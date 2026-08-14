@@ -1,0 +1,20 @@
+# .NET generated files
+bin/
+obj/
+TestResults/
+*.user
+*.suo
+
+# IDE and platform files
+.DS_Store
+.idea/
+.vs/
+.vscode/
+*.code-workspace
+*.xcodeproj
+*.xcworkspace
+
+# Local build and test output
+.cache/
+artifacts/
+coverage/

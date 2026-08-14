@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Deterministic visual graph projection for UnifiedScript HIR.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../UnifiedScript.Core/UnifiedScript.Core.csproj" />
+  </ItemGroup>
+</Project>
+

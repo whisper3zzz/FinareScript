@@ -1,0 +1,144 @@
+using System.Text.Json.Serialization;
+
+namespace UnifiedScript.Core.Hir;
+
+public abstract record HirNode(SemanticId Id, SourceSpan Span);
+
+public sealed record HirCompilationUnit(
+    SemanticId Id,
+    SourceSpan Span,
+    IReadOnlyList<HirTypeDeclaration> Types) : HirNode(Id, Span);
+
+public sealed record HirTypeDeclaration(
+    SemanticId Id,
+    SourceSpan Span,
+    string Namespace,
+    string Name,
+    IReadOnlyList<HirMethodDeclaration> Methods) : HirNode(Id, Span)
+{
+    public string QualifiedName => string.IsNullOrEmpty(Namespace) ? Name : $"{Namespace}.{Name}";
+}
+
+public sealed record HirMethodDeclaration(
+    SemanticId Id,
+    SourceSpan Span,
+    string Name,
+    string ReturnType,
+    bool IsVisual,
+    bool IsStatic,
+    bool IsAsync,
+    IReadOnlyList<HirParameter> Parameters,
+    HirBlockStatement Body) : HirNode(Id, Span);
+
+public sealed record HirParameter(
+    SemanticId Id,
+    SourceSpan Span,
+    string Name,
+    string TypeName) : HirNode(Id, Span);
+
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]
+[JsonDerivedType(typeof(HirBlockStatement), "block")]
+[JsonDerivedType(typeof(HirVariableDeclarationStatement), "variableDeclaration")]
+[JsonDerivedType(typeof(HirExpressionStatement), "expressionStatement")]
+[JsonDerivedType(typeof(HirIfStatement), "if")]
+[JsonDerivedType(typeof(HirReturnStatement), "return")]
+public abstract record HirStatement(SemanticId Id, SourceSpan Span) : HirNode(Id, Span);
+
+public sealed record HirBlockStatement(
+    SemanticId Id,
+    SourceSpan Span,
+    IReadOnlyList<HirStatement> Statements) : HirStatement(Id, Span);
+
+public sealed record HirVariableDeclarationStatement(
+    SemanticId Id,
+    SourceSpan Span,
+    string Name,
+    string TypeName,
+    HirExpression? Initializer) : HirStatement(Id, Span);
+
+public sealed record HirExpressionStatement(
+    SemanticId Id,
+    SourceSpan Span,
+    HirExpression Expression) : HirStatement(Id, Span);
+
+public sealed record HirIfStatement(
+    SemanticId Id,
+    SourceSpan Span,
+    HirExpression Condition,
+    HirBlockStatement Then,
+    HirBlockStatement? Else) : HirStatement(Id, Span);
+
+public sealed record HirReturnStatement(
+    SemanticId Id,
+    SourceSpan Span,
+    HirExpression? Expression) : HirStatement(Id, Span);
+
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]
+[JsonDerivedType(typeof(HirLiteralExpression), "literal")]
+[JsonDerivedType(typeof(HirIdentifierExpression), "identifier")]
+[JsonDerivedType(typeof(HirThisExpression), "this")]
+[JsonDerivedType(typeof(HirMemberAccessExpression), "memberAccess")]
+[JsonDerivedType(typeof(HirInvocationExpression), "invocation")]
+[JsonDerivedType(typeof(HirBinaryExpression), "binary")]
+[JsonDerivedType(typeof(HirUnaryExpression), "unary")]
+[JsonDerivedType(typeof(HirAssignmentExpression), "assignment")]
+[JsonDerivedType(typeof(HirAwaitExpression), "await")]
+[JsonDerivedType(typeof(HirCastExpression), "cast")]
+public abstract record HirExpression(SemanticId Id, SourceSpan Span) : HirNode(Id, Span);
+
+public sealed record HirLiteralExpression(
+    SemanticId Id,
+    SourceSpan Span,
+    string ValueText) : HirExpression(Id, Span);
+
+public sealed record HirIdentifierExpression(
+    SemanticId Id,
+    SourceSpan Span,
+    string Name) : HirExpression(Id, Span);
+
+public sealed record HirThisExpression(
+    SemanticId Id,
+    SourceSpan Span) : HirExpression(Id, Span);
+
+public sealed record HirMemberAccessExpression(
+    SemanticId Id,
+    SourceSpan Span,
+    HirExpression Target,
+    string MemberName) : HirExpression(Id, Span);
+
+public sealed record HirInvocationExpression(
+    SemanticId Id,
+    SourceSpan Span,
+    HirExpression Target,
+    IReadOnlyList<HirExpression> Arguments) : HirExpression(Id, Span);
+
+public sealed record HirBinaryExpression(
+    SemanticId Id,
+    SourceSpan Span,
+    string Operator,
+    HirExpression Left,
+    HirExpression Right) : HirExpression(Id, Span);
+
+public sealed record HirUnaryExpression(
+    SemanticId Id,
+    SourceSpan Span,
+    string Operator,
+    HirExpression Operand) : HirExpression(Id, Span);
+
+public sealed record HirAssignmentExpression(
+    SemanticId Id,
+    SourceSpan Span,
+    string Operator,
+    HirExpression Target,
+    HirExpression Value) : HirExpression(Id, Span);
+
+public sealed record HirAwaitExpression(
+    SemanticId Id,
+    SourceSpan Span,
+    HirExpression Operand) : HirExpression(Id, Span);
+
+public sealed record HirCastExpression(
+    SemanticId Id,
+    SourceSpan Span,
+    string TypeName,
+    HirExpression Operand) : HirExpression(Id, Span);

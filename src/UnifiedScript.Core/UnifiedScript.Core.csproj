@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Shared diagnostics, identities, and HIR for UnifiedScript.</Description>
+  </PropertyGroup>
+</Project>
+

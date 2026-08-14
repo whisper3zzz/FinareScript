@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <Description>Command-line front end for UnifiedScript analysis artifacts.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../UnifiedScript.Core/UnifiedScript.Core.csproj" />
+    <ProjectReference Include="../UnifiedScript.CSharp/UnifiedScript.CSharp.csproj" />
+    <ProjectReference Include="../UnifiedScript.Graph/UnifiedScript.Graph.csproj" />
+  </ItemGroup>
+</Project>
+

@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Roslyn-based Visual C# profile validation and HIR lowering.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../UnifiedScript.Core/UnifiedScript.Core.csproj" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+  </ItemGroup>
+</Project>
+
