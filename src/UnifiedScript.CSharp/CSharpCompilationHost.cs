@@ -20,9 +20,34 @@ public sealed class CSharpCompilationHost
             references.AddRange(additionalReferences);
         }
 
-        return CSharpCompilation.Create(
-            "UnifiedScript.Analysis",
-            [syntaxTree],
+        return CreateCore("UnifiedScript.Analysis", [syntaxTree], references);
+    }
+
+    public CSharpCompilation Create(
+        CSharpCompilationRequest request,
+        IReadOnlyList<SyntaxTree> syntaxTrees)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(syntaxTrees);
+        if (syntaxTrees.Count != request.Sources.Count)
+        {
+            throw new ArgumentException(
+                "The syntax tree count must match the compilation request source count.",
+                nameof(syntaxTrees));
+        }
+
+        var references = new List<MetadataReference>(PlatformReferences.Value);
+        references.AddRange(request.ReferencePaths.Select(
+            static path => MetadataReference.CreateFromFile(path)));
+        return CreateCore(request.AssemblyName, syntaxTrees, references);
+    }
+
+    private static CSharpCompilation CreateCore(
+        string assemblyName,
+        IEnumerable<SyntaxTree> syntaxTrees,
+        IEnumerable<MetadataReference> references) => CSharpCompilation.Create(
+            assemblyName,
+            syntaxTrees,
             references,
             new CSharpCompilationOptions(
                 OutputKind.DynamicallyLinkedLibrary,
@@ -30,7 +55,6 @@ public sealed class CSharpCompilationHost
                 allowUnsafe: false,
                 deterministic: true,
                 nullableContextOptions: NullableContextOptions.Enable));
-    }
 
     private static IReadOnlyList<MetadataReference> CreatePlatformReferences()
     {

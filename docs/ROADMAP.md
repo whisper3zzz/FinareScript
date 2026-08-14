@@ -36,8 +36,13 @@ Outcome: Roslyn symbols bind into a language-independent type/effect model.
 - [x] graph-safe signature validation
 - [x] pure/impure/latent effect descriptors
 - [x] deterministic bound symbol references
+- [x] deterministic multi-document compilation requests
+- [x] cross-file type and overload binding
+- [x] versioned method-effect catalog overrides
+- [x] semantic configuration identity for references and effect rules
 - [ ] flow-sensitive nullability state
-- [ ] configurable API/effect catalog
+- [ ] `.csproj`/MSBuild and NuGet reference loading
+- [ ] configurable API allow/deny catalog
 - [ ] semantic diagnostics for unsupported APIs
 
 ## M3 — Bidirectional source projection

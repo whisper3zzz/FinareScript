@@ -15,7 +15,9 @@ The repository currently implements:
 - a Roslyn validator for Visual C# profile v0.1;
 - C# syntax lowering into a polymorphic high-level IR (HIR);
 - a Roslyn compilation host and language-neutral bound semantic model;
+- deterministic multi-document compilation requests and cross-file binding;
 - resolved types, declaration references, overloads, and conservative call effects;
+- a versioned, configurable method-effect catalog;
 - deterministic, effect-aware HIR-to-graph projection with control and data edges;
 - versioned HIR, semantics, and graph JSON emission through a small CLI;
 - xUnit coverage for validation, lowering, identity, graph projection, and
@@ -80,6 +82,28 @@ artifacts/sample/DoorController.graph.json
 
 Without `--out`, the graph JSON is written to stdout.
 
+## Analyze multiple source files
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  analyze-files \
+  samples/MultiFile/GameplayApi.cs \
+  samples/MultiFile/DamageScript.cs \
+  --assembly UnifiedScript.MultiFileSample \
+  --effects samples/MultiFile/effects.json \
+  --out artifacts/multi-file
+```
+
+`analyze-files` sorts logical source paths before parsing, so changing command
+line input order does not change HIR, semantic IDs, or Graph JSON. `--reference`
+may be repeated to add explicit metadata assemblies; their contents contribute
+to the semantic configuration ID.
+
+Effect catalogs use `unifiedscript.effects/v0.1`. Rules match assembly,
+containing type, and method metadata names. `*` is supported as a whole-field
+wildcard. User rules override the bootstrap `System.Math`/`System.MathF` rules;
+unmatched calls remain conservatively read/write effectful.
+
 ## Repository layout
 
 ```text
@@ -101,8 +125,8 @@ This milestone does not include:
 - a UE graph editor;
 - IL emission or CoreCLR hosting inside another process;
 - semantic type binding against UE APIs;
-- multi-file or `.csproj` compilation loading;
-- a configurable API/effect catalog;
+- `.csproj`/MSBuild compilation loading;
+- namespace/API allow and deny policies;
 - flow-sensitive nullable state in the interchange model;
 - code generation from graph edits back into Roslyn syntax;
 - loops, switch, lambdas, exceptions, or general-purpose C# visualization.

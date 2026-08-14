@@ -68,6 +68,12 @@ def main() -> int:
 
     require((ROOT / "samples" / "DoorController.cs").is_file(), "Missing vertical-slice sample")
     require(
+        (ROOT / "samples" / "MultiFile" / "GameplayApi.cs").is_file()
+        and (ROOT / "samples" / "MultiFile" / "DamageScript.cs").is_file()
+        and (ROOT / "samples" / "MultiFile" / "effects.json").is_file(),
+        "Missing multi-file semantic sample",
+    )
+    require(
         any((ROOT / "tests" / "UnifiedScript.Tests").glob("*Tests.cs")),
         "No tests found",
     )

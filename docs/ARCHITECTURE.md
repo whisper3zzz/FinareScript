@@ -76,7 +76,7 @@ This project has no Roslyn, graph UI, CLR hosting, or UE dependency.
 - Visual Profile validation
 - syntax-to-HIR lowering
 - source range and deterministic ID assignment
-- deterministic single-file `CSharpCompilation` hosting
+- deterministic multi-document `CSharpCompilation` hosting
 - Roslyn symbol/type/method translation into bound semantics
 
 It may depend on Core and Roslyn, but not on Graph or UE.
@@ -151,8 +151,16 @@ The first semantic slice now classifies Roslyn builtin operators and
 `System.Math`/`System.MathF` calls as pure. Unknown calls default to
 `ReadsState | WritesState`; task-like or async calls additionally become
 `Async | Latent`. Effectful calls, assignments, and awaits receive explicit
-control ports and are sequenced in C# evaluation order. A configurable API
-catalog will replace these bootstrap rules later in M2.
+control ports and are sequenced in C# evaluation order. Versioned effect catalog
+rules can override method effects without introducing Roslyn dependencies into
+the semantic contract.
+
+`CSharpCompilationRequest` canonicalizes source order, rejects duplicate logical
+paths, fingerprints explicit metadata references, and carries the effect
+catalog. Multi-document HIR compilation identity depends on assembly name,
+logical paths, and source digests. Bound semantics additionally carry a
+configuration ID so the same source analyzed with different references or
+effect rules cannot be mistaken for the same semantic result.
 
 Visual method signatures currently accept void, booleans, integer and floating
 primitives, strings, enums, nullable forms of supported value types, and
@@ -198,8 +206,9 @@ None of these concerns may redefine HIR semantics implicitly.
 
 ## Current semantic-host boundary
 
-The M2 bootstrap compiles one source document against the runtime trusted
-platform assemblies plus `UnifiedScript.Core`. It does not yet load a `.csproj`,
-additional source documents, NuGet references, generated sources, or UE symbol
-assemblies. The compilation request abstraction and deterministic multi-file
-symbol catalog are the next semantic-host work, before any UE adapter.
+The M2 host compiles one or more source documents against runtime trusted
+platform assemblies, `UnifiedScript.Core`, and optional explicit metadata
+references. It does not yet load a `.csproj`, resolve NuGet assets, run source
+generators, or import UE symbol assemblies. MSBuild/project loading remains a
+CLI adapter concern; downstream Semantics and Graph modules continue to consume
+the same compilation-neutral contracts.

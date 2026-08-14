@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "unifiedscript.effects/v0.1",
+  "rules": [
+    {
+      "id": "samples.gameplay-api.clamp-to-positive",
+      "assembly": "UnifiedScript.MultiFileSample",
+      "containingType": "Samples.MultiFile.GameplayApi",
+      "method": "ClampToPositive",
+      "effects": "none"
+    }
+  ]
+}

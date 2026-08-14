@@ -38,24 +38,48 @@ public sealed class RoslynSemanticBinder
     private readonly Dictionary<SemanticId, MethodDescriptor> methods = [];
     private readonly Dictionary<SemanticId, BoundNodeInfo> nodes = [];
     private readonly Dictionary<ISymbol, SemanticId> declaredSymbols = new(SymbolEqualityComparer.Default);
+    private readonly Dictionary<string, BindingContext> contexts = new(StringComparer.Ordinal);
+    private readonly MethodEffectCatalog effectCatalog;
 
-    private SemanticModel semanticModel = null!;
-    private SyntaxIndex syntaxIndex = null!;
-    private string filePath = "<memory>";
+    public RoslynSemanticBinder(MethodEffectCatalog? effectCatalog = null)
+    {
+        this.effectCatalog = effectCatalog ?? MethodEffectCatalog.CreateDefault();
+    }
 
     public SemanticBindingResult Bind(
         CSharpCompilation compilation,
         SyntaxTree syntaxTree,
-        HirCompilationUnit hir)
+        HirCompilationUnit hir) => Bind(
+            compilation,
+            [syntaxTree],
+            hir,
+            SemanticId.FromKey($"semantic-configuration|{effectCatalog.Id}"));
+
+    public SemanticBindingResult Bind(
+        CSharpCompilation compilation,
+        IReadOnlyList<SyntaxTree> syntaxTrees,
+        HirCompilationUnit hir,
+        SemanticId configurationId)
     {
         ArgumentNullException.ThrowIfNull(compilation);
-        ArgumentNullException.ThrowIfNull(syntaxTree);
+        ArgumentNullException.ThrowIfNull(syntaxTrees);
         ArgumentNullException.ThrowIfNull(hir);
 
         Reset();
-        semanticModel = compilation.GetSemanticModel(syntaxTree, ignoreAccessibility: false);
-        syntaxIndex = new SyntaxIndex(syntaxTree.GetRoot());
-        filePath = string.IsNullOrEmpty(syntaxTree.FilePath) ? "<memory>" : syntaxTree.FilePath;
+        foreach (SyntaxTree syntaxTree in syntaxTrees)
+        {
+            string path = string.IsNullOrEmpty(syntaxTree.FilePath) ? "<memory>" : syntaxTree.FilePath;
+            if (!contexts.TryAdd(
+                    path,
+                    new BindingContext(
+                        path,
+                        compilation.GetSemanticModel(syntaxTree, ignoreAccessibility: false),
+                        new SyntaxIndex(syntaxTree.GetRoot()))))
+            {
+                throw new ArgumentException($"Duplicate syntax tree path '{path}'.", nameof(syntaxTrees));
+            }
+        }
+
         var diagnostics = new List<UnifiedDiagnostic>();
 
         RegisterTypeDeclarations(hir);
@@ -65,6 +89,7 @@ public sealed class RoslynSemanticBinder
         var bound = new BoundCompilation(
             BoundCompilation.CurrentSchemaVersion,
             hir.Id,
+            configurationId,
             types.Values.OrderBy(static type => type.Id.Value, StringComparer.Ordinal).ToArray(),
             methods.Values.OrderBy(static method => method.Id.Value, StringComparer.Ordinal).ToArray(),
             nodes.Values.OrderBy(static node => node.NodeId.Value, StringComparer.Ordinal).ToArray());
@@ -79,14 +104,16 @@ public sealed class RoslynSemanticBinder
         methods.Clear();
         nodes.Clear();
         declaredSymbols.Clear();
+        contexts.Clear();
     }
 
     private void RegisterTypeDeclarations(HirCompilationUnit hir)
     {
         foreach (HirTypeDeclaration type in hir.Types)
         {
-            TypeDeclarationSyntax syntax = syntaxIndex.Find<TypeDeclarationSyntax>(type);
-            INamedTypeSymbol symbol = semanticModel.GetDeclaredSymbol(syntax) ??
+            BindingContext context = GetContext(type);
+            TypeDeclarationSyntax syntax = context.SyntaxIndex.Find<TypeDeclarationSyntax>(type);
+            INamedTypeSymbol symbol = context.SemanticModel.GetDeclaredSymbol(syntax) ??
                 throw new InvalidOperationException($"Roslyn did not bind type '{type.QualifiedName}'.");
             declaredSymbols[symbol] = type.Id;
             TypeDescriptor descriptor = GetTypeDescriptor(symbol, type.Id);
@@ -105,8 +132,9 @@ public sealed class RoslynSemanticBinder
         {
             foreach (HirMethodDeclaration method in type.Methods)
             {
-                MethodDeclarationSyntax methodSyntax = syntaxIndex.Find<MethodDeclarationSyntax>(method);
-                IMethodSymbol methodSymbol = semanticModel.GetDeclaredSymbol(methodSyntax) ??
+                BindingContext context = GetContext(method);
+                MethodDeclarationSyntax methodSyntax = context.SyntaxIndex.Find<MethodDeclarationSyntax>(method);
+                IMethodSymbol methodSymbol = context.SemanticModel.GetDeclaredSymbol(methodSyntax) ??
                     throw new InvalidOperationException($"Roslyn did not bind method '{method.Name}'.");
                 declaredSymbols[methodSymbol] = method.Id;
                 MethodDescriptor methodDescriptor = GetMethodDescriptor(methodSymbol, method.Id);
@@ -119,12 +147,13 @@ public sealed class RoslynSemanticBinder
                     methodDescriptor.ReturnTypeId,
                     "return type",
                     methodSyntax.ReturnType,
+                    context.FilePath,
                     diagnostics);
 
                 foreach (HirParameter parameter in method.Parameters)
                 {
-                    ParameterSyntax parameterSyntax = syntaxIndex.Find<ParameterSyntax>(parameter);
-                    IParameterSymbol parameterSymbol = semanticModel.GetDeclaredSymbol(parameterSyntax) ??
+                    ParameterSyntax parameterSyntax = context.SyntaxIndex.Find<ParameterSyntax>(parameter);
+                    IParameterSymbol parameterSymbol = context.SemanticModel.GetDeclaredSymbol(parameterSyntax) ??
                         throw new InvalidOperationException($"Roslyn did not bind parameter '{parameter.Name}'.");
                     declaredSymbols[parameterSymbol] = parameter.Id;
                     TypeDescriptor parameterType = GetTypeDescriptor(parameterSymbol.Type);
@@ -136,6 +165,7 @@ public sealed class RoslynSemanticBinder
                         parameterType.Id,
                         $"parameter '{parameter.Name}'",
                         (SyntaxNode?)parameterSyntax.Type ?? parameterSyntax,
+                        context.FilePath,
                         diagnostics);
                 }
 
@@ -143,9 +173,9 @@ public sealed class RoslynSemanticBinder
                              .OfType<HirVariableDeclarationStatement>())
                 {
                     LocalDeclarationStatementSyntax localSyntax =
-                        syntaxIndex.Find<LocalDeclarationStatementSyntax>(local);
+                        context.SyntaxIndex.Find<LocalDeclarationStatementSyntax>(local);
                     VariableDeclaratorSyntax declarator = localSyntax.Declaration.Variables.Single();
-                    ILocalSymbol localSymbol = semanticModel.GetDeclaredSymbol(declarator) as ILocalSymbol ??
+                    ILocalSymbol localSymbol = context.SemanticModel.GetDeclaredSymbol(declarator) as ILocalSymbol ??
                         throw new InvalidOperationException($"Roslyn did not bind local '{local.Name}'.");
                     declaredSymbols[localSymbol] = local.Id;
                     TypeDescriptor localType = GetTypeDescriptor(localSymbol.Type);
@@ -164,11 +194,12 @@ public sealed class RoslynSemanticBinder
                      .SelectMany(static type => type.Methods)
                      .SelectMany(static method => EnumerateExpressions(method.Body)))
         {
-            ExpressionSyntax syntax = syntaxIndex.Find<ExpressionSyntax>(expression);
-            TypeInfo typeInfo = semanticModel.GetTypeInfo(syntax);
+            BindingContext context = GetContext(expression);
+            ExpressionSyntax syntax = context.SyntaxIndex.Find<ExpressionSyntax>(expression);
+            TypeInfo typeInfo = context.SemanticModel.GetTypeInfo(syntax);
             ITypeSymbol? expressionType = typeInfo.ConvertedType ?? typeInfo.Type;
             SemanticId? typeId = expressionType is null ? null : GetTypeDescriptor(expressionType).Id;
-            SymbolInfo symbolInfo = semanticModel.GetSymbolInfo(syntax);
+            SymbolInfo symbolInfo = context.SemanticModel.GetSymbolInfo(syntax);
             ISymbol? referencedSymbol = symbolInfo.Symbol;
             SemanticId? referencedSymbolId = referencedSymbol is null
                 ? null
@@ -177,7 +208,7 @@ public sealed class RoslynSemanticBinder
             MethodEffects effects = MethodEffects.None;
 
             if (syntax is InvocationExpressionSyntax invocationSyntax &&
-                semanticModel.GetSymbolInfo(invocationSyntax).Symbol is IMethodSymbol invokedMethod)
+                context.SemanticModel.GetSymbolInfo(invocationSyntax).Symbol is IMethodSymbol invokedMethod)
             {
                 MethodDescriptor descriptor = GetMethodDescriptor(invokedMethod);
                 invokedMethodId = descriptor.Id;
@@ -198,6 +229,7 @@ public sealed class RoslynSemanticBinder
         SemanticId typeId,
         string role,
         SyntaxNode syntax,
+        string sourcePath,
         ICollection<UnifiedDiagnostic> diagnostics)
     {
         TypeDescriptor descriptor = types[typeId];
@@ -210,7 +242,7 @@ public sealed class RoslynSemanticBinder
             SemanticDiagnosticCodes.GraphUnsafeSignature,
             UnifiedDiagnosticSeverity.Error,
             $"The {role} '{descriptor.DisplayName}' is not graph-safe in semantic profile v0.1.",
-            RoslynSourceSpan.FromNode(syntax, filePath)));
+            RoslynSourceSpan.FromNode(syntax, sourcePath)));
     }
 
     private TypeDescriptor GetTypeDescriptor(ITypeSymbol type, SemanticId? preferredId = null)
@@ -354,20 +386,31 @@ public sealed class RoslynSemanticBinder
             _ => (UnifiedTypeKind.Unknown, UnifiedNullability.Unknown, false),
         };
 
-    private static MethodEffects InferEffects(IMethodSymbol method)
+    private MethodEffects InferEffects(IMethodSymbol method)
     {
-        string containingNamespace = method.ContainingNamespace.ToDisplayString();
-        bool knownPure = method.MethodKind == MethodKind.BuiltinOperator ||
-            containingNamespace == "System" && method.ContainingType.Name is "Math" or "MathF";
-        MethodEffects effects = knownPure
+        MethodEffects effects = method.MethodKind == MethodKind.BuiltinOperator
             ? MethodEffects.None
-            : MethodEffects.ReadsState | MethodEffects.WritesState;
+            : effectCatalog.Resolve(new MethodEffectSubject(
+                method.ContainingAssembly?.Identity.Name ?? "source",
+                method.ContainingType.ToDisplayString(TypeMetadataFormat),
+                method.MetadataName));
         if (method.IsAsync || IsTaskLike(method.ReturnType, out _))
         {
             effects |= MethodEffects.Async | MethodEffects.Latent;
         }
 
         return effects;
+    }
+
+    private BindingContext GetContext(HirNode node)
+    {
+        if (contexts.TryGetValue(node.Span.FilePath, out BindingContext? context))
+        {
+            return context;
+        }
+
+        throw new InvalidOperationException(
+            $"No Roslyn syntax tree was registered for HIR path '{node.Span.FilePath}'.");
     }
 
     private static bool IsTaskLike(ITypeSymbol type, out INamedTypeSymbol? namedType)
@@ -474,6 +517,11 @@ public sealed class RoslynSemanticBinder
             }
         }
     }
+
+    private sealed record BindingContext(
+        string FilePath,
+        SemanticModel SemanticModel,
+        SyntaxIndex SyntaxIndex);
 
     private readonly record struct SpanKey(int StartLine, int StartColumn, int EndLine, int EndColumn)
     {

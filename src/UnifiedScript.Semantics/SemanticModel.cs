@@ -76,6 +76,7 @@ public sealed record BoundNodeInfo(
 public sealed record BoundCompilation(
     string SchemaVersion,
     SemanticId SourceCompilationId,
+    SemanticId ConfigurationId,
     IReadOnlyList<TypeDescriptor> Types,
     IReadOnlyList<MethodDescriptor> Methods,
     IReadOnlyList<BoundNodeInfo> Nodes)
