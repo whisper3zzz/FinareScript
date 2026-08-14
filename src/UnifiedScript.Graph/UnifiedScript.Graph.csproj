@@ -4,6 +4,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../UnifiedScript.Core/UnifiedScript.Core.csproj" />
+    <ProjectReference Include="../UnifiedScript.Semantics/UnifiedScript.Semantics.csproj" />
   </ItemGroup>
 </Project>
-

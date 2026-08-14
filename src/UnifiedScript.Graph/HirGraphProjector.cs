@@ -1,31 +1,46 @@
+using System.Text.Json;
 using UnifiedScript.Core;
 using UnifiedScript.Core.Hir;
+using UnifiedScript.Semantics;
 
 namespace UnifiedScript.Graph;
 
 public sealed class HirGraphProjector
 {
-    public GraphDocument Project(HirCompilationUnit compilationUnit)
+    public GraphDocument Project(HirCompilationUnit compilationUnit, BoundCompilation? semantics = null)
     {
         ArgumentNullException.ThrowIfNull(compilationUnit);
+        if (semantics is not null && semantics.SourceCompilationId != compilationUnit.Id)
+        {
+            throw new ArgumentException(
+                "The bound semantics were produced for a different HIR compilation.",
+                nameof(semantics));
+        }
+
+        var semanticIndex = new SemanticIndex(semantics);
         IReadOnlyList<GraphFunction> functions = compilationUnit.Types
-            .SelectMany(type => type.Methods.Select(method => ProjectMethod(type, method)))
+            .SelectMany(type => type.Methods.Select(method => ProjectMethod(type, method, semanticIndex)))
             .OrderBy(static function => function.QualifiedName, StringComparer.Ordinal)
             .ToArray();
         return new GraphDocument("unifiedscript.graph/v0.1", compilationUnit.Id, functions);
     }
 
-    private static GraphFunction ProjectMethod(HirTypeDeclaration type, HirMethodDeclaration method)
+    private static GraphFunction ProjectMethod(
+        HirTypeDeclaration type,
+        HirMethodDeclaration method,
+        SemanticIndex semantics)
     {
-        var builder = new FunctionBuilder();
+        var builder = new FunctionBuilder(semantics);
         SemanticId entryId = SemanticId.FromKey($"{method.Id}:graph:entry");
+        var properties = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        semantics.ApplyNodeProperties(method.Id, properties);
         builder.AddNode(new GraphNode(
             entryId,
             "entry",
             method.Name,
             method.Span,
             [new GraphPort("then", GraphPortDirection.Output, GraphPortKind.Control)],
-            EmptyProperties()));
+            properties));
 
         builder.ProjectBlock(method.Body, [new ControlEndpoint(entryId, "then")]);
         return new GraphFunction(
@@ -42,7 +57,9 @@ public sealed class HirGraphProjector
 
     private sealed record ValueEndpoint(SemanticId NodeId, string Port);
 
-    private sealed class FunctionBuilder
+    private sealed record ExpressionProjection(ValueEndpoint? Value, IReadOnlyList<SemanticId> Effects);
+
+    private sealed class FunctionBuilder(SemanticIndex semantics)
     {
         private readonly Dictionary<SemanticId, GraphNode> nodes = [];
         private readonly Dictionary<SemanticId, GraphEdge> edges = [];
@@ -93,22 +110,27 @@ public sealed class HirGraphProjector
                 ["name"] = variable.Name,
                 ["type"] = variable.TypeName,
             };
+            semantics.ApplyNodeProperties(variable.Id, properties);
             var ports = new List<GraphPort>
             {
                 new("in", GraphPortDirection.Input, GraphPortKind.Control),
                 new("then", GraphPortDirection.Output, GraphPortKind.Control),
             };
+            ExpressionProjection? initializer = null;
             if (variable.Initializer is not null)
             {
                 ports.Add(new GraphPort("value", GraphPortDirection.Input, GraphPortKind.Data));
+                initializer = ProjectExpression(variable.Initializer);
             }
 
             AddNode(new GraphNode(variable.Id, "variable", $"Declare {variable.Name}", variable.Span, ports, properties));
-            ConnectIncoming(incoming, variable.Id, "in");
-            if (variable.Initializer is not null)
+            IReadOnlyList<ControlEndpoint> current = initializer is null
+                ? incoming
+                : ConnectEffectChain(incoming, initializer.Effects);
+            ConnectIncoming(current, variable.Id, "in");
+            if (initializer?.Value is not null)
             {
-                ValueEndpoint value = ProjectExpression(variable.Initializer);
-                AddEdge(GraphEdgeKind.Data, value, new ValueEndpoint(variable.Id, "value"));
+                AddEdge(GraphEdgeKind.Data, initializer.Value, new ValueEndpoint(variable.Id, "value"));
             }
 
             return [new ControlEndpoint(variable.Id, "then")];
@@ -118,21 +140,31 @@ public sealed class HirGraphProjector
             HirExpressionStatement statement,
             IReadOnlyList<ControlEndpoint> incoming)
         {
-            ValueEndpoint expression = ProjectExpression(statement.Expression);
+            ExpressionProjection expression = ProjectExpression(statement.Expression);
+            IReadOnlyList<ControlEndpoint> afterEffects = ConnectEffectChain(incoming, expression.Effects);
+            if (expression.Effects.Count > 0)
+            {
+                return afterEffects;
+            }
+
             SemanticId evaluateId = SemanticId.FromKey($"{statement.Id}:graph:evaluate");
-            AddNode(new GraphNode(
-                evaluateId,
-                "evaluate",
-                "Evaluate",
-                statement.Span,
-                [
-                    new GraphPort("in", GraphPortDirection.Input, GraphPortKind.Control),
-                    new GraphPort("then", GraphPortDirection.Output, GraphPortKind.Control),
-                    new GraphPort("expression", GraphPortDirection.Input, GraphPortKind.Data),
-                ],
-                EmptyProperties()));
+            var ports = new List<GraphPort>
+            {
+                new("in", GraphPortDirection.Input, GraphPortKind.Control),
+                new("then", GraphPortDirection.Output, GraphPortKind.Control),
+            };
+            if (expression.Value is not null)
+            {
+                ports.Add(new GraphPort("expression", GraphPortDirection.Input, GraphPortKind.Data));
+            }
+
+            AddNode(new GraphNode(evaluateId, "evaluate", "Evaluate", statement.Span, ports, EmptyProperties()));
             ConnectIncoming(incoming, evaluateId, "in");
-            AddEdge(GraphEdgeKind.Data, expression, new ValueEndpoint(evaluateId, "expression"));
+            if (expression.Value is not null)
+            {
+                AddEdge(GraphEdgeKind.Data, expression.Value, new ValueEndpoint(evaluateId, "expression"));
+            }
+
             return [new ControlEndpoint(evaluateId, "then")];
         }
 
@@ -140,7 +172,9 @@ public sealed class HirGraphProjector
             HirIfStatement statement,
             IReadOnlyList<ControlEndpoint> incoming)
         {
-            ValueEndpoint condition = ProjectExpression(statement.Condition);
+            ExpressionProjection condition = ProjectExpression(statement.Condition);
+            var properties = new SortedDictionary<string, string>(StringComparer.Ordinal);
+            semantics.ApplyNodeProperties(statement.Condition.Id, properties);
             AddNode(new GraphNode(
                 statement.Id,
                 "branch",
@@ -152,10 +186,15 @@ public sealed class HirGraphProjector
                     new GraphPort("else", GraphPortDirection.Output, GraphPortKind.Control),
                     new GraphPort("condition", GraphPortDirection.Input, GraphPortKind.Data),
                 ],
-                EmptyProperties()));
-            ConnectIncoming(incoming, statement.Id, "in");
-            AddEdge(GraphEdgeKind.Data, condition, new ValueEndpoint(statement.Id, "condition"));
+                properties));
+            IReadOnlyList<ControlEndpoint> current = ConnectEffectChain(incoming, condition.Effects);
+            ConnectIncoming(current, statement.Id, "in");
+            if (condition.Value is null)
+            {
+                throw new InvalidOperationException("A branch condition must produce a value.");
+            }
 
+            AddEdge(GraphEdgeKind.Data, condition.Value, new ValueEndpoint(statement.Id, "condition"));
             IReadOnlyList<ControlEndpoint> thenExits = ProjectBlock(
                 statement.Then,
                 [new ControlEndpoint(statement.Id, "then")]);
@@ -169,82 +208,101 @@ public sealed class HirGraphProjector
             HirReturnStatement statement,
             IReadOnlyList<ControlEndpoint> incoming)
         {
+            ExpressionProjection? expression = statement.Expression is null
+                ? null
+                : ProjectExpression(statement.Expression);
             var ports = new List<GraphPort>
             {
                 new("in", GraphPortDirection.Input, GraphPortKind.Control),
             };
-            if (statement.Expression is not null)
+            if (expression?.Value is not null)
             {
                 ports.Add(new GraphPort("value", GraphPortDirection.Input, GraphPortKind.Data));
             }
 
             AddNode(new GraphNode(statement.Id, "return", "Return", statement.Span, ports, EmptyProperties()));
-            ConnectIncoming(incoming, statement.Id, "in");
-            if (statement.Expression is not null)
+            IReadOnlyList<ControlEndpoint> current = expression is null
+                ? incoming
+                : ConnectEffectChain(incoming, expression.Effects);
+            ConnectIncoming(current, statement.Id, "in");
+            if (expression?.Value is not null)
             {
-                ValueEndpoint value = ProjectExpression(statement.Expression);
-                AddEdge(GraphEdgeKind.Data, value, new ValueEndpoint(statement.Id, "value"));
+                AddEdge(GraphEdgeKind.Data, expression.Value, new ValueEndpoint(statement.Id, "value"));
             }
 
             return [];
         }
 
-        private ValueEndpoint ProjectExpression(HirExpression expression)
+        private ExpressionProjection ProjectExpression(HirExpression expression)
         {
+            ValueEndpoint? value = new(expression.Id, "value");
+            IReadOnlyList<SemanticId> effects = [];
             switch (expression)
             {
                 case HirLiteralExpression literal:
-                    AddNode(ValueNode(
-                        literal,
-                        "literal",
-                        literal.ValueText,
-                        KeyValuePair.Create("value", literal.ValueText)));
+                    AddNode(ValueNode(literal, "literal", literal.ValueText, KeyValuePair.Create("value", literal.ValueText)));
                     break;
                 case HirIdentifierExpression identifier:
-                    AddNode(ValueNode(
-                        identifier,
-                        "identifier",
-                        identifier.Name,
-                        KeyValuePair.Create("name", identifier.Name)));
+                    AddNode(ValueNode(identifier, "identifier", identifier.Name, KeyValuePair.Create("name", identifier.Name)));
                     break;
                 case HirThisExpression @this:
                     AddNode(ValueNode(@this, "this", "this"));
                     break;
                 case HirMemberAccessExpression member:
                     {
-                        ValueEndpoint target = ProjectExpression(member.Target);
+                        ExpressionProjection target = ProjectExpression(member.Target);
                         AddNode(ValueNode(
                             member,
                             "memberAccess",
                             member.MemberName,
                             KeyValuePair.Create("member", member.MemberName),
                             [new GraphPort("target", GraphPortDirection.Input, GraphPortKind.Data)]));
-                        AddEdge(GraphEdgeKind.Data, target, new ValueEndpoint(member.Id, "target"));
+                        AddRequiredDataEdge(target.Value, new ValueEndpoint(member.Id, "target"));
+                        effects = target.Effects;
                         break;
                     }
                 case HirInvocationExpression invocation:
                     {
-                        ValueEndpoint target = ProjectExpression(invocation.Target);
+                        ExpressionProjection target = ProjectExpression(invocation.Target);
+                        ExpressionProjection[] arguments = invocation.Arguments.Select(ProjectExpression).ToArray();
+                        bool isEffectful = semantics.IsEffectful(invocation.Id);
+                        bool hasValue = !semantics.IsVoid(invocation.Id);
                         var extraPorts = new List<GraphPort>
                     {
                         new("target", GraphPortDirection.Input, GraphPortKind.Data),
                     };
-                        extraPorts.AddRange(invocation.Arguments.Select(
+                        extraPorts.AddRange(arguments.Select(
                             (_, index) => new GraphPort($"arg{index}", GraphPortDirection.Input, GraphPortKind.Data)));
-                        AddNode(ValueNode(invocation, "invocation", "Invoke", extraPorts: extraPorts));
-                        AddEdge(GraphEdgeKind.Data, target, new ValueEndpoint(invocation.Id, "target"));
-                        for (int index = 0; index < invocation.Arguments.Count; index++)
+                        if (isEffectful)
                         {
-                            ValueEndpoint argument = ProjectExpression(invocation.Arguments[index]);
-                            AddEdge(GraphEdgeKind.Data, argument, new ValueEndpoint(invocation.Id, $"arg{index}"));
+                            extraPorts.Add(new GraphPort("execIn", GraphPortDirection.Input, GraphPortKind.Control));
+                            extraPorts.Add(new GraphPort("execOut", GraphPortDirection.Output, GraphPortKind.Control));
                         }
 
+                        AddNode(ValueNode(
+                            invocation,
+                            "invocation",
+                            semantics.GetMethodLabel(invocation.Id) ?? "Invoke",
+                            extraPorts: extraPorts,
+                            includeValuePort: hasValue));
+                        AddRequiredDataEdge(target.Value, new ValueEndpoint(invocation.Id, "target"));
+                        for (int index = 0; index < arguments.Length; index++)
+                        {
+                            AddRequiredDataEdge(arguments[index].Value, new ValueEndpoint(invocation.Id, $"arg{index}"));
+                        }
+
+                        effects = [
+                            .. target.Effects,
+                        .. arguments.SelectMany(static argument => argument.Effects),
+                        .. (isEffectful ? new[] { invocation.Id } : Array.Empty<SemanticId>()),
+                    ];
+                        value = hasValue ? value : null;
                         break;
                     }
                 case HirBinaryExpression binary:
                     {
-                        ValueEndpoint left = ProjectExpression(binary.Left);
-                        ValueEndpoint right = ProjectExpression(binary.Right);
+                        ExpressionProjection left = ProjectExpression(binary.Left);
+                        ExpressionProjection right = ProjectExpression(binary.Right);
                         AddNode(ValueNode(
                             binary,
                             "binary",
@@ -254,26 +312,28 @@ public sealed class HirGraphProjector
                                 new GraphPort("left", GraphPortDirection.Input, GraphPortKind.Data),
                             new GraphPort("right", GraphPortDirection.Input, GraphPortKind.Data),
                             ]));
-                        AddEdge(GraphEdgeKind.Data, left, new ValueEndpoint(binary.Id, "left"));
-                        AddEdge(GraphEdgeKind.Data, right, new ValueEndpoint(binary.Id, "right"));
+                        AddRequiredDataEdge(left.Value, new ValueEndpoint(binary.Id, "left"));
+                        AddRequiredDataEdge(right.Value, new ValueEndpoint(binary.Id, "right"));
+                        effects = [.. left.Effects, .. right.Effects];
                         break;
                     }
                 case HirUnaryExpression unary:
                     {
-                        ValueEndpoint operand = ProjectExpression(unary.Operand);
+                        ExpressionProjection operand = ProjectExpression(unary.Operand);
                         AddNode(ValueNode(
                             unary,
                             "unary",
                             unary.Operator,
                             KeyValuePair.Create("operator", unary.Operator),
                             [new GraphPort("operand", GraphPortDirection.Input, GraphPortKind.Data)]));
-                        AddEdge(GraphEdgeKind.Data, operand, new ValueEndpoint(unary.Id, "operand"));
+                        AddRequiredDataEdge(operand.Value, new ValueEndpoint(unary.Id, "operand"));
+                        effects = operand.Effects;
                         break;
                     }
                 case HirAssignmentExpression assignment:
                     {
-                        ValueEndpoint target = ProjectExpression(assignment.Target);
-                        ValueEndpoint value = ProjectExpression(assignment.Value);
+                        ExpressionProjection target = ProjectExpression(assignment.Target);
+                        ExpressionProjection assignedValue = ProjectExpression(assignment.Value);
                         AddNode(ValueNode(
                             assignment,
                             "assignment",
@@ -281,49 +341,59 @@ public sealed class HirGraphProjector
                             KeyValuePair.Create("operator", assignment.Operator),
                             [
                                 new GraphPort("target", GraphPortDirection.Input, GraphPortKind.Data),
-                            new GraphPort("value", GraphPortDirection.Input, GraphPortKind.Data),
+                            new GraphPort("assignedValue", GraphPortDirection.Input, GraphPortKind.Data),
+                            new GraphPort("execIn", GraphPortDirection.Input, GraphPortKind.Control),
+                            new GraphPort("execOut", GraphPortDirection.Output, GraphPortKind.Control),
                             ]));
-                        AddEdge(GraphEdgeKind.Data, target, new ValueEndpoint(assignment.Id, "target"));
-                        AddEdge(GraphEdgeKind.Data, value, new ValueEndpoint(assignment.Id, "value"));
+                        AddRequiredDataEdge(target.Value, new ValueEndpoint(assignment.Id, "target"));
+                        AddRequiredDataEdge(assignedValue.Value, new ValueEndpoint(assignment.Id, "assignedValue"));
+                        effects = [.. target.Effects, .. assignedValue.Effects, assignment.Id];
                         break;
                     }
                 case HirAwaitExpression awaitExpression:
                     {
-                        ValueEndpoint operand = ProjectExpression(awaitExpression.Operand);
+                        ExpressionProjection operand = ProjectExpression(awaitExpression.Operand);
                         AddNode(ValueNode(
                             awaitExpression,
                             "await",
                             "Await",
                             KeyValuePair.Create("effect", "latent"),
-                            [new GraphPort("operand", GraphPortDirection.Input, GraphPortKind.Data)]));
-                        AddEdge(GraphEdgeKind.Data, operand, new ValueEndpoint(awaitExpression.Id, "operand"));
+                            [
+                                new GraphPort("operand", GraphPortDirection.Input, GraphPortKind.Data),
+                            new GraphPort("execIn", GraphPortDirection.Input, GraphPortKind.Control),
+                            new GraphPort("execOut", GraphPortDirection.Output, GraphPortKind.Control),
+                            ]));
+                        AddRequiredDataEdge(operand.Value, new ValueEndpoint(awaitExpression.Id, "operand"));
+                        effects = [.. operand.Effects, awaitExpression.Id];
                         break;
                     }
                 case HirCastExpression cast:
                     {
-                        ValueEndpoint operand = ProjectExpression(cast.Operand);
+                        ExpressionProjection operand = ProjectExpression(cast.Operand);
                         AddNode(ValueNode(
                             cast,
                             "cast",
                             $"Cast {cast.TypeName}",
                             KeyValuePair.Create("type", cast.TypeName),
                             [new GraphPort("operand", GraphPortDirection.Input, GraphPortKind.Data)]));
-                        AddEdge(GraphEdgeKind.Data, operand, new ValueEndpoint(cast.Id, "operand"));
+                        AddRequiredDataEdge(operand.Value, new ValueEndpoint(cast.Id, "operand"));
+                        effects = operand.Effects;
                         break;
                     }
                 default:
                     throw new ArgumentOutOfRangeException(nameof(expression), expression.GetType().Name);
             }
 
-            return new ValueEndpoint(expression.Id, "value");
+            return new ExpressionProjection(value, effects);
         }
 
-        private static GraphNode ValueNode(
+        private GraphNode ValueNode(
             HirExpression expression,
             string kind,
             string label,
             KeyValuePair<string, string>? property = null,
-            IReadOnlyList<GraphPort>? extraPorts = null)
+            IReadOnlyList<GraphPort>? extraPorts = null,
+            bool includeValuePort = true)
         {
             var properties = new SortedDictionary<string, string>(StringComparer.Ordinal);
             if (property is not null)
@@ -331,14 +401,50 @@ public sealed class HirGraphProjector
                 properties.Add(property.Value.Key, property.Value.Value);
             }
 
+            semantics.ApplyNodeProperties(expression.Id, properties);
             var ports = new List<GraphPort>();
             if (extraPorts is not null)
             {
                 ports.AddRange(extraPorts);
             }
 
-            ports.Add(new GraphPort("value", GraphPortDirection.Output, GraphPortKind.Data));
+            if (includeValuePort)
+            {
+                ports.Add(new GraphPort("value", GraphPortDirection.Output, GraphPortKind.Data));
+            }
+
             return new GraphNode(expression.Id, kind, label, expression.Span, ports, properties);
+        }
+
+        private IReadOnlyList<ControlEndpoint> ConnectEffectChain(
+            IReadOnlyList<ControlEndpoint> incoming,
+            IEnumerable<SemanticId> effectNodes)
+        {
+            IReadOnlyList<ControlEndpoint> current = incoming;
+            var connected = new HashSet<SemanticId>();
+            foreach (SemanticId effectNode in effectNodes)
+            {
+                if (!connected.Add(effectNode))
+                {
+                    continue;
+                }
+
+                ConnectIncoming(current, effectNode, "execIn");
+                current = [new ControlEndpoint(effectNode, "execOut")];
+            }
+
+            return current;
+        }
+
+        private void AddRequiredDataEdge(ValueEndpoint? source, ValueEndpoint target)
+        {
+            if (source is null)
+            {
+                throw new InvalidOperationException(
+                    $"A void expression cannot be connected to data port {target.NodeId}.{target.Port}.");
+            }
+
+            AddEdge(GraphEdgeKind.Data, source, target);
         }
 
         private void ConnectIncoming(
@@ -348,12 +454,7 @@ public sealed class HirGraphProjector
         {
             foreach (ControlEndpoint source in incoming)
             {
-                AddEdge(
-                    GraphEdgeKind.Control,
-                    source.NodeId,
-                    source.Port,
-                    targetNode,
-                    targetPort);
+                AddEdge(GraphEdgeKind.Control, source.NodeId, source.Port, targetNode, targetPort);
             }
         }
 
@@ -371,5 +472,88 @@ public sealed class HirGraphProjector
                 $"edge|{kind}|{sourceNode}|{sourcePort}|{targetNode}|{targetPort}");
             edges.TryAdd(edgeId, new GraphEdge(edgeId, kind, sourceNode, sourcePort, targetNode, targetPort));
         }
+    }
+
+    private sealed class SemanticIndex
+    {
+        private readonly IReadOnlyDictionary<SemanticId, BoundNodeInfo> nodes;
+        private readonly IReadOnlyDictionary<SemanticId, TypeDescriptor> types;
+        private readonly IReadOnlyDictionary<SemanticId, MethodDescriptor> methods;
+
+        public SemanticIndex(BoundCompilation? compilation)
+        {
+            nodes = compilation?.Nodes.ToDictionary(static node => node.NodeId) ??
+                new Dictionary<SemanticId, BoundNodeInfo>();
+            types = compilation?.Types.ToDictionary(static type => type.Id) ??
+                new Dictionary<SemanticId, TypeDescriptor>();
+            methods = compilation?.Methods.ToDictionary(static method => method.Id) ??
+                new Dictionary<SemanticId, MethodDescriptor>();
+        }
+
+        public bool IsEffectful(SemanticId nodeId) =>
+            nodes.TryGetValue(nodeId, out BoundNodeInfo? node) && node.Effects != MethodEffects.None;
+
+        public bool IsVoid(SemanticId nodeId) =>
+            nodes.TryGetValue(nodeId, out BoundNodeInfo? node) &&
+            node.TypeId is SemanticId typeId &&
+            types.TryGetValue(typeId, out TypeDescriptor? type) &&
+            type.Kind == UnifiedTypeKind.Void;
+
+        public string? GetMethodLabel(SemanticId nodeId)
+        {
+            if (!nodes.TryGetValue(nodeId, out BoundNodeInfo? node) ||
+                node.InvokedMethodId is not SemanticId methodId ||
+                !methods.TryGetValue(methodId, out MethodDescriptor? method))
+            {
+                return null;
+            }
+
+            return method.DisplayName;
+        }
+
+        public void ApplyNodeProperties(SemanticId nodeId, IDictionary<string, string> properties)
+        {
+            if (!nodes.TryGetValue(nodeId, out BoundNodeInfo? node))
+            {
+                return;
+            }
+
+            if (node.TypeId is SemanticId typeId && types.TryGetValue(typeId, out TypeDescriptor? type))
+            {
+                properties["typeId"] = typeId.Value;
+                properties["resolvedType"] = type.DisplayName;
+                properties["graphSafe"] = type.IsGraphSafe ? "true" : "false";
+            }
+
+            if (node.DeclaredSymbolId is SemanticId declaredSymbolId)
+            {
+                properties["declaredSymbolId"] = declaredSymbolId.Value;
+            }
+
+            if (node.ReferencedSymbolId is SemanticId referencedSymbolId)
+            {
+                properties["referencedSymbolId"] = referencedSymbolId.Value;
+            }
+
+            if (node.InvokedMethodId is SemanticId invokedMethodId)
+            {
+                properties["methodId"] = invokedMethodId.Value;
+                if (methods.TryGetValue(invokedMethodId, out MethodDescriptor? method))
+                {
+                    properties["method"] = method.MetadataName;
+                }
+            }
+
+            if (node.Effects != MethodEffects.None)
+            {
+                properties["effects"] = FormatEffects(node.Effects);
+            }
+        }
+
+        private static string FormatEffects(MethodEffects effects) => string.Join(
+            '|',
+            effects.ToString()
+                .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .Select(static name => JsonNamingPolicy.CamelCase.ConvertName(name)));
     }
 }

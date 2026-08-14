@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 PROJECTS = [
     ROOT / "src" / "UnifiedScript.Core" / "UnifiedScript.Core.csproj",
+    ROOT / "src" / "UnifiedScript.Semantics" / "UnifiedScript.Semantics.csproj",
     ROOT / "src" / "UnifiedScript.CSharp" / "UnifiedScript.CSharp.csproj",
     ROOT / "src" / "UnifiedScript.Graph" / "UnifiedScript.Graph.csproj",
     ROOT / "src" / "UnifiedScript.Cli" / "UnifiedScript.Cli.csproj",
@@ -26,6 +27,7 @@ DOCUMENTS = [
     ROOT / "docs" / "IDENTITY_SIDECAR.md",
     ROOT / "docs" / "ROADMAP.md",
     ROOT / "docs" / "milestones" / "M1_ROSLYN_GRAPH_FOUNDATION.md",
+    ROOT / "docs" / "milestones" / "M2_SEMANTIC_BINDING.md",
 ]
 
 

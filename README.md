@@ -14,8 +14,10 @@ The repository currently implements:
 - source ranges and structured diagnostics;
 - a Roslyn validator for Visual C# profile v0.1;
 - C# syntax lowering into a polymorphic high-level IR (HIR);
-- deterministic HIR-to-graph projection with control and data edges;
-- JSON emission through a small CLI;
+- a Roslyn compilation host and language-neutral bound semantic model;
+- resolved types, declaration references, overloads, and conservative call effects;
+- deterministic, effect-aware HIR-to-graph projection with control and data edges;
+- versioned HIR, semantics, and graph JSON emission through a small CLI;
 - xUnit coverage for validation, lowering, identity, graph projection, and
   deterministic output.
 
@@ -30,7 +32,9 @@ C# source
   -> Roslyn full-fidelity syntax tree
   -> Visual Profile validation
   -> Unified HIR
-  -> deterministic graph projection
+  -> Roslyn SemanticModel
+  -> language-neutral bound semantics
+  -> deterministic, effect-aware graph projection
 
 Later:
   -> semantic MIR
@@ -70,6 +74,7 @@ This emits:
 
 ```text
 artifacts/sample/DoorController.hir.json
+artifacts/sample/DoorController.semantics.json
 artifacts/sample/DoorController.graph.json
 ```
 
@@ -79,6 +84,7 @@ Without `--out`, the graph JSON is written to stdout.
 
 ```text
 src/UnifiedScript.Core/      Semantic IDs, diagnostics, HIR, [Visual]
+src/UnifiedScript.Semantics/ Language-neutral types, symbols, effects, bindings
 src/UnifiedScript.CSharp/    Roslyn profile validation and lowering
 src/UnifiedScript.Graph/     Deterministic visual graph projection
 src/UnifiedScript.Cli/       Analysis command-line interface
@@ -95,10 +101,14 @@ This milestone does not include:
 - a UE graph editor;
 - IL emission or CoreCLR hosting inside another process;
 - semantic type binding against UE APIs;
+- multi-file or `.csproj` compilation loading;
+- a configurable API/effect catalog;
+- flow-sensitive nullable state in the interchange model;
 - code generation from graph edits back into Roslyn syntax;
 - loops, switch, lambdas, exceptions, or general-purpose C# visualization.
 
 See [ARCHITECTURE.md](docs/ARCHITECTURE.md),
-[IDENTITY_SIDECAR.md](docs/IDENTITY_SIDECAR.md), and
-[M1_ROSLYN_GRAPH_FOUNDATION.md](docs/milestones/M1_ROSLYN_GRAPH_FOUNDATION.md)
+[IDENTITY_SIDECAR.md](docs/IDENTITY_SIDECAR.md),
+[M1_ROSLYN_GRAPH_FOUNDATION.md](docs/milestones/M1_ROSLYN_GRAPH_FOUNDATION.md),
+and [M2_SEMANTIC_BINDING.md](docs/milestones/M2_SEMANTIC_BINDING.md)
 for the planned sequence.

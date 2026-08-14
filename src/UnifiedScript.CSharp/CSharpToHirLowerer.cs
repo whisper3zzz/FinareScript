@@ -8,7 +8,7 @@ namespace UnifiedScript.CSharp;
 
 public sealed class CSharpToHirLowerer
 {
-    private static readonly CSharpParseOptions ParseOptions = new(
+    internal static readonly CSharpParseOptions ParseOptions = new(
         LanguageVersion.Preview,
         DocumentationMode.Parse,
         SourceCodeKind.Regular);
@@ -19,6 +19,13 @@ public sealed class CSharpToHirLowerer
     {
         ArgumentNullException.ThrowIfNull(source);
         SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(source, ParseOptions, filePath);
+        return Lower(syntaxTree);
+    }
+
+    internal CSharpLoweringResult Lower(SyntaxTree syntaxTree)
+    {
+        ArgumentNullException.ThrowIfNull(syntaxTree);
+        string filePath = string.IsNullOrEmpty(syntaxTree.FilePath) ? "<memory>" : syntaxTree.FilePath;
         SyntaxNode root = syntaxTree.GetRoot();
         var diagnostics = syntaxTree.GetDiagnostics()
             .Select(diagnostic => FromRoslynDiagnostic(diagnostic, filePath))
@@ -213,7 +220,7 @@ public sealed class CSharpToHirLowerer
             _ => throw new InvalidOperationException($"Profile validator admitted unsupported expression {expression.Kind()}.")
         };
 
-    private static UnifiedDiagnostic FromRoslynDiagnostic(Diagnostic diagnostic, string filePath) =>
+    internal static UnifiedDiagnostic FromRoslynDiagnostic(Diagnostic diagnostic, string filePath) =>
         new(
             diagnostic.Id,
             diagnostic.Severity switch

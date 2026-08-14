@@ -7,6 +7,6 @@
     <ProjectReference Include="../UnifiedScript.Core/UnifiedScript.Core.csproj" />
     <ProjectReference Include="../UnifiedScript.CSharp/UnifiedScript.CSharp.csproj" />
     <ProjectReference Include="../UnifiedScript.Graph/UnifiedScript.Graph.csproj" />
+    <ProjectReference Include="../UnifiedScript.Semantics/UnifiedScript.Semantics.csproj" />
   </ItemGroup>
 </Project>
-

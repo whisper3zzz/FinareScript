@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/UnifiedScript.Core/UnifiedScript.Core.csproj" />
+    <Project Path="src/UnifiedScript.Semantics/UnifiedScript.Semantics.csproj" />
     <Project Path="src/UnifiedScript.CSharp/UnifiedScript.CSharp.csproj" />
     <Project Path="src/UnifiedScript.Graph/UnifiedScript.Graph.csproj" />
     <Project Path="src/UnifiedScript.Cli/UnifiedScript.Cli.csproj" />
@@ -9,4 +10,3 @@
     <Project Path="tests/UnifiedScript.Tests/UnifiedScript.Tests.csproj" />
   </Folder>
 </Solution>
-

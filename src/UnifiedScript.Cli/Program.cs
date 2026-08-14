@@ -1,7 +1,7 @@
-using System.Text.Json;
 using UnifiedScript.CSharp;
 using UnifiedScript.Core;
 using UnifiedScript.Graph;
+using UnifiedScript.Semantics;
 
 namespace UnifiedScript.Cli;
 
@@ -24,20 +24,21 @@ internal static class Program
         string fullInputPath = Path.GetFullPath(inputPath);
         string source = File.ReadAllText(fullInputPath);
         string logicalInputPath = GetLogicalInputPath(fullInputPath);
-        CSharpLoweringResult result = new CSharpToHirLowerer().Lower(source, logicalInputPath);
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(source, logicalInputPath);
         foreach (UnifiedDiagnostic diagnostic in result.Diagnostics)
         {
             Console.Error.WriteLine(FormatDiagnostic(diagnostic));
         }
 
-        if (!result.Succeeded || result.CompilationUnit is null)
+        if (!result.Succeeded || result.Hir is null || result.Semantics is null)
         {
-            Console.Error.WriteLine("Analysis failed; HIR and graph artifacts were not emitted.");
+            Console.Error.WriteLine("Analysis failed; HIR, semantics, and graph artifacts were not emitted.");
             return 2;
         }
 
-        GraphDocument graph = new HirGraphProjector().Project(result.CompilationUnit);
-        string hirJson = JsonSerializer.Serialize(result.CompilationUnit, UnifiedJson.CreateOptions());
+        GraphDocument graph = new HirGraphProjector().Project(result.Hir, result.Semantics);
+        string hirJson = HirJson.Serialize(HirDocument.Create(result.Hir));
+        string semanticJson = SemanticJson.Serialize(result.Semantics);
         string graphJson = GraphJson.Serialize(graph);
 
         if (outputDirectory is null)
@@ -50,10 +51,13 @@ internal static class Program
         Directory.CreateDirectory(fullOutputDirectory);
         string baseName = Path.GetFileNameWithoutExtension(fullInputPath);
         string hirPath = Path.Combine(fullOutputDirectory, $"{baseName}.hir.json");
+        string semanticPath = Path.Combine(fullOutputDirectory, $"{baseName}.semantics.json");
         string graphPath = Path.Combine(fullOutputDirectory, $"{baseName}.graph.json");
-        File.WriteAllText(hirPath, hirJson + Environment.NewLine);
-        File.WriteAllText(graphPath, graphJson + Environment.NewLine);
+        File.WriteAllText(hirPath, hirJson + "\n");
+        File.WriteAllText(semanticPath, semanticJson + "\n");
+        File.WriteAllText(graphPath, graphJson + "\n");
         Console.WriteLine(hirPath);
+        Console.WriteLine(semanticPath);
         Console.WriteLine(graphPath);
         return 0;
     }

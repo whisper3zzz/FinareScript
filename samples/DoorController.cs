@@ -18,11 +18,11 @@ public sealed class DoorController
     [Visual]
     public void BeginPlay()
     {
-        bool hasTarget = Target != null;
-        if (hasTarget)
+        Door? target = Target;
+        if (target != null)
         {
             Delay(OpenDelay);
-            Target.Open();
+            target.Open();
         }
     }
 
@@ -30,4 +30,3 @@ public sealed class DoorController
     {
     }
 }
-

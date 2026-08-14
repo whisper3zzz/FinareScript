@@ -6,7 +6,7 @@ Outcome: deterministic .NET solution with documented boundaries and automated
 verification.
 
 - [x] .NET 10 solution and central package versions
-- [x] Core, CSharp, Graph, CLI, and Tests projects
+- [x] Core, Semantics, CSharp, Graph, CLI, and Tests projects
 - [x] repository validator
 - [x] architecture and contribution rules
 
@@ -24,19 +24,21 @@ while unsupported syntax fails with actionable diagnostics.
 - [x] CLI emission
 - [x] unit tests and sample
 - [x] persistent identity sidecar design
-- [ ] golden JSON schema fixture
+- [x] golden JSON schema fixture
 
 ## M2 — Semantic model and graph-safe types
 
 Outcome: Roslyn symbols bind into a language-independent type/effect model.
 
-- primitive and nominal type descriptors
-- nullable flow state
-- method overload resolution capture
-- graph-safe signature validation
-- pure/impure/latent effect descriptors
-- deterministic symbol catalog
-- semantic diagnostics for unsupported APIs
+- [x] primitive and nominal type descriptors
+- [x] nullable type annotations
+- [x] method overload resolution capture
+- [x] graph-safe signature validation
+- [x] pure/impure/latent effect descriptors
+- [x] deterministic bound symbol references
+- [ ] flow-sensitive nullability state
+- [ ] configurable API/effect catalog
+- [ ] semantic diagnostics for unsupported APIs
 
 ## M3 — Bidirectional source projection
 
@@ -65,7 +67,7 @@ Outcome: practical gameplay methods are fully visualizable.
 
 Outcome: text and graph versions compile to and execute the same IL.
 
-- Roslyn compilation host
+- Roslyn IL-emission host
 - assembly and PDB emission
 - method/node source map
 - reloadable development assembly context

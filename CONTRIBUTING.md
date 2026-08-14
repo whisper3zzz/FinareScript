@@ -11,6 +11,8 @@
 4. New HIR nodes require graph projection and serialization tests.
 5. Core and graph projects stay independent of Unreal Engine.
 6. UE integration must arrive through adapters after the core model stabilizes.
+7. `UnifiedScript.Semantics` must not expose Roslyn, CLR-hosting, or UE types.
+8. Unknown calls are effectful by default; purity must be established explicitly.
 
 ## Verification
 
@@ -19,4 +21,3 @@ dotnet build UnifiedScript.slnx
 dotnet test UnifiedScript.slnx --no-build
 python3 tools/validate_project.py
 ```
-
