@@ -18,6 +18,13 @@ a second language implementation or bypassing the existing compiler checks.
 - localized Roslyn replacement with leading/trailing trivia preservation
 - single-document `apply-patch` CLI with non-in-place, atomic output writing
 - deterministic sample patch and round-trip tests
+- opt-in `unifiedscript.identity/v0.1` sidecar model and deterministic JSON
+- cryptographically random persistent semantic IDs
+- structural, shape, parent, token-context, and anchor reconciliation evidence
+- ambiguity warnings instead of silent identity guessing
+- tombstones for unmatched deleted nodes
+- Roslyn-annotation identity pins for graph-authored replacements
+- `identity-init`, repeatable `--identity`, and rollback-capable `--out-identity`
 
 ## Failure contract
 
@@ -30,6 +37,8 @@ diagnostic codes distinguish:
 - `UVS3004`: target is not the operation's required HIR kind
 - `UVS3005`: expected old value no longer matches
 - `UVS3006`: replacement is not one complete C# literal
+- `UVS3101`: identity evidence is ambiguous; allocate a new ID instead of guessing
+- `UVS3102`: an explicit identity pin is invalid, missing, duplicate, or tombstoned
 
 The proposed source is also rejected if normal C# compilation, Visual Profile
 validation, semantic binding, or graph-safe signature validation fails after the
@@ -49,18 +58,23 @@ The test and sample suite proves that:
 8. comments and formatting survive a successful replacement;
 9. a multi-file request changes only the target document;
 10. reanalysis projects the new literal back into Graph.
+11. unchanged source emits a byte-identical sidecar;
+12. comments and whitespace preserve the complete live ID set;
+13. deleted nodes move to tombstones and their IDs are not reused;
+14. ambiguous evidence allocates a new ID with `UVS3101`;
+15. changing `1` to `100` preserves every live persistent ID.
 
 ## Deliberate limits
 
-This is a value-edit slice, not general graph-to-source generation. It does not
-yet preserve a node ID when its source span changes, apply multi-file patches
-through the CLI, edit operators or connections, insert/delete statements, or
-persist graph layout. Those operations wait for `.usids` identity
-reconciliation and a structural patch algebra.
+This is still a value-edit slice, not general graph-to-source generation. It
+does not apply multi-file patches through the CLI, edit operators or
+connections, insert/delete statements from Graph, reconcile declaration
+renames, compact tombstones, or persist graph layout. Those operations require
+a structural patch algebra and project-level transaction coordinator.
 
 ## Next slice
 
-Implement the identity sidecar reader/writer and reconciliation engine. The
-first acceptance test should change `1` to `100`, reformat unrelated code, and
-prove that the explicitly edited node plus every unrelated node retains its
-identity across source-to-graph-to-source analysis.
+Define structural patch operations for changing unary/binary operators and
+reconnecting an existing invocation argument. Each operation must specify node
+kind, port/role, old endpoint preconditions, and expected semantic types before
+Roslyn construction is attempted.

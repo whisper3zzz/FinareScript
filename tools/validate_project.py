@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 import xml.etree.ElementTree as ET
@@ -74,10 +75,27 @@ def main() -> int:
         and (ROOT / "samples" / "MultiFile" / "effects.json").is_file(),
         "Missing multi-file semantic sample",
     )
+    patch_source_path = ROOT / "samples" / "Patching" / "DamageRules.cs"
+    patch_document_path = ROOT / "samples" / "Patching" / "ScaleDamage.patch.json"
+    patch_identity_path = ROOT / "samples" / "Patching" / "DamageRules.cs.usids"
     require(
-        (ROOT / "samples" / "Patching" / "DamageRules.cs").is_file()
-        and (ROOT / "samples" / "Patching" / "ScaleDamage.patch.json").is_file(),
+        patch_source_path.is_file()
+        and patch_document_path.is_file()
+        and patch_identity_path.is_file(),
         "Missing bidirectional patch sample",
+    )
+    patch_source = patch_source_path.read_text(encoding="utf-8")
+    patch_document = json.loads(patch_document_path.read_text(encoding="utf-8"))
+    patch_identity = json.loads(patch_identity_path.read_text(encoding="utf-8"))
+    patch_operation = patch_document["operations"][0]
+    identity_ids = {entry["id"] for entry in patch_identity["entries"]}
+    source_digest = hashlib.sha256(patch_source.encode("utf-8")).hexdigest()
+    require(
+        patch_identity["sourcePath"] == "samples/Patching/DamageRules.cs"
+        and patch_identity["sourceDigest"] == f"sha256:{source_digest}"
+        and patch_operation["targetNodeId"] in identity_ids
+        and patch_operation["expectedValueText"] in patch_source,
+        "Bidirectional patch sample source, sidecar, and patch are inconsistent",
     )
     require(
         any((ROOT / "tests" / "UnifiedScript.Tests").glob("*Tests.cs")),

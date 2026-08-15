@@ -9,6 +9,8 @@ public sealed record CSharpAnalysisResult(
     BoundCompilation? Semantics,
     IReadOnlyList<UnifiedDiagnostic> Diagnostics)
 {
+    public IReadOnlyList<IdentitySidecarDocument> IdentitySidecars { get; init; } = [];
+
     public bool Succeeded =>
         Hir is not null &&
         Semantics is not null &&

@@ -33,6 +33,11 @@ internal static class Program
 
     private static int Run(IReadOnlyList<string> args)
     {
+        if (args.Count > 0 && args[0] == "identity-init")
+        {
+            return RunIdentityInit(args);
+        }
+
         if (args.Count > 0 && args[0] == "apply-patch")
         {
             return RunApplyPatch(args);
@@ -60,12 +65,7 @@ internal static class Program
         }
 
         MethodEffectCatalog effectCatalog = LoadEffectCatalog(options.EffectCatalogPath);
-        CSharpSourceDocument[] sources = options.InputPaths
-            .Select(Path.GetFullPath)
-            .Select(fullPath => new CSharpSourceDocument(
-                GetLogicalInputPath(fullPath),
-                File.ReadAllText(fullPath)))
-            .ToArray();
+        CSharpSourceDocument[] sources = LoadSources(options.InputPaths, options.IdentityPaths);
         var request = new CSharpCompilationRequest(
             options.AssemblyName,
             sources,
@@ -105,6 +105,62 @@ internal static class Program
         Console.WriteLine(hirPath);
         Console.WriteLine(semanticPath);
         Console.WriteLine(graphPath);
+        foreach (IdentitySidecarDocument sidecar in result.IdentitySidecars)
+        {
+            string identityPath = Path.Combine(
+                fullOutputDirectory,
+                GetIdentityArtifactName(sidecar.SourcePath));
+            WriteAtomically(identityPath, IdentitySidecarJson.Serialize(sidecar) + "\n");
+            Console.WriteLine(identityPath);
+        }
+
+        return 0;
+    }
+
+    private static int RunIdentityInit(IReadOnlyList<string> args)
+    {
+        if (!TryParseIdentityArguments(args, out IdentityOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+
+        options = options ?? throw new InvalidOperationException("Argument parsing succeeded without identity options.");
+        if (!File.Exists(options.InputPath))
+        {
+            Console.Error.WriteLine($"Input file does not exist: {options.InputPath}");
+            return 66;
+        }
+
+        string fullInputPath = Path.GetFullPath(options.InputPath);
+        string logicalPath = GetLogicalInputPath(fullInputPath);
+        MethodEffectCatalog effectCatalog = LoadEffectCatalog(options.EffectCatalogPath);
+        var request = new CSharpCompilationRequest(
+            options.AssemblyName,
+            [new CSharpSourceDocument(
+                logicalPath,
+                File.ReadAllText(fullInputPath),
+                IdentitySidecarDocument.CreateEmpty(logicalPath))],
+            options.ReferencePaths,
+            effectCatalog);
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(request);
+        foreach (UnifiedDiagnostic diagnostic in result.Diagnostics)
+        {
+            Console.Error.WriteLine(FormatDiagnostic(diagnostic));
+        }
+
+        if (!result.Succeeded || result.IdentitySidecars.Count != 1)
+        {
+            Console.Error.WriteLine("Identity initialization failed; no sidecar was written.");
+            return 2;
+        }
+
+        string fullOutputPath = Path.GetFullPath(options.OutputPath);
+        EnsureDifferentPath(fullInputPath, fullOutputPath, "Identity output cannot overwrite the input source.");
+        WriteAtomically(
+            fullOutputPath,
+            IdentitySidecarJson.Serialize(result.IdentitySidecars[0]) + "\n");
+        Console.WriteLine(fullOutputPath);
         return 0;
     }
 
@@ -140,12 +196,21 @@ internal static class Program
                 "In-place source patching is not supported yet; choose a different --out path.");
         }
 
+        EnsureDifferentPath(
+            Path.GetFullPath(options.PatchPath),
+            fullOutputPath,
+            "Source output cannot overwrite the input patch document.");
+
         MethodEffectCatalog effectCatalog = LoadEffectCatalog(options.EffectCatalogPath);
+        IdentitySidecarDocument? identitySidecar = options.IdentityPath is null
+            ? null
+            : LoadIdentitySidecar(options.IdentityPath);
         var request = new CSharpCompilationRequest(
             options.AssemblyName,
             [new CSharpSourceDocument(
                 GetLogicalInputPath(fullInputPath),
-                File.ReadAllText(fullInputPath))],
+                File.ReadAllText(fullInputPath),
+                identitySidecar)],
             options.ReferencePaths,
             effectCatalog);
         SemanticPatchDocument patch = SemanticPatchJson.Deserialize(File.ReadAllText(options.PatchPath));
@@ -162,9 +227,93 @@ internal static class Program
         }
 
         string patchedSource = AssertSinglePatchedSource(result.PatchedRequest);
-        WriteAtomically(fullOutputPath, patchedSource);
+        var outputs = new List<OutputFile>
+        {
+            new(fullOutputPath, patchedSource),
+        };
+        if (identitySidecar is not null)
+        {
+            string fullIdentityInputPath = Path.GetFullPath(options.IdentityPath!);
+            string fullIdentityOutputPath = Path.GetFullPath(options.IdentityOutputPath!);
+            EnsureDifferentPath(
+                fullIdentityInputPath,
+                fullIdentityOutputPath,
+                "Identity output cannot overwrite the input sidecar.");
+            EnsureDifferentPath(
+                fullIdentityInputPath,
+                fullOutputPath,
+                "Source output cannot overwrite the input identity sidecar.");
+            EnsureDifferentPath(
+                fullInputPath,
+                fullIdentityOutputPath,
+                "Identity output cannot overwrite the input source.");
+            EnsureDifferentPath(
+                Path.GetFullPath(options.PatchPath),
+                fullIdentityOutputPath,
+                "Identity output cannot overwrite the input patch document.");
+            IdentitySidecarDocument updatedSidecar = AssertSingleIdentitySidecar(result.Analysis) with
+            {
+                SourcePath = GetLogicalInputPath(fullOutputPath),
+            };
+            outputs.Add(new OutputFile(
+                fullIdentityOutputPath,
+                IdentitySidecarJson.Serialize(updatedSidecar) + "\n"));
+        }
+
+        WriteTransactionally(outputs);
         Console.WriteLine(fullOutputPath);
+        if (options.IdentityOutputPath is not null)
+        {
+            Console.WriteLine(Path.GetFullPath(options.IdentityOutputPath));
+        }
+
         return 0;
+    }
+
+    private static CSharpSourceDocument[] LoadSources(
+        IReadOnlyList<string> inputPaths,
+        IReadOnlyList<string> identityPaths)
+    {
+        var identities = new Dictionary<string, IdentitySidecarDocument>(StringComparer.Ordinal);
+        foreach (string identityPath in identityPaths)
+        {
+            IdentitySidecarDocument sidecar = LoadIdentitySidecar(identityPath);
+            if (!identities.TryAdd(sidecar.SourcePath, sidecar))
+            {
+                throw new ArgumentException(
+                    $"More than one identity sidecar was supplied for '{sidecar.SourcePath}'.");
+            }
+        }
+
+        CSharpSourceDocument[] sources = inputPaths
+            .Select(Path.GetFullPath)
+            .Select(fullPath =>
+            {
+                string logicalPath = GetLogicalInputPath(fullPath);
+                identities.Remove(logicalPath, out IdentitySidecarDocument? sidecar);
+                return new CSharpSourceDocument(
+                    logicalPath,
+                    File.ReadAllText(fullPath),
+                    sidecar);
+            })
+            .ToArray();
+        if (identities.Count > 0)
+        {
+            throw new ArgumentException(
+                $"Identity sidecar '{identities.Values.First().SourcePath}' does not match any input source.");
+        }
+
+        return sources;
+    }
+
+    private static IdentitySidecarDocument LoadIdentitySidecar(string path)
+    {
+        if (!File.Exists(path))
+        {
+            throw new FileNotFoundException("Identity sidecar does not exist.", path);
+        }
+
+        return IdentitySidecarJson.Deserialize(File.ReadAllText(path));
     }
 
     private static MethodEffectCatalog LoadEffectCatalog(string? path)
@@ -209,6 +358,7 @@ internal static class Program
         string? effectCatalogPath = null;
         string? assemblyName = null;
         var referencePaths = new List<string>();
+        var identityPaths = new List<string>();
         while (index < args.Count)
         {
             string option = args[index++];
@@ -232,6 +382,9 @@ internal static class Program
                 case "--reference":
                     referencePaths.Add(value);
                     break;
+                case "--identity":
+                    identityPaths.Add(value);
+                    break;
                 default:
                     return false;
             }
@@ -240,6 +393,63 @@ internal static class Program
         options = new AnalyzeOptions(
             inputPaths,
             outputDirectory,
+            effectCatalogPath,
+            assemblyName ?? "UnifiedScript.Analysis",
+            referencePaths,
+            identityPaths);
+        return true;
+    }
+
+    private static bool TryParseIdentityArguments(IReadOnlyList<string> args, out IdentityOptions? options)
+    {
+        options = null;
+        if (args.Count < 4 || args[0] != "identity-init" || args[1].StartsWith("--", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        string inputPath = args[1];
+        string? outputPath = null;
+        string? effectCatalogPath = null;
+        string? assemblyName = null;
+        var referencePaths = new List<string>();
+        int index = 2;
+        while (index < args.Count)
+        {
+            string option = args[index++];
+            if (index >= args.Count)
+            {
+                return false;
+            }
+
+            string value = args[index++];
+            switch (option)
+            {
+                case "--out" when outputPath is null:
+                    outputPath = value;
+                    break;
+                case "--effects" when effectCatalogPath is null:
+                    effectCatalogPath = value;
+                    break;
+                case "--assembly" when assemblyName is null:
+                    assemblyName = value;
+                    break;
+                case "--reference":
+                    referencePaths.Add(value);
+                    break;
+                default:
+                    return false;
+            }
+        }
+
+        if (outputPath is null)
+        {
+            return false;
+        }
+
+        options = new IdentityOptions(
+            inputPath,
+            outputPath,
             effectCatalogPath,
             assemblyName ?? "UnifiedScript.Analysis",
             referencePaths);
@@ -259,6 +469,8 @@ internal static class Program
         string? outputPath = null;
         string? effectCatalogPath = null;
         string? assemblyName = null;
+        string? identityPath = null;
+        string? identityOutputPath = null;
         var referencePaths = new List<string>();
         int index = 2;
         while (index < args.Count)
@@ -287,12 +499,19 @@ internal static class Program
                 case "--reference":
                     referencePaths.Add(value);
                     break;
+                case "--identity" when identityPath is null:
+                    identityPath = value;
+                    break;
+                case "--out-identity" when identityOutputPath is null:
+                    identityOutputPath = value;
+                    break;
                 default:
                     return false;
             }
         }
 
-        if (patchPath is null || outputPath is null)
+        if (patchPath is null || outputPath is null ||
+            (identityPath is null) != (identityOutputPath is null))
         {
             return false;
         }
@@ -303,7 +522,9 @@ internal static class Program
             outputPath,
             effectCatalogPath,
             assemblyName ?? "UnifiedScript.Analysis",
-            referencePaths);
+            referencePaths,
+            identityPath,
+            identityOutputPath);
         return true;
     }
 
@@ -333,6 +554,16 @@ internal static class Program
             .ToArray());
     }
 
+    private static string GetIdentityArtifactName(string sourcePath)
+    {
+        char[] invalidCharacters = Path.GetInvalidFileNameChars();
+        return new string(sourcePath
+            .Select(character => character is '/' or '\\' || invalidCharacters.Contains(character)
+                ? '_'
+                : character)
+            .ToArray()) + ".usids";
+    }
+
     private static string AssertSinglePatchedSource(CSharpCompilationRequest request)
     {
         if (request.Sources.Count != 1)
@@ -343,28 +574,109 @@ internal static class Program
         return request.Sources[0].Source;
     }
 
-    private static void WriteAtomically(string outputPath, string content)
+    private static IdentitySidecarDocument AssertSingleIdentitySidecar(CSharpAnalysisResult? analysis)
     {
-        string? directory = Path.GetDirectoryName(outputPath);
-        if (!string.IsNullOrEmpty(directory))
+        if (analysis?.IdentitySidecars.Count != 1)
         {
-            Directory.CreateDirectory(directory);
+            throw new InvalidOperationException("A sidecar-enabled patch must produce one updated identity sidecar.");
         }
 
-        string temporaryPath = Path.Combine(
-            directory ?? Environment.CurrentDirectory,
-            $".{Path.GetFileName(outputPath)}.{Guid.NewGuid():N}.tmp");
+        return analysis.IdentitySidecars[0];
+    }
+
+    private static void EnsureDifferentPath(string first, string second, string message)
+    {
+        StringComparison pathComparison = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        if (string.Equals(first, second, pathComparison))
+        {
+            throw new ArgumentException(message);
+        }
+    }
+
+    private static void WriteAtomically(string outputPath, string content)
+        => WriteTransactionally([new OutputFile(outputPath, content)]);
+
+    private static void WriteTransactionally(IReadOnlyList<OutputFile> outputs)
+    {
+        string[] fullPaths = outputs.Select(output => Path.GetFullPath(output.Path)).ToArray();
+        if (fullPaths.Distinct(StringComparer.OrdinalIgnoreCase).Count() != fullPaths.Length)
+        {
+            throw new ArgumentException("Transactional output paths must be distinct.", nameof(outputs));
+        }
+
+        var pending = new List<PendingOutput>(outputs.Count);
+        var movedTargets = new List<PendingOutput>(outputs.Count);
+        bool committed = false;
         try
         {
-            File.WriteAllText(temporaryPath, content);
-            File.Move(temporaryPath, outputPath, overwrite: true);
+            for (int index = 0; index < outputs.Count; index++)
+            {
+                string fullPath = fullPaths[index];
+                string directory = Path.GetDirectoryName(fullPath) ?? Environment.CurrentDirectory;
+                Directory.CreateDirectory(directory);
+                string nonce = Guid.NewGuid().ToString("N");
+                string temporaryPath = Path.Combine(directory, $".{Path.GetFileName(fullPath)}.{nonce}.tmp");
+                string backupPath = Path.Combine(directory, $".{Path.GetFileName(fullPath)}.{nonce}.bak");
+                File.WriteAllText(temporaryPath, outputs[index].Content);
+                pending.Add(new PendingOutput(fullPath, temporaryPath, backupPath));
+            }
+
+            foreach (PendingOutput output in pending)
+            {
+                if (File.Exists(output.Path))
+                {
+                    File.Move(output.Path, output.BackupPath);
+                }
+
+                File.Move(output.TemporaryPath, output.Path);
+                movedTargets.Add(output);
+            }
+
+            committed = true;
+        }
+        catch
+        {
+            foreach (PendingOutput output in movedTargets.AsEnumerable().Reverse())
+            {
+                TryDelete(output.Path);
+            }
+
+            foreach (PendingOutput output in pending.AsEnumerable().Reverse())
+            {
+                if (File.Exists(output.BackupPath))
+                {
+                    File.Move(output.BackupPath, output.Path, overwrite: true);
+                }
+            }
+
+            throw;
         }
         finally
         {
-            if (File.Exists(temporaryPath))
+            foreach (PendingOutput output in pending)
             {
-                File.Delete(temporaryPath);
+                TryDelete(output.TemporaryPath);
+                if (committed)
+                {
+                    TryDelete(output.BackupPath);
+                }
             }
+        }
+    }
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
         }
     }
 
@@ -372,10 +684,13 @@ internal static class Program
         "Usage:\n" +
         "  unifiedscript analyze <input.cs> [options]\n" +
         "  unifiedscript analyze-files <input.cs> <additional.cs>... [options]\n" +
+        "  unifiedscript identity-init <input.cs> --out <identity.usids> [options]\n" +
         "  unifiedscript apply-patch <input.cs> --patch <patch.json> --out <output.cs> [options]\n" +
         "Options:\n" +
-        "  --out <path>            Artifact directory for analyze; source file for apply-patch.\n" +
+        "  --out <path>            Artifact directory, initialized sidecar, or patched source output.\n" +
         "  --patch <patch.json>    Semantic patch document required by apply-patch.\n" +
+        "  --identity <file.usids> Use a persistent identity sidecar; may repeat for analyze-files.\n" +
+        "  --out-identity <file>   Updated sidecar output required by sidecar-enabled apply-patch.\n" +
         "  --assembly <name>        Set the analysis assembly name.\n" +
         "  --effects <catalog.json> Apply effect catalog overrides.\n" +
         "  --reference <assembly>   Add a metadata reference; may be repeated.\n" +
@@ -386,6 +701,14 @@ internal static class Program
         string? OutputDirectory,
         string? EffectCatalogPath,
         string AssemblyName,
+        IReadOnlyList<string> ReferencePaths,
+        IReadOnlyList<string> IdentityPaths);
+
+    private sealed record IdentityOptions(
+        string InputPath,
+        string OutputPath,
+        string? EffectCatalogPath,
+        string AssemblyName,
         IReadOnlyList<string> ReferencePaths);
 
     private sealed record PatchOptions(
@@ -394,5 +717,11 @@ internal static class Program
         string OutputPath,
         string? EffectCatalogPath,
         string AssemblyName,
-        IReadOnlyList<string> ReferencePaths);
+        IReadOnlyList<string> ReferencePaths,
+        string? IdentityPath,
+        string? IdentityOutputPath);
+
+    private sealed record OutputFile(string Path, string Content);
+
+    private sealed record PendingOutput(string Path, string TemporaryPath, string BackupPath);
 }

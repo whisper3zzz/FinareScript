@@ -21,6 +21,8 @@ The repository currently implements:
 - deterministic, effect-aware HIR-to-graph projection with control and data edges;
 - a versioned semantic patch protocol with source/configuration conflict guards;
 - transactional graph-literal-to-C# source rewriting with trivia preservation;
+- opt-in `.usids` sidecars that preserve node identity across formatting and edits;
+- explicit patch identity pins and tombstones for deleted semantic nodes;
 - versioned HIR, semantics, and graph JSON emission through a small CLI;
 - xUnit coverage for validation, lowering, identity, graph projection, and
   deterministic output.
@@ -112,17 +114,42 @@ containing type, and method metadata names. `*` is supported as a whole-field
 wildcard. User rules override the bootstrap `System.Math`/`System.MathF` rules;
 unmatched calls remain conservatively read/write effectful.
 
+## Initialize persistent identities
+
+Create the source-controlled identity sidecar once:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  identity-init \
+  samples/Patching/DamageRules.cs \
+  --out artifacts/identity/DamageRules.cs.usids
+```
+
+`unifiedscript.identity/v0.1` stores random 128-bit semantic IDs, structural and
+shape fingerprints, token-context evidence, anchors, generations, and
+tombstones. Supplying it with `--identity` makes analysis reconcile the current
+HIR against the stored evidence. Unchanged sources reproduce byte-identical
+sidecars; whitespace and comment edits preserve IDs even though the source
+digest and generation advance.
+
+The checked-in sample sidecar is
+`samples/Patching/DamageRules.cs.usids`. `analyze` and `analyze-files` accept
+repeatable `--identity`; when `--out` is present, updated sidecars are emitted
+beside the other analysis artifacts without overwriting the input files.
+
 ## Apply a visual literal patch
 
-The patching sample changes the graph literal `1.0f` to `1.5f` and writes a
-new C# source file:
+The patching sample changes the graph literal `1.0f` to `100.0f`, deliberately
+changing its source width while retaining the same persistent node ID:
 
 ```bash
 dotnet run --project src/UnifiedScript.Cli -- \
   apply-patch \
   samples/Patching/DamageRules.cs \
+  --identity samples/Patching/DamageRules.cs.usids \
   --patch samples/Patching/ScaleDamage.patch.json \
-  --out artifacts/patched/DamageRules.cs
+  --out artifacts/patched/DamageRules.cs \
+  --out-identity artifacts/patched/DamageRules.cs.usids
 ```
 
 `unifiedscript.patch/v0.1` binds every patch to both the source compilation ID
@@ -131,10 +158,16 @@ expected old literal text. A stale source, changed reference/effect
 configuration, missing target, changed old value, non-literal replacement, or
 semantically invalid result rejects the entire patch and writes no source.
 
+The Roslyn replacement receives a temporary identity pin, so the edited node's
+old ID is explicitly carried into the reconciled sidecar even when its
+fingerprint and span length change. Deleted live entries move to tombstones;
+ambiguous matches allocate new IDs and emit `UVS3101` rather than guessing.
+
 `apply-patch` currently accepts one source document and one or more literal
-replacement operations. The underlying patch applier supports multi-document
-compilation requests, but persistent ID sidecars and structural graph edits are
-still M3 work.
+replacement operations. With `--identity`, `--out-identity` is required and the
+source plus updated sidecar are written as one rollback-capable output
+transaction. The underlying patch applier and analysis pipeline support
+multi-document requests, but structural graph edits remain M3 work.
 
 ## Repository layout
 
@@ -160,7 +193,6 @@ This milestone does not include:
 - `.csproj`/MSBuild compilation loading;
 - namespace/API allow and deny policies;
 - flow-sensitive nullable state in the interchange model;
-- persistent IDs across arbitrary text movement and value-length changes;
 - graph-to-source structural edits such as rewiring, inserting, or deleting nodes;
 - loops, switch, lambdas, exceptions, or general-purpose C# visualization.
 

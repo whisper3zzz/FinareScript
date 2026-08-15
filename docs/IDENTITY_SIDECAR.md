@@ -23,12 +23,16 @@ initial schema is:
   "schemaVersion": "unifiedscript.identity/v0.1",
   "sourcePath": "samples/DoorController.cs",
   "sourceDigest": "sha256:...",
+  "generation": 4,
   "entries": [
     {
       "id": "us_0123456789abcdef0123456789abcdef",
       "kind": "invocation",
       "owner": "Samples.DoorController.BeginPlay()",
+      "role": "expression",
       "fingerprint": "sha256:...",
+      "shapeFingerprint": "sha256:...",
+      "parentFingerprint": "sha256:...",
       "anchor": { "start": 412, "length": 13 },
       "contextBefore": "sha256:...",
       "contextAfter": "sha256:...",
@@ -45,22 +49,23 @@ sidecar so layout conflicts cannot change program identity.
 
 ## Reconciliation algorithm
 
-On each successful parse, the identity service matches the new syntax tree to
-the previous sidecar in this order:
+On each successful analysis, the identity service matches the new HIR to the
+previous sidecar in this order:
 
-1. Match the same owner, syntax kind, span, and structural fingerprint.
-2. Within an owner, match a unique structural fingerprint whose surrounding
-   context also matches.
-3. Use Roslyn syntax-tree edit information to match moved or locally rewritten
-   nodes, requiring compatible parent and role information.
-4. Allocate a cryptographically random `SemanticId` for every unmatched new
+1. Apply explicit editor pins, rejecting missing, duplicate, or tombstoned IDs.
+2. Match owner, kind, role, anchor, and complete reconciliation evidence.
+3. Score equal structural fingerprints using parent shape, normalized token
+   context, and anchor evidence; require one best candidate.
+4. Match a unique shallow shape within an owner/kind/role group.
+5. Allocate a cryptographically random `SemanticId` for every unmatched new
    semantic node.
-5. Move unmatched old entries to tombstones rather than reusing their IDs.
+6. Move unmatched old entries to tombstones rather than reusing their IDs.
 
-Structural fingerprints exclude trivia and absolute positions. They include the
-node role, normalized tokens, child roles, and the owning declaration ID. Local
-variable names and literal values are included because changing either normally
-changes the authored semantic node; whitespace and comments are excluded.
+Structural fingerprints exclude trivia and absolute positions. They include HIR
+shape plus child structure. Shallow shape fingerprints include execution-
+relevant attributes such as operators, names, types, argument counts, and
+literal text. Parent fingerprints and four normalized Roslyn tokens on each
+side add local evidence without making comments or whitespace significant.
 
 Ambiguous matches are never guessed silently. The identity service allocates new
 IDs and reports a reconciliation warning containing the competing candidates.
@@ -98,9 +103,23 @@ must never be assigned to a different node.
 - Failed edits do not mutate persistent identity.
 - Deleted IDs are tombstoned, not recycled.
 
-The first M3 slice permits only literal replacement through a versioned patch
-whose source/configuration baselines and old value must match exactly. It does
-not claim edit-stable identity: because the bootstrap ID includes the syntax
-span, changing a literal's width may change its ID after reanalysis. The sidecar
-service remains required before insertion, deletion, rewiring, movement, or
-general interactive graph editing can be enabled safely.
+## Implemented slice
+
+The sidecar is now implemented as an opt-in input on each C# source document.
+It covers parameters, blocks, statements, and expressions; declarations retain
+their deterministic symbol IDs. Unchanged source produces a byte-identical
+sidecar. Formatting and comment changes reconcile persistent IDs, deleted nodes
+become tombstones, and ambiguous evidence emits `UVS3101` while allocating a
+fresh ID rather than guessing. Invalid explicit pins emit `UVS3102` and stop
+analysis.
+
+Graph-authored literal replacement attaches a Roslyn annotation to the proposed
+syntax node and converts it into an explicit identity pin. Changing `1` to
+`100` therefore preserves the target ID and every unrelated live ID while
+updating fingerprints, anchors, source digest, and generation. Without a
+sidecar, deterministic span-derived bootstrap identity remains available for
+batch analysis.
+
+Structural graph operations, declaration rename reconciliation, multi-file CLI
+patch commits, bounded tombstone compaction, and `.usgraph` layout persistence
+remain future work.

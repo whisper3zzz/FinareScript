@@ -6,6 +6,17 @@ namespace UnifiedScript.Tests;
 public sealed class SemanticIdTests
 {
     [Fact]
+    public void New_ProducesValidDistinctRandomIds()
+    {
+        SemanticId first = SemanticId.New();
+        SemanticId second = SemanticId.New();
+
+        Assert.False(first.IsEmpty);
+        Assert.NotEqual(first, second);
+        Assert.True(SemanticId.TryParse(first.Value, out _));
+    }
+
+    [Fact]
     public void FromKey_IsDeterministicAndDistinct()
     {
         SemanticId first = SemanticId.FromKey("method|Samples.Door.BeginPlay()");

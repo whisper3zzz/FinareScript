@@ -5,9 +5,9 @@
   "operations": [
     {
       "operation": "replaceLiteral",
-      "targetNodeId": "us_bb0b778c63f72b2e8f09e81bed33321f",
+      "targetNodeId": "us_f43c3262433cffd2fbcabe636c5a9d46",
       "expectedValueText": "1.0f",
-      "newValueText": "1.5f"
+      "newValueText": "100.0f"
     }
   ]
 }

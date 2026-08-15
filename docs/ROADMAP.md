@@ -55,8 +55,10 @@ Outcome: graph patches produce localized, format-preserving C# edits.
 - [x] atomic rejection of stale, invalid, or semantically unsafe patches
 - [x] Roslyn syntax construction with trivia/comment preservation
 - [x] source-to-graph-to-source literal round-trip tests
-- [ ] persistent semantic ID sidecar
-- [ ] explicit identity remapping for graph-authored replacements
+- [x] persistent semantic ID sidecar
+- [x] structural/shape/context reconciliation with ambiguity diagnostics
+- [x] tombstones for deleted semantic nodes
+- [x] explicit identity remapping for graph-authored replacements
 - [ ] structural HIR operations and conflict detection
 - [ ] graph layout sidecar
 - [ ] localized insertion, deletion, and data/control rewiring

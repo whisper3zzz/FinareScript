@@ -6,17 +6,63 @@ namespace UnifiedScript.CSharp;
 
 public sealed record CSharpSourceDocument
 {
-    public CSharpSourceDocument(string logicalPath, string source)
+    public CSharpSourceDocument(
+        string logicalPath,
+        string source,
+        IdentitySidecarDocument? identitySidecar = null,
+        IEnumerable<CSharpIdentityPin>? identityPins = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(logicalPath);
         ArgumentNullException.ThrowIfNull(source);
         LogicalPath = logicalPath.Replace('\\', '/');
         Source = source;
+        if (identitySidecar is not null)
+        {
+            IdentitySidecarDocument normalized = IdentitySidecarJson.NormalizeAndValidate(identitySidecar);
+            if (!string.Equals(normalized.SourcePath, LogicalPath, StringComparison.Ordinal))
+            {
+                throw new ArgumentException(
+                    $"Identity sidecar path '{normalized.SourcePath}' does not match source path " +
+                    $"'{LogicalPath}'.",
+                    nameof(identitySidecar));
+            }
+
+            IdentitySidecar = normalized;
+        }
+
+        CSharpIdentityPin[] materializedPins = (identityPins ?? []).ToArray();
+        if (materializedPins.Length > 0 && IdentitySidecar is null)
+        {
+            throw new ArgumentException(
+                "Identity pins require an identity sidecar on the same source document.",
+                nameof(identityPins));
+        }
+
+        foreach (CSharpIdentityPin pin in materializedPins)
+        {
+            if (pin.Id.IsEmpty || string.IsNullOrWhiteSpace(pin.Kind))
+            {
+                throw new ArgumentException("Identity pins require a non-empty ID and kind.", nameof(identityPins));
+            }
+
+            if (!string.Equals(pin.CurrentSpan.FilePath, LogicalPath, StringComparison.Ordinal))
+            {
+                throw new ArgumentException(
+                    $"Identity pin path '{pin.CurrentSpan.FilePath}' does not match source path '{LogicalPath}'.",
+                    nameof(identityPins));
+            }
+        }
+
+        IdentityPins = materializedPins;
     }
 
     public string LogicalPath { get; }
 
     public string Source { get; }
+
+    public IdentitySidecarDocument? IdentitySidecar { get; }
+
+    public IReadOnlyList<CSharpIdentityPin> IdentityPins { get; }
 }
 
 public sealed class CSharpCompilationRequest
@@ -79,10 +125,11 @@ public sealed class CSharpCompilationRequest
     public static CSharpCompilationRequest Single(
         string source,
         string filePath = "<memory>",
-        MethodEffectCatalog? effectCatalog = null) =>
+        MethodEffectCatalog? effectCatalog = null,
+        IdentitySidecarDocument? identitySidecar = null) =>
         new(
             "UnifiedScript.Analysis",
-            [new CSharpSourceDocument(filePath, source)],
+            [new CSharpSourceDocument(filePath, source, identitySidecar)],
             effectCatalog: effectCatalog);
 
     private SemanticId CreateConfigurationId()

@@ -37,9 +37,11 @@ Roslyn symbols into downstream modules.
 
 Every declaration, statement, expression, graph node, future MIR operation, and
 future bytecode range carries a `SemanticId`. Profile v0.1 derives deterministic
-IDs from source identity and syntax locations. A persistent identity sidecar is
-planned before general structural graph editing so IDs survive unrelated
-insertions. Its file contract and reconciliation rules are specified in
+bootstrap IDs from source identity and syntax locations. When a `.usids`
+sidecar is supplied, parameters, blocks, statements, and expressions receive
+persistent random IDs reconciled from structural evidence. Type and method IDs
+remain deterministic symbol identities. The file contract and reconciliation
+rules are specified in
 [IDENTITY_SIDECAR.md](IDENTITY_SIDECAR.md).
 
 ## Current pipeline
@@ -49,9 +51,12 @@ flowchart LR
     Source["C# source"] --> Roslyn["Roslyn syntax tree"]
     Roslyn --> Validator["Visual Profile Validator"]
     Validator --> HIR["Unified HIR"]
-    HIR --> Binder["Roslyn Semantic Binder"]
+    Sidecar[".usids sidecar"] --> Reconcile["Identity Reconciler"]
+    HIR --> Reconcile
+    Reconcile --> StableHIR["Identity-stable HIR"]
+    StableHIR --> Binder["Roslyn Semantic Binder"]
     Binder --> Bound["Bound semantic side tables"]
-    HIR --> Projector["Effect-aware Graph Projector"]
+    StableHIR --> Projector["Effect-aware Graph Projector"]
     Bound --> Projector
     Projector --> Graph["Graph JSON"]
     Graph --> Patch["Semantic Patch"]
@@ -69,6 +74,7 @@ flowchart LR
 - diagnostics
 - HIR declarations, statements, and expressions
 - HIR traversal and the language-neutral semantic patch contract
+- identity sidecar schema, deterministic JSON, and random ID allocation
 - common JSON conventions
 
 This project has no Roslyn, graph UI, CLR hosting, or UE dependency.
@@ -83,6 +89,7 @@ This project has no Roslyn, graph UI, CLR hosting, or UE dependency.
 - deterministic multi-document `CSharpCompilation` hosting
 - Roslyn symbol/type/method translation into bound semantics
 - transactional semantic-patch validation and localized source rewriting
+- HIR structural fingerprinting, context reconciliation, pins, and tombstones
 
 It may depend on Core and Roslyn, but not on Graph or UE.
 
@@ -190,11 +197,12 @@ The C# patch boundary performs these steps without mutating files:
 7. rerun profile validation, compilation, semantic binding, and graph safety;
 8. return patched documents only if the complete transaction succeeds.
 
-The CLI currently writes a successful single-document result through a
-same-directory temporary file and atomic move. Failed patches produce no output
-source. Persistent `.usids` reconciliation is deliberately separate: the
-bootstrap span-derived ID can change after a value-length edit, so structural
-editing remains blocked until the identity sidecar is implemented.
+The CLI currently writes a successful single-document result and updated
+sidecar through same-directory temporary files with backup-based rollback.
+Failed patches produce neither output. A Roslyn annotation maps each explicit
+replacement to an identity pin in the proposed source, allowing `1` to become
+`100` without changing that node's persistent ID. General insertion, deletion,
+and connection operations still require a structural patch algebra.
 
 Visual method signatures currently accept void, booleans, integer and floating
 primitives, strings, enums, nullable forms of supported value types, and

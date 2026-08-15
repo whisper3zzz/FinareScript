@@ -1,0 +1,105 @@
+{
+  "schemaVersion": "unifiedscript.identity/v0.1",
+  "sourcePath": "samples/Patching/DamageRules.cs",
+  "sourceDigest": "sha256:8170f80b646cf44b86860509da36ab3f62079c65a0fd5bfa02b159dd07a6c13d",
+  "generation": 1,
+  "entries": [
+    {
+      "id": "us_44509e28ab9c8634563ffcd8a955e883",
+      "kind": "block",
+      "owner": "Samples.Patching.DamageRules.Scale(float)",
+      "role": "body",
+      "fingerprint": "sha256:3c3f6f6e917df6fe8dc3e757db17d01a1082e8d5a6f192eff26ade4908fbd7d5",
+      "shapeFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
+      "parentFingerprint": "sha256:a8ef5869d636c6eeddd5231ca18acc19f57b76f21ec977c44825769fd4b5c0fd",
+      "anchor": {
+        "start": 146,
+        "length": 37
+      },
+      "contextBefore": "sha256:790877f2b49592bd2fefab495b1d8edfa65f2d9a4f0e936f9bc33b6629328067",
+      "contextAfter": "sha256:9ef6e8522f55e488b50f21e6decd3327e24380a184ca3d5aa1f484ad5e3cc271",
+      "generation": 1
+    },
+    {
+      "id": "us_62bdf1f268c19f4f8a578a3de8f19736",
+      "kind": "identifier",
+      "owner": "Samples.Patching.DamageRules.Scale(float)",
+      "role": "left",
+      "fingerprint": "sha256:2a7e81b88374fcb7736bcb7cf092e36fdf9262b388275e57d59cecfa044563ca",
+      "shapeFingerprint": "sha256:2a7e81b88374fcb7736bcb7cf092e36fdf9262b388275e57d59cecfa044563ca",
+      "parentFingerprint": "sha256:e0f2a410edbd1fad5f7b6285f77e66921ce521f065354eff6f2fa0b092b2df6d",
+      "anchor": {
+        "start": 163,
+        "length": 6
+      },
+      "contextBefore": "sha256:87ff7eb652fa0919037c090558395887738870597a8e09374751370b651dccbe",
+      "contextAfter": "sha256:55144a709ba78e94e9866b0fc808c1c6ecf124b4a4daaabb86b321c7e102ebc6",
+      "generation": 1
+    },
+    {
+      "id": "us_6962206ad33e42f3ee5b21af118b4ce6",
+      "kind": "parameter",
+      "owner": "Samples.Patching.DamageRules.Scale(float)",
+      "role": "parameter",
+      "fingerprint": "sha256:f03af78ce39bd7a0eba23af0ac02f30da62740e822596cbd4b75b465a8363ce9",
+      "shapeFingerprint": "sha256:f03af78ce39bd7a0eba23af0ac02f30da62740e822596cbd4b75b465a8363ce9",
+      "parentFingerprint": "sha256:a8ef5869d636c6eeddd5231ca18acc19f57b76f21ec977c44825769fd4b5c0fd",
+      "anchor": {
+        "start": 128,
+        "length": 12
+      },
+      "contextBefore": "sha256:0e24d0dc1385d404e2feb7c0d5a0a6dad9d6e6ca9824731abb1a3c6bef81b56c",
+      "contextAfter": "sha256:440d2ecb3d167a63657af1624b4c98ddf52d6faf5487cebd377cca1737c4eeb4",
+      "generation": 1
+    },
+    {
+      "id": "us_79c7bd79e0ef0b9a1e2d9e0072f76d9b",
+      "kind": "return",
+      "owner": "Samples.Patching.DamageRules.Scale(float)",
+      "role": "statement",
+      "fingerprint": "sha256:426b54861422273865e48a3778d49cb9aa4fd9312ab8103c9f0179361ecf758f",
+      "shapeFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
+      "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
+      "anchor": {
+        "start": 156,
+        "length": 21
+      },
+      "contextBefore": "sha256:8f9712182a419909e5e6c27f8815382082bea72454e025010b6a4079515d7ffb",
+      "contextAfter": "sha256:3f885f681d71faa5a866645c2bdfdf0b04dd30d36b07a33b817e798695a980fd",
+      "generation": 1
+    },
+    {
+      "id": "us_cf74c58fdb5ab836b01feee06cea34d1",
+      "kind": "binary",
+      "owner": "Samples.Patching.DamageRules.Scale(float)",
+      "role": "returnValue",
+      "fingerprint": "sha256:6cbfb2fd3040aab2ce54213182e80376b97e72128e87bc0a5ffedb747b903b6e",
+      "shapeFingerprint": "sha256:e0f2a410edbd1fad5f7b6285f77e66921ce521f065354eff6f2fa0b092b2df6d",
+      "parentFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
+      "anchor": {
+        "start": 163,
+        "length": 13
+      },
+      "contextBefore": "sha256:87ff7eb652fa0919037c090558395887738870597a8e09374751370b651dccbe",
+      "contextAfter": "sha256:38a79062b48cd41f7e38f93dc2b1d073f8ae28a8d051c02f950b7846f36805b1",
+      "generation": 1
+    },
+    {
+      "id": "us_f43c3262433cffd2fbcabe636c5a9d46",
+      "kind": "literal",
+      "owner": "Samples.Patching.DamageRules.Scale(float)",
+      "role": "right",
+      "fingerprint": "sha256:bce5b523526287989c9212aedbf2cc9223a16aabe8b8133deba26f840defc2d5",
+      "shapeFingerprint": "sha256:bce5b523526287989c9212aedbf2cc9223a16aabe8b8133deba26f840defc2d5",
+      "parentFingerprint": "sha256:e0f2a410edbd1fad5f7b6285f77e66921ce521f065354eff6f2fa0b092b2df6d",
+      "anchor": {
+        "start": 172,
+        "length": 4
+      },
+      "contextBefore": "sha256:2b67f212023b32429cede9fbcf955c056531861472fddc611515a544ec6f2fc7",
+      "contextAfter": "sha256:38a79062b48cd41f7e38f93dc2b1d073f8ae28a8d051c02f950b7846f36805b1",
+      "generation": 1
+    }
+  ],
+  "tombstones": []
+}

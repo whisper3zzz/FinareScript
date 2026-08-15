@@ -57,7 +57,7 @@ public sealed class CSharpSourcePatchApplier
                     source.Source,
                     CSharpToHirLowerer.ParseOptions,
                     source.LogicalPath)));
-        var replacements = new Dictionary<string, Dictionary<TextSpan, LiteralExpressionSyntax>>(
+        var replacements = new Dictionary<string, Dictionary<TextSpan, PendingReplacement>>(
             StringComparer.Ordinal);
 
         foreach (ReplaceLiteralPatchOperation operation in patch.Operations
@@ -137,11 +137,25 @@ public sealed class CSharpSourcePatchApplier
                 replacements.Add(document.Source.LogicalPath, documentReplacements);
             }
 
-            documentReplacements.Add(syntax.Span, replacement!.WithTriviaFrom(syntax));
+            var annotation = new SyntaxAnnotation("UnifiedScript.IdentityPin", literal.Id.Value);
+            documentReplacements.Add(
+                syntax.Span,
+                new PendingReplacement(
+                    literal.Id,
+                    replacement!
+                        .WithTriviaFrom(syntax)
+                        .WithAdditionalAnnotations(annotation),
+                    annotation));
         }
 
+        IReadOnlyDictionary<string, IdentitySidecarDocument> effectiveSidecars = original.IdentitySidecars
+            .ToDictionary(static sidecar => sidecar.SourcePath, StringComparer.Ordinal);
         CSharpSourceDocument[] patchedSources = request.Sources
-            .Select(source => ReplaceDocument(source, documents[source.LogicalPath], replacements))
+            .Select(source => ReplaceDocument(
+                source,
+                documents[source.LogicalPath],
+                replacements,
+                effectiveSidecars.GetValueOrDefault(source.LogicalPath)))
             .ToArray();
         var patchedRequest = new CSharpCompilationRequest(
             request.AssemblyName,
@@ -160,11 +174,14 @@ public sealed class CSharpSourcePatchApplier
     private static CSharpSourceDocument ReplaceDocument(
         CSharpSourceDocument source,
         ParsedDocument document,
-        IReadOnlyDictionary<string, Dictionary<TextSpan, LiteralExpressionSyntax>> replacements)
+        IReadOnlyDictionary<string, Dictionary<TextSpan, PendingReplacement>> replacements,
+        IdentitySidecarDocument? effectiveSidecar)
     {
         if (!replacements.TryGetValue(source.LogicalPath, out var documentReplacements))
         {
-            return source;
+            return effectiveSidecar is null
+                ? source
+                : new CSharpSourceDocument(source.LogicalPath, source.Source, effectiveSidecar);
         }
 
         SyntaxNode[] targets = document.Root
@@ -175,8 +192,22 @@ public sealed class CSharpSourcePatchApplier
             .ToArray();
         SyntaxNode changedRoot = document.Root.ReplaceNodes(
             targets,
-            (original, _) => documentReplacements[original.Span]);
-        return new CSharpSourceDocument(source.LogicalPath, changedRoot.ToFullString());
+            (original, _) => documentReplacements[original.Span].Syntax);
+        CSharpIdentityPin[] pins = effectiveSidecar is null
+            ? []
+            : documentReplacements.Values
+                .Select(replacement => new CSharpIdentityPin(
+                    replacement.TargetId,
+                    "literal",
+                    RoslynSourceSpan.FromNode(
+                        changedRoot.GetAnnotatedNodes(replacement.Annotation).Single(),
+                        source.LogicalPath)))
+                .ToArray();
+        return new CSharpSourceDocument(
+            source.LogicalPath,
+            changedRoot.ToFullString(),
+            effectiveSidecar,
+            pins);
     }
 
     private static bool TryParseLiteral(
@@ -204,4 +235,9 @@ public sealed class CSharpSourcePatchApplier
     {
         public SyntaxNode Root { get; } = SyntaxTree.GetRoot();
     }
+
+    private sealed record PendingReplacement(
+        SemanticId TargetId,
+        LiteralExpressionSyntax Syntax,
+        SyntaxAnnotation Annotation);
 }

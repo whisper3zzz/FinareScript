@@ -34,6 +34,12 @@ public readonly partial record struct SemanticId
         return new SemanticId(Prefix + payload);
     }
 
+    public static SemanticId New()
+    {
+        byte[] random = RandomNumberGenerator.GetBytes(16);
+        return new SemanticId(Prefix + Convert.ToHexString(random).ToLowerInvariant());
+    }
+
     public static bool TryParse(string? value, out SemanticId id)
     {
         if (value is not null && SemanticIdPattern().IsMatch(value))
@@ -51,4 +57,3 @@ public readonly partial record struct SemanticId
     [GeneratedRegex("^us_[0-9a-f]{32}$", RegexOptions.CultureInvariant)]
     private static partial Regex SemanticIdPattern();
 }
-

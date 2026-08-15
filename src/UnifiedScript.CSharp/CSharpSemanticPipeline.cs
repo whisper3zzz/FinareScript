@@ -34,6 +34,36 @@ public sealed class CSharpSemanticPipeline
             return new CSharpAnalysisResult(null, null, diagnostics);
         }
 
+        var identitySidecars = new List<IdentitySidecarDocument>();
+        var identityReconciler = new CSharpIdentityReconciler();
+        for (int index = 0; index < request.Sources.Count; index++)
+        {
+            CSharpSourceDocument source = request.Sources[index];
+            if (source.IdentitySidecar is null)
+            {
+                continue;
+            }
+
+            IdentityReconciliationResult reconciliation = identityReconciler.Reconcile(
+                source,
+                syntaxTrees[index],
+                lowerings[index].CompilationUnit!);
+            diagnostics.AddRange(reconciliation.Diagnostics);
+            identitySidecars.Add(reconciliation.Sidecar);
+            lowerings[index] = lowerings[index] with
+            {
+                CompilationUnit = reconciliation.CompilationUnit,
+            };
+        }
+
+        if (diagnostics.Any(static diagnostic => diagnostic.Severity == UnifiedDiagnosticSeverity.Error))
+        {
+            return new CSharpAnalysisResult(null, null, diagnostics)
+            {
+                IdentitySidecars = GetOriginalIdentitySidecars(request),
+            };
+        }
+
         HirCompilationUnit hir = MergeCompilationUnits(request, lowerings);
         CSharpCompilation compilation = compilationHost.Create(request, syntaxTrees);
         diagnostics.AddRange(compilation
@@ -44,7 +74,10 @@ public sealed class CSharpSemanticPipeline
                 diagnostic.Location.SourceTree?.FilePath ?? "<compilation>")));
         if (diagnostics.Any(static diagnostic => diagnostic.Severity == UnifiedDiagnosticSeverity.Error))
         {
-            return new CSharpAnalysisResult(hir, null, diagnostics);
+            return new CSharpAnalysisResult(hir, null, diagnostics)
+            {
+                IdentitySidecars = GetOriginalIdentitySidecars(request),
+            };
         }
 
         SemanticBindingResult binding = new RoslynSemanticBinder(request.EffectCatalog).Bind(
@@ -53,13 +86,25 @@ public sealed class CSharpSemanticPipeline
             hir,
             request.ConfigurationId);
         diagnostics.AddRange(binding.Diagnostics);
+        bool hasBindingErrors = diagnostics.Any(
+            static diagnostic => diagnostic.Severity == UnifiedDiagnosticSeverity.Error);
         return new CSharpAnalysisResult(
             hir,
-            diagnostics.Any(static diagnostic => diagnostic.Severity == UnifiedDiagnosticSeverity.Error)
-                ? null
-                : binding.Compilation,
-            diagnostics);
+            hasBindingErrors ? null : binding.Compilation,
+            diagnostics)
+        {
+            IdentitySidecars = hasBindingErrors
+                ? GetOriginalIdentitySidecars(request)
+                : identitySidecars,
+        };
     }
+
+    private static IReadOnlyList<IdentitySidecarDocument> GetOriginalIdentitySidecars(
+        CSharpCompilationRequest request) => request.Sources
+        .Select(static source => source.IdentitySidecar)
+        .Where(static sidecar => sidecar is not null)
+        .Cast<IdentitySidecarDocument>()
+        .ToArray();
 
     private static HirCompilationUnit MergeCompilationUnits(
         CSharpCompilationRequest request,
