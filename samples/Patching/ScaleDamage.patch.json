@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "unifiedscript.patch/v0.1",
+  "sourceCompilationId": "us_bc0d9932df55e504747205795b5aa27e",
+  "semanticConfigurationId": "us_02f5fe78d296e2d4fe04bc50ca71acf1",
+  "operations": [
+    {
+      "operation": "replaceLiteral",
+      "targetNodeId": "us_bb0b778c63f72b2e8f09e81bed33321f",
+      "expectedValueText": "1.0f",
+      "newValueText": "1.5f"
+    }
+  ]
+}

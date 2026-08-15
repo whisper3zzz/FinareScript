@@ -28,6 +28,7 @@ DOCUMENTS = [
     ROOT / "docs" / "ROADMAP.md",
     ROOT / "docs" / "milestones" / "M1_ROSLYN_GRAPH_FOUNDATION.md",
     ROOT / "docs" / "milestones" / "M2_SEMANTIC_BINDING.md",
+    ROOT / "docs" / "milestones" / "M3_BIDIRECTIONAL_PATCHING.md",
 ]
 
 
@@ -72,6 +73,11 @@ def main() -> int:
         and (ROOT / "samples" / "MultiFile" / "DamageScript.cs").is_file()
         and (ROOT / "samples" / "MultiFile" / "effects.json").is_file(),
         "Missing multi-file semantic sample",
+    )
+    require(
+        (ROOT / "samples" / "Patching" / "DamageRules.cs").is_file()
+        and (ROOT / "samples" / "Patching" / "ScaleDamage.patch.json").is_file(),
+        "Missing bidirectional patch sample",
     )
     require(
         any((ROOT / "tests" / "UnifiedScript.Tests").glob("*Tests.cs")),

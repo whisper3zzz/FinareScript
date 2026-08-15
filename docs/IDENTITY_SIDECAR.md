@@ -98,6 +98,9 @@ must never be assigned to a different node.
 - Failed edits do not mutate persistent identity.
 - Deleted IDs are tombstoned, not recycled.
 
-M3 will implement this service before graph-to-source editing. Until then, M1
-span-derived IDs remain an explicit bootstrap mechanism rather than a promise of
-edit-stable identity.
+The first M3 slice permits only literal replacement through a versioned patch
+whose source/configuration baselines and old value must match exactly. It does
+not claim edit-stable identity: because the bootstrap ID includes the syntax
+span, changing a literal's width may change its ID after reanalysis. The sidecar
+service remains required before insertion, deletion, rewiring, movement, or
+general interactive graph editing can be enabled safely.

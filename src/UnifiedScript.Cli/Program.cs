@@ -33,7 +33,17 @@ internal static class Program
 
     private static int Run(IReadOnlyList<string> args)
     {
-        if (!TryParseArguments(args, out CliOptions? options))
+        if (args.Count > 0 && args[0] == "apply-patch")
+        {
+            return RunApplyPatch(args);
+        }
+
+        return RunAnalyze(args);
+    }
+
+    private static int RunAnalyze(IReadOnlyList<string> args)
+    {
+        if (!TryParseAnalyzeArguments(args, out AnalyzeOptions? options))
         {
             PrintUsage();
             return 64;
@@ -98,6 +108,65 @@ internal static class Program
         return 0;
     }
 
+    private static int RunApplyPatch(IReadOnlyList<string> args)
+    {
+        if (!TryParsePatchArguments(args, out PatchOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+
+        options = options ?? throw new InvalidOperationException("Argument parsing succeeded without patch options.");
+        if (!File.Exists(options.InputPath))
+        {
+            Console.Error.WriteLine($"Input file does not exist: {options.InputPath}");
+            return 66;
+        }
+
+        if (!File.Exists(options.PatchPath))
+        {
+            Console.Error.WriteLine($"Patch file does not exist: {options.PatchPath}");
+            return 66;
+        }
+
+        string fullInputPath = Path.GetFullPath(options.InputPath);
+        string fullOutputPath = Path.GetFullPath(options.OutputPath);
+        StringComparison pathComparison = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        if (string.Equals(fullInputPath, fullOutputPath, pathComparison))
+        {
+            throw new ArgumentException(
+                "In-place source patching is not supported yet; choose a different --out path.");
+        }
+
+        MethodEffectCatalog effectCatalog = LoadEffectCatalog(options.EffectCatalogPath);
+        var request = new CSharpCompilationRequest(
+            options.AssemblyName,
+            [new CSharpSourceDocument(
+                GetLogicalInputPath(fullInputPath),
+                File.ReadAllText(fullInputPath))],
+            options.ReferencePaths,
+            effectCatalog);
+        SemanticPatchDocument patch = SemanticPatchJson.Deserialize(File.ReadAllText(options.PatchPath));
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+        foreach (UnifiedDiagnostic diagnostic in result.Diagnostics)
+        {
+            Console.Error.WriteLine(FormatDiagnostic(diagnostic));
+        }
+
+        if (!result.Succeeded || result.PatchedRequest is null)
+        {
+            Console.Error.WriteLine("Patch failed; no source file was written.");
+            return 3;
+        }
+
+        string patchedSource = AssertSinglePatchedSource(result.PatchedRequest);
+        WriteAtomically(fullOutputPath, patchedSource);
+        Console.WriteLine(fullOutputPath);
+        return 0;
+    }
+
     private static MethodEffectCatalog LoadEffectCatalog(string? path)
     {
         MethodEffectCatalog catalog = MethodEffectCatalog.CreateDefault();
@@ -115,7 +184,7 @@ internal static class Program
         return catalog.WithOverrides(document.Rules);
     }
 
-    private static bool TryParseArguments(IReadOnlyList<string> args, out CliOptions? options)
+    private static bool TryParseAnalyzeArguments(IReadOnlyList<string> args, out AnalyzeOptions? options)
     {
         options = null;
         if (args.Count < 2 || args[0] is not ("analyze" or "analyze-files"))
@@ -168,9 +237,70 @@ internal static class Program
             }
         }
 
-        options = new CliOptions(
+        options = new AnalyzeOptions(
             inputPaths,
             outputDirectory,
+            effectCatalogPath,
+            assemblyName ?? "UnifiedScript.Analysis",
+            referencePaths);
+        return true;
+    }
+
+    private static bool TryParsePatchArguments(IReadOnlyList<string> args, out PatchOptions? options)
+    {
+        options = null;
+        if (args.Count < 6 || args[0] != "apply-patch" || args[1].StartsWith("--", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        string inputPath = args[1];
+        string? patchPath = null;
+        string? outputPath = null;
+        string? effectCatalogPath = null;
+        string? assemblyName = null;
+        var referencePaths = new List<string>();
+        int index = 2;
+        while (index < args.Count)
+        {
+            string option = args[index++];
+            if (index >= args.Count)
+            {
+                return false;
+            }
+
+            string value = args[index++];
+            switch (option)
+            {
+                case "--patch" when patchPath is null:
+                    patchPath = value;
+                    break;
+                case "--out" when outputPath is null:
+                    outputPath = value;
+                    break;
+                case "--effects" when effectCatalogPath is null:
+                    effectCatalogPath = value;
+                    break;
+                case "--assembly" when assemblyName is null:
+                    assemblyName = value;
+                    break;
+                case "--reference":
+                    referencePaths.Add(value);
+                    break;
+                default:
+                    return false;
+            }
+        }
+
+        if (patchPath is null || outputPath is null)
+        {
+            return false;
+        }
+
+        options = new PatchOptions(
+            inputPath,
+            patchPath,
+            outputPath,
             effectCatalogPath,
             assemblyName ?? "UnifiedScript.Analysis",
             referencePaths);
@@ -190,7 +320,7 @@ internal static class Program
         return path.Replace(Path.DirectorySeparatorChar, '/');
     }
 
-    private static string GetOutputBaseName(CliOptions options)
+    private static string GetOutputBaseName(AnalyzeOptions options)
     {
         if (options.InputPaths.Count == 1)
         {
@@ -203,20 +333,65 @@ internal static class Program
             .ToArray());
     }
 
+    private static string AssertSinglePatchedSource(CSharpCompilationRequest request)
+    {
+        if (request.Sources.Count != 1)
+        {
+            throw new InvalidOperationException("The apply-patch CLI currently requires one source document.");
+        }
+
+        return request.Sources[0].Source;
+    }
+
+    private static void WriteAtomically(string outputPath, string content)
+    {
+        string? directory = Path.GetDirectoryName(outputPath);
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        string temporaryPath = Path.Combine(
+            directory ?? Environment.CurrentDirectory,
+            $".{Path.GetFileName(outputPath)}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            File.WriteAllText(temporaryPath, content);
+            File.Move(temporaryPath, outputPath, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+            {
+                File.Delete(temporaryPath);
+            }
+        }
+    }
+
     private static void PrintUsage() => Console.Error.WriteLine(
         "Usage:\n" +
         "  unifiedscript analyze <input.cs> [options]\n" +
         "  unifiedscript analyze-files <input.cs> <additional.cs>... [options]\n" +
+        "  unifiedscript apply-patch <input.cs> --patch <patch.json> --out <output.cs> [options]\n" +
         "Options:\n" +
-        "  --out <directory>       Emit HIR, semantics, and graph JSON files.\n" +
+        "  --out <path>            Artifact directory for analyze; source file for apply-patch.\n" +
+        "  --patch <patch.json>    Semantic patch document required by apply-patch.\n" +
         "  --assembly <name>        Set the analysis assembly name.\n" +
         "  --effects <catalog.json> Apply effect catalog overrides.\n" +
         "  --reference <assembly>   Add a metadata reference; may be repeated.\n" +
-        "Without --out, the graph JSON is written to stdout.");
+        "Analyze writes graph JSON to stdout when --out is omitted; apply-patch requires --out.");
 
-    private sealed record CliOptions(
+    private sealed record AnalyzeOptions(
         IReadOnlyList<string> InputPaths,
         string? OutputDirectory,
+        string? EffectCatalogPath,
+        string AssemblyName,
+        IReadOnlyList<string> ReferencePaths);
+
+    private sealed record PatchOptions(
+        string InputPath,
+        string PatchPath,
+        string OutputPath,
         string? EffectCatalogPath,
         string AssemblyName,
         IReadOnlyList<string> ReferencePaths);

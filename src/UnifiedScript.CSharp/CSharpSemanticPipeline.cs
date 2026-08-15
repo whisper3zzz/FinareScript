@@ -65,17 +65,17 @@ public sealed class CSharpSemanticPipeline
         CSharpCompilationRequest request,
         IReadOnlyList<CSharpLoweringResult> lowerings)
     {
-        if (lowerings.Count == 1)
-        {
-            return lowerings[0].CompilationUnit!;
-        }
-
         string sourceFingerprint = string.Join(
             '|',
             request.Sources.Select(static source =>
                 $"{source.LogicalPath}:{GetSourceDigest(source.Source)}"));
         SemanticId compilationId = SemanticId.FromKey(
             $"csharp-compilation/v0.2|{request.AssemblyName}|{sourceFingerprint}");
+        if (lowerings.Count == 1)
+        {
+            return lowerings[0].CompilationUnit! with { Id = compilationId };
+        }
+
         HirTypeDeclaration[] types = lowerings
             .SelectMany(static lowering => lowering.CompilationUnit!.Types)
             .OrderBy(static type => type.QualifiedName, StringComparer.Ordinal)

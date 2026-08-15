@@ -49,13 +49,17 @@ Outcome: Roslyn symbols bind into a language-independent type/effect model.
 
 Outcome: graph patches produce localized, format-preserving C# edits.
 
-- persistent semantic ID sidecar
-- semantic patch protocol
-- HIR diff and conflict detection
-- Roslyn syntax construction
-- trivia/comment preservation
-- graph layout sidecar
-- source-to-graph-to-source golden tests
+- [x] versioned semantic patch protocol
+- [x] source compilation and semantic configuration preconditions
+- [x] localized literal replacement by graph/HIR `SemanticId`
+- [x] atomic rejection of stale, invalid, or semantically unsafe patches
+- [x] Roslyn syntax construction with trivia/comment preservation
+- [x] source-to-graph-to-source literal round-trip tests
+- [ ] persistent semantic ID sidecar
+- [ ] explicit identity remapping for graph-authored replacements
+- [ ] structural HIR operations and conflict detection
+- [ ] graph layout sidecar
+- [ ] localized insertion, deletion, and data/control rewiring
 
 ## M4 — Structured control flow expansion
 

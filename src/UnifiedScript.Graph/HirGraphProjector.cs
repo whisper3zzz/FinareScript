@@ -22,7 +22,11 @@ public sealed class HirGraphProjector
             .SelectMany(type => type.Methods.Select(method => ProjectMethod(type, method, semanticIndex)))
             .OrderBy(static function => function.QualifiedName, StringComparer.Ordinal)
             .ToArray();
-        return new GraphDocument("unifiedscript.graph/v0.1", compilationUnit.Id, functions);
+        return new GraphDocument(
+            GraphDocument.CurrentSchemaVersion,
+            compilationUnit.Id,
+            semantics?.ConfigurationId,
+            functions);
     }
 
     private static GraphFunction ProjectMethod(

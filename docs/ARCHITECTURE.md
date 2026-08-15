@@ -38,8 +38,8 @@ Roslyn symbols into downstream modules.
 Every declaration, statement, expression, graph node, future MIR operation, and
 future bytecode range carries a `SemanticId`. Profile v0.1 derives deterministic
 IDs from source identity and syntax locations. A persistent identity sidecar is
-planned before interactive graph editing so IDs survive unrelated insertions.
-Its file contract and reconciliation rules are specified in
+planned before general structural graph editing so IDs survive unrelated
+insertions. Its file contract and reconciliation rules are specified in
 [IDENTITY_SIDECAR.md](IDENTITY_SIDECAR.md).
 
 ## Current pipeline
@@ -54,6 +54,9 @@ flowchart LR
     HIR --> Projector["Effect-aware Graph Projector"]
     Bound --> Projector
     Projector --> Graph["Graph JSON"]
+    Graph --> Patch["Semantic Patch"]
+    Patch --> Rewriter["Transactional Roslyn Rewriter"]
+    Rewriter --> Source
 ```
 
 ## Project boundaries
@@ -65,6 +68,7 @@ flowchart LR
 - source positions
 - diagnostics
 - HIR declarations, statements, and expressions
+- HIR traversal and the language-neutral semantic patch contract
 - common JSON conventions
 
 This project has no Roslyn, graph UI, CLR hosting, or UE dependency.
@@ -78,6 +82,7 @@ This project has no Roslyn, graph UI, CLR hosting, or UE dependency.
 - source range and deterministic ID assignment
 - deterministic multi-document `CSharpCompilation` hosting
 - Roslyn symbol/type/method translation into bound semantics
+- transactional semantic-patch validation and localized source rewriting
 
 It may depend on Core and Roslyn, but not on Graph or UE.
 
@@ -161,6 +166,35 @@ catalog. Multi-document HIR compilation identity depends on assembly name,
 logical paths, and source digests. Bound semantics additionally carry a
 configuration ID so the same source analyzed with different references or
 effect rules cannot be mistaken for the same semantic result.
+
+Single- and multi-document HIR compilation IDs now both include assembly name,
+logical source paths, and SHA-256 source digests. This content-sensitive ID is
+the optimistic-concurrency baseline for graph-to-source patches; path-only
+compilation identity is not safe for editing.
+
+## Semantic patch transaction
+
+Graph schema v0.2 carries both the source compilation ID and semantic
+configuration ID. A `unifiedscript.patch/v0.1` document repeats those IDs and
+contains typed operations keyed by graph/HIR `SemanticId`. The first operation
+is `replaceLiteral`, with expected-old-value and proposed-new-value fields.
+
+The C# patch boundary performs these steps without mutating files:
+
+1. analyze the current source request;
+2. verify source and semantic-configuration baselines;
+3. resolve every target ID to the expected HIR node kind;
+4. verify operation-specific preconditions;
+5. build localized Roslyn syntax replacements while preserving trivia;
+6. apply every operation in memory;
+7. rerun profile validation, compilation, semantic binding, and graph safety;
+8. return patched documents only if the complete transaction succeeds.
+
+The CLI currently writes a successful single-document result through a
+same-directory temporary file and atomic move. Failed patches produce no output
+source. Persistent `.usids` reconciliation is deliberately separate: the
+bootstrap span-derived ID can change after a value-length edit, so structural
+editing remains blocked until the identity sidecar is implemented.
 
 Visual method signatures currently accept void, booleans, integer and floating
 primitives, strings, enums, nullable forms of supported value types, and

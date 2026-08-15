@@ -19,6 +19,8 @@ The repository currently implements:
 - resolved types, declaration references, overloads, and conservative call effects;
 - a versioned, configurable method-effect catalog;
 - deterministic, effect-aware HIR-to-graph projection with control and data edges;
+- a versioned semantic patch protocol with source/configuration conflict guards;
+- transactional graph-literal-to-C# source rewriting with trivia preservation;
 - versioned HIR, semantics, and graph JSON emission through a small CLI;
 - xUnit coverage for validation, lowering, identity, graph projection, and
   deterministic output.
@@ -37,6 +39,12 @@ C# source
   -> Roslyn SemanticModel
   -> language-neutral bound semantics
   -> deterministic, effect-aware graph projection
+
+Graph literal edit
+  -> semantic patch bound to source + semantic configuration IDs
+  -> Roslyn literal replacement
+  -> full profile and semantic revalidation
+  -> updated C# source (only if the whole patch succeeds)
 
 Later:
   -> semantic MIR
@@ -104,6 +112,30 @@ containing type, and method metadata names. `*` is supported as a whole-field
 wildcard. User rules override the bootstrap `System.Math`/`System.MathF` rules;
 unmatched calls remain conservatively read/write effectful.
 
+## Apply a visual literal patch
+
+The patching sample changes the graph literal `1.0f` to `1.5f` and writes a
+new C# source file:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  apply-patch \
+  samples/Patching/DamageRules.cs \
+  --patch samples/Patching/ScaleDamage.patch.json \
+  --out artifacts/patched/DamageRules.cs
+```
+
+`unifiedscript.patch/v0.1` binds every patch to both the source compilation ID
+and semantic configuration ID emitted in Graph schema v0.2. It also carries the
+expected old literal text. A stale source, changed reference/effect
+configuration, missing target, changed old value, non-literal replacement, or
+semantically invalid result rejects the entire patch and writes no source.
+
+`apply-patch` currently accepts one source document and one or more literal
+replacement operations. The underlying patch applier supports multi-document
+compilation requests, but persistent ID sidecars and structural graph edits are
+still M3 work.
+
 ## Repository layout
 
 ```text
@@ -128,11 +160,13 @@ This milestone does not include:
 - `.csproj`/MSBuild compilation loading;
 - namespace/API allow and deny policies;
 - flow-sensitive nullable state in the interchange model;
-- code generation from graph edits back into Roslyn syntax;
+- persistent IDs across arbitrary text movement and value-length changes;
+- graph-to-source structural edits such as rewiring, inserting, or deleting nodes;
 - loops, switch, lambdas, exceptions, or general-purpose C# visualization.
 
 See [ARCHITECTURE.md](docs/ARCHITECTURE.md),
 [IDENTITY_SIDECAR.md](docs/IDENTITY_SIDECAR.md),
 [M1_ROSLYN_GRAPH_FOUNDATION.md](docs/milestones/M1_ROSLYN_GRAPH_FOUNDATION.md),
-and [M2_SEMANTIC_BINDING.md](docs/milestones/M2_SEMANTIC_BINDING.md)
+[M2_SEMANTIC_BINDING.md](docs/milestones/M2_SEMANTIC_BINDING.md), and
+[M3_BIDIRECTIONAL_PATCHING.md](docs/milestones/M3_BIDIRECTIONAL_PATCHING.md)
 for the planned sequence.
