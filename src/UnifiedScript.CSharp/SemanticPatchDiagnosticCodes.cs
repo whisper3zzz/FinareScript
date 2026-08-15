@@ -8,4 +8,10 @@ public static class SemanticPatchDiagnosticCodes
     public const string TargetKindMismatch = "UVS3004";
     public const string PreconditionFailed = "UVS3005";
     public const string InvalidReplacement = "UVS3006";
+    public const string InvalidOperator = "UVS3007";
+    public const string ArgumentIndexOutOfRange = "UVS3008";
+    public const string TypeMismatch = "UVS3009";
+    public const string OverlappingOperations = "UVS3010";
+    public const string EffectOrderViolation = "UVS3011";
+    public const string InvocationShapeNotSupported = "UVS3012";
 }

@@ -7,8 +7,11 @@ a second language implementation or bypassing the existing compiler checks.
 
 ## Implemented vertical slice
 
-- `unifiedscript.patch/v0.1` polymorphic JSON protocol
+- `unifiedscript.patch/v0.2` polymorphic JSON protocol
 - `replaceLiteral` operation targeted by HIR/Graph `SemanticId`
+- unary/binary `changeOperator` with result and operand type preconditions
+- same-invocation `reconnectArgument` with endpoint, type, and effect guards
+- overlapping source-range conflict detection
 - expected-old-literal precondition
 - content-sensitive source compilation baseline
 - semantic configuration baseline covering assembly, references, and effects
@@ -35,8 +38,14 @@ diagnostic codes distinguish:
 - `UVS3002`: semantic configuration mismatch
 - `UVS3003`: target node or source syntax not found
 - `UVS3004`: target is not the operation's required HIR kind
-- `UVS3005`: expected old value no longer matches
+- `UVS3005`: an expected old value, operator, endpoint, or semantic type no longer matches
 - `UVS3006`: replacement is not one complete C# literal
+- `UVS3007`: operator is unsupported or crosses a result-preserving family
+- `UVS3008`: invocation argument index is outside the current argument list
+- `UVS3009`: reconnected ports are not exactly type-compatible
+- `UVS3010`: two operations overlap in the same source range
+- `UVS3011`: argument reconnection would change effect evaluation order
+- `UVS3012`: invocation shape cannot be safely represented by this operation
 - `UVS3101`: identity evidence is ambiguous; allocate a new ID instead of guessing
 - `UVS3102`: an explicit identity pin is invalid, missing, duplicate, or tombstoned
 
@@ -63,18 +72,24 @@ The test and sample suite proves that:
 13. deleted nodes move to tombstones and their IDs are not reused;
 14. ambiguous evidence allocates a new ID with `UVS3101`;
 15. changing `1` to `100` preserves every live persistent ID.
+16. unary and binary operators change without changing their persistent node IDs;
+17. exactly typed pure invocation arguments exchange Graph ports and retain IDs;
+18. different types and effectful argument subtrees reject reconnection;
+19. overlapping structural operations reject the complete transaction.
 
 ## Deliberate limits
 
-This is still a value-edit slice, not general graph-to-source generation. It
-does not apply multi-file patches through the CLI, edit operators or
-connections, insert/delete statements from Graph, reconcile declaration
-renames, compact tombstones, or persist graph layout. Those operations require
-a structural patch algebra and project-level transaction coordinator.
+This is a bounded structural-edit slice, not general graph-to-source generation.
+It does not apply multi-file patches through the CLI, insert/delete statements,
+share one expression across multiple source consumers, reconnect across
+invocations or statements, reconcile declaration renames, compact tombstones,
+or persist graph layout. General sharing requires a temporary-introduction
+lowering that preserves evaluation count and order; project-wide edits require
+a multi-file transaction coordinator.
 
 ## Next slice
 
-Define structural patch operations for changing unary/binary operators and
-reconnecting an existing invocation argument. Each operation must specify node
-kind, port/role, old endpoint preconditions, and expected semantic types before
-Roslyn construction is attempted.
+Add localized statement insertion/deletion with explicit parent block, sibling
+anchor, expected control edges, and tombstone behavior. Before general data
+rewiring, define temporary introduction so a shared graph value maps to C#
+without duplicating effectful evaluation.

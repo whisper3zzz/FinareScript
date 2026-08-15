@@ -20,7 +20,7 @@ The repository currently implements:
 - a versioned, configurable method-effect catalog;
 - deterministic, effect-aware HIR-to-graph projection with control and data edges;
 - a versioned semantic patch protocol with source/configuration conflict guards;
-- transactional graph-literal-to-C# source rewriting with trivia preservation;
+- transactional graph-to-C# literal, operator, and argument-connection rewriting;
 - opt-in `.usids` sidecars that preserve node identity across formatting and edits;
 - explicit patch identity pins and tombstones for deleted semantic nodes;
 - versioned HIR, semantics, and graph JSON emission through a small CLI;
@@ -42,9 +42,9 @@ C# source
   -> language-neutral bound semantics
   -> deterministic, effect-aware graph projection
 
-Graph literal edit
+Graph edit
   -> semantic patch bound to source + semantic configuration IDs
-  -> Roslyn literal replacement
+  -> typed/preconditioned Roslyn replacement
   -> full profile and semantic revalidation
   -> updated C# source (only if the whole patch succeeds)
 
@@ -152,7 +152,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
   --out-identity artifacts/patched/DamageRules.cs.usids
 ```
 
-`unifiedscript.patch/v0.1` binds every patch to both the source compilation ID
+`unifiedscript.patch/v0.2` binds every patch to both the source compilation ID
 and semantic configuration ID emitted in Graph schema v0.2. It also carries the
 expected old literal text. A stale source, changed reference/effect
 configuration, missing target, changed old value, non-literal replacement, or
@@ -163,11 +163,41 @@ old ID is explicitly carried into the reconciled sidecar even when its
 fingerprint and span length change. Deleted live entries move to tombstones;
 ambiguous matches allocate new IDs and emit `UVS3101` rather than guessing.
 
-`apply-patch` currently accepts one source document and one or more literal
-replacement operations. With `--identity`, `--out-identity` is required and the
-source plus updated sidecar are written as one rollback-capable output
-transaction. The underlying patch applier and analysis pipeline support
-multi-document requests, but structural graph edits remain M3 work.
+## Apply structural graph patches
+
+Patch v0.2 adds `changeOperator` and `reconnectArgument`. The checked-in
+operator sample changes the binary node from multiplication to division while
+requiring the expected result, left-port, and right-port type IDs:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  apply-patch \
+  samples/Patching/DamageRules.cs \
+  --identity samples/Patching/DamageRules.cs.usids \
+  --patch samples/Patching/DivideDamage.patch.json \
+  --out artifacts/operator/DamageRules.cs \
+  --out-identity artifacts/operator/DamageRules.cs.usids
+```
+
+Operator changes are restricted to the same result-preserving family, such as
+arithmetic-to-arithmetic or comparison-to-comparison. Both unary and binary
+operators are supported. The edited operator node receives an identity pin.
+
+`reconnectArgument` safely exchanges two existing positional arguments of one
+resolved invocation. Its patch records both indices, both expected endpoint
+IDs, and both expected parameter type IDs. The types must match exactly and
+both argument subtrees must be effect-free; otherwise changing their C#
+left-to-right evaluation order is rejected. The invocation and both moved
+argument roots retain their persistent IDs, so Graph edges move without
+inventing duplicate semantic nodes.
+
+Overlapping operations—for example changing an operator inside an invocation
+while also reconnecting that invocation in the same patch—are rejected and
+must be submitted as sequential patches with a fresh baseline. With
+`--identity`, `--out-identity` is required and source plus updated sidecar are
+written as one rollback-capable output transaction. The in-memory patcher
+supports multi-document requests; the CLI commit boundary remains
+single-document.
 
 ## Repository layout
 
@@ -193,7 +223,7 @@ This milestone does not include:
 - `.csproj`/MSBuild compilation loading;
 - namespace/API allow and deny policies;
 - flow-sensitive nullable state in the interchange model;
-- graph-to-source structural edits such as rewiring, inserting, or deleting nodes;
+- graph-to-source insertion, deletion, and general cross-expression rewiring;
 - loops, switch, lambdas, exceptions, or general-purpose C# visualization.
 
 See [ARCHITECTURE.md](docs/ARCHITECTURE.md),

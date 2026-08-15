@@ -77,24 +77,33 @@ def main() -> int:
     )
     patch_source_path = ROOT / "samples" / "Patching" / "DamageRules.cs"
     patch_document_path = ROOT / "samples" / "Patching" / "ScaleDamage.patch.json"
+    operator_patch_path = ROOT / "samples" / "Patching" / "DivideDamage.patch.json"
     patch_identity_path = ROOT / "samples" / "Patching" / "DamageRules.cs.usids"
     require(
         patch_source_path.is_file()
         and patch_document_path.is_file()
+        and operator_patch_path.is_file()
         and patch_identity_path.is_file(),
         "Missing bidirectional patch sample",
     )
     patch_source = patch_source_path.read_text(encoding="utf-8")
     patch_document = json.loads(patch_document_path.read_text(encoding="utf-8"))
+    operator_patch = json.loads(operator_patch_path.read_text(encoding="utf-8"))
     patch_identity = json.loads(patch_identity_path.read_text(encoding="utf-8"))
     patch_operation = patch_document["operations"][0]
+    operator_operation = operator_patch["operations"][0]
     identity_ids = {entry["id"] for entry in patch_identity["entries"]}
     source_digest = hashlib.sha256(patch_source.encode("utf-8")).hexdigest()
     require(
-        patch_identity["sourcePath"] == "samples/Patching/DamageRules.cs"
+        patch_document["schemaVersion"] == "unifiedscript.patch/v0.2"
+        and operator_patch["schemaVersion"] == "unifiedscript.patch/v0.2"
+        and patch_identity["sourcePath"] == "samples/Patching/DamageRules.cs"
         and patch_identity["sourceDigest"] == f"sha256:{source_digest}"
         and patch_operation["targetNodeId"] in identity_ids
-        and patch_operation["expectedValueText"] in patch_source,
+        and operator_operation["targetNodeId"] in identity_ids
+        and patch_operation["expectedValueText"] in patch_source
+        and operator_operation["expectedOperator"] in patch_source
+        and operator_operation["expectedOperator"] != operator_operation["newOperator"],
         "Bidirectional patch sample source, sidecar, and patch are inconsistent",
     )
     require(

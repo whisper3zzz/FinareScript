@@ -113,13 +113,14 @@ become tombstones, and ambiguous evidence emits `UVS3101` while allocating a
 fresh ID rather than guessing. Invalid explicit pins emit `UVS3102` and stop
 analysis.
 
-Graph-authored literal replacement attaches a Roslyn annotation to the proposed
-syntax node and converts it into an explicit identity pin. Changing `1` to
-`100` therefore preserves the target ID and every unrelated live ID while
-updating fingerprints, anchors, source digest, and generation. Without a
-sidecar, deterministic span-derived bootstrap identity remains available for
-batch analysis.
+Graph-authored replacements attach Roslyn annotations to proposed syntax nodes
+and convert them into explicit identity pins. Changing `1` to `100` therefore
+preserves the literal ID; changing an operator preserves the unary/binary node
+ID; exchanging two invocation arguments preserves the invocation plus both
+moved argument-root IDs. Unrelated live IDs remain stable while fingerprints,
+anchors, source digest, and generation update. Without a sidecar, deterministic
+span-derived bootstrap identity remains available for batch analysis.
 
-Structural graph operations, declaration rename reconciliation, multi-file CLI
-patch commits, bounded tombstone compaction, and `.usgraph` layout persistence
-remain future work.
+Insertion/deletion, general cross-expression rewiring, declaration rename
+reconciliation, multi-file CLI patch commits, bounded tombstone compaction, and
+`.usgraph` layout persistence remain future work.

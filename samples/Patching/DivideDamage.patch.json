@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "unifiedscript.patch/v0.2",
+  "sourceCompilationId": "us_bc0d9932df55e504747205795b5aa27e",
+  "semanticConfigurationId": "us_02f5fe78d296e2d4fe04bc50ca71acf1",
+  "operations": [
+    {
+      "operation": "changeOperator",
+      "targetNodeId": "us_cf74c58fdb5ab836b01feee06cea34d1",
+      "expectedOperator": "*",
+      "newOperator": "/",
+      "expectedResultTypeId": "us_26a5b44da19acd678d268ed608e9829f",
+      "expectedOperandTypeId": "us_26a5b44da19acd678d268ed608e9829f",
+      "expectedRightOperandTypeId": "us_26a5b44da19acd678d268ed608e9829f"
+    }
+  ]
+}

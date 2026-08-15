@@ -182,18 +182,20 @@ compilation identity is not safe for editing.
 ## Semantic patch transaction
 
 Graph schema v0.2 carries both the source compilation ID and semantic
-configuration ID. A `unifiedscript.patch/v0.1` document repeats those IDs and
-contains typed operations keyed by graph/HIR `SemanticId`. The first operation
-is `replaceLiteral`, with expected-old-value and proposed-new-value fields.
+configuration ID. A `unifiedscript.patch/v0.2` document repeats those IDs and
+contains typed operations keyed by graph/HIR `SemanticId`. Implemented
+operations are `replaceLiteral`, `changeOperator`, and `reconnectArgument`.
+Structural operations carry old operator/endpoint and semantic type
+preconditions rather than relying only on the compilation baseline.
 
 The C# patch boundary performs these steps without mutating files:
 
 1. analyze the current source request;
 2. verify source and semantic-configuration baselines;
-3. resolve every target ID to the expected HIR node kind;
-4. verify operation-specific preconditions;
+3. resolve every target and connection endpoint ID to the expected HIR kind;
+4. verify operation-specific value, operator, endpoint, type, and effect preconditions;
 5. build localized Roslyn syntax replacements while preserving trivia;
-6. apply every operation in memory;
+6. reject overlapping source ranges and apply every operation in memory;
 7. rerun profile validation, compilation, semantic binding, and graph safety;
 8. return patched documents only if the complete transaction succeeds.
 
@@ -201,8 +203,13 @@ The CLI currently writes a successful single-document result and updated
 sidecar through same-directory temporary files with backup-based rollback.
 Failed patches produce neither output. A Roslyn annotation maps each explicit
 replacement to an identity pin in the proposed source, allowing `1` to become
-`100` without changing that node's persistent ID. General insertion, deletion,
-and connection operations still require a structural patch algebra.
+`100` without changing that node's persistent ID. Operator roots and swapped
+invocation arguments use the same pin mechanism. Argument reconnection is
+deliberately bounded to exchanging two pure, exactly type-compatible positional
+arguments of one resolved invocation; arbitrary sharing would require
+introducing temporaries to preserve C# evaluation count and order. General
+insertion, deletion, and cross-expression rewiring remain future patch-algebra
+work.
 
 Visual method signatures currently accept void, booleans, integer and floating
 primitives, strings, enums, nullable forms of supported value types, and
@@ -230,7 +237,7 @@ receivers until a richer graph-safe object-handle policy is defined.
 - HIR-to-graph control/data tests;
 - deterministic serialization tests;
 - golden digests for versioned HIR, semantics, and graph fixtures;
-- later, golden source/graph/source round-trip tests;
+- source/graph/source round-trip tests for values, operators, and argument edges;
 - later, semantic equivalence tests between graph-edited and text-edited IL.
 
 ## Deferred UE boundary

@@ -59,7 +59,10 @@ Outcome: graph patches produce localized, format-preserving C# edits.
 - [x] structural/shape/context reconciliation with ambiguity diagnostics
 - [x] tombstones for deleted semantic nodes
 - [x] explicit identity remapping for graph-authored replacements
-- [ ] structural HIR operations and conflict detection
+- [x] unary/binary operator changes with semantic type preconditions
+- [x] same-invocation argument reconnection with type/effect guards
+- [x] overlapping structural-operation conflict detection
+- [ ] insertion/deletion and general structural HIR operations
 - [ ] graph layout sidecar
 - [ ] localized insertion, deletion, and data/control rewiring
 
