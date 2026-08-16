@@ -117,10 +117,14 @@ Graph-authored replacements attach Roslyn annotations to proposed syntax nodes
 and convert them into explicit identity pins. Changing `1` to `100` therefore
 preserves the literal ID; changing an operator preserves the unary/binary node
 ID; exchanging two invocation arguments preserves the invocation plus both
-moved argument-root IDs. Unrelated live IDs remain stable while fingerprints,
+moved argument-root IDs. A statement insertion pins its parent block and every
+pre-existing direct sibling while the new local declaration and literal receive
+freshly allocated IDs. A safe deletion pins the parent block and surviving
+siblings; every entry from the removed statement subtree becomes a tombstone
+and is never reassigned. Unrelated live IDs remain stable while fingerprints,
 anchors, source digest, and generation update. Without a sidecar, deterministic
 span-derived bootstrap identity remains available for batch analysis.
 
-Insertion/deletion, general cross-expression rewiring, declaration rename
-reconciliation, multi-file CLI patch commits, bounded tombstone compaction, and
-`.usgraph` layout persistence remain future work.
+General expression/control-flow synthesis, cross-expression rewiring,
+declaration rename reconciliation, multi-file CLI patch commits, bounded
+tombstone compaction, and `.usgraph` layout persistence remain future work.

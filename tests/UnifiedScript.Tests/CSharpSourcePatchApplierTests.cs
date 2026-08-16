@@ -541,6 +541,331 @@ public sealed class CSharpSourcePatchApplierTests
     }
 
     [Fact]
+    public void Apply_InsertsLocalLiteralAndAllocatesOnlyNewStatementIdentities()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static float Run(float damage)
+                {
+                    return damage;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/InsertLocal.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(Assert.Single(method.Body.Statements));
+        SemanticId floatType = GetTypeId(original, returnStatement.Expression!);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new InsertStatementPatchOperation(
+                method.Body.Id,
+                null,
+                returnStatement.Id,
+                new LocalLiteralDeclarationPatchStatement("scale", "float", "2.0f", floatType))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains("float scale = 2.0f;\n        return damage;", patchedSource);
+        HirMethodDeclaration changedMethod = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirVariableDeclarationStatement inserted = Assert.IsType<HirVariableDeclarationStatement>(
+            changedMethod.Body.Statements[0]);
+        Assert.Equal("scale", inserted.Name);
+        Assert.Equal("2.0f", Assert.IsType<HirLiteralExpression>(inserted.Initializer).ValueText);
+        Assert.Equal(method.Body.Id, changedMethod.Body.Id);
+        Assert.Equal(returnStatement.Id, changedMethod.Body.Statements[1].Id);
+
+        IdentitySidecarDocument before = Assert.Single(original.IdentitySidecars);
+        IdentitySidecarDocument after = Assert.Single(result.Analysis.IdentitySidecars);
+        HashSet<SemanticId> afterIds = after.Entries.Select(static entry => entry.Id).ToHashSet();
+        Assert.All(before.Entries, entry => Assert.Contains(entry.Id, afterIds));
+        Assert.Equal(before.Entries.Count + 2, after.Entries.Count);
+        Assert.Empty(after.Tombstones);
+
+        GraphDocument graph = new HirGraphProjector().Project(
+            result.Analysis.Hir,
+            result.Analysis.Semantics);
+        Assert.Contains(
+            Assert.Single(graph.Functions).Nodes,
+            node => node.Id == inserted.Id && node.Kind == "variable");
+    }
+
+    [Fact]
+    public void Apply_InsertsIntoEmptyExplicitBlockWithStableIndentation()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static void Run(int seed)
+                {
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/InsertEmpty.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        SemanticId intType = GetTypeId(original, Assert.Single(method.Parameters));
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new InsertStatementPatchOperation(
+                method.Body.Id,
+                null,
+                null,
+                new LocalLiteralDeclarationPatchStatement("value", "int", "1", intType))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Contains("{\n        int value = 1;\n    }", Assert.Single(result.PatchedRequest!.Sources).Source);
+    }
+
+    [Fact]
+    public void Apply_RejectsInsertionWhenSiblingNameOrTypePreconditionIsStale()
+    {
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(Source, "Game/InsertConflict.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(Assert.Single(method.Body.Statements));
+        SemanticId intType = GetTypeId(original, returnStatement.Expression!);
+        var applier = new CSharpSourcePatchApplier();
+        SemanticPatchDocument staleSibling = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new InsertStatementPatchOperation(
+                method.Body.Id,
+                null,
+                SemanticId.FromKey("stale-next-sibling"),
+                new LocalLiteralDeclarationPatchStatement("scale", "int", "2", intType))]);
+        SemanticPatchDocument nameConflict = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics.ConfigurationId,
+            [new InsertStatementPatchOperation(
+                method.Body.Id,
+                null,
+                returnStatement.Id,
+                new LocalLiteralDeclarationPatchStatement("value", "int", "2", intType))]);
+        SemanticPatchDocument wrongType = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics.ConfigurationId,
+            [new InsertStatementPatchOperation(
+                method.Body.Id,
+                null,
+                returnStatement.Id,
+                new LocalLiteralDeclarationPatchStatement(
+                    "scale",
+                    "float",
+                    "2.0f",
+                    SemanticId.FromKey("stale-type")))]);
+
+        CSharpPatchResult staleResult = applier.Apply(request, staleSibling);
+        CSharpPatchResult conflictResult = applier.Apply(request, nameConflict);
+        CSharpPatchResult typeResult = applier.Apply(request, wrongType);
+
+        Assert.False(staleResult.Succeeded);
+        Assert.Contains(
+            staleResult.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.SiblingPreconditionFailed);
+        Assert.False(conflictResult.Succeeded);
+        Assert.Contains(
+            conflictResult.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.NameConflict);
+        Assert.False(typeResult.Succeeded);
+        Assert.Contains(
+            typeResult.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.TypeMismatch);
+    }
+
+    [Fact]
+    public void Apply_DeletesUnusedLiteralLocalAndTombstonesItsSubtree()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static float Run(float damage)
+                {
+                    // Preserve this design note after deleting the graph node.
+                    float unused = 2.0f;
+                    return damage;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/DeleteLocal.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement variable = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+        HashSet<SemanticId> removedIds = variable.DescendantsAndSelf()
+            .Select(static node => node.Id)
+            .ToHashSet();
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new DeleteStatementPatchOperation(
+                variable.Id,
+                method.Body.Id,
+                null,
+                returnStatement.Id)]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.DoesNotContain("float unused", patchedSource);
+        Assert.Contains(
+            "// Preserve this design note after deleting the graph node.\n        return damage;",
+            patchedSource);
+        HirMethodDeclaration changedMethod = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        Assert.Equal(returnStatement.Id, Assert.Single(changedMethod.Body.Statements).Id);
+        Assert.Equal(method.Body.Id, changedMethod.Body.Id);
+
+        IdentitySidecarDocument before = Assert.Single(original.IdentitySidecars);
+        IdentitySidecarDocument after = Assert.Single(result.Analysis.IdentitySidecars);
+        Assert.All(removedIds, id => Assert.Contains(after.Tombstones, tombstone => tombstone.Id == id));
+        Assert.Equal(
+            before.Entries.Select(static entry => entry.Id).Where(id => !removedIds.Contains(id)).ToHashSet(),
+            after.Entries.Select(static entry => entry.Id).ToHashSet());
+    }
+
+    [Fact]
+    public void Apply_RejectsDeletingReferencedLocal()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static float Run(float damage)
+                {
+                    float scale = 2.0f;
+                    return damage * scale;
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(source, "Game/DeleteReferenced.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement variable = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new DeleteStatementPatchOperation(
+                variable.Id,
+                method.Body.Id,
+                null,
+                method.Body.Statements[1].Id)]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.PatchedRequest);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.SymbolStillReferenced);
+    }
+
+    [Fact]
+    public void Apply_DeletesLastStatementAndMovesTrailingCommentBeforeCloseBrace()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static void Run()
+                {
+                    int unused = 1; // Preserve this trailing note.
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(source, "Game/DeleteLast.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirStatement statement = Assert.Single(method.Body.Statements);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new DeleteStatementPatchOperation(statement.Id, method.Body.Id, null, null)]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.DoesNotContain("int unused", patchedSource);
+        Assert.Contains("        // Preserve this trailing note.\n    }", patchedSource);
+    }
+
+    [Fact]
+    public void Apply_DeletesPureStaticCallStatementButRejectsEffectfulCall()
+    {
+        const string pureSource = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static float Run(float value)
+                {
+                    System.MathF.Abs(value);
+                    return value;
+                }
+            }
+            """;
+        const string effectfulSource = """
+            using UnifiedScript;
+
+            static class Api
+            {
+                public static void Notify(int value) { }
+            }
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int value)
+                {
+                    Api.Notify(value);
+                    return value;
+                }
+            }
+            """;
+        CSharpPatchResult pureResult = ApplyDeleteFirstStatement(pureSource, "Game/DeletePureCall.cs");
+        CSharpPatchResult effectfulResult = ApplyDeleteFirstStatement(
+            effectfulSource,
+            "Game/DeleteEffectfulCall.cs");
+
+        Assert.True(pureResult.Succeeded, string.Join(Environment.NewLine, pureResult.Diagnostics));
+        string purePatchedSource = Assert.Single(pureResult.PatchedRequest!.Sources).Source;
+        Assert.DoesNotContain("MathF.Abs", purePatchedSource);
+        Assert.Contains("{\n        return value;", purePatchedSource);
+        Assert.False(effectfulResult.Succeeded);
+        Assert.Null(effectfulResult.PatchedRequest);
+        Assert.Contains(
+            effectfulResult.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.UnsafeDeletion);
+    }
+
+    [Fact]
     public void Analyze_SourceCompilationIdChangesWhenSingleFileContentChanges()
     {
         CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(Source, "Game/Calculator.cs");
@@ -575,6 +900,24 @@ public sealed class CSharpSourcePatchApplierTests
         return Assert.Single(
             analysis.Semantics.Methods,
             method => method.Id == binding.InvokedMethodId);
+    }
+
+    private static CSharpPatchResult ApplyDeleteFirstStatement(string source, string path)
+    {
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(source, path);
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        Assert.True(original.Succeeded, string.Join(Environment.NewLine, original.Diagnostics));
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirStatement target = method.Body.Statements[0];
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new DeleteStatementPatchOperation(
+                target.Id,
+                method.Body.Id,
+                null,
+                method.Body.Statements[1].Id)]);
+        return new CSharpSourcePatchApplier().Apply(request, patch);
     }
 
     private static (CSharpCompilationRequest Request, CSharpAnalysisResult Analysis) CreatePersistentRequest(

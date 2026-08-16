@@ -20,7 +20,8 @@ The repository currently implements:
 - a versioned, configurable method-effect catalog;
 - deterministic, effect-aware HIR-to-graph projection with control and data edges;
 - a versioned semantic patch protocol with source/configuration conflict guards;
-- transactional graph-to-C# literal, operator, and argument-connection rewriting;
+- transactional graph-to-C# literal, operator, argument-connection, and bounded
+  statement rewriting;
 - opt-in `.usids` sidecars that preserve node identity across formatting and edits;
 - explicit patch identity pins and tombstones for deleted semantic nodes;
 - versioned HIR, semantics, and graph JSON emission through a small CLI;
@@ -152,11 +153,12 @@ dotnet run --project src/UnifiedScript.Cli -- \
   --out-identity artifacts/patched/DamageRules.cs.usids
 ```
 
-`unifiedscript.patch/v0.2` binds every patch to both the source compilation ID
-and semantic configuration ID emitted in Graph schema v0.2. It also carries the
-expected old literal text. A stale source, changed reference/effect
-configuration, missing target, changed old value, non-literal replacement, or
-semantically invalid result rejects the entire patch and writes no source.
+`unifiedscript.patch/v0.3` binds every patch to both the source compilation ID
+and semantic configuration ID emitted in Graph schema v0.2. A `replaceLiteral`
+operation also carries the expected old literal text. A stale source, changed
+reference/effect configuration, missing target, changed old value, non-literal
+replacement, or semantically invalid result rejects the entire patch and writes
+no source.
 
 The Roslyn replacement receives a temporary identity pin, so the edited node's
 old ID is explicitly carried into the reconciled sidecar even when its
@@ -165,7 +167,7 @@ ambiguous matches allocate new IDs and emit `UVS3101` rather than guessing.
 
 ## Apply structural graph patches
 
-Patch v0.2 adds `changeOperator` and `reconnectArgument`. The checked-in
+Patch v0.3 includes `changeOperator` and `reconnectArgument`. The checked-in
 operator sample changes the binary node from multiplication to division while
 requiring the expected result, left-port, and right-port type IDs:
 
@@ -199,6 +201,42 @@ written as one rollback-capable output transaction. The in-memory patcher
 supports multi-document requests; the CLI commit boundary remains
 single-document.
 
+## Apply a statement insertion
+
+Patch v0.3 also introduces bounded `insertStatement` and `deleteStatement`
+operations. The insertion sample adds a graph-authored local declaration before
+the existing return statement:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  apply-patch \
+  samples/Patching/DamageRules.cs \
+  --identity samples/Patching/DamageRules.cs.usids \
+  --patch samples/Patching/InsertScale.patch.json \
+  --out artifacts/inserted/DamageRules.cs \
+  --out-identity artifacts/inserted/DamageRules.cs.usids
+```
+
+An insertion targets a parent block and records the exact adjacent sibling IDs.
+The current typed payload is a local declaration with one literal initializer.
+Its semantic type must already be present and graph-safe in the bound
+compilation, and its name must not collide with any parameter or local in the
+method. The existing block and sibling IDs are explicitly pinned; the inserted
+declaration and literal receive new persistent IDs.
+
+The sample intentionally reports compiler warning `CS0219` because the new
+local is not connected to a consumer yet; warnings do not bypass the full
+semantic reanalysis or make the transaction partial.
+
+A deletion targets one statement and records its parent block plus both current
+sibling IDs. This slice permits only an unused local with no initializer or a
+literal initializer, or an effect-free resolved static call whose argument
+subtrees are also effect-free. Referenced locals, effectful calls, assignments,
+awaits, mutations, returns, branches, and blocks are rejected. Surviving
+statements retain their IDs and comments; every ID in the deleted subtree moves
+to the sidecar tombstones. Sibling, type, name, reference, and effect checks are
+optimistic-concurrency preconditions: any failure rejects the whole patch.
+
 ## Repository layout
 
 ```text
@@ -223,7 +261,8 @@ This milestone does not include:
 - `.csproj`/MSBuild compilation loading;
 - namespace/API allow and deny policies;
 - flow-sensitive nullable state in the interchange model;
-- graph-to-source insertion, deletion, and general cross-expression rewiring;
+- general expression/statement synthesis and cross-expression rewiring beyond
+  the bounded local-literal insertion and safe deletion slice;
 - loops, switch, lambdas, exceptions, or general-purpose C# visualization.
 
 See [ARCHITECTURE.md](docs/ARCHITECTURE.md),

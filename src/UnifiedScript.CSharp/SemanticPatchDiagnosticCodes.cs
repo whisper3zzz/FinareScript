@@ -14,4 +14,9 @@ public static class SemanticPatchDiagnosticCodes
     public const string OverlappingOperations = "UVS3010";
     public const string EffectOrderViolation = "UVS3011";
     public const string InvocationShapeNotSupported = "UVS3012";
+    public const string SiblingPreconditionFailed = "UVS3013";
+    public const string InvalidStatement = "UVS3014";
+    public const string SymbolStillReferenced = "UVS3015";
+    public const string UnsafeDeletion = "UVS3016";
+    public const string NameConflict = "UVS3017";
 }

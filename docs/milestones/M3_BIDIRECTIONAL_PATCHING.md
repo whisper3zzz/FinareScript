@@ -7,10 +7,13 @@ a second language implementation or bypassing the existing compiler checks.
 
 ## Implemented vertical slice
 
-- `unifiedscript.patch/v0.2` polymorphic JSON protocol
+- `unifiedscript.patch/v0.3` polymorphic JSON protocol
 - `replaceLiteral` operation targeted by HIR/Graph `SemanticId`
 - unary/binary `changeOperator` with result and operand type preconditions
 - same-invocation `reconnectArgument` with endpoint, type, and effect guards
+- typed `insertStatement` for graph-safe local-literal declarations
+- bounded `deleteStatement` with symbol-use and effect safety checks
+- exact parent block and adjacent-sibling structural preconditions
 - overlapping source-range conflict detection
 - expected-old-literal precondition
 - content-sensitive source compilation baseline
@@ -46,6 +49,11 @@ diagnostic codes distinguish:
 - `UVS3010`: two operations overlap in the same source range
 - `UVS3011`: argument reconnection would change effect evaluation order
 - `UVS3012`: invocation shape cannot be safely represented by this operation
+- `UVS3013`: parent block or adjacent-sibling preconditions no longer match
+- `UVS3014`: the requested statement shape is outside the supported slice
+- `UVS3015`: a local declaration is still referenced
+- `UVS3016`: deleting the statement could remove effects, reads, or throws
+- `UVS3017`: an inserted local name conflicts with a parameter or local
 - `UVS3101`: identity evidence is ambiguous; allocate a new ID instead of guessing
 - `UVS3102`: an explicit identity pin is invalid, missing, duplicate, or tombstoned
 
@@ -66,30 +74,42 @@ The test and sample suite proves that:
 7. semantically invalid literal changes reject the whole transaction;
 8. comments and formatting survive a successful replacement;
 9. a multi-file request changes only the target document;
-10. reanalysis projects the new literal back into Graph.
+10. reanalysis projects the new literal back into Graph;
 11. unchanged source emits a byte-identical sidecar;
 12. comments and whitespace preserve the complete live ID set;
 13. deleted nodes move to tombstones and their IDs are not reused;
 14. ambiguous evidence allocates a new ID with `UVS3101`;
-15. changing `1` to `100` preserves every live persistent ID.
+15. changing `1` to `100` preserves every live persistent ID;
 16. unary and binary operators change without changing their persistent node IDs;
 17. exactly typed pure invocation arguments exchange Graph ports and retain IDs;
 18. different types and effectful argument subtrees reject reconnection;
-19. overlapping structural operations reject the complete transaction.
+19. overlapping structural operations reject the complete transaction;
+20. local-literal insertion works in empty and non-empty explicit blocks;
+21. insertion preserves every existing live ID and allocates IDs only for the
+    new declaration and literal;
+22. stale sibling/type anchors and method-wide name conflicts reject insertion;
+23. deleting an unused literal local preserves exterior comments and tombstones
+    its complete subtree;
+24. referenced locals and effectful calls reject deletion; and
+25. a resolved pure static call with effect-free arguments can be deleted.
 
 ## Deliberate limits
 
 This is a bounded structural-edit slice, not general graph-to-source generation.
-It does not apply multi-file patches through the CLI, insert/delete statements,
-share one expression across multiple source consumers, reconnect across
-invocations or statements, reconcile declaration renames, compact tombstones,
-or persist graph layout. General sharing requires a temporary-introduction
-lowering that preserves evaluation count and order; project-wide edits require
-a multi-file transaction coordinator.
+It does not apply multi-file patches through the CLI, synthesize arbitrary
+expressions or control-flow statements, delete returns/branches/blocks, share
+one expression across multiple source consumers, reconnect across invocations
+or statements, reconcile declaration renames, compact tombstones, or persist
+graph layout. Insertion currently accepts only a named graph-safe type already
+present in bound semantics plus one literal initializer. Deletion accepts only
+an unused local with no initializer or a literal initializer, or a resolved
+pure static call with effect-free simple arguments. General sharing requires a
+temporary-introduction lowering that preserves evaluation count and order;
+project-wide edits require a multi-file transaction coordinator.
 
 ## Next slice
 
-Add localized statement insertion/deletion with explicit parent block, sibling
-anchor, expected control edges, and tombstone behavior. Before general data
-rewiring, define temporary introduction so a shared graph value maps to C#
-without duplicating effectful evaluation.
+Define temporary introduction plus use/definition analysis so a shared graph
+value maps to one deterministic C# local without duplicating effectful
+evaluation. That becomes the safety layer for later cross-statement data
+rewiring, assignment synthesis, and eventually structured control-flow edits.

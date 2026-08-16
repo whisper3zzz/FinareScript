@@ -6,6 +6,8 @@ namespace UnifiedScript.Core;
 [JsonDerivedType(typeof(ReplaceLiteralPatchOperation), "replaceLiteral")]
 [JsonDerivedType(typeof(ChangeOperatorPatchOperation), "changeOperator")]
 [JsonDerivedType(typeof(ReconnectArgumentPatchOperation), "reconnectArgument")]
+[JsonDerivedType(typeof(InsertStatementPatchOperation), "insertStatement")]
+[JsonDerivedType(typeof(DeleteStatementPatchOperation), "deleteStatement")]
 public abstract record SemanticPatchOperation(SemanticId TargetNodeId);
 
 public sealed record ReplaceLiteralPatchOperation(
@@ -30,13 +32,35 @@ public sealed record ReconnectArgumentPatchOperation(
     SemanticId ExpectedArgumentTypeId,
     SemanticId ExpectedSourceArgumentTypeId) : SemanticPatchOperation(TargetNodeId);
 
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "statement")]
+[JsonDerivedType(typeof(LocalLiteralDeclarationPatchStatement), "localLiteralDeclaration")]
+public abstract record InsertPatchStatement;
+
+public sealed record LocalLiteralDeclarationPatchStatement(
+    string Name,
+    string TypeName,
+    string ValueText,
+    SemanticId ExpectedTypeId) : InsertPatchStatement;
+
+public sealed record InsertStatementPatchOperation(
+    SemanticId TargetNodeId,
+    SemanticId? ExpectedPreviousSiblingId,
+    SemanticId? ExpectedNextSiblingId,
+    InsertPatchStatement NewStatement) : SemanticPatchOperation(TargetNodeId);
+
+public sealed record DeleteStatementPatchOperation(
+    SemanticId TargetNodeId,
+    SemanticId ExpectedParentBlockId,
+    SemanticId? ExpectedPreviousSiblingId,
+    SemanticId? ExpectedNextSiblingId) : SemanticPatchOperation(TargetNodeId);
+
 public sealed record SemanticPatchDocument(
     string SchemaVersion,
     SemanticId SourceCompilationId,
     SemanticId SemanticConfigurationId,
     IReadOnlyList<SemanticPatchOperation> Operations)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.2";
+    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.3";
 
     public static SemanticPatchDocument Create(
         SemanticId sourceCompilationId,

@@ -62,9 +62,12 @@ Outcome: graph patches produce localized, format-preserving C# edits.
 - [x] unary/binary operator changes with semantic type preconditions
 - [x] same-invocation argument reconnection with type/effect guards
 - [x] overlapping structural-operation conflict detection
-- [ ] insertion/deletion and general structural HIR operations
+- [x] local-literal statement insertion with parent/sibling/type/name guards
+- [x] safe statement deletion with reference/effect guards and tombstones
+- [x] exact sibling preconditions for concurrent structural edits
+- [ ] general statement/control-flow synthesis and structural HIR operations
 - [ ] graph layout sidecar
-- [ ] localized insertion, deletion, and data/control rewiring
+- [ ] temporary introduction and general data/control rewiring
 
 ## M4 — Structured control flow expansion
 

@@ -77,6 +77,40 @@ public sealed class SemanticPatchJsonTests
     }
 
     [Fact]
+    public void SerializeAndDeserialize_PreserveStatementOperationsAndSiblingPreconditions()
+    {
+        SemanticId blockId = SemanticId.FromKey("statement-block");
+        SemanticId returnId = SemanticId.FromKey("statement-return");
+        SemanticId localId = SemanticId.FromKey("statement-local");
+        SemanticId floatType = SemanticId.FromKey("System.Single");
+        var insert = new InsertStatementPatchOperation(
+            blockId,
+            null,
+            returnId,
+            new LocalLiteralDeclarationPatchStatement("scale", "float", "2.0f", floatType));
+        var delete = new DeleteStatementPatchOperation(
+            localId,
+            blockId,
+            null,
+            returnId);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            SemanticId.FromKey("statement-compilation"),
+            SemanticId.FromKey("statement-configuration"),
+            [insert, delete]);
+
+        string json = SemanticPatchJson.Serialize(patch);
+        SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
+
+        Assert.Equal(insert, Assert.IsType<InsertStatementPatchOperation>(roundTrip.Operations[0]));
+        Assert.Equal(delete, Assert.IsType<DeleteStatementPatchOperation>(roundTrip.Operations[1]));
+        Assert.IsType<LocalLiteralDeclarationPatchStatement>(
+            Assert.IsType<InsertStatementPatchOperation>(roundTrip.Operations[0]).NewStatement);
+        Assert.Contains("\"operation\": \"insertStatement\"", json);
+        Assert.Contains("\"statement\": \"localLiteralDeclaration\"", json);
+        Assert.Contains("\"operation\": \"deleteStatement\"", json);
+    }
+
+    [Fact]
     public void Create_RejectsDuplicateTargets()
     {
         SemanticId targetId = SemanticId.FromKey("duplicate-target");
@@ -107,6 +141,23 @@ public sealed class SemanticPatchJsonTests
                     SemanticId.FromKey("argument-one"),
                     intType,
                     intType),
+            ]));
+    }
+
+    [Fact]
+    public void Create_RejectsStatementOperationWithDuplicateSiblingPreconditions()
+    {
+        SemanticId siblingId = SemanticId.FromKey("same-sibling");
+
+        Assert.Throws<JsonException>(() => SemanticPatchDocument.Create(
+            SemanticId.FromKey("compilation"),
+            SemanticId.FromKey("configuration"),
+            [
+                new DeleteStatementPatchOperation(
+                    SemanticId.FromKey("statement"),
+                    SemanticId.FromKey("block"),
+                    siblingId,
+                    siblingId),
             ]));
     }
 }

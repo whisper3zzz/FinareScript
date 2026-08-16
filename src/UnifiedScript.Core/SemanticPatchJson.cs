@@ -80,6 +80,12 @@ public static class SemanticPatchJson
                 case ReconnectArgumentPatchOperation reconnectArgument:
                     ValidateReconnectArgument(reconnectArgument);
                     break;
+                case InsertStatementPatchOperation insertStatement:
+                    ValidateInsertStatement(insertStatement);
+                    break;
+                case DeleteStatementPatchOperation deleteStatement:
+                    ValidateDeleteStatement(deleteStatement);
+                    break;
                 default:
                     throw new JsonException(
                         $"Unsupported semantic patch operation '{operation.GetType().Name}'.");
@@ -143,6 +149,63 @@ public static class SemanticPatchJson
         if (operation.ExpectedArgumentNodeId == operation.ExpectedSourceArgumentNodeId)
         {
             throw new JsonException("Argument reconnection requires two distinct argument nodes.");
+        }
+    }
+
+    private static void ValidateInsertStatement(InsertStatementPatchOperation operation)
+    {
+        ValidateSiblingIds(
+            operation.ExpectedPreviousSiblingId,
+            operation.ExpectedNextSiblingId);
+        if (operation.NewStatement is null)
+        {
+            throw new JsonException("Statement insertion requires a typed statement payload.");
+        }
+
+        switch (operation.NewStatement)
+        {
+            case LocalLiteralDeclarationPatchStatement local:
+                if (string.IsNullOrWhiteSpace(local.Name) ||
+                    string.IsNullOrWhiteSpace(local.TypeName) ||
+                    string.IsNullOrWhiteSpace(local.ValueText) ||
+                    local.ExpectedTypeId.IsEmpty)
+                {
+                    throw new JsonException(
+                        "A local-literal declaration requires a name, type, value, and expected type ID.");
+                }
+
+                break;
+            default:
+                throw new JsonException(
+                    $"Unsupported inserted statement payload '{operation.NewStatement.GetType().Name}'.");
+        }
+    }
+
+    private static void ValidateDeleteStatement(DeleteStatementPatchOperation operation)
+    {
+        if (operation.ExpectedParentBlockId.IsEmpty)
+        {
+            throw new JsonException("Statement deletion requires an expected parent block ID.");
+        }
+
+        ValidateSiblingIds(
+            operation.ExpectedPreviousSiblingId,
+            operation.ExpectedNextSiblingId);
+    }
+
+    private static void ValidateSiblingIds(
+        SemanticId? previousSiblingId,
+        SemanticId? nextSiblingId)
+    {
+        if (previousSiblingId is SemanticId previous && previous.IsEmpty ||
+            nextSiblingId is SemanticId next && next.IsEmpty)
+        {
+            throw new JsonException("Sibling preconditions cannot contain empty semantic IDs.");
+        }
+
+        if (previousSiblingId is not null && previousSiblingId == nextSiblingId)
+        {
+            throw new JsonException("Previous and next sibling preconditions must identify different nodes.");
         }
     }
 }

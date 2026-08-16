@@ -86,6 +86,9 @@ public sealed class CSharpSourcePatchApplier
             .ToDictionary(static node => node.NodeId);
         IReadOnlyDictionary<SemanticId, MethodDescriptor> methods = original.Semantics.Methods
             .ToDictionary(static method => method.Id);
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types = original.Semantics.Types
+            .ToDictionary(static type => type.Id);
+        var patchIndex = new HirPatchIndex(original.Hir);
         var documents = request.Sources.ToDictionary(
             static source => source.LogicalPath,
             static source => new ParsedDocument(
@@ -113,6 +116,19 @@ public sealed class CSharpSourcePatchApplier
                 ReconnectArgumentPatchOperation reconnectArgument => PlanArgumentReconnection(
                     reconnectArgument,
                     hirNodes,
+                    boundNodes,
+                    methods,
+                    documents),
+                InsertStatementPatchOperation insertStatement => PlanStatementInsertion(
+                    insertStatement,
+                    hirNodes,
+                    patchIndex,
+                    types,
+                    documents),
+                DeleteStatementPatchOperation deleteStatement => PlanStatementDeletion(
+                    deleteStatement,
+                    hirNodes,
+                    patchIndex,
                     boundNodes,
                     methods,
                     documents),
@@ -544,6 +560,469 @@ public sealed class CSharpSourcePatchApplier
             ]));
     }
 
+    private static OperationPlan PlanStatementInsertion(
+        InsertStatementPatchOperation operation,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
+        IReadOnlyDictionary<string, ParsedDocument> documents)
+    {
+        if (!hirNodes.TryGetValue(operation.TargetNodeId, out HirNode? target))
+        {
+            return MissingTarget(operation.TargetNodeId);
+        }
+
+        if (target is not HirBlockStatement block ||
+            !patchIndex.TryGetBlock(block.Id, out HirPatchIndex.BlockLocation? blockLocation))
+        {
+            return KindMismatch(target, operation.TargetNodeId, "a block statement");
+        }
+
+        if (!TryGetInsertionIndex(
+                block,
+                operation.ExpectedPreviousSiblingId,
+                operation.ExpectedNextSiblingId,
+                out int insertionIndex))
+        {
+            return SiblingFailure(
+                block,
+                operation.ExpectedPreviousSiblingId,
+                operation.ExpectedNextSiblingId);
+        }
+
+        if (operation.NewStatement is not LocalLiteralDeclarationPatchStatement local)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidStatement,
+                $"Inserted statement payload '{operation.NewStatement.GetType().Name}' is not supported.",
+                block);
+        }
+
+        if (!types.TryGetValue(local.ExpectedTypeId, out TypeDescriptor? expectedType) ||
+            !expectedType.IsGraphSafe ||
+            !TypeNameMatches(local.TypeName, expectedType))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.TypeMismatch,
+                $"Inserted local type '{local.TypeName}' does not match graph-safe semantic type " +
+                $"'{local.ExpectedTypeId}'. The type must already exist in the bound compilation.",
+                block);
+        }
+
+        if (blockLocation!.Method.Parameters.Any(parameter => parameter.Name == local.Name) ||
+            blockLocation.Method.DescendantsAndSelf()
+                .OfType<HirVariableDeclarationStatement>()
+                .Any(variable => variable.Name == local.Name))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.NameConflict,
+                $"A parameter or local named '{local.Name}' already exists in method " +
+                $"'{blockLocation.Method.Name}'.",
+                block);
+        }
+
+        if (!TryCreateLocalLiteralStatement(local, out LocalDeclarationStatementSyntax? newStatement))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidStatement,
+                "The local-literal payload could not be represented as one C# local declaration.",
+                block);
+        }
+
+        if (!TryFindSyntax(documents, block, out ParsedDocument? document, out BlockSyntax? syntax) ||
+            syntax!.Statements.Count != block.Statements.Count)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidStatement,
+                "Statement insertion currently requires an explicit C# block whose statement list " +
+                "matches the analyzed HIR block.",
+                block);
+        }
+
+        (List<StatementSyntax> annotatedStatements, List<PendingPin> pins) =
+            AnnotateStatements(syntax, block.Statements);
+        InsertionFormatting formatting = GetInsertionFormatting(document!, syntax, insertionIndex);
+        newStatement = newStatement!
+            .WithLeadingTrivia(SyntaxFactory.Whitespace(formatting.Indentation))
+            .WithTrailingTrivia(SyntaxFactory.EndOfLine(formatting.EndOfLine));
+        annotatedStatements.Insert(insertionIndex, newStatement);
+        var blockAnnotation = new SyntaxAnnotation(IdentityAnnotationKind, block.Id.Value);
+        BlockSyntax replacement = syntax
+            .WithStatements(SyntaxFactory.List(annotatedStatements))
+            .WithAdditionalAnnotations(blockAnnotation);
+        pins.Add(new PendingPin(block.Id, "block", blockAnnotation));
+        return SuccessPlan(document!, new PendingReplacement(
+            document!.Source.LogicalPath,
+            syntax,
+            replacement,
+            pins));
+    }
+
+    private static OperationPlan PlanStatementDeletion(
+        DeleteStatementPatchOperation operation,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, MethodDescriptor> methods,
+        IReadOnlyDictionary<string, ParsedDocument> documents)
+    {
+        if (!hirNodes.TryGetValue(operation.TargetNodeId, out HirNode? target))
+        {
+            return MissingTarget(operation.TargetNodeId);
+        }
+
+        if (target is not HirStatement statement ||
+            !patchIndex.TryGetStatement(statement.Id, out HirPatchIndex.StatementLocation? location))
+        {
+            return KindMismatch(target, operation.TargetNodeId, "a statement");
+        }
+
+        if (location!.ParentBlock.Id != operation.ExpectedParentBlockId ||
+            !StatementSiblingsMatch(
+                location,
+                operation.ExpectedPreviousSiblingId,
+                operation.ExpectedNextSiblingId))
+        {
+            return SiblingFailure(
+                statement,
+                operation.ExpectedPreviousSiblingId,
+                operation.ExpectedNextSiblingId,
+                operation.ExpectedParentBlockId);
+        }
+
+        OperationPlan? safetyFailure = ValidateDeletionSafety(
+            location,
+            boundNodes,
+            methods);
+        if (safetyFailure is not null)
+        {
+            return safetyFailure;
+        }
+
+        HirBlockStatement parentBlock = location.ParentBlock;
+        if (!TryFindSyntax(
+                documents,
+                parentBlock,
+                out ParsedDocument? document,
+                out BlockSyntax? syntax) ||
+            syntax!.Statements.Count != parentBlock.Statements.Count ||
+            RoslynSourceSpan.FromNode(
+                syntax.Statements[location.Index],
+                document!.Source.LogicalPath) != statement.Span)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidStatement,
+                "Statement deletion currently requires an explicit C# block whose statement list " +
+                "matches the analyzed HIR block.",
+                statement);
+        }
+
+        BlockSyntax removed = RemoveStatementPreservingComments(
+            document!,
+            syntax,
+            location.Index);
+        HirStatement[] survivingHir = parentBlock.Statements
+            .Where((_, index) => index != location.Index)
+            .ToArray();
+        (List<StatementSyntax> annotatedStatements, List<PendingPin> pins) =
+            AnnotateStatements(removed, survivingHir);
+        var blockAnnotation = new SyntaxAnnotation(IdentityAnnotationKind, parentBlock.Id.Value);
+        BlockSyntax replacement = removed
+            .WithStatements(SyntaxFactory.List(annotatedStatements))
+            .WithAdditionalAnnotations(blockAnnotation);
+        pins.Add(new PendingPin(parentBlock.Id, "block", blockAnnotation));
+        return SuccessPlan(document!, new PendingReplacement(
+            document!.Source.LogicalPath,
+            syntax,
+            replacement,
+            pins));
+    }
+
+    private static BlockSyntax RemoveStatementPreservingComments(
+        ParsedDocument document,
+        BlockSyntax block,
+        int statementIndex)
+    {
+        StatementSyntax target = block.Statements[statementIndex];
+        SyntaxTriviaList preservedTrivia = GetPreservedDeletionTrivia(document, target);
+        SyntaxList<StatementSyntax> statements = block.Statements.RemoveAt(statementIndex);
+        if (preservedTrivia.Count == 0)
+        {
+            return block.WithStatements(statements);
+        }
+
+        if (statementIndex < statements.Count)
+        {
+            StatementSyntax next = statements[statementIndex];
+            statements = statements.Replace(
+                next,
+                next.WithLeadingTrivia(preservedTrivia.AddRange(next.GetLeadingTrivia())));
+            return block.WithStatements(statements);
+        }
+
+        return block
+            .WithStatements(statements)
+            .WithCloseBraceToken(block.CloseBraceToken.WithLeadingTrivia(
+                preservedTrivia.AddRange(block.CloseBraceToken.LeadingTrivia)));
+    }
+
+    private static SyntaxTriviaList GetPreservedDeletionTrivia(
+        ParsedDocument document,
+        StatementSyntax statement)
+    {
+        var preserved = new List<SyntaxTrivia>();
+        SyntaxTriviaList leading = statement.GetLeadingTrivia();
+        if (leading.Any(IsMeaningfulTrivia))
+        {
+            preserved.AddRange(leading);
+            while (preserved.Count > 0 &&
+                preserved[^1].IsKind(SyntaxKind.WhitespaceTrivia))
+            {
+                preserved.RemoveAt(preserved.Count - 1);
+            }
+
+            EnsureEndsWithNewLine(preserved, document);
+        }
+
+        SyntaxTrivia[] trailing = statement.GetTrailingTrivia()
+            .SkipWhile(static trivia =>
+                trivia.IsKind(SyntaxKind.WhitespaceTrivia) ||
+                trivia.IsKind(SyntaxKind.EndOfLineTrivia))
+            .ToArray();
+        if (trailing.Any(IsMeaningfulTrivia))
+        {
+            preserved.Add(SyntaxFactory.Whitespace(GetLineIndentation(document, statement)));
+            preserved.AddRange(trailing);
+            EnsureEndsWithNewLine(preserved, document);
+        }
+
+        return SyntaxFactory.TriviaList(preserved);
+    }
+
+    private static bool IsMeaningfulTrivia(SyntaxTrivia trivia) =>
+        !trivia.IsKind(SyntaxKind.WhitespaceTrivia) &&
+        !trivia.IsKind(SyntaxKind.EndOfLineTrivia);
+
+    private static void EnsureEndsWithNewLine(
+        List<SyntaxTrivia> trivia,
+        ParsedDocument document)
+    {
+        if (trivia.Count == 0 || !trivia[^1].IsKind(SyntaxKind.EndOfLineTrivia))
+        {
+            trivia.Add(SyntaxFactory.EndOfLine(GetEndOfLine(document)));
+        }
+    }
+
+    private static OperationPlan? ValidateDeletionSafety(
+        HirPatchIndex.StatementLocation location,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, MethodDescriptor> methods)
+    {
+        switch (location.Statement)
+        {
+            case HirVariableDeclarationStatement variable:
+                if (boundNodes.Values.Any(binding => binding.ReferencedSymbolId == variable.Id))
+                {
+                    return DiagnosticPlan(
+                        SemanticPatchDiagnosticCodes.SymbolStillReferenced,
+                        $"Local '{variable.Name}' cannot be deleted while another HIR node references it.",
+                        variable);
+                }
+
+                if (variable.Initializer is not null and not HirLiteralExpression)
+                {
+                    return DiagnosticPlan(
+                        SemanticPatchDiagnosticCodes.UnsafeDeletion,
+                        "This slice deletes a local declaration only when it has no initializer or one " +
+                        "literal initializer; broader expressions may read, throw, or have effects.",
+                        variable);
+                }
+
+                return null;
+            case HirExpressionStatement { Expression: HirInvocationExpression invocation } expression:
+                if (!boundNodes.TryGetValue(invocation.Id, out BoundNodeInfo? invocationBinding) ||
+                    invocationBinding.InvokedMethodId is not SemanticId methodId ||
+                    !methods.TryGetValue(methodId, out MethodDescriptor? method) ||
+                    !method.IsStatic ||
+                    method.Effects != MethodEffects.None ||
+                    invocation.Arguments.Any(argument =>
+                        argument is not (
+                            HirLiteralExpression or HirIdentifierExpression or HirThisExpression) ||
+                        HasEffects(argument, boundNodes)))
+                {
+                    return DiagnosticPlan(
+                        SemanticPatchDiagnosticCodes.UnsafeDeletion,
+                        "An expression statement can be deleted only when it is a resolved pure static call " +
+                        "with literal, identifier, or this arguments.",
+                        expression);
+                }
+
+                return null;
+            case HirExpressionStatement expression:
+                return DiagnosticPlan(
+                    SemanticPatchDiagnosticCodes.UnsafeDeletion,
+                    "Assignment, await, unary mutation, and unresolved expression statements cannot be deleted.",
+                    expression);
+            default:
+                return DiagnosticPlan(
+                    SemanticPatchDiagnosticCodes.InvalidStatement,
+                    $"Deleting '{location.Statement.GetType().Name}' is outside this patch slice.",
+                    location.Statement);
+        }
+    }
+
+    private static (List<StatementSyntax> Statements, List<PendingPin> Pins) AnnotateStatements(
+        BlockSyntax block,
+        IReadOnlyList<HirStatement> hirStatements)
+    {
+        if (block.Statements.Count != hirStatements.Count)
+        {
+            throw new ArgumentException("Roslyn and HIR statement counts must match.", nameof(hirStatements));
+        }
+
+        var statements = new List<StatementSyntax>(hirStatements.Count);
+        var pins = new List<PendingPin>(hirStatements.Count + 1);
+        for (int index = 0; index < hirStatements.Count; index++)
+        {
+            HirStatement hirStatement = hirStatements[index];
+            var annotation = new SyntaxAnnotation(IdentityAnnotationKind, hirStatement.Id.Value);
+            statements.Add(block.Statements[index].WithAdditionalAnnotations(annotation));
+            pins.Add(new PendingPin(
+                hirStatement.Id,
+                GetIdentityKind(hirStatement),
+                annotation));
+        }
+
+        return (statements, pins);
+    }
+
+    private static bool TryGetInsertionIndex(
+        HirBlockStatement block,
+        SemanticId? expectedPreviousSiblingId,
+        SemanticId? expectedNextSiblingId,
+        out int index)
+    {
+        if (expectedPreviousSiblingId is null && expectedNextSiblingId is null)
+        {
+            index = 0;
+            return block.Statements.Count == 0;
+        }
+
+        if (expectedPreviousSiblingId is null)
+        {
+            index = 0;
+            return block.Statements.Count > 0 && block.Statements[0].Id == expectedNextSiblingId;
+        }
+
+        if (expectedNextSiblingId is null)
+        {
+            index = block.Statements.Count;
+            return block.Statements.Count > 0 && block.Statements[^1].Id == expectedPreviousSiblingId;
+        }
+
+        int previousIndex = block.Statements
+            .Select((statement, statementIndex) => (statement, statementIndex))
+            .Where(item => item.statement.Id == expectedPreviousSiblingId)
+            .Select(static item => item.statementIndex)
+            .DefaultIfEmpty(-1)
+            .Single();
+        index = previousIndex + 1;
+        return previousIndex >= 0 &&
+            index < block.Statements.Count &&
+            block.Statements[index].Id == expectedNextSiblingId;
+    }
+
+    private static bool StatementSiblingsMatch(
+        HirPatchIndex.StatementLocation location,
+        SemanticId? expectedPreviousSiblingId,
+        SemanticId? expectedNextSiblingId)
+    {
+        SemanticId? currentPrevious = location.Index == 0
+            ? null
+            : location.ParentBlock.Statements[location.Index - 1].Id;
+        SemanticId? currentNext = location.Index == location.ParentBlock.Statements.Count - 1
+            ? null
+            : location.ParentBlock.Statements[location.Index + 1].Id;
+        return currentPrevious == expectedPreviousSiblingId && currentNext == expectedNextSiblingId;
+    }
+
+    private static bool TryCreateLocalLiteralStatement(
+        LocalLiteralDeclarationPatchStatement local,
+        out LocalDeclarationStatementSyntax? statement)
+    {
+        statement = null;
+        if (!SyntaxFacts.IsValidIdentifier(local.Name) ||
+            SyntaxFacts.GetKeywordKind(local.Name) != SyntaxKind.None ||
+            !TryParseLiteral(local.ValueText, out LiteralExpressionSyntax? literal))
+        {
+            return false;
+        }
+
+        TypeSyntax type = SyntaxFactory.ParseTypeName(
+            local.TypeName,
+            options: CSharpToHirLowerer.ParseOptions,
+            consumeFullText: true);
+        if (type.ContainsDiagnostics || type.SpanStart != 0 || type.Span.Length != local.TypeName.Length)
+        {
+            return false;
+        }
+
+        EqualsValueClauseSyntax initializer = SyntaxFactory.EqualsValueClause(
+            SyntaxFactory.Token(SyntaxKind.EqualsToken)
+                .WithLeadingTrivia(SyntaxFactory.Space)
+                .WithTrailingTrivia(SyntaxFactory.Space),
+            literal!.WithoutTrivia());
+        VariableDeclaratorSyntax variable = SyntaxFactory.VariableDeclarator(
+                SyntaxFactory.Identifier(local.Name))
+            .WithInitializer(initializer);
+        VariableDeclarationSyntax declaration = SyntaxFactory.VariableDeclaration(
+            type.WithoutTrivia().WithTrailingTrivia(SyntaxFactory.Space),
+            SyntaxFactory.SingletonSeparatedList(variable));
+        statement = SyntaxFactory.LocalDeclarationStatement(declaration);
+        return true;
+    }
+
+    private static InsertionFormatting GetInsertionFormatting(
+        ParsedDocument document,
+        BlockSyntax block,
+        int insertionIndex)
+    {
+        string indentation;
+        if (block.Statements.Count > 0)
+        {
+            StatementSyntax reference = insertionIndex < block.Statements.Count
+                ? block.Statements[insertionIndex]
+                : block.Statements[^1];
+            indentation = GetLineIndentation(document, reference);
+        }
+        else
+        {
+            int blockColumn = block.OpenBraceToken.GetLocation().GetLineSpan().StartLinePosition.Character;
+            indentation = new string(' ', blockColumn + 4);
+        }
+
+        return new InsertionFormatting(indentation, GetEndOfLine(document));
+    }
+
+    private static string GetLineIndentation(ParsedDocument document, SyntaxNode node)
+    {
+        SourceText text = document.SyntaxTree.GetText();
+        TextLine line = text.Lines.GetLineFromPosition(node.SpanStart);
+        string indentation = text.ToString(TextSpan.FromBounds(line.Start, node.SpanStart));
+        return indentation.All(static character => character is ' ' or '\t')
+            ? indentation
+            : new string(' ', node.GetLocation().GetLineSpan().StartLinePosition.Character);
+    }
+
+    private static string GetEndOfLine(ParsedDocument document) =>
+        document.Source.Source.Contains("\r\n", StringComparison.Ordinal)
+            ? "\r\n"
+            : "\n";
+
+    private static bool TypeNameMatches(string typeName, TypeDescriptor type) =>
+        string.Equals(typeName, type.DisplayName, StringComparison.Ordinal) ||
+        string.Equals(typeName, type.MetadataName, StringComparison.Ordinal);
+
     private static bool TryAddReplacement(
         IDictionary<string, List<PendingReplacement>> replacements,
         PendingReplacement replacement,
@@ -633,7 +1112,9 @@ public sealed class CSharpSourcePatchApplier
         HirExpression expression,
         IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes) => expression
         .DescendantsAndSelf()
-        .Any(node => boundNodes.TryGetValue(node.Id, out BoundNodeInfo? binding) &&
+        .Any(node => node is HirAssignmentExpression or HirAwaitExpression ||
+            node is HirUnaryExpression { Operator: "++" or "--" } ||
+            boundNodes.TryGetValue(node.Id, out BoundNodeInfo? binding) &&
             binding.Effects != MethodEffects.None);
 
     private static bool AreOperatorsCompatible(
@@ -725,6 +1206,16 @@ public sealed class CSharpSourcePatchApplier
         _ => throw new ArgumentOutOfRangeException(nameof(expression), expression.GetType().Name),
     };
 
+    private static string GetIdentityKind(HirStatement statement) => statement switch
+    {
+        HirBlockStatement => "block",
+        HirVariableDeclarationStatement => "variableDeclaration",
+        HirExpressionStatement => "expressionStatement",
+        HirIfStatement => "if",
+        HirReturnStatement => "return",
+        _ => throw new ArgumentOutOfRangeException(nameof(statement), statement.GetType().Name),
+    };
+
     private static OperationPlan MissingTarget(SemanticId targetId) => new(
         null,
         new UnifiedDiagnostic(
@@ -772,6 +1263,17 @@ public sealed class CSharpSourcePatchApplier
         $"'{operation.NewOperator}' is not one supported C# operator token for this expression.",
         target);
 
+    private static OperationPlan SiblingFailure(
+        HirNode target,
+        SemanticId? expectedPreviousSiblingId,
+        SemanticId? expectedNextSiblingId,
+        SemanticId? expectedParentBlockId = null) => DiagnosticPlan(
+        SemanticPatchDiagnosticCodes.SiblingPreconditionFailed,
+        $"Statement position precondition failed for '{target.Id}'. Expected parent " +
+        $"'{expectedParentBlockId}', previous sibling '{expectedPreviousSiblingId}', and next sibling " +
+        $"'{expectedNextSiblingId}'. Re-analyze the block before editing it.",
+        target);
+
     private static OperationPlan DiagnosticPlan(
         string code,
         string message,
@@ -816,4 +1318,8 @@ public sealed class CSharpSourcePatchApplier
         SemanticId Id,
         string Kind,
         SyntaxAnnotation Annotation);
+
+    private readonly record struct InsertionFormatting(
+        string Indentation,
+        string EndOfLine);
 }

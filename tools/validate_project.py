@@ -78,33 +78,52 @@ def main() -> int:
     patch_source_path = ROOT / "samples" / "Patching" / "DamageRules.cs"
     patch_document_path = ROOT / "samples" / "Patching" / "ScaleDamage.patch.json"
     operator_patch_path = ROOT / "samples" / "Patching" / "DivideDamage.patch.json"
+    insert_patch_path = ROOT / "samples" / "Patching" / "InsertScale.patch.json"
     patch_identity_path = ROOT / "samples" / "Patching" / "DamageRules.cs.usids"
     require(
         patch_source_path.is_file()
         and patch_document_path.is_file()
         and operator_patch_path.is_file()
+        and insert_patch_path.is_file()
         and patch_identity_path.is_file(),
         "Missing bidirectional patch sample",
     )
     patch_source = patch_source_path.read_text(encoding="utf-8")
     patch_document = json.loads(patch_document_path.read_text(encoding="utf-8"))
     operator_patch = json.loads(operator_patch_path.read_text(encoding="utf-8"))
+    insert_patch = json.loads(insert_patch_path.read_text(encoding="utf-8"))
     patch_identity = json.loads(patch_identity_path.read_text(encoding="utf-8"))
     patch_operation = patch_document["operations"][0]
     operator_operation = operator_patch["operations"][0]
+    insert_operation = insert_patch["operations"][0]
     identity_ids = {entry["id"] for entry in patch_identity["entries"]}
     source_digest = hashlib.sha256(patch_source.encode("utf-8")).hexdigest()
     require(
-        patch_document["schemaVersion"] == "unifiedscript.patch/v0.2"
-        and operator_patch["schemaVersion"] == "unifiedscript.patch/v0.2"
+        patch_document["schemaVersion"] == "unifiedscript.patch/v0.3"
+        and operator_patch["schemaVersion"] == "unifiedscript.patch/v0.3"
+        and insert_patch["schemaVersion"] == "unifiedscript.patch/v0.3"
         and patch_identity["sourcePath"] == "samples/Patching/DamageRules.cs"
         and patch_identity["sourceDigest"] == f"sha256:{source_digest}"
+        and patch_operation["operation"] == "replaceLiteral"
+        and operator_operation["operation"] == "changeOperator"
+        and insert_operation["operation"] == "insertStatement"
         and patch_operation["targetNodeId"] in identity_ids
         and operator_operation["targetNodeId"] in identity_ids
+        and insert_operation["targetNodeId"] in identity_ids
+        and insert_operation["expectedNextSiblingId"] in identity_ids
         and patch_operation["expectedValueText"] in patch_source
         and operator_operation["expectedOperator"] in patch_source
         and operator_operation["expectedOperator"] != operator_operation["newOperator"],
         "Bidirectional patch sample source, sidecar, and patch are inconsistent",
+    )
+    inserted_statement = insert_operation["newStatement"]
+    require(
+        inserted_statement["statement"] == "localLiteralDeclaration"
+        and inserted_statement["name"] == "scale"
+        and inserted_statement["typeName"] == "float"
+        and inserted_statement["valueText"] == "2.0f"
+        and inserted_statement["expectedTypeId"].startswith("us_"),
+        "Statement insertion sample does not contain the expected typed payload",
     )
     require(
         any((ROOT / "tests" / "UnifiedScript.Tests").glob("*Tests.cs")),
