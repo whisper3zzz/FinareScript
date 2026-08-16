@@ -89,6 +89,9 @@ public static class SemanticPatchJson
                 case IntroduceTemporaryPatchOperation introduceTemporary:
                     ValidateIntroduceTemporary(introduceTemporary);
                     break;
+                case ReconnectValuePatchOperation reconnectValue:
+                    ValidateReconnectValue(reconnectValue);
+                    break;
                 default:
                     throw new JsonException(
                         $"Unsupported semantic patch operation '{operation.GetType().Name}'.");
@@ -215,6 +218,33 @@ public static class SemanticPatchJson
             string.IsNullOrWhiteSpace(operation.TypeName))
         {
             throw new JsonException("Temporary introduction requires a name and type name.");
+        }
+
+        ValidateSiblingIds(
+            operation.ExpectedPreviousSiblingId,
+            operation.ExpectedNextSiblingId);
+        ValidateSiblingTarget(
+            operation.ExpectedContainingStatementId,
+            operation.ExpectedPreviousSiblingId,
+            operation.ExpectedNextSiblingId,
+            "containing statement");
+    }
+
+    private static void ValidateReconnectValue(ReconnectValuePatchOperation operation)
+    {
+        if (operation.SourceDefinitionId.IsEmpty ||
+            operation.ExpectedContainingStatementId.IsEmpty ||
+            operation.ExpectedParentBlockId.IsEmpty ||
+            operation.ExpectedTargetTypeId.IsEmpty ||
+            operation.ExpectedSourceTypeId.IsEmpty)
+        {
+            throw new JsonException(
+                "Value reconnection requires non-empty source definition, statement, block, and type IDs.");
+        }
+
+        if (operation.SourceDefinitionId == operation.TargetNodeId)
+        {
+            throw new JsonException("A value reconnection source definition cannot be its target expression.");
         }
 
         ValidateSiblingIds(

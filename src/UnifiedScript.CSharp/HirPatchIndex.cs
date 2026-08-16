@@ -15,7 +15,7 @@ internal sealed class HirPatchIndex
         foreach (HirMethodDeclaration method in compilation.Types
                      .SelectMany(static type => type.Methods))
         {
-            AddBlock(method.Body, method);
+            AddBlock(method.Body, method, null, null);
         }
     }
 
@@ -28,9 +28,49 @@ internal sealed class HirPatchIndex
     public bool TryGetExpression(SemanticId id, out ExpressionLocation? location) =>
         expressions.TryGetValue(id, out location);
 
-    private void AddBlock(HirBlockStatement block, HirMethodDeclaration method)
+    public bool DoesStatementDominate(
+        SemanticId definitionStatementId,
+        SemanticId consumerStatementId)
     {
-        blocks.Add(block.Id, new BlockLocation(block, method));
+        if (!statements.TryGetValue(definitionStatementId, out StatementLocation? definition) ||
+            !statements.TryGetValue(consumerStatementId, out StatementLocation? consumer) ||
+            definition.Method.Id != consumer.Method.Id)
+        {
+            return false;
+        }
+
+        if (definition.ParentBlock.Id == consumer.ParentBlock.Id)
+        {
+            return definition.Index < consumer.Index;
+        }
+
+        HirBlockStatement current = consumer.ParentBlock;
+        while (blocks.TryGetValue(current.Id, out BlockLocation? currentLocation) &&
+            currentLocation.ParentBlock is not null &&
+            currentLocation.EntryStatement is not null)
+        {
+            HirBlockStatement parent = currentLocation.ParentBlock;
+            if (parent.Id == definition.ParentBlock.Id &&
+                statements.TryGetValue(
+                    currentLocation.EntryStatement.Id,
+                    out StatementLocation? entryLocation))
+            {
+                return definition.Index < entryLocation.Index;
+            }
+
+            current = parent;
+        }
+
+        return false;
+    }
+
+    private void AddBlock(
+        HirBlockStatement block,
+        HirMethodDeclaration method,
+        HirBlockStatement? parentBlock,
+        HirStatement? entryStatement)
+    {
+        blocks.Add(block.Id, new BlockLocation(block, method, parentBlock, entryStatement));
         for (int index = 0; index < block.Statements.Count; index++)
         {
             HirStatement statement = block.Statements[index];
@@ -38,7 +78,7 @@ internal sealed class HirPatchIndex
             switch (statement)
             {
                 case HirBlockStatement nested:
-                    AddBlock(nested, method);
+                    AddBlock(nested, method, block, nested);
                     break;
                 case HirVariableDeclarationStatement { Initializer: not null } variable:
                     AddExpression(variable.Initializer, variable, block, method, null);
@@ -48,10 +88,10 @@ internal sealed class HirPatchIndex
                     break;
                 case HirIfStatement ifStatement:
                     AddExpression(ifStatement.Condition, ifStatement, block, method, null);
-                    AddBlock(ifStatement.Then, method);
+                    AddBlock(ifStatement.Then, method, block, ifStatement);
                     if (ifStatement.Else is not null)
                     {
-                        AddBlock(ifStatement.Else, method);
+                        AddBlock(ifStatement.Else, method, block, ifStatement);
                     }
 
                     break;
@@ -112,7 +152,9 @@ internal sealed class HirPatchIndex
 
     internal sealed record BlockLocation(
         HirBlockStatement Block,
-        HirMethodDeclaration Method);
+        HirMethodDeclaration Method,
+        HirBlockStatement? ParentBlock,
+        HirStatement? EntryStatement);
 
     internal sealed record StatementLocation(
         HirStatement Statement,

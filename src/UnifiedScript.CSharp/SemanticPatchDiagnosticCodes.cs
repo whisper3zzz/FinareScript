@@ -20,4 +20,6 @@ public static class SemanticPatchDiagnosticCodes
     public const string UnsafeDeletion = "UVS3016";
     public const string NameConflict = "UVS3017";
     public const string UnsafeTemporaryIntroduction = "UVS3018";
+    public const string ValueSourceNotAvailable = "UVS3019";
+    public const string UnsafeValueReconnection = "UVS3020";
 }

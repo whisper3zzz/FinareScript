@@ -67,9 +67,11 @@ Outcome: graph patches produce localized, format-preserving C# edits.
 - [x] exact sibling preconditions for concurrent structural edits
 - [x] HIR use/definition and expression-location indexes
 - [x] stable pure-expression extraction into a single-evaluation temporary
+- [x] structured block dominance for local value availability
+- [x] typed existing-local-to-consumer reconnection with effect guards and tombstones
 - [ ] general statement/control-flow synthesis and structural HIR operations
 - [ ] graph layout sidecar
-- [ ] typed consumer-port reconnection and general data/control rewiring
+- [ ] atomic multi-consumer edit plans and general data/control rewiring
 
 ## M4 — Structured control flow expansion
 

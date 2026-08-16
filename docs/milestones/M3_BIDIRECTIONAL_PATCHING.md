@@ -7,14 +7,16 @@ a second language implementation or bypassing the existing compiler checks.
 
 ## Implemented vertical slice
 
-- `unifiedscript.patch/v0.4` polymorphic JSON protocol
+- `unifiedscript.patch/v0.5` polymorphic JSON protocol
 - `replaceLiteral` operation targeted by HIR/Graph `SemanticId`
 - unary/binary `changeOperator` with result and operand type preconditions
 - same-invocation `reconnectArgument` with endpoint, type, and effect guards
 - typed `insertStatement` for graph-safe local-literal declarations
 - bounded `deleteStatement` with symbol-use and effect safety checks
 - `introduceTemporary` for stable, pure return/local-initializer expressions
+- `reconnectValue` from an existing local to an exactly typed stable consumer
 - HIR expression-location and use/definition indexes
+- structured block hierarchy and statement-dominance checks
 - exact parent block and adjacent-sibling structural preconditions
 - overlapping source-range conflict detection
 - expected-old-literal precondition
@@ -57,6 +59,10 @@ diagnostic codes distinguish:
 - `UVS3016`: deleting the statement could remove effects, reads, or throws
 - `UVS3017`: an inserted local name conflicts with a parameter or local
 - `UVS3018`: temporary introduction would cross unstable or effectful evaluation
+- `UVS3019`: the requested local source is unavailable, out of scope, shadowed,
+  or does not dominate the consumer
+- `UVS3020`: reconnecting the value would discard unstable evaluation, effects,
+  comments, or directives
 - `UVS3101`: identity evidence is ambiguous; allocate a new ID instead of guessing
 - `UVS3102`: an explicit identity pin is invalid, missing, duplicate, or tombstoned
 
@@ -102,16 +108,27 @@ The test and sample suite proves that:
 28. return expressions and local initializers both support extraction with exact
     statement/block/sibling preconditions;
 29. the replacement identifier binds to the newly declared local and projects
-    that `referencedSymbolId` back into Graph; and
+    that `referencedSymbolId` back into Graph;
 30. stale containing statements and effectful evaluation contexts reject the
-    complete transaction.
+    complete transaction;
+31. a stable consumer expression can be replaced by an identifier bound to an
+    existing, exactly typed local declaration;
+32. the source declaration, consumer ancestors, statement, siblings, and block
+    retain their IDs while the removed consumer subtree is tombstoned and the
+    new identifier receives one fresh ID;
+33. a root-block local structurally dominates consumers in later nested blocks;
+34. a branch-local definition cannot feed an outer or sibling-branch consumer;
+35. effectful/unknown consumer evaluation and mismatched semantic types reject
+    value reconnection; and
+36. the checked-in CLI sample reanalyzes to a Graph identifier whose
+    `referencedSymbolId` is the requested source definition.
 
 ## Deliberate limits
 
 This is a bounded structural-edit slice, not general graph-to-source generation.
 It does not apply multi-file patches through the CLI, synthesize arbitrary
-expressions or control-flow statements, connect the introduced temporary to
-additional source consumers, reconnect across invocations or statements,
+expressions or control-flow statements, atomically connect several consumers
+whose block replacements overlap, perform arbitrary data/control rewiring,
 delete returns/branches/blocks, reconcile declaration renames, compact
 tombstones, or persist graph layout. Insertion currently accepts only a named
 graph-safe type already present in bound semantics plus one literal initializer.
@@ -121,13 +138,16 @@ Temporary introduction accepts only stable, pure value expressions in return or
 local-initializer statements inside explicit blocks. Short-circuit,
 division/remainder, decimal, and string operators remain excluded until builtin
 operator effects model conditional evaluation, allocation, and throws.
-Project-wide edits require a multi-file transaction coordinator.
+Value reconnection accepts only an existing, unshadowed local that structurally
+dominates the containing statement and has the same graph-safe semantic type as
+the removable stable consumer. Project-wide edits require a multi-file
+transaction coordinator.
 
 ## Next slice
 
-Add a typed consumer-port reconnection operation that can replace a compatible,
-stable consumer expression with a reference to an existing local definition.
-Use the new use/definition index to enforce lexical scope, statement order, and
-structured dominance before allowing one introduced temporary to serve
-multiple consumers. Assignment synthesis and structured control-flow editing
-remain later slices.
+Add an edit-plan coordinator that can compose temporary introduction with one
+or more typed consumer reconnections as a single graph transaction, even when
+their localized block replacements overlap. The coordinator must preserve the
+external source/configuration baseline, derive safe intermediate identities in
+memory, and roll back the entire plan on any failure. Assignment synthesis and
+structured control-flow editing remain later slices.

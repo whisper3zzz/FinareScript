@@ -1144,6 +1144,351 @@ public sealed class CSharpSourcePatchApplierTests
     }
 
     [Fact]
+    public void Apply_ReconnectsConsumerToDominatingLocalAndTombstonesRemovedExpression()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static float Run(float damage, float bonus)
+                {
+                    float sharedDamage = damage * 2.0f;
+                    return bonus + 1.0f;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/ReconnectValue.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement sourceDefinition = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+        HirBinaryExpression outer = Assert.IsType<HirBinaryExpression>(returnStatement.Expression);
+        HirLiteralExpression target = Assert.IsType<HirLiteralExpression>(outer.Right);
+        HashSet<SemanticId> removedIds = target.DescendantsAndSelf()
+            .Select(static node => node.Id)
+            .ToHashSet();
+        SemanticId floatType = GetTypeId(original, target);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new ReconnectValuePatchOperation(
+                target.Id,
+                sourceDefinition.Id,
+                returnStatement.Id,
+                method.Body.Id,
+                sourceDefinition.Id,
+                null,
+                floatType,
+                GetTypeId(original, sourceDefinition))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Contains(
+            "float sharedDamage = damage * 2.0f;\n        return bonus + sharedDamage;",
+            Assert.Single(result.PatchedRequest!.Sources).Source);
+        HirMethodDeclaration changedMethod = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirVariableDeclarationStatement changedDefinition = Assert.IsType<HirVariableDeclarationStatement>(
+            changedMethod.Body.Statements[0]);
+        HirReturnStatement changedReturn = Assert.IsType<HirReturnStatement>(changedMethod.Body.Statements[1]);
+        HirBinaryExpression changedOuter = Assert.IsType<HirBinaryExpression>(changedReturn.Expression);
+        HirIdentifierExpression newUse = Assert.IsType<HirIdentifierExpression>(changedOuter.Right);
+        Assert.Equal(sourceDefinition.Id, changedDefinition.Id);
+        Assert.Equal(outer.Id, changedOuter.Id);
+        Assert.Equal(returnStatement.Id, changedReturn.Id);
+        Assert.Equal(method.Body.Id, changedMethod.Body.Id);
+
+        BoundNodeInfo useBinding = Assert.Single(
+            result.Analysis.Semantics!.Nodes,
+            binding => binding.NodeId == newUse.Id);
+        Assert.Equal(sourceDefinition.Id, useBinding.ReferencedSymbolId);
+
+        IdentitySidecarDocument before = Assert.Single(original.IdentitySidecars);
+        IdentitySidecarDocument after = Assert.Single(result.Analysis.IdentitySidecars);
+        HashSet<SemanticId> beforeIds = before.Entries.Select(static entry => entry.Id).ToHashSet();
+        HashSet<SemanticId> afterIds = after.Entries.Select(static entry => entry.Id).ToHashSet();
+        Assert.All(
+            beforeIds.Where(id => !removedIds.Contains(id)),
+            id => Assert.Contains(id, afterIds));
+        Assert.All(
+            removedIds,
+            id => Assert.Contains(after.Tombstones, tombstone => tombstone.Id == id));
+        SemanticId allocatedUseId = Assert.Single(afterIds, id => !beforeIds.Contains(id));
+        Assert.Equal(newUse.Id, allocatedUseId);
+
+        GraphDocument graph = new HirGraphProjector().Project(
+            result.Analysis.Hir,
+            result.Analysis.Semantics);
+        GraphNode graphUse = Assert.Single(
+            Assert.Single(graph.Functions).Nodes,
+            node => node.Id == newUse.Id);
+        Assert.Equal("identifier", graphUse.Kind);
+        Assert.Equal(sourceDefinition.Id.Value, graphUse.Properties["referencedSymbolId"]);
+    }
+
+    [Fact]
+    public void Apply_ReconnectsNestedConsumerWhenRootLocalDominatesBranch()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static float Run(float damage, bool enabled)
+                {
+                    float sharedDamage = damage * 2.0f;
+                    if (enabled)
+                    {
+                        return 1.0f;
+                    }
+
+                    return sharedDamage;
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            source,
+            "Game/ReconnectNestedValue.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement sourceDefinition = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirIfStatement ifStatement = Assert.IsType<HirIfStatement>(method.Body.Statements[1]);
+        HirReturnStatement nestedReturn = Assert.IsType<HirReturnStatement>(
+            Assert.Single(ifStatement.Then.Statements));
+        HirExpression target = Assert.IsType<HirLiteralExpression>(nestedReturn.Expression);
+        SemanticId floatType = GetTypeId(original, target);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new ReconnectValuePatchOperation(
+                target.Id,
+                sourceDefinition.Id,
+                nestedReturn.Id,
+                ifStatement.Then.Id,
+                null,
+                null,
+                floatType,
+                GetTypeId(original, sourceDefinition))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains("return sharedDamage;", patchedSource);
+        Assert.Equal(2, patchedSource.Split("return sharedDamage;", StringSplitOptions.None).Length - 1);
+    }
+
+    [Fact]
+    public void Apply_RejectsValueSourceThatDoesNotDominateConsumer()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static float Run(float damage, bool enabled)
+                {
+                    if (enabled)
+                    {
+                        float branchValue = damage * 2.0f;
+                    }
+
+                    return 1.0f;
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            source,
+            "Game/RejectNonDominatingValue.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirIfStatement ifStatement = Assert.IsType<HirIfStatement>(method.Body.Statements[0]);
+        HirVariableDeclarationStatement sourceDefinition = Assert.IsType<HirVariableDeclarationStatement>(
+            Assert.Single(ifStatement.Then.Statements));
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+        HirExpression target = Assert.IsType<HirLiteralExpression>(returnStatement.Expression);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new ReconnectValuePatchOperation(
+                target.Id,
+                sourceDefinition.Id,
+                returnStatement.Id,
+                method.Body.Id,
+                ifStatement.Id,
+                null,
+                GetTypeId(original, target),
+                GetTypeId(original, sourceDefinition))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.PatchedRequest);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.ValueSourceNotAvailable);
+    }
+
+    [Fact]
+    public void Apply_RejectsRemovingEffectfulConsumerDuringValueReconnection()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Api
+            {
+                public static float Read() => 1.0f;
+            }
+
+            static class Script
+            {
+                [Visual]
+                static float Run(float value)
+                {
+                    float sharedValue = value * 2.0f;
+                    return Api.Read();
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            source,
+            "Game/RejectEffectfulReconnect.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        HirMethodDeclaration method = Assert.Single(
+            Assert.Single(original.Hir!.Types, static type => type.Name == "Script").Methods);
+        HirVariableDeclarationStatement sourceDefinition = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+        HirExpression target = Assert.IsType<HirInvocationExpression>(returnStatement.Expression);
+        SemanticId floatType = GetTypeId(original, target);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new ReconnectValuePatchOperation(
+                target.Id,
+                sourceDefinition.Id,
+                returnStatement.Id,
+                method.Body.Id,
+                sourceDefinition.Id,
+                null,
+                floatType,
+                GetTypeId(original, sourceDefinition))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.PatchedRequest);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.UnsafeValueReconnection);
+    }
+
+    [Fact]
+    public void Apply_RejectsValueReconnectionThatWouldDiscardCommentTrivia()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static float Run(float value)
+                {
+                    float sharedValue = value * 2.0f;
+                    return (value + /* keep this rationale */ 1.0f);
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            source,
+            "Game/RejectReconnectComment.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement sourceDefinition = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+        HirBinaryExpression target = Assert.IsType<HirBinaryExpression>(returnStatement.Expression);
+        SemanticId floatType = GetTypeId(original, target);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new ReconnectValuePatchOperation(
+                target.Id,
+                sourceDefinition.Id,
+                returnStatement.Id,
+                method.Body.Id,
+                sourceDefinition.Id,
+                null,
+                floatType,
+                GetTypeId(original, sourceDefinition))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.PatchedRequest);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.UnsafeValueReconnection);
+    }
+
+    [Fact]
+    public void Apply_RejectsValueReconnectionAcrossDifferentSemanticTypes()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static float Run(float value)
+                {
+                    float sharedValue = value * 2.0f;
+                    int consumer = 1;
+                    return sharedValue + consumer;
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            source,
+            "Game/RejectReconnectType.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement sourceDefinition = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirVariableDeclarationStatement consumer = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[1]);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(method.Body.Statements[2]);
+        HirExpression target = Assert.IsType<HirLiteralExpression>(consumer.Initializer);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new ReconnectValuePatchOperation(
+                target.Id,
+                sourceDefinition.Id,
+                consumer.Id,
+                method.Body.Id,
+                sourceDefinition.Id,
+                returnStatement.Id,
+                GetTypeId(original, target),
+                GetTypeId(original, sourceDefinition))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.PatchedRequest);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.TypeMismatch);
+    }
+
+    [Fact]
     public void Analyze_SourceCompilationIdChangesWhenSingleFileContentChanges()
     {
         CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(Source, "Game/Calculator.cs");

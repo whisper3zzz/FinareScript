@@ -182,10 +182,11 @@ compilation identity is not safe for editing.
 ## Semantic patch transaction
 
 Graph schema v0.2 carries both the source compilation ID and semantic
-configuration ID. A `unifiedscript.patch/v0.4` document repeats those IDs and
+configuration ID. A `unifiedscript.patch/v0.5` document repeats those IDs and
 contains typed operations keyed by graph/HIR `SemanticId`. Implemented
 operations are `replaceLiteral`, `changeOperator`, `reconnectArgument`,
-`insertStatement`, `deleteStatement`, and `introduceTemporary`. Structural
+`insertStatement`, `deleteStatement`, `introduceTemporary`, and
+`reconnectValue`. Structural
 operations carry old operator/endpoint, semantic type, containing statement,
 parent block, and exact sibling preconditions rather than relying only on the
 compilation baseline.
@@ -224,15 +225,26 @@ Short-circuit, division/remainder, decimal, and string operators remain outside
 this proof until builtin operator effects include conditional evaluation,
 allocation, and throw behavior.
 
+Typed value reconnection uses the same expression-stability predicate plus a
+block hierarchy in the HIR patch index. The source must be an existing local in
+the same method, its declaration statement must strictly precede and
+structurally dominate the consumer statement, its name must not be shadowed,
+and its bound graph-safe type must exactly equal the consumer type. Replacing a
+consumer never moves or duplicates evaluation: it removes one proven-stable
+subtree and inserts a local identifier at the same syntax position. Comments
+or directives inside that subtree make the edit unsafe. Surviving syntax is
+pinned; removed IDs are tombstoned; the new identifier receives a new ID and
+must rebind to the requested source declaration during full reanalysis.
+
 Argument reconnection is deliberately bounded to exchanging two pure, exactly
 type-compatible positional arguments of one resolved invocation. The
 implemented temporary-introduction primitive now preserves C# evaluation count
-and order for one extracted value, but connecting additional consumers still
-requires a typed consumer-port patch. Statement editing is similarly bounded to
-local declarations with a literal initializer and deletion of unused literal
-locals or pure static-call statements. General expression synthesis,
-control-flow editing, declaration renaming, and cross-expression rewiring remain
-future patch-algebra work.
+and order for one extracted value, and `reconnectValue` can connect later,
+dominated consumers to that definition. Statement editing is similarly bounded
+to local declarations with a literal initializer and deletion of unused
+literal locals or pure static-call statements. General expression synthesis,
+control-flow editing, declaration renaming, atomic multi-consumer edit plans,
+and arbitrary cross-expression rewiring remain future patch-algebra work.
 
 Visual method signatures currently accept void, booleans, integer and floating
 primitives, strings, enums, nullable forms of supported value types, and
@@ -261,7 +273,8 @@ receivers until a richer graph-safe object-handle policy is defined.
 - deterministic serialization tests;
 - golden digests for versioned HIR, semantics, and graph fixtures;
 - source/graph/source round-trip tests for values, operators, argument edges,
-  bounded statement edits, and temporary introduction;
+  bounded statement edits, temporary introduction, and typed local-to-consumer
+  reconnection;
 - later, semantic equivalence tests between graph-edited and text-edited IL.
 
 ## Deferred UE boundary

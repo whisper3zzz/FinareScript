@@ -81,6 +81,9 @@ def main() -> int:
     insert_patch_path = ROOT / "samples" / "Patching" / "InsertScale.patch.json"
     temporary_patch_path = ROOT / "samples" / "Patching" / "IntroduceScaledDamage.patch.json"
     patch_identity_path = ROOT / "samples" / "Patching" / "DamageRules.cs.usids"
+    reconnect_source_path = ROOT / "samples" / "Patching" / "SharedValueRules.cs"
+    reconnect_patch_path = ROOT / "samples" / "Patching" / "ReconnectSharedDamage.patch.json"
+    reconnect_identity_path = ROOT / "samples" / "Patching" / "SharedValueRules.cs.usids"
     require(
         patch_source_path.is_file()
         and patch_document_path.is_file()
@@ -90,23 +93,35 @@ def main() -> int:
         and patch_identity_path.is_file(),
         "Missing bidirectional patch sample",
     )
+    require(
+        reconnect_source_path.is_file()
+        and reconnect_patch_path.is_file()
+        and reconnect_identity_path.is_file(),
+        "Missing typed value-reconnection sample",
+    )
     patch_source = patch_source_path.read_text(encoding="utf-8")
     patch_document = json.loads(patch_document_path.read_text(encoding="utf-8"))
     operator_patch = json.loads(operator_patch_path.read_text(encoding="utf-8"))
     insert_patch = json.loads(insert_patch_path.read_text(encoding="utf-8"))
     temporary_patch = json.loads(temporary_patch_path.read_text(encoding="utf-8"))
     patch_identity = json.loads(patch_identity_path.read_text(encoding="utf-8"))
+    reconnect_source = reconnect_source_path.read_text(encoding="utf-8")
+    reconnect_patch = json.loads(reconnect_patch_path.read_text(encoding="utf-8"))
+    reconnect_identity = json.loads(reconnect_identity_path.read_text(encoding="utf-8"))
     patch_operation = patch_document["operations"][0]
     operator_operation = operator_patch["operations"][0]
     insert_operation = insert_patch["operations"][0]
     temporary_operation = temporary_patch["operations"][0]
+    reconnect_operation = reconnect_patch["operations"][0]
     identity_ids = {entry["id"] for entry in patch_identity["entries"]}
+    reconnect_identity_ids = {entry["id"] for entry in reconnect_identity["entries"]}
     source_digest = hashlib.sha256(patch_source.encode("utf-8")).hexdigest()
+    reconnect_source_digest = hashlib.sha256(reconnect_source.encode("utf-8")).hexdigest()
     require(
-        patch_document["schemaVersion"] == "unifiedscript.patch/v0.4"
-        and operator_patch["schemaVersion"] == "unifiedscript.patch/v0.4"
-        and insert_patch["schemaVersion"] == "unifiedscript.patch/v0.4"
-        and temporary_patch["schemaVersion"] == "unifiedscript.patch/v0.4"
+        patch_document["schemaVersion"] == "unifiedscript.patch/v0.5"
+        and operator_patch["schemaVersion"] == "unifiedscript.patch/v0.5"
+        and insert_patch["schemaVersion"] == "unifiedscript.patch/v0.5"
+        and temporary_patch["schemaVersion"] == "unifiedscript.patch/v0.5"
         and operator_patch["sourceCompilationId"]
         == patch_document["sourceCompilationId"]
         and insert_patch["sourceCompilationId"]
@@ -152,6 +167,28 @@ def main() -> int:
         and temporary_operation["expectedTypeId"]
         == inserted_statement["expectedTypeId"],
         "Temporary-introduction sample does not contain the expected typed payload",
+    )
+    require(
+        reconnect_patch["schemaVersion"] == "unifiedscript.patch/v0.5"
+        and reconnect_identity["sourcePath"]
+        == "samples/Patching/SharedValueRules.cs"
+        and reconnect_identity["sourceDigest"]
+        == f"sha256:{reconnect_source_digest}"
+        and reconnect_operation["operation"] == "reconnectValue"
+        and reconnect_operation["targetNodeId"] in reconnect_identity_ids
+        and reconnect_operation["sourceDefinitionId"] in reconnect_identity_ids
+        and reconnect_operation["expectedContainingStatementId"]
+        in reconnect_identity_ids
+        and reconnect_operation["expectedParentBlockId"] in reconnect_identity_ids
+        and reconnect_operation["expectedPreviousSiblingId"]
+        == reconnect_operation["sourceDefinitionId"]
+        and reconnect_operation["expectedNextSiblingId"] is None
+        and reconnect_operation["expectedTargetTypeId"]
+        == reconnect_operation["expectedSourceTypeId"]
+        and reconnect_operation["expectedTargetTypeId"].startswith("us_")
+        and "float sharedDamage = damage * 2.0f;" in reconnect_source
+        and "return bonus + 1.0f;" in reconnect_source,
+        "Typed value-reconnection source, sidecar, and patch are inconsistent",
     )
     require(
         any((ROOT / "tests" / "UnifiedScript.Tests").glob("*Tests.cs")),

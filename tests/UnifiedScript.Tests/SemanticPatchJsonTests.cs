@@ -102,10 +102,19 @@ public sealed class SemanticPatchJsonTests
             "sharedValue",
             "float",
             floatType);
+        var reconnectValue = new ReconnectValuePatchOperation(
+            SemanticId.FromKey("consumer-expression"),
+            localId,
+            returnId,
+            blockId,
+            localId,
+            null,
+            floatType,
+            floatType);
         SemanticPatchDocument patch = SemanticPatchDocument.Create(
             SemanticId.FromKey("statement-compilation"),
             SemanticId.FromKey("statement-configuration"),
-            [insert, delete, introduceTemporary]);
+            [insert, delete, introduceTemporary, reconnectValue]);
 
         string json = SemanticPatchJson.Serialize(patch);
         SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
@@ -115,12 +124,16 @@ public sealed class SemanticPatchJsonTests
         Assert.Equal(
             introduceTemporary,
             Assert.IsType<IntroduceTemporaryPatchOperation>(roundTrip.Operations[2]));
+        Assert.Equal(
+            reconnectValue,
+            Assert.IsType<ReconnectValuePatchOperation>(roundTrip.Operations[3]));
         Assert.IsType<LocalLiteralDeclarationPatchStatement>(
             Assert.IsType<InsertStatementPatchOperation>(roundTrip.Operations[0]).NewStatement);
         Assert.Contains("\"operation\": \"insertStatement\"", json);
         Assert.Contains("\"statement\": \"localLiteralDeclaration\"", json);
         Assert.Contains("\"operation\": \"deleteStatement\"", json);
         Assert.Contains("\"operation\": \"introduceTemporary\"", json);
+        Assert.Contains("\"operation\": \"reconnectValue\"", json);
     }
 
     [Fact]
@@ -189,6 +202,25 @@ public sealed class SemanticPatchJsonTests
                     null,
                     "sharedValue",
                     "float",
+                    SemanticId.FromKey("System.Single")),
+            ]));
+    }
+
+    [Fact]
+    public void Create_RejectsValueReconnectionWithoutASourceDefinition()
+    {
+        Assert.Throws<JsonException>(() => SemanticPatchDocument.Create(
+            SemanticId.FromKey("compilation"),
+            SemanticId.FromKey("configuration"),
+            [
+                new ReconnectValuePatchOperation(
+                    SemanticId.FromKey("consumer"),
+                    default,
+                    SemanticId.FromKey("statement"),
+                    SemanticId.FromKey("block"),
+                    null,
+                    null,
+                    SemanticId.FromKey("System.Single"),
                     SemanticId.FromKey("System.Single")),
             ]));
     }

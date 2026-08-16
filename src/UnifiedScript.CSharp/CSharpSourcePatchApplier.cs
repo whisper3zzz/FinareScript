@@ -11,6 +11,7 @@ namespace UnifiedScript.CSharp;
 public sealed class CSharpSourcePatchApplier
 {
     private const string IdentityAnnotationKind = "UnifiedScript.IdentityPin";
+    private const string PatchLocatorAnnotationKind = "UnifiedScript.PatchLocator";
     private static readonly IReadOnlyDictionary<string, string> BinaryOperatorFamilies =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
@@ -154,6 +155,15 @@ public sealed class CSharpSourcePatchApplier
                     documents),
                 IntroduceTemporaryPatchOperation introduceTemporary => PlanTemporaryIntroduction(
                     introduceTemporary,
+                    hirNodes,
+                    patchIndex,
+                    useDefinitionIndex,
+                    boundNodes,
+                    methods,
+                    types,
+                    documents),
+                ReconnectValuePatchOperation reconnectValue => PlanValueReconnection(
+                    reconnectValue,
                     hirNodes,
                     patchIndex,
                     useDefinitionIndex,
@@ -903,6 +913,7 @@ public sealed class CSharpSourcePatchApplier
                 document!,
                 containingSyntax,
                 expressionLocation.ContainingStatement,
+                null,
                 out StatementSyntax? annotatedContaining,
                 out IReadOnlyDictionary<SemanticId, SyntaxAnnotation>? expressionAnnotations,
                 out IReadOnlyList<PendingPin>? expressionPins) ||
@@ -949,6 +960,223 @@ public sealed class CSharpSourcePatchApplier
         annotatedStatements.Insert(statementLocation.Index, temporaryStatement);
 
         pins.AddRange(expressionPins!);
+        var blockAnnotation = new SyntaxAnnotation(IdentityAnnotationKind, parentBlock.Id.Value);
+        BlockSyntax replacement = blockSyntax
+            .WithStatements(SyntaxFactory.List(annotatedStatements))
+            .WithAdditionalAnnotations(blockAnnotation);
+        pins.Add(new PendingPin(parentBlock.Id, "block", blockAnnotation));
+        return SuccessPlan(document!, new PendingReplacement(
+            document!.Source.LogicalPath,
+            blockSyntax,
+            replacement,
+            pins));
+    }
+
+    private static OperationPlan PlanValueReconnection(
+        ReconnectValuePatchOperation operation,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        HirUseDefinitionIndex useDefinitionIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, MethodDescriptor> methods,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
+        IReadOnlyDictionary<string, ParsedDocument> documents)
+    {
+        if (!hirNodes.TryGetValue(operation.TargetNodeId, out HirNode? target))
+        {
+            return MissingTarget(operation.TargetNodeId);
+        }
+
+        if (target is not HirExpression expression ||
+            !patchIndex.TryGetExpression(
+                expression.Id,
+                out HirPatchIndex.ExpressionLocation? expressionLocation))
+        {
+            return KindMismatch(target, operation.TargetNodeId, "an expression");
+        }
+
+        if (!hirNodes.TryGetValue(operation.SourceDefinitionId, out HirNode? sourceNode) ||
+            sourceNode is not HirVariableDeclarationStatement sourceDefinition ||
+            !patchIndex.TryGetStatement(
+                operation.SourceDefinitionId,
+                out HirPatchIndex.StatementLocation? sourceLocation))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.ValueSourceNotAvailable,
+                $"Value source '{operation.SourceDefinitionId}' is not a local definition in the current HIR.",
+                expression);
+        }
+
+        if (expressionLocation!.ContainingStatement.Id != operation.ExpectedContainingStatementId)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.PreconditionFailed,
+                $"Value reconnection expected containing statement " +
+                $"'{operation.ExpectedContainingStatementId}', but expression '{expression.Id}' is currently " +
+                $"inside '{expressionLocation.ContainingStatement.Id}'.",
+                expression);
+        }
+
+        if (!patchIndex.TryGetStatement(
+                expressionLocation.ContainingStatement.Id,
+                out HirPatchIndex.StatementLocation? consumerLocation) ||
+            consumerLocation!.ParentBlock.Id != operation.ExpectedParentBlockId ||
+            !StatementSiblingsMatch(
+                consumerLocation,
+                operation.ExpectedPreviousSiblingId,
+                operation.ExpectedNextSiblingId))
+        {
+            return SiblingFailure(
+                expressionLocation.ContainingStatement,
+                operation.ExpectedPreviousSiblingId,
+                operation.ExpectedNextSiblingId,
+                operation.ExpectedParentBlockId);
+        }
+
+        if (sourceLocation!.Method.Id != expressionLocation.Method.Id ||
+            !patchIndex.DoesStatementDominate(
+                sourceDefinition.Id,
+                expressionLocation.ContainingStatement.Id))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.ValueSourceNotAvailable,
+                $"Local '{sourceDefinition.Name}' does not lexically dominate expression '{expression.Id}' " +
+                "in the same method.",
+                expression);
+        }
+
+        if (HasNameConflict(
+                expressionLocation.Method,
+                sourceDefinition.Name,
+                sourceDefinition.Id))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.ValueSourceNotAvailable,
+                $"Local '{sourceDefinition.Name}' is shadowed by another parameter or local in method " +
+                $"'{expressionLocation.Method.Name}'.",
+                expression);
+        }
+
+        if (useDefinitionIndex.References(expression, sourceDefinition.Id))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.PreconditionFailed,
+                $"Expression '{expression.Id}' already references local '{sourceDefinition.Name}'.",
+                expression);
+        }
+
+        if (operation.ExpectedTargetTypeId != operation.ExpectedSourceTypeId ||
+            !types.TryGetValue(operation.ExpectedSourceTypeId, out TypeDescriptor? sourceType) ||
+            !sourceType.IsGraphSafe)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.TypeMismatch,
+                "Value reconnection requires the same graph-safe semantic type on source and target.",
+                expression);
+        }
+
+        OperationPlan? targetTypeFailure = RequireType(
+            expression,
+            operation.ExpectedTargetTypeId,
+            "consumer expression",
+            boundNodes);
+        if (targetTypeFailure is not null)
+        {
+            return targetTypeFailure;
+        }
+
+        OperationPlan? sourceTypeFailure = RequireType(
+            sourceDefinition,
+            operation.ExpectedSourceTypeId,
+            "source local",
+            boundNodes);
+        if (sourceTypeFailure is not null)
+        {
+            return sourceTypeFailure;
+        }
+
+        if (!IsStablePureExpression(
+                expression,
+                useDefinitionIndex,
+                boundNodes,
+                methods,
+                types))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.UnsafeValueReconnection,
+                "The consumer expression cannot be removed because it may read state, mutate, throw, " +
+                "allocate, or change conditional evaluation.",
+                expression);
+        }
+
+        HirBlockStatement parentBlock = consumerLocation.ParentBlock;
+        if (!TryFindSyntax(
+                documents,
+                parentBlock,
+                out ParsedDocument? document,
+                out BlockSyntax? blockSyntax) ||
+            blockSyntax!.Statements.Count != parentBlock.Statements.Count)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidStatement,
+                "Value reconnection currently requires an explicit C# block whose statement list " +
+                "matches the analyzed HIR block.",
+                parentBlock);
+        }
+
+        StatementSyntax containingSyntax = blockSyntax.Statements[consumerLocation.Index];
+        if (RoslynSourceSpan.FromNode(
+                containingSyntax,
+                document!.Source.LogicalPath) != expressionLocation.ContainingStatement.Span)
+        {
+            return MissingSyntax(expressionLocation.ContainingStatement, "statement");
+        }
+
+        HashSet<SemanticId> removedIds = expression
+            .DescendantsAndSelf()
+            .Select(static node => node.Id)
+            .ToHashSet();
+        (List<StatementSyntax> annotatedStatements, List<PendingPin> pins) =
+            AnnotateStatements(blockSyntax, parentBlock.Statements);
+        if (!TryAnnotateExpressions(
+                document!,
+                containingSyntax,
+                expressionLocation.ContainingStatement,
+                removedIds,
+                out StatementSyntax? annotatedContaining,
+                out IReadOnlyDictionary<SemanticId, SyntaxAnnotation>? expressionAnnotations,
+                out IReadOnlyList<PendingPin>? expressionPins) ||
+            !expressionAnnotations!.TryGetValue(expression.Id, out SyntaxAnnotation? targetAnnotation))
+        {
+            return MissingSyntax(expression, "expression");
+        }
+
+        SyntaxAnnotation statementAnnotation = pins
+            .Single(pin => pin.Id == expressionLocation.ContainingStatement.Id)
+            .Annotation;
+        annotatedContaining = annotatedContaining!.WithAdditionalAnnotations(statementAnnotation);
+        ExpressionSyntax annotatedTarget = annotatedContaining
+            .GetAnnotatedNodes(targetAnnotation)
+            .OfType<ExpressionSyntax>()
+            .Single();
+        if (annotatedTarget
+            .DescendantTrivia(descendIntoTrivia: true)
+            .Any(IsMeaningfulTrivia))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.UnsafeValueReconnection,
+                "The consumer expression contains comments or directives that cannot be discarded safely.",
+                expression);
+        }
+
+        IdentifierNameSyntax replacementIdentifier = SyntaxFactory.IdentifierName(sourceDefinition.Name)
+            .WithTriviaFrom(annotatedTarget);
+        StatementSyntax updatedContaining = annotatedContaining.ReplaceNode(
+            annotatedTarget,
+            replacementIdentifier);
+        annotatedStatements[consumerLocation.Index] = updatedContaining;
+        pins.AddRange(expressionPins!);
+
         var blockAnnotation = new SyntaxAnnotation(IdentityAnnotationKind, parentBlock.Id.Value);
         BlockSyntax replacement = blockSyntax
             .WithStatements(SyntaxFactory.List(annotatedStatements))
@@ -1124,6 +1352,7 @@ public sealed class CSharpSourcePatchApplier
         ParsedDocument document,
         StatementSyntax syntax,
         HirStatement statement,
+        IReadOnlySet<SemanticId>? unpinnedExpressionIds,
         out StatementSyntax? annotated,
         out IReadOnlyDictionary<SemanticId, SyntaxAnnotation>? annotations,
         out IReadOnlyList<PendingPin>? pins)
@@ -1152,13 +1381,19 @@ public sealed class CSharpSourcePatchApplier
                 return false;
             }
 
-            var annotation = new SyntaxAnnotation(IdentityAnnotationKind, expression.Id.Value);
+            bool shouldPin = unpinnedExpressionIds?.Contains(expression.Id) != true;
+            var annotation = new SyntaxAnnotation(
+                shouldPin ? IdentityAnnotationKind : PatchLocatorAnnotationKind,
+                expression.Id.Value);
             annotationBySyntax.Add(matches[0], annotation);
             annotationById.Add(expression.Id, annotation);
-            pendingPins.Add(new PendingPin(
-                expression.Id,
-                GetIdentityKind(expression),
-                annotation));
+            if (shouldPin)
+            {
+                pendingPins.Add(new PendingPin(
+                    expression.Id,
+                    GetIdentityKind(expression),
+                    annotation));
+            }
         }
 
         annotated = syntax.ReplaceNodes(
@@ -1169,11 +1404,15 @@ public sealed class CSharpSourcePatchApplier
         return true;
     }
 
-    private static bool HasNameConflict(HirMethodDeclaration method, string name) =>
-        method.Parameters.Any(parameter => parameter.Name == name) ||
+    private static bool HasNameConflict(
+        HirMethodDeclaration method,
+        string name,
+        SemanticId? exceptDefinitionId = null) =>
+        method.Parameters.Any(parameter =>
+            parameter.Name == name && parameter.Id != exceptDefinitionId) ||
         method.DescendantsAndSelf()
             .OfType<HirVariableDeclarationStatement>()
-            .Any(variable => variable.Name == name);
+            .Any(variable => variable.Name == name && variable.Id != exceptDefinitionId);
 
     private static bool IsStablePureExpression(
         HirExpression expression,

@@ -61,4 +61,9 @@ internal sealed class HirUseDefinitionIndex
         boundNodes.TryGetValue(expression.Id, out BoundNodeInfo? binding) &&
         binding.ReferencedSymbolId is SemanticId definitionId &&
         definitions.ContainsKey(definitionId);
+
+    public bool References(HirExpression expression, SemanticId definitionId) =>
+        definitions.ContainsKey(definitionId) &&
+        boundNodes.TryGetValue(expression.Id, out BoundNodeInfo? binding) &&
+        binding.ReferencedSymbolId == definitionId;
 }

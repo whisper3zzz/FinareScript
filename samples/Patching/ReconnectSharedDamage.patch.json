@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "unifiedscript.patch/v0.5",
+  "sourceCompilationId": "us_b9bdccde5004add8bb8ff7467a3f2470",
+  "semanticConfigurationId": "us_02f5fe78d296e2d4fe04bc50ca71acf1",
+  "operations": [
+    {
+      "operation": "reconnectValue",
+      "targetNodeId": "us_e654de7a82974079183454af6d20db16",
+      "sourceDefinitionId": "us_4f22b0ac228dd72f41083eaebd6dd7b3",
+      "expectedContainingStatementId": "us_425f1f521611d3263883a58fd5369e9b",
+      "expectedParentBlockId": "us_6b7674b6f53bb05f6c3671dc5d1240f1",
+      "expectedPreviousSiblingId": "us_4f22b0ac228dd72f41083eaebd6dd7b3",
+      "expectedNextSiblingId": null,
+      "expectedTargetTypeId": "us_26a5b44da19acd678d268ed608e9829f",
+      "expectedSourceTypeId": "us_26a5b44da19acd678d268ed608e9829f"
+    }
+  ]
+}

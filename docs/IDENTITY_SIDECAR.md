@@ -130,6 +130,15 @@ fingerprints, anchors, source digest, and generation update. Without a sidecar,
 deterministic span-derived bootstrap identity remains available for batch
 analysis.
 
-General expression/control-flow synthesis, cross-expression rewiring,
-declaration rename reconciliation, multi-file CLI patch commits, bounded
-tombstone compaction, and `.usgraph` layout persistence remain future work.
+Value reconnection deliberately does not pin the removed consumer subtree. Its
+IDs move to tombstones, while the replacement identifier receives a fresh ID.
+The containing statement, surviving expression ancestors, direct siblings,
+parent block, and source local declaration remain pinned or structurally
+reconciled. Full semantic reanalysis must bind the new identifier's
+`referencedSymbolId` to the requested source declaration before either source or
+sidecar can commit.
+
+General expression/control-flow synthesis, arbitrary cross-expression
+rewiring, atomic multi-consumer edit plans, declaration rename reconciliation,
+multi-file CLI patch commits, bounded tombstone compaction, and `.usgraph`
+layout persistence remain future work.

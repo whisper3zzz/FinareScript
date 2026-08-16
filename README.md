@@ -24,6 +24,8 @@ The repository currently implements:
   statement rewriting;
 - use/definition indexing and safe extraction of stable expressions into
   single-evaluation C# temporaries;
+- structured dominance analysis and exactly typed reconnection from an existing
+  local definition to a stable consumer expression;
 - opt-in `.usids` sidecars that preserve node identity across formatting and edits;
 - explicit patch identity pins and tombstones for deleted semantic nodes;
 - versioned HIR, semantics, and graph JSON emission through a small CLI;
@@ -155,7 +157,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
   --out-identity artifacts/patched/DamageRules.cs.usids
 ```
 
-`unifiedscript.patch/v0.4` binds every patch to both the source compilation ID
+`unifiedscript.patch/v0.5` binds every patch to both the source compilation ID
 and semantic configuration ID emitted in Graph schema v0.2. A `replaceLiteral`
 operation also carries the expected old literal text. A stale source, changed
 reference/effect configuration, missing target, changed old value, non-literal
@@ -169,7 +171,7 @@ ambiguous matches allocate new IDs and emit `UVS3101` rather than guessing.
 
 ## Apply structural graph patches
 
-Patch v0.4 includes `changeOperator` and `reconnectArgument`. The checked-in
+Patch v0.5 includes `changeOperator` and `reconnectArgument`. The checked-in
 operator sample changes the binary node from multiplication to division while
 requiring the expected result, left-port, and right-port type IDs:
 
@@ -205,7 +207,7 @@ single-document.
 
 ## Apply a statement insertion
 
-Patch v0.4 also includes bounded `insertStatement` and `deleteStatement`
+Patch v0.5 also includes bounded `insertStatement` and `deleteStatement`
 operations. The insertion sample adds a graph-authored local declaration before
 the existing return statement:
 
@@ -280,7 +282,61 @@ pin. The moved expression, its descendants, the containing statement, sibling
 statements, and parent block therefore retain their IDs. Only the new local
 declaration and replacement identifier allocate new IDs. This is the first
 lowering primitive needed to represent a shared Graph value without duplicating
-C# evaluation; connecting additional consumers remains a later operation.
+C# evaluation. Patch v0.5 can now connect additional compatible consumers to
+that local definition.
+
+## Reconnect a typed consumer
+
+`reconnectValue` replaces one existing stable consumer expression with a C#
+identifier that refers to an existing local declaration. The checked-in sample
+turns the second expression below into a use of the already evaluated value:
+
+```csharp
+float sharedDamage = damage * 2.0f;
+return bonus + 1.0f;
+```
+
+Run it with:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  apply-patch \
+  samples/Patching/SharedValueRules.cs \
+  --identity samples/Patching/SharedValueRules.cs.usids \
+  --patch samples/Patching/ReconnectSharedDamage.patch.json \
+  --out artifacts/reconnected/SharedValueRules.cs \
+  --out-identity artifacts/reconnected/SharedValueRules.cs.usids
+```
+
+The result is:
+
+```csharp
+float sharedDamage = damage * 2.0f;
+return bonus + sharedDamage;
+```
+
+The patch records the source declaration, target expression, containing
+statement, parent block, exact adjacent siblings, and both semantic type IDs.
+The source local must be in the same method and must structurally dominate the
+consumer statement: a root-block local may feed a later nested branch, but a
+branch-local value cannot escape that branch or feed a sibling branch. The
+source name must also be unambiguous in the method, and source and target types
+must be the same graph-safe type.
+
+Removing the old consumer subtree is allowed only when it is stable and
+effect-free under the same conservative rules used by temporary extraction.
+State/member reads, mutation, assignment, await, unknown or effectful calls,
+short-circuit evaluation, division/remainder, and string/decimal operators are
+rejected. Comments or directives inside the removed target are rejected as
+well, because silently discarding them would make the projection lossy.
+
+The containing statement, its surviving expressions, siblings, parent block,
+and source declaration retain their persistent IDs. IDs belonging to the
+removed target subtree become tombstones, while the replacement identifier
+receives a new ID and binds back to `sourceDefinitionId`. Reanalyzing the output
+projects that binding into Graph as `referencedSymbolId`. Multiple consumers
+can be connected with sequential patches, each generated against the freshly
+analyzed source baseline.
 
 ## Repository layout
 
@@ -306,9 +362,9 @@ This milestone does not include:
 - `.csproj`/MSBuild compilation loading;
 - namespace/API allow and deny policies;
 - flow-sensitive nullable state in the interchange model;
-- general expression/statement synthesis and cross-expression rewiring beyond
-  the bounded local-literal insertion, safe deletion, and temporary-introduction
-  slices;
+- general expression/statement synthesis and arbitrary data/control rewiring
+  beyond the bounded local-literal insertion, safe deletion, temporary
+  introduction, and compatible existing-local consumer reconnection slices;
 - loops, switch, lambdas, exceptions, or general-purpose C# visualization.
 
 See [ARCHITECTURE.md](docs/ARCHITECTURE.md),
