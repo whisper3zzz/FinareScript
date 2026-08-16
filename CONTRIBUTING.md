@@ -15,6 +15,8 @@
 8. Unknown calls are effectful by default; purity must be established explicitly.
 9. `.usgraph` layout is non-semantic: layout reconciliation must never mutate
    source, HIR, bound semantics, or `.usids`.
+10. Patch plans must validate external preconditions against the initial HIR;
+    internal rebasing may account only for earlier stages in the same plan.
 
 ## Verification
 

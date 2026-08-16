@@ -3,11 +3,94 @@ using System.Text.Json.Serialization;
 namespace UnifiedScript.Core;
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "step")]
+[JsonDerivedType(typeof(ReplaceLiteralPatchPlanStep), "replaceLiteral")]
+[JsonDerivedType(typeof(ChangeOperatorPatchPlanStep), "changeOperator")]
+[JsonDerivedType(typeof(ReconnectArgumentPatchPlanStep), "reconnectArgument")]
+[JsonDerivedType(typeof(InsertStatementPatchPlanStep), "insertStatement")]
+[JsonDerivedType(typeof(DeleteStatementPatchPlanStep), "deleteStatement")]
 [JsonDerivedType(typeof(IntroduceTemporaryPatchPlanStep), "introduceTemporary")]
 [JsonDerivedType(typeof(ReconnectValuePatchPlanStep), "reconnectValue")]
 public abstract record SemanticPatchPlanStep(
     string StepId,
     SemanticId TargetNodeId);
+
+public sealed record ReplaceLiteralPatchPlanStep(
+    string StepId,
+    SemanticId TargetNodeId,
+    string ExpectedValueText,
+    string NewValueText) : SemanticPatchPlanStep(StepId, TargetNodeId)
+{
+    public ReplaceLiteralPatchOperation ToOperation() => new(
+        TargetNodeId,
+        ExpectedValueText,
+        NewValueText);
+}
+
+public sealed record ChangeOperatorPatchPlanStep(
+    string StepId,
+    SemanticId TargetNodeId,
+    string ExpectedOperator,
+    string NewOperator,
+    SemanticId ExpectedResultTypeId,
+    SemanticId ExpectedOperandTypeId,
+    SemanticId? ExpectedRightOperandTypeId = null) : SemanticPatchPlanStep(StepId, TargetNodeId)
+{
+    public ChangeOperatorPatchOperation ToOperation() => new(
+        TargetNodeId,
+        ExpectedOperator,
+        NewOperator,
+        ExpectedResultTypeId,
+        ExpectedOperandTypeId,
+        ExpectedRightOperandTypeId);
+}
+
+public sealed record ReconnectArgumentPatchPlanStep(
+    string StepId,
+    SemanticId TargetNodeId,
+    int ArgumentIndex,
+    SemanticId ExpectedArgumentNodeId,
+    int SourceArgumentIndex,
+    SemanticId ExpectedSourceArgumentNodeId,
+    SemanticId ExpectedArgumentTypeId,
+    SemanticId ExpectedSourceArgumentTypeId) : SemanticPatchPlanStep(StepId, TargetNodeId)
+{
+    public ReconnectArgumentPatchOperation ToOperation() => new(
+        TargetNodeId,
+        ArgumentIndex,
+        ExpectedArgumentNodeId,
+        SourceArgumentIndex,
+        ExpectedSourceArgumentNodeId,
+        ExpectedArgumentTypeId,
+        ExpectedSourceArgumentTypeId);
+}
+
+public sealed record InsertStatementPatchPlanStep(
+    string StepId,
+    SemanticId TargetNodeId,
+    SemanticId? ExpectedPreviousSiblingId,
+    SemanticId? ExpectedNextSiblingId,
+    InsertPatchStatement NewStatement) : SemanticPatchPlanStep(StepId, TargetNodeId)
+{
+    public InsertStatementPatchOperation ToOperation() => new(
+        TargetNodeId,
+        ExpectedPreviousSiblingId,
+        ExpectedNextSiblingId,
+        NewStatement);
+}
+
+public sealed record DeleteStatementPatchPlanStep(
+    string StepId,
+    SemanticId TargetNodeId,
+    SemanticId ExpectedParentBlockId,
+    SemanticId? ExpectedPreviousSiblingId,
+    SemanticId? ExpectedNextSiblingId) : SemanticPatchPlanStep(StepId, TargetNodeId)
+{
+    public DeleteStatementPatchOperation ToOperation() => new(
+        TargetNodeId,
+        ExpectedParentBlockId,
+        ExpectedPreviousSiblingId,
+        ExpectedNextSiblingId);
+}
 
 public sealed record IntroduceTemporaryPatchPlanStep(
     string StepId,
@@ -47,7 +130,7 @@ public sealed record SemanticPatchPlanDocument(
     SemanticId SemanticConfigurationId,
     IReadOnlyList<SemanticPatchPlanStep> Steps)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.patch-plan/v0.1";
+    public const string CurrentSchemaVersion = "unifiedscript.patch-plan/v0.2";
 
     public static SemanticPatchPlanDocument Create(
         SemanticId sourceCompilationId,

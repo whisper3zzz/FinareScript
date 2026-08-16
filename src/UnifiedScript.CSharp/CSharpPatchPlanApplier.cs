@@ -42,14 +42,17 @@ public sealed class CSharpPatchPlanApplier
                 SourceSpan.Unknown("<patch-plan>")));
         }
 
-        UnifiedDiagnostic? initialFailure = ValidateInitialContexts(request, original, plan);
-        if (initialFailure is not null)
+        IReadOnlyList<UnifiedDiagnostic>? initialFailures = ValidateInitialContexts(
+            request,
+            original,
+            plan);
+        if (initialFailures is not null)
         {
-            return Failure(initialFailure);
+            return Failure(initialFailures);
         }
 
         CSharpCompilationRequest currentRequest = request;
-        var introducedDefinitions = new Dictionary<string, SemanticId>(StringComparer.Ordinal);
+        var producedDefinitions = new Dictionary<string, SemanticId>(StringComparer.Ordinal);
         CSharpPatchResult? lastResult = null;
         foreach (SemanticPatchPlanStep step in plan.Steps)
         {
@@ -62,7 +65,7 @@ public sealed class CSharpPatchPlanApplier
             if (!TryCreateCurrentOperation(
                     step,
                     current,
-                    introducedDefinitions,
+                    producedDefinitions,
                     out SemanticPatchOperation? operation,
                     out UnifiedDiagnostic? operationFailure))
             {
@@ -81,23 +84,30 @@ public sealed class CSharpPatchPlanApplier
                 return Failure(stageResult.Diagnostics);
             }
 
-            if (step is IntroduceTemporaryPatchPlanStep introduction)
+            HirVariableDeclarationStatement? introduced = step switch
             {
-                HirVariableDeclarationStatement? introduced = FindIntroducedDefinition(
+                IntroduceTemporaryPatchPlanStep introduction => FindIntroducedDefinition(
                     stageResult.Analysis.Hir,
-                    introduction);
+                    introduction),
+                InsertStatementPatchPlanStep insertion => FindInsertedDefinition(
+                    stageResult.Analysis.Hir,
+                    insertion),
+                _ => null,
+            };
+            if (step is IntroduceTemporaryPatchPlanStep or InsertStatementPatchPlanStep)
+            {
                 if (introduced is null)
                 {
                     return Failure(new UnifiedDiagnostic(
                         SemanticPatchDiagnosticCodes.InvalidPatchPlan,
                         UnifiedDiagnosticSeverity.Error,
-                        $"Plan step '{step.StepId}' succeeded but its introduced local could not be " +
+                        $"Plan step '{step.StepId}' succeeded but its produced local could not be " +
                         "resolved for later steps.",
                         SourceSpan.Unknown("<patch-plan>"),
                         step.TargetNodeId));
                 }
 
-                introducedDefinitions.Add(step.StepId, introduced.Id);
+                producedDefinitions.Add(step.StepId, introduced.Id);
             }
 
             currentRequest = AdvanceRequest(
@@ -113,7 +123,7 @@ public sealed class CSharpPatchPlanApplier
             "A validated semantic patch plan completed without executing any steps.");
     }
 
-    private static UnifiedDiagnostic? ValidateInitialContexts(
+    private IReadOnlyList<UnifiedDiagnostic>? ValidateInitialContexts(
         CSharpCompilationRequest request,
         CSharpAnalysisResult analysis,
         SemanticPatchPlanDocument plan)
@@ -125,98 +135,148 @@ public sealed class CSharpPatchPlanApplier
         IReadOnlyDictionary<SemanticId, HirNode> nodes = compilation
             .DescendantsAndSelf()
             .ToDictionary(static node => node.Id);
-        IReadOnlyDictionary<SemanticId, BoundNodeInfo> bindings = semantics.Nodes
-            .ToDictionary(static binding => binding.NodeId);
         var patchIndex = new HirPatchIndex(compilation);
-        var introductionMethods = new Dictionary<string, SemanticId>(StringComparer.Ordinal);
+        var producerMethods = new Dictionary<string, SemanticId>(StringComparer.Ordinal);
         foreach (SemanticPatchPlanStep step in plan.Steps)
         {
             if (!nodes.TryGetValue(step.TargetNodeId, out HirNode? target))
             {
-                return Diagnostic(
+                return [Diagnostic(
                     SemanticPatchDiagnosticCodes.TargetNotFound,
                     $"Patch-plan target '{step.TargetNodeId}' was not found in the initial HIR.",
                     SourceSpan.Unknown("<patch-plan>"),
-                    step.TargetNodeId);
+                    step.TargetNodeId)];
             }
 
-            if (target is not HirExpression expression ||
-                !patchIndex.TryGetExpression(
-                    expression.Id,
-                    out HirPatchIndex.ExpressionLocation? expressionLocation))
+            if (!TryGetStepMethod(step, target, patchIndex, out HirMethodDeclaration? method))
             {
-                return Diagnostic(
+                return [Diagnostic(
                     SemanticPatchDiagnosticCodes.TargetKindMismatch,
-                    $"Patch-plan target '{step.TargetNodeId}' is not an indexed expression.",
+                    $"Patch-plan target '{step.TargetNodeId}' does not have the structure required " +
+                    $"by step '{step.StepId}'.",
                     target.Span,
-                    target.Id);
-            }
-
-            SemanticId expectedStatementId = GetExpectedContainingStatementId(step);
-            if (expressionLocation!.ContainingStatement.Id != expectedStatementId)
-            {
-                return Diagnostic(
-                    SemanticPatchDiagnosticCodes.PreconditionFailed,
-                    $"Plan step '{step.StepId}' expected containing statement '{expectedStatementId}', " +
-                    $"but its target is inside '{expressionLocation.ContainingStatement.Id}'.",
-                    expression.Span,
-                    expression.Id);
-            }
-
-            if (!patchIndex.TryGetStatement(
-                    expectedStatementId,
-                    out HirPatchIndex.StatementLocation? statementLocation) ||
-                statementLocation!.ParentBlock.Id != GetExpectedParentBlockId(step) ||
-                !SiblingsMatch(
-                    statementLocation,
-                    GetExpectedPreviousSiblingId(step),
-                    GetExpectedNextSiblingId(step)))
-            {
-                return Diagnostic(
-                    SemanticPatchDiagnosticCodes.SiblingPreconditionFailed,
-                    $"Initial parent-block or sibling preconditions failed for plan step '{step.StepId}'.",
-                    expression.Span,
-                    expression.Id);
-            }
-
-            SemanticId expectedTypeId = GetExpectedTypeId(step);
-            if (!bindings.TryGetValue(expression.Id, out BoundNodeInfo? binding) ||
-                binding.TypeId != expectedTypeId)
-            {
-                return Diagnostic(
-                    SemanticPatchDiagnosticCodes.PreconditionFailed,
-                    $"Plan step '{step.StepId}' expected target type '{expectedTypeId}', but the " +
-                    $"current type is '{binding?.TypeId}'.",
-                    expression.Span,
-                    expression.Id);
+                    target.Id)];
             }
 
             CSharpSourceDocument source = request.Sources.Single(
-                candidate => candidate.LogicalPath == expression.Span.FilePath);
+                candidate => candidate.LogicalPath == target.Span.FilePath);
             if (source.IdentitySidecar is null)
             {
-                return Diagnostic(
+                return [Diagnostic(
                     SemanticPatchDiagnosticCodes.PlanRequiresPersistentIdentity,
                     "A multi-stage patch plan requires a persistent identity sidecar on every " +
                     "target document so later stages can resolve nodes after source spans change.",
-                    expression.Span,
-                    expression.Id);
+                    target.Span,
+                    target.Id)];
             }
 
-            switch (step)
+            if (step is ReconnectValuePatchPlanStep reconnect)
             {
-                case IntroduceTemporaryPatchPlanStep introduction:
-                    introductionMethods.Add(introduction.StepId, expressionLocation.Method.Id);
-                    break;
-                case ReconnectValuePatchPlanStep reconnect
-                    when introductionMethods[reconnect.SourceStepId] != expressionLocation.Method.Id:
-                    return Diagnostic(
-                        SemanticPatchDiagnosticCodes.InvalidPatchPlan,
-                        $"Reconnect step '{reconnect.StepId}' and source step " +
-                        $"'{reconnect.SourceStepId}' target different methods.",
-                        expression.Span,
-                        expression.Id);
+                UnifiedDiagnostic? reconnectFailure = ValidateInitialReconnection(
+                    reconnect,
+                    target,
+                    semantics,
+                    patchIndex,
+                    producerMethods,
+                    method!);
+                if (reconnectFailure is not null)
+                {
+                    return [reconnectFailure];
+                }
             }
+            else
+            {
+                SemanticPatchOperation initialOperation = GetInitialOperation(step);
+                CSharpPatchResult validationResult = stageApplier.Apply(
+                    request,
+                    SemanticPatchDocument.Create(
+                        compilation.Id,
+                        semantics.ConfigurationId,
+                        [initialOperation]));
+                if (!validationResult.Succeeded)
+                {
+                    return validationResult.Diagnostics;
+                }
+            }
+
+            if (step is IntroduceTemporaryPatchPlanStep or InsertStatementPatchPlanStep)
+            {
+                producerMethods.Add(step.StepId, method!.Id);
+            }
+        }
+
+        return null;
+    }
+
+    private static UnifiedDiagnostic? ValidateInitialReconnection(
+        ReconnectValuePatchPlanStep reconnect,
+        HirNode target,
+        BoundCompilation semantics,
+        HirPatchIndex patchIndex,
+        IReadOnlyDictionary<string, SemanticId> producerMethods,
+        HirMethodDeclaration method)
+    {
+        if (target is not HirExpression expression ||
+            !patchIndex.TryGetExpression(
+                expression.Id,
+                out HirPatchIndex.ExpressionLocation? expressionLocation))
+        {
+            return Diagnostic(
+                SemanticPatchDiagnosticCodes.TargetKindMismatch,
+                $"Patch-plan target '{reconnect.TargetNodeId}' is not an indexed expression.",
+                target.Span,
+                target.Id);
+        }
+
+        if (expressionLocation!.ContainingStatement.Id != reconnect.ExpectedContainingStatementId)
+        {
+            return Diagnostic(
+                SemanticPatchDiagnosticCodes.PreconditionFailed,
+                $"Plan step '{reconnect.StepId}' expected containing statement " +
+                $"'{reconnect.ExpectedContainingStatementId}', but its target is inside " +
+                $"'{expressionLocation.ContainingStatement.Id}'.",
+                expression.Span,
+                expression.Id);
+        }
+
+        if (!patchIndex.TryGetStatement(
+                reconnect.ExpectedContainingStatementId,
+                out HirPatchIndex.StatementLocation? statementLocation) ||
+            statementLocation!.ParentBlock.Id != reconnect.ExpectedParentBlockId ||
+            !SiblingsMatch(
+                statementLocation,
+                reconnect.ExpectedPreviousSiblingId,
+                reconnect.ExpectedNextSiblingId))
+        {
+            return Diagnostic(
+                SemanticPatchDiagnosticCodes.SiblingPreconditionFailed,
+                $"Initial parent-block or sibling preconditions failed for plan step " +
+                $"'{reconnect.StepId}'.",
+                expression.Span,
+                expression.Id);
+        }
+
+        BoundNodeInfo? binding = semantics.Nodes.SingleOrDefault(
+            candidate => candidate.NodeId == expression.Id);
+        if (binding?.TypeId != reconnect.ExpectedTypeId)
+        {
+            return Diagnostic(
+                SemanticPatchDiagnosticCodes.PreconditionFailed,
+                $"Plan step '{reconnect.StepId}' expected target type " +
+                $"'{reconnect.ExpectedTypeId}', but the current type is '{binding?.TypeId}'.",
+                expression.Span,
+                expression.Id);
+        }
+
+        if (!producerMethods.TryGetValue(reconnect.SourceStepId, out SemanticId producerMethodId) ||
+            producerMethodId != method.Id)
+        {
+            return Diagnostic(
+                SemanticPatchDiagnosticCodes.InvalidPatchPlan,
+                $"Reconnect step '{reconnect.StepId}' and source step " +
+                $"'{reconnect.SourceStepId}' target different methods.",
+                expression.Span,
+                expression.Id);
         }
 
         return null;
@@ -225,7 +285,7 @@ public sealed class CSharpPatchPlanApplier
     private static bool TryCreateCurrentOperation(
         SemanticPatchPlanStep step,
         CSharpAnalysisResult current,
-        IReadOnlyDictionary<string, SemanticId> introducedDefinitions,
+        IReadOnlyDictionary<string, SemanticId> producedDefinitions,
         out SemanticPatchOperation? operation,
         out UnifiedDiagnostic? diagnostic)
     {
@@ -246,47 +306,90 @@ public sealed class CSharpPatchPlanApplier
             return false;
         }
 
-        if (target is not HirExpression expression ||
+        switch (step)
+        {
+            case ReplaceLiteralPatchPlanStep replace when target is HirLiteralExpression:
+                operation = replace.ToOperation();
+                diagnostic = null;
+                return true;
+            case ChangeOperatorPatchPlanStep changeOperator
+                when target is HirUnaryExpression or HirBinaryExpression:
+                operation = changeOperator.ToOperation();
+                diagnostic = null;
+                return true;
+            case ReconnectArgumentPatchPlanStep reconnectArgument
+                when target is HirInvocationExpression invocation:
+                return TryRebaseArgumentReconnection(
+                    reconnectArgument,
+                    invocation,
+                    out operation,
+                    out diagnostic);
+            case InsertStatementPatchPlanStep insertion
+                when patchIndex.TryGetBlock(
+                    insertion.TargetNodeId,
+                    out HirPatchIndex.BlockLocation? blockLocation):
+                return TryRebaseInsertion(
+                    insertion,
+                    blockLocation!.Block,
+                    out operation,
+                    out diagnostic);
+            case DeleteStatementPatchPlanStep deletion
+                when patchIndex.TryGetStatement(
+                    deletion.TargetNodeId,
+                    out HirPatchIndex.StatementLocation? statementLocation):
+                GetSiblings(
+                    statementLocation!,
+                    out SemanticId? deletionPreviousSiblingId,
+                    out SemanticId? deletionNextSiblingId);
+                operation = new DeleteStatementPatchOperation(
+                    deletion.TargetNodeId,
+                    statementLocation!.ParentBlock.Id,
+                    deletionPreviousSiblingId,
+                    deletionNextSiblingId);
+                diagnostic = null;
+                return true;
+        }
+
+        if (step is not (IntroduceTemporaryPatchPlanStep or ReconnectValuePatchPlanStep) ||
+            target is not HirExpression expression ||
             !patchIndex.TryGetExpression(
                 expression.Id,
                 out HirPatchIndex.ExpressionLocation? expressionLocation) ||
             !patchIndex.TryGetStatement(
                 expressionLocation!.ContainingStatement.Id,
-                out HirPatchIndex.StatementLocation? statementLocation))
+                out HirPatchIndex.StatementLocation? expressionStatementLocation))
         {
             operation = null;
             diagnostic = Diagnostic(
                 SemanticPatchDiagnosticCodes.TargetKindMismatch,
-                $"Plan step '{step.StepId}' no longer resolves to an indexed expression.",
+                $"Plan step '{step.StepId}' no longer resolves to the required HIR shape.",
                 target.Span,
                 target.Id);
             return false;
         }
 
-        HirPatchIndex.ExpressionLocation resolvedExpressionLocation = expressionLocation!;
-        HirPatchIndex.StatementLocation resolvedStatementLocation = statementLocation!;
         GetSiblings(
-            resolvedStatementLocation,
+            expressionStatementLocation!,
             out SemanticId? previousSiblingId,
             out SemanticId? nextSiblingId);
         operation = step switch
         {
             IntroduceTemporaryPatchPlanStep introduction => new IntroduceTemporaryPatchOperation(
                 introduction.TargetNodeId,
-                resolvedExpressionLocation.ContainingStatement.Id,
-                resolvedStatementLocation.ParentBlock.Id,
+                expressionLocation!.ContainingStatement.Id,
+                expressionStatementLocation!.ParentBlock.Id,
                 previousSiblingId,
                 nextSiblingId,
                 introduction.Name,
                 introduction.TypeName,
                 introduction.ExpectedTypeId),
-            ReconnectValuePatchPlanStep reconnect when introducedDefinitions.TryGetValue(
+            ReconnectValuePatchPlanStep reconnect when producedDefinitions.TryGetValue(
                 reconnect.SourceStepId,
                 out SemanticId sourceDefinitionId) => new ReconnectValuePatchOperation(
                     reconnect.TargetNodeId,
                     sourceDefinitionId,
-                    resolvedExpressionLocation.ContainingStatement.Id,
-                    resolvedStatementLocation.ParentBlock.Id,
+                    expressionLocation!.ContainingStatement.Id,
+                    expressionStatementLocation!.ParentBlock.Id,
                     previousSiblingId,
                     nextSiblingId,
                     reconnect.ExpectedTypeId,
@@ -310,6 +413,180 @@ public sealed class CSharpPatchPlanApplier
         return false;
     }
 
+    private static bool TryRebaseArgumentReconnection(
+        ReconnectArgumentPatchPlanStep step,
+        HirInvocationExpression invocation,
+        out SemanticPatchOperation? operation,
+        out UnifiedDiagnostic? diagnostic)
+    {
+        int argumentIndex = FindArgumentIndex(invocation.Arguments, step.ExpectedArgumentNodeId);
+        int sourceArgumentIndex = FindArgumentIndex(
+            invocation.Arguments,
+            step.ExpectedSourceArgumentNodeId);
+        if (argumentIndex < 0 || sourceArgumentIndex < 0 || argumentIndex == sourceArgumentIndex)
+        {
+            operation = null;
+            diagnostic = Diagnostic(
+                SemanticPatchDiagnosticCodes.PreconditionFailed,
+                $"Plan step '{step.StepId}' could not relocate both original invocation endpoints " +
+                "after earlier stages.",
+                invocation.Span,
+                invocation.Id);
+            return false;
+        }
+
+        operation = new ReconnectArgumentPatchOperation(
+            step.TargetNodeId,
+            argumentIndex,
+            step.ExpectedArgumentNodeId,
+            sourceArgumentIndex,
+            step.ExpectedSourceArgumentNodeId,
+            step.ExpectedArgumentTypeId,
+            step.ExpectedSourceArgumentTypeId);
+        diagnostic = null;
+        return true;
+    }
+
+    private static int FindArgumentIndex(
+        IReadOnlyList<HirExpression> arguments,
+        SemanticId nodeId)
+    {
+        for (int index = 0; index < arguments.Count; index++)
+        {
+            if (arguments[index].Id == nodeId)
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    private static bool TryRebaseInsertion(
+        InsertStatementPatchPlanStep step,
+        HirBlockStatement block,
+        out SemanticPatchOperation? operation,
+        out UnifiedDiagnostic? diagnostic)
+    {
+        if (!TryResolveInsertionGap(
+                block,
+                step.ExpectedPreviousSiblingId,
+                step.ExpectedNextSiblingId,
+                out SemanticId? previousSiblingId,
+                out SemanticId? nextSiblingId))
+        {
+            operation = null;
+            diagnostic = Diagnostic(
+                SemanticPatchDiagnosticCodes.SiblingPreconditionFailed,
+                $"Plan step '{step.StepId}' could not rebase its original insertion gap after " +
+                "earlier stages.",
+                block.Span,
+                block.Id);
+            return false;
+        }
+
+        operation = new InsertStatementPatchOperation(
+            step.TargetNodeId,
+            previousSiblingId,
+            nextSiblingId,
+            step.NewStatement);
+        diagnostic = null;
+        return true;
+    }
+
+    private static bool TryResolveInsertionGap(
+        HirBlockStatement block,
+        SemanticId? expectedPreviousSiblingId,
+        SemanticId? expectedNextSiblingId,
+        out SemanticId? previousSiblingId,
+        out SemanticId? nextSiblingId)
+    {
+        IReadOnlyList<HirStatement> statements = block.Statements;
+        int previousIndex = expectedPreviousSiblingId is SemanticId expectedPrevious
+            ? FindStatementIndex(statements, expectedPrevious)
+            : -1;
+        int nextIndex = expectedNextSiblingId is SemanticId expectedNext
+            ? FindStatementIndex(statements, expectedNext)
+            : -1;
+
+        if (expectedPreviousSiblingId is null && expectedNextSiblingId is null)
+        {
+            previousSiblingId = statements.Count == 0 ? null : statements[^1].Id;
+            nextSiblingId = null;
+            return true;
+        }
+
+        if (expectedPreviousSiblingId is null)
+        {
+            if (nextIndex < 0)
+            {
+                previousSiblingId = null;
+                nextSiblingId = null;
+                return false;
+            }
+
+            previousSiblingId = nextIndex == 0 ? null : statements[nextIndex - 1].Id;
+            nextSiblingId = statements[nextIndex].Id;
+            return true;
+        }
+
+        if (expectedNextSiblingId is null)
+        {
+            if (previousIndex < 0)
+            {
+                previousSiblingId = null;
+                nextSiblingId = null;
+                return false;
+            }
+
+            previousSiblingId = statements[^1].Id;
+            nextSiblingId = null;
+            return true;
+        }
+
+        if (previousIndex >= 0 && nextIndex >= 0 && previousIndex >= nextIndex)
+        {
+            previousSiblingId = null;
+            nextSiblingId = null;
+            return false;
+        }
+
+        if (nextIndex >= 0)
+        {
+            previousSiblingId = nextIndex == 0 ? null : statements[nextIndex - 1].Id;
+            nextSiblingId = statements[nextIndex].Id;
+            return true;
+        }
+
+        if (previousIndex >= 0)
+        {
+            previousSiblingId = statements[previousIndex].Id;
+            nextSiblingId = previousIndex == statements.Count - 1
+                ? null
+                : statements[previousIndex + 1].Id;
+            return true;
+        }
+
+        previousSiblingId = null;
+        nextSiblingId = null;
+        return false;
+    }
+
+    private static int FindStatementIndex(
+        IReadOnlyList<HirStatement> statements,
+        SemanticId statementId)
+    {
+        for (int index = 0; index < statements.Count; index++)
+        {
+            if (statements[index].Id == statementId)
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
     private static HirVariableDeclarationStatement? FindIntroducedDefinition(
         HirCompilationUnit compilation,
         IntroduceTemporaryPatchPlanStep step)
@@ -323,6 +600,74 @@ public sealed class CSharpPatchPlanApplier
             .ToArray();
         return candidates.Length == 1 ? candidates[0] : null;
     }
+
+    private static HirVariableDeclarationStatement? FindInsertedDefinition(
+        HirCompilationUnit compilation,
+        InsertStatementPatchPlanStep step)
+    {
+        if (step.NewStatement is not LocalLiteralDeclarationPatchStatement insertedLocal ||
+            !new HirPatchIndex(compilation).TryGetBlock(
+                step.TargetNodeId,
+                out HirPatchIndex.BlockLocation? blockLocation))
+        {
+            return null;
+        }
+
+        HirVariableDeclarationStatement[] candidates = blockLocation!.Block.Statements
+            .OfType<HirVariableDeclarationStatement>()
+            .Where(variable => variable.Name == insertedLocal.Name &&
+                variable.Initializer is HirLiteralExpression literal &&
+                literal.ValueText == insertedLocal.ValueText)
+            .ToArray();
+        return candidates.Length == 1 ? candidates[0] : null;
+    }
+
+    private static bool TryGetStepMethod(
+        SemanticPatchPlanStep step,
+        HirNode target,
+        HirPatchIndex patchIndex,
+        out HirMethodDeclaration? method)
+    {
+        switch (step)
+        {
+            case InsertStatementPatchPlanStep when target is HirBlockStatement block &&
+                patchIndex.TryGetBlock(block.Id, out HirPatchIndex.BlockLocation? blockLocation):
+                method = blockLocation!.Method;
+                return true;
+            case DeleteStatementPatchPlanStep when target is HirStatement statement &&
+                patchIndex.TryGetStatement(
+                    statement.Id,
+                    out HirPatchIndex.StatementLocation? statementLocation):
+                method = statementLocation!.Method;
+                return true;
+            default:
+                if (target is HirExpression expression &&
+                    patchIndex.TryGetExpression(
+                        expression.Id,
+                        out HirPatchIndex.ExpressionLocation? expressionLocation))
+                {
+                    method = expressionLocation!.Method;
+                    return true;
+                }
+
+                method = null;
+                return false;
+        }
+    }
+
+    private static SemanticPatchOperation GetInitialOperation(SemanticPatchPlanStep step) => step switch
+    {
+        ReplaceLiteralPatchPlanStep replace => replace.ToOperation(),
+        ChangeOperatorPatchPlanStep changeOperator => changeOperator.ToOperation(),
+        ReconnectArgumentPatchPlanStep reconnectArgument => reconnectArgument.ToOperation(),
+        InsertStatementPatchPlanStep insertion => insertion.ToOperation(),
+        DeleteStatementPatchPlanStep deletion => deletion.ToOperation(),
+        IntroduceTemporaryPatchPlanStep introduction => introduction.ToOperation(),
+        ReconnectValuePatchPlanStep => throw new ArgumentException(
+            "A symbolic value reconnection cannot become an initial standalone operation.",
+            nameof(step)),
+        _ => throw new ArgumentOutOfRangeException(nameof(step), step.GetType().Name),
+    };
 
     private static CSharpCompilationRequest AdvanceRequest(
         CSharpCompilationRequest patchedRequest,
@@ -364,41 +709,6 @@ public sealed class CSharpPatchPlanApplier
             ? null
             : location.ParentBlock.Statements[location.Index + 1].Id;
     }
-
-    private static SemanticId GetExpectedContainingStatementId(SemanticPatchPlanStep step) => step switch
-    {
-        IntroduceTemporaryPatchPlanStep introduction => introduction.ExpectedContainingStatementId,
-        ReconnectValuePatchPlanStep reconnect => reconnect.ExpectedContainingStatementId,
-        _ => throw new ArgumentOutOfRangeException(nameof(step), step.GetType().Name),
-    };
-
-    private static SemanticId GetExpectedParentBlockId(SemanticPatchPlanStep step) => step switch
-    {
-        IntroduceTemporaryPatchPlanStep introduction => introduction.ExpectedParentBlockId,
-        ReconnectValuePatchPlanStep reconnect => reconnect.ExpectedParentBlockId,
-        _ => throw new ArgumentOutOfRangeException(nameof(step), step.GetType().Name),
-    };
-
-    private static SemanticId? GetExpectedPreviousSiblingId(SemanticPatchPlanStep step) => step switch
-    {
-        IntroduceTemporaryPatchPlanStep introduction => introduction.ExpectedPreviousSiblingId,
-        ReconnectValuePatchPlanStep reconnect => reconnect.ExpectedPreviousSiblingId,
-        _ => throw new ArgumentOutOfRangeException(nameof(step), step.GetType().Name),
-    };
-
-    private static SemanticId? GetExpectedNextSiblingId(SemanticPatchPlanStep step) => step switch
-    {
-        IntroduceTemporaryPatchPlanStep introduction => introduction.ExpectedNextSiblingId,
-        ReconnectValuePatchPlanStep reconnect => reconnect.ExpectedNextSiblingId,
-        _ => throw new ArgumentOutOfRangeException(nameof(step), step.GetType().Name),
-    };
-
-    private static SemanticId GetExpectedTypeId(SemanticPatchPlanStep step) => step switch
-    {
-        IntroduceTemporaryPatchPlanStep introduction => introduction.ExpectedTypeId,
-        ReconnectValuePatchPlanStep reconnect => reconnect.ExpectedTypeId,
-        _ => throw new ArgumentOutOfRangeException(nameof(step), step.GetType().Name),
-    };
 
     private static UnifiedDiagnostic Diagnostic(
         string code,

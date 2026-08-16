@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "unifiedscript.patch-plan/v0.2",
+  "sourceCompilationId": "us_92ddd927dd1d90bf441f7f3b9cca6eb0",
+  "semanticConfigurationId": "us_02f5fe78d296e2d4fe04bc50ca71acf1",
+  "steps": [
+    {
+      "step": "insertStatement",
+      "stepId": "insertScale",
+      "targetNodeId": "us_3946bf4e60ae7d9a98b282f8ee41a163",
+      "expectedPreviousSiblingId": null,
+      "expectedNextSiblingId": "us_9b3d3e7f529fd3f8879838bd7a46d24d",
+      "newStatement": {
+        "statement": "localLiteralDeclaration",
+        "name": "scale",
+        "typeName": "float",
+        "valueText": "2.0f",
+        "expectedTypeId": "us_26a5b44da19acd678d268ed608e9829f"
+      }
+    },
+    {
+      "step": "reconnectValue",
+      "stepId": "connectScale",
+      "targetNodeId": "us_fd4058ab1c312c0ddd716e99bf5b0b2a",
+      "sourceStepId": "insertScale",
+      "expectedContainingStatementId": "us_2ddcf6c508d92ee16666af74cf3bb3d9",
+      "expectedParentBlockId": "us_3946bf4e60ae7d9a98b282f8ee41a163",
+      "expectedPreviousSiblingId": "us_9b3d3e7f529fd3f8879838bd7a46d24d",
+      "expectedNextSiblingId": null,
+      "expectedTypeId": "us_26a5b44da19acd678d268ed608e9829f"
+    },
+    {
+      "step": "changeOperator",
+      "stepId": "divideDamage",
+      "targetNodeId": "us_d6391795dad98a1bdb828cabd98a119f",
+      "expectedOperator": "*",
+      "newOperator": "/",
+      "expectedResultTypeId": "us_26a5b44da19acd678d268ed608e9829f",
+      "expectedOperandTypeId": "us_26a5b44da19acd678d268ed608e9829f",
+      "expectedRightOperandTypeId": "us_26a5b44da19acd678d268ed608e9829f"
+    },
+    {
+      "step": "deleteStatement",
+      "stepId": "deleteObsolete",
+      "targetNodeId": "us_9b3d3e7f529fd3f8879838bd7a46d24d",
+      "expectedParentBlockId": "us_3946bf4e60ae7d9a98b282f8ee41a163",
+      "expectedPreviousSiblingId": null,
+      "expectedNextSiblingId": "us_2ddcf6c508d92ee16666af74cf3bb3d9"
+    }
+  ]
+}

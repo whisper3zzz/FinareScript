@@ -27,6 +27,7 @@ DOCUMENTS = [
     ROOT / "docs" / "ARCHITECTURE.md",
     ROOT / "docs" / "IDENTITY_SIDECAR.md",
     ROOT / "docs" / "GRAPH_LAYOUT.md",
+    ROOT / "docs" / "PATCH_PLAN.md",
     ROOT / "docs" / "ROADMAP.md",
     ROOT / "docs" / "milestones" / "M1_ROSLYN_GRAPH_FOUNDATION.md",
     ROOT / "docs" / "milestones" / "M2_SEMANTIC_BINDING.md",
@@ -88,6 +89,9 @@ def main() -> int:
     plan_source_path = ROOT / "samples" / "Patching" / "SharedExpressionPlan.cs"
     plan_document_path = ROOT / "samples" / "Patching" / "ShareDamage.plan.json"
     plan_identity_path = ROOT / "samples" / "Patching" / "SharedExpressionPlan.cs.usids"
+    composed_source_path = ROOT / "samples" / "Patching" / "ComposedPlan.cs"
+    composed_document_path = ROOT / "samples" / "Patching" / "ComposeScale.plan.json"
+    composed_identity_path = ROOT / "samples" / "Patching" / "ComposedPlan.cs.usids"
     layout_path = ROOT / "samples" / "Layout" / "DamageRules.usgraph"
     require(
         patch_source_path.is_file()
@@ -110,6 +114,12 @@ def main() -> int:
         and plan_identity_path.is_file(),
         "Missing atomic semantic patch-plan sample",
     )
+    require(
+        composed_source_path.is_file()
+        and composed_document_path.is_file()
+        and composed_identity_path.is_file(),
+        "Missing composed semantic patch-plan sample",
+    )
     require(layout_path.is_file(), "Missing graph layout sidecar sample")
     patch_source = patch_source_path.read_text(encoding="utf-8")
     patch_document = json.loads(patch_document_path.read_text(encoding="utf-8"))
@@ -123,6 +133,9 @@ def main() -> int:
     plan_source = plan_source_path.read_text(encoding="utf-8")
     plan_document = json.loads(plan_document_path.read_text(encoding="utf-8"))
     plan_identity = json.loads(plan_identity_path.read_text(encoding="utf-8"))
+    composed_source = composed_source_path.read_text(encoding="utf-8")
+    composed_document = json.loads(composed_document_path.read_text(encoding="utf-8"))
+    composed_identity = json.loads(composed_identity_path.read_text(encoding="utf-8"))
     layout = json.loads(layout_path.read_text(encoding="utf-8"))
     patch_operation = patch_document["operations"][0]
     operator_operation = operator_patch["operations"][0]
@@ -134,6 +147,7 @@ def main() -> int:
     source_digest = hashlib.sha256(patch_source.encode("utf-8")).hexdigest()
     reconnect_source_digest = hashlib.sha256(reconnect_source.encode("utf-8")).hexdigest()
     plan_source_digest = hashlib.sha256(plan_source.encode("utf-8")).hexdigest()
+    composed_source_digest = hashlib.sha256(composed_source.encode("utf-8")).hexdigest()
     require(
         patch_document["schemaVersion"] == "unifiedscript.patch/v0.5"
         and operator_patch["schemaVersion"] == "unifiedscript.patch/v0.5"
@@ -213,7 +227,7 @@ def main() -> int:
     introduction_step = plan_steps[0]
     reconnect_steps = plan_steps[1:]
     require(
-        plan_document["schemaVersion"] == "unifiedscript.patch-plan/v0.1"
+        plan_document["schemaVersion"] == "unifiedscript.patch-plan/v0.2"
         and plan_identity["sourcePath"]
         == "samples/Patching/SharedExpressionPlan.cs"
         and plan_identity["sourceDigest"] == f"sha256:{plan_source_digest}"
@@ -243,6 +257,33 @@ def main() -> int:
         )
         and "return damage * 2.0f + damage * 3.0f + 1.0f;" in plan_source,
         "Atomic semantic patch-plan source, sidecar, and steps are inconsistent",
+    )
+    composed_steps = composed_document["steps"]
+    composed_identity_ids = {entry["id"] for entry in composed_identity["entries"]}
+    composed_insert, composed_reconnect, composed_operator, composed_delete = composed_steps
+    require(
+        composed_document["schemaVersion"] == "unifiedscript.patch-plan/v0.2"
+        and composed_identity["sourcePath"] == "samples/Patching/ComposedPlan.cs"
+        and composed_identity["sourceDigest"] == f"sha256:{composed_source_digest}"
+        and [step["step"] for step in composed_steps]
+        == ["insertStatement", "reconnectValue", "changeOperator", "deleteStatement"]
+        and len({step["stepId"] for step in composed_steps}) == len(composed_steps)
+        and composed_insert["targetNodeId"] in composed_identity_ids
+        and composed_insert["expectedNextSiblingId"] in composed_identity_ids
+        and composed_insert["newStatement"]["statement"] == "localLiteralDeclaration"
+        and composed_insert["newStatement"]["name"] == "scale"
+        and composed_reconnect["targetNodeId"] in composed_identity_ids
+        and composed_reconnect["sourceStepId"] == composed_insert["stepId"]
+        and composed_reconnect["expectedTypeId"]
+        == composed_insert["newStatement"]["expectedTypeId"]
+        and composed_operator["targetNodeId"] in composed_identity_ids
+        and composed_operator["expectedOperator"] == "*"
+        and composed_operator["newOperator"] == "/"
+        and composed_delete["targetNodeId"] in composed_identity_ids
+        and composed_delete["expectedParentBlockId"] == composed_insert["targetNodeId"]
+        and "float obsolete = 1.0f;" in composed_source
+        and "return damage * 2.0f;" in composed_source,
+        "Composed semantic patch-plan source, sidecar, and steps are inconsistent",
     )
     require(
         any((ROOT / "tests" / "UnifiedScript.Tests").glob("*Tests.cs")),

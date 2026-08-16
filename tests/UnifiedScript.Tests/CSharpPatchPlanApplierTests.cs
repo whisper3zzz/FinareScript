@@ -249,6 +249,242 @@ public sealed class CSharpPatchPlanApplierTests
                 diagnostic.Code == SemanticPatchDiagnosticCodes.SiblingPreconditionFailed);
     }
 
+    [Fact]
+    public void Apply_ComposesInsertionHandleReconnectionOperatorChangeAndDeletion()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static float Run(float damage)
+                {
+                    float obsolete = 1.0f;
+                    return damage * 2.0f;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/MixedPatchPlan.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement obsolete = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+        HirBinaryExpression binary = Assert.IsType<HirBinaryExpression>(returnStatement.Expression);
+        HirLiteralExpression consumer = Assert.IsType<HirLiteralExpression>(binary.Right);
+        SemanticId floatType = GetTypeId(original, consumer);
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                new InsertStatementPatchPlanStep(
+                    "insertScale",
+                    method.Body.Id,
+                    null,
+                    obsolete.Id,
+                    new LocalLiteralDeclarationPatchStatement(
+                        "scale",
+                        "float",
+                        "2.0f",
+                        floatType)),
+                new ReconnectValuePatchPlanStep(
+                    "connectScale",
+                    consumer.Id,
+                    "insertScale",
+                    returnStatement.Id,
+                    method.Body.Id,
+                    obsolete.Id,
+                    null,
+                    floatType),
+                new ChangeOperatorPatchPlanStep(
+                    "divideDamage",
+                    binary.Id,
+                    "*",
+                    "/",
+                    GetTypeId(original, binary),
+                    GetTypeId(original, binary.Left),
+                    GetTypeId(original, binary.Right)),
+                new DeleteStatementPatchPlanStep(
+                    "deleteObsolete",
+                    obsolete.Id,
+                    method.Body.Id,
+                    null,
+                    returnStatement.Id),
+            ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains("float scale = 2.0f;\n        return damage / scale;", patchedSource);
+        Assert.DoesNotContain("obsolete", patchedSource, StringComparison.Ordinal);
+        HirMethodDeclaration changedMethod = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirVariableDeclarationStatement scale = Assert.IsType<HirVariableDeclarationStatement>(
+            changedMethod.Body.Statements[0]);
+        HirReturnStatement changedReturn = Assert.IsType<HirReturnStatement>(
+            changedMethod.Body.Statements[1]);
+        HirBinaryExpression changedBinary = Assert.IsType<HirBinaryExpression>(changedReturn.Expression);
+        HirIdentifierExpression scaleUse = Assert.IsType<HirIdentifierExpression>(changedBinary.Right);
+        Assert.Equal("/", changedBinary.Operator);
+        Assert.Equal(
+            scale.Id,
+            Assert.Single(
+                result.Analysis.Semantics!.Nodes,
+                binding => binding.NodeId == scaleUse.Id).ReferencedSymbolId);
+        Assert.Contains(
+            Assert.Single(result.Analysis.IdentitySidecars).Tombstones,
+            tombstone => tombstone.Id == obsolete.Id);
+    }
+
+    [Fact]
+    public void Apply_PreservesPlanOrderForRepeatedInsertionsIntoTheSameGap()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int value)
+                {
+                    return value;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/RepeatedInsertPlan.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(
+            Assert.Single(method.Body.Statements));
+        SemanticId intType = GetTypeId(original, returnStatement.Expression!);
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                new InsertStatementPatchPlanStep(
+                    "insertFirst",
+                    method.Body.Id,
+                    null,
+                    returnStatement.Id,
+                    new LocalLiteralDeclarationPatchStatement("first", "int", "1", intType)),
+                new InsertStatementPatchPlanStep(
+                    "insertSecond",
+                    method.Body.Id,
+                    null,
+                    returnStatement.Id,
+                    new LocalLiteralDeclarationPatchStatement("second", "int", "2", intType)),
+            ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Contains(
+            "int first = 1;\n        int second = 2;\n        return value;",
+            Assert.Single(result.PatchedRequest!.Sources).Source);
+    }
+
+    [Fact]
+    public void Apply_RebasesArgumentEndpointsAfterAnEarlierLiteralReplacement()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Api
+            {
+                public static int Combine(int first, int second) => first + second;
+            }
+
+            static class Script
+            {
+                [Visual]
+                static int Run()
+                {
+                    return Api.Combine(1, 2);
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/ArgumentPlan.cs");
+        HirMethodDeclaration method = Assert.Single(
+            Assert.Single(original.Hir!.Types, static type => type.Name == "Script").Methods);
+        HirInvocationExpression invocation = Assert.Single(
+            method.DescendantsAndSelf().OfType<HirInvocationExpression>());
+        HirLiteralExpression first = Assert.IsType<HirLiteralExpression>(invocation.Arguments[0]);
+        HirLiteralExpression second = Assert.IsType<HirLiteralExpression>(invocation.Arguments[1]);
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                new ReplaceLiteralPatchPlanStep("replaceFirst", first.Id, "1", "10"),
+                new ReconnectArgumentPatchPlanStep(
+                    "swapArguments",
+                    invocation.Id,
+                    0,
+                    first.Id,
+                    1,
+                    second.Id,
+                    GetTypeId(original, first),
+                    GetTypeId(original, second)),
+            ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Contains("return Api.Combine(2, 10);", Assert.Single(result.PatchedRequest!.Sources).Source);
+    }
+
+    [Fact]
+    public void Apply_RollsBackDirectStepsWhenAnEarlierDeletionRemovesALaterTarget()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int value)
+                {
+                    int unused = 1;
+                    return value;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/DirectRollbackPlan.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement unused = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirLiteralExpression literal = Assert.IsType<HirLiteralExpression>(unused.Initializer);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                new DeleteStatementPatchPlanStep(
+                    "deleteUnused",
+                    unused.Id,
+                    method.Body.Id,
+                    null,
+                    returnStatement.Id),
+                new ReplaceLiteralPatchPlanStep("replaceDeletedLiteral", literal.Id, "1", "2"),
+            ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.PatchedRequest);
+        Assert.Null(result.Analysis);
+        Assert.Equal(source, Assert.Single(request.Sources).Source);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.TargetNotFound);
+    }
+
     private static SemanticPatchPlanDocument CreatePlan(
         CSharpAnalysisResult original,
         HirMethodDeclaration method,

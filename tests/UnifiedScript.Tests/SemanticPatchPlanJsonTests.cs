@@ -47,6 +47,130 @@ public sealed class SemanticPatchPlanJsonTests
     }
 
     [Fact]
+    public void SerializeAndDeserialize_PreserveEveryDirectOperationStep()
+    {
+        SemanticId intType = SemanticId.FromKey("System.Int32");
+        SemanticId firstArgument = SemanticId.FromKey("first-argument");
+        SemanticId secondArgument = SemanticId.FromKey("second-argument");
+        SemanticPatchPlanStep[] steps =
+        [
+            new ReplaceLiteralPatchPlanStep(
+                "replace",
+                SemanticId.FromKey("literal"),
+                "1",
+                "2"),
+            new ChangeOperatorPatchPlanStep(
+                "operator",
+                SemanticId.FromKey("binary"),
+                "+",
+                "-",
+                intType,
+                intType,
+                intType),
+            new ReconnectArgumentPatchPlanStep(
+                "arguments",
+                SemanticId.FromKey("invocation"),
+                0,
+                firstArgument,
+                1,
+                secondArgument,
+                intType,
+                intType),
+            new InsertStatementPatchPlanStep(
+                "insert",
+                SemanticId.FromKey("block"),
+                null,
+                SemanticId.FromKey("first-statement"),
+                new LocalLiteralDeclarationPatchStatement("value", "int", "1", intType)),
+            new DeleteStatementPatchPlanStep(
+                "delete",
+                SemanticId.FromKey("obsolete-statement"),
+                SemanticId.FromKey("delete-parent-block"),
+                null,
+                SemanticId.FromKey("next-statement")),
+        ];
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("direct-plan-compilation"),
+            SemanticId.FromKey("direct-plan-configuration"),
+            steps);
+
+        string json = SemanticPatchPlanJson.Serialize(plan);
+        SemanticPatchPlanDocument roundTrip = SemanticPatchPlanJson.Deserialize(json);
+
+        Assert.Equal(steps, roundTrip.Steps);
+        Assert.Contains("\"step\": \"replaceLiteral\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"step\": \"changeOperator\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"step\": \"reconnectArgument\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"step\": \"insertStatement\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"step\": \"deleteStatement\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Create_AllowsReconnectToReferenceAnEarlierInsertedLocal()
+    {
+        SemanticId floatType = SemanticId.FromKey("System.Single");
+        SemanticId blockId = SemanticId.FromKey("insert-source-block");
+        string sourceStepId = "insertScale";
+
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("insert-source-compilation"),
+            SemanticId.FromKey("insert-source-configuration"),
+            [
+                new InsertStatementPatchPlanStep(
+                    sourceStepId,
+                    blockId,
+                    null,
+                    SemanticId.FromKey("return-statement"),
+                    new LocalLiteralDeclarationPatchStatement(
+                        "scale",
+                        "float",
+                        "2.0f",
+                        floatType)),
+                new ReconnectValuePatchPlanStep(
+                    "connectScale",
+                    SemanticId.FromKey("scale-consumer"),
+                    sourceStepId,
+                    SemanticId.FromKey("consumer-statement"),
+                    blockId,
+                    SemanticId.FromKey("previous-statement"),
+                    null,
+                    floatType),
+            ]);
+
+        Assert.Equal(SemanticPatchPlanDocument.CurrentSchemaVersion, plan.SchemaVersion);
+        Assert.IsType<InsertStatementPatchPlanStep>(plan.Steps[0]);
+        Assert.IsType<ReconnectValuePatchPlanStep>(plan.Steps[1]);
+    }
+
+    [Fact]
+    public void Create_AllowsOrderedInsertionsToTargetTheSameBlock()
+    {
+        SemanticId intType = SemanticId.FromKey("System.Int32");
+        SemanticId blockId = SemanticId.FromKey("shared-insertion-block");
+        SemanticId nextId = SemanticId.FromKey("shared-insertion-next");
+
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("shared-insertion-compilation"),
+            SemanticId.FromKey("shared-insertion-configuration"),
+            [
+                new InsertStatementPatchPlanStep(
+                    "insertFirst",
+                    blockId,
+                    null,
+                    nextId,
+                    new LocalLiteralDeclarationPatchStatement("first", "int", "1", intType)),
+                new InsertStatementPatchPlanStep(
+                    "insertSecond",
+                    blockId,
+                    null,
+                    nextId,
+                    new LocalLiteralDeclarationPatchStatement("second", "int", "2", intType)),
+            ]);
+
+        Assert.Equal(2, plan.Steps.Count);
+    }
+
+    [Fact]
     public void Create_RejectsReconnectThatReferencesAFutureIntroduction()
     {
         SemanticId floatType = SemanticId.FromKey("System.Single");

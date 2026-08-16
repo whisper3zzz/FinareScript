@@ -15,9 +15,12 @@ a second language implementation or bypassing the existing compiler checks.
 - bounded `deleteStatement` with symbol-use and effect safety checks
 - `introduceTemporary` for stable, pure return/local-initializer expressions
 - `reconnectValue` from an existing local to an exactly typed stable consumer
-- `unifiedscript.patch-plan/v0.1` ordered multi-stage transaction protocol
-- symbolic plan handles for local IDs allocated by `introduceTemporary`
+- `unifiedscript.patch-plan/v0.2` ordered multi-stage transaction protocol
+- plan steps for every bounded semantic patch operation
+- symbolic plan handles for local IDs allocated by `introduceTemporary` and
+  local-literal `insertStatement`
 - initial-context validation and safe internal baseline/sibling rebasing
+- repeated insertion-gap and invocation-endpoint rebasing
 - persistent-sidecar adoption between in-memory plan stages
 - HIR expression-location and use/definition indexes
 - structured block hierarchy and statement-dominance checks
@@ -152,16 +155,27 @@ The test and sample suite proves that:
     or invalid geometry;
 46. semantic patch insertion preserves every surviving placed node while its
     two new Graph nodes receive explicit unplaced state;
-47. missing nodes retain their last visual state as reasoned orphans; and
+47. missing nodes retain their last visual state as reasoned orphans;
 48. an orphan restores its placement when the same function/node identity
-    reappears.
+    reappears;
+49. patch-plan JSON round-trips every bounded operation step and accepts an
+    inserted local as a typed symbolic source;
+50. one four-stage plan inserts a local, reconnects a consumer to it, changes an
+    operator, and deletes an obsolete declaration as one commit;
+51. repeated insertions into the same original block gap preserve plan order;
+52. argument reconnection relocates endpoint indices by persistent node ID after
+    an earlier literal replacement;
+53. deleting a statement before a later descendant step fails atomically without
+    returning the successful deletion; and
+54. both the shared-expression v0.2 plan and composed v0.2 CLI sample produce
+    their documented final source and identity sidecars.
 
 ## Deliberate limits
 
 This is a bounded structural-edit slice, not general graph-to-source generation.
 It does not apply multi-file patches through the CLI, synthesize arbitrary
-expressions or control-flow statements, use arbitrary individual patch
-operations as plan steps, perform arbitrary data/control rewiring, delete
+expression payload shapes or control-flow statements, perform arbitrary
+data/control rewiring, delete
 returns/branches/blocks, reconcile declaration renames, compact tombstones, or
 automatically place graph nodes. Layout v0.1 does not persist viewport/session
 state, define a three-way merge driver, or choose an auto-layout algorithm.
@@ -173,17 +187,21 @@ Temporary introduction accepts only stable, pure value expressions in return or
 local-initializer statements inside explicit blocks. Short-circuit,
 division/remainder, decimal, and string operators remain excluded until builtin
 operator effects model conditional evaluation, allocation, and throws.
-Value reconnection accepts only an existing, unshadowed local that structurally
-dominates the containing statement and has the same graph-safe semantic type as
-the removable stable consumer. Patch-plan v0.1 composes only temporary
-introduction and value reconnection, requires sidecars on target documents, and
-allows a source handle to reference only an earlier introduction in the same
-method with the same expected type. Project-wide edits require a multi-file
-transaction coordinator.
+Value reconnection accepts only an existing, unshadowed local or a local
+produced by an earlier plan step that structurally dominates the containing
+statement and has the same graph-safe semantic type as
+the removable stable consumer. Patch-plan v0.2 composes every current bounded
+operation and requires sidecars on target documents. A source handle may
+reference only an earlier temporary introduction or local-literal insertion in
+the same method with the same expected type. Only insertion steps may repeat a
+target block; repeated non-insertion old-value preconditions remain ambiguous.
+Project-wide edits require a multi-file transaction coordinator.
 
 ## Next slice
 
-Extend patch-plan composition to safe statement insertion/deletion and bounded
-operator/value operations. The editor then needs one atomic plan format for a
-larger visual gesture while every stage continues to reanalyze against the same
-HIR, semantic, identity, and layout boundaries.
+Define a versioned graph-authored expression payload for literals, local
+references, casts, and bounded unary/binary expressions, then use it for the
+first safe structured-control-flow insertion (`if` with explicit blocks). This
+extends visual authoring beyond rearranging existing syntax while retaining the
+same type/effect validation, persistent identity, atomic plan, and layout
+boundaries.

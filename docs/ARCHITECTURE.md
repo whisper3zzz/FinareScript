@@ -196,12 +196,17 @@ operations carry old operator/endpoint, semantic type, containing statement,
 parent block, and exact sibling preconditions rather than relying only on the
 compilation baseline.
 
-`unifiedscript.patch-plan/v0.1` is an ordered transaction above individual
-patches. Its `introduceTemporary` steps publish symbolic step handles, and later
-`reconnectValue` steps reference those handles instead of guessing the random
-ID of a declaration that does not exist in the initial HIR. The complete plan
-still carries one external source/configuration baseline and records every
-target's original statement, block, sibling, and type preconditions.
+`unifiedscript.patch-plan/v0.2` is an ordered transaction above individual
+patches. It composes every current bounded operation: literal and operator
+changes, argument reconnection, statement insertion/deletion, temporary
+introduction, and value reconnection. `introduceTemporary` and local-literal
+`insertStatement` steps publish symbolic handles; later `reconnectValue` steps
+reference those handles instead of guessing a random declaration ID that does
+not exist in the initial HIR. The complete plan still carries one external
+source/configuration baseline and records every target's original value,
+endpoint, statement, block, sibling, and type preconditions.
+The complete transaction and internal rebasing contract is specified in
+[PATCH_PLAN.md](PATCH_PLAN.md).
 
 The C# patch boundary performs these steps without mutating files:
 
@@ -255,19 +260,23 @@ and order for one extracted value, and `reconnectValue` can connect later,
 dominated consumers to that definition. Statement editing is similarly bounded
 to local declarations with a literal initializer and deletion of unused
 literal locals or pure static-call statements. General expression synthesis,
-control-flow editing, declaration renaming, arbitrary patch-plan steps, and
-general cross-expression rewiring remain future patch-algebra work.
+control-flow editing, declaration renaming, and general cross-expression
+rewiring remain future patch-algebra work.
 
-The C# patch-plan coordinator validates every step against the initial graph,
-then executes one localized patch at a time entirely in memory. After each
-successful stage it adopts that analysis's updated sidecar, removes transient
-pins, resolves any newly introduced declaration handle, and constructs the
-next internal patch with the current compilation baseline and sibling context.
-Each stage performs complete semantic reanalysis. A failure discards every
-intermediate request; only the final request and sidecar cross the CLI's single
-rollback-capable filesystem transaction. Patch plans therefore require
-persistent identity on target documents. This version composes only temporary
-introduction and typed value reconnection, not arbitrary operation graphs.
+The C# patch-plan coordinator validates every independently executable step in
+isolation against the initial HIR before changing its in-memory request;
+symbolic reconnections receive equivalent initial statement, sibling, method,
+and type checks. It then executes one localized patch at a time, adopts the
+stage's updated sidecar, removes transient pins, resolves any produced local
+handle, and constructs the next internal patch with the current compilation
+baseline. Statement deletion uses current siblings; repeated insertion rebases
+the original gap while retaining plan order; argument reconnection relocates
+current indices from persistent endpoint IDs. Each stage performs complete
+semantic reanalysis. A failure discards every intermediate request; only the
+final request and sidecar cross the CLI's rollback-capable transaction. Plans
+therefore require persistent identity on target documents. Repeated target IDs
+are allowed only for ordered insertions into one block; other operations retain
+one original old-value/precondition set per target.
 
 ## Visual layout boundary
 

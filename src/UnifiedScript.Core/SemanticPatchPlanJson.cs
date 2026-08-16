@@ -47,8 +47,8 @@ public static class SemanticPatchPlanJson
         }
 
         var stepIds = new HashSet<string>(StringComparer.Ordinal);
-        var targetIds = new HashSet<SemanticId>();
-        var introductionTypes = new Dictionary<string, SemanticId>(StringComparer.Ordinal);
+        var targetKinds = new Dictionary<SemanticId, bool>();
+        var producedTypes = new Dictionary<string, SemanticId>(StringComparer.Ordinal);
         foreach (SemanticPatchPlanStep? step in document.Steps)
         {
             if (step is null)
@@ -62,20 +62,57 @@ public static class SemanticPatchPlanJson
                     "Every semantic patch plan step requires a unique, non-empty step ID.");
             }
 
-            if (step.TargetNodeId.IsEmpty || !targetIds.Add(step.TargetNodeId))
+            if (step.TargetNodeId.IsEmpty)
             {
                 throw new JsonException(
-                    "Every semantic patch plan step must target one unique, non-empty semantic node ID.");
+                    "Every semantic patch plan step must target a non-empty semantic node ID.");
+            }
+
+            bool isInsertion = step is InsertStatementPatchPlanStep;
+            if (targetKinds.TryGetValue(step.TargetNodeId, out bool previousWasInsertion))
+            {
+                if (!isInsertion || !previousWasInsertion)
+                {
+                    throw new JsonException(
+                        $"Semantic patch plan target '{step.TargetNodeId}' can be repeated only " +
+                        "by statement-insertion steps.");
+                }
+            }
+            else
+            {
+                targetKinds.Add(step.TargetNodeId, isInsertion);
             }
 
             switch (step)
             {
+                case ReplaceLiteralPatchPlanStep replace:
+                    ValidateOperation(document, replace.ToOperation());
+                    break;
+                case ChangeOperatorPatchPlanStep changeOperator:
+                    ValidateOperation(document, changeOperator.ToOperation());
+                    break;
+                case ReconnectArgumentPatchPlanStep reconnectArgument:
+                    ValidateOperation(document, reconnectArgument.ToOperation());
+                    break;
+                case InsertStatementPatchPlanStep insertion:
+                    ValidateOperation(document, insertion.ToOperation());
+                    if (insertion.NewStatement is not LocalLiteralDeclarationPatchStatement insertedLocal)
+                    {
+                        throw new JsonException(
+                            "Patch-plan v0.2 insertions must produce a local-literal declaration handle.");
+                    }
+
+                    producedTypes.Add(insertion.StepId, insertedLocal.ExpectedTypeId);
+                    break;
+                case DeleteStatementPatchPlanStep deletion:
+                    ValidateOperation(document, deletion.ToOperation());
+                    break;
                 case IntroduceTemporaryPatchPlanStep introduction:
                     ValidateIntroduction(document, introduction);
-                    introductionTypes.Add(introduction.StepId, introduction.ExpectedTypeId);
+                    producedTypes.Add(introduction.StepId, introduction.ExpectedTypeId);
                     break;
                 case ReconnectValuePatchPlanStep reconnect:
-                    ValidateReconnection(reconnect, introductionTypes);
+                    ValidateReconnection(reconnect, producedTypes);
                     break;
                 default:
                     throw new JsonException(
@@ -84,20 +121,27 @@ public static class SemanticPatchPlanJson
         }
     }
 
-    private static void ValidateIntroduction(
+    private static void ValidateOperation(
         SemanticPatchPlanDocument document,
-        IntroduceTemporaryPatchPlanStep introduction)
+        SemanticPatchOperation operation)
     {
         SemanticPatchJson.Validate(new SemanticPatchDocument(
             SemanticPatchDocument.CurrentSchemaVersion,
             document.SourceCompilationId,
             document.SemanticConfigurationId,
-            [introduction.ToOperation()]));
+            [operation]));
+    }
+
+    private static void ValidateIntroduction(
+        SemanticPatchPlanDocument document,
+        IntroduceTemporaryPatchPlanStep introduction)
+    {
+        ValidateOperation(document, introduction.ToOperation());
     }
 
     private static void ValidateReconnection(
         ReconnectValuePatchPlanStep reconnect,
-        IReadOnlyDictionary<string, SemanticId> introductionTypes)
+        IReadOnlyDictionary<string, SemanticId> producedTypes)
     {
         ValidateContext(
             reconnect.ExpectedContainingStatementId,
@@ -106,10 +150,10 @@ public static class SemanticPatchPlanJson
             reconnect.ExpectedNextSiblingId,
             reconnect.ExpectedTypeId);
         if (string.IsNullOrWhiteSpace(reconnect.SourceStepId) ||
-            !introductionTypes.TryGetValue(reconnect.SourceStepId, out SemanticId sourceTypeId))
+            !producedTypes.TryGetValue(reconnect.SourceStepId, out SemanticId sourceTypeId))
         {
             throw new JsonException(
-                $"Reconnect step '{reconnect.StepId}' must reference an earlier temporary-introduction step.");
+                $"Reconnect step '{reconnect.StepId}' must reference an earlier local-producing step.");
         }
 
         if (sourceTypeId != reconnect.ExpectedTypeId)
