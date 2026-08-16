@@ -15,6 +15,10 @@ a second language implementation or bypassing the existing compiler checks.
 - bounded `deleteStatement` with symbol-use and effect safety checks
 - `introduceTemporary` for stable, pure return/local-initializer expressions
 - `reconnectValue` from an existing local to an exactly typed stable consumer
+- `unifiedscript.patch-plan/v0.1` ordered multi-stage transaction protocol
+- symbolic plan handles for local IDs allocated by `introduceTemporary`
+- initial-context validation and safe internal baseline/sibling rebasing
+- persistent-sidecar adoption between in-memory plan stages
 - HIR expression-location and use/definition indexes
 - structured block hierarchy and statement-dominance checks
 - exact parent block and adjacent-sibling structural preconditions
@@ -26,7 +30,8 @@ a second language implementation or bypassing the existing compiler checks.
 - multi-document in-memory patch application
 - complete Roslyn/profile/semantic reanalysis before commit
 - localized Roslyn replacement with leading/trailing trivia preservation
-- single-document `apply-patch` CLI with non-in-place, atomic output writing
+- single-document `apply-patch` and `apply-plan` CLI commands with non-in-place,
+  atomic output writing
 - deterministic sample patch and round-trip tests
 - opt-in `unifiedscript.identity/v0.1` sidecar model and deterministic JSON
 - cryptographically random persistent semantic IDs
@@ -63,6 +68,8 @@ diagnostic codes distinguish:
   or does not dominate the consumer
 - `UVS3020`: reconnecting the value would discard unstable evaluation, effects,
   comments, or directives
+- `UVS3021`: a multi-stage plan targets a document without persistent identity
+- `UVS3022`: plan handles or method relationships cannot be resolved safely
 - `UVS3101`: identity evidence is ambiguous; allocate a new ID instead of guessing
 - `UVS3102`: an explicit identity pin is invalid, missing, duplicate, or tombstoned
 
@@ -119,18 +126,33 @@ The test and sample suite proves that:
 33. a root-block local structurally dominates consumers in later nested blocks;
 34. a branch-local definition cannot feed an outer or sibling-branch consumer;
 35. effectful/unknown consumer evaluation and mismatched semantic types reject
-    value reconnection; and
+    value reconnection;
 36. the checked-in CLI sample reanalyzes to a Graph identifier whose
-    `referencedSymbolId` is the requested source definition.
+    `referencedSymbolId` is the requested source definition;
+37. patch-plan JSON preserves ordered polymorphic steps and rejects duplicate
+    targets, future source-handle references, and handle type mismatches;
+38. one introduction and two overlapping consumer replacements execute in
+    order despite all three editing the same original C# block;
+39. a symbolic `sourceStepId` resolves the temporary declaration's newly
+    allocated random ID after the first in-memory reconciliation;
+40. all three final identifiers bind to that one declaration while both removed
+    consumer subtrees become tombstones;
+41. a later effectful reconnection rejects the complete plan after earlier safe
+    stages without returning any intermediate source or sidecar;
+42. stale original sibling context fails before internal stage rebasing begins;
+43. plans without persistent identity fail before executing their first step;
+    and
+44. the checked-in `apply-plan` sample writes one final source/sidecar pair and
+    reanalyzes to three Graph references to the shared declaration.
 
 ## Deliberate limits
 
 This is a bounded structural-edit slice, not general graph-to-source generation.
 It does not apply multi-file patches through the CLI, synthesize arbitrary
-expressions or control-flow statements, atomically connect several consumers
-whose block replacements overlap, perform arbitrary data/control rewiring,
-delete returns/branches/blocks, reconcile declaration renames, compact
-tombstones, or persist graph layout. Insertion currently accepts only a named
+expressions or control-flow statements, use arbitrary individual patch
+operations as plan steps, perform arbitrary data/control rewiring, delete
+returns/branches/blocks, reconcile declaration renames, compact tombstones, or
+persist graph layout. Insertion currently accepts only a named
 graph-safe type already present in bound semantics plus one literal initializer.
 Deletion accepts only an unused local with no initializer or a literal
 initializer, or a resolved pure static call with effect-free simple arguments.
@@ -140,14 +162,17 @@ division/remainder, decimal, and string operators remain excluded until builtin
 operator effects model conditional evaluation, allocation, and throws.
 Value reconnection accepts only an existing, unshadowed local that structurally
 dominates the containing statement and has the same graph-safe semantic type as
-the removable stable consumer. Project-wide edits require a multi-file
+the removable stable consumer. Patch-plan v0.1 composes only temporary
+introduction and value reconnection, requires sidecars on target documents, and
+allows a source handle to reference only an earlier introduction in the same
+method with the same expected type. Project-wide edits require a multi-file
 transaction coordinator.
 
 ## Next slice
 
-Add an edit-plan coordinator that can compose temporary introduction with one
-or more typed consumer reconnections as a single graph transaction, even when
-their localized block replacements overlap. The coordinator must preserve the
-external source/configuration baseline, derive safe intermediate identities in
-memory, and roll back the entire plan on any failure. Assignment synthesis and
-structured control-flow editing remain later slices.
+Add `unifiedscript.graph-layout/v0.1` as a semantic-independent `.usgraph`
+sidecar keyed by function and node `SemanticId`. Persist deterministic node
+positions, sizes, collapsed state, comment regions, and routing hints without
+allowing layout merges to change HIR or `.usids`. Define orphan handling for
+tombstoned/missing nodes and prove that semantic patches preserve surviving
+layout entries while new graph nodes receive explicit unplaced state.

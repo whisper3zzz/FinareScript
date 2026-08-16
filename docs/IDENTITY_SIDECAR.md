@@ -138,7 +138,17 @@ reconciled. Full semantic reanalysis must bind the new identifier's
 `referencedSymbolId` to the requested source declaration before either source or
 sidecar can commit.
 
+Multi-stage patch plans require a sidecar before their first step. After each
+successful in-memory stage, the coordinator adopts the newly reconciled
+sidecar as the next stage's identity baseline. This makes the random ID of a
+new temporary declaration stable immediately and allows `sourceStepId` handles
+to resolve it in subsequent reconnections. Intermediate sidecars are never
+written. A late failure returns no proposed request, so neither the initial
+sidecar nor source is advanced on disk; a successful plan writes only the final
+source and final sidecar through one filesystem transaction. Sidecar generation
+and tombstone generation reflect the ordered internal reconciliation stages.
+
 General expression/control-flow synthesis, arbitrary cross-expression
-rewiring, atomic multi-consumer edit plans, declaration rename reconciliation,
-multi-file CLI patch commits, bounded tombstone compaction, and `.usgraph`
-layout persistence remain future work.
+rewiring, declaration rename reconciliation, multi-file CLI patch commits,
+bounded tombstone compaction, and `.usgraph` layout persistence remain future
+work.

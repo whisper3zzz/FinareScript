@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "unifiedscript.patch-plan/v0.1",
+  "sourceCompilationId": "us_920150a7eb7c3b5a92f66c4ed2961342",
+  "semanticConfigurationId": "us_02f5fe78d296e2d4fe04bc50ca71acf1",
+  "steps": [
+    {
+      "step": "introduceTemporary",
+      "stepId": "sharedDamage",
+      "targetNodeId": "us_1704c1f8f638764fa1303935a1cfcb0e",
+      "expectedContainingStatementId": "us_3d88847ae293ba7f5e0186c2704c3c96",
+      "expectedParentBlockId": "us_1f4b45a4b4f93f72954be5a863084f85",
+      "expectedPreviousSiblingId": null,
+      "expectedNextSiblingId": null,
+      "name": "sharedDamage",
+      "typeName": "float",
+      "expectedTypeId": "us_26a5b44da19acd678d268ed608e9829f"
+    },
+    {
+      "step": "reconnectValue",
+      "stepId": "connectSecondConsumer",
+      "targetNodeId": "us_4d2e80e172385fc0cf7f0d31b77f797a",
+      "sourceStepId": "sharedDamage",
+      "expectedContainingStatementId": "us_3d88847ae293ba7f5e0186c2704c3c96",
+      "expectedParentBlockId": "us_1f4b45a4b4f93f72954be5a863084f85",
+      "expectedPreviousSiblingId": null,
+      "expectedNextSiblingId": null,
+      "expectedTypeId": "us_26a5b44da19acd678d268ed608e9829f"
+    },
+    {
+      "step": "reconnectValue",
+      "stepId": "connectThirdConsumer",
+      "targetNodeId": "us_e76c7037e2332f98fa3f519aa4a804c5",
+      "sourceStepId": "sharedDamage",
+      "expectedContainingStatementId": "us_3d88847ae293ba7f5e0186c2704c3c96",
+      "expectedParentBlockId": "us_1f4b45a4b4f93f72954be5a863084f85",
+      "expectedPreviousSiblingId": null,
+      "expectedNextSiblingId": null,
+      "expectedTypeId": "us_26a5b44da19acd678d268ed608e9829f"
+    }
+  ]
+}

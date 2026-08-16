@@ -26,6 +26,8 @@ The repository currently implements:
   single-evaluation C# temporaries;
 - structured dominance analysis and exactly typed reconnection from an existing
   local definition to a stable consumer expression;
+- atomic multi-stage patch plans with symbolic references to newly introduced
+  locals and full semantic reanalysis between stages;
 - opt-in `.usids` sidecars that preserve node identity across formatting and edits;
 - explicit patch identity pins and tombstones for deleted semantic nodes;
 - versioned HIR, semantics, and graph JSON emission through a small CLI;
@@ -336,7 +338,59 @@ removed target subtree become tombstones, while the replacement identifier
 receives a new ID and binds back to `sourceDefinitionId`. Reanalyzing the output
 projects that binding into Graph as `referencedSymbolId`. Multiple consumers
 can be connected with sequential patches, each generated against the freshly
-analyzed source baseline.
+analyzed source baseline, or atomically with the patch-plan protocol below.
+
+## Apply an atomic shared-value plan
+
+`unifiedscript.patch-plan/v0.1` composes temporary introduction and one or more
+consumer reconnections without requiring the editor to predict the new local's
+random persistent ID. The checked-in sample starts with:
+
+```csharp
+return damage * 2.0f + damage * 3.0f + 1.0f;
+```
+
+Run the plan with:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  apply-plan \
+  samples/Patching/SharedExpressionPlan.cs \
+  --identity samples/Patching/SharedExpressionPlan.cs.usids \
+  --plan samples/Patching/ShareDamage.plan.json \
+  --out artifacts/planned/SharedExpressionPlan.cs \
+  --out-identity artifacts/planned/SharedExpressionPlan.cs.usids
+```
+
+The result is committed once:
+
+```csharp
+float sharedDamage = damage * 2.0f;
+return sharedDamage + sharedDamage + sharedDamage;
+```
+
+Each plan step has a unique `stepId`. An `introduceTemporary` step publishes a
+symbolic handle; later `reconnectValue` steps use `sourceStepId` to reference
+that handle. The coordinator resolves the actual declaration ID after the
+introduction stage, rebuilds the in-memory request with the newly reconciled
+sidecar, derives a fresh internal source baseline and current sibling context,
+and then executes the next validated step. This is why the editor does not need
+to know an intermediate random ID or submit several external transactions.
+
+All target, containing-statement, parent-block, sibling, and semantic-type
+preconditions are first checked against the original plan baseline. Internal
+rebasing applies only to changes made by earlier steps in that same plan. Every
+stage reruns parsing, Visual Profile validation, C# compilation, semantic
+binding, identity reconciliation, and Graph safety. If any later stage fails,
+the API returns no patched request and the CLI writes neither source nor
+sidecar. A persistent `.usids` input is mandatory because span-derived IDs
+cannot identify later targets after the first insertion changes source ranges.
+
+The current plan schema intentionally supports only `introduceTemporary` and
+`reconnectValue` steps, and a reconnect handle must reference an earlier
+introduction in the same method with the same graph-safe type. Arbitrary patch
+operations, control-flow construction, and cross-method handles remain outside
+this version.
 
 ## Repository layout
 
@@ -364,7 +418,8 @@ This milestone does not include:
 - flow-sensitive nullable state in the interchange model;
 - general expression/statement synthesis and arbitrary data/control rewiring
   beyond the bounded local-literal insertion, safe deletion, temporary
-  introduction, and compatible existing-local consumer reconnection slices;
+  introduction, compatible existing-local consumer reconnection, and atomic
+  shared-value-plan slices;
 - loops, switch, lambdas, exceptions, or general-purpose C# visualization.
 
 See [ARCHITECTURE.md](docs/ARCHITECTURE.md),

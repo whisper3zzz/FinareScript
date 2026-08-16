@@ -40,7 +40,12 @@ internal static class Program
 
         if (args.Count > 0 && args[0] == "apply-patch")
         {
-            return RunApplyPatch(args);
+            return RunApply(args, isPlan: false);
+        }
+
+        if (args.Count > 0 && args[0] == "apply-plan")
+        {
+            return RunApply(args, isPlan: true);
         }
 
         return RunAnalyze(args);
@@ -164,9 +169,9 @@ internal static class Program
         return 0;
     }
 
-    private static int RunApplyPatch(IReadOnlyList<string> args)
+    private static int RunApply(IReadOnlyList<string> args, bool isPlan)
     {
-        if (!TryParsePatchArguments(args, out PatchOptions? options))
+        if (!TryParsePatchArguments(args, isPlan, out PatchOptions? options))
         {
             PrintUsage();
             return 64;
@@ -179,9 +184,11 @@ internal static class Program
             return 66;
         }
 
-        if (!File.Exists(options.PatchPath))
+        if (!File.Exists(options.EditDocumentPath))
         {
-            Console.Error.WriteLine($"Patch file does not exist: {options.PatchPath}");
+            Console.Error.WriteLine(
+                $"{(isPlan ? "Patch plan" : "Patch")} file does not exist: " +
+                options.EditDocumentPath);
             return 66;
         }
 
@@ -197,9 +204,9 @@ internal static class Program
         }
 
         EnsureDifferentPath(
-            Path.GetFullPath(options.PatchPath),
+            Path.GetFullPath(options.EditDocumentPath),
             fullOutputPath,
-            "Source output cannot overwrite the input patch document.");
+            "Source output cannot overwrite the input edit document.");
 
         MethodEffectCatalog effectCatalog = LoadEffectCatalog(options.EffectCatalogPath);
         IdentitySidecarDocument? identitySidecar = options.IdentityPath is null
@@ -213,8 +220,14 @@ internal static class Program
                 identitySidecar)],
             options.ReferencePaths,
             effectCatalog);
-        SemanticPatchDocument patch = SemanticPatchJson.Deserialize(File.ReadAllText(options.PatchPath));
-        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+        string editJson = File.ReadAllText(options.EditDocumentPath);
+        CSharpPatchResult result = isPlan
+            ? new CSharpPatchPlanApplier().Apply(
+                request,
+                SemanticPatchPlanJson.Deserialize(editJson))
+            : new CSharpSourcePatchApplier().Apply(
+                request,
+                SemanticPatchJson.Deserialize(editJson));
         foreach (UnifiedDiagnostic diagnostic in result.Diagnostics)
         {
             Console.Error.WriteLine(FormatDiagnostic(diagnostic));
@@ -222,7 +235,8 @@ internal static class Program
 
         if (!result.Succeeded || result.PatchedRequest is null)
         {
-            Console.Error.WriteLine("Patch failed; no source file was written.");
+            Console.Error.WriteLine(
+                $"{(isPlan ? "Patch plan" : "Patch")} failed; no source file was written.");
             return 3;
         }
 
@@ -248,9 +262,9 @@ internal static class Program
                 fullIdentityOutputPath,
                 "Identity output cannot overwrite the input source.");
             EnsureDifferentPath(
-                Path.GetFullPath(options.PatchPath),
+                Path.GetFullPath(options.EditDocumentPath),
                 fullIdentityOutputPath,
-                "Identity output cannot overwrite the input patch document.");
+                "Identity output cannot overwrite the input edit document.");
             IdentitySidecarDocument updatedSidecar = AssertSingleIdentitySidecar(result.Analysis) with
             {
                 SourcePath = GetLogicalInputPath(fullOutputPath),
@@ -456,16 +470,21 @@ internal static class Program
         return true;
     }
 
-    private static bool TryParsePatchArguments(IReadOnlyList<string> args, out PatchOptions? options)
+    private static bool TryParsePatchArguments(
+        IReadOnlyList<string> args,
+        bool isPlan,
+        out PatchOptions? options)
     {
         options = null;
-        if (args.Count < 6 || args[0] != "apply-patch" || args[1].StartsWith("--", StringComparison.Ordinal))
+        string command = isPlan ? "apply-plan" : "apply-patch";
+        string editOption = isPlan ? "--plan" : "--patch";
+        if (args.Count < 6 || args[0] != command || args[1].StartsWith("--", StringComparison.Ordinal))
         {
             return false;
         }
 
         string inputPath = args[1];
-        string? patchPath = null;
+        string? editDocumentPath = null;
         string? outputPath = null;
         string? effectCatalogPath = null;
         string? assemblyName = null;
@@ -482,11 +501,14 @@ internal static class Program
             }
 
             string value = args[index++];
+            if (option == editOption && editDocumentPath is null)
+            {
+                editDocumentPath = value;
+                continue;
+            }
+
             switch (option)
             {
-                case "--patch" when patchPath is null:
-                    patchPath = value;
-                    break;
                 case "--out" when outputPath is null:
                     outputPath = value;
                     break;
@@ -510,7 +532,7 @@ internal static class Program
             }
         }
 
-        if (patchPath is null || outputPath is null ||
+        if (editDocumentPath is null || outputPath is null ||
             (identityPath is null) != (identityOutputPath is null))
         {
             return false;
@@ -518,7 +540,7 @@ internal static class Program
 
         options = new PatchOptions(
             inputPath,
-            patchPath,
+            editDocumentPath,
             outputPath,
             effectCatalogPath,
             assemblyName ?? "UnifiedScript.Analysis",
@@ -686,15 +708,17 @@ internal static class Program
         "  unifiedscript analyze-files <input.cs> <additional.cs>... [options]\n" +
         "  unifiedscript identity-init <input.cs> --out <identity.usids> [options]\n" +
         "  unifiedscript apply-patch <input.cs> --patch <patch.json> --out <output.cs> [options]\n" +
+        "  unifiedscript apply-plan <input.cs> --plan <plan.json> --out <output.cs> [options]\n" +
         "Options:\n" +
         "  --out <path>            Artifact directory, initialized sidecar, or patched source output.\n" +
         "  --patch <patch.json>    Semantic patch document required by apply-patch.\n" +
+        "  --plan <plan.json>      Ordered semantic patch plan required by apply-plan.\n" +
         "  --identity <file.usids> Use a persistent identity sidecar; may repeat for analyze-files.\n" +
         "  --out-identity <file>   Updated sidecar output required by sidecar-enabled apply-patch.\n" +
         "  --assembly <name>        Set the analysis assembly name.\n" +
         "  --effects <catalog.json> Apply effect catalog overrides.\n" +
         "  --reference <assembly>   Add a metadata reference; may be repeated.\n" +
-        "Analyze writes graph JSON to stdout when --out is omitted; apply-patch requires --out.");
+        "Analyze writes graph JSON to stdout when --out is omitted; apply commands require --out.");
 
     private sealed record AnalyzeOptions(
         IReadOnlyList<string> InputPaths,
@@ -713,7 +737,7 @@ internal static class Program
 
     private sealed record PatchOptions(
         string InputPath,
-        string PatchPath,
+        string EditDocumentPath,
         string OutputPath,
         string? EffectCatalogPath,
         string AssemblyName,

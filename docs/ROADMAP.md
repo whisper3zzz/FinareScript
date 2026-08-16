@@ -69,9 +69,12 @@ Outcome: graph patches produce localized, format-preserving C# edits.
 - [x] stable pure-expression extraction into a single-evaluation temporary
 - [x] structured block dominance for local value availability
 - [x] typed existing-local-to-consumer reconnection with effect guards and tombstones
+- [x] atomic temporary-introduction and multi-consumer patch plans
+- [x] symbolic plan handles for newly allocated local declaration IDs
+- [x] in-memory stage rebasing with late-failure rollback
 - [ ] general statement/control-flow synthesis and structural HIR operations
 - [ ] graph layout sidecar
-- [ ] atomic multi-consumer edit plans and general data/control rewiring
+- [ ] general data/control rewiring and arbitrary patch-plan steps
 
 ## M4 — Structured control flow expansion
 

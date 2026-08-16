@@ -191,6 +191,13 @@ operations carry old operator/endpoint, semantic type, containing statement,
 parent block, and exact sibling preconditions rather than relying only on the
 compilation baseline.
 
+`unifiedscript.patch-plan/v0.1` is an ordered transaction above individual
+patches. Its `introduceTemporary` steps publish symbolic step handles, and later
+`reconnectValue` steps reference those handles instead of guessing the random
+ID of a declaration that does not exist in the initial HIR. The complete plan
+still carries one external source/configuration baseline and records every
+target's original statement, block, sibling, and type preconditions.
+
 The C# patch boundary performs these steps without mutating files:
 
 1. analyze the current source request;
@@ -243,8 +250,19 @@ and order for one extracted value, and `reconnectValue` can connect later,
 dominated consumers to that definition. Statement editing is similarly bounded
 to local declarations with a literal initializer and deletion of unused
 literal locals or pure static-call statements. General expression synthesis,
-control-flow editing, declaration renaming, atomic multi-consumer edit plans,
-and arbitrary cross-expression rewiring remain future patch-algebra work.
+control-flow editing, declaration renaming, arbitrary patch-plan steps, and
+general cross-expression rewiring remain future patch-algebra work.
+
+The C# patch-plan coordinator validates every step against the initial graph,
+then executes one localized patch at a time entirely in memory. After each
+successful stage it adopts that analysis's updated sidecar, removes transient
+pins, resolves any newly introduced declaration handle, and constructs the
+next internal patch with the current compilation baseline and sibling context.
+Each stage performs complete semantic reanalysis. A failure discards every
+intermediate request; only the final request and sidecar cross the CLI's single
+rollback-capable filesystem transaction. Patch plans therefore require
+persistent identity on target documents. This version composes only temporary
+introduction and typed value reconnection, not arbitrary operation graphs.
 
 Visual method signatures currently accept void, booleans, integer and floating
 primitives, strings, enums, nullable forms of supported value types, and
@@ -275,6 +293,7 @@ receivers until a richer graph-safe object-handle policy is defined.
 - source/graph/source round-trip tests for values, operators, argument edges,
   bounded statement edits, temporary introduction, and typed local-to-consumer
   reconnection;
+- atomic plan tests for overlapping multi-consumer edits and late-stage rollback;
 - later, semantic equivalence tests between graph-edited and text-edited IL.
 
 ## Deferred UE boundary

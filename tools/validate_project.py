@@ -84,6 +84,9 @@ def main() -> int:
     reconnect_source_path = ROOT / "samples" / "Patching" / "SharedValueRules.cs"
     reconnect_patch_path = ROOT / "samples" / "Patching" / "ReconnectSharedDamage.patch.json"
     reconnect_identity_path = ROOT / "samples" / "Patching" / "SharedValueRules.cs.usids"
+    plan_source_path = ROOT / "samples" / "Patching" / "SharedExpressionPlan.cs"
+    plan_document_path = ROOT / "samples" / "Patching" / "ShareDamage.plan.json"
+    plan_identity_path = ROOT / "samples" / "Patching" / "SharedExpressionPlan.cs.usids"
     require(
         patch_source_path.is_file()
         and patch_document_path.is_file()
@@ -99,6 +102,12 @@ def main() -> int:
         and reconnect_identity_path.is_file(),
         "Missing typed value-reconnection sample",
     )
+    require(
+        plan_source_path.is_file()
+        and plan_document_path.is_file()
+        and plan_identity_path.is_file(),
+        "Missing atomic semantic patch-plan sample",
+    )
     patch_source = patch_source_path.read_text(encoding="utf-8")
     patch_document = json.loads(patch_document_path.read_text(encoding="utf-8"))
     operator_patch = json.loads(operator_patch_path.read_text(encoding="utf-8"))
@@ -108,6 +117,9 @@ def main() -> int:
     reconnect_source = reconnect_source_path.read_text(encoding="utf-8")
     reconnect_patch = json.loads(reconnect_patch_path.read_text(encoding="utf-8"))
     reconnect_identity = json.loads(reconnect_identity_path.read_text(encoding="utf-8"))
+    plan_source = plan_source_path.read_text(encoding="utf-8")
+    plan_document = json.loads(plan_document_path.read_text(encoding="utf-8"))
+    plan_identity = json.loads(plan_identity_path.read_text(encoding="utf-8"))
     patch_operation = patch_document["operations"][0]
     operator_operation = operator_patch["operations"][0]
     insert_operation = insert_patch["operations"][0]
@@ -117,6 +129,7 @@ def main() -> int:
     reconnect_identity_ids = {entry["id"] for entry in reconnect_identity["entries"]}
     source_digest = hashlib.sha256(patch_source.encode("utf-8")).hexdigest()
     reconnect_source_digest = hashlib.sha256(reconnect_source.encode("utf-8")).hexdigest()
+    plan_source_digest = hashlib.sha256(plan_source.encode("utf-8")).hexdigest()
     require(
         patch_document["schemaVersion"] == "unifiedscript.patch/v0.5"
         and operator_patch["schemaVersion"] == "unifiedscript.patch/v0.5"
@@ -189,6 +202,43 @@ def main() -> int:
         and "float sharedDamage = damage * 2.0f;" in reconnect_source
         and "return bonus + 1.0f;" in reconnect_source,
         "Typed value-reconnection source, sidecar, and patch are inconsistent",
+    )
+    plan_steps = plan_document["steps"]
+    plan_identity_ids = {entry["id"] for entry in plan_identity["entries"]}
+    plan_step_ids = {step["stepId"] for step in plan_steps}
+    introduction_step = plan_steps[0]
+    reconnect_steps = plan_steps[1:]
+    require(
+        plan_document["schemaVersion"] == "unifiedscript.patch-plan/v0.1"
+        and plan_identity["sourcePath"]
+        == "samples/Patching/SharedExpressionPlan.cs"
+        and plan_identity["sourceDigest"] == f"sha256:{plan_source_digest}"
+        and len(plan_steps) == 3
+        and len(plan_step_ids) == len(plan_steps)
+        and introduction_step["step"] == "introduceTemporary"
+        and introduction_step["stepId"] == "sharedDamage"
+        and introduction_step["targetNodeId"] in plan_identity_ids
+        and introduction_step["expectedContainingStatementId"] in plan_identity_ids
+        and introduction_step["expectedParentBlockId"] in plan_identity_ids
+        and all(step["step"] == "reconnectValue" for step in reconnect_steps)
+        and all(step["targetNodeId"] in plan_identity_ids for step in reconnect_steps)
+        and all(step["sourceStepId"] == introduction_step["stepId"] for step in reconnect_steps)
+        and all(
+            step["expectedContainingStatementId"]
+            == introduction_step["expectedContainingStatementId"]
+            for step in reconnect_steps
+        )
+        and all(
+            step["expectedParentBlockId"]
+            == introduction_step["expectedParentBlockId"]
+            for step in reconnect_steps
+        )
+        and all(
+            step["expectedTypeId"] == introduction_step["expectedTypeId"]
+            for step in reconnect_steps
+        )
+        and "return damage * 2.0f + damage * 3.0f + 1.0f;" in plan_source,
+        "Atomic semantic patch-plan source, sidecar, and steps are inconsistent",
     )
     require(
         any((ROOT / "tests" / "UnifiedScript.Tests").glob("*Tests.cs")),

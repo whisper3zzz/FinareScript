@@ -22,4 +22,6 @@ public static class SemanticPatchDiagnosticCodes
     public const string UnsafeTemporaryIntroduction = "UVS3018";
     public const string ValueSourceNotAvailable = "UVS3019";
     public const string UnsafeValueReconnection = "UVS3020";
+    public const string PlanRequiresPersistentIdentity = "UVS3021";
+    public const string InvalidPatchPlan = "UVS3022";
 }
