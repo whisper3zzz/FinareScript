@@ -7,15 +7,18 @@ a second language implementation or bypassing the existing compiler checks.
 
 ## Implemented vertical slice
 
-- `unifiedscript.patch/v0.5` polymorphic JSON protocol
+- `unifiedscript.patch/v0.6` polymorphic JSON protocol
 - `replaceLiteral` operation targeted by HIR/Graph `SemanticId`
 - unary/binary `changeOperator` with result and operand type preconditions
 - same-invocation `reconnectArgument` with endpoint, type, and effect guards
 - typed `insertStatement` for graph-safe local-literal declarations
+- versioned graph-authored expressions for scalar literals, local/parameter
+  references, casts, and bounded unary/binary operators
+- typed `if` insertion with explicit empty `then` and `else` blocks
 - bounded `deleteStatement` with symbol-use and effect safety checks
 - `introduceTemporary` for stable, pure return/local-initializer expressions
 - `reconnectValue` from an existing local to an exactly typed stable consumer
-- `unifiedscript.patch-plan/v0.2` ordered multi-stage transaction protocol
+- `unifiedscript.patch-plan/v0.3` ordered multi-stage transaction protocol
 - plan steps for every bounded semantic patch operation
 - symbolic plan handles for local IDs allocated by `introduceTemporary` and
   local-literal `insertStatement`
@@ -77,6 +80,7 @@ diagnostic codes distinguish:
   comments, or directives
 - `UVS3021`: a multi-stage plan targets a document without persistent identity
 - `UVS3022`: plan handles or method relationships cannot be resolved safely
+- `UVS3023`: a graph-authored expression shape/operator is invalid or unsafe
 - `UVS3101`: identity evidence is ambiguous; allocate a new ID instead of guessing
 - `UVS3102`: an explicit identity pin is invalid, missing, duplicate, or tombstoned
 
@@ -148,7 +152,6 @@ The test and sample suite proves that:
     stages without returning any intermediate source or sidecar;
 42. stale original sibling context fails before internal stage rebasing begins;
 43. plans without persistent identity fail before executing their first step;
-    and
 44. the checked-in `apply-plan` sample writes one final source/sidecar pair and
     reanalyzes to three Graph references to the shared declaration;
 45. layout JSON normalizes deterministically and rejects contradictory placement
@@ -167,20 +170,38 @@ The test and sample suite proves that:
     an earlier literal replacement;
 53. deleting a statement before a later descendant step fails atomically without
     returning the successful deletion; and
-54. both the shared-expression v0.2 plan and composed v0.2 CLI sample produce
-    their documented final source and identity sidecars.
+54. both the shared-expression v0.3 plan and composed v0.3 CLI sample produce
+    their documented final source and identity sidecars;
+55. patch JSON round-trips all five graph-authored expression variants and
+    rejects expression trees deeper than the protocol bound;
+56. one `if` insertion composes a cast, literal, parameter references,
+    comparison, logical negation, and conditional conjunction into a
+    compiler-bound Boolean condition;
+57. branch insertion always emits explicit `then` and `else` blocks, while a
+    later local source or an unsupported potentially throwing operator is
+    rejected before source mutation;
+58. every pre-existing identity and placed Graph node survives branch
+    insertion, while the branch and condition Graph nodes receive fresh IDs and
+    explicit unplaced layout state;
+59. patch-plan v0.3 composes a non-producing `if` insertion with a later direct
+    edit and rejects attempts to consume the branch step as a local handle; and
+60. the checked-in `InsertGuard.patch.json` sample applies and emits the
+    documented branch skeleton.
 
 ## Deliberate limits
 
 This is a bounded structural-edit slice, not general graph-to-source generation.
 It does not apply multi-file patches through the CLI, synthesize arbitrary
-expression payload shapes or control-flow statements, perform arbitrary
-data/control rewiring, delete
+expression payload shapes or general control-flow statements, perform
+arbitrary data/control rewiring, delete
 returns/branches/blocks, reconcile declaration renames, compact tombstones, or
 automatically place graph nodes. Layout v0.1 does not persist viewport/session
 state, define a three-way merge driver, or choose an auto-layout algorithm.
-Insertion currently accepts only a named
-graph-safe type already present in bound semantics plus one literal initializer.
+Insertion accepts a local-literal declaration or an `if` skeleton. The `if`
+condition accepts only graph-safe scalar types already present in bound
+semantics, a closed pure expression subset, and same-method references that are
+available at the exact insertion gap. It always creates empty explicit branch
+blocks and does not yet publish symbolic handles for those blocks.
 Deletion accepts only an unused local with no initializer or a literal
 initializer, or a resolved pure static call with effect-free simple arguments.
 Temporary introduction accepts only stable, pure value expressions in return or
@@ -190,7 +211,7 @@ operator effects model conditional evaluation, allocation, and throws.
 Value reconnection accepts only an existing, unshadowed local or a local
 produced by an earlier plan step that structurally dominates the containing
 statement and has the same graph-safe semantic type as
-the removable stable consumer. Patch-plan v0.2 composes every current bounded
+the removable stable consumer. Patch-plan v0.3 composes every current bounded
 operation and requires sidecars on target documents. A source handle may
 reference only an earlier temporary introduction or local-literal insertion in
 the same method with the same expected type. Only insertion steps may repeat a
@@ -199,9 +220,9 @@ Project-wide edits require a multi-file transaction coordinator.
 
 ## Next slice
 
-Define a versioned graph-authored expression payload for literals, local
-references, casts, and bounded unary/binary expressions, then use it for the
-first safe structured-control-flow insertion (`if` with explicit blocks). This
-extends visual authoring beyond rearranging existing syntax while retaining the
-same type/effect validation, persistent identity, atomic plan, and layout
-boundaries.
+Add symbolic `then`/`else` block handles to the patch-plan protocol and allow
+later plan steps to populate those newly created blocks with the existing safe
+statement payloads. This turns the proven branch skeleton into a useful atomic
+visual gesture without requiring the editor to predict random block IDs. Then
+extend the expression payload only where type/effect rules remain statically
+closed, before moving to loop-region construction.

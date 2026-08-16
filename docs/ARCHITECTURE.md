@@ -187,16 +187,17 @@ compilation identity is not safe for editing.
 ## Semantic patch transaction
 
 Graph schema v0.2 carries both the source compilation ID and semantic
-configuration ID. A `unifiedscript.patch/v0.5` document repeats those IDs and
+configuration ID. A `unifiedscript.patch/v0.6` document repeats those IDs and
 contains typed operations keyed by graph/HIR `SemanticId`. Implemented
 operations are `replaceLiteral`, `changeOperator`, `reconnectArgument`,
 `insertStatement`, `deleteStatement`, `introduceTemporary`, and
-`reconnectValue`. Structural
-operations carry old operator/endpoint, semantic type, containing statement,
-parent block, and exact sibling preconditions rather than relying only on the
-compilation baseline.
+`reconnectValue`. `insertStatement` accepts either a local-literal declaration
+or an `if` with a closed typed expression tree and explicit empty `then`/`else`
+blocks. Structural operations carry old operator/endpoint, semantic type,
+containing statement, parent block, and exact sibling preconditions rather than
+relying only on the compilation baseline.
 
-`unifiedscript.patch-plan/v0.2` is an ordered transaction above individual
+`unifiedscript.patch-plan/v0.3` is an ordered transaction above individual
 patches. It composes every current bounded operation: literal and operator
 changes, argument reconnection, statement insertion/deletion, temporary
 introduction, and value reconnection. `introduceTemporary` and local-literal
@@ -205,6 +206,8 @@ reference those handles instead of guessing a random declaration ID that does
 not exist in the initial HIR. The complete plan still carries one external
 source/configuration baseline and records every target's original value,
 endpoint, statement, block, sibling, and type preconditions.
+An `if` insertion participates as a non-producing step, so it can compose with
+later direct edits without masquerading as a reconnectable local definition.
 The complete transaction and internal rebasing contract is specified in
 [PATCH_PLAN.md](PATCH_PLAN.md).
 

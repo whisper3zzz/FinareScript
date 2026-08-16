@@ -181,9 +181,82 @@ public static class SemanticPatchJson
                 }
 
                 break;
+            case IfPatchStatement ifStatement:
+                if (ifStatement.Condition is null)
+                {
+                    throw new JsonException("An if insertion requires a typed condition expression.");
+                }
+
+                ValidatePatchExpression(ifStatement.Condition, 0);
+                break;
             default:
                 throw new JsonException(
                     $"Unsupported inserted statement payload '{operation.NewStatement.GetType().Name}'.");
+        }
+    }
+
+    private static void ValidatePatchExpression(PatchExpression expression, int depth)
+    {
+        if (depth > 16)
+        {
+            throw new JsonException("A graph-authored expression cannot exceed 16 nested nodes.");
+        }
+
+        if (expression.ExpectedTypeId.IsEmpty)
+        {
+            throw new JsonException("Every graph-authored expression requires an expected type ID.");
+        }
+
+        switch (expression)
+        {
+            case LiteralPatchExpression literal:
+                if (string.IsNullOrWhiteSpace(literal.ValueText))
+                {
+                    throw new JsonException("A graph-authored literal requires a value.");
+                }
+
+                break;
+            case LocalReferencePatchExpression local:
+                if (local.SourceDefinitionId.IsEmpty || string.IsNullOrWhiteSpace(local.ExpectedName))
+                {
+                    throw new JsonException(
+                        "A graph-authored local reference requires a source definition and expected name.");
+                }
+
+                break;
+            case UnaryPatchExpression unary:
+                if (string.IsNullOrWhiteSpace(unary.Operator) || unary.Operand is null)
+                {
+                    throw new JsonException(
+                        "A graph-authored unary expression requires an operator and operand.");
+                }
+
+                ValidatePatchExpression(unary.Operand, depth + 1);
+                break;
+            case BinaryPatchExpression binary:
+                if (string.IsNullOrWhiteSpace(binary.Operator) ||
+                    binary.Left is null ||
+                    binary.Right is null)
+                {
+                    throw new JsonException(
+                        "A graph-authored binary expression requires an operator and two operands.");
+                }
+
+                ValidatePatchExpression(binary.Left, depth + 1);
+                ValidatePatchExpression(binary.Right, depth + 1);
+                break;
+            case CastPatchExpression cast:
+                if (string.IsNullOrWhiteSpace(cast.TypeName) || cast.Operand is null)
+                {
+                    throw new JsonException(
+                        "A graph-authored cast requires a type name and operand.");
+                }
+
+                ValidatePatchExpression(cast.Operand, depth + 1);
+                break;
+            default:
+                throw new JsonException(
+                    $"Unsupported graph-authored expression '{expression.GetType().Name}'.");
         }
     }
 

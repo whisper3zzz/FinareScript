@@ -137,6 +137,65 @@ public sealed class SemanticPatchJsonTests
     }
 
     [Fact]
+    public void SerializeAndDeserialize_PreserveTypedIfExpressionTree()
+    {
+        SemanticId intType = SemanticId.FromKey("System.Int32");
+        SemanticId boolType = SemanticId.FromKey("System.Boolean");
+        SemanticId sourceDefinition = SemanticId.FromKey("damage-parameter");
+        var condition = new BinaryPatchExpression(
+            ">",
+            new CastPatchExpression(
+                "int",
+                new LocalReferencePatchExpression(sourceDefinition, "damage", intType),
+                intType),
+            new UnaryPatchExpression(
+                "-",
+                new LiteralPatchExpression("1", intType),
+                intType),
+            boolType);
+        var insert = new InsertStatementPatchOperation(
+            SemanticId.FromKey("if-parent-block"),
+            null,
+            SemanticId.FromKey("if-next-statement"),
+            new IfPatchStatement(condition));
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            SemanticId.FromKey("if-compilation"),
+            SemanticId.FromKey("if-configuration"),
+            [insert]);
+
+        string json = SemanticPatchJson.Serialize(patch);
+        SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
+
+        Assert.Equal(insert, Assert.IsType<InsertStatementPatchOperation>(Assert.Single(roundTrip.Operations)));
+        Assert.Contains("\"statement\": \"if\"", json);
+        Assert.Contains("\"expression\": \"binary\"", json);
+        Assert.Contains("\"expression\": \"cast\"", json);
+        Assert.Contains("\"expression\": \"localReference\"", json);
+        Assert.Contains("\"expression\": \"unary\"", json);
+        Assert.Contains("\"expression\": \"literal\"", json);
+    }
+
+    [Fact]
+    public void Create_RejectsExcessivelyDeepGraphExpression()
+    {
+        SemanticId boolType = SemanticId.FromKey("System.Boolean");
+        PatchExpression expression = new LiteralPatchExpression("true", boolType);
+        for (int index = 0; index < 18; index++)
+        {
+            expression = new UnaryPatchExpression("!", expression, boolType);
+        }
+
+        Assert.Throws<JsonException>(() => SemanticPatchDocument.Create(
+            SemanticId.FromKey("deep-expression-compilation"),
+            SemanticId.FromKey("deep-expression-configuration"),
+            [new InsertStatementPatchOperation(
+                SemanticId.FromKey("deep-expression-block"),
+                null,
+                null,
+                new IfPatchStatement(expression))]));
+    }
+
+    [Fact]
     public void Create_RejectsDuplicateTargets()
     {
         SemanticId targetId = SemanticId.FromKey("duplicate-target");

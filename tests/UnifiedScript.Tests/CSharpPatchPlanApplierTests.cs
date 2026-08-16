@@ -387,6 +387,63 @@ public sealed class CSharpPatchPlanApplierTests
     }
 
     [Fact]
+    public void Apply_ComposesNonProducingIfInsertionWithLaterDirectStep()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static bool Run(bool ready)
+                {
+                    return true;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/IfPatchPlan.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(
+            Assert.Single(method.Body.Statements));
+        HirLiteralExpression literal = Assert.IsType<HirLiteralExpression>(returnStatement.Expression);
+        SemanticId boolType = GetTypeId(original, method.Parameters[0]);
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                new InsertStatementPatchPlanStep(
+                    "insertGuard",
+                    method.Body.Id,
+                    null,
+                    returnStatement.Id,
+                    new IfPatchStatement(new LocalReferencePatchExpression(
+                        method.Parameters[0].Id,
+                        "ready",
+                        boolType))),
+                new ReplaceLiteralPatchPlanStep(
+                    "replaceReturn",
+                    literal.Id,
+                    "true",
+                    "false"),
+            ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains("if (ready)", patchedSource);
+        Assert.Contains("return false;", patchedSource);
+        HirMethodDeclaration changedMethod = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirIfStatement inserted = Assert.IsType<HirIfStatement>(changedMethod.Body.Statements[0]);
+        Assert.NotNull(inserted.Else);
+        HirReturnStatement changedReturn = Assert.IsType<HirReturnStatement>(
+            changedMethod.Body.Statements[1]);
+        Assert.Equal(literal.Id, Assert.IsType<HirLiteralExpression>(changedReturn.Expression).Id);
+    }
+
+    [Fact]
     public void Apply_RebasesArgumentEndpointsAfterAnEarlierLiteralReplacement()
     {
         const string source = """

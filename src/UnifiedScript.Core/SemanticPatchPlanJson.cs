@@ -96,13 +96,11 @@ public static class SemanticPatchPlanJson
                     break;
                 case InsertStatementPatchPlanStep insertion:
                     ValidateOperation(document, insertion.ToOperation());
-                    if (insertion.NewStatement is not LocalLiteralDeclarationPatchStatement insertedLocal)
+                    if (insertion.NewStatement is LocalLiteralDeclarationPatchStatement insertedLocal)
                     {
-                        throw new JsonException(
-                            "Patch-plan v0.2 insertions must produce a local-literal declaration handle.");
+                        producedTypes.Add(insertion.StepId, insertedLocal.ExpectedTypeId);
                     }
 
-                    producedTypes.Add(insertion.StepId, insertedLocal.ExpectedTypeId);
                     break;
                 case DeleteStatementPatchPlanStep deletion:
                     ValidateOperation(document, deletion.ToOperation());

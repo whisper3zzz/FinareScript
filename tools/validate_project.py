@@ -92,6 +92,9 @@ def main() -> int:
     composed_source_path = ROOT / "samples" / "Patching" / "ComposedPlan.cs"
     composed_document_path = ROOT / "samples" / "Patching" / "ComposeScale.plan.json"
     composed_identity_path = ROOT / "samples" / "Patching" / "ComposedPlan.cs.usids"
+    guard_source_path = ROOT / "samples" / "Patching" / "GuardRules.cs"
+    guard_document_path = ROOT / "samples" / "Patching" / "InsertGuard.patch.json"
+    guard_identity_path = ROOT / "samples" / "Patching" / "GuardRules.cs.usids"
     layout_path = ROOT / "samples" / "Layout" / "DamageRules.usgraph"
     require(
         patch_source_path.is_file()
@@ -120,6 +123,12 @@ def main() -> int:
         and composed_identity_path.is_file(),
         "Missing composed semantic patch-plan sample",
     )
+    require(
+        guard_source_path.is_file()
+        and guard_document_path.is_file()
+        and guard_identity_path.is_file(),
+        "Missing typed branch-insertion sample",
+    )
     require(layout_path.is_file(), "Missing graph layout sidecar sample")
     patch_source = patch_source_path.read_text(encoding="utf-8")
     patch_document = json.loads(patch_document_path.read_text(encoding="utf-8"))
@@ -136,6 +145,9 @@ def main() -> int:
     composed_source = composed_source_path.read_text(encoding="utf-8")
     composed_document = json.loads(composed_document_path.read_text(encoding="utf-8"))
     composed_identity = json.loads(composed_identity_path.read_text(encoding="utf-8"))
+    guard_source = guard_source_path.read_text(encoding="utf-8")
+    guard_document = json.loads(guard_document_path.read_text(encoding="utf-8"))
+    guard_identity = json.loads(guard_identity_path.read_text(encoding="utf-8"))
     layout = json.loads(layout_path.read_text(encoding="utf-8"))
     patch_operation = patch_document["operations"][0]
     operator_operation = operator_patch["operations"][0]
@@ -148,11 +160,12 @@ def main() -> int:
     reconnect_source_digest = hashlib.sha256(reconnect_source.encode("utf-8")).hexdigest()
     plan_source_digest = hashlib.sha256(plan_source.encode("utf-8")).hexdigest()
     composed_source_digest = hashlib.sha256(composed_source.encode("utf-8")).hexdigest()
+    guard_source_digest = hashlib.sha256(guard_source.encode("utf-8")).hexdigest()
     require(
-        patch_document["schemaVersion"] == "unifiedscript.patch/v0.5"
-        and operator_patch["schemaVersion"] == "unifiedscript.patch/v0.5"
-        and insert_patch["schemaVersion"] == "unifiedscript.patch/v0.5"
-        and temporary_patch["schemaVersion"] == "unifiedscript.patch/v0.5"
+        patch_document["schemaVersion"] == "unifiedscript.patch/v0.6"
+        and operator_patch["schemaVersion"] == "unifiedscript.patch/v0.6"
+        and insert_patch["schemaVersion"] == "unifiedscript.patch/v0.6"
+        and temporary_patch["schemaVersion"] == "unifiedscript.patch/v0.6"
         and operator_patch["sourceCompilationId"]
         == patch_document["sourceCompilationId"]
         and insert_patch["sourceCompilationId"]
@@ -200,7 +213,7 @@ def main() -> int:
         "Temporary-introduction sample does not contain the expected typed payload",
     )
     require(
-        reconnect_patch["schemaVersion"] == "unifiedscript.patch/v0.5"
+        reconnect_patch["schemaVersion"] == "unifiedscript.patch/v0.6"
         and reconnect_identity["sourcePath"]
         == "samples/Patching/SharedValueRules.cs"
         and reconnect_identity["sourceDigest"]
@@ -227,7 +240,7 @@ def main() -> int:
     introduction_step = plan_steps[0]
     reconnect_steps = plan_steps[1:]
     require(
-        plan_document["schemaVersion"] == "unifiedscript.patch-plan/v0.2"
+        plan_document["schemaVersion"] == "unifiedscript.patch-plan/v0.3"
         and plan_identity["sourcePath"]
         == "samples/Patching/SharedExpressionPlan.cs"
         and plan_identity["sourceDigest"] == f"sha256:{plan_source_digest}"
@@ -262,7 +275,7 @@ def main() -> int:
     composed_identity_ids = {entry["id"] for entry in composed_identity["entries"]}
     composed_insert, composed_reconnect, composed_operator, composed_delete = composed_steps
     require(
-        composed_document["schemaVersion"] == "unifiedscript.patch-plan/v0.2"
+        composed_document["schemaVersion"] == "unifiedscript.patch-plan/v0.3"
         and composed_identity["sourcePath"] == "samples/Patching/ComposedPlan.cs"
         and composed_identity["sourceDigest"] == f"sha256:{composed_source_digest}"
         and [step["step"] for step in composed_steps]
@@ -284,6 +297,34 @@ def main() -> int:
         and "float obsolete = 1.0f;" in composed_source
         and "return damage * 2.0f;" in composed_source,
         "Composed semantic patch-plan source, sidecar, and steps are inconsistent",
+    )
+    guard_operation = guard_document["operations"][0]
+    guard_statement = guard_operation["newStatement"]
+    guard_condition = guard_statement["condition"]
+    guard_identity_ids = {entry["id"] for entry in guard_identity["entries"]}
+    guard_comparison = guard_condition["left"]
+    guard_negation = guard_condition["right"]
+    require(
+        guard_document["schemaVersion"] == "unifiedscript.patch/v0.6"
+        and guard_identity["sourcePath"] == "samples/Patching/GuardRules.cs"
+        and guard_identity["sourceDigest"] == f"sha256:{guard_source_digest}"
+        and guard_operation["operation"] == "insertStatement"
+        and guard_operation["targetNodeId"] in guard_identity_ids
+        and guard_operation["expectedNextSiblingId"] in guard_identity_ids
+        and guard_statement["statement"] == "if"
+        and guard_condition["expression"] == "binary"
+        and guard_condition["operator"] == "&&"
+        and guard_comparison["expression"] == "binary"
+        and guard_comparison["operator"] == ">"
+        and guard_negation["expression"] == "unary"
+        and guard_negation["operator"] == "!"
+        and guard_comparison["left"]["sourceDefinitionId"] in guard_identity_ids
+        and guard_comparison["right"]["sourceDefinitionId"] in guard_identity_ids
+        and guard_negation["operand"]["sourceDefinitionId"] in guard_identity_ids
+        and "int damage" in guard_source
+        and "int threshold" in guard_source
+        and "bool disabled" in guard_source,
+        "Typed branch source, sidecar, and patch are inconsistent",
     )
     require(
         any((ROOT / "tests" / "UnifiedScript.Tests").glob("*Tests.cs")),

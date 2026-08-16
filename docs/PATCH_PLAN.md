@@ -2,9 +2,9 @@
 
 ## Purpose
 
-`unifiedscript.patch-plan/v0.2` represents one visual-editor gesture as an
+`unifiedscript.patch-plan/v0.3` represents one visual-editor gesture as an
 ordered, atomic sequence of the same bounded semantic operations supported by
-`unifiedscript.patch/v0.5`. It exists because a useful graph edit often needs
+`unifiedscript.patch/v0.6`. It exists because a useful graph edit often needs
 IDs created by an earlier edit or changes several overlapping source regions.
 Submitting those stages as unrelated filesystem transactions would expose
 partial programs and force the editor to predict random persistent IDs.
@@ -18,7 +18,7 @@ identity sidecar are eligible for a CLI filesystem transaction.
 
 ```json
 {
-  "schemaVersion": "unifiedscript.patch-plan/v0.2",
+  "schemaVersion": "unifiedscript.patch-plan/v0.3",
   "sourceCompilationId": "us_...",
   "semanticConfigurationId": "us_...",
   "steps": []
@@ -29,14 +29,14 @@ The source compilation and semantic configuration IDs are the external
 optimistic-concurrency baseline. Every step has a unique, non-empty `stepId`
 and a persistent `targetNodeId`.
 
-Version v0.2 supports these step discriminators:
+Version v0.3 supports these step discriminators:
 
 | `step` | Purpose | Structural result |
 | --- | --- | --- |
 | `replaceLiteral` | Replace one literal with a complete literal token | Target ID survives |
 | `changeOperator` | Change a unary/binary operator inside its result-preserving family | Operator node ID survives |
 | `reconnectArgument` | Exchange two pure, exactly typed positional arguments | Invocation and endpoint IDs survive |
-| `insertStatement` | Insert the bounded local-literal declaration payload | Produces a local handle |
+| `insertStatement` | Insert a local-literal declaration or typed `if` skeleton | Local payload produces a handle; `if` does not |
 | `deleteStatement` | Delete one proven-safe unused/effect-free statement | Removed subtree becomes tombstones |
 | `introduceTemporary` | Move one stable expression into a single-evaluation local | Produces a local handle |
 | `reconnectValue` | Replace a stable consumer with a produced local reference | Consumes a local handle |
@@ -47,7 +47,7 @@ weaken operation safety.
 
 ## Symbolic local handles
 
-`introduceTemporary` and the current local-literal `insertStatement` publish
+`introduceTemporary` and a local-literal `insertStatement` publish
 their `stepId` as a symbolic local handle. A later `reconnectValue` supplies
 that value as `sourceStepId`:
 
@@ -119,6 +119,11 @@ Only insertion steps may repeat a target block. This supports several ordered
 new statements in one gap without giving repeated literal/operator edits
 ambiguous original-versus-intermediate preconditions.
 
+An `insertStatement` carrying an `if` payload executes through the same staged
+transaction and gap rebasing, but does not publish a local handle. A
+`reconnectValue` whose `sourceStepId` names that step is rejected during JSON
+validation rather than failing after source mutation.
+
 If an earlier step deletes a later target or removes every anchor needed to
 reconstruct an insertion gap, execution fails atomically. Internal rebasing is
 not a mechanism for accepting unrelated external source changes.
@@ -144,13 +149,15 @@ remains unchanged.
 
 ## Deliberate limits
 
-Plan v0.2 composes all operations currently defined by patch v0.5, but it does
-not add new expression payloads or control-flow syntax. It has no cross-method
-or cross-document symbolic handle, does not support a handle to an arbitrary
-expression, and does not expose conditional branches inside the plan itself.
-Multi-document in-memory analysis remains available below the CLI, while the
-CLI commit boundary is still one source/identity pair.
+Plan v0.3 composes all operations currently defined by patch v0.6, including
+the graph-authored condition and explicit empty-block `if` insertion. It has no
+branch-block handle, cannot populate either branch within the same plan, has no
+cross-method or cross-document symbolic handle, and does not support a handle
+to an arbitrary expression. Multi-document in-memory analysis remains
+available below the CLI, while the CLI commit boundary is still one
+source/identity pair.
 
-There is no automatic reader migration for `patch-plan/v0.1`; producers should
-reanalyze and emit the current schema and baselines. The original temporary plus
-reconnect step shapes remain representable in v0.2.
+There is no automatic reader migration for older patch-plan schemas; producers
+should reanalyze and emit the current schema and baselines. The original
+temporary-plus-reconnect and v0.2 composed step shapes remain representable in
+v0.3.

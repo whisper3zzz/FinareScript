@@ -60,6 +60,34 @@ public sealed class CSharpSourcePatchApplier
             "^",
             "|",
         };
+    private static readonly IReadOnlySet<string> GraphExpressionBinaryOperators =
+        new HashSet<string>(StringComparer.Ordinal)
+        {
+            "+",
+            "-",
+            "*",
+            "<<",
+            ">>",
+            "<",
+            ">",
+            "<=",
+            ">=",
+            "==",
+            "!=",
+            "&",
+            "^",
+            "|",
+            "&&",
+            "||",
+        };
+    private static readonly IReadOnlySet<string> GraphExpressionUnaryOperators =
+        new HashSet<string>(StringComparer.Ordinal)
+        {
+            "+",
+            "-",
+            "!",
+            "~",
+        };
 
     private readonly CSharpSemanticPipeline pipeline = new();
 
@@ -143,6 +171,7 @@ public sealed class CSharpSourcePatchApplier
                     insertStatement,
                     hirNodes,
                     patchIndex,
+                    boundNodes,
                     types,
                     documents),
                 DeleteStatementPatchOperation deleteStatement => PlanStatementDeletion(
@@ -603,6 +632,7 @@ public sealed class CSharpSourcePatchApplier
         InsertStatementPatchOperation operation,
         IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
         HirPatchIndex patchIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
         IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
         IReadOnlyDictionary<string, ParsedDocument> documents)
     {
@@ -629,39 +659,29 @@ public sealed class CSharpSourcePatchApplier
                 operation.ExpectedNextSiblingId);
         }
 
-        if (operation.NewStatement is not LocalLiteralDeclarationPatchStatement local)
+        StatementBuildResult statementResult = operation.NewStatement switch
         {
-            return DiagnosticPlan(
+            LocalLiteralDeclarationPatchStatement local => BuildLocalLiteralStatement(
+                local,
+                blockLocation!.Method,
+                types),
+            IfPatchStatement ifStatement => BuildIfStatement(
+                ifStatement,
+                blockLocation!,
+                insertionIndex,
+                hirNodes,
+                patchIndex,
+                boundNodes,
+                types),
+            _ => StatementBuildResult.Failure(
                 SemanticPatchDiagnosticCodes.InvalidStatement,
-                $"Inserted statement payload '{operation.NewStatement.GetType().Name}' is not supported.",
-                block);
-        }
-
-        if (!types.TryGetValue(local.ExpectedTypeId, out TypeDescriptor? expectedType) ||
-            !expectedType.IsGraphSafe ||
-            !TypeNameMatches(local.TypeName, expectedType))
+                $"Inserted statement payload '{operation.NewStatement.GetType().Name}' is not supported."),
+        };
+        if (statementResult.Syntax is null)
         {
             return DiagnosticPlan(
-                SemanticPatchDiagnosticCodes.TypeMismatch,
-                $"Inserted local type '{local.TypeName}' does not match graph-safe semantic type " +
-                $"'{local.ExpectedTypeId}'. The type must already exist in the bound compilation.",
-                block);
-        }
-
-        if (HasNameConflict(blockLocation!.Method, local.Name))
-        {
-            return DiagnosticPlan(
-                SemanticPatchDiagnosticCodes.NameConflict,
-                $"A parameter or local named '{local.Name}' already exists in method " +
-                $"'{blockLocation.Method.Name}'.",
-                block);
-        }
-
-        if (!TryCreateLocalLiteralStatement(local, out LocalDeclarationStatementSyntax? newStatement))
-        {
-            return DiagnosticPlan(
-                SemanticPatchDiagnosticCodes.InvalidStatement,
-                "The local-literal payload could not be represented as one C# local declaration.",
+                statementResult.DiagnosticCode ?? SemanticPatchDiagnosticCodes.InvalidStatement,
+                statementResult.DiagnosticMessage ?? "The inserted statement payload is invalid.",
                 block);
         }
 
@@ -676,11 +696,9 @@ public sealed class CSharpSourcePatchApplier
         }
 
         (List<StatementSyntax> annotatedStatements, List<PendingPin> pins) =
-            AnnotateStatements(syntax, block.Statements);
+            AnnotateStatementTrees(document!, syntax, block.Statements);
         InsertionFormatting formatting = GetInsertionFormatting(document!, syntax, insertionIndex);
-        newStatement = newStatement!
-            .WithLeadingTrivia(SyntaxFactory.Whitespace(formatting.Indentation))
-            .WithTrailingTrivia(SyntaxFactory.EndOfLine(formatting.EndOfLine));
+        StatementSyntax newStatement = FormatInsertedStatement(statementResult.Syntax, formatting);
         annotatedStatements.Insert(insertionIndex, newStatement);
         var blockAnnotation = new SyntaxAnnotation(IdentityAnnotationKind, block.Id.Value);
         BlockSyntax replacement = syntax
@@ -1348,6 +1366,46 @@ public sealed class CSharpSourcePatchApplier
         return (statements, pins);
     }
 
+    private static (List<StatementSyntax> Statements, List<PendingPin> Pins) AnnotateStatementTrees(
+        ParsedDocument document,
+        BlockSyntax block,
+        IReadOnlyList<HirStatement> hirStatements)
+    {
+        if (block.Statements.Count != hirStatements.Count)
+        {
+            throw new ArgumentException("Roslyn and HIR statement counts must match.", nameof(hirStatements));
+        }
+
+        var statements = new List<StatementSyntax>(hirStatements.Count);
+        var pins = new List<PendingPin>();
+        for (int index = 0; index < hirStatements.Count; index++)
+        {
+            HirStatement hirStatement = hirStatements[index];
+            if (!TryAnnotateExpressions(
+                    document,
+                    block.Statements[index],
+                    hirStatement,
+                    null,
+                    out StatementSyntax? annotated,
+                    out _,
+                    out IReadOnlyList<PendingPin>? expressionPins))
+            {
+                throw new InvalidOperationException(
+                    $"Could not pin expressions in existing statement '{hirStatement.Id}'.");
+            }
+
+            var statementAnnotation = new SyntaxAnnotation(IdentityAnnotationKind, hirStatement.Id.Value);
+            statements.Add(annotated!.WithAdditionalAnnotations(statementAnnotation));
+            pins.Add(new PendingPin(
+                hirStatement.Id,
+                GetIdentityKind(hirStatement),
+                statementAnnotation));
+            pins.AddRange(expressionPins!);
+        }
+
+        return (statements, pins);
+    }
+
     private static bool TryAnnotateExpressions(
         ParsedDocument document,
         StatementSyntax syntax,
@@ -1513,6 +1571,424 @@ public sealed class CSharpSourcePatchApplier
         return currentPrevious == expectedPreviousSiblingId && currentNext == expectedNextSiblingId;
     }
 
+    private static StatementBuildResult BuildLocalLiteralStatement(
+        LocalLiteralDeclarationPatchStatement local,
+        HirMethodDeclaration method,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types)
+    {
+        if (!types.TryGetValue(local.ExpectedTypeId, out TypeDescriptor? expectedType) ||
+            !expectedType.IsGraphSafe ||
+            !TypeNameMatches(local.TypeName, expectedType))
+        {
+            return StatementBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.TypeMismatch,
+                $"Inserted local type '{local.TypeName}' does not match graph-safe semantic type " +
+                $"'{local.ExpectedTypeId}'. The type must already exist in the bound compilation.");
+        }
+
+        if (HasNameConflict(method, local.Name))
+        {
+            return StatementBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.NameConflict,
+                $"A parameter or local named '{local.Name}' already exists in method '{method.Name}'.");
+        }
+
+        if (!TryCreateLocalLiteralStatement(local, out LocalDeclarationStatementSyntax? statement))
+        {
+            return StatementBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.InvalidStatement,
+                "The local-literal payload could not be represented as one C# local declaration.");
+        }
+
+        return StatementBuildResult.Success(statement!);
+    }
+
+    private static StatementBuildResult BuildIfStatement(
+        IfPatchStatement ifStatement,
+        HirPatchIndex.BlockLocation blockLocation,
+        int insertionIndex,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types)
+    {
+        ExpressionBuildResult condition = BuildPatchExpression(
+            ifStatement.Condition,
+            blockLocation,
+            insertionIndex,
+            hirNodes,
+            patchIndex,
+            boundNodes,
+            types);
+        if (condition.Syntax is null || condition.Type is null)
+        {
+            return StatementBuildResult.Failure(
+                condition.DiagnosticCode ?? SemanticPatchDiagnosticCodes.InvalidGraphExpression,
+                condition.DiagnosticMessage ?? "The graph-authored if condition is invalid.");
+        }
+
+        if (condition.Type.Kind != UnifiedTypeKind.Boolean ||
+            !string.Equals(condition.Type.MetadataName, "System.Boolean", StringComparison.Ordinal))
+        {
+            return StatementBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.TypeMismatch,
+                $"An if condition must have semantic type 'System.Boolean', not " +
+                $"'{condition.Type.MetadataName}' ('{ifStatement.Condition.ExpectedTypeId}').");
+        }
+
+        IfStatementSyntax syntax = SyntaxFactory
+            .IfStatement(condition.Syntax, SyntaxFactory.Block())
+            .WithElse(SyntaxFactory.ElseClause(SyntaxFactory.Block()));
+        return StatementBuildResult.Success(syntax);
+    }
+
+    private static ExpressionBuildResult BuildPatchExpression(
+        PatchExpression expression,
+        HirPatchIndex.BlockLocation blockLocation,
+        int insertionIndex,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types)
+    {
+        if (!types.TryGetValue(expression.ExpectedTypeId, out TypeDescriptor? expectedType) ||
+            !IsStableGraphExpressionType(expectedType))
+        {
+            return ExpressionBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.TypeMismatch,
+                $"Graph-authored expression type '{expression.ExpectedTypeId}' is missing or outside " +
+                "the graph-safe scalar subset.");
+        }
+
+        switch (expression)
+        {
+            case LiteralPatchExpression literal:
+                if (!TryParseLiteral(literal.ValueText, out LiteralExpressionSyntax? literalSyntax) ||
+                    literalSyntax!.Token.Value is not object value ||
+                    !string.Equals(
+                        value.GetType().FullName,
+                        expectedType.MetadataName,
+                        StringComparison.Ordinal))
+                {
+                    return ExpressionBuildResult.Failure(
+                        SemanticPatchDiagnosticCodes.InvalidGraphExpression,
+                        $"Literal '{literal.ValueText}' is not one scalar C# literal with expected type " +
+                        $"'{expectedType.MetadataName}'. Signed literals must use an explicit unary payload.");
+                }
+
+                return ExpressionBuildResult.Success(literalSyntax.WithoutTrivia(), expectedType);
+
+            case LocalReferencePatchExpression local:
+                return BuildLocalReferenceExpression(
+                    local,
+                    expectedType,
+                    blockLocation,
+                    insertionIndex,
+                    hirNodes,
+                    patchIndex,
+                    boundNodes);
+
+            case UnaryPatchExpression unary:
+                {
+                    if (!GraphExpressionUnaryOperators.Contains(unary.Operator) ||
+                        !TryParseUnaryOperator(unary.Operator, out PrefixUnaryExpressionSyntax? parsedUnary))
+                    {
+                        return ExpressionBuildResult.Failure(
+                            SemanticPatchDiagnosticCodes.InvalidGraphExpression,
+                            $"Unary operator '{unary.Operator}' is outside the graph-authored expression subset.");
+                    }
+
+                    ExpressionBuildResult operand = BuildPatchExpression(
+                        unary.Operand,
+                        blockLocation,
+                        insertionIndex,
+                        hirNodes,
+                        patchIndex,
+                        boundNodes,
+                        types);
+                    if (operand.Syntax is null || operand.Type is null)
+                    {
+                        return operand;
+                    }
+
+                    if (!IsValidGraphUnaryType(unary.Operator, operand.Type, expectedType))
+                    {
+                        return ExpressionBuildResult.Failure(
+                            SemanticPatchDiagnosticCodes.TypeMismatch,
+                            $"Unary operator '{unary.Operator}' does not preserve the declared operand/result " +
+                            "types in the bounded scalar subset.");
+                    }
+
+                    ExpressionSyntax operandSyntax = ParenthesizeCompositeExpression(operand.Syntax);
+                    PrefixUnaryExpressionSyntax syntax = SyntaxFactory.PrefixUnaryExpression(
+                        parsedUnary!.Kind(),
+                        parsedUnary.OperatorToken.WithoutTrivia(),
+                        operandSyntax);
+                    return ExpressionBuildResult.Success(syntax, expectedType);
+                }
+
+            case BinaryPatchExpression binary:
+                {
+                    if (!GraphExpressionBinaryOperators.Contains(binary.Operator) ||
+                        !TryParseBinaryOperator(binary.Operator, out BinaryExpressionSyntax? parsedBinary))
+                    {
+                        return ExpressionBuildResult.Failure(
+                            SemanticPatchDiagnosticCodes.InvalidGraphExpression,
+                            $"Binary operator '{binary.Operator}' is outside the graph-authored expression subset.");
+                    }
+
+                    ExpressionBuildResult left = BuildPatchExpression(
+                        binary.Left,
+                        blockLocation,
+                        insertionIndex,
+                        hirNodes,
+                        patchIndex,
+                        boundNodes,
+                        types);
+                    if (left.Syntax is null || left.Type is null)
+                    {
+                        return left;
+                    }
+
+                    ExpressionBuildResult right = BuildPatchExpression(
+                        binary.Right,
+                        blockLocation,
+                        insertionIndex,
+                        hirNodes,
+                        patchIndex,
+                        boundNodes,
+                        types);
+                    if (right.Syntax is null || right.Type is null)
+                    {
+                        return right;
+                    }
+
+                    if (!IsValidGraphBinaryType(binary.Operator, left.Type, right.Type, expectedType))
+                    {
+                        return ExpressionBuildResult.Failure(
+                            SemanticPatchDiagnosticCodes.TypeMismatch,
+                            $"Binary operator '{binary.Operator}' does not match the declared operand/result " +
+                            "types in the bounded scalar subset.");
+                    }
+
+                    BinaryExpressionSyntax syntax = SyntaxFactory.BinaryExpression(
+                        parsedBinary!.Kind(),
+                        ParenthesizeCompositeExpression(left.Syntax),
+                        parsedBinary.OperatorToken.WithoutTrivia(),
+                        ParenthesizeCompositeExpression(right.Syntax));
+                    return ExpressionBuildResult.Success(syntax, expectedType);
+                }
+
+            case CastPatchExpression cast:
+                {
+                    ExpressionBuildResult operand = BuildPatchExpression(
+                        cast.Operand,
+                        blockLocation,
+                        insertionIndex,
+                        hirNodes,
+                        patchIndex,
+                        boundNodes,
+                        types);
+                    if (operand.Syntax is null || operand.Type is null)
+                    {
+                        return operand;
+                    }
+
+                    TypeSyntax typeSyntax = SyntaxFactory.ParseTypeName(
+                        cast.TypeName,
+                        options: CSharpToHirLowerer.ParseOptions,
+                        consumeFullText: true);
+                    if (typeSyntax.ContainsDiagnostics ||
+                        typeSyntax.SpanStart != 0 ||
+                        typeSyntax.Span.Length != cast.TypeName.Length ||
+                        !TypeNameMatches(cast.TypeName, expectedType))
+                    {
+                        return ExpressionBuildResult.Failure(
+                            SemanticPatchDiagnosticCodes.TypeMismatch,
+                            $"Cast type '{cast.TypeName}' does not match semantic type " +
+                            $"'{expression.ExpectedTypeId}'.");
+                    }
+
+                    CastExpressionSyntax syntax = SyntaxFactory.CastExpression(
+                        typeSyntax.WithoutTrivia(),
+                        ParenthesizeCompositeExpression(operand.Syntax));
+                    return ExpressionBuildResult.Success(syntax, expectedType);
+                }
+
+            default:
+                return ExpressionBuildResult.Failure(
+                    SemanticPatchDiagnosticCodes.InvalidGraphExpression,
+                    $"Graph-authored expression '{expression.GetType().Name}' is not supported.");
+        }
+    }
+
+    private static ExpressionBuildResult BuildLocalReferenceExpression(
+        LocalReferencePatchExpression local,
+        TypeDescriptor expectedType,
+        HirPatchIndex.BlockLocation blockLocation,
+        int insertionIndex,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes)
+    {
+        if (!hirNodes.TryGetValue(local.SourceDefinitionId, out HirNode? source))
+        {
+            return UnavailableGraphSource(local, "was not found in the current HIR");
+        }
+
+        string? actualName = source switch
+        {
+            HirParameter parameter when blockLocation.Method.Parameters.Any(
+                candidate => candidate.Id == parameter.Id) => parameter.Name,
+            HirVariableDeclarationStatement variable when
+                patchIndex.TryGetStatement(
+                    variable.Id,
+                    out HirPatchIndex.StatementLocation? sourceLocation) &&
+                sourceLocation!.Method.Id == blockLocation.Method.Id &&
+                patchIndex.DoesStatementDominateInsertion(
+                    variable.Id,
+                    blockLocation.Block.Id,
+                    insertionIndex) => variable.Name,
+            _ => null,
+        };
+        if (actualName is null)
+        {
+            return UnavailableGraphSource(
+                local,
+                "is not a parameter or a local that lexically dominates the insertion gap");
+        }
+
+        if (!string.Equals(actualName, local.ExpectedName, StringComparison.Ordinal) ||
+            HasNameConflict(blockLocation.Method, actualName, local.SourceDefinitionId))
+        {
+            return UnavailableGraphSource(
+                local,
+                $"is named '{actualName}', not '{local.ExpectedName}', or is shadowed");
+        }
+
+        if (!boundNodes.TryGetValue(local.SourceDefinitionId, out BoundNodeInfo? binding) ||
+            binding.TypeId != local.ExpectedTypeId)
+        {
+            return ExpressionBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.TypeMismatch,
+                $"Graph value source '{local.SourceDefinitionId}' no longer has expected type " +
+                $"'{local.ExpectedTypeId}'.");
+        }
+
+        return ExpressionBuildResult.Success(
+            SyntaxFactory.IdentifierName(actualName),
+            expectedType);
+    }
+
+    private static ExpressionBuildResult UnavailableGraphSource(
+        LocalReferencePatchExpression local,
+        string reason) => ExpressionBuildResult.Failure(
+        SemanticPatchDiagnosticCodes.ValueSourceNotAvailable,
+        $"Graph value source '{local.SourceDefinitionId}' {reason}.");
+
+    private static bool IsStableGraphExpressionType(TypeDescriptor type) =>
+        type.IsGraphSafe &&
+        (type.Kind is UnifiedTypeKind.Boolean or
+            UnifiedTypeKind.Integer or
+            UnifiedTypeKind.FloatingPoint or
+            UnifiedTypeKind.Enum) &&
+        !string.Equals(type.MetadataName, "System.Decimal", StringComparison.Ordinal);
+
+    private static bool IsValidGraphUnaryType(
+        string operatorText,
+        TypeDescriptor operand,
+        TypeDescriptor result)
+    {
+        if (operatorText == "!")
+        {
+            return IsBoolean(operand) && IsSameType(operand, result);
+        }
+
+        if (operatorText == "~")
+        {
+            return IsSameType(operand, result) &&
+                (operand.Kind == UnifiedTypeKind.Enum || IsIntegralOperatorType(operand));
+        }
+
+        if (operatorText == "+")
+        {
+            return IsSameType(operand, result) && IsArithmeticOperatorType(operand);
+        }
+
+        return operatorText == "-" &&
+            IsSameType(operand, result) &&
+            operand.MetadataName is "System.Int32" or "System.Int64" or "System.Single" or "System.Double";
+    }
+
+    private static bool IsValidGraphBinaryType(
+        string operatorText,
+        TypeDescriptor left,
+        TypeDescriptor right,
+        TypeDescriptor result)
+    {
+        if (operatorText is "+" or "-" or "*")
+        {
+            return IsSameType(left, right) && IsSameType(left, result) &&
+                IsArithmeticOperatorType(left);
+        }
+
+        if (operatorText is "<<" or ">>")
+        {
+            return IsSameType(left, result) &&
+                IsIntegralOperatorType(left) &&
+                string.Equals(right.MetadataName, "System.Int32", StringComparison.Ordinal);
+        }
+
+        if (operatorText is "<" or ">" or "<=" or ">=")
+        {
+            return IsSameType(left, right) && IsArithmeticOperatorType(left) && IsBoolean(result);
+        }
+
+        if (operatorText is "==" or "!=")
+        {
+            return IsSameType(left, right) &&
+                (IsBoolean(left) || IsArithmeticOperatorType(left) || left.Kind == UnifiedTypeKind.Enum) &&
+                IsBoolean(result);
+        }
+
+        if (operatorText is "&&" or "||")
+        {
+            return IsBoolean(left) && IsBoolean(right) && IsBoolean(result);
+        }
+
+        return (operatorText is "&" or "^" or "|") &&
+            IsSameType(left, right) &&
+            IsSameType(left, result) &&
+            (IsBoolean(left) || IsIntegralOperatorType(left) || left.Kind == UnifiedTypeKind.Enum);
+    }
+
+    private static bool IsBoolean(TypeDescriptor type) =>
+        type.Kind == UnifiedTypeKind.Boolean &&
+        string.Equals(type.MetadataName, "System.Boolean", StringComparison.Ordinal);
+
+    private static bool IsArithmeticOperatorType(TypeDescriptor type) =>
+        type.MetadataName is
+            "System.Int32" or
+            "System.UInt32" or
+            "System.Int64" or
+            "System.UInt64" or
+            "System.Single" or
+            "System.Double";
+
+    private static bool IsIntegralOperatorType(TypeDescriptor type) =>
+        type.MetadataName is
+            "System.Int32" or
+            "System.UInt32" or
+            "System.Int64" or
+            "System.UInt64";
+
+    private static bool IsSameType(TypeDescriptor left, TypeDescriptor right) => left.Id == right.Id;
+
+    private static ExpressionSyntax ParenthesizeCompositeExpression(ExpressionSyntax expression) =>
+        expression is LiteralExpressionSyntax or IdentifierNameSyntax
+            ? expression
+            : SyntaxFactory.ParenthesizedExpression(expression);
+
     private static bool TryCreateLocalLiteralStatement(
         LocalLiteralDeclarationPatchStatement local,
         out LocalDeclarationStatementSyntax? statement)
@@ -1606,6 +2082,33 @@ public sealed class CSharpSourcePatchApplier
         }
 
         return new InsertionFormatting(indentation, GetEndOfLine(document));
+    }
+
+    private static StatementSyntax FormatInsertedStatement(
+        StatementSyntax statement,
+        InsertionFormatting formatting)
+    {
+        if (statement is not IfStatementSyntax)
+        {
+            return statement
+                .WithLeadingTrivia(SyntaxFactory.Whitespace(formatting.Indentation))
+                .WithTrailingTrivia(SyntaxFactory.EndOfLine(formatting.EndOfLine));
+        }
+
+        string normalized = statement
+            .NormalizeWhitespace(indentation: "    ", eol: formatting.EndOfLine)
+            .ToFullString();
+        string indented = formatting.Indentation + normalized.Replace(
+            formatting.EndOfLine,
+            formatting.EndOfLine + formatting.Indentation,
+            StringComparison.Ordinal) + formatting.EndOfLine;
+        StatementSyntax formatted = SyntaxFactory.ParseStatement(
+            indented,
+            options: CSharpToHirLowerer.ParseOptions,
+            consumeFullText: true);
+        return formatted.ContainsDiagnostics
+            ? throw new InvalidOperationException("A constructed if statement could not be formatted.")
+            : formatted;
     }
 
     private static string GetLineIndentation(ParsedDocument document, SyntaxNode node)
@@ -1911,6 +2414,29 @@ public sealed class CSharpSourcePatchApplier
     private sealed record OperationPlan(
         PendingReplacement? Replacement,
         UnifiedDiagnostic? Diagnostic);
+
+    private sealed record StatementBuildResult(
+        StatementSyntax? Syntax,
+        string? DiagnosticCode,
+        string? DiagnosticMessage)
+    {
+        public static StatementBuildResult Success(StatementSyntax syntax) => new(syntax, null, null);
+
+        public static StatementBuildResult Failure(string code, string message) => new(null, code, message);
+    }
+
+    private sealed record ExpressionBuildResult(
+        ExpressionSyntax? Syntax,
+        TypeDescriptor? Type,
+        string? DiagnosticCode,
+        string? DiagnosticMessage)
+    {
+        public static ExpressionBuildResult Success(ExpressionSyntax syntax, TypeDescriptor type) =>
+            new(syntax, type, null, null);
+
+        public static ExpressionBuildResult Failure(string code, string message) =>
+            new(null, null, code, message);
+    }
 
     private sealed record PendingReplacement(
         string DocumentPath,

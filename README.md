@@ -161,7 +161,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
   --out-identity artifacts/patched/DamageRules.cs.usids
 ```
 
-`unifiedscript.patch/v0.5` binds every patch to both the source compilation ID
+`unifiedscript.patch/v0.6` binds every patch to both the source compilation ID
 and semantic configuration ID emitted in Graph schema v0.2. A `replaceLiteral`
 operation also carries the expected old literal text. A stale source, changed
 reference/effect configuration, missing target, changed old value, non-literal
@@ -175,7 +175,7 @@ ambiguous matches allocate new IDs and emit `UVS3101` rather than guessing.
 
 ## Apply structural graph patches
 
-Patch v0.5 includes `changeOperator` and `reconnectArgument`. The checked-in
+Patch v0.6 includes `changeOperator` and `reconnectArgument`. The checked-in
 operator sample changes the binary node from multiplication to division while
 requiring the expected result, left-port, and right-port type IDs:
 
@@ -211,7 +211,7 @@ single-document.
 
 ## Apply a statement insertion
 
-Patch v0.5 also includes bounded `insertStatement` and `deleteStatement`
+Patch v0.6 also includes bounded `insertStatement` and `deleteStatement`
 operations. The insertion sample adds a graph-authored local declaration before
 the existing return statement:
 
@@ -226,15 +226,56 @@ dotnet run --project src/UnifiedScript.Cli -- \
 ```
 
 An insertion targets a parent block and records the exact adjacent sibling IDs.
-The current typed payload is a local declaration with one literal initializer.
-Its semantic type must already be present and graph-safe in the bound
-compilation, and its name must not collide with any parameter or local in the
-method. The existing block and sibling IDs are explicitly pinned; the inserted
-declaration and literal receive new persistent IDs.
+Patch v0.6 accepts either a local declaration with one literal initializer or
+an `if` whose condition is a versioned graph-authored expression. A local's
+semantic type must already be present and graph-safe in the bound compilation,
+and its name must not collide with any parameter or local in the method. The
+existing block, sibling statements, and their expressions are explicitly
+pinned; newly authored syntax receives new persistent IDs.
 
 The sample intentionally reports compiler warning `CS0219` because the new
 local is not connected to a consumer yet; warnings do not bypass the full
 semantic reanalysis or make the transaction partial.
+
+### Insert a typed branch skeleton
+
+The structured-control-flow sample builds `(damage > threshold) && !disabled`
+from typed expression nodes and inserts an `if` before the existing return:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  apply-patch \
+  samples/Patching/GuardRules.cs \
+  --identity samples/Patching/GuardRules.cs.usids \
+  --patch samples/Patching/InsertGuard.patch.json \
+  --out artifacts/guard/GuardRules.cs \
+  --out-identity artifacts/guard/GuardRules.cs.usids
+```
+
+The emitted source contains explicit blocks on both paths:
+
+```csharp
+if ((damage > threshold) && (!disabled))
+{
+}
+else
+{
+}
+```
+
+The expression payload has five closed variants: scalar `literal`,
+`localReference`, `unary`, `binary`, and `cast`. Every node carries an expected
+semantic type ID. References also carry a source definition ID and expected
+name; a local must lexically dominate the insertion gap, while a parameter must
+belong to the same method. The current operator subset excludes division,
+remainder, decimal/string operations, mutation, calls, member reads, and other
+expressions whose evaluation may throw, allocate, mutate, or read state.
+
+This first control-flow primitive deliberately creates empty `then` and `else`
+blocks. It proves that source, HIR, Graph branch/data/control edges, persistent
+identity, and `.usgraph` layout synchronization share one structure. New branch
+and condition nodes are explicitly `unplaced`; existing placements survive.
+Block handles and branch-body population are the next bounded protocol slice.
 
 A deletion targets one statement and records its parent block plus both current
 sibling IDs. This slice permits only an unused local with no initializer or a
@@ -286,7 +327,7 @@ pin. The moved expression, its descendants, the containing statement, sibling
 statements, and parent block therefore retain their IDs. Only the new local
 declaration and replacement identifier allocate new IDs. This is the first
 lowering primitive needed to represent a shared Graph value without duplicating
-C# evaluation. Patch v0.5 can now connect additional compatible consumers to
+C# evaluation. Patch v0.6 can now connect additional compatible consumers to
 that local definition.
 
 ## Reconnect a typed consumer
@@ -344,7 +385,7 @@ analyzed source baseline, or atomically with the patch-plan protocol below.
 
 ## Apply atomic semantic patch plans
 
-`unifiedscript.patch-plan/v0.2` composes `replaceLiteral`, `changeOperator`,
+`unifiedscript.patch-plan/v0.3` composes `replaceLiteral`, `changeOperator`,
 `reconnectArgument`, `insertStatement`, `deleteStatement`,
 `introduceTemporary`, and `reconnectValue` as one ordered transaction. The
 shared-value sample starts with:
@@ -372,7 +413,7 @@ float sharedDamage = damage * 2.0f;
 return sharedDamage + sharedDamage + sharedDamage;
 ```
 
-Each plan step has a unique `stepId`. Both `introduceTemporary` and the current
+Each plan step has a unique `stepId`. Both `introduceTemporary` and a
 local-literal `insertStatement` publish a symbolic handle; later
 `reconnectValue` steps use `sourceStepId` to reference that handle. The
 coordinator resolves the actual random declaration ID after the producer stage,
@@ -417,8 +458,10 @@ rebased only over earlier stages in the same plan. Multiple insertions into one
 original gap retain plan order, and argument reconnection relocates its current
 indices by persistent endpoint ID. Non-insertion targets remain unique to avoid
 ambiguous repeated old-value preconditions. Reconnect handles must reference an
-earlier local producer in the same method with the same graph-safe type.
-Control-flow construction and cross-method handles remain outside v0.2.
+earlier local producer in the same method with the same graph-safe type. An
+`if` insertion is a non-producing plan step: it composes atomically with later
+direct steps but cannot be used as a local value handle. Branch-block handles,
+branch-body population, and cross-method handles remain outside v0.3.
 
 ## Persist and synchronize graph layout
 

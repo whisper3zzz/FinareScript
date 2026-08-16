@@ -64,6 +64,45 @@ internal sealed class HirPatchIndex
         return false;
     }
 
+    public bool DoesStatementDominateInsertion(
+        SemanticId definitionStatementId,
+        SemanticId targetBlockId,
+        int insertionIndex)
+    {
+        if (!statements.TryGetValue(definitionStatementId, out StatementLocation? definition) ||
+            !blocks.TryGetValue(targetBlockId, out BlockLocation? target) ||
+            definition.Method.Id != target.Method.Id ||
+            insertionIndex < 0 ||
+            insertionIndex > target.Block.Statements.Count)
+        {
+            return false;
+        }
+
+        if (definition.ParentBlock.Id == targetBlockId)
+        {
+            return definition.Index < insertionIndex;
+        }
+
+        HirBlockStatement current = target.Block;
+        while (blocks.TryGetValue(current.Id, out BlockLocation? currentLocation) &&
+            currentLocation.ParentBlock is not null &&
+            currentLocation.EntryStatement is not null)
+        {
+            HirBlockStatement parent = currentLocation.ParentBlock;
+            if (parent.Id == definition.ParentBlock.Id &&
+                statements.TryGetValue(
+                    currentLocation.EntryStatement.Id,
+                    out StatementLocation? entryLocation))
+            {
+                return definition.Index < entryLocation.Index;
+            }
+
+            current = parent;
+        }
+
+        return false;
+    }
+
     private void AddBlock(
         HirBlockStatement block,
         HirMethodDeclaration method,

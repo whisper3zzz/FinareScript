@@ -149,7 +149,10 @@ writes only the final source and final sidecar through one filesystem
 transaction. Sidecar generation and tombstone generation reflect the ordered
 internal reconciliation stages.
 
-General expression/control-flow synthesis, arbitrary cross-expression
-rewiring, declaration rename reconciliation, multi-file CLI patch commits,
-bounded tombstone compaction, structured control-flow construction, and
-automatic `.usgraph` placement remain future work.
+Graph-authored branch insertion pins every existing sibling expression before
+adding the new `if`, condition subtree, and two explicit blocks. Those authored
+nodes receive fresh identities while layout synchronization leaves their Graph
+nodes explicitly unplaced. Symbolic handles for the new branch blocks, broader
+expression/control-flow synthesis, arbitrary cross-expression rewiring,
+declaration rename reconciliation, multi-file CLI patch commits, bounded
+tombstone compaction, and automatic `.usgraph` placement remain future work.

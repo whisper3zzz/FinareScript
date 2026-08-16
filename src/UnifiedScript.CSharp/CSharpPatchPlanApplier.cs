@@ -89,12 +89,13 @@ public sealed class CSharpPatchPlanApplier
                 IntroduceTemporaryPatchPlanStep introduction => FindIntroducedDefinition(
                     stageResult.Analysis.Hir,
                     introduction),
-                InsertStatementPatchPlanStep insertion => FindInsertedDefinition(
+                InsertStatementPatchPlanStep { NewStatement: LocalLiteralDeclarationPatchStatement }
+                    insertion => FindInsertedDefinition(
                     stageResult.Analysis.Hir,
                     insertion),
                 _ => null,
             };
-            if (step is IntroduceTemporaryPatchPlanStep or InsertStatementPatchPlanStep)
+            if (ProducesLocal(step))
             {
                 if (introduced is null)
                 {
@@ -199,7 +200,7 @@ public sealed class CSharpPatchPlanApplier
                 }
             }
 
-            if (step is IntroduceTemporaryPatchPlanStep or InsertStatementPatchPlanStep)
+            if (ProducesLocal(step))
             {
                 producerMethods.Add(step.StepId, method!.Id);
             }
@@ -621,6 +622,10 @@ public sealed class CSharpPatchPlanApplier
             .ToArray();
         return candidates.Length == 1 ? candidates[0] : null;
     }
+
+    private static bool ProducesLocal(SemanticPatchPlanStep step) =>
+        step is IntroduceTemporaryPatchPlanStep or
+            InsertStatementPatchPlanStep { NewStatement: LocalLiteralDeclarationPatchStatement };
 
     private static bool TryGetStepMethod(
         SemanticPatchPlanStep step,

@@ -171,6 +171,47 @@ public sealed class SemanticPatchPlanJsonTests
     }
 
     [Fact]
+    public void Create_AllowsNonProducingIfInsertionButNotAReconnectHandleToIt()
+    {
+        SemanticId boolType = SemanticId.FromKey("System.Boolean");
+        SemanticId blockId = SemanticId.FromKey("if-plan-block");
+        var insertion = new InsertStatementPatchPlanStep(
+            "insertGuard",
+            blockId,
+            null,
+            SemanticId.FromKey("if-plan-next"),
+            new IfPatchStatement(new LocalReferencePatchExpression(
+                SemanticId.FromKey("if-plan-parameter"),
+                "ready",
+                boolType)));
+
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("if-plan-compilation"),
+            SemanticId.FromKey("if-plan-configuration"),
+            [insertion]);
+
+        string json = SemanticPatchPlanJson.Serialize(plan);
+        Assert.Equal(insertion, Assert.Single(SemanticPatchPlanJson.Deserialize(json).Steps));
+        Assert.Contains("\"statement\": \"if\"", json);
+
+        Assert.Throws<JsonException>(() => SemanticPatchPlanDocument.Create(
+            plan.SourceCompilationId,
+            plan.SemanticConfigurationId,
+            [
+                insertion,
+                new ReconnectValuePatchPlanStep(
+                    "invalidGuardHandle",
+                    SemanticId.FromKey("if-plan-consumer"),
+                    insertion.StepId,
+                    SemanticId.FromKey("if-plan-statement"),
+                    blockId,
+                    null,
+                    null,
+                    boolType),
+            ]));
+    }
+
+    [Fact]
     public void Create_RejectsReconnectThatReferencesAFutureIntroduction()
     {
         SemanticId floatType = SemanticId.FromKey("System.Single");

@@ -633,6 +633,245 @@ public sealed class CSharpSourcePatchApplierTests
     }
 
     [Fact]
+    public void Apply_InsertsTypedIfWithExplicitBlocksAndSynchronizesGraphLayout()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static bool Run(long damage, bool disabled)
+                {
+                    int marker = 10;
+                    return !disabled;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/InsertIf.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement marker = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+        SemanticId longType = GetTypeId(original, method.Parameters[0]);
+        SemanticId boolType = GetTypeId(original, method.Parameters[1]);
+        SemanticId intType = GetTypeId(original, marker);
+        PatchExpression condition = new BinaryPatchExpression(
+            "&&",
+            new BinaryPatchExpression(
+                ">",
+                new CastPatchExpression(
+                    "int",
+                    new LocalReferencePatchExpression(
+                        method.Parameters[0].Id,
+                        "damage",
+                        longType),
+                    intType),
+                new BinaryPatchExpression(
+                    "+",
+                    new LocalReferencePatchExpression(marker.Id, marker.Name, intType),
+                    new LiteralPatchExpression("10", intType),
+                    intType),
+                boolType),
+            new UnaryPatchExpression(
+                "!",
+                new LocalReferencePatchExpression(
+                    method.Parameters[1].Id,
+                    "disabled",
+                    boolType),
+                boolType),
+            boolType);
+        GraphDocument originalGraph = new HirGraphProjector().Project(
+            original.Hir,
+            original.Semantics);
+        GraphFunction originalFunction = Assert.Single(originalGraph.Functions);
+        var originalLayout = new GraphLayoutDocument(
+            GraphLayoutDocument.CurrentSchemaVersion,
+            [new GraphFunctionLayout(
+                originalFunction.Id,
+                originalFunction.Nodes.Select((node, index) => new GraphNodeLayout(
+                    node.Id,
+                    GraphNodePlacement.Placed,
+                    new GraphLayoutPoint(index * 200, index * 80),
+                    new GraphLayoutSize(220, 90),
+                    false)).ToArray(),
+                [],
+                [])],
+            []);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new InsertStatementPatchOperation(
+                method.Body.Id,
+                marker.Id,
+                returnStatement.Id,
+                new IfPatchStatement(condition))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains("if (", patchedSource);
+        Assert.Contains("damage", patchedSource);
+        Assert.Contains("!disabled", patchedSource);
+        Assert.Contains("        {\n        }\n        else\n        {\n        }", patchedSource);
+        HirMethodDeclaration changedMethod = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirIfStatement inserted = Assert.IsType<HirIfStatement>(changedMethod.Body.Statements[1]);
+        Assert.Empty(inserted.Then.Statements);
+        Assert.NotNull(inserted.Else);
+        Assert.Empty(inserted.Else.Statements);
+        HirBinaryExpression logicalAnd = Assert.IsType<HirBinaryExpression>(inserted.Condition);
+        Assert.Equal("&&", logicalAnd.Operator);
+        HirBinaryExpression comparison = Assert.IsType<HirBinaryExpression>(logicalAnd.Left);
+        Assert.Equal(">", comparison.Operator);
+        Assert.IsType<HirCastExpression>(comparison.Left);
+        HirBinaryExpression offset = Assert.IsType<HirBinaryExpression>(comparison.Right);
+        HirIdentifierExpression markerReference = Assert.IsType<HirIdentifierExpression>(offset.Left);
+        Assert.Equal(
+            marker.Id,
+            Assert.Single(
+                result.Analysis.Semantics!.Nodes,
+                binding => binding.NodeId == markerReference.Id).ReferencedSymbolId);
+        Assert.IsType<HirUnaryExpression>(logicalAnd.Right);
+        Assert.Equal(method.Body.Id, changedMethod.Body.Id);
+        Assert.Equal(marker.Id, changedMethod.Body.Statements[0].Id);
+        Assert.Equal(returnStatement.Id, changedMethod.Body.Statements[2].Id);
+
+        IdentitySidecarDocument beforeIdentity = Assert.Single(original.IdentitySidecars);
+        IdentitySidecarDocument afterIdentity = Assert.Single(result.Analysis.IdentitySidecars);
+        HashSet<SemanticId> beforeIds = beforeIdentity.Entries.Select(static entry => entry.Id).ToHashSet();
+        HashSet<SemanticId> afterIds = afterIdentity.Entries.Select(static entry => entry.Id).ToHashSet();
+        Assert.All(beforeIds, id => Assert.Contains(id, afterIds));
+        Assert.Equal(12, afterIds.Count - beforeIds.Count);
+        Assert.Empty(afterIdentity.Tombstones);
+
+        GraphDocument patchedGraph = new HirGraphProjector().Project(
+            result.Analysis.Hir,
+            result.Analysis.Semantics);
+        GraphFunction patchedFunction = Assert.Single(patchedGraph.Functions);
+        Assert.Contains(patchedFunction.Nodes, node => node.Id == inserted.Id && node.Kind == "branch");
+        GraphLayoutDocument synchronized = new GraphLayoutSynchronizer().Synchronize(
+            patchedGraph,
+            originalLayout);
+        GraphFunctionLayout synchronizedFunction = Assert.Single(synchronized.Functions);
+        HashSet<SemanticId> originalNodeIds = originalFunction.Nodes
+            .Select(static node => node.Id)
+            .ToHashSet();
+        Assert.Equal(
+            originalNodeIds.Count,
+            synchronizedFunction.Nodes.Count(node => originalNodeIds.Contains(node.NodeId)));
+        Assert.All(
+            synchronizedFunction.Nodes.Where(node => originalNodeIds.Contains(node.NodeId)),
+            static node => Assert.Equal(GraphNodePlacement.Placed, node.Placement));
+        GraphNodeLayout[] newLayouts = synchronizedFunction.Nodes
+            .Where(node => !originalNodeIds.Contains(node.NodeId))
+            .ToArray();
+        Assert.Equal(10, newLayouts.Length);
+        Assert.All(newLayouts, static node => Assert.Equal(GraphNodePlacement.Unplaced, node.Placement));
+        Assert.Empty(synchronized.OrphanedNodes);
+    }
+
+    [Fact]
+    public void Apply_RejectsIfConditionThatReferencesALaterLocal()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static bool Run()
+                {
+                    bool ready = true;
+                    return ready;
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            source,
+            "Game/RejectLaterIfSource.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement ready = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        SemanticId boolType = GetTypeId(original, ready);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new InsertStatementPatchOperation(
+                method.Body.Id,
+                null,
+                ready.Id,
+                new IfPatchStatement(new LocalReferencePatchExpression(
+                    ready.Id,
+                    ready.Name,
+                    boolType)))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.PatchedRequest);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.ValueSourceNotAvailable);
+    }
+
+    [Fact]
+    public void Apply_RejectsUnsafeGraphAuthoredOperator()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static bool Run(int value)
+                {
+                    return value > 0;
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            source,
+            "Game/RejectUnsafeIfExpression.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(
+            Assert.Single(method.Body.Statements));
+        HirBinaryExpression comparison = Assert.IsType<HirBinaryExpression>(returnStatement.Expression);
+        SemanticId intType = GetTypeId(original, method.Parameters[0]);
+        SemanticId boolType = GetTypeId(original, comparison);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new InsertStatementPatchOperation(
+                method.Body.Id,
+                null,
+                returnStatement.Id,
+                new IfPatchStatement(new BinaryPatchExpression(
+                    ">",
+                    new BinaryPatchExpression(
+                        "/",
+                        new LocalReferencePatchExpression(
+                            method.Parameters[0].Id,
+                            "value",
+                            intType),
+                        new LiteralPatchExpression("0", intType),
+                        intType),
+                    new LiteralPatchExpression("0", intType),
+                    boolType)))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.InvalidGraphExpression);
+    }
+
+    [Fact]
     public void Apply_RejectsInsertionWhenSiblingNameOrTypePreconditionIsStale()
     {
         CSharpCompilationRequest request = CSharpCompilationRequest.Single(Source, "Game/InsertConflict.cs");

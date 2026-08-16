@@ -24,4 +24,5 @@ public static class SemanticPatchDiagnosticCodes
     public const string UnsafeValueReconnection = "UVS3020";
     public const string PlanRequiresPersistentIdentity = "UVS3021";
     public const string InvalidPatchPlan = "UVS3022";
+    public const string InvalidGraphExpression = "UVS3023";
 }
