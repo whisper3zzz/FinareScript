@@ -37,6 +37,7 @@ public sealed record ReconnectArgumentPatchOperation(
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "statement")]
 [JsonDerivedType(typeof(LocalLiteralDeclarationPatchStatement), "localLiteralDeclaration")]
 [JsonDerivedType(typeof(IfPatchStatement), "if")]
+[JsonDerivedType(typeof(ReturnPatchStatement), "return")]
 public abstract record InsertPatchStatement;
 
 public sealed record LocalLiteralDeclarationPatchStatement(
@@ -78,11 +79,12 @@ public sealed record CastPatchExpression(
     PatchExpression Operand,
     SemanticId ExpectedTypeId) : PatchExpression(ExpectedTypeId);
 
-// The v0.6 structured-control-flow slice deliberately creates explicit empty
-// then/else blocks. Later protocol versions can add block handles and populate
-// those blocks without making this first operation recursively unbounded.
 public sealed record IfPatchStatement(
     PatchExpression Condition) : InsertPatchStatement;
+
+public sealed record ReturnPatchStatement(
+    PatchExpression? Expression,
+    SemanticId ExpectedReturnTypeId) : InsertPatchStatement;
 
 public sealed record InsertStatementPatchOperation(
     SemanticId TargetNodeId,
@@ -122,7 +124,7 @@ public sealed record SemanticPatchDocument(
     SemanticId SemanticConfigurationId,
     IReadOnlyList<SemanticPatchOperation> Operations)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.6";
+    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.7";
 
     public static SemanticPatchDocument Create(
         SemanticId sourceCompilationId,

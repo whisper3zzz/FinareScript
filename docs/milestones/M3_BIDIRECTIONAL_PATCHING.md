@@ -5,9 +5,12 @@
 Prove that a visual edit can become a localized C# source edit without creating
 a second language implementation or bypassing the existing compiler checks.
 
+Status: complete. The remaining general control/data-flow expansion belongs to
+M4 and builds on this frozen bidirectional transaction boundary.
+
 ## Implemented vertical slice
 
-- `unifiedscript.patch/v0.6` polymorphic JSON protocol
+- `unifiedscript.patch/v0.7` polymorphic JSON protocol
 - `replaceLiteral` operation targeted by HIR/Graph `SemanticId`
 - unary/binary `changeOperator` with result and operand type preconditions
 - same-invocation `reconnectArgument` with endpoint, type, and effect guards
@@ -15,15 +18,18 @@ a second language implementation or bypassing the existing compiler checks.
 - versioned graph-authored expressions for scalar literals, local/parameter
   references, casts, and bounded unary/binary operators
 - typed `if` insertion with explicit empty `then` and `else` blocks
+- typed terminal `return` insertion for non-async value and `void` methods
 - bounded `deleteStatement` with symbol-use and effect safety checks
 - `introduceTemporary` for stable, pure return/local-initializer expressions
 - `reconnectValue` from an existing local to an exactly typed stable consumer
-- `unifiedscript.patch-plan/v0.4` ordered multi-stage transaction protocol
+- `unifiedscript.patch-plan/v0.5` ordered multi-stage transaction protocol
 - plan steps for every bounded semantic patch operation
 - symbolic plan handles for local IDs allocated by `introduceTemporary` and
   local-literal `insertStatement`
 - symbolic `then`/`else` handles for blocks allocated by `if` insertion, with
-  ordered local-literal branch-body population
+  ordered local-literal and typed-return branch-body population
+- terminal branch-handle tracking that rejects unreachable later appends
+- unaffected-node identity pins around nested replacements
 - initial-context validation and safe internal baseline/sibling rebasing
 - repeated insertion-gap and invocation-endpoint rebasing
 - persistent-sidecar adoption between in-memory plan stages
@@ -172,7 +178,7 @@ The test and sample suite proves that:
     an earlier literal replacement;
 53. deleting a statement before a later descendant step fails atomically without
     returning the successful deletion; and
-54. both the shared-expression v0.3 plan and composed v0.3 CLI sample produce
+54. both the shared-expression and composed v0.5 CLI samples produce
     their documented final source and identity sidecars;
 55. patch JSON round-trips all five graph-authored expression variants and
     rejects expression trees deeper than the protocol bound;
@@ -196,7 +202,18 @@ The test and sample suite proves that:
 63. original identities and Graph layout survive atomic branch population,
     while every newly projected branch/condition/local node is unplaced; and
 64. the checked-in `PopulateGuard.plan.json` sample applies without exposing a
-    generated block ID.
+    generated block ID;
+65. value and `void` return payloads round-trip, bind to the current method's
+    exact return type, and reject mismatched or async/task-like methods;
+66. a return may be inserted only at a block end, and a later append to the same
+    symbolic branch is rejected as unreachable before plan execution;
+67. an early-return plan preserves every original identity and placed Graph
+    node while projecting the new return and control edges as unplaced nodes;
+68. a late wrong-type return rolls back the earlier generated `if` and branch;
+69. nested insertion pins unaffected exterior nodes, so a new same-valued branch
+    literal cannot steal a later target's persistent ID; and
+70. the checked-in `ReturnGuard.plan.json` sample emits a typed early return and
+    edits the original fallback literal in one atomic transaction.
 
 ## Deliberate limits
 
@@ -207,12 +224,15 @@ arbitrary data/control rewiring, delete
 returns/branches/blocks, reconcile declaration renames, compact tombstones, or
 automatically place graph nodes. Layout v0.1 does not persist viewport/session
 state, define a three-way merge driver, or choose an auto-layout algorithm.
-Standalone insertion accepts a local-literal declaration or an `if` skeleton.
+Standalone insertion accepts a local-literal declaration, an `if` skeleton, or
+a terminal return.
 The `if` condition accepts only graph-safe scalar types already present in bound
 semantics, a closed pure expression subset, and same-method references that are
 available at the exact insertion gap. It always creates empty explicit branch
-blocks. Patch-plan v0.4 can resolve those blocks symbolically, but branch-body
-payloads are limited to local declarations with literal initializers.
+blocks. Patch-plan v0.5 can resolve those blocks symbolically, but branch-body
+payloads are limited to local declarations with literal initializers and typed
+returns. A return must be last, must exactly match the current method return
+type, and does not yet support async or task-like methods.
 Deletion accepts only an unused local with no initializer or a literal
 initializer, or a resolved pure static call with effect-free simple arguments.
 Temporary introduction accepts only stable, pure value expressions in return or
@@ -222,7 +242,7 @@ operator effects model conditional evaluation, allocation, and throws.
 Value reconnection accepts only an existing, unshadowed local or a local
 produced by an earlier plan step that structurally dominates the containing
 statement and has the same graph-safe semantic type as
-the removable stable consumer. Patch-plan v0.4 composes every current bounded
+the removable stable consumer. Patch-plan v0.5 composes every current bounded
 operation and requires sidecars on target documents. A source handle may
 reference only an earlier temporary introduction, root-block local-literal
 insertion, or branch local-literal insertion in the same method with the same
@@ -233,8 +253,9 @@ transaction coordinator.
 
 ## Next slice
 
-Add bounded branch `return` and assignment payloads with explicit target/type/
-effect preconditions. This turns populated branch skeletons into behaviorally
-useful visual gestures while keeping statement synthesis closed. Then extend
-the expression payload only where type/effect rules remain statically closed,
-before moving to nested branch and loop-region construction.
+Begin M4 with a versioned `GraphRegion` model for function, block, `if`, `then`,
+and `else` ownership. Project the existing early-return sample into explicit
+regions before adding loop syntax. Then build CFG reachability, dominance,
+post-dominance, and reducibility indexes on those regions; only after those
+invariants are executable should the patch algebra grow bounded assignment,
+nested-branch construction, and `while`/`break`/`continue`.

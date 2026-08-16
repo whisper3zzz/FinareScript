@@ -172,6 +172,7 @@ public sealed class CSharpSourcePatchApplier
                     hirNodes,
                     patchIndex,
                     boundNodes,
+                    methods,
                     types,
                     documents),
                 DeleteStatementPatchOperation deleteStatement => PlanStatementDeletion(
@@ -223,7 +224,8 @@ public sealed class CSharpSourcePatchApplier
                 source,
                 documents[source.LogicalPath],
                 replacements,
-                effectiveSidecars.GetValueOrDefault(source.LogicalPath)))
+                effectiveSidecars.GetValueOrDefault(source.LogicalPath),
+                hirNodes))
             .ToArray();
         var patchedRequest = new CSharpCompilationRequest(
             request.AssemblyName,
@@ -633,6 +635,7 @@ public sealed class CSharpSourcePatchApplier
         IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
         HirPatchIndex patchIndex,
         IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, MethodDescriptor> methods,
         IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
         IReadOnlyDictionary<string, ParsedDocument> documents)
     {
@@ -659,6 +662,22 @@ public sealed class CSharpSourcePatchApplier
                 operation.ExpectedNextSiblingId);
         }
 
+        if (block.Statements.Take(insertionIndex).Any(static statement => statement is HirReturnStatement))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidStatement,
+                "A statement cannot be inserted after a terminal return because it would be unreachable.",
+                block);
+        }
+
+        if (operation.NewStatement is ReturnPatchStatement && insertionIndex != block.Statements.Count)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidStatement,
+                "A return statement can be inserted only at the end of an explicit block.",
+                block);
+        }
+
         StatementBuildResult statementResult = operation.NewStatement switch
         {
             LocalLiteralDeclarationPatchStatement local => BuildLocalLiteralStatement(
@@ -672,6 +691,15 @@ public sealed class CSharpSourcePatchApplier
                 hirNodes,
                 patchIndex,
                 boundNodes,
+                types),
+            ReturnPatchStatement returnStatement => BuildReturnStatement(
+                returnStatement,
+                blockLocation!,
+                insertionIndex,
+                hirNodes,
+                patchIndex,
+                boundNodes,
+                methods,
                 types),
             _ => StatementBuildResult.Failure(
                 SemanticPatchDiagnosticCodes.InvalidStatement,
@@ -1642,6 +1670,81 @@ public sealed class CSharpSourcePatchApplier
         return StatementBuildResult.Success(syntax);
     }
 
+    private static StatementBuildResult BuildReturnStatement(
+        ReturnPatchStatement returnStatement,
+        HirPatchIndex.BlockLocation blockLocation,
+        int insertionIndex,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, MethodDescriptor> methods,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types)
+    {
+        if (!methods.TryGetValue(blockLocation.Method.Id, out MethodDescriptor? method) ||
+            method.ReturnTypeId != returnStatement.ExpectedReturnTypeId ||
+            !types.TryGetValue(returnStatement.ExpectedReturnTypeId, out TypeDescriptor? returnType) ||
+            !returnType.IsGraphSafe)
+        {
+            return StatementBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.TypeMismatch,
+                $"Return payload type '{returnStatement.ExpectedReturnTypeId}' does not match the " +
+                $"graph-safe return type of method '{blockLocation.Method.Name}'.");
+        }
+
+        if (blockLocation.Method.IsAsync || returnType.Kind == UnifiedTypeKind.TaskLike)
+        {
+            return StatementBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.InvalidStatement,
+                "Return insertion for async or task-like methods is outside the current bounded slice.");
+        }
+
+        if (returnType.Kind == UnifiedTypeKind.Void)
+        {
+            return returnStatement.Expression is null
+                ? StatementBuildResult.Success(SyntaxFactory.ReturnStatement())
+                : StatementBuildResult.Failure(
+                    SemanticPatchDiagnosticCodes.TypeMismatch,
+                    "A void method return cannot carry a value expression.");
+        }
+
+        if (returnStatement.Expression is null)
+        {
+            return StatementBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.TypeMismatch,
+                $"Method '{blockLocation.Method.Name}' requires a return value of semantic type " +
+                $"'{returnStatement.ExpectedReturnTypeId}'.");
+        }
+
+        if (returnStatement.Expression.ExpectedTypeId != returnStatement.ExpectedReturnTypeId)
+        {
+            return StatementBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.TypeMismatch,
+                $"Return expression type '{returnStatement.Expression.ExpectedTypeId}' does not match " +
+                $"method return type '{returnStatement.ExpectedReturnTypeId}'.");
+        }
+
+        ExpressionBuildResult expression = BuildPatchExpression(
+            returnStatement.Expression,
+            blockLocation,
+            insertionIndex,
+            hirNodes,
+            patchIndex,
+            boundNodes,
+            types);
+        if (expression.Syntax is null || expression.Type?.Id != returnStatement.ExpectedReturnTypeId)
+        {
+            return StatementBuildResult.Failure(
+                expression.DiagnosticCode ?? SemanticPatchDiagnosticCodes.TypeMismatch,
+                expression.DiagnosticMessage ?? "The graph-authored return expression is invalid.");
+        }
+
+        ReturnStatementSyntax syntax = SyntaxFactory
+            .ReturnStatement(expression.Syntax)
+            .WithReturnKeyword(SyntaxFactory.Token(SyntaxKind.ReturnKeyword)
+                .WithTrailingTrivia(SyntaxFactory.Space));
+        return StatementBuildResult.Success(syntax);
+    }
+
     private static ExpressionBuildResult BuildPatchExpression(
         PatchExpression expression,
         HirPatchIndex.BlockLocation blockLocation,
@@ -2163,7 +2266,8 @@ public sealed class CSharpSourcePatchApplier
         CSharpSourceDocument source,
         ParsedDocument document,
         IReadOnlyDictionary<string, List<PendingReplacement>> replacements,
-        IdentitySidecarDocument? effectiveSidecar)
+        IdentitySidecarDocument? effectiveSidecar,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes)
     {
         if (!replacements.TryGetValue(source.LogicalPath, out List<PendingReplacement>? documentReplacements))
         {
@@ -2174,13 +2278,40 @@ public sealed class CSharpSourcePatchApplier
 
         IReadOnlyDictionary<TextSpan, PendingReplacement> bySpan = documentReplacements
             .ToDictionary(static replacement => replacement.Original.Span);
+        var globalAnnotations = new Dictionary<SyntaxNode, SyntaxAnnotation>();
+        var globalPins = new List<PendingPin>();
+        if (effectiveSidecar is not null)
+        {
+            foreach (IdentityEntry entry in effectiveSidecar.Entries)
+            {
+                if (!hirNodes.TryGetValue(entry.Id, out HirNode? hirNode) ||
+                    !string.Equals(hirNode.Span.FilePath, source.LogicalPath, StringComparison.Ordinal) ||
+                    !TryFindIdentitySyntax(document, hirNode, out SyntaxNode? syntax) ||
+                    documentReplacements.Any(replacement =>
+                        replacement.Original.Span.OverlapsWith(syntax!.Span)))
+                {
+                    continue;
+                }
+
+                var annotation = new SyntaxAnnotation(IdentityAnnotationKind, entry.Id.Value);
+                globalAnnotations.Add(syntax!, annotation);
+                globalPins.Add(new PendingPin(entry.Id, entry.Kind, annotation));
+            }
+        }
+
+        SyntaxNode[] changedNodes = documentReplacements
+            .Select(static replacement => replacement.Original)
+            .Concat(globalAnnotations.Keys)
+            .ToArray();
         SyntaxNode changedRoot = document.Root.ReplaceNodes(
-            documentReplacements.Select(static replacement => replacement.Original),
-            (original, _) => bySpan[original.Span].Syntax);
+            changedNodes,
+            (original, rewritten) => bySpan.TryGetValue(original.Span, out PendingReplacement? replacement)
+                ? replacement.Syntax
+                : rewritten.WithAdditionalAnnotations(globalAnnotations[original]));
         CSharpIdentityPin[] pins = effectiveSidecar is null
             ? []
-            : documentReplacements
-                .SelectMany(static replacement => replacement.Pins)
+            : documentReplacements.SelectMany(static replacement => replacement.Pins)
+                .Concat(globalPins)
                 .Select(pin => new CSharpIdentityPin(
                     pin.Id,
                     pin.Kind,
@@ -2194,6 +2325,41 @@ public sealed class CSharpSourcePatchApplier
             effectiveSidecar,
             pins);
     }
+
+    private static bool TryFindIdentitySyntax(
+        ParsedDocument document,
+        HirNode hirNode,
+        out SyntaxNode? syntax)
+    {
+        SyntaxNode[] matches = document.Root
+            .DescendantNodesAndSelf()
+            .Where(candidate => IdentitySyntaxMatches(hirNode, candidate) &&
+                RoslynSourceSpan.FromNode(candidate, document.Source.LogicalPath) == hirNode.Span)
+            .ToArray();
+        syntax = matches.Length == 1 ? matches[0] : null;
+        return syntax is not null;
+    }
+
+    private static bool IdentitySyntaxMatches(HirNode hirNode, SyntaxNode syntax) => hirNode switch
+    {
+        HirParameter => syntax is ParameterSyntax,
+        HirBlockStatement => syntax is BlockSyntax,
+        HirVariableDeclarationStatement => syntax is LocalDeclarationStatementSyntax,
+        HirExpressionStatement => syntax is ExpressionStatementSyntax,
+        HirIfStatement => syntax is IfStatementSyntax,
+        HirReturnStatement => syntax is ReturnStatementSyntax,
+        HirLiteralExpression => syntax is LiteralExpressionSyntax,
+        HirIdentifierExpression => syntax is IdentifierNameSyntax,
+        HirThisExpression => syntax is ThisExpressionSyntax,
+        HirMemberAccessExpression => syntax is MemberAccessExpressionSyntax,
+        HirInvocationExpression => syntax is InvocationExpressionSyntax,
+        HirBinaryExpression => syntax is BinaryExpressionSyntax,
+        HirUnaryExpression => syntax is PrefixUnaryExpressionSyntax or PostfixUnaryExpressionSyntax,
+        HirAssignmentExpression => syntax is AssignmentExpressionSyntax,
+        HirAwaitExpression => syntax is AwaitExpressionSyntax,
+        HirCastExpression => syntax is CastExpressionSyntax,
+        _ => false,
+    };
 
     private static OperationPlan? RequireType(
         HirNode node,

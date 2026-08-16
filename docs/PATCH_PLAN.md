@@ -2,9 +2,9 @@
 
 ## Purpose
 
-`unifiedscript.patch-plan/v0.4` represents one visual-editor gesture as an
+`unifiedscript.patch-plan/v0.5` represents one visual-editor gesture as an
 ordered, atomic sequence of the same bounded semantic operations supported by
-`unifiedscript.patch/v0.6`. It exists because a useful graph edit often needs
+`unifiedscript.patch/v0.7`. It exists because a useful graph edit often needs
 IDs created by an earlier edit or changes several overlapping source regions.
 Submitting those stages as unrelated filesystem transactions would expose
 partial programs and force the editor to predict random persistent IDs.
@@ -18,7 +18,7 @@ identity sidecar are eligible for a CLI filesystem transaction.
 
 ```json
 {
-  "schemaVersion": "unifiedscript.patch-plan/v0.4",
+  "schemaVersion": "unifiedscript.patch-plan/v0.5",
   "sourceCompilationId": "us_...",
   "semanticConfigurationId": "us_...",
   "steps": []
@@ -29,15 +29,15 @@ The source compilation and semantic configuration IDs are the external
 optimistic-concurrency baseline. Every step has a unique, non-empty `stepId`
 and a persistent `targetNodeId`.
 
-Version v0.4 supports these step discriminators:
+Version v0.5 supports these step discriminators:
 
 | `step` | Purpose | Structural result |
 | --- | --- | --- |
 | `replaceLiteral` | Replace one literal with a complete literal token | Target ID survives |
 | `changeOperator` | Change a unary/binary operator inside its result-preserving family | Operator node ID survives |
 | `reconnectArgument` | Exchange two pure, exactly typed positional arguments | Invocation and endpoint IDs survive |
-| `insertStatement` | Insert a local-literal declaration or typed `if` skeleton | Local payload produces a handle; `if` does not |
-| `insertBranchStatement` | Append a local-literal declaration to a produced `then` or `else` block | Consumes a branch handle and produces a local handle |
+| `insertStatement` | Insert a local-literal declaration, typed `if`, or terminal `return` | Local payload produces a handle; `if` produces branch handles |
+| `insertBranchStatement` | Append a local-literal declaration or terminal `return` to a produced branch | Consumes a branch handle; a local produces a value handle |
 | `deleteStatement` | Delete one proven-safe unused/effect-free statement | Removed subtree becomes tombstones |
 | `introduceTemporary` | Move one stable expression into a single-evaluation local | Produces a local handle |
 | `reconnectValue` | Replace a stable consumer with a produced local reference | Consumes a local handle |
@@ -103,12 +103,42 @@ branch block ID. The coordinator captures the real `Then.Id` and `Else.Id`
 after the producer stage and uses the selected ID in an ordinary internal
 `InsertStatementPatchOperation`.
 
-Branch statements append in plan order. Version v0.4 accepts only
-`localLiteralDeclaration` here, keeping recursive statement synthesis bounded.
-That declaration publishes its own `stepId` as a normal local handle. A later
+Branch statements append in plan order. Version v0.5 accepts
+`localLiteralDeclaration` or `return` here, keeping recursive statement
+synthesis bounded. A local declaration publishes its own `stepId` as a normal
+local handle. A later
 `reconnectValue` may consume it only where the existing structural-dominance
 rules make it available; a branch local therefore cannot escape its branch or
 feed its sibling branch.
+
+## Typed terminal returns
+
+A `return` payload contains an optional expression and the expected method
+return type:
+
+```json
+{
+  "statement": "return",
+  "expression": {
+    "expression": "literal",
+    "valueText": "true",
+    "expectedTypeId": "us_bool_type"
+  },
+  "expectedReturnTypeId": "us_bool_type"
+}
+```
+
+For a non-`void` method, the expression is required and its type ID must exactly
+equal both `expectedReturnTypeId` and the currently bound method return type. A
+`void` method requires a matching `System.Void` type ID and no expression.
+Async and task-like methods are rejected until the protocol distinguishes the
+declared task type from the value returned inside an async body.
+
+A return may be inserted only at the end of an explicit block. No insertion may
+follow an existing return. Because every `insertBranchStatement` appends, the
+v0.5 JSON validator records `(sourceStepId, branch)` as terminal after a return
+and rejects every later append to that same symbolic branch before any stage is
+executed. The other branch remains independently writable.
 
 ## Two-phase safety model
 
@@ -192,7 +222,7 @@ The CLI requires non-in-place source and sidecar outputs and commits both with
 the same backup-based transaction used by standalone patches. The input source
 remains unchanged.
 
-The branch-population sample demonstrates the v0.4 symbolic block path:
+The branch-population sample demonstrates the symbolic block path:
 
 ```bash
 dotnet run --project src/UnifiedScript.Cli -- \
@@ -208,18 +238,33 @@ It resolves one generated `then` block twice, preserving the two insertion
 steps' order, and resolves the generated `else` block once. The editor supplies
 no generated statement or block IDs.
 
+The typed early-return sample composes a same-valued new branch literal with a
+later edit to the original fallback literal. It also proves that nested-block
+insertion pins unaffected live nodes outside the replaced subtree, preventing
+same-shape identities from migrating to newly authored syntax:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  apply-plan \
+  samples/Patching/GuardRules.cs \
+  --identity samples/Patching/GuardRules.cs.usids \
+  --plan samples/Patching/ReturnGuard.plan.json \
+  --out artifacts/return-guard/GuardRules.cs \
+  --out-identity artifacts/return-guard/GuardRules.cs.usids
+```
+
 ## Deliberate limits
 
-Plan v0.4 composes all operations currently defined by patch v0.6 and adds
-symbolic `then`/`else` block resolution for local-literal branch population.
-It cannot yet insert returns, assignments, calls, nested branches, or arbitrary
-statement payloads through a branch handle. It has no cross-method or
-cross-document symbolic handle and does not support a handle to an arbitrary
-expression. Multi-document in-memory analysis remains available below the CLI,
-while the CLI commit boundary is still one source/identity pair.
+Plan v0.5 composes all operations currently defined by patch v0.7 and resolves
+symbolic `then`/`else` blocks for local-literal and typed-return population. It
+cannot yet insert assignments, calls, nested branches, or arbitrary statement
+payloads through a branch handle. It has no cross-method or cross-document
+symbolic handle and does not support a handle to an arbitrary expression.
+Multi-document in-memory analysis remains available below the CLI, while the
+CLI commit boundary is still one source/identity pair.
 
 There is no automatic reader migration for older patch-plan schemas; producers
 should reanalyze and emit the current schema and baselines. The original
 temporary-plus-reconnect and v0.2 composed step shapes remain representable in
-v0.4. Version v0.3 documents must be regenerated because the reader accepts
-only the current schema.
+v0.5. Older plan documents must be regenerated because the reader accepts only
+the current schema.

@@ -187,17 +187,18 @@ compilation identity is not safe for editing.
 ## Semantic patch transaction
 
 Graph schema v0.2 carries both the source compilation ID and semantic
-configuration ID. A `unifiedscript.patch/v0.6` document repeats those IDs and
+configuration ID. A `unifiedscript.patch/v0.7` document repeats those IDs and
 contains typed operations keyed by graph/HIR `SemanticId`. Implemented
 operations are `replaceLiteral`, `changeOperator`, `reconnectArgument`,
 `insertStatement`, `deleteStatement`, `introduceTemporary`, and
-`reconnectValue`. `insertStatement` accepts either a local-literal declaration
-or an `if` with a closed typed expression tree and explicit empty `then`/`else`
-blocks. Structural operations carry old operator/endpoint, semantic type,
+`reconnectValue`. `insertStatement` accepts a local-literal declaration, an
+`if` with a closed typed expression tree and explicit empty `then`/`else`
+blocks, or a typed terminal `return`. Structural operations carry old
+operator/endpoint, semantic type,
 containing statement, parent block, and exact sibling preconditions rather than
 relying only on the compilation baseline.
 
-`unifiedscript.patch-plan/v0.4` is an ordered transaction above individual
+`unifiedscript.patch-plan/v0.5` is an ordered transaction above individual
 patches. It composes every current bounded operation: literal and operator
 changes, argument reconnection, statement insertion/deletion, temporary
 introduction, value reconnection, and symbolic branch-body insertion.
@@ -212,6 +213,9 @@ An `if` insertion publishes internal `then`/`else` block handles for later
 definition. The branch steps repeat the producer's original parent block as
 their stable initial anchor; the coordinator records the generated branch IDs
 after the `if` stage and turns each append into a normal bounded insertion.
+Local-literal and typed-return payloads are accepted in a produced branch. A
+return terminates that branch handle, so later appends are rejected as
+unreachable while the sibling branch remains independent.
 The complete transaction and internal rebasing contract is specified in
 [PATCH_PLAN.md](PATCH_PLAN.md).
 
@@ -236,6 +240,10 @@ invocation arguments use the same pin mechanism. Statement insertion pins the
 existing block and direct siblings while leaving the new declaration and
 literal unpinned, so they receive fresh persistent IDs. Safe deletion pins the
 block and surviving siblings while the deleted subtree becomes tombstones.
+When an insertion replaces a nested block, unaffected live nodes elsewhere in
+the same document are also pinned. This prevents a newly authored same-shape
+literal or return from taking an exterior node's persistent ID during staged
+plan execution.
 
 Temporary introduction uses a HIR use/definition index and an expression
 location index. It moves a stable expression into a new local declaration
@@ -265,10 +273,12 @@ type-compatible positional arguments of one resolved invocation. The
 implemented temporary-introduction primitive now preserves C# evaluation count
 and order for one extracted value, and `reconnectValue` can connect later,
 dominated consumers to that definition. Statement editing is similarly bounded
-to local declarations with a literal initializer and deletion of unused
-literal locals or pure static-call statements. General expression synthesis,
-control-flow editing, declaration renaming, and general cross-expression
-rewiring remain future patch-algebra work.
+to local declarations with a literal initializer, typed non-async returns at
+the end of explicit blocks, and deletion of unused literal locals or pure
+static-call statements. Return values reuse the closed graph-authored scalar
+expression subset and must exactly match the bound method return type. General
+expression synthesis, assignment/call insertion, declaration renaming, and
+general cross-expression rewiring remain future patch-algebra work.
 
 The C# patch-plan coordinator validates every independently executable step in
 isolation against the initial HIR before changing its in-memory request;

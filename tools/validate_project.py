@@ -95,6 +95,7 @@ def main() -> int:
     guard_source_path = ROOT / "samples" / "Patching" / "GuardRules.cs"
     guard_document_path = ROOT / "samples" / "Patching" / "InsertGuard.patch.json"
     guard_plan_path = ROOT / "samples" / "Patching" / "PopulateGuard.plan.json"
+    guard_return_plan_path = ROOT / "samples" / "Patching" / "ReturnGuard.plan.json"
     guard_identity_path = ROOT / "samples" / "Patching" / "GuardRules.cs.usids"
     layout_path = ROOT / "samples" / "Layout" / "DamageRules.usgraph"
     require(
@@ -128,6 +129,7 @@ def main() -> int:
         guard_source_path.is_file()
         and guard_document_path.is_file()
         and guard_plan_path.is_file()
+        and guard_return_plan_path.is_file()
         and guard_identity_path.is_file(),
         "Missing typed branch-insertion or branch-population sample",
     )
@@ -150,6 +152,7 @@ def main() -> int:
     guard_source = guard_source_path.read_text(encoding="utf-8")
     guard_document = json.loads(guard_document_path.read_text(encoding="utf-8"))
     guard_plan = json.loads(guard_plan_path.read_text(encoding="utf-8"))
+    guard_return_plan = json.loads(guard_return_plan_path.read_text(encoding="utf-8"))
     guard_identity = json.loads(guard_identity_path.read_text(encoding="utf-8"))
     layout = json.loads(layout_path.read_text(encoding="utf-8"))
     patch_operation = patch_document["operations"][0]
@@ -165,10 +168,10 @@ def main() -> int:
     composed_source_digest = hashlib.sha256(composed_source.encode("utf-8")).hexdigest()
     guard_source_digest = hashlib.sha256(guard_source.encode("utf-8")).hexdigest()
     require(
-        patch_document["schemaVersion"] == "unifiedscript.patch/v0.6"
-        and operator_patch["schemaVersion"] == "unifiedscript.patch/v0.6"
-        and insert_patch["schemaVersion"] == "unifiedscript.patch/v0.6"
-        and temporary_patch["schemaVersion"] == "unifiedscript.patch/v0.6"
+        patch_document["schemaVersion"] == "unifiedscript.patch/v0.7"
+        and operator_patch["schemaVersion"] == "unifiedscript.patch/v0.7"
+        and insert_patch["schemaVersion"] == "unifiedscript.patch/v0.7"
+        and temporary_patch["schemaVersion"] == "unifiedscript.patch/v0.7"
         and operator_patch["sourceCompilationId"]
         == patch_document["sourceCompilationId"]
         and insert_patch["sourceCompilationId"]
@@ -216,7 +219,7 @@ def main() -> int:
         "Temporary-introduction sample does not contain the expected typed payload",
     )
     require(
-        reconnect_patch["schemaVersion"] == "unifiedscript.patch/v0.6"
+        reconnect_patch["schemaVersion"] == "unifiedscript.patch/v0.7"
         and reconnect_identity["sourcePath"]
         == "samples/Patching/SharedValueRules.cs"
         and reconnect_identity["sourceDigest"]
@@ -243,7 +246,7 @@ def main() -> int:
     introduction_step = plan_steps[0]
     reconnect_steps = plan_steps[1:]
     require(
-        plan_document["schemaVersion"] == "unifiedscript.patch-plan/v0.4"
+        plan_document["schemaVersion"] == "unifiedscript.patch-plan/v0.5"
         and plan_identity["sourcePath"]
         == "samples/Patching/SharedExpressionPlan.cs"
         and plan_identity["sourceDigest"] == f"sha256:{plan_source_digest}"
@@ -278,7 +281,7 @@ def main() -> int:
     composed_identity_ids = {entry["id"] for entry in composed_identity["entries"]}
     composed_insert, composed_reconnect, composed_operator, composed_delete = composed_steps
     require(
-        composed_document["schemaVersion"] == "unifiedscript.patch-plan/v0.4"
+        composed_document["schemaVersion"] == "unifiedscript.patch-plan/v0.5"
         and composed_identity["sourcePath"] == "samples/Patching/ComposedPlan.cs"
         and composed_identity["sourceDigest"] == f"sha256:{composed_source_digest}"
         and [step["step"] for step in composed_steps]
@@ -308,7 +311,7 @@ def main() -> int:
     guard_comparison = guard_condition["left"]
     guard_negation = guard_condition["right"]
     require(
-        guard_document["schemaVersion"] == "unifiedscript.patch/v0.6"
+        guard_document["schemaVersion"] == "unifiedscript.patch/v0.7"
         and guard_identity["sourcePath"] == "samples/Patching/GuardRules.cs"
         and guard_identity["sourceDigest"] == f"sha256:{guard_source_digest}"
         and guard_operation["operation"] == "insertStatement"
@@ -332,7 +335,7 @@ def main() -> int:
     guard_plan_steps = guard_plan["steps"]
     guard_plan_source, *guard_branch_steps = guard_plan_steps
     require(
-        guard_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.4"
+        guard_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.5"
         and guard_plan["sourceCompilationId"] == guard_document["sourceCompilationId"]
         and guard_plan["semanticConfigurationId"]
         == guard_document["semanticConfigurationId"]
@@ -350,6 +353,26 @@ def main() -> int:
             for step in guard_branch_steps
         ),
         "Atomic branch-population plan is inconsistent with the branch sample",
+    )
+    guard_return_source, guard_return_step, guard_fallback_step = guard_return_plan["steps"]
+    require(
+        guard_return_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.5"
+        and guard_return_plan["sourceCompilationId"] == guard_document["sourceCompilationId"]
+        and guard_return_plan["semanticConfigurationId"]
+        == guard_document["semanticConfigurationId"]
+        and guard_return_source["newStatement"] == guard_statement
+        and guard_return_step["step"] == "insertBranchStatement"
+        and guard_return_step["sourceStepId"] == guard_return_source["stepId"]
+        and guard_return_step["branch"] == "then"
+        and guard_return_step["newStatement"]["statement"] == "return"
+        and guard_return_step["newStatement"]["expression"]["valueText"] == "true"
+        and guard_return_step["newStatement"]["expression"]["expectedTypeId"]
+        == guard_return_step["newStatement"]["expectedReturnTypeId"]
+        and guard_fallback_step["step"] == "replaceLiteral"
+        and guard_fallback_step["targetNodeId"] in guard_identity_ids
+        and guard_fallback_step["expectedValueText"] == "true"
+        and guard_fallback_step["newValueText"] == "false",
+        "Typed early-return patch plan is inconsistent with the branch sample",
     )
     require(
         any((ROOT / "tests" / "UnifiedScript.Tests").glob("*Tests.cs")),

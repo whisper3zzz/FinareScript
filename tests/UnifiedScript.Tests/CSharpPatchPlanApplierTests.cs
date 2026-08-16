@@ -592,6 +592,198 @@ public sealed class CSharpPatchPlanApplierTests
     }
 
     [Fact]
+    public void Apply_InsertsTypedEarlyReturnIntoProducedThenBlock()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static bool Run(bool ready)
+                {
+                    return true;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/BranchReturnPlan.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement fallbackReturn = Assert.IsType<HirReturnStatement>(
+            Assert.Single(method.Body.Statements));
+        HirLiteralExpression fallbackLiteral = Assert.IsType<HirLiteralExpression>(fallbackReturn.Expression);
+        SemanticId boolType = GetTypeId(original, method);
+        IdentitySidecarDocument beforeIdentity = Assert.Single(original.IdentitySidecars);
+        GraphDocument beforeGraph = new HirGraphProjector().Project(original.Hir, original.Semantics);
+        GraphFunction beforeFunction = Assert.Single(beforeGraph.Functions);
+        GraphLayoutDocument beforeLayout = new(
+            GraphLayoutDocument.CurrentSchemaVersion,
+            [new GraphFunctionLayout(
+                beforeFunction.Id,
+                beforeFunction.Nodes.Select((node, index) => new GraphNodeLayout(
+                    node.Id,
+                    GraphNodePlacement.Placed,
+                    new GraphLayoutPoint(index * 100, index * 50),
+                    new GraphLayoutSize(160, 80),
+                    false)).ToArray(),
+                [],
+                [])],
+            []);
+        var guard = new InsertStatementPatchPlanStep(
+            "insertGuard",
+            method.Body.Id,
+            null,
+            fallbackReturn.Id,
+            new IfPatchStatement(new LocalReferencePatchExpression(
+                method.Parameters[0].Id,
+                "ready",
+                boolType)));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                guard,
+                new InsertBranchStatementPatchPlanStep(
+                    "returnWhenReady",
+                    method.Body.Id,
+                    guard.StepId,
+                    IfBranchKind.Then,
+                    new ReturnPatchStatement(
+                        new LiteralPatchExpression("true", boolType),
+                        boolType)),
+                new ReplaceLiteralPatchPlanStep(
+                    "replaceFallback",
+                    fallbackLiteral.Id,
+                    "true",
+                    "false"),
+            ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains("if (ready)\n        {\n            return true;", patchedSource, StringComparison.Ordinal);
+        Assert.Contains("return false;", patchedSource, StringComparison.Ordinal);
+
+        HirMethodDeclaration changedMethod = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirIfStatement insertedIf = Assert.IsType<HirIfStatement>(changedMethod.Body.Statements[0]);
+        HirReturnStatement branchReturn = Assert.IsType<HirReturnStatement>(
+            Assert.Single(insertedIf.Then.Statements));
+        Assert.Empty(insertedIf.Else!.Statements);
+        HirReturnStatement changedFallback = Assert.IsType<HirReturnStatement>(
+            changedMethod.Body.Statements[1]);
+        Assert.Equal(fallbackReturn.Id, changedFallback.Id);
+        Assert.Equal(
+            fallbackLiteral.Id,
+            Assert.IsType<HirLiteralExpression>(changedFallback.Expression).Id);
+        Assert.Equal(
+            "true",
+            Assert.IsType<HirLiteralExpression>(branchReturn.Expression).ValueText);
+        Assert.Equal(
+            "false",
+            Assert.IsType<HirLiteralExpression>(changedFallback.Expression).ValueText);
+
+        IdentitySidecarDocument afterIdentity = Assert.Single(result.Analysis.IdentitySidecars);
+        Assert.All(
+            beforeIdentity.Entries,
+            entry => Assert.Contains(afterIdentity.Entries, candidate => candidate.Id == entry.Id));
+        Assert.Empty(afterIdentity.Tombstones);
+
+        GraphDocument afterGraph = new HirGraphProjector().Project(
+            result.Analysis.Hir,
+            result.Analysis.Semantics);
+        GraphFunction afterFunction = Assert.Single(afterGraph.Functions);
+        Assert.Contains(afterFunction.Nodes, node => node.Id == insertedIf.Id && node.Kind == "branch");
+        Assert.Contains(afterFunction.Nodes, node => node.Id == branchReturn.Id && node.Kind == "return");
+        Assert.Contains(
+            afterFunction.Edges,
+            edge => edge.Kind == GraphEdgeKind.Control &&
+                edge.FromNode == insertedIf.Id &&
+                edge.FromPort == "then" &&
+                edge.ToNode == branchReturn.Id);
+        Assert.Contains(
+            afterFunction.Edges,
+            edge => edge.Kind == GraphEdgeKind.Control &&
+                edge.FromNode == insertedIf.Id &&
+                edge.FromPort == "else" &&
+                edge.ToNode == fallbackReturn.Id);
+
+        GraphLayoutDocument synchronized = new GraphLayoutSynchronizer().Synchronize(
+            afterGraph,
+            beforeLayout);
+        GraphFunctionLayout synchronizedFunction = Assert.Single(synchronized.Functions);
+        HashSet<SemanticId> oldGraphNodeIds = beforeFunction.Nodes
+            .Select(static node => node.Id)
+            .ToHashSet();
+        Assert.All(
+            synchronizedFunction.Nodes.Where(node => oldGraphNodeIds.Contains(node.NodeId)),
+            node => Assert.Equal(GraphNodePlacement.Placed, node.Placement));
+        Assert.All(
+            synchronizedFunction.Nodes.Where(node => !oldGraphNodeIds.Contains(node.NodeId)),
+            node => Assert.Equal(GraphNodePlacement.Unplaced, node.Placement));
+        Assert.Empty(synchronized.OrphanedNodes);
+    }
+
+    [Fact]
+    public void Apply_RollsBackIfProducedBranchReturnHasTheWrongValueType()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static bool Run(bool ready, int value)
+                {
+                    return false;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/BranchReturnRollback.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement fallbackReturn = Assert.IsType<HirReturnStatement>(
+            Assert.Single(method.Body.Statements));
+        SemanticId boolType = GetTypeId(original, method);
+        SemanticId intType = GetTypeId(original, method.Parameters[1]);
+        var guard = new InsertStatementPatchPlanStep(
+            "insertGuard",
+            method.Body.Id,
+            null,
+            fallbackReturn.Id,
+            new IfPatchStatement(new LocalReferencePatchExpression(
+                method.Parameters[0].Id,
+                "ready",
+                boolType)));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                guard,
+                new InsertBranchStatementPatchPlanStep(
+                    "invalidReturn",
+                    method.Body.Id,
+                    guard.StepId,
+                    IfBranchKind.Then,
+                    new ReturnPatchStatement(
+                        new LiteralPatchExpression("1", intType),
+                        boolType)),
+            ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.PatchedRequest);
+        Assert.Null(result.Analysis);
+        Assert.Equal(source, Assert.Single(request.Sources).Source);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.TypeMismatch);
+    }
+
+    [Fact]
     public void Apply_RollsBackWhenBranchLocalEscapesItsProducedBlock()
     {
         const string source = """

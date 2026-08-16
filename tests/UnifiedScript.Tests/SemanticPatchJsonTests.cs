@@ -176,6 +176,59 @@ public sealed class SemanticPatchJsonTests
     }
 
     [Fact]
+    public void SerializeAndDeserialize_PreserveValueAndVoidReturnStatements()
+    {
+        SemanticId boolType = SemanticId.FromKey("System.Boolean");
+        SemanticId voidType = SemanticId.FromKey("System.Void");
+        var valueReturn = new ReturnPatchStatement(
+            new LiteralPatchExpression("true", boolType),
+            boolType);
+        var voidReturn = new ReturnPatchStatement(null, voidType);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            SemanticId.FromKey("return-compilation"),
+            SemanticId.FromKey("return-configuration"),
+            [
+                new InsertStatementPatchOperation(
+                    SemanticId.FromKey("value-return-block"),
+                    null,
+                    null,
+                    valueReturn),
+                new InsertStatementPatchOperation(
+                    SemanticId.FromKey("void-return-block"),
+                    null,
+                    null,
+                    voidReturn),
+            ]);
+
+        string json = SemanticPatchJson.Serialize(patch);
+        SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
+
+        Assert.Equal(
+            valueReturn,
+            Assert.IsType<ReturnPatchStatement>(
+                Assert.IsType<InsertStatementPatchOperation>(roundTrip.Operations[0]).NewStatement));
+        Assert.Equal(
+            voidReturn,
+            Assert.IsType<ReturnPatchStatement>(
+                Assert.IsType<InsertStatementPatchOperation>(roundTrip.Operations[1]).NewStatement));
+        Assert.Contains("\"statement\": \"return\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"expectedReturnTypeId\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Create_RejectsReturnWithoutAnExpectedMethodType()
+    {
+        Assert.Throws<JsonException>(() => SemanticPatchDocument.Create(
+            SemanticId.FromKey("invalid-return-compilation"),
+            SemanticId.FromKey("invalid-return-configuration"),
+            [new InsertStatementPatchOperation(
+                SemanticId.FromKey("invalid-return-block"),
+                null,
+                null,
+                new ReturnPatchStatement(null, default))]));
+    }
+
+    [Fact]
     public void Create_RejectsExcessivelyDeepGraphExpression()
     {
         SemanticId boolType = SemanticId.FromKey("System.Boolean");

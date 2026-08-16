@@ -263,6 +263,60 @@ public sealed class SemanticPatchPlanJsonTests
     }
 
     [Fact]
+    public void SerializeAndDeserialize_PreserveBranchReturnAndRejectLaterUnreachableStep()
+    {
+        SemanticId boolType = SemanticId.FromKey("System.Boolean");
+        SemanticId blockId = SemanticId.FromKey("branch-return-block");
+        var guard = new InsertStatementPatchPlanStep(
+            "insertGuard",
+            blockId,
+            null,
+            null,
+            new IfPatchStatement(new LiteralPatchExpression("true", boolType)));
+        var thenReturn = new InsertBranchStatementPatchPlanStep(
+            "returnTrue",
+            blockId,
+            guard.StepId,
+            IfBranchKind.Then,
+            new ReturnPatchStatement(new LiteralPatchExpression("true", boolType), boolType));
+        var elseReturn = new InsertBranchStatementPatchPlanStep(
+            "returnFalse",
+            blockId,
+            guard.StepId,
+            IfBranchKind.Else,
+            new ReturnPatchStatement(new LiteralPatchExpression("false", boolType), boolType));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("branch-return-compilation"),
+            SemanticId.FromKey("branch-return-configuration"),
+            [guard, thenReturn, elseReturn]);
+
+        string json = SemanticPatchPlanJson.Serialize(plan);
+        SemanticPatchPlanDocument roundTrip = SemanticPatchPlanJson.Deserialize(json);
+
+        Assert.Equal(thenReturn, Assert.IsType<InsertBranchStatementPatchPlanStep>(roundTrip.Steps[1]));
+        Assert.Equal(elseReturn, Assert.IsType<InsertBranchStatementPatchPlanStep>(roundTrip.Steps[2]));
+        Assert.Contains("\"statement\": \"return\"", json, StringComparison.Ordinal);
+
+        Assert.Throws<JsonException>(() => SemanticPatchPlanDocument.Create(
+            plan.SourceCompilationId,
+            plan.SemanticConfigurationId,
+            [
+                guard,
+                thenReturn,
+                new InsertBranchStatementPatchPlanStep(
+                    "unreachableThenLocal",
+                    blockId,
+                    guard.StepId,
+                    IfBranchKind.Then,
+                    new LocalLiteralDeclarationPatchStatement(
+                        "unreachable",
+                        "bool",
+                        "false",
+                        boolType)),
+            ]));
+    }
+
+    [Fact]
     public void Create_RejectsInvalidBranchSourcesAnchorsAndPayloads()
     {
         SemanticId boolType = SemanticId.FromKey("System.Boolean");

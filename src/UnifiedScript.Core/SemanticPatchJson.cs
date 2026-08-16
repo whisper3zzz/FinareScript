@@ -189,6 +189,19 @@ public static class SemanticPatchJson
 
                 ValidatePatchExpression(ifStatement.Condition, 0);
                 break;
+            case ReturnPatchStatement returnStatement:
+                if (returnStatement.ExpectedReturnTypeId.IsEmpty)
+                {
+                    throw new JsonException(
+                        "A return insertion requires a non-empty expected method return type ID.");
+                }
+
+                if (returnStatement.Expression is not null)
+                {
+                    ValidatePatchExpression(returnStatement.Expression, 0);
+                }
+
+                break;
             default:
                 throw new JsonException(
                     $"Unsupported inserted statement payload '{operation.NewStatement.GetType().Name}'.");

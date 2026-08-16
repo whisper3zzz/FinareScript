@@ -50,6 +50,7 @@ public static class SemanticPatchPlanJson
         var targetKinds = new Dictionary<SemanticId, bool>();
         var producedTypes = new Dictionary<string, SemanticId>(StringComparer.Ordinal);
         var branchProducers = new Dictionary<string, InsertStatementPatchPlanStep>(StringComparer.Ordinal);
+        var terminatedBranches = new HashSet<(string SourceStepId, IfBranchKind Branch)>();
         foreach (SemanticPatchPlanStep? step in document.Steps)
         {
             if (step is null)
@@ -109,11 +110,19 @@ public static class SemanticPatchPlanJson
 
                     break;
                 case InsertBranchStatementPatchPlanStep branchInsertion:
-                    ValidateBranchInsertion(document, branchInsertion, branchProducers);
-                    producedTypes.Add(
-                        branchInsertion.StepId,
-                        ((LocalLiteralDeclarationPatchStatement)branchInsertion.NewStatement)
-                            .ExpectedTypeId);
+                    ValidateBranchInsertion(
+                        document,
+                        branchInsertion,
+                        branchProducers,
+                        terminatedBranches);
+                    if (branchInsertion.NewStatement is LocalLiteralDeclarationPatchStatement branchLocal)
+                    {
+                        producedTypes.Add(branchInsertion.StepId, branchLocal.ExpectedTypeId);
+                    }
+                    else if (branchInsertion.NewStatement is ReturnPatchStatement)
+                    {
+                        terminatedBranches.Add((branchInsertion.SourceStepId, branchInsertion.Branch));
+                    }
 
                     break;
                 case DeleteStatementPatchPlanStep deletion:
@@ -154,7 +163,8 @@ public static class SemanticPatchPlanJson
     private static void ValidateBranchInsertion(
         SemanticPatchPlanDocument document,
         InsertBranchStatementPatchPlanStep insertion,
-        IReadOnlyDictionary<string, InsertStatementPatchPlanStep> branchProducers)
+        IReadOnlyDictionary<string, InsertStatementPatchPlanStep> branchProducers,
+        IReadOnlySet<(string SourceStepId, IfBranchKind Branch)> terminatedBranches)
     {
         if (string.IsNullOrWhiteSpace(insertion.SourceStepId) ||
             !branchProducers.TryGetValue(
@@ -178,11 +188,18 @@ public static class SemanticPatchPlanJson
                 $"Branch insertion step '{insertion.StepId}' has an unsupported branch selector.");
         }
 
-        if (insertion.NewStatement is not LocalLiteralDeclarationPatchStatement)
+        if (terminatedBranches.Contains((insertion.SourceStepId, insertion.Branch)))
+        {
+            throw new JsonException(
+                $"Branch insertion step '{insertion.StepId}' would append an unreachable statement " +
+                $"after a return in the '{insertion.Branch}' branch of '{insertion.SourceStepId}'.");
+        }
+
+        if (insertion.NewStatement is not (LocalLiteralDeclarationPatchStatement or ReturnPatchStatement))
         {
             throw new JsonException(
                 $"Branch insertion step '{insertion.StepId}' currently accepts only a " +
-                "local-literal declaration.");
+                "local-literal declaration or return statement.");
         }
 
         ValidateOperation(document, new InsertStatementPatchOperation(

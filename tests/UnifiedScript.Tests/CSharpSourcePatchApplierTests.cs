@@ -819,6 +819,206 @@ public sealed class CSharpSourcePatchApplierTests
     }
 
     [Fact]
+    public void Apply_InsertsTypedEarlyReturnAtTheEndOfAnExistingBranch()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static bool Run(bool ready)
+                {
+                    if (ready)
+                    {
+                    }
+
+                    return false;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/InsertEarlyReturn.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirIfStatement existingIf = Assert.IsType<HirIfStatement>(method.Body.Statements[0]);
+        SemanticId boolType = GetTypeId(original, method);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new InsertStatementPatchOperation(
+                existingIf.Then.Id,
+                null,
+                null,
+                new ReturnPatchStatement(
+                    new LiteralPatchExpression("true", boolType),
+                    boolType))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Contains("if (ready)\n        {\n            return true;", Assert.Single(
+            result.PatchedRequest!.Sources).Source, StringComparison.Ordinal);
+        HirMethodDeclaration changedMethod = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirIfStatement changedIf = Assert.IsType<HirIfStatement>(changedMethod.Body.Statements[0]);
+        HirReturnStatement insertedReturn = Assert.IsType<HirReturnStatement>(
+            Assert.Single(changedIf.Then.Statements));
+        Assert.Equal("true", Assert.IsType<HirLiteralExpression>(insertedReturn.Expression).ValueText);
+        Assert.Equal(existingIf.Then.Id, changedIf.Then.Id);
+        Assert.Empty(Assert.Single(result.Analysis.IdentitySidecars).Tombstones);
+    }
+
+    [Fact]
+    public void Apply_InsertsVoidReturnWithoutAValue()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static void Run(bool ready)
+                {
+                    if (ready)
+                    {
+                    }
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            source,
+            "Game/InsertVoidReturn.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        Assert.True(original.Succeeded, string.Join(Environment.NewLine, original.Diagnostics));
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirIfStatement existingIf = Assert.IsType<HirIfStatement>(Assert.Single(method.Body.Statements));
+        SemanticId voidType = GetTypeId(original, method);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new InsertStatementPatchOperation(
+                existingIf.Then.Id,
+                null,
+                null,
+                new ReturnPatchStatement(null, voidType))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Contains("{\n            return;\n        }", Assert.Single(
+            result.PatchedRequest!.Sources).Source, StringComparison.Ordinal);
+        HirIfStatement changedIf = Assert.IsType<HirIfStatement>(Assert.Single(
+            Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods).Body.Statements));
+        Assert.Null(Assert.IsType<HirReturnStatement>(Assert.Single(changedIf.Then.Statements)).Expression);
+    }
+
+    [Fact]
+    public void Apply_RejectsWrongReturnTypeAndInsertionAfterReturn()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static bool Run(int value)
+                {
+                    if (value > 0)
+                    {
+                    }
+
+                    return false;
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            source,
+            "Game/RejectInvalidReturn.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        Assert.True(original.Succeeded, string.Join(Environment.NewLine, original.Diagnostics));
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirIfStatement existingIf = Assert.IsType<HirIfStatement>(method.Body.Statements[0]);
+        HirReturnStatement existingReturn = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+        SemanticId boolType = GetTypeId(original, method);
+        SemanticId intType = GetTypeId(original, method.Parameters[0]);
+        SemanticPatchDocument wrongType = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new InsertStatementPatchOperation(
+                existingIf.Then.Id,
+                null,
+                null,
+                new ReturnPatchStatement(
+                    new LiteralPatchExpression("1", intType),
+                    boolType))]);
+        SemanticPatchDocument unreachable = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics.ConfigurationId,
+            [new InsertStatementPatchOperation(
+                method.Body.Id,
+                existingReturn.Id,
+                null,
+                new LocalLiteralDeclarationPatchStatement("late", "bool", "true", boolType))]);
+
+        CSharpPatchResult wrongTypeResult = new CSharpSourcePatchApplier().Apply(request, wrongType);
+        CSharpPatchResult unreachableResult = new CSharpSourcePatchApplier().Apply(request, unreachable);
+
+        Assert.False(wrongTypeResult.Succeeded);
+        Assert.Contains(
+            wrongTypeResult.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.TypeMismatch);
+        Assert.False(unreachableResult.Succeeded);
+        Assert.Contains(
+            unreachableResult.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.InvalidStatement);
+    }
+
+    [Fact]
+    public void Apply_RejectsReturnInsertionForAsyncTaskLikeMethod()
+    {
+        const string source = """
+            using System.Threading.Tasks;
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static async Task<int> Run(bool ready)
+                {
+                    if (ready)
+                    {
+                    }
+
+                    return 1;
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            source,
+            "Game/RejectAsyncReturn.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        Assert.True(original.Succeeded, string.Join(Environment.NewLine, original.Diagnostics));
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirIfStatement existingIf = Assert.IsType<HirIfStatement>(method.Body.Statements[0]);
+        SemanticId taskType = GetTypeId(original, method);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new InsertStatementPatchOperation(
+                existingIf.Then.Id,
+                null,
+                null,
+                new ReturnPatchStatement(null, taskType))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.InvalidStatement);
+    }
+
+    [Fact]
     public void Apply_RejectsUnsafeGraphAuthoredOperator()
     {
         const string source = """

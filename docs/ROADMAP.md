@@ -49,6 +49,8 @@ Outcome: Roslyn symbols bind into a language-independent type/effect model.
 
 Outcome: graph patches produce localized, format-preserving C# edits.
 
+Status: complete. Broader control/data-flow editing continues under M4.
+
 - [x] versioned semantic patch protocol
 - [x] source compilation and semantic configuration preconditions
 - [x] localized literal replacement by graph/HIR `SemanticId`
@@ -77,21 +79,23 @@ Outcome: graph patches produce localized, format-preserving C# edits.
 - [x] versioned scalar graph-authored expression payload
 - [x] first typed `if` synthesis with explicit empty branch blocks
 - [x] symbolic branch-block handles and ordered local-literal branch-body population
-- [ ] bounded branch return and assignment payloads
-- [ ] general statement/control-flow synthesis and structural HIR operations
+- [x] typed branch return payloads and terminal-step/unreachable guards
+- [x] unaffected-node identity pinning for nested staged insertions
 - [x] graph layout sidecar with deterministic JSON, orphan recovery, and CLI sync
-- [ ] general data/control rewiring
 
 ## M4 — Structured control flow expansion
 
 Outcome: practical gameplay methods are fully visualizable.
 
-- `while`, `for`, and `foreach`
-- `switch` and supported patterns
-- conditional and null-conditional expressions
-- explicit graph regions for branches and loops
-- reducibility validation
-- deterministic temporary naming
+- [ ] explicit graph regions for functions, blocks, branches, and loops
+- [ ] CFG reachability, dominance, post-dominance, and reducibility validation
+- [ ] bounded local assignment and general data/control rewiring
+- [ ] nested branch construction and structural HIR operations
+- [ ] `while`, `break`, and `continue`
+- [ ] `for` and `foreach`
+- [ ] `switch` and supported patterns
+- [ ] conditional and null-conditional expressions
+- [ ] deterministic temporary naming
 
 ## M5 — CoreCLR execution backend
 
