@@ -77,7 +77,7 @@ public sealed class SemanticPatchJsonTests
     }
 
     [Fact]
-    public void SerializeAndDeserialize_PreserveStatementOperationsAndSiblingPreconditions()
+    public void SerializeAndDeserialize_PreserveStatementTemporaryAndSiblingPreconditions()
     {
         SemanticId blockId = SemanticId.FromKey("statement-block");
         SemanticId returnId = SemanticId.FromKey("statement-return");
@@ -93,21 +93,34 @@ public sealed class SemanticPatchJsonTests
             blockId,
             null,
             returnId);
+        var introduceTemporary = new IntroduceTemporaryPatchOperation(
+            SemanticId.FromKey("statement-expression"),
+            returnId,
+            blockId,
+            null,
+            null,
+            "sharedValue",
+            "float",
+            floatType);
         SemanticPatchDocument patch = SemanticPatchDocument.Create(
             SemanticId.FromKey("statement-compilation"),
             SemanticId.FromKey("statement-configuration"),
-            [insert, delete]);
+            [insert, delete, introduceTemporary]);
 
         string json = SemanticPatchJson.Serialize(patch);
         SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
 
         Assert.Equal(insert, Assert.IsType<InsertStatementPatchOperation>(roundTrip.Operations[0]));
         Assert.Equal(delete, Assert.IsType<DeleteStatementPatchOperation>(roundTrip.Operations[1]));
+        Assert.Equal(
+            introduceTemporary,
+            Assert.IsType<IntroduceTemporaryPatchOperation>(roundTrip.Operations[2]));
         Assert.IsType<LocalLiteralDeclarationPatchStatement>(
             Assert.IsType<InsertStatementPatchOperation>(roundTrip.Operations[0]).NewStatement);
         Assert.Contains("\"operation\": \"insertStatement\"", json);
         Assert.Contains("\"statement\": \"localLiteralDeclaration\"", json);
         Assert.Contains("\"operation\": \"deleteStatement\"", json);
+        Assert.Contains("\"operation\": \"introduceTemporary\"", json);
     }
 
     [Fact]
@@ -158,6 +171,25 @@ public sealed class SemanticPatchJsonTests
                     SemanticId.FromKey("block"),
                     siblingId,
                     siblingId),
+            ]));
+    }
+
+    [Fact]
+    public void Create_RejectsTemporaryWithoutAContainingStatement()
+    {
+        Assert.Throws<JsonException>(() => SemanticPatchDocument.Create(
+            SemanticId.FromKey("compilation"),
+            SemanticId.FromKey("configuration"),
+            [
+                new IntroduceTemporaryPatchOperation(
+                    SemanticId.FromKey("expression"),
+                    default,
+                    SemanticId.FromKey("block"),
+                    null,
+                    null,
+                    "sharedValue",
+                    "float",
+                    SemanticId.FromKey("System.Single")),
             ]));
     }
 }

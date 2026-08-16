@@ -22,6 +22,8 @@ The repository currently implements:
 - a versioned semantic patch protocol with source/configuration conflict guards;
 - transactional graph-to-C# literal, operator, argument-connection, and bounded
   statement rewriting;
+- use/definition indexing and safe extraction of stable expressions into
+  single-evaluation C# temporaries;
 - opt-in `.usids` sidecars that preserve node identity across formatting and edits;
 - explicit patch identity pins and tombstones for deleted semantic nodes;
 - versioned HIR, semantics, and graph JSON emission through a small CLI;
@@ -153,7 +155,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
   --out-identity artifacts/patched/DamageRules.cs.usids
 ```
 
-`unifiedscript.patch/v0.3` binds every patch to both the source compilation ID
+`unifiedscript.patch/v0.4` binds every patch to both the source compilation ID
 and semantic configuration ID emitted in Graph schema v0.2. A `replaceLiteral`
 operation also carries the expected old literal text. A stale source, changed
 reference/effect configuration, missing target, changed old value, non-literal
@@ -167,7 +169,7 @@ ambiguous matches allocate new IDs and emit `UVS3101` rather than guessing.
 
 ## Apply structural graph patches
 
-Patch v0.3 includes `changeOperator` and `reconnectArgument`. The checked-in
+Patch v0.4 includes `changeOperator` and `reconnectArgument`. The checked-in
 operator sample changes the binary node from multiplication to division while
 requiring the expected result, left-port, and right-port type IDs:
 
@@ -203,7 +205,7 @@ single-document.
 
 ## Apply a statement insertion
 
-Patch v0.3 also introduces bounded `insertStatement` and `deleteStatement`
+Patch v0.4 also includes bounded `insertStatement` and `deleteStatement`
 operations. The insertion sample adds a graph-authored local declaration before
 the existing return statement:
 
@@ -237,6 +239,49 @@ statements retain their IDs and comments; every ID in the deleted subtree moves
 to the sidecar tombstones. Sibling, type, name, reference, and effect checks are
 optimistic-concurrency preconditions: any failure rejects the whole patch.
 
+## Introduce a single-evaluation temporary
+
+`introduceTemporary` extracts one existing stable expression into a typed local
+immediately before its containing statement. The original expression moves to
+the initializer and keeps its persistent ID; a new identifier replaces the old
+position:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  apply-patch \
+  samples/Patching/DamageRules.cs \
+  --identity samples/Patching/DamageRules.cs.usids \
+  --patch samples/Patching/IntroduceScaledDamage.patch.json \
+  --out artifacts/temporary/DamageRules.cs \
+  --out-identity artifacts/temporary/DamageRules.cs.usids
+```
+
+The sample produces:
+
+```csharp
+float scaledDamage = damage * 1.0f;
+return scaledDamage;
+```
+
+The operation records the target expression, containing statement, parent
+block, exact adjacent siblings, temporary name, and expected semantic type. The
+current slice accepts return values and local initializers in explicit blocks.
+The complete containing expression must consist only of literals, parameter or
+local references, supported operators/casts, and resolved pure static calls
+with equally stable arguments. Member/state reads, assignments, mutation,
+awaits, unknown/effectful calls, branches, and expression statements are
+rejected rather than reordered. Short-circuit operators, division/remainder,
+decimal operators, and string operators are also excluded in this slice because
+the current builtin-effect model cannot yet prove that speculative or reordered
+evaluation is non-throwing and allocation-free.
+
+Every pre-existing expression in the changed statement receives an identity
+pin. The moved expression, its descendants, the containing statement, sibling
+statements, and parent block therefore retain their IDs. Only the new local
+declaration and replacement identifier allocate new IDs. This is the first
+lowering primitive needed to represent a shared Graph value without duplicating
+C# evaluation; connecting additional consumers remains a later operation.
+
 ## Repository layout
 
 ```text
@@ -262,7 +307,8 @@ This milestone does not include:
 - namespace/API allow and deny policies;
 - flow-sensitive nullable state in the interchange model;
 - general expression/statement synthesis and cross-expression rewiring beyond
-  the bounded local-literal insertion and safe deletion slice;
+  the bounded local-literal insertion, safe deletion, and temporary-introduction
+  slices;
 - loops, switch, lambdas, exceptions, or general-purpose C# visualization.
 
 See [ARCHITECTURE.md](docs/ARCHITECTURE.md),

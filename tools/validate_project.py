@@ -79,12 +79,14 @@ def main() -> int:
     patch_document_path = ROOT / "samples" / "Patching" / "ScaleDamage.patch.json"
     operator_patch_path = ROOT / "samples" / "Patching" / "DivideDamage.patch.json"
     insert_patch_path = ROOT / "samples" / "Patching" / "InsertScale.patch.json"
+    temporary_patch_path = ROOT / "samples" / "Patching" / "IntroduceScaledDamage.patch.json"
     patch_identity_path = ROOT / "samples" / "Patching" / "DamageRules.cs.usids"
     require(
         patch_source_path.is_file()
         and patch_document_path.is_file()
         and operator_patch_path.is_file()
         and insert_patch_path.is_file()
+        and temporary_patch_path.is_file()
         and patch_identity_path.is_file(),
         "Missing bidirectional patch sample",
     )
@@ -92,25 +94,44 @@ def main() -> int:
     patch_document = json.loads(patch_document_path.read_text(encoding="utf-8"))
     operator_patch = json.loads(operator_patch_path.read_text(encoding="utf-8"))
     insert_patch = json.loads(insert_patch_path.read_text(encoding="utf-8"))
+    temporary_patch = json.loads(temporary_patch_path.read_text(encoding="utf-8"))
     patch_identity = json.loads(patch_identity_path.read_text(encoding="utf-8"))
     patch_operation = patch_document["operations"][0]
     operator_operation = operator_patch["operations"][0]
     insert_operation = insert_patch["operations"][0]
+    temporary_operation = temporary_patch["operations"][0]
     identity_ids = {entry["id"] for entry in patch_identity["entries"]}
     source_digest = hashlib.sha256(patch_source.encode("utf-8")).hexdigest()
     require(
-        patch_document["schemaVersion"] == "unifiedscript.patch/v0.3"
-        and operator_patch["schemaVersion"] == "unifiedscript.patch/v0.3"
-        and insert_patch["schemaVersion"] == "unifiedscript.patch/v0.3"
+        patch_document["schemaVersion"] == "unifiedscript.patch/v0.4"
+        and operator_patch["schemaVersion"] == "unifiedscript.patch/v0.4"
+        and insert_patch["schemaVersion"] == "unifiedscript.patch/v0.4"
+        and temporary_patch["schemaVersion"] == "unifiedscript.patch/v0.4"
+        and operator_patch["sourceCompilationId"]
+        == patch_document["sourceCompilationId"]
+        and insert_patch["sourceCompilationId"]
+        == patch_document["sourceCompilationId"]
+        and temporary_patch["sourceCompilationId"]
+        == patch_document["sourceCompilationId"]
+        and operator_patch["semanticConfigurationId"]
+        == patch_document["semanticConfigurationId"]
+        and insert_patch["semanticConfigurationId"]
+        == patch_document["semanticConfigurationId"]
+        and temporary_patch["semanticConfigurationId"]
+        == patch_document["semanticConfigurationId"]
         and patch_identity["sourcePath"] == "samples/Patching/DamageRules.cs"
         and patch_identity["sourceDigest"] == f"sha256:{source_digest}"
         and patch_operation["operation"] == "replaceLiteral"
         and operator_operation["operation"] == "changeOperator"
         and insert_operation["operation"] == "insertStatement"
+        and temporary_operation["operation"] == "introduceTemporary"
         and patch_operation["targetNodeId"] in identity_ids
         and operator_operation["targetNodeId"] in identity_ids
         and insert_operation["targetNodeId"] in identity_ids
         and insert_operation["expectedNextSiblingId"] in identity_ids
+        and temporary_operation["targetNodeId"] in identity_ids
+        and temporary_operation["expectedContainingStatementId"] in identity_ids
+        and temporary_operation["expectedParentBlockId"] in identity_ids
         and patch_operation["expectedValueText"] in patch_source
         and operator_operation["expectedOperator"] in patch_source
         and operator_operation["expectedOperator"] != operator_operation["newOperator"],
@@ -124,6 +145,13 @@ def main() -> int:
         and inserted_statement["valueText"] == "2.0f"
         and inserted_statement["expectedTypeId"].startswith("us_"),
         "Statement insertion sample does not contain the expected typed payload",
+    )
+    require(
+        temporary_operation["name"] == "scaledDamage"
+        and temporary_operation["typeName"] == "float"
+        and temporary_operation["expectedTypeId"]
+        == inserted_statement["expectedTypeId"],
+        "Temporary-introduction sample does not contain the expected typed payload",
     )
     require(
         any((ROOT / "tests" / "UnifiedScript.Tests").glob("*Tests.cs")),

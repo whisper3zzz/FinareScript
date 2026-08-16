@@ -866,6 +866,284 @@ public sealed class CSharpSourcePatchApplierTests
     }
 
     [Fact]
+    public void Apply_IntroducesTemporaryForNestedPureExpressionAndPreservesExistingIdentities()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static float Run(float damage)
+                {
+                    return damage * 2.0f + 1.0f;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/IntroduceTemporary.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(Assert.Single(method.Body.Statements));
+        HirBinaryExpression target = Assert.Single(
+            returnStatement.DescendantsAndSelf()
+                .OfType<HirBinaryExpression>(),
+            static binary => binary.Operator == "*");
+        HirBinaryExpression outer = Assert.IsType<HirBinaryExpression>(returnStatement.Expression);
+        SemanticId floatType = GetTypeId(original, target);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new IntroduceTemporaryPatchOperation(
+                target.Id,
+                returnStatement.Id,
+                method.Body.Id,
+                null,
+                null,
+                "sharedDamage",
+                "float",
+                floatType)]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains(
+            "float sharedDamage = damage * 2.0f;\n        return sharedDamage + 1.0f;",
+            patchedSource);
+        HirMethodDeclaration changedMethod = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirVariableDeclarationStatement temporary = Assert.IsType<HirVariableDeclarationStatement>(
+            changedMethod.Body.Statements[0]);
+        HirBinaryExpression movedTarget = Assert.IsType<HirBinaryExpression>(temporary.Initializer);
+        HirReturnStatement changedReturn = Assert.IsType<HirReturnStatement>(changedMethod.Body.Statements[1]);
+        HirBinaryExpression changedOuter = Assert.IsType<HirBinaryExpression>(changedReturn.Expression);
+        HirIdentifierExpression temporaryUse = Assert.IsType<HirIdentifierExpression>(changedOuter.Left);
+        Assert.Equal(target.Id, movedTarget.Id);
+        Assert.Equal(outer.Id, changedOuter.Id);
+        Assert.Equal(returnStatement.Id, changedReturn.Id);
+        Assert.Equal(method.Body.Id, changedMethod.Body.Id);
+
+        BoundNodeInfo useBinding = Assert.Single(
+            result.Analysis.Semantics!.Nodes,
+            binding => binding.NodeId == temporaryUse.Id);
+        Assert.Equal(temporary.Id, useBinding.ReferencedSymbolId);
+
+        IdentitySidecarDocument before = Assert.Single(original.IdentitySidecars);
+        IdentitySidecarDocument after = Assert.Single(result.Analysis.IdentitySidecars);
+        HashSet<SemanticId> afterIds = after.Entries.Select(static entry => entry.Id).ToHashSet();
+        Assert.All(before.Entries, entry => Assert.Contains(entry.Id, afterIds));
+        Assert.Equal(before.Entries.Count + 2, after.Entries.Count);
+        Assert.Empty(after.Tombstones);
+
+        GraphDocument graph = new HirGraphProjector().Project(
+            result.Analysis.Hir,
+            result.Analysis.Semantics);
+        GraphNode graphUse = Assert.Single(
+            Assert.Single(graph.Functions).Nodes,
+            node => node.Id == temporaryUse.Id);
+        Assert.Equal(temporary.Id.Value, graphUse.Properties["referencedSymbolId"]);
+    }
+
+    [Fact]
+    public void Apply_IntroducesTemporaryBeforeLocalInitializerWithSiblingGuards()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static float Run(float damage)
+                {
+                    float scaled = damage * 2.0f;
+                    return scaled;
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            source,
+            "Game/IntroduceBeforeLocal.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement local = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+        HirExpression target = local.Initializer!;
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new IntroduceTemporaryPatchOperation(
+                target.Id,
+                local.Id,
+                method.Body.Id,
+                null,
+                returnStatement.Id,
+                "sharedDamage",
+                "float",
+                GetTypeId(original, target))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Contains(
+            "float sharedDamage = damage * 2.0f;\n        float scaled = sharedDamage;",
+            Assert.Single(result.PatchedRequest!.Sources).Source);
+    }
+
+    [Fact]
+    public void Apply_IntroducesTemporaryForResolvedPureStaticCall()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static float Run(float value)
+                {
+                    return System.MathF.Abs(value) + 1.0f;
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            source,
+            "Game/PureCallTemporary.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(Assert.Single(method.Body.Statements));
+        HirInvocationExpression invocation = Assert.Single(
+            returnStatement.DescendantsAndSelf().OfType<HirInvocationExpression>());
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new IntroduceTemporaryPatchOperation(
+                invocation.Id,
+                returnStatement.Id,
+                method.Body.Id,
+                null,
+                null,
+                "magnitude",
+                "float",
+                GetTypeId(original, invocation))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Contains(
+            "float magnitude = System.MathF.Abs(value);\n        return magnitude + 1.0f;",
+            Assert.Single(result.PatchedRequest!.Sources).Source);
+    }
+
+    [Fact]
+    public void Apply_RejectsTemporaryIntroductionAcrossEffectfulEvaluationOrStaleContext()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Api
+            {
+                public static float Read() => 1.0f;
+            }
+
+            static class Script
+            {
+                [Visual]
+                static float Run(float value)
+                {
+                    return Api.Read() + value;
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            source,
+            "Game/UnsafeTemporary.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        HirMethodDeclaration method = Assert.Single(
+            Assert.Single(original.Hir!.Types, static type => type.Name == "Script").Methods);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(Assert.Single(method.Body.Statements));
+        HirIdentifierExpression target = Assert.Single(
+            returnStatement.DescendantsAndSelf()
+                .OfType<HirIdentifierExpression>(),
+            static identifier => identifier.Name == "value");
+        SemanticId floatType = GetTypeId(original, target);
+        IntroduceTemporaryPatchOperation operation = new(
+            target.Id,
+            returnStatement.Id,
+            method.Body.Id,
+            null,
+            null,
+            "sharedValue",
+            "float",
+            floatType);
+        SemanticPatchDocument unsafePatch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [operation]);
+        SemanticPatchDocument stalePatch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics.ConfigurationId,
+            [operation with { ExpectedContainingStatementId = SemanticId.FromKey("stale-statement") }]);
+
+        CSharpPatchResult unsafeResult = new CSharpSourcePatchApplier().Apply(request, unsafePatch);
+        CSharpPatchResult staleResult = new CSharpSourcePatchApplier().Apply(request, stalePatch);
+
+        Assert.False(unsafeResult.Succeeded);
+        Assert.Contains(
+            unsafeResult.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.UnsafeTemporaryIntroduction);
+        Assert.False(staleResult.Succeeded);
+        Assert.Contains(
+            staleResult.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.PreconditionFailed);
+    }
+
+    [Fact]
+    public void Apply_RejectsTemporaryIntroductionAcrossShortCircuitEvaluation()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static bool Run(bool enabled, int value, int divisor)
+                {
+                    return enabled && value / divisor > 1;
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            source,
+            "Game/ShortCircuitTemporary.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(Assert.Single(method.Body.Statements));
+        HirBinaryExpression division = Assert.Single(
+            returnStatement.DescendantsAndSelf().OfType<HirBinaryExpression>(),
+            static binary => binary.Operator == "/");
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new IntroduceTemporaryPatchOperation(
+                division.Id,
+                returnStatement.Id,
+                method.Body.Id,
+                null,
+                null,
+                "quotient",
+                "int",
+                GetTypeId(original, division))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.PatchedRequest);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.UnsafeTemporaryIntroduction);
+    }
+
+    [Fact]
     public void Analyze_SourceCompilationIdChangesWhenSingleFileContentChanges()
     {
         CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(Source, "Game/Calculator.cs");

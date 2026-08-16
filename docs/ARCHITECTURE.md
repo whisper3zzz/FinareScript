@@ -182,20 +182,21 @@ compilation identity is not safe for editing.
 ## Semantic patch transaction
 
 Graph schema v0.2 carries both the source compilation ID and semantic
-configuration ID. A `unifiedscript.patch/v0.3` document repeats those IDs and
+configuration ID. A `unifiedscript.patch/v0.4` document repeats those IDs and
 contains typed operations keyed by graph/HIR `SemanticId`. Implemented
 operations are `replaceLiteral`, `changeOperator`, `reconnectArgument`,
-`insertStatement`, and `deleteStatement`. Structural operations carry old
-operator/endpoint, semantic type, parent block, and exact sibling preconditions
-rather than relying only on the compilation baseline.
+`insertStatement`, `deleteStatement`, and `introduceTemporary`. Structural
+operations carry old operator/endpoint, semantic type, containing statement,
+parent block, and exact sibling preconditions rather than relying only on the
+compilation baseline.
 
 The C# patch boundary performs these steps without mutating files:
 
 1. analyze the current source request;
 2. verify source and semantic-configuration baselines;
 3. resolve every target and connection endpoint ID to the expected HIR kind;
-4. verify operation-specific value, operator, endpoint, type, sibling, symbol-use,
-   name, and effect preconditions;
+4. verify operation-specific value, operator, endpoint, type, sibling,
+   symbol-use/definition, name, and effect preconditions;
 5. build localized Roslyn syntax replacements while preserving trivia;
 6. reject overlapping source ranges and apply every operation in memory;
 7. rerun profile validation, compilation, semantic binding, and graph safety;
@@ -211,13 +212,27 @@ existing block and direct siblings while leaving the new declaration and
 literal unpinned, so they receive fresh persistent IDs. Safe deletion pins the
 block and surviving siblings while the deleted subtree becomes tombstones.
 
+Temporary introduction uses a HIR use/definition index and an expression
+location index. It moves a stable expression into a new local declaration
+immediately before its current return or local-declaration statement, then
+replaces the old occurrence with an identifier. The complete containing value
+expression must be effect-free and referentially stable, so the transformation
+cannot cross state reads, mutations, awaits, throwing/effectful calls, or
+unknown evaluation. Every pre-existing expression in the changed statement is
+explicitly pinned; only the new declaration and identifier receive new IDs.
+Short-circuit, division/remainder, decimal, and string operators remain outside
+this proof until builtin operator effects include conditional evaluation,
+allocation, and throw behavior.
+
 Argument reconnection is deliberately bounded to exchanging two pure, exactly
-type-compatible positional arguments of one resolved invocation; arbitrary
-sharing would require introducing temporaries to preserve C# evaluation count
-and order. Statement editing is similarly bounded to local declarations with a
-literal initializer and deletion of unused literal locals or pure static-call
-statements. General expression synthesis, control-flow editing, declaration
-renaming, and cross-expression rewiring remain future patch-algebra work.
+type-compatible positional arguments of one resolved invocation. The
+implemented temporary-introduction primitive now preserves C# evaluation count
+and order for one extracted value, but connecting additional consumers still
+requires a typed consumer-port patch. Statement editing is similarly bounded to
+local declarations with a literal initializer and deletion of unused literal
+locals or pure static-call statements. General expression synthesis,
+control-flow editing, declaration renaming, and cross-expression rewiring remain
+future patch-algebra work.
 
 Visual method signatures currently accept void, booleans, integer and floating
 primitives, strings, enums, nullable forms of supported value types, and
@@ -246,7 +261,7 @@ receivers until a richer graph-safe object-handle policy is defined.
 - deterministic serialization tests;
 - golden digests for versioned HIR, semantics, and graph fixtures;
 - source/graph/source round-trip tests for values, operators, argument edges,
-  and bounded statement edits;
+  bounded statement edits, and temporary introduction;
 - later, semantic equivalence tests between graph-edited and text-edited IL.
 
 ## Deferred UE boundary

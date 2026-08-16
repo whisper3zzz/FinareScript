@@ -86,6 +86,9 @@ public static class SemanticPatchJson
                 case DeleteStatementPatchOperation deleteStatement:
                     ValidateDeleteStatement(deleteStatement);
                     break;
+                case IntroduceTemporaryPatchOperation introduceTemporary:
+                    ValidateIntroduceTemporary(introduceTemporary);
+                    break;
                 default:
                     throw new JsonException(
                         $"Unsupported semantic patch operation '{operation.GetType().Name}'.");
@@ -191,14 +194,45 @@ public static class SemanticPatchJson
         ValidateSiblingIds(
             operation.ExpectedPreviousSiblingId,
             operation.ExpectedNextSiblingId);
+        ValidateSiblingTarget(
+            operation.TargetNodeId,
+            operation.ExpectedPreviousSiblingId,
+            operation.ExpectedNextSiblingId,
+            "deleted statement");
+    }
+
+    private static void ValidateIntroduceTemporary(IntroduceTemporaryPatchOperation operation)
+    {
+        if (operation.ExpectedContainingStatementId.IsEmpty ||
+            operation.ExpectedParentBlockId.IsEmpty ||
+            operation.ExpectedTypeId.IsEmpty)
+        {
+            throw new JsonException(
+                "Temporary introduction requires non-empty statement, parent block, and type IDs.");
+        }
+
+        if (string.IsNullOrWhiteSpace(operation.Name) ||
+            string.IsNullOrWhiteSpace(operation.TypeName))
+        {
+            throw new JsonException("Temporary introduction requires a name and type name.");
+        }
+
+        ValidateSiblingIds(
+            operation.ExpectedPreviousSiblingId,
+            operation.ExpectedNextSiblingId);
+        ValidateSiblingTarget(
+            operation.ExpectedContainingStatementId,
+            operation.ExpectedPreviousSiblingId,
+            operation.ExpectedNextSiblingId,
+            "containing statement");
     }
 
     private static void ValidateSiblingIds(
         SemanticId? previousSiblingId,
         SemanticId? nextSiblingId)
     {
-        if (previousSiblingId is SemanticId previous && previous.IsEmpty ||
-            nextSiblingId is SemanticId next && next.IsEmpty)
+        if ((previousSiblingId is SemanticId previous && previous.IsEmpty) ||
+            (nextSiblingId is SemanticId next && next.IsEmpty))
         {
             throw new JsonException("Sibling preconditions cannot contain empty semantic IDs.");
         }
@@ -206,6 +240,18 @@ public static class SemanticPatchJson
         if (previousSiblingId is not null && previousSiblingId == nextSiblingId)
         {
             throw new JsonException("Previous and next sibling preconditions must identify different nodes.");
+        }
+    }
+
+    private static void ValidateSiblingTarget(
+        SemanticId targetId,
+        SemanticId? previousSiblingId,
+        SemanticId? nextSiblingId,
+        string targetRole)
+    {
+        if (previousSiblingId == targetId || nextSiblingId == targetId)
+        {
+            throw new JsonException($"A {targetRole} cannot also be its own sibling precondition.");
         }
     }
 }

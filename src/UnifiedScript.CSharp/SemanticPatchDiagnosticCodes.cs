@@ -19,4 +19,5 @@ public static class SemanticPatchDiagnosticCodes
     public const string SymbolStillReferenced = "UVS3015";
     public const string UnsafeDeletion = "UVS3016";
     public const string NameConflict = "UVS3017";
+    public const string UnsafeTemporaryIntroduction = "UVS3018";
 }

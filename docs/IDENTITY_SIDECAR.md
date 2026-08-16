@@ -121,9 +121,14 @@ moved argument-root IDs. A statement insertion pins its parent block and every
 pre-existing direct sibling while the new local declaration and literal receive
 freshly allocated IDs. A safe deletion pins the parent block and surviving
 siblings; every entry from the removed statement subtree becomes a tombstone
-and is never reassigned. Unrelated live IDs remain stable while fingerprints,
-anchors, source digest, and generation update. Without a sidecar, deterministic
-span-derived bootstrap identity remains available for batch analysis.
+and is never reassigned. Temporary introduction pins every pre-existing
+expression in the changed statement: the extracted expression subtree moves to
+the new initializer without changing IDs, while its ancestors remain on the
+consumer side with their existing IDs. Only the new declaration and replacement
+identifier allocate new IDs. Unrelated live IDs remain stable while
+fingerprints, anchors, source digest, and generation update. Without a sidecar,
+deterministic span-derived bootstrap identity remains available for batch
+analysis.
 
 General expression/control-flow synthesis, cross-expression rewiring,
 declaration rename reconciliation, multi-file CLI patch commits, bounded

@@ -41,6 +41,24 @@ public sealed class CSharpSourcePatchApplier
             ["!"] = "logicalNot",
             ["~"] = "bitwiseNot",
         };
+    private static readonly IReadOnlySet<string> StableTemporaryBinaryOperators =
+        new HashSet<string>(StringComparer.Ordinal)
+        {
+            "+",
+            "-",
+            "*",
+            "<<",
+            ">>",
+            "<",
+            ">",
+            "<=",
+            ">=",
+            "==",
+            "!=",
+            "&",
+            "^",
+            "|",
+        };
 
     private readonly CSharpSemanticPipeline pipeline = new();
 
@@ -89,6 +107,7 @@ public sealed class CSharpSourcePatchApplier
         IReadOnlyDictionary<SemanticId, TypeDescriptor> types = original.Semantics.Types
             .ToDictionary(static type => type.Id);
         var patchIndex = new HirPatchIndex(original.Hir);
+        var useDefinitionIndex = new HirUseDefinitionIndex(original.Hir, boundNodes);
         var documents = request.Sources.ToDictionary(
             static source => source.LogicalPath,
             static source => new ParsedDocument(
@@ -129,8 +148,18 @@ public sealed class CSharpSourcePatchApplier
                     deleteStatement,
                     hirNodes,
                     patchIndex,
+                    useDefinitionIndex,
                     boundNodes,
                     methods,
+                    documents),
+                IntroduceTemporaryPatchOperation introduceTemporary => PlanTemporaryIntroduction(
+                    introduceTemporary,
+                    hirNodes,
+                    patchIndex,
+                    useDefinitionIndex,
+                    boundNodes,
+                    methods,
+                    types,
                     documents),
                 _ => throw new InvalidOperationException(
                     $"Validated patch operation '{operation.GetType().Name}' was not handled."),
@@ -609,10 +638,7 @@ public sealed class CSharpSourcePatchApplier
                 block);
         }
 
-        if (blockLocation!.Method.Parameters.Any(parameter => parameter.Name == local.Name) ||
-            blockLocation.Method.DescendantsAndSelf()
-                .OfType<HirVariableDeclarationStatement>()
-                .Any(variable => variable.Name == local.Name))
+        if (HasNameConflict(blockLocation!.Method, local.Name))
         {
             return DiagnosticPlan(
                 SemanticPatchDiagnosticCodes.NameConflict,
@@ -662,6 +688,7 @@ public sealed class CSharpSourcePatchApplier
         DeleteStatementPatchOperation operation,
         IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
         HirPatchIndex patchIndex,
+        HirUseDefinitionIndex useDefinitionIndex,
         IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
         IReadOnlyDictionary<SemanticId, MethodDescriptor> methods,
         IReadOnlyDictionary<string, ParsedDocument> documents)
@@ -692,6 +719,7 @@ public sealed class CSharpSourcePatchApplier
 
         OperationPlan? safetyFailure = ValidateDeletionSafety(
             location,
+            useDefinitionIndex,
             boundNodes,
             methods);
         if (safetyFailure is not null)
@@ -734,6 +762,201 @@ public sealed class CSharpSourcePatchApplier
         return SuccessPlan(document!, new PendingReplacement(
             document!.Source.LogicalPath,
             syntax,
+            replacement,
+            pins));
+    }
+
+    private static OperationPlan PlanTemporaryIntroduction(
+        IntroduceTemporaryPatchOperation operation,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        HirUseDefinitionIndex useDefinitionIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, MethodDescriptor> methods,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
+        IReadOnlyDictionary<string, ParsedDocument> documents)
+    {
+        if (!hirNodes.TryGetValue(operation.TargetNodeId, out HirNode? target))
+        {
+            return MissingTarget(operation.TargetNodeId);
+        }
+
+        if (target is not HirExpression expression ||
+            !patchIndex.TryGetExpression(
+                expression.Id,
+                out HirPatchIndex.ExpressionLocation? expressionLocation))
+        {
+            return KindMismatch(target, operation.TargetNodeId, "an expression");
+        }
+
+        if (expressionLocation!.ContainingStatement.Id != operation.ExpectedContainingStatementId)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.PreconditionFailed,
+                $"Temporary introduction expected containing statement " +
+                $"'{operation.ExpectedContainingStatementId}', but expression '{expression.Id}' is currently " +
+                $"inside '{expressionLocation.ContainingStatement.Id}'.",
+                expression);
+        }
+
+        if (!patchIndex.TryGetStatement(
+                expressionLocation.ContainingStatement.Id,
+                out HirPatchIndex.StatementLocation? statementLocation) ||
+            statementLocation!.ParentBlock.Id != operation.ExpectedParentBlockId ||
+            !StatementSiblingsMatch(
+                statementLocation,
+                operation.ExpectedPreviousSiblingId,
+                operation.ExpectedNextSiblingId))
+        {
+            return SiblingFailure(
+                expressionLocation.ContainingStatement,
+                operation.ExpectedPreviousSiblingId,
+                operation.ExpectedNextSiblingId,
+                operation.ExpectedParentBlockId);
+        }
+
+        HirExpression? containingExpression = expressionLocation.ContainingStatement switch
+        {
+            HirReturnStatement { Expression: not null } returnStatement => returnStatement.Expression,
+            HirVariableDeclarationStatement { Initializer: not null } variable => variable.Initializer,
+            _ => null,
+        };
+        if (containingExpression is null)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidStatement,
+                "Temporary introduction currently requires a return value or local initializer " +
+                "inside an explicit block.",
+                expressionLocation.ContainingStatement);
+        }
+
+        if (!types.TryGetValue(operation.ExpectedTypeId, out TypeDescriptor? expectedType) ||
+            !expectedType.IsGraphSafe ||
+            !TypeNameMatches(operation.TypeName, expectedType))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.TypeMismatch,
+                $"Temporary type '{operation.TypeName}' does not match graph-safe semantic type " +
+                $"'{operation.ExpectedTypeId}'.",
+                expression);
+        }
+
+        OperationPlan? typeFailure = RequireType(
+            expression,
+            operation.ExpectedTypeId,
+            "temporary expression",
+            boundNodes);
+        if (typeFailure is not null)
+        {
+            return typeFailure;
+        }
+
+        if (HasNameConflict(expressionLocation.Method, operation.Name))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.NameConflict,
+                $"A parameter or local named '{operation.Name}' already exists in method " +
+                $"'{expressionLocation.Method.Name}'.",
+                expression);
+        }
+
+        if (!IsStablePureExpression(
+                containingExpression,
+                useDefinitionIndex,
+                boundNodes,
+                methods,
+                types))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.UnsafeTemporaryIntroduction,
+                "Temporary introduction would move evaluation within a statement that is not a " +
+                "stable, effect-free value expression.",
+                expression);
+        }
+
+        HirBlockStatement parentBlock = statementLocation.ParentBlock;
+        if (!TryFindSyntax(
+                documents,
+                parentBlock,
+                out ParsedDocument? document,
+                out BlockSyntax? blockSyntax) ||
+            blockSyntax!.Statements.Count != parentBlock.Statements.Count)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidStatement,
+                "Temporary introduction currently requires an explicit C# block whose statement list " +
+                "matches the analyzed HIR block.",
+                parentBlock);
+        }
+
+        StatementSyntax containingSyntax = blockSyntax.Statements[statementLocation.Index];
+        if (RoslynSourceSpan.FromNode(
+                containingSyntax,
+                document!.Source.LogicalPath) != expressionLocation.ContainingStatement.Span)
+        {
+            return MissingSyntax(expressionLocation.ContainingStatement, "statement");
+        }
+
+        (List<StatementSyntax> annotatedStatements, List<PendingPin> pins) =
+            AnnotateStatements(blockSyntax, parentBlock.Statements);
+        if (!TryAnnotateExpressions(
+                document!,
+                containingSyntax,
+                expressionLocation.ContainingStatement,
+                out StatementSyntax? annotatedContaining,
+                out IReadOnlyDictionary<SemanticId, SyntaxAnnotation>? expressionAnnotations,
+                out IReadOnlyList<PendingPin>? expressionPins) ||
+            !expressionAnnotations!.TryGetValue(expression.Id, out SyntaxAnnotation? targetAnnotation))
+        {
+            return MissingSyntax(expression, "expression");
+        }
+
+        SyntaxAnnotation statementAnnotation = pins
+            .Single(pin => pin.Id == expressionLocation.ContainingStatement.Id)
+            .Annotation;
+        annotatedContaining = annotatedContaining!.WithAdditionalAnnotations(statementAnnotation);
+
+        ExpressionSyntax annotatedTarget = annotatedContaining
+            .GetAnnotatedNodes(targetAnnotation)
+            .OfType<ExpressionSyntax>()
+            .Single();
+        if (!TryCreateTemporaryStatement(
+                operation.Name,
+                operation.TypeName,
+                annotatedTarget,
+                out LocalDeclarationStatementSyntax? temporaryStatement))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidStatement,
+                "The temporary name, type, or initializer could not be represented as one C# " +
+                "local declaration.",
+                expression);
+        }
+
+        IdentifierNameSyntax replacementIdentifier = SyntaxFactory.IdentifierName(operation.Name)
+            .WithTriviaFrom(annotatedTarget);
+        StatementSyntax updatedContaining = annotatedContaining.ReplaceNode(
+            annotatedTarget,
+            replacementIdentifier);
+        annotatedStatements[statementLocation.Index] = updatedContaining;
+        InsertionFormatting formatting = GetInsertionFormatting(
+            document!,
+            blockSyntax,
+            statementLocation.Index);
+        temporaryStatement = temporaryStatement!
+            .WithLeadingTrivia(SyntaxFactory.Whitespace(formatting.Indentation))
+            .WithTrailingTrivia(SyntaxFactory.EndOfLine(formatting.EndOfLine));
+        annotatedStatements.Insert(statementLocation.Index, temporaryStatement);
+
+        pins.AddRange(expressionPins!);
+        var blockAnnotation = new SyntaxAnnotation(IdentityAnnotationKind, parentBlock.Id.Value);
+        BlockSyntax replacement = blockSyntax
+            .WithStatements(SyntaxFactory.List(annotatedStatements))
+            .WithAdditionalAnnotations(blockAnnotation);
+        pins.Add(new PendingPin(parentBlock.Id, "block", blockAnnotation));
+        return SuccessPlan(document!, new PendingReplacement(
+            document!.Source.LogicalPath,
+            blockSyntax,
             replacement,
             pins));
     }
@@ -815,13 +1038,14 @@ public sealed class CSharpSourcePatchApplier
 
     private static OperationPlan? ValidateDeletionSafety(
         HirPatchIndex.StatementLocation location,
+        HirUseDefinitionIndex useDefinitionIndex,
         IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
         IReadOnlyDictionary<SemanticId, MethodDescriptor> methods)
     {
         switch (location.Statement)
         {
             case HirVariableDeclarationStatement variable:
-                if (boundNodes.Values.Any(binding => binding.ReferencedSymbolId == variable.Id))
+                if (useDefinitionIndex.HasUses(variable.Id))
                 {
                     return DiagnosticPlan(
                         SemanticPatchDiagnosticCodes.SymbolStillReferenced,
@@ -895,6 +1119,110 @@ public sealed class CSharpSourcePatchApplier
 
         return (statements, pins);
     }
+
+    private static bool TryAnnotateExpressions(
+        ParsedDocument document,
+        StatementSyntax syntax,
+        HirStatement statement,
+        out StatementSyntax? annotated,
+        out IReadOnlyDictionary<SemanticId, SyntaxAnnotation>? annotations,
+        out IReadOnlyList<PendingPin>? pins)
+    {
+        ExpressionSyntax[] syntaxExpressions = syntax
+            .DescendantNodes()
+            .OfType<ExpressionSyntax>()
+            .ToArray();
+        var annotationBySyntax = new Dictionary<ExpressionSyntax, SyntaxAnnotation>();
+        var annotationById = new Dictionary<SemanticId, SyntaxAnnotation>();
+        var pendingPins = new List<PendingPin>();
+        foreach (HirExpression expression in statement
+                     .DescendantsAndSelf()
+                     .OfType<HirExpression>())
+        {
+            ExpressionSyntax[] matches = syntaxExpressions
+                .Where(candidate => RoslynSourceSpan.FromNode(
+                    candidate,
+                    document.Source.LogicalPath) == expression.Span)
+                .ToArray();
+            if (matches.Length != 1)
+            {
+                annotated = null;
+                annotations = null;
+                pins = null;
+                return false;
+            }
+
+            var annotation = new SyntaxAnnotation(IdentityAnnotationKind, expression.Id.Value);
+            annotationBySyntax.Add(matches[0], annotation);
+            annotationById.Add(expression.Id, annotation);
+            pendingPins.Add(new PendingPin(
+                expression.Id,
+                GetIdentityKind(expression),
+                annotation));
+        }
+
+        annotated = syntax.ReplaceNodes(
+            annotationBySyntax.Keys,
+            (original, rewritten) => rewritten.WithAdditionalAnnotations(annotationBySyntax[original]));
+        annotations = annotationById;
+        pins = pendingPins;
+        return true;
+    }
+
+    private static bool HasNameConflict(HirMethodDeclaration method, string name) =>
+        method.Parameters.Any(parameter => parameter.Name == name) ||
+        method.DescendantsAndSelf()
+            .OfType<HirVariableDeclarationStatement>()
+            .Any(variable => variable.Name == name);
+
+    private static bool IsStablePureExpression(
+        HirExpression expression,
+        HirUseDefinitionIndex useDefinitionIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, MethodDescriptor> methods,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types) => expression switch
+        {
+            HirLiteralExpression => true,
+            HirIdentifierExpression identifier => useDefinitionIndex.IsValueReference(identifier),
+            HirBinaryExpression binary =>
+                StableTemporaryBinaryOperators.Contains(binary.Operator) &&
+                HasStableOperatorType(binary.Left, boundNodes, types) &&
+                HasStableOperatorType(binary.Right, boundNodes, types) &&
+                IsStablePureExpression(binary.Left, useDefinitionIndex, boundNodes, methods, types) &&
+                IsStablePureExpression(binary.Right, useDefinitionIndex, boundNodes, methods, types),
+            HirUnaryExpression { Operator: not ("++" or "--") } unary =>
+                HasStableOperatorType(unary.Operand, boundNodes, types) &&
+                IsStablePureExpression(unary.Operand, useDefinitionIndex, boundNodes, methods, types),
+            HirCastExpression cast =>
+                HasStableOperatorType(cast, boundNodes, types) &&
+                HasStableOperatorType(cast.Operand, boundNodes, types) &&
+                IsStablePureExpression(cast.Operand, useDefinitionIndex, boundNodes, methods, types),
+            HirInvocationExpression invocation =>
+                boundNodes.TryGetValue(invocation.Id, out BoundNodeInfo? invocationBinding) &&
+                invocationBinding.InvokedMethodId is SemanticId methodId &&
+                methods.TryGetValue(methodId, out MethodDescriptor? method) &&
+                method.IsStatic &&
+                method.Effects == MethodEffects.None &&
+                invocationBinding.TypeId is SemanticId invocationTypeId &&
+                types.TryGetValue(invocationTypeId, out TypeDescriptor? invocationType) &&
+                invocationType.IsGraphSafe &&
+                invocation.Arguments.All(argument =>
+                    IsStablePureExpression(argument, useDefinitionIndex, boundNodes, methods, types)),
+            _ => false,
+        };
+
+    private static bool HasStableOperatorType(
+        HirExpression expression,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types) =>
+        boundNodes.TryGetValue(expression.Id, out BoundNodeInfo? binding) &&
+        binding.TypeId is SemanticId typeId &&
+        types.TryGetValue(typeId, out TypeDescriptor? type) &&
+        (type.Kind is UnifiedTypeKind.Boolean or
+            UnifiedTypeKind.Integer or
+            UnifiedTypeKind.FloatingPoint or
+            UnifiedTypeKind.Enum) &&
+        !string.Equals(type.MetadataName, "System.Decimal", StringComparison.Ordinal);
 
     private static bool TryGetInsertionIndex(
         HirBlockStatement block,
@@ -974,6 +1302,43 @@ public sealed class CSharpSourcePatchApplier
             literal!.WithoutTrivia());
         VariableDeclaratorSyntax variable = SyntaxFactory.VariableDeclarator(
                 SyntaxFactory.Identifier(local.Name))
+            .WithInitializer(initializer);
+        VariableDeclarationSyntax declaration = SyntaxFactory.VariableDeclaration(
+            type.WithoutTrivia().WithTrailingTrivia(SyntaxFactory.Space),
+            SyntaxFactory.SingletonSeparatedList(variable));
+        statement = SyntaxFactory.LocalDeclarationStatement(declaration);
+        return true;
+    }
+
+    private static bool TryCreateTemporaryStatement(
+        string name,
+        string typeName,
+        ExpressionSyntax initializerExpression,
+        out LocalDeclarationStatementSyntax? statement)
+    {
+        statement = null;
+        if (!SyntaxFacts.IsValidIdentifier(name) ||
+            SyntaxFacts.GetKeywordKind(name) != SyntaxKind.None)
+        {
+            return false;
+        }
+
+        TypeSyntax type = SyntaxFactory.ParseTypeName(
+            typeName,
+            options: CSharpToHirLowerer.ParseOptions,
+            consumeFullText: true);
+        if (type.ContainsDiagnostics || type.SpanStart != 0 || type.Span.Length != typeName.Length)
+        {
+            return false;
+        }
+
+        EqualsValueClauseSyntax initializer = SyntaxFactory.EqualsValueClause(
+            SyntaxFactory.Token(SyntaxKind.EqualsToken)
+                .WithLeadingTrivia(SyntaxFactory.Space)
+                .WithTrailingTrivia(SyntaxFactory.Space),
+            initializerExpression.WithoutLeadingTrivia().WithoutTrailingTrivia());
+        VariableDeclaratorSyntax variable = SyntaxFactory.VariableDeclarator(
+                SyntaxFactory.Identifier(name))
             .WithInitializer(initializer);
         VariableDeclarationSyntax declaration = SyntaxFactory.VariableDeclaration(
             type.WithoutTrivia().WithTrailingTrivia(SyntaxFactory.Space),

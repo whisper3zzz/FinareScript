@@ -7,12 +7,14 @@ a second language implementation or bypassing the existing compiler checks.
 
 ## Implemented vertical slice
 
-- `unifiedscript.patch/v0.3` polymorphic JSON protocol
+- `unifiedscript.patch/v0.4` polymorphic JSON protocol
 - `replaceLiteral` operation targeted by HIR/Graph `SemanticId`
 - unary/binary `changeOperator` with result and operand type preconditions
 - same-invocation `reconnectArgument` with endpoint, type, and effect guards
 - typed `insertStatement` for graph-safe local-literal declarations
 - bounded `deleteStatement` with symbol-use and effect safety checks
+- `introduceTemporary` for stable, pure return/local-initializer expressions
+- HIR expression-location and use/definition indexes
 - exact parent block and adjacent-sibling structural preconditions
 - overlapping source-range conflict detection
 - expected-old-literal precondition
@@ -54,6 +56,7 @@ diagnostic codes distinguish:
 - `UVS3015`: a local declaration is still referenced
 - `UVS3016`: deleting the statement could remove effects, reads, or throws
 - `UVS3017`: an inserted local name conflicts with a parameter or local
+- `UVS3018`: temporary introduction would cross unstable or effectful evaluation
 - `UVS3101`: identity evidence is ambiguous; allocate a new ID instead of guessing
 - `UVS3102`: an explicit identity pin is invalid, missing, duplicate, or tombstoned
 
@@ -90,26 +93,41 @@ The test and sample suite proves that:
 22. stale sibling/type anchors and method-wide name conflicts reject insertion;
 23. deleting an unused literal local preserves exterior comments and tombstones
     its complete subtree;
-24. referenced locals and effectful calls reject deletion; and
-25. a resolved pure static call with effect-free arguments can be deleted.
+24. referenced locals and effectful calls reject deletion;
+25. a resolved pure static call with effect-free arguments can be deleted;
+26. a nested stable expression moves into a temporary initializer without
+    changing its ID or the IDs of its original ancestors;
+27. a new declaration and replacement identifier are the only IDs allocated by
+    temporary introduction;
+28. return expressions and local initializers both support extraction with exact
+    statement/block/sibling preconditions;
+29. the replacement identifier binds to the newly declared local and projects
+    that `referencedSymbolId` back into Graph; and
+30. stale containing statements and effectful evaluation contexts reject the
+    complete transaction.
 
 ## Deliberate limits
 
 This is a bounded structural-edit slice, not general graph-to-source generation.
 It does not apply multi-file patches through the CLI, synthesize arbitrary
-expressions or control-flow statements, delete returns/branches/blocks, share
-one expression across multiple source consumers, reconnect across invocations
-or statements, reconcile declaration renames, compact tombstones, or persist
-graph layout. Insertion currently accepts only a named graph-safe type already
-present in bound semantics plus one literal initializer. Deletion accepts only
-an unused local with no initializer or a literal initializer, or a resolved
-pure static call with effect-free simple arguments. General sharing requires a
-temporary-introduction lowering that preserves evaluation count and order;
-project-wide edits require a multi-file transaction coordinator.
+expressions or control-flow statements, connect the introduced temporary to
+additional source consumers, reconnect across invocations or statements,
+delete returns/branches/blocks, reconcile declaration renames, compact
+tombstones, or persist graph layout. Insertion currently accepts only a named
+graph-safe type already present in bound semantics plus one literal initializer.
+Deletion accepts only an unused local with no initializer or a literal
+initializer, or a resolved pure static call with effect-free simple arguments.
+Temporary introduction accepts only stable, pure value expressions in return or
+local-initializer statements inside explicit blocks. Short-circuit,
+division/remainder, decimal, and string operators remain excluded until builtin
+operator effects model conditional evaluation, allocation, and throws.
+Project-wide edits require a multi-file transaction coordinator.
 
 ## Next slice
 
-Define temporary introduction plus use/definition analysis so a shared graph
-value maps to one deterministic C# local without duplicating effectful
-evaluation. That becomes the safety layer for later cross-statement data
-rewiring, assignment synthesis, and eventually structured control-flow edits.
+Add a typed consumer-port reconnection operation that can replace a compatible,
+stable consumer expression with a reference to an existing local definition.
+Use the new use/definition index to enforce lexical scope, statement order, and
+structured dominance before allowing one introduced temporary to serve
+multiple consumers. Assignment synthesis and structured control-flow editing
+remain later slices.
