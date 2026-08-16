@@ -59,6 +59,9 @@ flowchart LR
     StableHIR --> Projector["Effect-aware Graph Projector"]
     Bound --> Projector
     Projector --> Graph["Graph JSON"]
+    Graph --> LayoutSync["Layout Synchronizer"]
+    Layout[".usgraph sidecar"] --> LayoutSync
+    LayoutSync --> UpdatedLayout["Updated .usgraph"]
     Graph --> Patch["Semantic Patch"]
     Patch --> Rewriter["Transactional Roslyn Rewriter"]
     Rewriter --> Source
@@ -113,6 +116,8 @@ translate into this contract.
 - data and control ports
 - deterministic HIR projection
 - graph JSON serialization
+- semantic-independent `.usgraph` layout schema and deterministic JSON
+- node layout synchronization, explicit unplaced state, and orphan recovery
 
 It depends on Core and Semantics. This lets later frontends render a typed,
 effect-aware graph without hosting Roslyn.
@@ -264,6 +269,22 @@ rollback-capable filesystem transaction. Patch plans therefore require
 persistent identity on target documents. This version composes only temporary
 introduction and typed value reconnection, not arbitrary operation graphs.
 
+## Visual layout boundary
+
+`unifiedscript.graph-layout/v0.1` is a non-semantic sidecar keyed by function,
+node, and edge `SemanticId`. It stores node placement and collapsed state,
+comment regions, and routing hints but deliberately excludes source compilation
+IDs, source spans, types, effects, and editable program properties. The complete
+contract is specified in [GRAPH_LAYOUT.md](GRAPH_LAYOUT.md).
+
+Layout synchronization is a one-way reconciliation against a current Graph
+document. Surviving nodes keep their canvas state, new nodes become explicitly
+unplaced, and missing nodes become reasoned orphans. Comment membership and
+routing hints are restricted to current nodes and edges. The synchronizer has
+no dependency on the C# project, receives no HIR or identity sidecar, and
+returns no semantic artifact; canvas changes therefore cannot silently become
+program changes.
+
 Visual method signatures currently accept void, booleans, integer and floating
 primitives, strings, enums, nullable forms of supported value types, and
 task-like wrappers with safe results. Arbitrary classes, interfaces, delegates,
@@ -294,6 +315,8 @@ receivers until a richer graph-safe object-handle policy is defined.
   bounded statement edits, temporary introduction, and typed local-to-consumer
   reconnection;
 - atomic plan tests for overlapping multi-consumer edits and late-stage rollback;
+- graph-layout schema, deterministic serialization, orphan restoration, and
+  semantic-patch synchronization tests;
 - later, semantic equivalence tests between graph-edited and text-edited IL.
 
 ## Deferred UE boundary

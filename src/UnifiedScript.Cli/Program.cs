@@ -38,6 +38,16 @@ internal static class Program
             return RunIdentityInit(args);
         }
 
+        if (args.Count > 0 && args[0] == "layout-init")
+        {
+            return RunLayout(args, synchronize: false);
+        }
+
+        if (args.Count > 0 && args[0] == "layout-sync")
+        {
+            return RunLayout(args, synchronize: true);
+        }
+
         if (args.Count > 0 && args[0] == "apply-patch")
         {
             return RunApply(args, isPlan: false);
@@ -49,6 +59,57 @@ internal static class Program
         }
 
         return RunAnalyze(args);
+    }
+
+    private static int RunLayout(IReadOnlyList<string> args, bool synchronize)
+    {
+        if (!TryParseLayoutArguments(args, synchronize, out LayoutOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+
+        options = options ?? throw new InvalidOperationException("Argument parsing succeeded without layout options.");
+        if (!File.Exists(options.GraphPath))
+        {
+            Console.Error.WriteLine($"Graph document does not exist: {options.GraphPath}");
+            return 66;
+        }
+
+        if (options.LayoutPath is not null && !File.Exists(options.LayoutPath))
+        {
+            Console.Error.WriteLine($"Graph layout sidecar does not exist: {options.LayoutPath}");
+            return 66;
+        }
+
+        string fullGraphPath = Path.GetFullPath(options.GraphPath);
+        string fullOutputPath = Path.GetFullPath(options.OutputPath);
+        EnsureDifferentPath(
+            fullGraphPath,
+            fullOutputPath,
+            "Graph layout output cannot overwrite the semantic graph document.");
+        GraphDocument graph = GraphJson.Deserialize(File.ReadAllText(fullGraphPath));
+        var layoutSynchronizer = new GraphLayoutSynchronizer();
+        GraphLayoutDocument result;
+        if (options.LayoutPath is null)
+        {
+            result = layoutSynchronizer.Create(graph);
+        }
+        else
+        {
+            string fullLayoutPath = Path.GetFullPath(options.LayoutPath);
+            EnsureDifferentPath(
+                fullLayoutPath,
+                fullOutputPath,
+                "In-place graph layout synchronization is not supported; choose a different --out path.");
+            result = layoutSynchronizer.Synchronize(
+                graph,
+                GraphLayoutJson.Deserialize(File.ReadAllText(fullLayoutPath)));
+        }
+
+        WriteAtomically(fullOutputPath, GraphLayoutJson.Serialize(result) + "\n");
+        Console.WriteLine(fullOutputPath);
+        return 0;
     }
 
     private static int RunAnalyze(IReadOnlyList<string> args)
@@ -470,6 +531,53 @@ internal static class Program
         return true;
     }
 
+    private static bool TryParseLayoutArguments(
+        IReadOnlyList<string> args,
+        bool synchronize,
+        out LayoutOptions? options)
+    {
+        options = null;
+        string command = synchronize ? "layout-sync" : "layout-init";
+        if (args.Count < 4 || args[0] != command || args[1].StartsWith("--", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        string graphPath = args[1];
+        string? layoutPath = null;
+        string? outputPath = null;
+        int index = 2;
+        while (index < args.Count)
+        {
+            string option = args[index++];
+            if (index >= args.Count)
+            {
+                return false;
+            }
+
+            string value = args[index++];
+            switch (option)
+            {
+                case "--layout" when synchronize && layoutPath is null:
+                    layoutPath = value;
+                    break;
+                case "--out" when outputPath is null:
+                    outputPath = value;
+                    break;
+                default:
+                    return false;
+            }
+        }
+
+        if (outputPath is null || synchronize && layoutPath is null)
+        {
+            return false;
+        }
+
+        options = new LayoutOptions(graphPath, layoutPath, outputPath);
+        return true;
+    }
+
     private static bool TryParsePatchArguments(
         IReadOnlyList<string> args,
         bool isPlan,
@@ -707,6 +815,8 @@ internal static class Program
         "  unifiedscript analyze <input.cs> [options]\n" +
         "  unifiedscript analyze-files <input.cs> <additional.cs>... [options]\n" +
         "  unifiedscript identity-init <input.cs> --out <identity.usids> [options]\n" +
+        "  unifiedscript layout-init <graph.json> --out <layout.usgraph>\n" +
+        "  unifiedscript layout-sync <graph.json> --layout <layout.usgraph> --out <updated.usgraph>\n" +
         "  unifiedscript apply-patch <input.cs> --patch <patch.json> --out <output.cs> [options]\n" +
         "  unifiedscript apply-plan <input.cs> --plan <plan.json> --out <output.cs> [options]\n" +
         "Options:\n" +
@@ -715,6 +825,7 @@ internal static class Program
         "  --plan <plan.json>      Ordered semantic patch plan required by apply-plan.\n" +
         "  --identity <file.usids> Use a persistent identity sidecar; may repeat for analyze-files.\n" +
         "  --out-identity <file>   Updated sidecar output required by sidecar-enabled apply-patch.\n" +
+        "  --layout <file.usgraph> Existing visual layout required by layout-sync.\n" +
         "  --assembly <name>        Set the analysis assembly name.\n" +
         "  --effects <catalog.json> Apply effect catalog overrides.\n" +
         "  --reference <assembly>   Add a metadata reference; may be repeated.\n" +
@@ -734,6 +845,11 @@ internal static class Program
         string? EffectCatalogPath,
         string AssemblyName,
         IReadOnlyList<string> ReferencePaths);
+
+    private sealed record LayoutOptions(
+        string GraphPath,
+        string? LayoutPath,
+        string OutputPath);
 
     private sealed record PatchOptions(
         string InputPath,

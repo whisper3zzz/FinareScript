@@ -26,6 +26,7 @@ DOCUMENTS = [
     ROOT / "CONTRIBUTING.md",
     ROOT / "docs" / "ARCHITECTURE.md",
     ROOT / "docs" / "IDENTITY_SIDECAR.md",
+    ROOT / "docs" / "GRAPH_LAYOUT.md",
     ROOT / "docs" / "ROADMAP.md",
     ROOT / "docs" / "milestones" / "M1_ROSLYN_GRAPH_FOUNDATION.md",
     ROOT / "docs" / "milestones" / "M2_SEMANTIC_BINDING.md",
@@ -87,6 +88,7 @@ def main() -> int:
     plan_source_path = ROOT / "samples" / "Patching" / "SharedExpressionPlan.cs"
     plan_document_path = ROOT / "samples" / "Patching" / "ShareDamage.plan.json"
     plan_identity_path = ROOT / "samples" / "Patching" / "SharedExpressionPlan.cs.usids"
+    layout_path = ROOT / "samples" / "Layout" / "DamageRules.usgraph"
     require(
         patch_source_path.is_file()
         and patch_document_path.is_file()
@@ -108,6 +110,7 @@ def main() -> int:
         and plan_identity_path.is_file(),
         "Missing atomic semantic patch-plan sample",
     )
+    require(layout_path.is_file(), "Missing graph layout sidecar sample")
     patch_source = patch_source_path.read_text(encoding="utf-8")
     patch_document = json.loads(patch_document_path.read_text(encoding="utf-8"))
     operator_patch = json.loads(operator_patch_path.read_text(encoding="utf-8"))
@@ -120,6 +123,7 @@ def main() -> int:
     plan_source = plan_source_path.read_text(encoding="utf-8")
     plan_document = json.loads(plan_document_path.read_text(encoding="utf-8"))
     plan_identity = json.loads(plan_identity_path.read_text(encoding="utf-8"))
+    layout = json.loads(layout_path.read_text(encoding="utf-8"))
     patch_operation = patch_document["operations"][0]
     operator_operation = operator_patch["operations"][0]
     insert_operation = insert_patch["operations"][0]
@@ -243,6 +247,27 @@ def main() -> int:
     require(
         any((ROOT / "tests" / "UnifiedScript.Tests").glob("*Tests.cs")),
         "No tests found",
+    )
+    layout_functions = layout["functions"]
+    layout_nodes = [
+        node
+        for function in layout_functions
+        for node in function["nodes"]
+    ]
+    require(
+        layout["schemaVersion"] == "unifiedscript.graph-layout/v0.1"
+        and len(layout_functions) == 1
+        and layout_nodes
+        and all(node["nodeId"].startswith("us_") for node in layout_nodes)
+        and all(node["placement"] == "placed" for node in layout_nodes)
+        and all(
+            node["size"]["width"] > 0 and node["size"]["height"] > 0
+            for node in layout_nodes
+        )
+        and layout_functions[0]["commentRegions"]
+        and layout_functions[0]["routingHints"]
+        and layout["orphanedNodes"] == [],
+        "Graph layout sample does not exercise the complete v0.1 canvas state",
     )
     checks.append("sample and test sources exist")
 

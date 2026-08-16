@@ -10,5 +10,18 @@ public static class GraphJson
         ArgumentNullException.ThrowIfNull(document);
         return JsonSerializer.Serialize(document, UnifiedJson.CreateOptions(writeIndented));
     }
-}
 
+    public static GraphDocument Deserialize(string json)
+    {
+        ArgumentNullException.ThrowIfNull(json);
+        GraphDocument? document = JsonSerializer.Deserialize<GraphDocument>(
+            json,
+            UnifiedJson.CreateOptions());
+        if (document is null)
+        {
+            throw new JsonException("The graph document was empty.");
+        }
+
+        return document;
+    }
+}

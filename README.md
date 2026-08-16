@@ -29,6 +29,8 @@ The repository currently implements:
 - atomic multi-stage patch plans with symbolic references to newly introduced
   locals and full semantic reanalysis between stages;
 - opt-in `.usids` sidecars that preserve node identity across formatting and edits;
+- semantic-independent `.usgraph` layout sidecars with deterministic positions,
+  sizes, collapsed state, comment regions, routing hints, and orphan recovery;
 - explicit patch identity pins and tombstones for deleted semantic nodes;
 - versioned HIR, semantics, and graph JSON emission through a small CLI;
 - xUnit coverage for validation, lowering, identity, graph projection, and
@@ -392,13 +394,46 @@ introduction in the same method with the same graph-safe type. Arbitrary patch
 operations, control-flow construction, and cross-method handles remain outside
 this version.
 
+## Persist and synchronize graph layout
+
+`unifiedscript.graph-layout/v0.1` keeps visual canvas state separate from C#,
+HIR, bound semantics, and persistent `.usids` identity. Initialize a layout from
+an emitted Graph document:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  layout-init artifacts/sample/DoorController.graph.json \
+  --out artifacts/sample/DoorController.usgraph
+```
+
+Every projected node begins in explicit `unplaced` state. An editor can then
+record finite positions and positive sizes, collapsed state, comment regions,
+and edge routing control points. After a semantic edit emits an updated Graph,
+synchronize the existing visual state into it:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  layout-sync artifacts/updated/DoorController.graph.json \
+  --layout artifacts/sample/DoorController.usgraph \
+  --out artifacts/updated/DoorController.usgraph
+```
+
+Surviving node IDs retain their layouts, new IDs become `unplaced`, and missing
+nodes move to explicit `missingNode` or `missingFunction` orphans. A matching
+orphan is restored if its semantic ID reappears. Comment membership and routing
+hints are pruned only when their nodes or edges no longer exist. Layout syncing
+cannot mutate semantic Graph JSON, HIR, source, or `.usids` because those
+artifacts are not writable inputs to the synchronizer. See
+[GRAPH_LAYOUT.md](docs/GRAPH_LAYOUT.md) and the checked-in
+`samples/Layout/DamageRules.usgraph` example.
+
 ## Repository layout
 
 ```text
 src/UnifiedScript.Core/      Semantic IDs, diagnostics, HIR, [Visual]
 src/UnifiedScript.Semantics/ Language-neutral types, symbols, effects, bindings
 src/UnifiedScript.CSharp/    Roslyn profile validation and lowering
-src/UnifiedScript.Graph/     Deterministic visual graph projection
+src/UnifiedScript.Graph/     Deterministic graph projection and layout sidecars
 src/UnifiedScript.Cli/       Analysis command-line interface
 tests/UnifiedScript.Tests/   Unit and vertical-slice tests
 samples/                     Input programs for manual inspection
@@ -420,10 +455,13 @@ This milestone does not include:
   beyond the bounded local-literal insertion, safe deletion, temporary
   introduction, compatible existing-local consumer reconnection, and atomic
   shared-value-plan slices;
+- automatic graph placement, layout merge drivers, and editor viewport/session
+  state;
 - loops, switch, lambdas, exceptions, or general-purpose C# visualization.
 
 See [ARCHITECTURE.md](docs/ARCHITECTURE.md),
 [IDENTITY_SIDECAR.md](docs/IDENTITY_SIDECAR.md),
+[GRAPH_LAYOUT.md](docs/GRAPH_LAYOUT.md),
 [M1_ROSLYN_GRAPH_FOUNDATION.md](docs/milestones/M1_ROSLYN_GRAPH_FOUNDATION.md),
 [M2_SEMANTIC_BINDING.md](docs/milestones/M2_SEMANTIC_BINDING.md), and
 [M3_BIDIRECTIONAL_PATCHING.md](docs/milestones/M3_BIDIRECTIONAL_PATCHING.md)

@@ -40,6 +40,10 @@ a second language implementation or bypassing the existing compiler checks.
 - tombstones for unmatched deleted nodes
 - Roslyn-annotation identity pins for graph-authored replacements
 - `identity-init`, repeatable `--identity`, and rollback-capable `--out-identity`
+- `unifiedscript.graph-layout/v0.1` semantic-independent canvas sidecar
+- deterministic node placement, comment region, and edge-routing JSON
+- graph-driven layout initialization and synchronization CLI commands
+- explicit unplaced state plus missing-node/function orphan recovery
 
 ## Failure contract
 
@@ -143,7 +147,14 @@ The test and sample suite proves that:
 43. plans without persistent identity fail before executing their first step;
     and
 44. the checked-in `apply-plan` sample writes one final source/sidecar pair and
-    reanalyzes to three Graph references to the shared declaration.
+    reanalyzes to three Graph references to the shared declaration;
+45. layout JSON normalizes deterministically and rejects contradictory placement
+    or invalid geometry;
+46. semantic patch insertion preserves every surviving placed node while its
+    two new Graph nodes receive explicit unplaced state;
+47. missing nodes retain their last visual state as reasoned orphans; and
+48. an orphan restores its placement when the same function/node identity
+    reappears.
 
 ## Deliberate limits
 
@@ -152,7 +163,9 @@ It does not apply multi-file patches through the CLI, synthesize arbitrary
 expressions or control-flow statements, use arbitrary individual patch
 operations as plan steps, perform arbitrary data/control rewiring, delete
 returns/branches/blocks, reconcile declaration renames, compact tombstones, or
-persist graph layout. Insertion currently accepts only a named
+automatically place graph nodes. Layout v0.1 does not persist viewport/session
+state, define a three-way merge driver, or choose an auto-layout algorithm.
+Insertion currently accepts only a named
 graph-safe type already present in bound semantics plus one literal initializer.
 Deletion accepts only an unused local with no initializer or a literal
 initializer, or a resolved pure static call with effect-free simple arguments.
@@ -170,9 +183,7 @@ transaction coordinator.
 
 ## Next slice
 
-Add `unifiedscript.graph-layout/v0.1` as a semantic-independent `.usgraph`
-sidecar keyed by function and node `SemanticId`. Persist deterministic node
-positions, sizes, collapsed state, comment regions, and routing hints without
-allowing layout merges to change HIR or `.usids`. Define orphan handling for
-tombstoned/missing nodes and prove that semantic patches preserve surviving
-layout entries while new graph nodes receive explicit unplaced state.
+Extend patch-plan composition to safe statement insertion/deletion and bounded
+operator/value operations. The editor then needs one atomic plan format for a
+larger visual gesture while every stage continues to reanalyze against the same
+HIR, semantic, identity, and layout boundaries.

@@ -73,7 +73,7 @@ Outcome: graph patches produce localized, format-preserving C# edits.
 - [x] symbolic plan handles for newly allocated local declaration IDs
 - [x] in-memory stage rebasing with late-failure rollback
 - [ ] general statement/control-flow synthesis and structural HIR operations
-- [ ] graph layout sidecar
+- [x] graph layout sidecar with deterministic JSON, orphan recovery, and CLI sync
 - [ ] general data/control rewiring and arbitrary patch-plan steps
 
 ## M4 — Structured control flow expansion

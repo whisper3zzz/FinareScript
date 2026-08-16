@@ -13,6 +13,8 @@
 6. UE integration must arrive through adapters after the core model stabilizes.
 7. `UnifiedScript.Semantics` must not expose Roslyn, CLR-hosting, or UE types.
 8. Unknown calls are effectful by default; purity must be established explicitly.
+9. `.usgraph` layout is non-semantic: layout reconciliation must never mutate
+   source, HIR, bound semantics, or `.usids`.
 
 ## Verification
 
