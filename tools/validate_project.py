@@ -94,6 +94,7 @@ def main() -> int:
     composed_identity_path = ROOT / "samples" / "Patching" / "ComposedPlan.cs.usids"
     guard_source_path = ROOT / "samples" / "Patching" / "GuardRules.cs"
     guard_document_path = ROOT / "samples" / "Patching" / "InsertGuard.patch.json"
+    guard_plan_path = ROOT / "samples" / "Patching" / "PopulateGuard.plan.json"
     guard_identity_path = ROOT / "samples" / "Patching" / "GuardRules.cs.usids"
     layout_path = ROOT / "samples" / "Layout" / "DamageRules.usgraph"
     require(
@@ -126,8 +127,9 @@ def main() -> int:
     require(
         guard_source_path.is_file()
         and guard_document_path.is_file()
+        and guard_plan_path.is_file()
         and guard_identity_path.is_file(),
-        "Missing typed branch-insertion sample",
+        "Missing typed branch-insertion or branch-population sample",
     )
     require(layout_path.is_file(), "Missing graph layout sidecar sample")
     patch_source = patch_source_path.read_text(encoding="utf-8")
@@ -147,6 +149,7 @@ def main() -> int:
     composed_identity = json.loads(composed_identity_path.read_text(encoding="utf-8"))
     guard_source = guard_source_path.read_text(encoding="utf-8")
     guard_document = json.loads(guard_document_path.read_text(encoding="utf-8"))
+    guard_plan = json.loads(guard_plan_path.read_text(encoding="utf-8"))
     guard_identity = json.loads(guard_identity_path.read_text(encoding="utf-8"))
     layout = json.loads(layout_path.read_text(encoding="utf-8"))
     patch_operation = patch_document["operations"][0]
@@ -240,7 +243,7 @@ def main() -> int:
     introduction_step = plan_steps[0]
     reconnect_steps = plan_steps[1:]
     require(
-        plan_document["schemaVersion"] == "unifiedscript.patch-plan/v0.3"
+        plan_document["schemaVersion"] == "unifiedscript.patch-plan/v0.4"
         and plan_identity["sourcePath"]
         == "samples/Patching/SharedExpressionPlan.cs"
         and plan_identity["sourceDigest"] == f"sha256:{plan_source_digest}"
@@ -275,7 +278,7 @@ def main() -> int:
     composed_identity_ids = {entry["id"] for entry in composed_identity["entries"]}
     composed_insert, composed_reconnect, composed_operator, composed_delete = composed_steps
     require(
-        composed_document["schemaVersion"] == "unifiedscript.patch-plan/v0.3"
+        composed_document["schemaVersion"] == "unifiedscript.patch-plan/v0.4"
         and composed_identity["sourcePath"] == "samples/Patching/ComposedPlan.cs"
         and composed_identity["sourceDigest"] == f"sha256:{composed_source_digest}"
         and [step["step"] for step in composed_steps]
@@ -325,6 +328,28 @@ def main() -> int:
         and "int threshold" in guard_source
         and "bool disabled" in guard_source,
         "Typed branch source, sidecar, and patch are inconsistent",
+    )
+    guard_plan_steps = guard_plan["steps"]
+    guard_plan_source, *guard_branch_steps = guard_plan_steps
+    require(
+        guard_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.4"
+        and guard_plan["sourceCompilationId"] == guard_document["sourceCompilationId"]
+        and guard_plan["semanticConfigurationId"]
+        == guard_document["semanticConfigurationId"]
+        and guard_plan_source["step"] == "insertStatement"
+        and guard_plan_source["stepId"] == "insertGuard"
+        and guard_plan_source["targetNodeId"] == guard_operation["targetNodeId"]
+        and guard_plan_source["newStatement"] == guard_statement
+        and len(guard_branch_steps) == 3
+        and all(step["step"] == "insertBranchStatement" for step in guard_branch_steps)
+        and all(step["sourceStepId"] == guard_plan_source["stepId"] for step in guard_branch_steps)
+        and all(step["targetNodeId"] == guard_plan_source["targetNodeId"] for step in guard_branch_steps)
+        and [step["branch"] for step in guard_branch_steps] == ["then", "then", "else"]
+        and all(
+            step["newStatement"]["statement"] == "localLiteralDeclaration"
+            for step in guard_branch_steps
+        ),
+        "Atomic branch-population plan is inconsistent with the branch sample",
     )
     require(
         any((ROOT / "tests" / "UnifiedScript.Tests").glob("*Tests.cs")),

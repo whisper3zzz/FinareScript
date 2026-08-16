@@ -76,7 +76,8 @@ Outcome: graph patches produce localized, format-preserving C# edits.
 - [x] insertion-produced local handles and structural gap/endpoint rebasing
 - [x] versioned scalar graph-authored expression payload
 - [x] first typed `if` synthesis with explicit empty branch blocks
-- [ ] symbolic branch-block handles and atomic branch-body population
+- [x] symbolic branch-block handles and ordered local-literal branch-body population
+- [ ] bounded branch return and assignment payloads
 - [ ] general statement/control-flow synthesis and structural HIR operations
 - [x] graph layout sidecar with deterministic JSON, orphan recovery, and CLI sync
 - [ ] general data/control rewiring

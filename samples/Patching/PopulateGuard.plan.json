@@ -1,0 +1,91 @@
+{
+  "schemaVersion": "unifiedscript.patch-plan/v0.4",
+  "sourceCompilationId": "us_737559d53dccabd39b405aaf5dcdce79",
+  "semanticConfigurationId": "us_02f5fe78d296e2d4fe04bc50ca71acf1",
+  "steps": [
+    {
+      "step": "insertStatement",
+      "stepId": "insertGuard",
+      "targetNodeId": "us_8e30bbdf7bf01fe9cd3f69a4305ab19b",
+      "expectedNextSiblingId": "us_f5282828968755e496f9e8437ca5d277",
+      "newStatement": {
+        "statement": "if",
+        "condition": {
+          "expression": "binary",
+          "operator": "&&",
+          "left": {
+            "expression": "binary",
+            "operator": ">",
+            "left": {
+              "expression": "localReference",
+              "sourceDefinitionId": "us_6416d3e9c3d39f76f3d378f04407378d",
+              "expectedName": "damage",
+              "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+            },
+            "right": {
+              "expression": "localReference",
+              "sourceDefinitionId": "us_479f10eabba2d07e06aecc4d3f281895",
+              "expectedName": "threshold",
+              "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+            },
+            "expectedTypeId": "us_b5f84bcf933b6593d45e9e031353bfef"
+          },
+          "right": {
+            "expression": "unary",
+            "operator": "!",
+            "operand": {
+              "expression": "localReference",
+              "sourceDefinitionId": "us_ceec89ddb5b862cd6811d9daa5c9198a",
+              "expectedName": "disabled",
+              "expectedTypeId": "us_b5f84bcf933b6593d45e9e031353bfef"
+            },
+            "expectedTypeId": "us_b5f84bcf933b6593d45e9e031353bfef"
+          },
+          "expectedTypeId": "us_b5f84bcf933b6593d45e9e031353bfef"
+        }
+      }
+    },
+    {
+      "step": "insertBranchStatement",
+      "stepId": "insertHighDamageBonus",
+      "targetNodeId": "us_8e30bbdf7bf01fe9cd3f69a4305ab19b",
+      "sourceStepId": "insertGuard",
+      "branch": "then",
+      "newStatement": {
+        "statement": "localLiteralDeclaration",
+        "name": "highDamageBonus",
+        "typeName": "int",
+        "valueText": "2",
+        "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+      }
+    },
+    {
+      "step": "insertBranchStatement",
+      "stepId": "insertStackingBonus",
+      "targetNodeId": "us_8e30bbdf7bf01fe9cd3f69a4305ab19b",
+      "sourceStepId": "insertGuard",
+      "branch": "then",
+      "newStatement": {
+        "statement": "localLiteralDeclaration",
+        "name": "stackingBonus",
+        "typeName": "int",
+        "valueText": "3",
+        "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+      }
+    },
+    {
+      "step": "insertBranchStatement",
+      "stepId": "insertFallbackBonus",
+      "targetNodeId": "us_8e30bbdf7bf01fe9cd3f69a4305ab19b",
+      "sourceStepId": "insertGuard",
+      "branch": "else",
+      "newStatement": {
+        "statement": "localLiteralDeclaration",
+        "name": "fallbackBonus",
+        "typeName": "int",
+        "valueText": "1",
+        "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+      }
+    }
+  ]
+}

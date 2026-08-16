@@ -1,6 +1,7 @@
 using UnifiedScript.CSharp;
 using UnifiedScript.Core;
 using UnifiedScript.Core.Hir;
+using UnifiedScript.Graph;
 using UnifiedScript.Semantics;
 
 namespace UnifiedScript.Tests;
@@ -441,6 +442,223 @@ public sealed class CSharpPatchPlanApplierTests
         HirReturnStatement changedReturn = Assert.IsType<HirReturnStatement>(
             changedMethod.Body.Statements[1]);
         Assert.Equal(literal.Id, Assert.IsType<HirLiteralExpression>(changedReturn.Expression).Id);
+    }
+
+    [Fact]
+    public void Apply_PopulatesProducedThenAndElseBlocksInPlanOrder()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static bool Run(int damage, int threshold)
+                {
+                    return true;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/BranchBodyPlan.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(
+            Assert.Single(method.Body.Statements));
+        SemanticId intType = GetTypeId(original, method.Parameters[0]);
+        SemanticId boolType = GetTypeId(original, returnStatement.Expression!);
+        IdentitySidecarDocument beforeIdentity = Assert.Single(original.IdentitySidecars);
+        GraphDocument beforeGraph = new HirGraphProjector().Project(original.Hir, original.Semantics);
+        GraphFunction beforeFunction = Assert.Single(beforeGraph.Functions);
+        GraphLayoutDocument beforeLayout = new(
+            GraphLayoutDocument.CurrentSchemaVersion,
+            [new GraphFunctionLayout(
+                beforeFunction.Id,
+                beforeFunction.Nodes.Select((node, index) => new GraphNodeLayout(
+                    node.Id,
+                    GraphNodePlacement.Placed,
+                    new GraphLayoutPoint(index * 100, index * 50),
+                    new GraphLayoutSize(160, 80),
+                    false)).ToArray(),
+                [],
+                [])],
+            []);
+        var guard = new InsertStatementPatchPlanStep(
+            "insertGuard",
+            method.Body.Id,
+            null,
+            returnStatement.Id,
+            new IfPatchStatement(new BinaryPatchExpression(
+                ">",
+                new LocalReferencePatchExpression(
+                    method.Parameters[0].Id,
+                    "damage",
+                    intType),
+                new LocalReferencePatchExpression(
+                    method.Parameters[1].Id,
+                    "threshold",
+                    intType),
+                boolType)));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                guard,
+                new InsertBranchStatementPatchPlanStep(
+                    "insertHighDamage",
+                    method.Body.Id,
+                    guard.StepId,
+                    IfBranchKind.Then,
+                    new LocalLiteralDeclarationPatchStatement("highDamage", "int", "2", intType)),
+                new InsertBranchStatementPatchPlanStep(
+                    "insertBonus",
+                    method.Body.Id,
+                    guard.StepId,
+                    IfBranchKind.Then,
+                    new LocalLiteralDeclarationPatchStatement("bonus", "int", "3", intType)),
+                new InsertBranchStatementPatchPlanStep(
+                    "insertFallback",
+                    method.Body.Id,
+                    guard.StepId,
+                    IfBranchKind.Else,
+                    new LocalLiteralDeclarationPatchStatement("fallback", "int", "1", intType)),
+            ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains("if (damage > threshold)", patchedSource, StringComparison.Ordinal);
+        Assert.Contains(
+            "int highDamage = 2;\n            int bonus = 3;",
+            patchedSource,
+            StringComparison.Ordinal);
+        Assert.Contains("else\n        {\n            int fallback = 1;", patchedSource, StringComparison.Ordinal);
+
+        HirMethodDeclaration changedMethod = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirIfStatement inserted = Assert.IsType<HirIfStatement>(changedMethod.Body.Statements[0]);
+        HirVariableDeclarationStatement highDamage = Assert.IsType<HirVariableDeclarationStatement>(
+            inserted.Then.Statements[0]);
+        HirVariableDeclarationStatement bonus = Assert.IsType<HirVariableDeclarationStatement>(
+            inserted.Then.Statements[1]);
+        HirVariableDeclarationStatement fallback = Assert.IsType<HirVariableDeclarationStatement>(
+            Assert.Single(inserted.Else!.Statements));
+        Assert.Equal("highDamage", highDamage.Name);
+        Assert.Equal("bonus", bonus.Name);
+        Assert.Equal("fallback", fallback.Name);
+        Assert.Equal(returnStatement.Id, changedMethod.Body.Statements[1].Id);
+
+        IdentitySidecarDocument afterIdentity = Assert.Single(result.Analysis.IdentitySidecars);
+        Assert.All(
+            beforeIdentity.Entries,
+            entry => Assert.Contains(afterIdentity.Entries, candidate => candidate.Id == entry.Id));
+        Assert.Empty(afterIdentity.Tombstones);
+
+        GraphDocument afterGraph = new HirGraphProjector().Project(
+            result.Analysis.Hir,
+            result.Analysis.Semantics);
+        GraphFunction afterFunction = Assert.Single(afterGraph.Functions);
+        Assert.Contains(afterFunction.Nodes, node => node.Id == inserted.Id && node.Kind == "branch");
+        Assert.Contains(afterFunction.Nodes, node => node.Id == highDamage.Id && node.Kind == "variable");
+        Assert.Contains(afterFunction.Nodes, node => node.Id == bonus.Id && node.Kind == "variable");
+        Assert.Contains(afterFunction.Nodes, node => node.Id == fallback.Id && node.Kind == "variable");
+        Assert.Contains(
+            afterFunction.Edges,
+            edge => edge.Kind == GraphEdgeKind.Control &&
+                edge.FromNode == inserted.Id &&
+                edge.FromPort == "then" &&
+                edge.ToNode == highDamage.Id);
+        Assert.Contains(
+            afterFunction.Edges,
+            edge => edge.Kind == GraphEdgeKind.Control &&
+                edge.FromNode == inserted.Id &&
+                edge.FromPort == "else" &&
+                edge.ToNode == fallback.Id);
+
+        GraphLayoutDocument synchronized = new GraphLayoutSynchronizer().Synchronize(
+            afterGraph,
+            beforeLayout);
+        GraphFunctionLayout synchronizedFunction = Assert.Single(synchronized.Functions);
+        HashSet<SemanticId> oldGraphNodeIds = beforeFunction.Nodes
+            .Select(static node => node.Id)
+            .ToHashSet();
+        Assert.All(
+            synchronizedFunction.Nodes.Where(node => oldGraphNodeIds.Contains(node.NodeId)),
+            node => Assert.Equal(GraphNodePlacement.Placed, node.Placement));
+        Assert.All(
+            synchronizedFunction.Nodes.Where(node => !oldGraphNodeIds.Contains(node.NodeId)),
+            node => Assert.Equal(GraphNodePlacement.Unplaced, node.Placement));
+        Assert.Empty(synchronized.OrphanedNodes);
+    }
+
+    [Fact]
+    public void Apply_RollsBackWhenBranchLocalEscapesItsProducedBlock()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(bool ready)
+                {
+                    return 0;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/BranchHandleRollback.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(
+            Assert.Single(method.Body.Statements));
+        HirLiteralExpression consumer = Assert.IsType<HirLiteralExpression>(returnStatement.Expression);
+        SemanticId intType = GetTypeId(original, consumer);
+        SemanticId boolType = GetTypeId(original, method.Parameters[0]);
+        var guard = new InsertStatementPatchPlanStep(
+            "insertGuard",
+            method.Body.Id,
+            null,
+            returnStatement.Id,
+            new IfPatchStatement(new LocalReferencePatchExpression(
+                method.Parameters[0].Id,
+                "ready",
+                boolType)));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                guard,
+                new InsertBranchStatementPatchPlanStep(
+                    "insertBranchValue",
+                    method.Body.Id,
+                    guard.StepId,
+                    IfBranchKind.Then,
+                    new LocalLiteralDeclarationPatchStatement(
+                        "branchValue",
+                        "int",
+                        "1",
+                        intType)),
+                new ReconnectValuePatchPlanStep(
+                    "escapeBranchValue",
+                    consumer.Id,
+                    "insertBranchValue",
+                    returnStatement.Id,
+                    method.Body.Id,
+                    null,
+                    null,
+                    intType),
+            ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.PatchedRequest);
+        Assert.Null(result.Analysis);
+        Assert.Equal(source, Assert.Single(request.Sources).Source);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.ValueSourceNotAvailable);
     }
 
     [Fact]

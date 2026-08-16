@@ -212,6 +212,99 @@ public sealed class SemanticPatchPlanJsonTests
     }
 
     [Fact]
+    public void SerializeAndDeserialize_PreserveTypedBranchInsertionsAndLocalHandles()
+    {
+        SemanticId boolType = SemanticId.FromKey("System.Boolean");
+        SemanticId intType = SemanticId.FromKey("System.Int32");
+        SemanticId blockId = SemanticId.FromKey("branch-plan-block");
+        var guard = new InsertStatementPatchPlanStep(
+            "insertGuard",
+            blockId,
+            null,
+            SemanticId.FromKey("branch-plan-next"),
+            new IfPatchStatement(new LocalReferencePatchExpression(
+                SemanticId.FromKey("branch-plan-parameter"),
+                "ready",
+                boolType)));
+        var thenInsertion = new InsertBranchStatementPatchPlanStep(
+            "insertThenValue",
+            blockId,
+            guard.StepId,
+            IfBranchKind.Then,
+            new LocalLiteralDeclarationPatchStatement("thenValue", "int", "1", intType));
+        var elseInsertion = new InsertBranchStatementPatchPlanStep(
+            "insertElseValue",
+            blockId,
+            guard.StepId,
+            IfBranchKind.Else,
+            new LocalLiteralDeclarationPatchStatement("elseValue", "int", "2", intType));
+        var reconnect = new ReconnectValuePatchPlanStep(
+            "connectBranchValue",
+            SemanticId.FromKey("branch-plan-consumer"),
+            thenInsertion.StepId,
+            SemanticId.FromKey("branch-plan-consumer-statement"),
+            blockId,
+            null,
+            null,
+            intType);
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("branch-plan-compilation"),
+            SemanticId.FromKey("branch-plan-configuration"),
+            [guard, thenInsertion, elseInsertion, reconnect]);
+
+        string json = SemanticPatchPlanJson.Serialize(plan);
+        SemanticPatchPlanDocument roundTrip = SemanticPatchPlanJson.Deserialize(json);
+
+        Assert.Equal(thenInsertion, Assert.IsType<InsertBranchStatementPatchPlanStep>(roundTrip.Steps[1]));
+        Assert.Equal(elseInsertion, Assert.IsType<InsertBranchStatementPatchPlanStep>(roundTrip.Steps[2]));
+        Assert.Contains("\"step\": \"insertBranchStatement\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"branch\": \"then\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"branch\": \"else\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Create_RejectsInvalidBranchSourcesAnchorsAndPayloads()
+    {
+        SemanticId boolType = SemanticId.FromKey("System.Boolean");
+        SemanticId intType = SemanticId.FromKey("System.Int32");
+        SemanticId blockId = SemanticId.FromKey("branch-validation-block");
+        var guard = new InsertStatementPatchPlanStep(
+            "insertGuard",
+            blockId,
+            null,
+            null,
+            new IfPatchStatement(new LiteralPatchExpression("true", boolType)));
+        InsertBranchStatementPatchPlanStep BranchStep(
+            string sourceStepId,
+            SemanticId? target = null,
+            InsertPatchStatement? payload = null) => new(
+            "populateThen",
+            target ?? blockId,
+            sourceStepId,
+            IfBranchKind.Then,
+            payload ?? new LocalLiteralDeclarationPatchStatement("value", "int", "1", intType));
+
+        Assert.Throws<JsonException>(() => SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("branch-validation-compilation"),
+            SemanticId.FromKey("branch-validation-configuration"),
+            [BranchStep(guard.StepId), guard]));
+        Assert.Throws<JsonException>(() => SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("branch-validation-compilation"),
+            SemanticId.FromKey("branch-validation-configuration"),
+            [guard, BranchStep("missingGuard")]));
+        Assert.Throws<JsonException>(() => SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("branch-validation-compilation"),
+            SemanticId.FromKey("branch-validation-configuration"),
+            [guard, BranchStep(guard.StepId, SemanticId.FromKey("other-block"))]));
+        Assert.Throws<JsonException>(() => SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("branch-validation-compilation"),
+            SemanticId.FromKey("branch-validation-configuration"),
+            [guard, BranchStep(
+                guard.StepId,
+                payload: new IfPatchStatement(new LiteralPatchExpression("true", boolType)))]));
+    }
+
+    [Fact]
     public void Create_RejectsReconnectThatReferencesAFutureIntroduction()
     {
         SemanticId floatType = SemanticId.FromKey("System.Single");

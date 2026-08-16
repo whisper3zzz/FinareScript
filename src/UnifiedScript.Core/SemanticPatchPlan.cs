@@ -7,6 +7,7 @@ namespace UnifiedScript.Core;
 [JsonDerivedType(typeof(ChangeOperatorPatchPlanStep), "changeOperator")]
 [JsonDerivedType(typeof(ReconnectArgumentPatchPlanStep), "reconnectArgument")]
 [JsonDerivedType(typeof(InsertStatementPatchPlanStep), "insertStatement")]
+[JsonDerivedType(typeof(InsertBranchStatementPatchPlanStep), "insertBranchStatement")]
 [JsonDerivedType(typeof(DeleteStatementPatchPlanStep), "deleteStatement")]
 [JsonDerivedType(typeof(IntroduceTemporaryPatchPlanStep), "introduceTemporary")]
 [JsonDerivedType(typeof(ReconnectValuePatchPlanStep), "reconnectValue")]
@@ -78,6 +79,19 @@ public sealed record InsertStatementPatchPlanStep(
         NewStatement);
 }
 
+public enum IfBranchKind
+{
+    Then,
+    Else,
+}
+
+public sealed record InsertBranchStatementPatchPlanStep(
+    string StepId,
+    SemanticId TargetNodeId,
+    string SourceStepId,
+    IfBranchKind Branch,
+    InsertPatchStatement NewStatement) : SemanticPatchPlanStep(StepId, TargetNodeId);
+
 public sealed record DeleteStatementPatchPlanStep(
     string StepId,
     SemanticId TargetNodeId,
@@ -130,7 +144,7 @@ public sealed record SemanticPatchPlanDocument(
     SemanticId SemanticConfigurationId,
     IReadOnlyList<SemanticPatchPlanStep> Steps)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.patch-plan/v0.3";
+    public const string CurrentSchemaVersion = "unifiedscript.patch-plan/v0.4";
 
     public static SemanticPatchPlanDocument Create(
         SemanticId sourceCompilationId,

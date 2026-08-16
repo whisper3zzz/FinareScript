@@ -197,17 +197,21 @@ blocks. Structural operations carry old operator/endpoint, semantic type,
 containing statement, parent block, and exact sibling preconditions rather than
 relying only on the compilation baseline.
 
-`unifiedscript.patch-plan/v0.3` is an ordered transaction above individual
+`unifiedscript.patch-plan/v0.4` is an ordered transaction above individual
 patches. It composes every current bounded operation: literal and operator
 changes, argument reconnection, statement insertion/deletion, temporary
-introduction, and value reconnection. `introduceTemporary` and local-literal
-`insertStatement` steps publish symbolic handles; later `reconnectValue` steps
-reference those handles instead of guessing a random declaration ID that does
-not exist in the initial HIR. The complete plan still carries one external
-source/configuration baseline and records every target's original value,
-endpoint, statement, block, sibling, and type preconditions.
-An `if` insertion participates as a non-producing step, so it can compose with
-later direct edits without masquerading as a reconnectable local definition.
+introduction, value reconnection, and symbolic branch-body insertion.
+`introduceTemporary`, local-literal `insertStatement`, and local-literal
+`insertBranchStatement` steps publish symbolic local handles. Later
+`reconnectValue` steps reference those handles instead of guessing a random
+declaration ID that does not exist in the initial HIR. The complete plan still
+carries one external source/configuration baseline and records every target's
+original value, endpoint, statement, block, sibling, and type preconditions.
+An `if` insertion publishes internal `then`/`else` block handles for later
+`insertBranchStatement` steps without masquerading as a reconnectable local
+definition. The branch steps repeat the producer's original parent block as
+their stable initial anchor; the coordinator records the generated branch IDs
+after the `if` stage and turns each append into a normal bounded insertion.
 The complete transaction and internal rebasing contract is specified in
 [PATCH_PLAN.md](PATCH_PLAN.md).
 
@@ -269,12 +273,15 @@ rewiring remain future patch-algebra work.
 The C# patch-plan coordinator validates every independently executable step in
 isolation against the initial HIR before changing its in-memory request;
 symbolic reconnections receive equivalent initial statement, sibling, method,
-and type checks. It then executes one localized patch at a time, adopts the
-stage's updated sidecar, removes transient pins, resolves any produced local
-handle, and constructs the next internal patch with the current compilation
-baseline. Statement deletion uses current siblings; repeated insertion rebases
-the original gap while retaining plan order; argument reconnection relocates
-current indices from persistent endpoint IDs. Each stage performs complete
+and type checks, while dependent branch insertions validate their original
+anchor, producer method, selector, and payload shape. It then executes one
+localized patch at a time, adopts the stage's updated sidecar, removes transient
+pins, resolves any produced local or branch handle, and constructs the next
+internal patch with the current compilation baseline. Statement deletion uses
+current siblings; repeated root-block insertion rebases the original gap while
+retaining plan order; argument reconnection relocates current indices from
+persistent endpoint IDs; branch insertion appends to the currently resolved
+produced block. Each stage performs complete
 semantic reanalysis. A failure discards every intermediate request; only the
 final request and sidecar cross the CLI's rollback-capable transaction. Plans
 therefore require persistent identity on target documents. Repeated target IDs

@@ -18,10 +18,12 @@ a second language implementation or bypassing the existing compiler checks.
 - bounded `deleteStatement` with symbol-use and effect safety checks
 - `introduceTemporary` for stable, pure return/local-initializer expressions
 - `reconnectValue` from an existing local to an exactly typed stable consumer
-- `unifiedscript.patch-plan/v0.3` ordered multi-stage transaction protocol
+- `unifiedscript.patch-plan/v0.4` ordered multi-stage transaction protocol
 - plan steps for every bounded semantic patch operation
 - symbolic plan handles for local IDs allocated by `introduceTemporary` and
   local-literal `insertStatement`
+- symbolic `then`/`else` handles for blocks allocated by `if` insertion, with
+  ordered local-literal branch-body population
 - initial-context validation and safe internal baseline/sibling rebasing
 - repeated insertion-gap and invocation-endpoint rebasing
 - persistent-sidecar adoption between in-memory plan stages
@@ -184,9 +186,17 @@ The test and sample suite proves that:
     insertion, while the branch and condition Graph nodes receive fresh IDs and
     explicit unplaced layout state;
 59. patch-plan v0.3 composes a non-producing `if` insertion with a later direct
-    edit and rejects attempts to consume the branch step as a local handle; and
+    edit and rejects attempts to consume the branch step as a local handle;
 60. the checked-in `InsertGuard.patch.json` sample applies and emits the
-    documented branch skeleton.
+    documented branch skeleton;
+61. patch-plan v0.4 resolves the random `then` and `else` block IDs produced by
+    an earlier `if` step and appends local-literal declarations in plan order;
+62. branch-body locals become typed plan handles, but a late attempt to use one
+    outside its branch fails dominance checks and rolls back every prior stage;
+63. original identities and Graph layout survive atomic branch population,
+    while every newly projected branch/condition/local node is unplaced; and
+64. the checked-in `PopulateGuard.plan.json` sample applies without exposing a
+    generated block ID.
 
 ## Deliberate limits
 
@@ -197,11 +207,12 @@ arbitrary data/control rewiring, delete
 returns/branches/blocks, reconcile declaration renames, compact tombstones, or
 automatically place graph nodes. Layout v0.1 does not persist viewport/session
 state, define a three-way merge driver, or choose an auto-layout algorithm.
-Insertion accepts a local-literal declaration or an `if` skeleton. The `if`
-condition accepts only graph-safe scalar types already present in bound
+Standalone insertion accepts a local-literal declaration or an `if` skeleton.
+The `if` condition accepts only graph-safe scalar types already present in bound
 semantics, a closed pure expression subset, and same-method references that are
 available at the exact insertion gap. It always creates empty explicit branch
-blocks and does not yet publish symbolic handles for those blocks.
+blocks. Patch-plan v0.4 can resolve those blocks symbolically, but branch-body
+payloads are limited to local declarations with literal initializers.
 Deletion accepts only an unused local with no initializer or a literal
 initializer, or a resolved pure static call with effect-free simple arguments.
 Temporary introduction accepts only stable, pure value expressions in return or
@@ -211,18 +222,19 @@ operator effects model conditional evaluation, allocation, and throws.
 Value reconnection accepts only an existing, unshadowed local or a local
 produced by an earlier plan step that structurally dominates the containing
 statement and has the same graph-safe semantic type as
-the removable stable consumer. Patch-plan v0.3 composes every current bounded
+the removable stable consumer. Patch-plan v0.4 composes every current bounded
 operation and requires sidecars on target documents. A source handle may
-reference only an earlier temporary introduction or local-literal insertion in
-the same method with the same expected type. Only insertion steps may repeat a
-target block; repeated non-insertion old-value preconditions remain ambiguous.
-Project-wide edits require a multi-file transaction coordinator.
+reference only an earlier temporary introduction, root-block local-literal
+insertion, or branch local-literal insertion in the same method with the same
+expected type. Dominance still governs where that handle may be consumed. Only
+insertion steps may repeat a target block; repeated non-insertion old-value
+preconditions remain ambiguous. Project-wide edits require a multi-file
+transaction coordinator.
 
 ## Next slice
 
-Add symbolic `then`/`else` block handles to the patch-plan protocol and allow
-later plan steps to populate those newly created blocks with the existing safe
-statement payloads. This turns the proven branch skeleton into a useful atomic
-visual gesture without requiring the editor to predict random block IDs. Then
-extend the expression payload only where type/effect rules remain statically
-closed, before moving to loop-region construction.
+Add bounded branch `return` and assignment payloads with explicit target/type/
+effect preconditions. This turns populated branch skeletons into behaviorally
+useful visual gestures while keeping statement synthesis closed. Then extend
+the expression payload only where type/effect rules remain statically closed,
+before moving to nested branch and loop-region construction.

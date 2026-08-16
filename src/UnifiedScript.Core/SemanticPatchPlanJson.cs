@@ -49,6 +49,7 @@ public static class SemanticPatchPlanJson
         var stepIds = new HashSet<string>(StringComparer.Ordinal);
         var targetKinds = new Dictionary<SemanticId, bool>();
         var producedTypes = new Dictionary<string, SemanticId>(StringComparer.Ordinal);
+        var branchProducers = new Dictionary<string, InsertStatementPatchPlanStep>(StringComparer.Ordinal);
         foreach (SemanticPatchPlanStep? step in document.Steps)
         {
             if (step is null)
@@ -68,7 +69,8 @@ public static class SemanticPatchPlanJson
                     "Every semantic patch plan step must target a non-empty semantic node ID.");
             }
 
-            bool isInsertion = step is InsertStatementPatchPlanStep;
+            bool isInsertion = step is InsertStatementPatchPlanStep or
+                InsertBranchStatementPatchPlanStep;
             if (targetKinds.TryGetValue(step.TargetNodeId, out bool previousWasInsertion))
             {
                 if (!isInsertion || !previousWasInsertion)
@@ -100,6 +102,18 @@ public static class SemanticPatchPlanJson
                     {
                         producedTypes.Add(insertion.StepId, insertedLocal.ExpectedTypeId);
                     }
+                    else if (insertion.NewStatement is IfPatchStatement)
+                    {
+                        branchProducers.Add(insertion.StepId, insertion);
+                    }
+
+                    break;
+                case InsertBranchStatementPatchPlanStep branchInsertion:
+                    ValidateBranchInsertion(document, branchInsertion, branchProducers);
+                    producedTypes.Add(
+                        branchInsertion.StepId,
+                        ((LocalLiteralDeclarationPatchStatement)branchInsertion.NewStatement)
+                            .ExpectedTypeId);
 
                     break;
                 case DeleteStatementPatchPlanStep deletion:
@@ -135,6 +149,47 @@ public static class SemanticPatchPlanJson
         IntroduceTemporaryPatchPlanStep introduction)
     {
         ValidateOperation(document, introduction.ToOperation());
+    }
+
+    private static void ValidateBranchInsertion(
+        SemanticPatchPlanDocument document,
+        InsertBranchStatementPatchPlanStep insertion,
+        IReadOnlyDictionary<string, InsertStatementPatchPlanStep> branchProducers)
+    {
+        if (string.IsNullOrWhiteSpace(insertion.SourceStepId) ||
+            !branchProducers.TryGetValue(
+                insertion.SourceStepId,
+                out InsertStatementPatchPlanStep? source))
+        {
+            throw new JsonException(
+                $"Branch insertion step '{insertion.StepId}' must reference an earlier if-insertion step.");
+        }
+
+        if (source.TargetNodeId != insertion.TargetNodeId)
+        {
+            throw new JsonException(
+                $"Branch insertion step '{insertion.StepId}' and source step " +
+                $"'{insertion.SourceStepId}' must use the same original parent-block target.");
+        }
+
+        if (!Enum.IsDefined(insertion.Branch))
+        {
+            throw new JsonException(
+                $"Branch insertion step '{insertion.StepId}' has an unsupported branch selector.");
+        }
+
+        if (insertion.NewStatement is not LocalLiteralDeclarationPatchStatement)
+        {
+            throw new JsonException(
+                $"Branch insertion step '{insertion.StepId}' currently accepts only a " +
+                "local-literal declaration.");
+        }
+
+        ValidateOperation(document, new InsertStatementPatchOperation(
+            insertion.TargetNodeId,
+            null,
+            null,
+            insertion.NewStatement));
     }
 
     private static void ValidateReconnection(

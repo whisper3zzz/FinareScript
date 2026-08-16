@@ -271,11 +271,30 @@ belong to the same method. The current operator subset excludes division,
 remainder, decimal/string operations, mutation, calls, member reads, and other
 expressions whose evaluation may throw, allocate, mutate, or read state.
 
-This first control-flow primitive deliberately creates empty `then` and `else`
-blocks. It proves that source, HIR, Graph branch/data/control edges, persistent
-identity, and `.usgraph` layout synchronization share one structure. New branch
-and condition nodes are explicitly `unplaced`; existing placements survive.
-Block handles and branch-body population are the next bounded protocol slice.
+The standalone operation deliberately creates empty `then` and `else` blocks.
+It proves that source, HIR, Graph branch/data/control edges, persistent identity,
+and `.usgraph` layout synchronization share one structure. New branch and
+condition nodes are explicitly `unplaced`; existing placements survive.
+
+Patch-plan v0.4 can populate those newly allocated blocks without predicting
+their random IDs. The checked-in plan inserts the same guard, appends two typed
+locals to `then`, and appends one typed local to `else`:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  apply-plan \
+  samples/Patching/GuardRules.cs \
+  --identity samples/Patching/GuardRules.cs.usids \
+  --plan samples/Patching/PopulateGuard.plan.json \
+  --out artifacts/guard-plan/GuardRules.cs \
+  --out-identity artifacts/guard-plan/GuardRules.cs.usids
+```
+
+Each `insertBranchStatement` names the earlier `if` step through `sourceStepId`
+and selects `then` or `else`. The coordinator resolves the actual block ID after
+the `if` stage, appends branch statements in plan order, and reuses the normal
+typed insertion checks. The v0.4 branch payload is deliberately limited to a
+local declaration with a literal initializer.
 
 A deletion targets one statement and records its parent block plus both current
 sibling IDs. This slice permits only an unused local with no initializer or a
@@ -385,8 +404,8 @@ analyzed source baseline, or atomically with the patch-plan protocol below.
 
 ## Apply atomic semantic patch plans
 
-`unifiedscript.patch-plan/v0.3` composes `replaceLiteral`, `changeOperator`,
-`reconnectArgument`, `insertStatement`, `deleteStatement`,
+`unifiedscript.patch-plan/v0.4` composes `replaceLiteral`, `changeOperator`,
+`reconnectArgument`, `insertStatement`, `insertBranchStatement`, `deleteStatement`,
 `introduceTemporary`, and `reconnectValue` as one ordered transaction. The
 shared-value sample starts with:
 
@@ -452,16 +471,18 @@ float scale = 2.0f;
 return damage / scale;
 ```
 
-Before execution, every non-symbolic step is independently checked against the
+Before execution, every independently executable step is checked against the
 original source. During execution, statement siblings and insertion gaps are
 rebased only over earlier stages in the same plan. Multiple insertions into one
 original gap retain plan order, and argument reconnection relocates its current
 indices by persistent endpoint ID. Non-insertion targets remain unique to avoid
 ambiguous repeated old-value preconditions. Reconnect handles must reference an
-earlier local producer in the same method with the same graph-safe type. An
-`if` insertion is a non-producing plan step: it composes atomically with later
-direct steps but cannot be used as a local value handle. Branch-block handles,
-branch-body population, and cross-method handles remain outside v0.3.
+earlier local producer in the same method with the same graph-safe type. An `if`
+insertion publishes symbolic `then` and `else` block handles only through later
+`insertBranchStatement` steps; it still is not a local value handle. Branch
+locals publish ordinary local handles, but normal dominance rules prevent a
+branch-local value from escaping to the outer block or sibling branch. General
+branch statements and cross-method handles remain outside v0.4.
 
 ## Persist and synchronize graph layout
 
