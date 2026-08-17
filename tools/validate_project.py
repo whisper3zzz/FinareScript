@@ -27,11 +27,13 @@ DOCUMENTS = [
     ROOT / "docs" / "ARCHITECTURE.md",
     ROOT / "docs" / "IDENTITY_SIDECAR.md",
     ROOT / "docs" / "GRAPH_LAYOUT.md",
+    ROOT / "docs" / "GRAPH_REGIONS.md",
     ROOT / "docs" / "PATCH_PLAN.md",
     ROOT / "docs" / "ROADMAP.md",
     ROOT / "docs" / "milestones" / "M1_ROSLYN_GRAPH_FOUNDATION.md",
     ROOT / "docs" / "milestones" / "M2_SEMANTIC_BINDING.md",
     ROOT / "docs" / "milestones" / "M3_BIDIRECTIONAL_PATCHING.md",
+    ROOT / "docs" / "milestones" / "M4_STRUCTURED_CONTROL_FLOW.md",
 ]
 
 
@@ -97,6 +99,14 @@ def main() -> int:
     guard_plan_path = ROOT / "samples" / "Patching" / "PopulateGuard.plan.json"
     guard_return_plan_path = ROOT / "samples" / "Patching" / "ReturnGuard.plan.json"
     guard_identity_path = ROOT / "samples" / "Patching" / "GuardRules.cs.usids"
+    region_source_path = ROOT / "samples" / "Regions" / "EarlyReturn.cs"
+    golden_manifest_path = (
+        ROOT
+        / "tests"
+        / "UnifiedScript.Tests"
+        / "Fixtures"
+        / "GoldenVisual.golden.json"
+    )
     layout_path = ROOT / "samples" / "Layout" / "DamageRules.usgraph"
     require(
         patch_source_path.is_file()
@@ -133,6 +143,8 @@ def main() -> int:
         and guard_identity_path.is_file(),
         "Missing typed branch-insertion or branch-population sample",
     )
+    require(region_source_path.is_file(), "Missing structured Graph-region sample")
+    require(golden_manifest_path.is_file(), "Missing Golden artifact manifest")
     require(layout_path.is_file(), "Missing graph layout sidecar sample")
     patch_source = patch_source_path.read_text(encoding="utf-8")
     patch_document = json.loads(patch_document_path.read_text(encoding="utf-8"))
@@ -154,6 +166,8 @@ def main() -> int:
     guard_plan = json.loads(guard_plan_path.read_text(encoding="utf-8"))
     guard_return_plan = json.loads(guard_return_plan_path.read_text(encoding="utf-8"))
     guard_identity = json.loads(guard_identity_path.read_text(encoding="utf-8"))
+    region_source = region_source_path.read_text(encoding="utf-8")
+    golden_manifest = json.loads(golden_manifest_path.read_text(encoding="utf-8"))
     layout = json.loads(layout_path.read_text(encoding="utf-8"))
     patch_operation = patch_document["operations"][0]
     operator_operation = operator_patch["operations"][0]
@@ -377,6 +391,14 @@ def main() -> int:
     require(
         any((ROOT / "tests" / "UnifiedScript.Tests").glob("*Tests.cs")),
         "No tests found",
+    )
+    require(
+        golden_manifest["artifacts"]["graph"]["schemaVersion"]
+        == "unifiedscript.graph/v0.3"
+        and "if ((damage > threshold) && !disabled)" in region_source
+        and "return true;" in region_source
+        and "return false;" in region_source,
+        "Graph v0.3 Golden manifest or early-return region sample is inconsistent",
     )
     layout_functions = layout["functions"]
     layout_nodes = [

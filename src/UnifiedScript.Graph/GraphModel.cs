@@ -20,6 +20,15 @@ public enum GraphEdgeKind
     Data,
 }
 
+public enum GraphRegionKind
+{
+    Function,
+    Block,
+    If,
+    Then,
+    Else,
+}
+
 public sealed record GraphPort(
     string Name,
     GraphPortDirection Direction,
@@ -41,11 +50,23 @@ public sealed record GraphEdge(
     SemanticId ToNode,
     string ToPort);
 
+public sealed record GraphRegion(
+    SemanticId Id,
+    GraphRegionKind Kind,
+    SemanticId? ParentRegionId,
+    SemanticId SourceNodeId,
+    SourceSpan Span,
+    bool IsImplicit,
+    IReadOnlyList<SemanticId> NodeIds,
+    IReadOnlyList<SemanticId> ChildRegionIds);
+
 public sealed record GraphFunction(
     SemanticId Id,
     string QualifiedName,
     IReadOnlyList<GraphNode> Nodes,
-    IReadOnlyList<GraphEdge> Edges);
+    IReadOnlyList<GraphEdge> Edges,
+    SemanticId RootRegionId,
+    IReadOnlyList<GraphRegion> Regions);
 
 public sealed record GraphDocument(
     string SchemaVersion,
@@ -53,5 +74,5 @@ public sealed record GraphDocument(
     SemanticId? SemanticConfigurationId,
     IReadOnlyList<GraphFunction> Functions)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.graph/v0.2";
+    public const string CurrentSchemaVersion = "unifiedscript.graph/v0.3";
 }

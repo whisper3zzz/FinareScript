@@ -1,0 +1,140 @@
+using System.Text.Json;
+using UnifiedScript.CSharp;
+using UnifiedScript.Core;
+using UnifiedScript.Graph;
+
+namespace UnifiedScript.Tests;
+
+public sealed class GraphJsonTests
+{
+    private const string Source = """
+        static class Rules
+        {
+            [Visual]
+            static bool Run(bool ready)
+            {
+                if (ready)
+                {
+                    return true;
+                }
+
+                return false;
+            }
+        }
+        """;
+
+    [Fact]
+    public void Serialize_NormalizesAndRoundTripsExplicitRegions()
+    {
+        GraphDocument graph = CreateGraph();
+        GraphFunction function = Assert.Single(graph.Functions);
+        GraphDocument reordered = graph with
+        {
+            Functions = [function with
+            {
+                Nodes = function.Nodes.Reverse().ToArray(),
+                Edges = function.Edges.Reverse().ToArray(),
+                Regions = function.Regions.Reverse().ToArray(),
+            }],
+        };
+
+        string json = GraphJson.Serialize(reordered);
+        GraphDocument roundTrip = GraphJson.Deserialize(json);
+
+        Assert.Equal(GraphDocument.CurrentSchemaVersion, roundTrip.SchemaVersion);
+        Assert.Equal(json, GraphJson.Serialize(roundTrip));
+        Assert.Contains("\"rootRegionId\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"kind\": \"function\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"kind\": \"then\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"isImplicit\": true", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Deserialize_RejectsPreRegionGraphSchema()
+    {
+        string json = GraphJson.Serialize(CreateGraph())
+            .Replace(
+                GraphDocument.CurrentSchemaVersion,
+                "unifiedscript.graph/v0.2",
+                StringComparison.Ordinal);
+
+        JsonException exception = Assert.Throws<JsonException>(() => GraphJson.Deserialize(json));
+
+        Assert.Contains("Unsupported graph schema", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Serialize_RejectsNodeWithoutExactlyOneRegionOwner()
+    {
+        GraphDocument graph = CreateGraph();
+        GraphFunction function = Assert.Single(graph.Functions);
+        SemanticId nodeId = Assert.Single(
+            function.Regions,
+            static region => region.Kind == GraphRegionKind.Function).NodeIds[0];
+        GraphRegion owner = Assert.Single(function.Regions, region => region.NodeIds.Contains(nodeId));
+        GraphFunction invalidFunction = function with
+        {
+            Regions = function.Regions
+                .Select(region => region.Id == owner.Id
+                    ? region with { NodeIds = region.NodeIds.Where(id => id != nodeId).ToArray() }
+                    : region)
+                .ToArray(),
+        };
+
+        JsonException exception = Assert.Throws<JsonException>(() =>
+            GraphJson.Serialize(graph with { Functions = [invalidFunction] }));
+
+        Assert.Contains("does not belong to a direct region", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Serialize_RejectsBranchChildrenOutsideThenElseOrder()
+    {
+        GraphDocument graph = CreateGraph();
+        GraphFunction function = Assert.Single(graph.Functions);
+        GraphRegion branch = Assert.Single(
+            function.Regions,
+            static region => region.Kind == GraphRegionKind.If);
+        GraphFunction invalidFunction = function with
+        {
+            Regions = function.Regions
+                .Select(region => region.Id == branch.Id
+                    ? region with { ChildRegionIds = region.ChildRegionIds.Reverse().ToArray() }
+                    : region)
+                .ToArray(),
+        };
+
+        JsonException exception = Assert.Throws<JsonException>(() =>
+            GraphJson.Serialize(graph with { Functions = [invalidFunction] }));
+
+        Assert.Contains("ordered then/else children", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Serialize_RejectsImplicitNonElseRegion()
+    {
+        GraphDocument graph = CreateGraph();
+        GraphFunction function = Assert.Single(graph.Functions);
+        GraphRegion then = Assert.Single(
+            function.Regions,
+            static region => region.Kind == GraphRegionKind.Then);
+        GraphFunction invalidFunction = function with
+        {
+            Regions = function.Regions
+                .Select(region => region.Id == then.Id ? region with { IsImplicit = true } : region)
+                .ToArray(),
+        };
+
+        JsonException exception = Assert.Throws<JsonException>(() =>
+            GraphJson.Serialize(graph with { Functions = [invalidFunction] }));
+
+        Assert.Contains("Only an else region may be implicit", exception.Message, StringComparison.Ordinal);
+    }
+
+    private static GraphDocument CreateGraph()
+    {
+        var lowering = new CSharpToHirLowerer().Lower(Source, "GraphRegions.cs");
+        Assert.True(lowering.Succeeded, string.Join(Environment.NewLine, lowering.Diagnostics));
+        return new HirGraphProjector().Project(lowering.CompilationUnit!);
+    }
+}

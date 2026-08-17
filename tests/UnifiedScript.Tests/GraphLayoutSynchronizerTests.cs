@@ -221,11 +221,39 @@ public sealed class GraphLayoutSynchronizerTests
                 nodeIds[0],
                 "input"))
             .ToArray();
+        SemanticId rootRegionId = SemanticId.FromKey($"{functionId}:test-region:function");
+        SemanticId bodyRegionId = SemanticId.FromKey($"{functionId}:test-region:block");
+        SourceSpan span = SourceSpan.Unknown("Test.cs");
         return new GraphDocument(
             GraphDocument.CurrentSchemaVersion,
             SemanticId.FromKey($"graph-source-{functionId}"),
             null,
-            [new GraphFunction(functionId, "Game.Script.Run", nodes, edges)]);
+            [new GraphFunction(
+                functionId,
+                "Game.Script.Run",
+                nodes,
+                edges,
+                rootRegionId,
+                [
+                    new GraphRegion(
+                        rootRegionId,
+                        GraphRegionKind.Function,
+                        null,
+                        functionId,
+                        span,
+                        false,
+                        [],
+                        [bodyRegionId]),
+                    new GraphRegion(
+                        bodyRegionId,
+                        GraphRegionKind.Block,
+                        rootRegionId,
+                        functionId,
+                        span,
+                        false,
+                        nodeIds,
+                        []),
+                ])]);
     }
 
     private static (CSharpCompilationRequest Request, CSharpAnalysisResult Analysis) CreatePersistentRequest(

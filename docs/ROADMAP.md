@@ -87,8 +87,10 @@ Status: complete. Broader control/data-flow editing continues under M4.
 
 Outcome: practical gameplay methods are fully visualizable.
 
-- [ ] explicit graph regions for functions, blocks, branches, and loops
+- [x] Graph v0.3 regions for functions, blocks, `if`, `then`, and `else`
+- [x] exact direct node ownership and explicit/implicit branch preservation
 - [ ] CFG reachability, dominance, post-dominance, and reducibility validation
+- [ ] extend regions to loop bodies, exits, and continuations
 - [ ] bounded local assignment and general data/control rewiring
 - [ ] nested branch construction and structural HIR operations
 - [ ] `while`, `break`, and `continue`

@@ -251,11 +251,11 @@ insertion steps may repeat a target block; repeated non-insertion old-value
 preconditions remain ambiguous. Project-wide edits require a multi-file
 transaction coordinator.
 
-## Next slice
+## Follow-on milestone
 
-Begin M4 with a versioned `GraphRegion` model for function, block, `if`, `then`,
-and `else` ownership. Project the existing early-return sample into explicit
-regions before adding loop syntax. Then build CFG reachability, dominance,
-post-dominance, and reducibility indexes on those regions; only after those
-invariants are executable should the patch algebra grow bounded assignment,
-nested-branch construction, and `while`/`break`/`continue`.
+M4.1 has now delivered the versioned `GraphRegion` model proposed here for
+function, block, `if`, `then`, and `else` ownership, including early-return
+projection. M4.2 builds CFG reachability, dominance, post-dominance, and
+reducibility indexes on those regions. Only after those invariants are
+executable should the patch algebra grow bounded assignment, nested-branch
+construction, and `while`/`break`/`continue`.

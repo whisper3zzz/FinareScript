@@ -18,7 +18,8 @@ The repository currently implements:
 - deterministic multi-document compilation requests and cross-file binding;
 - resolved types, declaration references, overloads, and conservative call effects;
 - a versioned, configurable method-effect catalog;
-- deterministic, effect-aware HIR-to-graph projection with control and data edges;
+- deterministic, effect-aware HIR-to-graph projection with control/data edges
+  and explicit function/block/branch regions;
 - a versioned semantic patch protocol with source/configuration conflict guards;
 - transactional graph-to-C# literal, operator, argument-connection, and bounded
   statement rewriting;
@@ -38,8 +39,8 @@ The repository currently implements:
 - xUnit coverage for validation, lowering, identity, graph projection, and
   deterministic output.
 
-M3 bidirectional source projection is complete. The next milestone starts with
-explicit Graph regions and CFG/reducibility analysis before adding loops.
+M3 bidirectional source projection is complete. M4.1 now adds explicit Graph
+regions; CFG/reducibility analysis is the next slice before adding loops.
 
 The v0.1 profile accepts `[Visual]` methods containing local variables,
 expressions, calls, assignments, `if/else`, `return`, casts, and `await`.
@@ -106,6 +107,24 @@ artifacts/sample/DoorController.graph.json
 
 Without `--out`, the graph JSON is written to stdout.
 
+### Analyze structured regions
+
+Graph v0.3 assigns every node to exactly one semantic region and preserves
+function, block, `if`, `then`, and explicit/implicit `else` nesting. Generate
+the early-return example with:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  analyze samples/Regions/EarlyReturn.cs \
+  --out artifacts/regions
+```
+
+The projected hierarchy is `function → body block → if → then/else`. The
+`return true` nodes belong to `then`; because the source omits an explicit
+`else`, the empty false-path region is marked `isImplicit`. The outer
+`return false` remains in the body block. See
+[Graph Regions](docs/GRAPH_REGIONS.md) for the schema and invariants.
+
 ## Analyze multiple source files
 
 ```bash
@@ -167,7 +186,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
 ```
 
 `unifiedscript.patch/v0.7` binds every patch to both the source compilation ID
-and semantic configuration ID emitted in Graph schema v0.2. A `replaceLiteral`
+and semantic configuration ID emitted in Graph schema v0.3. A `replaceLiteral`
 operation also carries the expected old literal text. A stale source, changed
 reference/effect configuration, missing target, changed old value, non-literal
 replacement, or semantically invalid result rejects the entire patch and writes
@@ -564,7 +583,7 @@ artifacts are not writable inputs to the synchronizer. See
 src/UnifiedScript.Core/      Semantic IDs, diagnostics, HIR, [Visual]
 src/UnifiedScript.Semantics/ Language-neutral types, symbols, effects, bindings
 src/UnifiedScript.CSharp/    Roslyn profile validation and lowering
-src/UnifiedScript.Graph/     Deterministic graph projection and layout sidecars
+src/UnifiedScript.Graph/     Graph projection, structured regions, layout sidecars
 src/UnifiedScript.Cli/       Analysis command-line interface
 tests/UnifiedScript.Tests/   Unit and vertical-slice tests
 samples/                     Input programs for manual inspection

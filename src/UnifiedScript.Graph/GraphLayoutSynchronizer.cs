@@ -1,4 +1,3 @@
-using System.Text.Json;
 using UnifiedScript.Core;
 
 namespace UnifiedScript.Graph;
@@ -11,8 +10,8 @@ public sealed class GraphLayoutSynchronizer
     public GraphLayoutDocument Synchronize(GraphDocument graph, GraphLayoutDocument layout)
     {
         ArgumentNullException.ThrowIfNull(graph);
+        graph = GraphJson.NormalizeAndValidate(graph);
         GraphLayoutDocument normalized = GraphLayoutJson.NormalizeAndValidate(layout);
-        ValidateGraph(graph);
 
         IReadOnlyDictionary<SemanticId, GraphFunctionLayout> previousFunctions =
             normalized.Functions.ToDictionary(static function => function.FunctionId);
@@ -93,44 +92,4 @@ public sealed class GraphLayoutSynchronizer
             orphans.Values.ToArray()));
     }
 
-    private static void ValidateGraph(GraphDocument graph)
-    {
-        if (graph.SchemaVersion != GraphDocument.CurrentSchemaVersion)
-        {
-            throw new JsonException(
-                $"Unsupported graph schema '{graph.SchemaVersion}'. " +
-                $"Expected '{GraphDocument.CurrentSchemaVersion}'.");
-        }
-
-        if (graph.Functions is null)
-        {
-            throw new JsonException("Graph functions cannot be null.");
-        }
-
-        var functionIds = new HashSet<SemanticId>();
-        foreach (GraphFunction? function in graph.Functions)
-        {
-            if (function is null || function.Id.IsEmpty || function.Nodes is null || function.Edges is null)
-            {
-                throw new JsonException("A graph function has invalid required fields.");
-            }
-
-            if (!functionIds.Add(function.Id))
-            {
-                throw new JsonException($"Duplicate graph function '{function.Id}'.");
-            }
-
-            if (function.Nodes.Any(static node => node is null || node.Id.IsEmpty) ||
-                function.Nodes.Select(static node => node.Id).Distinct().Count() != function.Nodes.Count)
-            {
-                throw new JsonException($"Graph function '{function.Id}' has invalid or duplicate nodes.");
-            }
-
-            if (function.Edges.Any(static edge => edge is null || edge.Id.IsEmpty) ||
-                function.Edges.Select(static edge => edge.Id).Distinct().Count() != function.Edges.Count)
-            {
-                throw new JsonException($"Graph function '{function.Id}' has invalid or duplicate edges.");
-            }
-        }
-    }
 }

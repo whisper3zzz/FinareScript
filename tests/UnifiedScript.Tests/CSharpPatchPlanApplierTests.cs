@@ -708,6 +708,27 @@ public sealed class CSharpPatchPlanApplierTests
                 edge.FromNode == insertedIf.Id &&
                 edge.FromPort == "else" &&
                 edge.ToNode == fallbackReturn.Id);
+        Assert.All(
+            beforeFunction.Regions,
+            region => Assert.Contains(afterFunction.Regions, candidate => candidate.Id == region.Id));
+        GraphRegion branchRegion = Assert.Single(
+            afterFunction.Regions,
+            region => region.Kind == GraphRegionKind.If && region.SourceNodeId == insertedIf.Id);
+        GraphRegion thenRegion = Assert.Single(
+            afterFunction.Regions,
+            region => region.Kind == GraphRegionKind.Then && region.ParentRegionId == branchRegion.Id);
+        GraphRegion elseRegion = Assert.Single(
+            afterFunction.Regions,
+            region => region.Kind == GraphRegionKind.Else && region.ParentRegionId == branchRegion.Id);
+        GraphRegion bodyRegion = Assert.Single(
+            afterFunction.Regions,
+            region => region.Kind == GraphRegionKind.Block &&
+                region.SourceNodeId == changedMethod.Body.Id);
+        Assert.Equal([thenRegion.Id, elseRegion.Id], branchRegion.ChildRegionIds);
+        Assert.Contains(branchReturn.Id, thenRegion.NodeIds);
+        Assert.Empty(elseRegion.NodeIds);
+        Assert.False(elseRegion.IsImplicit);
+        Assert.Contains(changedFallback.Id, bodyRegion.NodeIds);
 
         GraphLayoutDocument synchronized = new GraphLayoutSynchronizer().Synchronize(
             afterGraph,

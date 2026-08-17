@@ -164,6 +164,20 @@ Pure expression statements use an explicit `Evaluate` control node. Effectful
 calls, assignments, and awaits instead expose their own control ports, so nested
 side effects are sequenced before their data consumers.
 
+Graph schema v0.3 also separates structured ownership from connectivity. Every
+function has a `function` root and method-body `block`; an `if` region owns its
+condition/branch nodes plus ordered `then` and `else` children. Every Graph node
+has exactly one direct region owner. An omitted C# `else` remains an empty
+`isImplicit` region, while an explicitly empty `else` is non-implicit. Nested
+lexical blocks and branches form child regions instead of being reconstructed
+from edge geometry. The complete contract is documented in
+[GRAPH_REGIONS.md](GRAPH_REGIONS.md).
+
+Regions are not a CFG cache. Control edges remain authoritative for execution;
+reachability, dominance, post-dominance, merge structure, and reducibility are
+the next M4 analysis layer. Semantic regions are also independent from
+layout-only `.usgraph` comment regions.
+
 The first semantic slice now classifies Roslyn builtin operators and
 `System.Math`/`System.MathF` calls as pure. Unknown calls default to
 `ReadsState | WritesState`; task-like or async calls additionally become
@@ -186,7 +200,7 @@ compilation identity is not safe for editing.
 
 ## Semantic patch transaction
 
-Graph schema v0.2 carries both the source compilation ID and semantic
+Graph schema v0.3 carries both the source compilation ID and semantic
 configuration ID. A `unifiedscript.patch/v0.7` document repeats those IDs and
 contains typed operations keyed by graph/HIR `SemanticId`. Implemented
 operations are `replaceLiteral`, `changeOperator`, `reconnectArgument`,
