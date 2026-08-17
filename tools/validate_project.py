@@ -28,6 +28,7 @@ DOCUMENTS = [
     ROOT / "docs" / "IDENTITY_SIDECAR.md",
     ROOT / "docs" / "GRAPH_LAYOUT.md",
     ROOT / "docs" / "GRAPH_REGIONS.md",
+    ROOT / "docs" / "CONTROL_FLOW_ANALYSIS.md",
     ROOT / "docs" / "PATCH_PLAN.md",
     ROOT / "docs" / "ROADMAP.md",
     ROOT / "docs" / "milestones" / "M1_ROSLYN_GRAPH_FOUNDATION.md",

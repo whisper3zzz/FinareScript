@@ -6,8 +6,8 @@ Make practical gameplay control flow explicit, verifiable, and editable in the
 shared Graph/HIR model before introducing a UE editor or a second execution
 path.
 
-Status: in progress. M4.1 explicit regions are implemented; CFG analysis and
-loop regions are the next slices.
+Status: in progress. M4.1 explicit regions and M4.2 derived CFG analysis are
+implemented; bounded assignment/data rewiring is the next slice.
 
 ## M4.1 implemented vertical slice
 
@@ -45,20 +45,60 @@ loop regions are the next slices.
 12. The full solution, project validator, Golden fixture, and CLI regressions
     pass.
 
+## M4.2 implemented vertical slice
+
+- derived `GraphControlFlowAnalysis` and per-function CFG model
+- control-node filtering that keeps pure data expressions out of the CFG
+- validated real control arcs plus stable synthetic function exit/arcs
+- deterministic predecessor and successor indexes
+- entry reachability and explicit unreachable control-node reporting
+- dominator sets and immediate dominators
+- post-dominator sets and immediate post-dominators
+- structured branch then/else entry and nearest real merge facts
+- branch-region function-exit classification for early returns
+- deterministic SCC discovery and single-entry reducibility checks
+- diagnostic `Analyze` path plus rejecting `AnalyzeAndValidate` path
+- automatic CFG/reducibility validation at the HIR-to-Graph projection boundary
+- coverage for sequential flow, normal branch merges, implicit-else early
+  return, both-branch return, unreachable statements, nested branches,
+  reducible cycles, and irreducible two-entry cycles
+
+## M4.2 acceptance criteria
+
+1. Every projected function has one real entry and one stable synthetic exit.
+2. Returns and otherwise unconnected control outputs receive deterministic
+   synthetic exit arcs without changing Graph JSON.
+3. Pure expression nodes do not appear in predecessor/successor indexes.
+4. Unreachable control nodes remain visible but carry no fabricated dominance
+   relations.
+5. Sequential immediate dominators/post-dominators match execution order.
+6. Both sides of a falling-through branch identify the first shared real merge.
+7. A one-sided early return has no real merge and distinguishes the exiting
+   branch from the implicit fallthrough branch.
+8. A both-return branch reports two regional exits and no real merge.
+9. Nested branch analysis is deterministic.
+10. A single-entry cyclic SCC whose header dominates the component is
+    reducible.
+11. A two-entry cyclic SCC is reported by `Analyze` and rejected by
+    `AnalyzeAndValidate`.
+12. Every normal HIR Graph projection passes reducibility validation before it
+    is returned to CLI/library consumers.
+
 ## Deliberate limits
 
-M4.1 does not infer a general CFG, materialize merge nodes, compute
-reachability/dominance/post-dominance, or validate reducibility. It does not add
+M4.2 derives but does not serialize CFG facts, materialize source/Graph merge
+nodes, or rewrite M3's lexical patch-dominance checks. It does not add
 assignments to the patch algebra, nested-branch synthesis, loops, switch,
-conditional expressions, or automatic node placement. Region kinds for loops
-remain absent until their HIR and control semantics are defined.
+conditional expressions, exception edges, short-circuit expression flow,
+async state-machine transitions, control dependence, SSA, or automatic node
+placement. Region kinds for loops remain absent until their HIR and control
+semantics are defined.
 
 ## Next slice
 
-M4.2 will construct a deterministic per-function CFG index from control edges
-and regions. It will expose entry, successor, predecessor, reachability,
-dominance, immediate dominator, post-dominance, and structured merge facts,
-then reject region/edge combinations that are irreducible for visual round-trip.
-Those executable invariants will become the safety basis for assignment and
-nested-control-flow patch operations before `while`/`break`/`continue` are
-added.
+M4.3 should use Graph reachability/dominance and the existing type/effect model
+to add bounded local assignment plus compatible data rewiring. Assignment
+targets must be existing same-method locals, must be reachable at the insertion
+point, and must dominate later consumers where required. Only after those
+checks are executable should nested branch construction and loop HIR/regions
+extend the control-flow surface.

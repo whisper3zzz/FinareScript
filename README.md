@@ -20,6 +20,8 @@ The repository currently implements:
 - a versioned, configurable method-effect catalog;
 - deterministic, effect-aware HIR-to-graph projection with control/data edges
   and explicit function/block/branch regions;
+- derived CFG analysis with synthetic exits, reachability, dominance,
+  post-dominance, structured merge facts, and reducibility validation;
 - a versioned semantic patch protocol with source/configuration conflict guards;
 - transactional graph-to-C# literal, operator, argument-connection, and bounded
   statement rewriting;
@@ -39,8 +41,9 @@ The repository currently implements:
 - xUnit coverage for validation, lowering, identity, graph projection, and
   deterministic output.
 
-M3 bidirectional source projection is complete. M4.1 now adds explicit Graph
-regions; CFG/reducibility analysis is the next slice before adding loops.
+M3 bidirectional source projection is complete. M4.1 adds explicit Graph
+regions, and M4.2 now derives and validates control flow before later patch and
+loop expansion.
 
 The v0.1 profile accepts `[Visual]` methods containing local variables,
 expressions, calls, assignments, `if/else`, `return`, casts, and `await`.
@@ -124,6 +127,12 @@ The projected hierarchy is `function → body block → if → then/else`. The
 `else`, the empty false-path region is marked `isImplicit`. The outer
 `return false` remains in the body block. See
 [Graph Regions](docs/GRAPH_REGIONS.md) for the schema and invariants.
+
+The projector also derives a non-persisted CFG index and rejects irreducible
+control flow before returning the Graph. The index exposes synthetic function
+exit arcs, predecessors/successors, reachable nodes, dominance,
+post-dominance, branch merges, per-branch function exits, and cyclic SCC entry
+facts. See [Control Flow Analysis](docs/CONTROL_FLOW_ANALYSIS.md).
 
 ## Analyze multiple source files
 
@@ -583,7 +592,7 @@ artifacts are not writable inputs to the synchronizer. See
 src/UnifiedScript.Core/      Semantic IDs, diagnostics, HIR, [Visual]
 src/UnifiedScript.Semantics/ Language-neutral types, symbols, effects, bindings
 src/UnifiedScript.CSharp/    Roslyn profile validation and lowering
-src/UnifiedScript.Graph/     Graph projection, structured regions, layout sidecars
+src/UnifiedScript.Graph/     Graph projection, regions, CFG analysis, layout
 src/UnifiedScript.Cli/       Analysis command-line interface
 tests/UnifiedScript.Tests/   Unit and vertical-slice tests
 samples/                     Input programs for manual inspection

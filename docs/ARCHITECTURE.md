@@ -174,9 +174,12 @@ from edge geometry. The complete contract is documented in
 [GRAPH_REGIONS.md](GRAPH_REGIONS.md).
 
 Regions are not a CFG cache. Control edges remain authoritative for execution;
-reachability, dominance, post-dominance, merge structure, and reducibility are
-the next M4 analysis layer. Semantic regions are also independent from
-layout-only `.usgraph` comment regions.
+M4.2 now derives synthetic exits, predecessor/successor indexes, reachability,
+dominance, post-dominance, structured merges, and SCC reducibility without
+persisting those recomputable facts in Graph JSON. `HirGraphProjector` validates
+the derived CFG before returning a Graph. See
+[CONTROL_FLOW_ANALYSIS.md](CONTROL_FLOW_ANALYSIS.md). Semantic regions remain
+independent from layout-only `.usgraph` comment regions.
 
 The first semantic slice now classifies Roslyn builtin operators and
 `System.Math`/`System.MathF` calls as pure. Unknown calls default to

@@ -92,10 +92,11 @@ hierarchy.
 
 ## Control flow and layout boundaries
 
-Regions do not replace control edges and do not yet claim CFG facts. In
-particular, v0.3 does not serialize reachability, dominance, post-dominance,
-merge blocks, or reducibility. Those will be computed and validated in M4.2
-from the explicit hierarchy plus control edges.
+Regions do not replace control edges and do not serialize CFG facts. M4.2 now
+computes and validates reachability, dominance, post-dominance, merge nodes, and
+reducibility from the explicit hierarchy plus control edges. The result remains
+a derived in-memory index so edits cannot leave stale quadratic analysis data
+inside Graph JSON. See [CONTROL_FLOW_ANALYSIS.md](CONTROL_FLOW_ANALYSIS.md).
 
 Semantic regions are also separate from `.usgraph` comment regions. A semantic
 region affects program structure; a comment region is only visual canvas state.

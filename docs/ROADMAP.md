@@ -89,11 +89,12 @@ Outcome: practical gameplay methods are fully visualizable.
 
 - [x] Graph v0.3 regions for functions, blocks, `if`, `then`, and `else`
 - [x] exact direct node ownership and explicit/implicit branch preservation
-- [ ] CFG reachability, dominance, post-dominance, and reducibility validation
-- [ ] extend regions to loop bodies, exits, and continuations
+- [x] CFG entry/exit, reachability, dominance, and post-dominance indexes
+- [x] structured branch merge/exit facts and SCC reducibility validation
 - [ ] bounded local assignment and general data/control rewiring
 - [ ] nested branch construction and structural HIR operations
 - [ ] `while`, `break`, and `continue`
+- [ ] extend regions to loop bodies, exits, and continuations
 - [ ] `for` and `foreach`
 - [ ] `switch` and supported patterns
 - [ ] conditional and null-conditional expressions

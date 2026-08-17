@@ -255,7 +255,7 @@ transaction coordinator.
 
 M4.1 has now delivered the versioned `GraphRegion` model proposed here for
 function, block, `if`, `then`, and `else` ownership, including early-return
-projection. M4.2 builds CFG reachability, dominance, post-dominance, and
-reducibility indexes on those regions. Only after those invariants are
-executable should the patch algebra grow bounded assignment, nested-branch
-construction, and `while`/`break`/`continue`.
+projection. M4.2 has also delivered CFG reachability, dominance,
+post-dominance, merge, and reducibility indexes on those regions. M4.3 can now
+grow bounded assignment and data rewiring before nested-branch construction and
+`while`/`break`/`continue`.

@@ -22,11 +22,13 @@ public sealed class HirGraphProjector
             .SelectMany(type => type.Methods.Select(method => ProjectMethod(type, method, semanticIndex)))
             .OrderBy(static function => function.QualifiedName, StringComparer.Ordinal)
             .ToArray();
-        return new GraphDocument(
+        var graph = new GraphDocument(
             GraphDocument.CurrentSchemaVersion,
             compilationUnit.Id,
             semantics?.ConfigurationId,
             functions);
+        _ = new GraphControlFlowAnalyzer().AnalyzeAndValidate(graph);
+        return graph;
     }
 
     private static GraphFunction ProjectMethod(
