@@ -38,6 +38,9 @@ public sealed record ReconnectArgumentPatchOperation(
 [JsonDerivedType(typeof(LocalLiteralDeclarationPatchStatement), "localLiteralDeclaration")]
 [JsonDerivedType(typeof(LocalAssignmentPatchStatement), "localAssignment")]
 [JsonDerivedType(typeof(IfPatchStatement), "if")]
+[JsonDerivedType(typeof(WhilePatchStatement), "while")]
+[JsonDerivedType(typeof(BreakPatchStatement), "break")]
+[JsonDerivedType(typeof(ContinuePatchStatement), "continue")]
 [JsonDerivedType(typeof(ReturnPatchStatement), "return")]
 public abstract record InsertPatchStatement;
 
@@ -89,6 +92,13 @@ public sealed record CastPatchExpression(
 public sealed record IfPatchStatement(
     PatchExpression Condition) : InsertPatchStatement;
 
+public sealed record WhilePatchStatement(
+    PatchExpression Condition) : InsertPatchStatement;
+
+public sealed record BreakPatchStatement : InsertPatchStatement;
+
+public sealed record ContinuePatchStatement : InsertPatchStatement;
+
 public sealed record ReturnPatchStatement(
     PatchExpression? Expression,
     SemanticId ExpectedReturnTypeId) : InsertPatchStatement;
@@ -131,7 +141,7 @@ public sealed record SemanticPatchDocument(
     SemanticId SemanticConfigurationId,
     IReadOnlyList<SemanticPatchOperation> Operations)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.8";
+    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.9";
 
     public static SemanticPatchDocument Create(
         SemanticId sourceCompilationId,

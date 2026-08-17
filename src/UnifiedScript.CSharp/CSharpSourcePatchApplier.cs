@@ -678,11 +678,12 @@ public sealed class CSharpSourcePatchApplier
                 block);
         }
 
-        if (operation.NewStatement is ReturnPatchStatement && insertionIndex != block.Statements.Count)
+        if (operation.NewStatement is ReturnPatchStatement or BreakPatchStatement or ContinuePatchStatement &&
+            insertionIndex != block.Statements.Count)
         {
             return DiagnosticPlan(
                 SemanticPatchDiagnosticCodes.InvalidStatement,
-                "A return statement can be inserted only at the end of an explicit block.",
+                "A terminal control-transfer statement can be inserted only at the end of an explicit block.",
                 block);
         }
 
@@ -719,6 +720,27 @@ public sealed class CSharpSourcePatchApplier
                 graphSafetyIndex,
                 boundNodes,
                 types),
+            WhilePatchStatement whileStatement => BuildWhileStatement(
+                whileStatement,
+                blockLocation!,
+                insertionIndex,
+                hirNodes,
+                patchIndex,
+                graphSafetyIndex,
+                boundNodes,
+                types),
+            BreakPatchStatement => BuildLoopTransferStatement(
+                isContinue: false,
+                blockLocation!,
+                insertionIndex,
+                patchIndex,
+                graphSafetyIndex),
+            ContinuePatchStatement => BuildLoopTransferStatement(
+                isContinue: true,
+                blockLocation!,
+                insertionIndex,
+                patchIndex,
+                graphSafetyIndex),
             ReturnPatchStatement returnStatement => BuildReturnStatement(
                 returnStatement,
                 blockLocation!,
@@ -1804,6 +1826,82 @@ public sealed class CSharpSourcePatchApplier
         return StatementBuildResult.Success(syntax);
     }
 
+    private static StatementBuildResult BuildWhileStatement(
+        WhilePatchStatement whileStatement,
+        HirPatchIndex.BlockLocation blockLocation,
+        int insertionIndex,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        GraphPatchSafetyIndex graphSafetyIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types)
+    {
+        if (!graphSafetyIndex.IsInsertionReachable(blockLocation, insertionIndex))
+        {
+            return StatementBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.UnreachableInsertion,
+                "A graph-authored while requires a CFG-reachable insertion gap.");
+        }
+
+        ExpressionBuildResult condition = BuildPatchExpression(
+            whileStatement.Condition,
+            blockLocation,
+            insertionIndex,
+            hirNodes,
+            patchIndex,
+            graphSafetyIndex,
+            boundNodes,
+            types);
+        if (condition.Syntax is null || condition.Type is null)
+        {
+            return StatementBuildResult.Failure(
+                condition.DiagnosticCode ?? SemanticPatchDiagnosticCodes.InvalidGraphExpression,
+                condition.DiagnosticMessage ?? "The graph-authored while condition is invalid.");
+        }
+
+        if (condition.Type.Kind != UnifiedTypeKind.Boolean ||
+            !string.Equals(condition.Type.MetadataName, "System.Boolean", StringComparison.Ordinal))
+        {
+            return StatementBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.TypeMismatch,
+                $"A while condition must have semantic type 'System.Boolean', not " +
+                $"'{condition.Type.MetadataName}' ('{whileStatement.Condition.ExpectedTypeId}').");
+        }
+
+        WhileStatementSyntax syntax = SyntaxFactory.WhileStatement(
+            condition.Syntax,
+            SyntaxFactory.Block());
+        return StatementBuildResult.Success(syntax);
+    }
+
+    private static StatementBuildResult BuildLoopTransferStatement(
+        bool isContinue,
+        HirPatchIndex.BlockLocation blockLocation,
+        int insertionIndex,
+        HirPatchIndex patchIndex,
+        GraphPatchSafetyIndex graphSafetyIndex)
+    {
+        if (!patchIndex.TryGetNearestEnclosingLoop(blockLocation.Block.Id, out HirWhileStatement? loop))
+        {
+            return StatementBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.InvalidStatement,
+                $"A graph-authored {(isContinue ? "continue" : "break")} requires an enclosing " +
+                "while loop in the current HIR.");
+        }
+
+        if (!graphSafetyIndex.IsInsertionReachable(blockLocation, insertionIndex))
+        {
+            return StatementBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.UnreachableInsertion,
+                $"A graph-authored {(isContinue ? "continue" : "break")} requires a reachable " +
+                $"insertion gap inside loop '{loop!.Id}'.");
+        }
+
+        return StatementBuildResult.Success(isContinue
+            ? SyntaxFactory.ContinueStatement()
+            : SyntaxFactory.BreakStatement());
+    }
+
     private static StatementBuildResult BuildReturnStatement(
         ReturnPatchStatement returnStatement,
         HirPatchIndex.BlockLocation blockLocation,
@@ -2338,7 +2436,7 @@ public sealed class CSharpSourcePatchApplier
         StatementSyntax statement,
         InsertionFormatting formatting)
     {
-        if (statement is not IfStatementSyntax)
+        if (statement is not (IfStatementSyntax or WhileStatementSyntax))
         {
             return statement
                 .WithLeadingTrivia(SyntaxFactory.Whitespace(formatting.Indentation))
@@ -2357,7 +2455,8 @@ public sealed class CSharpSourcePatchApplier
             options: CSharpToHirLowerer.ParseOptions,
             consumeFullText: true);
         return formatted.ContainsDiagnostics
-            ? throw new InvalidOperationException("A constructed if statement could not be formatted.")
+            ? throw new InvalidOperationException(
+                "A constructed structured statement could not be formatted.")
             : formatted;
     }
 

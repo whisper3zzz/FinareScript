@@ -16,7 +16,7 @@ Neither approximation is accepted alone.
 
 ## Protocol
 
-Patch schema `unifiedscript.patch/v0.8` adds the
+Patch schema `unifiedscript.patch/v0.9` includes the
 `localAssignment` statement discriminator:
 
 ```json
@@ -144,12 +144,13 @@ assignment node, target identifier, and value nodes receive fresh persistent
 IDs and immediately project through the ordinary HIR/Graph path. No special VM
 node or editor-only assignment representation exists.
 
-Patch-plan schema `unifiedscript.patch-plan/v0.7` carries the same payload in a
+Patch-plan schema `unifiedscript.patch-plan/v0.8` carries the same payload in a
 direct `insertStatement` step. `insertBranchStatement` may also place an
 assignment into a generated `then` or `else` block, allowing one atomic plan to
 create a branch and write different values to an existing outer local on each
-path. Every stage reanalyzes and re-derives CFG facts; a late failure discards
-all earlier in-memory stages.
+path. `insertLoopBodyStatement` applies the identical rules at a generated
+while-body gap. Every stage reanalyzes and re-derives CFG facts; a late failure
+discards all earlier in-memory stages.
 
 ## CLI sample
 

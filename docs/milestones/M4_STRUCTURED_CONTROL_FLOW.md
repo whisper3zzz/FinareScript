@@ -8,7 +8,8 @@ path.
 
 Status: in progress. M4.1 explicit regions, M4.2 derived CFG analysis, M4.3
 CFG-checked local assignment/data reconnection, M4.4 recursive nested branch
-construction, and M4.5 structured loop projection/analysis are implemented.
+construction, M4.5 structured loop projection/analysis, and M4.6 bounded
+Graph-authored loop construction are implemented.
 
 ## M4.1 implemented vertical slice
 
@@ -88,8 +89,8 @@ construction, and M4.5 structured loop projection/analysis are implemented.
 
 ## M4.3 implemented vertical slice
 
-- `unifiedscript.patch/v0.8` local-assignment statement payload
-- `unifiedscript.patch-plan/v0.7` direct and symbolic-branch assignment steps
+- `unifiedscript.patch/v0.9` local-assignment statement payload
+- `unifiedscript.patch-plan/v0.8` direct and symbolic-branch assignment steps
 - ordinary normalized C# assignment emission and full HIR/Graph reprojection
 - existing same-method local targets with persistent-ID, name, and exact-type
   preconditions
@@ -106,8 +107,8 @@ construction, and M4.5 structured loop projection/analysis are implemented.
 
 ## M4.3 acceptance criteria
 
-1. Patch v0.8 JSON round-trips a typed `localAssignment` payload.
-2. Plan v0.7 accepts that payload as a direct statement insertion and as a
+1. Patch v0.9 JSON round-trips a typed `localAssignment` payload.
+2. Plan v0.8 accepts that payload as a direct statement insertion and as a
    generated `then`/`else` branch append.
 3. An assignment targets only an existing local declaration in the same
    method, identified by persistent semantic ID.
@@ -134,7 +135,7 @@ construction, and M4.5 structured loop projection/analysis are implemented.
 
 ## M4.4 implemented vertical slice
 
-- `unifiedscript.patch-plan/v0.7` recursive branch-producer protocol
+- `unifiedscript.patch-plan/v0.8` recursive branch-producer protocol
 - nested `if` accepted as a bounded `insertBranchStatement` payload
 - every successful if-producing insertion publishes its own `then`/`else`
   handles after HIR reanalysis
@@ -155,7 +156,7 @@ construction, and M4.5 structured loop projection/analysis are implemented.
 
 ## M4.4 acceptance criteria
 
-1. Plan v0.7 JSON round-trips an `if` nested through
+1. Plan v0.8 JSON round-trips an `if` nested through
    `insertBranchStatement`.
 2. A nested producer's `stepId` can be consumed by later `then` and `else`
    branch insertions.
@@ -243,6 +244,72 @@ construction, and M4.5 structured loop projection/analysis are implemented.
 16. The loop sample, Golden HIR/Graph schemas, full test suite, format check,
     project validator, and CLI identity round trip pass.
 
+## M4.6 implemented vertical slice
+
+- `unifiedscript.patch/v0.9` typed `while`, `break`, and `continue` statement
+  payloads
+- `unifiedscript.patch-plan/v0.8` `insertLoopBodyStatement` symbolic body step
+- typed, pure, graph-safe while conditions built from the existing bounded
+  patch-expression algebra
+- ordinary formatted C# while emission followed by full HIR/Graph/CFG
+  reanalysis
+- successful while-producer discovery and capture of actual persistent loop
+  and body IDs
+- same-method, backward-only symbolic loop-body producer references
+- ordered appends to the current generated body without predicted IDs
+- local-literal, existing-local assignment, nested `if`, nested `while`, typed
+  return, break, and continue body payloads
+- recursive composition between branch and loop-body producers
+- nearest-enclosing-loop resolution for direct and symbolic break/continue
+  insertions
+- reachable end-of-block requirement for terminal transfers
+- path termination for return/break/continue with propagation through nested
+  all-terminal branches
+- loop-boundary termination rule preserving reachable code after a possibly
+  zero-iteration loop
+- generated-loop ancestor identity preservation across later body replacements
+- old-layout preservation and explicit unplaced state for every authored node
+- atomic late-failure rollback with no intermediate source or analysis
+- checked-in `LoopBuildRules.cs`, `.usids`, and `BuildLoop.plan.json` CLI sample
+
+## M4.6 acceptance criteria
+
+1. Patch v0.9 JSON round-trips typed while and targetless break/continue
+   payloads.
+2. Plan v0.8 JSON round-trips ordered `insertLoopBodyStatement` steps and
+   rejects future, missing, cross-anchor, or non-while producers.
+3. A while condition must bind exactly to graph-safe `System.Boolean` and pass
+   the bounded pure-expression checks at the original insertion gap.
+4. A successful root, branch, or loop-body while insertion publishes a body
+   handle under its actual post-analysis persistent ID.
+5. Later body steps resolve that actual current Block and preserve plan order
+   without an editor-supplied generated ID.
+6. Nested if and while body payloads recursively publish branch and loop
+   handles in the same method.
+7. Break/continue carry no user-selectable target and are accepted only when a
+   nearest enclosing HIR while exists.
+8. Reprojected CFG facts assign each generated transfer to that nearest loop's
+   validated header or exit.
+9. Return, break, and continue terminate their symbolic path, and later direct
+   appends are rejected before execution.
+10. All-terminal nested branch paths propagate termination to a containing loop
+    body only while the nested if remains its final statement.
+11. Terminal state stops at a loop boundary because the condition may be false
+    before entry; a nested loop's terminal body does not terminate its outer
+    body.
+12. The generated loop projects to Graph v0.4 loop/loopBody regions with a
+    reducible CFG, body entry, exit, break/continue sets, and back-edge arcs.
+13. Every original ID remains live, generated loop/body IDs survive later
+    stages, and no incidental tombstone appears.
+14. Existing graph nodes retain placed layout while all generated nodes remain
+    explicitly unplaced.
+15. A late body type/scope/CFG failure returns no patched request or analysis
+    and leaves the original source untouched.
+16. The five-stage CLI sample emits normal formatted C#, advances its sidecar
+    from generation 1 to 6, and finishes with zero tombstones.
+17. The full solution, 181-test suite, format check, repository validator, and
+    CLI regression pass.
+
 ## Deliberate limits
 
 M4 consumes derived CFG facts at patch time but does not serialize them or
@@ -253,19 +320,18 @@ write members/indexers, or support compound assignments, increment/decrement,
 calls, or effectful right-hand sides. Nested conditions can reference existing
 same-method definitions but cannot consume a symbolic newly generated local
 handle. Branch insertions append at the end of generated blocks and do not move,
-replace, or delete existing branch structures. Existing loops are forward
-projected and analyzed, but the patch algebra cannot synthesize, move, replace,
-or delete loop structures and cannot retarget transfers. `do`/`for`/`foreach`,
+replace, or delete existing branch structures. New bounded while loops can be
+constructed and appended to, but the patch algebra cannot move, replace, edit,
+or delete existing loop structures and cannot retarget transfers. `do`/`for`/`foreach`,
 switch, conditional expressions, exception edges, short-circuit expression
 flow, async state-machine transitions, control dependence, SSA, and automatic
 node placement remain outside the current slice.
 
 ## Next slice
 
-M4.6 should add bounded Graph-to-C# loop construction without opening arbitrary
-cyclic rewiring: insert a typed while with an explicit body, publish a symbolic
-body handle, populate it through existing safe statement operations, and admit
-break/continue only when the produced path has a statically known nearest loop.
-The current header/exit/back-edge and terminal-path facts should be the
-validation surface. Broader existing-assignment editing and arbitrary
-structural rewiring remain separate patch-algebra work.
+M4.7 should expand editing of existing structured statements without opening
+arbitrary rewiring: begin with exact-precondition replacement of an existing
+local assignment value and a generated/existing while condition, reusing the
+closed expression algebra, persistent identity pins, and CFG validation. `for`
+and `foreach` need an explicit lossless HIR decision before admission rather
+than silently desugaring source syntax into while loops.

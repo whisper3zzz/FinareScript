@@ -2,9 +2,9 @@
 
 ## Purpose
 
-`unifiedscript.patch-plan/v0.7` represents one visual-editor gesture as an
+`unifiedscript.patch-plan/v0.8` represents one visual-editor gesture as an
 ordered, atomic sequence of the same bounded semantic operations supported by
-`unifiedscript.patch/v0.8`. It exists because a useful graph edit often needs
+`unifiedscript.patch/v0.9`. It exists because a useful graph edit often needs
 IDs created by an earlier edit or changes several overlapping source regions.
 Submitting those stages as unrelated filesystem transactions would expose
 partial programs and force the editor to predict random persistent IDs.
@@ -18,7 +18,7 @@ identity sidecar are eligible for a CLI filesystem transaction.
 
 ```json
 {
-  "schemaVersion": "unifiedscript.patch-plan/v0.7",
+  "schemaVersion": "unifiedscript.patch-plan/v0.8",
   "sourceCompilationId": "us_...",
   "semanticConfigurationId": "us_...",
   "steps": []
@@ -29,15 +29,16 @@ The source compilation and semantic configuration IDs are the external
 optimistic-concurrency baseline. Every step has a unique, non-empty `stepId`
 and a persistent `targetNodeId`.
 
-Version v0.7 supports these step discriminators:
+Version v0.8 supports these step discriminators:
 
 | `step` | Purpose | Structural result |
 | --- | --- | --- |
 | `replaceLiteral` | Replace one literal with a complete literal token | Target ID survives |
 | `changeOperator` | Change a unary/binary operator inside its result-preserving family | Operator node ID survives |
 | `reconnectArgument` | Exchange two pure, exactly typed positional arguments | Invocation and endpoint IDs survive |
-| `insertStatement` | Insert a local-literal declaration, local assignment, typed `if`, or terminal `return` | Local payload produces a handle; `if` produces branch handles |
-| `insertBranchStatement` | Append a local-literal declaration, outer-local assignment, nested `if`, or terminal `return` to a produced branch | Consumes a branch handle; a declaration produces a value handle; an `if` produces more branch handles |
+| `insertStatement` | Insert a local-literal declaration, local assignment, typed `if`/`while`, loop transfer, or terminal `return` | Local payload produces a handle; `if` produces branch handles; `while` produces a body handle |
+| `insertBranchStatement` | Append a bounded statement to a produced branch | Consumes a branch handle; a declaration produces a value handle; an `if` or `while` produces structural handles |
+| `insertLoopBodyStatement` | Append a bounded statement to a produced while body | Consumes a loop-body handle; a declaration, `if`, or nested `while` can publish more handles |
 | `deleteStatement` | Delete one proven-safe unused/effect-free statement | Removed subtree becomes tombstones |
 | `introduceTemporary` | Move one stable expression into a single-evaluation local | Produces a local handle |
 | `reconnectValue` | Replace a stable consumer with a produced local reference | Consumes a local handle |
@@ -48,9 +49,9 @@ weaken operation safety.
 
 ## Symbolic local handles
 
-`introduceTemporary` and a local-literal `insertStatement` publish
-their `stepId` as a symbolic local handle. A later `reconnectValue` supplies
-that value as `sourceStepId`:
+`introduceTemporary` and a local-literal root, branch, or loop-body insertion
+publish their `stepId` as a symbolic local handle. A later `reconnectValue`
+supplies that value as `sourceStepId`:
 
 ```json
 {
@@ -95,8 +96,8 @@ selects one branch, and supplies a bounded statement payload:
 }
 ```
 
-`sourceStepId` must name an earlier `insertStatement` or
-`insertBranchStatement` with an `if` payload.
+`sourceStepId` must name an earlier root, branch, or loop-body insertion with an
+`if` payload.
 `targetNodeId` intentionally repeats that source step's original parent-block
 target: it is the stable initial-baseline anchor used for target-document,
 method, sidecar, and duplicate-target validation. It is not the generated
@@ -104,8 +105,9 @@ branch block ID. The coordinator captures the real `Then.Id` and `Else.Id`
 after the producer stage and uses the selected ID in an ordinary internal
 `InsertStatementPatchOperation`.
 
-Branch statements append in plan order. Version v0.7 accepts
-`localLiteralDeclaration`, `localAssignment`, `if`, or `return` here. An
+Branch statements append in plan order. Version v0.8 accepts
+`localLiteralDeclaration`, `localAssignment`, `if`, `while`, `break`,
+`continue`, or `return` here. An
 assignment may target only an existing same-method local that lexically and
 CFG-dominates the generated branch gap. A local declaration publishes its own
 `stepId` as a normal local handle. A later
@@ -147,6 +149,36 @@ target. The coordinator reanalyzes after each stage, resolves the newly
 allocated `Then.Id` and `Else.Id`, and registers them only after the inserted
 HIR node is proven to be an `if` with two explicit blocks.
 
+## Symbolic loop-body handles
+
+An insertion whose payload is `while` publishes one internal body handle under
+its `stepId`. A later `insertLoopBodyStatement` names that producer and carries
+a bounded statement payload:
+
+```json
+{
+  "step": "insertLoopBodyStatement",
+  "stepId": "continueLoop",
+  "targetNodeId": "us_original_parent_block",
+  "sourceStepId": "insertLoop",
+  "newStatement": {
+    "statement": "continue"
+  }
+}
+```
+
+The producer must occur earlier, target the same original parent Block and
+method, and contain a `while` payload. After the producer stage, the coordinator
+proves the inserted HIR node is a `HirWhileStatement`, records its actual
+persistent loop and body IDs, and resolves later appends against the current
+body. A body insertion containing `if` or another `while` publishes recursive
+branch or loop handles under its own `stepId`.
+
+`break` and `continue` do not carry a target ID. The source applier requires a
+reachable insertion gap and discovers the nearest enclosing HIR loop; the
+reprojected CFG independently verifies that transfer target. This prevents a
+plan from manufacturing unstructured jumps or cross-loop edges.
+
 ## Typed terminal returns
 
 A `return` payload contains an optional expression and the expected method
@@ -171,8 +203,8 @@ Async and task-like methods are rejected until the protocol distinguishes the
 declared task type from the value returned inside an async body.
 
 A return may be inserted only at the end of an explicit block. No insertion may
-follow an existing return. Because every `insertBranchStatement` appends, the
-v0.7 JSON validator records each `(sourceStepId, branch)` path and rejects every
+follow an existing return. Because every symbolic body step appends, the
+v0.8 JSON validator records each `(sourceStepId, branch)` path and rejects every
 later append after a direct return. The other branch remains independently
 writable.
 
@@ -180,8 +212,14 @@ Terminal state also propagates through nested producers. When both branches of
 a nested `if` terminate, its parent path terminates if and only if that nested
 `if` is still the final statement on the parent path. If another statement was
 already appended after it, accepting the second child termination would make
-that later statement unreachable; v0.7 rejects the plan before executing any
+that later statement unreachable; v0.8 rejects the plan before executing any
 stage. This propagation is recursive across arbitrary acyclic nesting depth.
+
+`break` and `continue` are also terminal within their selected branch or loop
+body path. Terminal propagation stops at a `while` boundary: the condition may
+be false before the first iteration, so a terminal body does not make the
+parent path terminal. The same rule lets an outer loop body continue after a
+nested loop whose own body terminates.
 
 ## Two-phase safety model
 
@@ -197,8 +235,9 @@ Before executing the first stage, the coordinator:
    memory and rejects the plan if any standalone precondition fails;
 6. validates symbolic reconnect statement, block, sibling, method, and type
    context against the original HIR; and
-7. validates each branch insertion's original parent block, source-step order,
-   producer method, sidecar, branch selector, and bounded payload shape.
+7. validates each branch or loop-body insertion's original parent block,
+   source-step order, producer method, sidecar, selector where applicable, and
+   bounded payload shape.
 
 This prevents an earlier stage from making a stale external precondition appear
 valid. Initial validation results are discarded; they never advance identity
@@ -227,6 +266,8 @@ in the same validated plan:
 - `insertBranchStatement` resolves the actual block ID captured from its earlier
   `if` producer and appends after the current last statement in the selected
   branch;
+- `insertLoopBodyStatement` resolves the actual body ID captured from its
+  earlier `while` producer and appends after the current last body statement;
 - `reconnectArgument` locates both endpoint roots by persistent ID and derives
   their current positional indices;
 - literal and operator steps reuse their original old-value/type preconditions,
@@ -236,11 +277,11 @@ Only insertion steps may repeat a target block. This supports several ordered
 new statements in one gap without giving repeated literal/operator edits
 ambiguous original-versus-intermediate preconditions.
 
-Any insertion step carrying an `if` payload executes through the same staged
-transaction and rebasing. It publishes branch handles for
-`insertBranchStatement`, but does not publish a local handle. A `reconnectValue`
-whose `sourceStepId` names that step is rejected during JSON validation rather
-than failing after source mutation.
+Any insertion step carrying an `if` or `while` payload executes through the
+same staged transaction and rebasing. It publishes structural handles, but does
+not publish a local handle. A `reconnectValue` whose `sourceStepId` names that
+step is rejected during JSON validation rather than failing after source
+mutation.
 
 If an earlier step deletes a later target or removes every anchor needed to
 reconstruct an insertion gap, execution fails atomically. Internal rebasing is
@@ -314,19 +355,33 @@ The five internal stages finish with no tombstones: original identities remain
 live, enclosing branch/block ancestors retain their IDs, and the editor never
 supplies either generated `if` or Block ID.
 
+The loop-construction sample creates a while, populates a nested stop branch,
+and appends assignment and transfer statements without predicting generated
+loop, body, or branch IDs:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  apply-plan \
+  samples/Patching/LoopBuildRules.cs \
+  --identity samples/Patching/LoopBuildRules.cs.usids \
+  --plan samples/Patching/BuildLoop.plan.json \
+  --out artifacts/loop-plan/LoopBuildRules.cs \
+  --out-identity artifacts/loop-plan/LoopBuildRules.cs.usids
+```
+
 ## Deliberate limits
 
-Plan v0.7 composes all operations currently defined by patch v0.8 and resolves
-recursive symbolic `then`/`else` blocks for local-literal, existing-local
-assignment, nested-if, and typed-return population. It cannot insert calls,
-member writes, loops, or arbitrary statement payloads through a branch handle.
-It has no cross-method or cross-document symbolic handle and does not support a
-handle to an arbitrary expression or generated local inside a later condition.
-Multi-document in-memory analysis remains available below the CLI, while the
-CLI commit boundary is still one source/identity pair.
+Plan v0.8 composes all operations currently defined by patch v0.9 and resolves
+recursive symbolic `then`/`else` and loop-body handles for bounded local,
+assignment, nested-if/while, loop-transfer, and typed-return population. It
+cannot insert calls, member writes, or arbitrary statement payloads through a
+structural handle. It has no cross-method or cross-document symbolic handle and
+does not support a handle to an arbitrary expression or generated local inside
+a later condition. Multi-document in-memory analysis remains available below
+the CLI, while the CLI commit boundary is still one source/identity pair.
 
 There is no automatic reader migration for older patch-plan schemas; producers
 should reanalyze and emit the current schema and baselines. The original
 temporary-plus-reconnect and earlier composed step shapes remain representable
-in v0.7. Older plan documents must be regenerated because the reader accepts
+in v0.8. Older plan documents must be regenerated because the reader accepts
 only the current schema.

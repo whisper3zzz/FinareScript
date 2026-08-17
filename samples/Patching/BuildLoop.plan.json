@@ -1,0 +1,117 @@
+{
+  "schemaVersion": "unifiedscript.patch-plan/v0.8",
+  "sourceCompilationId": "us_6ef273e40e60ec89cfd1067ca6237542",
+  "semanticConfigurationId": "us_02f5fe78d296e2d4fe04bc50ca71acf1",
+  "steps": [
+    {
+      "step": "insertStatement",
+      "stepId": "insertLoop",
+      "targetNodeId": "us_2f1f497380142a7083297f29e21387d7",
+      "expectedPreviousSiblingId": "us_9c5249e52518a9fee1518174ae12a992",
+      "expectedNextSiblingId": "us_123cd9dcfe999a6795e22faf68de1182",
+      "newStatement": {
+        "statement": "while",
+        "condition": {
+          "expression": "binary",
+          "operator": "&&",
+          "left": {
+            "expression": "localReference",
+            "sourceDefinitionId": "us_4a71ead4326778943c5907ac2e948729",
+            "expectedName": "enabled",
+            "expectedTypeId": "us_b5f84bcf933b6593d45e9e031353bfef"
+          },
+          "right": {
+            "expression": "binary",
+            "operator": ">",
+            "left": {
+              "expression": "localReference",
+              "sourceDefinitionId": "us_9c5249e52518a9fee1518174ae12a992",
+              "expectedName": "result",
+              "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+            },
+            "right": {
+              "expression": "literal",
+              "valueText": "0",
+              "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+            },
+            "expectedTypeId": "us_b5f84bcf933b6593d45e9e031353bfef"
+          },
+          "expectedTypeId": "us_b5f84bcf933b6593d45e9e031353bfef"
+        }
+      }
+    },
+    {
+      "step": "insertLoopBodyStatement",
+      "stepId": "insertStopGuard",
+      "targetNodeId": "us_2f1f497380142a7083297f29e21387d7",
+      "sourceStepId": "insertLoop",
+      "newStatement": {
+        "statement": "if",
+        "condition": {
+          "expression": "binary",
+          "operator": "==",
+          "left": {
+            "expression": "localReference",
+            "sourceDefinitionId": "us_9c5249e52518a9fee1518174ae12a992",
+            "expectedName": "result",
+            "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+          },
+          "right": {
+            "expression": "localReference",
+            "sourceDefinitionId": "us_913f78e18e22e41388993a8698958d83",
+            "expectedName": "stopAt",
+            "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+          },
+          "expectedTypeId": "us_b5f84bcf933b6593d45e9e031353bfef"
+        }
+      }
+    },
+    {
+      "step": "insertBranchStatement",
+      "stepId": "breakAtStop",
+      "targetNodeId": "us_2f1f497380142a7083297f29e21387d7",
+      "sourceStepId": "insertStopGuard",
+      "branch": "then",
+      "newStatement": {
+        "statement": "break"
+      }
+    },
+    {
+      "step": "insertLoopBodyStatement",
+      "stepId": "decrementResult",
+      "targetNodeId": "us_2f1f497380142a7083297f29e21387d7",
+      "sourceStepId": "insertLoop",
+      "newStatement": {
+        "statement": "localAssignment",
+        "targetDefinitionId": "us_9c5249e52518a9fee1518174ae12a992",
+        "expectedName": "result",
+        "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+        "value": {
+          "expression": "binary",
+          "operator": "-",
+          "left": {
+            "expression": "localReference",
+            "sourceDefinitionId": "us_9c5249e52518a9fee1518174ae12a992",
+            "expectedName": "result",
+            "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+          },
+          "right": {
+            "expression": "literal",
+            "valueText": "1",
+            "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+          },
+          "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+        }
+      }
+    },
+    {
+      "step": "insertLoopBodyStatement",
+      "stepId": "continueLoop",
+      "targetNodeId": "us_2f1f497380142a7083297f29e21387d7",
+      "sourceStepId": "insertLoop",
+      "newStatement": {
+        "statement": "continue"
+      }
+    }
+  ]
+}

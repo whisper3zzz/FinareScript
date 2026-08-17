@@ -214,24 +214,25 @@ compilation identity is not safe for editing.
 ## Semantic patch transaction
 
 Graph schema v0.4 carries both the source compilation ID and semantic
-configuration ID. A `unifiedscript.patch/v0.8` document repeats those IDs and
+configuration ID. A `unifiedscript.patch/v0.9` document repeats those IDs and
 contains typed operations keyed by graph/HIR `SemanticId`. Implemented
 operations are `replaceLiteral`, `changeOperator`, `reconnectArgument`,
 `insertStatement`, `deleteStatement`, `introduceTemporary`, and
 `reconnectValue`. `insertStatement` accepts a local-literal declaration, a
-CFG-checked assignment to an existing local, an `if` with a closed typed
-expression tree and explicit empty `then`/`else` blocks, or a typed terminal
-`return`. Structural operations carry old
+CFG-checked assignment to an existing local, an `if` or `while` with a closed
+typed expression tree and explicit blocks, a nearest-loop `break`/`continue`,
+or a typed terminal `return`. Structural operations carry old
 operator/endpoint, semantic type,
 containing statement, parent block, and exact sibling preconditions rather than
 relying only on the compilation baseline.
 
-`unifiedscript.patch-plan/v0.7` is an ordered transaction above individual
+`unifiedscript.patch-plan/v0.8` is an ordered transaction above individual
 patches. It composes every current bounded operation: literal and operator
 changes, argument reconnection, statement insertion/deletion, temporary
-introduction, value reconnection, and symbolic branch-body insertion.
-`introduceTemporary`, local-literal `insertStatement`, and local-literal
-`insertBranchStatement` steps publish symbolic local handles. Later
+introduction, value reconnection, symbolic branch-body insertion, and symbolic
+loop-body insertion.
+`introduceTemporary` and local-literal root, branch, or loop-body insertion
+steps publish symbolic local handles. Later
 `reconnectValue` steps reference those handles instead of guessing a random
 declaration ID that does not exist in the initial HIR. The complete plan still
 carries one external source/configuration baseline and records every target's
@@ -241,13 +242,19 @@ An `if` insertion publishes internal `then`/`else` block handles for later
 definition. The branch steps repeat the producer's original parent block as
 their stable initial anchor; the coordinator records the generated branch IDs
 after the `if` stage and turns each append into a normal bounded insertion.
-Local-literal, existing-local assignment, nested `if`, and typed-return
-payloads are accepted in a produced branch. A nested `if` publishes another
-pair of branch handles, forming an acyclic producer tree. A return terminates
+Local-literal, existing-local assignment, nested `if`/`while`, nearest-loop
+transfer, and typed-return payloads are accepted in a produced branch. A nested
+`if` publishes another pair of branch handles, forming an acyclic producer
+tree. A return terminates
 one path; when both child paths terminate, termination propagates to the parent
 only if the nested `if` is still the parent's final statement. This rejects
 both direct and retroactive unreachability before execution while keeping
 unrelated sibling paths independently writable.
+A `while` insertion publishes one generated body handle for later
+`insertLoopBodyStatement` steps. Loop bodies accept the same bounded statements,
+including nested `if`/`while` producers and nearest-loop transfers. Terminal
+state stops at the loop boundary because a while condition may be false on
+entry; execution and CFG validation still determine the actual current flow.
 The complete transaction and internal rebasing contract is specified in
 [PATCH_PLAN.md](PATCH_PLAN.md).
 

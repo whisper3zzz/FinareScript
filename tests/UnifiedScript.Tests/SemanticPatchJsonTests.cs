@@ -176,6 +176,61 @@ public sealed class SemanticPatchJsonTests
     }
 
     [Fact]
+    public void SerializeAndDeserialize_PreserveTypedWhileAndLoopTransfers()
+    {
+        SemanticId boolType = SemanticId.FromKey("System.Boolean");
+        var loop = new WhilePatchStatement(new LiteralPatchExpression("true", boolType));
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            SemanticId.FromKey("loop-compilation"),
+            SemanticId.FromKey("loop-configuration"),
+            [
+                new InsertStatementPatchOperation(
+                    SemanticId.FromKey("loop-parent-block"),
+                    null,
+                    null,
+                    loop),
+                new InsertStatementPatchOperation(
+                    SemanticId.FromKey("break-parent-block"),
+                    null,
+                    null,
+                    new BreakPatchStatement()),
+                new InsertStatementPatchOperation(
+                    SemanticId.FromKey("continue-parent-block"),
+                    null,
+                    null,
+                    new ContinuePatchStatement()),
+            ]);
+
+        string json = SemanticPatchJson.Serialize(patch);
+        SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
+
+        Assert.Equal(
+            loop,
+            Assert.IsType<WhilePatchStatement>(
+                Assert.IsType<InsertStatementPatchOperation>(roundTrip.Operations[0]).NewStatement));
+        Assert.IsType<BreakPatchStatement>(
+            Assert.IsType<InsertStatementPatchOperation>(roundTrip.Operations[1]).NewStatement);
+        Assert.IsType<ContinuePatchStatement>(
+            Assert.IsType<InsertStatementPatchOperation>(roundTrip.Operations[2]).NewStatement);
+        Assert.Contains("\"statement\": \"while\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"statement\": \"break\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"statement\": \"continue\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Create_RejectsWhileWhoseConditionDoesNotDeclareAType()
+    {
+        Assert.Throws<JsonException>(() => SemanticPatchDocument.Create(
+            SemanticId.FromKey("invalid-while-compilation"),
+            SemanticId.FromKey("invalid-while-configuration"),
+            [new InsertStatementPatchOperation(
+                SemanticId.FromKey("invalid-while-block"),
+                null,
+                null,
+                new WhilePatchStatement(new LiteralPatchExpression("true", default)))]));
+    }
+
+    [Fact]
     public void SerializeAndDeserialize_PreserveValueAndVoidReturnStatements()
     {
         SemanticId boolType = SemanticId.FromKey("System.Boolean");

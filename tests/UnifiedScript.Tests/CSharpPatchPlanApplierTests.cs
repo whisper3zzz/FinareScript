@@ -1361,6 +1361,343 @@ public sealed class CSharpPatchPlanApplierTests
     }
 
     [Fact]
+    public void Apply_ConstructsTypedWhileBodyWithNearestLoopTransfersAtomically()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int value, int stopAt, bool enabled)
+                {
+                    int result = value;
+                    return result;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/LoopBuildPlan.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement resultDefinition = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+        SemanticId intType = GetTypeId(original, resultDefinition);
+        SemanticId boolType = GetTypeId(original, method.Parameters[2]);
+        IdentitySidecarDocument beforeIdentity = Assert.Single(original.IdentitySidecars);
+        GraphDocument beforeGraph = new HirGraphProjector().Project(original.Hir, original.Semantics);
+        GraphFunction beforeFunction = Assert.Single(beforeGraph.Functions);
+        GraphLayoutDocument beforeLayout = new(
+            GraphLayoutDocument.CurrentSchemaVersion,
+            [new GraphFunctionLayout(
+                beforeFunction.Id,
+                beforeFunction.Nodes.Select((node, index) => new GraphNodeLayout(
+                    node.Id,
+                    GraphNodePlacement.Placed,
+                    new GraphLayoutPoint(index * 110, index * 60),
+                    new GraphLayoutSize(160, 80),
+                    false)).ToArray(),
+                [],
+                [])],
+            []);
+        var loop = new InsertStatementPatchPlanStep(
+            "insertLoop",
+            method.Body.Id,
+            resultDefinition.Id,
+            returnStatement.Id,
+            new WhilePatchStatement(new BinaryPatchExpression(
+                ">",
+                new LocalReferencePatchExpression(
+                    resultDefinition.Id,
+                    resultDefinition.Name,
+                    intType),
+                new LiteralPatchExpression("0", intType),
+                boolType)));
+        var stopGuard = new InsertLoopBodyStatementPatchPlanStep(
+            "insertStopGuard",
+            method.Body.Id,
+            loop.StepId,
+            new IfPatchStatement(new BinaryPatchExpression(
+                "==",
+                new LocalReferencePatchExpression(
+                    resultDefinition.Id,
+                    resultDefinition.Name,
+                    intType),
+                new LocalReferencePatchExpression(
+                    method.Parameters[1].Id,
+                    method.Parameters[1].Name,
+                    intType),
+                boolType)));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                loop,
+                stopGuard,
+                new InsertBranchStatementPatchPlanStep(
+                    "breakAtStop",
+                    method.Body.Id,
+                    stopGuard.StepId,
+                    IfBranchKind.Then,
+                    new BreakPatchStatement()),
+                new InsertLoopBodyStatementPatchPlanStep(
+                    "decrementResult",
+                    method.Body.Id,
+                    loop.StepId,
+                    new LocalAssignmentPatchStatement(
+                        resultDefinition.Id,
+                        resultDefinition.Name,
+                        intType,
+                        new BinaryPatchExpression(
+                            "-",
+                            new LocalReferencePatchExpression(
+                                resultDefinition.Id,
+                                resultDefinition.Name,
+                                intType),
+                            new LiteralPatchExpression("1", intType),
+                            intType))),
+                new InsertLoopBodyStatementPatchPlanStep(
+                    "continueLoop",
+                    method.Body.Id,
+                    loop.StepId,
+                    new ContinuePatchStatement()),
+            ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains("while (result > 0)", patchedSource, StringComparison.Ordinal);
+        Assert.Contains("if (result == stopAt)", patchedSource, StringComparison.Ordinal);
+        Assert.Contains("break;", patchedSource, StringComparison.Ordinal);
+        Assert.Contains("result = result - 1;", patchedSource, StringComparison.Ordinal);
+        Assert.Contains("continue;", patchedSource, StringComparison.Ordinal);
+
+        HirMethodDeclaration changedMethod = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        Assert.Equal(method.Id, changedMethod.Id);
+        Assert.Equal(method.Body.Id, changedMethod.Body.Id);
+        Assert.Equal(resultDefinition.Id, changedMethod.Body.Statements[0].Id);
+        HirWhileStatement insertedLoop = Assert.IsType<HirWhileStatement>(changedMethod.Body.Statements[1]);
+        HirIfStatement insertedGuard = Assert.IsType<HirIfStatement>(insertedLoop.Body.Statements[0]);
+        HirBreakStatement insertedBreak = Assert.IsType<HirBreakStatement>(
+            Assert.Single(insertedGuard.Then.Statements));
+        Assert.Empty(insertedGuard.Else!.Statements);
+        HirAssignmentExpression assignment = Assert.IsType<HirAssignmentExpression>(
+            Assert.IsType<HirExpressionStatement>(insertedLoop.Body.Statements[1]).Expression);
+        HirContinueStatement insertedContinue = Assert.IsType<HirContinueStatement>(
+            insertedLoop.Body.Statements[2]);
+        Assert.Equal(returnStatement.Id, changedMethod.Body.Statements[2].Id);
+        HirIdentifierExpression assignmentTarget = Assert.IsType<HirIdentifierExpression>(assignment.Target);
+        Assert.Equal(
+            resultDefinition.Id,
+            Assert.Single(
+                result.Analysis.Semantics!.Nodes,
+                binding => binding.NodeId == assignmentTarget.Id).ReferencedSymbolId);
+
+        IdentitySidecarDocument afterIdentity = Assert.Single(result.Analysis.IdentitySidecars);
+        Assert.All(
+            beforeIdentity.Entries,
+            entry => Assert.Contains(afterIdentity.Entries, candidate => candidate.Id == entry.Id));
+        Assert.Contains(afterIdentity.Entries, entry => entry.Id == insertedLoop.Id);
+        Assert.Contains(afterIdentity.Entries, entry => entry.Id == insertedLoop.Body.Id);
+        Assert.Empty(afterIdentity.Tombstones);
+
+        GraphDocument afterGraph = new HirGraphProjector().Project(
+            result.Analysis.Hir,
+            result.Analysis.Semantics);
+        GraphFunction afterFunction = Assert.Single(afterGraph.Functions);
+        GraphRegion loopRegion = Assert.Single(
+            afterFunction.Regions,
+            region => region.Kind == GraphRegionKind.Loop && region.SourceNodeId == insertedLoop.Id);
+        GraphRegion loopBodyRegion = Assert.Single(
+            afterFunction.Regions,
+            region => region.Kind == GraphRegionKind.LoopBody && region.ParentRegionId == loopRegion.Id);
+        GraphRegion guardRegion = Assert.Single(
+            afterFunction.Regions,
+            region => region.Kind == GraphRegionKind.If &&
+                region.ParentRegionId == loopBodyRegion.Id &&
+                region.SourceNodeId == insertedGuard.Id);
+        Assert.Contains(guardRegion.Id, loopBodyRegion.ChildRegionIds);
+        Assert.Contains(insertedContinue.Id, loopBodyRegion.NodeIds);
+        GraphControlFlowFunction flow = Assert.Single(
+            new GraphControlFlowAnalyzer().AnalyzeAndValidate(afterGraph).Functions);
+        GraphControlFlowLoop loopFlow = Assert.Single(flow.Loops);
+        Assert.True(flow.IsReducible);
+        Assert.Equal(insertedLoop.Id, loopFlow.LoopNodeId);
+        Assert.Equal(insertedGuard.Id, loopFlow.BodyEntryNodeId);
+        Assert.Equal(returnStatement.Id, loopFlow.ExitNodeId);
+        Assert.Contains(insertedBreak.Id, loopFlow.BreakNodeIds);
+        Assert.Contains(insertedContinue.Id, loopFlow.ContinueNodeIds);
+        Assert.NotEmpty(loopFlow.BackEdgeArcIds);
+
+        GraphLayoutDocument synchronized = new GraphLayoutSynchronizer().Synchronize(
+            afterGraph,
+            beforeLayout);
+        GraphFunctionLayout synchronizedFunction = Assert.Single(synchronized.Functions);
+        HashSet<SemanticId> oldGraphNodeIds = beforeFunction.Nodes
+            .Select(static node => node.Id)
+            .ToHashSet();
+        Assert.All(
+            synchronizedFunction.Nodes.Where(node => oldGraphNodeIds.Contains(node.NodeId)),
+            node => Assert.Equal(GraphNodePlacement.Placed, node.Placement));
+        Assert.All(
+            synchronizedFunction.Nodes.Where(node => !oldGraphNodeIds.Contains(node.NodeId)),
+            node => Assert.Equal(GraphNodePlacement.Unplaced, node.Placement));
+        Assert.Empty(synchronized.OrphanedNodes);
+    }
+
+    [Fact]
+    public void Apply_RollsBackGeneratedLoopWhenALaterBodyStatementHasAStaleType()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int value, bool enabled)
+                {
+                    int result = value;
+                    return result;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/LoopBuildRollback.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement resultDefinition = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+        SemanticId intType = GetTypeId(original, resultDefinition);
+        SemanticId boolType = GetTypeId(original, method.Parameters[1]);
+        var loop = new InsertStatementPatchPlanStep(
+            "insertLoop",
+            method.Body.Id,
+            resultDefinition.Id,
+            returnStatement.Id,
+            new WhilePatchStatement(new LiteralPatchExpression("true", boolType)));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                loop,
+                new InsertLoopBodyStatementPatchPlanStep(
+                    "invalidAssignment",
+                    method.Body.Id,
+                    loop.StepId,
+                    new LocalAssignmentPatchStatement(
+                        resultDefinition.Id,
+                        resultDefinition.Name,
+                        boolType,
+                        new LiteralPatchExpression("false", boolType))),
+            ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.PatchedRequest);
+        Assert.Null(result.Analysis);
+        Assert.Equal(source, Assert.Single(request.Sources).Source);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.TypeMismatch);
+        Assert.NotEqual(intType, boolType);
+    }
+
+    [Fact]
+    public void Apply_ResolvesNestedLoopBodiesAndBindsTransfersToTheNearestLoop()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int value, bool outerEnabled, bool innerEnabled)
+                {
+                    return value;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/NestedLoopBuildPlan.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(
+            Assert.Single(method.Body.Statements));
+        SemanticId boolType = GetTypeId(original, method.Parameters[1]);
+        var outerLoop = new InsertStatementPatchPlanStep(
+            "insertOuterLoop",
+            method.Body.Id,
+            null,
+            returnStatement.Id,
+            new WhilePatchStatement(new LocalReferencePatchExpression(
+                method.Parameters[1].Id,
+                method.Parameters[1].Name,
+                boolType)));
+        var innerLoop = new InsertLoopBodyStatementPatchPlanStep(
+            "insertInnerLoop",
+            method.Body.Id,
+            outerLoop.StepId,
+            new WhilePatchStatement(new LocalReferencePatchExpression(
+                method.Parameters[2].Id,
+                method.Parameters[2].Name,
+                boolType)));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                outerLoop,
+                innerLoop,
+                new InsertLoopBodyStatementPatchPlanStep(
+                    "breakInnerLoop",
+                    method.Body.Id,
+                    innerLoop.StepId,
+                    new BreakPatchStatement()),
+                new InsertLoopBodyStatementPatchPlanStep(
+                    "continueOuterLoop",
+                    method.Body.Id,
+                    outerLoop.StepId,
+                    new ContinuePatchStatement()),
+            ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains("while (outerEnabled)", patchedSource, StringComparison.Ordinal);
+        Assert.Contains("while (innerEnabled)", patchedSource, StringComparison.Ordinal);
+        Assert.Contains("break;", patchedSource, StringComparison.Ordinal);
+        Assert.Contains("continue;", patchedSource, StringComparison.Ordinal);
+        HirMethodDeclaration changedMethod = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirWhileStatement changedOuter = Assert.IsType<HirWhileStatement>(changedMethod.Body.Statements[0]);
+        HirWhileStatement changedInner = Assert.IsType<HirWhileStatement>(changedOuter.Body.Statements[0]);
+        HirBreakStatement innerBreak = Assert.IsType<HirBreakStatement>(
+            Assert.Single(changedInner.Body.Statements));
+        HirContinueStatement outerContinue = Assert.IsType<HirContinueStatement>(
+            changedOuter.Body.Statements[1]);
+        GraphDocument graph = new HirGraphProjector().Project(
+            result.Analysis.Hir,
+            result.Analysis.Semantics);
+        GraphControlFlowFunction flow = Assert.Single(
+            new GraphControlFlowAnalyzer().AnalyzeAndValidate(graph).Functions);
+        GraphControlFlowLoop outerFlow = Assert.Single(
+            flow.Loops,
+            loop => loop.LoopNodeId == changedOuter.Id);
+        GraphControlFlowLoop innerFlow = Assert.Single(
+            flow.Loops,
+            loop => loop.LoopNodeId == changedInner.Id);
+        Assert.Contains(innerBreak.Id, innerFlow.BreakNodeIds);
+        Assert.DoesNotContain(innerBreak.Id, outerFlow.BreakNodeIds);
+        Assert.Contains(outerContinue.Id, outerFlow.ContinueNodeIds);
+        Assert.DoesNotContain(outerContinue.Id, innerFlow.ContinueNodeIds);
+        Assert.True(flow.IsReducible);
+        Assert.Empty(Assert.Single(result.Analysis.IdentitySidecars).Tombstones);
+    }
+
+    [Fact]
     public void Apply_RollsBackDirectStepsWhenAnEarlierDeletionRemovesALaterTarget()
     {
         const string source = """

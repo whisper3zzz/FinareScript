@@ -8,9 +8,10 @@ edges and they do not use a second execution model. C# text, HIR, semantic
 bindings, Graph regions, and the derived CFG all identify the same loop and the
 same transfer targets.
 
-This slice is deliberately forward-only. Existing C# loops can be visualized,
-serialized, analyzed, and identity-reconciled. Graph-authored insertion or
-structural editing of a loop remains a later bounded patch operation.
+M4.5 was deliberately forward-only: existing C# loops could be visualized,
+serialized, analyzed, and identity-reconciled. M4.6 now builds on this contract
+with bounded Graph-authored while insertion and symbolic body population; see
+[Bounded Graph-Authored Loop Patching](LOOP_PATCHING.md).
 
 ## HIR contract
 
@@ -116,10 +117,10 @@ Insertion after a direct `break` or `continue` is rejected as unreachable, and
 patch CFG anchors do not mistake those terminal transfers for normal block
 fallthrough.
 
-This slice does not yet provide:
+The combined M4.5/M4.6 loop slices do not yet provide:
 
-- Graph-to-C# synthesis of a new while loop;
 - moving statements into or out of a loop;
+- editing or deleting an existing while loop;
 - changing a break/continue target;
 - `do`, `for`, or `foreach`;
 - constant-condition folding or proof of loop termination;

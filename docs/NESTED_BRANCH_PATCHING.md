@@ -9,7 +9,7 @@ typed `IfPatchStatement` inserted into a previously generated C# `then` or
 `else` Block, followed by the same full C# → HIR → semantics → Graph → CFG
 pipeline used by every other edit.
 
-Patch-plan schema `unifiedscript.patch-plan/v0.7` extends the existing symbolic
+Patch-plan schema `unifiedscript.patch-plan/v0.8` extends the existing symbolic
 branch-handle model recursively. No new step discriminator is required.
 
 ## Recursive producer model
@@ -113,7 +113,7 @@ parent path
 └── later statement      ← would become unreachable
 ```
 
-Plan v0.7 tracks the last statement on every symbolic path and rejects this
+Plan v0.8 tracks the last statement on every symbolic path and rejects this
 retroactive-unreachability shape before executing the first stage. The rule
 propagates recursively: terminal leaves can close their parent, which can close
 its parent, through arbitrary acyclic depth.
@@ -210,9 +210,10 @@ existing `if`. Nested conditions cannot refer to a newly generated local by a
 symbolic value handle because patch expressions still carry persistent source
 definition IDs. The producer tree cannot cross methods or documents.
 
-Calls, member writes, compound assignments, loops, `switch`, conditional
-expressions, exception flow, async state-machine flow, and arbitrary Graph edge
-rewiring remain outside this slice. Independent root-block insertions are not
-members of the symbolic branch tree; terminal propagation applies to generated
-branch paths, while every executed stage still relies on compiler and CFG
-validation for its actual source state.
+Calls, member writes, compound assignments, `switch`, conditional expressions,
+exception flow, async state-machine flow, and arbitrary Graph edge rewiring
+remain outside this branch slice. Bounded `while` construction is layered on
+the same recursive producer model in M4.6. Independent root-block insertions
+are not members of the symbolic branch tree; terminal propagation applies to
+generated branch paths, while every executed stage still relies on compiler
+and CFG validation for its actual source state.

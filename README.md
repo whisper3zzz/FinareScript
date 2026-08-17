@@ -37,6 +37,8 @@ The repository currently implements:
 - recursive symbolic `then`/`else` block handles with ordered local, assignment,
   nested-branch, and typed early-return population, tree-aware terminal-path
   guards, and late-failure rollback;
+- bounded typed `while` synthesis with symbolic loop-body handles, recursive
+  branch/loop composition, and nearest-loop `break`/`continue` validation;
 - opt-in `.usids` sidecars that preserve node identity across formatting and edits;
 - semantic-independent `.usgraph` layout sidecars with deterministic positions,
   sizes, collapsed state, comment regions, routing hints, and orphan recovery;
@@ -49,7 +51,9 @@ M3 bidirectional source projection is complete. M4.1 adds explicit Graph
 regions, M4.2 derives and validates control flow, M4.3 consumes those facts for
 bounded local assignment and safer value reconnection, and M4.4 recursively
 authors nested acyclic decisions through the same HIR/Graph path. M4.5 now
-projects and validates structured loops through that same path.
+projects and validates structured loops through that same path. M4.6 completes
+the first bounded Graph-to-C# loop round trip by constructing and populating
+those loops atomically.
 
 The v0.2 profile accepts `[Visual]` methods containing local variables,
 expressions, calls, assignments, `if/else`, `while`, `break`, `continue`,
@@ -222,7 +226,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
   --out-identity artifacts/patched/DamageRules.cs.usids
 ```
 
-`unifiedscript.patch/v0.8` binds every patch to both the source compilation ID
+`unifiedscript.patch/v0.9` binds every patch to both the source compilation ID
 and semantic configuration ID emitted in Graph schema v0.3. A `replaceLiteral`
 operation also carries the expected old literal text. A stale source, changed
 reference/effect configuration, missing target, changed old value, non-literal
@@ -236,7 +240,7 @@ ambiguous matches allocate new IDs and emit `UVS3101` rather than guessing.
 
 ## Apply structural graph patches
 
-Patch v0.8 includes `changeOperator` and `reconnectArgument`. The checked-in
+Patch v0.9 includes `changeOperator` and `reconnectArgument`. The checked-in
 operator sample changes the binary node from multiplication to division while
 requiring the expected result, left-port, and right-port type IDs:
 
@@ -572,9 +576,10 @@ analyzed source baseline, or atomically with the patch-plan protocol below.
 
 ## Apply atomic semantic patch plans
 
-`unifiedscript.patch-plan/v0.7` composes `replaceLiteral`, `changeOperator`,
-`reconnectArgument`, `insertStatement`, `insertBranchStatement`, `deleteStatement`,
-`introduceTemporary`, and `reconnectValue` as one ordered transaction. The
+`unifiedscript.patch-plan/v0.8` composes `replaceLiteral`, `changeOperator`,
+`reconnectArgument`, `insertStatement`, `insertBranchStatement`,
+`insertLoopBodyStatement`, `deleteStatement`, `introduceTemporary`, and
+`reconnectValue` as one ordered transaction. The
 shared-value sample starts with:
 
 ```csharp
@@ -652,10 +657,35 @@ locals publish ordinary local handles, but normal dominance rules prevent a
 branch-local value from escaping to the outer block or sibling branch. A typed
 branch return terminates that symbolic path; later appends to the same path are
 rejected before execution. An inserted nested `if` recursively publishes two
-more paths, and all-path termination propagates up that producer tree. Local
-assignments are supported as direct and produced-branch insertion payloads;
-calls, async/task-like returns, cyclic handles, and cross-method handles remain
-outside v0.7.
+more paths, and all-path termination propagates up that producer tree. A
+`while` insertion similarly publishes one symbolic body handle through
+`insertLoopBodyStatement`; nested if/while producers compose, while
+`break`/`continue` bind only to the nearest lexical loop. Local assignments are
+supported as direct, produced-branch, and produced-loop-body payloads. Calls,
+async/task-like returns, cyclic handle references, and cross-method handles
+remain outside v0.8.
+
+### Build a loop from a visual plan
+
+The checked-in M4.6 sample starts with a local and its return, then atomically
+inserts a typed while, adds a stop branch and `break`, decrements the local, and
+adds `continue`:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  apply-plan \
+  samples/Patching/LoopBuildRules.cs \
+  --identity samples/Patching/LoopBuildRules.cs.usids \
+  --plan samples/Patching/BuildLoop.plan.json \
+  --out artifacts/loop-plan/LoopBuildRules.cs \
+  --out-identity artifacts/loop-plan/LoopBuildRules.cs.usids
+```
+
+The editor supplies only the original method-body anchor and backward symbolic
+producer references. The coordinator resolves the generated while/body/branch
+IDs after each reanalysis. The final ordinary C# loop reprojects into the same
+HIR v0.2, Graph v0.4 regions, and nearest-loop CFG facts as a text-authored
+loop. See [LOOP_PATCHING.md](docs/LOOP_PATCHING.md).
 
 ## Persist and synchronize graph layout
 
@@ -715,14 +745,14 @@ This milestone does not include:
 - namespace/API allow and deny policies;
 - flow-sensitive nullable state in the interchange model;
 - general expression/statement synthesis and arbitrary data/control rewiring
-  beyond bounded local/assignment/`if`/`return` insertion, safe deletion,
-  temporary introduction, compatible local consumer reconnection, and atomic
-  composition of the current patch operations;
+  beyond bounded local/assignment/`if`/`while`/loop-transfer/`return`
+  insertion, safe deletion, temporary introduction, compatible local consumer
+  reconnection, and atomic composition of the current patch operations;
 - automatic graph placement, layout merge drivers, and editor viewport/session
   state;
 - `do`/`for`/`foreach`, switch, lambdas, exceptions, or general-purpose C#
   visualization;
-- graph-authored loop synthesis or arbitrary loop restructuring.
+- arbitrary loop restructuring, transfer retargeting, or existing-loop editing.
 
 See [ARCHITECTURE.md](docs/ARCHITECTURE.md),
 [IDENTITY_SIDECAR.md](docs/IDENTITY_SIDECAR.md),
@@ -731,6 +761,7 @@ See [ARCHITECTURE.md](docs/ARCHITECTURE.md),
 [LOCAL_ASSIGNMENT_PATCHING.md](docs/LOCAL_ASSIGNMENT_PATCHING.md),
 [NESTED_BRANCH_PATCHING.md](docs/NESTED_BRANCH_PATCHING.md),
 [LOOP_FOUNDATION.md](docs/LOOP_FOUNDATION.md),
+[LOOP_PATCHING.md](docs/LOOP_PATCHING.md),
 [PATCH_PLAN.md](docs/PATCH_PLAN.md),
 [M1_ROSLYN_GRAPH_FOUNDATION.md](docs/milestones/M1_ROSLYN_GRAPH_FOUNDATION.md),
 [M2_SEMANTIC_BINDING.md](docs/milestones/M2_SEMANTIC_BINDING.md), and

@@ -550,6 +550,173 @@ public sealed class SemanticPatchPlanJsonTests
     }
 
     [Fact]
+    public void SerializeAndDeserialize_PreserveRecursiveLoopBodyConstruction()
+    {
+        SemanticId boolType = SemanticId.FromKey("System.Boolean");
+        SemanticId intType = SemanticId.FromKey("System.Int32");
+        SemanticId blockId = SemanticId.FromKey("loop-plan-block");
+        SemanticId resultId = SemanticId.FromKey("loop-plan-result");
+        var loop = new InsertStatementPatchPlanStep(
+            "insertLoop",
+            blockId,
+            resultId,
+            SemanticId.FromKey("loop-plan-return"),
+            new WhilePatchStatement(new LiteralPatchExpression("true", boolType)));
+        var guard = new InsertLoopBodyStatementPatchPlanStep(
+            "insertGuard",
+            blockId,
+            loop.StepId,
+            new IfPatchStatement(new LiteralPatchExpression("false", boolType)));
+        var stop = new InsertBranchStatementPatchPlanStep(
+            "stopLoop",
+            blockId,
+            guard.StepId,
+            IfBranchKind.Then,
+            new BreakPatchStatement());
+        var decrement = new InsertLoopBodyStatementPatchPlanStep(
+            "decrement",
+            blockId,
+            loop.StepId,
+            new LocalAssignmentPatchStatement(
+                resultId,
+                "result",
+                intType,
+                new LiteralPatchExpression("0", intType)));
+        var nextIteration = new InsertLoopBodyStatementPatchPlanStep(
+            "nextIteration",
+            blockId,
+            loop.StepId,
+            new ContinuePatchStatement());
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("loop-plan-compilation"),
+            SemanticId.FromKey("loop-plan-configuration"),
+            [loop, guard, stop, decrement, nextIteration]);
+
+        string json = SemanticPatchPlanJson.Serialize(plan);
+        SemanticPatchPlanDocument roundTrip = SemanticPatchPlanJson.Deserialize(json);
+
+        Assert.Equal(plan.Steps, roundTrip.Steps);
+        Assert.IsType<WhilePatchStatement>(
+            Assert.IsType<InsertStatementPatchPlanStep>(roundTrip.Steps[0]).NewStatement);
+        Assert.IsType<InsertLoopBodyStatementPatchPlanStep>(roundTrip.Steps[1]);
+        Assert.IsType<BreakPatchStatement>(
+            Assert.IsType<InsertBranchStatementPatchPlanStep>(roundTrip.Steps[2]).NewStatement);
+        Assert.IsType<ContinuePatchStatement>(
+            Assert.IsType<InsertLoopBodyStatementPatchPlanStep>(roundTrip.Steps[4]).NewStatement);
+        Assert.Contains("\"step\": \"insertLoopBodyStatement\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"statement\": \"while\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Create_RejectsInvalidLoopSourcesAnchorsAndUnreachableAppends()
+    {
+        SemanticId boolType = SemanticId.FromKey("System.Boolean");
+        SemanticId intType = SemanticId.FromKey("System.Int32");
+        SemanticId blockId = SemanticId.FromKey("loop-validation-block");
+        var loop = new InsertStatementPatchPlanStep(
+            "insertLoop",
+            blockId,
+            null,
+            null,
+            new WhilePatchStatement(new LiteralPatchExpression("true", boolType)));
+        InsertLoopBodyStatementPatchPlanStep Body(
+            string stepId,
+            string sourceStepId,
+            SemanticId? target = null,
+            InsertPatchStatement? payload = null) => new(
+            stepId,
+            target ?? blockId,
+            sourceStepId,
+            payload ?? new LocalLiteralDeclarationPatchStatement("value", "int", "1", intType));
+
+        Assert.Throws<JsonException>(() => SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("loop-validation-compilation"),
+            SemanticId.FromKey("loop-validation-configuration"),
+            [Body("populateFirst", loop.StepId), loop]));
+        Assert.Throws<JsonException>(() => SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("loop-validation-compilation"),
+            SemanticId.FromKey("loop-validation-configuration"),
+            [loop, Body("missingSource", "missingLoop")]));
+        Assert.Throws<JsonException>(() => SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("loop-validation-compilation"),
+            SemanticId.FromKey("loop-validation-configuration"),
+            [loop, Body("wrongAnchor", loop.StepId, SemanticId.FromKey("other-block"))]));
+        Assert.Throws<JsonException>(() => SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("loop-validation-compilation"),
+            SemanticId.FromKey("loop-validation-configuration"),
+            [
+                loop,
+                Body("leaveLoop", loop.StepId, payload: new ContinuePatchStatement()),
+                Body("unreachableValue", loop.StepId),
+            ]));
+    }
+
+    [Fact]
+    public void Create_PropagatesTerminalBranchesOnlyToTheirContainingLoopBody()
+    {
+        SemanticId boolType = SemanticId.FromKey("System.Boolean");
+        SemanticId blockId = SemanticId.FromKey("loop-terminal-block");
+        var outerLoop = new InsertStatementPatchPlanStep(
+            "outerLoop",
+            blockId,
+            null,
+            null,
+            new WhilePatchStatement(new LiteralPatchExpression("true", boolType)));
+        var terminalIf = new InsertLoopBodyStatementPatchPlanStep(
+            "terminalIf",
+            blockId,
+            outerLoop.StepId,
+            new IfPatchStatement(new LiteralPatchExpression("true", boolType)));
+        var breakThen = new InsertBranchStatementPatchPlanStep(
+            "breakThen",
+            blockId,
+            terminalIf.StepId,
+            IfBranchKind.Then,
+            new BreakPatchStatement());
+        var continueElse = new InsertBranchStatementPatchPlanStep(
+            "continueElse",
+            blockId,
+            terminalIf.StepId,
+            IfBranchKind.Else,
+            new ContinuePatchStatement());
+        var unreachable = new InsertLoopBodyStatementPatchPlanStep(
+            "unreachable",
+            blockId,
+            outerLoop.StepId,
+            new ContinuePatchStatement());
+
+        Assert.Throws<JsonException>(() => SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("loop-terminal-compilation"),
+            SemanticId.FromKey("loop-terminal-configuration"),
+            [outerLoop, terminalIf, breakThen, continueElse, unreachable]));
+
+        var innerLoop = new InsertLoopBodyStatementPatchPlanStep(
+            "innerLoop",
+            blockId,
+            outerLoop.StepId,
+            new WhilePatchStatement(new LiteralPatchExpression("true", boolType)));
+        SemanticPatchPlanDocument nested = SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("nested-loop-terminal-compilation"),
+            SemanticId.FromKey("nested-loop-terminal-configuration"),
+            [
+                outerLoop,
+                innerLoop,
+                new InsertLoopBodyStatementPatchPlanStep(
+                    "breakInner",
+                    blockId,
+                    innerLoop.StepId,
+                    new BreakPatchStatement()),
+                new InsertLoopBodyStatementPatchPlanStep(
+                    "continueOuter",
+                    blockId,
+                    outerLoop.StepId,
+                    new ContinuePatchStatement()),
+            ]);
+
+        Assert.Equal(4, nested.Steps.Count);
+    }
+
+    [Fact]
     public void Create_RejectsReconnectThatReferencesAFutureIntroduction()
     {
         SemanticId floatType = SemanticId.FromKey("System.Single");

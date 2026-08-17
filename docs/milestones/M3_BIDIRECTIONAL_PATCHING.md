@@ -10,7 +10,7 @@ M4 and builds on this frozen bidirectional transaction boundary.
 
 ## Implemented vertical slice
 
-- `unifiedscript.patch/v0.8` polymorphic JSON protocol
+- `unifiedscript.patch/v0.9` polymorphic JSON protocol
 - `replaceLiteral` operation targeted by HIR/Graph `SemanticId`
 - unary/binary `changeOperator` with result and operand type preconditions
 - same-invocation `reconnectArgument` with endpoint, type, and effect guards
@@ -24,7 +24,7 @@ M4 and builds on this frozen bidirectional transaction boundary.
 - `introduceTemporary` for stable, pure return/local-initializer expressions
 - `reconnectValue` from an existing local to an exactly typed, reachable stable
   consumer
-- `unifiedscript.patch-plan/v0.7` ordered multi-stage transaction protocol
+- `unifiedscript.patch-plan/v0.8` ordered multi-stage transaction protocol
 - plan steps for every bounded semantic patch operation
 - symbolic plan handles for local IDs allocated by `introduceTemporary` and
   local-literal `insertStatement`
@@ -220,7 +220,7 @@ The test and sample suite proves that:
     literal cannot steal a later target's persistent ID; and
 70. the checked-in `ReturnGuard.plan.json` sample emits a typed early return and
     edits the original fallback literal in one atomic transaction;
-71. patch v0.8 round-trips a local assignment whose target name, persistent ID,
+71. patch v0.9 round-trips a local assignment whose target name, persistent ID,
     expected type, and typed pure right-hand side are explicit;
 72. a reachable root-block assignment emits ordinary C#, binds to the existing
     local, and projects an HIR/Graph assignment with the expected dominance;

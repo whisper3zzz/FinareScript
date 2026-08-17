@@ -208,6 +208,17 @@ public static class SemanticPatchJson
 
                 ValidatePatchExpression(ifStatement.Condition, 0);
                 break;
+            case WhilePatchStatement whileStatement:
+                if (whileStatement.Condition is null)
+                {
+                    throw new JsonException("A while insertion requires a typed condition expression.");
+                }
+
+                ValidatePatchExpression(whileStatement.Condition, 0);
+                break;
+            case BreakPatchStatement:
+            case ContinuePatchStatement:
+                break;
             case ReturnPatchStatement returnStatement:
                 if (returnStatement.ExpectedReturnTypeId.IsEmpty)
                 {

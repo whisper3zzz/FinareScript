@@ -54,6 +54,7 @@ public sealed class CSharpPatchPlanApplier
         CSharpCompilationRequest currentRequest = request;
         var producedDefinitions = new Dictionary<string, SemanticId>(StringComparer.Ordinal);
         var producedBranches = new Dictionary<string, ProducedIfBranches>(StringComparer.Ordinal);
+        var producedLoops = new Dictionary<string, ProducedWhileLoop>(StringComparer.Ordinal);
         CSharpPatchResult? lastResult = null;
         foreach (SemanticPatchPlanStep step in plan.Steps)
         {
@@ -68,6 +69,7 @@ public sealed class CSharpPatchPlanApplier
                     current,
                     producedDefinitions,
                     producedBranches,
+                    producedLoops,
                     out SemanticPatchOperation? operation,
                     out UnifiedDiagnostic? operationFailure))
             {
@@ -107,12 +109,32 @@ public sealed class CSharpPatchPlanApplier
                     new ProducedIfBranches(insertedIf.Then.Id, insertedIf.Else.Id));
             }
 
+            if (ProducesLoop(step))
+            {
+                if (insertedStatement is not HirWhileStatement insertedWhile)
+                {
+                    return Failure(new UnifiedDiagnostic(
+                        SemanticPatchDiagnosticCodes.InvalidPatchPlan,
+                        UnifiedDiagnosticSeverity.Error,
+                        $"Plan step '{step.StepId}' succeeded but its produced loop body could " +
+                        "not be resolved for later steps.",
+                        SourceSpan.Unknown("<patch-plan>"),
+                        step.TargetNodeId));
+                }
+
+                producedLoops.Add(
+                    step.StepId,
+                    new ProducedWhileLoop(insertedWhile.Id, insertedWhile.Body.Id));
+            }
+
             HirVariableDeclarationStatement? introduced = step switch
             {
                 IntroduceTemporaryPatchPlanStep introduction => FindIntroducedDefinition(
                     stageResult.Analysis.Hir,
                     introduction),
-                InsertStatementPatchPlanStep or InsertBranchStatementPatchPlanStep =>
+                InsertStatementPatchPlanStep or
+                    InsertBranchStatementPatchPlanStep or
+                    InsertLoopBodyStatementPatchPlanStep =>
                     insertedStatement as HirVariableDeclarationStatement,
                 _ => null,
             };
@@ -160,6 +182,7 @@ public sealed class CSharpPatchPlanApplier
         var patchIndex = new HirPatchIndex(compilation);
         var producerMethods = new Dictionary<string, SemanticId>(StringComparer.Ordinal);
         var branchProducerMethods = new Dictionary<string, SemanticId>(StringComparer.Ordinal);
+        var loopProducerMethods = new Dictionary<string, SemanticId>(StringComparer.Ordinal);
         foreach (SemanticPatchPlanStep step in plan.Steps)
         {
             if (!nodes.TryGetValue(step.TargetNodeId, out HirNode? target))
@@ -222,6 +245,21 @@ public sealed class CSharpPatchPlanApplier
                         target.Id)];
                 }
             }
+            else if (step is InsertLoopBodyStatementPatchPlanStep loopInsertion)
+            {
+                if (!loopProducerMethods.TryGetValue(
+                        loopInsertion.SourceStepId,
+                        out SemanticId loopProducerMethodId) ||
+                    loopProducerMethodId != method!.Id)
+                {
+                    return [Diagnostic(
+                        SemanticPatchDiagnosticCodes.InvalidPatchPlan,
+                        $"Loop-body insertion step '{loopInsertion.StepId}' and source step " +
+                        $"'{loopInsertion.SourceStepId}' target different methods.",
+                        target.Span,
+                        target.Id)];
+                }
+            }
             else
             {
                 SemanticPatchOperation initialOperation = GetInitialOperation(step);
@@ -245,6 +283,11 @@ public sealed class CSharpPatchPlanApplier
             if (ProducesBranches(step))
             {
                 branchProducerMethods.Add(step.StepId, method!.Id);
+            }
+
+            if (ProducesLoop(step))
+            {
+                loopProducerMethods.Add(step.StepId, method!.Id);
             }
         }
 
@@ -330,6 +373,7 @@ public sealed class CSharpPatchPlanApplier
         CSharpAnalysisResult current,
         IReadOnlyDictionary<string, SemanticId> producedDefinitions,
         IReadOnlyDictionary<string, ProducedIfBranches> producedBranches,
+        IReadOnlyDictionary<string, ProducedWhileLoop> producedLoops,
         out SemanticPatchOperation? operation,
         out UnifiedDiagnostic? diagnostic)
     {
@@ -382,6 +426,13 @@ public sealed class CSharpPatchPlanApplier
                     branchInsertion,
                     patchIndex,
                     producedBranches,
+                    out operation,
+                    out diagnostic);
+            case InsertLoopBodyStatementPatchPlanStep loopInsertion:
+                return TryCreateLoopBodyInsertion(
+                    loopInsertion,
+                    patchIndex,
+                    producedLoops,
                     out operation,
                     out diagnostic);
             case DeleteStatementPatchPlanStep deletion
@@ -596,6 +647,53 @@ public sealed class CSharpPatchPlanApplier
         return true;
     }
 
+    private static bool TryCreateLoopBodyInsertion(
+        InsertLoopBodyStatementPatchPlanStep step,
+        HirPatchIndex patchIndex,
+        IReadOnlyDictionary<string, ProducedWhileLoop> producedLoops,
+        out SemanticPatchOperation? operation,
+        out UnifiedDiagnostic? diagnostic)
+    {
+        if (!producedLoops.TryGetValue(step.SourceStepId, out ProducedWhileLoop loop))
+        {
+            operation = null;
+            diagnostic = Diagnostic(
+                SemanticPatchDiagnosticCodes.InvalidPatchPlan,
+                $"Loop-body insertion step '{step.StepId}' could not resolve source step " +
+                $"'{step.SourceStepId}'.",
+                SourceSpan.Unknown("<patch-plan>"),
+                step.TargetNodeId);
+            return false;
+        }
+
+        if (!patchIndex.TryGetBlock(
+                loop.BodyBlockId,
+                out HirPatchIndex.BlockLocation? bodyLocation) ||
+            bodyLocation!.EntryStatement is not HirWhileStatement currentLoop ||
+            currentLoop.Id != loop.LoopId)
+        {
+            operation = null;
+            diagnostic = Diagnostic(
+                SemanticPatchDiagnosticCodes.TargetNotFound,
+                $"Loop-body insertion step '{step.StepId}' could not resolve the produced body " +
+                $"from source step '{step.SourceStepId}'.",
+                SourceSpan.Unknown("<patch-plan>"),
+                loop.BodyBlockId);
+            return false;
+        }
+
+        SemanticId? previousSiblingId = bodyLocation.Block.Statements.Count == 0
+            ? null
+            : bodyLocation.Block.Statements[^1].Id;
+        operation = new InsertStatementPatchOperation(
+            loop.BodyBlockId,
+            previousSiblingId,
+            null,
+            step.NewStatement);
+        diagnostic = null;
+        return true;
+    }
+
     private static bool TryResolveInsertionGap(
         HirBlockStatement block,
         SemanticId? expectedPreviousSiblingId,
@@ -754,11 +852,21 @@ public sealed class CSharpPatchPlanApplier
             InsertBranchStatementPatchPlanStep
         {
             NewStatement: LocalLiteralDeclarationPatchStatement
+        } or
+            InsertLoopBodyStatementPatchPlanStep
+        {
+            NewStatement: LocalLiteralDeclarationPatchStatement
         };
 
     private static bool ProducesBranches(SemanticPatchPlanStep step) =>
         step is InsertStatementPatchPlanStep { NewStatement: IfPatchStatement } or
-            InsertBranchStatementPatchPlanStep { NewStatement: IfPatchStatement };
+            InsertBranchStatementPatchPlanStep { NewStatement: IfPatchStatement } or
+            InsertLoopBodyStatementPatchPlanStep { NewStatement: IfPatchStatement };
+
+    private static bool ProducesLoop(SemanticPatchPlanStep step) =>
+        step is InsertStatementPatchPlanStep { NewStatement: WhilePatchStatement } or
+            InsertBranchStatementPatchPlanStep { NewStatement: WhilePatchStatement } or
+            InsertLoopBodyStatementPatchPlanStep { NewStatement: WhilePatchStatement };
 
     private static bool TryGetStepMethod(
         SemanticPatchPlanStep step,
@@ -768,7 +876,9 @@ public sealed class CSharpPatchPlanApplier
     {
         switch (step)
         {
-            case InsertStatementPatchPlanStep or InsertBranchStatementPatchPlanStep
+            case InsertStatementPatchPlanStep or
+                InsertBranchStatementPatchPlanStep or
+                InsertLoopBodyStatementPatchPlanStep
                 when target is HirBlockStatement block &&
                 patchIndex.TryGetBlock(block.Id, out HirPatchIndex.BlockLocation? blockLocation):
                 method = blockLocation!.Method;
@@ -803,6 +913,9 @@ public sealed class CSharpPatchPlanApplier
         InsertBranchStatementPatchPlanStep => throw new ArgumentException(
             "A symbolic branch insertion cannot become an initial standalone operation.",
             nameof(step)),
+        InsertLoopBodyStatementPatchPlanStep => throw new ArgumentException(
+            "A symbolic loop-body insertion cannot become an initial standalone operation.",
+            nameof(step)),
         DeleteStatementPatchPlanStep deletion => deletion.ToOperation(),
         IntroduceTemporaryPatchPlanStep introduction => introduction.ToOperation(),
         ReconnectValuePatchPlanStep => throw new ArgumentException(
@@ -814,6 +927,10 @@ public sealed class CSharpPatchPlanApplier
     private readonly record struct ProducedIfBranches(
         SemanticId ThenBlockId,
         SemanticId ElseBlockId);
+
+    private readonly record struct ProducedWhileLoop(
+        SemanticId LoopId,
+        SemanticId BodyBlockId);
 
     private static CSharpCompilationRequest AdvanceRequest(
         CSharpCompilationRequest patchedRequest,

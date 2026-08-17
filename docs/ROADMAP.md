@@ -96,8 +96,9 @@ Outcome: practical gameplay methods are fully visualizable.
 - [x] explicit `while`, `break`, and `continue` HIR and C# lowering
 - [x] Graph v0.4 `loop`/`loopBody` regions and nearest-loop transfer roles
 - [x] loop header/body/exit/back-edge CFG facts and target validation
+- [x] bounded Graph-to-C# while synthesis and symbolic body population
+- [x] nearest-loop break/continue construction with atomic rollback
 - [ ] general data/control rewiring, existing-assignment editing, and structural HIR operations
-- [ ] bounded Graph-to-C# loop synthesis and body population
 - [ ] `for` and `foreach`
 - [ ] `switch` and supported patterns
 - [ ] conditional and null-conditional expressions

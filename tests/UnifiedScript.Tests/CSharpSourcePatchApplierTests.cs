@@ -1474,6 +1474,137 @@ public sealed class CSharpSourcePatchApplierTests
             static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.InvalidGraphExpression);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Apply_RejectsLoopTransferOutsideAnEnclosingLoop(bool isContinue)
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static void Run()
+                {
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            source,
+            "Game/RejectUnscopedLoopTransfer.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        Assert.Empty(method.Body.Statements);
+        InsertPatchStatement transfer = isContinue
+            ? new ContinuePatchStatement()
+            : new BreakPatchStatement();
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new InsertStatementPatchOperation(
+                method.Body.Id,
+                null,
+                null,
+                transfer)]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.PatchedRequest);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.InvalidStatement);
+    }
+
+    [Fact]
+    public void Apply_RejectsWhileInsertionAfterAnAllPathsReturnBranch()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(bool ready)
+                {
+                    if (ready)
+                    {
+                        return 1;
+                    }
+                    else
+                    {
+                        return 0;
+                    }
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            source,
+            "Game/RejectUnreachableWhile.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirIfStatement existingIf = Assert.IsType<HirIfStatement>(Assert.Single(method.Body.Statements));
+        SemanticId boolType = GetTypeId(original, method.Parameters[0]);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new InsertStatementPatchOperation(
+                method.Body.Id,
+                existingIf.Id,
+                null,
+                new WhilePatchStatement(new LiteralPatchExpression("true", boolType)))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.PatchedRequest);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.UnreachableInsertion);
+    }
+
+    [Fact]
+    public void Apply_RejectsWhileConditionThatIsNotSystemBoolean()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int value)
+                {
+                    return value;
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            source,
+            "Game/RejectNonBooleanWhile.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(
+            Assert.Single(method.Body.Statements));
+        SemanticId intType = GetTypeId(original, method.Parameters[0]);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new InsertStatementPatchOperation(
+                method.Body.Id,
+                null,
+                returnStatement.Id,
+                new WhilePatchStatement(new LiteralPatchExpression("1", intType)))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.PatchedRequest);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.TypeMismatch);
+    }
+
     [Fact]
     public void Apply_RejectsInsertionWhenSiblingNameOrTypePreconditionIsStale()
     {

@@ -50,7 +50,8 @@ public static class SemanticPatchPlanJson
         var targetKinds = new Dictionary<SemanticId, bool>();
         var producedTypes = new Dictionary<string, SemanticId>(StringComparer.Ordinal);
         var branchProducers = new Dictionary<string, BranchProducerState>(StringComparer.Ordinal);
-        var branchPaths = new Dictionary<BranchPathKey, BranchPathState>();
+        var loopProducers = new Dictionary<string, LoopProducerState>(StringComparer.Ordinal);
+        var paths = new Dictionary<PlanPathKey, PlanPathState>();
         foreach (SemanticPatchPlanStep? step in document.Steps)
         {
             if (step is null)
@@ -71,7 +72,8 @@ public static class SemanticPatchPlanJson
             }
 
             bool isInsertion = step is InsertStatementPatchPlanStep or
-                InsertBranchStatementPatchPlanStep;
+                InsertBranchStatementPatchPlanStep or
+                InsertLoopBodyStatementPatchPlanStep;
             if (targetKinds.TryGetValue(step.TargetNodeId, out bool previousWasInsertion))
             {
                 if (!isInsertion || !previousWasInsertion)
@@ -110,7 +112,15 @@ public static class SemanticPatchPlanJson
                             insertion.TargetNodeId,
                             null,
                             branchProducers,
-                            branchPaths);
+                            paths);
+                    }
+                    else if (insertion.NewStatement is WhilePatchStatement)
+                    {
+                        RegisterLoopProducer(
+                            insertion.StepId,
+                            insertion.TargetNodeId,
+                            loopProducers,
+                            paths);
                     }
 
                     break;
@@ -119,11 +129,13 @@ public static class SemanticPatchPlanJson
                         document,
                         branchInsertion,
                         branchProducers,
-                        branchPaths);
-                    var sourcePath = new BranchPathKey(
+                        paths);
+                    var sourcePath = new PlanPathKey(
                         branchInsertion.SourceStepId,
-                        branchInsertion.Branch);
-                    branchPaths[sourcePath].LastStatementStepId = branchInsertion.StepId;
+                        branchInsertion.Branch == IfBranchKind.Then
+                            ? PlanPathKind.Then
+                            : PlanPathKind.Else);
+                    paths[sourcePath].LastStatementStepId = branchInsertion.StepId;
                     if (branchInsertion.NewStatement is LocalLiteralDeclarationPatchStatement branchLocal)
                     {
                         producedTypes.Add(branchInsertion.StepId, branchLocal.ExpectedTypeId);
@@ -135,15 +147,64 @@ public static class SemanticPatchPlanJson
                             branchInsertion.TargetNodeId,
                             sourcePath,
                             branchProducers,
-                            branchPaths);
+                            paths);
                     }
-                    else if (branchInsertion.NewStatement is ReturnPatchStatement)
+                    else if (branchInsertion.NewStatement is WhilePatchStatement)
                     {
-                        MarkBranchTerminated(
+                        RegisterLoopProducer(
+                            branchInsertion.StepId,
+                            branchInsertion.TargetNodeId,
+                            loopProducers,
+                            paths);
+                    }
+                    else if (IsTerminalStatement(branchInsertion.NewStatement))
+                    {
+                        MarkPathTerminated(
                             sourcePath,
                             branchInsertion.StepId,
                             branchProducers,
-                            branchPaths);
+                            paths);
+                    }
+
+                    break;
+                case InsertLoopBodyStatementPatchPlanStep loopInsertion:
+                    ValidateLoopBodyInsertion(
+                        document,
+                        loopInsertion,
+                        loopProducers,
+                        paths);
+                    var loopPath = new PlanPathKey(
+                        loopInsertion.SourceStepId,
+                        PlanPathKind.LoopBody);
+                    paths[loopPath].LastStatementStepId = loopInsertion.StepId;
+                    if (loopInsertion.NewStatement is LocalLiteralDeclarationPatchStatement loopLocal)
+                    {
+                        producedTypes.Add(loopInsertion.StepId, loopLocal.ExpectedTypeId);
+                    }
+                    else if (loopInsertion.NewStatement is IfPatchStatement)
+                    {
+                        RegisterBranchProducer(
+                            loopInsertion.StepId,
+                            loopInsertion.TargetNodeId,
+                            loopPath,
+                            branchProducers,
+                            paths);
+                    }
+                    else if (loopInsertion.NewStatement is WhilePatchStatement)
+                    {
+                        RegisterLoopProducer(
+                            loopInsertion.StepId,
+                            loopInsertion.TargetNodeId,
+                            loopProducers,
+                            paths);
+                    }
+                    else if (IsTerminalStatement(loopInsertion.NewStatement))
+                    {
+                        MarkPathTerminated(
+                            loopPath,
+                            loopInsertion.StepId,
+                            branchProducers,
+                            paths);
                     }
 
                     break;
@@ -186,7 +247,7 @@ public static class SemanticPatchPlanJson
         SemanticPatchPlanDocument document,
         InsertBranchStatementPatchPlanStep insertion,
         IReadOnlyDictionary<string, BranchProducerState> branchProducers,
-        IReadOnlyDictionary<BranchPathKey, BranchPathState> branchPaths)
+        IReadOnlyDictionary<PlanPathKey, PlanPathState> paths)
     {
         if (string.IsNullOrWhiteSpace(insertion.SourceStepId) ||
             !branchProducers.TryGetValue(
@@ -210,8 +271,10 @@ public static class SemanticPatchPlanJson
                 $"Branch insertion step '{insertion.StepId}' has an unsupported branch selector.");
         }
 
-        var sourcePath = new BranchPathKey(insertion.SourceStepId, insertion.Branch);
-        if (!branchPaths.TryGetValue(sourcePath, out BranchPathState? path))
+        var sourcePath = new PlanPathKey(
+            insertion.SourceStepId,
+            insertion.Branch == IfBranchKind.Then ? PlanPathKind.Then : PlanPathKind.Else);
+        if (!paths.TryGetValue(sourcePath, out PlanPathState? path))
         {
             throw new JsonException(
                 $"Branch insertion step '{insertion.StepId}' could not resolve the " +
@@ -230,11 +293,71 @@ public static class SemanticPatchPlanJson
                 LocalLiteralDeclarationPatchStatement or
                 LocalAssignmentPatchStatement or
                 IfPatchStatement or
+                WhilePatchStatement or
+                BreakPatchStatement or
+                ContinuePatchStatement or
                 ReturnPatchStatement))
         {
             throw new JsonException(
                 $"Branch insertion step '{insertion.StepId}' currently accepts only a " +
-                "local-literal declaration, local assignment, nested if, or return statement.");
+                "local-literal declaration, local assignment, nested if/while, loop transfer, " +
+                "or return statement.");
+        }
+
+        ValidateOperation(document, new InsertStatementPatchOperation(
+            insertion.TargetNodeId,
+            null,
+            null,
+            insertion.NewStatement));
+    }
+
+    private static void ValidateLoopBodyInsertion(
+        SemanticPatchPlanDocument document,
+        InsertLoopBodyStatementPatchPlanStep insertion,
+        IReadOnlyDictionary<string, LoopProducerState> loopProducers,
+        IReadOnlyDictionary<PlanPathKey, PlanPathState> paths)
+    {
+        if (string.IsNullOrWhiteSpace(insertion.SourceStepId) ||
+            !loopProducers.TryGetValue(insertion.SourceStepId, out LoopProducerState? source))
+        {
+            throw new JsonException(
+                $"Loop-body insertion step '{insertion.StepId}' must reference an earlier " +
+                "while-insertion step.");
+        }
+
+        if (source.OriginalTargetNodeId != insertion.TargetNodeId)
+        {
+            throw new JsonException(
+                $"Loop-body insertion step '{insertion.StepId}' and source step " +
+                $"'{insertion.SourceStepId}' must use the same original parent-block target.");
+        }
+
+        var sourcePath = new PlanPathKey(insertion.SourceStepId, PlanPathKind.LoopBody);
+        if (!paths.TryGetValue(sourcePath, out PlanPathState? path))
+        {
+            throw new JsonException(
+                $"Loop-body insertion step '{insertion.StepId}' could not resolve the body of " +
+                $"'{insertion.SourceStepId}'.");
+        }
+
+        if (path.IsTerminated)
+        {
+            throw new JsonException(
+                $"Loop-body insertion step '{insertion.StepId}' would append an unreachable " +
+                $"statement after a terminal body path in '{insertion.SourceStepId}'.");
+        }
+
+        if (insertion.NewStatement is not (
+                LocalLiteralDeclarationPatchStatement or
+                LocalAssignmentPatchStatement or
+                IfPatchStatement or
+                WhilePatchStatement or
+                BreakPatchStatement or
+                ContinuePatchStatement or
+                ReturnPatchStatement))
+        {
+            throw new JsonException(
+                $"Loop-body insertion step '{insertion.StepId}' has an unsupported statement payload.");
         }
 
         ValidateOperation(document, new InsertStatementPatchOperation(
@@ -247,43 +370,63 @@ public static class SemanticPatchPlanJson
     private static void RegisterBranchProducer(
         string stepId,
         SemanticId originalTargetNodeId,
-        BranchPathKey? parentPath,
+        PlanPathKey? parentPath,
         IDictionary<string, BranchProducerState> branchProducers,
-        IDictionary<BranchPathKey, BranchPathState> branchPaths)
+        IDictionary<PlanPathKey, PlanPathState> paths)
     {
         branchProducers.Add(
             stepId,
             new BranchProducerState(originalTargetNodeId, parentPath));
-        branchPaths.Add(
-            new BranchPathKey(stepId, IfBranchKind.Then),
-            new BranchPathState());
-        branchPaths.Add(
-            new BranchPathKey(stepId, IfBranchKind.Else),
-            new BranchPathState());
+        paths.Add(
+            new PlanPathKey(stepId, PlanPathKind.Then),
+            new PlanPathState());
+        paths.Add(
+            new PlanPathKey(stepId, PlanPathKind.Else),
+            new PlanPathState());
     }
 
-    private static void MarkBranchTerminated(
-        BranchPathKey pathKey,
+    private static void RegisterLoopProducer(
+        string stepId,
+        SemanticId originalTargetNodeId,
+        IDictionary<string, LoopProducerState> loopProducers,
+        IDictionary<PlanPathKey, PlanPathState> paths)
+    {
+        loopProducers.Add(stepId, new LoopProducerState(originalTargetNodeId));
+        paths.Add(
+            new PlanPathKey(stepId, PlanPathKind.LoopBody),
+            new PlanPathState());
+    }
+
+    private static bool IsTerminalStatement(InsertPatchStatement statement) =>
+        statement is ReturnPatchStatement or BreakPatchStatement or ContinuePatchStatement;
+
+    private static void MarkPathTerminated(
+        PlanPathKey pathKey,
         string terminalStepId,
         IReadOnlyDictionary<string, BranchProducerState> branchProducers,
-        IReadOnlyDictionary<BranchPathKey, BranchPathState> branchPaths)
+        IReadOnlyDictionary<PlanPathKey, PlanPathState> paths)
     {
-        BranchPathKey currentPathKey = pathKey;
+        PlanPathKey currentPathKey = pathKey;
         while (true)
         {
-            branchPaths[currentPathKey].IsTerminated = true;
-            BranchProducerState producer = branchProducers[currentPathKey.SourceStepId];
-            BranchPathState thenPath = branchPaths[
-                new BranchPathKey(currentPathKey.SourceStepId, IfBranchKind.Then)];
-            BranchPathState elsePath = branchPaths[
-                new BranchPathKey(currentPathKey.SourceStepId, IfBranchKind.Else)];
-            if (!thenPath.IsTerminated || !elsePath.IsTerminated ||
-                producer.ParentPath is not BranchPathKey parentPathKey)
+            paths[currentPathKey].IsTerminated = true;
+            if (currentPathKey.Kind == PlanPathKind.LoopBody)
             {
                 return;
             }
 
-            BranchPathState parentPath = branchPaths[parentPathKey];
+            BranchProducerState producer = branchProducers[currentPathKey.SourceStepId];
+            PlanPathState thenPath = paths[
+                new PlanPathKey(currentPathKey.SourceStepId, PlanPathKind.Then)];
+            PlanPathState elsePath = paths[
+                new PlanPathKey(currentPathKey.SourceStepId, PlanPathKind.Else)];
+            if (!thenPath.IsTerminated || !elsePath.IsTerminated ||
+                producer.ParentPath is not PlanPathKey parentPathKey)
+            {
+                return;
+            }
+
+            PlanPathState parentPath = paths[parentPathKey];
             if (!string.Equals(
                     parentPath.LastStatementStepId,
                     currentPathKey.SourceStepId,
@@ -292,7 +435,7 @@ public static class SemanticPatchPlanJson
                 throw new JsonException(
                     $"Plan step '{terminalStepId}' would make statements appended after nested if " +
                     $"'{currentPathKey.SourceStepId}' unreachable in the " +
-                    $"'{parentPathKey.Branch}' branch of '{parentPathKey.SourceStepId}'.");
+                    $"'{parentPathKey.Kind}' path of '{parentPathKey.SourceStepId}'.");
             }
 
             currentPathKey = parentPathKey;
@@ -351,15 +494,25 @@ public static class SemanticPatchPlanJson
         }
     }
 
-    private readonly record struct BranchPathKey(
+    private enum PlanPathKind
+    {
+        Then,
+        Else,
+        LoopBody,
+    }
+
+    private readonly record struct PlanPathKey(
         string SourceStepId,
-        IfBranchKind Branch);
+        PlanPathKind Kind);
 
     private sealed record BranchProducerState(
         SemanticId OriginalTargetNodeId,
-        BranchPathKey? ParentPath);
+        PlanPathKey? ParentPath);
 
-    private sealed class BranchPathState
+    private sealed record LoopProducerState(
+        SemanticId OriginalTargetNodeId);
+
+    private sealed class PlanPathState
     {
         public string? LastStatementStepId { get; set; }
 

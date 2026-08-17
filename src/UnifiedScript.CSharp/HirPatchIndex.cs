@@ -28,6 +28,34 @@ internal sealed class HirPatchIndex
     public bool TryGetExpression(SemanticId id, out ExpressionLocation? location) =>
         expressions.TryGetValue(id, out location);
 
+    public bool TryGetNearestEnclosingLoop(
+        SemanticId blockId,
+        out HirWhileStatement? loop)
+    {
+        if (!blocks.TryGetValue(blockId, out BlockLocation? current))
+        {
+            loop = null;
+            return false;
+        }
+
+        while (true)
+        {
+            if (current.EntryStatement is HirWhileStatement candidate &&
+                candidate.Body.Id == current.Block.Id)
+            {
+                loop = candidate;
+                return true;
+            }
+
+            if (current.ParentBlock is null ||
+                !blocks.TryGetValue(current.ParentBlock.Id, out current))
+            {
+                loop = null;
+                return false;
+            }
+        }
+    }
+
     public bool DoesStatementDominate(
         SemanticId definitionStatementId,
         SemanticId consumerStatementId)
