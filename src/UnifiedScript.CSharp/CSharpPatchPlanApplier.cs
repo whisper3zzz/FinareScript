@@ -89,7 +89,7 @@ public sealed class CSharpPatchPlanApplier
             HirStatement? insertedStatement = operation is InsertStatementPatchOperation insertionOperation
                 ? FindInsertedStatement(stageResult.Analysis.Hir, insertionOperation)
                 : null;
-            if (step is InsertStatementPatchPlanStep { NewStatement: IfPatchStatement })
+            if (ProducesBranches(step))
             {
                 if (insertedStatement is not HirIfStatement { Else: not null } insertedIf)
                 {
@@ -242,7 +242,7 @@ public sealed class CSharpPatchPlanApplier
                 producerMethods.Add(step.StepId, method!.Id);
             }
 
-            if (step is InsertStatementPatchPlanStep { NewStatement: IfPatchStatement })
+            if (ProducesBranches(step))
             {
                 branchProducerMethods.Add(step.StepId, method!.Id);
             }
@@ -755,6 +755,10 @@ public sealed class CSharpPatchPlanApplier
         {
             NewStatement: LocalLiteralDeclarationPatchStatement
         };
+
+    private static bool ProducesBranches(SemanticPatchPlanStep step) =>
+        step is InsertStatementPatchPlanStep { NewStatement: IfPatchStatement } or
+            InsertBranchStatementPatchPlanStep { NewStatement: IfPatchStatement };
 
     private static bool TryGetStepMethod(
         SemanticPatchPlanStep step,

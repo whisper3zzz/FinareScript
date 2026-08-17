@@ -24,15 +24,16 @@ M4 and builds on this frozen bidirectional transaction boundary.
 - `introduceTemporary` for stable, pure return/local-initializer expressions
 - `reconnectValue` from an existing local to an exactly typed, reachable stable
   consumer
-- `unifiedscript.patch-plan/v0.6` ordered multi-stage transaction protocol
+- `unifiedscript.patch-plan/v0.7` ordered multi-stage transaction protocol
 - plan steps for every bounded semantic patch operation
 - symbolic plan handles for local IDs allocated by `introduceTemporary` and
   local-literal `insertStatement`
-- symbolic `then`/`else` handles for blocks allocated by `if` insertion, with
-  ordered local-literal, outer-local-assignment, and typed-return branch-body
-  population
-- terminal branch-handle tracking that rejects unreachable later appends
-- unaffected-node identity pins around nested replacements
+- recursive symbolic `then`/`else` handles for blocks allocated by any
+  if-producing insertion, with ordered local-literal, outer-local-assignment,
+  nested-if, and typed-return branch-body population
+- tree-aware terminal branch tracking that rejects direct and retroactive
+  unreachable appends
+- unaffected exterior and ancestor identity pins around nested replacements
 - initial-context validation and safe internal baseline/sibling rebasing
 - repeated insertion-gap and invocation-endpoint rebasing
 - persistent-sidecar adoption between in-memory plan stages
@@ -233,8 +234,21 @@ The test and sample suite proves that:
     commit;
 77. value reconnection rejects an unreachable consumer and cannot retarget the
     writable left-hand side of an assignment; and
-78. plan v0.6 can populate both generated branches with assignments to one
-    dominating outer local and commit them atomically.
+78. plan v0.7 can populate both generated branches with assignments to one
+    dominating outer local and commit them atomically;
+79. a nested `if` inserted into a produced branch publishes another pair of
+    symbolic branch handles without exposing generated IDs;
+80. recursive branch producers retain their original target/method anchor and
+    reject future, missing, cross-target, or cyclic references;
+81. direct returns and nested both-child termination propagate path state
+    recursively while leaving unrelated sibling paths writable;
+82. a plan that would retroactively make statements after a nested `if`
+    unreachable is rejected before source mutation;
+83. replacing an inner generated Block pins its enclosing branch ancestors, so
+    recursive population preserves every original ID with no incidental
+    tombstones; and
+84. the checked-in nested-decision plan emits two branch levels, three leaf
+    assignments, reducible Graph control flow, and a tombstone-free sidecar.
 
 ## Deliberate limits
 
@@ -250,11 +264,11 @@ to an existing local, an `if` skeleton, or a terminal return.
 The `if` condition accepts only graph-safe scalar types already present in bound
 semantics, a closed pure expression subset, and same-method references that are
 available at the exact insertion gap. It always creates empty explicit branch
-blocks. Patch-plan v0.6 can resolve those blocks symbolically, but branch-body
+blocks. Patch-plan v0.7 resolves those blocks recursively, but branch-body
 payloads are limited to local declarations with literal initializers,
-assignments to valid outer locals, and typed returns. A return must be last,
-must exactly match the current method return type, and does not yet support
-async or task-like methods.
+assignments to valid outer locals, nested typed `if` statements, and typed
+returns. A return must be last, must exactly match the current method return
+type, and does not yet support async or task-like methods.
 Deletion accepts only an unused local with no initializer or a literal
 initializer, or a resolved pure static call with effect-free simple arguments.
 Temporary introduction accepts only stable, pure value expressions in return or
@@ -265,7 +279,7 @@ Value reconnection accepts only an existing, unshadowed local or a local
 produced by an earlier plan step that lexically and CFG-dominates the reachable
 containing statement and has the same graph-safe semantic type as the removable
 stable consumer. It cannot target an assignment's writable left-hand side.
-Patch-plan v0.6 composes every current bounded operation and requires sidecars
+Patch-plan v0.7 composes every current bounded operation and requires sidecars
 on target documents. A source handle may
 reference only an earlier temporary introduction, root-block local-literal
 insertion, or branch local-literal insertion in the same method with the same
@@ -279,7 +293,8 @@ transaction coordinator.
 M4.1 delivered the versioned `GraphRegion` model proposed here for function,
 block, `if`, `then`, and `else` ownership, including early-return projection.
 M4.2 delivered CFG reachability, dominance, post-dominance, merge, and
-reducibility indexes on those regions. M4.3 now consumes those facts for
-bounded local assignment and safer data reconnection. M4.4 can proceed to
-nested-branch construction and broader structural HIR operations before
-`while`/`break`/`continue`.
+reducibility indexes on those regions. M4.3 consumes those facts for bounded
+local assignment and safer data reconnection. M4.4 now delivers recursive
+nested-branch construction, terminal propagation, and ancestor identity
+stability. M4.5 can proceed to the first `while`/`break`/`continue` HIR and
+region foundation.

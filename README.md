@@ -32,8 +32,9 @@ The repository currently implements:
   an existing local definition to a stable consumer expression;
 - atomic multi-stage patch plans composing every bounded patch operation, with
   symbolic references to newly introduced locals and full reanalysis per stage;
-- symbolic `then`/`else` block handles with ordered local and typed early-return
-  population, terminal-path guards, and late-failure rollback;
+- recursive symbolic `then`/`else` block handles with ordered local, assignment,
+  nested-branch, and typed early-return population, tree-aware terminal-path
+  guards, and late-failure rollback;
 - opt-in `.usids` sidecars that preserve node identity across formatting and edits;
 - semantic-independent `.usgraph` layout sidecars with deterministic positions,
   sizes, collapsed state, comment regions, routing hints, and orphan recovery;
@@ -43,8 +44,9 @@ The repository currently implements:
   deterministic output.
 
 M3 bidirectional source projection is complete. M4.1 adds explicit Graph
-regions, M4.2 derives and validates control flow, and M4.3 now consumes those
-facts for bounded local assignment and safer value reconnection.
+regions, M4.2 derives and validates control flow, M4.3 consumes those facts for
+bounded local assignment and safer value reconnection, and M4.4 recursively
+authors nested acyclic decisions through the same HIR/Graph path.
 
 The v0.1 profile accepts `[Visual]` methods containing local variables,
 expressions, calls, assignments, `if/else`, `return`, casts, and `await`.
@@ -336,7 +338,7 @@ It proves that source, HIR, Graph branch/data/control edges, persistent identity
 and `.usgraph` layout synchronization share one structure. New branch and
 condition nodes are explicitly `unplaced`; existing placements survive.
 
-Patch-plan v0.6 can populate those newly allocated blocks without predicting
+Patch-plan v0.7 can populate those newly allocated blocks without predicting
 their random IDs. The checked-in plan inserts the same guard, appends two typed
 locals to `then`, and appends one typed local to `else`:
 
@@ -355,7 +357,53 @@ and selects `then` or `else`. The coordinator resolves the actual block ID after
 the `if` stage, appends branch statements in plan order, and reuses the normal
 typed insertion checks. A branch payload is deliberately limited to a local
 declaration with a literal initializer, a CFG-checked assignment to an existing
-outer local, or a typed terminal `return`.
+outer local, another typed `if`, or a typed terminal `return`.
+
+### Build nested decisions recursively
+
+An `if` inserted through `insertBranchStatement` publishes its own `stepId` as
+the next branch producer. Later steps can therefore address its generated
+`then` and `else` blocks without knowing any intermediate random IDs:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  apply-plan \
+  samples/Patching/NestedDecisionRules.cs \
+  --identity samples/Patching/NestedDecisionRules.cs.usids \
+  --plan samples/Patching/BuildNestedDecision.plan.json \
+  --out artifacts/nested/NestedDecisionRules.cs \
+  --out-identity artifacts/nested/NestedDecisionRules.cs.usids
+```
+
+The five-stage sample emits:
+
+```csharp
+int result = 0;
+if (enabled)
+{
+    if (critical)
+    {
+        result = 2;
+    }
+    else
+    {
+        result = 1;
+    }
+}
+else
+{
+    result = 0;
+}
+return result;
+```
+
+Branch handles form an acyclic producer tree. If both children of a nested
+`if` become terminal, terminal state propagates to the parent path only when
+that nested `if` is still its final statement. The validator rejects a plan
+that would retroactively make already appended parent statements unreachable.
+Every stage reanalyzes CFG and reconciles identity; ancestor `if` and Block IDs
+remain pinned, while newly authored nodes remain unplaced. See
+[NESTED_BRANCH_PATCHING.md](docs/NESTED_BRANCH_PATCHING.md).
 
 ### Insert a typed early return
 
@@ -499,7 +547,7 @@ analyzed source baseline, or atomically with the patch-plan protocol below.
 
 ## Apply atomic semantic patch plans
 
-`unifiedscript.patch-plan/v0.6` composes `replaceLiteral`, `changeOperator`,
+`unifiedscript.patch-plan/v0.7` composes `replaceLiteral`, `changeOperator`,
 `reconnectArgument`, `insertStatement`, `insertBranchStatement`, `deleteStatement`,
 `introduceTemporary`, and `reconnectValue` as one ordered transaction. The
 shared-value sample starts with:
@@ -578,9 +626,11 @@ insertion publishes symbolic `then` and `else` block handles only through later
 locals publish ordinary local handles, but normal dominance rules prevent a
 branch-local value from escaping to the outer block or sibling branch. A typed
 branch return terminates that symbolic path; later appends to the same path are
-rejected before execution. Local assignments are supported as direct and
-produced-branch insertion payloads; calls, nested branch payloads, async/
-task-like returns, and cross-method handles remain outside v0.6.
+rejected before execution. An inserted nested `if` recursively publishes two
+more paths, and all-path termination propagates up that producer tree. Local
+assignments are supported as direct and produced-branch insertion payloads;
+calls, async/task-like returns, cyclic handles, and cross-method handles remain
+outside v0.7.
 
 ## Persist and synchronize graph layout
 
@@ -652,6 +702,7 @@ See [ARCHITECTURE.md](docs/ARCHITECTURE.md),
 [GRAPH_LAYOUT.md](docs/GRAPH_LAYOUT.md),
 [CONTROL_FLOW_ANALYSIS.md](docs/CONTROL_FLOW_ANALYSIS.md),
 [LOCAL_ASSIGNMENT_PATCHING.md](docs/LOCAL_ASSIGNMENT_PATCHING.md),
+[NESTED_BRANCH_PATCHING.md](docs/NESTED_BRANCH_PATCHING.md),
 [PATCH_PLAN.md](docs/PATCH_PLAN.md),
 [M1_ROSLYN_GRAPH_FOUNDATION.md](docs/milestones/M1_ROSLYN_GRAPH_FOUNDATION.md),
 [M2_SEMANTIC_BINDING.md](docs/milestones/M2_SEMANTIC_BINDING.md), and

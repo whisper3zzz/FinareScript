@@ -576,6 +576,310 @@ public sealed class CSharpPatchPlanApplierTests
     }
 
     [Fact]
+    public void Apply_RecursivelyPopulatesNestedProducedBranches()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(bool enabled, bool critical)
+                {
+                    int result = 0;
+                    return result;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/NestedBranchPlan.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement resultDefinition = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+        SemanticId boolType = GetTypeId(original, method.Parameters[0]);
+        SemanticId intType = GetTypeId(original, resultDefinition);
+        IdentitySidecarDocument beforeIdentity = Assert.Single(original.IdentitySidecars);
+        GraphDocument beforeGraph = new HirGraphProjector().Project(original.Hir, original.Semantics);
+        GraphFunction beforeFunction = Assert.Single(beforeGraph.Functions);
+        GraphLayoutDocument beforeLayout = new(
+            GraphLayoutDocument.CurrentSchemaVersion,
+            [new GraphFunctionLayout(
+                beforeFunction.Id,
+                beforeFunction.Nodes.Select((node, index) => new GraphNodeLayout(
+                    node.Id,
+                    GraphNodePlacement.Placed,
+                    new GraphLayoutPoint(index * 100, index * 50),
+                    new GraphLayoutSize(160, 80),
+                    false)).ToArray(),
+                [],
+                [])],
+            []);
+        var outer = new InsertStatementPatchPlanStep(
+            "insertOuter",
+            method.Body.Id,
+            resultDefinition.Id,
+            returnStatement.Id,
+            new IfPatchStatement(new LocalReferencePatchExpression(
+                method.Parameters[0].Id,
+                method.Parameters[0].Name,
+                boolType)));
+        var nested = new InsertBranchStatementPatchPlanStep(
+            "insertNested",
+            method.Body.Id,
+            outer.StepId,
+            IfBranchKind.Then,
+            new IfPatchStatement(new LocalReferencePatchExpression(
+                method.Parameters[1].Id,
+                method.Parameters[1].Name,
+                boolType)));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                outer,
+                nested,
+                new InsertBranchStatementPatchPlanStep(
+                    "assignCritical",
+                    method.Body.Id,
+                    nested.StepId,
+                    IfBranchKind.Then,
+                    new LocalAssignmentPatchStatement(
+                        resultDefinition.Id,
+                        resultDefinition.Name,
+                        intType,
+                        new LiteralPatchExpression("2", intType))),
+                new InsertBranchStatementPatchPlanStep(
+                    "assignNormal",
+                    method.Body.Id,
+                    nested.StepId,
+                    IfBranchKind.Else,
+                    new LocalAssignmentPatchStatement(
+                        resultDefinition.Id,
+                        resultDefinition.Name,
+                        intType,
+                        new LiteralPatchExpression("1", intType))),
+                new InsertBranchStatementPatchPlanStep(
+                    "assignDisabled",
+                    method.Body.Id,
+                    outer.StepId,
+                    IfBranchKind.Else,
+                    new LocalAssignmentPatchStatement(
+                        resultDefinition.Id,
+                        resultDefinition.Name,
+                        intType,
+                        new LiteralPatchExpression("0", intType))),
+            ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains("if (enabled)", patchedSource, StringComparison.Ordinal);
+        Assert.Contains("if (critical)", patchedSource, StringComparison.Ordinal);
+        Assert.Contains("result = 2;", patchedSource, StringComparison.Ordinal);
+        Assert.Contains("result = 1;", patchedSource, StringComparison.Ordinal);
+        Assert.Contains("result = 0;", patchedSource, StringComparison.Ordinal);
+
+        HirMethodDeclaration changed = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirIfStatement changedOuter = Assert.IsType<HirIfStatement>(changed.Body.Statements[1]);
+        HirIfStatement changedNested = Assert.IsType<HirIfStatement>(Assert.Single(changedOuter.Then.Statements));
+        HirAssignmentExpression[] assignments =
+        [
+            Assert.IsType<HirAssignmentExpression>(
+                Assert.IsType<HirExpressionStatement>(Assert.Single(changedNested.Then.Statements)).Expression),
+            Assert.IsType<HirAssignmentExpression>(
+                Assert.IsType<HirExpressionStatement>(Assert.Single(changedNested.Else!.Statements)).Expression),
+            Assert.IsType<HirAssignmentExpression>(
+                Assert.IsType<HirExpressionStatement>(Assert.Single(changedOuter.Else!.Statements)).Expression),
+        ];
+        Assert.All(
+            assignments.Select(static assignment => Assert.IsType<HirIdentifierExpression>(assignment.Target)),
+            target => Assert.Equal(
+                resultDefinition.Id,
+                Assert.Single(
+                    result.Analysis.Semantics!.Nodes,
+                    binding => binding.NodeId == target.Id).ReferencedSymbolId));
+
+        IdentitySidecarDocument afterIdentity = Assert.Single(result.Analysis.IdentitySidecars);
+        Assert.All(
+            beforeIdentity.Entries,
+            entry => Assert.Contains(afterIdentity.Entries, candidate => candidate.Id == entry.Id));
+        Assert.Empty(afterIdentity.Tombstones);
+
+        GraphDocument afterGraph = new HirGraphProjector().Project(
+            result.Analysis.Hir,
+            result.Analysis.Semantics);
+        GraphFunction afterFunction = Assert.Single(afterGraph.Functions);
+        GraphRegion outerIfRegion = Assert.Single(
+            afterFunction.Regions,
+            region => region.Kind == GraphRegionKind.If && region.SourceNodeId == changedOuter.Id);
+        GraphRegion outerThenRegion = Assert.Single(
+            afterFunction.Regions,
+            region => region.Kind == GraphRegionKind.Then && region.ParentRegionId == outerIfRegion.Id);
+        GraphRegion nestedIfRegion = Assert.Single(
+            afterFunction.Regions,
+            region => region.Kind == GraphRegionKind.If && region.SourceNodeId == changedNested.Id);
+        Assert.Equal(outerThenRegion.Id, nestedIfRegion.ParentRegionId);
+        GraphControlFlowFunction flow = Assert.Single(
+            new GraphControlFlowAnalyzer().AnalyzeAndValidate(afterGraph).Functions);
+        Assert.True(flow.IsReducible);
+        Assert.Equal(2, flow.Branches.Count);
+        Assert.All(flow.Branches, static branch => Assert.True(branch.MergeNodeId.HasValue));
+
+        GraphLayoutDocument synchronized = new GraphLayoutSynchronizer().Synchronize(
+            afterGraph,
+            beforeLayout);
+        GraphFunctionLayout synchronizedFunction = Assert.Single(synchronized.Functions);
+        HashSet<SemanticId> oldNodeIds = beforeFunction.Nodes.Select(static node => node.Id).ToHashSet();
+        Assert.All(
+            synchronizedFunction.Nodes.Where(node => oldNodeIds.Contains(node.NodeId)),
+            node => Assert.Equal(GraphNodePlacement.Placed, node.Placement));
+        Assert.All(
+            synchronizedFunction.Nodes.Where(node => !oldNodeIds.Contains(node.NodeId)),
+            node => Assert.Equal(GraphNodePlacement.Unplaced, node.Placement));
+        Assert.Empty(synchronized.OrphanedNodes);
+    }
+
+    [Fact]
+    public void Apply_InsertsTerminalNestedBranchesWithoutAnOuterFallthrough()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(bool enabled, bool critical)
+                {
+                    return 0;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/NestedReturnPlan.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement fallback = Assert.IsType<HirReturnStatement>(Assert.Single(method.Body.Statements));
+        SemanticId boolType = GetTypeId(original, method.Parameters[0]);
+        SemanticId intType = GetTypeId(original, fallback.Expression!);
+        var outer = new InsertStatementPatchPlanStep(
+            "insertOuter",
+            method.Body.Id,
+            null,
+            fallback.Id,
+            new IfPatchStatement(new LocalReferencePatchExpression(
+                method.Parameters[0].Id,
+                method.Parameters[0].Name,
+                boolType)));
+        var nested = new InsertBranchStatementPatchPlanStep(
+            "insertNested",
+            method.Body.Id,
+            outer.StepId,
+            IfBranchKind.Then,
+            new IfPatchStatement(new LocalReferencePatchExpression(
+                method.Parameters[1].Id,
+                method.Parameters[1].Name,
+                boolType)));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                outer,
+                nested,
+                new InsertBranchStatementPatchPlanStep(
+                    "returnCritical",
+                    method.Body.Id,
+                    nested.StepId,
+                    IfBranchKind.Then,
+                    new ReturnPatchStatement(new LiteralPatchExpression("2", intType), intType)),
+                new InsertBranchStatementPatchPlanStep(
+                    "returnNormal",
+                    method.Body.Id,
+                    nested.StepId,
+                    IfBranchKind.Else,
+                    new ReturnPatchStatement(new LiteralPatchExpression("1", intType), intType)),
+            ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        HirMethodDeclaration changed = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirIfStatement changedOuter = Assert.IsType<HirIfStatement>(changed.Body.Statements[0]);
+        HirIfStatement changedNested = Assert.IsType<HirIfStatement>(Assert.Single(changedOuter.Then.Statements));
+        Assert.IsType<HirReturnStatement>(Assert.Single(changedNested.Then.Statements));
+        Assert.IsType<HirReturnStatement>(Assert.Single(changedNested.Else!.Statements));
+        GraphControlFlowFunction flow = Assert.Single(
+            new GraphControlFlowAnalyzer().AnalyzeAndValidate(
+                new HirGraphProjector().Project(result.Analysis.Hir, result.Analysis.Semantics)).Functions);
+        GraphControlFlowBranch nestedFlow = Assert.Single(
+            flow.Branches,
+            branch => branch.BranchNodeId == changedNested.Id);
+        Assert.True(nestedFlow.ThenExitsFunction);
+        Assert.True(nestedFlow.ElseExitsFunction);
+        Assert.Null(nestedFlow.MergeNodeId);
+    }
+
+    [Fact]
+    public void Apply_RollsBackWhenANestedProducedIfHasTheWrongConditionType()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(bool enabled, int count)
+                {
+                    return 0;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/NestedBranchRollback.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement fallback = Assert.IsType<HirReturnStatement>(Assert.Single(method.Body.Statements));
+        SemanticId boolType = GetTypeId(original, method.Parameters[0]);
+        SemanticId intType = GetTypeId(original, method.Parameters[1]);
+        var outer = new InsertStatementPatchPlanStep(
+            "insertOuter",
+            method.Body.Id,
+            null,
+            fallback.Id,
+            new IfPatchStatement(new LocalReferencePatchExpression(
+                method.Parameters[0].Id,
+                method.Parameters[0].Name,
+                boolType)));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                outer,
+                new InsertBranchStatementPatchPlanStep(
+                    "invalidNested",
+                    method.Body.Id,
+                    outer.StepId,
+                    IfBranchKind.Then,
+                    new IfPatchStatement(new LocalReferencePatchExpression(
+                        method.Parameters[1].Id,
+                        method.Parameters[1].Name,
+                        intType))),
+            ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.PatchedRequest);
+        Assert.Null(result.Analysis);
+        Assert.Equal(source, Assert.Single(request.Sources).Source);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.TypeMismatch);
+    }
+
+    [Fact]
     public void Apply_PopulatesProducedThenAndElseBlocksInPlanOrder()
     {
         const string source = """

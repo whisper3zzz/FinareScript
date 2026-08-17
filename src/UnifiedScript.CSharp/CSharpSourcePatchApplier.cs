@@ -2434,7 +2434,7 @@ public sealed class CSharpSourcePatchApplier
                     !string.Equals(hirNode.Span.FilePath, source.LogicalPath, StringComparison.Ordinal) ||
                     !TryFindIdentitySyntax(document, hirNode, out SyntaxNode? syntax) ||
                     documentReplacements.Any(replacement =>
-                        replacement.Original.Span.OverlapsWith(syntax!.Span)))
+                        replacement.Original.Span.Contains(syntax!.Span)))
                 {
                     continue;
                 }

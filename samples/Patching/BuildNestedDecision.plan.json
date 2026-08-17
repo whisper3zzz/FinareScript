@@ -1,0 +1,93 @@
+{
+  "schemaVersion": "unifiedscript.patch-plan/v0.7",
+  "sourceCompilationId": "us_60f97f1d023be8a8d4805e330cec8ebb",
+  "semanticConfigurationId": "us_02f5fe78d296e2d4fe04bc50ca71acf1",
+  "steps": [
+    {
+      "step": "insertStatement",
+      "stepId": "insertEnabledBranch",
+      "targetNodeId": "us_d85dbb0fdb585e39bc602c37b4bd94af",
+      "expectedPreviousSiblingId": "us_bb41c770698d28ffeeb4161cdc89b121",
+      "expectedNextSiblingId": "us_6141f873e925b5b9fca5e54d50cc8af0",
+      "newStatement": {
+        "statement": "if",
+        "condition": {
+          "expression": "localReference",
+          "sourceDefinitionId": "us_f93f5e9bc9eff3582a9503dbc14ec331",
+          "expectedName": "enabled",
+          "expectedTypeId": "us_b5f84bcf933b6593d45e9e031353bfef"
+        }
+      }
+    },
+    {
+      "step": "insertBranchStatement",
+      "stepId": "insertCriticalBranch",
+      "targetNodeId": "us_d85dbb0fdb585e39bc602c37b4bd94af",
+      "sourceStepId": "insertEnabledBranch",
+      "branch": "then",
+      "newStatement": {
+        "statement": "if",
+        "condition": {
+          "expression": "localReference",
+          "sourceDefinitionId": "us_7b3d4080b25c28e32f5f3d65d6703d66",
+          "expectedName": "critical",
+          "expectedTypeId": "us_b5f84bcf933b6593d45e9e031353bfef"
+        }
+      }
+    },
+    {
+      "step": "insertBranchStatement",
+      "stepId": "assignCritical",
+      "targetNodeId": "us_d85dbb0fdb585e39bc602c37b4bd94af",
+      "sourceStepId": "insertCriticalBranch",
+      "branch": "then",
+      "newStatement": {
+        "statement": "localAssignment",
+        "targetDefinitionId": "us_bb41c770698d28ffeeb4161cdc89b121",
+        "expectedName": "result",
+        "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+        "value": {
+          "expression": "literal",
+          "valueText": "2",
+          "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+        }
+      }
+    },
+    {
+      "step": "insertBranchStatement",
+      "stepId": "assignNormal",
+      "targetNodeId": "us_d85dbb0fdb585e39bc602c37b4bd94af",
+      "sourceStepId": "insertCriticalBranch",
+      "branch": "else",
+      "newStatement": {
+        "statement": "localAssignment",
+        "targetDefinitionId": "us_bb41c770698d28ffeeb4161cdc89b121",
+        "expectedName": "result",
+        "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+        "value": {
+          "expression": "literal",
+          "valueText": "1",
+          "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+        }
+      }
+    },
+    {
+      "step": "insertBranchStatement",
+      "stepId": "assignDisabled",
+      "targetNodeId": "us_d85dbb0fdb585e39bc602c37b4bd94af",
+      "sourceStepId": "insertEnabledBranch",
+      "branch": "else",
+      "newStatement": {
+        "statement": "localAssignment",
+        "targetDefinitionId": "us_bb41c770698d28ffeeb4161cdc89b121",
+        "expectedName": "result",
+        "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+        "value": {
+          "expression": "literal",
+          "valueText": "0",
+          "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+        }
+      }
+    }
+  ]
+}

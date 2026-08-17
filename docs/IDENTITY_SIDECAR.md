@@ -152,7 +152,7 @@ internal reconciliation stages.
 Graph-authored branch insertion pins every existing sibling expression before
 adding the new `if`, condition subtree, and two explicit blocks. Those authored
 nodes receive fresh identities while layout synchronization leaves their Graph
-nodes explicitly unplaced. Patch-plan v0.6 captures those fresh block IDs after
+nodes explicitly unplaced. Patch-plan v0.7 captures those fresh block IDs after
 the producer stage and exposes them symbolically as `then`/`else` targets. Each
 branch-body stage adopts the preceding sidecar before resolving the block, so
 ordered insertions remain stable even though the editor never sees or predicts
@@ -164,9 +164,11 @@ declaration rename reconciliation, multi-file CLI patch commits, bounded
 tombstone compaction, and automatic `.usgraph` placement remain future work.
 
 Nested-block insertion additionally pins every unaffected live syntax node in
-the edited document when that node lies outside the replaced subtree. This is
-required for staged plans: a newly inserted return literal may have exactly the
-same shape and value as an exterior return literal that a later step targets.
-The exterior ID remains attached to its original semantic location instead of
-migrating to the new branch node; nodes inside the replacement continue to use
-the operation-specific subtree pins.
+the edited document when that node is not contained by the replaced subtree.
+This includes ancestor syntax that contains the target Block: replacing an
+inner `then`/`else` Block does not semantically replace its enclosing `if`.
+Those ancestors keep their IDs through arbitrarily nested plan stages. This is
+also required when newly inserted syntax has the same shape and value as an
+exterior node; the exterior ID remains attached to its original semantic
+location, while nodes truly inside the replacement continue to use the
+operation-specific subtree pins.

@@ -30,6 +30,7 @@ DOCUMENTS = [
     ROOT / "docs" / "GRAPH_REGIONS.md",
     ROOT / "docs" / "CONTROL_FLOW_ANALYSIS.md",
     ROOT / "docs" / "LOCAL_ASSIGNMENT_PATCHING.md",
+    ROOT / "docs" / "NESTED_BRANCH_PATCHING.md",
     ROOT / "docs" / "PATCH_PLAN.md",
     ROOT / "docs" / "ROADMAP.md",
     ROOT / "docs" / "milestones" / "M1_ROSLYN_GRAPH_FOUNDATION.md",
@@ -104,6 +105,9 @@ def main() -> int:
     guard_plan_path = ROOT / "samples" / "Patching" / "PopulateGuard.plan.json"
     guard_return_plan_path = ROOT / "samples" / "Patching" / "ReturnGuard.plan.json"
     guard_identity_path = ROOT / "samples" / "Patching" / "GuardRules.cs.usids"
+    nested_source_path = ROOT / "samples" / "Patching" / "NestedDecisionRules.cs"
+    nested_plan_path = ROOT / "samples" / "Patching" / "BuildNestedDecision.plan.json"
+    nested_identity_path = ROOT / "samples" / "Patching" / "NestedDecisionRules.cs.usids"
     region_source_path = ROOT / "samples" / "Regions" / "EarlyReturn.cs"
     golden_manifest_path = (
         ROOT
@@ -154,6 +158,12 @@ def main() -> int:
         and guard_identity_path.is_file(),
         "Missing typed branch-insertion or branch-population sample",
     )
+    require(
+        nested_source_path.is_file()
+        and nested_plan_path.is_file()
+        and nested_identity_path.is_file(),
+        "Missing recursive nested-branch plan sample",
+    )
     require(region_source_path.is_file(), "Missing structured Graph-region sample")
     require(golden_manifest_path.is_file(), "Missing Golden artifact manifest")
     require(layout_path.is_file(), "Missing graph layout sidecar sample")
@@ -180,6 +190,9 @@ def main() -> int:
     guard_plan = json.loads(guard_plan_path.read_text(encoding="utf-8"))
     guard_return_plan = json.loads(guard_return_plan_path.read_text(encoding="utf-8"))
     guard_identity = json.loads(guard_identity_path.read_text(encoding="utf-8"))
+    nested_source = nested_source_path.read_text(encoding="utf-8")
+    nested_plan = json.loads(nested_plan_path.read_text(encoding="utf-8"))
+    nested_identity = json.loads(nested_identity_path.read_text(encoding="utf-8"))
     region_source = region_source_path.read_text(encoding="utf-8")
     golden_manifest = json.loads(golden_manifest_path.read_text(encoding="utf-8"))
     layout = json.loads(layout_path.read_text(encoding="utf-8"))
@@ -197,6 +210,7 @@ def main() -> int:
     plan_source_digest = hashlib.sha256(plan_source.encode("utf-8")).hexdigest()
     composed_source_digest = hashlib.sha256(composed_source.encode("utf-8")).hexdigest()
     guard_source_digest = hashlib.sha256(guard_source.encode("utf-8")).hexdigest()
+    nested_source_digest = hashlib.sha256(nested_source.encode("utf-8")).hexdigest()
     require(
         patch_document["schemaVersion"] == "unifiedscript.patch/v0.8"
         and operator_patch["schemaVersion"] == "unifiedscript.patch/v0.8"
@@ -305,7 +319,7 @@ def main() -> int:
     introduction_step = plan_steps[0]
     reconnect_steps = plan_steps[1:]
     require(
-        plan_document["schemaVersion"] == "unifiedscript.patch-plan/v0.6"
+        plan_document["schemaVersion"] == "unifiedscript.patch-plan/v0.7"
         and plan_identity["sourcePath"]
         == "samples/Patching/SharedExpressionPlan.cs"
         and plan_identity["sourceDigest"] == f"sha256:{plan_source_digest}"
@@ -340,7 +354,7 @@ def main() -> int:
     composed_identity_ids = {entry["id"] for entry in composed_identity["entries"]}
     composed_insert, composed_reconnect, composed_operator, composed_delete = composed_steps
     require(
-        composed_document["schemaVersion"] == "unifiedscript.patch-plan/v0.6"
+        composed_document["schemaVersion"] == "unifiedscript.patch-plan/v0.7"
         and composed_identity["sourcePath"] == "samples/Patching/ComposedPlan.cs"
         and composed_identity["sourceDigest"] == f"sha256:{composed_source_digest}"
         and [step["step"] for step in composed_steps]
@@ -394,7 +408,7 @@ def main() -> int:
     guard_plan_steps = guard_plan["steps"]
     guard_plan_source, *guard_branch_steps = guard_plan_steps
     require(
-        guard_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.6"
+        guard_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.7"
         and guard_plan["sourceCompilationId"] == guard_document["sourceCompilationId"]
         and guard_plan["semanticConfigurationId"]
         == guard_document["semanticConfigurationId"]
@@ -415,7 +429,7 @@ def main() -> int:
     )
     guard_return_source, guard_return_step, guard_fallback_step = guard_return_plan["steps"]
     require(
-        guard_return_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.6"
+        guard_return_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.7"
         and guard_return_plan["sourceCompilationId"] == guard_document["sourceCompilationId"]
         and guard_return_plan["semanticConfigurationId"]
         == guard_document["semanticConfigurationId"]
@@ -432,6 +446,46 @@ def main() -> int:
         and guard_fallback_step["expectedValueText"] == "true"
         and guard_fallback_step["newValueText"] == "false",
         "Typed early-return patch plan is inconsistent with the branch sample",
+    )
+    nested_identity_ids = {entry["id"] for entry in nested_identity["entries"]}
+    nested_steps = nested_plan["steps"]
+    nested_outer, nested_inner, nested_then, nested_else, nested_outer_else = nested_steps
+    require(
+        nested_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.7"
+        and nested_identity["sourcePath"]
+        == "samples/Patching/NestedDecisionRules.cs"
+        and nested_identity["sourceDigest"] == f"sha256:{nested_source_digest}"
+        and nested_identity["tombstones"] == []
+        and len(nested_steps) == 5
+        and len({step["stepId"] for step in nested_steps}) == len(nested_steps)
+        and nested_outer["step"] == "insertStatement"
+        and nested_outer["targetNodeId"] in nested_identity_ids
+        and nested_outer["expectedPreviousSiblingId"] in nested_identity_ids
+        and nested_outer["expectedNextSiblingId"] in nested_identity_ids
+        and nested_outer["newStatement"]["statement"] == "if"
+        and nested_outer["newStatement"]["condition"]["expectedName"] == "enabled"
+        and nested_inner["step"] == "insertBranchStatement"
+        and nested_inner["sourceStepId"] == nested_outer["stepId"]
+        and nested_inner["branch"] == "then"
+        and nested_inner["newStatement"]["statement"] == "if"
+        and nested_inner["newStatement"]["condition"]["expectedName"] == "critical"
+        and nested_then["sourceStepId"] == nested_inner["stepId"]
+        and nested_else["sourceStepId"] == nested_inner["stepId"]
+        and [nested_then["branch"], nested_else["branch"]] == ["then", "else"]
+        and nested_outer_else["sourceStepId"] == nested_outer["stepId"]
+        and nested_outer_else["branch"] == "else"
+        and all(
+            step["newStatement"]["statement"] == "localAssignment"
+            for step in (nested_then, nested_else, nested_outer_else)
+        )
+        and all(
+            step["newStatement"]["targetDefinitionId"] in nested_identity_ids
+            for step in (nested_then, nested_else, nested_outer_else)
+        )
+        and "bool enabled" in nested_source
+        and "bool critical" in nested_source
+        and "int result = 0;" in nested_source,
+        "Recursive nested-branch plan source, sidecar, and handles are inconsistent",
     )
     require(
         any((ROOT / "tests" / "UnifiedScript.Tests").glob("*Tests.cs")),

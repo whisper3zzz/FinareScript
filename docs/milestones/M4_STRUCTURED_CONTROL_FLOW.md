@@ -6,9 +6,10 @@ Make practical gameplay control flow explicit, verifiable, and editable in the
 shared Graph/HIR model before introducing a UE editor or a second execution
 path.
 
-Status: in progress. M4.1 explicit regions, M4.2 derived CFG analysis, and
-M4.3 CFG-checked local assignment/data reconnection are implemented. Nested
-branch construction and broader structural HIR operations are the next slice.
+Status: in progress. M4.1 explicit regions, M4.2 derived CFG analysis, M4.3
+CFG-checked local assignment/data reconnection, and M4.4 recursive nested
+branch construction are implemented. Loop HIR/regions are the next major
+control-flow slice.
 
 ## M4.1 implemented vertical slice
 
@@ -88,7 +89,7 @@ branch construction and broader structural HIR operations are the next slice.
 ## M4.3 implemented vertical slice
 
 - `unifiedscript.patch/v0.8` local-assignment statement payload
-- `unifiedscript.patch-plan/v0.6` direct and symbolic-branch assignment steps
+- `unifiedscript.patch-plan/v0.7` direct and symbolic-branch assignment steps
 - ordinary normalized C# assignment emission and full HIR/Graph reprojection
 - existing same-method local targets with persistent-ID, name, and exact-type
   preconditions
@@ -106,7 +107,7 @@ branch construction and broader structural HIR operations are the next slice.
 ## M4.3 acceptance criteria
 
 1. Patch v0.8 JSON round-trips a typed `localAssignment` payload.
-2. Plan v0.6 accepts that payload as a direct statement insertion and as a
+2. Plan v0.7 accepts that payload as a direct statement insertion and as a
    generated `then`/`else` branch append.
 3. An assignment targets only an existing local declaration in the same
    method, identified by persistent semantic ID.
@@ -131,24 +132,83 @@ branch construction and broader structural HIR operations are the next slice.
 14. The checked-in assignment sample, full solution, test suite, and project
     validator pass.
 
+## M4.4 implemented vertical slice
+
+- `unifiedscript.patch-plan/v0.7` recursive branch-producer protocol
+- nested `if` accepted as a bounded `insertBranchStatement` payload
+- every successful if-producing insertion publishes its own `then`/`else`
+  handles after HIR reanalysis
+- backward-only `sourceStepId` references forming an acyclic producer tree
+- one stable original parent-block anchor across every nesting level
+- same-method validation for nested producer/consumer steps
+- ordered append semantics independently maintained for every symbolic path
+- direct return termination plus recursive all-child-path propagation
+- pre-execution rejection of retroactive unreachability when a nested `if` is
+  no longer its parent path's final statement
+- full Graph region nesting, CFG merge/exit, and reducibility validation after
+  every stage
+- ancestor identity pins for syntax containing a replaced nested Block
+- preservation of all original identities with zero incidental tombstones
+- preservation of old layout plus explicit unplaced state for authored nodes
+- atomic rollback when a nested produced condition fails semantic typing
+- checked-in `BuildNestedDecision.plan.json` CLI sample
+
+## M4.4 acceptance criteria
+
+1. Plan v0.7 JSON round-trips an `if` nested through
+   `insertBranchStatement`.
+2. A nested producer's `stepId` can be consumed by later `then` and `else`
+   branch insertions.
+3. Producer references must point to an earlier step and retain the same
+   original parent-block target and method.
+4. Recursive resolution uses actual post-stage `Then.Id` and `Else.Id`; the
+   editor never predicts generated semantic IDs.
+5. Local assignments in nested leaves retain the lexical, type, reachability,
+   and CFG-dominance checks from M4.3.
+6. A direct return terminates only its selected symbolic path; its sibling
+   remains writable.
+7. When both child paths terminate, terminal state propagates through every
+   enclosing nested producer whose `if` is still the final parent statement.
+8. A plan that would make a statement appended after a nested `if` unreachable
+   is rejected before executing its first stage.
+9. Nested successful output reprojects to hierarchical `if`/`then`/`else`
+   Graph regions with a reducible CFG.
+10. Both-fallthrough nested branches report real merges, while both-return
+    nested branches report two function exits and no merge.
+11. Every pre-existing identity remains live and no incidental tombstones are
+    introduced across nested stages.
+12. Enclosing `if` and Block ancestors retain their persistent IDs when an
+    inner generated Block is replaced.
+13. Existing layout stays placed, new nodes stay unplaced, and no false orphan
+    is created.
+14. A late invalid nested condition rolls back the outer generated branch and
+    returns no proposed source or analysis.
+15. The recursive CLI sample emits two branch levels and three leaf assignments
+    with a tombstone-free final sidecar.
+16. The full solution, project validator, format check, and test suite pass.
+
 ## Deliberate limits
 
-M4.3 consumes derived CFG facts at patch time but does not serialize them or
-materialize source/Graph merge nodes. Assignment support is intentionally
-limited to inserting a simple assignment to an existing local; it does not edit
-an existing assignment, synthesize declarations with arbitrary initializers,
+M4.4 consumes derived CFG facts at patch time but does not serialize them or
+materialize source/Graph merge nodes. Assignment support remains limited to
+inserting a simple assignment to an existing local; it does not edit an
+existing assignment, synthesize declarations with arbitrary initializers,
 write members/indexers, or support compound assignments, increment/decrement,
-calls, or effectful right-hand sides. Nested-branch synthesis, loops, switch,
-conditional expressions, exception edges, short-circuit expression flow,
-async state-machine transitions, control dependence, SSA, and automatic node
+calls, or effectful right-hand sides. Nested conditions can reference existing
+same-method definitions but cannot consume a symbolic newly generated local
+handle. Branch insertions append at the end of generated blocks and do not move,
+replace, or delete existing branch structures. Loops, switch, conditional
+expressions, exception edges, short-circuit expression flow, async
+state-machine transitions, control dependence, SSA, and automatic node
 placement remain outside the current slice. Region kinds for loops remain
 absent until their HIR and control semantics are defined.
 
 ## Next slice
 
-M4.4 should add nested branch construction and the minimum structural HIR
-operations needed to author useful multi-level gameplay decisions. It should
-reuse M4.3's insertion reachability and dominance boundary, define bounded
-symbolic handles for nested regions, and preserve atomic source/identity/layout
-reconciliation. Loop HIR and regions should follow only after nested acyclic
-control flow is editable end to end.
+M4.5 should introduce the first loop foundation: explicit HIR for `while`,
+`break`, and `continue`; Graph regions for loop bodies, continuations, and
+exits; and CFG roles for headers and back edges. The existing reducibility,
+dominance, identity, and staged-patch boundaries should remain the validation
+surface. Broader existing-assignment editing and arbitrary structural rewiring
+remain separate bounded patch-algebra work rather than being folded into loop
+semantics.

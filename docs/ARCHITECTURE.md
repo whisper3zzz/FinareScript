@@ -216,7 +216,7 @@ operator/endpoint, semantic type,
 containing statement, parent block, and exact sibling preconditions rather than
 relying only on the compilation baseline.
 
-`unifiedscript.patch-plan/v0.6` is an ordered transaction above individual
+`unifiedscript.patch-plan/v0.7` is an ordered transaction above individual
 patches. It composes every current bounded operation: literal and operator
 changes, argument reconnection, statement insertion/deletion, temporary
 introduction, value reconnection, and symbolic branch-body insertion.
@@ -231,10 +231,13 @@ An `if` insertion publishes internal `then`/`else` block handles for later
 definition. The branch steps repeat the producer's original parent block as
 their stable initial anchor; the coordinator records the generated branch IDs
 after the `if` stage and turns each append into a normal bounded insertion.
-Local-literal, existing-local assignment, and typed-return payloads are
-accepted in a produced branch. A return terminates that branch handle, so later
-appends are rejected as unreachable while the sibling branch remains
-independent.
+Local-literal, existing-local assignment, nested `if`, and typed-return
+payloads are accepted in a produced branch. A nested `if` publishes another
+pair of branch handles, forming an acyclic producer tree. A return terminates
+one path; when both child paths terminate, termination propagates to the parent
+only if the nested `if` is still the parent's final statement. This rejects
+both direct and retroactive unreachability before execution while keeping
+unrelated sibling paths independently writable.
 The complete transaction and internal rebasing contract is specified in
 [PATCH_PLAN.md](PATCH_PLAN.md).
 
@@ -260,9 +263,11 @@ existing block and direct siblings while leaving the new declaration and
 literal unpinned, so they receive fresh persistent IDs. Safe deletion pins the
 block and surviving siblings while the deleted subtree becomes tombstones.
 When an insertion replaces a nested block, unaffected live nodes elsewhere in
-the same document are also pinned. This prevents a newly authored same-shape
-literal or return from taking an exterior node's persistent ID during staged
-plan execution.
+the same document are also pinned. Nodes that contain the replaced block are
+pinned as unaffected ancestors rather than incorrectly treated as part of the
+replacement subtree. This preserves every enclosing `if` and Block ID during
+recursive branch population and prevents newly authored same-shape syntax from
+taking an exterior or ancestor node's persistent ID during staged execution.
 
 Temporary introduction uses a HIR use/definition index and an expression
 location index. It moves a stable expression into a new local declaration
@@ -315,15 +320,16 @@ The C# patch-plan coordinator validates every independently executable step in
 isolation against the initial HIR before changing its in-memory request;
 symbolic reconnections receive equivalent initial statement, sibling, method,
 and type checks, while dependent branch insertions validate their original
-anchor, producer method, selector, and payload shape. It then executes one
-localized patch at a time, adopts the stage's updated sidecar, removes transient
-pins, resolves any produced local or branch handle, and constructs the next
-internal patch with the current compilation baseline. Statement deletion uses
-current siblings; repeated root-block insertion rebases the original gap while
-retaining plan order; argument reconnection relocates current indices from
-persistent endpoint IDs; branch insertion appends to the currently resolved
-produced block. Each stage performs complete
-semantic reanalysis. A failure discards every intermediate request; only the
+anchor, producer method, selector, payload shape, and recursive terminal-path
+state. It then executes one localized patch at a time, adopts the stage's
+updated sidecar, removes transient pins, resolves any produced local or branch
+handle, and constructs the next internal patch with the current compilation
+baseline. Statement deletion uses current siblings; repeated root-block
+insertion rebases the original gap while retaining plan order; argument
+reconnection relocates current indices from persistent endpoint IDs; branch
+insertion appends to the currently resolved produced block and may register
+another pair of produced blocks. Each stage performs complete semantic
+reanalysis. A failure discards every intermediate request; only the
 final request and sidecar cross the CLI's rollback-capable transaction. Plans
 therefore require persistent identity on target documents. Repeated target IDs
 are allowed only for ordered insertions into one block; other operations retain

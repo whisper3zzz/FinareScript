@@ -92,8 +92,8 @@ Outcome: practical gameplay methods are fully visualizable.
 - [x] CFG entry/exit, reachability, dominance, and post-dominance indexes
 - [x] structured branch merge/exit facts and SCC reducibility validation
 - [x] CFG-checked bounded local assignment and compatible local-value rewiring
-- [ ] general data/control rewiring and existing-assignment editing
-- [ ] nested branch construction and structural HIR operations
+- [x] recursive nested branch construction and terminal-path propagation
+- [ ] general data/control rewiring, existing-assignment editing, and structural HIR operations
 - [ ] `while`, `break`, and `continue`
 - [ ] extend regions to loop bodies, exits, and continuations
 - [ ] `for` and `foreach`

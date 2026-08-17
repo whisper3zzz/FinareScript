@@ -328,6 +328,182 @@ public sealed class SemanticPatchPlanJsonTests
     }
 
     [Fact]
+    public void SerializeAndDeserialize_PreserveNestedBranchProducersRecursively()
+    {
+        SemanticId boolType = SemanticId.FromKey("System.Boolean");
+        SemanticId intType = SemanticId.FromKey("System.Int32");
+        SemanticId blockId = SemanticId.FromKey("nested-branch-block");
+        var outer = new InsertStatementPatchPlanStep(
+            "insertOuter",
+            blockId,
+            null,
+            null,
+            new IfPatchStatement(new LiteralPatchExpression("true", boolType)));
+        var nested = new InsertBranchStatementPatchPlanStep(
+            "insertNested",
+            blockId,
+            outer.StepId,
+            IfBranchKind.Then,
+            new IfPatchStatement(new LiteralPatchExpression("false", boolType)));
+        var nestedThen = new InsertBranchStatementPatchPlanStep(
+            "populateNestedThen",
+            blockId,
+            nested.StepId,
+            IfBranchKind.Then,
+            new LocalLiteralDeclarationPatchStatement("thenValue", "int", "1", intType));
+        var nestedElse = new InsertBranchStatementPatchPlanStep(
+            "populateNestedElse",
+            blockId,
+            nested.StepId,
+            IfBranchKind.Else,
+            new LocalLiteralDeclarationPatchStatement("elseValue", "int", "2", intType));
+        var outerElse = new InsertBranchStatementPatchPlanStep(
+            "populateOuterElse",
+            blockId,
+            outer.StepId,
+            IfBranchKind.Else,
+            new LocalLiteralDeclarationPatchStatement("fallbackValue", "int", "0", intType));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("nested-branch-compilation"),
+            SemanticId.FromKey("nested-branch-configuration"),
+            [outer, nested, nestedThen, nestedElse, outerElse]);
+
+        string json = SemanticPatchPlanJson.Serialize(plan);
+        SemanticPatchPlanDocument roundTrip = SemanticPatchPlanJson.Deserialize(json);
+
+        Assert.Equal(plan.Steps, roundTrip.Steps);
+        Assert.Equal(
+            nested,
+            Assert.IsType<InsertBranchStatementPatchPlanStep>(roundTrip.Steps[1]));
+        Assert.Contains("\"sourceStepId\": \"insertNested\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"statement\": \"if\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Create_PropagatesNestedTerminalPathsAndRejectsRetroactiveUnreachability()
+    {
+        SemanticId boolType = SemanticId.FromKey("System.Boolean");
+        SemanticId blockId = SemanticId.FromKey("nested-terminal-block");
+        var outer = new InsertStatementPatchPlanStep(
+            "outer",
+            blockId,
+            null,
+            null,
+            new IfPatchStatement(new LiteralPatchExpression("true", boolType)));
+        var nested = new InsertBranchStatementPatchPlanStep(
+            "nested",
+            blockId,
+            outer.StepId,
+            IfBranchKind.Then,
+            new IfPatchStatement(new LiteralPatchExpression("true", boolType)));
+        var nestedThenReturn = new InsertBranchStatementPatchPlanStep(
+            "nestedThenReturn",
+            blockId,
+            nested.StepId,
+            IfBranchKind.Then,
+            new ReturnPatchStatement(new LiteralPatchExpression("true", boolType), boolType));
+        var nestedElseReturn = new InsertBranchStatementPatchPlanStep(
+            "nestedElseReturn",
+            blockId,
+            nested.StepId,
+            IfBranchKind.Else,
+            new ReturnPatchStatement(new LiteralPatchExpression("false", boolType), boolType));
+        var outerElseValue = new InsertBranchStatementPatchPlanStep(
+            "outerElseValue",
+            blockId,
+            outer.StepId,
+            IfBranchKind.Else,
+            new LocalLiteralDeclarationPatchStatement("fallback", "bool", "false", boolType));
+        var unreachableOuterThen = new InsertBranchStatementPatchPlanStep(
+            "unreachableOuterThen",
+            blockId,
+            outer.StepId,
+            IfBranchKind.Then,
+            new LocalLiteralDeclarationPatchStatement("late", "bool", "false", boolType));
+
+        SemanticPatchPlanDocument siblingPlan = SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("nested-terminal-compilation"),
+            SemanticId.FromKey("nested-terminal-configuration"),
+            [outer, nested, nestedThenReturn, nestedElseReturn, outerElseValue]);
+        Assert.Equal(5, siblingPlan.Steps.Count);
+        SemanticPatchPlanDocument oneSidedPlan = SemanticPatchPlanDocument.Create(
+            siblingPlan.SourceCompilationId,
+            siblingPlan.SemanticConfigurationId,
+            [outer, nested, unreachableOuterThen, nestedThenReturn]);
+        Assert.Equal(4, oneSidedPlan.Steps.Count);
+
+        Assert.Throws<JsonException>(() => SemanticPatchPlanDocument.Create(
+            siblingPlan.SourceCompilationId,
+            siblingPlan.SemanticConfigurationId,
+            [outer, nested, nestedThenReturn, nestedElseReturn, unreachableOuterThen]));
+
+        Assert.Throws<JsonException>(() => SemanticPatchPlanDocument.Create(
+            siblingPlan.SourceCompilationId,
+            siblingPlan.SemanticConfigurationId,
+            [outer, nested, unreachableOuterThen, nestedThenReturn, nestedElseReturn]));
+    }
+
+    [Fact]
+    public void Create_PropagatesTerminalStateAcrossMultipleNestedBranchLevels()
+    {
+        SemanticId boolType = SemanticId.FromKey("System.Boolean");
+        SemanticId blockId = SemanticId.FromKey("deep-terminal-block");
+        var outer = new InsertStatementPatchPlanStep(
+            "outer",
+            blockId,
+            null,
+            null,
+            new IfPatchStatement(new LiteralPatchExpression("true", boolType)));
+        InsertBranchStatementPatchPlanStep NestedIf(
+            string stepId,
+            string sourceStepId,
+            IfBranchKind branch) => new(
+            stepId,
+            blockId,
+            sourceStepId,
+            branch,
+            new IfPatchStatement(new LiteralPatchExpression("true", boolType)));
+        InsertBranchStatementPatchPlanStep Return(
+            string stepId,
+            string sourceStepId,
+            IfBranchKind branch,
+            string value) => new(
+            stepId,
+            blockId,
+            sourceStepId,
+            branch,
+            new ReturnPatchStatement(new LiteralPatchExpression(value, boolType), boolType));
+        InsertBranchStatementPatchPlanStep middle = NestedIf("middle", outer.StepId, IfBranchKind.Then);
+        InsertBranchStatementPatchPlanStep inner = NestedIf("inner", middle.StepId, IfBranchKind.Then);
+        SemanticPatchPlanStep[] terminalTree =
+        [
+            outer,
+            middle,
+            inner,
+            Return("innerThen", inner.StepId, IfBranchKind.Then, "true"),
+            Return("innerElse", inner.StepId, IfBranchKind.Else, "false"),
+            Return("middleElse", middle.StepId, IfBranchKind.Else, "false"),
+        ];
+
+        Assert.Throws<JsonException>(() => SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("deep-terminal-compilation"),
+            SemanticId.FromKey("deep-terminal-configuration"),
+            [
+                .. terminalTree,
+                new InsertBranchStatementPatchPlanStep(
+                    "unreachableOuterThen",
+                    blockId,
+                    outer.StepId,
+                    IfBranchKind.Then,
+                    new LocalLiteralDeclarationPatchStatement(
+                        "late",
+                        "bool",
+                        "false",
+                        boolType)),
+            ]));
+    }
+
+    [Fact]
     public void Create_RejectsInvalidBranchSourcesAnchorsAndPayloads()
     {
         SemanticId boolType = SemanticId.FromKey("System.Boolean");
@@ -366,7 +542,11 @@ public sealed class SemanticPatchPlanJsonTests
             SemanticId.FromKey("branch-validation-configuration"),
             [guard, BranchStep(
                 guard.StepId,
-                payload: new IfPatchStatement(new LiteralPatchExpression("true", boolType)))]));
+                payload: new LocalAssignmentPatchStatement(
+                    SemanticId.FromKey("assignment-target"),
+                    "value",
+                    intType,
+                    new LiteralPatchExpression("true", boolType)))]));
     }
 
     [Fact]
