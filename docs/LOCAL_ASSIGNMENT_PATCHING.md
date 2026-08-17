@@ -62,7 +62,7 @@ decrement, member/property writes, indexers, deconstruction, tuple targets,
 ## CFG insertion proof
 
 `GraphPatchSafetyIndex` projects the already analyzed HIR and bound semantics
-to Graph v0.3, derives the validated CFG, and maps a source insertion gap to
+to Graph v0.4, derives the validated CFG, and maps a source insertion gap to
 control-flow anchors:
 
 - before an existing statement, the anchors are that statement's first

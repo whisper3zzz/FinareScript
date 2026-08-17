@@ -56,7 +56,7 @@ public sealed class VisualProfileValidator
             Add(
                 diagnostics,
                 VisualProfileDiagnosticCodes.BlockBodyRequired,
-                "A [Visual] method must use a block body in profile v0.1.",
+                "A [Visual] method must use a block body in profile v0.2.",
                 method,
                 filePath);
         }
@@ -66,7 +66,7 @@ public sealed class VisualProfileValidator
             Add(
                 diagnostics,
                 VisualProfileDiagnosticCodes.GenericVisualMethodNotSupported,
-                "Generic [Visual] methods are not supported in profile v0.1.",
+                "Generic [Visual] methods are not supported in profile v0.2.",
                 method.TypeParameterList,
                 filePath);
         }
@@ -86,7 +86,7 @@ public sealed class VisualProfileValidator
             Add(
                 diagnostics,
                 VisualProfileDiagnosticCodes.RefReturnNotSupported,
-                "Ref return values are not supported in profile v0.1.",
+                "Ref return values are not supported in profile v0.2.",
                 method.ReturnType,
                 filePath);
         }
@@ -98,7 +98,7 @@ public sealed class VisualProfileValidator
                 Add(
                     diagnostics,
                     VisualProfileDiagnosticCodes.ParameterModifierNotSupported,
-                    $"Parameter modifier '{parameter.Modifiers}' is not supported in profile v0.1.",
+                    $"Parameter modifier '{parameter.Modifiers}' is not supported in profile v0.2.",
                     parameter,
                     filePath);
             }
@@ -109,7 +109,7 @@ public sealed class VisualProfileValidator
                 Add(
                     diagnostics,
                     VisualProfileDiagnosticCodes.DefaultParameterValueNotSupported,
-                    "Default parameter values are not represented in profile v0.1.",
+                    "Default parameter values are not represented in profile v0.2.",
                     parameter.Default,
                     filePath);
             }
@@ -161,7 +161,7 @@ public sealed class VisualProfileValidator
                 Add(
                     diagnostics,
                     VisualProfileDiagnosticCodes.StatementNotSupported,
-                    $"Statement '{statement.Kind()}' is not supported in Visual C# profile v0.1.",
+                    $"Statement '{statement.Kind()}' is not supported in Visual C# profile v0.2.",
                     statement,
                     filePath);
                 return;
@@ -172,7 +172,7 @@ public sealed class VisualProfileValidator
                 Add(
                     diagnostics,
                     VisualProfileDiagnosticCodes.ExpressionNotSupported,
-                    $"Expression '{expression.Kind()}' is not supported in Visual C# profile v0.1.",
+                    $"Expression '{expression.Kind()}' is not supported in Visual C# profile v0.2.",
                     expression,
                     filePath);
                 return;
@@ -190,7 +190,7 @@ public sealed class VisualProfileValidator
                 Add(
                     diagnostics,
                     VisualProfileDiagnosticCodes.LocalModifierNotSupported,
-                    "Const, ref, scoped, and using local declarations are not represented in profile v0.1.",
+                    "Const, ref, scoped, and using local declarations are not represented in profile v0.2.",
                     node,
                     filePath);
             }
@@ -200,7 +200,7 @@ public sealed class VisualProfileValidator
                 Add(
                     diagnostics,
                     VisualProfileDiagnosticCodes.SingleVariableDeclarationRequired,
-                    "Declare one local variable per statement in profile v0.1.",
+                    "Declare one local variable per statement in profile v0.2.",
                     node,
                     filePath);
             }
@@ -215,7 +215,7 @@ public sealed class VisualProfileValidator
                 Add(
                     diagnostics,
                     VisualProfileDiagnosticCodes.NamedArgumentNotSupported,
-                    "Named arguments are not represented in profile v0.1; use positional arguments.",
+                    "Named arguments are not represented in profile v0.2; use positional arguments.",
                     node.NameColon,
                     filePath);
             }
@@ -225,12 +225,39 @@ public sealed class VisualProfileValidator
                 Add(
                     diagnostics,
                     VisualProfileDiagnosticCodes.ArgumentModifierNotSupported,
-                    $"Argument modifier '{node.RefKindKeyword.ValueText}' is not supported in profile v0.1.",
+                    $"Argument modifier '{node.RefKindKeyword.ValueText}' is not supported in profile v0.2.",
                     node,
                     filePath);
             }
 
             base.VisitArgument(node);
+        }
+
+        public override void VisitBreakStatement(BreakStatementSyntax node)
+        {
+            ValidateLoopControlTarget(node);
+            base.VisitBreakStatement(node);
+        }
+
+        public override void VisitContinueStatement(ContinueStatementSyntax node)
+        {
+            ValidateLoopControlTarget(node);
+            base.VisitContinueStatement(node);
+        }
+
+        private void ValidateLoopControlTarget(StatementSyntax node)
+        {
+            if (node.Ancestors().OfType<WhileStatementSyntax>().Any())
+            {
+                return;
+            }
+
+            Add(
+                diagnostics,
+                VisualProfileDiagnosticCodes.LoopControlTargetRequired,
+                $"'{node.Kind()}' requires an enclosing while loop in Visual C# profile v0.2.",
+                node,
+                filePath);
         }
 
         private bool TryReportExplicitlyForbidden(SyntaxNode node)
@@ -248,22 +275,22 @@ public sealed class VisualProfileValidator
                     "Arbitrary goto control flow is not graph-compatible."),
                 YieldStatementSyntax => (
                     VisualProfileDiagnosticCodes.YieldNotSupported,
-                    "Iterator state machines are not supported in profile v0.1."),
+                    "Iterator state machines are not supported in profile v0.2."),
                 LocalFunctionStatementSyntax => (
                     VisualProfileDiagnosticCodes.LocalFunctionNotSupported,
-                    "Local functions are not supported in profile v0.1."),
+                    "Local functions are not supported in profile v0.2."),
                 AnonymousFunctionExpressionSyntax => (
                     VisualProfileDiagnosticCodes.LambdaNotSupported,
-                    "Lambdas are not supported in profile v0.1."),
+                    "Lambdas are not supported in profile v0.2."),
                 TryStatementSyntax or ThrowStatementSyntax or ThrowExpressionSyntax => (
                     VisualProfileDiagnosticCodes.ExceptionFlowNotSupported,
-                    "Exception control flow is not supported in profile v0.1."),
+                    "Exception control flow is not supported in profile v0.2."),
                 LockStatementSyntax => (
                     VisualProfileDiagnosticCodes.LockNotSupported,
                     "Lock statements are not supported in Visual gameplay code."),
                 QueryExpressionSyntax => (
                     VisualProfileDiagnosticCodes.QueryNotSupported,
-                    "LINQ query syntax is not supported in profile v0.1."),
+                    "LINQ query syntax is not supported in profile v0.2."),
                 StackAllocArrayCreationExpressionSyntax or ImplicitStackAllocArrayCreationExpressionSyntax => (
                     VisualProfileDiagnosticCodes.StackAllocNotSupported,
                     "Stack allocation is not graph-compatible."),
@@ -337,6 +364,9 @@ public sealed class VisualProfileValidator
             SyntaxKind.LocalDeclarationStatement or
             SyntaxKind.ExpressionStatement or
             SyntaxKind.IfStatement or
+            SyntaxKind.WhileStatement or
+            SyntaxKind.BreakStatement or
+            SyntaxKind.ContinueStatement or
             SyntaxKind.ReturnStatement or
             SyntaxKind.EmptyStatement;
 

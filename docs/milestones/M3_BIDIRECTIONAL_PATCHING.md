@@ -297,4 +297,5 @@ reducibility indexes on those regions. M4.3 consumes those facts for bounded
 local assignment and safer data reconnection. M4.4 now delivers recursive
 nested-branch construction, terminal propagation, and ancestor identity
 stability. M4.5 can proceed to the first `while`/`break`/`continue` HIR and
-region foundation.
+region foundation. M4.5 now provides that forward projection and CFG contract;
+bounded Graph-authored loop synthesis remains follow-on work.

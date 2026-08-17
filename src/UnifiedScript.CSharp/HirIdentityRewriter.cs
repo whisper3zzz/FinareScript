@@ -62,6 +62,20 @@ internal static class HirIdentityRewriter
                 Then = RewriteBlock(ifStatement.Then, identities),
                 Else = ifStatement.Else is null ? null : RewriteBlock(ifStatement.Else, identities),
             },
+            HirWhileStatement whileStatement => whileStatement with
+            {
+                Id = GetId(whileStatement, identities),
+                Condition = RewriteExpression(whileStatement.Condition, identities),
+                Body = RewriteBlock(whileStatement.Body, identities),
+            },
+            HirBreakStatement breakStatement => breakStatement with
+            {
+                Id = GetId(breakStatement, identities),
+            },
+            HirContinueStatement continueStatement => continueStatement with
+            {
+                Id = GetId(continueStatement, identities),
+            },
             HirReturnStatement returnStatement => returnStatement with
             {
                 Id = GetId(returnStatement, identities),

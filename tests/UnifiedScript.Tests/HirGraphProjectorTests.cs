@@ -192,4 +192,71 @@ public sealed class HirGraphProjectorTests
 
         Assert.Equal(first, second);
     }
+
+    [Fact]
+    public void Project_RepresentsLoopBodyBreakContinueAndBackEdges()
+    {
+        const string source = """
+            static class Rules
+            {
+                [Visual]
+                static int Run(int value)
+                {
+                    while (value > 0)
+                    {
+                        if (value == 3)
+                        {
+                            value = value - 1;
+                            continue;
+                        }
+
+                        if (value == 1)
+                        {
+                            break;
+                        }
+
+                        value = value - 1;
+                    }
+
+                    return value;
+                }
+            }
+            """;
+        var lowering = new CSharpToHirLowerer().Lower(source, "LoopProjection.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(lowering.CompilationUnit!.Types).Methods);
+        HirWhileStatement loop = Assert.IsType<HirWhileStatement>(method.Body.Statements[0]);
+        HirBreakStatement breakStatement = Assert.Single(
+            loop.Body.DescendantsAndSelf().OfType<HirBreakStatement>());
+        HirContinueStatement continueStatement = Assert.Single(
+            loop.Body.DescendantsAndSelf().OfType<HirContinueStatement>());
+        HirReturnStatement continuation = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+
+        GraphFunction function = Assert.Single(new HirGraphProjector()
+            .Project(lowering.CompilationUnit)
+            .Functions);
+        GraphRegion loopRegion = Assert.Single(
+            function.Regions,
+            region => region.Kind == GraphRegionKind.Loop && region.SourceNodeId == loop.Id);
+        GraphRegion bodyRegion = Assert.Single(
+            function.Regions,
+            region => region.Kind == GraphRegionKind.LoopBody && region.SourceNodeId == loop.Body.Id);
+
+        Assert.Equal(loopRegion.Id, bodyRegion.ParentRegionId);
+        Assert.Equal([bodyRegion.Id], loopRegion.ChildRegionIds);
+        Assert.Contains(loop.Id, loopRegion.NodeIds);
+        Assert.Contains(function.Nodes, node => node.Id == breakStatement.Id && node.Kind == "break");
+        Assert.Contains(
+            function.Edges,
+            edge => edge.Kind == GraphEdgeKind.Control &&
+                edge.FromNode == continueStatement.Id && edge.ToNode == loop.Id);
+        Assert.Contains(
+            function.Edges,
+            edge => edge.Kind == GraphEdgeKind.Control &&
+                edge.FromNode == breakStatement.Id && edge.ToNode == continuation.Id);
+        Assert.Contains(
+            function.Edges,
+            edge => edge.Kind == GraphEdgeKind.Control &&
+                edge.FromNode == loop.Id && edge.FromPort == "exit" &&
+                edge.ToNode == continuation.Id);
+    }
 }

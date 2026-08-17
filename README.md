@@ -12,7 +12,7 @@ The repository currently implements:
 
 - deterministic semantic IDs shared as compact JSON strings across compiler artifacts;
 - source ranges and structured diagnostics;
-- a Roslyn validator for Visual C# profile v0.1;
+- a Roslyn validator for Visual C# profile v0.2;
 - C# syntax lowering into a polymorphic high-level IR (HIR);
 - a Roslyn compilation host and language-neutral bound semantic model;
 - deterministic multi-document compilation requests and cross-file binding;
@@ -22,6 +22,8 @@ The repository currently implements:
   and explicit function/block/branch regions;
 - derived CFG analysis with synthetic exits, reachability, dominance,
   post-dominance, structured merge facts, and reducibility validation;
+- explicit `while`, `break`, and `continue` HIR, Graph regions, nearest-loop
+  transfers, condition re-evaluation, and CFG header/back-edge facts;
 - a versioned semantic patch protocol with source/configuration conflict guards;
 - transactional graph-to-C# literal, operator, argument-connection, and bounded
   statement rewriting;
@@ -46,10 +48,12 @@ The repository currently implements:
 M3 bidirectional source projection is complete. M4.1 adds explicit Graph
 regions, M4.2 derives and validates control flow, M4.3 consumes those facts for
 bounded local assignment and safer value reconnection, and M4.4 recursively
-authors nested acyclic decisions through the same HIR/Graph path.
+authors nested acyclic decisions through the same HIR/Graph path. M4.5 now
+projects and validates structured loops through that same path.
 
-The v0.1 profile accepts `[Visual]` methods containing local variables,
-expressions, calls, assignments, `if/else`, `return`, casts, and `await`.
+The v0.2 profile accepts `[Visual]` methods containing local variables,
+expressions, calls, assignments, `if/else`, `while`, `break`, `continue`,
+`return`, casts, and `await`.
 Unsupported syntax is rejected explicitly instead of being approximated.
 
 ## Architecture
@@ -115,9 +119,9 @@ Without `--out`, the graph JSON is written to stdout.
 
 ### Analyze structured regions
 
-Graph v0.3 assigns every node to exactly one semantic region and preserves
-function, block, `if`, `then`, and explicit/implicit `else` nesting. Generate
-the early-return example with:
+Graph v0.4 assigns every node to exactly one semantic region and preserves
+function, block, `if`, `then`, explicit/implicit `else`, `loop`, and `loopBody`
+nesting. Generate the early-return example with:
 
 ```bash
 dotnet run --project src/UnifiedScript.Cli -- \
@@ -136,6 +140,27 @@ control flow before returning the Graph. The index exposes synthetic function
 exit arcs, predecessors/successors, reachable nodes, dominance,
 post-dominance, branch merges, per-branch function exits, and cyclic SCC entry
 facts. See [Control Flow Analysis](docs/CONTROL_FLOW_ANALYSIS.md).
+
+### Analyze structured loops
+
+The loop sample exercises local assignment, a nearest-loop `break`, a
+nearest-loop `continue`, and normal body back edges while retaining persistent
+node identity:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  analyze samples/Loops/Countdown.cs \
+  --identity samples/Loops/Countdown.cs.usids \
+  --out artifacts/loops
+```
+
+HIR v0.2 emits explicit while/break/continue statements. Graph v0.4 emits a
+`loop` region with one `loopBody` child, and derived CFG facts identify the
+effective condition header, body entry, exit successor, back-edge arcs, and
+break/continue nodes owned by the nearest loop. Effectful conditions route all
+continues and normal fallthrough back through their first effect so the
+condition is reevaluated each iteration. See
+[Structured Loop Foundation](docs/LOOP_FOUNDATION.md).
 
 ## Analyze multiple source files
 
@@ -695,7 +720,9 @@ This milestone does not include:
   composition of the current patch operations;
 - automatic graph placement, layout merge drivers, and editor viewport/session
   state;
-- loops, switch, lambdas, exceptions, or general-purpose C# visualization.
+- `do`/`for`/`foreach`, switch, lambdas, exceptions, or general-purpose C#
+  visualization;
+- graph-authored loop synthesis or arbitrary loop restructuring.
 
 See [ARCHITECTURE.md](docs/ARCHITECTURE.md),
 [IDENTITY_SIDECAR.md](docs/IDENTITY_SIDECAR.md),
@@ -703,6 +730,7 @@ See [ARCHITECTURE.md](docs/ARCHITECTURE.md),
 [CONTROL_FLOW_ANALYSIS.md](docs/CONTROL_FLOW_ANALYSIS.md),
 [LOCAL_ASSIGNMENT_PATCHING.md](docs/LOCAL_ASSIGNMENT_PATCHING.md),
 [NESTED_BRANCH_PATCHING.md](docs/NESTED_BRANCH_PATCHING.md),
+[LOOP_FOUNDATION.md](docs/LOOP_FOUNDATION.md),
 [PATCH_PLAN.md](docs/PATCH_PLAN.md),
 [M1_ROSLYN_GRAPH_FOUNDATION.md](docs/milestones/M1_ROSLYN_GRAPH_FOUNDATION.md),
 [M2_SEMANTIC_BINDING.md](docs/milestones/M2_SEMANTIC_BINDING.md), and

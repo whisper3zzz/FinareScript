@@ -110,6 +110,16 @@ internal sealed class GraphPatchSafetyIndex
             return [branchNode];
         }
 
+        GraphControlFlowLoop? loop = region is null
+            ? null
+            : function.Flow.Loops.SingleOrDefault(candidate => candidate.BodyRegionId == region.Id);
+        if (loop is not null && function.Nodes.TryGetValue(
+                loop.LoopNodeId,
+                out GraphControlFlowNode? loopNode))
+        {
+            return [loopNode];
+        }
+
         if (blockLocation.ParentBlock is null || blockLocation.EntryStatement is null ||
             !patchIndex.TryGetStatement(
                 blockLocation.EntryStatement.Id,
@@ -170,7 +180,7 @@ internal sealed class GraphPatchSafetyIndex
         return function.Flow.Arcs
             .Where(arc => insideNodes.Contains(arc.FromNodeId) &&
                 !insideNodes.Contains(arc.ToNodeId) &&
-                graphNodes[arc.FromNodeId].Kind != "return")
+                graphNodes[arc.FromNodeId].Kind is not ("return" or "break" or "continue"))
             .Select(static arc => arc.FromNodeId)
             .Distinct()
             .Select(id => function.Nodes[id])
@@ -182,7 +192,8 @@ internal sealed class GraphPatchSafetyIndex
     private static GraphRegion? FindBlockRegion(GraphFunction function, SemanticId blockId) =>
         function.Regions.SingleOrDefault(region =>
             region.SourceNodeId == blockId &&
-            region.Kind is GraphRegionKind.Block or GraphRegionKind.Then or GraphRegionKind.Else);
+            region.Kind is GraphRegionKind.Block or GraphRegionKind.Then or GraphRegionKind.Else or
+                GraphRegionKind.LoopBody);
 
     private static bool RegionSubtreeHasNodes(GraphFunction function, SemanticId regionId)
     {

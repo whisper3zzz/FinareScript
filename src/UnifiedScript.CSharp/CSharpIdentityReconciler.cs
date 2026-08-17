@@ -326,6 +326,10 @@ public sealed class CSharpIdentityReconciler
                     }
 
                     break;
+                case HirWhileStatement whileStatement:
+                    Visit(whileStatement.Condition, owner, "condition", childParent);
+                    Visit(whileStatement.Body, owner, "body", childParent);
+                    break;
                 case HirReturnStatement { Expression: not null } returnStatement:
                     Visit(returnStatement.Expression, owner, "returnValue", childParent);
                     break;
@@ -396,6 +400,8 @@ public sealed class CSharpIdentityReconciler
             HirExpressionStatement statement => GetShapeKey(statement) + Child(statement.Expression),
             HirIfStatement ifStatement => GetShapeKey(ifStatement) +
                 Child(ifStatement.Condition) + Child(ifStatement.Then) + Child(ifStatement.Else),
+            HirWhileStatement whileStatement => GetShapeKey(whileStatement) +
+                Child(whileStatement.Condition) + Child(whileStatement.Body),
             HirReturnStatement returnStatement => GetShapeKey(returnStatement) +
                 Child(returnStatement.Expression),
             HirMemberAccessExpression member => GetShapeKey(member) + Child(member.Target),
@@ -424,6 +430,9 @@ public sealed class CSharpIdentityReconciler
         HirVariableDeclarationStatement variable => $"variable|{variable.Name}|{variable.TypeName}",
         HirExpressionStatement => "expressionStatement",
         HirIfStatement => "if",
+        HirWhileStatement => "while",
+        HirBreakStatement => "break",
+        HirContinueStatement => "continue",
         HirReturnStatement => "return",
         HirLiteralExpression literal => $"literal|{literal.ValueText}",
         HirIdentifierExpression identifier => $"identifier|{identifier.Name}",
@@ -445,6 +454,9 @@ public sealed class CSharpIdentityReconciler
         HirVariableDeclarationStatement => "variableDeclaration",
         HirExpressionStatement => "expressionStatement",
         HirIfStatement => "if",
+        HirWhileStatement => "while",
+        HirBreakStatement => "break",
+        HirContinueStatement => "continue",
         HirReturnStatement => "return",
         HirLiteralExpression => "literal",
         HirIdentifierExpression => "identifier",

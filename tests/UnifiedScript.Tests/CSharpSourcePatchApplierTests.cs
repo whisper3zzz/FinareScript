@@ -2490,6 +2490,57 @@ public sealed class CSharpSourcePatchApplierTests
         return new CSharpSourcePatchApplier().Apply(request, patch);
     }
 
+    [Fact]
+    public void Apply_PatchesLoopConditionWithoutRecreatingLoopIdentity()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int Run(int value)
+                {
+                    while (value > 10)
+                    {
+                        value = value - 1;
+                    }
+
+                    return value;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) =
+            CreatePersistentRequest(source, "Game/LoopPatch.cs");
+        HirCompilationUnit originalHir = original.Hir!;
+        HirWhileStatement originalLoop = Assert.Single(
+            originalHir.DescendantsAndSelf().OfType<HirWhileStatement>());
+        HirLiteralExpression literal = Assert.Single(
+            originalLoop.Condition.DescendantsAndSelf().OfType<HirLiteralExpression>());
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            originalHir.Id,
+            original.Semantics!.ConfigurationId,
+            [new ReplaceLiteralPatchOperation(literal.Id, "10", "100")]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Contains("while (value > 100)", Assert.Single(result.PatchedRequest!.Sources).Source);
+        CSharpAnalysisResult changedAnalysis = result.Analysis!;
+        HirCompilationUnit changedHir = changedAnalysis.Hir!;
+        HirWhileStatement changedLoop = Assert.Single(
+            changedHir.DescendantsAndSelf().OfType<HirWhileStatement>());
+        Assert.Equal(originalLoop.Id, changedLoop.Id);
+        Assert.Equal(
+            Assert.Single(original.IdentitySidecars).Entries.Select(static entry => entry.Id).ToHashSet(),
+            Assert.Single(changedAnalysis.IdentitySidecars).Entries.Select(static entry => entry.Id).ToHashSet());
+        Assert.Empty(Assert.Single(changedAnalysis.IdentitySidecars).Tombstones);
+        GraphControlFlowLoop loop = Assert.Single(Assert.Single(
+            new GraphControlFlowAnalyzer().AnalyzeAndValidate(
+                new HirGraphProjector().Project(changedHir, changedAnalysis.Semantics)).Functions).Loops);
+        Assert.Equal(changedLoop.Id, loop.LoopNodeId);
+    }
+
     private static (CSharpCompilationRequest Request, CSharpAnalysisResult Analysis) CreatePersistentRequest(
         string source,
         string path)

@@ -467,6 +467,13 @@ public sealed class RoslynSemanticBinder
                     }
 
                     break;
+                case HirWhileStatement whileStatement:
+                    foreach (HirStatement child in EnumerateStatements(whileStatement.Body))
+                    {
+                        yield return child;
+                    }
+
+                    break;
             }
         }
     }
@@ -480,6 +487,7 @@ public sealed class RoslynSemanticBinder
                 HirVariableDeclarationStatement variable => variable.Initializer,
                 HirExpressionStatement expression => expression.Expression,
                 HirIfStatement ifStatement => ifStatement.Condition,
+                HirWhileStatement whileStatement => whileStatement.Condition,
                 HirReturnStatement returnStatement => returnStatement.Expression,
                 _ => null,
             };

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-M4.2 derives a deterministic control-flow index from Graph v0.3 control edges
+M4.2 derives a deterministic control-flow index from Graph control edges
 and semantic regions. It gives the compiler, visual editor, and future patch
 algebra one executable definition of reachability, dominance, branch merging,
 and reducibility instead of relying on node positions or lexical guesses.
@@ -35,7 +35,7 @@ Only Graph nodes with control ports participate in the CFG:
 
 - function entry;
 - variable/evaluate statements;
-- branch and return nodes;
+- branch, loop, break, continue, and return nodes;
 - effectful invocation, assignment, and await nodes.
 
 Pure literal, identifier, member, operator, cast, and pure-call nodes remain
@@ -44,8 +44,9 @@ mistaken for executable CFG steps.
 
 Real Graph control edges become CFG arcs after their source/output and
 target/input ports are validated. Every control output must have at most one
-successor. A branch has exactly the ordered `then` and `else` outputs; other
-current nodes have at most one control output.
+successor. A branch has exactly the ordered `then` and `else` outputs, and a
+loop has exactly the ordered `body` and `exit` outputs; other current nodes have
+at most one control output.
 
 Each function receives a stable synthetic exit ID. The analyzer adds synthetic
 arcs for:
@@ -124,7 +125,7 @@ The analyzer computes deterministic strongly connected components over
 reachable CFG nodes. A cyclic component is reducible only when it has one entry
 header and that header dominates every node in the component.
 
-This accepts the structured shape required by a future `while` loop:
+This accepts the structured shape emitted by a `while` loop:
 
 ```text
 entry → header ⇄ body
@@ -146,9 +147,7 @@ IDs; `AnalyzeAndValidate` rejects it.
 
 ## Current limits
 
-M4.2 analyzes the current acyclic HIR and can classify manually supplied cyclic
-Graphs, but the language profile still rejects loop syntax. CFG facts remain
-derived rather than serialized. M4.3 now consumes reachability and dominance
+CFG facts remain derived rather than serialized. M4.3 consumes reachability and dominance
 through `GraphPatchSafetyIndex`: local assignment insertion and value
 reconnection combine those facts with the existing lexical scope/type/effect
 checks. M4.4 recursively inserts nested acyclic branches, re-deriving this
@@ -156,7 +155,14 @@ analysis after every produced-branch stage and validating the final nested
 merge/exit structure. The patch target is still a persistent HIR/Graph semantic
 node or a structural source gap, not a serialized CFG node.
 
+M4.5 adds `GraphControlFlowLoop` facts for the source loop node, loop/body
+regions, effective condition header, body entry, exit successor, back-edge arc
+IDs, and nearest-loop break/continue nodes. The effective header is the first
+condition effect when one exists, ensuring those effects rerun on every normal
+back edge and continue. Loop-target validation rejects transfers that bypass
+their nearest structured owner. See [LOOP_FOUNDATION.md](LOOP_FOUNDATION.md).
+
 The analysis does not compute exception edges, short-circuit expression CFG,
-async suspension-state transitions, loop headers/back-edge roles, control
-dependence, or SSA form. Nested acyclic branch construction is now proven;
-loop HIR/regions remain the next major control-flow expansion.
+async suspension-state transitions, constant-condition reachability, control
+dependence, or SSA form. `do`/`for`/`foreach` and Graph-authored loop synthesis
+remain later expansions.

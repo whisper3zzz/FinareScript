@@ -125,10 +125,10 @@ public sealed class GraphControlFlowAnalyzer
                 continue;
             }
 
-            if (outputs.Length > 1 && node.Kind != "branch")
+            if (outputs.Length > 1 && node.Kind is not ("branch" or "loop"))
             {
                 throw new InvalidOperationException(
-                    $"Only a branch node may expose multiple control outputs; node '{node.Id}' does so.");
+                    $"Only a branch or loop node may expose multiple control outputs; node '{node.Id}' does so.");
             }
 
             if (node.Kind == "branch" &&
@@ -138,6 +138,15 @@ public sealed class GraphControlFlowAnalyzer
             {
                 throw new InvalidOperationException(
                     $"Branch node '{node.Id}' requires ordered then/else control outputs.");
+            }
+
+            if (node.Kind == "loop" &&
+                (outputs.Length != 2 ||
+                    outputs[0].Name != "body" ||
+                    outputs[1].Name != "exit"))
+            {
+                throw new InvalidOperationException(
+                    $"Loop node '{node.Id}' requires ordered body/exit control outputs.");
             }
 
             foreach (GraphPort output in outputs)
@@ -219,6 +228,10 @@ public sealed class GraphControlFlowAnalyzer
             arcs,
             successors,
             immediatePostDominators);
+        GraphControlFlowLoop[] loops = BuildLoops(
+            function,
+            controlById,
+            arcs);
         GraphControlFlowComponent[] components = BuildCyclicComponents(
             entry.Id,
             exitId,
@@ -234,6 +247,7 @@ public sealed class GraphControlFlowAnalyzer
             flowNodes,
             arcs.OrderBy(static arc => arc.Id.Value, StringComparer.Ordinal).ToArray(),
             branches,
+            loops,
             components,
             controlById.Keys
                 .Where(id => !reachable.Contains(id))
@@ -583,6 +597,153 @@ public sealed class GraphControlFlowAnalyzer
         }
 
         return Visit(entryId);
+    }
+
+    private static GraphControlFlowLoop[] BuildLoops(
+        GraphFunction function,
+        IReadOnlyDictionary<SemanticId, GraphNode> controlNodes,
+        IReadOnlyList<GraphControlFlowArc> arcs)
+    {
+        IReadOnlyDictionary<SemanticId, GraphRegion> regions = function.Regions
+            .ToDictionary(static region => region.Id);
+        IReadOnlyDictionary<SemanticId, SemanticId> nodeOwners = function.Regions
+            .SelectMany(region => region.NodeIds.Select(nodeId => (nodeId, region.Id)))
+            .ToDictionary(static item => item.nodeId, static item => item.Id);
+        var claimedTransfers = new HashSet<SemanticId>();
+        var result = new List<GraphControlFlowLoop>();
+        foreach (GraphRegion loopRegion in function.Regions
+                     .Where(static region => region.Kind == GraphRegionKind.Loop)
+                     .OrderBy(static region => region.Id.Value, StringComparer.Ordinal))
+        {
+            GraphNode loopNode = controlNodes[loopRegion.SourceNodeId];
+            GraphRegion bodyRegion = regions[loopRegion.ChildRegionIds.Single()];
+            HashSet<SemanticId> directControlNodes = loopRegion.NodeIds
+                .Where(controlNodes.ContainsKey)
+                .ToHashSet();
+            SemanticId[] headerEntries = directControlNodes
+                .Where(nodeId => !arcs.Any(arc =>
+                    arc.ToNodeId == nodeId &&
+                    directControlNodes.Contains(arc.FromNodeId) &&
+                    !(arc.FromNodeId == loopNode.Id && arc.FromPort == "body")))
+                .OrderBy(static id => id.Value, StringComparer.Ordinal)
+                .ToArray();
+            if (headerEntries.Length != 1)
+            {
+                throw new InvalidOperationException(
+                    $"Loop region '{loopRegion.Id}' requires one control-flow header entry.");
+            }
+
+            SemanticId headerEntry = headerEntries[0];
+            SemanticId bodyEntry = RequireControlSuccessor(loopNode.Id, "body", arcs);
+            SemanticId loopExit = RequireControlSuccessor(loopNode.Id, "exit", arcs);
+            HashSet<SemanticId> bodyRegions = CollectRegionSubtree(bodyRegion.Id, regions);
+            HashSet<SemanticId> bodyNodes = bodyRegions
+                .SelectMany(id => regions[id].NodeIds)
+                .ToHashSet();
+            SemanticId[] breaks = controlNodes.Values
+                .Where(static node => node.Kind == "break")
+                .Where(node => nodeOwners.TryGetValue(node.Id, out SemanticId ownerId) &&
+                    FindNearestLoopRegion(ownerId, regions) == loopRegion.Id)
+                .Select(static node => node.Id)
+                .OrderBy(static id => id.Value, StringComparer.Ordinal)
+                .ToArray();
+            SemanticId[] continues = controlNodes.Values
+                .Where(static node => node.Kind == "continue")
+                .Where(node => nodeOwners.TryGetValue(node.Id, out SemanticId ownerId) &&
+                    FindNearestLoopRegion(ownerId, regions) == loopRegion.Id)
+                .Select(static node => node.Id)
+                .OrderBy(static id => id.Value, StringComparer.Ordinal)
+                .ToArray();
+            foreach (SemanticId breakNodeId in breaks)
+            {
+                claimedTransfers.Add(breakNodeId);
+                if (RequireControlSuccessor(breakNodeId, "then", arcs) != loopExit)
+                {
+                    throw new InvalidOperationException(
+                        $"Break node '{breakNodeId}' must target exit '{loopExit}' of its nearest loop.");
+                }
+            }
+
+            foreach (SemanticId continueNodeId in continues)
+            {
+                claimedTransfers.Add(continueNodeId);
+                if (RequireControlSuccessor(continueNodeId, "then", arcs) != headerEntry)
+                {
+                    throw new InvalidOperationException(
+                        $"Continue node '{continueNodeId}' must target header '{headerEntry}' of its nearest loop.");
+                }
+            }
+
+            SemanticId[] backEdges = arcs
+                .Where(arc => !arc.IsSynthetic && arc.ToNodeId == headerEntry &&
+                    (bodyNodes.Contains(arc.FromNodeId) ||
+                        arc.FromNodeId == loopNode.Id && arc.FromPort == "body"))
+                .Select(static arc => arc.Id)
+                .OrderBy(static id => id.Value, StringComparer.Ordinal)
+                .ToArray();
+            result.Add(new GraphControlFlowLoop(
+                loopNode.Id,
+                loopRegion.Id,
+                bodyRegion.Id,
+                headerEntry,
+                bodyEntry,
+                loopExit,
+                backEdges,
+                breaks,
+                continues));
+        }
+
+        SemanticId[] unclaimedTransfers = controlNodes.Values
+            .Where(static node => node.Kind is "break" or "continue")
+            .Select(static node => node.Id)
+            .Where(id => !claimedTransfers.Contains(id))
+            .OrderBy(static id => id.Value, StringComparer.Ordinal)
+            .ToArray();
+        if (unclaimedTransfers.Length > 0)
+        {
+            throw new InvalidOperationException(
+                $"Loop-control node '{unclaimedTransfers[0]}' has no enclosing loop region.");
+        }
+
+        return result.ToArray();
+    }
+
+    private static SemanticId? FindNearestLoopRegion(
+        SemanticId regionId,
+        IReadOnlyDictionary<SemanticId, GraphRegion> regions)
+    {
+        GraphRegion current = regions[regionId];
+        while (true)
+        {
+            if (current.Kind == GraphRegionKind.Loop)
+            {
+                return current.Id;
+            }
+
+            if (current.ParentRegionId is not SemanticId parentId)
+            {
+                return null;
+            }
+
+            current = regions[parentId];
+        }
+    }
+
+    private static SemanticId RequireControlSuccessor(
+        SemanticId nodeId,
+        string port,
+        IEnumerable<GraphControlFlowArc> arcs)
+    {
+        GraphControlFlowArc[] matches = arcs
+            .Where(arc => arc.FromNodeId == nodeId && arc.FromPort == port)
+            .ToArray();
+        if (matches.Length != 1)
+        {
+            throw new InvalidOperationException(
+                $"Control output '{nodeId}.{port}' requires exactly one CFG successor.");
+        }
+
+        return matches[0].ToNodeId;
     }
 
     private static HashSet<SemanticId> CollectRegionSubtree(

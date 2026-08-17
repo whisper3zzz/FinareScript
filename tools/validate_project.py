@@ -31,6 +31,7 @@ DOCUMENTS = [
     ROOT / "docs" / "CONTROL_FLOW_ANALYSIS.md",
     ROOT / "docs" / "LOCAL_ASSIGNMENT_PATCHING.md",
     ROOT / "docs" / "NESTED_BRANCH_PATCHING.md",
+    ROOT / "docs" / "LOOP_FOUNDATION.md",
     ROOT / "docs" / "PATCH_PLAN.md",
     ROOT / "docs" / "ROADMAP.md",
     ROOT / "docs" / "milestones" / "M1_ROSLYN_GRAPH_FOUNDATION.md",
@@ -109,6 +110,8 @@ def main() -> int:
     nested_plan_path = ROOT / "samples" / "Patching" / "BuildNestedDecision.plan.json"
     nested_identity_path = ROOT / "samples" / "Patching" / "NestedDecisionRules.cs.usids"
     region_source_path = ROOT / "samples" / "Regions" / "EarlyReturn.cs"
+    loop_source_path = ROOT / "samples" / "Loops" / "Countdown.cs"
+    loop_identity_path = ROOT / "samples" / "Loops" / "Countdown.cs.usids"
     golden_manifest_path = (
         ROOT
         / "tests"
@@ -165,6 +168,10 @@ def main() -> int:
         "Missing recursive nested-branch plan sample",
     )
     require(region_source_path.is_file(), "Missing structured Graph-region sample")
+    require(
+        loop_source_path.is_file() and loop_identity_path.is_file(),
+        "Missing structured while-loop sample or identity sidecar",
+    )
     require(golden_manifest_path.is_file(), "Missing Golden artifact manifest")
     require(layout_path.is_file(), "Missing graph layout sidecar sample")
     patch_source = patch_source_path.read_text(encoding="utf-8")
@@ -194,6 +201,8 @@ def main() -> int:
     nested_plan = json.loads(nested_plan_path.read_text(encoding="utf-8"))
     nested_identity = json.loads(nested_identity_path.read_text(encoding="utf-8"))
     region_source = region_source_path.read_text(encoding="utf-8")
+    loop_source = loop_source_path.read_text(encoding="utf-8")
+    loop_identity = json.loads(loop_identity_path.read_text(encoding="utf-8"))
     golden_manifest = json.loads(golden_manifest_path.read_text(encoding="utf-8"))
     layout = json.loads(layout_path.read_text(encoding="utf-8"))
     patch_operation = patch_document["operations"][0]
@@ -211,6 +220,7 @@ def main() -> int:
     composed_source_digest = hashlib.sha256(composed_source.encode("utf-8")).hexdigest()
     guard_source_digest = hashlib.sha256(guard_source.encode("utf-8")).hexdigest()
     nested_source_digest = hashlib.sha256(nested_source.encode("utf-8")).hexdigest()
+    loop_source_digest = hashlib.sha256(loop_source.encode("utf-8")).hexdigest()
     require(
         patch_document["schemaVersion"] == "unifiedscript.patch/v0.8"
         and operator_patch["schemaVersion"] == "unifiedscript.patch/v0.8"
@@ -493,11 +503,27 @@ def main() -> int:
     )
     require(
         golden_manifest["artifacts"]["graph"]["schemaVersion"]
-        == "unifiedscript.graph/v0.3"
+        == "unifiedscript.graph/v0.4"
         and "if ((damage > threshold) && !disabled)" in region_source
         and "return true;" in region_source
         and "return false;" in region_source,
-        "Graph v0.3 Golden manifest or early-return region sample is inconsistent",
+        "Graph v0.4 Golden manifest or early-return region sample is inconsistent",
+    )
+    require(
+        "while (value > 0)" in loop_source
+        and "break;" in loop_source
+        and "continue;" in loop_source
+        and "value = value - 1;" in loop_source,
+        "Structured while-loop sample does not cover loop transfers and assignment",
+    )
+    loop_kinds = {entry["kind"] for entry in loop_identity["entries"]}
+    require(
+        loop_identity["sourcePath"] == "samples/Loops/Countdown.cs"
+        and loop_identity["sourceDigest"] == f"sha256:{loop_source_digest}"
+        and loop_identity["generation"] == 1
+        and loop_identity["tombstones"] == []
+        and {"while", "break", "continue", "assignment"}.issubset(loop_kinds),
+        "Structured while-loop identity sidecar is inconsistent",
     )
     layout_functions = layout["functions"]
     layout_nodes = [

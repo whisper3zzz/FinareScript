@@ -6,7 +6,7 @@ namespace UnifiedScript.Tests;
 public sealed class VisualProfileValidatorTests
 {
     [Fact]
-    public void Validate_RejectsDynamicLambdaAndLoop()
+    public void Validate_RejectsDynamicAndLambdaWhileAllowingWhileLoop()
     {
         const string source = """
             class Example
@@ -26,7 +26,48 @@ public sealed class VisualProfileValidatorTests
 
         Assert.Contains(VisualProfileDiagnosticCodes.DynamicNotSupported, codes);
         Assert.Contains(VisualProfileDiagnosticCodes.LambdaNotSupported, codes);
-        Assert.Contains(VisualProfileDiagnosticCodes.StatementNotSupported, codes);
+        Assert.DoesNotContain(VisualProfileDiagnosticCodes.StatementNotSupported, codes);
+    }
+
+    [Fact]
+    public void Validate_AllowsBreakAndContinueOnlyInsideWhile()
+    {
+        const string valid = """
+            class Example
+            {
+                [Visual]
+                void Run(bool ready)
+                {
+                    while (ready)
+                    {
+                        if (ready) continue;
+                        break;
+                    }
+                }
+            }
+            """;
+        const string invalid = """
+            class Example
+            {
+                [Visual]
+                void Run()
+                {
+                    break;
+                    continue;
+                }
+            }
+            """;
+
+        Assert.Empty(new VisualProfileValidator().Validate(
+            CSharpSyntaxTree.ParseText(valid, path: "ValidLoop.cs")));
+        IReadOnlyList<UnifiedScript.Core.UnifiedDiagnostic> diagnostics =
+            new VisualProfileValidator().Validate(
+                CSharpSyntaxTree.ParseText(invalid, path: "InvalidLoop.cs"));
+
+        Assert.Equal(
+            2,
+            diagnostics.Count(static diagnostic =>
+                diagnostic.Code == VisualProfileDiagnosticCodes.LoopControlTargetRequired));
     }
 
     [Fact]

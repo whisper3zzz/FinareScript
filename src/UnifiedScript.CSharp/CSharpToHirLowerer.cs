@@ -134,6 +134,17 @@ public sealed class CSharpToHirLowerer
                 LowerExpression(ifStatement.Condition, filePath, ownerKey),
                 LowerAsBlock(ifStatement.Statement, filePath, ownerKey),
                 ifStatement.Else is null ? null : LowerAsBlock(ifStatement.Else.Statement, filePath, ownerKey)),
+            WhileStatementSyntax whileStatement => new HirWhileStatement(
+                CSharpSemanticIds.ForNode(filePath, ownerKey, whileStatement),
+                RoslynSourceSpan.FromNode(whileStatement, filePath),
+                LowerExpression(whileStatement.Condition, filePath, ownerKey),
+                LowerAsBlock(whileStatement.Statement, filePath, ownerKey)),
+            BreakStatementSyntax breakStatement => new HirBreakStatement(
+                CSharpSemanticIds.ForNode(filePath, ownerKey, breakStatement),
+                RoslynSourceSpan.FromNode(breakStatement, filePath)),
+            ContinueStatementSyntax continueStatement => new HirContinueStatement(
+                CSharpSemanticIds.ForNode(filePath, ownerKey, continueStatement),
+                RoslynSourceSpan.FromNode(continueStatement, filePath)),
             ReturnStatementSyntax returnStatement => new HirReturnStatement(
                 CSharpSemanticIds.ForNode(filePath, ownerKey, returnStatement),
                 RoslynSourceSpan.FromNode(returnStatement, filePath),

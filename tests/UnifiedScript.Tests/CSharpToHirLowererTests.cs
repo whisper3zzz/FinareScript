@@ -99,4 +99,51 @@ public sealed class CSharpToHirLowererTests
             result.Diagnostics,
             static diagnostic => diagnostic.Code == VisualProfileDiagnosticCodes.ExpressionNotSupported);
     }
+
+    [Fact]
+    public void Lower_ProducesExplicitWhileBreakAndContinueHierarchy()
+    {
+        const string source = """
+            static class Rules
+            {
+                [Visual]
+                static int Run(int value)
+                {
+                    while (value > 0)
+                    {
+                        if (value == 2)
+                        {
+                            value = value - 1;
+                            continue;
+                        }
+
+                        if (value == 1)
+                        {
+                            break;
+                        }
+
+                        value = value - 1;
+                    }
+
+                    return value;
+                }
+            }
+            """;
+
+        CSharpLoweringResult result = new CSharpToHirLowerer().Lower(source, "LoopRules.cs");
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        HirMethodDeclaration method = Assert.Single(Assert.Single(result.CompilationUnit!.Types).Methods);
+        HirWhileStatement loop = Assert.IsType<HirWhileStatement>(method.Body.Statements[0]);
+        Assert.IsType<HirBinaryExpression>(loop.Condition);
+        Assert.Single(loop.Body.DescendantsAndSelf().OfType<HirContinueStatement>());
+        Assert.Single(loop.Body.DescendantsAndSelf().OfType<HirBreakStatement>());
+        Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+        string json = UnifiedScript.Core.HirJson.Serialize(
+            UnifiedScript.Core.HirDocument.Create(result.CompilationUnit));
+        Assert.Contains("\"schemaVersion\": \"unifiedscript.hir/v0.2\"", json);
+        Assert.Contains("\"kind\": \"while\"", json);
+        Assert.Contains("\"kind\": \"break\"", json);
+        Assert.Contains("\"kind\": \"continue\"", json);
+    }
 }

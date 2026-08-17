@@ -187,6 +187,14 @@ public static class GraphJson
                     $"Graph region '{region.Id}' must be a direct child of an if region.");
             }
 
+            if (region.Kind == GraphRegionKind.LoopBody &&
+                (region.ParentRegionId is not SemanticId loopParentId ||
+                    regions[loopParentId].Kind != GraphRegionKind.Loop))
+            {
+                throw new JsonException(
+                    $"Graph region '{region.Id}' must be a direct child of a loop region.");
+            }
+
             foreach (SemanticId nodeId in region.NodeIds)
             {
                 if (!nodes.ContainsKey(nodeId))
@@ -228,6 +236,18 @@ public static class GraphJson
                 {
                     throw new JsonException(
                         $"If region '{region.Id}' requires its branch node and ordered then/else children.");
+                }
+            }
+
+            if (region.Kind == GraphRegionKind.Loop)
+            {
+                GraphRegion[] children = region.ChildRegionIds.Select(id => regions[id]).ToArray();
+                if (children.Length != 1 || children[0].Kind != GraphRegionKind.LoopBody ||
+                    !region.NodeIds.Contains(region.SourceNodeId) ||
+                    nodes[region.SourceNodeId].Kind != "loop")
+                {
+                    throw new JsonException(
+                        $"Loop region '{region.Id}' requires its loop node and one loop-body child.");
                 }
             }
         }

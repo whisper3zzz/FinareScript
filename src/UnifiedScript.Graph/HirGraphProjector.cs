@@ -80,6 +80,8 @@ public sealed class HirGraphProjector
 
     private sealed record ControlEndpoint(SemanticId NodeId, string Port);
 
+    private sealed record ControlTarget(SemanticId NodeId, string Port);
+
     private sealed record ValueEndpoint(SemanticId NodeId, string Port);
 
     private sealed record ExpressionProjection(ValueEndpoint? Value, IReadOnlyList<SemanticId> Effects);
@@ -124,6 +126,7 @@ public sealed class HirGraphProjector
         private readonly Dictionary<SemanticId, GraphNode> nodes = [];
         private readonly Dictionary<SemanticId, GraphEdge> edges = [];
         private readonly Dictionary<SemanticId, RegionBuilder> regions = [];
+        private readonly Stack<LoopContext> loops = [];
 
         public IEnumerable<GraphNode> Nodes => nodes.Values;
 
@@ -213,6 +216,9 @@ public sealed class HirGraphProjector
                 HirVariableDeclarationStatement variable => ProjectVariable(variable, incoming, regionId),
                 HirExpressionStatement expression => ProjectExpressionStatement(expression, incoming, regionId),
                 HirIfStatement ifStatement => ProjectIf(ifStatement, incoming, regionId),
+                HirWhileStatement whileStatement => ProjectWhile(whileStatement, incoming, regionId),
+                HirBreakStatement breakStatement => ProjectBreak(breakStatement, incoming, regionId),
+                HirContinueStatement continueStatement => ProjectContinue(continueStatement, incoming, regionId),
                 HirReturnStatement returnStatement => ProjectReturn(returnStatement, incoming, regionId),
                 _ => throw new ArgumentOutOfRangeException(nameof(statement), statement.GetType().Name),
             };
@@ -368,6 +374,121 @@ public sealed class HirGraphProjector
                     elseRegionId);
             return thenExits.Concat(elseExits).ToArray();
         }
+
+        private IReadOnlyList<ControlEndpoint> ProjectWhile(
+            HirWhileStatement statement,
+            IReadOnlyList<ControlEndpoint> incoming,
+            SemanticId parentRegionId)
+        {
+            SemanticId loopRegionId = RegionId(statement.Id, GraphRegionKind.Loop);
+            AddRegion(new RegionBuilder(
+                loopRegionId,
+                GraphRegionKind.Loop,
+                parentRegionId,
+                statement.Id,
+                statement.Span,
+                false));
+            SemanticId bodyRegionId = RegionId(statement.Id, GraphRegionKind.LoopBody);
+            AddRegion(new RegionBuilder(
+                bodyRegionId,
+                GraphRegionKind.LoopBody,
+                loopRegionId,
+                statement.Body.Id,
+                statement.Body.Span,
+                false));
+
+            ExpressionProjection condition = ProjectExpression(statement.Condition, loopRegionId);
+            SemanticId[] conditionEffects = condition.Effects.Distinct().ToArray();
+            var properties = new SortedDictionary<string, string>(StringComparer.Ordinal);
+            semantics.ApplyNodeProperties(statement.Condition.Id, properties);
+            AddNode(new GraphNode(
+                statement.Id,
+                "loop",
+                "While",
+                statement.Span,
+                [
+                    new GraphPort("in", GraphPortDirection.Input, GraphPortKind.Control),
+                    new GraphPort("body", GraphPortDirection.Output, GraphPortKind.Control),
+                    new GraphPort("exit", GraphPortDirection.Output, GraphPortKind.Control),
+                    new GraphPort("condition", GraphPortDirection.Input, GraphPortKind.Data),
+                ],
+                properties),
+                loopRegionId);
+            IReadOnlyList<ControlEndpoint> beforeCondition = ConnectEffectChain(incoming, conditionEffects);
+            ConnectIncoming(beforeCondition, statement.Id, "in");
+            if (condition.Value is null)
+            {
+                throw new InvalidOperationException("A while condition must produce a value.");
+            }
+
+            AddEdge(GraphEdgeKind.Data, condition.Value, new ValueEndpoint(statement.Id, "condition"));
+            ControlTarget continueTarget = conditionEffects.Length == 0
+                ? new ControlTarget(statement.Id, "in")
+                : new ControlTarget(conditionEffects[0], "execIn");
+            var context = new LoopContext(continueTarget);
+            loops.Push(context);
+            IReadOnlyList<ControlEndpoint> bodyExits;
+            try
+            {
+                bodyExits = ProjectBlockContents(
+                    statement.Body,
+                    [new ControlEndpoint(statement.Id, "body")],
+                    bodyRegionId);
+            }
+            finally
+            {
+                _ = loops.Pop();
+            }
+
+            ConnectIncoming(bodyExits, continueTarget.NodeId, continueTarget.Port);
+            return [new ControlEndpoint(statement.Id, "exit"), .. context.BreakExits];
+        }
+
+        private IReadOnlyList<ControlEndpoint> ProjectBreak(
+            HirBreakStatement statement,
+            IReadOnlyList<ControlEndpoint> incoming,
+            SemanticId regionId)
+        {
+            LoopContext context = RequireLoopContext(statement);
+            AddNode(ControlTransferNode(statement, "break", "Break"), regionId);
+            ConnectIncoming(incoming, statement.Id, "in");
+            context.BreakExits.Add(new ControlEndpoint(statement.Id, "then"));
+            return [];
+        }
+
+        private IReadOnlyList<ControlEndpoint> ProjectContinue(
+            HirContinueStatement statement,
+            IReadOnlyList<ControlEndpoint> incoming,
+            SemanticId regionId)
+        {
+            LoopContext context = RequireLoopContext(statement);
+            AddNode(ControlTransferNode(statement, "continue", "Continue"), regionId);
+            ConnectIncoming(incoming, statement.Id, "in");
+            ConnectIncoming(
+                [new ControlEndpoint(statement.Id, "then")],
+                context.ContinueTarget.NodeId,
+                context.ContinueTarget.Port);
+            return [];
+        }
+
+        private LoopContext RequireLoopContext(HirStatement statement) => loops.TryPeek(out LoopContext? context)
+            ? context
+            : throw new InvalidOperationException(
+                $"Loop-control statement '{statement.Id}' has no enclosing while loop.");
+
+        private static GraphNode ControlTransferNode(
+            HirStatement statement,
+            string kind,
+            string label) => new(
+                statement.Id,
+                kind,
+                label,
+                statement.Span,
+                [
+                    new GraphPort("in", GraphPortDirection.Input, GraphPortKind.Control),
+                    new GraphPort("then", GraphPortDirection.Output, GraphPortKind.Control),
+                ],
+                EmptyProperties());
 
         private IReadOnlyList<ControlEndpoint> ProjectReturn(
             HirReturnStatement statement,
@@ -666,6 +787,13 @@ public sealed class HirGraphProjector
             SemanticId edgeId = SemanticId.FromKey(
                 $"edge|{kind}|{sourceNode}|{sourcePort}|{targetNode}|{targetPort}");
             edges.TryAdd(edgeId, new GraphEdge(edgeId, kind, sourceNode, sourcePort, targetNode, targetPort));
+        }
+
+        private sealed class LoopContext(ControlTarget continueTarget)
+        {
+            public ControlTarget ContinueTarget { get; } = continueTarget;
+
+            public List<ControlEndpoint> BreakExits { get; } = [];
         }
     }
 

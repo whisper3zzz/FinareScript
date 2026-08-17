@@ -210,6 +210,67 @@ public sealed class CSharpIdentityReconcilerTests
         Assert.Empty(Assert.Single(patched.Analysis.IdentitySidecars).Tombstones);
     }
 
+    [Fact]
+    public void Analyze_PreservesLoopAndTransferIdentitiesAcrossFormattingChanges()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static void Run(bool ready)
+                {
+                    while (ready)
+                    {
+                        if (ready)
+                        {
+                            continue;
+                        }
+
+                        break;
+                    }
+                }
+            }
+            """;
+        const string changed = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static void Run(bool ready)
+                {
+                    // Formatting and comments must not recreate graph nodes.
+                    while (ready)
+                    {
+                        if (ready) { continue; }
+
+                        break;
+                    }
+                }
+            }
+            """;
+        IdentitySidecarDocument empty = IdentitySidecarDocument.CreateEmpty(Path);
+        CSharpAnalysisResult initial = AnalyzeWithIdentity(source, empty);
+        IdentitySidecarDocument sidecar = Assert.Single(initial.IdentitySidecars);
+        HirCompilationUnit initialHir = initial.Hir!;
+        SemanticId loopId = Assert.Single(initialHir.DescendantsAndSelf().OfType<HirWhileStatement>()).Id;
+        SemanticId breakId = Assert.Single(initialHir.DescendantsAndSelf().OfType<HirBreakStatement>()).Id;
+        SemanticId continueId = Assert.Single(initialHir.DescendantsAndSelf().OfType<HirContinueStatement>()).Id;
+
+        CSharpAnalysisResult formatted = AnalyzeWithIdentity(changed, sidecar);
+        HirCompilationUnit formattedHir = formatted.Hir!;
+
+        Assert.Equal(loopId, Assert.Single(
+            formattedHir.DescendantsAndSelf().OfType<HirWhileStatement>()).Id);
+        Assert.Equal(breakId, Assert.Single(
+            formattedHir.DescendantsAndSelf().OfType<HirBreakStatement>()).Id);
+        Assert.Equal(continueId, Assert.Single(
+            formattedHir.DescendantsAndSelf().OfType<HirContinueStatement>()).Id);
+        Assert.Empty(Assert.Single(formatted.IdentitySidecars).Tombstones);
+    }
+
     private const string Path = "Game/Calculator.cs";
 
     private static CSharpAnalysisResult AnalyzeWithIdentity(

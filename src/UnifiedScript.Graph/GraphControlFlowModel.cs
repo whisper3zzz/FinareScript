@@ -32,6 +32,17 @@ public sealed record GraphControlFlowBranch(
     bool ThenExitsFunction,
     bool ElseExitsFunction);
 
+public sealed record GraphControlFlowLoop(
+    SemanticId LoopNodeId,
+    SemanticId LoopRegionId,
+    SemanticId BodyRegionId,
+    SemanticId HeaderEntryNodeId,
+    SemanticId BodyEntryNodeId,
+    SemanticId ExitNodeId,
+    IReadOnlyList<SemanticId> BackEdgeArcIds,
+    IReadOnlyList<SemanticId> BreakNodeIds,
+    IReadOnlyList<SemanticId> ContinueNodeIds);
+
 public sealed record GraphControlFlowComponent(
     IReadOnlyList<SemanticId> NodeIds,
     IReadOnlyList<SemanticId> EntryNodeIds,
@@ -44,6 +55,7 @@ public sealed record GraphControlFlowFunction(
     IReadOnlyList<GraphControlFlowNode> Nodes,
     IReadOnlyList<GraphControlFlowArc> Arcs,
     IReadOnlyList<GraphControlFlowBranch> Branches,
+    IReadOnlyList<GraphControlFlowLoop> Loops,
     IReadOnlyList<GraphControlFlowComponent> CyclicComponents,
     IReadOnlyList<SemanticId> UnreachableNodeIds,
     bool HasCompleteExitCoverage,

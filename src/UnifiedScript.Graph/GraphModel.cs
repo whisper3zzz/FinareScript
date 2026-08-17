@@ -27,6 +27,8 @@ public enum GraphRegionKind
     If,
     Then,
     Else,
+    Loop,
+    LoopBody,
 }
 
 public sealed record GraphPort(
@@ -74,5 +76,5 @@ public sealed record GraphDocument(
     SemanticId? SemanticConfigurationId,
     IReadOnlyList<GraphFunction> Functions)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.graph/v0.3";
+    public const string CurrentSchemaVersion = "unifiedscript.graph/v0.4";
 }

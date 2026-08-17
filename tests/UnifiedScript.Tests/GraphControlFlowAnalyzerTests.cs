@@ -12,6 +12,8 @@ public sealed class GraphControlFlowAnalyzerTests
     public void Analyze_ComputesStraightLineDominanceAndSyntheticExit()
     {
         const string source = """
+            using UnifiedScript;
+
             static class Rules
             {
                 [Visual]
@@ -370,6 +372,240 @@ public sealed class GraphControlFlowAnalyzerTests
         Assert.All(flow.Branches, static branch => Assert.Null(branch.MergeNodeId));
         Assert.Contains(flow.Branches, static branch => branch.ThenExitsFunction);
         Assert.All(flow.Branches, static branch => Assert.False(branch.ElseExitsFunction));
+    }
+
+    [Fact]
+    public void Analyze_ClassifiesStructuredWhileHeaderBackEdgesAndTransfers()
+    {
+        const string source = """
+            static class Rules
+            {
+                [Visual]
+                static int Run(int value)
+                {
+                    while (value > 0)
+                    {
+                        if (value == 3)
+                        {
+                            value = value - 1;
+                            continue;
+                        }
+
+                        if (value == 1)
+                        {
+                            break;
+                        }
+
+                        value = value - 1;
+                    }
+
+                    return value;
+                }
+            }
+            """;
+        (HirMethodDeclaration method, GraphDocument graph) = Project(source, "StructuredWhile.cs");
+        HirWhileStatement statement = Assert.IsType<HirWhileStatement>(method.Body.Statements[0]);
+        HirBreakStatement breakStatement = Assert.Single(
+            statement.Body.DescendantsAndSelf().OfType<HirBreakStatement>());
+        HirContinueStatement continueStatement = Assert.Single(
+            statement.Body.DescendantsAndSelf().OfType<HirContinueStatement>());
+        HirReturnStatement continuation = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+
+        GraphControlFlowFunction flow = Assert.Single(new GraphControlFlowAnalyzer()
+            .AnalyzeAndValidate(graph)
+            .Functions);
+        GraphControlFlowLoop loop = Assert.Single(flow.Loops);
+        GraphControlFlowComponent component = Assert.Single(flow.CyclicComponents);
+
+        Assert.Equal(statement.Id, loop.LoopNodeId);
+        Assert.Equal(statement.Id, loop.HeaderEntryNodeId);
+        Assert.Equal(continuation.Id, loop.ExitNodeId);
+        Assert.Equal([breakStatement.Id], loop.BreakNodeIds);
+        Assert.Equal([continueStatement.Id], loop.ContinueNodeIds);
+        Assert.True(loop.BackEdgeArcIds.Count >= 2);
+        Assert.Equal([statement.Id], component.EntryNodeIds);
+        Assert.True(component.IsReducible);
+        Assert.True(flow.IsReducible);
+        Assert.Contains(statement.Id, Node(flow, continueStatement.Id).SuccessorIds);
+        Assert.Contains(continuation.Id, Node(flow, breakStatement.Id).SuccessorIds);
+    }
+
+    [Fact]
+    public void Analyze_UsesEffectfulConditionEntryAsContinueAndBackEdgeTarget()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int Run()
+                {
+                    while (ShouldContinue())
+                    {
+                        continue;
+                    }
+
+                    return 0;
+                }
+
+                static bool ShouldContinue() => false;
+            }
+            """;
+        CSharpAnalysisResult analysis = new CSharpSemanticPipeline().Analyze(source, "EffectfulWhile.cs");
+        Assert.True(analysis.Succeeded, string.Join(Environment.NewLine, analysis.Diagnostics));
+        HirWhileStatement statement = Assert.IsType<HirWhileStatement>(Assert.Single(
+            Assert.Single(Assert.Single(analysis.Hir!.Types).Methods).Body.Statements,
+            static candidate => candidate is HirWhileStatement));
+        HirInvocationExpression condition = Assert.IsType<HirInvocationExpression>(statement.Condition);
+        HirContinueStatement continueStatement = Assert.IsType<HirContinueStatement>(
+            Assert.Single(statement.Body.Statements));
+        GraphDocument graph = new HirGraphProjector().Project(analysis.Hir, analysis.Semantics);
+
+        GraphControlFlowFunction flow = Assert.Single(new GraphControlFlowAnalyzer()
+            .AnalyzeAndValidate(graph)
+            .Functions);
+        GraphControlFlowLoop loop = Assert.Single(flow.Loops);
+
+        Assert.Equal(condition.Id, loop.HeaderEntryNodeId);
+        Assert.Contains(condition.Id, Node(flow, continueStatement.Id).SuccessorIds);
+        Assert.Contains(
+            loop.BackEdgeArcIds,
+            arcId => flow.Arcs.Single(arc => arc.Id == arcId).FromNodeId == continueStatement.Id);
+        Assert.Equal([condition.Id], Assert.Single(flow.CyclicComponents).EntryNodeIds);
+    }
+
+    [Fact]
+    public void Analyze_BindsNestedBreakAndContinueToNearestLoop()
+    {
+        const string source = """
+            static class Rules
+            {
+                [Visual]
+                static int Run(int outer, int inner)
+                {
+                    while (outer > 0)
+                    {
+                        while (inner > 0)
+                        {
+                            if (inner == 2)
+                            {
+                                continue;
+                            }
+
+                            break;
+                        }
+
+                        break;
+                    }
+
+                    return 0;
+                }
+            }
+            """;
+        (HirMethodDeclaration method, GraphDocument graph) = Project(source, "NestedWhile.cs");
+        HirWhileStatement outer = Assert.IsType<HirWhileStatement>(method.Body.Statements[0]);
+        HirWhileStatement inner = Assert.IsType<HirWhileStatement>(outer.Body.Statements[0]);
+        HirBreakStatement outerBreak = Assert.IsType<HirBreakStatement>(outer.Body.Statements[1]);
+        HirBreakStatement innerBreak = Assert.Single(inner.Body.DescendantsAndSelf().OfType<HirBreakStatement>());
+        HirContinueStatement innerContinue = Assert.Single(
+            inner.Body.DescendantsAndSelf().OfType<HirContinueStatement>());
+
+        GraphControlFlowFunction flow = Assert.Single(new GraphControlFlowAnalyzer()
+            .AnalyzeAndValidate(graph)
+            .Functions);
+        GraphControlFlowLoop outerFlow = Assert.Single(flow.Loops, loop => loop.LoopNodeId == outer.Id);
+        GraphControlFlowLoop innerFlow = Assert.Single(flow.Loops, loop => loop.LoopNodeId == inner.Id);
+
+        Assert.Equal([outerBreak.Id], outerFlow.BreakNodeIds);
+        Assert.Empty(outerFlow.ContinueNodeIds);
+        Assert.Equal([innerBreak.Id], innerFlow.BreakNodeIds);
+        Assert.Equal([innerContinue.Id], innerFlow.ContinueNodeIds);
+        Assert.Equal(inner.Id, Node(flow, innerContinue.Id).SuccessorIds.Single());
+        Assert.Equal(outerBreak.Id, Node(flow, innerBreak.Id).SuccessorIds.Single());
+    }
+
+    [Fact]
+    public void Analyze_RepresentsEmptyLoopBodyAsReducibleSelfBackEdge()
+    {
+        const string source = """
+            static class Rules
+            {
+                [Visual]
+                static int Run(bool ready)
+                {
+                    while (ready)
+                    {
+                    }
+
+                    return 0;
+                }
+            }
+            """;
+        (HirMethodDeclaration method, GraphDocument graph) = Project(source, "EmptyWhile.cs");
+        HirWhileStatement statement = Assert.IsType<HirWhileStatement>(method.Body.Statements[0]);
+
+        GraphControlFlowFunction flow = Assert.Single(new GraphControlFlowAnalyzer()
+            .AnalyzeAndValidate(graph)
+            .Functions);
+        GraphControlFlowLoop loop = Assert.Single(flow.Loops);
+        GraphControlFlowArc backEdge = Assert.Single(
+            loop.BackEdgeArcIds.Select(id => flow.Arcs.Single(arc => arc.Id == id)));
+
+        Assert.Equal(statement.Id, loop.HeaderEntryNodeId);
+        Assert.Equal(statement.Id, loop.BodyEntryNodeId);
+        Assert.Equal(statement.Id, backEdge.FromNodeId);
+        Assert.Equal(statement.Id, backEdge.ToNodeId);
+        Assert.Equal([statement.Id], Assert.Single(flow.CyclicComponents).NodeIds);
+        Assert.True(flow.IsReducible);
+    }
+
+    [Fact]
+    public void Analyze_RejectsContinueThatDoesNotTargetNearestLoopHeader()
+    {
+        const string source = """
+            static class Rules
+            {
+                [Visual]
+                static int Run(bool ready)
+                {
+                    while (ready)
+                    {
+                        continue;
+                    }
+
+                    return 0;
+                }
+            }
+            """;
+        (HirMethodDeclaration method, GraphDocument graph) = Project(source, "InvalidContinueTarget.cs");
+        HirWhileStatement statement = Assert.IsType<HirWhileStatement>(method.Body.Statements[0]);
+        HirContinueStatement continueStatement = Assert.IsType<HirContinueStatement>(
+            Assert.Single(statement.Body.Statements));
+        HirReturnStatement continuation = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+        GraphFunction function = Assert.Single(graph.Functions);
+        GraphEdge continueEdge = Assert.Single(
+            function.Edges,
+            edge => edge.Kind == GraphEdgeKind.Control && edge.FromNode == continueStatement.Id);
+        GraphEdge invalidEdge = continueEdge with
+        {
+            Id = SemanticId.FromKey($"invalid-continue|{continueStatement.Id}|{continuation.Id}"),
+            ToNode = continuation.Id,
+        };
+        GraphDocument invalid = graph with
+        {
+            Functions = [function with
+            {
+                Edges = function.Edges
+                    .Select(edge => edge.Id == continueEdge.Id ? invalidEdge : edge)
+                    .ToArray(),
+            }],
+        };
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new GraphControlFlowAnalyzer().AnalyzeAndValidate(invalid));
+
+        Assert.Contains("nearest loop", exception.Message, StringComparison.Ordinal);
     }
 
     private static GraphControlFlowNode Node(GraphControlFlowFunction function, SemanticId id) =>

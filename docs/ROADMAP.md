@@ -17,7 +17,7 @@ while unsupported syntax fails with actionable diagnostics.
 
 - [x] deterministic semantic ID primitive
 - [x] source spans and diagnostics
-- [x] profile v0.1 validator
+- [x] profile v0.2 validator (`while` foundation included)
 - [x] declaration/statement/expression HIR
 - [x] syntax-to-HIR lowering
 - [x] graph schema and projection
@@ -93,9 +93,11 @@ Outcome: practical gameplay methods are fully visualizable.
 - [x] structured branch merge/exit facts and SCC reducibility validation
 - [x] CFG-checked bounded local assignment and compatible local-value rewiring
 - [x] recursive nested branch construction and terminal-path propagation
+- [x] explicit `while`, `break`, and `continue` HIR and C# lowering
+- [x] Graph v0.4 `loop`/`loopBody` regions and nearest-loop transfer roles
+- [x] loop header/body/exit/back-edge CFG facts and target validation
 - [ ] general data/control rewiring, existing-assignment editing, and structural HIR operations
-- [ ] `while`, `break`, and `continue`
-- [ ] extend regions to loop bodies, exits, and continuations
+- [ ] bounded Graph-to-C# loop synthesis and body population
 - [ ] `for` and `foreach`
 - [ ] `switch` and supported patterns
 - [ ] conditional and null-conditional expressions

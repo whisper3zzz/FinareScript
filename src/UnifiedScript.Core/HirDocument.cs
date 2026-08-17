@@ -6,7 +6,7 @@ public sealed record HirDocument(
     string SchemaVersion,
     HirCompilationUnit Compilation)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.hir/v0.1";
+    public const string CurrentSchemaVersion = "unifiedscript.hir/v0.2";
 
     public static HirDocument Create(HirCompilationUnit compilation)
     {

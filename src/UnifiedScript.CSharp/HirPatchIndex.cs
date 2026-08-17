@@ -134,6 +134,10 @@ internal sealed class HirPatchIndex
                     }
 
                     break;
+                case HirWhileStatement whileStatement:
+                    AddExpression(whileStatement.Condition, whileStatement, block, method, null);
+                    AddBlock(whileStatement.Body, method, block, whileStatement);
+                    break;
                 case HirReturnStatement { Expression: not null } returnStatement:
                     AddExpression(returnStatement.Expression, returnStatement, block, method, null);
                     break;

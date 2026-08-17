@@ -669,11 +669,12 @@ public sealed class CSharpSourcePatchApplier
                 operation.ExpectedNextSiblingId);
         }
 
-        if (block.Statements.Take(insertionIndex).Any(static statement => statement is HirReturnStatement))
+        if (block.Statements.Take(insertionIndex).Any(static statement =>
+                statement is HirReturnStatement or HirBreakStatement or HirContinueStatement))
         {
             return DiagnosticPlan(
                 SemanticPatchDiagnosticCodes.InvalidStatement,
-                "A statement cannot be inserted after a terminal return because it would be unreachable.",
+                "A statement cannot be inserted after terminal control flow because it would be unreachable.",
                 block);
         }
 
@@ -2493,6 +2494,9 @@ public sealed class CSharpSourcePatchApplier
         HirVariableDeclarationStatement => syntax is LocalDeclarationStatementSyntax,
         HirExpressionStatement => syntax is ExpressionStatementSyntax,
         HirIfStatement => syntax is IfStatementSyntax,
+        HirWhileStatement => syntax is WhileStatementSyntax,
+        HirBreakStatement => syntax is BreakStatementSyntax,
+        HirContinueStatement => syntax is ContinueStatementSyntax,
         HirReturnStatement => syntax is ReturnStatementSyntax,
         HirLiteralExpression => syntax is LiteralExpressionSyntax,
         HirIdentifierExpression => syntax is IdentifierNameSyntax,
@@ -2631,6 +2635,9 @@ public sealed class CSharpSourcePatchApplier
         HirVariableDeclarationStatement => "variableDeclaration",
         HirExpressionStatement => "expressionStatement",
         HirIfStatement => "if",
+        HirWhileStatement => "while",
+        HirBreakStatement => "break",
+        HirContinueStatement => "continue",
         HirReturnStatement => "return",
         _ => throw new ArgumentOutOfRangeException(nameof(statement), statement.GetType().Name),
     };

@@ -36,7 +36,7 @@ Roslyn symbols into downstream modules.
 ### IDs flow through every layer
 
 Every declaration, statement, expression, graph node, future MIR operation, and
-future bytecode range carries a `SemanticId`. Profile v0.1 derives deterministic
+future bytecode range carries a `SemanticId`. Profile v0.2 derives deterministic
 bootstrap IDs from source identity and syntax locations. When a `.usids`
 sidecar is supplied, parameters, blocks, statements, and expressions receive
 persistent random IDs reconciled from structural evidence. Type and method IDs
@@ -130,7 +130,7 @@ effect-aware graph without hosting Roslyn.
 
 The CLI is a test harness and integration boundary, not the final editor.
 
-## Profile v0.1
+## Profile v0.2
 
 Accepted statement forms:
 
@@ -138,6 +138,8 @@ Accepted statement forms:
 - one local declaration per statement
 - expression statement
 - `if/else`
+- `while`
+- `break` and `continue` inside an enclosing `while`
 - `return`
 
 Accepted expression forms:
@@ -154,7 +156,7 @@ Accepted expression forms:
 Explicitly rejected forms include dynamic binding, unsafe code, pointers, goto,
 yield, local functions, lambdas, exception control flow, locks, LINQ query
 syntax, stack allocation, ref/out/in parameters and arguments, generic visual
-methods, loops, switch, and all other syntax not listed above.
+methods, `do`/`for`/`foreach`, switch, and all other syntax not listed above.
 
 ## Graph semantics
 
@@ -164,7 +166,7 @@ Pure expression statements use an explicit `Evaluate` control node. Effectful
 calls, assignments, and awaits instead expose their own control ports, so nested
 side effects are sequenced before their data consumers.
 
-Graph schema v0.3 also separates structured ownership from connectivity. Every
+Graph schema v0.4 also separates structured ownership from connectivity. Every
 function has a `function` root and method-body `block`; an `if` region owns its
 condition/branch nodes plus ordered `then` and `else` children. Every Graph node
 has exactly one direct region owner. An omitted C# `else` remains an empty
@@ -172,6 +174,14 @@ has exactly one direct region owner. An omitted C# `else` remains an empty
 lexical blocks and branches form child regions instead of being reconstructed
 from edge geometry. The complete contract is documented in
 [GRAPH_REGIONS.md](GRAPH_REGIONS.md).
+
+A `while` owns one `loop` region with one `loopBody` child. Its Graph decision
+node exposes `body` and `exit` control ports. Derived loop facts associate
+`break` and `continue` with the nearest loop without moving those statements
+out of their lexical regions. Normal body fallthrough and continue edges return
+to the effective condition header; if the condition contains effects, that
+header is the first effect rather than the final decision node. See
+[LOOP_FOUNDATION.md](LOOP_FOUNDATION.md).
 
 Regions are not a CFG cache. Control edges remain authoritative for execution;
 M4.2 now derives synthetic exits, predecessor/successor indexes, reachability,
@@ -203,7 +213,7 @@ compilation identity is not safe for editing.
 
 ## Semantic patch transaction
 
-Graph schema v0.3 carries both the source compilation ID and semantic
+Graph schema v0.4 carries both the source compilation ID and semantic
 configuration ID. A `unifiedscript.patch/v0.8` document repeats those IDs and
 contains typed operations keyed by graph/HIR `SemanticId`. Implemented
 operations are `replaceLiteral`, `changeOperator`, `reconnectArgument`,
@@ -282,7 +292,7 @@ this proof until builtin operator effects include conditional evaluation,
 allocation, and throw behavior.
 
 M4.3 adds a `GraphPatchSafetyIndex` inside the C# patch boundary. It projects
-the same analyzed HIR and bound semantics through Graph v0.3, derives the M4.2
+the same analyzed HIR and bound semantics through Graph v0.4, derives the M4.2
 CFG, and resolves statement entries or region fallthrough sources as insertion
 anchors. A non-empty block whose paths terminate has no fallthrough anchor.
 Local assignment targets and graph-authored local references must satisfy both

@@ -2,14 +2,15 @@
 
 ## Purpose
 
-`unifiedscript.graph/v0.3` adds explicit structured regions to the semantic
-Graph. Nodes and control/data edges still describe computation; regions describe
-lexical ownership and structured control-flow nesting without inferring it from
-screen coordinates or reverse-engineering edge shapes.
+`unifiedscript.graph/v0.3` introduced explicit structured regions to the
+semantic Graph, and `unifiedscript.graph/v0.4` extends them to structured
+`while` loops. Nodes and control/data edges still describe computation; regions
+describe lexical ownership and structured control-flow nesting without
+inferring it from screen coordinates or reverse-engineering edge shapes.
 
-This is the first M4 contract. It deliberately projects existing HIR constructs
-before adding loops or new patch operations, so future CFG and reducibility
-analysis can depend on a stable hierarchy.
+The v0.3 branch hierarchy remains compatible in v0.4. Loop structure now uses
+the same direct-ownership and parent/child rules instead of being inferred from
+cyclic edge geometry.
 
 ## Function contract
 
@@ -48,7 +49,7 @@ editor could recover that location.
 
 ## Region kinds
 
-The v0.3 schema defines five kinds:
+The v0.4 schema defines seven kinds:
 
 | Kind | Meaning | Parent |
 | --- | --- | --- |
@@ -57,6 +58,8 @@ The v0.3 schema defines five kinds:
 | `if` | Branch condition and branch control node | block/branch region |
 | `then` | True branch body | corresponding `if` |
 | `else` | False branch body or implicit false path | corresponding `if` |
+| `loop` | While condition and loop decision node | enclosing structured region |
+| `loopBody` | While body | corresponding `loop` |
 
 An `if` region directly owns the condition expression nodes and its `branch`
 node. Its `childRegionIds` must contain exactly the `then` region followed by the
@@ -69,6 +72,12 @@ explicit false control port. If C# omitted the `else` block, the region is empty
 and `isImplicit` is `true`. Only an `else` region may be implicit. This preserves
 the difference between an absent `else` and an explicitly authored empty block.
 
+A `loop` region directly owns its condition expression and `loop` decision
+node. It has exactly one `loopBody` child sourced from the HIR body block. A
+break or continue nested under an `if` remains directly owned by that lexical
+`then`/`else` region; the derived CFG separately records which nearest loop owns
+its transfer. See [LOOP_FOUNDATION.md](LOOP_FOUNDATION.md).
+
 ## Direct node ownership
 
 Every Graph node belongs to exactly one direct region through `nodeIds`:
@@ -77,6 +86,8 @@ Every Graph node belongs to exactly one direct region through `nodeIds`:
 - method-body statements and their expressions belong to the body block;
 - branch conditions and branch nodes belong to the `if` region;
 - branch-body statements and expressions belong to `then` or `else`;
+- loop conditions and decisions belong to `loop`, while body statements belong
+  to `loopBody` or its nested child regions;
 - nodes inside a nested structured construct belong to its child region.
 
 Region node order is projection/evaluation order and is therefore preserved.
@@ -86,9 +97,9 @@ semantic order.
 
 `GraphJson` rejects missing or duplicate node ownership, unknown node/child
 references, inconsistent parent links, unreachable/cyclic regions, secondary
-function roots, invalid implicit regions, and malformed `if` children. Older
-Graph schema documents must be regenerated; no v0.2 migration guesses a region
-hierarchy.
+function roots, invalid implicit regions, and malformed `if` or loop children.
+Older Graph schema documents, including v0.3, must be regenerated; no migration
+guesses a loop hierarchy from cyclic edges.
 
 ## Control flow and layout boundaries
 
@@ -100,7 +111,7 @@ inside Graph JSON. See [CONTROL_FLOW_ANALYSIS.md](CONTROL_FLOW_ANALYSIS.md).
 
 Semantic regions are also separate from `.usgraph` comment regions. A semantic
 region affects program structure; a comment region is only visual canvas state.
-`GraphLayoutSynchronizer` validates Graph v0.3 but continues to preserve layout
+`GraphLayoutSynchronizer` validates Graph v0.4 but continues to preserve layout
 solely by function/node/edge IDs, so adding region metadata does not move nodes
 or change placement.
 

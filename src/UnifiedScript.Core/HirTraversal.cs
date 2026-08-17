@@ -26,6 +26,7 @@ public static class HirTraversal
         HirIfStatement { Else: not null } statement =>
             [statement.Condition, statement.Then, statement.Else],
         HirIfStatement statement => [statement.Condition, statement.Then],
+        HirWhileStatement statement => [statement.Condition, statement.Body],
         HirReturnStatement { Expression: not null } statement => [statement.Expression],
         HirMemberAccessExpression expression => [expression.Target],
         HirInvocationExpression expression => expression.Arguments
