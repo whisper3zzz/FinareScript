@@ -1,0 +1,69 @@
+{
+  "schemaVersion": "unifiedscript.patch-plan/v0.9",
+  "sourceCompilationId": "us_af1569167e061a52c4b177551a7d859e",
+  "semanticConfigurationId": "us_02f5fe78d296e2d4fe04bc50ca71acf1",
+  "steps": [
+    {
+      "step": "replaceAssignmentValue",
+      "stepId": "editDecrement",
+      "targetNodeId": "us_23e43acdcab8fbad9e8c1f39c6d2b6d1",
+      "expectedOperator": "=",
+      "expectedTargetNodeId": "us_70df91e4f026f4056a6c0fa256543492",
+      "expectedTargetDefinitionId": "us_2f67a62172358cdadb0df86092d0b6c3",
+      "expectedTargetName": "result",
+      "expectedValueNodeId": "us_5a3f26ebf80ac7d7f7e49a405f366bc1",
+      "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+      "newValue": {
+        "expression": "binary",
+        "operator": "-",
+        "left": {
+          "expression": "localReference",
+          "sourceDefinitionId": "us_2f67a62172358cdadb0df86092d0b6c3",
+          "expectedName": "result",
+          "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+        },
+        "right": {
+          "expression": "literal",
+          "valueText": "2",
+          "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+        },
+        "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+      }
+    },
+    {
+      "step": "replaceWhileCondition",
+      "stepId": "editLoopCondition",
+      "targetNodeId": "us_d71a918f6b045040f7ebcda6af109e58",
+      "expectedConditionNodeId": "us_bc923caac27afd2d63cdf15cc76e72e8",
+      "expectedConditionTypeId": "us_b5f84bcf933b6593d45e9e031353bfef",
+      "newCondition": {
+        "expression": "binary",
+        "operator": "&&",
+        "left": {
+          "expression": "localReference",
+          "sourceDefinitionId": "us_03abd0626eca63a25479687242ac7934",
+          "expectedName": "enabled",
+          "expectedTypeId": "us_b5f84bcf933b6593d45e9e031353bfef"
+        },
+        "right": {
+          "expression": "binary",
+          "operator": ">",
+          "left": {
+            "expression": "localReference",
+            "sourceDefinitionId": "us_2f67a62172358cdadb0df86092d0b6c3",
+            "expectedName": "result",
+            "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+          },
+          "right": {
+            "expression": "localReference",
+            "sourceDefinitionId": "us_676e618aaf139f249184fe206e0e8ea6",
+            "expectedName": "stopAt",
+            "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+          },
+          "expectedTypeId": "us_b5f84bcf933b6593d45e9e031353bfef"
+        },
+        "expectedTypeId": "us_b5f84bcf933b6593d45e9e031353bfef"
+      }
+    }
+  ]
+}

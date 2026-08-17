@@ -171,6 +171,24 @@ public sealed class CSharpSourcePatchApplier
                     boundNodes,
                     methods,
                     documents),
+                ReplaceAssignmentValuePatchOperation assignmentValue =>
+                    PlanAssignmentValueReplacement(
+                        assignmentValue,
+                        hirNodes,
+                        patchIndex,
+                        boundNodes,
+                        types,
+                        graphSafetyIndex,
+                        documents),
+                ReplaceWhileConditionPatchOperation whileCondition =>
+                    PlanWhileConditionReplacement(
+                        whileCondition,
+                        hirNodes,
+                        patchIndex,
+                        boundNodes,
+                        types,
+                        graphSafetyIndex,
+                        documents),
                 InsertStatementPatchOperation insertStatement => PlanStatementInsertion(
                     insertStatement,
                     hirNodes,
@@ -788,6 +806,298 @@ public sealed class CSharpSourcePatchApplier
             syntax,
             replacement,
             pins));
+    }
+
+    private static OperationPlan PlanAssignmentValueReplacement(
+        ReplaceAssignmentValuePatchOperation operation,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
+        GraphPatchSafetyIndex graphSafetyIndex,
+        IReadOnlyDictionary<string, ParsedDocument> documents)
+    {
+        if (!hirNodes.TryGetValue(operation.TargetNodeId, out HirNode? target))
+        {
+            return MissingTarget(operation.TargetNodeId);
+        }
+
+        if (target is not HirAssignmentExpression assignment ||
+            !patchIndex.TryGetExpression(
+                assignment.Id,
+                out HirPatchIndex.ExpressionLocation? expressionLocation) ||
+            expressionLocation!.ParentExpression is not null ||
+            expressionLocation.ContainingStatement is not HirExpressionStatement expressionStatement ||
+            expressionStatement.Expression.Id != assignment.Id ||
+            !patchIndex.TryGetStatement(
+                expressionStatement.Id,
+                out HirPatchIndex.StatementLocation? statementLocation) ||
+            !patchIndex.TryGetBlock(
+                statementLocation!.ParentBlock.Id,
+                out HirPatchIndex.BlockLocation? blockLocation))
+        {
+            return KindMismatch(
+                target,
+                operation.TargetNodeId,
+                "a root simple-assignment expression statement");
+        }
+
+        if (!string.Equals(assignment.Operator, operation.ExpectedOperator, StringComparison.Ordinal) ||
+            !string.Equals(assignment.Operator, "=", StringComparison.Ordinal) ||
+            assignment.Target.Id != operation.ExpectedTargetNodeId ||
+            assignment.Value.Id != operation.ExpectedValueNodeId)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.PreconditionFailed,
+                $"Assignment shape precondition failed for '{assignment.Id}'. Current operator/target/value " +
+                $"are '{assignment.Operator}', '{assignment.Target.Id}', and '{assignment.Value.Id}'.",
+                assignment);
+        }
+
+        if (assignment.Target is not HirIdentifierExpression targetIdentifier ||
+            !boundNodes.TryGetValue(targetIdentifier.Id, out BoundNodeInfo? targetBinding) ||
+            targetBinding.ReferencedSymbolId != operation.ExpectedTargetDefinitionId ||
+            !hirNodes.TryGetValue(
+                operation.ExpectedTargetDefinitionId,
+                out HirNode? targetDefinition) ||
+            targetDefinition is not HirVariableDeclarationStatement variable ||
+            !string.Equals(variable.Name, operation.ExpectedTargetName, StringComparison.Ordinal) ||
+            !string.Equals(targetIdentifier.Name, operation.ExpectedTargetName, StringComparison.Ordinal))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.PreconditionFailed,
+                "Assignment target no longer resolves to the expected named local definition.",
+                assignment);
+        }
+
+        OperationPlan? assignmentTypeFailure = RequireType(
+            assignment,
+            operation.ExpectedTypeId,
+            "assignment",
+            boundNodes);
+        OperationPlan? targetTypeFailure = RequireType(
+            assignment.Target,
+            operation.ExpectedTypeId,
+            "assignment target",
+            boundNodes);
+        OperationPlan? valueTypeFailure = RequireType(
+            assignment.Value,
+            operation.ExpectedTypeId,
+            "assignment value",
+            boundNodes);
+        OperationPlan? definitionTypeFailure = RequireType(
+            variable,
+            operation.ExpectedTypeId,
+            "assignment target definition",
+            boundNodes);
+        if (assignmentTypeFailure is not null || targetTypeFailure is not null ||
+            valueTypeFailure is not null || definitionTypeFailure is not null)
+        {
+            return assignmentTypeFailure ?? targetTypeFailure ??
+                valueTypeFailure ?? definitionTypeFailure!;
+        }
+
+        if (!graphSafetyIndex.IsInsertionReachable(blockLocation!, statementLocation.Index))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.UnreachableInsertion,
+                "An assignment value can be edited only when its statement is CFG-reachable.",
+                assignment);
+        }
+
+        ExpressionBuildResult newValue = BuildPatchExpression(
+            operation.NewValue,
+            blockLocation!,
+            statementLocation.Index,
+            hirNodes,
+            patchIndex,
+            graphSafetyIndex,
+            boundNodes,
+            types);
+        if (newValue.Syntax is null || newValue.Type?.Id != operation.ExpectedTypeId)
+        {
+            return DiagnosticPlan(
+                newValue.DiagnosticCode ?? SemanticPatchDiagnosticCodes.TypeMismatch,
+                newValue.DiagnosticMessage ?? "The replacement assignment value is invalid.",
+                assignment);
+        }
+
+        if (!TryFindSyntax(
+                documents,
+                expressionStatement,
+                out ParsedDocument? document,
+                out ExpressionStatementSyntax? statementSyntax) ||
+            statementSyntax!.Expression is not AssignmentExpressionSyntax)
+        {
+            return MissingSyntax(expressionStatement, "assignment expression statement");
+        }
+
+        HashSet<SemanticId> removedIds = assignment.Value
+            .DescendantsAndSelf()
+            .Select(static node => node.Id)
+            .ToHashSet();
+        if (!TryAnnotateExpressions(
+                document!,
+                statementSyntax,
+                expressionStatement,
+                removedIds,
+                out StatementSyntax? annotatedStatement,
+                out IReadOnlyDictionary<SemanticId, SyntaxAnnotation>? expressionAnnotations,
+                out IReadOnlyList<PendingPin>? expressionPins) ||
+            !expressionAnnotations!.TryGetValue(
+                assignment.Id,
+                out SyntaxAnnotation? assignmentAnnotation))
+        {
+            return MissingSyntax(assignment, "assignment expression");
+        }
+
+        AssignmentExpressionSyntax annotatedAssignment = annotatedStatement!
+            .GetAnnotatedNodes(assignmentAnnotation)
+            .OfType<AssignmentExpressionSyntax>()
+            .Single();
+        if (annotatedAssignment.Right
+            .DescendantTrivia(descendIntoTrivia: true)
+            .Any(IsMeaningfulTrivia))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidReplacement,
+                "The existing assignment value contains comments or directives that cannot be " +
+                "discarded safely.",
+                assignment.Value);
+        }
+
+        ExpressionSyntax formattedValue = FormatReplacementExpression(
+            newValue.Syntax,
+            annotatedAssignment.Right);
+        AssignmentExpressionSyntax updatedAssignment = annotatedAssignment.WithRight(formattedValue);
+        StatementSyntax updatedStatement = annotatedStatement.ReplaceNode(
+            annotatedAssignment,
+            updatedAssignment);
+        var statementAnnotation = new SyntaxAnnotation(
+            IdentityAnnotationKind,
+            expressionStatement.Id.Value);
+        updatedStatement = updatedStatement.WithAdditionalAnnotations(statementAnnotation);
+        var pins = new List<PendingPin>(expressionPins!)
+        {
+            new(expressionStatement.Id, GetIdentityKind(expressionStatement), statementAnnotation),
+        };
+        return SuccessPlan(document!, new PendingReplacement(
+            document!.Source.LogicalPath,
+            statementSyntax,
+            updatedStatement,
+            pins));
+    }
+
+    private static OperationPlan PlanWhileConditionReplacement(
+        ReplaceWhileConditionPatchOperation operation,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
+        GraphPatchSafetyIndex graphSafetyIndex,
+        IReadOnlyDictionary<string, ParsedDocument> documents)
+    {
+        if (!hirNodes.TryGetValue(operation.TargetNodeId, out HirNode? target))
+        {
+            return MissingTarget(operation.TargetNodeId);
+        }
+
+        if (target is not HirWhileStatement loop ||
+            !patchIndex.TryGetStatement(
+                loop.Id,
+                out HirPatchIndex.StatementLocation? statementLocation) ||
+            !patchIndex.TryGetBlock(
+                statementLocation!.ParentBlock.Id,
+                out HirPatchIndex.BlockLocation? blockLocation))
+        {
+            return KindMismatch(target, operation.TargetNodeId, "a while statement");
+        }
+
+        if (loop.Condition.Id != operation.ExpectedConditionNodeId)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.PreconditionFailed,
+                $"While condition precondition failed: current endpoint is '{loop.Condition.Id}', " +
+                $"not '{operation.ExpectedConditionNodeId}'.",
+                loop);
+        }
+
+        OperationPlan? conditionTypeFailure = RequireType(
+            loop.Condition,
+            operation.ExpectedConditionTypeId,
+            "while condition",
+            boundNodes);
+        if (conditionTypeFailure is not null)
+        {
+            return conditionTypeFailure;
+        }
+
+        if (!graphSafetyIndex.IsInsertionReachable(blockLocation!, statementLocation.Index))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.UnreachableInsertion,
+                "A while condition can be edited only when its loop statement is CFG-reachable.",
+                loop);
+        }
+
+        ExpressionBuildResult newCondition = BuildPatchExpression(
+            operation.NewCondition,
+            blockLocation!,
+            statementLocation.Index,
+            hirNodes,
+            patchIndex,
+            graphSafetyIndex,
+            boundNodes,
+            types);
+        if (newCondition.Syntax is null || newCondition.Type is null)
+        {
+            return DiagnosticPlan(
+                newCondition.DiagnosticCode ?? SemanticPatchDiagnosticCodes.InvalidGraphExpression,
+                newCondition.DiagnosticMessage ?? "The replacement while condition is invalid.",
+                loop);
+        }
+
+        if (newCondition.Type.Id != operation.ExpectedConditionTypeId ||
+            newCondition.Type.Kind != UnifiedTypeKind.Boolean ||
+            !string.Equals(
+                newCondition.Type.MetadataName,
+                "System.Boolean",
+                StringComparison.Ordinal))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.TypeMismatch,
+                "A replacement while condition must have semantic type 'System.Boolean'.",
+                loop);
+        }
+
+        if (!TryFindSyntax(
+                documents,
+                loop,
+                out ParsedDocument? document,
+                out WhileStatementSyntax? syntax))
+        {
+            return MissingSyntax(loop, "while statement");
+        }
+
+        if (syntax!.Condition
+            .DescendantTrivia(descendIntoTrivia: true)
+            .Any(IsMeaningfulTrivia))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidReplacement,
+                "The existing while condition contains comments or directives that cannot be " +
+                "discarded safely.",
+                loop.Condition);
+        }
+
+        ExpressionSyntax formattedCondition = FormatReplacementExpression(
+            newCondition.Syntax,
+            syntax.Condition);
+        return SuccessPlan(document!, new PendingReplacement(
+            document!.Source.LogicalPath,
+            syntax.Condition,
+            formattedCondition,
+            []));
     }
 
     private static OperationPlan PlanStatementDeletion(
@@ -2459,6 +2769,14 @@ public sealed class CSharpSourcePatchApplier
                 "A constructed structured statement could not be formatted.")
             : formatted;
     }
+
+    private static ExpressionSyntax FormatReplacementExpression(
+        ExpressionSyntax replacement,
+        ExpressionSyntax original) => replacement
+        .NormalizeWhitespace()
+        .WithoutLeadingTrivia()
+        .WithoutTrailingTrivia()
+        .WithTriviaFrom(original);
 
     private static string GetLineIndentation(ParsedDocument document, SyntaxNode node)
     {

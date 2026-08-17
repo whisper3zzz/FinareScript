@@ -2,9 +2,9 @@
 
 ## Purpose
 
-`unifiedscript.patch-plan/v0.8` represents one visual-editor gesture as an
+`unifiedscript.patch-plan/v0.9` represents one visual-editor gesture as an
 ordered, atomic sequence of the same bounded semantic operations supported by
-`unifiedscript.patch/v0.9`. It exists because a useful graph edit often needs
+`unifiedscript.patch/v0.10`. It exists because a useful graph edit often needs
 IDs created by an earlier edit or changes several overlapping source regions.
 Submitting those stages as unrelated filesystem transactions would expose
 partial programs and force the editor to predict random persistent IDs.
@@ -18,7 +18,7 @@ identity sidecar are eligible for a CLI filesystem transaction.
 
 ```json
 {
-  "schemaVersion": "unifiedscript.patch-plan/v0.8",
+  "schemaVersion": "unifiedscript.patch-plan/v0.9",
   "sourceCompilationId": "us_...",
   "semanticConfigurationId": "us_...",
   "steps": []
@@ -29,13 +29,16 @@ The source compilation and semantic configuration IDs are the external
 optimistic-concurrency baseline. Every step has a unique, non-empty `stepId`
 and a persistent `targetNodeId`.
 
-Version v0.8 supports these step discriminators:
+Version v0.9 supports these step discriminators:
 
 | `step` | Purpose | Structural result |
 | --- | --- | --- |
 | `replaceLiteral` | Replace one literal with a complete literal token | Target ID survives |
 | `changeOperator` | Change a unary/binary operator inside its result-preserving family | Operator node ID survives |
 | `reconnectArgument` | Exchange two pure, exactly typed positional arguments | Invocation and endpoint IDs survive |
+| `replaceAssignmentValue` | Replace one root simple-local-assignment value with a closed typed expression | Statement, assignment, and target IDs survive |
+| `replaceWhileCondition` | Replace an existing while condition with a closed typed Boolean expression | While and body IDs survive |
+| `replaceProducedWhileCondition` | Resolve an earlier while producer and replace its current condition | Consumes a loop handle without predicting generated IDs |
 | `insertStatement` | Insert a local-literal declaration, local assignment, typed `if`/`while`, loop transfer, or terminal `return` | Local payload produces a handle; `if` produces branch handles; `while` produces a body handle |
 | `insertBranchStatement` | Append a bounded statement to a produced branch | Consumes a branch handle; a declaration produces a value handle; an `if` or `while` produces structural handles |
 | `insertLoopBodyStatement` | Append a bounded statement to a produced while body | Consumes a loop-body handle; a declaration, `if`, or nested `while` can publish more handles |
@@ -105,7 +108,7 @@ branch block ID. The coordinator captures the real `Then.Id` and `Else.Id`
 after the producer stage and uses the selected ID in an ordinary internal
 `InsertStatementPatchOperation`.
 
-Branch statements append in plan order. Version v0.8 accepts
+Branch statements append in plan order. Version v0.9 accepts
 `localLiteralDeclaration`, `localAssignment`, `if`, `while`, `break`,
 `continue`, or `return` here. An
 assignment may target only an existing same-method local that lexically and
@@ -179,6 +182,41 @@ reachable insertion gap and discovers the nearest enclosing HIR loop; the
 reprojected CFG independently verifies that transfer target. This prevents a
 plan from manufacturing unstructured jumps or cross-loop edges.
 
+## Symbolic produced-while condition handles
+
+`replaceProducedWhileCondition` edits the condition of a while created by an
+earlier insertion in the same plan:
+
+```json
+{
+  "step": "replaceProducedWhileCondition",
+  "stepId": "tightenLoop",
+  "targetNodeId": "us_original_parent_block",
+  "sourceStepId": "insertLoop",
+  "newCondition": {
+    "expression": "localReference",
+    "sourceDefinitionId": "us_enabled_parameter",
+    "expectedName": "enabled",
+    "expectedTypeId": "us_bool_type"
+  }
+}
+```
+
+The producer must be earlier, contain a `while` payload, use the same original
+parent-block target, and declare the same condition type. During execution the
+coordinator finds the producer's actual persistent while ID, reads its current
+condition ID, and creates a normal `replaceWhileCondition` operation. Multiple
+steps may reference the same producer; each resolves the condition produced by
+the previous stage. Body insertions remain valid because the while and body
+identities are preserved.
+
+Direct `replaceAssignmentValue` and `replaceWhileCondition` steps use exactly
+the standalone patch v0.10 payload plus `stepId`. They are validated against
+the original plan baseline and are intentionally single-target, because their
+explicit old endpoints describe the original rather than an intermediate
+stage. See
+[STRUCTURED_EXPRESSION_EDITING.md](STRUCTURED_EXPRESSION_EDITING.md).
+
 ## Typed terminal returns
 
 A `return` payload contains an optional expression and the expected method
@@ -204,7 +242,7 @@ declared task type from the value returned inside an async body.
 
 A return may be inserted only at the end of an explicit block. No insertion may
 follow an existing return. Because every symbolic body step appends, the
-v0.8 JSON validator records each `(sourceStepId, branch)` path and rejects every
+v0.9 JSON validator records each `(sourceStepId, branch)` path and rejects every
 later append after a direct return. The other branch remains independently
 writable.
 
@@ -212,7 +250,7 @@ Terminal state also propagates through nested producers. When both branches of
 a nested `if` terminate, its parent path terminates if and only if that nested
 `if` is still the final statement on the parent path. If another statement was
 already appended after it, accepting the second child termination would make
-that later statement unreachable; v0.8 rejects the plan before executing any
+that later statement unreachable; v0.9 rejects the plan before executing any
 stage. This propagation is recursive across arbitrary acyclic nesting depth.
 
 `break` and `continue` are also terminal within their selected branch or loop
@@ -268,14 +306,19 @@ in the same validated plan:
   branch;
 - `insertLoopBodyStatement` resolves the actual body ID captured from its
   earlier `while` producer and appends after the current last body statement;
+- `replaceProducedWhileCondition` resolves the actual loop ID and current
+  condition ID captured through its earlier while producer on every stage;
 - `reconnectArgument` locates both endpoint roots by persistent ID and derives
   their current positional indices;
-- literal and operator steps reuse their original old-value/type preconditions,
-  so their non-insertion target IDs cannot be repeated in one plan.
+- direct literal, operator, assignment-value, and existing-while-condition
+  steps reuse their original endpoint/type preconditions, so those direct
+  targets cannot be repeated in one plan.
 
-Only insertion steps may repeat a target block. This supports several ordered
-new statements in one gap without giving repeated literal/operator edits
-ambiguous original-versus-intermediate preconditions.
+Insertion steps and produced-while-condition steps may repeat their original
+target block. This supports several ordered statements in one gap and repeated
+condition edits through a dynamic producer handle without giving direct
+literal/operator/endpoint edits ambiguous original-versus-intermediate
+preconditions.
 
 Any insertion step carrying an `if` or `while` payload executes through the
 same staged transaction and rebasing. It publishes structural handles, but does
@@ -369,19 +412,35 @@ dotnet run --project src/UnifiedScript.Cli -- \
   --out-identity artifacts/loop-plan/LoopBuildRules.cs.usids
 ```
 
+The structured expression-edit sample uses the direct assignment and existing
+while wrappers in one transaction:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  apply-plan \
+  samples/Patching/EditLoopRules.cs \
+  --identity samples/Patching/EditLoopRules.cs.usids \
+  --plan samples/Patching/EditLoopRules.plan.json \
+  --out artifacts/expression-edit/EditLoopRules.cs \
+  --out-identity artifacts/expression-edit/EditLoopRules.cs.usids
+```
+
 ## Deliberate limits
 
-Plan v0.8 composes all operations currently defined by patch v0.9 and resolves
+Plan v0.9 composes all operations currently defined by patch v0.10 and resolves
 recursive symbolic `then`/`else` and loop-body handles for bounded local,
 assignment, nested-if/while, loop-transfer, and typed-return population. It
-cannot insert calls, member writes, or arbitrary statement payloads through a
-structural handle. It has no cross-method or cross-document symbolic handle and
-does not support a handle to an arbitrary expression or generated local inside
-a later condition. Multi-document in-memory analysis remains available below
-the CLI, while the CLI commit boundary is still one source/identity pair.
+also resolves repeatable condition edits on a produced while. It cannot insert
+calls, member writes, or arbitrary statement payloads through a structural
+handle. It has no cross-method or cross-document symbolic handle and does not
+support a handle to an arbitrary expression or generated local inside a later
+condition. Existing-expression replacement is currently limited to a simple
+local-assignment value and while condition. Multi-document in-memory analysis
+remains available below the CLI, while the CLI commit boundary is still one
+source/identity pair.
 
 There is no automatic reader migration for older patch-plan schemas; producers
 should reanalyze and emit the current schema and baselines. The original
 temporary-plus-reconnect and earlier composed step shapes remain representable
-in v0.8. Older plan documents must be regenerated because the reader accepts
+in v0.9. Older plan documents must be regenerated because the reader accepts
 only the current schema.

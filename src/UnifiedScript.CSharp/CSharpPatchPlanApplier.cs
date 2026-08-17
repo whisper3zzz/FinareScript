@@ -260,6 +260,21 @@ public sealed class CSharpPatchPlanApplier
                         target.Id)];
                 }
             }
+            else if (step is ReplaceProducedWhileConditionPatchPlanStep producedCondition)
+            {
+                if (!loopProducerMethods.TryGetValue(
+                        producedCondition.SourceStepId,
+                        out SemanticId loopProducerMethodId) ||
+                    loopProducerMethodId != method!.Id)
+                {
+                    return [Diagnostic(
+                        SemanticPatchDiagnosticCodes.InvalidPatchPlan,
+                        $"Produced-while condition step '{producedCondition.StepId}' and source " +
+                        $"step '{producedCondition.SourceStepId}' target different methods.",
+                        target.Span,
+                        target.Id)];
+                }
+            }
             else
             {
                 SemanticPatchOperation initialOperation = GetInitialOperation(step);
@@ -410,6 +425,23 @@ public sealed class CSharpPatchPlanApplier
                 return TryRebaseArgumentReconnection(
                     reconnectArgument,
                     invocation,
+                    out operation,
+                    out diagnostic);
+            case ReplaceAssignmentValuePatchPlanStep assignmentValue
+                when target is HirAssignmentExpression:
+                operation = assignmentValue.ToOperation();
+                diagnostic = null;
+                return true;
+            case ReplaceWhileConditionPatchPlanStep whileCondition
+                when target is HirWhileStatement:
+                operation = whileCondition.ToOperation();
+                diagnostic = null;
+                return true;
+            case ReplaceProducedWhileConditionPatchPlanStep producedCondition:
+                return TryCreateProducedWhileConditionReplacement(
+                    producedCondition,
+                    nodes,
+                    producedLoops,
                     out operation,
                     out diagnostic);
             case InsertStatementPatchPlanStep insertion
@@ -694,6 +726,37 @@ public sealed class CSharpPatchPlanApplier
         return true;
     }
 
+    private static bool TryCreateProducedWhileConditionReplacement(
+        ReplaceProducedWhileConditionPatchPlanStep step,
+        IReadOnlyDictionary<SemanticId, HirNode> nodes,
+        IReadOnlyDictionary<string, ProducedWhileLoop> producedLoops,
+        out SemanticPatchOperation? operation,
+        out UnifiedDiagnostic? diagnostic)
+    {
+        if (!producedLoops.TryGetValue(step.SourceStepId, out ProducedWhileLoop producedLoop) ||
+            !nodes.TryGetValue(producedLoop.LoopId, out HirNode? node) ||
+            node is not HirWhileStatement currentLoop ||
+            currentLoop.Body.Id != producedLoop.BodyBlockId)
+        {
+            operation = null;
+            diagnostic = Diagnostic(
+                SemanticPatchDiagnosticCodes.TargetNotFound,
+                $"Produced-while condition step '{step.StepId}' could not resolve loop source " +
+                $"'{step.SourceStepId}'.",
+                SourceSpan.Unknown("<patch-plan>"),
+                step.TargetNodeId);
+            return false;
+        }
+
+        operation = new ReplaceWhileConditionPatchOperation(
+            currentLoop.Id,
+            currentLoop.Condition.Id,
+            step.NewCondition.ExpectedTypeId,
+            step.NewCondition);
+        diagnostic = null;
+        return true;
+    }
+
     private static bool TryResolveInsertionGap(
         HirBlockStatement block,
         SemanticId? expectedPreviousSiblingId,
@@ -878,7 +941,8 @@ public sealed class CSharpPatchPlanApplier
         {
             case InsertStatementPatchPlanStep or
                 InsertBranchStatementPatchPlanStep or
-                InsertLoopBodyStatementPatchPlanStep
+                InsertLoopBodyStatementPatchPlanStep or
+                ReplaceProducedWhileConditionPatchPlanStep
                 when target is HirBlockStatement block &&
                 patchIndex.TryGetBlock(block.Id, out HirPatchIndex.BlockLocation? blockLocation):
                 method = blockLocation!.Method;
@@ -888,6 +952,12 @@ public sealed class CSharpPatchPlanApplier
                     statement.Id,
                     out HirPatchIndex.StatementLocation? statementLocation):
                 method = statementLocation!.Method;
+                return true;
+            case ReplaceWhileConditionPatchPlanStep when target is HirWhileStatement loop &&
+                patchIndex.TryGetStatement(
+                    loop.Id,
+                    out HirPatchIndex.StatementLocation? loopLocation):
+                method = loopLocation!.Method;
                 return true;
             default:
                 if (target is HirExpression expression &&
@@ -909,6 +979,11 @@ public sealed class CSharpPatchPlanApplier
         ReplaceLiteralPatchPlanStep replace => replace.ToOperation(),
         ChangeOperatorPatchPlanStep changeOperator => changeOperator.ToOperation(),
         ReconnectArgumentPatchPlanStep reconnectArgument => reconnectArgument.ToOperation(),
+        ReplaceAssignmentValuePatchPlanStep assignmentValue => assignmentValue.ToOperation(),
+        ReplaceWhileConditionPatchPlanStep whileCondition => whileCondition.ToOperation(),
+        ReplaceProducedWhileConditionPatchPlanStep => throw new ArgumentException(
+            "A symbolic produced-while condition edit cannot become an initial standalone operation.",
+            nameof(step)),
         InsertStatementPatchPlanStep insertion => insertion.ToOperation(),
         InsertBranchStatementPatchPlanStep => throw new ArgumentException(
             "A symbolic branch insertion cannot become an initial standalone operation.",

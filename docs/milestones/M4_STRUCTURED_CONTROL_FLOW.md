@@ -9,7 +9,8 @@ path.
 Status: in progress. M4.1 explicit regions, M4.2 derived CFG analysis, M4.3
 CFG-checked local assignment/data reconnection, M4.4 recursive nested branch
 construction, M4.5 structured loop projection/analysis, and M4.6 bounded
-Graph-authored loop construction are implemented.
+Graph-authored loop construction are implemented. M4.7 adds exact typed editing
+of assignment values and existing or plan-produced while conditions.
 
 ## M4.1 implemented vertical slice
 
@@ -310,28 +311,97 @@ Graph-authored loop construction are implemented.
 17. The full solution, 181-test suite, format check, repository validator, and
     CLI regression pass.
 
+## M4.7 implemented vertical slice
+
+- `unifiedscript.patch/v0.10` `replaceAssignmentValue` operation with exact
+  operator, target endpoint, target definition/name, old value endpoint, and
+  semantic type preconditions
+- root simple-local-assignment restriction that preserves the statement,
+  assignment, and writable-target identities
+- `replaceWhileCondition` operation with exact current condition endpoint and
+  `System.Boolean` type guards
+- reuse of the bounded literal/local/unary/binary/cast expression algebra for
+  both replacements
+- lexical scope, CFG reachability, and dominance validation at the edited
+  assignment statement or loop header
+- lossless rejection when a discarded old value or condition contains comments
+  or directives
+- expression-descendant identity reconciliation: reusable nodes may remain
+  live, removed nodes become tombstones, and enclosing structures are pinned
+- Graph v0.4 and reducible-CFG revalidation after every replacement
+- `unifiedscript.patch-plan/v0.9` direct wrappers for existing assignment and
+  while edits
+- `replaceProducedWhileCondition` symbolic step resolving the actual loop and
+  current condition through an earlier while producer
+- repeatable edits through one produced-while handle without editor-predicted
+  intermediate expression IDs
+- compatibility between produced-condition editing and later symbolic loop-body
+  population
+- atomic rollback when a late generated-condition source/type/scope check fails
+- original placed-layout preservation with new expression nodes left unplaced
+- checked-in `EditLoopRules.cs`, `.usids`, and two-step
+  `EditLoopRules.plan.json` CLI sample
+
+## M4.7 acceptance criteria
+
+1. Patch v0.10 JSON round-trips assignment-value and while-condition
+   replacement operations and rejects non-simple assignment or payload/type
+   mismatch.
+2. Plan v0.9 JSON round-trips direct wrappers and a produced-while condition
+   handle.
+3. A produced-condition step must reference an earlier while producer with the
+   same original parent-block target and declared condition type.
+4. An assignment edit requires a root expression statement whose simple `=`,
+   target endpoint, target definition/name, old value endpoint, and exact type
+   all still match.
+5. A while edit requires the current condition endpoint and exact graph-safe
+   `System.Boolean` type to still match.
+6. Every referenced local is checked at the actual assignment or loop-header
+   position with lexical and CFG dominance rules.
+7. The assignment statement, assignment expression, target identifier, while,
+   and while body keep their persistent IDs.
+8. Removed literals and superseded condition nodes become tombstones, while an
+   unambiguous equivalent descendant may retain its live ID.
+9. Comments or directives inside the discarded expression reject the edit
+   rather than being silently lost.
+10. Reprojected Graph nodes retain the original assignment and loop IDs, and
+    CFG analysis still reports the loop body entry, exit, back edges, and
+    reducibility.
+11. A produced while may have its condition edited repeatedly through the same
+    producer handle, with every stage resolving the current condition ID.
+12. Later body insertions continue to resolve the same produced while and bind
+    their assignment targets normally.
+13. Existing graph layouts remain placed, all new expression/control nodes are
+    unplaced, and no original node becomes a false orphan.
+14. A late missing or unavailable value source returns no patched request or
+    analysis and leaves the original source untouched.
+15. The CLI sample atomically changes both `result - 1` and `result > 0`, keeps
+    structural IDs live, and advances the sidecar from generation 1 to 3.
+16. The full solution, 191-test suite, format check, repository validator, and
+    CLI regression pass.
+
 ## Deliberate limits
 
 M4 consumes derived CFG facts at patch time but does not serialize them or
-materialize source/Graph merge nodes. Assignment support remains limited to
-inserting a simple assignment to an existing local; it does not edit an
-existing assignment, synthesize declarations with arbitrary initializers,
-write members/indexers, or support compound assignments, increment/decrement,
-calls, or effectful right-hand sides. Nested conditions can reference existing
-same-method definitions but cannot consume a symbolic newly generated local
-handle. Branch insertions append at the end of generated blocks and do not move,
-replace, or delete existing branch structures. New bounded while loops can be
-constructed and appended to, but the patch algebra cannot move, replace, edit,
-or delete existing loop structures and cannot retarget transfers. `do`/`for`/`foreach`,
-switch, conditional expressions, exception edges, short-circuit expression
-flow, async state-machine transitions, control dependence, SSA, and automatic
-node placement remain outside the current slice.
+materialize source/Graph merge nodes. Assignment editing is limited to the
+right-hand value of a root simple assignment to an existing local; it cannot
+retarget the write, synthesize declarations with arbitrary initializers, write
+members/indexers, or support compound assignment, increment/decrement, calls,
+or effectful right-hand sides. Existing-condition editing is limited to while;
+if conditions, declaration initializers, returns, and arbitrary nested value
+ports do not yet have equivalent replacement operations. Nested conditions can
+reference existing same-method definitions but cannot consume a symbolic newly
+generated local handle. Branch and loop-body insertions append and cannot move
+or delete existing structures. Loop transfers cannot be retargeted.
+`do`/`for`/`foreach`, switch, conditional expressions, exception edges,
+short-circuit expression flow, async state-machine transitions, control
+dependence, SSA, and automatic node placement remain outside the current slice.
 
 ## Next slice
 
-M4.7 should expand editing of existing structured statements without opening
-arbitrary rewiring: begin with exact-precondition replacement of an existing
-local assignment value and a generated/existing while condition, reusing the
-closed expression algebra, persistent identity pins, and CFG validation. `for`
-and `foreach` need an explicit lossless HIR decision before admission rather
-than silently desugaring source syntax into while loops.
+M4.8 should generalize the proven exact-endpoint expression replacement model
+to existing `if` conditions, local initializers, and return values, then expose
+the same dynamic producer-handle rule where generated structures make endpoint
+IDs unknowable at the external baseline. `for` and `foreach` still need an
+explicit lossless HIR decision before admission rather than silently desugaring
+source syntax into while loops.

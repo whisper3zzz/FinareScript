@@ -15,7 +15,7 @@ targets.
 
 ## Protocol
 
-Patch schema `unifiedscript.patch/v0.9` adds three statement payloads:
+Current patch schema `unifiedscript.patch/v0.10` carries three loop statement payloads:
 
 - `while`, carrying one closed, typed `PatchExpression` condition;
 - `break`, carrying no target ID; and
@@ -25,7 +25,7 @@ The absence of a transfer target is intentional. C# and HIR bind each transfer
 to its nearest lexical loop, and the derived CFG verifies that target. A visual
 client cannot forge an edge to an outer or unrelated loop.
 
-Patch-plan schema `unifiedscript.patch-plan/v0.8` adds
+Current patch-plan schema `unifiedscript.patch-plan/v0.9` carries
 `insertLoopBodyStatement`:
 
 ```json
@@ -177,9 +177,11 @@ same program.
 ## Current limits
 
 Loop-body steps append; they cannot move an existing statement into or out of
-a loop, select an arbitrary generated-body gap, delete a generated loop, edit
-an existing loop condition, or retarget a transfer. A patch expression cannot
-yet reference a newly inserted local through a symbolic value handle. The
+a loop, select an arbitrary generated-body gap, delete a generated loop, or
+retarget a transfer. M4.7 can edit an existing condition or repeatedly edit a
+condition through a produced-while handle; see
+[STRUCTURED_EXPRESSION_EDITING.md](STRUCTURED_EXPRESSION_EDITING.md). A patch
+expression cannot yet reference a newly inserted local through a symbolic value handle. The
 implementation does not prove loop termination or constant-fold conditions.
 
 `do`, `for`, `foreach`, arbitrary cyclic Graph rewiring, compound assignment,

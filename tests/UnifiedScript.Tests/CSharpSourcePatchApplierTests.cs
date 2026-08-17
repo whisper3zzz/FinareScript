@@ -2672,6 +2672,261 @@ public sealed class CSharpSourcePatchApplierTests
         Assert.Equal(changedLoop.Id, loop.LoopNodeId);
     }
 
+    [Fact]
+    public void Apply_ReplacesAssignmentValueAndWhileConditionWithoutRecreatingStructure()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int Run(int value, int stopAt, bool enabled)
+                {
+                    int result = value;
+                    while (result > 0)
+                    {
+                        result = result - 1;
+                    }
+
+                    return result;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) =
+            CreatePersistentRequest(source, "Game/StructuredExpressionEdit.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement resultDefinition = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirWhileStatement loop = Assert.IsType<HirWhileStatement>(method.Body.Statements[1]);
+        HirExpressionStatement assignmentStatement = Assert.IsType<HirExpressionStatement>(
+            Assert.Single(loop.Body.Statements));
+        HirAssignmentExpression assignment = Assert.IsType<HirAssignmentExpression>(
+            assignmentStatement.Expression);
+        HirIdentifierExpression assignmentTarget = Assert.IsType<HirIdentifierExpression>(assignment.Target);
+        HashSet<SemanticId> replacedExpressionIds = assignment.Value
+            .DescendantsAndSelf()
+            .Concat(loop.Condition.DescendantsAndSelf())
+            .Select(static node => node.Id)
+            .ToHashSet();
+        SemanticId intType = GetTypeId(original, resultDefinition);
+        SemanticId boolType = GetTypeId(original, loop.Condition);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                new ReplaceAssignmentValuePatchOperation(
+                    assignment.Id,
+                    assignment.Operator,
+                    assignment.Target.Id,
+                    resultDefinition.Id,
+                    resultDefinition.Name,
+                    assignment.Value.Id,
+                    intType,
+                    new BinaryPatchExpression(
+                        "-",
+                        new LocalReferencePatchExpression(
+                            resultDefinition.Id,
+                            resultDefinition.Name,
+                            intType),
+                        new LiteralPatchExpression("2", intType),
+                        intType)),
+                new ReplaceWhileConditionPatchOperation(
+                    loop.Id,
+                    loop.Condition.Id,
+                    boolType,
+                    new BinaryPatchExpression(
+                        "&&",
+                        new LocalReferencePatchExpression(
+                            method.Parameters[2].Id,
+                            method.Parameters[2].Name,
+                            boolType),
+                        new BinaryPatchExpression(
+                            ">",
+                            new LocalReferencePatchExpression(
+                                resultDefinition.Id,
+                                resultDefinition.Name,
+                                intType),
+                            new LocalReferencePatchExpression(
+                                method.Parameters[1].Id,
+                                method.Parameters[1].Name,
+                                intType),
+                            boolType),
+                        boolType)),
+            ]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains("while (enabled && (result > stopAt))", patchedSource, StringComparison.Ordinal);
+        Assert.Contains("result = result - 2;", patchedSource, StringComparison.Ordinal);
+        HirMethodDeclaration changedMethod = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirWhileStatement changedLoop = Assert.IsType<HirWhileStatement>(changedMethod.Body.Statements[1]);
+        HirExpressionStatement changedAssignmentStatement = Assert.IsType<HirExpressionStatement>(
+            Assert.Single(changedLoop.Body.Statements));
+        HirAssignmentExpression changedAssignment = Assert.IsType<HirAssignmentExpression>(
+            changedAssignmentStatement.Expression);
+        Assert.Equal(method.Id, changedMethod.Id);
+        Assert.Equal(method.Body.Id, changedMethod.Body.Id);
+        Assert.Equal(loop.Id, changedLoop.Id);
+        Assert.Equal(loop.Body.Id, changedLoop.Body.Id);
+        Assert.Equal(assignmentStatement.Id, changedAssignmentStatement.Id);
+        Assert.Equal(assignment.Id, changedAssignment.Id);
+        Assert.Equal(assignmentTarget.Id, changedAssignment.Target.Id);
+        Assert.Equal(
+            resultDefinition.Id,
+            Assert.Single(
+                result.Analysis.Semantics!.Nodes,
+                binding => binding.NodeId == changedAssignment.Target.Id).ReferencedSymbolId);
+
+        IdentitySidecarDocument afterIdentity = Assert.Single(result.Analysis.IdentitySidecars);
+        HashSet<SemanticId> liveIds = afterIdentity.Entries
+            .Select(static entry => entry.Id)
+            .ToHashSet();
+        HashSet<SemanticId> tombstoneIds = afterIdentity.Tombstones
+            .Select(static tombstone => tombstone.Id)
+            .ToHashSet();
+        Assert.All(
+            replacedExpressionIds,
+            id => Assert.True(liveIds.Contains(id) ^ tombstoneIds.Contains(id)));
+        Assert.Contains(loop.Condition.Id, tombstoneIds);
+        Assert.Contains(
+            Assert.Single(assignment.Value.DescendantsAndSelf().OfType<HirLiteralExpression>()).Id,
+            tombstoneIds);
+        Assert.Contains(
+            Assert.Single(loop.Condition.DescendantsAndSelf().OfType<HirLiteralExpression>()).Id,
+            tombstoneIds);
+        SemanticId[] preservedIds =
+        [
+            method.Body.Id,
+            resultDefinition.Id,
+            loop.Id,
+            loop.Body.Id,
+            assignmentStatement.Id,
+            assignment.Id,
+            assignmentTarget.Id,
+        ];
+        Assert.All(
+            preservedIds,
+            id => Assert.Contains(afterIdentity.Entries, entry => entry.Id == id));
+
+        GraphDocument graph = new HirGraphProjector().Project(
+            result.Analysis.Hir,
+            result.Analysis.Semantics);
+        GraphFunction function = Assert.Single(graph.Functions);
+        Assert.Contains(function.Nodes, node => node.Id == loop.Id && node.Kind == "loop");
+        Assert.Contains(function.Nodes, node => node.Id == assignment.Id && node.Kind == "assignment");
+        GraphControlFlowFunction flow = Assert.Single(
+            new GraphControlFlowAnalyzer().AnalyzeAndValidate(graph).Functions);
+        GraphControlFlowLoop changedFlow = Assert.Single(flow.Loops);
+        Assert.True(flow.IsReducible);
+        Assert.Equal(loop.Id, changedFlow.LoopNodeId);
+        Assert.Equal(assignment.Id, changedFlow.BodyEntryNodeId);
+        Assert.NotEmpty(changedFlow.BackEdgeArcIds);
+    }
+
+    [Fact]
+    public void Apply_RejectsAssignmentValueReplacementWithAStaleEndpoint()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int Run(int value)
+                {
+                    int result = value;
+                    result = result - 1;
+                    return result;
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            source,
+            "Game/StaleAssignmentValueEdit.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement definition = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirAssignmentExpression assignment = Assert.IsType<HirAssignmentExpression>(
+            Assert.IsType<HirExpressionStatement>(method.Body.Statements[1]).Expression);
+        SemanticId intType = GetTypeId(original, definition);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new ReplaceAssignmentValuePatchOperation(
+                assignment.Id,
+                assignment.Operator,
+                assignment.Target.Id,
+                definition.Id,
+                definition.Name,
+                SemanticId.FromKey("stale-assignment-value"),
+                intType,
+                new LiteralPatchExpression("2", intType))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.PatchedRequest);
+        Assert.Null(result.Analysis);
+        Assert.Equal(source, Assert.Single(request.Sources).Source);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.PreconditionFailed);
+    }
+
+    [Fact]
+    public void Apply_RejectsWhileConditionReplacementThatWouldDiscardAComment()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int Run(int value, bool enabled)
+                {
+                    while (value /* keep threshold rationale */ > 0)
+                    {
+                        value = value - 1;
+                    }
+
+                    return value;
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            source,
+            "Game/CommentedLoopConditionEdit.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirWhileStatement loop = Assert.IsType<HirWhileStatement>(method.Body.Statements[0]);
+        SemanticId boolType = GetTypeId(original, loop.Condition);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new ReplaceWhileConditionPatchOperation(
+                loop.Id,
+                loop.Condition.Id,
+                boolType,
+                new LocalReferencePatchExpression(
+                    method.Parameters[1].Id,
+                    method.Parameters[1].Name,
+                    boolType))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.PatchedRequest);
+        Assert.Null(result.Analysis);
+        Assert.Equal(source, Assert.Single(request.Sources).Source);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.InvalidReplacement);
+    }
+
     private static (CSharpCompilationRequest Request, CSharpAnalysisResult Analysis) CreatePersistentRequest(
         string source,
         string path)

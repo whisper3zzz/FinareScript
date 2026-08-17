@@ -77,6 +77,71 @@ public sealed class SemanticPatchJsonTests
     }
 
     [Fact]
+    public void SerializeAndDeserialize_PreserveStructuredExpressionReplacementOperations()
+    {
+        SemanticId intType = SemanticId.FromKey("System.Int32");
+        SemanticId boolType = SemanticId.FromKey("System.Boolean");
+        var assignment = new ReplaceAssignmentValuePatchOperation(
+            SemanticId.FromKey("edit-assignment"),
+            "=",
+            SemanticId.FromKey("edit-assignment-target"),
+            SemanticId.FromKey("edit-assignment-definition"),
+            "result",
+            SemanticId.FromKey("edit-assignment-value"),
+            intType,
+            new LiteralPatchExpression("2", intType));
+        var loop = new ReplaceWhileConditionPatchOperation(
+            SemanticId.FromKey("edit-loop"),
+            SemanticId.FromKey("edit-loop-condition"),
+            boolType,
+            new LiteralPatchExpression("false", boolType));
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            SemanticId.FromKey("structured-edit-compilation"),
+            SemanticId.FromKey("structured-edit-configuration"),
+            [assignment, loop]);
+
+        string json = SemanticPatchJson.Serialize(patch);
+        SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
+
+        Assert.Equal(
+            assignment,
+            Assert.IsType<ReplaceAssignmentValuePatchOperation>(roundTrip.Operations[0]));
+        Assert.Equal(
+            loop,
+            Assert.IsType<ReplaceWhileConditionPatchOperation>(roundTrip.Operations[1]));
+        Assert.Contains("\"operation\": \"replaceAssignmentValue\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"operation\": \"replaceWhileCondition\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Create_RejectsStructuredReplacementTypeOrShapeMismatch()
+    {
+        SemanticId intType = SemanticId.FromKey("System.Int32");
+        SemanticId boolType = SemanticId.FromKey("System.Boolean");
+
+        Assert.Throws<JsonException>(() => SemanticPatchDocument.Create(
+            SemanticId.FromKey("invalid-assignment-edit-compilation"),
+            SemanticId.FromKey("invalid-assignment-edit-configuration"),
+            [new ReplaceAssignmentValuePatchOperation(
+                SemanticId.FromKey("invalid-assignment"),
+                "+=",
+                SemanticId.FromKey("invalid-assignment-target"),
+                SemanticId.FromKey("invalid-assignment-definition"),
+                "result",
+                SemanticId.FromKey("invalid-assignment-value"),
+                intType,
+                new LiteralPatchExpression("1", intType))]));
+        Assert.Throws<JsonException>(() => SemanticPatchDocument.Create(
+            SemanticId.FromKey("invalid-loop-edit-compilation"),
+            SemanticId.FromKey("invalid-loop-edit-configuration"),
+            [new ReplaceWhileConditionPatchOperation(
+                SemanticId.FromKey("invalid-loop"),
+                SemanticId.FromKey("invalid-loop-condition"),
+                boolType,
+                new LiteralPatchExpression("1", intType))]));
+    }
+
+    [Fact]
     public void SerializeAndDeserialize_PreserveStatementTemporaryAndSiblingPreconditions()
     {
         SemanticId blockId = SemanticId.FromKey("statement-block");

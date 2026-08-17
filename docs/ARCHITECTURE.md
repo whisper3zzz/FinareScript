@@ -214,11 +214,12 @@ compilation identity is not safe for editing.
 ## Semantic patch transaction
 
 Graph schema v0.4 carries both the source compilation ID and semantic
-configuration ID. A `unifiedscript.patch/v0.9` document repeats those IDs and
+configuration ID. A `unifiedscript.patch/v0.10` document repeats those IDs and
 contains typed operations keyed by graph/HIR `SemanticId`. Implemented
 operations are `replaceLiteral`, `changeOperator`, `reconnectArgument`,
-`insertStatement`, `deleteStatement`, `introduceTemporary`, and
-`reconnectValue`. `insertStatement` accepts a local-literal declaration, a
+`replaceAssignmentValue`, `replaceWhileCondition`, `insertStatement`,
+`deleteStatement`, `introduceTemporary`, and `reconnectValue`.
+`insertStatement` accepts a local-literal declaration, a
 CFG-checked assignment to an existing local, an `if` or `while` with a closed
 typed expression tree and explicit blocks, a nearest-loop `break`/`continue`,
 or a typed terminal `return`. Structural operations carry old
@@ -226,11 +227,12 @@ operator/endpoint, semantic type,
 containing statement, parent block, and exact sibling preconditions rather than
 relying only on the compilation baseline.
 
-`unifiedscript.patch-plan/v0.8` is an ordered transaction above individual
+`unifiedscript.patch-plan/v0.9` is an ordered transaction above individual
 patches. It composes every current bounded operation: literal and operator
-changes, argument reconnection, statement insertion/deletion, temporary
-introduction, value reconnection, symbolic branch-body insertion, and symbolic
-loop-body insertion.
+changes, argument reconnection, structured assignment/while expression edits,
+statement insertion/deletion, temporary introduction, value reconnection,
+symbolic branch-body insertion, symbolic loop-body insertion, and symbolic
+replacement of a condition on a while produced earlier in the same plan.
 `introduceTemporary` and local-literal root, branch, or loop-body insertion
 steps publish symbolic local handles. Later
 `reconnectValue` steps reference those handles instead of guessing a random

@@ -1,0 +1,313 @@
+{
+  "schemaVersion": "unifiedscript.identity/v0.1",
+  "sourcePath": "samples/Patching/EditLoopRules.cs",
+  "sourceDigest": "sha256:7e8731c8be565bf2c406f6a989a48ef32e62dc595a0e30a8d07dd02a68a71b34",
+  "generation": 1,
+  "entries": [
+    {
+      "id": "us_03abd0626eca63a25479687242ac7934",
+      "kind": "parameter",
+      "owner": "Samples.Patching.EditLoopRules.Run(int,int,bool)",
+      "role": "parameter",
+      "fingerprint": "sha256:122f0ba1c12430485488722e1fc2b57377bffd23a8481d5c7e2175c4f8b9d435",
+      "shapeFingerprint": "sha256:122f0ba1c12430485488722e1fc2b57377bffd23a8481d5c7e2175c4f8b9d435",
+      "parentFingerprint": "sha256:cdd67e5404103c36689355fb301b8a01b7e4defc6383c818821926ba378498ba",
+      "anchor": {
+        "start": 149,
+        "length": 12
+      },
+      "contextBefore": "sha256:fbf0eef984e989caca0a7ebf9003f8d741c671e851278c324f0fc28b1e9d65df",
+      "contextAfter": "sha256:aaaaba135b6c7499477f1b1a092edccb2f65159b76664daf174c2a0beb8b19c1",
+      "generation": 1
+    },
+    {
+      "id": "us_0bc3a95e542cded4dc18c9b8c9231270",
+      "kind": "identifier",
+      "owner": "Samples.Patching.EditLoopRules.Run(int,int,bool)",
+      "role": "initializer",
+      "fingerprint": "sha256:590247c6dc5408588f68c6c4483f1f459badc7a67712c2e9b20e2bedd3535199",
+      "shapeFingerprint": "sha256:590247c6dc5408588f68c6c4483f1f459badc7a67712c2e9b20e2bedd3535199",
+      "parentFingerprint": "sha256:5e2d051b647be5cb9969b375c2ec31443ea0ec174db2ee9dc4a9d83cbe02c60a",
+      "anchor": {
+        "start": 190,
+        "length": 5
+      },
+      "contextBefore": "sha256:5a5894c2a67e2ad8154c0a3d9829d038e751e016ac7fc62034eb9e02a60001bd",
+      "contextAfter": "sha256:f29281daa7c2e544750bf5597b9d43976287c5384c7109c2d123788379862e06",
+      "generation": 1
+    },
+    {
+      "id": "us_23e43acdcab8fbad9e8c1f39c6d2b6d1",
+      "kind": "assignment",
+      "owner": "Samples.Patching.EditLoopRules.Run(int,int,bool)",
+      "role": "expression",
+      "fingerprint": "sha256:f306cde8cee99541a68144155b437bfa293b0b4c49e57eec23b928a680ca8526",
+      "shapeFingerprint": "sha256:19e0fc644d42b78656ce4f7bdb7e220e0701d99e6ea107faac717f4835a9ff9f",
+      "parentFingerprint": "sha256:a3c79599d7a8e2f78b2796ec6074983209fd436fe64c9093c93f2fb2b080e9c7",
+      "anchor": {
+        "start": 246,
+        "length": 19
+      },
+      "contextBefore": "sha256:f2ec45d260686d2c775c3dd7a9d23f862f266f0f4048814a01784c6ddcc434f8",
+      "contextAfter": "sha256:54ca410d497c9a633a5e60bc747bbefd7e514ec68d3fdbec64fd19e865d7cc76",
+      "generation": 1
+    },
+    {
+      "id": "us_2f67a62172358cdadb0df86092d0b6c3",
+      "kind": "variableDeclaration",
+      "owner": "Samples.Patching.EditLoopRules.Run(int,int,bool)",
+      "role": "statement",
+      "fingerprint": "sha256:ddf1e8cba25f978c6cb37e3822c0b230f7f49d8db5929f3e59b19f6b81e19d11",
+      "shapeFingerprint": "sha256:5e2d051b647be5cb9969b375c2ec31443ea0ec174db2ee9dc4a9d83cbe02c60a",
+      "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
+      "anchor": {
+        "start": 177,
+        "length": 19
+      },
+      "contextBefore": "sha256:28913184d12b1b4247c2e199dbadc10c244855e878daaa86cb17cff0850fc616",
+      "contextAfter": "sha256:07993c98b40479781dac42be3a0245079be9f9b0d6a64f7777c351881dccf429",
+      "generation": 1
+    },
+    {
+      "id": "us_3f20635ded0a091a99acd498dd268cfe",
+      "kind": "identifier",
+      "owner": "Samples.Patching.EditLoopRules.Run(int,int,bool)",
+      "role": "left",
+      "fingerprint": "sha256:dcda5313b97be5866db6a31dc4244925eafb51564171b2279422d267754e20b3",
+      "shapeFingerprint": "sha256:dcda5313b97be5866db6a31dc4244925eafb51564171b2279422d267754e20b3",
+      "parentFingerprint": "sha256:e6d2fba792c5eed5a33e19fccc391acb2657181c9a641fdc248bba3d273618a0",
+      "anchor": {
+        "start": 255,
+        "length": 6
+      },
+      "contextBefore": "sha256:17a1b7c7f453154daf1209e58b40f9e305387aa4b34eaa2d87ef5053cf50b0e2",
+      "contextAfter": "sha256:072301d25398451f9d9ebe29353721670b2e6d62635454b7f1fdf5fd25f010e9",
+      "generation": 1
+    },
+    {
+      "id": "us_4b403feca6ad8c351c942266390413ac",
+      "kind": "literal",
+      "owner": "Samples.Patching.EditLoopRules.Run(int,int,bool)",
+      "role": "right",
+      "fingerprint": "sha256:d4d49cb4d943a64e760bac5dd592de88e050926e09a3ac91203ea9580124e1ba",
+      "shapeFingerprint": "sha256:d4d49cb4d943a64e760bac5dd592de88e050926e09a3ac91203ea9580124e1ba",
+      "parentFingerprint": "sha256:e6d2fba792c5eed5a33e19fccc391acb2657181c9a641fdc248bba3d273618a0",
+      "anchor": {
+        "start": 264,
+        "length": 1
+      },
+      "contextBefore": "sha256:39b5f7e6cf5fb1dae755a27f372e26b19dde40e4aa2d6250a27c9a8b6bd0ca2f",
+      "contextAfter": "sha256:54ca410d497c9a633a5e60bc747bbefd7e514ec68d3fdbec64fd19e865d7cc76",
+      "generation": 1
+    },
+    {
+      "id": "us_5a3f26ebf80ac7d7f7e49a405f366bc1",
+      "kind": "binary",
+      "owner": "Samples.Patching.EditLoopRules.Run(int,int,bool)",
+      "role": "assignedValue",
+      "fingerprint": "sha256:a906fc6974816f61155c314baa2deeda45d83138aee54fbb755653574105cab5",
+      "shapeFingerprint": "sha256:e6d2fba792c5eed5a33e19fccc391acb2657181c9a641fdc248bba3d273618a0",
+      "parentFingerprint": "sha256:19e0fc644d42b78656ce4f7bdb7e220e0701d99e6ea107faac717f4835a9ff9f",
+      "anchor": {
+        "start": 255,
+        "length": 10
+      },
+      "contextBefore": "sha256:17a1b7c7f453154daf1209e58b40f9e305387aa4b34eaa2d87ef5053cf50b0e2",
+      "contextAfter": "sha256:54ca410d497c9a633a5e60bc747bbefd7e514ec68d3fdbec64fd19e865d7cc76",
+      "generation": 1
+    },
+    {
+      "id": "us_5c90d05497099584eefc7628603043e2",
+      "kind": "block",
+      "owner": "Samples.Patching.EditLoopRules.Run(int,int,bool)",
+      "role": "body",
+      "fingerprint": "sha256:7203f599870d4467a40d8f9b2dc2faefc4a80ba4ff08295943777b18fb54646d",
+      "shapeFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
+      "parentFingerprint": "sha256:cdd67e5404103c36689355fb301b8a01b7e4defc6383c818821926ba378498ba",
+      "anchor": {
+        "start": 167,
+        "length": 139
+      },
+      "contextBefore": "sha256:a5879bd1951c2ba88c1fc442fe986af7e463e566f336e865427e1e0d57ce2b5f",
+      "contextAfter": "sha256:9ef6e8522f55e488b50f21e6decd3327e24380a184ca3d5aa1f484ad5e3cc271",
+      "generation": 1
+    },
+    {
+      "id": "us_5d9cb24025239dd06ea0189f76b18277",
+      "kind": "return",
+      "owner": "Samples.Patching.EditLoopRules.Run(int,int,bool)",
+      "role": "statement",
+      "fingerprint": "sha256:1e0a0d842587c9d5f9dc208b9641cafc3072b1d166fef16ce7701e913e31701a",
+      "shapeFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
+      "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
+      "anchor": {
+        "start": 286,
+        "length": 14
+      },
+      "contextBefore": "sha256:072301d25398451f9d9ebe29353721670b2e6d62635454b7f1fdf5fd25f010e9",
+      "contextAfter": "sha256:3f885f681d71faa5a866645c2bdfdf0b04dd30d36b07a33b817e798695a980fd",
+      "generation": 1
+    },
+    {
+      "id": "us_676e618aaf139f249184fe206e0e8ea6",
+      "kind": "parameter",
+      "owner": "Samples.Patching.EditLoopRules.Run(int,int,bool)",
+      "role": "parameter",
+      "fingerprint": "sha256:d850358694b46e528e16c445fa8e9fd1b795dd464c70228232e7384bc3bfb575",
+      "shapeFingerprint": "sha256:d850358694b46e528e16c445fa8e9fd1b795dd464c70228232e7384bc3bfb575",
+      "parentFingerprint": "sha256:cdd67e5404103c36689355fb301b8a01b7e4defc6383c818821926ba378498ba",
+      "anchor": {
+        "start": 137,
+        "length": 10
+      },
+      "contextBefore": "sha256:d5862708122e2e21dd2e865aaffe5cf3781fd6ffa9f1240cd1ab2640206c8973",
+      "contextAfter": "sha256:a5879bd1951c2ba88c1fc442fe986af7e463e566f336e865427e1e0d57ce2b5f",
+      "generation": 1
+    },
+    {
+      "id": "us_69dd2550d71d2965bcaf89f01b332eb4",
+      "kind": "literal",
+      "owner": "Samples.Patching.EditLoopRules.Run(int,int,bool)",
+      "role": "right",
+      "fingerprint": "sha256:c7ae46b699b01e32cd1f3786eb5d3b3ae3a4db464ca0a7148d72bed5f933bf59",
+      "shapeFingerprint": "sha256:c7ae46b699b01e32cd1f3786eb5d3b3ae3a4db464ca0a7148d72bed5f933bf59",
+      "parentFingerprint": "sha256:cb23df9c15d706b765b8d1e47778deedbaa62d1dd67f0d149901d8efbcb5ea02",
+      "anchor": {
+        "start": 221,
+        "length": 1
+      },
+      "contextBefore": "sha256:07993c98b40479781dac42be3a0245079be9f9b0d6a64f7777c351881dccf429",
+      "contextAfter": "sha256:17a1b7c7f453154daf1209e58b40f9e305387aa4b34eaa2d87ef5053cf50b0e2",
+      "generation": 1
+    },
+    {
+      "id": "us_70df91e4f026f4056a6c0fa256543492",
+      "kind": "identifier",
+      "owner": "Samples.Patching.EditLoopRules.Run(int,int,bool)",
+      "role": "target",
+      "fingerprint": "sha256:dcda5313b97be5866db6a31dc4244925eafb51564171b2279422d267754e20b3",
+      "shapeFingerprint": "sha256:dcda5313b97be5866db6a31dc4244925eafb51564171b2279422d267754e20b3",
+      "parentFingerprint": "sha256:19e0fc644d42b78656ce4f7bdb7e220e0701d99e6ea107faac717f4835a9ff9f",
+      "anchor": {
+        "start": 246,
+        "length": 6
+      },
+      "contextBefore": "sha256:f2ec45d260686d2c775c3dd7a9d23f862f266f0f4048814a01784c6ddcc434f8",
+      "contextAfter": "sha256:097a7b01297c6345c67b5547cedb03db886fa506e8e0bd0c80997e91064ebfa4",
+      "generation": 1
+    },
+    {
+      "id": "us_764852729f3d6a26a5f76f0dedb8b9c0",
+      "kind": "identifier",
+      "owner": "Samples.Patching.EditLoopRules.Run(int,int,bool)",
+      "role": "left",
+      "fingerprint": "sha256:dcda5313b97be5866db6a31dc4244925eafb51564171b2279422d267754e20b3",
+      "shapeFingerprint": "sha256:dcda5313b97be5866db6a31dc4244925eafb51564171b2279422d267754e20b3",
+      "parentFingerprint": "sha256:cb23df9c15d706b765b8d1e47778deedbaa62d1dd67f0d149901d8efbcb5ea02",
+      "anchor": {
+        "start": 212,
+        "length": 6
+      },
+      "contextBefore": "sha256:a1bc76475fb217b3ca351171fabc9c01dd6aa67cc9b3b8e270c2ff804f9cd154",
+      "contextAfter": "sha256:f2ec45d260686d2c775c3dd7a9d23f862f266f0f4048814a01784c6ddcc434f8",
+      "generation": 1
+    },
+    {
+      "id": "us_890febe29b9e9e8e49dda65eee0f997f",
+      "kind": "identifier",
+      "owner": "Samples.Patching.EditLoopRules.Run(int,int,bool)",
+      "role": "returnValue",
+      "fingerprint": "sha256:dcda5313b97be5866db6a31dc4244925eafb51564171b2279422d267754e20b3",
+      "shapeFingerprint": "sha256:dcda5313b97be5866db6a31dc4244925eafb51564171b2279422d267754e20b3",
+      "parentFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
+      "anchor": {
+        "start": 293,
+        "length": 6
+      },
+      "contextBefore": "sha256:f11cb87d91d2286a780a6fb1dbee6229b017c89796d268b7c9461ff9f9dc99ff",
+      "contextAfter": "sha256:38a79062b48cd41f7e38f93dc2b1d073f8ae28a8d051c02f950b7846f36805b1",
+      "generation": 1
+    },
+    {
+      "id": "us_adbc383132973747322f785b2e7584fe",
+      "kind": "parameter",
+      "owner": "Samples.Patching.EditLoopRules.Run(int,int,bool)",
+      "role": "parameter",
+      "fingerprint": "sha256:2c2db5f2f6bffc62d4b35d0a58b87bff81cdb0f111f39ad32ea9e4a97db93e97",
+      "shapeFingerprint": "sha256:2c2db5f2f6bffc62d4b35d0a58b87bff81cdb0f111f39ad32ea9e4a97db93e97",
+      "parentFingerprint": "sha256:cdd67e5404103c36689355fb301b8a01b7e4defc6383c818821926ba378498ba",
+      "anchor": {
+        "start": 126,
+        "length": 9
+      },
+      "contextBefore": "sha256:e764406da39e2ca4379ddb80d770a265413c7e440ddb0278a0287d82906b5f0e",
+      "contextAfter": "sha256:fbf0eef984e989caca0a7ebf9003f8d741c671e851278c324f0fc28b1e9d65df",
+      "generation": 1
+    },
+    {
+      "id": "us_b37f05d01bcfd389d33492c896ab8535",
+      "kind": "expressionStatement",
+      "owner": "Samples.Patching.EditLoopRules.Run(int,int,bool)",
+      "role": "statement",
+      "fingerprint": "sha256:d7021799cd5fd31950a97aa0a42ae20705033ec1226cb9f5e781ff6031743933",
+      "shapeFingerprint": "sha256:a3c79599d7a8e2f78b2796ec6074983209fd436fe64c9093c93f2fb2b080e9c7",
+      "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
+      "anchor": {
+        "start": 246,
+        "length": 20
+      },
+      "contextBefore": "sha256:f2ec45d260686d2c775c3dd7a9d23f862f266f0f4048814a01784c6ddcc434f8",
+      "contextAfter": "sha256:17b1ffd69a125e88f59b70e4aafca4693d272e8bd924c7cf8a946f79da2444d9",
+      "generation": 1
+    },
+    {
+      "id": "us_bc923caac27afd2d63cdf15cc76e72e8",
+      "kind": "binary",
+      "owner": "Samples.Patching.EditLoopRules.Run(int,int,bool)",
+      "role": "condition",
+      "fingerprint": "sha256:1d0bc797364b92c5373107dc8f983187fdc2b12695126d886585a9440231677f",
+      "shapeFingerprint": "sha256:cb23df9c15d706b765b8d1e47778deedbaa62d1dd67f0d149901d8efbcb5ea02",
+      "parentFingerprint": "sha256:07a8750738828ffd36a9bbfc198cf5d3bfd93e9f86b0e16e5aedeef8426804cf",
+      "anchor": {
+        "start": 212,
+        "length": 10
+      },
+      "contextBefore": "sha256:a1bc76475fb217b3ca351171fabc9c01dd6aa67cc9b3b8e270c2ff804f9cd154",
+      "contextAfter": "sha256:17a1b7c7f453154daf1209e58b40f9e305387aa4b34eaa2d87ef5053cf50b0e2",
+      "generation": 1
+    },
+    {
+      "id": "us_d71a918f6b045040f7ebcda6af109e58",
+      "kind": "while",
+      "owner": "Samples.Patching.EditLoopRules.Run(int,int,bool)",
+      "role": "statement",
+      "fingerprint": "sha256:0bf030abb3a0ca4f6a0b5ebc6b064781e8c1e880f227b7ba357f4c51568a4352",
+      "shapeFingerprint": "sha256:07a8750738828ffd36a9bbfc198cf5d3bfd93e9f86b0e16e5aedeef8426804cf",
+      "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
+      "anchor": {
+        "start": 205,
+        "length": 71
+      },
+      "contextBefore": "sha256:da3be0a19d76cac52bd720a0533290f3b5312c822d4bd3f7a18910be371c2788",
+      "contextAfter": "sha256:f8608c971c4265f9e959286664de07463ca7af8700797ae7b86f5017f9034254",
+      "generation": 1
+    },
+    {
+      "id": "us_d92583f93a7f26d21d5e5b74be40a12e",
+      "kind": "block",
+      "owner": "Samples.Patching.EditLoopRules.Run(int,int,bool)",
+      "role": "body",
+      "fingerprint": "sha256:05f6efe7550b4ef3dad8637042ff79630e3896d77e6e24d77cae8bc5ab3ea518",
+      "shapeFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
+      "parentFingerprint": "sha256:07a8750738828ffd36a9bbfc198cf5d3bfd93e9f86b0e16e5aedeef8426804cf",
+      "anchor": {
+        "start": 232,
+        "length": 44
+      },
+      "contextBefore": "sha256:3711f0aab970d798d6b66db5b6e02d3e628667cd65a5500e70325a70f146c737",
+      "contextAfter": "sha256:f8608c971c4265f9e959286664de07463ca7af8700797ae7b86f5017f9034254",
+      "generation": 1
+    }
+  ],
+  "tombstones": []
+}

@@ -80,6 +80,12 @@ public static class SemanticPatchJson
                 case ReconnectArgumentPatchOperation reconnectArgument:
                     ValidateReconnectArgument(reconnectArgument);
                     break;
+                case ReplaceAssignmentValuePatchOperation replaceAssignmentValue:
+                    ValidateReplaceAssignmentValue(replaceAssignmentValue);
+                    break;
+                case ReplaceWhileConditionPatchOperation replaceWhileCondition:
+                    ValidateReplaceWhileCondition(replaceWhileCondition);
+                    break;
                 case InsertStatementPatchOperation insertStatement:
                     ValidateInsertStatement(insertStatement);
                     break;
@@ -156,6 +162,57 @@ public static class SemanticPatchJson
         {
             throw new JsonException("Argument reconnection requires two distinct argument nodes.");
         }
+    }
+
+    private static void ValidateReplaceAssignmentValue(
+        ReplaceAssignmentValuePatchOperation operation)
+    {
+        if (!string.Equals(operation.ExpectedOperator, "=", StringComparison.Ordinal))
+        {
+            throw new JsonException(
+                "Assignment-value replacement currently requires the expected simple '=' operator.");
+        }
+
+        if (operation.ExpectedTargetNodeId.IsEmpty ||
+            operation.ExpectedTargetDefinitionId.IsEmpty ||
+            string.IsNullOrWhiteSpace(operation.ExpectedTargetName) ||
+            operation.ExpectedValueNodeId.IsEmpty ||
+            operation.ExpectedTypeId.IsEmpty ||
+            operation.NewValue is null)
+        {
+            throw new JsonException(
+                "Assignment-value replacement requires target/value endpoints, the target definition, " +
+                "expected name and type, and a typed new value.");
+        }
+
+        if (operation.NewValue.ExpectedTypeId != operation.ExpectedTypeId)
+        {
+            throw new JsonException(
+                "An assignment replacement value must declare the expected assignment type.");
+        }
+
+        ValidatePatchExpression(operation.NewValue, 0);
+    }
+
+    private static void ValidateReplaceWhileCondition(
+        ReplaceWhileConditionPatchOperation operation)
+    {
+        if (operation.ExpectedConditionNodeId.IsEmpty ||
+            operation.ExpectedConditionTypeId.IsEmpty ||
+            operation.NewCondition is null)
+        {
+            throw new JsonException(
+                "While-condition replacement requires the current condition endpoint, expected type, " +
+                "and a typed new condition.");
+        }
+
+        if (operation.NewCondition.ExpectedTypeId != operation.ExpectedConditionTypeId)
+        {
+            throw new JsonException(
+                "A while replacement condition must declare the expected condition type.");
+        }
+
+        ValidatePatchExpression(operation.NewCondition, 0);
     }
 
     private static void ValidateInsertStatement(InsertStatementPatchOperation operation)

@@ -117,10 +117,10 @@ Insertion after a direct `break` or `continue` is rejected as unreachable, and
 patch CFG anchors do not mistake those terminal transfers for normal block
 fallthrough.
 
-The combined M4.5/M4.6 loop slices do not yet provide:
+The combined M4.5-M4.7 loop slices do not yet provide:
 
 - moving statements into or out of a loop;
-- editing or deleting an existing while loop;
+- moving or deleting an existing while loop (M4.7 can replace its condition);
 - changing a break/continue target;
 - `do`, `for`, or `foreach`;
 - constant-condition folding or proof of loop termination;

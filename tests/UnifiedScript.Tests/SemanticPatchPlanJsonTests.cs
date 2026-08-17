@@ -76,6 +76,24 @@ public sealed class SemanticPatchPlanJsonTests
                 secondArgument,
                 intType,
                 intType),
+            new ReplaceAssignmentValuePatchPlanStep(
+                "replaceAssignmentValue",
+                SemanticId.FromKey("assignment-expression"),
+                "=",
+                SemanticId.FromKey("assignment-target-expression"),
+                SemanticId.FromKey("assignment-target-definition"),
+                "value",
+                SemanticId.FromKey("assignment-value-expression"),
+                intType,
+                new LiteralPatchExpression("2", intType)),
+            new ReplaceWhileConditionPatchPlanStep(
+                "replaceWhileCondition",
+                SemanticId.FromKey("while-statement"),
+                SemanticId.FromKey("while-condition"),
+                SemanticId.FromKey("System.Boolean"),
+                new LiteralPatchExpression(
+                    "false",
+                    SemanticId.FromKey("System.Boolean"))),
             new InsertStatementPatchPlanStep(
                 "insert",
                 SemanticId.FromKey("block"),
@@ -111,9 +129,91 @@ public sealed class SemanticPatchPlanJsonTests
         Assert.Contains("\"step\": \"replaceLiteral\"", json, StringComparison.Ordinal);
         Assert.Contains("\"step\": \"changeOperator\"", json, StringComparison.Ordinal);
         Assert.Contains("\"step\": \"reconnectArgument\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"step\": \"replaceAssignmentValue\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"step\": \"replaceWhileCondition\"", json, StringComparison.Ordinal);
         Assert.Contains("\"step\": \"insertStatement\"", json, StringComparison.Ordinal);
         Assert.Contains("\"statement\": \"localAssignment\"", json, StringComparison.Ordinal);
         Assert.Contains("\"step\": \"deleteStatement\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SerializeAndDeserialize_PreserveProducedWhileConditionHandle()
+    {
+        SemanticId blockId = SemanticId.FromKey("generated-loop-parent");
+        SemanticId boolType = SemanticId.FromKey("System.Boolean");
+        var producer = new InsertStatementPatchPlanStep(
+            "insertLoop",
+            blockId,
+            null,
+            SemanticId.FromKey("generated-loop-next"),
+            new WhilePatchStatement(new LiteralPatchExpression("true", boolType)));
+        var replacement = new ReplaceProducedWhileConditionPatchPlanStep(
+            "editGeneratedLoop",
+            blockId,
+            producer.StepId,
+            new LiteralPatchExpression("false", boolType));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("generated-loop-compilation"),
+            SemanticId.FromKey("generated-loop-configuration"),
+            [producer, replacement]);
+
+        string json = SemanticPatchPlanJson.Serialize(plan);
+        SemanticPatchPlanDocument roundTrip = SemanticPatchPlanJson.Deserialize(json);
+
+        Assert.Equal(producer, Assert.IsType<InsertStatementPatchPlanStep>(roundTrip.Steps[0]));
+        Assert.Equal(
+            replacement,
+            Assert.IsType<ReplaceProducedWhileConditionPatchPlanStep>(roundTrip.Steps[1]));
+        Assert.Contains("\"step\": \"replaceProducedWhileCondition\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"sourceStepId\": \"insertLoop\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Create_RejectsInvalidProducedWhileConditionHandles()
+    {
+        SemanticId blockId = SemanticId.FromKey("invalid-generated-loop-parent");
+        SemanticId boolType = SemanticId.FromKey("System.Boolean");
+        SemanticId intType = SemanticId.FromKey("System.Int32");
+        var producer = new InsertStatementPatchPlanStep(
+            "insertLoop",
+            blockId,
+            null,
+            SemanticId.FromKey("invalid-generated-loop-next"),
+            new WhilePatchStatement(new LiteralPatchExpression("true", boolType)));
+
+        Assert.Throws<JsonException>(() => SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("missing-loop-source-compilation"),
+            SemanticId.FromKey("missing-loop-source-configuration"),
+            [
+                new ReplaceProducedWhileConditionPatchPlanStep(
+                    "editMissingLoop",
+                    blockId,
+                    producer.StepId,
+                    new LiteralPatchExpression("false", boolType)),
+                producer,
+            ]));
+        Assert.Throws<JsonException>(() => SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("wrong-loop-parent-compilation"),
+            SemanticId.FromKey("wrong-loop-parent-configuration"),
+            [
+                producer,
+                new ReplaceProducedWhileConditionPatchPlanStep(
+                    "editWrongParent",
+                    SemanticId.FromKey("another-loop-parent"),
+                    producer.StepId,
+                    new LiteralPatchExpression("false", boolType)),
+            ]));
+        Assert.Throws<JsonException>(() => SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("wrong-loop-type-compilation"),
+            SemanticId.FromKey("wrong-loop-type-configuration"),
+            [
+                producer,
+                new ReplaceProducedWhileConditionPatchPlanStep(
+                    "editWrongType",
+                    blockId,
+                    producer.StepId,
+                    new LiteralPatchExpression("0", intType)),
+            ]));
     }
 
     [Fact]

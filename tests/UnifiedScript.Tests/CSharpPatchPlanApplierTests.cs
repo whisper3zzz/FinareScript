@@ -1548,6 +1548,329 @@ public sealed class CSharpPatchPlanApplierTests
     }
 
     [Fact]
+    public void Apply_ReplacesExistingAssignmentValueAndWhileConditionAtomically()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int value, int stopAt, bool enabled)
+                {
+                    int result = value;
+                    while (result > 0)
+                    {
+                        result = result - 1;
+                    }
+
+                    return result;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/DirectStructuredExpressionPlan.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement resultDefinition = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirWhileStatement loop = Assert.IsType<HirWhileStatement>(method.Body.Statements[1]);
+        HirExpressionStatement assignmentStatement = Assert.IsType<HirExpressionStatement>(
+            Assert.Single(loop.Body.Statements));
+        HirAssignmentExpression assignment = Assert.IsType<HirAssignmentExpression>(
+            assignmentStatement.Expression);
+        SemanticId intType = GetTypeId(original, resultDefinition);
+        SemanticId boolType = GetTypeId(original, loop.Condition);
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                new ReplaceAssignmentValuePatchPlanStep(
+                    "editDecrement",
+                    assignment.Id,
+                    assignment.Operator,
+                    assignment.Target.Id,
+                    resultDefinition.Id,
+                    resultDefinition.Name,
+                    assignment.Value.Id,
+                    intType,
+                    new BinaryPatchExpression(
+                        "-",
+                        new LocalReferencePatchExpression(
+                            resultDefinition.Id,
+                            resultDefinition.Name,
+                            intType),
+                        new LiteralPatchExpression("2", intType),
+                        intType)),
+                new ReplaceWhileConditionPatchPlanStep(
+                    "editLoopCondition",
+                    loop.Id,
+                    loop.Condition.Id,
+                    boolType,
+                    new BinaryPatchExpression(
+                        "&&",
+                        new LocalReferencePatchExpression(
+                            method.Parameters[2].Id,
+                            method.Parameters[2].Name,
+                            boolType),
+                        new BinaryPatchExpression(
+                            ">",
+                            new LocalReferencePatchExpression(
+                                resultDefinition.Id,
+                                resultDefinition.Name,
+                                intType),
+                            new LocalReferencePatchExpression(
+                                method.Parameters[1].Id,
+                                method.Parameters[1].Name,
+                                intType),
+                            boolType),
+                        boolType)),
+            ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains("while (enabled && (result > stopAt))", patchedSource, StringComparison.Ordinal);
+        Assert.Contains("result = result - 2;", patchedSource, StringComparison.Ordinal);
+        HirMethodDeclaration changedMethod = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirWhileStatement changedLoop = Assert.IsType<HirWhileStatement>(changedMethod.Body.Statements[1]);
+        HirExpressionStatement changedAssignmentStatement = Assert.IsType<HirExpressionStatement>(
+            Assert.Single(changedLoop.Body.Statements));
+        HirAssignmentExpression changedAssignment = Assert.IsType<HirAssignmentExpression>(
+            changedAssignmentStatement.Expression);
+        Assert.Equal(loop.Id, changedLoop.Id);
+        Assert.Equal(loop.Body.Id, changedLoop.Body.Id);
+        Assert.Equal(assignmentStatement.Id, changedAssignmentStatement.Id);
+        Assert.Equal(assignment.Id, changedAssignment.Id);
+        Assert.Equal(assignment.Target.Id, changedAssignment.Target.Id);
+        IdentitySidecarDocument identity = Assert.Single(result.Analysis.IdentitySidecars);
+        Assert.Contains(identity.Tombstones, tombstone => tombstone.Id == loop.Condition.Id);
+        SemanticId oldAssignmentLiteralId = Assert.Single(
+            assignment.Value.DescendantsAndSelf().OfType<HirLiteralExpression>()).Id;
+        Assert.Contains(identity.Tombstones, tombstone => tombstone.Id == oldAssignmentLiteralId);
+    }
+
+    [Fact]
+    public void Apply_RepeatedlyEditsAProducedWhileConditionThroughItsStablePlanHandle()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int value, int stopAt, bool enabled)
+                {
+                    int result = value;
+                    return result;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/ProducedLoopConditionPlan.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement resultDefinition = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+        SemanticId intType = GetTypeId(original, resultDefinition);
+        SemanticId boolType = GetTypeId(original, method.Parameters[2]);
+        GraphDocument beforeGraph = new HirGraphProjector().Project(original.Hir, original.Semantics);
+        GraphFunction beforeFunction = Assert.Single(beforeGraph.Functions);
+        GraphLayoutDocument beforeLayout = new(
+            GraphLayoutDocument.CurrentSchemaVersion,
+            [new GraphFunctionLayout(
+                beforeFunction.Id,
+                beforeFunction.Nodes.Select((node, index) => new GraphNodeLayout(
+                    node.Id,
+                    GraphNodePlacement.Placed,
+                    new GraphLayoutPoint(index * 100, index * 50),
+                    new GraphLayoutSize(160, 80),
+                    false)).ToArray(),
+                [],
+                [])],
+            []);
+        var loopProducer = new InsertStatementPatchPlanStep(
+            "insertLoop",
+            method.Body.Id,
+            resultDefinition.Id,
+            returnStatement.Id,
+            new WhilePatchStatement(new LocalReferencePatchExpression(
+                method.Parameters[2].Id,
+                method.Parameters[2].Name,
+                boolType)));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                loopProducer,
+                new ReplaceProducedWhileConditionPatchPlanStep(
+                    "addPositiveGuard",
+                    method.Body.Id,
+                    loopProducer.StepId,
+                    new BinaryPatchExpression(
+                        "&&",
+                        new LocalReferencePatchExpression(
+                            method.Parameters[2].Id,
+                            method.Parameters[2].Name,
+                            boolType),
+                        new BinaryPatchExpression(
+                            ">",
+                            new LocalReferencePatchExpression(
+                                resultDefinition.Id,
+                                resultDefinition.Name,
+                                intType),
+                            new LiteralPatchExpression("0", intType),
+                            boolType),
+                        boolType)),
+                new ReplaceProducedWhileConditionPatchPlanStep(
+                    "useStopAt",
+                    method.Body.Id,
+                    loopProducer.StepId,
+                    new BinaryPatchExpression(
+                        "&&",
+                        new LocalReferencePatchExpression(
+                            method.Parameters[2].Id,
+                            method.Parameters[2].Name,
+                            boolType),
+                        new BinaryPatchExpression(
+                            ">",
+                            new LocalReferencePatchExpression(
+                                resultDefinition.Id,
+                                resultDefinition.Name,
+                                intType),
+                            new LocalReferencePatchExpression(
+                                method.Parameters[1].Id,
+                                method.Parameters[1].Name,
+                                intType),
+                            boolType),
+                        boolType)),
+                new InsertLoopBodyStatementPatchPlanStep(
+                    "decrementResult",
+                    method.Body.Id,
+                    loopProducer.StepId,
+                    new LocalAssignmentPatchStatement(
+                        resultDefinition.Id,
+                        resultDefinition.Name,
+                        intType,
+                        new BinaryPatchExpression(
+                            "-",
+                            new LocalReferencePatchExpression(
+                                resultDefinition.Id,
+                                resultDefinition.Name,
+                                intType),
+                            new LiteralPatchExpression("1", intType),
+                            intType))),
+            ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains("while (enabled && (result > stopAt))", patchedSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("result > 0", patchedSource, StringComparison.Ordinal);
+        Assert.Contains("result = result - 1;", patchedSource, StringComparison.Ordinal);
+        HirMethodDeclaration changedMethod = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirWhileStatement insertedLoop = Assert.IsType<HirWhileStatement>(changedMethod.Body.Statements[1]);
+        HirAssignmentExpression insertedAssignment = Assert.IsType<HirAssignmentExpression>(
+            Assert.IsType<HirExpressionStatement>(Assert.Single(insertedLoop.Body.Statements)).Expression);
+        Assert.Equal(method.Id, changedMethod.Id);
+        Assert.Equal(method.Body.Id, changedMethod.Body.Id);
+        Assert.Equal(resultDefinition.Id, changedMethod.Body.Statements[0].Id);
+        Assert.Equal(returnStatement.Id, changedMethod.Body.Statements[2].Id);
+        Assert.Equal(
+            resultDefinition.Id,
+            Assert.Single(
+                result.Analysis.Semantics!.Nodes,
+                binding => binding.NodeId == insertedAssignment.Target.Id).ReferencedSymbolId);
+
+        GraphDocument afterGraph = new HirGraphProjector().Project(
+            result.Analysis.Hir,
+            result.Analysis.Semantics);
+        GraphControlFlowFunction flow = Assert.Single(
+            new GraphControlFlowAnalyzer().AnalyzeAndValidate(afterGraph).Functions);
+        GraphControlFlowLoop loopFlow = Assert.Single(flow.Loops);
+        Assert.True(flow.IsReducible);
+        Assert.Equal(insertedLoop.Id, loopFlow.LoopNodeId);
+        Assert.Equal(insertedAssignment.Id, loopFlow.BodyEntryNodeId);
+        Assert.Equal(returnStatement.Id, loopFlow.ExitNodeId);
+        Assert.NotEmpty(loopFlow.BackEdgeArcIds);
+
+        GraphLayoutDocument synchronized = new GraphLayoutSynchronizer().Synchronize(
+            afterGraph,
+            beforeLayout);
+        GraphFunctionLayout synchronizedFunction = Assert.Single(synchronized.Functions);
+        HashSet<SemanticId> beforeNodeIds = beforeFunction.Nodes
+            .Select(static node => node.Id)
+            .ToHashSet();
+        Assert.All(
+            synchronizedFunction.Nodes.Where(node => beforeNodeIds.Contains(node.NodeId)),
+            node => Assert.Equal(GraphNodePlacement.Placed, node.Placement));
+        Assert.All(
+            synchronizedFunction.Nodes.Where(node => !beforeNodeIds.Contains(node.NodeId)),
+            node => Assert.Equal(GraphNodePlacement.Unplaced, node.Placement));
+        Assert.Empty(synchronized.OrphanedNodes);
+    }
+
+    [Fact]
+    public void Apply_RollsBackProducedLoopWhenItsConditionHandleReferencesAMissingLocal()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int value, bool enabled)
+                {
+                    return value;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/ProducedLoopConditionRollback.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(
+            Assert.Single(method.Body.Statements));
+        SemanticId boolType = GetTypeId(original, method.Parameters[1]);
+        var loopProducer = new InsertStatementPatchPlanStep(
+            "insertLoop",
+            method.Body.Id,
+            null,
+            returnStatement.Id,
+            new WhilePatchStatement(new LocalReferencePatchExpression(
+                method.Parameters[1].Id,
+                method.Parameters[1].Name,
+                boolType)));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                loopProducer,
+                new ReplaceProducedWhileConditionPatchPlanStep(
+                    "invalidCondition",
+                    method.Body.Id,
+                    loopProducer.StepId,
+                    new LocalReferencePatchExpression(
+                        SemanticId.FromKey("missing-condition-local"),
+                        "missingCondition",
+                        boolType)),
+            ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.PatchedRequest);
+        Assert.Null(result.Analysis);
+        Assert.Equal(source, Assert.Single(request.Sources).Source);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.ValueSourceNotAvailable);
+    }
+
+    [Fact]
     public void Apply_RollsBackGeneratedLoopWhenALaterBodyStatementHasAStaleType()
     {
         const string source = """

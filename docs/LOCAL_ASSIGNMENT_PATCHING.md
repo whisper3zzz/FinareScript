@@ -16,7 +16,7 @@ Neither approximation is accepted alone.
 
 ## Protocol
 
-Patch schema `unifiedscript.patch/v0.9` includes the
+Current patch schema `unifiedscript.patch/v0.10` includes the
 `localAssignment` statement discriminator:
 
 ```json
@@ -144,7 +144,7 @@ assignment node, target identifier, and value nodes receive fresh persistent
 IDs and immediately project through the ordinary HIR/Graph path. No special VM
 node or editor-only assignment representation exists.
 
-Patch-plan schema `unifiedscript.patch-plan/v0.8` carries the same payload in a
+Patch-plan schema `unifiedscript.patch-plan/v0.9` carries the same payload in a
 direct `insertStatement` step. `insertBranchStatement` may also place an
 assignment into a generated `then` or `else` block, allowing one atomic plan to
 create a branch and write different values to an existing outer local on each
@@ -175,9 +175,11 @@ output pair is committed.
 
 ## Current limits
 
-M4.3 does not edit an existing assignment in place, reconnect arbitrary Graph
-data ports, move control nodes, synthesize calls, introduce phi/SSA values, or
-prove definite assignment independently from the C# compiler. It does not
-model exception edges, short-circuit CFG, async suspension states, or loops.
-Those capabilities require broader expression/control patch operations and,
-for loops, new HIR and region contracts.
+M4.7 now edits the right-hand value of an existing root simple-local assignment
+through `replaceAssignmentValue`; see
+[STRUCTURED_EXPRESSION_EDITING.md](STRUCTURED_EXPRESSION_EDITING.md). It still
+does not retarget the assignment, edit compound or nested assignments,
+reconnect arbitrary Graph data ports, move control nodes, synthesize calls,
+introduce phi/SSA values, or prove definite assignment independently from the
+C# compiler. Exception edges, short-circuit CFG, and async suspension states
+also remain outside the current slice.

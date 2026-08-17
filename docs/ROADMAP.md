@@ -98,7 +98,9 @@ Outcome: practical gameplay methods are fully visualizable.
 - [x] loop header/body/exit/back-edge CFG facts and target validation
 - [x] bounded Graph-to-C# while synthesis and symbolic body population
 - [x] nearest-loop break/continue construction with atomic rollback
-- [ ] general data/control rewiring, existing-assignment editing, and structural HIR operations
+- [x] exact typed replacement of existing assignment values and while conditions
+- [x] repeatable symbolic condition editing for plan-produced while loops
+- [ ] general data/control rewiring and structural HIR operations
 - [ ] `for` and `foreach`
 - [ ] `switch` and supported patterns
 - [ ] conditional and null-conditional expressions

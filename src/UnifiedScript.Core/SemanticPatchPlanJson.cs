@@ -71,21 +71,22 @@ public static class SemanticPatchPlanJson
                     "Every semantic patch plan step must target a non-empty semantic node ID.");
             }
 
-            bool isInsertion = step is InsertStatementPatchPlanStep or
+            bool isRepeatableTarget = step is InsertStatementPatchPlanStep or
                 InsertBranchStatementPatchPlanStep or
-                InsertLoopBodyStatementPatchPlanStep;
-            if (targetKinds.TryGetValue(step.TargetNodeId, out bool previousWasInsertion))
+                InsertLoopBodyStatementPatchPlanStep or
+                ReplaceProducedWhileConditionPatchPlanStep;
+            if (targetKinds.TryGetValue(step.TargetNodeId, out bool previousWasRepeatable))
             {
-                if (!isInsertion || !previousWasInsertion)
+                if (!isRepeatableTarget || !previousWasRepeatable)
                 {
                     throw new JsonException(
                         $"Semantic patch plan target '{step.TargetNodeId}' can be repeated only " +
-                        "by statement-insertion steps.");
+                        "by structural insertion/producer-handle steps.");
                 }
             }
             else
             {
-                targetKinds.Add(step.TargetNodeId, isInsertion);
+                targetKinds.Add(step.TargetNodeId, isRepeatableTarget);
             }
 
             switch (step)
@@ -98,6 +99,18 @@ public static class SemanticPatchPlanJson
                     break;
                 case ReconnectArgumentPatchPlanStep reconnectArgument:
                     ValidateOperation(document, reconnectArgument.ToOperation());
+                    break;
+                case ReplaceAssignmentValuePatchPlanStep replaceAssignmentValue:
+                    ValidateOperation(document, replaceAssignmentValue.ToOperation());
+                    break;
+                case ReplaceWhileConditionPatchPlanStep replaceWhileCondition:
+                    ValidateOperation(document, replaceWhileCondition.ToOperation());
+                    break;
+                case ReplaceProducedWhileConditionPatchPlanStep producedCondition:
+                    ValidateProducedWhileCondition(
+                        document,
+                        producedCondition,
+                        loopProducers);
                     break;
                 case InsertStatementPatchPlanStep insertion:
                     ValidateOperation(document, insertion.ToOperation());
@@ -114,11 +127,12 @@ public static class SemanticPatchPlanJson
                             branchProducers,
                             paths);
                     }
-                    else if (insertion.NewStatement is WhilePatchStatement)
+                    else if (insertion.NewStatement is WhilePatchStatement insertedLoop)
                     {
                         RegisterLoopProducer(
                             insertion.StepId,
                             insertion.TargetNodeId,
+                            insertedLoop.Condition.ExpectedTypeId,
                             loopProducers,
                             paths);
                     }
@@ -149,11 +163,12 @@ public static class SemanticPatchPlanJson
                             branchProducers,
                             paths);
                     }
-                    else if (branchInsertion.NewStatement is WhilePatchStatement)
+                    else if (branchInsertion.NewStatement is WhilePatchStatement insertedBranchLoop)
                     {
                         RegisterLoopProducer(
                             branchInsertion.StepId,
                             branchInsertion.TargetNodeId,
+                            insertedBranchLoop.Condition.ExpectedTypeId,
                             loopProducers,
                             paths);
                     }
@@ -190,11 +205,12 @@ public static class SemanticPatchPlanJson
                             branchProducers,
                             paths);
                     }
-                    else if (loopInsertion.NewStatement is WhilePatchStatement)
+                    else if (loopInsertion.NewStatement is WhilePatchStatement insertedNestedLoop)
                     {
                         RegisterLoopProducer(
                             loopInsertion.StepId,
                             loopInsertion.TargetNodeId,
+                            insertedNestedLoop.Condition.ExpectedTypeId,
                             loopProducers,
                             paths);
                     }
@@ -367,6 +383,41 @@ public static class SemanticPatchPlanJson
             insertion.NewStatement));
     }
 
+    private static void ValidateProducedWhileCondition(
+        SemanticPatchPlanDocument document,
+        ReplaceProducedWhileConditionPatchPlanStep replacement,
+        IReadOnlyDictionary<string, LoopProducerState> loopProducers)
+    {
+        if (string.IsNullOrWhiteSpace(replacement.SourceStepId) ||
+            !loopProducers.TryGetValue(replacement.SourceStepId, out LoopProducerState? source))
+        {
+            throw new JsonException(
+                $"Produced-while condition step '{replacement.StepId}' must reference an earlier " +
+                "while-insertion step.");
+        }
+
+        if (source.OriginalTargetNodeId != replacement.TargetNodeId)
+        {
+            throw new JsonException(
+                $"Produced-while condition step '{replacement.StepId}' and source step " +
+                $"'{replacement.SourceStepId}' must use the same original parent-block target.");
+        }
+
+        if (replacement.NewCondition is null ||
+            replacement.NewCondition.ExpectedTypeId != source.ConditionTypeId)
+        {
+            throw new JsonException(
+                $"Produced-while condition step '{replacement.StepId}' must preserve the source " +
+                "while condition's declared semantic type.");
+        }
+
+        ValidateOperation(document, new InsertStatementPatchOperation(
+            replacement.TargetNodeId,
+            null,
+            null,
+            new WhilePatchStatement(replacement.NewCondition)));
+    }
+
     private static void RegisterBranchProducer(
         string stepId,
         SemanticId originalTargetNodeId,
@@ -388,10 +439,13 @@ public static class SemanticPatchPlanJson
     private static void RegisterLoopProducer(
         string stepId,
         SemanticId originalTargetNodeId,
+        SemanticId conditionTypeId,
         IDictionary<string, LoopProducerState> loopProducers,
         IDictionary<PlanPathKey, PlanPathState> paths)
     {
-        loopProducers.Add(stepId, new LoopProducerState(originalTargetNodeId));
+        loopProducers.Add(
+            stepId,
+            new LoopProducerState(originalTargetNodeId, conditionTypeId));
         paths.Add(
             new PlanPathKey(stepId, PlanPathKind.LoopBody),
             new PlanPathState());
@@ -510,7 +564,8 @@ public static class SemanticPatchPlanJson
         PlanPathKey? ParentPath);
 
     private sealed record LoopProducerState(
-        SemanticId OriginalTargetNodeId);
+        SemanticId OriginalTargetNodeId,
+        SemanticId ConditionTypeId);
 
     private sealed class PlanPathState
     {

@@ -6,6 +6,8 @@ namespace UnifiedScript.Core;
 [JsonDerivedType(typeof(ReplaceLiteralPatchOperation), "replaceLiteral")]
 [JsonDerivedType(typeof(ChangeOperatorPatchOperation), "changeOperator")]
 [JsonDerivedType(typeof(ReconnectArgumentPatchOperation), "reconnectArgument")]
+[JsonDerivedType(typeof(ReplaceAssignmentValuePatchOperation), "replaceAssignmentValue")]
+[JsonDerivedType(typeof(ReplaceWhileConditionPatchOperation), "replaceWhileCondition")]
 [JsonDerivedType(typeof(InsertStatementPatchOperation), "insertStatement")]
 [JsonDerivedType(typeof(DeleteStatementPatchOperation), "deleteStatement")]
 [JsonDerivedType(typeof(IntroduceTemporaryPatchOperation), "introduceTemporary")]
@@ -33,6 +35,22 @@ public sealed record ReconnectArgumentPatchOperation(
     SemanticId ExpectedSourceArgumentNodeId,
     SemanticId ExpectedArgumentTypeId,
     SemanticId ExpectedSourceArgumentTypeId) : SemanticPatchOperation(TargetNodeId);
+
+public sealed record ReplaceAssignmentValuePatchOperation(
+    SemanticId TargetNodeId,
+    string ExpectedOperator,
+    SemanticId ExpectedTargetNodeId,
+    SemanticId ExpectedTargetDefinitionId,
+    string ExpectedTargetName,
+    SemanticId ExpectedValueNodeId,
+    SemanticId ExpectedTypeId,
+    PatchExpression NewValue) : SemanticPatchOperation(TargetNodeId);
+
+public sealed record ReplaceWhileConditionPatchOperation(
+    SemanticId TargetNodeId,
+    SemanticId ExpectedConditionNodeId,
+    SemanticId ExpectedConditionTypeId,
+    PatchExpression NewCondition) : SemanticPatchOperation(TargetNodeId);
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "statement")]
 [JsonDerivedType(typeof(LocalLiteralDeclarationPatchStatement), "localLiteralDeclaration")]
@@ -141,7 +159,7 @@ public sealed record SemanticPatchDocument(
     SemanticId SemanticConfigurationId,
     IReadOnlyList<SemanticPatchOperation> Operations)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.9";
+    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.10";
 
     public static SemanticPatchDocument Create(
         SemanticId sourceCompilationId,

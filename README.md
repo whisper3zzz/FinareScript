@@ -39,6 +39,8 @@ The repository currently implements:
   guards, and late-failure rollback;
 - bounded typed `while` synthesis with symbolic loop-body handles, recursive
   branch/loop composition, and nearest-loop `break`/`continue` validation;
+- exact typed editing of existing assignment values and while conditions,
+  including repeatable condition edits through produced-loop plan handles;
 - opt-in `.usids` sidecars that preserve node identity across formatting and edits;
 - semantic-independent `.usgraph` layout sidecars with deterministic positions,
   sizes, collapsed state, comment regions, routing hints, and orphan recovery;
@@ -53,7 +55,8 @@ bounded local assignment and safer value reconnection, and M4.4 recursively
 authors nested acyclic decisions through the same HIR/Graph path. M4.5 now
 projects and validates structured loops through that same path. M4.6 completes
 the first bounded Graph-to-C# loop round trip by constructing and populating
-those loops atomically.
+those loops atomically. M4.7 preserves those structures while editing existing
+assignment values and existing or plan-produced while conditions.
 
 The v0.2 profile accepts `[Visual]` methods containing local variables,
 expressions, calls, assignments, `if/else`, `while`, `break`, `continue`,
@@ -226,7 +229,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
   --out-identity artifacts/patched/DamageRules.cs.usids
 ```
 
-`unifiedscript.patch/v0.9` binds every patch to both the source compilation ID
+`unifiedscript.patch/v0.10` binds every patch to both the source compilation ID
 and semantic configuration ID emitted in Graph schema v0.3. A `replaceLiteral`
 operation also carries the expected old literal text. A stale source, changed
 reference/effect configuration, missing target, changed old value, non-literal
@@ -240,7 +243,7 @@ ambiguous matches allocate new IDs and emit `UVS3101` rather than guessing.
 
 ## Apply structural graph patches
 
-Patch v0.9 includes `changeOperator` and `reconnectArgument`. The checked-in
+Patch v0.10 includes `changeOperator` and `reconnectArgument`. The checked-in
 operator sample changes the binary node from multiplication to division while
 requiring the expected result, left-port, and right-port type IDs:
 
@@ -276,7 +279,7 @@ single-document.
 
 ## Apply a statement insertion
 
-Patch v0.8 also includes bounded `insertStatement` and `deleteStatement`
+Patch v0.10 also includes bounded `insertStatement` and `deleteStatement`
 operations. The insertion sample adds a graph-authored local declaration before
 the existing return statement:
 
@@ -291,7 +294,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
 ```
 
 An insertion targets a parent block and records the exact adjacent sibling IDs.
-Patch v0.8 accepts a local declaration with one literal initializer, a
+Patch v0.10 accepts a local declaration with one literal initializer, a
 CFG-checked local assignment, a typed terminal return, or an `if` whose
 condition is a versioned graph-authored expression. A local's
 semantic type must already be present and graph-safe in the bound compilation,
@@ -517,7 +520,7 @@ pin. The moved expression, its descendants, the containing statement, sibling
 statements, and parent block therefore retain their IDs. Only the new local
 declaration and replacement identifier allocate new IDs. This is the first
 lowering primitive needed to represent a shared Graph value without duplicating
-C# evaluation. Patch v0.8 can now connect additional compatible consumers to
+C# evaluation. Patch v0.10 can connect additional compatible consumers to
 that local definition.
 
 ## Reconnect a typed consumer
@@ -576,8 +579,9 @@ analyzed source baseline, or atomically with the patch-plan protocol below.
 
 ## Apply atomic semantic patch plans
 
-`unifiedscript.patch-plan/v0.8` composes `replaceLiteral`, `changeOperator`,
-`reconnectArgument`, `insertStatement`, `insertBranchStatement`,
+`unifiedscript.patch-plan/v0.9` composes `replaceLiteral`, `changeOperator`,
+`reconnectArgument`, `replaceAssignmentValue`, `replaceWhileCondition`,
+`replaceProducedWhileCondition`, `insertStatement`, `insertBranchStatement`,
 `insertLoopBodyStatement`, `deleteStatement`, `introduceTemporary`, and
 `reconnectValue` as one ordered transaction. The
 shared-value sample starts with:
@@ -663,7 +667,7 @@ more paths, and all-path termination propagates up that producer tree. A
 `break`/`continue` bind only to the nearest lexical loop. Local assignments are
 supported as direct, produced-branch, and produced-loop-body payloads. Calls,
 async/task-like returns, cyclic handle references, and cross-method handles
-remain outside v0.8.
+remain outside v0.9.
 
 ### Build a loop from a visual plan
 
@@ -686,6 +690,36 @@ producer references. The coordinator resolves the generated while/body/branch
 IDs after each reanalysis. The final ordinary C# loop reprojects into the same
 HIR v0.2, Graph v0.4 regions, and nearest-loop CFG facts as a text-authored
 loop. See [LOOP_PATCHING.md](docs/LOOP_PATCHING.md).
+
+### Edit assignment values and loop conditions
+
+M4.7 adds exact-precondition expression editing without replacing its enclosing
+control structure. `replaceAssignmentValue` preserves an existing simple
+assignment, statement, and target identity while replacing its typed right-hand
+tree. `replaceWhileCondition` preserves an existing while and body while
+rebuilding its Boolean condition. Both use the same bounded literal/local/
+unary/binary/cast expression algebra and rerun scope, dominance, type, Graph,
+and CFG validation.
+
+The checked-in two-step sample changes `result - 1` to `result - 2` and changes
+`result > 0` to `enabled && (result > stopAt)` atomically:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  apply-plan \
+  samples/Patching/EditLoopRules.cs \
+  --identity samples/Patching/EditLoopRules.cs.usids \
+  --plan samples/Patching/EditLoopRules.plan.json \
+  --out artifacts/expression-edit/EditLoopRules.cs \
+  --out-identity artifacts/expression-edit/EditLoopRules.cs.usids
+```
+
+A `replaceProducedWhileCondition` plan step can instead reference an earlier
+while-producing step by `sourceStepId`. The coordinator resolves the generated
+loop and its current condition after every stage, so repeated edits and later
+body population require no predicted intermediate ID. Comments or directives
+inside a discarded old expression reject the edit rather than being lost. See
+[STRUCTURED_EXPRESSION_EDITING.md](docs/STRUCTURED_EXPRESSION_EDITING.md).
 
 ## Persist and synchronize graph layout
 
