@@ -91,7 +91,8 @@ Outcome: practical gameplay methods are fully visualizable.
 - [x] exact direct node ownership and explicit/implicit branch preservation
 - [x] CFG entry/exit, reachability, dominance, and post-dominance indexes
 - [x] structured branch merge/exit facts and SCC reducibility validation
-- [ ] bounded local assignment and general data/control rewiring
+- [x] CFG-checked bounded local assignment and compatible local-value rewiring
+- [ ] general data/control rewiring and existing-assignment editing
 - [ ] nested branch construction and structural HIR operations
 - [ ] `while`, `break`, and `continue`
 - [ ] extend regions to loop bodies, exits, and continuations

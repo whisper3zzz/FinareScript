@@ -195,11 +195,14 @@ public static class SemanticPatchPlanJson
                 $"after a return in the '{insertion.Branch}' branch of '{insertion.SourceStepId}'.");
         }
 
-        if (insertion.NewStatement is not (LocalLiteralDeclarationPatchStatement or ReturnPatchStatement))
+        if (insertion.NewStatement is not (
+                LocalLiteralDeclarationPatchStatement or
+                LocalAssignmentPatchStatement or
+                ReturnPatchStatement))
         {
             throw new JsonException(
                 $"Branch insertion step '{insertion.StepId}' currently accepts only a " +
-                "local-literal declaration or return statement.");
+                "local-literal declaration, local assignment, or return statement.");
         }
 
         ValidateOperation(document, new InsertStatementPatchOperation(

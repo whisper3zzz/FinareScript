@@ -599,6 +599,409 @@ public sealed class CSharpSourcePatchApplierTests
     }
 
     [Fact]
+    public void Apply_InsertsCfgCheckedLocalAssignmentWithTypedPureValue()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int seed)
+                {
+                    int result = seed;
+                    return result;
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            source,
+            "Game/InsertAssignment.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement resultDefinition = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+        SemanticId intType = GetTypeId(original, resultDefinition);
+        var assignment = new LocalAssignmentPatchStatement(
+            resultDefinition.Id,
+            resultDefinition.Name,
+            intType,
+            new BinaryPatchExpression(
+                "+",
+                new LocalReferencePatchExpression(
+                    resultDefinition.Id,
+                    resultDefinition.Name,
+                    intType),
+                new LiteralPatchExpression("1", intType),
+                intType));
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new InsertStatementPatchOperation(
+                method.Body.Id,
+                resultDefinition.Id,
+                returnStatement.Id,
+                assignment)]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Contains(
+            "int result = seed;\n        result = result + 1;\n        return result;",
+            Assert.Single(result.PatchedRequest!.Sources).Source);
+        HirMethodDeclaration changedMethod = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirExpressionStatement assignmentStatement = Assert.IsType<HirExpressionStatement>(
+            changedMethod.Body.Statements[1]);
+        HirAssignmentExpression assignmentExpression = Assert.IsType<HirAssignmentExpression>(
+            assignmentStatement.Expression);
+        Assert.Equal("=", assignmentExpression.Operator);
+        HirIdentifierExpression assignmentTarget = Assert.IsType<HirIdentifierExpression>(
+            assignmentExpression.Target);
+        Assert.Equal(
+            resultDefinition.Id,
+            Assert.Single(
+                result.Analysis.Semantics!.Nodes,
+                binding => binding.NodeId == assignmentTarget.Id).ReferencedSymbolId);
+
+        GraphDocument graph = new HirGraphProjector().Project(
+            result.Analysis.Hir,
+            result.Analysis.Semantics);
+        GraphControlFlowFunction flow = Assert.Single(
+            new GraphControlFlowAnalyzer().AnalyzeAndValidate(graph).Functions);
+        GraphControlFlowNode assignmentNode = Assert.Single(
+            flow.Nodes,
+            node => node.Id == assignmentExpression.Id);
+        Assert.True(assignmentNode.IsReachable);
+        Assert.Contains(resultDefinition.Id, assignmentNode.DominatorIds);
+    }
+
+    [Fact]
+    public void Apply_InsertsAssignmentAtReachableBranchEndUsingBranchLocal()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(bool ready)
+                {
+                    int result = 0;
+                    if (ready)
+                    {
+                        int branchValue = 2;
+                    }
+
+                    return result;
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            source,
+            "Game/InsertBranchAssignment.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement resultDefinition = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirIfStatement ifStatement = Assert.IsType<HirIfStatement>(method.Body.Statements[1]);
+        HirVariableDeclarationStatement branchValue = Assert.IsType<HirVariableDeclarationStatement>(
+            Assert.Single(ifStatement.Then.Statements));
+        SemanticId intType = GetTypeId(original, resultDefinition);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new InsertStatementPatchOperation(
+                ifStatement.Then.Id,
+                branchValue.Id,
+                null,
+                new LocalAssignmentPatchStatement(
+                    resultDefinition.Id,
+                    resultDefinition.Name,
+                    intType,
+                    new LocalReferencePatchExpression(
+                        branchValue.Id,
+                        branchValue.Name,
+                        intType)))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Contains(
+            "int branchValue = 2;\n            result = branchValue;",
+            Assert.Single(result.PatchedRequest!.Sources).Source);
+        HirIfStatement changedIf = Assert.IsType<HirIfStatement>(
+            Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods).Body.Statements[1]);
+        Assert.IsType<HirAssignmentExpression>(
+            Assert.IsType<HirExpressionStatement>(changedIf.Then.Statements[1]).Expression);
+    }
+
+    [Fact]
+    public void Apply_RejectsAssignmentToBranchLocalOutsideItsCfgScope()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(bool ready)
+                {
+                    if (ready)
+                    {
+                        int branchValue = 2;
+                    }
+
+                    return 0;
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            source,
+            "Game/RejectBranchAssignmentTarget.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirIfStatement ifStatement = Assert.IsType<HirIfStatement>(method.Body.Statements[0]);
+        HirVariableDeclarationStatement branchValue = Assert.IsType<HirVariableDeclarationStatement>(
+            Assert.Single(ifStatement.Then.Statements));
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+        SemanticId intType = GetTypeId(original, branchValue);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new InsertStatementPatchOperation(
+                method.Body.Id,
+                ifStatement.Id,
+                returnStatement.Id,
+                new LocalAssignmentPatchStatement(
+                    branchValue.Id,
+                    branchValue.Name,
+                    intType,
+                    new LiteralPatchExpression("3", intType)))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.PatchedRequest);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code ==
+                SemanticPatchDiagnosticCodes.AssignmentTargetNotAvailable);
+    }
+
+    [Fact]
+    public void Apply_RejectsAssignmentAfterBothBranchesTerminate()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(bool ready)
+                {
+                    int result = 0;
+                    if (ready)
+                    {
+                        return 1;
+                    }
+                    else
+                    {
+                        return 2;
+                    }
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            source,
+            "Game/RejectUnreachableAssignment.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement resultDefinition = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirIfStatement terminalIf = Assert.IsType<HirIfStatement>(method.Body.Statements[1]);
+        SemanticId intType = GetTypeId(original, resultDefinition);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new InsertStatementPatchOperation(
+                method.Body.Id,
+                terminalIf.Id,
+                null,
+                new LocalAssignmentPatchStatement(
+                    resultDefinition.Id,
+                    resultDefinition.Name,
+                    intType,
+                    new LiteralPatchExpression("3", intType)))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.PatchedRequest);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.UnreachableInsertion);
+    }
+
+    [Fact]
+    public void Apply_RejectsAssignmentAtEndOfBranchWhoseNestedPathsTerminate()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(bool outer, bool inner)
+                {
+                    int result = 0;
+                    if (outer)
+                    {
+                        if (inner)
+                        {
+                            return 1;
+                        }
+                        else
+                        {
+                            return 2;
+                        }
+                    }
+
+                    return result;
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            source,
+            "Game/RejectNestedTerminalAssignment.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement resultDefinition = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirIfStatement outerIf = Assert.IsType<HirIfStatement>(method.Body.Statements[1]);
+        HirIfStatement terminalInnerIf = Assert.IsType<HirIfStatement>(
+            Assert.Single(outerIf.Then.Statements));
+        SemanticId intType = GetTypeId(original, resultDefinition);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new InsertStatementPatchOperation(
+                outerIf.Then.Id,
+                terminalInnerIf.Id,
+                null,
+                new LocalAssignmentPatchStatement(
+                    resultDefinition.Id,
+                    resultDefinition.Name,
+                    intType,
+                    new LiteralPatchExpression("3", intType)))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.PatchedRequest);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.UnreachableInsertion);
+    }
+
+    [Fact]
+    public void Apply_RejectsAssignmentWhenTargetTypePreconditionIsWrong()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int seed, bool flag)
+                {
+                    int result = seed;
+                    return result;
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            source,
+            "Game/RejectAssignmentType.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement resultDefinition = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+        SemanticId boolType = Assert.Single(
+            original.Semantics!.Types,
+            static type => type.MetadataName == "System.Boolean").Id;
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics.ConfigurationId,
+            [new InsertStatementPatchOperation(
+                method.Body.Id,
+                resultDefinition.Id,
+                returnStatement.Id,
+                new LocalAssignmentPatchStatement(
+                    resultDefinition.Id,
+                    resultDefinition.Name,
+                    boolType,
+                    new LiteralPatchExpression("true", boolType)))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.PatchedRequest);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.TypeMismatch);
+    }
+
+    [Fact]
+    public void Apply_RejectsAssignmentWhenTargetNamePreconditionIsStale()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int seed)
+                {
+                    int result = seed;
+                    return result;
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            source,
+            "Game/RejectAssignmentName.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement resultDefinition = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+        SemanticId intType = GetTypeId(original, resultDefinition);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new InsertStatementPatchOperation(
+                method.Body.Id,
+                resultDefinition.Id,
+                returnStatement.Id,
+                new LocalAssignmentPatchStatement(
+                    resultDefinition.Id,
+                    "renamedResult",
+                    intType,
+                    new LiteralPatchExpression("3", intType)))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.PatchedRequest);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code ==
+                SemanticPatchDiagnosticCodes.AssignmentTargetNotAvailable);
+    }
+
+    [Fact]
     public void Apply_InsertsIntoEmptyExplicitBlockWithStableIndentation()
     {
         const string source = """
@@ -1773,6 +2176,111 @@ public sealed class CSharpSourcePatchApplierTests
         Assert.Contains(
             result.Diagnostics,
             static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.ValueSourceNotAvailable);
+    }
+
+    [Fact]
+    public void Apply_RejectsValueReconnectionIntoUnreachableConsumer()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run()
+                {
+                    int sourceValue = 1;
+                    return sourceValue;
+                    int lateValue = 2;
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            source,
+            "Game/RejectUnreachableReconnect.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement sourceDefinition = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+        HirVariableDeclarationStatement lateDefinition = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[2]);
+        HirExpression target = Assert.IsType<HirLiteralExpression>(lateDefinition.Initializer);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new ReconnectValuePatchOperation(
+                target.Id,
+                sourceDefinition.Id,
+                lateDefinition.Id,
+                method.Body.Id,
+                returnStatement.Id,
+                null,
+                GetTypeId(original, target),
+                GetTypeId(original, sourceDefinition))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.PatchedRequest);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.ValueSourceNotAvailable);
+    }
+
+    [Fact]
+    public void Apply_RejectsValueReconnectionThatRetargetsAssignmentWrite()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run()
+                {
+                    int sourceValue = 1;
+                    int targetValue = 2;
+                    targetValue = 3;
+                    return targetValue;
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            source,
+            "Game/RejectAssignmentRetarget.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement sourceDefinition = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirVariableDeclarationStatement targetDefinition = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[1]);
+        HirExpressionStatement assignmentStatement = Assert.IsType<HirExpressionStatement>(
+            method.Body.Statements[2]);
+        HirAssignmentExpression assignment = Assert.IsType<HirAssignmentExpression>(
+            assignmentStatement.Expression);
+        HirIdentifierExpression target = Assert.IsType<HirIdentifierExpression>(assignment.Target);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(method.Body.Statements[3]);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new ReconnectValuePatchOperation(
+                target.Id,
+                sourceDefinition.Id,
+                assignmentStatement.Id,
+                method.Body.Id,
+                targetDefinition.Id,
+                returnStatement.Id,
+                GetTypeId(original, target),
+                GetTypeId(original, sourceDefinition))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.PatchedRequest);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.UnsafeValueReconnection);
     }
 
     [Fact]

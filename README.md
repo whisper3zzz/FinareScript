@@ -25,10 +25,11 @@ The repository currently implements:
 - a versioned semantic patch protocol with source/configuration conflict guards;
 - transactional graph-to-C# literal, operator, argument-connection, and bounded
   statement rewriting;
+- CFG-checked local-assignment insertion with typed, effect-bounded values;
 - use/definition indexing and safe extraction of stable expressions into
   single-evaluation C# temporaries;
-- structured dominance analysis and exactly typed reconnection from an existing
-  local definition to a stable consumer expression;
+- combined lexical/CFG dominance analysis and exactly typed reconnection from
+  an existing local definition to a stable consumer expression;
 - atomic multi-stage patch plans composing every bounded patch operation, with
   symbolic references to newly introduced locals and full reanalysis per stage;
 - symbolic `then`/`else` block handles with ordered local and typed early-return
@@ -42,8 +43,8 @@ The repository currently implements:
   deterministic output.
 
 M3 bidirectional source projection is complete. M4.1 adds explicit Graph
-regions, and M4.2 now derives and validates control flow before later patch and
-loop expansion.
+regions, M4.2 derives and validates control flow, and M4.3 now consumes those
+facts for bounded local assignment and safer value reconnection.
 
 The v0.1 profile accepts `[Visual]` methods containing local variables,
 expressions, calls, assignments, `if/else`, `return`, casts, and `await`.
@@ -194,7 +195,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
   --out-identity artifacts/patched/DamageRules.cs.usids
 ```
 
-`unifiedscript.patch/v0.7` binds every patch to both the source compilation ID
+`unifiedscript.patch/v0.8` binds every patch to both the source compilation ID
 and semantic configuration ID emitted in Graph schema v0.3. A `replaceLiteral`
 operation also carries the expected old literal text. A stale source, changed
 reference/effect configuration, missing target, changed old value, non-literal
@@ -208,7 +209,7 @@ ambiguous matches allocate new IDs and emit `UVS3101` rather than guessing.
 
 ## Apply structural graph patches
 
-Patch v0.7 includes `changeOperator` and `reconnectArgument`. The checked-in
+Patch v0.8 includes `changeOperator` and `reconnectArgument`. The checked-in
 operator sample changes the binary node from multiplication to division while
 requiring the expected result, left-port, and right-port type IDs:
 
@@ -244,7 +245,7 @@ single-document.
 
 ## Apply a statement insertion
 
-Patch v0.7 also includes bounded `insertStatement` and `deleteStatement`
+Patch v0.8 also includes bounded `insertStatement` and `deleteStatement`
 operations. The insertion sample adds a graph-authored local declaration before
 the existing return statement:
 
@@ -259,9 +260,9 @@ dotnet run --project src/UnifiedScript.Cli -- \
 ```
 
 An insertion targets a parent block and records the exact adjacent sibling IDs.
-Patch v0.7 accepts a local declaration with one literal initializer, a typed
-terminal return, or an `if` whose condition is a versioned graph-authored
-expression. A local's
+Patch v0.8 accepts a local declaration with one literal initializer, a
+CFG-checked local assignment, a typed terminal return, or an `if` whose
+condition is a versioned graph-authored expression. A local's
 semantic type must already be present and graph-safe in the bound compilation,
 and its name must not collide with any parameter or local in the method. The
 existing block, sibling statements, and their expressions are explicitly
@@ -270,6 +271,30 @@ pinned; newly authored syntax receives new persistent IDs.
 The sample intentionally reports compiler warning `CS0219` because the new
 local is not connected to a consumer yet; warnings do not bypass the full
 semantic reanalysis or make the transaction partial.
+
+### Insert a CFG-checked local assignment
+
+The M4.3 sample inserts `result = result + 1;` between an existing local
+declaration and return:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  apply-patch \
+  samples/Patching/AssignmentRules.cs \
+  --identity samples/Patching/AssignmentRules.cs.usids \
+  --patch samples/Patching/IncrementResult.patch.json \
+  --out artifacts/assignment/AssignmentRules.cs \
+  --out-identity artifacts/assignment/AssignmentRules.cs.usids
+```
+
+`localAssignment` identifies an existing same-method local by persistent ID,
+expected name, and exact graph-safe type. Its value reuses the closed typed
+expression payload. The insertion gap must be CFG-reachable; the target and
+every local used by the value must be in lexical scope and dominate every CFG
+anchor reaching that gap. This permits assignments at a reachable branch end,
+but rejects sibling-branch locals and paths terminated by returns. The emitted
+assignment is ordinary C#, HIR, and Graph—not an editor-only node. See
+[LOCAL_ASSIGNMENT_PATCHING.md](docs/LOCAL_ASSIGNMENT_PATCHING.md).
 
 ### Insert a typed branch skeleton
 
@@ -300,17 +325,18 @@ else
 The expression payload has five closed variants: scalar `literal`,
 `localReference`, `unary`, `binary`, and `cast`. Every node carries an expected
 semantic type ID. References also carry a source definition ID and expected
-name; a local must lexically dominate the insertion gap, while a parameter must
-belong to the same method. The current operator subset excludes division,
-remainder, decimal/string operations, mutation, calls, member reads, and other
-expressions whose evaluation may throw, allocate, mutate, or read state.
+name; a local must both lexically and CFG-dominate the reachable insertion gap,
+while a parameter must belong to the same method. The current operator subset
+excludes division, remainder, decimal/string operations, mutation, calls,
+member reads, and other expressions whose evaluation may throw, allocate,
+mutate, or read state.
 
 The standalone operation deliberately creates empty `then` and `else` blocks.
 It proves that source, HIR, Graph branch/data/control edges, persistent identity,
 and `.usgraph` layout synchronization share one structure. New branch and
 condition nodes are explicitly `unplaced`; existing placements survive.
 
-Patch-plan v0.5 can populate those newly allocated blocks without predicting
+Patch-plan v0.6 can populate those newly allocated blocks without predicting
 their random IDs. The checked-in plan inserts the same guard, appends two typed
 locals to `then`, and appends one typed local to `else`:
 
@@ -328,7 +354,8 @@ Each `insertBranchStatement` names the earlier `if` step through `sourceStepId`
 and selects `then` or `else`. The coordinator resolves the actual block ID after
 the `if` stage, appends branch statements in plan order, and reuses the normal
 typed insertion checks. A branch payload is deliberately limited to a local
-declaration with a literal initializer or a typed terminal `return`.
+declaration with a literal initializer, a CFG-checked assignment to an existing
+outer local, or a typed terminal `return`.
 
 ### Insert a typed early return
 
@@ -413,7 +440,7 @@ pin. The moved expression, its descendants, the containing statement, sibling
 statements, and parent block therefore retain their IDs. Only the new local
 declaration and replacement identifier allocate new IDs. This is the first
 lowering primitive needed to represent a shared Graph value without duplicating
-C# evaluation. Patch v0.7 can now connect additional compatible consumers to
+C# evaluation. Patch v0.8 can now connect additional compatible consumers to
 that local definition.
 
 ## Reconnect a typed consumer
@@ -448,9 +475,10 @@ return bonus + sharedDamage;
 
 The patch records the source declaration, target expression, containing
 statement, parent block, exact adjacent siblings, and both semantic type IDs.
-The source local must be in the same method and must structurally dominate the
-consumer statement: a root-block local may feed a later nested branch, but a
-branch-local value cannot escape that branch or feed a sibling branch. The
+The source local must be in the same method and must both lexically and
+CFG-dominate the reachable consumer statement: a root-block local may feed a
+later nested branch, but a branch-local value cannot escape that branch or feed
+a sibling branch. The
 source name must also be unambiguous in the method, and source and target types
 must be the same graph-safe type.
 
@@ -471,7 +499,7 @@ analyzed source baseline, or atomically with the patch-plan protocol below.
 
 ## Apply atomic semantic patch plans
 
-`unifiedscript.patch-plan/v0.5` composes `replaceLiteral`, `changeOperator`,
+`unifiedscript.patch-plan/v0.6` composes `replaceLiteral`, `changeOperator`,
 `reconnectArgument`, `insertStatement`, `insertBranchStatement`, `deleteStatement`,
 `introduceTemporary`, and `reconnectValue` as one ordered transaction. The
 shared-value sample starts with:
@@ -550,8 +578,9 @@ insertion publishes symbolic `then` and `else` block handles only through later
 locals publish ordinary local handles, but normal dominance rules prevent a
 branch-local value from escaping to the outer block or sibling branch. A typed
 branch return terminates that symbolic path; later appends to the same path are
-rejected before execution. Assignments, calls, nested branch payloads, async/
-task-like returns, and cross-method handles remain outside v0.5.
+rejected before execution. Local assignments are supported as direct and
+produced-branch insertion payloads; calls, nested branch payloads, async/
+task-like returns, and cross-method handles remain outside v0.6.
 
 ## Persist and synchronize graph layout
 
@@ -611,9 +640,9 @@ This milestone does not include:
 - namespace/API allow and deny policies;
 - flow-sensitive nullable state in the interchange model;
 - general expression/statement synthesis and arbitrary data/control rewiring
-  beyond bounded local/`if`/`return` insertion, safe deletion, temporary
-  introduction, compatible local consumer reconnection, and atomic composition
-  of the current patch operations;
+  beyond bounded local/assignment/`if`/`return` insertion, safe deletion,
+  temporary introduction, compatible local consumer reconnection, and atomic
+  composition of the current patch operations;
 - automatic graph placement, layout merge drivers, and editor viewport/session
   state;
 - loops, switch, lambdas, exceptions, or general-purpose C# visualization.
@@ -621,6 +650,8 @@ This milestone does not include:
 See [ARCHITECTURE.md](docs/ARCHITECTURE.md),
 [IDENTITY_SIDECAR.md](docs/IDENTITY_SIDECAR.md),
 [GRAPH_LAYOUT.md](docs/GRAPH_LAYOUT.md),
+[CONTROL_FLOW_ANALYSIS.md](docs/CONTROL_FLOW_ANALYSIS.md),
+[LOCAL_ASSIGNMENT_PATCHING.md](docs/LOCAL_ASSIGNMENT_PATCHING.md),
 [PATCH_PLAN.md](docs/PATCH_PLAN.md),
 [M1_ROSLYN_GRAPH_FOUNDATION.md](docs/milestones/M1_ROSLYN_GRAPH_FOUNDATION.md),
 [M2_SEMANTIC_BINDING.md](docs/milestones/M2_SEMANTIC_BINDING.md), and

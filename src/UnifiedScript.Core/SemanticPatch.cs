@@ -36,6 +36,7 @@ public sealed record ReconnectArgumentPatchOperation(
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "statement")]
 [JsonDerivedType(typeof(LocalLiteralDeclarationPatchStatement), "localLiteralDeclaration")]
+[JsonDerivedType(typeof(LocalAssignmentPatchStatement), "localAssignment")]
 [JsonDerivedType(typeof(IfPatchStatement), "if")]
 [JsonDerivedType(typeof(ReturnPatchStatement), "return")]
 public abstract record InsertPatchStatement;
@@ -45,6 +46,12 @@ public sealed record LocalLiteralDeclarationPatchStatement(
     string TypeName,
     string ValueText,
     SemanticId ExpectedTypeId) : InsertPatchStatement;
+
+public sealed record LocalAssignmentPatchStatement(
+    SemanticId TargetDefinitionId,
+    string ExpectedName,
+    SemanticId ExpectedTypeId,
+    PatchExpression Value) : InsertPatchStatement;
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "expression")]
 [JsonDerivedType(typeof(LiteralPatchExpression), "literal")]
@@ -124,7 +131,7 @@ public sealed record SemanticPatchDocument(
     SemanticId SemanticConfigurationId,
     IReadOnlyList<SemanticPatchOperation> Operations)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.7";
+    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.8";
 
     public static SemanticPatchDocument Create(
         SemanticId sourceCompilationId,

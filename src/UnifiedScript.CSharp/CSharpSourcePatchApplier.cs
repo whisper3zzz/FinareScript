@@ -136,6 +136,10 @@ public sealed class CSharpSourcePatchApplier
         IReadOnlyDictionary<SemanticId, TypeDescriptor> types = original.Semantics.Types
             .ToDictionary(static type => type.Id);
         var patchIndex = new HirPatchIndex(original.Hir);
+        var graphSafetyIndex = new GraphPatchSafetyIndex(
+            original.Hir,
+            original.Semantics,
+            patchIndex);
         var useDefinitionIndex = new HirUseDefinitionIndex(original.Hir, boundNodes);
         var documents = request.Sources.ToDictionary(
             static source => source.LogicalPath,
@@ -174,6 +178,7 @@ public sealed class CSharpSourcePatchApplier
                     boundNodes,
                     methods,
                     types,
+                    graphSafetyIndex,
                     documents),
                 DeleteStatementPatchOperation deleteStatement => PlanStatementDeletion(
                     deleteStatement,
@@ -200,6 +205,7 @@ public sealed class CSharpSourcePatchApplier
                     boundNodes,
                     methods,
                     types,
+                    graphSafetyIndex,
                     documents),
                 _ => throw new InvalidOperationException(
                     $"Validated patch operation '{operation.GetType().Name}' was not handled."),
@@ -637,6 +643,7 @@ public sealed class CSharpSourcePatchApplier
         IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
         IReadOnlyDictionary<SemanticId, MethodDescriptor> methods,
         IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
+        GraphPatchSafetyIndex graphSafetyIndex,
         IReadOnlyDictionary<string, ParsedDocument> documents)
     {
         if (!hirNodes.TryGetValue(operation.TargetNodeId, out HirNode? target))
@@ -678,11 +685,29 @@ public sealed class CSharpSourcePatchApplier
                 block);
         }
 
+        if (operation.NewStatement is LocalAssignmentPatchStatement &&
+            !graphSafetyIndex.IsInsertionReachable(blockLocation!, insertionIndex))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.UnreachableInsertion,
+                "A local assignment requires a CFG-reachable insertion gap.",
+                block);
+        }
+
         StatementBuildResult statementResult = operation.NewStatement switch
         {
             LocalLiteralDeclarationPatchStatement local => BuildLocalLiteralStatement(
                 local,
                 blockLocation!.Method,
+                types),
+            LocalAssignmentPatchStatement assignment => BuildLocalAssignmentStatement(
+                assignment,
+                blockLocation!,
+                insertionIndex,
+                hirNodes,
+                patchIndex,
+                graphSafetyIndex,
+                boundNodes,
                 types),
             IfPatchStatement ifStatement => BuildIfStatement(
                 ifStatement,
@@ -690,6 +715,7 @@ public sealed class CSharpSourcePatchApplier
                 insertionIndex,
                 hirNodes,
                 patchIndex,
+                graphSafetyIndex,
                 boundNodes,
                 types),
             ReturnPatchStatement returnStatement => BuildReturnStatement(
@@ -698,6 +724,7 @@ public sealed class CSharpSourcePatchApplier
                 insertionIndex,
                 hirNodes,
                 patchIndex,
+                graphSafetyIndex,
                 boundNodes,
                 methods,
                 types),
@@ -1026,6 +1053,7 @@ public sealed class CSharpSourcePatchApplier
         IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
         IReadOnlyDictionary<SemanticId, MethodDescriptor> methods,
         IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
+        GraphPatchSafetyIndex graphSafetyIndex,
         IReadOnlyDictionary<string, ParsedDocument> documents)
     {
         if (!hirNodes.TryGetValue(operation.TargetNodeId, out HirNode? target))
@@ -1082,12 +1110,28 @@ public sealed class CSharpSourcePatchApplier
         if (sourceLocation!.Method.Id != expressionLocation.Method.Id ||
             !patchIndex.DoesStatementDominate(
                 sourceDefinition.Id,
-                expressionLocation.ContainingStatement.Id))
+                expressionLocation.ContainingStatement.Id) ||
+            !graphSafetyIndex.DoesDefinitionDominateStatement(
+                sourceDefinition.Id,
+                consumerLocation!))
         {
             return DiagnosticPlan(
                 SemanticPatchDiagnosticCodes.ValueSourceNotAvailable,
-                $"Local '{sourceDefinition.Name}' does not lexically dominate expression '{expression.Id}' " +
-                "in the same method.",
+                $"Local '{sourceDefinition.Name}' does not lexically and CFG-dominate reachable " +
+                $"expression '{expression.Id}' in the same method.",
+                expression);
+        }
+
+        if (expressionLocation.ContainingStatement
+            .DescendantsAndSelf()
+            .OfType<HirAssignmentExpression>()
+            .Any(assignment => assignment.Target
+                .DescendantsAndSelf()
+                .Any(node => node.Id == expression.Id)))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.UnsafeValueReconnection,
+                "Value reconnection cannot retarget the writable side of an assignment.",
                 expression);
         }
 
@@ -1631,12 +1675,100 @@ public sealed class CSharpSourcePatchApplier
         return StatementBuildResult.Success(statement!);
     }
 
+    private static StatementBuildResult BuildLocalAssignmentStatement(
+        LocalAssignmentPatchStatement assignment,
+        HirPatchIndex.BlockLocation blockLocation,
+        int insertionIndex,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        GraphPatchSafetyIndex graphSafetyIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types)
+    {
+        if (!hirNodes.TryGetValue(
+                assignment.TargetDefinitionId,
+                out HirNode? targetNode) ||
+            targetNode is not HirVariableDeclarationStatement target ||
+            !patchIndex.TryGetStatement(
+                target.Id,
+                out HirPatchIndex.StatementLocation? targetLocation) ||
+            targetLocation!.Method.Id != blockLocation.Method.Id)
+        {
+            return StatementBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.AssignmentTargetNotAvailable,
+                $"Assignment target '{assignment.TargetDefinitionId}' is not a local in the target method.");
+        }
+
+        if (!string.Equals(target.Name, assignment.ExpectedName, StringComparison.Ordinal) ||
+            HasNameConflict(blockLocation.Method, target.Name, target.Id))
+        {
+            return StatementBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.AssignmentTargetNotAvailable,
+                $"Assignment target '{assignment.TargetDefinitionId}' is no longer the unshadowed local " +
+                $"named '{assignment.ExpectedName}'.");
+        }
+
+        if (!patchIndex.DoesStatementDominateInsertion(
+                target.Id,
+                blockLocation.Block.Id,
+                insertionIndex) ||
+            !graphSafetyIndex.DoesDefinitionDominateInsertion(
+                target.Id,
+                blockLocation,
+                insertionIndex))
+        {
+            return StatementBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.AssignmentTargetNotAvailable,
+                $"Local '{target.Name}' is not in scope on every reachable CFG path to the insertion gap.");
+        }
+
+        if (!types.TryGetValue(assignment.ExpectedTypeId, out TypeDescriptor? targetType) ||
+            !targetType.IsGraphSafe ||
+            !boundNodes.TryGetValue(target.Id, out BoundNodeInfo? targetBinding) ||
+            targetBinding.TypeId != assignment.ExpectedTypeId)
+        {
+            return StatementBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.TypeMismatch,
+                $"Local '{target.Name}' no longer has graph-safe semantic type " +
+                $"'{assignment.ExpectedTypeId}'.");
+        }
+
+        ExpressionBuildResult value = BuildPatchExpression(
+            assignment.Value,
+            blockLocation,
+            insertionIndex,
+            hirNodes,
+            patchIndex,
+            graphSafetyIndex,
+            boundNodes,
+            types);
+        if (value.Syntax is null || value.Type?.Id != assignment.ExpectedTypeId)
+        {
+            return StatementBuildResult.Failure(
+                value.DiagnosticCode ?? SemanticPatchDiagnosticCodes.TypeMismatch,
+                value.DiagnosticMessage ?? "The local assignment value is invalid.");
+        }
+
+        AssignmentExpressionSyntax assignmentSyntax = SyntaxFactory.AssignmentExpression(
+            SyntaxKind.SimpleAssignmentExpression,
+            SyntaxFactory.IdentifierName(target.Name).WithTrailingTrivia(SyntaxFactory.Space),
+            value.Syntax)
+            .WithOperatorToken(SyntaxFactory.Token(SyntaxKind.EqualsToken)
+                .WithTrailingTrivia(SyntaxFactory.Space));
+        StatementSyntax statement = SyntaxFactory.ExpressionStatement(assignmentSyntax)
+            .NormalizeWhitespace()
+            .WithoutLeadingTrivia()
+            .WithoutTrailingTrivia();
+        return StatementBuildResult.Success(statement);
+    }
+
     private static StatementBuildResult BuildIfStatement(
         IfPatchStatement ifStatement,
         HirPatchIndex.BlockLocation blockLocation,
         int insertionIndex,
         IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
         HirPatchIndex patchIndex,
+        GraphPatchSafetyIndex graphSafetyIndex,
         IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
         IReadOnlyDictionary<SemanticId, TypeDescriptor> types)
     {
@@ -1646,6 +1778,7 @@ public sealed class CSharpSourcePatchApplier
             insertionIndex,
             hirNodes,
             patchIndex,
+            graphSafetyIndex,
             boundNodes,
             types);
         if (condition.Syntax is null || condition.Type is null)
@@ -1676,6 +1809,7 @@ public sealed class CSharpSourcePatchApplier
         int insertionIndex,
         IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
         HirPatchIndex patchIndex,
+        GraphPatchSafetyIndex graphSafetyIndex,
         IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
         IReadOnlyDictionary<SemanticId, MethodDescriptor> methods,
         IReadOnlyDictionary<SemanticId, TypeDescriptor> types)
@@ -1729,6 +1863,7 @@ public sealed class CSharpSourcePatchApplier
             insertionIndex,
             hirNodes,
             patchIndex,
+            graphSafetyIndex,
             boundNodes,
             types);
         if (expression.Syntax is null || expression.Type?.Id != returnStatement.ExpectedReturnTypeId)
@@ -1751,6 +1886,7 @@ public sealed class CSharpSourcePatchApplier
         int insertionIndex,
         IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
         HirPatchIndex patchIndex,
+        GraphPatchSafetyIndex graphSafetyIndex,
         IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
         IReadOnlyDictionary<SemanticId, TypeDescriptor> types)
     {
@@ -1789,6 +1925,7 @@ public sealed class CSharpSourcePatchApplier
                     insertionIndex,
                     hirNodes,
                     patchIndex,
+                    graphSafetyIndex,
                     boundNodes);
 
             case UnaryPatchExpression unary:
@@ -1807,6 +1944,7 @@ public sealed class CSharpSourcePatchApplier
                         insertionIndex,
                         hirNodes,
                         patchIndex,
+                        graphSafetyIndex,
                         boundNodes,
                         types);
                     if (operand.Syntax is null || operand.Type is null)
@@ -1846,6 +1984,7 @@ public sealed class CSharpSourcePatchApplier
                         insertionIndex,
                         hirNodes,
                         patchIndex,
+                        graphSafetyIndex,
                         boundNodes,
                         types);
                     if (left.Syntax is null || left.Type is null)
@@ -1859,6 +1998,7 @@ public sealed class CSharpSourcePatchApplier
                         insertionIndex,
                         hirNodes,
                         patchIndex,
+                        graphSafetyIndex,
                         boundNodes,
                         types);
                     if (right.Syntax is null || right.Type is null)
@@ -1890,6 +2030,7 @@ public sealed class CSharpSourcePatchApplier
                         insertionIndex,
                         hirNodes,
                         patchIndex,
+                        graphSafetyIndex,
                         boundNodes,
                         types);
                     if (operand.Syntax is null || operand.Type is null)
@@ -1932,6 +2073,7 @@ public sealed class CSharpSourcePatchApplier
         int insertionIndex,
         IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
         HirPatchIndex patchIndex,
+        GraphPatchSafetyIndex graphSafetyIndex,
         IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes)
     {
         if (!hirNodes.TryGetValue(local.SourceDefinitionId, out HirNode? source))
@@ -1951,6 +2093,10 @@ public sealed class CSharpSourcePatchApplier
                 patchIndex.DoesStatementDominateInsertion(
                     variable.Id,
                     blockLocation.Block.Id,
+                    insertionIndex) &&
+                graphSafetyIndex.DoesDefinitionDominateInsertion(
+                    variable.Id,
+                    blockLocation,
                     insertionIndex) => variable.Name,
             _ => null,
         };
@@ -1958,7 +2104,7 @@ public sealed class CSharpSourcePatchApplier
         {
             return UnavailableGraphSource(
                 local,
-                "is not a parameter or a local that lexically dominates the insertion gap");
+                "is not a parameter or a local that lexically and CFG-dominates the reachable insertion gap");
         }
 
         if (!string.Equals(actualName, local.ExpectedName, StringComparison.Ordinal) ||

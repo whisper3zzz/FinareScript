@@ -181,6 +181,25 @@ public static class SemanticPatchJson
                 }
 
                 break;
+            case LocalAssignmentPatchStatement assignment:
+                if (assignment.TargetDefinitionId.IsEmpty ||
+                    string.IsNullOrWhiteSpace(assignment.ExpectedName) ||
+                    assignment.ExpectedTypeId.IsEmpty ||
+                    assignment.Value is null)
+                {
+                    throw new JsonException(
+                        "A local assignment requires a target definition, expected name and type, " +
+                        "and typed value expression.");
+                }
+
+                if (assignment.Value.ExpectedTypeId != assignment.ExpectedTypeId)
+                {
+                    throw new JsonException(
+                        "A local assignment value must declare the same expected type as its target.");
+                }
+
+                ValidatePatchExpression(assignment.Value, 0);
+                break;
             case IfPatchStatement ifStatement:
                 if (ifStatement.Condition is null)
                 {

@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "unifiedscript.patch/v0.8",
+  "sourceCompilationId": "us_08309ed1a5299dc1fefa34afbe2c8e03",
+  "semanticConfigurationId": "us_02f5fe78d296e2d4fe04bc50ca71acf1",
+  "operations": [
+    {
+      "operation": "insertStatement",
+      "targetNodeId": "us_922f23cd72c4894a428425468f34a0ce",
+      "expectedPreviousSiblingId": "us_18d042c8c9b61d3b9aa77766c3ea23e3",
+      "expectedNextSiblingId": "us_cc7094cb3032aeec9bab63f9254fd444",
+      "newStatement": {
+        "statement": "localAssignment",
+        "targetDefinitionId": "us_18d042c8c9b61d3b9aa77766c3ea23e3",
+        "expectedName": "result",
+        "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+        "value": {
+          "expression": "binary",
+          "operator": "+",
+          "left": {
+            "expression": "localReference",
+            "sourceDefinitionId": "us_18d042c8c9b61d3b9aa77766c3ea23e3",
+            "expectedName": "result",
+            "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+          },
+          "right": {
+            "expression": "literal",
+            "valueText": "1",
+            "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+          },
+          "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+        }
+      }
+    }
+  ]
+}

@@ -10,7 +10,7 @@ M4 and builds on this frozen bidirectional transaction boundary.
 
 ## Implemented vertical slice
 
-- `unifiedscript.patch/v0.7` polymorphic JSON protocol
+- `unifiedscript.patch/v0.8` polymorphic JSON protocol
 - `replaceLiteral` operation targeted by HIR/Graph `SemanticId`
 - unary/binary `changeOperator` with result and operand type preconditions
 - same-invocation `reconnectArgument` with endpoint, type, and effect guards
@@ -19,22 +19,25 @@ M4 and builds on this frozen bidirectional transaction boundary.
   references, casts, and bounded unary/binary operators
 - typed `if` insertion with explicit empty `then` and `else` blocks
 - typed terminal `return` insertion for non-async value and `void` methods
+- CFG-checked assignment insertion to an existing same-method local
 - bounded `deleteStatement` with symbol-use and effect safety checks
 - `introduceTemporary` for stable, pure return/local-initializer expressions
-- `reconnectValue` from an existing local to an exactly typed stable consumer
-- `unifiedscript.patch-plan/v0.5` ordered multi-stage transaction protocol
+- `reconnectValue` from an existing local to an exactly typed, reachable stable
+  consumer
+- `unifiedscript.patch-plan/v0.6` ordered multi-stage transaction protocol
 - plan steps for every bounded semantic patch operation
 - symbolic plan handles for local IDs allocated by `introduceTemporary` and
   local-literal `insertStatement`
 - symbolic `then`/`else` handles for blocks allocated by `if` insertion, with
-  ordered local-literal and typed-return branch-body population
+  ordered local-literal, outer-local-assignment, and typed-return branch-body
+  population
 - terminal branch-handle tracking that rejects unreachable later appends
 - unaffected-node identity pins around nested replacements
 - initial-context validation and safe internal baseline/sibling rebasing
 - repeated insertion-gap and invocation-endpoint rebasing
 - persistent-sidecar adoption between in-memory plan stages
 - HIR expression-location and use/definition indexes
-- structured block hierarchy and statement-dominance checks
+- structured block hierarchy plus lexical and CFG-dominance checks
 - exact parent block and adjacent-sibling structural preconditions
 - overlapping source-range conflict detection
 - expected-old-literal precondition
@@ -89,6 +92,8 @@ diagnostic codes distinguish:
 - `UVS3021`: a multi-stage plan targets a document without persistent identity
 - `UVS3022`: plan handles or method relationships cannot be resolved safely
 - `UVS3023`: a graph-authored expression shape/operator is invalid or unsafe
+- `UVS3024`: the requested insertion gap is unreachable
+- `UVS3025`: the assignment target is unavailable at the requested gap
 - `UVS3101`: identity evidence is ambiguous; allocate a new ID instead of guessing
 - `UVS3102`: an explicit identity pin is invalid, missing, duplicate, or tombstoned
 
@@ -178,7 +183,7 @@ The test and sample suite proves that:
     an earlier literal replacement;
 53. deleting a statement before a later descendant step fails atomically without
     returning the successful deletion; and
-54. both the shared-expression and composed v0.5 CLI samples produce
+54. both the shared-expression and composed plan CLI samples produce
     their documented final source and identity sidecars;
 55. patch JSON round-trips all five graph-authored expression variants and
     rejects expression trees deeper than the protocol bound;
@@ -213,26 +218,43 @@ The test and sample suite proves that:
 69. nested insertion pins unaffected exterior nodes, so a new same-valued branch
     literal cannot steal a later target's persistent ID; and
 70. the checked-in `ReturnGuard.plan.json` sample emits a typed early return and
-    edits the original fallback literal in one atomic transaction.
+    edits the original fallback literal in one atomic transaction;
+71. patch v0.8 round-trips a local assignment whose target name, persistent ID,
+    expected type, and typed pure right-hand side are explicit;
+72. a reachable root-block assignment emits ordinary C#, binds to the existing
+    local, and projects an HIR/Graph assignment with the expected dominance;
+73. an assignment can be appended to a reachable generated branch and can read
+    a valid branch-local or outer-local value;
+74. a branch local cannot be assigned or referenced outside its lexical and CFG
+    scope;
+75. assignment insertion after a direct or nested all-paths-return branch is
+    rejected as unreachable;
+76. stale assignment target names/types reject the transaction before source
+    commit;
+77. value reconnection rejects an unreachable consumer and cannot retarget the
+    writable left-hand side of an assignment; and
+78. plan v0.6 can populate both generated branches with assignments to one
+    dominating outer local and commit them atomically.
 
 ## Deliberate limits
 
 This is a bounded structural-edit slice, not general graph-to-source generation.
 It does not apply multi-file patches through the CLI, synthesize arbitrary
 expression payload shapes or general control-flow statements, perform
-arbitrary data/control rewiring, delete
+arbitrary data/control rewiring, edit existing assignments, delete
 returns/branches/blocks, reconcile declaration renames, compact tombstones, or
 automatically place graph nodes. Layout v0.1 does not persist viewport/session
 state, define a three-way merge driver, or choose an auto-layout algorithm.
-Standalone insertion accepts a local-literal declaration, an `if` skeleton, or
-a terminal return.
+Standalone insertion accepts a local-literal declaration, a simple assignment
+to an existing local, an `if` skeleton, or a terminal return.
 The `if` condition accepts only graph-safe scalar types already present in bound
 semantics, a closed pure expression subset, and same-method references that are
 available at the exact insertion gap. It always creates empty explicit branch
-blocks. Patch-plan v0.5 can resolve those blocks symbolically, but branch-body
-payloads are limited to local declarations with literal initializers and typed
-returns. A return must be last, must exactly match the current method return
-type, and does not yet support async or task-like methods.
+blocks. Patch-plan v0.6 can resolve those blocks symbolically, but branch-body
+payloads are limited to local declarations with literal initializers,
+assignments to valid outer locals, and typed returns. A return must be last,
+must exactly match the current method return type, and does not yet support
+async or task-like methods.
 Deletion accepts only an unused local with no initializer or a literal
 initializer, or a resolved pure static call with effect-free simple arguments.
 Temporary introduction accepts only stable, pure value expressions in return or
@@ -240,10 +262,11 @@ local-initializer statements inside explicit blocks. Short-circuit,
 division/remainder, decimal, and string operators remain excluded until builtin
 operator effects model conditional evaluation, allocation, and throws.
 Value reconnection accepts only an existing, unshadowed local or a local
-produced by an earlier plan step that structurally dominates the containing
-statement and has the same graph-safe semantic type as
-the removable stable consumer. Patch-plan v0.5 composes every current bounded
-operation and requires sidecars on target documents. A source handle may
+produced by an earlier plan step that lexically and CFG-dominates the reachable
+containing statement and has the same graph-safe semantic type as the removable
+stable consumer. It cannot target an assignment's writable left-hand side.
+Patch-plan v0.6 composes every current bounded operation and requires sidecars
+on target documents. A source handle may
 reference only an earlier temporary introduction, root-block local-literal
 insertion, or branch local-literal insertion in the same method with the same
 expected type. Dominance still governs where that handle may be consumed. Only
@@ -253,9 +276,10 @@ transaction coordinator.
 
 ## Follow-on milestone
 
-M4.1 has now delivered the versioned `GraphRegion` model proposed here for
-function, block, `if`, `then`, and `else` ownership, including early-return
-projection. M4.2 has also delivered CFG reachability, dominance,
-post-dominance, merge, and reducibility indexes on those regions. M4.3 can now
-grow bounded assignment and data rewiring before nested-branch construction and
+M4.1 delivered the versioned `GraphRegion` model proposed here for function,
+block, `if`, `then`, and `else` ownership, including early-return projection.
+M4.2 delivered CFG reachability, dominance, post-dominance, merge, and
+reducibility indexes on those regions. M4.3 now consumes those facts for
+bounded local assignment and safer data reconnection. M4.4 can proceed to
+nested-branch construction and broader structural HIR operations before
 `while`/`break`/`continue`.

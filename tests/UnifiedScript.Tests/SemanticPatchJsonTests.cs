@@ -216,6 +216,60 @@ public sealed class SemanticPatchJsonTests
     }
 
     [Fact]
+    public void SerializeAndDeserialize_PreserveTypedLocalAssignment()
+    {
+        SemanticId intType = SemanticId.FromKey("System.Int32");
+        var assignment = new LocalAssignmentPatchStatement(
+            SemanticId.FromKey("assignment-target"),
+            "result",
+            intType,
+            new BinaryPatchExpression(
+                "+",
+                new LocalReferencePatchExpression(
+                    SemanticId.FromKey("assignment-source"),
+                    "source",
+                    intType),
+                new LiteralPatchExpression("1", intType),
+                intType));
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            SemanticId.FromKey("assignment-compilation"),
+            SemanticId.FromKey("assignment-configuration"),
+            [new InsertStatementPatchOperation(
+                SemanticId.FromKey("assignment-block"),
+                null,
+                null,
+                assignment)]);
+
+        string json = SemanticPatchJson.Serialize(patch);
+        SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
+
+        InsertStatementPatchOperation insertion = Assert.IsType<InsertStatementPatchOperation>(
+            Assert.Single(roundTrip.Operations));
+        Assert.Equal(assignment, Assert.IsType<LocalAssignmentPatchStatement>(insertion.NewStatement));
+        Assert.Contains("\"statement\": \"localAssignment\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Create_RejectsLocalAssignmentWhoseValueDeclaresAnotherType()
+    {
+        SemanticId intType = SemanticId.FromKey("System.Int32");
+        SemanticId boolType = SemanticId.FromKey("System.Boolean");
+
+        Assert.Throws<JsonException>(() => SemanticPatchDocument.Create(
+            SemanticId.FromKey("invalid-assignment-compilation"),
+            SemanticId.FromKey("invalid-assignment-configuration"),
+            [new InsertStatementPatchOperation(
+                SemanticId.FromKey("invalid-assignment-block"),
+                null,
+                null,
+                new LocalAssignmentPatchStatement(
+                    SemanticId.FromKey("invalid-assignment-target"),
+                    "result",
+                    intType,
+                    new LiteralPatchExpression("true", boolType)))]));
+    }
+
+    [Fact]
     public void Create_RejectsReturnWithoutAnExpectedMethodType()
     {
         Assert.Throws<JsonException>(() => SemanticPatchDocument.Create(

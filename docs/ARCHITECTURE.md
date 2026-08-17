@@ -204,18 +204,19 @@ compilation identity is not safe for editing.
 ## Semantic patch transaction
 
 Graph schema v0.3 carries both the source compilation ID and semantic
-configuration ID. A `unifiedscript.patch/v0.7` document repeats those IDs and
+configuration ID. A `unifiedscript.patch/v0.8` document repeats those IDs and
 contains typed operations keyed by graph/HIR `SemanticId`. Implemented
 operations are `replaceLiteral`, `changeOperator`, `reconnectArgument`,
 `insertStatement`, `deleteStatement`, `introduceTemporary`, and
-`reconnectValue`. `insertStatement` accepts a local-literal declaration, an
-`if` with a closed typed expression tree and explicit empty `then`/`else`
-blocks, or a typed terminal `return`. Structural operations carry old
+`reconnectValue`. `insertStatement` accepts a local-literal declaration, a
+CFG-checked assignment to an existing local, an `if` with a closed typed
+expression tree and explicit empty `then`/`else` blocks, or a typed terminal
+`return`. Structural operations carry old
 operator/endpoint, semantic type,
 containing statement, parent block, and exact sibling preconditions rather than
 relying only on the compilation baseline.
 
-`unifiedscript.patch-plan/v0.5` is an ordered transaction above individual
+`unifiedscript.patch-plan/v0.6` is an ordered transaction above individual
 patches. It composes every current bounded operation: literal and operator
 changes, argument reconnection, statement insertion/deletion, temporary
 introduction, value reconnection, and symbolic branch-body insertion.
@@ -230,9 +231,10 @@ An `if` insertion publishes internal `then`/`else` block handles for later
 definition. The branch steps repeat the producer's original parent block as
 their stable initial anchor; the coordinator records the generated branch IDs
 after the `if` stage and turns each append into a normal bounded insertion.
-Local-literal and typed-return payloads are accepted in a produced branch. A
-return terminates that branch handle, so later appends are rejected as
-unreachable while the sibling branch remains independent.
+Local-literal, existing-local assignment, and typed-return payloads are
+accepted in a produced branch. A return terminates that branch handle, so later
+appends are rejected as unreachable while the sibling branch remains
+independent.
 The complete transaction and internal rebasing contract is specified in
 [PATCH_PLAN.md](PATCH_PLAN.md).
 
@@ -274,28 +276,40 @@ Short-circuit, division/remainder, decimal, and string operators remain outside
 this proof until builtin operator effects include conditional evaluation,
 allocation, and throw behavior.
 
-Typed value reconnection uses the same expression-stability predicate plus a
-block hierarchy in the HIR patch index. The source must be an existing local in
-the same method, its declaration statement must strictly precede and
-structurally dominate the consumer statement, its name must not be shadowed,
-and its bound graph-safe type must exactly equal the consumer type. Replacing a
-consumer never moves or duplicates evaluation: it removes one proven-stable
-subtree and inserts a local identifier at the same syntax position. Comments
-or directives inside that subtree make the edit unsafe. Surviving syntax is
-pinned; removed IDs are tombstoned; the new identifier receives a new ID and
-must rebind to the requested source declaration during full reanalysis.
+M4.3 adds a `GraphPatchSafetyIndex` inside the C# patch boundary. It projects
+the same analyzed HIR and bound semantics through Graph v0.3, derives the M4.2
+CFG, and resolves statement entries or region fallthrough sources as insertion
+anchors. A non-empty block whose paths terminate has no fallthrough anchor.
+Local assignment targets and graph-authored local references must satisfy both
+C# lexical dominance and Graph reachability/dominance; the Graph does not
+replace language scope. See
+[LOCAL_ASSIGNMENT_PATCHING.md](LOCAL_ASSIGNMENT_PATCHING.md).
+
+Typed value reconnection uses the same expression-stability predicate plus the
+lexical and CFG indexes. The source must be an existing local in the same
+method, its declaration statement must strictly precede and dominate the
+reachable consumer statement, its name must not be shadowed, and its bound
+graph-safe type must exactly equal the consumer type. Replacing a consumer
+never moves or duplicates evaluation: it removes one proven-stable subtree and
+inserts a local identifier at the same syntax position. The writable target
+subtree of an assignment is never a value consumer and cannot be reconnected.
+Comments or directives inside the removed subtree make the edit unsafe.
+Surviving syntax is pinned; removed IDs are tombstoned; the new identifier
+receives a new ID and must rebind to the requested source declaration during
+full reanalysis.
 
 Argument reconnection is deliberately bounded to exchanging two pure, exactly
 type-compatible positional arguments of one resolved invocation. The
-implemented temporary-introduction primitive now preserves C# evaluation count
-and order for one extracted value, and `reconnectValue` can connect later,
-dominated consumers to that definition. Statement editing is similarly bounded
-to local declarations with a literal initializer, typed non-async returns at
-the end of explicit blocks, and deletion of unused literal locals or pure
-static-call statements. Return values reuse the closed graph-authored scalar
-expression subset and must exactly match the bound method return type. General
-expression synthesis, assignment/call insertion, declaration renaming, and
-general cross-expression rewiring remain future patch-algebra work.
+implemented temporary-introduction primitive preserves C# evaluation count and
+order for one extracted value, and `reconnectValue` can connect later,
+dominated consumers to that definition. Statement editing is bounded to local
+declarations with a literal initializer, simple assignments to existing
+locals, typed non-async returns at the end of explicit blocks, and deletion of
+unused literal locals or pure static-call statements. Assignment and return
+values reuse the closed graph-authored scalar expression subset and must
+exactly match the bound target type. Call insertion, declaration renaming,
+existing-assignment retargeting, and general cross-expression/data-port
+rewiring remain future patch-algebra work.
 
 The C# patch-plan coordinator validates every independently executable step in
 isolation against the initial HIR before changing its in-memory request;

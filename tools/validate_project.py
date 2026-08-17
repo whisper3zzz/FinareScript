@@ -29,6 +29,7 @@ DOCUMENTS = [
     ROOT / "docs" / "GRAPH_LAYOUT.md",
     ROOT / "docs" / "GRAPH_REGIONS.md",
     ROOT / "docs" / "CONTROL_FLOW_ANALYSIS.md",
+    ROOT / "docs" / "LOCAL_ASSIGNMENT_PATCHING.md",
     ROOT / "docs" / "PATCH_PLAN.md",
     ROOT / "docs" / "ROADMAP.md",
     ROOT / "docs" / "milestones" / "M1_ROSLYN_GRAPH_FOUNDATION.md",
@@ -89,6 +90,9 @@ def main() -> int:
     reconnect_source_path = ROOT / "samples" / "Patching" / "SharedValueRules.cs"
     reconnect_patch_path = ROOT / "samples" / "Patching" / "ReconnectSharedDamage.patch.json"
     reconnect_identity_path = ROOT / "samples" / "Patching" / "SharedValueRules.cs.usids"
+    assignment_source_path = ROOT / "samples" / "Patching" / "AssignmentRules.cs"
+    assignment_patch_path = ROOT / "samples" / "Patching" / "IncrementResult.patch.json"
+    assignment_identity_path = ROOT / "samples" / "Patching" / "AssignmentRules.cs.usids"
     plan_source_path = ROOT / "samples" / "Patching" / "SharedExpressionPlan.cs"
     plan_document_path = ROOT / "samples" / "Patching" / "ShareDamage.plan.json"
     plan_identity_path = ROOT / "samples" / "Patching" / "SharedExpressionPlan.cs.usids"
@@ -125,6 +129,12 @@ def main() -> int:
         "Missing typed value-reconnection sample",
     )
     require(
+        assignment_source_path.is_file()
+        and assignment_patch_path.is_file()
+        and assignment_identity_path.is_file(),
+        "Missing CFG-checked local-assignment sample",
+    )
+    require(
         plan_source_path.is_file()
         and plan_document_path.is_file()
         and plan_identity_path.is_file(),
@@ -156,6 +166,9 @@ def main() -> int:
     reconnect_source = reconnect_source_path.read_text(encoding="utf-8")
     reconnect_patch = json.loads(reconnect_patch_path.read_text(encoding="utf-8"))
     reconnect_identity = json.loads(reconnect_identity_path.read_text(encoding="utf-8"))
+    assignment_source = assignment_source_path.read_text(encoding="utf-8")
+    assignment_patch = json.loads(assignment_patch_path.read_text(encoding="utf-8"))
+    assignment_identity = json.loads(assignment_identity_path.read_text(encoding="utf-8"))
     plan_source = plan_source_path.read_text(encoding="utf-8")
     plan_document = json.loads(plan_document_path.read_text(encoding="utf-8"))
     plan_identity = json.loads(plan_identity_path.read_text(encoding="utf-8"))
@@ -175,18 +188,20 @@ def main() -> int:
     insert_operation = insert_patch["operations"][0]
     temporary_operation = temporary_patch["operations"][0]
     reconnect_operation = reconnect_patch["operations"][0]
+    assignment_operation = assignment_patch["operations"][0]
     identity_ids = {entry["id"] for entry in patch_identity["entries"]}
     reconnect_identity_ids = {entry["id"] for entry in reconnect_identity["entries"]}
     source_digest = hashlib.sha256(patch_source.encode("utf-8")).hexdigest()
     reconnect_source_digest = hashlib.sha256(reconnect_source.encode("utf-8")).hexdigest()
+    assignment_source_digest = hashlib.sha256(assignment_source.encode("utf-8")).hexdigest()
     plan_source_digest = hashlib.sha256(plan_source.encode("utf-8")).hexdigest()
     composed_source_digest = hashlib.sha256(composed_source.encode("utf-8")).hexdigest()
     guard_source_digest = hashlib.sha256(guard_source.encode("utf-8")).hexdigest()
     require(
-        patch_document["schemaVersion"] == "unifiedscript.patch/v0.7"
-        and operator_patch["schemaVersion"] == "unifiedscript.patch/v0.7"
-        and insert_patch["schemaVersion"] == "unifiedscript.patch/v0.7"
-        and temporary_patch["schemaVersion"] == "unifiedscript.patch/v0.7"
+        patch_document["schemaVersion"] == "unifiedscript.patch/v0.8"
+        and operator_patch["schemaVersion"] == "unifiedscript.patch/v0.8"
+        and insert_patch["schemaVersion"] == "unifiedscript.patch/v0.8"
+        and temporary_patch["schemaVersion"] == "unifiedscript.patch/v0.8"
         and operator_patch["sourceCompilationId"]
         == patch_document["sourceCompilationId"]
         and insert_patch["sourceCompilationId"]
@@ -234,7 +249,7 @@ def main() -> int:
         "Temporary-introduction sample does not contain the expected typed payload",
     )
     require(
-        reconnect_patch["schemaVersion"] == "unifiedscript.patch/v0.7"
+        reconnect_patch["schemaVersion"] == "unifiedscript.patch/v0.8"
         and reconnect_identity["sourcePath"]
         == "samples/Patching/SharedValueRules.cs"
         and reconnect_identity["sourceDigest"]
@@ -255,13 +270,42 @@ def main() -> int:
         and "return bonus + 1.0f;" in reconnect_source,
         "Typed value-reconnection source, sidecar, and patch are inconsistent",
     )
+    assignment_identity_ids = {entry["id"] for entry in assignment_identity["entries"]}
+    assignment_statement = assignment_operation["newStatement"]
+    assignment_value = assignment_statement["value"]
+    require(
+        assignment_patch["schemaVersion"] == "unifiedscript.patch/v0.8"
+        and assignment_identity["sourcePath"]
+        == "samples/Patching/AssignmentRules.cs"
+        and assignment_identity["sourceDigest"]
+        == f"sha256:{assignment_source_digest}"
+        and assignment_operation["operation"] == "insertStatement"
+        and assignment_operation["targetNodeId"] in assignment_identity_ids
+        and assignment_operation["expectedPreviousSiblingId"]
+        in assignment_identity_ids
+        and assignment_operation["expectedNextSiblingId"] in assignment_identity_ids
+        and assignment_statement["statement"] == "localAssignment"
+        and assignment_statement["targetDefinitionId"]
+        == assignment_operation["expectedPreviousSiblingId"]
+        and assignment_statement["targetDefinitionId"] in assignment_identity_ids
+        and assignment_statement["expectedName"] == "result"
+        and assignment_value["expression"] == "binary"
+        and assignment_value["operator"] == "+"
+        and assignment_value["left"]["sourceDefinitionId"]
+        == assignment_statement["targetDefinitionId"]
+        and assignment_value["expectedTypeId"]
+        == assignment_statement["expectedTypeId"]
+        and "int result = seed;" in assignment_source
+        and "return result;" in assignment_source,
+        "CFG-checked local-assignment source, sidecar, and patch are inconsistent",
+    )
     plan_steps = plan_document["steps"]
     plan_identity_ids = {entry["id"] for entry in plan_identity["entries"]}
     plan_step_ids = {step["stepId"] for step in plan_steps}
     introduction_step = plan_steps[0]
     reconnect_steps = plan_steps[1:]
     require(
-        plan_document["schemaVersion"] == "unifiedscript.patch-plan/v0.5"
+        plan_document["schemaVersion"] == "unifiedscript.patch-plan/v0.6"
         and plan_identity["sourcePath"]
         == "samples/Patching/SharedExpressionPlan.cs"
         and plan_identity["sourceDigest"] == f"sha256:{plan_source_digest}"
@@ -296,7 +340,7 @@ def main() -> int:
     composed_identity_ids = {entry["id"] for entry in composed_identity["entries"]}
     composed_insert, composed_reconnect, composed_operator, composed_delete = composed_steps
     require(
-        composed_document["schemaVersion"] == "unifiedscript.patch-plan/v0.5"
+        composed_document["schemaVersion"] == "unifiedscript.patch-plan/v0.6"
         and composed_identity["sourcePath"] == "samples/Patching/ComposedPlan.cs"
         and composed_identity["sourceDigest"] == f"sha256:{composed_source_digest}"
         and [step["step"] for step in composed_steps]
@@ -326,7 +370,7 @@ def main() -> int:
     guard_comparison = guard_condition["left"]
     guard_negation = guard_condition["right"]
     require(
-        guard_document["schemaVersion"] == "unifiedscript.patch/v0.7"
+        guard_document["schemaVersion"] == "unifiedscript.patch/v0.8"
         and guard_identity["sourcePath"] == "samples/Patching/GuardRules.cs"
         and guard_identity["sourceDigest"] == f"sha256:{guard_source_digest}"
         and guard_operation["operation"] == "insertStatement"
@@ -350,7 +394,7 @@ def main() -> int:
     guard_plan_steps = guard_plan["steps"]
     guard_plan_source, *guard_branch_steps = guard_plan_steps
     require(
-        guard_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.5"
+        guard_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.6"
         and guard_plan["sourceCompilationId"] == guard_document["sourceCompilationId"]
         and guard_plan["semanticConfigurationId"]
         == guard_document["semanticConfigurationId"]
@@ -371,7 +415,7 @@ def main() -> int:
     )
     guard_return_source, guard_return_step, guard_fallback_step = guard_return_plan["steps"]
     require(
-        guard_return_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.5"
+        guard_return_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.6"
         and guard_return_plan["sourceCompilationId"] == guard_document["sourceCompilationId"]
         and guard_return_plan["semanticConfigurationId"]
         == guard_document["semanticConfigurationId"]

@@ -6,8 +6,9 @@ Make practical gameplay control flow explicit, verifiable, and editable in the
 shared Graph/HIR model before introducing a UE editor or a second execution
 path.
 
-Status: in progress. M4.1 explicit regions and M4.2 derived CFG analysis are
-implemented; bounded assignment/data rewiring is the next slice.
+Status: in progress. M4.1 explicit regions, M4.2 derived CFG analysis, and
+M4.3 CFG-checked local assignment/data reconnection are implemented. Nested
+branch construction and broader structural HIR operations are the next slice.
 
 ## M4.1 implemented vertical slice
 
@@ -84,21 +85,70 @@ implemented; bounded assignment/data rewiring is the next slice.
 12. Every normal HIR Graph projection passes reducibility validation before it
     is returned to CLI/library consumers.
 
+## M4.3 implemented vertical slice
+
+- `unifiedscript.patch/v0.8` local-assignment statement payload
+- `unifiedscript.patch-plan/v0.6` direct and symbolic-branch assignment steps
+- ordinary normalized C# assignment emission and full HIR/Graph reprojection
+- existing same-method local targets with persistent-ID, name, and exact-type
+  preconditions
+- bounded, closed, pure graph-authored right-hand-side expressions
+- a patch-time Graph safety index derived from the current HIR and CFG
+- insertion-gap reachability checks, including terminal nested branch regions
+- combined lexical-scope and CFG-dominance checks for assignment targets and
+  local references used by authored expressions
+- CFG-backed value-reconnection dominance checks
+- rejection of reconnect targets inside an assignment's writable left-hand
+  side
+- atomic plan composition and identity-sidecar reconciliation
+- checked-in `IncrementResult.patch.json` CLI sample
+
+## M4.3 acceptance criteria
+
+1. Patch v0.8 JSON round-trips a typed `localAssignment` payload.
+2. Plan v0.6 accepts that payload as a direct statement insertion and as a
+   generated `then`/`else` branch append.
+3. An assignment targets only an existing local declaration in the same
+   method, identified by persistent semantic ID.
+4. The target's expected name and exact graph-safe semantic type must still
+   match the current program.
+5. The insertion gap must be reachable in the derived function CFG.
+6. The target declaration must be lexically visible and CFG-dominate every
+   control anchor for the insertion gap.
+7. Every local referenced by the right-hand side must satisfy the same lexical
+   and CFG availability rules.
+8. The right-hand side remains inside the closed, pure, bounded scalar
+   expression algebra and must exactly match the target type.
+9. Assignments at reachable branch ends work, while insertion after a direct or
+   nested all-paths-return region is rejected.
+10. Successful insertion emits ordinary C#, rebinds to an HIR assignment, and
+    projects the corresponding Graph assignment/control facts.
+11. Value reconnection rejects unreachable consumers and any target inside an
+    assignment's writable left-hand side.
+12. A plan can populate both generated branches with assignments to a valid
+    outer local without predicting generated block IDs.
+13. Any failed stage returns no partial source or identity sidecar.
+14. The checked-in assignment sample, full solution, test suite, and project
+    validator pass.
+
 ## Deliberate limits
 
-M4.2 derives but does not serialize CFG facts, materialize source/Graph merge
-nodes, or rewrite M3's lexical patch-dominance checks. It does not add
-assignments to the patch algebra, nested-branch synthesis, loops, switch,
+M4.3 consumes derived CFG facts at patch time but does not serialize them or
+materialize source/Graph merge nodes. Assignment support is intentionally
+limited to inserting a simple assignment to an existing local; it does not edit
+an existing assignment, synthesize declarations with arbitrary initializers,
+write members/indexers, or support compound assignments, increment/decrement,
+calls, or effectful right-hand sides. Nested-branch synthesis, loops, switch,
 conditional expressions, exception edges, short-circuit expression flow,
-async state-machine transitions, control dependence, SSA, or automatic node
-placement. Region kinds for loops remain absent until their HIR and control
-semantics are defined.
+async state-machine transitions, control dependence, SSA, and automatic node
+placement remain outside the current slice. Region kinds for loops remain
+absent until their HIR and control semantics are defined.
 
 ## Next slice
 
-M4.3 should use Graph reachability/dominance and the existing type/effect model
-to add bounded local assignment plus compatible data rewiring. Assignment
-targets must be existing same-method locals, must be reachable at the insertion
-point, and must dominate later consumers where required. Only after those
-checks are executable should nested branch construction and loop HIR/regions
-extend the control-flow surface.
+M4.4 should add nested branch construction and the minimum structural HIR
+operations needed to author useful multi-level gameplay decisions. It should
+reuse M4.3's insertion reachability and dominance boundary, define bounded
+symbolic handles for nested regions, and preserve atomic source/identity/layout
+reconciliation. Loop HIR and regions should follow only after nested acyclic
+control flow is editable end to end.

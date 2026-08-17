@@ -25,4 +25,6 @@ public static class SemanticPatchDiagnosticCodes
     public const string PlanRequiresPersistentIdentity = "UVS3021";
     public const string InvalidPatchPlan = "UVS3022";
     public const string InvalidGraphExpression = "UVS3023";
+    public const string UnreachableInsertion = "UVS3024";
+    public const string AssignmentTargetNotAvailable = "UVS3025";
 }

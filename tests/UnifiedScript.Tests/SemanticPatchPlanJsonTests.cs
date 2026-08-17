@@ -82,6 +82,16 @@ public sealed class SemanticPatchPlanJsonTests
                 null,
                 SemanticId.FromKey("first-statement"),
                 new LocalLiteralDeclarationPatchStatement("value", "int", "1", intType)),
+            new InsertStatementPatchPlanStep(
+                "assign",
+                SemanticId.FromKey("assignment-block"),
+                SemanticId.FromKey("assignment-previous"),
+                SemanticId.FromKey("assignment-next"),
+                new LocalAssignmentPatchStatement(
+                    SemanticId.FromKey("assignment-target"),
+                    "value",
+                    intType,
+                    new LiteralPatchExpression("2", intType))),
             new DeleteStatementPatchPlanStep(
                 "delete",
                 SemanticId.FromKey("obsolete-statement"),
@@ -102,6 +112,7 @@ public sealed class SemanticPatchPlanJsonTests
         Assert.Contains("\"step\": \"changeOperator\"", json, StringComparison.Ordinal);
         Assert.Contains("\"step\": \"reconnectArgument\"", json, StringComparison.Ordinal);
         Assert.Contains("\"step\": \"insertStatement\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"statement\": \"localAssignment\"", json, StringComparison.Ordinal);
         Assert.Contains("\"step\": \"deleteStatement\"", json, StringComparison.Ordinal);
     }
 

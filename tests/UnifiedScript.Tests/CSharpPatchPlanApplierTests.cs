@@ -445,6 +445,137 @@ public sealed class CSharpPatchPlanApplierTests
     }
 
     [Fact]
+    public void Apply_InsertsCfgCheckedAssignmentAsDirectPlanStep()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int seed)
+                {
+                    int result = seed;
+                    return result;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/AssignmentPlan.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement definition = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+        SemanticId intType = GetTypeId(original, definition);
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new InsertStatementPatchPlanStep(
+                "incrementResult",
+                method.Body.Id,
+                definition.Id,
+                returnStatement.Id,
+                new LocalAssignmentPatchStatement(
+                    definition.Id,
+                    definition.Name,
+                    intType,
+                    new BinaryPatchExpression(
+                        "+",
+                        new LocalReferencePatchExpression(
+                            definition.Id,
+                            definition.Name,
+                            intType),
+                        new LiteralPatchExpression("1", intType),
+                        intType))) ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Contains(
+            "int result = seed;\n        result = result + 1;\n        return result;",
+            Assert.Single(result.PatchedRequest!.Sources).Source);
+        HirMethodDeclaration changed = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        Assert.IsType<HirAssignmentExpression>(
+            Assert.IsType<HirExpressionStatement>(changed.Body.Statements[1]).Expression);
+    }
+
+    [Fact]
+    public void Apply_PopulatesNewThenAndElseBlocksWithAssignmentsToOuterLocal()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(bool ready)
+                {
+                    int result = 0;
+                    return result;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/BranchAssignmentPlan.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement definition = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+        SemanticId intType = GetTypeId(original, definition);
+        SemanticId boolType = GetTypeId(original, method.Parameters[0]);
+        var guard = new InsertStatementPatchPlanStep(
+            "insertGuard",
+            method.Body.Id,
+            definition.Id,
+            returnStatement.Id,
+            new IfPatchStatement(new LocalReferencePatchExpression(
+                method.Parameters[0].Id,
+                method.Parameters[0].Name,
+                boolType)));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                guard,
+                new InsertBranchStatementPatchPlanStep(
+                    "assignThen",
+                    method.Body.Id,
+                    guard.StepId,
+                    IfBranchKind.Then,
+                    new LocalAssignmentPatchStatement(
+                        definition.Id,
+                        definition.Name,
+                        intType,
+                        new LiteralPatchExpression("1", intType))),
+                new InsertBranchStatementPatchPlanStep(
+                    "assignElse",
+                    method.Body.Id,
+                    guard.StepId,
+                    IfBranchKind.Else,
+                    new LocalAssignmentPatchStatement(
+                        definition.Id,
+                        definition.Name,
+                        intType,
+                        new LiteralPatchExpression("2", intType))),
+            ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains("result = 1;", patchedSource);
+        Assert.Contains("result = 2;", patchedSource);
+        HirMethodDeclaration changed = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirIfStatement insertedIf = Assert.IsType<HirIfStatement>(changed.Body.Statements[1]);
+        Assert.IsType<HirAssignmentExpression>(
+            Assert.IsType<HirExpressionStatement>(Assert.Single(insertedIf.Then.Statements)).Expression);
+        Assert.IsType<HirAssignmentExpression>(
+            Assert.IsType<HirExpressionStatement>(Assert.Single(insertedIf.Else!.Statements)).Expression);
+    }
+
+    [Fact]
     public void Apply_PopulatesProducedThenAndElseBlocksInPlanOrder()
     {
         const string source = """
