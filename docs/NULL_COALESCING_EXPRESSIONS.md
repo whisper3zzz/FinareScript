@@ -9,8 +9,8 @@ The current contracts are:
 
 - HIR `unifiedscript.hir/v0.5`;
 - Graph `unifiedscript.graph/v0.9`;
-- standalone patch `unifiedscript.patch/v0.15`;
-- patch plan `unifiedscript.patch-plan/v0.16`.
+- standalone patch `unifiedscript.patch/v0.16`;
+- patch plan `unifiedscript.patch-plan/v0.17`.
 
 At the M4.14 boundary only Graph changed version: HIR, persistent identity, and
 both patch protocols already represented `??` losslessly as an ordered binary
@@ -72,7 +72,7 @@ declared/bound nullability already present in semantic profile v0.1.
 
 ## Graph-authored type boundary
 
-Patch v0.15 reuses `BinaryPatchExpression` with operator `??`. No new payload
+Patch v0.16 reuses `BinaryPatchExpression` with operator `??`. No new payload
 or port is required. To avoid hiding conversions from the future shared VM,
 visual construction is deliberately narrower than all legal C# forms:
 
@@ -90,7 +90,7 @@ Boolean, integer, floating-point, and enum graph-authored subset. Roslyn then
 reanalyzes the emitted ordinary C# before any patch result is returned.
 
 Existing `replaceExpressionInput` operations edit `left` or `right` using exact
-endpoint and type preconditions. Patch-plan v0.16 can author a coalescing binary
+endpoint and type preconditions. Patch-plan v0.17 can author a coalescing binary
 tree, publish its actual root under a step handle, and use
 `replaceProducedExpressionInput` on either canonical port without predicting a
 generated semantic ID. Persistent identity, trivia safety, tombstones, scope,

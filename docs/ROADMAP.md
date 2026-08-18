@@ -126,6 +126,10 @@ Outcome: practical gameplay methods are fully visualizable.
   routing through incrementors
 - [x] dedicated bounded `ForPatchStatement` construction with declaration
   scope, clause ordering, and continue-target proofs
+- [x] exact existing-for condition, declaration-initializer,
+  assignment-initializer-value, and mutation-incrementor editing, including a
+  generated-for condition handle
+- [ ] lossless `do` loop projection, CFG, construction, and exact condition editing
 - [ ] general data/control rewiring and structural HIR operations
 - [ ] `foreach` and enumerator/disposal semantics
 - [ ] `switch` and supported patterns

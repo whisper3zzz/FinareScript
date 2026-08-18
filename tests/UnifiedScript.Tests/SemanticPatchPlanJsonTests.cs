@@ -94,6 +94,51 @@ public sealed class SemanticPatchPlanJsonTests
                 new LiteralPatchExpression(
                     "false",
                     SemanticId.FromKey("System.Boolean"))),
+            new ReplaceForConditionPatchPlanStep(
+                "replaceForCondition",
+                SemanticId.FromKey("for-statement"),
+                SemanticId.FromKey("for-condition"),
+                SemanticId.FromKey("System.Boolean"),
+                new LiteralPatchExpression(
+                    "true",
+                    SemanticId.FromKey("System.Boolean"))),
+            new ReplaceForDeclarationInitializerPatchPlanStep(
+                "replaceForDeclarationInitializer",
+                SemanticId.FromKey("for-variable"),
+                SemanticId.FromKey("for-declaration-statement"),
+                "index",
+                SemanticId.FromKey("for-declaration-initializer"),
+                intType,
+                new LiteralPatchExpression("1", intType)),
+            new ReplaceForAssignmentInitializerValuePatchPlanStep(
+                "replaceForAssignmentInitializerValue",
+                SemanticId.FromKey("for-assignment-initializer"),
+                SemanticId.FromKey("for-assignment-statement"),
+                0,
+                "=",
+                SemanticId.FromKey("for-assignment-target"),
+                SemanticId.FromKey("for-assignment-definition"),
+                "cursor",
+                SemanticId.FromKey("for-assignment-value"),
+                intType,
+                new LiteralPatchExpression("2", intType)),
+            new ReplaceForIncrementorPatchPlanStep(
+                "replaceForIncrementor",
+                SemanticId.FromKey("for-incrementor"),
+                SemanticId.FromKey("for-incrementor-statement"),
+                0,
+                "++",
+                true,
+                SemanticId.FromKey("for-incrementor-operand"),
+                SemanticId.FromKey("for-incrementor-definition"),
+                "index",
+                intType,
+                "--",
+                false,
+                new LocalReferencePatchExpression(
+                    SemanticId.FromKey("for-incrementor-definition"),
+                    "index",
+                    intType)),
             new ReplaceIfConditionPatchPlanStep(
                 "replaceIfCondition",
                 SemanticId.FromKey("if-statement"),
@@ -152,6 +197,16 @@ public sealed class SemanticPatchPlanJsonTests
         Assert.Contains("\"step\": \"reconnectArgument\"", json, StringComparison.Ordinal);
         Assert.Contains("\"step\": \"replaceAssignmentValue\"", json, StringComparison.Ordinal);
         Assert.Contains("\"step\": \"replaceWhileCondition\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"step\": \"replaceForCondition\"", json, StringComparison.Ordinal);
+        Assert.Contains(
+            "\"step\": \"replaceForDeclarationInitializer\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"step\": \"replaceForAssignmentInitializerValue\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains("\"step\": \"replaceForIncrementor\"", json, StringComparison.Ordinal);
         Assert.Contains("\"step\": \"replaceIfCondition\"", json, StringComparison.Ordinal);
         Assert.Contains("\"step\": \"replaceLocalInitializer\"", json, StringComparison.Ordinal);
         Assert.Contains("\"step\": \"replaceReturnValue\"", json, StringComparison.Ordinal);
@@ -1290,7 +1345,7 @@ public sealed class SemanticPatchPlanJsonTests
         Assert.Equal(third.StepId, roundTripThird.StepId);
         Assert.Equal(third.TargetPath, roundTripThird.TargetPath);
         Assert.Equal(third.NewInput, roundTripThird.NewInput);
-        Assert.Equal("unifiedscript.patch-plan/v0.16", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch-plan/v0.17", roundTrip.SchemaVersion);
         Assert.Contains("\"step\": \"replaceProducedExpressionInput\"", json);
         Assert.Contains("\"targetPath\": []", json);
     }
@@ -1344,7 +1399,7 @@ public sealed class SemanticPatchPlanJsonTests
         Assert.Equal(consumer.ExpectedInputTypeId, roundTripConsumer.ExpectedInputTypeId);
         Assert.Equal(consumer.ExpectedTargetTypeId, roundTripConsumer.ExpectedTargetTypeId);
         Assert.Equal(consumer.NewInput, roundTripConsumer.NewInput);
-        Assert.Equal("unifiedscript.patch-plan/v0.16", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch-plan/v0.17", roundTrip.SchemaVersion);
         Assert.Contains("\"expression\": \"conditionalMemberAccess\"", json);
         Assert.Contains("\"inputPort\": \"receiver\"", json);
     }
@@ -1461,6 +1516,84 @@ public sealed class SemanticPatchPlanJsonTests
                     null,
                     null,
                     intType),
+            ]));
+    }
+
+    [Fact]
+    public void SerializeAndDeserialize_PreserveProducedForConditionHandle()
+    {
+        SemanticId blockId = SemanticId.FromKey("produced-for-parent");
+        SemanticId intType = SemanticId.FromKey("produced-for-int-type");
+        SemanticId boolType = SemanticId.FromKey("produced-for-bool-type");
+        var index = new ForLocalReferencePatchExpression(0, "index", intType);
+        var producer = new InsertStatementPatchPlanStep(
+            "insertFor",
+            blockId,
+            null,
+            SemanticId.FromKey("produced-for-next"),
+            new ForPatchStatement(
+                new ForVariableDeclarationPatch(
+                    "int",
+                    [new ForVariableDeclaratorPatch(
+                        "index",
+                        new LiteralPatchExpression("0", intType),
+                        intType)]),
+                [],
+                new LiteralPatchExpression("true", boolType),
+                [new ForMutationPatchExpression(index, "++", true, intType)]));
+        var replacement = new ReplaceProducedForConditionPatchPlanStep(
+            "replaceProducedForCondition",
+            blockId,
+            producer.StepId,
+            new BinaryPatchExpression(
+                "<",
+                new ProducedLocalReferencePatchExpression(producer.StepId, "index", intType),
+                new LiteralPatchExpression("4", intType),
+                boolType));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("produced-for-compilation"),
+            SemanticId.FromKey("produced-for-configuration"),
+            [producer, replacement]);
+
+        string json = SemanticPatchPlanJson.Serialize(plan);
+        SemanticPatchPlanDocument roundTrip = SemanticPatchPlanJson.Deserialize(json);
+
+        InsertStatementPatchPlanStep roundTripProducer =
+            Assert.IsType<InsertStatementPatchPlanStep>(roundTrip.Steps[0]);
+        Assert.Equal(producer.StepId, roundTripProducer.StepId);
+        Assert.Equal(producer.TargetNodeId, roundTripProducer.TargetNodeId);
+        Assert.IsType<ForPatchStatement>(roundTripProducer.NewStatement);
+        Assert.Equal(
+            replacement,
+            Assert.IsType<ReplaceProducedForConditionPatchPlanStep>(roundTrip.Steps[1]));
+        Assert.Contains(
+            "\"step\": \"replaceProducedForCondition\"",
+            json,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Create_RejectsProducedForConditionHandleForAnOmittedCondition()
+    {
+        SemanticId blockId = SemanticId.FromKey("omitted-produced-for-parent");
+        SemanticId boolType = SemanticId.FromKey("omitted-produced-for-bool-type");
+        var producer = new InsertStatementPatchPlanStep(
+            "insertFor",
+            blockId,
+            null,
+            null,
+            new ForPatchStatement(null, [], null, []));
+
+        Assert.Throws<JsonException>(() => SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("omitted-produced-for-compilation"),
+            SemanticId.FromKey("omitted-produced-for-configuration"),
+            [
+                producer,
+                new ReplaceProducedForConditionPatchPlanStep(
+                    "replaceMissingCondition",
+                    blockId,
+                    producer.StepId,
+                    new LiteralPatchExpression("false", boolType)),
             ]));
     }
 }

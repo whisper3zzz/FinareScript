@@ -726,7 +726,7 @@ public sealed class CSharpSourcePatchApplierTests
 
         SemanticPatchDocument invalidConditionPatch = SemanticPatchDocument.Create(
             original.Hir.Id,
-            original.Semantics.ConfigurationId,
+            original.Semantics!.ConfigurationId,
             [new ReplaceReturnValuePatchOperation(
                 returnStatement.Id,
                 oldValue.Id,
@@ -4298,6 +4298,291 @@ public sealed class CSharpSourcePatchApplierTests
         Assert.Contains(
             result.Diagnostics,
             static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.InvalidReplacement);
+    }
+
+    [Fact]
+    public void Apply_EditsEverySupportedForHeaderEndpointWithoutRecreatingStructure()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int Run(int count, bool enabled)
+                {
+                    int cursor = count;
+                    for (int index = 0; index < count; index++)
+                    {
+                        cursor = cursor + index;
+                    }
+
+                    for (cursor = 0; cursor < count; cursor++)
+                    {
+                        cursor = cursor + 1;
+                    }
+
+                    return cursor;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/ForHeaderEndpointEdit.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement cursor = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirForStatement declarationLoop = Assert.IsType<HirForStatement>(method.Body.Statements[1]);
+        HirForVariableDeclarator index = Assert.Single(declarationLoop.Declaration!.Variables);
+        HirAssignmentExpression assignmentInitializer = Assert.IsType<HirAssignmentExpression>(
+            Assert.Single(Assert.IsType<HirForStatement>(method.Body.Statements[2]).Initializers));
+        HirForStatement assignmentLoop = Assert.IsType<HirForStatement>(method.Body.Statements[2]);
+        HirUnaryExpression incrementor = Assert.IsType<HirUnaryExpression>(
+            Assert.Single(declarationLoop.Incrementors));
+        HirIdentifierExpression incrementorOperand = Assert.IsType<HirIdentifierExpression>(
+            incrementor.Operand);
+        HirIdentifierExpression assignmentTarget = Assert.IsType<HirIdentifierExpression>(
+            assignmentInitializer.Target);
+        SemanticId intType = GetTypeId(original, index);
+        SemanticId boolType = GetTypeId(original, declarationLoop.Condition!);
+        HashSet<SemanticId> replacedIds = index.Initializer!.DescendantsAndSelf()
+            .Concat(declarationLoop.Condition!.DescendantsAndSelf())
+            .Concat(assignmentInitializer.Value.DescendantsAndSelf())
+            .Select(static node => node.Id)
+            .ToHashSet();
+
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                new ReplaceForConditionPatchOperation(
+                    declarationLoop.Id,
+                    declarationLoop.Condition!.Id,
+                    boolType,
+                    new BinaryPatchExpression(
+                        "&&",
+                        new LocalReferencePatchExpression(
+                            method.Parameters[1].Id,
+                            method.Parameters[1].Name,
+                            boolType),
+                        new BinaryPatchExpression(
+                            "<",
+                            new LocalReferencePatchExpression(index.Id, index.Name, intType),
+                            new LocalReferencePatchExpression(
+                                method.Parameters[0].Id,
+                                method.Parameters[0].Name,
+                                intType),
+                            boolType),
+                        boolType)),
+                new ReplaceForDeclarationInitializerPatchOperation(
+                    index.Id,
+                    declarationLoop.Id,
+                    index.Name,
+                    index.Initializer!.Id,
+                    intType,
+                    new LiteralPatchExpression("1", intType)),
+                new ReplaceForAssignmentInitializerValuePatchOperation(
+                    assignmentInitializer.Id,
+                    assignmentLoop.Id,
+                    0,
+                    assignmentInitializer.Operator,
+                    assignmentInitializer.Target.Id,
+                    cursor.Id,
+                    cursor.Name,
+                    assignmentInitializer.Value.Id,
+                    intType,
+                    new LiteralPatchExpression("2", intType)),
+                new ReplaceForIncrementorPatchOperation(
+                    incrementor.Id,
+                    declarationLoop.Id,
+                    0,
+                    incrementor.Operator,
+                    incrementor.IsPostfix,
+                    incrementor.Operand.Id,
+                    index.Id,
+                    index.Name,
+                    intType,
+                    "--",
+                    false,
+                    new LocalReferencePatchExpression(index.Id, index.Name, intType)),
+            ]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains(
+            "for (int index = 1; enabled && (index < count); --index)",
+            patchedSource,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "for (cursor = 2; cursor < count; cursor++)",
+            patchedSource,
+            StringComparison.Ordinal);
+        HirMethodDeclaration changedMethod = Assert.Single(
+            Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirForStatement changedDeclarationLoop = Assert.IsType<HirForStatement>(
+            changedMethod.Body.Statements[1]);
+        HirForStatement changedAssignmentLoop = Assert.IsType<HirForStatement>(
+            changedMethod.Body.Statements[2]);
+        HirForVariableDeclarator changedIndex = Assert.Single(
+            changedDeclarationLoop.Declaration!.Variables);
+        HirUnaryExpression changedIncrementor = Assert.IsType<HirUnaryExpression>(
+            Assert.Single(changedDeclarationLoop.Incrementors));
+        HirAssignmentExpression changedAssignmentInitializer = Assert.IsType<HirAssignmentExpression>(
+            Assert.Single(changedAssignmentLoop.Initializers));
+        Assert.Equal(declarationLoop.Id, changedDeclarationLoop.Id);
+        Assert.Equal(declarationLoop.Body.Id, changedDeclarationLoop.Body.Id);
+        Assert.Equal(index.Id, changedIndex.Id);
+        Assert.Equal(incrementor.Id, changedIncrementor.Id);
+        Assert.Equal(incrementorOperand.Id, changedIncrementor.Operand.Id);
+        Assert.Equal(assignmentLoop.Id, changedAssignmentLoop.Id);
+        Assert.Equal(assignmentInitializer.Id, changedAssignmentInitializer.Id);
+        Assert.Equal(assignmentTarget.Id, changedAssignmentInitializer.Target.Id);
+        Assert.Equal("--", changedIncrementor.Operator);
+        Assert.False(changedIncrementor.IsPostfix);
+
+        IdentitySidecarDocument identity = Assert.Single(result.Analysis.IdentitySidecars);
+        HashSet<SemanticId> liveIds = identity.Entries.Select(static entry => entry.Id).ToHashSet();
+        HashSet<SemanticId> tombstoneIds = identity.Tombstones
+            .Select(static tombstone => tombstone.Id)
+            .ToHashSet();
+        Assert.All(replacedIds, id => Assert.True(liveIds.Contains(id) ^ tombstoneIds.Contains(id)));
+        Assert.Contains(index.Initializer.Id, tombstoneIds);
+        Assert.Contains(declarationLoop.Condition.Id, tombstoneIds);
+        Assert.Contains(assignmentInitializer.Value.Id, tombstoneIds);
+        GraphControlFlowFunction flow = Assert.Single(
+            new GraphControlFlowAnalyzer().AnalyzeAndValidate(
+                new HirGraphProjector().Project(
+                    result.Analysis.Hir,
+                    result.Analysis.Semantics)).Functions);
+        Assert.Equal(2, flow.Loops.Count);
+        Assert.Contains(flow.Loops, candidate =>
+            candidate.LoopNodeId == changedDeclarationLoop.Id &&
+            candidate.ContinueTargetNodeId == changedIncrementor.Id);
+    }
+
+    [Fact]
+    public void Apply_RejectsForConditionReplacementForAnOmittedConditionAtomically()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static void Run(bool enabled)
+                {
+                    for (;;)
+                    {
+                        break;
+                    }
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            source,
+            "Game/OmittedForConditionEdit.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirForStatement loop = Assert.Single(
+            original.Hir!.DescendantsAndSelf().OfType<HirForStatement>());
+        SemanticId boolType = GetTypeId(original, Assert.Single(method.Parameters));
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir!.Id,
+            original.Semantics!.ConfigurationId,
+            [new ReplaceForConditionPatchOperation(
+                loop.Id,
+                SemanticId.FromKey("missing-for-condition"),
+                boolType,
+                new LiteralPatchExpression("false", boolType))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.PatchedRequest);
+        Assert.Equal(source, Assert.Single(request.Sources).Source);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.TargetKindMismatch);
+    }
+
+    [Fact]
+    public void Apply_RebindsAForIncrementorOperandAndTombstonesTheOldUse()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int Run(int count)
+                {
+                    int cursor = 0;
+                    int step = 0;
+                    for (cursor = 0; cursor < count; cursor++)
+                    {
+                        step = step + 1;
+                    }
+
+                    return step;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/ForIncrementorOperandEdit.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement step = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[1]);
+        HirForStatement loop = Assert.IsType<HirForStatement>(method.Body.Statements[2]);
+        HirUnaryExpression incrementor = Assert.IsType<HirUnaryExpression>(
+            Assert.Single(loop.Incrementors));
+        HirIdentifierExpression oldOperand = Assert.IsType<HirIdentifierExpression>(
+            incrementor.Operand);
+        SemanticId cursorId = Assert.Single(
+            original.Semantics!.Nodes,
+            binding => binding.NodeId == oldOperand.Id).ReferencedSymbolId!.Value;
+        SemanticId intType = GetTypeId(original, incrementor);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics.ConfigurationId,
+            [new ReplaceForIncrementorPatchOperation(
+                incrementor.Id,
+                loop.Id,
+                0,
+                incrementor.Operator,
+                incrementor.IsPostfix,
+                oldOperand.Id,
+                cursorId,
+                oldOperand.Name,
+                intType,
+                incrementor.Operator,
+                incrementor.IsPostfix,
+                new LocalReferencePatchExpression(step.Id, step.Name, intType))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Contains(
+            "for (cursor = 0; cursor < count; step++)",
+            Assert.Single(result.PatchedRequest!.Sources).Source,
+            StringComparison.Ordinal);
+        HirForStatement changedLoop = Assert.IsType<HirForStatement>(
+            Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods).Body.Statements[2]);
+        HirUnaryExpression changedIncrementor = Assert.IsType<HirUnaryExpression>(
+            Assert.Single(changedLoop.Incrementors));
+        Assert.Equal(loop.Id, changedLoop.Id);
+        Assert.Equal(incrementor.Id, changedIncrementor.Id);
+        Assert.NotEqual(oldOperand.Id, changedIncrementor.Operand.Id);
+        Assert.Equal(
+            step.Id,
+            Assert.Single(
+                result.Analysis.Semantics!.Nodes,
+                binding => binding.NodeId == changedIncrementor.Operand.Id).ReferencedSymbolId);
+        Assert.Contains(
+            Assert.Single(result.Analysis.IdentitySidecars).Tombstones,
+            tombstone => tombstone.Id == oldOperand.Id);
     }
 
     private static (CSharpCompilationRequest Request, CSharpAnalysisResult Analysis) CreatePersistentRequest(

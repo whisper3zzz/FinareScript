@@ -2,20 +2,21 @@
 
 M4.16 admits text-authored C# `for` loops to the shared source/HIR/Graph
 contract. M4.17 closes the bounded reverse path with a dedicated
-`ForPatchStatement`. A `for` remains a first-class structure in both
-directions; it is never rewritten into a `while`, because that would lose
-clause ownership and would route `continue` past the incrementors.
+`ForPatchStatement`; M4.18 adds exact editing of supported existing header
+endpoints. A `for` remains a first-class structure in both directions; it is
+never rewritten into a `while`, because that would lose clause ownership and
+would route `continue` past the incrementors.
 
 The current strict-reader contracts are:
 
 - HIR `unifiedscript.hir/v0.5`;
 - Graph `unifiedscript.graph/v0.9`;
-- standalone patch `unifiedscript.patch/v0.15`;
-- patch plan `unifiedscript.patch-plan/v0.16`.
+- standalone patch `unifiedscript.patch/v0.16`;
+- patch plan `unifiedscript.patch-plan/v0.17`.
 
-Patch v0.15 adds the dedicated statement and for-local expression payloads;
-plan v0.16 adds symbolic loop-body and generated-for-local use without changing
-the existing plan-step discriminators.
+Patch v0.16 carries construction plus the four existing-header endpoint
+operations. Plan v0.17 carries their direct wrappers, symbolic loop-body and
+generated-for-local use, and the generated-for condition handle.
 
 ## HIR structure
 
@@ -183,14 +184,50 @@ nearest `HirWhileStatement` or `HirForStatement`; Graph/CFG validation proves
 that a generated `for` continue enters the increment phase rather than jumping
 directly to the condition.
 
-Existing exact operations can still edit supported expression nodes nested
-inside text- or graph-authored clauses when their normal type, endpoint, effect,
-trivia, identity, scope, and dominance checks pass.
+## Exact existing-header editing
 
-The patch algebra does not yet restructure an existing whole `for`. It cannot
-add, remove, reorder, or change the kind of existing initializer/incrementor
-clauses, and it does not offer a whole-condition endpoint operation analogous
-to `replaceWhileCondition`.
+M4.18 exposes four role-aware operations instead of treating the complete
+header as one replaceable expression:
+
+| Operation | Target | Replacement | Preserved structure |
+|---|---|---|---|
+| `replaceForCondition` | `HirForStatement` with an explicit condition | exact Boolean expression | loop and body |
+| `replaceForDeclarationInitializer` | initialized `HirForVariableDeclarator` | exact same-typed expression | loop, declaration group, declarator and name |
+| `replaceForAssignmentInitializerValue` | indexed root simple assignment | exact same-typed right side | loop, initializer slot, assignment and target |
+| `replaceForIncrementor` | indexed root `++`/`--` unary | local operand, operator and prefix/postfix position | loop, incrementor slot and mutation identity |
+
+Every payload repeats the owning loop ID. Indexed initializer and incrementor
+forms also repeat their zero-based slot, current operator, endpoints, binding,
+name, and exact semantic type. This prevents a stale visual edit from landing
+on a different clause after source changes. Declaration initialization rejects
+an absent initializer; condition replacement rejects an implicit-true omitted
+condition.
+
+Condition and incrementor expressions may reference the same loop's declared
+local. That scope is admitted only for the exact owning header; it does not make
+the local visible before its declaration or outside the loop. Declaration
+initializer editing deliberately uses the ordinary pre-loop scope and therefore
+cannot self-reference the new declarator. Assignment initializers remain
+limited to simple assignments to an existing bound local.
+
+Incrementor replacement admits only a local reference of the exact arithmetic
+or enum type and `++`/`--`. It can change operator, prefix/postfix position, or
+the writable local. When the operand binding is unchanged, both the mutation
+and operand IDs are pinned; changing the operand tombstones the old identifier
+while retaining the mutation ID. Full reanalysis still proves C# writability,
+binding, Graph effects, and the continue-to-increment CFG target.
+
+`replaceProducedForCondition` references an earlier `ForPatchStatement`
+insertion by `sourceStepId`. It is published only when the generated loop has
+an explicit condition. At execution time the coordinator resolves the actual
+post-reanalysis loop and condition IDs, resolves any generated-local references,
+and emits an ordinary `replaceForCondition` stage.
+
+The patch algebra still does not restructure an existing whole `for`: it cannot
+add/remove/reorder clauses, switch initializer kind, replace arbitrary
+initializer/incrementor expression forms, or turn an omitted condition into an
+explicit one. Nested supported expression nodes remain independently editable
+through the general exact-input operation.
 
 Reusing `WhilePatchStatement` remains invalid: that payload has only a
 condition and body, so it cannot express one-time initialization, incrementor
@@ -232,9 +269,27 @@ inserts an `index == 2` guard and `continue`, then accumulates `index` into an
 outer `total`. It demonstrates both symbolic handles and verifies that the
 continue target remains the generated incrementor.
 
+Run the exact existing-header sample with:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  apply-plan \
+  samples/Patching/EditForRules.cs \
+  --identity samples/Patching/EditForRules.cs.usids \
+  --plan samples/Patching/EditForRules.plan.json \
+  --out artifacts/for-edit/EditForRules.cs \
+  --out-identity artifacts/for-edit/EditForRules.cs.usids
+```
+
+The four-stage plan changes the source to
+`for (int index = 1; enabled && (index < count); ++index)` and advances the
+assignment-form initializer to `cursor = 1`, while retaining both loop bodies
+and the ordered initializer/increment regions.
+
 ## Deliberate limits
 
-- Existing-`for` whole-clause replacement/restructuring is not exposed.
+- Existing-`for` whole-clause replacement/restructuring is not exposed; only
+  the four exact M4.18 endpoints above are mutable.
 - Visual declaration construction is limited to exactly one initialized local;
   text-authored multiple declarators remain losslessly readable.
 - Visual expression initializers are exact assignments to available locals;

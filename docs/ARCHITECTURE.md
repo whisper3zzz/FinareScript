@@ -226,11 +226,13 @@ compilation identity is not safe for editing.
 ## Semantic patch transaction
 
 Graph schema v0.9 carries both the source compilation ID and semantic
-configuration ID. A `unifiedscript.patch/v0.15` document repeats those IDs and
+configuration ID. A `unifiedscript.patch/v0.16` document repeats those IDs and
 contains typed operations keyed by graph/HIR `SemanticId`. Implemented
 operations are `replaceLiteral`, `changeOperator`, `reconnectArgument`,
 `replaceExpressionInput`,
-`replaceAssignmentValue`, `replaceWhileCondition`, `replaceIfCondition`,
+`replaceAssignmentValue`, `replaceWhileCondition`, `replaceForCondition`,
+`replaceForDeclarationInitializer`, `replaceForAssignmentInitializerValue`,
+`replaceForIncrementor`, `replaceIfCondition`,
 `replaceLocalInitializer`, `replaceReturnValue`, `insertStatement`,
 `deleteStatement`, `introduceTemporary`, and `reconnectValue`.
 `insertStatement` accepts a local-literal declaration, a
@@ -241,14 +243,15 @@ operator/endpoint, semantic type,
 containing statement, parent block, and exact sibling preconditions rather than
 relying only on the compilation baseline.
 
-`unifiedscript.patch-plan/v0.16` is an ordered transaction above individual
+`unifiedscript.patch-plan/v0.17` is an ordered transaction above individual
 patches. It composes every current bounded operation: literal and operator
-changes, argument reconnection, structured assignment/loop/branch/local/return
-expression edits, exact nested expression-input replacement, statement
+changes, argument reconnection, structured assignment/while/for/branch/local/
+return expression edits, exact nested expression-input replacement, statement
 insertion/deletion, temporary introduction, value
 reconnection, symbolic branch-body insertion, symbolic loop-body insertion,
 and symbolic replacement of expression endpoints on compatible statements
-produced earlier in the same plan.
+produced earlier in the same plan, including explicit conditions on generated
+while and for loops.
 `introduceTemporary` and local-literal root, branch, or loop-body insertion
 steps publish symbolic local handles. Later `reconnectValue` steps can consume
 an entire value port, while transaction-only `producedLocalReference` leaves
@@ -269,8 +272,8 @@ true, and false children. Graph v0.9 projects that node as a `conditional`/`Sele
 with canonical `condition`, `whenTrue`, and `whenFalse` inputs and an explicit
 `evaluation: lazyBranches` contract. Semantic binding rejects effectful arms so
 the data projection cannot eagerly execute mutation, latency, or effectful
-calls that C# would evaluate only on the selected path. Patch v0.15 and plan
-v0.16 use the same conditional shape in their closed expression algebra and
+calls that C# would evaluate only on the selected path. Patch v0.16 and plan
+v0.17 use the same conditional shape in their closed expression algebra and
 allow exact or produced-handle edits through those Graph ports.
 The same HIR already preserves `&&` and `||` as ordered binary nodes. Graph
 v0.9 retains their `shortCircuitRight` contract, with
@@ -295,8 +298,8 @@ explicit: the receiver feeds the parent `receiver` input and the binding's
 `whenReceiverNonNull`, and `whenNotNullOrNull`, so a VM can evaluate once,
 skip the selected subtree on null, and lift the result. `UVS2006` rejects
 effects in the selected subtree and `UVS2007` rejects void or hidden-conversion
-type shapes. Patch v0.15 can author a bounded simple conditional member access;
-plan v0.16 can replace its `receiver` through an actual produced root. See
+type shapes. Patch v0.16 can author a bounded simple conditional member access;
+plan v0.17 can replace its `receiver` through an actual produced root. See
 [NULL_CONDITIONAL_ACCESS.md](NULL_CONDITIONAL_ACCESS.md).
 An `if` insertion publishes internal `then`/`else` block handles for later
 `insertBranchStatement` steps without masquerading as a reconnectable local

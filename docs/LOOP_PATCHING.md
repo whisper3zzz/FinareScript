@@ -16,7 +16,7 @@ targets.
 
 ## Protocol
 
-Current patch schema `unifiedscript.patch/v0.15` carries four loop statement payloads:
+Current patch schema `unifiedscript.patch/v0.16` carries four loop statement payloads:
 
 - `while`, carrying one closed, typed `PatchExpression` condition;
 - `for`, carrying declaration or assignment initialization, an optional
@@ -28,7 +28,7 @@ The absence of a transfer target is intentional. C# and HIR bind each transfer
 to its nearest lexical loop, and the derived CFG verifies that target. A visual
 client cannot forge an edge to an outer or unrelated loop.
 
-Current patch-plan schema `unifiedscript.patch-plan/v0.16` carries
+Current patch-plan schema `unifiedscript.patch-plan/v0.17` carries
 `insertLoopBodyStatement`:
 
 ```json

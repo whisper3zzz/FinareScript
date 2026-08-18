@@ -29,6 +29,17 @@ internal sealed class HirPatchIndex
     public bool TryGetExpression(SemanticId id, out ExpressionLocation? location) =>
         expressions.TryGetValue(id, out location);
 
+    public bool TryGetDeclaringFor(
+        SemanticId variableId,
+        out HirForStatement? statement) =>
+        forVariables.TryGetValue(variableId, out statement);
+
+    public bool IsForVariableDeclaredBy(
+        SemanticId variableId,
+        SemanticId forStatementId) =>
+        forVariables.TryGetValue(variableId, out HirForStatement? statement) &&
+        statement.Id == forStatementId;
+
     public bool TryGetNearestEnclosingLoop(
         SemanticId blockId,
         out HirStatement? loop)

@@ -43,6 +43,26 @@ public static class SemanticPatchPlanExpressions
             {
                 NewCondition = Rewrite(replacement.NewCondition, resolver),
             },
+            ReplaceForConditionPatchPlanStep replacement => replacement with
+            {
+                NewCondition = Rewrite(replacement.NewCondition, resolver),
+            },
+            ReplaceProducedForConditionPatchPlanStep replacement => replacement with
+            {
+                NewCondition = Rewrite(replacement.NewCondition, resolver),
+            },
+            ReplaceForDeclarationInitializerPatchPlanStep replacement => replacement with
+            {
+                NewInitializer = Rewrite(replacement.NewInitializer, resolver),
+            },
+            ReplaceForAssignmentInitializerValuePatchPlanStep replacement => replacement with
+            {
+                NewValue = Rewrite(replacement.NewValue, resolver),
+            },
+            ReplaceForIncrementorPatchPlanStep replacement => replacement with
+            {
+                NewOperand = Rewrite(replacement.NewOperand, resolver),
+            },
             ReplaceIfConditionPatchPlanStep replacement => replacement with
             {
                 NewCondition = Rewrite(replacement.NewCondition, resolver),
@@ -93,6 +113,11 @@ public static class SemanticPatchPlanExpressions
             ReplaceProducedExpressionInputPatchPlanStep replacement => replacement.NewInput,
             ReplaceWhileConditionPatchPlanStep replacement => replacement.NewCondition,
             ReplaceProducedWhileConditionPatchPlanStep replacement => replacement.NewCondition,
+            ReplaceForConditionPatchPlanStep replacement => replacement.NewCondition,
+            ReplaceProducedForConditionPatchPlanStep replacement => replacement.NewCondition,
+            ReplaceForDeclarationInitializerPatchPlanStep replacement => replacement.NewInitializer,
+            ReplaceForAssignmentInitializerValuePatchPlanStep replacement => replacement.NewValue,
+            ReplaceForIncrementorPatchPlanStep replacement => replacement.NewOperand,
             ReplaceIfConditionPatchPlanStep replacement => replacement.NewCondition,
             ReplaceProducedIfConditionPatchPlanStep replacement => replacement.NewCondition,
             ReplaceLocalInitializerPatchPlanStep replacement => replacement.NewInitializer,

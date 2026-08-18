@@ -9,7 +9,7 @@ typed `IfPatchStatement` inserted into a previously generated C# `then` or
 `else` Block, followed by the same full C# → HIR → semantics → Graph → CFG
 pipeline used by every other edit.
 
-Current patch-plan schema `unifiedscript.patch-plan/v0.16` extends the symbolic
+Current patch-plan schema `unifiedscript.patch-plan/v0.17` extends the symbolic
 branch-handle model recursively. No new step discriminator is required.
 
 ## Recursive producer model
@@ -113,7 +113,7 @@ parent path
 └── later statement      ← would become unreachable
 ```
 
-Plan v0.16 tracks the last statement on every symbolic path and rejects this
+Plan v0.17 tracks the last statement on every symbolic path and rejects this
 retroactive-unreachability shape before executing the first stage. The rule
 propagates recursively: terminal leaves can close their parent, which can close
 its parent, through arbitrary acyclic depth.

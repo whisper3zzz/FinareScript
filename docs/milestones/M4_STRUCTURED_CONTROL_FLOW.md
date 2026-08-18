@@ -967,8 +967,8 @@ its implicit receiver as an explicit shared-VM contract.
 
 ## M4.17 implemented vertical slice
 
-- strict patch `unifiedscript.patch/v0.15` and patch-plan
-  `unifiedscript.patch-plan/v0.16` readers while HIR v0.5 and Graph v0.9 remain
+- strict patch `unifiedscript.patch/v0.16` and patch-plan
+  `unifiedscript.patch-plan/v0.17` readers while HIR v0.5 and Graph v0.9 remain
   unchanged
 - dedicated `ForPatchStatement` rather than widening the lossy while payload
 - explicit declaration-form or ordered assignment-form initialization, with
@@ -1007,7 +1007,7 @@ its implicit receiver as an explicit shared-VM contract.
 
 ## M4.17 acceptance criteria
 
-1. Patch v0.15 JSON round-trips a declaration-form `for`, its scoped local
+1. Patch v0.16 JSON round-trips a declaration-form `for`, its scoped local
    references, optional condition, and ordered prefix/postfix mutations.
 2. Declaration and assignment initializer forms are mutually exclusive; a
    malformed mixed or null collection shape is rejected by the strict reader.
@@ -1028,7 +1028,7 @@ its implicit receiver as an explicit shared-VM contract.
 9. Successful standalone construction emits ordinary `for (...) { }` C# and
    reprojects to `HirForStatement`, the three Graph phase regions, and reducible
    loop CFG facts.
-10. Patch-plan v0.16 recognizes a for insertion as a loop producer and resolves
+10. Patch-plan v0.17 recognizes a for insertion as a loop producer and resolves
     later `insertLoopBodyStatement` steps without predicted loop/body IDs.
 11. A declaration-form for producer publishes its actual post-reanalysis
     declarator ID; body expressions can consume it through
@@ -1046,6 +1046,72 @@ its implicit receiver as an explicit shared-VM contract.
 17. Late name, type, scope, dominance, reachability, semantic, or CFG failure
     returns no partial source or identity output.
 18. The full solution, 268-test suite, format check, repository validator, 20
+    patch/plan CLI regressions, and four analyze regressions pass.
+
+## M4.18 implemented vertical slice
+
+- strict patch `unifiedscript.patch/v0.16` and patch-plan
+  `unifiedscript.patch-plan/v0.17`, with HIR v0.5 and Graph v0.9 unchanged
+- `replaceForCondition` targeting only an existing `HirForStatement` with an
+  explicit condition and exact Boolean endpoint/type preconditions
+- `replaceForDeclarationInitializer` targeting one initialized
+  `HirForVariableDeclarator`, repeating its owner loop, name, initializer, and
+  exact type
+- `replaceForAssignmentInitializerValue` targeting one indexed root simple
+  assignment and repeating loop, slot, operator, target binding/name, value,
+  and type preconditions
+- `replaceForIncrementor` targeting one indexed root `++`/`--` unary and
+  allowing exact changes to its writable local, operator, and prefix/postfix
+  position
+- header-aware local resolution admitting a for declarator only in the
+  condition/incrementors of its exact owning loop
+- ordinary pre-loop resolution for declaration initializers, preventing new
+  self-reference or accidental same-declaration scope widening
+- mutation/operand identity pins when the operand binding survives, with the
+  removed operand becoming a tombstone when the binding changes
+- meaningful-trivia rejection for every replaced endpoint and full
+  profile/compiler/semantic/HIR/Graph/CFG reanalysis after emission
+- direct plan wrappers for all four operations and expression-producer
+  registration for their authored replacement roots
+- `replaceProducedForCondition` resolving the actual loop and current explicit
+  condition from an earlier `ForPatchStatement` producer
+- generated-for condition expressions consuming the generated declarator
+  through `producedLocalReference` without predicting its persistent ID
+- implicit-true generated for loops deliberately publishing no condition-edit
+  handle
+- checked-in `EditForRules.cs`, `.usids`, and four-stage
+  `EditForRules.plan.json` CLI sample
+- protocol, architecture, for-loop, patch-plan, roadmap, README, schema fixture,
+  and repository-validator migration
+
+## M4.18 acceptance criteria
+
+1. Patch v0.16 and plan v0.17 JSON round-trip all four direct existing-for
+   header operations, with strict discriminator and payload validation.
+2. An explicit condition can be replaced by an exact Boolean authored tree
+   that references the same for's declaration local; an omitted condition is
+   rejected without proposing source.
+3. Declaration-initializer replacement retains the loop, declaration group,
+   declarator/name, body, and unrelated clause identities.
+4. Assignment-initializer replacement verifies its exact loop, zero-based slot,
+   simple assignment, target endpoint/binding/name, value endpoint, and type.
+5. Incrementor replacement verifies its exact loop/slot, current operator and
+   position, operand endpoint/binding/name, and arithmetic/enum type.
+6. Incrementor operator, prefix/postfix position, or writable local can change;
+   a no-op payload is rejected by the protocol.
+7. A comment or directive inside any discarded endpoint rejects the complete
+   patch or plan stage.
+8. Successful edits preserve for/body/phase structure and derived CFG continue
+   routing to the retained incrementor mutation.
+9. A for inserted earlier in one plan exposes its explicit condition through
+   `replaceProducedForCondition`, and its generated local can feed that edit.
+10. An inserted for with an omitted condition is rejected as a produced
+    condition source during plan validation.
+11. Later-stage source, scope, binding, type, writability, Graph, or CFG failure
+    rolls the full plan back with no output.
+12. The checked-in four-stage sample edits declaration condition/start/
+    increment position and assignment-form start through the public CLI.
+13. The full solution, 276-test suite, format check, repository validator, 21
     patch/plan CLI regressions, and four analyze regressions pass.
 
 ## Deliberate limits
@@ -1066,7 +1132,9 @@ earlier in one plan. Produced paths do not yet traverse ordinary members,
 conditional selected bindings, calls, assignments, awaits, or wildcard/parent
 queries. Branch and loop-body insertions append and cannot move or delete
 existing structures. Loop transfers cannot be retargeted.
-Existing-`for` clause restructuring/replacement, `do`/`foreach`, switch,
+Existing-`for` whole-clause restructuring remains unavailable beyond M4.18's
+exact condition/declaration-initializer/assignment-value/incrementor endpoints.
+`do`/`foreach`, switch,
 conditional element access,
 conditional effect subgraphs for lazy expression inputs, exception edges,
 standalone short-circuit CFG regions, async state-machine transitions, control
@@ -1074,10 +1142,9 @@ dependence, SSA, and automatic node placement remain outside the current slice.
 
 ## Next slice
 
-M4.18 should choose between exact existing-`for` clause editing and the next
-independent control structure. Clause editing must retain initializer-kind,
-declaration-scope, mutation-order, continue-target, trivia, and identity proofs;
-it cannot be implemented as a generic expression replacement over the whole
-header. `foreach` remains separate because enumerator acquisition, disposal,
+M4.19 should add `do` as the next independent structured loop. It must preserve
+condition-after-body evaluation, at-least-once execution, condition effects,
+continue-to-condition routing, and exact source identity instead of lowering to
+`while`. `foreach` remains separate because enumerator acquisition, disposal,
 iteration-variable scope, and collection mutation semantics cannot be modeled
 as a cosmetic for-loop variant.

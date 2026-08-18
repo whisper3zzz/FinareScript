@@ -435,7 +435,7 @@ public sealed class SemanticPatchJsonTests
         ReplaceReturnValuePatchOperation operation = Assert.IsType<ReplaceReturnValuePatchOperation>(
             Assert.Single(roundTrip.Operations));
         Assert.Equal(expression, Assert.IsType<ConditionalPatchExpression>(operation.NewValue));
-        Assert.Equal("unifiedscript.patch/v0.15", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch/v0.16", roundTrip.SchemaVersion);
         Assert.Contains("\"expression\": \"conditional\"", json);
         Assert.Contains("\"whenTrue\"", json);
         Assert.Contains("\"whenFalse\"", json);
@@ -469,7 +469,7 @@ public sealed class SemanticPatchJsonTests
         ReplaceReturnValuePatchOperation operation = Assert.IsType<ReplaceReturnValuePatchOperation>(
             Assert.Single(roundTrip.Operations));
         Assert.Equal(expression, Assert.IsType<BinaryPatchExpression>(operation.NewValue));
-        Assert.Equal("unifiedscript.patch/v0.15", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch/v0.16", roundTrip.SchemaVersion);
         Assert.Contains("\"operator\": \"??\"", json, StringComparison.Ordinal);
     }
 
@@ -502,7 +502,7 @@ public sealed class SemanticPatchJsonTests
         Assert.Equal(
             expression,
             Assert.IsType<ConditionalMemberAccessPatchExpression>(operation.NewValue));
-        Assert.Equal("unifiedscript.patch/v0.15", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch/v0.16", roundTrip.SchemaVersion);
         Assert.Contains("\"expression\": \"conditionalMemberAccess\"", json);
         Assert.Contains("\"memberName\": \"Length\"", json);
         Assert.Contains("\"receiver\"", json);
@@ -924,5 +924,111 @@ public sealed class SemanticPatchJsonTests
                     SemanticId.FromKey("System.Single"),
                     SemanticId.FromKey("System.Single")),
             ]));
+    }
+
+    [Fact]
+    public void SerializeAndDeserialize_PreserveForHeaderEndpointOperations()
+    {
+        SemanticId intType = SemanticId.FromKey("for-header-int-type");
+        SemanticId boolType = SemanticId.FromKey("for-header-bool-type");
+        SemanticId loopId = SemanticId.FromKey("for-header-loop");
+        SemanticId indexId = SemanticId.FromKey("for-header-index");
+        SemanticPatchOperation[] operations =
+        [
+            new ReplaceForConditionPatchOperation(
+                loopId,
+                SemanticId.FromKey("for-header-condition"),
+                boolType,
+                new LiteralPatchExpression("false", boolType)),
+            new ReplaceForDeclarationInitializerPatchOperation(
+                indexId,
+                loopId,
+                "index",
+                SemanticId.FromKey("for-header-declaration-value"),
+                intType,
+                new LiteralPatchExpression("1", intType)),
+            new ReplaceForAssignmentInitializerValuePatchOperation(
+                SemanticId.FromKey("for-header-assignment"),
+                SemanticId.FromKey("for-header-assignment-loop"),
+                0,
+                "=",
+                SemanticId.FromKey("for-header-assignment-target"),
+                SemanticId.FromKey("for-header-assignment-definition"),
+                "cursor",
+                SemanticId.FromKey("for-header-assignment-value"),
+                intType,
+                new LiteralPatchExpression("2", intType)),
+            new ReplaceForIncrementorPatchOperation(
+                SemanticId.FromKey("for-header-incrementor"),
+                loopId,
+                0,
+                "++",
+                true,
+                SemanticId.FromKey("for-header-incrementor-operand"),
+                indexId,
+                "index",
+                intType,
+                "--",
+                false,
+                new LocalReferencePatchExpression(indexId, "index", intType)),
+        ];
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            SemanticId.FromKey("for-header-compilation"),
+            SemanticId.FromKey("for-header-configuration"),
+            operations);
+
+        string json = SemanticPatchJson.Serialize(patch);
+        SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
+
+        Assert.Equal(operations, roundTrip.Operations);
+        Assert.Contains("\"operation\": \"replaceForCondition\"", json, StringComparison.Ordinal);
+        Assert.Contains(
+            "\"operation\": \"replaceForDeclarationInitializer\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"operation\": \"replaceForAssignmentInitializerValue\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains("\"operation\": \"replaceForIncrementor\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Create_RejectsInvalidForHeaderEndpointPayloads()
+    {
+        SemanticId intType = SemanticId.FromKey("invalid-for-header-int-type");
+        SemanticId loopId = SemanticId.FromKey("invalid-for-header-loop");
+        SemanticId indexId = SemanticId.FromKey("invalid-for-header-index");
+
+        Assert.Throws<JsonException>(() => SemanticPatchDocument.Create(
+            SemanticId.FromKey("invalid-for-index-compilation"),
+            SemanticId.FromKey("invalid-for-index-configuration"),
+            [new ReplaceForAssignmentInitializerValuePatchOperation(
+                SemanticId.FromKey("invalid-for-assignment"),
+                loopId,
+                -1,
+                "=",
+                SemanticId.FromKey("invalid-for-assignment-target"),
+                indexId,
+                "index",
+                SemanticId.FromKey("invalid-for-assignment-value"),
+                intType,
+                new LiteralPatchExpression("0", intType))]));
+        Assert.Throws<JsonException>(() => SemanticPatchDocument.Create(
+            SemanticId.FromKey("invalid-for-mutation-compilation"),
+            SemanticId.FromKey("invalid-for-mutation-configuration"),
+            [new ReplaceForIncrementorPatchOperation(
+                SemanticId.FromKey("invalid-for-mutation"),
+                loopId,
+                0,
+                "++",
+                true,
+                SemanticId.FromKey("invalid-for-mutation-operand"),
+                indexId,
+                "index",
+                intType,
+                "++",
+                true,
+                new LocalReferencePatchExpression(indexId, "index", intType))]));
     }
 }

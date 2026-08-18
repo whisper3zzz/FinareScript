@@ -1,0 +1,95 @@
+{
+  "schemaVersion": "unifiedscript.patch-plan/v0.17",
+  "sourceCompilationId": "us_3136341c1299e51c18523468d89c5367",
+  "semanticConfigurationId": "us_02f5fe78d296e2d4fe04bc50ca71acf1",
+  "steps": [
+    {
+      "step": "replaceForCondition",
+      "stepId": "gateForCondition",
+      "targetNodeId": "us_2333a21473ad5c9aea9d13243b25870c",
+      "expectedConditionNodeId": "us_9724d3d1d3ae1aeafba2e438a8f3f653",
+      "expectedConditionTypeId": "us_b5f84bcf933b6593d45e9e031353bfef",
+      "newCondition": {
+        "expression": "binary",
+        "operator": "&&",
+        "left": {
+          "expression": "localReference",
+          "sourceDefinitionId": "us_38d4c64d5ecea55d3be113ed2573b372",
+          "expectedName": "enabled",
+          "expectedTypeId": "us_b5f84bcf933b6593d45e9e031353bfef"
+        },
+        "right": {
+          "expression": "binary",
+          "operator": "<",
+          "left": {
+            "expression": "localReference",
+            "sourceDefinitionId": "us_bd43192b2fc528cad50f88ad65c1f554",
+            "expectedName": "index",
+            "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+          },
+          "right": {
+            "expression": "localReference",
+            "sourceDefinitionId": "us_f7bdb1be9dae28f894b5d3999faa264b",
+            "expectedName": "count",
+            "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+          },
+          "expectedTypeId": "us_b5f84bcf933b6593d45e9e031353bfef"
+        },
+        "expectedTypeId": "us_b5f84bcf933b6593d45e9e031353bfef"
+      }
+    },
+    {
+      "step": "replaceForDeclarationInitializer",
+      "stepId": "advanceForStart",
+      "targetNodeId": "us_bd43192b2fc528cad50f88ad65c1f554",
+      "expectedForStatementId": "us_2333a21473ad5c9aea9d13243b25870c",
+      "expectedName": "index",
+      "expectedInitializerNodeId": "us_a3455dee2c3ccaa1fc5d3fade7121a46",
+      "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+      "newInitializer": {
+        "expression": "literal",
+        "valueText": "1",
+        "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+      }
+    },
+    {
+      "step": "replaceForIncrementor",
+      "stepId": "prefixForIncrement",
+      "targetNodeId": "us_112f406ad740de225edc0ccf08045246",
+      "expectedForStatementId": "us_2333a21473ad5c9aea9d13243b25870c",
+      "incrementorIndex": 0,
+      "expectedOperator": "++",
+      "expectedIsPostfix": true,
+      "expectedOperandNodeId": "us_24509fd3b7f4226dc0c289c077c114ed",
+      "expectedOperandDefinitionId": "us_bd43192b2fc528cad50f88ad65c1f554",
+      "expectedOperandName": "index",
+      "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+      "newOperator": "++",
+      "newIsPostfix": false,
+      "newOperand": {
+        "expression": "localReference",
+        "sourceDefinitionId": "us_bd43192b2fc528cad50f88ad65c1f554",
+        "expectedName": "index",
+        "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+      }
+    },
+    {
+      "step": "replaceForAssignmentInitializerValue",
+      "stepId": "advanceAssignmentStart",
+      "targetNodeId": "us_6fda2ec98963306112ecc9072cd0a156",
+      "expectedForStatementId": "us_16f3df5ce6b8f0a10a99658c04db2b49",
+      "initializerIndex": 0,
+      "expectedOperator": "=",
+      "expectedTargetNodeId": "us_a8abc2c0e78a713507de403468b62757",
+      "expectedTargetDefinitionId": "us_3340f8ffbe4269ae378a180d2883a9d9",
+      "expectedTargetName": "cursor",
+      "expectedValueNodeId": "us_baa0e697548ea053a229e1781721f169",
+      "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+      "newValue": {
+        "expression": "literal",
+        "valueText": "1",
+        "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+      }
+    }
+  ]
+}

@@ -9,6 +9,14 @@ namespace UnifiedScript.Core;
 [JsonDerivedType(typeof(ReplaceExpressionInputPatchOperation), "replaceExpressionInput")]
 [JsonDerivedType(typeof(ReplaceAssignmentValuePatchOperation), "replaceAssignmentValue")]
 [JsonDerivedType(typeof(ReplaceWhileConditionPatchOperation), "replaceWhileCondition")]
+[JsonDerivedType(typeof(ReplaceForConditionPatchOperation), "replaceForCondition")]
+[JsonDerivedType(
+    typeof(ReplaceForDeclarationInitializerPatchOperation),
+    "replaceForDeclarationInitializer")]
+[JsonDerivedType(
+    typeof(ReplaceForAssignmentInitializerValuePatchOperation),
+    "replaceForAssignmentInitializerValue")]
+[JsonDerivedType(typeof(ReplaceForIncrementorPatchOperation), "replaceForIncrementor")]
 [JsonDerivedType(typeof(ReplaceIfConditionPatchOperation), "replaceIfCondition")]
 [JsonDerivedType(typeof(ReplaceLocalInitializerPatchOperation), "replaceLocalInitializer")]
 [JsonDerivedType(typeof(ReplaceReturnValuePatchOperation), "replaceReturnValue")]
@@ -63,6 +71,46 @@ public sealed record ReplaceWhileConditionPatchOperation(
     SemanticId ExpectedConditionNodeId,
     SemanticId ExpectedConditionTypeId,
     PatchExpression NewCondition) : SemanticPatchOperation(TargetNodeId);
+
+public sealed record ReplaceForConditionPatchOperation(
+    SemanticId TargetNodeId,
+    SemanticId ExpectedConditionNodeId,
+    SemanticId ExpectedConditionTypeId,
+    PatchExpression NewCondition) : SemanticPatchOperation(TargetNodeId);
+
+public sealed record ReplaceForDeclarationInitializerPatchOperation(
+    SemanticId TargetNodeId,
+    SemanticId ExpectedForStatementId,
+    string ExpectedName,
+    SemanticId ExpectedInitializerNodeId,
+    SemanticId ExpectedTypeId,
+    PatchExpression NewInitializer) : SemanticPatchOperation(TargetNodeId);
+
+public sealed record ReplaceForAssignmentInitializerValuePatchOperation(
+    SemanticId TargetNodeId,
+    SemanticId ExpectedForStatementId,
+    int InitializerIndex,
+    string ExpectedOperator,
+    SemanticId ExpectedTargetNodeId,
+    SemanticId ExpectedTargetDefinitionId,
+    string ExpectedTargetName,
+    SemanticId ExpectedValueNodeId,
+    SemanticId ExpectedTypeId,
+    PatchExpression NewValue) : SemanticPatchOperation(TargetNodeId);
+
+public sealed record ReplaceForIncrementorPatchOperation(
+    SemanticId TargetNodeId,
+    SemanticId ExpectedForStatementId,
+    int IncrementorIndex,
+    string ExpectedOperator,
+    bool ExpectedIsPostfix,
+    SemanticId ExpectedOperandNodeId,
+    SemanticId ExpectedOperandDefinitionId,
+    string ExpectedOperandName,
+    SemanticId ExpectedTypeId,
+    string NewOperator,
+    bool NewIsPostfix,
+    PatchExpression NewOperand) : SemanticPatchOperation(TargetNodeId);
 
 public sealed record ReplaceIfConditionPatchOperation(
     SemanticId TargetNodeId,
@@ -243,7 +291,7 @@ public sealed record SemanticPatchDocument(
     SemanticId SemanticConfigurationId,
     IReadOnlyList<SemanticPatchOperation> Operations)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.15";
+    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.16";
 
     public static SemanticPatchDocument Create(
         SemanticId sourceCompilationId,

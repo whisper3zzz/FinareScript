@@ -63,9 +63,12 @@ The repository currently implements:
 - lossless text-authored `for` loops across HIR v0.5 and Graph v0.9, with
   declaration/expression initializers, optional conditions, ordered incrementors,
   prefix/postfix mutation identity, and CFG-validated continue-to-increment routing;
-- dedicated bounded `for` construction through patch v0.15/plan v0.16, with
+- dedicated bounded `for` construction through patch v0.16/plan v0.17, with
   declaration or assignment initialization, scoped for-local references,
   ordered `++`/`--`, symbolic body/local handles, and atomic CFG revalidation;
+- exact editing of an existing `for` condition, declaration initializer,
+  assignment-initializer value, and `++`/`--` incrementor, plus a generated-for
+  condition handle, without replacing the loop or changing clause ownership;
 - opt-in `.usids` sidecars that preserve node identity across formatting and edits;
 - semantic-independent `.usgraph` layout sidecars with deterministic positions,
   sizes, collapsed state, comment regions, routing hints, and orphan recovery;
@@ -109,10 +112,12 @@ M4.16 preserves text-authored `for` as a distinct ordered loop structure with
 initializer/body/increment regions and continue-to-increment CFG routing.
 M4.17 adds the dedicated bounded reverse path: visual plans can construct a
 typed `for`, populate its body, and consume its generated declaration local
-without predicting any persistent IDs.
+without predicting any persistent IDs. M4.18 adds exact mutation of the four
+bounded existing-header endpoints while retaining loop/body/declarator/
+assignment/mutation identity and CFG continue routing.
 
 The v0.2 profile accepts `[Visual]` methods containing local variables,
-expressions, calls, assignments, `if/else`, `while`, `break`, `continue`,
+expressions, calls, assignments, `if/else`, `while`, `for`, `break`, `continue`,
 `return`, conditional, null-coalescing, and null-conditional expressions,
 casts, and `await`.
 Unsupported syntax is rejected explicitly instead of being approximated.
@@ -311,7 +316,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
   --out-identity artifacts/patched/DamageRules.cs.usids
 ```
 
-`unifiedscript.patch/v0.15` binds every patch to both the source compilation ID
+`unifiedscript.patch/v0.16` binds every patch to both the source compilation ID
 and semantic configuration ID emitted in current Graph schema v0.9. A `replaceLiteral`
 operation also carries the expected old literal text. A stale source, changed
 reference/effect configuration, missing target, changed old value, non-literal
@@ -325,7 +330,7 @@ ambiguous matches allocate new IDs and emit `UVS3101` rather than guessing.
 
 ## Apply structural graph patches
 
-Patch v0.15 includes `changeOperator` and `reconnectArgument`. The checked-in
+Patch v0.16 includes `changeOperator` and `reconnectArgument`. The checked-in
 operator sample changes the binary node from multiplication to division while
 requiring the expected result, left-port, and right-port type IDs:
 
@@ -361,7 +366,7 @@ single-document.
 
 ## Apply a statement insertion
 
-Patch v0.15 also includes bounded `insertStatement` and `deleteStatement`
+Patch v0.16 also includes bounded `insertStatement` and `deleteStatement`
 operations. The insertion sample adds a graph-authored local declaration before
 the existing return statement:
 
@@ -376,7 +381,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
 ```
 
 An insertion targets a parent block and records the exact adjacent sibling IDs.
-Patch v0.15 accepts a local declaration with one literal initializer, a
+Patch v0.16 accepts a local declaration with one literal initializer, a
 CFG-checked local assignment, a typed terminal return, an `if`/`while`, or a
 dedicated bounded `for` whose clauses are versioned graph-authored expressions.
 A local's
@@ -457,7 +462,7 @@ It proves that source, HIR, Graph branch/data/control edges, persistent identity
 and `.usgraph` layout synchronization share one structure. New branch and
 condition nodes are explicitly `unplaced`; existing placements survive.
 
-Patch-plan v0.16 can populate those newly allocated blocks without predicting
+Patch-plan v0.17 can populate those newly allocated blocks without predicting
 their random IDs. The checked-in plan inserts the same guard, appends two typed
 locals to `then`, and appends one typed local to `else`:
 
@@ -607,7 +612,7 @@ pin. The moved expression, its descendants, the containing statement, sibling
 statements, and parent block therefore retain their IDs. Only the new local
 declaration and replacement identifier allocate new IDs. This is the first
 lowering primitive needed to represent a shared Graph value without duplicating
-C# evaluation. Patch v0.15 can connect additional compatible consumers to
+C# evaluation. Patch v0.16 can connect additional compatible consumers to
 that local definition.
 
 ## Reconnect a typed consumer
@@ -666,7 +671,7 @@ analyzed source baseline, or atomically with the patch-plan protocol below.
 
 ## Apply atomic semantic patch plans
 
-`unifiedscript.patch-plan/v0.16` composes `replaceLiteral`, `changeOperator`,
+`unifiedscript.patch-plan/v0.17` composes `replaceLiteral`, `changeOperator`,
 `reconnectArgument`, typed replacement of assignment, loop, branch,
 declaration-initializer, and return endpoints, their generated-statement
 handle variants, `insertStatement`, `insertBranchStatement`,
@@ -766,7 +771,7 @@ more paths, and all-path termination propagates up that producer tree. A
 handle, usable only where scope and CFG dominance allow. Local assignments are
 supported as direct, produced-branch, and produced-loop-body payloads. Authored
 call construction, async/task-like returns, cyclic handle references, and
-cross-method handles remain outside v0.16; exact inputs of already-resolved
+cross-method handles remain outside plan v0.17; exact inputs of already-resolved
 positional calls are covered by M4.10 below.
 
 ### Build a loop from a visual plan
@@ -812,6 +817,34 @@ initialization, optional condition, and ordered mutation incrementors. Its
 clause-local `forLocalReference` never escapes the payload; after reanalysis,
 the plan coordinator publishes the real declarator through an ordinary
 `producedLocalReference` handle for body steps. See
+[FOR_LOOPS.md](docs/FOR_LOOPS.md).
+
+### Edit an existing for header
+
+M4.18 adds four exact endpoint operations: `replaceForCondition`,
+`replaceForDeclarationInitializer`, `replaceForAssignmentInitializerValue`,
+and `replaceForIncrementor`. They retain the `for` form and body, pin the
+surviving mutation/operand identities where applicable, reject omitted
+conditions and missing initializers, and preserve declaration scope and clause
+order. A `replaceProducedForCondition` plan step can edit the explicit
+condition of a `for` inserted earlier in the same transaction.
+
+The checked-in four-step sample gates a declaration-form condition with
+`enabled`, advances both initializer values, and changes postfix `index++` to
+prefix `++index`:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  apply-plan \
+  samples/Patching/EditForRules.cs \
+  --identity samples/Patching/EditForRules.cs.usids \
+  --plan samples/Patching/EditForRules.plan.json \
+  --out artifacts/for-edit/EditForRules.cs \
+  --out-identity artifacts/for-edit/EditForRules.cs.usids
+```
+
+The transaction is still bounded: it cannot add/remove/reorder clauses or
+switch between declaration and expression initializer forms. See
 [FOR_LOOPS.md](docs/FOR_LOOPS.md).
 
 ### Edit assignment values and loop conditions
@@ -963,7 +996,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
 ```
 
 The result is `return value + (value * 3);`, and the sidecar advances from
-generation 1 to 4. The symbolic step becomes an ordinary patch v0.15
+generation 1 to 4. The symbolic step becomes an ordinary patch v0.16
 `replaceExpressionInput` at execution time, so type, purity, dominance, trivia,
 identity, tombstone, and Graph-edge behavior stay on one code path. See
 [PRODUCED_EXPRESSION_HANDLES.md](docs/PRODUCED_EXPRESSION_HANDLES.md).
@@ -971,7 +1004,7 @@ identity, tombstone, and Graph-edge behavior stay on one code path. See
 ### Author and edit a conditional expression
 
 M4.12 adds `condition ? whenTrue : whenFalse` as a first-class expression in
-current HIR v0.5, Graph v0.9, patch v0.15, and patch-plan v0.16. Graph emits one
+current HIR v0.5, Graph v0.9, patch v0.16, and patch-plan v0.17. Graph emits one
 `conditional`/`Select` node with `condition`, `whenTrue`, and `whenFalse` data
 inputs, a `value` output, and `evaluation: lazyBranches`. Text lowering keeps
 the original expression shape; it does not turn the expression into a call or
@@ -1073,11 +1106,11 @@ subtree is skipped on null, so an assignment, await, mutation, or effectful call
 there produces `UVS2006` until Graph has conditional effect subregions.
 `UVS2007` rejects void, graph-unsafe, or hidden-conversion result shapes.
 
-Patch v0.15 adds a bounded `conditionalMemberAccess` payload for a simple member
+Patch v0.16 adds a bounded `conditionalMemberAccess` payload for a simple member
 identifier. It emits ordinary C#, reanalyzes it, and verifies every authored
 node against Roslyn's exact pre-conversion type. Existing and generated
 conditional-access roots expose `receiver` as an exact editable port under
-patch-plan v0.16. The conditional `whenNotNull` data port remains read-only for
+patch-plan v0.17. The conditional `whenNotNull` data port remains read-only for
 general edits until a closed call/member-binding payload can preserve its
 implicit receiver safely.
 

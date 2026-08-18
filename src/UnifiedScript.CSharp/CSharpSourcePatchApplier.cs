@@ -208,6 +208,42 @@ public sealed class CSharpSourcePatchApplier
                         types,
                         graphSafetyIndex,
                         documents),
+                ReplaceForConditionPatchOperation forCondition =>
+                    PlanForConditionReplacement(
+                        forCondition,
+                        hirNodes,
+                        patchIndex,
+                        boundNodes,
+                        types,
+                        graphSafetyIndex,
+                        documents),
+                ReplaceForDeclarationInitializerPatchOperation forDeclaration =>
+                    PlanForDeclarationInitializerReplacement(
+                        forDeclaration,
+                        hirNodes,
+                        patchIndex,
+                        boundNodes,
+                        types,
+                        graphSafetyIndex,
+                        documents),
+                ReplaceForAssignmentInitializerValuePatchOperation forAssignment =>
+                    PlanForAssignmentInitializerValueReplacement(
+                        forAssignment,
+                        hirNodes,
+                        patchIndex,
+                        boundNodes,
+                        types,
+                        graphSafetyIndex,
+                        documents),
+                ReplaceForIncrementorPatchOperation forIncrementor =>
+                    PlanForIncrementorReplacement(
+                        forIncrementor,
+                        hirNodes,
+                        patchIndex,
+                        boundNodes,
+                        types,
+                        graphSafetyIndex,
+                        documents),
                 ReplaceIfConditionPatchOperation ifCondition =>
                     PlanIfConditionReplacement(
                         ifCondition,
@@ -398,6 +434,11 @@ public sealed class CSharpSourcePatchApplier
             ReplaceExpressionInputPatchOperation replacement => replacement.NewInput,
             ReplaceAssignmentValuePatchOperation replacement => replacement.NewValue,
             ReplaceWhileConditionPatchOperation replacement => replacement.NewCondition,
+            ReplaceForConditionPatchOperation replacement => replacement.NewCondition,
+            ReplaceForDeclarationInitializerPatchOperation replacement =>
+                replacement.NewInitializer,
+            ReplaceForAssignmentInitializerValuePatchOperation replacement => replacement.NewValue,
+            ReplaceForIncrementorPatchOperation replacement => replacement.NewOperand,
             ReplaceIfConditionPatchOperation replacement => replacement.NewCondition,
             ReplaceLocalInitializerPatchOperation replacement => replacement.NewInitializer,
             ReplaceReturnValuePatchOperation replacement => replacement.NewValue,
@@ -458,6 +499,22 @@ public sealed class CSharpSourcePatchApplier
                 when nodes.TryGetValue(replacement.TargetNodeId, out HirNode? targetNode) &&
                 targetNode is HirWhileStatement loop:
                 return loop.Condition;
+            case ReplaceForConditionPatchOperation replacement
+                when nodes.TryGetValue(replacement.TargetNodeId, out HirNode? targetNode) &&
+                targetNode is HirForStatement loop:
+                return loop.Condition;
+            case ReplaceForDeclarationInitializerPatchOperation replacement
+                when nodes.TryGetValue(replacement.TargetNodeId, out HirNode? targetNode) &&
+                targetNode is HirForVariableDeclarator variable:
+                return variable.Initializer;
+            case ReplaceForAssignmentInitializerValuePatchOperation replacement
+                when nodes.TryGetValue(replacement.TargetNodeId, out HirNode? targetNode) &&
+                targetNode is HirAssignmentExpression assignment:
+                return assignment.Value;
+            case ReplaceForIncrementorPatchOperation replacement
+                when nodes.TryGetValue(replacement.TargetNodeId, out HirNode? targetNode) &&
+                targetNode is HirUnaryExpression incrementor:
+                return incrementor.Operand;
             case ReplaceIfConditionPatchOperation replacement
                 when nodes.TryGetValue(replacement.TargetNodeId, out HirNode? targetNode) &&
                 targetNode is HirIfStatement branch:
@@ -1646,6 +1703,405 @@ public sealed class CSharpSourcePatchApplier
             pins));
     }
 
+    private static OperationPlan PlanForConditionReplacement(
+        ReplaceForConditionPatchOperation operation,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
+        GraphPatchSafetyIndex graphSafetyIndex,
+        IReadOnlyDictionary<string, ParsedDocument> documents)
+    {
+        if (!hirNodes.TryGetValue(operation.TargetNodeId, out HirNode? target))
+        {
+            return MissingTarget(operation.TargetNodeId);
+        }
+
+        if (target is not HirForStatement { Condition: not null } loop ||
+            !patchIndex.TryGetStatement(
+                loop.Id,
+                out HirPatchIndex.StatementLocation? statementLocation) ||
+            !patchIndex.TryGetBlock(
+                statementLocation!.ParentBlock.Id,
+                out HirPatchIndex.BlockLocation? blockLocation))
+        {
+            return KindMismatch(target, operation.TargetNodeId, "a for statement with a condition");
+        }
+
+        if (loop.Condition.Id != operation.ExpectedConditionNodeId)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.PreconditionFailed,
+                $"For condition precondition failed: current endpoint is '{loop.Condition.Id}', " +
+                $"not '{operation.ExpectedConditionNodeId}'.",
+                loop);
+        }
+
+        return PlanStatementExpressionReplacement(
+            "for condition",
+            loop,
+            loop.Condition,
+            operation.ExpectedConditionTypeId,
+            operation.NewCondition,
+            requireBoolean: true,
+            blockLocation!,
+            statementLocation!,
+            hirNodes,
+            patchIndex,
+            boundNodes,
+            types,
+            graphSafetyIndex,
+            documents,
+            loop.Id);
+    }
+
+    private static OperationPlan PlanForDeclarationInitializerReplacement(
+        ReplaceForDeclarationInitializerPatchOperation operation,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
+        GraphPatchSafetyIndex graphSafetyIndex,
+        IReadOnlyDictionary<string, ParsedDocument> documents)
+    {
+        if (!hirNodes.TryGetValue(operation.TargetNodeId, out HirNode? target))
+        {
+            return MissingTarget(operation.TargetNodeId);
+        }
+
+        if (target is not HirForVariableDeclarator { Initializer: not null } variable ||
+            !patchIndex.TryGetDeclaringFor(variable.Id, out HirForStatement? loop) ||
+            loop!.Id != operation.ExpectedForStatementId ||
+            !patchIndex.TryGetStatement(
+                loop.Id,
+                out HirPatchIndex.StatementLocation? statementLocation) ||
+            !patchIndex.TryGetBlock(
+                statementLocation!.ParentBlock.Id,
+                out HirPatchIndex.BlockLocation? blockLocation))
+        {
+            return KindMismatch(
+                target,
+                operation.TargetNodeId,
+                "an initialized variable declared by the expected for statement");
+        }
+
+        if (!string.Equals(variable.Name, operation.ExpectedName, StringComparison.Ordinal) ||
+            variable.Initializer.Id != operation.ExpectedInitializerNodeId)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.PreconditionFailed,
+                "For declaration initializer no longer has the expected name or value endpoint.",
+                variable);
+        }
+
+        OperationPlan? variableTypeFailure = RequireType(
+            variable,
+            operation.ExpectedTypeId,
+            "for variable",
+            boundNodes);
+        if (variableTypeFailure is not null)
+        {
+            return variableTypeFailure;
+        }
+
+        return PlanStatementExpressionReplacement(
+            "for declaration initializer",
+            loop,
+            variable.Initializer,
+            operation.ExpectedTypeId,
+            operation.NewInitializer,
+            requireBoolean: false,
+            blockLocation!,
+            statementLocation!,
+            hirNodes,
+            patchIndex,
+            boundNodes,
+            types,
+            graphSafetyIndex,
+            documents);
+    }
+
+    private static OperationPlan PlanForAssignmentInitializerValueReplacement(
+        ReplaceForAssignmentInitializerValuePatchOperation operation,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
+        GraphPatchSafetyIndex graphSafetyIndex,
+        IReadOnlyDictionary<string, ParsedDocument> documents)
+    {
+        if (!hirNodes.TryGetValue(operation.TargetNodeId, out HirNode? target))
+        {
+            return MissingTarget(operation.TargetNodeId);
+        }
+
+        if (target is not HirAssignmentExpression assignment ||
+            !patchIndex.TryGetExpression(
+                assignment.Id,
+                out HirPatchIndex.ExpressionLocation? expressionLocation) ||
+            expressionLocation!.ParentExpression is not null ||
+            expressionLocation.ContainingStatement is not HirForStatement loop ||
+            loop.Id != operation.ExpectedForStatementId ||
+            operation.InitializerIndex >= loop.Initializers.Count ||
+            loop.Initializers[operation.InitializerIndex].Id != assignment.Id ||
+            !patchIndex.TryGetStatement(
+                loop.Id,
+                out HirPatchIndex.StatementLocation? statementLocation) ||
+            !patchIndex.TryGetBlock(
+                statementLocation!.ParentBlock.Id,
+                out HirPatchIndex.BlockLocation? blockLocation))
+        {
+            return KindMismatch(
+                target,
+                operation.TargetNodeId,
+                "the indexed assignment initializer of the expected for statement");
+        }
+
+        if (!string.Equals(assignment.Operator, operation.ExpectedOperator, StringComparison.Ordinal) ||
+            assignment.Target.Id != operation.ExpectedTargetNodeId ||
+            assignment.Value.Id != operation.ExpectedValueNodeId ||
+            assignment.Target is not HirIdentifierExpression targetIdentifier ||
+            !boundNodes.TryGetValue(targetIdentifier.Id, out BoundNodeInfo? targetBinding) ||
+            targetBinding.ReferencedSymbolId != operation.ExpectedTargetDefinitionId ||
+            !hirNodes.TryGetValue(operation.ExpectedTargetDefinitionId, out HirNode? definition) ||
+            definition is not HirVariableDeclarationStatement targetVariable ||
+            !string.Equals(targetIdentifier.Name, operation.ExpectedTargetName, StringComparison.Ordinal) ||
+            !string.Equals(targetVariable.Name, operation.ExpectedTargetName, StringComparison.Ordinal))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.PreconditionFailed,
+                "For assignment initializer no longer has the expected operator, target, or value.",
+                assignment);
+        }
+
+        OperationPlan? assignmentTypeFailure = RequireType(
+            assignment,
+            operation.ExpectedTypeId,
+            "for assignment initializer",
+            boundNodes);
+        OperationPlan? targetTypeFailure = RequireType(
+            assignment.Target,
+            operation.ExpectedTypeId,
+            "for assignment initializer target",
+            boundNodes);
+        OperationPlan? valueTypeFailure = RequireType(
+            assignment.Value,
+            operation.ExpectedTypeId,
+            "for assignment initializer value",
+            boundNodes);
+        OperationPlan? definitionTypeFailure = RequireType(
+            targetVariable,
+            operation.ExpectedTypeId,
+            "for assignment initializer target definition",
+            boundNodes);
+        if (assignmentTypeFailure is not null || targetTypeFailure is not null ||
+            valueTypeFailure is not null || definitionTypeFailure is not null)
+        {
+            return assignmentTypeFailure ?? targetTypeFailure ?? valueTypeFailure ??
+                definitionTypeFailure!;
+        }
+
+        return PlanStatementExpressionReplacement(
+            "for assignment initializer value",
+            loop,
+            assignment.Value,
+            operation.ExpectedTypeId,
+            operation.NewValue,
+            requireBoolean: false,
+            blockLocation!,
+            statementLocation!,
+            hirNodes,
+            patchIndex,
+            boundNodes,
+            types,
+            graphSafetyIndex,
+            documents);
+    }
+
+    private static OperationPlan PlanForIncrementorReplacement(
+        ReplaceForIncrementorPatchOperation operation,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
+        GraphPatchSafetyIndex graphSafetyIndex,
+        IReadOnlyDictionary<string, ParsedDocument> documents)
+    {
+        if (!hirNodes.TryGetValue(operation.TargetNodeId, out HirNode? target))
+        {
+            return MissingTarget(operation.TargetNodeId);
+        }
+
+        if (target is not HirUnaryExpression incrementor ||
+            !patchIndex.TryGetExpression(
+                incrementor.Id,
+                out HirPatchIndex.ExpressionLocation? expressionLocation) ||
+            expressionLocation!.ParentExpression is not null ||
+            expressionLocation.ContainingStatement is not HirForStatement loop ||
+            loop.Id != operation.ExpectedForStatementId ||
+            operation.IncrementorIndex >= loop.Incrementors.Count ||
+            loop.Incrementors[operation.IncrementorIndex].Id != incrementor.Id ||
+            !patchIndex.TryGetStatement(
+                loop.Id,
+                out HirPatchIndex.StatementLocation? statementLocation) ||
+            !patchIndex.TryGetBlock(
+                statementLocation!.ParentBlock.Id,
+                out HirPatchIndex.BlockLocation? blockLocation))
+        {
+            return KindMismatch(
+                target,
+                operation.TargetNodeId,
+                "the indexed mutation incrementor of the expected for statement");
+        }
+
+        if (incrementor.Operator != operation.ExpectedOperator ||
+            incrementor.IsPostfix != operation.ExpectedIsPostfix ||
+            incrementor.Operand.Id != operation.ExpectedOperandNodeId ||
+            incrementor.Operand is not HirIdentifierExpression operandIdentifier ||
+            !boundNodes.TryGetValue(operandIdentifier.Id, out BoundNodeInfo? operandBinding) ||
+            operandBinding.ReferencedSymbolId != operation.ExpectedOperandDefinitionId ||
+            !string.Equals(
+                operandIdentifier.Name,
+                operation.ExpectedOperandName,
+                StringComparison.Ordinal) ||
+            !hirNodes.TryGetValue(operation.ExpectedOperandDefinitionId, out HirNode? operandDefinition))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.PreconditionFailed,
+                "For incrementor no longer has the expected mutation or bound operand.",
+                incrementor);
+        }
+
+        OperationPlan? incrementorTypeFailure = RequireType(
+            incrementor,
+            operation.ExpectedTypeId,
+            "for incrementor",
+            boundNodes);
+        OperationPlan? operandTypeFailure = RequireType(
+            incrementor.Operand,
+            operation.ExpectedTypeId,
+            "for incrementor operand",
+            boundNodes);
+        OperationPlan? definitionTypeFailure = RequireType(
+            operandDefinition,
+            operation.ExpectedTypeId,
+            "for incrementor operand definition",
+            boundNodes);
+        if (incrementorTypeFailure is not null || operandTypeFailure is not null ||
+            definitionTypeFailure is not null)
+        {
+            return incrementorTypeFailure ?? operandTypeFailure ?? definitionTypeFailure!;
+        }
+
+        if (!types.TryGetValue(operation.ExpectedTypeId, out TypeDescriptor? mutationType) ||
+            (!IsArithmeticOperatorType(mutationType) && mutationType.Kind != UnifiedTypeKind.Enum))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.TypeMismatch,
+                "The for incrementor type no longer supports ++ or --.",
+                incrementor);
+        }
+
+        if (!graphSafetyIndex.IsInsertionReachable(blockLocation!, statementLocation!.Index))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.UnreachableInsertion,
+                "A for incrementor can be edited only when its loop is CFG-reachable.",
+                incrementor);
+        }
+
+        ExpressionBuildResult newOperand = BuildPatchExpression(
+            operation.NewOperand,
+            blockLocation!,
+            statementLocation.Index,
+            hirNodes,
+            patchIndex,
+            graphSafetyIndex,
+            boundNodes,
+            types,
+            authoredForLocals: null,
+            loop.Id);
+        if (newOperand.Syntax is not IdentifierNameSyntax ||
+            newOperand.Type?.Id != operation.ExpectedTypeId)
+        {
+            return DiagnosticPlan(
+                newOperand.DiagnosticCode ?? SemanticPatchDiagnosticCodes.InvalidGraphExpression,
+                newOperand.DiagnosticMessage ??
+                    "A replacement for incrementor operand must be one same-typed writable local.",
+                incrementor);
+        }
+
+        if (!TryFindSyntax(
+                documents,
+                incrementor,
+                out ParsedDocument? document,
+                out ExpressionSyntax? syntax) ||
+            syntax is not PrefixUnaryExpressionSyntax and not PostfixUnaryExpressionSyntax)
+        {
+            return MissingSyntax(incrementor, "for incrementor");
+        }
+
+        if (syntax.DescendantTrivia(descendIntoTrivia: true).Any(IsMeaningfulTrivia))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidReplacement,
+                "The existing for incrementor contains comments or directives that cannot be " +
+                "discarded safely.",
+                incrementor);
+        }
+
+        SyntaxKind kind = (operation.NewOperator, operation.NewIsPostfix) switch
+        {
+            ("++", false) => SyntaxKind.PreIncrementExpression,
+            ("--", false) => SyntaxKind.PreDecrementExpression,
+            ("++", true) => SyntaxKind.PostIncrementExpression,
+            ("--", true) => SyntaxKind.PostDecrementExpression,
+            _ => SyntaxKind.None,
+        };
+        if (kind == SyntaxKind.None)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidGraphExpression,
+                "The replacement for incrementor operator is unsupported.",
+                incrementor);
+        }
+
+        var pins = new List<PendingPin>();
+        ExpressionSyntax operandSyntax = newOperand.Syntax;
+        LocalReferencePatchExpression authoredOperand =
+            (LocalReferencePatchExpression)operation.NewOperand;
+        if (authoredOperand.SourceDefinitionId == operation.ExpectedOperandDefinitionId &&
+            string.Equals(
+                authoredOperand.ExpectedName,
+                operation.ExpectedOperandName,
+                StringComparison.Ordinal))
+        {
+            var operandAnnotation = new SyntaxAnnotation(
+                IdentityAnnotationKind,
+                incrementor.Operand.Id.Value);
+            operandSyntax = operandSyntax.WithAdditionalAnnotations(operandAnnotation);
+            pins.Add(new PendingPin(
+                incrementor.Operand.Id,
+                GetIdentityKind(incrementor.Operand),
+                operandAnnotation));
+        }
+
+        ExpressionSyntax replacement = operation.NewIsPostfix
+            ? SyntaxFactory.PostfixUnaryExpression(kind, operandSyntax)
+            : SyntaxFactory.PrefixUnaryExpression(kind, operandSyntax);
+        var incrementorAnnotation = new SyntaxAnnotation(
+            IdentityAnnotationKind,
+            incrementor.Id.Value);
+        replacement = FormatReplacementExpression(replacement, syntax)
+            .WithAdditionalAnnotations(incrementorAnnotation);
+        pins.Add(new PendingPin(incrementor.Id, GetIdentityKind(incrementor), incrementorAnnotation));
+        return SuccessPlan(document!, new PendingReplacement(
+            document!.Source.LogicalPath,
+            syntax,
+            replacement,
+            pins));
+    }
+
     private static OperationPlan PlanWhileConditionReplacement(
         ReplaceWhileConditionPatchOperation operation,
         IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
@@ -1896,7 +2352,8 @@ public sealed class CSharpSourcePatchApplier
         IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
         IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
         GraphPatchSafetyIndex graphSafetyIndex,
-        IReadOnlyDictionary<string, ParsedDocument> documents)
+        IReadOnlyDictionary<string, ParsedDocument> documents,
+        SemanticId? forHeaderLoopId = null)
     {
         OperationPlan? typeFailure = RequireType(
             currentExpression,
@@ -1924,7 +2381,9 @@ public sealed class CSharpSourcePatchApplier
             patchIndex,
             graphSafetyIndex,
             boundNodes,
-            types);
+            types,
+            authoredForLocals: null,
+            forHeaderLoopId);
         if (replacement.Syntax is null || replacement.Type is null)
         {
             return DiagnosticPlan(
@@ -3520,7 +3979,8 @@ public sealed class CSharpSourcePatchApplier
         GraphPatchSafetyIndex graphSafetyIndex,
         IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
         IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
-        IReadOnlyDictionary<int, AuthoredForLocal>? authoredForLocals = null)
+        IReadOnlyDictionary<int, AuthoredForLocal>? authoredForLocals = null,
+        SemanticId? forHeaderLoopId = null)
     {
         if (!types.TryGetValue(expression.ExpectedTypeId, out TypeDescriptor? expectedType) ||
             !IsStableGraphExpressionType(expectedType))
@@ -3558,7 +4018,8 @@ public sealed class CSharpSourcePatchApplier
                     hirNodes,
                     patchIndex,
                     graphSafetyIndex,
-                    boundNodes);
+                    boundNodes,
+                    forHeaderLoopId);
 
             case ForLocalReferencePatchExpression forLocal:
                 if (authoredForLocals is null ||
@@ -3600,7 +4061,8 @@ public sealed class CSharpSourcePatchApplier
                         graphSafetyIndex,
                         boundNodes,
                         types,
-                        authoredForLocals);
+                        authoredForLocals,
+                        forHeaderLoopId);
                     if (operand.Syntax is null || operand.Type is null)
                     {
                         return operand;
@@ -3641,7 +4103,8 @@ public sealed class CSharpSourcePatchApplier
                         graphSafetyIndex,
                         boundNodes,
                         types,
-                        authoredForLocals);
+                        authoredForLocals,
+                        forHeaderLoopId);
                     if (left.Syntax is null || left.Type is null)
                     {
                         return left;
@@ -3656,7 +4119,8 @@ public sealed class CSharpSourcePatchApplier
                         graphSafetyIndex,
                         boundNodes,
                         types,
-                        authoredForLocals);
+                        authoredForLocals,
+                        forHeaderLoopId);
                     if (right.Syntax is null || right.Type is null)
                     {
                         return right;
@@ -3689,7 +4153,8 @@ public sealed class CSharpSourcePatchApplier
                         graphSafetyIndex,
                         boundNodes,
                         types,
-                        authoredForLocals);
+                        authoredForLocals,
+                        forHeaderLoopId);
                     if (operand.Syntax is null || operand.Type is null)
                     {
                         return operand;
@@ -3727,7 +4192,8 @@ public sealed class CSharpSourcePatchApplier
                         graphSafetyIndex,
                         boundNodes,
                         types,
-                        authoredForLocals);
+                        authoredForLocals,
+                        forHeaderLoopId);
                     if (condition.Syntax is null || condition.Type is null)
                     {
                         return condition;
@@ -3742,7 +4208,8 @@ public sealed class CSharpSourcePatchApplier
                         graphSafetyIndex,
                         boundNodes,
                         types,
-                        authoredForLocals);
+                        authoredForLocals,
+                        forHeaderLoopId);
                     if (whenTrue.Syntax is null || whenTrue.Type is null)
                     {
                         return whenTrue;
@@ -3757,7 +4224,8 @@ public sealed class CSharpSourcePatchApplier
                         graphSafetyIndex,
                         boundNodes,
                         types,
-                        authoredForLocals);
+                        authoredForLocals,
+                        forHeaderLoopId);
                     if (whenFalse.Syntax is null || whenFalse.Type is null)
                     {
                         return whenFalse;
@@ -3800,7 +4268,8 @@ public sealed class CSharpSourcePatchApplier
                         graphSafetyIndex,
                         boundNodes,
                         types,
-                        authoredForLocals);
+                        authoredForLocals,
+                        forHeaderLoopId);
                     if (receiver.Syntax is null || receiver.Type is null)
                     {
                         return receiver;
@@ -3839,7 +4308,8 @@ public sealed class CSharpSourcePatchApplier
         IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
         HirPatchIndex patchIndex,
         GraphPatchSafetyIndex graphSafetyIndex,
-        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes)
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        SemanticId? forHeaderLoopId)
     {
         if (!hirNodes.TryGetValue(local.SourceDefinitionId, out HirNode? source))
         {
@@ -3864,6 +4334,8 @@ public sealed class CSharpSourcePatchApplier
                     blockLocation,
                     insertionIndex) => variable.Name,
             HirForVariableDeclarator variable when
+                forHeaderLoopId is SemanticId loopId &&
+                patchIndex.IsForVariableDeclaredBy(variable.Id, loopId) ||
                 patchIndex.IsForVariableInScopeAtBlock(
                     variable.Id,
                     blockLocation.Block.Id) &&

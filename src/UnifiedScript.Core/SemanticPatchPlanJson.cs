@@ -80,6 +80,7 @@ public static class SemanticPatchPlanJson
                 InsertBranchStatementPatchPlanStep or
                 InsertLoopBodyStatementPatchPlanStep or
                 ReplaceProducedWhileConditionPatchPlanStep or
+                ReplaceProducedForConditionPatchPlanStep or
                 ReplaceProducedIfConditionPatchPlanStep or
                 ReplaceProducedLocalInitializerPatchPlanStep or
                 ReplaceProducedReturnValuePatchPlanStep;
@@ -138,6 +139,24 @@ public static class SemanticPatchPlanJson
                         document,
                         producedCondition,
                         loopProducers);
+                    break;
+                case ReplaceForConditionPatchPlanStep replaceForCondition:
+                    ValidateOperation(document, replaceForCondition.ToOperation());
+                    break;
+                case ReplaceProducedForConditionPatchPlanStep producedForCondition:
+                    ValidateProducedForCondition(
+                        document,
+                        producedForCondition,
+                        loopProducers);
+                    break;
+                case ReplaceForDeclarationInitializerPatchPlanStep replaceForDeclaration:
+                    ValidateOperation(document, replaceForDeclaration.ToOperation());
+                    break;
+                case ReplaceForAssignmentInitializerValuePatchPlanStep replaceForAssignment:
+                    ValidateOperation(document, replaceForAssignment.ToOperation());
+                    break;
+                case ReplaceForIncrementorPatchPlanStep replaceForIncrementor:
+                    ValidateOperation(document, replaceForIncrementor.ToOperation());
                     break;
                 case ReplaceIfConditionPatchPlanStep replaceIfCondition:
                     ValidateOperation(document, replaceIfCondition.ToOperation());
@@ -716,6 +735,43 @@ public static class SemanticPatchPlanJson
             null,
             null,
             new WhilePatchStatement(replacement.NewCondition)));
+    }
+
+    private static void ValidateProducedForCondition(
+        SemanticPatchPlanDocument document,
+        ReplaceProducedForConditionPatchPlanStep replacement,
+        IReadOnlyDictionary<string, LoopProducerState> loopProducers)
+    {
+        if (string.IsNullOrWhiteSpace(replacement.SourceStepId) ||
+            !loopProducers.TryGetValue(replacement.SourceStepId, out LoopProducerState? source) ||
+            source.IsWhile ||
+            source.ConditionTypeId is not SemanticId conditionTypeId)
+        {
+            throw new JsonException(
+                $"Produced-for condition step '{replacement.StepId}' must reference an earlier " +
+                "for-insertion step with an explicit condition.");
+        }
+
+        if (source.OriginalTargetNodeId != replacement.TargetNodeId)
+        {
+            throw new JsonException(
+                $"Produced-for condition step '{replacement.StepId}' and source step " +
+                $"'{replacement.SourceStepId}' must use the same original parent-block target.");
+        }
+
+        if (replacement.NewCondition is null ||
+            replacement.NewCondition.ExpectedTypeId != conditionTypeId)
+        {
+            throw new JsonException(
+                $"Produced-for condition step '{replacement.StepId}' must preserve the source " +
+                "for condition's declared semantic type.");
+        }
+
+        ValidateOperation(document, new ReplaceForConditionPatchOperation(
+            SemanticId.FromKey($"patch-plan-produced-for:{replacement.StepId}"),
+            SemanticId.FromKey($"patch-plan-produced-for-condition:{replacement.StepId}"),
+            conditionTypeId,
+            replacement.NewCondition));
     }
 
     private static void ValidateProducedIfCondition(

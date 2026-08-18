@@ -89,6 +89,18 @@ public static class SemanticPatchJson
                 case ReplaceWhileConditionPatchOperation replaceWhileCondition:
                     ValidateReplaceWhileCondition(replaceWhileCondition);
                     break;
+                case ReplaceForConditionPatchOperation replaceForCondition:
+                    ValidateReplaceForCondition(replaceForCondition);
+                    break;
+                case ReplaceForDeclarationInitializerPatchOperation replaceForDeclaration:
+                    ValidateReplaceForDeclarationInitializer(replaceForDeclaration);
+                    break;
+                case ReplaceForAssignmentInitializerValuePatchOperation replaceForAssignment:
+                    ValidateReplaceForAssignmentInitializerValue(replaceForAssignment);
+                    break;
+                case ReplaceForIncrementorPatchOperation replaceForIncrementor:
+                    ValidateReplaceForIncrementor(replaceForIncrementor);
+                    break;
                 case ReplaceIfConditionPatchOperation replaceIfCondition:
                     ValidateReplaceIfCondition(replaceIfCondition);
                     break;
@@ -275,6 +287,134 @@ public static class SemanticPatchJson
         }
 
         ValidatePatchExpression(operation.NewCondition, 0);
+    }
+
+    private static void ValidateReplaceForCondition(
+        ReplaceForConditionPatchOperation operation)
+    {
+        if (operation.ExpectedConditionNodeId.IsEmpty ||
+            operation.ExpectedConditionTypeId.IsEmpty ||
+            operation.NewCondition is null)
+        {
+            throw new JsonException(
+                "For-condition replacement requires the current condition endpoint, expected type, " +
+                "and a typed new condition.");
+        }
+
+        if (operation.NewCondition.ExpectedTypeId != operation.ExpectedConditionTypeId)
+        {
+            throw new JsonException(
+                "A for replacement condition must declare the expected condition type.");
+        }
+
+        ValidatePatchExpression(operation.NewCondition, 0);
+    }
+
+    private static void ValidateReplaceForDeclarationInitializer(
+        ReplaceForDeclarationInitializerPatchOperation operation)
+    {
+        if (operation.ExpectedForStatementId.IsEmpty ||
+            string.IsNullOrWhiteSpace(operation.ExpectedName) ||
+            operation.ExpectedInitializerNodeId.IsEmpty ||
+            operation.ExpectedTypeId.IsEmpty ||
+            operation.NewInitializer is null)
+        {
+            throw new JsonException(
+                "For declaration-initializer replacement requires the owning for statement, " +
+                "expected variable name, current initializer endpoint, exact type, and a typed value.");
+        }
+
+        if (operation.NewInitializer.ExpectedTypeId != operation.ExpectedTypeId)
+        {
+            throw new JsonException(
+                "A for declaration initializer must declare the expected variable type.");
+        }
+
+        ValidatePatchExpression(operation.NewInitializer, 0);
+    }
+
+    private static void ValidateReplaceForAssignmentInitializerValue(
+        ReplaceForAssignmentInitializerValuePatchOperation operation)
+    {
+        if (operation.InitializerIndex < 0)
+        {
+            throw new JsonException("A for assignment-initializer index cannot be negative.");
+        }
+
+        if (!string.Equals(operation.ExpectedOperator, "=", StringComparison.Ordinal))
+        {
+            throw new JsonException(
+                "For assignment-initializer replacement requires the simple '=' operator.");
+        }
+
+        if (operation.ExpectedForStatementId.IsEmpty ||
+            operation.ExpectedTargetNodeId.IsEmpty ||
+            operation.ExpectedTargetDefinitionId.IsEmpty ||
+            string.IsNullOrWhiteSpace(operation.ExpectedTargetName) ||
+            operation.ExpectedValueNodeId.IsEmpty ||
+            operation.ExpectedTypeId.IsEmpty ||
+            operation.NewValue is null)
+        {
+            throw new JsonException(
+                "For assignment-initializer replacement requires its owning loop and index, " +
+                "target/value endpoints, target definition, expected name and exact type.");
+        }
+
+        if (operation.NewValue.ExpectedTypeId != operation.ExpectedTypeId)
+        {
+            throw new JsonException(
+                "A for assignment initializer value must declare the expected assignment type.");
+        }
+
+        ValidatePatchExpression(operation.NewValue, 0);
+    }
+
+    private static void ValidateReplaceForIncrementor(
+        ReplaceForIncrementorPatchOperation operation)
+    {
+        if (operation.IncrementorIndex < 0)
+        {
+            throw new JsonException("A for incrementor index cannot be negative.");
+        }
+
+        if (operation.ExpectedForStatementId.IsEmpty ||
+            operation.ExpectedOperandNodeId.IsEmpty ||
+            operation.ExpectedOperandDefinitionId.IsEmpty ||
+            string.IsNullOrWhiteSpace(operation.ExpectedOperandName) ||
+            operation.ExpectedTypeId.IsEmpty ||
+            operation.NewOperand is null)
+        {
+            throw new JsonException(
+                "For-incrementor replacement requires its owning loop and index, operand endpoint, " +
+                "operand definition, expected name and exact type, and a typed new operand.");
+        }
+
+        if (operation.ExpectedOperator is not ("++" or "--") ||
+            operation.NewOperator is not ("++" or "--"))
+        {
+            throw new JsonException("For incrementors currently support only '++' and '--'.");
+        }
+
+        if (operation.NewOperand is not LocalReferencePatchExpression newOperand ||
+            newOperand.ExpectedTypeId != operation.ExpectedTypeId)
+        {
+            throw new JsonException(
+                "A replacement for incrementor operand must be a local reference of the exact type.");
+        }
+
+        bool operandChanges = newOperand.SourceDefinitionId != operation.ExpectedOperandDefinitionId ||
+            !string.Equals(
+                newOperand.ExpectedName,
+                operation.ExpectedOperandName,
+                StringComparison.Ordinal);
+        if (!operandChanges &&
+            operation.NewOperator == operation.ExpectedOperator &&
+            operation.NewIsPostfix == operation.ExpectedIsPostfix)
+        {
+            throw new JsonException("A for incrementor replacement must change the mutation.");
+        }
+
+        ValidatePatchExpression(operation.NewOperand, 0);
     }
 
     private static void ValidateReplaceIfCondition(

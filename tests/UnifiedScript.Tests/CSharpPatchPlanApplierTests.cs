@@ -3582,6 +3582,107 @@ public sealed class CSharpPatchPlanApplierTests
             static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.TargetNotFound);
     }
 
+    [Fact]
+    public void Apply_ReplacesAProducedForConditionUsingItsProducedLocal()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int count, bool enabled)
+                {
+                    return count;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/ProducedForConditionPlan.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement valueReturn = Assert.IsType<HirReturnStatement>(
+            Assert.Single(method.Body.Statements));
+        SemanticId intType = GetTypeId(original, method.Parameters[0]);
+        SemanticId boolType = GetTypeId(original, method.Parameters[1]);
+        var authoredIndex = new ForLocalReferencePatchExpression(0, "index", intType);
+        var insertFor = new InsertStatementPatchPlanStep(
+            "insertFor",
+            method.Body.Id,
+            null,
+            valueReturn.Id,
+            new ForPatchStatement(
+                new ForVariableDeclarationPatch(
+                    "int",
+                    [new ForVariableDeclaratorPatch(
+                        "index",
+                        new LiteralPatchExpression("0", intType),
+                        intType)]),
+                [],
+                new BinaryPatchExpression(
+                    "<",
+                    authoredIndex,
+                    new LocalReferencePatchExpression(
+                        method.Parameters[0].Id,
+                        method.Parameters[0].Name,
+                        intType),
+                    boolType),
+                [new ForMutationPatchExpression(authoredIndex, "++", true, intType)]));
+        var producedIndex = new ProducedLocalReferencePatchExpression(
+            insertFor.StepId,
+            "index",
+            intType);
+        var replaceCondition = new ReplaceProducedForConditionPatchPlanStep(
+            "tightenForCondition",
+            method.Body.Id,
+            insertFor.StepId,
+            new BinaryPatchExpression(
+                "&&",
+                new LocalReferencePatchExpression(
+                    method.Parameters[1].Id,
+                    method.Parameters[1].Name,
+                    boolType),
+                new BinaryPatchExpression(
+                    "<",
+                    producedIndex,
+                    new LocalReferencePatchExpression(
+                        method.Parameters[0].Id,
+                        method.Parameters[0].Name,
+                        intType),
+                    boolType),
+                boolType));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [insertFor, replaceCondition]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Contains(
+            "for (int index = 0; enabled && (index < count); index++)",
+            Assert.Single(result.PatchedRequest!.Sources).Source,
+            StringComparison.Ordinal);
+        HirMethodDeclaration changedMethod = Assert.Single(
+            Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirForStatement inserted = Assert.IsType<HirForStatement>(changedMethod.Body.Statements[0]);
+        HirForVariableDeclarator insertedIndex = Assert.Single(inserted.Declaration!.Variables);
+        HirBinaryExpression condition = Assert.IsType<HirBinaryExpression>(inserted.Condition);
+        HirBinaryExpression comparison = Assert.IsType<HirBinaryExpression>(condition.Right);
+        HirIdentifierExpression indexReference = Assert.IsType<HirIdentifierExpression>(comparison.Left);
+        Assert.Equal(
+            insertedIndex.Id,
+            Assert.Single(
+                result.Analysis.Semantics!.Nodes,
+                binding => binding.NodeId == indexReference.Id).ReferencedSymbolId);
+        Assert.Equal(valueReturn.Id, changedMethod.Body.Statements[1].Id);
+        Assert.Single(
+            new GraphControlFlowAnalyzer().AnalyzeAndValidate(
+                new HirGraphProjector().Project(
+                    result.Analysis.Hir,
+                    result.Analysis.Semantics)).Functions[0].Loops);
+    }
+
     private static SemanticPatchPlanDocument CreatePlan(
         CSharpAnalysisResult original,
         HirMethodDeclaration method,

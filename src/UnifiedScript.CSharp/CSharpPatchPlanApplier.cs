@@ -344,6 +344,21 @@ public sealed class CSharpPatchPlanApplier
                         target.Id)];
                 }
             }
+            else if (step is ReplaceProducedForConditionPatchPlanStep producedForCondition)
+            {
+                if (!loopProducerMethods.TryGetValue(
+                        producedForCondition.SourceStepId,
+                        out SemanticId loopProducerMethodId) ||
+                    loopProducerMethodId != method!.Id)
+                {
+                    return [Diagnostic(
+                        SemanticPatchDiagnosticCodes.InvalidPatchPlan,
+                        $"Produced-for condition step '{producedForCondition.StepId}' and source " +
+                        $"step '{producedForCondition.SourceStepId}' target different methods.",
+                        target.Span,
+                        target.Id)];
+                }
+            }
             else if (step is ReplaceProducedIfConditionPatchPlanStep producedIfCondition)
             {
                 if (!branchProducerMethods.TryGetValue(
@@ -616,6 +631,33 @@ public sealed class CSharpPatchPlanApplier
                     producedLoops,
                     out operation,
                     out diagnostic);
+            case ReplaceForConditionPatchPlanStep forCondition
+                when target is HirForStatement:
+                operation = forCondition.ToOperation();
+                diagnostic = null;
+                return true;
+            case ReplaceProducedForConditionPatchPlanStep producedForCondition:
+                return TryCreateProducedForConditionReplacement(
+                    producedForCondition,
+                    nodes,
+                    producedLoops,
+                    out operation,
+                    out diagnostic);
+            case ReplaceForDeclarationInitializerPatchPlanStep forDeclaration
+                when target is HirForVariableDeclarator:
+                operation = forDeclaration.ToOperation();
+                diagnostic = null;
+                return true;
+            case ReplaceForAssignmentInitializerValuePatchPlanStep forAssignment
+                when target is HirAssignmentExpression:
+                operation = forAssignment.ToOperation();
+                diagnostic = null;
+                return true;
+            case ReplaceForIncrementorPatchPlanStep forIncrementor
+                when target is HirUnaryExpression:
+                operation = forIncrementor.ToOperation();
+                diagnostic = null;
+                return true;
             case ReplaceIfConditionPatchPlanStep ifCondition
                 when target is HirIfStatement:
                 operation = ifCondition.ToOperation();
@@ -997,6 +1039,37 @@ public sealed class CSharpPatchPlanApplier
         return true;
     }
 
+    private static bool TryCreateProducedForConditionReplacement(
+        ReplaceProducedForConditionPatchPlanStep step,
+        IReadOnlyDictionary<SemanticId, HirNode> nodes,
+        IReadOnlyDictionary<string, ProducedLoop> producedLoops,
+        out SemanticPatchOperation? operation,
+        out UnifiedDiagnostic? diagnostic)
+    {
+        if (!producedLoops.TryGetValue(step.SourceStepId, out ProducedLoop producedLoop) ||
+            !nodes.TryGetValue(producedLoop.LoopId, out HirNode? node) ||
+            node is not HirForStatement { Condition: not null } currentLoop ||
+            currentLoop.Body.Id != producedLoop.BodyBlockId)
+        {
+            operation = null;
+            diagnostic = Diagnostic(
+                SemanticPatchDiagnosticCodes.TargetNotFound,
+                $"Produced-for condition step '{step.StepId}' could not resolve an explicit " +
+                $"condition from loop source '{step.SourceStepId}'.",
+                SourceSpan.Unknown("<patch-plan>"),
+                step.TargetNodeId);
+            return false;
+        }
+
+        operation = new ReplaceForConditionPatchOperation(
+            currentLoop.Id,
+            currentLoop.Condition.Id,
+            step.NewCondition.ExpectedTypeId,
+            step.NewCondition);
+        diagnostic = null;
+        return true;
+    }
+
     private static bool TryCreateProducedExpressionInputReplacement(
         ReplaceProducedExpressionInputPatchPlanStep step,
         IReadOnlyDictionary<SemanticId, HirNode> nodes,
@@ -1361,6 +1434,18 @@ public sealed class CSharpPatchPlanApplier
             ReplaceWhileConditionPatchOperation replacement
                 when nodes.TryGetValue(replacement.TargetNodeId, out HirNode? node) &&
                 node is HirWhileStatement loop => loop.Condition,
+            ReplaceForConditionPatchOperation replacement
+                when nodes.TryGetValue(replacement.TargetNodeId, out HirNode? node) &&
+                node is HirForStatement loop => loop.Condition,
+            ReplaceForDeclarationInitializerPatchOperation replacement
+                when nodes.TryGetValue(replacement.TargetNodeId, out HirNode? node) &&
+                node is HirForVariableDeclarator variable => variable.Initializer,
+            ReplaceForAssignmentInitializerValuePatchOperation replacement
+                when nodes.TryGetValue(replacement.TargetNodeId, out HirNode? node) &&
+                node is HirAssignmentExpression assignment => assignment.Value,
+            ReplaceForIncrementorPatchOperation replacement
+                when nodes.TryGetValue(replacement.TargetNodeId, out HirNode? node) &&
+                node is HirUnaryExpression incrementor => incrementor.Operand,
             ReplaceIfConditionPatchOperation replacement
                 when nodes.TryGetValue(replacement.TargetNodeId, out HirNode? node) &&
                 node is HirIfStatement branch => branch.Condition,
@@ -1491,6 +1576,7 @@ public sealed class CSharpPatchPlanApplier
                 InsertBranchStatementPatchPlanStep or
                 InsertLoopBodyStatementPatchPlanStep or
                 ReplaceProducedWhileConditionPatchPlanStep or
+                ReplaceProducedForConditionPatchPlanStep or
                 ReplaceProducedIfConditionPatchPlanStep or
                 ReplaceProducedLocalInitializerPatchPlanStep or
                 ReplaceProducedReturnValuePatchPlanStep
@@ -1509,6 +1595,20 @@ public sealed class CSharpPatchPlanApplier
                     loop.Id,
                     out HirPatchIndex.StatementLocation? loopLocation):
                 method = loopLocation!.Method;
+                return true;
+            case ReplaceForConditionPatchPlanStep when target is HirForStatement loop &&
+                patchIndex.TryGetStatement(
+                    loop.Id,
+                    out HirPatchIndex.StatementLocation? loopLocation):
+                method = loopLocation!.Method;
+                return true;
+            case ReplaceForDeclarationInitializerPatchPlanStep
+                when target is HirForVariableDeclarator variable &&
+                patchIndex.TryGetDeclaringFor(variable.Id, out HirForStatement? declaringLoop) &&
+                patchIndex.TryGetStatement(
+                    declaringLoop!.Id,
+                    out HirPatchIndex.StatementLocation? declarationLocation):
+                method = declarationLocation!.Method;
                 return true;
             case ReplaceIfConditionPatchPlanStep or
                 ReplaceLocalInitializerPatchPlanStep or
@@ -1582,6 +1682,15 @@ public sealed class CSharpPatchPlanApplier
         ReplaceProducedWhileConditionPatchPlanStep => throw new ArgumentException(
             "A symbolic produced-while condition edit cannot become an initial standalone operation.",
             nameof(step)),
+        ReplaceForConditionPatchPlanStep forCondition => forCondition.ToOperation(),
+        ReplaceProducedForConditionPatchPlanStep => throw new ArgumentException(
+            "A symbolic produced-for condition edit cannot become an initial standalone operation.",
+            nameof(step)),
+        ReplaceForDeclarationInitializerPatchPlanStep forDeclaration =>
+            forDeclaration.ToOperation(),
+        ReplaceForAssignmentInitializerValuePatchPlanStep forAssignment =>
+            forAssignment.ToOperation(),
+        ReplaceForIncrementorPatchPlanStep forIncrementor => forIncrementor.ToOperation(),
         ReplaceIfConditionPatchPlanStep ifCondition => ifCondition.ToOperation(),
         ReplaceProducedIfConditionPatchPlanStep => throw new ArgumentException(
             "A symbolic produced-if condition edit cannot become an initial standalone operation.",
