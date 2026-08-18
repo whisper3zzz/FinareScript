@@ -3,8 +3,8 @@
 M4.11 lets a later patch-plan stage edit an expression tree authored by an
 earlier stage without predicting any of the tree's persistent `SemanticId`
 values. The feature is plan-only and belongs to
-`unifiedscript.patch-plan/v0.14`. Standalone patches use
-`unifiedscript.patch/v0.13` because they have no earlier stage namespace.
+`unifiedscript.patch-plan/v0.15`. Standalone patches use
+`unifiedscript.patch/v0.14` because they have no earlier stage namespace.
 
 This closes an important text/visual round-trip gap. An AI or graph editor can
 first replace a return value, condition, initializer, assignment value, or
@@ -59,6 +59,7 @@ syntax index, JSON pointer, or generated node ID:
 - `operand` traverses a `UnaryPatchExpression` or `CastPatchExpression`;
 - `condition`, `whenTrue`, and `whenFalse` traverse a
   `ConditionalPatchExpression`;
+- `receiver` traverses a `ConditionalMemberAccessPatchExpression`;
 - an empty path selects the produced root itself.
 
 After the path selects the generated parent, `inputPort` uses the same names.

@@ -1065,6 +1065,8 @@ public sealed class CSharpPatchPlanApplier
             (HirConditionalExpression conditional, "condition") => conditional.Condition,
             (HirConditionalExpression conditional, "whenTrue") => conditional.WhenTrue,
             (HirConditionalExpression conditional, "whenFalse") => conditional.WhenFalse,
+            (HirConditionalAccessExpression conditionalAccess, "receiver") =>
+                conditionalAccess.Receiver,
             _ => null,
         };
         if (input is not null)

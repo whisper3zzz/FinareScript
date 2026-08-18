@@ -209,7 +209,7 @@ public sealed class CSharpSemanticPipelineTests
             conditionBinding.TypeId!.Value).Kind);
 
         GraphDocument document = new HirGraphProjector().Project(hir, semantics);
-        Assert.Equal("unifiedscript.graph/v0.7", document.SchemaVersion);
+        Assert.Equal("unifiedscript.graph/v0.8", document.SchemaVersion);
         GraphFunction graph = Assert.Single(document.Functions);
         GraphNode select = Assert.Single(graph.Nodes, static node => node.Kind == "conditional");
         Assert.Equal("Select", select.Label);
@@ -309,7 +309,7 @@ public sealed class CSharpSemanticPipelineTests
         HirCompilationUnit hir = Assert.IsType<HirCompilationUnit>(result.Hir);
         BoundCompilation semantics = Assert.IsType<BoundCompilation>(result.Semantics);
         GraphDocument document = new HirGraphProjector().Project(hir, semantics);
-        Assert.Equal("unifiedscript.graph/v0.7", document.SchemaVersion);
+        Assert.Equal("unifiedscript.graph/v0.8", document.SchemaVersion);
         GraphNode[] logicalNodes = document.Functions
             .SelectMany(static function => function.Nodes)
             .Where(static node => node.Kind == "binary" &&
@@ -527,7 +527,7 @@ public sealed class CSharpSemanticPipelineTests
         });
 
         GraphDocument document = new HirGraphProjector().Project(hir, semantics);
-        Assert.Equal("unifiedscript.graph/v0.7", document.SchemaVersion);
+        Assert.Equal("unifiedscript.graph/v0.8", document.SchemaVersion);
         GraphNode[] graphCoalesces = document.Functions
             .SelectMany(static function => function.Nodes)
             .Where(static node => node.Kind == "binary" &&
@@ -674,6 +674,172 @@ public sealed class CSharpSemanticPipelineTests
             node.Kind == "binary" && node.Properties["operator"] == "??");
         Assert.Equal("whenLeftNull", coalesce.Properties["rightEvaluation"]);
         Assert.DoesNotContain(math.Ports, static port => port.Kind == GraphPortKind.Control);
+    }
+
+    [Fact]
+    public void AnalyzeAndProject_PreservesNullConditionalReceiverEvaluationAndLiftedResult()
+    {
+        const string source = """
+            #nullable enable
+
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int? Measure(string? value)
+                {
+                    return Observe(value)?.Length;
+                }
+
+                static string? Observe(string? value)
+                {
+                    return value;
+                }
+            }
+            """;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            source,
+            "NullConditionalEffects.cs");
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        HirCompilationUnit hir = Assert.IsType<HirCompilationUnit>(result.Hir);
+        BoundCompilation semantics = Assert.IsType<BoundCompilation>(result.Semantics);
+        HirConditionalAccessExpression conditionalAccess = Assert.Single(
+            hir.DescendantsAndSelf().OfType<HirConditionalAccessExpression>());
+        HirInvocationExpression receiver = Assert.IsType<HirInvocationExpression>(
+            conditionalAccess.Receiver);
+        HirConditionalMemberBindingExpression memberBinding =
+            Assert.IsType<HirConditionalMemberBindingExpression>(conditionalAccess.WhenNotNull);
+        TypeDescriptor resultType = FindType(
+            semantics,
+            FindNode(semantics, conditionalAccess.Id).TypeId!.Value);
+        Assert.Equal(UnifiedTypeKind.Integer, resultType.Kind);
+        Assert.Equal(UnifiedNullability.Nullable, resultType.Nullability);
+
+        GraphDocument document = new HirGraphProjector().Project(hir, semantics);
+        Assert.Equal("unifiedscript.graph/v0.8", document.SchemaVersion);
+        GraphFunction graph = Assert.Single(document.Functions);
+        GraphNode conditionalNode = Assert.Single(
+            graph.Nodes,
+            node => node.Id == conditionalAccess.Id && node.Kind == "conditionalAccess");
+        GraphNode memberNode = Assert.Single(
+            graph.Nodes,
+            node => node.Id == memberBinding.Id && node.Kind == "conditionalMemberBinding");
+        GraphNode receiverNode = Assert.Single(graph.Nodes, node => node.Id == receiver.Id);
+        GraphNode valueReturn = Assert.Single(graph.Nodes, static node => node.Kind == "return");
+        Assert.Equal("conditionalWhenNotNull", conditionalNode.Properties["evaluation"]);
+        Assert.Equal(
+            "whenReceiverNonNull",
+            conditionalNode.Properties["whenNotNullEvaluation"]);
+        Assert.Equal("whenNotNullOrNull", conditionalNode.Properties["resultSelection"]);
+        Assert.Contains(graph.Edges, edge =>
+            edge.Kind == GraphEdgeKind.Data &&
+            edge.FromNode == receiverNode.Id && edge.FromPort == "value" &&
+            edge.ToNode == conditionalNode.Id && edge.ToPort == "receiver");
+        Assert.Contains(graph.Edges, edge =>
+            edge.Kind == GraphEdgeKind.Data &&
+            edge.FromNode == receiverNode.Id && edge.FromPort == "value" &&
+            edge.ToNode == memberNode.Id && edge.ToPort == "target");
+        Assert.Contains(graph.Edges, edge =>
+            edge.Kind == GraphEdgeKind.Data &&
+            edge.FromNode == memberNode.Id && edge.FromPort == "value" &&
+            edge.ToNode == conditionalNode.Id && edge.ToPort == "whenNotNull");
+        Assert.Contains(graph.Edges, edge =>
+            edge.Kind == GraphEdgeKind.Control &&
+            edge.FromNode == receiverNode.Id && edge.FromPort == "execOut" &&
+            edge.ToNode == valueReturn.Id && edge.ToPort == "in");
+    }
+
+    [Fact]
+    public void Analyze_RejectsEffectfulNullConditionalPortionsThatCannotRemainLazy()
+    {
+        const string source = """
+            #nullable enable
+
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static string? Normalize(string? value)
+                {
+                    return value?.Trim();
+                }
+            }
+            """;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            source,
+            "EffectfulNullConditional.cs");
+
+        Assert.False(result.Succeeded);
+        Assert.NotNull(result.Hir);
+        Assert.Null(result.Semantics);
+        UnifiedDiagnostic diagnostic = Assert.Single(
+            result.Diagnostics,
+            static diagnostic =>
+                diagnostic.Code == SemanticDiagnosticCodes.ConditionalAccessEffectsNotSupported);
+        Assert.Contains("null-conditional evaluation", diagnostic.Message, StringComparison.Ordinal);
+        Assert.IsType<HirInvocationExpression>(Assert.Single(
+            result.Hir!.DescendantsAndSelf().OfType<HirConditionalAccessExpression>()).WhenNotNull);
+    }
+
+    [Fact]
+    public void AnalyzeAndProject_AllowsCataloguedPureNullConditionalCallChains()
+    {
+        const string source = """
+            #nullable enable
+
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int? NormalizeAndMeasure(string? value)
+                {
+                    return value?.Trim()?.Length;
+                }
+            }
+            """;
+        MethodEffectCatalog catalog = MethodEffectCatalog.CreateDefault().WithOverrides(
+        [
+            new MethodEffectRule(
+                "system.string.trim.pure",
+                "*",
+                "System.String",
+                "Trim",
+                MethodEffects.None),
+        ]);
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            source,
+            "PureNullConditionalChain.cs",
+            effectCatalog: catalog);
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(request);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        HirCompilationUnit hir = Assert.IsType<HirCompilationUnit>(result.Hir);
+        BoundCompilation semantics = Assert.IsType<BoundCompilation>(result.Semantics);
+        Assert.Equal(
+            2,
+            hir.DescendantsAndSelf().OfType<HirConditionalAccessExpression>().Count());
+        Assert.Equal(
+            2,
+            hir.DescendantsAndSelf().OfType<HirConditionalMemberBindingExpression>().Count());
+        GraphFunction graph = Assert.Single(new HirGraphProjector().Project(hir, semantics).Functions);
+        GraphNode trim = Assert.Single(graph.Nodes, static node =>
+            node.Kind == "invocation" && node.Properties["method"].Contains("System.String.Trim"));
+        Assert.DoesNotContain(trim.Ports, static port => port.Kind == GraphPortKind.Control);
+        Assert.Equal(
+            2,
+            graph.Nodes.Count(static node => node.Kind == "conditionalAccess"));
+        Assert.All(
+            graph.Nodes.Where(static node => node.Kind == "conditionalAccess"),
+            static node => Assert.Equal(
+                "whenReceiverNonNull",
+                node.Properties["whenNotNullEvaluation"]));
     }
 
     private static BoundNodeInfo FindNode(BoundCompilation semantics, SemanticId id) =>

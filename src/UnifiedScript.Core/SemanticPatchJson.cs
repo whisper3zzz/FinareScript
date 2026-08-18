@@ -213,7 +213,7 @@ public static class SemanticPatchJson
 
     private static bool IsSupportedExpressionInputPort(string? inputPort)
     {
-        if (inputPort is "left" or "right" or "operand" or
+        if (inputPort is "left" or "right" or "operand" or "receiver" or
             "condition" or "whenTrue" or "whenFalse")
         {
             return true;
@@ -503,6 +503,16 @@ public static class SemanticPatchJson
                 ValidatePatchExpression(conditional.Condition, depth + 1);
                 ValidatePatchExpression(conditional.WhenTrue, depth + 1);
                 ValidatePatchExpression(conditional.WhenFalse, depth + 1);
+                break;
+            case ConditionalMemberAccessPatchExpression conditionalMemberAccess:
+                if (conditionalMemberAccess.Receiver is null ||
+                    string.IsNullOrWhiteSpace(conditionalMemberAccess.MemberName))
+                {
+                    throw new JsonException(
+                        "A graph-authored conditional member access requires a receiver and member name.");
+                }
+
+                ValidatePatchExpression(conditionalMemberAccess.Receiver, depth + 1);
                 break;
             default:
                 throw new JsonException(

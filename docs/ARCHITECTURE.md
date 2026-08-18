@@ -214,7 +214,7 @@ compilation identity is not safe for editing.
 ## Semantic patch transaction
 
 Graph schema v0.5 carries both the source compilation ID and semantic
-configuration ID. A `unifiedscript.patch/v0.13` document repeats those IDs and
+configuration ID. A `unifiedscript.patch/v0.14` document repeats those IDs and
 contains typed operations keyed by graph/HIR `SemanticId`. Implemented
 operations are `replaceLiteral`, `changeOperator`, `reconnectArgument`,
 `replaceExpressionInput`,
@@ -229,7 +229,7 @@ operator/endpoint, semantic type,
 containing statement, parent block, and exact sibling preconditions rather than
 relying only on the compilation baseline.
 
-`unifiedscript.patch-plan/v0.14` is an ordered transaction above individual
+`unifiedscript.patch-plan/v0.15` is an ordered transaction above individual
 patches. It composes every current bounded operation: literal and operator
 changes, argument reconnection, structured assignment/loop/branch/local/return
 expression edits, exact nested expression-input replacement, statement
@@ -252,22 +252,22 @@ captured HIR root, and lowers to the existing standalone
 `replaceExpressionInput` operation with real current endpoint IDs. The
 consumer's replacement root is published again, so handles chain without a
 second VM, graph evaluator, or generated-ID prediction scheme.
-HIR v0.3 preserves a conditional expression as one node with condition, true,
-and false children. Graph v0.7 projects that node as a `conditional`/`Select`
+HIR v0.4 preserves a conditional expression as one node with condition, true,
+and false children. Graph v0.8 projects that node as a `conditional`/`Select`
 with canonical `condition`, `whenTrue`, and `whenFalse` inputs and an explicit
 `evaluation: lazyBranches` contract. Semantic binding rejects effectful arms so
 the data projection cannot eagerly execute mutation, latency, or effectful
-calls that C# would evaluate only on the selected path. Patch v0.13 and plan
-v0.14 use the same conditional shape in their closed expression algebra and
+calls that C# would evaluate only on the selected path. Patch v0.14 and plan
+v0.15 use the same conditional shape in their closed expression algebra and
 allow exact or produced-handle edits through those Graph ports.
 The same HIR already preserves `&&` and `||` as ordered binary nodes. Graph
-v0.7 retains their `shortCircuitRight` contract, with
+v0.8 retains their `shortCircuitRight` contract, with
 `whenLeftTrue`/`whenLeftFalse` selecting the operator-specific condition.
 Always-evaluated left effects stay in the statement control chain. Semantic
 binding rejects effectful right subtrees with `UVS2003` until Graph has a
 conditional effect-subgraph contract. The full boundary is specified in
 [SHORT_CIRCUIT_EXPRESSIONS.md](SHORT_CIRCUIT_EXPRESSIONS.md).
-Null coalescing also remains an ordered binary HIR node. Graph v0.7 marks its
+Null coalescing also remains an ordered binary HIR node. Graph v0.8 marks its
 right input `whenLeftNull` and its result selection `leftNonNullOrRight`.
 Roslyn remains authoritative for candidate text-authored operand/result types;
 `UVS2005` then rejects implicit or user-defined conversions absent from the
@@ -275,6 +275,17 @@ Graph contract. Graph-authored construction accepts the same exact nullable
 scalar families. Effectful right subtrees produce `UVS2004`; left effects
 remain in the statement control chain. See
 [NULL_COALESCING_EXPRESSIONS.md](NULL_COALESCING_EXPRESSIONS.md).
+Null-conditional access is a distinct HIR node owning an always-evaluated
+receiver and a conditional `whenNotNull` subtree. A conditional member binding
+keeps the receiver implicit in HIR while Graph v0.8 makes both relationships
+explicit: the receiver feeds the parent `receiver` input and the binding's
+`target` input. The parent records `conditionalWhenNotNull`,
+`whenReceiverNonNull`, and `whenNotNullOrNull`, so a VM can evaluate once,
+skip the selected subtree on null, and lift the result. `UVS2006` rejects
+effects in the selected subtree and `UVS2007` rejects void or hidden-conversion
+type shapes. Patch v0.14 can author a bounded simple conditional member access;
+plan v0.15 can replace its `receiver` through an actual produced root. See
+[NULL_CONDITIONAL_ACCESS.md](NULL_CONDITIONAL_ACCESS.md).
 An `if` insertion publishes internal `then`/`else` block handles for later
 `insertBranchStatement` steps without masquerading as a reconnectable local
 definition. The branch steps repeat the producer's original parent block as
@@ -345,7 +356,7 @@ this proof until builtin operator effects include conditional evaluation,
 allocation, and throw behavior.
 
 M4.3 adds a `GraphPatchSafetyIndex` inside the C# patch boundary. It projects
-the same analyzed HIR and bound semantics through Graph v0.7, derives the M4.2
+the same analyzed HIR and bound semantics through Graph v0.8, derives the M4.2
 CFG, and resolves statement entries or region fallthrough sources as insertion
 anchors. A non-empty block whose paths terminate has no fallthrough anchor.
 Local assignment targets and graph-authored local references must satisfy both

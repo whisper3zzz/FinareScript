@@ -41,6 +41,7 @@ DOCUMENTS = [
     ROOT / "docs" / "CONDITIONAL_EXPRESSIONS.md",
     ROOT / "docs" / "SHORT_CIRCUIT_EXPRESSIONS.md",
     ROOT / "docs" / "NULL_COALESCING_EXPRESSIONS.md",
+    ROOT / "docs" / "NULL_CONDITIONAL_ACCESS.md",
     ROOT / "docs" / "PATCH_PLAN.md",
     ROOT / "docs" / "ROADMAP.md",
     ROOT / "docs" / "milestones" / "M1_ROSLYN_GRAPH_FOUNDATION.md",
@@ -177,6 +178,9 @@ def main() -> int:
         ROOT / "samples" / "Expressions" / "ShortCircuitRules.cs"
     )
     coalesce_source_path = ROOT / "samples" / "Expressions" / "CoalesceRules.cs"
+    null_conditional_source_path = (
+        ROOT / "samples" / "Expressions" / "NullConditionalRules.cs"
+    )
     region_source_path = ROOT / "samples" / "Regions" / "EarlyReturn.cs"
     loop_source_path = ROOT / "samples" / "Loops" / "Countdown.cs"
     loop_identity_path = ROOT / "samples" / "Loops" / "Countdown.cs.usids"
@@ -279,6 +283,10 @@ def main() -> int:
     )
     require(short_circuit_source_path.is_file(), "Missing short-circuit sample")
     require(coalesce_source_path.is_file(), "Missing null-coalescing sample")
+    require(
+        null_conditional_source_path.is_file(),
+        "Missing null-conditional access sample",
+    )
     require(region_source_path.is_file(), "Missing structured Graph-region sample")
     require(
         loop_source_path.is_file() and loop_identity_path.is_file(),
@@ -367,6 +375,7 @@ def main() -> int:
     )
     short_circuit_source = short_circuit_source_path.read_text(encoding="utf-8")
     coalesce_source = coalesce_source_path.read_text(encoding="utf-8")
+    null_conditional_source = null_conditional_source_path.read_text(encoding="utf-8")
     region_source = region_source_path.read_text(encoding="utf-8")
     loop_source = loop_source_path.read_text(encoding="utf-8")
     loop_identity = json.loads(loop_identity_path.read_text(encoding="utf-8"))
@@ -410,10 +419,10 @@ def main() -> int:
     ).hexdigest()
     loop_source_digest = hashlib.sha256(loop_source.encode("utf-8")).hexdigest()
     require(
-        patch_document["schemaVersion"] == "unifiedscript.patch/v0.13"
-        and operator_patch["schemaVersion"] == "unifiedscript.patch/v0.13"
-        and insert_patch["schemaVersion"] == "unifiedscript.patch/v0.13"
-        and temporary_patch["schemaVersion"] == "unifiedscript.patch/v0.13"
+        patch_document["schemaVersion"] == "unifiedscript.patch/v0.14"
+        and operator_patch["schemaVersion"] == "unifiedscript.patch/v0.14"
+        and insert_patch["schemaVersion"] == "unifiedscript.patch/v0.14"
+        and temporary_patch["schemaVersion"] == "unifiedscript.patch/v0.14"
         and operator_patch["sourceCompilationId"]
         == patch_document["sourceCompilationId"]
         and insert_patch["sourceCompilationId"]
@@ -461,7 +470,7 @@ def main() -> int:
         "Temporary-introduction sample does not contain the expected typed payload",
     )
     require(
-        reconnect_patch["schemaVersion"] == "unifiedscript.patch/v0.13"
+        reconnect_patch["schemaVersion"] == "unifiedscript.patch/v0.14"
         and reconnect_identity["sourcePath"]
         == "samples/Patching/SharedValueRules.cs"
         and reconnect_identity["sourceDigest"]
@@ -486,7 +495,7 @@ def main() -> int:
     assignment_statement = assignment_operation["newStatement"]
     assignment_value = assignment_statement["value"]
     require(
-        assignment_patch["schemaVersion"] == "unifiedscript.patch/v0.13"
+        assignment_patch["schemaVersion"] == "unifiedscript.patch/v0.14"
         and assignment_identity["sourcePath"]
         == "samples/Patching/AssignmentRules.cs"
         and assignment_identity["sourceDigest"]
@@ -517,7 +526,7 @@ def main() -> int:
     introduction_step = plan_steps[0]
     reconnect_steps = plan_steps[1:]
     require(
-        plan_document["schemaVersion"] == "unifiedscript.patch-plan/v0.14"
+        plan_document["schemaVersion"] == "unifiedscript.patch-plan/v0.15"
         and plan_identity["sourcePath"]
         == "samples/Patching/SharedExpressionPlan.cs"
         and plan_identity["sourceDigest"] == f"sha256:{plan_source_digest}"
@@ -552,7 +561,7 @@ def main() -> int:
     composed_identity_ids = {entry["id"] for entry in composed_identity["entries"]}
     composed_insert, composed_reconnect, composed_operator, composed_delete = composed_steps
     require(
-        composed_document["schemaVersion"] == "unifiedscript.patch-plan/v0.14"
+        composed_document["schemaVersion"] == "unifiedscript.patch-plan/v0.15"
         and composed_identity["sourcePath"] == "samples/Patching/ComposedPlan.cs"
         and composed_identity["sourceDigest"] == f"sha256:{composed_source_digest}"
         and [step["step"] for step in composed_steps]
@@ -582,7 +591,7 @@ def main() -> int:
     guard_comparison = guard_condition["left"]
     guard_negation = guard_condition["right"]
     require(
-        guard_document["schemaVersion"] == "unifiedscript.patch/v0.13"
+        guard_document["schemaVersion"] == "unifiedscript.patch/v0.14"
         and guard_identity["sourcePath"] == "samples/Patching/GuardRules.cs"
         and guard_identity["sourceDigest"] == f"sha256:{guard_source_digest}"
         and guard_operation["operation"] == "insertStatement"
@@ -606,7 +615,7 @@ def main() -> int:
     guard_plan_steps = guard_plan["steps"]
     guard_plan_source, *guard_branch_steps = guard_plan_steps
     require(
-        guard_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.14"
+        guard_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.15"
         and guard_plan["sourceCompilationId"] == guard_document["sourceCompilationId"]
         and guard_plan["semanticConfigurationId"]
         == guard_document["semanticConfigurationId"]
@@ -627,7 +636,7 @@ def main() -> int:
     )
     guard_return_source, guard_return_step, guard_fallback_step = guard_return_plan["steps"]
     require(
-        guard_return_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.14"
+        guard_return_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.15"
         and guard_return_plan["sourceCompilationId"] == guard_document["sourceCompilationId"]
         and guard_return_plan["semanticConfigurationId"]
         == guard_document["semanticConfigurationId"]
@@ -649,7 +658,7 @@ def main() -> int:
     nested_steps = nested_plan["steps"]
     nested_outer, nested_inner, nested_then, nested_else, nested_outer_else = nested_steps
     require(
-        nested_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.14"
+        nested_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.15"
         and nested_identity["sourcePath"]
         == "samples/Patching/NestedDecisionRules.cs"
         and nested_identity["sourceDigest"] == f"sha256:{nested_source_digest}"
@@ -693,7 +702,7 @@ def main() -> int:
         loop_plan_steps
     )
     require(
-        loop_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.14"
+        loop_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.15"
         and loop_plan_identity["sourcePath"]
         == "samples/Patching/LoopBuildRules.cs"
         and loop_plan_identity["sourceDigest"]
@@ -735,7 +744,7 @@ def main() -> int:
     condition_payload = condition_edit["newCondition"]
     require(
         expression_edit_plan["schemaVersion"]
-        == "unifiedscript.patch-plan/v0.14"
+        == "unifiedscript.patch-plan/v0.15"
         and expression_edit_identity["sourcePath"]
         == "samples/Patching/EditLoopRules.cs"
         and expression_edit_identity["sourceDigest"]
@@ -773,7 +782,7 @@ def main() -> int:
     initializer_edit, if_edit, return_edit = general_expression_plan["steps"]
     require(
         general_expression_plan["schemaVersion"]
-        == "unifiedscript.patch-plan/v0.14"
+        == "unifiedscript.patch-plan/v0.15"
         and general_expression_identity["sourcePath"]
         == "samples/Patching/EditDecisionValues.cs"
         and general_expression_identity["sourceDigest"]
@@ -816,7 +825,7 @@ def main() -> int:
     produced_references = [guard_reference, branch_reference, fallback_reference]
     require(
         produced_value_plan["schemaVersion"]
-        == "unifiedscript.patch-plan/v0.14"
+        == "unifiedscript.patch-plan/v0.15"
         and produced_value_identity["sourcePath"]
         == "samples/Patching/ConnectGeneratedValues.cs"
         and produced_value_identity["sourceDigest"]
@@ -863,7 +872,7 @@ def main() -> int:
     nested_input_producer, nested_input_edit = nested_input_plan["steps"]
     require(
         nested_input_plan["schemaVersion"]
-        == "unifiedscript.patch-plan/v0.14"
+        == "unifiedscript.patch-plan/v0.15"
         and nested_input_identity["sourcePath"]
         == "samples/Patching/EditNestedInput.cs"
         and nested_input_identity["sourceDigest"]
@@ -902,7 +911,7 @@ def main() -> int:
     generated_handles = [generated_right, generated_nested_right]
     require(
         generated_expression_plan["schemaVersion"]
-        == "unifiedscript.patch-plan/v0.14"
+        == "unifiedscript.patch-plan/v0.15"
         and generated_expression_identity["sourcePath"]
         == "samples/Patching/EditGeneratedExpression.cs"
         and generated_expression_identity["sourceDigest"]
@@ -948,7 +957,7 @@ def main() -> int:
     conditional_payload = conditional_root["newValue"]
     require(
         conditional_expression_plan["schemaVersion"]
-        == "unifiedscript.patch-plan/v0.14"
+        == "unifiedscript.patch-plan/v0.15"
         and conditional_expression_identity["sourcePath"]
         == "samples/Patching/EditConditionalExpression.cs"
         and conditional_expression_identity["sourceDigest"]
@@ -993,11 +1002,11 @@ def main() -> int:
     )
     require(
         golden_manifest["artifacts"]["graph"]["schemaVersion"]
-        == "unifiedscript.graph/v0.7"
+        == "unifiedscript.graph/v0.8"
         and "if ((damage > threshold) && !disabled)" in region_source
         and "return true;" in region_source
         and "return false;" in region_source,
-        "Graph v0.7 Golden manifest or early-return region sample is inconsistent",
+        "Graph v0.8 Golden manifest or early-return region sample is inconsistent",
     )
     require(
         "return enabled && ready;" in short_circuit_source
@@ -1010,6 +1019,12 @@ def main() -> int:
         and "return Poll() ?? fallback;" in coalesce_source
         and "return value ?? Math.Abs(fallback);" in coalesce_source,
         "Null-coalescing sample does not cover nullable values and effect boundaries",
+    )
+    require(
+        "return value?.Length;" in null_conditional_source
+        and "return Observe(value)?.Length;" in null_conditional_source
+        and "return (primary ?? fallback)?.Length;" in null_conditional_source,
+        "Null-conditional sample does not cover receiver, effects, and composition",
     )
     require(
         "while (value > 0)" in loop_source

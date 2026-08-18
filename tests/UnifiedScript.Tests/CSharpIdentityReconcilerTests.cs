@@ -211,6 +211,64 @@ public sealed class CSharpIdentityReconcilerTests
     }
 
     [Fact]
+    public void Analyze_PreservesConditionalAccessIdentitiesAcrossFormattingChanges()
+    {
+        const string source = """
+            #nullable enable
+
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int? Measure(string? value)
+                {
+                    return value?.Length;
+                }
+            }
+            """;
+        const string changed = """
+            #nullable enable
+
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int? Measure(string? value)
+                {
+                    // The visual identity must not depend on line wrapping.
+                    return value
+                        ?.Length;
+                }
+            }
+            """;
+        CSharpAnalysisResult initial = AnalyzeWithIdentity(
+            source,
+            IdentitySidecarDocument.CreateEmpty(Path));
+        IdentitySidecarDocument sidecar = Assert.Single(initial.IdentitySidecars);
+        HirConditionalAccessExpression initialAccess = Assert.Single(
+            initial.Hir!.DescendantsAndSelf().OfType<HirConditionalAccessExpression>());
+        HirConditionalMemberBindingExpression initialBinding =
+            Assert.IsType<HirConditionalMemberBindingExpression>(initialAccess.WhenNotNull);
+
+        CSharpAnalysisResult formatted = AnalyzeWithIdentity(changed, sidecar);
+
+        HirConditionalAccessExpression formattedAccess = Assert.Single(
+            formatted.Hir!.DescendantsAndSelf().OfType<HirConditionalAccessExpression>());
+        HirConditionalMemberBindingExpression formattedBinding =
+            Assert.IsType<HirConditionalMemberBindingExpression>(formattedAccess.WhenNotNull);
+        Assert.Equal(initialAccess.Id, formattedAccess.Id);
+        Assert.Equal(initialBinding.Id, formattedBinding.Id);
+        IdentitySidecarDocument formattedSidecar = Assert.Single(formatted.IdentitySidecars);
+        Assert.Contains(formattedSidecar.Entries, static entry =>
+            entry.Kind == "conditionalAccess");
+        Assert.Contains(formattedSidecar.Entries, static entry =>
+            entry.Kind == "conditionalMemberBinding");
+        Assert.Empty(formattedSidecar.Tombstones);
+    }
+
+    [Fact]
     public void Analyze_PreservesLoopAndTransferIdentitiesAcrossFormattingChanges()
     {
         const string source = """

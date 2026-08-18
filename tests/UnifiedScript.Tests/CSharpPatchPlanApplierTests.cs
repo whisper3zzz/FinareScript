@@ -3020,6 +3020,92 @@ public sealed class CSharpPatchPlanApplierTests
     }
 
     [Fact]
+    public void Apply_ChainsProducedHandleThroughConditionalAccessReceiverPort()
+    {
+        const string source = """
+            #nullable enable
+
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int? Measure(string? primary, string? fallback)
+                {
+                    return null;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/ProducedConditionalAccess.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement valueReturn = Assert.IsType<HirReturnStatement>(
+            Assert.Single(method.Body.Statements));
+        HirExpression oldValue = Assert.IsAssignableFrom<HirExpression>(valueReturn.Expression);
+        SemanticId nullableStringType = GetTypeId(original, method.Parameters[0]);
+        SemanticId nullableIntType = GetTypeId(original, oldValue);
+        var replaceReturn = new ReplaceReturnValuePatchPlanStep(
+            "replaceReturn",
+            valueReturn.Id,
+            oldValue.Id,
+            nullableIntType,
+            new ConditionalMemberAccessPatchExpression(
+                new LocalReferencePatchExpression(
+                    method.Parameters[0].Id,
+                    method.Parameters[0].Name,
+                    nullableStringType),
+                "Length",
+                nullableIntType));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                replaceReturn,
+                new ReplaceProducedExpressionInputPatchPlanStep(
+                    "replaceGeneratedReceiver",
+                    valueReturn.Id,
+                    replaceReturn.StepId,
+                    [],
+                    "receiver",
+                    nullableStringType,
+                    nullableIntType,
+                    new LocalReferencePatchExpression(
+                        method.Parameters[1].Id,
+                        method.Parameters[1].Name,
+                        nullableStringType)),
+            ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Contains(
+            "return fallback?.Length;",
+            Assert.Single(result.PatchedRequest!.Sources).Source,
+            StringComparison.Ordinal);
+        CSharpAnalysisResult analysis = Assert.IsType<CSharpAnalysisResult>(result.Analysis);
+        HirCompilationUnit hir = Assert.IsType<HirCompilationUnit>(analysis.Hir);
+        BoundCompilation semantics = Assert.IsType<BoundCompilation>(analysis.Semantics);
+        HirConditionalAccessExpression conditionalAccess = Assert.Single(
+            hir.DescendantsAndSelf().OfType<HirConditionalAccessExpression>());
+        Assert.Equal(
+            "fallback",
+            Assert.IsType<HirIdentifierExpression>(conditionalAccess.Receiver).Name);
+        Assert.Equal(
+            "Length",
+            Assert.IsType<HirConditionalMemberBindingExpression>(
+                conditionalAccess.WhenNotNull).MemberName);
+        Assert.Equal(3, Assert.Single(analysis.IdentitySidecars).Generation);
+        GraphFunction graph = Assert.Single(new HirGraphProjector()
+            .Project(hir, semantics)
+            .Functions);
+        GraphNode conditionalNode = Assert.Single(
+            graph.Nodes,
+            node => node.Id == conditionalAccess.Id && node.Kind == "conditionalAccess");
+        Assert.Equal("whenReceiverNonNull", conditionalNode.Properties["whenNotNullEvaluation"]);
+    }
+
+    [Fact]
     public void Apply_ResolvesNestedPathInsideAnInsertedExpressionTree()
     {
         const string source = """

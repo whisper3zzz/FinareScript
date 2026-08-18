@@ -12,6 +12,13 @@ public sealed class CSharpSourcePatchApplier
 {
     private const string IdentityAnnotationKind = "UnifiedScript.IdentityPin";
     private const string PatchLocatorAnnotationKind = "UnifiedScript.PatchLocator";
+    private static readonly SymbolDisplayFormat ExactPatchTypeMetadataFormat = new(
+        globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Omitted,
+        typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
+        genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
+        miscellaneousOptions:
+            SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers |
+            SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
     private static readonly IReadOnlyDictionary<string, string> BinaryOperatorFamilies =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
@@ -302,8 +309,361 @@ public sealed class CSharpSourcePatchApplier
             return Failure(patchedAnalysis.Diagnostics);
         }
 
+        UnifiedDiagnostic? authoredExpressionFailure =
+            ValidateConditionalMemberAccessResults(patch, patchedRequest, patchedAnalysis);
+        if (authoredExpressionFailure is not null)
+        {
+            return Failure(authoredExpressionFailure);
+        }
+
         return new CSharpPatchResult(patchedRequest, patchedAnalysis, patchedAnalysis.Diagnostics);
     }
+
+    private static UnifiedDiagnostic? ValidateConditionalMemberAccessResults(
+        SemanticPatchDocument patch,
+        CSharpCompilationRequest request,
+        CSharpAnalysisResult analysis)
+    {
+        HirCompilationUnit hir = analysis.Hir ??
+            throw new ArgumentException("Patched expression validation requires HIR.", nameof(analysis));
+        BoundCompilation semantics = analysis.Semantics ??
+            throw new ArgumentException(
+                "Patched expression validation requires bound semantics.",
+                nameof(analysis));
+        IReadOnlyDictionary<SemanticId, HirNode> nodes = hir
+            .DescendantsAndSelf()
+            .ToDictionary(static node => node.Id);
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes = semantics.Nodes
+            .ToDictionary(static node => node.NodeId);
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types = semantics.Types
+            .ToDictionary(static type => type.Id);
+        SyntaxTree[] syntaxTrees = request.Sources
+            .Select(static source => CSharpSyntaxTree.ParseText(
+                source.Source,
+                CSharpToHirLowerer.ParseOptions,
+                source.LogicalPath))
+            .ToArray();
+        CSharpCompilation compilation = new CSharpCompilationHost().Create(request, syntaxTrees);
+        IReadOnlyDictionary<string, ExactBindingContext> exactContexts = syntaxTrees
+            .ToDictionary(
+                static tree => tree.FilePath,
+                tree => new ExactBindingContext(
+                    compilation.GetSemanticModel(tree, ignoreAccessibility: false),
+                    tree.GetRoot()),
+                StringComparer.Ordinal);
+
+        foreach (SemanticPatchOperation operation in patch.Operations)
+        {
+            PatchExpression? authored = GetAuthoredPatchExpression(operation);
+            if (authored is null || !ContainsConditionalMemberAccess(authored))
+            {
+                continue;
+            }
+
+            HirExpression? actual = FindPatchedAuthoredExpression(operation, nodes);
+            if (actual is null)
+            {
+                return new UnifiedDiagnostic(
+                    SemanticPatchDiagnosticCodes.InvalidGraphExpression,
+                    UnifiedDiagnosticSeverity.Error,
+                    "The emitted conditional member access could not be correlated with its " +
+                    "post-patch HIR root.",
+                    SourceSpan.Unknown("<patch>"),
+                    operation.TargetNodeId);
+            }
+
+            if (!TryValidateAuthoredExpression(
+                    authored,
+                    actual,
+                    boundNodes,
+                    types,
+                    exactContexts,
+                    out string? failure))
+            {
+                return new UnifiedDiagnostic(
+                    SemanticPatchDiagnosticCodes.TypeMismatch,
+                    UnifiedDiagnosticSeverity.Error,
+                    failure ?? "The emitted conditional member access changed semantic shape or type.",
+                    actual.Span,
+                    actual.Id);
+            }
+        }
+
+        return null;
+    }
+
+    private static PatchExpression? GetAuthoredPatchExpression(
+        SemanticPatchOperation operation) => operation switch
+        {
+            ReplaceExpressionInputPatchOperation replacement => replacement.NewInput,
+            ReplaceAssignmentValuePatchOperation replacement => replacement.NewValue,
+            ReplaceWhileConditionPatchOperation replacement => replacement.NewCondition,
+            ReplaceIfConditionPatchOperation replacement => replacement.NewCondition,
+            ReplaceLocalInitializerPatchOperation replacement => replacement.NewInitializer,
+            ReplaceReturnValuePatchOperation replacement => replacement.NewValue,
+            InsertStatementPatchOperation
+            {
+                NewStatement: LocalAssignmentPatchStatement assignment,
+            } => assignment.Value,
+            InsertStatementPatchOperation
+            {
+                NewStatement: IfPatchStatement branch,
+            } => branch.Condition,
+            InsertStatementPatchOperation
+            {
+                NewStatement: WhilePatchStatement loop,
+            } => loop.Condition,
+            InsertStatementPatchOperation
+            {
+                NewStatement: ReturnPatchStatement { Expression: not null } valueReturn,
+            } => valueReturn.Expression,
+            _ => null,
+        };
+
+    private static bool ContainsConditionalMemberAccess(PatchExpression expression) => expression switch
+    {
+        ConditionalMemberAccessPatchExpression => true,
+        UnaryPatchExpression unary => ContainsConditionalMemberAccess(unary.Operand),
+        BinaryPatchExpression binary =>
+            ContainsConditionalMemberAccess(binary.Left) ||
+            ContainsConditionalMemberAccess(binary.Right),
+        CastPatchExpression cast => ContainsConditionalMemberAccess(cast.Operand),
+        ConditionalPatchExpression conditional =>
+            ContainsConditionalMemberAccess(conditional.Condition) ||
+            ContainsConditionalMemberAccess(conditional.WhenTrue) ||
+            ContainsConditionalMemberAccess(conditional.WhenFalse),
+        _ => false,
+    };
+
+    private static HirExpression? FindPatchedAuthoredExpression(
+        SemanticPatchOperation operation,
+        IReadOnlyDictionary<SemanticId, HirNode> nodes)
+    {
+        switch (operation)
+        {
+            case ReplaceExpressionInputPatchOperation replacement
+                when nodes.TryGetValue(replacement.TargetNodeId, out HirNode? targetNode) &&
+                targetNode is HirExpression target &&
+                TryGetExpressionInput(
+                    target,
+                    replacement.InputPort,
+                    out HirExpression? input,
+                    out _):
+                return input;
+            case ReplaceAssignmentValuePatchOperation replacement
+                when nodes.TryGetValue(replacement.TargetNodeId, out HirNode? targetNode) &&
+                targetNode is HirAssignmentExpression assignment:
+                return assignment.Value;
+            case ReplaceWhileConditionPatchOperation replacement
+                when nodes.TryGetValue(replacement.TargetNodeId, out HirNode? targetNode) &&
+                targetNode is HirWhileStatement loop:
+                return loop.Condition;
+            case ReplaceIfConditionPatchOperation replacement
+                when nodes.TryGetValue(replacement.TargetNodeId, out HirNode? targetNode) &&
+                targetNode is HirIfStatement branch:
+                return branch.Condition;
+            case ReplaceLocalInitializerPatchOperation replacement
+                when nodes.TryGetValue(replacement.TargetNodeId, out HirNode? targetNode) &&
+                targetNode is HirVariableDeclarationStatement local:
+                return local.Initializer;
+            case ReplaceReturnValuePatchOperation replacement
+                when nodes.TryGetValue(replacement.TargetNodeId, out HirNode? targetNode) &&
+                targetNode is HirReturnStatement valueReturn:
+                return valueReturn.Expression;
+            case InsertStatementPatchOperation insertion
+                when nodes.TryGetValue(insertion.TargetNodeId, out HirNode? targetNode) &&
+                targetNode is HirBlockStatement block:
+                return GetInsertedAuthoredExpression(FindInsertedStatement(block, insertion));
+            default:
+                return null;
+        }
+    }
+
+    private static HirStatement? FindInsertedStatement(
+        HirBlockStatement block,
+        InsertStatementPatchOperation insertion)
+    {
+        int previousIndex = insertion.ExpectedPreviousSiblingId is SemanticId previousId
+            ? block.Statements.ToList().FindIndex(statement => statement.Id == previousId)
+            : -1;
+        int nextIndex = insertion.ExpectedNextSiblingId is SemanticId nextId
+            ? block.Statements.ToList().FindIndex(statement => statement.Id == nextId)
+            : -1;
+        int insertedIndex = previousIndex >= 0
+            ? previousIndex + 1
+            : nextIndex >= 0
+                ? nextIndex - 1
+                : block.Statements.Count == 1
+                    ? 0
+                    : -1;
+        if (insertedIndex < 0 || insertedIndex >= block.Statements.Count)
+        {
+            return null;
+        }
+
+        if (nextIndex >= 0 && insertedIndex + 1 != nextIndex)
+        {
+            return null;
+        }
+
+        return block.Statements[insertedIndex];
+    }
+
+    private static HirExpression? GetInsertedAuthoredExpression(HirStatement? statement) => statement switch
+    {
+        HirExpressionStatement { Expression: HirAssignmentExpression assignment } => assignment.Value,
+        HirIfStatement branch => branch.Condition,
+        HirWhileStatement loop => loop.Condition,
+        HirReturnStatement valueReturn => valueReturn.Expression,
+        _ => null,
+    };
+
+    private static bool TryValidateAuthoredExpression(
+        PatchExpression expected,
+        HirExpression actual,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
+        IReadOnlyDictionary<string, ExactBindingContext> exactContexts,
+        out string? failure)
+    {
+        boundNodes.TryGetValue(actual.Id, out BoundNodeInfo? binding);
+        types.TryGetValue(expected.ExpectedTypeId, out TypeDescriptor? expectedType);
+        TryGetExactExpressionType(actual, exactContexts, out ITypeSymbol? exactType);
+        if (binding is null ||
+            binding.TypeId != expected.ExpectedTypeId ||
+            expectedType is null ||
+            exactType is null ||
+            !string.Equals(
+                exactType.ToDisplayString(ExactPatchTypeMetadataFormat),
+                expectedType.MetadataName,
+                StringComparison.Ordinal))
+        {
+            string exactTypeName = exactType?.ToDisplayString(ExactPatchTypeMetadataFormat) ?? "<none>";
+            failure = $"Graph-authored expression '{actual.Id}' has exact Roslyn type " +
+                $"'{exactTypeName}' and converted semantic type '{binding?.TypeId}', not its " +
+                $"declared exact type '{expectedType?.MetadataName}' " +
+                $"('{expected.ExpectedTypeId}'). Hidden C# conversions are not permitted in the " +
+                "shared-VM expression subset.";
+            return false;
+        }
+
+        bool valid = (expected, actual) switch
+        {
+            (LiteralPatchExpression literal, HirLiteralExpression hirLiteral) =>
+                string.Equals(literal.ValueText, hirLiteral.ValueText, StringComparison.Ordinal),
+            (LocalReferencePatchExpression local, HirIdentifierExpression identifier) =>
+                string.Equals(local.ExpectedName, identifier.Name, StringComparison.Ordinal) &&
+                binding.ReferencedSymbolId == local.SourceDefinitionId,
+            (UnaryPatchExpression unary, HirUnaryExpression hirUnary) =>
+                string.Equals(unary.Operator, hirUnary.Operator, StringComparison.Ordinal) &&
+                TryValidateAuthoredExpression(
+                    unary.Operand,
+                    hirUnary.Operand,
+                    boundNodes,
+                    types,
+                    exactContexts,
+                    out _),
+            (BinaryPatchExpression binary, HirBinaryExpression hirBinary) =>
+                string.Equals(binary.Operator, hirBinary.Operator, StringComparison.Ordinal) &&
+                TryValidateAuthoredExpression(
+                    binary.Left,
+                    hirBinary.Left,
+                    boundNodes,
+                    types,
+                    exactContexts,
+                    out _) &&
+                TryValidateAuthoredExpression(
+                    binary.Right,
+                    hirBinary.Right,
+                    boundNodes,
+                    types,
+                    exactContexts,
+                    out _),
+            (CastPatchExpression cast, HirCastExpression hirCast) =>
+                string.Equals(cast.TypeName, hirCast.TypeName, StringComparison.Ordinal) &&
+                TryValidateAuthoredExpression(
+                    cast.Operand,
+                    hirCast.Operand,
+                    boundNodes,
+                    types,
+                    exactContexts,
+                    out _),
+            (ConditionalPatchExpression conditional, HirConditionalExpression hirConditional) =>
+                TryValidateAuthoredExpression(
+                    conditional.Condition,
+                    hirConditional.Condition,
+                    boundNodes,
+                    types,
+                    exactContexts,
+                    out _) &&
+                TryValidateAuthoredExpression(
+                    conditional.WhenTrue,
+                    hirConditional.WhenTrue,
+                    boundNodes,
+                    types,
+                    exactContexts,
+                    out _) &&
+                TryValidateAuthoredExpression(
+                    conditional.WhenFalse,
+                    hirConditional.WhenFalse,
+                    boundNodes,
+                    types,
+                    exactContexts,
+                    out _),
+            (
+                ConditionalMemberAccessPatchExpression conditionalAccess,
+                HirConditionalAccessExpression
+                {
+                    WhenNotNull: HirConditionalMemberBindingExpression memberBinding,
+                } hirConditionalAccess) =>
+                string.Equals(
+                    conditionalAccess.MemberName,
+                    memberBinding.MemberName,
+                    StringComparison.Ordinal) &&
+                TryValidateAuthoredExpression(
+                    conditionalAccess.Receiver,
+                    hirConditionalAccess.Receiver,
+                    boundNodes,
+                    types,
+                    exactContexts,
+                    out _),
+            _ => false,
+        };
+        failure = valid
+            ? null
+            : $"Graph-authored expression '{actual.Id}' did not retain the declared closed " +
+                $"'{expected.GetType().Name}' structure after Roslyn reanalysis.";
+        return valid;
+    }
+
+    private static bool TryGetExactExpressionType(
+        HirExpression expression,
+        IReadOnlyDictionary<string, ExactBindingContext> contexts,
+        out ITypeSymbol? type)
+    {
+        type = null;
+        if (!contexts.TryGetValue(expression.Span.FilePath, out ExactBindingContext? context))
+        {
+            return false;
+        }
+
+        ExpressionSyntax[] matches = context.Root
+            .DescendantNodesAndSelf()
+            .OfType<ExpressionSyntax>()
+            .Where(candidate => RoslynSourceSpan.FromNode(
+                candidate,
+                expression.Span.FilePath) == expression.Span)
+            .ToArray();
+        if (matches.Length != 1)
+        {
+            return false;
+        }
+
+        type = context.SemanticModel.GetTypeInfo(matches[0]).Type;
+        return type is not null;
+    }
+
+    private sealed record ExactBindingContext(SemanticModel SemanticModel, SyntaxNode Root);
 
     private static OperationPlan PlanLiteralReplacement(
         ReplaceLiteralPatchOperation operation,
@@ -918,6 +1278,8 @@ public sealed class CSharpSourcePatchApplier
             (HirConditionalExpression conditional, "condition") => conditional.Condition,
             (HirConditionalExpression conditional, "whenTrue") => conditional.WhenTrue,
             (HirConditionalExpression conditional, "whenFalse") => conditional.WhenFalse,
+            (HirConditionalAccessExpression conditionalAccess, "receiver") =>
+                conditionalAccess.Receiver,
             _ => null,
         };
         if (input is not null)
@@ -2423,6 +2785,20 @@ public sealed class CSharpSourcePatchApplier
                     boundNodes,
                     methods,
                     types),
+            HirConditionalAccessExpression conditionalAccess =>
+                IsStablePureExpression(
+                    conditionalAccess.Receiver,
+                    useDefinitionIndex,
+                    boundNodes,
+                    methods,
+                    types) &&
+                IsStablePureExpression(
+                    conditionalAccess.WhenNotNull,
+                    useDefinitionIndex,
+                    boundNodes,
+                    methods,
+                    types),
+            HirConditionalMemberBindingExpression => true,
             HirInvocationExpression invocation =>
                 boundNodes.TryGetValue(invocation.Id, out BoundNodeInfo? invocationBinding) &&
                 invocationBinding.InvokedMethodId is SemanticId methodId &&
@@ -3056,6 +3432,49 @@ public sealed class CSharpSourcePatchApplier
                     return ExpressionBuildResult.Success(syntax, expectedType);
                 }
 
+            case ConditionalMemberAccessPatchExpression conditionalAccess:
+                {
+                    if (!SyntaxFacts.IsValidIdentifier(conditionalAccess.MemberName) ||
+                        SyntaxFacts.GetKeywordKind(conditionalAccess.MemberName) != SyntaxKind.None)
+                    {
+                        return ExpressionBuildResult.Failure(
+                            SemanticPatchDiagnosticCodes.InvalidGraphExpression,
+                            $"Conditional member name '{conditionalAccess.MemberName}' is not one " +
+                            "unescaped C# identifier.");
+                    }
+
+                    ExpressionBuildResult receiver = BuildPatchExpression(
+                        conditionalAccess.Receiver,
+                        blockLocation,
+                        insertionIndex,
+                        hirNodes,
+                        patchIndex,
+                        graphSafetyIndex,
+                        boundNodes,
+                        types);
+                    if (receiver.Syntax is null || receiver.Type is null)
+                    {
+                        return receiver;
+                    }
+
+                    if ((receiver.Type.Kind != UnifiedTypeKind.String &&
+                            receiver.Type.Nullability != UnifiedNullability.Nullable) ||
+                        expectedType.Nullability != UnifiedNullability.Nullable)
+                    {
+                        return ExpressionBuildResult.Failure(
+                            SemanticPatchDiagnosticCodes.TypeMismatch,
+                            "A conditional member access requires a reference-like or nullable " +
+                            "receiver and a nullable declared result type.");
+                    }
+
+                    ConditionalAccessExpressionSyntax syntax =
+                        SyntaxFactory.ConditionalAccessExpression(
+                            ParenthesizeCompositeExpression(receiver.Syntax),
+                            SyntaxFactory.MemberBindingExpression(
+                                SyntaxFactory.IdentifierName(conditionalAccess.MemberName)));
+                    return ExpressionBuildResult.Success(syntax, expectedType);
+                }
+
             default:
                 return ExpressionBuildResult.Failure(
                     SemanticPatchDiagnosticCodes.InvalidGraphExpression,
@@ -3137,7 +3556,8 @@ public sealed class CSharpSourcePatchApplier
         (type.Kind is UnifiedTypeKind.Boolean or
             UnifiedTypeKind.Integer or
             UnifiedTypeKind.FloatingPoint or
-            UnifiedTypeKind.Enum) &&
+            UnifiedTypeKind.Enum or
+            UnifiedTypeKind.String) &&
         !string.Equals(type.MetadataName, "System.Decimal", StringComparison.Ordinal);
 
     private static bool IsValidGraphUnaryType(
@@ -3523,6 +3943,8 @@ public sealed class CSharpSourcePatchApplier
         HirIdentifierExpression => syntax is IdentifierNameSyntax,
         HirThisExpression => syntax is ThisExpressionSyntax,
         HirMemberAccessExpression => syntax is MemberAccessExpressionSyntax,
+        HirConditionalAccessExpression => syntax is ConditionalAccessExpressionSyntax,
+        HirConditionalMemberBindingExpression => syntax is MemberBindingExpressionSyntax,
         HirInvocationExpression => syntax is InvocationExpressionSyntax,
         HirBinaryExpression => syntax is BinaryExpressionSyntax,
         HirUnaryExpression => syntax is PrefixUnaryExpressionSyntax or PostfixUnaryExpressionSyntax,
@@ -3642,6 +4064,8 @@ public sealed class CSharpSourcePatchApplier
         HirIdentifierExpression => "identifier",
         HirThisExpression => "this",
         HirMemberAccessExpression => "memberAccess",
+        HirConditionalAccessExpression => "conditionalAccess",
+        HirConditionalMemberBindingExpression => "conditionalMemberBinding",
         HirInvocationExpression => "invocation",
         HirBinaryExpression => "binary",
         HirUnaryExpression => "unary",

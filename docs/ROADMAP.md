@@ -118,10 +118,12 @@ Outcome: practical gameplay methods are fully visualizable.
   sequencing and effect-safe conditional right operands
 - [x] null-coalescing text/HIR/Graph/patch round trip with nullable result
   typing, lazy-right metadata, and produced-expression editing
+- [x] first-class null-conditional access/member binding with single receiver
+  evaluation, lifted result/effect safety, bounded visual construction, and
+  exact receiver/produced-handle editing
 - [ ] general data/control rewiring and structural HIR operations
 - [ ] `for` and `foreach`
 - [ ] `switch` and supported patterns
-- [ ] null-conditional access
 - [ ] deterministic temporary naming
 
 ## M5 — CoreCLR execution backend

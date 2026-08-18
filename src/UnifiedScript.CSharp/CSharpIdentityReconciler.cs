@@ -336,6 +336,10 @@ public sealed class CSharpIdentityReconciler
                 case HirMemberAccessExpression member:
                     Visit(member.Target, owner, "target", childParent);
                     break;
+                case HirConditionalAccessExpression conditionalAccess:
+                    Visit(conditionalAccess.Receiver, owner, "receiver", childParent);
+                    Visit(conditionalAccess.WhenNotNull, owner, "whenNotNull", childParent);
+                    break;
                 case HirInvocationExpression invocation:
                     Visit(invocation.Target, owner, "target", childParent);
                     foreach (HirExpression argument in invocation.Arguments)
@@ -410,6 +414,8 @@ public sealed class CSharpIdentityReconciler
             HirReturnStatement returnStatement => GetShapeKey(returnStatement) +
                 Child(returnStatement.Expression),
             HirMemberAccessExpression member => GetShapeKey(member) + Child(member.Target),
+            HirConditionalAccessExpression conditionalAccess => GetShapeKey(conditionalAccess) +
+                Child(conditionalAccess.Receiver) + Child(conditionalAccess.WhenNotNull),
             HirInvocationExpression invocation => GetShapeKey(invocation) + Child(invocation.Target) +
                 "[" + string.Join(',', invocation.Arguments.Select(argument =>
                     GetStructuralFingerprint(argument, cache))) + "]",
@@ -447,6 +453,9 @@ public sealed class CSharpIdentityReconciler
         HirIdentifierExpression identifier => $"identifier|{identifier.Name}",
         HirThisExpression => "this",
         HirMemberAccessExpression member => $"memberAccess|{member.MemberName}",
+        HirConditionalAccessExpression => "conditionalAccess",
+        HirConditionalMemberBindingExpression member =>
+            $"conditionalMemberBinding|{member.MemberName}",
         HirInvocationExpression invocation => $"invocation|{invocation.Arguments.Count}",
         HirBinaryExpression binary => $"binary|{binary.Operator}",
         HirUnaryExpression unary => $"unary|{unary.Operator}",
@@ -472,6 +481,8 @@ public sealed class CSharpIdentityReconciler
         HirIdentifierExpression => "identifier",
         HirThisExpression => "this",
         HirMemberAccessExpression => "memberAccess",
+        HirConditionalAccessExpression => "conditionalAccess",
+        HirConditionalMemberBindingExpression => "conditionalMemberBinding",
         HirInvocationExpression => "invocation",
         HirBinaryExpression => "binary",
         HirUnaryExpression => "unary",

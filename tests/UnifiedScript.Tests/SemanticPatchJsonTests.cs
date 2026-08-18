@@ -435,7 +435,7 @@ public sealed class SemanticPatchJsonTests
         ReplaceReturnValuePatchOperation operation = Assert.IsType<ReplaceReturnValuePatchOperation>(
             Assert.Single(roundTrip.Operations));
         Assert.Equal(expression, Assert.IsType<ConditionalPatchExpression>(operation.NewValue));
-        Assert.Equal("unifiedscript.patch/v0.13", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch/v0.14", roundTrip.SchemaVersion);
         Assert.Contains("\"expression\": \"conditional\"", json);
         Assert.Contains("\"whenTrue\"", json);
         Assert.Contains("\"whenFalse\"", json);
@@ -469,8 +469,81 @@ public sealed class SemanticPatchJsonTests
         ReplaceReturnValuePatchOperation operation = Assert.IsType<ReplaceReturnValuePatchOperation>(
             Assert.Single(roundTrip.Operations));
         Assert.Equal(expression, Assert.IsType<BinaryPatchExpression>(operation.NewValue));
-        Assert.Equal("unifiedscript.patch/v0.13", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch/v0.14", roundTrip.SchemaVersion);
         Assert.Contains("\"operator\": \"??\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SerializeAndDeserialize_PreserveTypedConditionalMemberAccess()
+    {
+        SemanticId nullableStringType = SemanticId.FromKey("System.String?");
+        SemanticId nullableIntType = SemanticId.FromKey("System.Int32?");
+        var expression = new ConditionalMemberAccessPatchExpression(
+            new LocalReferencePatchExpression(
+                SemanticId.FromKey("text-parameter"),
+                "text",
+                nullableStringType),
+            "Length",
+            nullableIntType);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            SemanticId.FromKey("conditional-access-compilation"),
+            SemanticId.FromKey("conditional-access-configuration"),
+            [new ReplaceReturnValuePatchOperation(
+                SemanticId.FromKey("conditional-access-return"),
+                SemanticId.FromKey("conditional-access-old-value"),
+                nullableIntType,
+                expression)]);
+
+        string json = SemanticPatchJson.Serialize(patch);
+        SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
+
+        ReplaceReturnValuePatchOperation operation = Assert.IsType<ReplaceReturnValuePatchOperation>(
+            Assert.Single(roundTrip.Operations));
+        Assert.Equal(
+            expression,
+            Assert.IsType<ConditionalMemberAccessPatchExpression>(operation.NewValue));
+        Assert.Equal("unifiedscript.patch/v0.14", roundTrip.SchemaVersion);
+        Assert.Contains("\"expression\": \"conditionalMemberAccess\"", json);
+        Assert.Contains("\"memberName\": \"Length\"", json);
+        Assert.Contains("\"receiver\"", json);
+    }
+
+    [Fact]
+    public void Create_RejectsInvalidConditionalMemberAccessShapeOrSelectedPort()
+    {
+        SemanticId stringType = SemanticId.FromKey("System.String");
+        SemanticId nullableIntType = SemanticId.FromKey("System.Int32?");
+        var receiver = new LocalReferencePatchExpression(
+            SemanticId.FromKey("conditional-access-receiver"),
+            "text",
+            stringType);
+
+        Assert.Throws<JsonException>(() => SemanticPatchDocument.Create(
+            SemanticId.FromKey("missing-conditional-receiver-compilation"),
+            SemanticId.FromKey("missing-conditional-receiver-configuration"),
+            [new ReplaceReturnValuePatchOperation(
+                SemanticId.FromKey("missing-conditional-receiver-return"),
+                SemanticId.FromKey("missing-conditional-receiver-value"),
+                nullableIntType,
+                new ConditionalMemberAccessPatchExpression(null!, "Length", nullableIntType))]));
+        Assert.Throws<JsonException>(() => SemanticPatchDocument.Create(
+            SemanticId.FromKey("missing-conditional-member-compilation"),
+            SemanticId.FromKey("missing-conditional-member-configuration"),
+            [new ReplaceReturnValuePatchOperation(
+                SemanticId.FromKey("missing-conditional-member-return"),
+                SemanticId.FromKey("missing-conditional-member-value"),
+                nullableIntType,
+                new ConditionalMemberAccessPatchExpression(receiver, " ", nullableIntType))]));
+        Assert.Throws<JsonException>(() => SemanticPatchDocument.Create(
+            SemanticId.FromKey("selected-conditional-port-compilation"),
+            SemanticId.FromKey("selected-conditional-port-configuration"),
+            [new ReplaceExpressionInputPatchOperation(
+                SemanticId.FromKey("selected-conditional-port-root"),
+                "whenNotNull",
+                SemanticId.FromKey("selected-conditional-port-value"),
+                nullableIntType,
+                nullableIntType,
+                new LiteralPatchExpression("1", nullableIntType))]));
     }
 
     [Fact]

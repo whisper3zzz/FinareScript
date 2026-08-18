@@ -7,20 +7,23 @@ the operation into a Boolean test, conditional call, or editor-only evaluator.
 
 The current contracts are:
 
-- HIR `unifiedscript.hir/v0.3`;
-- Graph `unifiedscript.graph/v0.7`;
-- standalone patch `unifiedscript.patch/v0.13`;
-- patch plan `unifiedscript.patch-plan/v0.14`.
+- HIR `unifiedscript.hir/v0.4`;
+- Graph `unifiedscript.graph/v0.8`;
+- standalone patch `unifiedscript.patch/v0.14`;
+- patch plan `unifiedscript.patch-plan/v0.15`.
 
-Only Graph changes version in this slice. HIR, persistent identity, and both
-patch protocols already represent `??` losslessly as an ordered binary
-expression with canonical `left` and `right` children.
+At the M4.14 boundary only Graph changed version: HIR, persistent identity, and
+both patch protocols already represented `??` losslessly as an ordered binary
+expression with canonical `left` and `right` children. M4.15 subsequently
+advanced the current strict-reader versions shown above for null-conditional
+access.
 
 ## Evaluation and result contract
 
 C# evaluates `left` exactly once. If it is non-null, that value supplies the
 result and `right` is skipped. Otherwise C# evaluates `right` and uses its
-value. Graph v0.7 records all three decisions on the existing binary node:
+value. Graph v0.7 introduced all three decisions; current Graph v0.8 retains
+them on the existing binary node:
 
 ```json
 {
@@ -69,7 +72,7 @@ declared/bound nullability already present in semantic profile v0.1.
 
 ## Graph-authored type boundary
 
-Patch v0.13 reuses `BinaryPatchExpression` with operator `??`. No new payload
+Patch v0.14 reuses `BinaryPatchExpression` with operator `??`. No new payload
 or port is required. To avoid hiding conversions from the future shared VM,
 visual construction is deliberately narrower than all legal C# forms:
 
@@ -87,7 +90,7 @@ Boolean, integer, floating-point, and enum graph-authored subset. Roslyn then
 reanalyzes the emitted ordinary C# before any patch result is returned.
 
 Existing `replaceExpressionInput` operations edit `left` or `right` using exact
-endpoint and type preconditions. Patch-plan v0.14 can author a coalescing binary
+endpoint and type preconditions. Patch-plan v0.15 can author a coalescing binary
 tree, publish its actual root under a step handle, and use
 `replaceProducedExpressionInput` on either canonical port without predicting a
 generated semantic ID. Persistent identity, trivia safety, tombstones, scope,
@@ -129,7 +132,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
 
 The sample covers nullable value and reference types, an effectful
 always-evaluated left call, and a catalogued-pure right call. Every coalescing
-node emits Graph v0.7 lazy-right metadata.
+node emits the Graph v0.8 lazy-right metadata introduced in v0.7.
 
 ## Deliberate limits
 

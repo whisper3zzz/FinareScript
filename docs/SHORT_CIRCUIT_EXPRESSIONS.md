@@ -7,10 +7,10 @@ an eager Boolean helper or a second evaluator.
 
 The current contracts are:
 
-- HIR `unifiedscript.hir/v0.3`;
-- Graph `unifiedscript.graph/v0.7`;
-- standalone patch `unifiedscript.patch/v0.13`;
-- patch plan `unifiedscript.patch-plan/v0.14`.
+- HIR `unifiedscript.hir/v0.4`;
+- Graph `unifiedscript.graph/v0.8`;
+- standalone patch `unifiedscript.patch/v0.14`;
+- patch plan `unifiedscript.patch-plan/v0.15`.
 
 Only Graph changes in this slice. HIR and the patch protocols already preserve
 `&&` and `||` as binary operators with canonical `left` and `right` children.
@@ -20,7 +20,8 @@ Only Graph changes in this slice. HIR and the patch protocols already preserve
 C# always evaluates the left operand first. It evaluates the right operand of
 `&&` only when the left value is `true`, and the right operand of `||` only
 when the left value is `false`. Graph v0.6 introduced that rule; current Graph
-v0.7 records it directly on the existing binary node:
+v0.6 introduced it directly on the existing binary node; current v0.8 retains
+the same contract:
 
 | Operator | `evaluation` | `rightEvaluation` |
 | --- | --- | --- |
@@ -74,7 +75,7 @@ ordered left/right children. Traversal, semantic binding, persistent identity,
 source location, serialization, and structural fingerprints already share that
 shape.
 
-Patch v0.13 and patch-plan v0.14 likewise keep logical operators in the closed
+Patch v0.14 and patch-plan v0.15 likewise keep logical operators in the closed
 typed binary-expression algebra. Existing `replaceExpressionInput` and
 `replaceProducedExpressionInput` operations use `left` and `right`, matching
 the Graph ports. Source reconstruction emits ordinary C#, reruns semantic
@@ -83,7 +84,7 @@ effectful conditional right operand through a patch.
 
 No patch-schema bump is required because the authored syntax shape and ports
 do not change. Graph v0.6 was required because consumers gained a new mandatory
-evaluation meaning for these operators; v0.7 retains that contract.
+evaluation meaning for these operators; v0.8 retains that contract.
 
 ## Checked-in sample
 
@@ -103,8 +104,8 @@ The resulting Graph uses v0.6 and the properties in the table above.
 
 - Conditional effects on the right are rejected instead of being represented
   by a dedicated lazy subregion.
-- Null coalescing (`??`) is covered by the subsequent Graph v0.7 contract;
-  null-conditional access (`?.`) remains outside this slice.
+- Null coalescing (`??`) is covered by the subsequent Graph v0.7 contract, and
+  null-conditional access (`?.`) by the subsequent Graph v0.8 contract.
 - Flow-sensitive nullable state, exception edges, and speculative-allocation
   effects are not modeled yet.
 - `&&`/`||` remain binary HIR nodes rather than standalone CFG regions; their

@@ -113,6 +113,7 @@ public sealed record LocalAssignmentPatchStatement(
 [JsonDerivedType(typeof(BinaryPatchExpression), "binary")]
 [JsonDerivedType(typeof(CastPatchExpression), "cast")]
 [JsonDerivedType(typeof(ConditionalPatchExpression), "conditional")]
+[JsonDerivedType(typeof(ConditionalMemberAccessPatchExpression), "conditionalMemberAccess")]
 public abstract record PatchExpression(SemanticId ExpectedTypeId);
 
 public sealed record LiteralPatchExpression(
@@ -149,6 +150,11 @@ public sealed record ConditionalPatchExpression(
     PatchExpression Condition,
     PatchExpression WhenTrue,
     PatchExpression WhenFalse,
+    SemanticId ExpectedTypeId) : PatchExpression(ExpectedTypeId);
+
+public sealed record ConditionalMemberAccessPatchExpression(
+    PatchExpression Receiver,
+    string MemberName,
     SemanticId ExpectedTypeId) : PatchExpression(ExpectedTypeId);
 
 public sealed record IfPatchStatement(
@@ -203,7 +209,7 @@ public sealed record SemanticPatchDocument(
     SemanticId SemanticConfigurationId,
     IReadOnlyList<SemanticPatchOperation> Operations)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.13";
+    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.14";
 
     public static SemanticPatchDocument Create(
         SemanticId sourceCompilationId,

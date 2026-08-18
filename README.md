@@ -49,14 +49,17 @@ The repository currently implements:
   `operand`, and positional `argN` ports emitted by Graph;
 - transaction expression handles that let later stages traverse and edit trees
   authored by earlier stages without predicting generated semantic IDs;
-- first-class conditional (`?:`) expressions across HIR v0.3 and Graph v0.7,
+- first-class conditional (`?:`) expressions across HIR v0.4 and Graph v0.8,
   with lazy-branch safety, typed source synthesis, canonical branch ports, and
   generated-tree handle traversal;
-- explicit `&&`/`||` right-side evaluation conditions in Graph v0.7, with
+- explicit `&&`/`||` right-side evaluation conditions in Graph v0.8, with
   always-evaluated left effects and `UVS2003` rejection of conditional right
   effects;
-- null-coalescing (`??`) across text, HIR, Graph v0.7, exact visual
+- null-coalescing (`??`) across text, HIR, Graph v0.8, exact visual
   construction, and produced-expression editing, with `UVS2004` effect safety;
+- null-conditional member access (`?.`) across HIR v0.4 and Graph v0.8, with
+  explicit single receiver evaluation, lifted nullable results, `UVS2006`/`UVS2007`
+  safety, bounded visual construction, and exact receiver editing;
 - opt-in `.usids` sidecars that preserve node identity across formatting and edits;
 - semantic-independent `.usgraph` layout sidecars with deterministic positions,
   sizes, collapsed state, comment regions, routing hints, and orphan recovery;
@@ -92,10 +95,15 @@ rejects right subtrees whose effects would require conditional control flow.
 M4.14 applies the same explicit lazy-right contract to `??`, preserves
 Roslyn-bound nullable/result types, and adds exact scalar visual construction
 and produced-handle editing through the existing binary ports.
+M4.15 preserves `?.` as conditional access plus conditional member binding,
+connects the implicit receiver explicitly in Graph, rejects conditionally
+effectful or hidden-conversion shapes, and lets visual plans author a simple
+member access and edit its receiver through the same exact endpoint machinery.
 
 The v0.2 profile accepts `[Visual]` methods containing local variables,
 expressions, calls, assignments, `if/else`, `while`, `break`, `continue`,
-`return`, conditional and null-coalescing expressions, casts, and `await`.
+`return`, conditional, null-coalescing, and null-conditional expressions,
+casts, and `await`.
 Unsupported syntax is rejected explicitly instead of being approximated.
 
 ## Architecture
@@ -161,7 +169,7 @@ Without `--out`, the graph JSON is written to stdout.
 
 ### Analyze structured regions
 
-Graph v0.7 assigns every node to exactly one semantic region and preserves
+Graph v0.8 assigns every node to exactly one semantic region and preserves
 function, block, `if`, `then`, explicit/implicit `else`, `loop`, and `loopBody`
 nesting. Generate the early-return example with:
 
@@ -196,7 +204,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
   --out artifacts/loops
 ```
 
-HIR v0.3 emits explicit while/break/continue statements. Graph v0.7 emits a
+HIR v0.4 emits explicit while/break/continue statements. Graph v0.8 emits a
 `loop` region with one `loopBody` child, and derived CFG facts identify the
 effective condition header, body entry, exit successor, back-edge arcs, and
 break/continue nodes owned by the nearest loop. Effectful conditions route all
@@ -264,8 +272,8 @@ dotnet run --project src/UnifiedScript.Cli -- \
   --out-identity artifacts/patched/DamageRules.cs.usids
 ```
 
-`unifiedscript.patch/v0.13` binds every patch to both the source compilation ID
-and semantic configuration ID emitted in Graph schema v0.3. A `replaceLiteral`
+`unifiedscript.patch/v0.14` binds every patch to both the source compilation ID
+and semantic configuration ID emitted in Graph schema v0.8. A `replaceLiteral`
 operation also carries the expected old literal text. A stale source, changed
 reference/effect configuration, missing target, changed old value, non-literal
 replacement, or semantically invalid result rejects the entire patch and writes
@@ -278,7 +286,7 @@ ambiguous matches allocate new IDs and emit `UVS3101` rather than guessing.
 
 ## Apply structural graph patches
 
-Patch v0.13 includes `changeOperator` and `reconnectArgument`. The checked-in
+Patch v0.14 includes `changeOperator` and `reconnectArgument`. The checked-in
 operator sample changes the binary node from multiplication to division while
 requiring the expected result, left-port, and right-port type IDs:
 
@@ -314,7 +322,7 @@ single-document.
 
 ## Apply a statement insertion
 
-Patch v0.13 also includes bounded `insertStatement` and `deleteStatement`
+Patch v0.14 also includes bounded `insertStatement` and `deleteStatement`
 operations. The insertion sample adds a graph-authored local declaration before
 the existing return statement:
 
@@ -329,7 +337,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
 ```
 
 An insertion targets a parent block and records the exact adjacent sibling IDs.
-Patch v0.13 accepts a local declaration with one literal initializer, a
+Patch v0.14 accepts a local declaration with one literal initializer, a
 CFG-checked local assignment, a typed terminal return, or an `if` whose
 condition is a versioned graph-authored expression. A local's
 semantic type must already be present and graph-safe in the bound compilation,
@@ -391,21 +399,23 @@ else
 }
 ```
 
-The expression payload has five closed variants: scalar `literal`,
-`localReference`, `unary`, `binary`, and `cast`. Every node carries an expected
+The standalone expression payload has seven closed variants: scalar `literal`,
+`localReference`, `unary`, `binary`, `cast`, `conditional`, and bounded
+`conditionalMemberAccess`. Every node carries an expected
 semantic type ID. References also carry a source definition ID and expected
 name; a local must both lexically and CFG-dominate the reachable insertion gap,
 while a parameter must belong to the same method. The current operator subset
-excludes division, remainder, decimal/string operations, mutation, calls,
-member reads, and other expressions whose evaluation may throw, allocate,
-mutate, or read state.
+excludes division, remainder, decimal/string operators, mutation, calls, and
+general member reads. The only authored member read is the M4.15
+null-conditional simple-member payload, which is revalidated against Roslyn's
+exact type before commit.
 
 The standalone operation deliberately creates empty `then` and `else` blocks.
 It proves that source, HIR, Graph branch/data/control edges, persistent identity,
 and `.usgraph` layout synchronization share one structure. New branch and
 condition nodes are explicitly `unplaced`; existing placements survive.
 
-Patch-plan v0.14 can populate those newly allocated blocks without predicting
+Patch-plan v0.15 can populate those newly allocated blocks without predicting
 their random IDs. The checked-in plan inserts the same guard, appends two typed
 locals to `then`, and appends one typed local to `else`:
 
@@ -555,7 +565,7 @@ pin. The moved expression, its descendants, the containing statement, sibling
 statements, and parent block therefore retain their IDs. Only the new local
 declaration and replacement identifier allocate new IDs. This is the first
 lowering primitive needed to represent a shared Graph value without duplicating
-C# evaluation. Patch v0.13 can connect additional compatible consumers to
+C# evaluation. Patch v0.14 can connect additional compatible consumers to
 that local definition.
 
 ## Reconnect a typed consumer
@@ -614,7 +624,7 @@ analyzed source baseline, or atomically with the patch-plan protocol below.
 
 ## Apply atomic semantic patch plans
 
-`unifiedscript.patch-plan/v0.14` composes `replaceLiteral`, `changeOperator`,
+`unifiedscript.patch-plan/v0.15` composes `replaceLiteral`, `changeOperator`,
 `reconnectArgument`, typed replacement of assignment, loop, branch,
 declaration-initializer, and return endpoints, their generated-statement
 handle variants, `insertStatement`, `insertBranchStatement`,
@@ -712,7 +722,7 @@ more paths, and all-path termination propagates up that producer tree. A
 `break`/`continue` bind only to the nearest lexical loop. Local assignments are
 supported as direct, produced-branch, and produced-loop-body payloads. Authored
 call construction, async/task-like returns, cyclic handle references, and
-cross-method handles remain outside v0.14; exact inputs of already-resolved
+cross-method handles remain outside v0.15; exact inputs of already-resolved
 positional calls are covered by M4.10 below.
 
 ### Build a loop from a visual plan
@@ -734,7 +744,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
 The editor supplies only the original method-body anchor and backward symbolic
 producer references. The coordinator resolves the generated while/body/branch
 IDs after each reanalysis. The final ordinary C# loop reprojects into the same
-HIR v0.3, Graph v0.7 regions, and nearest-loop CFG facts as a text-authored
+HIR v0.4, Graph v0.8 regions, and nearest-loop CFG facts as a text-authored
 loop. See [LOOP_PATCHING.md](docs/LOOP_PATCHING.md).
 
 ### Edit assignment values and loop conditions
@@ -886,7 +896,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
 ```
 
 The result is `return value + (value * 3);`, and the sidecar advances from
-generation 1 to 4. The symbolic step becomes an ordinary patch v0.13
+generation 1 to 4. The symbolic step becomes an ordinary patch v0.14
 `replaceExpressionInput` at execution time, so type, purity, dominance, trivia,
 identity, tombstone, and Graph-edge behavior stay on one code path. See
 [PRODUCED_EXPRESSION_HANDLES.md](docs/PRODUCED_EXPRESSION_HANDLES.md).
@@ -894,7 +904,7 @@ identity, tombstone, and Graph-edge behavior stay on one code path. See
 ### Author and edit a conditional expression
 
 M4.12 adds `condition ? whenTrue : whenFalse` as a first-class expression in
-HIR v0.3, current Graph v0.7, patch v0.13, and patch-plan v0.14. Graph emits one
+HIR v0.4, current Graph v0.8, patch v0.14, and patch-plan v0.15. Graph emits one
 `conditional`/`Select` node with `condition`, `whenTrue`, and `whenFalse` data
 inputs, a `value` output, and `evaluation: lazyBranches`. Text lowering keeps
 the original expression shape; it does not turn the expression into a call or
@@ -929,7 +939,7 @@ input edit. See
 
 M4.13 makes the evaluation order of `&&` and `||` machine-readable. Their
 existing binary nodes retain `left`, `right`, and `value` data ports while
-Graph v0.6 introduced `evaluation: shortCircuitRight`; current Graph v0.7
+Graph v0.6 introduced `evaluation: shortCircuitRight`; current Graph v0.8
 retains it. `rightEvaluation` is
 `whenLeftTrue` for `&&` and `whenLeftFalse` for `||`. Ordinary `&` and `|`
 remain eager binary operators.
@@ -954,7 +964,7 @@ Graph and effect-safety contract.
 ### Analyze and edit null-coalescing expressions
 
 M4.14 admits `left ?? right` without desugaring it into an eager call or a
-Boolean conditional. HIR retains the ordered binary expression. Graph v0.7
+Boolean conditional. HIR retains the ordered binary expression. Graph v0.8
 adds `rightEvaluation: whenLeftNull` and
 `resultSelection: leftNonNullOrRight`, so a visual runtime or shared VM can
 preserve both evaluation and value selection directly.
@@ -978,6 +988,41 @@ dotnet run --project src/UnifiedScript.Cli -- \
 Existing `left`/`right` input edits and produced-expression handles operate on
 the same coalescing tree. See
 [NULL_COALESCING_EXPRESSIONS.md](docs/NULL_COALESCING_EXPRESSIONS.md).
+
+### Analyze and edit null-conditional access
+
+M4.15 admits `receiver?.Member` without flattening its implicit receiver into
+an ordinary eager member read. HIR v0.4 preserves both the full conditional
+access and its conditional member binding. Graph v0.8 emits
+`evaluation: conditionalWhenNotNull`,
+`whenNotNullEvaluation: whenReceiverNonNull`, and
+`resultSelection: whenNotNullOrNull`. It also connects the receiver value to
+both the conditional node's `receiver` port and the member binding's implicit
+`target` port, so a shared VM can evaluate the receiver once and reuse it.
+
+Receiver effects are valid because the receiver always executes. The selected
+subtree is skipped on null, so an assignment, await, mutation, or effectful call
+there produces `UVS2006` until Graph has conditional effect subregions.
+`UVS2007` rejects void, graph-unsafe, or hidden-conversion result shapes.
+
+Patch v0.14 adds a bounded `conditionalMemberAccess` payload for a simple member
+identifier. It emits ordinary C#, reanalyzes it, and verifies every authored
+node against Roslyn's exact pre-conversion type. Existing and generated
+conditional-access roots expose `receiver` as an exact editable port under
+patch-plan v0.15. The conditional `whenNotNull` data port remains read-only for
+general edits until a closed call/member-binding payload can preserve its
+implicit receiver safely.
+
+Generate the checked-in example with:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  analyze samples/Expressions/NullConditionalRules.cs \
+  --out artifacts/null-conditional
+```
+
+See [NULL_CONDITIONAL_ACCESS.md](docs/NULL_CONDITIONAL_ACCESS.md) for the HIR,
+Graph, type, effect, and visual-editing contract.
 
 ## Persist and synchronize graph layout
 

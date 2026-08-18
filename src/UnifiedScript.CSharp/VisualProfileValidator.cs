@@ -375,6 +375,8 @@ public sealed class VisualProfileValidator
             IdentifierNameSyntax or
             ThisExpressionSyntax or
             MemberAccessExpressionSyntax or
+            ConditionalAccessExpressionSyntax or
+            MemberBindingExpressionSyntax or
             InvocationExpressionSyntax or
             BinaryExpressionSyntax or
             PrefixUnaryExpressionSyntax or

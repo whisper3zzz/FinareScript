@@ -179,7 +179,48 @@ public sealed class CSharpToHirLowererTests
 
         string json = UnifiedScript.Core.HirJson.Serialize(
             UnifiedScript.Core.HirDocument.Create(result.CompilationUnit));
-        Assert.Contains("\"schemaVersion\": \"unifiedscript.hir/v0.3\"", json);
+        Assert.Contains("\"schemaVersion\": \"unifiedscript.hir/v0.4\"", json);
         Assert.Contains("\"kind\": \"conditional\"", json);
+    }
+
+    [Fact]
+    public void Lower_PreservesNullConditionalAccessAndMemberBindingAsFirstClassHir()
+    {
+        const string source = """
+            #nullable enable
+
+            static class Rules
+            {
+                [Visual]
+                static int? Measure(string? value)
+                {
+                    return value?.Length;
+                }
+            }
+            """;
+
+        CSharpLoweringResult result = new CSharpToHirLowerer().Lower(
+            source,
+            "NullConditionalRules.cs");
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        HirMethodDeclaration method = Assert.Single(Assert.Single(result.CompilationUnit!.Types).Methods);
+        HirReturnStatement valueReturn = Assert.IsType<HirReturnStatement>(
+            Assert.Single(method.Body.Statements));
+        HirConditionalAccessExpression conditionalAccess =
+            Assert.IsType<HirConditionalAccessExpression>(valueReturn.Expression);
+        Assert.Equal(
+            "value",
+            Assert.IsType<HirIdentifierExpression>(conditionalAccess.Receiver).Name);
+        Assert.Equal(
+            "Length",
+            Assert.IsType<HirConditionalMemberBindingExpression>(
+                conditionalAccess.WhenNotNull).MemberName);
+
+        string json = UnifiedScript.Core.HirJson.Serialize(
+            UnifiedScript.Core.HirDocument.Create(result.CompilationUnit));
+        Assert.Contains("\"schemaVersion\": \"unifiedscript.hir/v0.4\"", json);
+        Assert.Contains("\"kind\": \"conditionalAccess\"", json);
+        Assert.Contains("\"kind\": \"conditionalMemberBinding\"", json);
     }
 }

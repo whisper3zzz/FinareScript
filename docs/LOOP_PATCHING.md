@@ -5,8 +5,8 @@
 M4.6 closes the first bounded loop round trip. A visual edit can now create an
 ordinary C# `while`, obtain a symbolic handle for its generated body, and
 populate that body with the same typed statements used elsewhere. The result
-is re-lowered into the current HIR v0.3 and projected into the current Graph
-v0.7/CFG loop model; there is no editor-only loop node or second runtime.
+is re-lowered into the current HIR v0.4 and projected into the current Graph
+v0.8/CFG loop model; there is no editor-only loop node or second runtime.
 
 This is structured construction, not arbitrary cyclic edge rewiring. The
 patch describes a `while` and ordered body statements. The compiler owns the
@@ -15,7 +15,7 @@ targets.
 
 ## Protocol
 
-Current patch schema `unifiedscript.patch/v0.13` carries three loop statement payloads:
+Current patch schema `unifiedscript.patch/v0.14` carries three loop statement payloads:
 
 - `while`, carrying one closed, typed `PatchExpression` condition;
 - `break`, carrying no target ID; and
@@ -25,7 +25,7 @@ The absence of a transfer target is intentional. C# and HIR bind each transfer
 to its nearest lexical loop, and the derived CFG verifies that target. A visual
 client cannot forge an edge to an outer or unrelated loop.
 
-Current patch-plan schema `unifiedscript.patch-plan/v0.14` carries
+Current patch-plan schema `unifiedscript.patch-plan/v0.15` carries
 `insertLoopBodyStatement`:
 
 ```json

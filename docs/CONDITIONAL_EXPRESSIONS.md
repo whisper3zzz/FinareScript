@@ -8,10 +8,10 @@ evaluator or desugar the expression into an eager function call.
 
 The current contracts are:
 
-- HIR `unifiedscript.hir/v0.3`;
-- Graph `unifiedscript.graph/v0.7`;
-- standalone patch `unifiedscript.patch/v0.13`;
-- patch plan `unifiedscript.patch-plan/v0.14`.
+- HIR `unifiedscript.hir/v0.4`;
+- Graph `unifiedscript.graph/v0.8`;
+- standalone patch `unifiedscript.patch/v0.14`;
+- patch plan `unifiedscript.patch-plan/v0.15`.
 
 ## HIR and semantic contract
 
@@ -50,7 +50,7 @@ each branch independently.
 
 ## Graph contract
 
-Graph v0.5 introduced the node; current Graph v0.7 retains it with:
+Graph v0.5 introduced the node; current Graph v0.8 retains it with:
 
 - `kind: "conditional"`;
 - label `Select`;
@@ -65,7 +65,7 @@ selection even though the currently admitted arms are effect-free.
 
 ## Graph-authored patch expression
 
-Patch v0.13 extends the closed expression algebra with this payload:
+Patch v0.14 retains the conditional extension to the closed expression algebra:
 
 ```json
 {
@@ -116,7 +116,7 @@ scope/dominance, and persistent-identity checks. The conditional node,
 containing statement, unaffected arms, and surrounding expression spine retain
 their IDs; only the removed subtree becomes tombstones.
 
-Patch-plan v0.14 also allows these ports in `targetPath` and `inputPort` for
+Patch-plan v0.15 also allows these ports in `targetPath` and `inputPort` for
 `replaceProducedExpressionInput`. A stage may author a conditional, a later
 stage may replace `whenFalse`, and a third stage may use the second stage's
 published expression root to edit a nested binary input. No generated ID is
@@ -155,8 +155,8 @@ subtrees as ordinary tombstones.
   reference, nullable, tuple, or user-defined conversions.
 - The closed authored algebra still excludes new call/member construction,
   assignment, and `await`.
-- Null coalescing (`??`) is covered by the subsequent lazy-right contract.
-  Null-conditional access (`?.`), switch expressions, pattern arms, and
-  conditional `ref` expressions remain outside this slice.
+- Null coalescing (`??`) is covered by the subsequent lazy-right contract, and
+  null-conditional access (`?.`) is covered by M4.15. Switch expressions,
+  pattern arms, and conditional `ref` expressions remain outside this slice.
 - Conditional-expression control flow and exception edges are not yet
   materialized as standalone CFG regions.

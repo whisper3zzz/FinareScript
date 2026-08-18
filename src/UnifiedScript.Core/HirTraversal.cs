@@ -29,6 +29,8 @@ public static class HirTraversal
         HirWhileStatement statement => [statement.Condition, statement.Body],
         HirReturnStatement { Expression: not null } statement => [statement.Expression],
         HirMemberAccessExpression expression => [expression.Target],
+        HirConditionalAccessExpression expression =>
+            [expression.Receiver, expression.WhenNotNull],
         HirInvocationExpression expression => expression.Arguments
             .Cast<HirNode>()
             .Prepend(expression.Target),

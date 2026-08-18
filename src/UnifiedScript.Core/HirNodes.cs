@@ -95,6 +95,8 @@ public sealed record HirReturnStatement(
 [JsonDerivedType(typeof(HirIdentifierExpression), "identifier")]
 [JsonDerivedType(typeof(HirThisExpression), "this")]
 [JsonDerivedType(typeof(HirMemberAccessExpression), "memberAccess")]
+[JsonDerivedType(typeof(HirConditionalAccessExpression), "conditionalAccess")]
+[JsonDerivedType(typeof(HirConditionalMemberBindingExpression), "conditionalMemberBinding")]
 [JsonDerivedType(typeof(HirInvocationExpression), "invocation")]
 [JsonDerivedType(typeof(HirBinaryExpression), "binary")]
 [JsonDerivedType(typeof(HirUnaryExpression), "unary")]
@@ -122,6 +124,17 @@ public sealed record HirMemberAccessExpression(
     SemanticId Id,
     SourceSpan Span,
     HirExpression Target,
+    string MemberName) : HirExpression(Id, Span);
+
+public sealed record HirConditionalAccessExpression(
+    SemanticId Id,
+    SourceSpan Span,
+    HirExpression Receiver,
+    HirExpression WhenNotNull) : HirExpression(Id, Span);
+
+public sealed record HirConditionalMemberBindingExpression(
+    SemanticId Id,
+    SourceSpan Span,
     string MemberName) : HirExpression(Id, Span);
 
 public sealed record HirInvocationExpression(

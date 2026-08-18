@@ -883,6 +883,174 @@ public sealed class CSharpSourcePatchApplierTests
     }
 
     [Fact]
+    public void Apply_BuildsConditionalMemberAccessAndEditsItsReceiverPort()
+    {
+        const string source = """
+            #nullable enable
+
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int? Measure(string? primary, string? fallback)
+                {
+                    return null;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/ConditionalMemberAccessPatch.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement valueReturn = Assert.IsType<HirReturnStatement>(
+            Assert.Single(method.Body.Statements));
+        HirExpression oldValue = Assert.IsAssignableFrom<HirExpression>(valueReturn.Expression);
+        SemanticId nullableStringType = GetTypeId(original, method.Parameters[0]);
+        SemanticId nullableIntType = GetTypeId(original, oldValue);
+        var applier = new CSharpSourcePatchApplier();
+        SemanticPatchDocument buildPatch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new ReplaceReturnValuePatchOperation(
+                valueReturn.Id,
+                oldValue.Id,
+                nullableIntType,
+                new ConditionalMemberAccessPatchExpression(
+                    new LocalReferencePatchExpression(
+                        method.Parameters[0].Id,
+                        method.Parameters[0].Name,
+                        nullableStringType),
+                    "Length",
+                    nullableIntType))]);
+
+        CSharpPatchResult built = applier.Apply(request, buildPatch);
+
+        Assert.True(built.Succeeded, string.Join(Environment.NewLine, built.Diagnostics));
+        CSharpCompilationRequest builtRequest = Assert.IsType<CSharpCompilationRequest>(
+            built.PatchedRequest);
+        Assert.Contains(
+            "return primary?.Length;",
+            Assert.Single(builtRequest.Sources).Source,
+            StringComparison.Ordinal);
+        CSharpAnalysisResult builtAnalysis = Assert.IsType<CSharpAnalysisResult>(built.Analysis);
+        HirCompilationUnit builtHir = Assert.IsType<HirCompilationUnit>(builtAnalysis.Hir);
+        HirConditionalAccessExpression conditionalAccess = Assert.Single(
+            builtHir.DescendantsAndSelf().OfType<HirConditionalAccessExpression>());
+        HirConditionalMemberBindingExpression memberBinding =
+            Assert.IsType<HirConditionalMemberBindingExpression>(conditionalAccess.WhenNotNull);
+        SemanticId oldReceiverId = conditionalAccess.Receiver.Id;
+        SemanticPatchDocument editPatch = SemanticPatchDocument.Create(
+            builtHir.Id,
+            builtAnalysis.Semantics!.ConfigurationId,
+            [new ReplaceExpressionInputPatchOperation(
+                conditionalAccess.Id,
+                "receiver",
+                oldReceiverId,
+                nullableStringType,
+                nullableIntType,
+                new LocalReferencePatchExpression(
+                    method.Parameters[1].Id,
+                    method.Parameters[1].Name,
+                    nullableStringType))]);
+        IReadOnlyDictionary<string, IdentitySidecarDocument> sidecars = builtAnalysis.IdentitySidecars
+            .ToDictionary(static sidecar => sidecar.SourcePath, StringComparer.Ordinal);
+        var advancedRequest = new CSharpCompilationRequest(
+            builtRequest.AssemblyName,
+            builtRequest.Sources.Select(document => new CSharpSourceDocument(
+                document.LogicalPath,
+                document.Source,
+                sidecars[document.LogicalPath])),
+            builtRequest.ReferencePaths,
+            builtRequest.EffectCatalog);
+
+        CSharpPatchResult edited = applier.Apply(advancedRequest, editPatch);
+
+        Assert.True(edited.Succeeded, string.Join(Environment.NewLine, edited.Diagnostics));
+        Assert.Contains(
+            "return fallback?.Length;",
+            Assert.Single(edited.PatchedRequest!.Sources).Source,
+            StringComparison.Ordinal);
+        CSharpAnalysisResult editedAnalysis = Assert.IsType<CSharpAnalysisResult>(edited.Analysis);
+        HirCompilationUnit editedHir = Assert.IsType<HirCompilationUnit>(editedAnalysis.Hir);
+        BoundCompilation editedSemantics = Assert.IsType<BoundCompilation>(editedAnalysis.Semantics);
+        HirConditionalAccessExpression changed = Assert.Single(
+            editedHir.DescendantsAndSelf().OfType<HirConditionalAccessExpression>());
+        Assert.Equal(conditionalAccess.Id, changed.Id);
+        Assert.Equal(memberBinding.Id, changed.WhenNotNull.Id);
+        Assert.Equal(
+            "fallback",
+            Assert.IsType<HirIdentifierExpression>(changed.Receiver).Name);
+        Assert.Contains(
+            Assert.Single(editedAnalysis.IdentitySidecars).Tombstones,
+            tombstone => tombstone.Id == oldReceiverId);
+        GraphFunction graph = Assert.Single(new HirGraphProjector()
+            .Project(editedHir, editedSemantics)
+            .Functions);
+        Assert.Contains(graph.Edges, edge =>
+            edge.Kind == GraphEdgeKind.Data &&
+            edge.FromNode == changed.Receiver.Id &&
+            edge.ToNode == changed.Id &&
+            edge.ToPort == "receiver");
+        Assert.Contains(graph.Edges, edge =>
+            edge.Kind == GraphEdgeKind.Data &&
+            edge.FromNode == changed.Receiver.Id &&
+            edge.ToNode == changed.WhenNotNull.Id &&
+            edge.ToPort == "target");
+    }
+
+    [Fact]
+    public void Apply_RejectsConditionalMemberAccessWithAHiddenResultConversion()
+    {
+        const string source = """
+            #nullable enable
+
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static long? Measure(string? value)
+                {
+                    return null;
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            source,
+            "Game/ConvertedConditionalMemberAccess.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        Assert.True(original.Succeeded, string.Join(Environment.NewLine, original.Diagnostics));
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement valueReturn = Assert.IsType<HirReturnStatement>(
+            Assert.Single(method.Body.Statements));
+        SemanticId nullableStringType = GetTypeId(original, method.Parameters[0]);
+        SemanticId nullableLongType = GetTypeId(original, valueReturn.Expression!);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new ReplaceReturnValuePatchOperation(
+                valueReturn.Id,
+                valueReturn.Expression!.Id,
+                nullableLongType,
+                new ConditionalMemberAccessPatchExpression(
+                    new LocalReferencePatchExpression(
+                        method.Parameters[0].Id,
+                        method.Parameters[0].Name,
+                        nullableStringType),
+                    "Length",
+                    nullableLongType))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.PatchedRequest);
+        Assert.Contains(result.Diagnostics, static diagnostic =>
+            diagnostic.Code is SemanticDiagnosticCodes.ConditionalAccessTypeShapeNotSupported or
+                SemanticPatchDiagnosticCodes.TypeMismatch);
+    }
+
+    [Fact]
     public void Apply_RejectsStaleOrIncompatibleExpressionInputPort()
     {
         CSharpCompilationRequest request = CSharpCompilationRequest.Single(

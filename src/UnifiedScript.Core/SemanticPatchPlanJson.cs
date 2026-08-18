@@ -462,6 +462,8 @@ public static class SemanticPatchPlanJson
             (ConditionalPatchExpression conditional, "condition") => conditional.Condition,
             (ConditionalPatchExpression conditional, "whenTrue") => conditional.WhenTrue,
             (ConditionalPatchExpression conditional, "whenFalse") => conditional.WhenFalse,
+            (ConditionalMemberAccessPatchExpression conditionalAccess, "receiver") =>
+                conditionalAccess.Receiver,
             _ => null,
         };
         return input is not null;

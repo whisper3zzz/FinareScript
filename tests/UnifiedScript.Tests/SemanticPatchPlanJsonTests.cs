@@ -1223,9 +1223,63 @@ public sealed class SemanticPatchPlanJsonTests
         Assert.Equal(third.StepId, roundTripThird.StepId);
         Assert.Equal(third.TargetPath, roundTripThird.TargetPath);
         Assert.Equal(third.NewInput, roundTripThird.NewInput);
-        Assert.Equal("unifiedscript.patch-plan/v0.14", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch-plan/v0.15", roundTrip.SchemaVersion);
         Assert.Contains("\"step\": \"replaceProducedExpressionInput\"", json);
         Assert.Contains("\"targetPath\": []", json);
+    }
+
+    [Fact]
+    public void SerializeAndDeserialize_PreserveConditionalAccessReceiverHandle()
+    {
+        SemanticId nullableStringType = SemanticId.FromKey("System.String?");
+        SemanticId nullableIntType = SemanticId.FromKey("System.Int32?");
+        SemanticId returnId = SemanticId.FromKey("conditional-access-return");
+        var producer = new ReplaceReturnValuePatchPlanStep(
+            "replaceReturn",
+            returnId,
+            SemanticId.FromKey("old-return-value"),
+            nullableIntType,
+            new ConditionalMemberAccessPatchExpression(
+                new LocalReferencePatchExpression(
+                    SemanticId.FromKey("primary-parameter"),
+                    "primary",
+                    nullableStringType),
+                "Length",
+                nullableIntType));
+        var consumer = new ReplaceProducedExpressionInputPatchPlanStep(
+            "replaceReceiver",
+            returnId,
+            producer.StepId,
+            [],
+            "receiver",
+            nullableStringType,
+            nullableIntType,
+            new LocalReferencePatchExpression(
+                SemanticId.FromKey("fallback-parameter"),
+                "fallback",
+                nullableStringType));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("conditional-access-compilation"),
+            SemanticId.FromKey("conditional-access-configuration"),
+            [producer, consumer]);
+
+        string json = SemanticPatchPlanJson.Serialize(plan);
+        SemanticPatchPlanDocument roundTrip = SemanticPatchPlanJson.Deserialize(json);
+
+        Assert.Equal(producer, roundTrip.Steps[0]);
+        ReplaceProducedExpressionInputPatchPlanStep roundTripConsumer = Assert.IsType<
+            ReplaceProducedExpressionInputPatchPlanStep>(roundTrip.Steps[1]);
+        Assert.Equal(consumer.StepId, roundTripConsumer.StepId);
+        Assert.Equal(consumer.TargetNodeId, roundTripConsumer.TargetNodeId);
+        Assert.Equal(consumer.SourceStepId, roundTripConsumer.SourceStepId);
+        Assert.Equal(consumer.TargetPath, roundTripConsumer.TargetPath);
+        Assert.Equal(consumer.InputPort, roundTripConsumer.InputPort);
+        Assert.Equal(consumer.ExpectedInputTypeId, roundTripConsumer.ExpectedInputTypeId);
+        Assert.Equal(consumer.ExpectedTargetTypeId, roundTripConsumer.ExpectedTargetTypeId);
+        Assert.Equal(consumer.NewInput, roundTripConsumer.NewInput);
+        Assert.Equal("unifiedscript.patch-plan/v0.15", roundTrip.SchemaVersion);
+        Assert.Contains("\"expression\": \"conditionalMemberAccess\"", json);
+        Assert.Contains("\"inputPort\": \"receiver\"", json);
     }
 
     [Fact]

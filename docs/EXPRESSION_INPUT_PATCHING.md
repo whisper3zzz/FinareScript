@@ -5,7 +5,7 @@
 M4.10 adds an exact Graph-input edit that replaces one nested expression
 subtree without rebuilding its enclosing assignment, condition, initializer,
 return value, or invocation. The standalone and transaction protocols are
-`unifiedscript.patch/v0.13` and `unifiedscript.patch-plan/v0.14`.
+`unifiedscript.patch/v0.14` and `unifiedscript.patch-plan/v0.15`.
 
 The operation uses the same input-port vocabulary already emitted by the Graph
 projector. It therefore models a visual connection change directly instead of
@@ -47,12 +47,15 @@ The first slice accepts these canonical Graph data-input names:
 | conditional | `condition` | Boolean selector |
 | conditional | `whenTrue` | selected-when-true arm |
 | conditional | `whenFalse` | selected-when-false arm |
+| conditional access | `receiver` | always-evaluated receiver |
 | resolved positional invocation | `arg0`, `arg1`, ... | corresponding argument |
 
 `argN` is zero-based and canonical. Spellings such as `arg01`, negative
-indices, missing indices, and out-of-range arguments are rejected. Member
-receivers, invocation targets, assignment targets/values, await operands, and
-mutation operands are deliberately excluded from this slice.
+indices, missing indices, and out-of-range arguments are rejected. Ordinary
+member receivers, conditional `whenNotNull` bindings, invocation targets,
+assignment targets/values, await operands, and mutation operands are
+deliberately excluded. M4.15 exposes only the receiver owned by a first-class
+conditional-access node.
 
 The parent expression is `targetNodeId`; the old child connected to the chosen
 port is `expectedInputNodeId`. Both IDs are required. This makes a stale visual
@@ -79,7 +82,8 @@ string substitution is accepted at the patch boundary.
 
 ## Scope, dominance, and effects
 
-`newInput` uses the existing literal/local/unary/binary/cast/conditional algebra. Every
+`newInput` uses the existing
+literal/local/unary/binary/cast/conditional/conditional-member-access algebra. Every
 ordinary or produced local reference therefore reuses the normal checks:
 
 - same method;
@@ -197,11 +201,12 @@ handle rather than replaying an external old-value precondition. Multiple ports
 on the same existing baseline parent must still be edited against freshly
 analyzed sequential baselines.
 
-Member/indexer receivers, invocation targets, assignments, mutation, await,
-conditional access, lambdas, object construction,
+Ordinary member/indexer receivers, conditional-access `whenNotNull` bindings,
+invocation targets, assignments, mutation, await, lambdas, object construction,
 and arbitrary call construction remain outside the editable input set.
 Produced-expression paths are intentionally limited to binary `left`/`right`,
-unary/cast `operand`, and conditional `condition`/`whenTrue`/`whenFalse` shapes
+unary/cast `operand`, conditional `condition`/`whenTrue`/`whenFalse`, and
+conditional-member-access `receiver` shapes
 constructible by the current patch-expression algebra; broadening that algebra
 or admitting effectful rewrites remains future work. See
 [CONDITIONAL_EXPRESSIONS.md](CONDITIONAL_EXPRESSIONS.md) for lazy-arm safety.

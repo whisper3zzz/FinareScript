@@ -98,6 +98,16 @@ internal static class HirIdentityRewriter
                 Id = GetId(member, identities),
                 Target = RewriteExpression(member.Target, identities),
             },
+            HirConditionalAccessExpression conditionalAccess => conditionalAccess with
+            {
+                Id = GetId(conditionalAccess, identities),
+                Receiver = RewriteExpression(conditionalAccess.Receiver, identities),
+                WhenNotNull = RewriteExpression(conditionalAccess.WhenNotNull, identities),
+            },
+            HirConditionalMemberBindingExpression memberBinding => memberBinding with
+            {
+                Id = GetId(memberBinding, identities),
+            },
             HirInvocationExpression invocation => invocation with
             {
                 Id = GetId(invocation, identities),

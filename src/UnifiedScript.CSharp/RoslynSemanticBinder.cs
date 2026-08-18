@@ -88,6 +88,7 @@ public sealed class RoslynSemanticBinder
         ValidateConditionalExpressions(hir, diagnostics);
         ValidateShortCircuitExpressions(hir, diagnostics);
         ValidateCoalesceExpressions(hir, diagnostics);
+        ValidateConditionalAccessExpressions(hir, diagnostics);
 
         var bound = new BoundCompilation(
             BoundCompilation.CurrentSchemaVersion,
@@ -325,6 +326,61 @@ public sealed class RoslynSemanticBinder
                 "explicit control flow.",
                 effectfulRightNode.Span,
                 effectfulRightNode.Id));
+        }
+    }
+
+    private void ValidateConditionalAccessExpressions(
+        HirCompilationUnit hir,
+        ICollection<UnifiedDiagnostic> diagnostics)
+    {
+        var reportedEffectNodes = new HashSet<SemanticId>();
+        foreach (HirConditionalAccessExpression conditionalAccess in hir
+                     .DescendantsAndSelf()
+                     .OfType<HirConditionalAccessExpression>())
+        {
+            TypeDescriptor? receiverType = GetBoundType(conditionalAccess.Receiver);
+            TypeDescriptor? whenNotNullType = GetBoundType(conditionalAccess.WhenNotNull);
+            TypeDescriptor? resultType = GetBoundType(conditionalAccess);
+            if (receiverType is null ||
+                whenNotNullType is null ||
+                resultType is null ||
+                !receiverType.IsGraphSafe ||
+                !whenNotNullType.IsGraphSafe ||
+                !resultType.IsGraphSafe ||
+                resultType.Kind == UnifiedTypeKind.Void ||
+                resultType.Nullability != UnifiedNullability.Nullable ||
+                whenNotNullType.Kind != resultType.Kind ||
+                !string.Equals(
+                    whenNotNullType.MetadataName.TrimEnd('?'),
+                    resultType.MetadataName.TrimEnd('?'),
+                    StringComparison.Ordinal))
+            {
+                diagnostics.Add(new UnifiedDiagnostic(
+                    SemanticDiagnosticCodes.ConditionalAccessTypeShapeNotSupported,
+                    UnifiedDiagnosticSeverity.Error,
+                    "Null-conditional access in the Visual Profile requires graph-safe receiver, " +
+                    "selected, and nullable result types whose selected/result metadata types " +
+                    "differ only by nullability. Void and hidden conversion shapes are not yet " +
+                    "serialized for shared VM execution.",
+                    conditionalAccess.Span,
+                    conditionalAccess.Id));
+            }
+
+            HirExpression? effectfulNode = FindEffectfulExpression(
+                [conditionalAccess.WhenNotNull]);
+            if (effectfulNode is null || !reportedEffectNodes.Add(effectfulNode.Id))
+            {
+                continue;
+            }
+
+            diagnostics.Add(new UnifiedDiagnostic(
+                SemanticDiagnosticCodes.ConditionalAccessEffectsNotSupported,
+                UnifiedDiagnosticSeverity.Error,
+                "The conditionally evaluated portion of '?.' must be effect-free so Graph can " +
+                "preserve C# null-conditional evaluation. Move mutation, await, or effectful " +
+                "calls into explicit control flow.",
+                effectfulNode.Span,
+                effectfulNode.Id));
         }
     }
 
@@ -643,6 +699,8 @@ public sealed class RoslynSemanticBinder
         IEnumerable<HirExpression> children = expression switch
         {
             HirMemberAccessExpression member => [member.Target],
+            HirConditionalAccessExpression conditionalAccess =>
+                [conditionalAccess.Receiver, conditionalAccess.WhenNotNull],
             HirInvocationExpression invocation => [invocation.Target, .. invocation.Arguments],
             HirBinaryExpression binary => [binary.Left, binary.Right],
             HirUnaryExpression unary => [unary.Operand],

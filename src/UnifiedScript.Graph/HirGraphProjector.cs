@@ -528,7 +528,10 @@ public sealed class HirGraphProjector
             return [];
         }
 
-        private ExpressionProjection ProjectExpression(HirExpression expression, SemanticId regionId)
+        private ExpressionProjection ProjectExpression(
+            HirExpression expression,
+            SemanticId regionId,
+            ValueEndpoint? conditionalReceiver = null)
         {
             ValueEndpoint? value = new(expression.Id, "value");
             IReadOnlyList<SemanticId> effects = [];
@@ -557,7 +560,10 @@ public sealed class HirGraphProjector
                     break;
                 case HirMemberAccessExpression member:
                     {
-                        ExpressionProjection target = ProjectExpression(member.Target, regionId);
+                        ExpressionProjection target = ProjectExpression(
+                            member.Target,
+                            regionId,
+                            conditionalReceiver);
                         AddNode(ValueNode(
                             member,
                             "memberAccess",
@@ -569,11 +575,100 @@ public sealed class HirGraphProjector
                         effects = target.Effects;
                         break;
                     }
+                case HirConditionalAccessExpression conditionalAccess:
+                    {
+                        ExpressionProjection receiver = ProjectExpression(
+                            conditionalAccess.Receiver,
+                            regionId,
+                            conditionalReceiver);
+                        if (receiver.Value is null)
+                        {
+                            throw new InvalidOperationException(
+                                "A conditional-access receiver must produce a Graph value.");
+                        }
+
+                        ExpressionProjection whenNotNull = ProjectExpression(
+                            conditionalAccess.WhenNotNull,
+                            regionId,
+                            receiver.Value);
+                        if (whenNotNull.Effects.Count > 0)
+                        {
+                            throw new InvalidOperationException(
+                                "Conditional-access Graph branches must be effect-free to preserve " +
+                                "null-conditional evaluation.");
+                        }
+
+                        AddNode(ValueNode(
+                            conditionalAccess,
+                            "conditionalAccess",
+                            "?.",
+                            KeyValuePair.Create("evaluation", "conditionalWhenNotNull"),
+                            [
+                                new GraphPort(
+                                    "receiver",
+                                    GraphPortDirection.Input,
+                                    GraphPortKind.Data),
+                                new GraphPort(
+                                    "whenNotNull",
+                                    GraphPortDirection.Input,
+                                    GraphPortKind.Data),
+                            ],
+                            additionalProperties:
+                            [
+                                KeyValuePair.Create(
+                                    "whenNotNullEvaluation",
+                                    "whenReceiverNonNull"),
+                                KeyValuePair.Create(
+                                    "resultSelection",
+                                    "whenNotNullOrNull"),
+                            ]),
+                            regionId);
+                        AddRequiredDataEdge(
+                            receiver.Value,
+                            new ValueEndpoint(conditionalAccess.Id, "receiver"));
+                        AddRequiredDataEdge(
+                            whenNotNull.Value,
+                            new ValueEndpoint(conditionalAccess.Id, "whenNotNull"));
+                        effects = receiver.Effects;
+                        break;
+                    }
+                case HirConditionalMemberBindingExpression memberBinding:
+                    {
+                        if (conditionalReceiver is null)
+                        {
+                            throw new InvalidOperationException(
+                                "A conditional member binding requires its enclosing receiver.");
+                        }
+
+                        AddNode(ValueNode(
+                            memberBinding,
+                            "conditionalMemberBinding",
+                            memberBinding.MemberName,
+                            KeyValuePair.Create("member", memberBinding.MemberName),
+                            [new GraphPort(
+                                "target",
+                                GraphPortDirection.Input,
+                                GraphPortKind.Data)]),
+                            regionId);
+                        AddEdge(
+                            GraphEdgeKind.Data,
+                            conditionalReceiver.NodeId,
+                            conditionalReceiver.Port,
+                            memberBinding.Id,
+                            "target");
+                        break;
+                    }
                 case HirInvocationExpression invocation:
                     {
-                        ExpressionProjection target = ProjectExpression(invocation.Target, regionId);
+                        ExpressionProjection target = ProjectExpression(
+                            invocation.Target,
+                            regionId,
+                            conditionalReceiver);
                         ExpressionProjection[] arguments = invocation.Arguments
-                            .Select(argument => ProjectExpression(argument, regionId))
+                            .Select(argument => ProjectExpression(
+                                argument,
+                                regionId,
+                                conditionalReceiver))
                             .ToArray();
                         bool isEffectful = semantics.IsEffectful(invocation.Id);
                         bool hasValue = !semantics.IsVoid(invocation.Id);
@@ -612,8 +707,14 @@ public sealed class HirGraphProjector
                     }
                 case HirBinaryExpression binary:
                     {
-                        ExpressionProjection left = ProjectExpression(binary.Left, regionId);
-                        ExpressionProjection right = ProjectExpression(binary.Right, regionId);
+                        ExpressionProjection left = ProjectExpression(
+                            binary.Left,
+                            regionId,
+                            conditionalReceiver);
+                        ExpressionProjection right = ProjectExpression(
+                            binary.Right,
+                            regionId,
+                            conditionalReceiver);
                         IReadOnlyList<KeyValuePair<string, string>> evaluationProperties =
                             binary.Operator switch
                             {
@@ -663,7 +764,10 @@ public sealed class HirGraphProjector
                     }
                 case HirUnaryExpression unary:
                     {
-                        ExpressionProjection operand = ProjectExpression(unary.Operand, regionId);
+                        ExpressionProjection operand = ProjectExpression(
+                            unary.Operand,
+                            regionId,
+                            conditionalReceiver);
                         AddNode(ValueNode(
                             unary,
                             "unary",
@@ -677,8 +781,14 @@ public sealed class HirGraphProjector
                     }
                 case HirAssignmentExpression assignment:
                     {
-                        ExpressionProjection target = ProjectExpression(assignment.Target, regionId);
-                        ExpressionProjection assignedValue = ProjectExpression(assignment.Value, regionId);
+                        ExpressionProjection target = ProjectExpression(
+                            assignment.Target,
+                            regionId,
+                            conditionalReceiver);
+                        ExpressionProjection assignedValue = ProjectExpression(
+                            assignment.Value,
+                            regionId,
+                            conditionalReceiver);
                         AddNode(ValueNode(
                             assignment,
                             "assignment",
@@ -698,7 +808,10 @@ public sealed class HirGraphProjector
                     }
                 case HirAwaitExpression awaitExpression:
                     {
-                        ExpressionProjection operand = ProjectExpression(awaitExpression.Operand, regionId);
+                        ExpressionProjection operand = ProjectExpression(
+                            awaitExpression.Operand,
+                            regionId,
+                            conditionalReceiver);
                         AddNode(ValueNode(
                             awaitExpression,
                             "await",
@@ -716,7 +829,10 @@ public sealed class HirGraphProjector
                     }
                 case HirCastExpression cast:
                     {
-                        ExpressionProjection operand = ProjectExpression(cast.Operand, regionId);
+                        ExpressionProjection operand = ProjectExpression(
+                            cast.Operand,
+                            regionId,
+                            conditionalReceiver);
                         AddNode(ValueNode(
                             cast,
                             "cast",
@@ -732,13 +848,16 @@ public sealed class HirGraphProjector
                     {
                         ExpressionProjection condition = ProjectExpression(
                             conditional.Condition,
-                            regionId);
+                            regionId,
+                            conditionalReceiver);
                         ExpressionProjection whenTrue = ProjectExpression(
                             conditional.WhenTrue,
-                            regionId);
+                            regionId,
+                            conditionalReceiver);
                         ExpressionProjection whenFalse = ProjectExpression(
                             conditional.WhenFalse,
-                            regionId);
+                            regionId,
+                            conditionalReceiver);
                         if (whenTrue.Effects.Count > 0 || whenFalse.Effects.Count > 0)
                         {
                             throw new InvalidOperationException(

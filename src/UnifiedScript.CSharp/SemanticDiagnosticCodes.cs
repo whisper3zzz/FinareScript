@@ -7,4 +7,6 @@ public static class SemanticDiagnosticCodes
     public const string ShortCircuitRightEffectsNotSupported = "UVS2003";
     public const string CoalesceRightEffectsNotSupported = "UVS2004";
     public const string CoalesceConversionNotSupported = "UVS2005";
+    public const string ConditionalAccessEffectsNotSupported = "UVS2006";
+    public const string ConditionalAccessTypeShapeNotSupported = "UVS2007";
 }

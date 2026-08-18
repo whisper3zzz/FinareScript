@@ -193,6 +193,17 @@ public sealed class CSharpToHirLowerer
                 RoslynSourceSpan.FromNode(member, filePath),
                 LowerExpression(member.Expression, filePath, ownerKey),
                 member.Name.Identifier.ValueText),
+            ConditionalAccessExpressionSyntax conditionalAccess =>
+                new HirConditionalAccessExpression(
+                    CSharpSemanticIds.ForNode(filePath, ownerKey, conditionalAccess),
+                    RoslynSourceSpan.FromNode(conditionalAccess, filePath),
+                    LowerExpression(conditionalAccess.Expression, filePath, ownerKey),
+                    LowerExpression(conditionalAccess.WhenNotNull, filePath, ownerKey)),
+            MemberBindingExpressionSyntax memberBinding =>
+                new HirConditionalMemberBindingExpression(
+                    CSharpSemanticIds.ForNode(filePath, ownerKey, memberBinding),
+                    RoslynSourceSpan.FromNode(memberBinding, filePath),
+                    memberBinding.Name.Identifier.ValueText),
             InvocationExpressionSyntax invocation => new HirInvocationExpression(
                 CSharpSemanticIds.ForNode(filePath, ownerKey, invocation),
                 RoslynSourceSpan.FromNode(invocation, filePath),

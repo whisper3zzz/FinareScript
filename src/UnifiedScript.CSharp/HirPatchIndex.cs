@@ -193,6 +193,20 @@ internal sealed class HirPatchIndex
             case HirMemberAccessExpression member:
                 AddExpression(member.Target, containingStatement, parentBlock, method, member);
                 break;
+            case HirConditionalAccessExpression conditionalAccess:
+                AddExpression(
+                    conditionalAccess.Receiver,
+                    containingStatement,
+                    parentBlock,
+                    method,
+                    conditionalAccess);
+                AddExpression(
+                    conditionalAccess.WhenNotNull,
+                    containingStatement,
+                    parentBlock,
+                    method,
+                    conditionalAccess);
+                break;
             case HirInvocationExpression invocation:
                 AddExpression(invocation.Target, containingStatement, parentBlock, method, invocation);
                 foreach (HirExpression argument in invocation.Arguments)

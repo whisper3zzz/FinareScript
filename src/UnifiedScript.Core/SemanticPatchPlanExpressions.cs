@@ -193,6 +193,11 @@ public static class SemanticPatchPlanExpressions
                 WhenTrue = Rewrite(conditional.WhenTrue, resolver),
                 WhenFalse = Rewrite(conditional.WhenFalse, resolver),
             },
+            ConditionalMemberAccessPatchExpression { Receiver: not null } conditionalAccess =>
+                conditionalAccess with
+                {
+                    Receiver = Rewrite(conditionalAccess.Receiver, resolver),
+                },
             _ => expression,
         };
     }
@@ -225,6 +230,9 @@ public static class SemanticPatchPlanExpressions
                 CollectProducedLocalReferences(conditional.Condition, references);
                 CollectProducedLocalReferences(conditional.WhenTrue, references);
                 CollectProducedLocalReferences(conditional.WhenFalse, references);
+                break;
+            case ConditionalMemberAccessPatchExpression { Receiver: not null } conditionalAccess:
+                CollectProducedLocalReferences(conditionalAccess.Receiver, references);
                 break;
         }
     }
