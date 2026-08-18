@@ -5,8 +5,8 @@
 M4.6 closes the first bounded loop round trip. A visual edit can now create an
 ordinary C# `while`, obtain a symbolic handle for its generated body, and
 populate that body with the same typed statements used elsewhere. The result
-is re-lowered into the current HIR v0.4 and projected into the current Graph
-v0.8/CFG loop model; there is no editor-only loop node or second runtime.
+is re-lowered into the current HIR v0.5 and projected into the current Graph
+v0.9/CFG loop model; there is no editor-only loop node or second runtime.
 
 This is structured construction, not arbitrary cyclic edge rewiring. The
 patch describes a `while` and ordered body statements. The compiler owns the
@@ -184,7 +184,7 @@ condition through a produced-while handle; see
 expression cannot yet reference a newly inserted local through a symbolic value handle. The
 implementation does not prove loop termination or constant-fold conditions.
 
-`do`, `for`, `foreach`, arbitrary cyclic Graph rewiring, compound assignment,
-increment/decrement, effectful authored expressions, exception flow,
+`do`, `foreach`, whole-`for` construction/restructuring, arbitrary cyclic Graph
+rewiring, compound assignment, increment/decrement payloads, effectful authored expressions, exception flow,
 short-circuit expression CFG expansion, async state-machine flow, and automatic
 node placement remain later slices.

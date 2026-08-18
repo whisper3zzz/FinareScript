@@ -68,6 +68,23 @@ internal static class HirIdentityRewriter
                 Condition = RewriteExpression(whileStatement.Condition, identities),
                 Body = RewriteBlock(whileStatement.Body, identities),
             },
+            HirForStatement forStatement => forStatement with
+            {
+                Id = GetId(forStatement, identities),
+                Declaration = forStatement.Declaration is null
+                    ? null
+                    : RewriteForDeclaration(forStatement.Declaration, identities),
+                Initializers = forStatement.Initializers
+                    .Select(initializer => RewriteExpression(initializer, identities))
+                    .ToArray(),
+                Condition = forStatement.Condition is null
+                    ? null
+                    : RewriteExpression(forStatement.Condition, identities),
+                Incrementors = forStatement.Incrementors
+                    .Select(incrementor => RewriteExpression(incrementor, identities))
+                    .ToArray(),
+                Body = RewriteBlock(forStatement.Body, identities),
+            },
             HirBreakStatement breakStatement => breakStatement with
             {
                 Id = GetId(breakStatement, identities),
@@ -84,6 +101,20 @@ internal static class HirIdentityRewriter
                     : RewriteExpression(returnStatement.Expression, identities),
             },
             _ => throw new ArgumentOutOfRangeException(nameof(statement), statement.GetType().Name),
+        };
+
+    private static HirForVariableDeclaration RewriteForDeclaration(
+        HirForVariableDeclaration declaration,
+        IReadOnlyDictionary<SemanticId, SemanticId> identities) => declaration with
+        {
+            Id = GetId(declaration, identities),
+            Variables = declaration.Variables.Select(variable => variable with
+            {
+                Id = GetId(variable, identities),
+                Initializer = variable.Initializer is null
+                    ? null
+                    : RewriteExpression(variable.Initializer, identities),
+            }).ToArray(),
         };
 
     private static HirExpression RewriteExpression(

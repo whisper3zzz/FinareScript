@@ -49,17 +49,20 @@ The repository currently implements:
   `operand`, and positional `argN` ports emitted by Graph;
 - transaction expression handles that let later stages traverse and edit trees
   authored by earlier stages without predicting generated semantic IDs;
-- first-class conditional (`?:`) expressions across HIR v0.4 and Graph v0.8,
+- first-class conditional (`?:`) expressions across HIR v0.5 and Graph v0.9,
   with lazy-branch safety, typed source synthesis, canonical branch ports, and
   generated-tree handle traversal;
-- explicit `&&`/`||` right-side evaluation conditions in Graph v0.8, with
+- explicit `&&`/`||` right-side evaluation conditions in Graph v0.9, with
   always-evaluated left effects and `UVS2003` rejection of conditional right
   effects;
-- null-coalescing (`??`) across text, HIR, Graph v0.8, exact visual
+- null-coalescing (`??`) across text, HIR, Graph v0.9, exact visual
   construction, and produced-expression editing, with `UVS2004` effect safety;
-- null-conditional member access (`?.`) across HIR v0.4 and Graph v0.8, with
+- null-conditional member access (`?.`) across HIR v0.5 and Graph v0.9, with
   explicit single receiver evaluation, lifted nullable results, `UVS2006`/`UVS2007`
   safety, bounded visual construction, and exact receiver editing;
+- lossless text-authored `for` loops across HIR v0.5 and Graph v0.9, with
+  declaration/expression initializers, optional conditions, ordered incrementors,
+  prefix/postfix mutation identity, and CFG-validated continue-to-increment routing;
 - opt-in `.usids` sidecars that preserve node identity across formatting and edits;
 - semantic-independent `.usgraph` layout sidecars with deterministic positions,
   sizes, collapsed state, comment regions, routing hints, and orphan recovery;
@@ -169,9 +172,10 @@ Without `--out`, the graph JSON is written to stdout.
 
 ### Analyze structured regions
 
-Graph v0.8 assigns every node to exactly one semantic region and preserves
+Graph v0.9 assigns every node to exactly one semantic region and preserves
 function, block, `if`, `then`, explicit/implicit `else`, `loop`, and `loopBody`
-nesting. Generate the early-return example with:
+nesting, plus explicit `loopInitializer` and `loopIncrement` phases for `for`.
+Generate the early-return example with:
 
 ```bash
 dotnet run --project src/UnifiedScript.Cli -- \
@@ -204,13 +208,40 @@ dotnet run --project src/UnifiedScript.Cli -- \
   --out artifacts/loops
 ```
 
-HIR v0.4 emits explicit while/break/continue statements. Graph v0.8 emits a
+HIR v0.5 emits explicit while/break/continue statements. Graph v0.9 emits a
 `loop` region with one `loopBody` child, and derived CFG facts identify the
 effective condition header, body entry, exit successor, back-edge arcs, and
 break/continue nodes owned by the nearest loop. Effectful conditions route all
 continues and normal fallthrough back through their first effect so the
 condition is reevaluated each iteration. See
 [Structured Loop Foundation](docs/LOOP_FOUNDATION.md).
+
+### Analyze lossless for loops
+
+M4.16 admits text-authored `for` without rewriting it into `while`. HIR v0.5
+keeps a declaration initializer or ordered expression initializers, the optional
+condition, ordered incrementors, and body as separate fields. Unary HIR also
+records prefix versus postfix position, so `index++` cannot silently become
+`++index` during a source/visual round trip.
+
+Graph v0.9 gives every `for` loop three ordered child regions:
+`loopInitializer`, `loopBody`, and `loopIncrement`. The loop node records
+`evaluationOrder: initializer,condition,body,incrementors`; normal body
+fallthrough and `continue` enter the increment region, while completed
+incrementors return to the effective condition header. Initializer execution is
+outside the cyclic component and therefore occurs exactly once.
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  analyze samples/Loops/ForRules.cs \
+  --out artifacts/for-loops
+```
+
+The sample covers a declaration initializer with postfix increment and an
+effectful initializer/incrementor loop with `break` and `continue`. Whole-loop
+visual construction remains deliberately unavailable: the existing bounded
+payload describes `while` only and cannot represent all `for` phases without
+loss. See [Lossless For Loops](docs/FOR_LOOPS.md).
 
 ## Analyze multiple source files
 
@@ -273,7 +304,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
 ```
 
 `unifiedscript.patch/v0.14` binds every patch to both the source compilation ID
-and semantic configuration ID emitted in Graph schema v0.8. A `replaceLiteral`
+and semantic configuration ID emitted in current Graph schema v0.9. A `replaceLiteral`
 operation also carries the expected old literal text. A stale source, changed
 reference/effect configuration, missing target, changed old value, non-literal
 replacement, or semantically invalid result rejects the entire patch and writes
@@ -744,7 +775,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
 The editor supplies only the original method-body anchor and backward symbolic
 producer references. The coordinator resolves the generated while/body/branch
 IDs after each reanalysis. The final ordinary C# loop reprojects into the same
-HIR v0.4, Graph v0.8 regions, and nearest-loop CFG facts as a text-authored
+HIR v0.5, Graph v0.9 regions, and nearest-loop CFG facts as a text-authored
 loop. See [LOOP_PATCHING.md](docs/LOOP_PATCHING.md).
 
 ### Edit assignment values and loop conditions
@@ -904,7 +935,7 @@ identity, tombstone, and Graph-edge behavior stay on one code path. See
 ### Author and edit a conditional expression
 
 M4.12 adds `condition ? whenTrue : whenFalse` as a first-class expression in
-HIR v0.4, current Graph v0.8, patch v0.14, and patch-plan v0.15. Graph emits one
+current HIR v0.5, Graph v0.9, patch v0.14, and patch-plan v0.15. Graph emits one
 `conditional`/`Select` node with `condition`, `whenTrue`, and `whenFalse` data
 inputs, a `value` output, and `evaluation: lazyBranches`. Text lowering keeps
 the original expression shape; it does not turn the expression into a call or
@@ -939,7 +970,7 @@ input edit. See
 
 M4.13 makes the evaluation order of `&&` and `||` machine-readable. Their
 existing binary nodes retain `left`, `right`, and `value` data ports while
-Graph v0.6 introduced `evaluation: shortCircuitRight`; current Graph v0.8
+Graph v0.6 introduced `evaluation: shortCircuitRight`; current Graph v0.9
 retains it. `rightEvaluation` is
 `whenLeftTrue` for `&&` and `whenLeftFalse` for `||`. Ordinary `&` and `|`
 remain eager binary operators.
@@ -964,8 +995,8 @@ Graph and effect-safety contract.
 ### Analyze and edit null-coalescing expressions
 
 M4.14 admits `left ?? right` without desugaring it into an eager call or a
-Boolean conditional. HIR retains the ordered binary expression. Graph v0.8
-adds `rightEvaluation: whenLeftNull` and
+Boolean conditional. HIR retains the ordered binary expression. Graph v0.7
+introduced `rightEvaluation: whenLeftNull`; current Graph v0.9 retains it and
 `resultSelection: leftNonNullOrRight`, so a visual runtime or shared VM can
 preserve both evaluation and value selection directly.
 
@@ -992,8 +1023,9 @@ the same coalescing tree. See
 ### Analyze and edit null-conditional access
 
 M4.15 admits `receiver?.Member` without flattening its implicit receiver into
-an ordinary eager member read. HIR v0.4 preserves both the full conditional
-access and its conditional member binding. Graph v0.8 emits
+an ordinary eager member read. Current HIR v0.5 preserves both the full conditional
+access and its conditional member binding. Graph v0.8 introduced, and current
+Graph v0.9 retains,
 `evaluation: conditionalWhenNotNull`,
 `whenNotNullEvaluation: whenReceiverNonNull`, and
 `resultSelection: whenNotNullOrNull`. It also connects the receiver value to
@@ -1088,9 +1120,11 @@ This milestone does not include:
   reconnection, and atomic composition of the current patch operations;
 - automatic graph placement, layout merge drivers, and editor viewport/session
   state;
-- `do`/`for`/`foreach`, switch, lambdas, exceptions, or general-purpose C#
-  visualization;
-- arbitrary loop restructuring, transfer retargeting, or existing-loop editing.
+- `do`/`foreach`, switch, lambdas, exceptions, or general-purpose C#
+  visualization; text-authored `for` is represented losslessly, but whole-loop
+  visual construction and clause restructuring remain outside the bounded patch API;
+- moving/deleting loops, arbitrary loop restructuring, transfer retargeting, or
+  whole-`for` clause construction/replacement.
 
 See [ARCHITECTURE.md](docs/ARCHITECTURE.md),
 [IDENTITY_SIDECAR.md](docs/IDENTITY_SIDECAR.md),
@@ -1099,6 +1133,7 @@ See [ARCHITECTURE.md](docs/ARCHITECTURE.md),
 [LOCAL_ASSIGNMENT_PATCHING.md](docs/LOCAL_ASSIGNMENT_PATCHING.md),
 [NESTED_BRANCH_PATCHING.md](docs/NESTED_BRANCH_PATCHING.md),
 [LOOP_FOUNDATION.md](docs/LOOP_FOUNDATION.md),
+[FOR_LOOPS.md](docs/FOR_LOOPS.md),
 [LOOP_PATCHING.md](docs/LOOP_PATCHING.md),
 [CONDITIONAL_EXPRESSIONS.md](docs/CONDITIONAL_EXPRESSIONS.md),
 [PATCH_PLAN.md](docs/PATCH_PLAN.md),

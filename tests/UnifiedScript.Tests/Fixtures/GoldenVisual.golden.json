@@ -3,8 +3,8 @@
   "sourcePath": "tests/UnifiedScript.Tests/Fixtures/GoldenVisual.cs",
   "artifacts": {
     "hir": {
-      "schemaVersion": "unifiedscript.hir/v0.4",
-      "sha256": "a9608440d4d090700e6abc2b6bd65d82e06190bb1d613ea85d64214cce80be36",
+      "schemaVersion": "unifiedscript.hir/v0.5",
+      "sha256": "1c3c76d4094a75d2b7aa1c21ddac6860b1a692fa8dacd05814204104291749ce",
       "utf8Bytes": 5284
     },
     "semantics": {
@@ -13,8 +13,8 @@
       "utf8Bytes": 3459
     },
     "graph": {
-      "schemaVersion": "unifiedscript.graph/v0.8",
-      "sha256": "9d609f48767369944a610dc2adc0a45696a068ae0aa3285a5cee53f1e60ac3f0",
+      "schemaVersion": "unifiedscript.graph/v0.9",
+      "sha256": "b0b0ddb79585445a18f97786bdec7a4585e770c3513538983f920ab560cf2304",
       "utf8Bytes": 7471
     }
   }

@@ -139,6 +139,7 @@ public sealed class CSharpToHirLowerer
                 RoslynSourceSpan.FromNode(whileStatement, filePath),
                 LowerExpression(whileStatement.Condition, filePath, ownerKey),
                 LowerAsBlock(whileStatement.Statement, filePath, ownerKey)),
+            ForStatementSyntax forStatement => LowerFor(forStatement, filePath, ownerKey),
             BreakStatementSyntax breakStatement => new HirBreakStatement(
                 CSharpSemanticIds.ForNode(filePath, ownerKey, breakStatement),
                 RoslynSourceSpan.FromNode(breakStatement, filePath)),
@@ -157,6 +158,42 @@ public sealed class CSharpToHirLowerer
                 []),
             _ => throw new InvalidOperationException($"Profile validator admitted unsupported statement {statement.Kind()}.")
         };
+
+    private static HirForStatement LowerFor(
+        ForStatementSyntax statement,
+        string filePath,
+        string ownerKey) => new(
+            CSharpSemanticIds.ForNode(filePath, ownerKey, statement),
+            RoslynSourceSpan.FromNode(statement, filePath),
+            statement.Declaration is null
+                ? null
+                : LowerForDeclaration(statement.Declaration, filePath, ownerKey),
+            statement.Initializers
+                .Select(initializer => LowerExpression(initializer, filePath, ownerKey))
+                .ToArray(),
+            statement.Condition is null
+                ? null
+                : LowerExpression(statement.Condition, filePath, ownerKey),
+            statement.Incrementors
+                .Select(incrementor => LowerExpression(incrementor, filePath, ownerKey))
+                .ToArray(),
+            LowerAsBlock(statement.Statement, filePath, ownerKey));
+
+    private static HirForVariableDeclaration LowerForDeclaration(
+        VariableDeclarationSyntax declaration,
+        string filePath,
+        string ownerKey) => new(
+            CSharpSemanticIds.ForNode(filePath, ownerKey, declaration),
+            RoslynSourceSpan.FromNode(declaration, filePath),
+            declaration.Type.ToString(),
+            declaration.Variables.Select(variable => new HirForVariableDeclarator(
+                CSharpSemanticIds.ForNode(filePath, ownerKey, variable),
+                RoslynSourceSpan.FromNode(variable, filePath),
+                variable.Identifier.ValueText,
+                variable.Initializer is null
+                    ? null
+                    : LowerExpression(variable.Initializer.Value, filePath, ownerKey)))
+                .ToArray());
 
     private static HirVariableDeclarationStatement LowerLocal(
         LocalDeclarationStatementSyntax local,
@@ -222,6 +259,12 @@ public sealed class CSharpToHirLowerer
                 RoslynSourceSpan.FromNode(unary, filePath),
                 unary.OperatorToken.Text,
                 LowerExpression(unary.Operand, filePath, ownerKey)),
+            PostfixUnaryExpressionSyntax unary => new HirUnaryExpression(
+                CSharpSemanticIds.ForNode(filePath, ownerKey, unary),
+                RoslynSourceSpan.FromNode(unary, filePath),
+                unary.OperatorToken.Text,
+                LowerExpression(unary.Operand, filePath, ownerKey),
+                IsPostfix: true),
             ParenthesizedExpressionSyntax parenthesized =>
                 LowerExpression(parenthesized.Expression, filePath, ownerKey),
             AssignmentExpressionSyntax assignment => new HirAssignmentExpression(

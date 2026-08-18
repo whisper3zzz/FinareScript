@@ -329,6 +329,80 @@ public sealed class CSharpIdentityReconcilerTests
         Assert.Empty(Assert.Single(formatted.IdentitySidecars).Tombstones);
     }
 
+    [Fact]
+    public void Analyze_PreservesForClauseIdentitiesAcrossFormattingChanges()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int Run(int count)
+                {
+                    for (int i = 0; i < count; i++)
+                    {
+                        if (i == 2)
+                        {
+                            continue;
+                        }
+                    }
+
+                    return count;
+                }
+            }
+            """;
+        const string changed = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int Run(int count)
+                {
+                    // Clause formatting cannot recreate the visual loop.
+                    for ( int i=0 ; i < count ; i++ )
+                    {
+                        if (i == 2) { continue; }
+                    }
+
+                    return count;
+                }
+            }
+            """;
+        CSharpAnalysisResult initial = AnalyzeWithIdentity(
+            source,
+            IdentitySidecarDocument.CreateEmpty(Path));
+        HirForStatement initialLoop = Assert.Single(
+            initial.Hir!.DescendantsAndSelf().OfType<HirForStatement>());
+        HirForVariableDeclaration initialDeclaration = Assert.IsType<HirForVariableDeclaration>(
+            initialLoop.Declaration);
+        HirForVariableDeclarator initialVariable = Assert.Single(initialDeclaration.Variables);
+        HirUnaryExpression initialIncrement = Assert.IsType<HirUnaryExpression>(
+            Assert.Single(initialLoop.Incrementors));
+
+        CSharpAnalysisResult formatted = AnalyzeWithIdentity(
+            changed,
+            Assert.Single(initial.IdentitySidecars));
+        HirForStatement formattedLoop = Assert.Single(
+            formatted.Hir!.DescendantsAndSelf().OfType<HirForStatement>());
+        HirForVariableDeclaration formattedDeclaration = Assert.IsType<HirForVariableDeclaration>(
+            formattedLoop.Declaration);
+        HirForVariableDeclarator formattedVariable = Assert.Single(formattedDeclaration.Variables);
+        HirUnaryExpression formattedIncrement = Assert.IsType<HirUnaryExpression>(
+            Assert.Single(formattedLoop.Incrementors));
+
+        Assert.Equal(initialLoop.Id, formattedLoop.Id);
+        Assert.Equal(initialDeclaration.Id, formattedDeclaration.Id);
+        Assert.Equal(initialVariable.Id, formattedVariable.Id);
+        Assert.Equal(initialIncrement.Id, formattedIncrement.Id);
+        IdentitySidecarDocument sidecar = Assert.Single(formatted.IdentitySidecars);
+        Assert.Contains(sidecar.Entries, static entry => entry.Kind == "for");
+        Assert.Contains(sidecar.Entries, static entry => entry.Kind == "forVariableDeclaration");
+        Assert.Contains(sidecar.Entries, static entry => entry.Kind == "forVariable");
+        Assert.Empty(sidecar.Tombstones);
+    }
+
     private const string Path = "Game/Calculator.cs";
 
     private static CSharpAnalysisResult AnalyzeWithIdentity(

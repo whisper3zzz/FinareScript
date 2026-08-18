@@ -209,7 +209,7 @@ public sealed class CSharpSemanticPipelineTests
             conditionBinding.TypeId!.Value).Kind);
 
         GraphDocument document = new HirGraphProjector().Project(hir, semantics);
-        Assert.Equal("unifiedscript.graph/v0.8", document.SchemaVersion);
+        Assert.Equal("unifiedscript.graph/v0.9", document.SchemaVersion);
         GraphFunction graph = Assert.Single(document.Functions);
         GraphNode select = Assert.Single(graph.Nodes, static node => node.Kind == "conditional");
         Assert.Equal("Select", select.Label);
@@ -309,7 +309,7 @@ public sealed class CSharpSemanticPipelineTests
         HirCompilationUnit hir = Assert.IsType<HirCompilationUnit>(result.Hir);
         BoundCompilation semantics = Assert.IsType<BoundCompilation>(result.Semantics);
         GraphDocument document = new HirGraphProjector().Project(hir, semantics);
-        Assert.Equal("unifiedscript.graph/v0.8", document.SchemaVersion);
+        Assert.Equal("unifiedscript.graph/v0.9", document.SchemaVersion);
         GraphNode[] logicalNodes = document.Functions
             .SelectMany(static function => function.Nodes)
             .Where(static node => node.Kind == "binary" &&
@@ -527,7 +527,7 @@ public sealed class CSharpSemanticPipelineTests
         });
 
         GraphDocument document = new HirGraphProjector().Project(hir, semantics);
-        Assert.Equal("unifiedscript.graph/v0.8", document.SchemaVersion);
+        Assert.Equal("unifiedscript.graph/v0.9", document.SchemaVersion);
         GraphNode[] graphCoalesces = document.Functions
             .SelectMany(static function => function.Nodes)
             .Where(static node => node.Kind == "binary" &&
@@ -719,7 +719,7 @@ public sealed class CSharpSemanticPipelineTests
         Assert.Equal(UnifiedNullability.Nullable, resultType.Nullability);
 
         GraphDocument document = new HirGraphProjector().Project(hir, semantics);
-        Assert.Equal("unifiedscript.graph/v0.8", document.SchemaVersion);
+        Assert.Equal("unifiedscript.graph/v0.9", document.SchemaVersion);
         GraphFunction graph = Assert.Single(document.Functions);
         GraphNode conditionalNode = Assert.Single(
             graph.Nodes,
@@ -840,6 +840,102 @@ public sealed class CSharpSemanticPipelineTests
             static node => Assert.Equal(
                 "whenReceiverNonNull",
                 node.Properties["whenNotNullEvaluation"]));
+    }
+
+    [Fact]
+    public void AnalyzeAndProject_PreservesForPhaseOrderAndContinueIncrementTarget()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int Sum(int count)
+                {
+                    int total = 0;
+                    for (int i = 0; i < count; i++)
+                    {
+                        if (i == 2)
+                        {
+                            continue;
+                        }
+
+                        total = total + i;
+                    }
+
+                    return total;
+                }
+            }
+            """;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(source, "ForPhases.cs");
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        HirCompilationUnit hir = Assert.IsType<HirCompilationUnit>(result.Hir);
+        HirForStatement statement = Assert.Single(hir.DescendantsAndSelf().OfType<HirForStatement>());
+        HirForVariableDeclarator variable = Assert.Single(statement.Declaration!.Variables);
+        HirUnaryExpression increment = Assert.IsType<HirUnaryExpression>(
+            Assert.Single(statement.Incrementors));
+        HirContinueStatement nextIteration = Assert.Single(
+            statement.Body.DescendantsAndSelf().OfType<HirContinueStatement>());
+        HirIdentifierExpression conditionLocal = Assert.IsType<HirIdentifierExpression>(
+            Assert.IsType<HirBinaryExpression>(statement.Condition).Left);
+        Assert.Equal(
+            variable.Id,
+            FindNode(result.Semantics!, conditionLocal.Id).ReferencedSymbolId);
+
+        GraphDocument document = new HirGraphProjector().Project(hir, result.Semantics);
+        Assert.Equal("unifiedscript.graph/v0.9", document.SchemaVersion);
+        GraphFunction graph = Assert.Single(document.Functions);
+        GraphNode loopNode = Assert.Single(graph.Nodes, node => node.Id == statement.Id);
+        GraphNode variableNode = Assert.Single(graph.Nodes, node => node.Id == variable.Id);
+        GraphNode incrementNode = Assert.Single(graph.Nodes, node => node.Id == increment.Id);
+        GraphRegion loopRegion = Assert.Single(graph.Regions, region =>
+            region.Kind == GraphRegionKind.Loop && region.SourceNodeId == statement.Id);
+        GraphRegion initializerRegion = graph.Regions.Single(region =>
+            region.Kind == GraphRegionKind.LoopInitializer &&
+            region.ParentRegionId == loopRegion.Id);
+        GraphRegion bodyRegion = graph.Regions.Single(region =>
+            region.Kind == GraphRegionKind.LoopBody &&
+            region.ParentRegionId == loopRegion.Id);
+        GraphRegion incrementRegion = graph.Regions.Single(region =>
+            region.Kind == GraphRegionKind.LoopIncrement &&
+            region.ParentRegionId == loopRegion.Id);
+
+        Assert.Equal(
+            [initializerRegion.Id, bodyRegion.Id, incrementRegion.Id],
+            loopRegion.ChildRegionIds);
+        Assert.Equal("for", loopNode.Properties["loopForm"]);
+        Assert.Equal("initializer,condition,body,incrementors", loopNode.Properties["evaluationOrder"]);
+        Assert.Equal("incrementors", loopNode.Properties["continueTarget"]);
+        Assert.Equal("forInitializer", variableNode.Properties["declarationContext"]);
+        Assert.Equal("postfix", incrementNode.Properties["position"]);
+        Assert.Contains(incrementNode.Ports, static port =>
+            port.Name == "execIn" && port.Kind == GraphPortKind.Control);
+        Assert.Contains(graph.Edges, edge =>
+            edge.Kind == GraphEdgeKind.Control &&
+            edge.FromNode == variable.Id && edge.FromPort == "then" &&
+            edge.ToNode == statement.Id && edge.ToPort == "in");
+        Assert.Contains(graph.Edges, edge =>
+            edge.Kind == GraphEdgeKind.Control &&
+            edge.FromNode == nextIteration.Id && edge.FromPort == "then" &&
+            edge.ToNode == increment.Id && edge.ToPort == "execIn");
+        Assert.Contains(graph.Edges, edge =>
+            edge.Kind == GraphEdgeKind.Control &&
+            edge.FromNode == increment.Id && edge.FromPort == "execOut" &&
+            edge.ToNode == statement.Id && edge.ToPort == "in");
+
+        GraphControlFlowFunction flowFunction = Assert.Single(
+            new GraphControlFlowAnalyzer().AnalyzeAndValidate(document).Functions);
+        GraphControlFlowLoop flow = Assert.Single(flowFunction.Loops);
+        Assert.Equal(initializerRegion.Id, flow.InitializerRegionId);
+        Assert.Equal(incrementRegion.Id, flow.IncrementRegionId);
+        Assert.Equal(statement.Id, flow.HeaderEntryNodeId);
+        Assert.Equal(increment.Id, flow.ContinueTargetNodeId);
+        Assert.Contains(nextIteration.Id, flow.ContinueNodeIds);
+        Assert.Contains(flow.BackEdgeArcIds, arcId =>
+            flowFunction.Arcs.Single(arc => arc.Id == arcId).FromNodeId == increment.Id);
     }
 
     private static BoundNodeInfo FindNode(BoundCompilation semantics, SemanticId id) =>

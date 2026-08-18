@@ -121,8 +121,13 @@ Outcome: practical gameplay methods are fully visualizable.
 - [x] first-class null-conditional access/member binding with single receiver
   evaluation, lifted result/effect safety, bounded visual construction, and
   exact receiver/produced-handle editing
+- [x] lossless text-authored `for` HIR/Graph projection with explicit
+  initializer/body/increment regions, postfix identity, and correct continue
+  routing through incrementors
+- [ ] dedicated bounded `ForPatchStatement` construction with declaration
+  scope, clause ordering, and continue-target proofs
 - [ ] general data/control rewiring and structural HIR operations
-- [ ] `for` and `foreach`
+- [ ] `foreach` and enumerator/disposal semantics
 - [ ] `switch` and supported patterns
 - [ ] deterministic temporary naming
 

@@ -42,6 +42,7 @@ public sealed record HirParameter(
 [JsonDerivedType(typeof(HirExpressionStatement), "expressionStatement")]
 [JsonDerivedType(typeof(HirIfStatement), "if")]
 [JsonDerivedType(typeof(HirWhileStatement), "while")]
+[JsonDerivedType(typeof(HirForStatement), "for")]
 [JsonDerivedType(typeof(HirBreakStatement), "break")]
 [JsonDerivedType(typeof(HirContinueStatement), "continue")]
 [JsonDerivedType(typeof(HirReturnStatement), "return")]
@@ -76,6 +77,27 @@ public sealed record HirWhileStatement(
     SourceSpan Span,
     HirExpression Condition,
     HirBlockStatement Body) : HirStatement(Id, Span);
+
+public sealed record HirForStatement(
+    SemanticId Id,
+    SourceSpan Span,
+    HirForVariableDeclaration? Declaration,
+    IReadOnlyList<HirExpression> Initializers,
+    HirExpression? Condition,
+    IReadOnlyList<HirExpression> Incrementors,
+    HirBlockStatement Body) : HirStatement(Id, Span);
+
+public sealed record HirForVariableDeclaration(
+    SemanticId Id,
+    SourceSpan Span,
+    string TypeName,
+    IReadOnlyList<HirForVariableDeclarator> Variables) : HirNode(Id, Span);
+
+public sealed record HirForVariableDeclarator(
+    SemanticId Id,
+    SourceSpan Span,
+    string Name,
+    HirExpression? Initializer) : HirNode(Id, Span);
 
 public sealed record HirBreakStatement(
     SemanticId Id,
@@ -154,7 +176,8 @@ public sealed record HirUnaryExpression(
     SemanticId Id,
     SourceSpan Span,
     string Operator,
-    HirExpression Operand) : HirExpression(Id, Span);
+    HirExpression Operand,
+    bool IsPostfix = false) : HirExpression(Id, Span);
 
 public sealed record HirAssignmentExpression(
     SemanticId Id,

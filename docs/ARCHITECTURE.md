@@ -139,7 +139,8 @@ Accepted statement forms:
 - expression statement
 - `if/else`
 - `while`
-- `break` and `continue` inside an enclosing `while`
+- lossless text-authored `for`
+- `break` and `continue` inside an enclosing `while` or `for`
 - `return`
 
 Accepted expression forms:
@@ -148,7 +149,7 @@ Accepted expression forms:
 - `this`
 - member access
 - invocation
-- binary and prefix unary operators
+- binary and prefix unary operators, plus postfix `++`/`--`
 - assignment
 - cast
 - `await`
@@ -156,7 +157,7 @@ Accepted expression forms:
 Explicitly rejected forms include dynamic binding, unsafe code, pointers, goto,
 yield, local functions, lambdas, exception control flow, locks, LINQ query
 syntax, stack allocation, ref/out/in parameters and arguments, generic visual
-methods, `do`/`for`/`foreach`, switch, and all other syntax not listed above.
+methods, `do`/`foreach`, switch, and all other syntax not listed above.
 
 ## Graph semantics
 
@@ -182,6 +183,17 @@ out of their lexical regions. Normal body fallthrough and continue edges return
 to the effective condition header; if the condition contains effects, that
 header is the first effect rather than the final decision node. See
 [LOOP_FOUNDATION.md](LOOP_FOUNDATION.md).
+
+A `for` remains a distinct HIR statement rather than being desugared to
+`while`. HIR v0.5 separately preserves its declaration or expression
+initializers, optional condition, ordered incrementors, and body. Graph v0.9
+owns ordered `loopInitializer`, `loopBody`, and `loopIncrement` child regions.
+Initializer exits enter the effective condition header once; body fallthrough
+and `continue` enter the increment phase; completed incrementors return to the
+condition header. Prefix/postfix unary position is explicit, and `++`/`--`
+nodes carry control ports as mutation effects. Derived loop facts publish a
+separate continue target so CFG validation does not incorrectly route a `for`
+continue like a `while` continue. See [FOR_LOOPS.md](FOR_LOOPS.md).
 
 Regions are not a CFG cache. Control edges remain authoritative for execution;
 M4.2 now derives synthetic exits, predecessor/successor indexes, reachability,
@@ -252,8 +264,8 @@ captured HIR root, and lowers to the existing standalone
 `replaceExpressionInput` operation with real current endpoint IDs. The
 consumer's replacement root is published again, so handles chain without a
 second VM, graph evaluator, or generated-ID prediction scheme.
-HIR v0.4 preserves a conditional expression as one node with condition, true,
-and false children. Graph v0.8 projects that node as a `conditional`/`Select`
+Current HIR v0.5 preserves a conditional expression as one node with condition,
+true, and false children. Graph v0.9 projects that node as a `conditional`/`Select`
 with canonical `condition`, `whenTrue`, and `whenFalse` inputs and an explicit
 `evaluation: lazyBranches` contract. Semantic binding rejects effectful arms so
 the data projection cannot eagerly execute mutation, latency, or effectful
@@ -261,13 +273,13 @@ calls that C# would evaluate only on the selected path. Patch v0.14 and plan
 v0.15 use the same conditional shape in their closed expression algebra and
 allow exact or produced-handle edits through those Graph ports.
 The same HIR already preserves `&&` and `||` as ordered binary nodes. Graph
-v0.8 retains their `shortCircuitRight` contract, with
+v0.9 retains their `shortCircuitRight` contract, with
 `whenLeftTrue`/`whenLeftFalse` selecting the operator-specific condition.
 Always-evaluated left effects stay in the statement control chain. Semantic
 binding rejects effectful right subtrees with `UVS2003` until Graph has a
 conditional effect-subgraph contract. The full boundary is specified in
 [SHORT_CIRCUIT_EXPRESSIONS.md](SHORT_CIRCUIT_EXPRESSIONS.md).
-Null coalescing also remains an ordered binary HIR node. Graph v0.8 marks its
+Null coalescing also remains an ordered binary HIR node. Graph v0.9 marks its
 right input `whenLeftNull` and its result selection `leftNonNullOrRight`.
 Roslyn remains authoritative for candidate text-authored operand/result types;
 `UVS2005` then rejects implicit or user-defined conversions absent from the
@@ -277,7 +289,7 @@ remain in the statement control chain. See
 [NULL_COALESCING_EXPRESSIONS.md](NULL_COALESCING_EXPRESSIONS.md).
 Null-conditional access is a distinct HIR node owning an always-evaluated
 receiver and a conditional `whenNotNull` subtree. A conditional member binding
-keeps the receiver implicit in HIR while Graph v0.8 makes both relationships
+keeps the receiver implicit in HIR while Graph v0.9 makes both relationships
 explicit: the receiver feeds the parent `receiver` input and the binding's
 `target` input. The parent records `conditionalWhenNotNull`,
 `whenReceiverNonNull`, and `whenNotNullOrNull`, so a VM can evaluate once,
@@ -356,7 +368,7 @@ this proof until builtin operator effects include conditional evaluation,
 allocation, and throw behavior.
 
 M4.3 adds a `GraphPatchSafetyIndex` inside the C# patch boundary. It projects
-the same analyzed HIR and bound semantics through Graph v0.8, derives the M4.2
+the same analyzed HIR and bound semantics through Graph v0.9, derives the M4.2
 CFG, and resolves statement entries or region fallthrough sources as insertion
 anchors. A non-empty block whose paths terminate has no fallthrough anchor.
 Local assignment targets and graph-authored local references must satisfy both

@@ -188,6 +188,22 @@ public sealed class RoslynSemanticBinder
                         localType.Id,
                         DeclaredSymbolId: local.Id);
                 }
+
+                foreach (HirForVariableDeclarator local in method.Body
+                             .DescendantsAndSelf()
+                             .OfType<HirForVariableDeclarator>())
+                {
+                    VariableDeclaratorSyntax declarator =
+                        context.SyntaxIndex.Find<VariableDeclaratorSyntax>(local);
+                    ILocalSymbol localSymbol = context.SemanticModel.GetDeclaredSymbol(declarator) as ILocalSymbol ??
+                        throw new InvalidOperationException($"Roslyn did not bind for local '{local.Name}'.");
+                    declaredSymbols[localSymbol] = local.Id;
+                    TypeDescriptor localType = GetTypeDescriptor(localSymbol.Type);
+                    nodes[local.Id] = new BoundNodeInfo(
+                        local.Id,
+                        localType.Id,
+                        DeclaredSymbolId: local.Id);
+                }
             }
         }
     }
@@ -664,6 +680,13 @@ public sealed class RoslynSemanticBinder
                     }
 
                     break;
+                case HirForStatement forStatement:
+                    foreach (HirStatement child in EnumerateStatements(forStatement.Body))
+                    {
+                        yield return child;
+                    }
+
+                    break;
             }
         }
     }
@@ -672,24 +695,53 @@ public sealed class RoslynSemanticBinder
     {
         foreach (HirStatement statement in EnumerateStatements(block))
         {
-            HirExpression? root = statement switch
+            IEnumerable<HirExpression> roots = statement switch
             {
-                HirVariableDeclarationStatement variable => variable.Initializer,
-                HirExpressionStatement expression => expression.Expression,
-                HirIfStatement ifStatement => ifStatement.Condition,
-                HirWhileStatement whileStatement => whileStatement.Condition,
-                HirReturnStatement returnStatement => returnStatement.Expression,
-                _ => null,
+                HirVariableDeclarationStatement { Initializer: not null } variable =>
+                    [variable.Initializer],
+                HirExpressionStatement expression => [expression.Expression],
+                HirIfStatement ifStatement => [ifStatement.Condition],
+                HirWhileStatement whileStatement => [whileStatement.Condition],
+                HirForStatement forStatement => GetForExpressionRoots(forStatement),
+                HirReturnStatement { Expression: not null } returnStatement =>
+                    [returnStatement.Expression],
+                _ => [],
             };
-            if (root is null)
+            foreach (HirExpression root in roots)
             {
-                continue;
+                foreach (HirExpression expression in EnumerateExpressionTree(root))
+                {
+                    yield return expression;
+                }
             }
+        }
+    }
 
-            foreach (HirExpression expression in EnumerateExpressionTree(root))
+    private static IEnumerable<HirExpression> GetForExpressionRoots(HirForStatement statement)
+    {
+        if (statement.Declaration is not null)
+        {
+            foreach (HirExpression initializer in statement.Declaration.Variables
+                         .Where(static variable => variable.Initializer is not null)
+                         .Select(static variable => variable.Initializer!))
             {
-                yield return expression;
+                yield return initializer;
             }
+        }
+
+        foreach (HirExpression initializer in statement.Initializers)
+        {
+            yield return initializer;
+        }
+
+        if (statement.Condition is not null)
+        {
+            yield return statement.Condition;
+        }
+
+        foreach (HirExpression incrementor in statement.Incrementors)
+        {
+            yield return incrementor;
         }
     }
 

@@ -166,6 +166,35 @@ internal sealed class HirPatchIndex
                     AddExpression(whileStatement.Condition, whileStatement, block, method, null);
                     AddBlock(whileStatement.Body, method, block, whileStatement);
                     break;
+                case HirForStatement forStatement:
+                    if (forStatement.Declaration is not null)
+                    {
+                        foreach (HirForVariableDeclarator variable in forStatement.Declaration.Variables)
+                        {
+                            if (variable.Initializer is not null)
+                            {
+                                AddExpression(variable.Initializer, forStatement, block, method, null);
+                            }
+                        }
+                    }
+
+                    foreach (HirExpression initializer in forStatement.Initializers)
+                    {
+                        AddExpression(initializer, forStatement, block, method, null);
+                    }
+
+                    if (forStatement.Condition is not null)
+                    {
+                        AddExpression(forStatement.Condition, forStatement, block, method, null);
+                    }
+
+                    foreach (HirExpression incrementor in forStatement.Incrementors)
+                    {
+                        AddExpression(incrementor, forStatement, block, method, null);
+                    }
+
+                    AddBlock(forStatement.Body, method, block, forStatement);
+                    break;
                 case HirReturnStatement { Expression: not null } returnStatement:
                     AddExpression(returnStatement.Expression, returnStatement, block, method, null);
                     break;

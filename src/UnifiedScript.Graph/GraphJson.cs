@@ -124,10 +124,14 @@ public static class GraphJson
                 throw new JsonException($"Graph function '{function.Id}' has an invalid region.");
             }
 
-            if (region.IsImplicit && region.Kind != GraphRegionKind.Else)
+            if (region.IsImplicit && region.Kind is not (
+                    GraphRegionKind.Else or
+                    GraphRegionKind.LoopInitializer or
+                    GraphRegionKind.LoopIncrement))
             {
                 throw new JsonException(
-                    $"Only an else region may be implicit; region '{region.Id}' is '{region.Kind}'.");
+                    $"Only else and omitted for-clause regions may be implicit; region " +
+                    $"'{region.Id}' is '{region.Kind}'.");
             }
 
             if (!regions.TryAdd(region.Id, region))
@@ -187,7 +191,9 @@ public static class GraphJson
                     $"Graph region '{region.Id}' must be a direct child of an if region.");
             }
 
-            if (region.Kind == GraphRegionKind.LoopBody &&
+            if (region.Kind is (GraphRegionKind.LoopInitializer or
+                    GraphRegionKind.LoopBody or
+                    GraphRegionKind.LoopIncrement) &&
                 (region.ParentRegionId is not SemanticId loopParentId ||
                     regions[loopParentId].Kind != GraphRegionKind.Loop))
             {
@@ -242,12 +248,24 @@ public static class GraphJson
             if (region.Kind == GraphRegionKind.Loop)
             {
                 GraphRegion[] children = region.ChildRegionIds.Select(id => regions[id]).ToArray();
-                if (children.Length != 1 || children[0].Kind != GraphRegionKind.LoopBody ||
-                    !region.NodeIds.Contains(region.SourceNodeId) ||
-                    nodes[region.SourceNodeId].Kind != "loop")
+                bool hasLoopNode = region.NodeIds.Contains(region.SourceNodeId) &&
+                    nodes[region.SourceNodeId].Kind == "loop";
+                bool isFor = hasLoopNode &&
+                    nodes[region.SourceNodeId].Properties.TryGetValue(
+                        "loopForm",
+                        out string? loopForm) &&
+                    string.Equals(loopForm, "for", StringComparison.Ordinal);
+                bool hasValidChildren = isFor
+                    ? children.Length == 3 &&
+                        children[0].Kind == GraphRegionKind.LoopInitializer &&
+                        children[1].Kind == GraphRegionKind.LoopBody &&
+                        children[2].Kind == GraphRegionKind.LoopIncrement
+                    : children.Length == 1 && children[0].Kind == GraphRegionKind.LoopBody;
+                if (!hasLoopNode || !hasValidChildren)
                 {
                     throw new JsonException(
-                        $"Loop region '{region.Id}' requires its loop node and one loop-body child.");
+                        $"Loop region '{region.Id}' requires its loop node and either one while-body " +
+                        "child or ordered for initializer/body/increment children.");
                 }
             }
         }

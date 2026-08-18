@@ -896,6 +896,75 @@ its implicit receiver as an explicit shared-VM contract.
     patch/plan CLI regressions, and three lazy-expression analyze regressions
     pass.
 
+## M4.16 implemented vertical slice
+
+- strict HIR v0.5 and Graph v0.9 readers while patch v0.14 and patch-plan v0.15
+  remain unchanged
+- first-class `HirForStatement` preserving declaration or ordered expression
+  initializers, optional condition, ordered incrementors, and body
+- first-class `HirForVariableDeclaration` group and individually identified
+  `HirForVariableDeclarator` children
+- Roslyn declaration binding for for-locals, including references from the
+  condition, incrementors, and body
+- prefix/postfix position on `HirUnaryExpression` so `++value` and `value++`
+  remain distinguishable
+- mutation unary Graph nodes with explicit control ports and effect ordering
+- Graph `loopInitializer`, `loopBody`, and `loopIncrement` regions in fixed
+  source-execution order
+- explicit loop properties for initializer kind, explicit/implicit-true
+  condition, incrementor count, continue target, and complete phase order
+- one-time initializer control flow outside the cyclic component
+- normal body fallthrough and `continue` routed through the increment phase,
+  followed by a back edge to the effective condition header
+- effectful initializer, condition, and incrementor sequencing through their
+  ordinary Graph control nodes
+- optional initializer/increment regions marked implicit when their clauses are
+  absent, without synthesizing HIR expressions
+- derived CFG loop facts separating header entry from continue target and
+  publishing optional initializer/increment region IDs
+- Graph JSON validation of the ordered three-child for-region shape
+- traversal, patch indexing, syntax matching, structural fingerprints,
+  identity reconciliation, and identity rewriting for all new nodes
+- checked-in `ForRules.cs` sample covering declaration/postfix and effectful
+  phase forms
+- dedicated lossless-for contract plus architecture, roadmap, README, Golden,
+  and repository-validator migration
+
+## M4.16 acceptance criteria
+
+1. A text-authored `for` lowers to `HirForStatement` under HIR v0.5 and is not
+   rewritten into `HirWhileStatement`.
+2. Declaration and expression initializer forms remain distinct and preserve
+   source order.
+3. Multiple declaration variables and incrementors retain individual stable
+   IDs and ordered children.
+4. An omitted condition remains absent in HIR and becomes
+   `conditionEvaluation: implicitTrue` without a synthetic literal.
+5. Prefix and postfix unary forms remain distinct in HIR and Graph.
+6. `++`/`--` Graph nodes expose control ports and participate in the mutation
+   effect chain.
+7. Graph v0.9 emits ordered initializer/body/increment regions for every for
+   loop, marking only omitted clause regions implicit.
+8. The initializer executes once and is excluded from loop back-edge arcs and
+   cyclic components.
+9. Normal body fallthrough and every nearest-loop continue target the first
+   incrementor, or the condition header when incrementors are absent.
+10. Completed incrementors return to the first condition effect or loop node.
+11. `break` bypasses incrementors and reaches the loop exit.
+12. Effectful initializer, condition, and incrementor calls retain exact C#
+    order in Graph and the derived CFG.
+13. Roslyn-bound uses of a for-local reference its declarator identity.
+14. Formatting/comment changes preserve loop, declaration, declarator, unary,
+    transfer, and body identities.
+15. Graph JSON rejects malformed for region order and invalid implicit regions.
+16. Whole-loop visual construction remains unavailable rather than reusing the
+    lossy while payload; existing exact nested edits retain their normal safety
+    gates.
+17. The checked-in sample analyzes both declaration/postfix and effectful phase
+    forms to HIR v0.5 and Graph v0.9.
+18. The full solution, 258-test suite, format check, repository validator, 19
+    patch/plan CLI regressions, and four analyze regressions pass.
+
 ## Deliberate limits
 
 M4 consumes derived CFG facts at patch time but does not serialize them or
@@ -914,18 +983,19 @@ earlier in one plan. Produced paths do not yet traverse ordinary members,
 conditional selected bindings, calls, assignments, awaits, or wildcard/parent
 queries. Branch and loop-body insertions append and cannot move or delete
 existing structures. Loop transfers cannot be retargeted.
-`do`/`for`/`foreach`, switch, conditional element access,
+Whole-`for` construction, for-clause restructuring, `do`/`foreach`, switch,
+conditional element access,
 conditional effect subgraphs for lazy expression inputs, exception edges,
 standalone short-circuit CFG regions, async state-machine transitions, control
 dependence, SSA, and automatic node placement remain outside the current slice.
 
 ## Next slice
 
-M4.16 should make an explicit lossless HIR decision for `for` before admission
-rather than silently desugaring source syntax into a `while` and losing editor
-round-trip structure. The slice must represent initializer, condition,
-incrementors, body, `continue` target, and effect order directly, then decide
-whether bounded visual construction belongs in the same increment. `foreach`
-requires a separate iteration/enumerator contract and should not be conflated
-with `for`. Flow-sensitive nullable state and conditional effect subgraphs can
-build on the lazy-expression evidence established by M4.12–M4.15.
+M4.17 should add a dedicated, versioned `ForPatchStatement` rather than widen
+`WhilePatchStatement`. It must author declaration or expression initializers,
+an optional Boolean condition, ordered incrementors, and an explicit body while
+proving declaration scope, mutation effects, continue routing, identity pins,
+and atomic rollback after Roslyn reanalysis. Whole-clause replacement should be
+considered only after construction proves the same invariants. `foreach`
+remains separate because enumerator acquisition, disposal, and iteration
+variable semantics cannot be modeled as a cosmetic for-loop variant.

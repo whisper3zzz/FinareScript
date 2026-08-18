@@ -7,8 +7,8 @@ an eager Boolean helper or a second evaluator.
 
 The current contracts are:
 
-- HIR `unifiedscript.hir/v0.4`;
-- Graph `unifiedscript.graph/v0.8`;
+- HIR `unifiedscript.hir/v0.5`;
+- Graph `unifiedscript.graph/v0.9`;
 - standalone patch `unifiedscript.patch/v0.14`;
 - patch plan `unifiedscript.patch-plan/v0.15`.
 
@@ -19,9 +19,8 @@ Only Graph changes in this slice. HIR and the patch protocols already preserve
 
 C# always evaluates the left operand first. It evaluates the right operand of
 `&&` only when the left value is `true`, and the right operand of `||` only
-when the left value is `false`. Graph v0.6 introduced that rule; current Graph
-v0.6 introduced it directly on the existing binary node; current v0.8 retains
-the same contract:
+when the left value is `false`. Graph v0.6 introduced that rule directly on the
+existing binary node; current Graph v0.9 retains the same contract:
 
 | Operator | `evaluation` | `rightEvaluation` |
 | --- | --- | --- |

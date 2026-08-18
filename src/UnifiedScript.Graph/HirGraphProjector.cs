@@ -217,6 +217,7 @@ public sealed class HirGraphProjector
                 HirExpressionStatement expression => ProjectExpressionStatement(expression, incoming, regionId),
                 HirIfStatement ifStatement => ProjectIf(ifStatement, incoming, regionId),
                 HirWhileStatement whileStatement => ProjectWhile(whileStatement, incoming, regionId),
+                HirForStatement forStatement => ProjectFor(forStatement, incoming, regionId),
                 HirBreakStatement breakStatement => ProjectBreak(breakStatement, incoming, regionId),
                 HirContinueStatement continueStatement => ProjectContinue(continueStatement, incoming, regionId),
                 HirReturnStatement returnStatement => ProjectReturn(returnStatement, incoming, regionId),
@@ -444,6 +445,264 @@ public sealed class HirGraphProjector
             return [new ControlEndpoint(statement.Id, "exit"), .. context.BreakExits];
         }
 
+        private IReadOnlyList<ControlEndpoint> ProjectFor(
+            HirForStatement statement,
+            IReadOnlyList<ControlEndpoint> incoming,
+            SemanticId parentRegionId)
+        {
+            SemanticId loopRegionId = RegionId(statement.Id, GraphRegionKind.Loop);
+            AddRegion(new RegionBuilder(
+                loopRegionId,
+                GraphRegionKind.Loop,
+                parentRegionId,
+                statement.Id,
+                statement.Span,
+                false));
+            SemanticId initializerRegionId = RegionId(statement.Id, GraphRegionKind.LoopInitializer);
+            AddRegion(new RegionBuilder(
+                initializerRegionId,
+                GraphRegionKind.LoopInitializer,
+                loopRegionId,
+                statement.Declaration?.Id ?? statement.Id,
+                statement.Declaration?.Span ?? statement.Span,
+                statement.Declaration is null && statement.Initializers.Count == 0));
+            SemanticId bodyRegionId = RegionId(statement.Id, GraphRegionKind.LoopBody);
+            AddRegion(new RegionBuilder(
+                bodyRegionId,
+                GraphRegionKind.LoopBody,
+                loopRegionId,
+                statement.Body.Id,
+                statement.Body.Span,
+                false));
+            SemanticId incrementRegionId = RegionId(statement.Id, GraphRegionKind.LoopIncrement);
+            AddRegion(new RegionBuilder(
+                incrementRegionId,
+                GraphRegionKind.LoopIncrement,
+                loopRegionId,
+                statement.Id,
+                statement.Span,
+                statement.Incrementors.Count == 0));
+
+            ExpressionProjection? condition = statement.Condition is null
+                ? null
+                : ProjectExpression(statement.Condition, loopRegionId);
+            SemanticId[] conditionEffects = condition?.Effects.Distinct().ToArray() ?? [];
+            var properties = new SortedDictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["loopForm"] = "for",
+                ["initializerKind"] = statement.Declaration is not null
+                    ? "declaration"
+                    : statement.Initializers.Count > 0
+                        ? "expressions"
+                        : "none",
+                ["conditionEvaluation"] = statement.Condition is null
+                    ? "implicitTrue"
+                    : "explicit",
+                ["incrementorCount"] = statement.Incrementors.Count.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture),
+                ["continueTarget"] = statement.Incrementors.Count > 0
+                    ? "incrementors"
+                    : "condition",
+                ["evaluationOrder"] = "initializer,condition,body,incrementors",
+            };
+            if (statement.Condition is not null)
+            {
+                semantics.ApplyNodeProperties(statement.Condition.Id, properties);
+            }
+
+            var ports = new List<GraphPort>
+            {
+                new("in", GraphPortDirection.Input, GraphPortKind.Control),
+                new("body", GraphPortDirection.Output, GraphPortKind.Control),
+                new("exit", GraphPortDirection.Output, GraphPortKind.Control),
+            };
+            if (statement.Condition is not null)
+            {
+                ports.Add(new GraphPort("condition", GraphPortDirection.Input, GraphPortKind.Data));
+            }
+
+            AddNode(new GraphNode(
+                statement.Id,
+                "loop",
+                "For",
+                statement.Span,
+                ports,
+                properties),
+                loopRegionId);
+            if (statement.Condition is not null)
+            {
+                AddRequiredDataEdge(
+                    condition?.Value,
+                    new ValueEndpoint(statement.Id, "condition"));
+            }
+
+            ControlTarget headerTarget = conditionEffects.Length == 0
+                ? new ControlTarget(statement.Id, "in")
+                : new ControlTarget(conditionEffects[0], "execIn");
+
+            IReadOnlyList<ControlEndpoint> initializerExits = incoming;
+            if (statement.Declaration is not null)
+            {
+                foreach (HirForVariableDeclarator variable in statement.Declaration.Variables)
+                {
+                    initializerExits = ProjectForVariable(
+                        variable,
+                        statement.Declaration.TypeName,
+                        initializerExits,
+                        initializerRegionId);
+                }
+            }
+
+            for (int index = 0; index < statement.Initializers.Count; index++)
+            {
+                (_, initializerExits) = ProjectLoopPhaseExpression(
+                    statement.Initializers[index],
+                    initializerExits,
+                    initializerRegionId,
+                    statement.Id,
+                    "initializer",
+                    index);
+            }
+
+            ConnectIncoming(initializerExits, headerTarget.NodeId, headerTarget.Port);
+            IReadOnlyList<ControlEndpoint> beforeHeader = ConnectEffectChain([], conditionEffects);
+            ConnectIncoming(beforeHeader, statement.Id, "in");
+
+            ControlTarget? incrementEntry = null;
+            IReadOnlyList<ControlEndpoint> incrementExits = [];
+            for (int index = 0; index < statement.Incrementors.Count; index++)
+            {
+                (ControlTarget entry, IReadOnlyList<ControlEndpoint> exits) =
+                    ProjectLoopPhaseExpression(
+                        statement.Incrementors[index],
+                        incrementExits,
+                        incrementRegionId,
+                        statement.Id,
+                        "incrementor",
+                        index);
+                incrementEntry ??= entry;
+                incrementExits = exits;
+            }
+
+            ControlTarget continueTarget = incrementEntry ?? headerTarget;
+            var context = new LoopContext(continueTarget);
+            loops.Push(context);
+            IReadOnlyList<ControlEndpoint> bodyExits;
+            try
+            {
+                bodyExits = ProjectBlockContents(
+                    statement.Body,
+                    [new ControlEndpoint(statement.Id, "body")],
+                    bodyRegionId);
+            }
+            finally
+            {
+                _ = loops.Pop();
+            }
+
+            ConnectIncoming(bodyExits, continueTarget.NodeId, continueTarget.Port);
+            if (incrementEntry is not null)
+            {
+                ConnectIncoming(incrementExits, headerTarget.NodeId, headerTarget.Port);
+            }
+
+            return [new ControlEndpoint(statement.Id, "exit"), .. context.BreakExits];
+        }
+
+        private IReadOnlyList<ControlEndpoint> ProjectForVariable(
+            HirForVariableDeclarator variable,
+            string typeName,
+            IReadOnlyList<ControlEndpoint> incoming,
+            SemanticId regionId)
+        {
+            var properties = new SortedDictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["name"] = variable.Name,
+                ["type"] = typeName,
+                ["declarationContext"] = "forInitializer",
+            };
+            semantics.ApplyNodeProperties(variable.Id, properties);
+            var ports = new List<GraphPort>
+            {
+                new("in", GraphPortDirection.Input, GraphPortKind.Control),
+                new("then", GraphPortDirection.Output, GraphPortKind.Control),
+            };
+            ExpressionProjection? initializer = null;
+            if (variable.Initializer is not null)
+            {
+                ports.Add(new GraphPort("value", GraphPortDirection.Input, GraphPortKind.Data));
+                initializer = ProjectExpression(variable.Initializer, regionId);
+            }
+
+            AddNode(new GraphNode(
+                variable.Id,
+                "variable",
+                $"Declare {variable.Name}",
+                variable.Span,
+                ports,
+                properties),
+                regionId);
+            IReadOnlyList<ControlEndpoint> current = initializer is null
+                ? incoming
+                : ConnectEffectChain(incoming, initializer.Effects);
+            ConnectIncoming(current, variable.Id, "in");
+            if (initializer?.Value is not null)
+            {
+                AddEdge(GraphEdgeKind.Data, initializer.Value, new ValueEndpoint(variable.Id, "value"));
+            }
+
+            return [new ControlEndpoint(variable.Id, "then")];
+        }
+
+        private (ControlTarget Entry, IReadOnlyList<ControlEndpoint> Exits)
+            ProjectLoopPhaseExpression(
+                HirExpression expression,
+                IReadOnlyList<ControlEndpoint> incoming,
+                SemanticId regionId,
+                SemanticId loopId,
+                string phase,
+                int index)
+        {
+            ExpressionProjection projection = ProjectExpression(expression, regionId);
+            SemanticId[] effects = projection.Effects.Distinct().ToArray();
+            if (effects.Length > 0)
+            {
+                return (
+                    new ControlTarget(effects[0], "execIn"),
+                    ConnectEffectChain(incoming, effects));
+            }
+
+            SemanticId evaluateId = SemanticId.FromKey(
+                $"{loopId}:graph:{phase}:{index}:evaluate");
+            var ports = new List<GraphPort>
+            {
+                new("in", GraphPortDirection.Input, GraphPortKind.Control),
+                new("then", GraphPortDirection.Output, GraphPortKind.Control),
+            };
+            if (projection.Value is not null)
+            {
+                ports.Add(new GraphPort("expression", GraphPortDirection.Input, GraphPortKind.Data));
+            }
+
+            AddNode(new GraphNode(
+                evaluateId,
+                "evaluate",
+                phase == "initializer" ? "Initialize" : "Increment",
+                expression.Span,
+                ports,
+                EmptyProperties()),
+                regionId);
+            ConnectIncoming(incoming, evaluateId, "in");
+            if (projection.Value is not null)
+            {
+                AddEdge(GraphEdgeKind.Data, projection.Value, new ValueEndpoint(evaluateId, "expression"));
+            }
+
+            return (
+                new ControlTarget(evaluateId, "in"),
+                [new ControlEndpoint(evaluateId, "then")]);
+        }
+
         private IReadOnlyList<ControlEndpoint> ProjectBreak(
             HirBreakStatement statement,
             IReadOnlyList<ControlEndpoint> incoming,
@@ -474,7 +733,7 @@ public sealed class HirGraphProjector
         private LoopContext RequireLoopContext(HirStatement statement) => loops.TryPeek(out LoopContext? context)
             ? context
             : throw new InvalidOperationException(
-                $"Loop-control statement '{statement.Id}' has no enclosing while loop.");
+                $"Loop-control statement '{statement.Id}' has no enclosing loop.");
 
         private static GraphNode ControlTransferNode(
             HirStatement statement,
@@ -768,15 +1027,40 @@ public sealed class HirGraphProjector
                             unary.Operand,
                             regionId,
                             conditionalReceiver);
+                        bool isMutation = unary.Operator is "++" or "--";
+                        var extraPorts = new List<GraphPort>
+                        {
+                            new("operand", GraphPortDirection.Input, GraphPortKind.Data),
+                        };
+                        if (isMutation)
+                        {
+                            extraPorts.Add(new GraphPort(
+                                "execIn",
+                                GraphPortDirection.Input,
+                                GraphPortKind.Control));
+                            extraPorts.Add(new GraphPort(
+                                "execOut",
+                                GraphPortDirection.Output,
+                                GraphPortKind.Control));
+                        }
+
                         AddNode(ValueNode(
                             unary,
                             "unary",
                             unary.Operator,
                             KeyValuePair.Create("operator", unary.Operator),
-                            [new GraphPort("operand", GraphPortDirection.Input, GraphPortKind.Data)]),
+                            extraPorts,
+                            additionalProperties:
+                            [
+                                KeyValuePair.Create(
+                                    "position",
+                                    unary.IsPostfix ? "postfix" : "prefix"),
+                            ]),
                             regionId);
                         AddRequiredDataEdge(operand.Value, new ValueEndpoint(unary.Id, "operand"));
-                        effects = operand.Effects;
+                        effects = isMutation
+                            ? [.. operand.Effects, unary.Id]
+                            : operand.Effects;
                         break;
                     }
                 case HirAssignmentExpression assignment:

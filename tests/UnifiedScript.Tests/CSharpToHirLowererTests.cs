@@ -150,6 +150,87 @@ public sealed class CSharpToHirLowererTests
     }
 
     [Fact]
+    public void Lower_PreservesForClausesAndUnaryPositionWithoutWhileDesugaring()
+    {
+        const string source = """
+            static class Rules
+            {
+                [Visual]
+                static int Run(int count)
+                {
+                    for (int i = 0, step = 1; i < count; i++, ++step)
+                    {
+                        if (i == 2)
+                        {
+                            continue;
+                        }
+
+                        if (step > count)
+                        {
+                            break;
+                        }
+                    }
+
+                    return count;
+                }
+            }
+            """;
+
+        CSharpLoweringResult result = new CSharpToHirLowerer().Lower(source, "ForRules.cs");
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        HirMethodDeclaration method = Assert.Single(Assert.Single(result.CompilationUnit!.Types).Methods);
+        HirForStatement loop = Assert.IsType<HirForStatement>(method.Body.Statements[0]);
+        HirForVariableDeclaration declaration = Assert.IsType<HirForVariableDeclaration>(
+            loop.Declaration);
+        Assert.Equal("int", declaration.TypeName);
+        Assert.Equal(["i", "step"], declaration.Variables.Select(static variable => variable.Name));
+        Assert.All(declaration.Variables, static variable => Assert.NotNull(variable.Initializer));
+        Assert.Empty(loop.Initializers);
+        Assert.IsType<HirBinaryExpression>(loop.Condition);
+        Assert.Collection(
+            loop.Incrementors,
+            incrementor => Assert.True(Assert.IsType<HirUnaryExpression>(incrementor).IsPostfix),
+            incrementor => Assert.False(Assert.IsType<HirUnaryExpression>(incrementor).IsPostfix));
+        Assert.Single(loop.Body.DescendantsAndSelf().OfType<HirContinueStatement>());
+        Assert.Single(loop.Body.DescendantsAndSelf().OfType<HirBreakStatement>());
+        Assert.DoesNotContain(method.Body.DescendantsAndSelf(), static node => node is HirWhileStatement);
+
+        string json = UnifiedScript.Core.HirJson.Serialize(
+            UnifiedScript.Core.HirDocument.Create(result.CompilationUnit));
+        Assert.Contains("\"schemaVersion\": \"unifiedscript.hir/v0.5\"", json);
+        Assert.Contains("\"kind\": \"for\"", json);
+        Assert.Contains("\"isPostfix\": true", json);
+    }
+
+    [Fact]
+    public void Lower_PostfixAdmissionDoesNotAdmitNullForgivingExpressions()
+    {
+        const string source = """
+            #nullable enable
+
+            static class Rules
+            {
+                [Visual]
+                static string Run(string? value)
+                {
+                    return value!;
+                }
+            }
+            """;
+
+        CSharpLoweringResult result = new CSharpToHirLowerer().Lower(
+            source,
+            "NullForgivingRules.cs");
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.CompilationUnit);
+        Assert.Contains(result.Diagnostics, static diagnostic =>
+            diagnostic.Code == VisualProfileDiagnosticCodes.ExpressionNotSupported &&
+            diagnostic.Message.Contains("SuppressNullableWarningExpression", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Lower_PreservesConditionalExpressionAsFirstClassHir()
     {
         const string source = """
@@ -179,7 +260,7 @@ public sealed class CSharpToHirLowererTests
 
         string json = UnifiedScript.Core.HirJson.Serialize(
             UnifiedScript.Core.HirDocument.Create(result.CompilationUnit));
-        Assert.Contains("\"schemaVersion\": \"unifiedscript.hir/v0.4\"", json);
+        Assert.Contains("\"schemaVersion\": \"unifiedscript.hir/v0.5\"", json);
         Assert.Contains("\"kind\": \"conditional\"", json);
     }
 
@@ -219,7 +300,7 @@ public sealed class CSharpToHirLowererTests
 
         string json = UnifiedScript.Core.HirJson.Serialize(
             UnifiedScript.Core.HirDocument.Create(result.CompilationUnit));
-        Assert.Contains("\"schemaVersion\": \"unifiedscript.hir/v0.4\"", json);
+        Assert.Contains("\"schemaVersion\": \"unifiedscript.hir/v0.5\"", json);
         Assert.Contains("\"kind\": \"conditionalAccess\"", json);
         Assert.Contains("\"kind\": \"conditionalMemberBinding\"", json);
     }

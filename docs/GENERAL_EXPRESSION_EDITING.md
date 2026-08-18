@@ -306,5 +306,6 @@ of scope.
 Generated expression roots publish symbolic node/port handles for bounded
 binary/unary/cast/conditional paths. Member receivers, invocation targets,
 assignment/mutation, and await inputs remain outside exact input replacement.
-`for`, `foreach`, and `switch` still require explicit lossless HIR designs
-before their control structure is admitted.
+Text-authored `for` now has an explicit lossless HIR/Graph design, but its
+whole control structure and clauses remain outside authored patch payloads.
+`foreach` and `switch` still require their own lossless HIR designs.

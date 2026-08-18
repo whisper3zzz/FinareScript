@@ -111,6 +111,44 @@ public sealed class GraphJsonTests
     }
 
     [Fact]
+    public void Serialize_RejectsForChildrenOutsideInitializerBodyIncrementOrder()
+    {
+        const string source = """
+            static class Rules
+            {
+                [Visual]
+                static void Run(int count)
+                {
+                    for (int index = 0; index < count; index++)
+                    {
+                    }
+                }
+            }
+            """;
+        CSharpLoweringResult lowering = new CSharpToHirLowerer().Lower(source, "ForRegions.cs");
+        Assert.True(lowering.Succeeded, string.Join(Environment.NewLine, lowering.Diagnostics));
+        GraphDocument graph = new HirGraphProjector().Project(lowering.CompilationUnit!);
+        GraphFunction function = Assert.Single(graph.Functions);
+        GraphRegion loop = Assert.Single(
+            function.Regions,
+            static region => region.Kind == GraphRegionKind.Loop);
+        GraphFunction invalidFunction = function with
+        {
+            Regions = function.Regions
+                .Select(region => region.Id == loop.Id
+                    ? region with { ChildRegionIds = region.ChildRegionIds.Reverse().ToArray() }
+                    : region)
+                .ToArray(),
+        };
+
+        JsonException exception = Assert.Throws<JsonException>(() =>
+            GraphJson.Serialize(graph with { Functions = [invalidFunction] }));
+
+        Assert.Contains("ordered for initializer/body/increment children", exception.Message,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Serialize_RejectsImplicitNonElseRegion()
     {
         GraphDocument graph = CreateGraph();
@@ -128,7 +166,8 @@ public sealed class GraphJsonTests
         JsonException exception = Assert.Throws<JsonException>(() =>
             GraphJson.Serialize(graph with { Functions = [invalidFunction] }));
 
-        Assert.Contains("Only an else region may be implicit", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("Only else and omitted for-clause regions may be implicit", exception.Message,
+            StringComparison.Ordinal);
     }
 
     private static GraphDocument CreateGraph()

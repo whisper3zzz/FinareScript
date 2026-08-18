@@ -8,8 +8,8 @@ evaluator or desugar the expression into an eager function call.
 
 The current contracts are:
 
-- HIR `unifiedscript.hir/v0.4`;
-- Graph `unifiedscript.graph/v0.8`;
+- HIR `unifiedscript.hir/v0.5`;
+- Graph `unifiedscript.graph/v0.9`;
 - standalone patch `unifiedscript.patch/v0.14`;
 - patch plan `unifiedscript.patch-plan/v0.15`.
 
@@ -50,7 +50,7 @@ each branch independently.
 
 ## Graph contract
 
-Graph v0.5 introduced the node; current Graph v0.8 retains it with:
+Graph v0.5 introduced the node; current Graph v0.9 retains it with:
 
 - `kind: "conditional"`;
 - label `Select`;

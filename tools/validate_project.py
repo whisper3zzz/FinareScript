@@ -184,6 +184,7 @@ def main() -> int:
     region_source_path = ROOT / "samples" / "Regions" / "EarlyReturn.cs"
     loop_source_path = ROOT / "samples" / "Loops" / "Countdown.cs"
     loop_identity_path = ROOT / "samples" / "Loops" / "Countdown.cs.usids"
+    for_source_path = ROOT / "samples" / "Loops" / "ForRules.cs"
     golden_manifest_path = (
         ROOT
         / "tests"
@@ -292,6 +293,7 @@ def main() -> int:
         loop_source_path.is_file() and loop_identity_path.is_file(),
         "Missing structured while-loop sample or identity sidecar",
     )
+    require(for_source_path.is_file(), "Missing lossless for-loop sample")
     require(golden_manifest_path.is_file(), "Missing Golden artifact manifest")
     require(layout_path.is_file(), "Missing graph layout sidecar sample")
     patch_source = patch_source_path.read_text(encoding="utf-8")
@@ -379,6 +381,7 @@ def main() -> int:
     region_source = region_source_path.read_text(encoding="utf-8")
     loop_source = loop_source_path.read_text(encoding="utf-8")
     loop_identity = json.loads(loop_identity_path.read_text(encoding="utf-8"))
+    for_source = for_source_path.read_text(encoding="utf-8")
     golden_manifest = json.loads(golden_manifest_path.read_text(encoding="utf-8"))
     layout = json.loads(layout_path.read_text(encoding="utf-8"))
     patch_operation = patch_document["operations"][0]
@@ -1002,11 +1005,13 @@ def main() -> int:
     )
     require(
         golden_manifest["artifacts"]["graph"]["schemaVersion"]
-        == "unifiedscript.graph/v0.8"
+        == "unifiedscript.graph/v0.9"
+        and golden_manifest["artifacts"]["hir"]["schemaVersion"]
+        == "unifiedscript.hir/v0.5"
         and "if ((damage > threshold) && !disabled)" in region_source
         and "return true;" in region_source
         and "return false;" in region_source,
-        "Graph v0.8 Golden manifest or early-return region sample is inconsistent",
+        "HIR v0.5/Graph v0.9 Golden manifest or early-return region sample is inconsistent",
     )
     require(
         "return enabled && ready;" in short_circuit_source
@@ -1032,6 +1037,13 @@ def main() -> int:
         and "continue;" in loop_source
         and "value = value - 1;" in loop_source,
         "Structured while-loop sample does not cover loop transfers and assignment",
+    )
+    require(
+        "for (int index = 0; index < count; index++)" in for_source
+        and "for (Reset(); state < limit; Advance())" in for_source
+        and "break;" in for_source
+        and "continue;" in for_source,
+        "Lossless for-loop sample does not cover declaration/effect phases and transfers",
     )
     loop_kinds = {entry["kind"] for entry in loop_identity["entries"]}
     require(

@@ -476,6 +476,111 @@ public sealed class GraphControlFlowAnalyzerTests
     }
 
     [Fact]
+    public void Analyze_ForExecutesInitializerOnceAndRoutesContinueThroughIncrementors()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static void Run()
+                {
+                    for (Reset(); Check(); Advance())
+                    {
+                        continue;
+                    }
+                }
+
+                static void Reset() { }
+
+                static bool Check() => false;
+
+                static void Advance() { }
+            }
+            """;
+        CSharpAnalysisResult analysis = new CSharpSemanticPipeline().Analyze(
+            source,
+            "EffectfulFor.cs");
+        Assert.True(analysis.Succeeded, string.Join(Environment.NewLine, analysis.Diagnostics));
+        HirForStatement statement = Assert.Single(
+            analysis.Hir!.DescendantsAndSelf().OfType<HirForStatement>());
+        HirInvocationExpression reset = Assert.IsType<HirInvocationExpression>(
+            Assert.Single(statement.Initializers));
+        HirInvocationExpression check = Assert.IsType<HirInvocationExpression>(statement.Condition);
+        HirInvocationExpression advance = Assert.IsType<HirInvocationExpression>(
+            Assert.Single(statement.Incrementors));
+        HirContinueStatement nextIteration = Assert.IsType<HirContinueStatement>(
+            Assert.Single(statement.Body.Statements));
+        GraphDocument graph = new HirGraphProjector().Project(analysis.Hir!, analysis.Semantics!);
+
+        GraphControlFlowFunction flow = Assert.Single(new GraphControlFlowAnalyzer()
+            .AnalyzeAndValidate(graph)
+            .Functions);
+        GraphControlFlowLoop loop = Assert.Single(flow.Loops);
+
+        Assert.Equal(check.Id, loop.HeaderEntryNodeId);
+        Assert.Equal(advance.Id, loop.ContinueTargetNodeId);
+        Assert.Equal(advance.Id, Node(flow, nextIteration.Id).SuccessorIds.Single());
+        Assert.Equal(check.Id, Node(flow, reset.Id).SuccessorIds.Single());
+        Assert.Equal(check.Id, Node(flow, advance.Id).SuccessorIds.Single());
+        Assert.Contains(
+            loop.BackEdgeArcIds,
+            arcId => flow.Arcs.Single(arc => arc.Id == arcId).FromNodeId == advance.Id);
+        Assert.DoesNotContain(
+            loop.BackEdgeArcIds,
+            arcId => flow.Arcs.Single(arc => arc.Id == arcId).FromNodeId == reset.Id);
+        Assert.Equal([check.Id], Assert.Single(flow.CyclicComponents).EntryNodeIds);
+    }
+
+    [Fact]
+    public void Analyze_ForWithOmittedClausesUsesImplicitTrueHeaderAndExplicitPhaseRegions()
+    {
+        const string source = """
+            static class Rules
+            {
+                [Visual]
+                static int Run()
+                {
+                    for (;;)
+                    {
+                        break;
+                    }
+
+                    return 1;
+                }
+            }
+            """;
+        (HirMethodDeclaration method, GraphDocument graph) = Project(source, "InfiniteFor.cs");
+        HirForStatement statement = Assert.IsType<HirForStatement>(method.Body.Statements[0]);
+        GraphFunction function = Assert.Single(graph.Functions);
+        GraphNode loopNode = Assert.Single(function.Nodes, node => node.Id == statement.Id);
+        GraphRegion loopRegion = Assert.Single(function.Regions, region =>
+            region.Kind == GraphRegionKind.Loop && region.SourceNodeId == statement.Id);
+        GraphRegion initializerRegion = function.Regions.Single(region =>
+            region.ParentRegionId == loopRegion.Id &&
+            region.Kind == GraphRegionKind.LoopInitializer);
+        GraphRegion incrementRegion = function.Regions.Single(region =>
+            region.ParentRegionId == loopRegion.Id &&
+            region.Kind == GraphRegionKind.LoopIncrement);
+
+        Assert.Null(statement.Declaration);
+        Assert.Empty(statement.Initializers);
+        Assert.Null(statement.Condition);
+        Assert.Empty(statement.Incrementors);
+        Assert.Equal("implicitTrue", loopNode.Properties["conditionEvaluation"]);
+        Assert.DoesNotContain(loopNode.Ports, static port => port.Name == "condition");
+        Assert.True(initializerRegion.IsImplicit);
+        Assert.True(incrementRegion.IsImplicit);
+
+        GraphControlFlowLoop flow = Assert.Single(
+            Assert.Single(new GraphControlFlowAnalyzer().AnalyzeAndValidate(graph).Functions).Loops);
+        Assert.Equal(statement.Id, flow.HeaderEntryNodeId);
+        Assert.Equal(statement.Id, flow.ContinueTargetNodeId);
+        Assert.Empty(flow.BackEdgeArcIds);
+    }
+
+    [Fact]
     public void Analyze_BindsNestedBreakAndContinueToNearestLoop()
     {
         const string source = """

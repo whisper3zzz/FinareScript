@@ -7,8 +7,8 @@ the operation into a Boolean test, conditional call, or editor-only evaluator.
 
 The current contracts are:
 
-- HIR `unifiedscript.hir/v0.4`;
-- Graph `unifiedscript.graph/v0.8`;
+- HIR `unifiedscript.hir/v0.5`;
+- Graph `unifiedscript.graph/v0.9`;
 - standalone patch `unifiedscript.patch/v0.14`;
 - patch plan `unifiedscript.patch-plan/v0.15`.
 
@@ -22,7 +22,7 @@ access.
 
 C# evaluates `left` exactly once. If it is non-null, that value supplies the
 result and `right` is skipped. Otherwise C# evaluates `right` and uses its
-value. Graph v0.7 introduced all three decisions; current Graph v0.8 retains
+value. Graph v0.7 introduced all three decisions; current Graph v0.9 retains
 them on the existing binary node:
 
 ```json
@@ -132,7 +132,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
 
 The sample covers nullable value and reference types, an effectful
 always-evaluated left call, and a catalogued-pure right call. Every coalescing
-node emits the Graph v0.8 lazy-right metadata introduced in v0.7.
+node emits the Graph v0.9 lazy-right metadata introduced in v0.7.
 
 ## Deliberate limits
 

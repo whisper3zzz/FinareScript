@@ -7,8 +7,8 @@ conditional, or an editor-only node.
 
 The current strict-reader contracts are:
 
-- HIR `unifiedscript.hir/v0.4`;
-- Graph `unifiedscript.graph/v0.8`;
+- HIR `unifiedscript.hir/v0.5`;
+- Graph `unifiedscript.graph/v0.9`;
 - standalone patch `unifiedscript.patch/v0.14`;
 - patch plan `unifiedscript.patch-plan/v0.15`.
 
@@ -43,7 +43,7 @@ nodes.
 
 ## Graph evaluation contract
 
-Graph v0.8 emits one `conditionalAccess` node with two data inputs and one data
+Graph v0.8 introduced one `conditionalAccess` node with two data inputs and one data
 output:
 
 ```json
@@ -179,8 +179,8 @@ dotnet run --project src/UnifiedScript.Cli -- \
 ```
 
 The sample covers a direct receiver, an effectful always-evaluated receiver,
-and composition with a null-coalescing receiver. Every `?.` emits HIR v0.4 and
-Graph v0.8 conditional-access/member-binding nodes with the explicit receiver
+and composition with a null-coalescing receiver. Every `?.` emits HIR v0.5 and
+Graph v0.9 conditional-access/member-binding nodes with the explicit receiver
 evaluation contract.
 
 ## Deliberate limits

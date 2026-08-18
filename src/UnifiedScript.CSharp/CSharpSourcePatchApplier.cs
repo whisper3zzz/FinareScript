@@ -555,6 +555,7 @@ public sealed class CSharpSourcePatchApplier
                 string.Equals(local.ExpectedName, identifier.Name, StringComparison.Ordinal) &&
                 binding.ReferencedSymbolId == local.SourceDefinitionId,
             (UnaryPatchExpression unary, HirUnaryExpression hirUnary) =>
+                !hirUnary.IsPostfix &&
                 string.Equals(unary.Operator, hirUnary.Operator, StringComparison.Ordinal) &&
                 TryValidateAuthoredExpression(
                     unary.Operand,
@@ -3936,6 +3937,9 @@ public sealed class CSharpSourcePatchApplier
         HirExpressionStatement => syntax is ExpressionStatementSyntax,
         HirIfStatement => syntax is IfStatementSyntax,
         HirWhileStatement => syntax is WhileStatementSyntax,
+        HirForStatement => syntax is ForStatementSyntax,
+        HirForVariableDeclaration => syntax is VariableDeclarationSyntax,
+        HirForVariableDeclarator => syntax is VariableDeclaratorSyntax,
         HirBreakStatement => syntax is BreakStatementSyntax,
         HirContinueStatement => syntax is ContinueStatementSyntax,
         HirReturnStatement => syntax is ReturnStatementSyntax,
@@ -4083,6 +4087,7 @@ public sealed class CSharpSourcePatchApplier
         HirExpressionStatement => "expressionStatement",
         HirIfStatement => "if",
         HirWhileStatement => "while",
+        HirForStatement => "for",
         HirBreakStatement => "break",
         HirContinueStatement => "continue",
         HirReturnStatement => "return",

@@ -233,6 +233,23 @@ public sealed class VisualProfileValidator
             base.VisitArgument(node);
         }
 
+        public override void VisitPostfixUnaryExpression(PostfixUnaryExpressionSyntax node)
+        {
+            if (!node.IsKind(SyntaxKind.PostIncrementExpression) &&
+                !node.IsKind(SyntaxKind.PostDecrementExpression))
+            {
+                Add(
+                    diagnostics,
+                    VisualProfileDiagnosticCodes.ExpressionNotSupported,
+                    $"Postfix expression '{node.Kind()}' is not supported in Visual C# profile v0.2.",
+                    node,
+                    filePath);
+                return;
+            }
+
+            base.VisitPostfixUnaryExpression(node);
+        }
+
         public override void VisitBreakStatement(BreakStatementSyntax node)
         {
             ValidateLoopControlTarget(node);
@@ -247,7 +264,8 @@ public sealed class VisualProfileValidator
 
         private void ValidateLoopControlTarget(StatementSyntax node)
         {
-            if (node.Ancestors().OfType<WhileStatementSyntax>().Any())
+            if (node.Ancestors().Any(static ancestor =>
+                    ancestor is WhileStatementSyntax or ForStatementSyntax))
             {
                 return;
             }
@@ -255,7 +273,7 @@ public sealed class VisualProfileValidator
             Add(
                 diagnostics,
                 VisualProfileDiagnosticCodes.LoopControlTargetRequired,
-                $"'{node.Kind()}' requires an enclosing while loop in Visual C# profile v0.2.",
+                $"'{node.Kind()}' requires an enclosing while or for loop in Visual C# profile v0.2.",
                 node,
                 filePath);
         }
@@ -365,6 +383,7 @@ public sealed class VisualProfileValidator
             SyntaxKind.ExpressionStatement or
             SyntaxKind.IfStatement or
             SyntaxKind.WhileStatement or
+            SyntaxKind.ForStatement or
             SyntaxKind.BreakStatement or
             SyntaxKind.ContinueStatement or
             SyntaxKind.ReturnStatement or
@@ -380,6 +399,7 @@ public sealed class VisualProfileValidator
             InvocationExpressionSyntax or
             BinaryExpressionSyntax or
             PrefixUnaryExpressionSyntax or
+            PostfixUnaryExpressionSyntax or
             ParenthesizedExpressionSyntax or
             AssignmentExpressionSyntax or
             AwaitExpressionSyntax or

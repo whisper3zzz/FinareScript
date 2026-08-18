@@ -27,6 +27,9 @@ public static class HirTraversal
             [statement.Condition, statement.Then, statement.Else],
         HirIfStatement statement => [statement.Condition, statement.Then],
         HirWhileStatement statement => [statement.Condition, statement.Body],
+        HirForStatement statement => GetForChildren(statement),
+        HirForVariableDeclaration declaration => declaration.Variables,
+        HirForVariableDeclarator { Initializer: not null } declarator => [declarator.Initializer],
         HirReturnStatement { Expression: not null } statement => [statement.Expression],
         HirMemberAccessExpression expression => [expression.Target],
         HirConditionalAccessExpression expression =>
@@ -43,4 +46,29 @@ public static class HirTraversal
             [expression.Condition, expression.WhenTrue, expression.WhenFalse],
         _ => [],
     };
+
+    private static IEnumerable<HirNode> GetForChildren(HirForStatement statement)
+    {
+        if (statement.Declaration is not null)
+        {
+            yield return statement.Declaration;
+        }
+
+        foreach (HirExpression initializer in statement.Initializers)
+        {
+            yield return initializer;
+        }
+
+        if (statement.Condition is not null)
+        {
+            yield return statement.Condition;
+        }
+
+        foreach (HirExpression incrementor in statement.Incrementors)
+        {
+            yield return incrementor;
+        }
+
+        yield return statement.Body;
+    }
 }

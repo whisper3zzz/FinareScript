@@ -4,7 +4,8 @@
 
 `unifiedscript.graph/v0.3` introduced explicit structured regions to the
 semantic Graph, v0.4 added structured `while` loops, and current
-`unifiedscript.graph/v0.8` retains both. Nodes and control/data edges still describe computation; regions
+`unifiedscript.graph/v0.9` adds explicit `for` initializer and increment phases.
+Nodes and control/data edges still describe computation; regions
 describe lexical ownership and structured control-flow nesting without
 inferring it from screen coordinates or reverse-engineering edge shapes.
 
@@ -49,7 +50,7 @@ editor could recover that location.
 
 ## Region kinds
 
-The v0.4 schema defines seven kinds:
+The v0.9 schema defines nine kinds:
 
 | Kind | Meaning | Parent |
 | --- | --- | --- |
@@ -58,8 +59,10 @@ The v0.4 schema defines seven kinds:
 | `if` | Branch condition and branch control node | block/branch region |
 | `then` | True branch body | corresponding `if` |
 | `else` | False branch body or implicit false path | corresponding `if` |
-| `loop` | While condition and loop decision node | enclosing structured region |
-| `loopBody` | While body | corresponding `loop` |
+| `loop` | While/for condition and loop decision node | enclosing structured region |
+| `loopInitializer` | Ordered for initializers | corresponding `loop` |
+| `loopBody` | While/for body | corresponding `loop` |
+| `loopIncrement` | Ordered for incrementors | corresponding `loop` |
 
 An `if` region directly owns the condition expression nodes and its `branch`
 node. Its `childRegionIds` must contain exactly the `then` region followed by the
@@ -69,12 +72,13 @@ their nodes into the parent.
 
 The projector always emits an `else` region because the Graph branch has an
 explicit false control port. If C# omitted the `else` block, the region is empty
-and `isImplicit` is `true`. Only an `else` region may be implicit. This preserves
-the difference between an absent `else` and an explicitly authored empty block.
+and `isImplicit` is `true`. Omitted for initializer/increment clauses likewise
+produce empty implicit phase regions. No other region kind may be implicit.
 
 A `loop` region directly owns its condition expression and `loop` decision
-node. It has exactly one `loopBody` child sourced from the HIR body block. A
-break or continue nested under an `if` remains directly owned by that lexical
+node. A while has exactly one `loopBody` child sourced from the HIR body block.
+A for has ordered `loopInitializer`, `loopBody`, and `loopIncrement` children.
+A break or continue nested under an `if` remains directly owned by that lexical
 `then`/`else` region; the derived CFG separately records which nearest loop owns
 its transfer. See [LOOP_FOUNDATION.md](LOOP_FOUNDATION.md).
 
@@ -86,8 +90,8 @@ Every Graph node belongs to exactly one direct region through `nodeIds`:
 - method-body statements and their expressions belong to the body block;
 - branch conditions and branch nodes belong to the `if` region;
 - branch-body statements and expressions belong to `then` or `else`;
-- loop conditions and decisions belong to `loop`, while body statements belong
-  to `loopBody` or its nested child regions;
+- loop conditions and decisions belong to `loop`; initializer, body, and
+  increment nodes belong to their corresponding phase or nested child regions;
 - nodes inside a nested structured construct belong to its child region.
 
 Region node order is projection/evaluation order and is therefore preserved.
@@ -111,7 +115,7 @@ inside Graph JSON. See [CONTROL_FLOW_ANALYSIS.md](CONTROL_FLOW_ANALYSIS.md).
 
 Semantic regions are also separate from `.usgraph` comment regions. A semantic
 region affects program structure; a comment region is only visual canvas state.
-`GraphLayoutSynchronizer` validates Graph v0.8 but continues to preserve layout
+`GraphLayoutSynchronizer` validates Graph v0.9 but continues to preserve layout
 solely by function/node/edge IDs, so adding region metadata does not move nodes
 or change placement.
 

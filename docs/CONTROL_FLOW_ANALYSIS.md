@@ -164,5 +164,6 @@ their nearest structured owner. See [LOOP_FOUNDATION.md](LOOP_FOUNDATION.md).
 
 The analysis does not compute exception edges, short-circuit expression CFG,
 async suspension-state transitions, constant-condition reachability, control
-dependence, or SSA form. `do`/`for`/`foreach` and Graph-authored loop synthesis
-remain later expansions.
+dependence, or SSA form. M4.16 extends the same analysis to lossless
+text-authored `for`, including distinct header and continue targets. `do`,
+`foreach`, and Graph-authored for-loop synthesis remain later expansions.

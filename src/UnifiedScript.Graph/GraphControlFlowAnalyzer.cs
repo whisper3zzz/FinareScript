@@ -616,7 +616,15 @@ public sealed class GraphControlFlowAnalyzer
                      .OrderBy(static region => region.Id.Value, StringComparer.Ordinal))
         {
             GraphNode loopNode = controlNodes[loopRegion.SourceNodeId];
-            GraphRegion bodyRegion = regions[loopRegion.ChildRegionIds.Single()];
+            GraphRegion[] childRegions = loopRegion.ChildRegionIds
+                .Select(id => regions[id])
+                .ToArray();
+            GraphRegion bodyRegion = childRegions.Single(
+                static region => region.Kind == GraphRegionKind.LoopBody);
+            GraphRegion? initializerRegion = childRegions.SingleOrDefault(
+                static region => region.Kind == GraphRegionKind.LoopInitializer);
+            GraphRegion? incrementRegion = childRegions.SingleOrDefault(
+                static region => region.Kind == GraphRegionKind.LoopIncrement);
             HashSet<SemanticId> directControlNodes = loopRegion.NodeIds
                 .Where(controlNodes.ContainsKey)
                 .ToHashSet();
@@ -640,6 +648,26 @@ public sealed class GraphControlFlowAnalyzer
             HashSet<SemanticId> bodyNodes = bodyRegions
                 .SelectMany(id => regions[id].NodeIds)
                 .ToHashSet();
+            HashSet<SemanticId> incrementNodes = incrementRegion is null
+                ? []
+                : CollectRegionSubtree(incrementRegion.Id, regions)
+                    .SelectMany(id => regions[id].NodeIds)
+                    .ToHashSet();
+            SemanticId[] incrementControlEntries = incrementNodes
+                .Where(controlNodes.ContainsKey)
+                .Where(nodeId => !arcs.Any(arc =>
+                    arc.ToNodeId == nodeId && incrementNodes.Contains(arc.FromNodeId)))
+                .OrderBy(static id => id.Value, StringComparer.Ordinal)
+                .ToArray();
+            if (incrementControlEntries.Length > 1)
+            {
+                throw new InvalidOperationException(
+                    $"Loop increment region '{incrementRegion!.Id}' requires at most one control entry.");
+            }
+
+            SemanticId continueTarget = incrementControlEntries.Length == 1
+                ? incrementControlEntries[0]
+                : headerEntry;
             SemanticId[] breaks = controlNodes.Values
                 .Where(static node => node.Kind == "break")
                 .Where(node => nodeOwners.TryGetValue(node.Id, out SemanticId ownerId) &&
@@ -667,16 +695,17 @@ public sealed class GraphControlFlowAnalyzer
             foreach (SemanticId continueNodeId in continues)
             {
                 claimedTransfers.Add(continueNodeId);
-                if (RequireControlSuccessor(continueNodeId, "then", arcs) != headerEntry)
+                if (RequireControlSuccessor(continueNodeId, "then", arcs) != continueTarget)
                 {
                     throw new InvalidOperationException(
-                        $"Continue node '{continueNodeId}' must target header '{headerEntry}' of its nearest loop.");
+                        $"Continue node '{continueNodeId}' must target '{continueTarget}' of its nearest loop.");
                 }
             }
 
             SemanticId[] backEdges = arcs
                 .Where(arc => !arc.IsSynthetic && arc.ToNodeId == headerEntry &&
                     (bodyNodes.Contains(arc.FromNodeId) ||
+                        incrementNodes.Contains(arc.FromNodeId) ||
                         arc.FromNodeId == loopNode.Id && arc.FromPort == "body"))
                 .Select(static arc => arc.Id)
                 .OrderBy(static id => id.Value, StringComparer.Ordinal)
@@ -685,7 +714,10 @@ public sealed class GraphControlFlowAnalyzer
                 loopNode.Id,
                 loopRegion.Id,
                 bodyRegion.Id,
+                initializerRegion?.Id,
+                incrementRegion?.Id,
                 headerEntry,
+                continueTarget,
                 bodyEntry,
                 loopExit,
                 backEdges,

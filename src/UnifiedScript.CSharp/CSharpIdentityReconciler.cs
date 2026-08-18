@@ -330,6 +330,39 @@ public sealed class CSharpIdentityReconciler
                     Visit(whileStatement.Condition, owner, "condition", childParent);
                     Visit(whileStatement.Body, owner, "body", childParent);
                     break;
+                case HirForStatement forStatement:
+                    if (forStatement.Declaration is not null)
+                    {
+                        Visit(forStatement.Declaration, owner, "initializerDeclaration", childParent);
+                    }
+
+                    foreach (HirExpression initializer in forStatement.Initializers)
+                    {
+                        Visit(initializer, owner, "initializer", childParent);
+                    }
+
+                    if (forStatement.Condition is not null)
+                    {
+                        Visit(forStatement.Condition, owner, "condition", childParent);
+                    }
+
+                    foreach (HirExpression incrementor in forStatement.Incrementors)
+                    {
+                        Visit(incrementor, owner, "incrementor", childParent);
+                    }
+
+                    Visit(forStatement.Body, owner, "body", childParent);
+                    break;
+                case HirForVariableDeclaration declaration:
+                    foreach (HirForVariableDeclarator variable in declaration.Variables)
+                    {
+                        Visit(variable, owner, "variable", childParent);
+                    }
+
+                    break;
+                case HirForVariableDeclarator { Initializer: not null } variable:
+                    Visit(variable.Initializer, owner, "initializer", childParent);
+                    break;
                 case HirReturnStatement { Expression: not null } returnStatement:
                     Visit(returnStatement.Expression, owner, "returnValue", childParent);
                     break;
@@ -411,6 +444,18 @@ public sealed class CSharpIdentityReconciler
                 Child(ifStatement.Condition) + Child(ifStatement.Then) + Child(ifStatement.Else),
             HirWhileStatement whileStatement => GetShapeKey(whileStatement) +
                 Child(whileStatement.Condition) + Child(whileStatement.Body),
+            HirForStatement forStatement => GetShapeKey(forStatement) +
+                Child(forStatement.Declaration) +
+                "[" + string.Join(',', forStatement.Initializers.Select(initializer =>
+                    GetStructuralFingerprint(initializer, cache))) + "]" +
+                Child(forStatement.Condition) +
+                "[" + string.Join(',', forStatement.Incrementors.Select(incrementor =>
+                    GetStructuralFingerprint(incrementor, cache))) + "]" +
+                Child(forStatement.Body),
+            HirForVariableDeclaration declaration => GetShapeKey(declaration) +
+                "[" + string.Join(',', declaration.Variables.Select(variable =>
+                    GetStructuralFingerprint(variable, cache))) + "]",
+            HirForVariableDeclarator variable => GetShapeKey(variable) + Child(variable.Initializer),
             HirReturnStatement returnStatement => GetShapeKey(returnStatement) +
                 Child(returnStatement.Expression),
             HirMemberAccessExpression member => GetShapeKey(member) + Child(member.Target),
@@ -446,6 +491,12 @@ public sealed class CSharpIdentityReconciler
         HirExpressionStatement => "expressionStatement",
         HirIfStatement => "if",
         HirWhileStatement => "while",
+        HirForStatement forStatement =>
+            $"for|{forStatement.Declaration is not null}|{forStatement.Initializers.Count}|" +
+            $"{forStatement.Condition is not null}|{forStatement.Incrementors.Count}",
+        HirForVariableDeclaration declaration =>
+            $"forVariableDeclaration|{declaration.TypeName}|{declaration.Variables.Count}",
+        HirForVariableDeclarator variable => $"forVariable|{variable.Name}",
         HirBreakStatement => "break",
         HirContinueStatement => "continue",
         HirReturnStatement => "return",
@@ -458,7 +509,7 @@ public sealed class CSharpIdentityReconciler
             $"conditionalMemberBinding|{member.MemberName}",
         HirInvocationExpression invocation => $"invocation|{invocation.Arguments.Count}",
         HirBinaryExpression binary => $"binary|{binary.Operator}",
-        HirUnaryExpression unary => $"unary|{unary.Operator}",
+        HirUnaryExpression unary => $"unary|{unary.Operator}|{unary.IsPostfix}",
         HirAssignmentExpression assignment => $"assignment|{assignment.Operator}",
         HirAwaitExpression => "await",
         HirCastExpression cast => $"cast|{cast.TypeName}",
@@ -474,6 +525,9 @@ public sealed class CSharpIdentityReconciler
         HirExpressionStatement => "expressionStatement",
         HirIfStatement => "if",
         HirWhileStatement => "while",
+        HirForStatement => "for",
+        HirForVariableDeclaration => "forVariableDeclaration",
+        HirForVariableDeclarator => "forVariable",
         HirBreakStatement => "break",
         HirContinueStatement => "continue",
         HirReturnStatement => "return",

@@ -3548,6 +3548,94 @@ public sealed class CSharpSourcePatchApplierTests
     }
 
     [Fact]
+    public void Apply_EditsForClauseExpressionWithoutRecreatingForStructure()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int Run(int value)
+                {
+                    for (int index = 0; index < 3; index++)
+                    {
+                        value = value + 1;
+                    }
+
+                    return value;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) =
+            CreatePersistentRequest(source, "Game/ForClauseEdit.cs");
+        HirCompilationUnit originalHir = Assert.IsType<HirCompilationUnit>(original.Hir);
+        HirForStatement originalLoop = Assert.Single(
+            originalHir.DescendantsAndSelf().OfType<HirForStatement>());
+        HirForVariableDeclaration originalDeclaration = Assert.IsType<HirForVariableDeclaration>(
+            originalLoop.Declaration);
+        HirForVariableDeclarator originalVariable = Assert.Single(originalDeclaration.Variables);
+        HirBinaryExpression originalCondition = Assert.IsType<HirBinaryExpression>(
+            originalLoop.Condition);
+        HirLiteralExpression originalLimit = Assert.IsType<HirLiteralExpression>(
+            originalCondition.Right);
+        HirUnaryExpression originalIncrement = Assert.IsType<HirUnaryExpression>(
+            Assert.Single(originalLoop.Incrementors));
+        SemanticId intType = GetTypeId(original, originalLimit);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            originalHir.Id,
+            original.Semantics!.ConfigurationId,
+            [new ReplaceExpressionInputPatchOperation(
+                originalCondition.Id,
+                "right",
+                originalLimit.Id,
+                intType,
+                GetTypeId(original, originalCondition),
+                new LiteralPatchExpression("4", intType))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Contains(
+            "for (int index = 0; index < 4; index++)",
+            Assert.Single(result.PatchedRequest!.Sources).Source,
+            StringComparison.Ordinal);
+        CSharpAnalysisResult changedAnalysis = Assert.IsType<CSharpAnalysisResult>(result.Analysis);
+        HirCompilationUnit changedHir = Assert.IsType<HirCompilationUnit>(changedAnalysis.Hir);
+        HirForStatement changedLoop = Assert.Single(
+            changedHir.DescendantsAndSelf().OfType<HirForStatement>());
+        HirForVariableDeclaration changedDeclaration = Assert.IsType<HirForVariableDeclaration>(
+            changedLoop.Declaration);
+        HirForVariableDeclarator changedVariable = Assert.Single(changedDeclaration.Variables);
+        HirBinaryExpression changedCondition = Assert.IsType<HirBinaryExpression>(
+            changedLoop.Condition);
+        HirLiteralExpression changedLimit = Assert.IsType<HirLiteralExpression>(
+            changedCondition.Right);
+        HirUnaryExpression changedIncrement = Assert.IsType<HirUnaryExpression>(
+            Assert.Single(changedLoop.Incrementors));
+        Assert.Equal(originalLoop.Id, changedLoop.Id);
+        Assert.Equal(originalLoop.Body.Id, changedLoop.Body.Id);
+        Assert.Equal(originalDeclaration.Id, changedDeclaration.Id);
+        Assert.Equal(originalVariable.Id, changedVariable.Id);
+        Assert.Equal(originalCondition.Id, changedCondition.Id);
+        Assert.Equal(originalIncrement.Id, changedIncrement.Id);
+        Assert.NotEqual(originalLimit.Id, changedLimit.Id);
+        Assert.Equal("4", changedLimit.ValueText);
+        IdentitySidecarDocument identity = Assert.Single(changedAnalysis.IdentitySidecars);
+        Assert.Contains(identity.Tombstones, tombstone => tombstone.Id == originalLimit.Id);
+
+        GraphControlFlowLoop flow = Assert.Single(Assert.Single(
+            new GraphControlFlowAnalyzer().AnalyzeAndValidate(
+                new HirGraphProjector().Project(
+                    changedHir,
+                    changedAnalysis.Semantics)).Functions).Loops);
+        Assert.Equal(changedLoop.Id, flow.LoopNodeId);
+        Assert.NotNull(flow.InitializerRegionId);
+        Assert.NotNull(flow.IncrementRegionId);
+        Assert.Equal(changedIncrement.Id, flow.ContinueTargetNodeId);
+    }
+
+    [Fact]
     public void Apply_ReplacesAssignmentValueAndWhileConditionWithoutRecreatingStructure()
     {
         const string source = """
