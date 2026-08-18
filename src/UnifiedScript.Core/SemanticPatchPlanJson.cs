@@ -82,6 +82,7 @@ public static class SemanticPatchPlanJson
                 ReplaceProducedWhileConditionPatchPlanStep or
                 ReplaceProducedDoWhileConditionPatchPlanStep or
                 ReplaceProducedForConditionPatchPlanStep or
+                ReplaceProducedForEachCollectionPatchPlanStep or
                 ReplaceProducedIfConditionPatchPlanStep or
                 ReplaceProducedLocalInitializerPatchPlanStep or
                 ReplaceProducedReturnValuePatchPlanStep;
@@ -157,6 +158,15 @@ public static class SemanticPatchPlanJson
                     ValidateProducedForCondition(
                         document,
                         producedForCondition,
+                        loopProducers);
+                    break;
+                case ReplaceForEachCollectionPatchPlanStep replaceForEachCollection:
+                    ValidateOperation(document, replaceForEachCollection.ToOperation());
+                    break;
+                case ReplaceProducedForEachCollectionPatchPlanStep producedForEachCollection:
+                    ValidateProducedForEachCollection(
+                        document,
+                        producedForEachCollection,
                         loopProducers);
                     break;
                 case ReplaceForDeclarationInitializerPatchPlanStep replaceForDeclaration:
@@ -249,6 +259,20 @@ public static class SemanticPatchPlanJson
                             paths);
                         RegisterForLocalProducer(insertion.StepId, insertedFor, producedLocals);
                     }
+                    else if (insertion.NewStatement is ForEachPatchStatement insertedForEach)
+                    {
+                        RegisterLoopProducer(
+                            insertion.StepId,
+                            insertion.TargetNodeId,
+                            insertedForEach.Collection.ExpectedTypeId,
+                            LoopProducerKind.ForEach,
+                            loopProducers,
+                            paths);
+                        RegisterForEachLocalProducer(
+                            insertion.StepId,
+                            insertedForEach,
+                            producedLocals);
+                    }
                     else if (insertion.NewStatement is ReturnPatchStatement
                     {
                         Expression: not null,
@@ -327,6 +351,20 @@ public static class SemanticPatchPlanJson
                         RegisterForLocalProducer(
                             branchInsertion.StepId,
                             insertedBranchFor,
+                            producedLocals);
+                    }
+                    else if (branchInsertion.NewStatement is ForEachPatchStatement insertedBranchForEach)
+                    {
+                        RegisterLoopProducer(
+                            branchInsertion.StepId,
+                            branchInsertion.TargetNodeId,
+                            insertedBranchForEach.Collection.ExpectedTypeId,
+                            LoopProducerKind.ForEach,
+                            loopProducers,
+                            paths);
+                        RegisterForEachLocalProducer(
+                            branchInsertion.StepId,
+                            insertedBranchForEach,
                             producedLocals);
                     }
                     else if (branchInsertion.NewStatement is ReturnPatchStatement
@@ -418,6 +456,20 @@ public static class SemanticPatchPlanJson
                         RegisterForLocalProducer(
                             loopInsertion.StepId,
                             insertedNestedFor,
+                            producedLocals);
+                    }
+                    else if (loopInsertion.NewStatement is ForEachPatchStatement insertedNestedForEach)
+                    {
+                        RegisterLoopProducer(
+                            loopInsertion.StepId,
+                            loopInsertion.TargetNodeId,
+                            insertedNestedForEach.Collection.ExpectedTypeId,
+                            LoopProducerKind.ForEach,
+                            loopProducers,
+                            paths);
+                        RegisterForEachLocalProducer(
+                            loopInsertion.StepId,
+                            insertedNestedForEach,
                             producedLocals);
                     }
                     else if (loopInsertion.NewStatement is ReturnPatchStatement
@@ -667,13 +719,15 @@ public static class SemanticPatchPlanJson
                 WhilePatchStatement or
                 DoWhilePatchStatement or
                 ForPatchStatement or
+                ForEachPatchStatement or
                 BreakPatchStatement or
                 ContinuePatchStatement or
                 ReturnPatchStatement))
         {
             throw new JsonException(
                 $"Branch insertion step '{insertion.StepId}' currently accepts only a " +
-                "local-literal declaration, local assignment, nested if/while/do/for, loop transfer, " +
+                "local-literal declaration, local assignment, nested if/while/do/for/foreach, " +
+                "loop transfer, " +
                 "or return statement.");
         }
 
@@ -695,7 +749,7 @@ public static class SemanticPatchPlanJson
         {
             throw new JsonException(
                 $"Loop-body insertion step '{insertion.StepId}' must reference an earlier " +
-                "while/do/for-insertion step.");
+                "while/do/for/foreach-insertion step.");
         }
 
         if (source.OriginalTargetNodeId != insertion.TargetNodeId)
@@ -727,6 +781,7 @@ public static class SemanticPatchPlanJson
                 WhilePatchStatement or
                 DoWhilePatchStatement or
                 ForPatchStatement or
+                ForEachPatchStatement or
                 BreakPatchStatement or
                 ContinuePatchStatement or
                 ReturnPatchStatement))
@@ -851,6 +906,43 @@ public static class SemanticPatchPlanJson
             SemanticId.FromKey($"patch-plan-produced-for-condition:{replacement.StepId}"),
             conditionTypeId,
             replacement.NewCondition));
+    }
+
+    private static void ValidateProducedForEachCollection(
+        SemanticPatchPlanDocument document,
+        ReplaceProducedForEachCollectionPatchPlanStep replacement,
+        IReadOnlyDictionary<string, LoopProducerState> loopProducers)
+    {
+        if (string.IsNullOrWhiteSpace(replacement.SourceStepId) ||
+            !loopProducers.TryGetValue(replacement.SourceStepId, out LoopProducerState? source) ||
+            source.Kind != LoopProducerKind.ForEach ||
+            source.ConditionTypeId is not SemanticId collectionTypeId)
+        {
+            throw new JsonException(
+                $"Produced-foreach collection step '{replacement.StepId}' must reference an " +
+                "earlier foreach-insertion step.");
+        }
+
+        if (source.OriginalTargetNodeId != replacement.TargetNodeId)
+        {
+            throw new JsonException(
+                $"Produced-foreach collection step '{replacement.StepId}' and source step " +
+                $"'{replacement.SourceStepId}' must use the same original parent-block target.");
+        }
+
+        if (replacement.NewCollection is null ||
+            replacement.NewCollection.ExpectedTypeId != collectionTypeId)
+        {
+            throw new JsonException(
+                $"Produced-foreach collection step '{replacement.StepId}' must preserve the " +
+                "source foreach collection's declared semantic type.");
+        }
+
+        ValidateOperation(document, new ReplaceForEachCollectionPatchOperation(
+            SemanticId.FromKey($"patch-plan-produced-foreach:{replacement.StepId}"),
+            SemanticId.FromKey($"patch-plan-produced-foreach-collection:{replacement.StepId}"),
+            collectionTypeId,
+            replacement.NewCollection));
     }
 
     private static void ValidateProducedIfCondition(
@@ -1033,6 +1125,13 @@ public static class SemanticPatchPlanJson
             new LocalProducerState(variable.Name, variable.ExpectedTypeId));
     }
 
+    private static void RegisterForEachLocalProducer(
+        string stepId,
+        ForEachPatchStatement statement,
+        IDictionary<string, LocalProducerState> producedLocals) => producedLocals.Add(
+        stepId,
+        new LocalProducerState(statement.VariableName, statement.ExpectedElementTypeId));
+
     private static ForVariableDeclaratorPatch AssertSingleForVariable(
         ForVariableDeclarationPatch declaration) => declaration.Variables.Count == 1
         ? declaration.Variables[0]
@@ -1157,6 +1256,7 @@ public static class SemanticPatchPlanJson
         While,
         DoWhile,
         For,
+        ForEach,
     }
 
     private sealed record LoopProducerState(

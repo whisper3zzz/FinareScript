@@ -133,8 +133,11 @@ Outcome: practical gameplay methods are fully visualizable.
   post-body condition/continue CFG routing
 - [x] bounded `do` construction, symbolic body population, and exact
   existing/produced condition editing
+- [x] indexed `foreach` over strings and one-dimensional zero-based arrays,
+  with collection capture, current-value binding, CFG routing, bounded
+  construction, produced-local handles, and exact collection editing
 - [ ] general data/control rewiring and structural HIR operations
-- [ ] `foreach` and enumerator/disposal semantics
+- [ ] general enumerator-backed/ref/async `foreach` and disposal/finally semantics
 - [ ] `switch` and supported patterns
 - [ ] deterministic temporary naming
 

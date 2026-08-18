@@ -625,6 +625,8 @@ public sealed class GraphControlFlowAnalyzer
                 static region => region.Kind == GraphRegionKind.LoopInitializer);
             GraphRegion? incrementRegion = childRegions.SingleOrDefault(
                 static region => region.Kind == GraphRegionKind.LoopIncrement);
+            GraphRegion? collectionRegion = childRegions.SingleOrDefault(
+                static region => region.Kind == GraphRegionKind.LoopCollection);
             HashSet<SemanticId> directControlNodes = loopRegion.NodeIds
                 .Where(controlNodes.ContainsKey)
                 .ToHashSet();
@@ -755,6 +757,7 @@ public sealed class GraphControlFlowAnalyzer
                 bodyRegion.Id,
                 initializerRegion?.Id,
                 incrementRegion?.Id,
+                collectionRegion?.Id,
                 headerEntry,
                 continueTarget,
                 bodyEntry,

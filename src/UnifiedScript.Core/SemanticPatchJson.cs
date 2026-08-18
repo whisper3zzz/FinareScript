@@ -95,6 +95,9 @@ public static class SemanticPatchJson
                 case ReplaceForConditionPatchOperation replaceForCondition:
                     ValidateReplaceForCondition(replaceForCondition);
                     break;
+                case ReplaceForEachCollectionPatchOperation replaceForEachCollection:
+                    ValidateReplaceForEachCollection(replaceForEachCollection);
+                    break;
                 case ReplaceForDeclarationInitializerPatchOperation replaceForDeclaration:
                     ValidateReplaceForDeclarationInitializer(replaceForDeclaration);
                     break;
@@ -332,6 +335,27 @@ public static class SemanticPatchJson
         }
 
         ValidatePatchExpression(operation.NewCondition, 0);
+    }
+
+    private static void ValidateReplaceForEachCollection(
+        ReplaceForEachCollectionPatchOperation operation)
+    {
+        if (operation.ExpectedCollectionNodeId.IsEmpty ||
+            operation.ExpectedCollectionTypeId.IsEmpty ||
+            operation.NewCollection is null)
+        {
+            throw new JsonException(
+                "Foreach-collection replacement requires the current collection endpoint, " +
+                "expected collection type, and a typed new collection.");
+        }
+
+        if (operation.NewCollection.ExpectedTypeId != operation.ExpectedCollectionTypeId)
+        {
+            throw new JsonException(
+                "A foreach replacement collection must preserve the exact collection type.");
+        }
+
+        ValidatePatchExpression(operation.NewCollection, 0);
     }
 
     private static void ValidateReplaceForDeclarationInitializer(
@@ -574,6 +598,19 @@ public static class SemanticPatchJson
                 break;
             case ForPatchStatement forStatement:
                 ValidateForStatement(forStatement);
+                break;
+            case ForEachPatchStatement forEachStatement:
+                if (string.IsNullOrWhiteSpace(forEachStatement.TypeName) ||
+                    string.IsNullOrWhiteSpace(forEachStatement.VariableName) ||
+                    forEachStatement.ExpectedElementTypeId.IsEmpty ||
+                    forEachStatement.Collection is null)
+                {
+                    throw new JsonException(
+                        "A foreach insertion requires an explicit element type, variable name, " +
+                        "element type ID, and typed collection expression.");
+                }
+
+                ValidatePatchExpression(forEachStatement.Collection, 0);
                 break;
             case BreakPatchStatement:
             case ContinuePatchStatement:

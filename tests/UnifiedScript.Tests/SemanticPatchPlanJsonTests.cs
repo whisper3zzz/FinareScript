@@ -1390,7 +1390,7 @@ public sealed class SemanticPatchPlanJsonTests
         Assert.Equal(third.StepId, roundTripThird.StepId);
         Assert.Equal(third.TargetPath, roundTripThird.TargetPath);
         Assert.Equal(third.NewInput, roundTripThird.NewInput);
-        Assert.Equal("unifiedscript.patch-plan/v0.18", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch-plan/v0.19", roundTrip.SchemaVersion);
         Assert.Contains("\"step\": \"replaceProducedExpressionInput\"", json);
         Assert.Contains("\"targetPath\": []", json);
     }
@@ -1444,7 +1444,7 @@ public sealed class SemanticPatchPlanJsonTests
         Assert.Equal(consumer.ExpectedInputTypeId, roundTripConsumer.ExpectedInputTypeId);
         Assert.Equal(consumer.ExpectedTargetTypeId, roundTripConsumer.ExpectedTargetTypeId);
         Assert.Equal(consumer.NewInput, roundTripConsumer.NewInput);
-        Assert.Equal("unifiedscript.patch-plan/v0.18", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch-plan/v0.19", roundTrip.SchemaVersion);
         Assert.Contains("\"expression\": \"conditionalMemberAccess\"", json);
         Assert.Contains("\"inputPort\": \"receiver\"", json);
     }
@@ -1640,5 +1640,49 @@ public sealed class SemanticPatchPlanJsonTests
                     producer.StepId,
                     new LiteralPatchExpression("false", boolType)),
             ]));
+    }
+
+    [Fact]
+    public void SerializeAndDeserialize_PreserveProducedForEachCollectionHandle()
+    {
+        SemanticId blockId = SemanticId.FromKey("produced-foreach-parent");
+        SemanticId stringType = SemanticId.FromKey("produced-foreach-string-type");
+        SemanticId charType = SemanticId.FromKey("produced-foreach-char-type");
+        var producer = new InsertStatementPatchPlanStep(
+            "insertForEach",
+            blockId,
+            null,
+            null,
+            new ForEachPatchStatement(
+                "char",
+                "value",
+                charType,
+                new LocalReferencePatchExpression(
+                    SemanticId.FromKey("primary-text"),
+                    "primary",
+                    stringType)));
+        var replacement = new ReplaceProducedForEachCollectionPatchPlanStep(
+            "replaceProducedForEachCollection",
+            blockId,
+            producer.StepId,
+            new LocalReferencePatchExpression(
+                SemanticId.FromKey("fallback-text"),
+                "fallback",
+                stringType));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("produced-foreach-compilation"),
+            SemanticId.FromKey("produced-foreach-configuration"),
+            [producer, replacement]);
+
+        string json = SemanticPatchPlanJson.Serialize(plan);
+        SemanticPatchPlanDocument roundTrip = SemanticPatchPlanJson.Deserialize(json);
+
+        Assert.IsType<ForEachPatchStatement>(
+            Assert.IsType<InsertStatementPatchPlanStep>(roundTrip.Steps[0]).NewStatement);
+        Assert.Equal(
+            replacement,
+            Assert.IsType<ReplaceProducedForEachCollectionPatchPlanStep>(roundTrip.Steps[1]));
+        Assert.Equal("unifiedscript.patch-plan/v0.19", roundTrip.SchemaVersion);
+        Assert.Contains("\"step\": \"replaceProducedForEachCollection\"", json);
     }
 }

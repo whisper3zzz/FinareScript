@@ -169,4 +169,8 @@ text-authored `for`, including distinct header and continue targets. M4.19 adds
 post-test `do ... while`: the cyclic header is the body entry, the continue
 target is the condition entry, and a generated one-time entry proves the body
 runs before the first condition. See [DO_WHILE_LOOPS.md](DO_WHILE_LOOPS.md).
-`foreach` and its enumerator/disposal semantics remain a later expansion.
+M4.20 adds indexed `foreach`: `CollectionRegionId` identifies the evaluate-once
+phase, the move-next decision is the header/continue target, and the current
+binding is the body entry. See [FOREACH_LOOPS.md](FOREACH_LOOPS.md). General
+enumerator acquisition, disposal/finally, and exceptional cleanup edges remain
+a later expansion.

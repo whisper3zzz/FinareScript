@@ -9,6 +9,7 @@ internal sealed class HirPatchIndex
     private readonly Dictionary<SemanticId, StatementLocation> statements = [];
     private readonly Dictionary<SemanticId, ExpressionLocation> expressions = [];
     private readonly Dictionary<SemanticId, HirForStatement> forVariables = [];
+    private readonly Dictionary<SemanticId, HirForEachStatement> forEachVariables = [];
 
     public HirPatchIndex(HirCompilationUnit compilation)
     {
@@ -40,6 +41,38 @@ internal sealed class HirPatchIndex
         forVariables.TryGetValue(variableId, out HirForStatement? statement) &&
         statement.Id == forStatementId;
 
+    public bool TryGetDeclaringForEach(
+        SemanticId variableId,
+        out HirForEachStatement? statement) =>
+        forEachVariables.TryGetValue(variableId, out statement);
+
+    public bool IsForEachVariableInScopeAtBlock(
+        SemanticId variableId,
+        SemanticId blockId)
+    {
+        if (!forEachVariables.TryGetValue(variableId, out HirForEachStatement? declaringLoop) ||
+            !blocks.TryGetValue(blockId, out BlockLocation? current))
+        {
+            return false;
+        }
+
+        while (true)
+        {
+            if (current.EntryStatement is HirForEachStatement candidate &&
+                candidate.Id == declaringLoop.Id &&
+                candidate.Body.Id == current.Block.Id)
+            {
+                return true;
+            }
+
+            if (current.ParentBlock is null ||
+                !blocks.TryGetValue(current.ParentBlock.Id, out current))
+            {
+                return false;
+            }
+        }
+    }
+
     public bool TryGetNearestEnclosingLoop(
         SemanticId blockId,
         out HirStatement? loop)
@@ -70,6 +103,13 @@ internal sealed class HirPatchIndex
                 forLoop.Body.Id == current.Block.Id)
             {
                 loop = forLoop;
+                return true;
+            }
+
+            if (current.EntryStatement is HirForEachStatement forEachLoop &&
+                forEachLoop.Body.Id == current.Block.Id)
+            {
+                loop = forEachLoop;
                 return true;
             }
 
@@ -252,6 +292,11 @@ internal sealed class HirPatchIndex
                     }
 
                     AddBlock(forStatement.Body, method, block, forStatement);
+                    break;
+                case HirForEachStatement forEachStatement:
+                    forEachVariables.Add(forEachStatement.Variable.Id, forEachStatement);
+                    AddExpression(forEachStatement.Collection, forEachStatement, block, method, null);
+                    AddBlock(forEachStatement.Body, method, block, forEachStatement);
                     break;
                 case HirReturnStatement { Expression: not null } returnStatement:
                     AddExpression(returnStatement.Expression, returnStatement, block, method, null);

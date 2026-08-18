@@ -219,6 +219,10 @@ public sealed class HirGraphProjector
                 HirWhileStatement whileStatement => ProjectWhile(whileStatement, incoming, regionId),
                 HirDoWhileStatement doWhileStatement => ProjectDoWhile(doWhileStatement, incoming, regionId),
                 HirForStatement forStatement => ProjectFor(forStatement, incoming, regionId),
+                HirForEachStatement forEachStatement => ProjectForEach(
+                    forEachStatement,
+                    incoming,
+                    regionId),
                 HirBreakStatement breakStatement => ProjectBreak(breakStatement, incoming, regionId),
                 HirContinueStatement continueStatement => ProjectContinue(continueStatement, incoming, regionId),
                 HirReturnStatement returnStatement => ProjectReturn(returnStatement, incoming, regionId),
@@ -702,6 +706,150 @@ public sealed class HirGraphProjector
             }
 
             ConnectIncoming(bodyExits, conditionTarget.NodeId, conditionTarget.Port);
+            return [new ControlEndpoint(statement.Id, "exit"), .. context.BreakExits];
+        }
+
+        private IReadOnlyList<ControlEndpoint> ProjectForEach(
+            HirForEachStatement statement,
+            IReadOnlyList<ControlEndpoint> incoming,
+            SemanticId parentRegionId)
+        {
+            SemanticId loopRegionId = RegionId(statement.Id, GraphRegionKind.Loop);
+            AddRegion(new RegionBuilder(
+                loopRegionId,
+                GraphRegionKind.Loop,
+                parentRegionId,
+                statement.Id,
+                statement.Span,
+                false));
+            SemanticId collectionRegionId = RegionId(
+                statement.Id,
+                GraphRegionKind.LoopCollection);
+            AddRegion(new RegionBuilder(
+                collectionRegionId,
+                GraphRegionKind.LoopCollection,
+                loopRegionId,
+                statement.Collection.Id,
+                statement.Collection.Span,
+                false));
+            SemanticId bodyRegionId = RegionId(statement.Id, GraphRegionKind.LoopBody);
+            AddRegion(new RegionBuilder(
+                bodyRegionId,
+                GraphRegionKind.LoopBody,
+                loopRegionId,
+                statement.Body.Id,
+                statement.Body.Span,
+                false));
+
+            ExpressionProjection collection = ProjectExpression(
+                statement.Collection,
+                collectionRegionId);
+            SemanticId captureId = SemanticId.FromKey(
+                $"{statement.Id}:graph:foreach:collectionCapture");
+            AddNode(new GraphNode(
+                captureId,
+                "collectionCapture",
+                "Capture Collection",
+                statement.Collection.Span,
+                [
+                    new GraphPort("in", GraphPortDirection.Input, GraphPortKind.Control),
+                    new GraphPort("then", GraphPortDirection.Output, GraphPortKind.Control),
+                    new GraphPort("value", GraphPortDirection.Input, GraphPortKind.Data),
+                    new GraphPort("collection", GraphPortDirection.Output, GraphPortKind.Data),
+                ],
+                new SortedDictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["evaluation"] = "once",
+                    ["strategy"] = "indexed",
+                }),
+                collectionRegionId);
+            IReadOnlyList<ControlEndpoint> beforeCapture = ConnectEffectChain(
+                incoming,
+                collection.Effects.Distinct().ToArray());
+            ConnectIncoming(beforeCapture, captureId, "in");
+            AddRequiredDataEdge(
+                collection.Value,
+                new ValueEndpoint(captureId, "value"));
+
+            var loopProperties = new SortedDictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["loopForm"] = "forEach",
+                ["collectionEvaluation"] = "once",
+                ["collectionStrategy"] = "indexed",
+                ["iterationAdvance"] = "beforeBody",
+                ["continueTarget"] = "moveNext",
+                ["disposal"] = "none",
+                ["evaluationOrder"] = "collection,moveNext,current,body",
+            };
+            semantics.ApplyNodeProperties(statement.Collection.Id, loopProperties);
+            AddNode(new GraphNode(
+                statement.Id,
+                "loop",
+                "Foreach",
+                statement.Span,
+                [
+                    new GraphPort("in", GraphPortDirection.Input, GraphPortKind.Control),
+                    new GraphPort("body", GraphPortDirection.Output, GraphPortKind.Control),
+                    new GraphPort("exit", GraphPortDirection.Output, GraphPortKind.Control),
+                    new GraphPort("collection", GraphPortDirection.Input, GraphPortKind.Data),
+                ],
+                loopProperties),
+                loopRegionId);
+            ConnectIncoming(
+                [new ControlEndpoint(captureId, "then")],
+                statement.Id,
+                "in");
+            AddEdge(
+                GraphEdgeKind.Data,
+                new ValueEndpoint(captureId, "collection"),
+                new ValueEndpoint(statement.Id, "collection"));
+
+            var variableProperties = new SortedDictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["name"] = statement.Variable.Name,
+                ["type"] = statement.Variable.TypeName,
+                ["binding"] = "current",
+                ["readOnly"] = "true",
+            };
+            semantics.ApplyNodeProperties(statement.Variable.Id, variableProperties);
+            AddNode(new GraphNode(
+                statement.Variable.Id,
+                "iterationVariable",
+                $"Current {statement.Variable.Name}",
+                statement.Variable.Span,
+                [
+                    new GraphPort("in", GraphPortDirection.Input, GraphPortKind.Control),
+                    new GraphPort("then", GraphPortDirection.Output, GraphPortKind.Control),
+                    new GraphPort("collection", GraphPortDirection.Input, GraphPortKind.Data),
+                    new GraphPort("value", GraphPortDirection.Output, GraphPortKind.Data),
+                ],
+                variableProperties),
+                bodyRegionId);
+            ConnectIncoming(
+                [new ControlEndpoint(statement.Id, "body")],
+                statement.Variable.Id,
+                "in");
+            AddEdge(
+                GraphEdgeKind.Data,
+                new ValueEndpoint(captureId, "collection"),
+                new ValueEndpoint(statement.Variable.Id, "collection"));
+
+            var context = new LoopContext(new ControlTarget(statement.Id, "in"));
+            loops.Push(context);
+            IReadOnlyList<ControlEndpoint> bodyExits;
+            try
+            {
+                bodyExits = ProjectBlockContents(
+                    statement.Body,
+                    [new ControlEndpoint(statement.Variable.Id, "then")],
+                    bodyRegionId);
+            }
+            finally
+            {
+                _ = loops.Pop();
+            }
+
+            ConnectIncoming(bodyExits, statement.Id, "in");
             return [new ControlEndpoint(statement.Id, "exit"), .. context.BreakExits];
         }
 

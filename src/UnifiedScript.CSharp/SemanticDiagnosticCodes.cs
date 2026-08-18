@@ -9,4 +9,5 @@ public static class SemanticDiagnosticCodes
     public const string CoalesceConversionNotSupported = "UVS2005";
     public const string ConditionalAccessEffectsNotSupported = "UVS2006";
     public const string ConditionalAccessTypeShapeNotSupported = "UVS2007";
+    public const string ForEachCollectionNotSupported = "UVS2008";
 }

@@ -85,6 +85,7 @@ public sealed class RoslynSemanticBinder
         RegisterTypeDeclarations(hir);
         RegisterMethodAndValueDeclarations(hir, diagnostics);
         BindExpressions(hir);
+        ValidateForEachStatements(hir, diagnostics);
         ValidateConditionalExpressions(hir, diagnostics);
         ValidateShortCircuitExpressions(hir, diagnostics);
         ValidateCoalesceExpressions(hir, diagnostics);
@@ -204,7 +205,70 @@ public sealed class RoslynSemanticBinder
                         localType.Id,
                         DeclaredSymbolId: local.Id);
                 }
+
+                foreach (HirForEachStatement forEach in method.Body
+                             .DescendantsAndSelf()
+                             .OfType<HirForEachStatement>())
+                {
+                    ForEachStatementSyntax forEachSyntax =
+                        context.SyntaxIndex.Find<ForEachStatementSyntax>(forEach);
+                    ILocalSymbol localSymbol = context.SemanticModel.GetDeclaredSymbol(forEachSyntax) ??
+                        throw new InvalidOperationException(
+                            $"Roslyn did not bind foreach local '{forEach.Variable.Name}'.");
+                    declaredSymbols[localSymbol] = forEach.Variable.Id;
+                    TypeDescriptor localType = GetTypeDescriptor(localSymbol.Type);
+                    nodes[forEach.Variable.Id] = new BoundNodeInfo(
+                        forEach.Variable.Id,
+                        localType.Id,
+                        DeclaredSymbolId: forEach.Variable.Id);
+                }
             }
+        }
+    }
+
+    private void ValidateForEachStatements(
+        HirCompilationUnit hir,
+        ICollection<UnifiedDiagnostic> diagnostics)
+    {
+        foreach (HirForEachStatement forEach in hir
+                     .DescendantsAndSelf()
+                     .OfType<HirForEachStatement>())
+        {
+            BindingContext context = GetContext(forEach);
+            ForEachStatementSyntax syntax = context.SyntaxIndex.Find<ForEachStatementSyntax>(forEach);
+            ITypeSymbol? collectionType = context.SemanticModel.GetTypeInfo(syntax.Expression).Type;
+            ILocalSymbol? iterationVariable = context.SemanticModel.GetDeclaredSymbol(syntax);
+            ITypeSymbol? elementType = collectionType switch
+            {
+                { SpecialType: SpecialType.System_String } =>
+                    context.SemanticModel.Compilation.GetSpecialType(SpecialType.System_Char),
+                IArrayTypeSymbol { Rank: 1, IsSZArray: true } array => array.ElementType,
+                _ => null,
+            };
+            bool supportedCollection = collectionType?.SpecialType == SpecialType.System_String ||
+                collectionType is IArrayTypeSymbol
+                {
+                    Rank: 1,
+                    IsSZArray: true,
+                } supportedArray && GetTypeDescriptor(supportedArray.ElementType).IsGraphSafe;
+            bool hasExactElementType = elementType is not null && iterationVariable is not null &&
+                SymbolEqualityComparer.IncludeNullability.Equals(
+                    elementType,
+                    iterationVariable.Type);
+            if (supportedCollection && hasExactElementType)
+            {
+                continue;
+            }
+
+            diagnostics.Add(new UnifiedDiagnostic(
+                SemanticDiagnosticCodes.ForEachCollectionNotSupported,
+                UnifiedDiagnosticSeverity.Error,
+                "Indexed foreach currently requires System.String or a one-dimensional, " +
+                "zero-based array with a graph-safe element type, and the iteration variable " +
+                "must have that exact element type without a hidden conversion. " +
+                "Enumerator-backed collections are reserved for the disposal-aware slice.",
+                forEach.Collection.Span,
+                forEach.Collection.Id));
         }
     }
 
@@ -552,6 +616,8 @@ public sealed class RoslynSemanticBinder
 
         return type switch
         {
+            IArrayTypeSymbol { Rank: 1, IsSZArray: true } array =>
+                (UnifiedTypeKind.Array, nullability, GetTypeDescriptor(array.ElementType).IsGraphSafe),
             IArrayTypeSymbol => (UnifiedTypeKind.Array, nullability, false),
             ITypeParameterSymbol => (UnifiedTypeKind.TypeParameter, nullability, false),
             INamedTypeSymbol { TypeKind: TypeKind.Enum } =>
@@ -694,6 +760,13 @@ public sealed class RoslynSemanticBinder
                     }
 
                     break;
+                case HirForEachStatement forEachStatement:
+                    foreach (HirStatement child in EnumerateStatements(forEachStatement.Body))
+                    {
+                        yield return child;
+                    }
+
+                    break;
             }
         }
     }
@@ -711,6 +784,7 @@ public sealed class RoslynSemanticBinder
                 HirWhileStatement whileStatement => [whileStatement.Condition],
                 HirDoWhileStatement doWhileStatement => [doWhileStatement.Condition],
                 HirForStatement forStatement => GetForExpressionRoots(forStatement),
+                HirForEachStatement forEachStatement => [forEachStatement.Collection],
                 HirReturnStatement { Expression: not null } returnStatement =>
                     [returnStatement.Expression],
                 _ => [],

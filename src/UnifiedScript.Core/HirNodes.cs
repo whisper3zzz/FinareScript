@@ -44,6 +44,7 @@ public sealed record HirParameter(
 [JsonDerivedType(typeof(HirWhileStatement), "while")]
 [JsonDerivedType(typeof(HirDoWhileStatement), "doWhile")]
 [JsonDerivedType(typeof(HirForStatement), "for")]
+[JsonDerivedType(typeof(HirForEachStatement), "forEach")]
 [JsonDerivedType(typeof(HirBreakStatement), "break")]
 [JsonDerivedType(typeof(HirContinueStatement), "continue")]
 [JsonDerivedType(typeof(HirReturnStatement), "return")]
@@ -93,6 +94,19 @@ public sealed record HirForStatement(
     HirExpression? Condition,
     IReadOnlyList<HirExpression> Incrementors,
     HirBlockStatement Body) : HirStatement(Id, Span);
+
+public sealed record HirForEachStatement(
+    SemanticId Id,
+    SourceSpan Span,
+    HirForEachVariable Variable,
+    HirExpression Collection,
+    HirBlockStatement Body) : HirStatement(Id, Span);
+
+public sealed record HirForEachVariable(
+    SemanticId Id,
+    SourceSpan Span,
+    string Name,
+    string TypeName) : HirNode(Id, Span);
 
 public sealed record HirForVariableDeclaration(
     SemanticId Id,

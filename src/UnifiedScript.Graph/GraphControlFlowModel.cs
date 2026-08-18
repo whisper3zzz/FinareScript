@@ -38,6 +38,7 @@ public sealed record GraphControlFlowLoop(
     SemanticId BodyRegionId,
     SemanticId? InitializerRegionId,
     SemanticId? IncrementRegionId,
+    SemanticId? CollectionRegionId,
     SemanticId HeaderEntryNodeId,
     SemanticId ContinueTargetNodeId,
     SemanticId BodyEntryNodeId,

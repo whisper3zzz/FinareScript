@@ -472,6 +472,66 @@ public sealed class CSharpIdentityReconcilerTests
         Assert.Empty(sidecar.Tombstones);
     }
 
+    [Fact]
+    public void Analyze_PreservesForEachVariableCollectionAndBodyAcrossFormattingChanges()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static void Run(string values)
+                {
+                    foreach (char value in values)
+                    {
+                        if (value == 'x')
+                        {
+                            continue;
+                        }
+                    }
+                }
+            }
+            """;
+        const string changed = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static void Run(string values)
+                {
+                    // Formatting does not recreate the visual foreach.
+                    foreach( char value  in  values )
+                    { if (value == 'x') { continue; } }
+                }
+            }
+            """;
+        CSharpAnalysisResult initial = AnalyzeWithIdentity(
+            source,
+            IdentitySidecarDocument.CreateEmpty(Path));
+        HirForEachStatement initialLoop = Assert.Single(
+            initial.Hir!.DescendantsAndSelf().OfType<HirForEachStatement>());
+
+        CSharpAnalysisResult formatted = AnalyzeWithIdentity(
+            changed,
+            Assert.Single(initial.IdentitySidecars));
+        HirForEachStatement formattedLoop = Assert.Single(
+            formatted.Hir!.DescendantsAndSelf().OfType<HirForEachStatement>());
+
+        Assert.Equal(initialLoop.Id, formattedLoop.Id);
+        Assert.Equal(initialLoop.Variable.Id, formattedLoop.Variable.Id);
+        Assert.Equal(initialLoop.Collection.Id, formattedLoop.Collection.Id);
+        Assert.Equal(initialLoop.Body.Id, formattedLoop.Body.Id);
+        Assert.Equal(
+            Assert.Single(initialLoop.DescendantsAndSelf().OfType<HirContinueStatement>()).Id,
+            Assert.Single(formattedLoop.DescendantsAndSelf().OfType<HirContinueStatement>()).Id);
+        IdentitySidecarDocument sidecar = Assert.Single(formatted.IdentitySidecars);
+        Assert.Contains(sidecar.Entries, static entry => entry.Kind == "forEach");
+        Assert.Contains(sidecar.Entries, static entry => entry.Kind == "forEachVariable");
+        Assert.Empty(sidecar.Tombstones);
+    }
+
     private const string Path = "Game/Calculator.cs";
 
     private static CSharpAnalysisResult AnalyzeWithIdentity(

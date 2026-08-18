@@ -357,6 +357,11 @@ public sealed class CSharpIdentityReconciler
 
                     Visit(forStatement.Body, owner, "body", childParent);
                     break;
+                case HirForEachStatement forEachStatement:
+                    Visit(forEachStatement.Variable, owner, "iterationVariable", childParent);
+                    Visit(forEachStatement.Collection, owner, "collection", childParent);
+                    Visit(forEachStatement.Body, owner, "body", childParent);
+                    break;
                 case HirForVariableDeclaration declaration:
                     foreach (HirForVariableDeclarator variable in declaration.Variables)
                     {
@@ -458,6 +463,10 @@ public sealed class CSharpIdentityReconciler
                 "[" + string.Join(',', forStatement.Incrementors.Select(incrementor =>
                     GetStructuralFingerprint(incrementor, cache))) + "]" +
                 Child(forStatement.Body),
+            HirForEachStatement forEachStatement => GetShapeKey(forEachStatement) +
+                Child(forEachStatement.Variable) +
+                Child(forEachStatement.Collection) +
+                Child(forEachStatement.Body),
             HirForVariableDeclaration declaration => GetShapeKey(declaration) +
                 "[" + string.Join(',', declaration.Variables.Select(variable =>
                     GetStructuralFingerprint(variable, cache))) + "]",
@@ -501,6 +510,8 @@ public sealed class CSharpIdentityReconciler
         HirForStatement forStatement =>
             $"for|{forStatement.Declaration is not null}|{forStatement.Initializers.Count}|" +
             $"{forStatement.Condition is not null}|{forStatement.Incrementors.Count}",
+        HirForEachStatement => "forEach",
+        HirForEachVariable variable => $"forEachVariable|{variable.Name}|{variable.TypeName}",
         HirForVariableDeclaration declaration =>
             $"forVariableDeclaration|{declaration.TypeName}|{declaration.Variables.Count}",
         HirForVariableDeclarator variable => $"forVariable|{variable.Name}",
@@ -534,6 +545,8 @@ public sealed class CSharpIdentityReconciler
         HirWhileStatement => "while",
         HirDoWhileStatement => "doWhile",
         HirForStatement => "for",
+        HirForEachStatement => "forEach",
+        HirForEachVariable => "forEachVariable",
         HirForVariableDeclaration => "forVariableDeclaration",
         HirForVariableDeclarator => "forVariable",
         HirBreakStatement => "break",

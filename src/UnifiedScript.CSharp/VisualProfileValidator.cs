@@ -262,10 +262,28 @@ public sealed class VisualProfileValidator
             base.VisitContinueStatement(node);
         }
 
+        public override void VisitForEachStatement(ForEachStatementSyntax node)
+        {
+            if (!node.AwaitKeyword.IsKind(SyntaxKind.None) || node.Type is RefTypeSyntax)
+            {
+                Add(
+                    diagnostics,
+                    VisualProfileDiagnosticCodes.StatementNotSupported,
+                    "Indexed foreach does not support await, ref, ref readonly, or scoped " +
+                    "iteration variables in Visual C# profile v0.2.",
+                    node,
+                    filePath);
+                return;
+            }
+
+            base.VisitForEachStatement(node);
+        }
+
         private void ValidateLoopControlTarget(StatementSyntax node)
         {
             if (node.Ancestors().Any(static ancestor =>
-                    ancestor is WhileStatementSyntax or DoStatementSyntax or ForStatementSyntax))
+                    ancestor is WhileStatementSyntax or DoStatementSyntax or ForStatementSyntax or
+                        ForEachStatementSyntax))
             {
                 return;
             }
@@ -273,7 +291,8 @@ public sealed class VisualProfileValidator
             Add(
                 diagnostics,
                 VisualProfileDiagnosticCodes.LoopControlTargetRequired,
-                $"'{node.Kind()}' requires an enclosing while, do, or for loop in Visual C# profile v0.2.",
+                $"'{node.Kind()}' requires an enclosing while, do, for, or foreach loop in " +
+                "Visual C# profile v0.2.",
                 node,
                 filePath);
         }
@@ -359,6 +378,7 @@ public sealed class VisualProfileValidator
                     AttributeSyntax attribute => attribute.Name.Span.Contains(typeSyntax.Span),
                     ParameterSyntax parameter => parameter.Type?.Span.Contains(typeSyntax.Span) == true,
                     VariableDeclarationSyntax declaration => declaration.Type.Span.Contains(typeSyntax.Span),
+                    ForEachStatementSyntax forEach => forEach.Type.Span.Contains(typeSyntax.Span),
                     MethodDeclarationSyntax method => method.ReturnType.Span.Contains(typeSyntax.Span),
                     CastExpressionSyntax cast => cast.Type.Span.Contains(typeSyntax.Span),
                     ObjectCreationExpressionSyntax creation => creation.Type.Span.Contains(typeSyntax.Span),
@@ -385,6 +405,7 @@ public sealed class VisualProfileValidator
             SyntaxKind.WhileStatement or
             SyntaxKind.DoStatement or
             SyntaxKind.ForStatement or
+            SyntaxKind.ForEachStatement or
             SyntaxKind.BreakStatement or
             SyntaxKind.ContinueStatement or
             SyntaxKind.ReturnStatement or
@@ -405,6 +426,7 @@ public sealed class VisualProfileValidator
             AssignmentExpressionSyntax or
             AwaitExpressionSyntax or
             CastExpressionSyntax or
-            ConditionalExpressionSyntax;
+            ConditionalExpressionSyntax or
+            OmittedArraySizeExpressionSyntax;
     }
 }

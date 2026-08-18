@@ -192,6 +192,7 @@ public static class GraphJson
             }
 
             if (region.Kind is (GraphRegionKind.LoopInitializer or
+                    GraphRegionKind.LoopCollection or
                     GraphRegionKind.LoopBody or
                     GraphRegionKind.LoopIncrement) &&
                 (region.ParentRegionId is not SemanticId loopParentId ||
@@ -257,13 +258,19 @@ public static class GraphJson
                 bool isFor = hasLoopForm && string.Equals(loopForm, "for", StringComparison.Ordinal);
                 bool isDoWhile = hasLoopForm &&
                     string.Equals(loopForm, "doWhile", StringComparison.Ordinal);
-                bool hasSupportedLoopForm = !hasLoopForm || isFor || isDoWhile;
+                bool isForEach = hasLoopForm &&
+                    string.Equals(loopForm, "forEach", StringComparison.Ordinal);
+                bool hasSupportedLoopForm = !hasLoopForm || isFor || isDoWhile || isForEach;
                 bool hasValidChildren = isFor
                     ? children.Length == 3 &&
                         children[0].Kind == GraphRegionKind.LoopInitializer &&
                         children[1].Kind == GraphRegionKind.LoopBody &&
                         children[2].Kind == GraphRegionKind.LoopIncrement
-                    : children.Length == 1 && children[0].Kind == GraphRegionKind.LoopBody;
+                    : isForEach
+                        ? children.Length == 2 &&
+                            children[0].Kind == GraphRegionKind.LoopCollection &&
+                            children[1].Kind == GraphRegionKind.LoopBody
+                        : children.Length == 1 && children[0].Kind == GraphRegionKind.LoopBody;
                 GraphNode[] loopEntries = region.NodeIds
                     .Select(id => nodes[id])
                     .Where(static node => node.Kind == "loopEntry")
@@ -280,13 +287,34 @@ public static class GraphJson
                     string.Equals(continueTarget, "condition", StringComparison.Ordinal) &&
                     loopNode.Properties.TryGetValue("evaluationOrder", out string? order) &&
                     string.Equals(order, "body,condition", StringComparison.Ordinal);
+                bool hasValidForEachProperties = !isForEach ||
+                    loopNode!.Properties.TryGetValue("collectionEvaluation", out string? collectionEvaluation) &&
+                    string.Equals(collectionEvaluation, "once", StringComparison.Ordinal) &&
+                    loopNode.Properties.TryGetValue("collectionStrategy", out string? collectionStrategy) &&
+                    string.Equals(collectionStrategy, "indexed", StringComparison.Ordinal) &&
+                    loopNode.Properties.TryGetValue("iterationAdvance", out string? advance) &&
+                    string.Equals(advance, "beforeBody", StringComparison.Ordinal) &&
+                    loopNode.Properties.TryGetValue("continueTarget", out string? forEachContinueTarget) &&
+                    string.Equals(forEachContinueTarget, "moveNext", StringComparison.Ordinal) &&
+                    loopNode.Properties.TryGetValue("disposal", out string? disposal) &&
+                    string.Equals(disposal, "none", StringComparison.Ordinal) &&
+                    loopNode.Properties.TryGetValue("evaluationOrder", out string? forEachOrder) &&
+                    string.Equals(
+                        forEachOrder,
+                        "collection,moveNext,current,body",
+                        StringComparison.Ordinal);
+                bool hasValidForEachNodes = !isForEach ||
+                    hasValidChildren &&
+                    children[0].NodeIds.Count(id => nodes[id].Kind == "collectionCapture") == 1 &&
+                    children[1].NodeIds.Count(id => nodes[id].Kind == "iterationVariable") == 1;
                 if (!hasLoopNode || !hasSupportedLoopForm || !hasValidChildren ||
-                    !hasValidEntryShape || !hasValidDoWhileProperties)
+                    !hasValidEntryShape || !hasValidDoWhileProperties ||
+                    !hasValidForEachProperties || !hasValidForEachNodes)
                 {
                     throw new JsonException(
-                        $"Loop region '{region.Id}' requires a valid while, do-while, or " +
-                        "ordered for initializer/body/increment children with the required " +
-                        "entry nodes and properties.");
+                        $"Loop region '{region.Id}' requires a valid while, do-while, indexed " +
+                        "foreach shape, or ordered for initializer/body/increment children with " +
+                        "the required entry nodes and properties.");
                 }
             }
         }

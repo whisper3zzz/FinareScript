@@ -4,25 +4,27 @@
 
 M4.6 closes the first bounded loop round trip for `while`; M4.17 extends the
 same symbolic protocol to a dedicated `for` constructor, and M4.19 adds the
-post-test `do ... while` form. A visual edit can
+post-test `do ... while` form. M4.20 adds bounded indexed `foreach`. A visual edit can
 create ordinary C#, obtain a symbolic handle for its generated body, and
 populate that body with the same typed statements used elsewhere. The result
-is re-lowered into the current HIR v0.6 and projected into the current Graph
-v0.10/CFG loop model; there is no editor-only loop node or second runtime.
+is re-lowered into the current HIR v0.7 and projected into the current Graph
+v0.11/CFG loop model; there is no editor-only loop node or second runtime.
 
 This is structured construction, not arbitrary cyclic edge rewiring. The
 patch describes a supported structured loop and ordered body statements. The compiler owns the
-actual loop/body IDs, control edges, back edges, and nearest-loop transfer
+actual loop/body IDs, collection phases, control edges, back edges, and nearest-loop transfer
 targets.
 
 ## Protocol
 
-Current patch schema `unifiedscript.patch/v0.17` carries five loop statement payloads:
+Current patch schema `unifiedscript.patch/v0.18` carries six loop statement payloads:
 
 - `while`, carrying one closed, typed `PatchExpression` condition;
 - `doWhile`, carrying one closed, typed post-body condition;
 - `for`, carrying declaration or assignment initialization, an optional
   condition, and ordered prefix/postfix `++`/`--` incrementors;
+- `forEach`, carrying an explicit iteration variable and an indexed string or
+  one-dimensional zero-based array collection reference;
 - `break`, carrying no target ID; and
 - `continue`, carrying no target ID.
 
@@ -30,7 +32,7 @@ The absence of a transfer target is intentional. C# and HIR bind each transfer
 to its nearest lexical loop, and the derived CFG verifies that target. A visual
 client cannot forge an edge to an outer or unrelated loop.
 
-Current patch-plan schema `unifiedscript.patch-plan/v0.18` carries
+Current patch-plan schema `unifiedscript.patch-plan/v0.19` carries
 `insertLoopBodyStatement`:
 
 ```json
@@ -54,7 +56,7 @@ Current patch-plan schema `unifiedscript.patch-plan/v0.18` carries
 ```
 
 `sourceStepId` must refer backward to an earlier insertion whose payload is a
-`while`, `doWhile`, or `for`. The consumer repeats the producer's original `targetNodeId`;
+`while`, `doWhile`, `for`, or `forEach`. The consumer repeats the producer's original `targetNodeId`;
 it never predicts the generated HIR loop or Block ID.
 
 An `insertLoopBodyStatement` may itself insert another loop or `if`.
@@ -85,13 +87,13 @@ binary, and cast expressions. It must:
 - remain inside the expression nesting-depth limit.
 
 The generated body currently accepts local-literal declarations, assignments
-to existing locals, nested `if`, nested `while`/`do`/`for`, typed return, break, and
+to existing locals, nested `if`, nested `while`/`do`/`for`/`foreach`, typed return, break, and
 continue. Every stage retains the statement-specific name, type, scope,
 dominance, effect, and reachability checks.
 
 `break` and `continue` are accepted only at the end of an explicit reachable
 Block with a discoverable nearest enclosing `HirWhileStatement`,
-`HirDoWhileStatement`, or `HirForStatement`. This applies equally to direct library patches and symbolic
+`HirDoWhileStatement`, `HirForStatement`, or `HirForEachStatement`. This applies equally to direct library patches and symbolic
 plan steps. A transfer outside a loop is rejected; a statement appended after
 a transfer is rejected as unreachable. A `for` continue is independently
 verified to target its increment phase.
@@ -99,7 +101,8 @@ verified to target its increment phase.
 ## Symbolic rebasing and identity
 
 After a successful loop-producing stage, the plan coordinator finds the actual
-inserted `HirWhileStatement` or `HirForStatement`, records its persistent loop
+inserted `HirWhileStatement`, `HirDoWhileStatement`, `HirForStatement`, or
+`HirForEachStatement`, records its persistent loop
 and body IDs, and advances the request with the reconciled identity sidecar. A
 later body step resolves that current body, appends after its current final
 statement, and invokes a normal `InsertStatementPatchOperation`.
@@ -139,6 +142,11 @@ Successful output is processed by the M4.5 loop contract:
 - break and false-condition flow to the same loop exit;
 - nearest-loop break/continue ownership; and
 - reducible cyclic-component validation.
+
+Indexed foreach specializes that shape with an ordered `loopCollection`
+evaluate-once phase, a move-next header/continue target, and a current-value
+body entry. Its generated iteration local is available through the same
+produced-local mechanism but remains scoped to the loop body.
 
 The layout synchronizer preserves every pre-existing placed node. Newly
 authored loop, condition, body, branch, assignment, and transfer nodes are
@@ -183,6 +191,8 @@ same program.
 The bounded `for` constructor and its four-stage CLI sample are documented in
 [FOR_LOOPS.md](FOR_LOOPS.md). It reuses the same body handle while additionally
 publishing the single generated for-local to later body expressions.
+The indexed foreach constructor, collection endpoint, and three-stage sample
+are documented in [FOREACH_LOOPS.md](FOREACH_LOOPS.md).
 
 ## Current limits
 
@@ -199,7 +209,7 @@ M4.19 applies the same body-handle and exact-condition model to post-test
 `do ... while` while preserving its distinct initial-body entry and
 continue-to-condition CFG. See [DO_WHILE_LOOPS.md](DO_WHILE_LOOPS.md).
 
-`foreach`, existing-`for` clause restructuring, arbitrary cyclic Graph
-rewiring, general compound-assignment/mutation statements, effectful authored
+General enumerator/ref/async `foreach`, existing-`for` clause restructuring,
+arbitrary cyclic Graph rewiring, general compound-assignment/mutation statements, effectful authored
 expression trees, exception flow, short-circuit expression CFG expansion,
 async state-machine flow, and automatic node placement remain later slices.

@@ -32,6 +32,13 @@ internal sealed class HirUseDefinitionIndex
             definitions.Add(variable.Id, variable);
         }
 
+        foreach (HirForEachVariable variable in compilation
+                     .DescendantsAndSelf()
+                     .OfType<HirForEachVariable>())
+        {
+            definitions.Add(variable.Id, variable);
+        }
+
         foreach (HirExpression expression in compilation
                      .DescendantsAndSelf()
                      .OfType<HirExpression>())

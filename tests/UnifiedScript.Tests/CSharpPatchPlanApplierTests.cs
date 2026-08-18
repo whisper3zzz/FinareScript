@@ -3780,6 +3780,112 @@ public sealed class CSharpPatchPlanApplierTests
                     result.Analysis.Semantics)).Functions[0].Loops);
     }
 
+    [Fact]
+    public void Apply_ConstructsEditsAndPopulatesProducedForEachLoop()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static char Last(string primary, string fallback, char seed)
+                {
+                    char result = seed;
+                    return result;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/ProducedForEachPlan.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement resultLocal = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirReturnStatement valueReturn = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+        SemanticId stringType = GetTypeId(original, method.Parameters[0]);
+        SemanticId charType = GetTypeId(original, method.Parameters[2]);
+        var insertForEach = new InsertStatementPatchPlanStep(
+            "insertForEach",
+            method.Body.Id,
+            resultLocal.Id,
+            valueReturn.Id,
+            new ForEachPatchStatement(
+                "char",
+                "value",
+                charType,
+                new LocalReferencePatchExpression(
+                    method.Parameters[0].Id,
+                    method.Parameters[0].Name,
+                    stringType)));
+        var replaceCollection = new ReplaceProducedForEachCollectionPatchPlanStep(
+            "replaceProducedCollection",
+            method.Body.Id,
+            insertForEach.StepId,
+            new LocalReferencePatchExpression(
+                method.Parameters[1].Id,
+                method.Parameters[1].Name,
+                stringType));
+        var populateBody = new InsertLoopBodyStatementPatchPlanStep(
+            "assignCurrent",
+            method.Body.Id,
+            insertForEach.StepId,
+            new LocalAssignmentPatchStatement(
+                resultLocal.Id,
+                resultLocal.Name,
+                charType,
+                new ProducedLocalReferencePatchExpression(
+                    insertForEach.StepId,
+                    "value",
+                    charType)));
+        CSharpPatchResult insertionOnly = new CSharpPatchPlanApplier().Apply(
+            request,
+            SemanticPatchPlanDocument.Create(
+                original.Hir.Id,
+                original.Semantics!.ConfigurationId,
+                [insertForEach]));
+        Assert.True(
+            insertionOnly.Succeeded,
+            string.Join(Environment.NewLine, insertionOnly.Diagnostics));
+        CSharpPatchResult collectionEdited = new CSharpPatchPlanApplier().Apply(
+            request,
+            SemanticPatchPlanDocument.Create(
+                original.Hir.Id,
+                original.Semantics.ConfigurationId,
+                [insertForEach, replaceCollection]));
+        Assert.True(
+            collectionEdited.Succeeded,
+            string.Join(Environment.NewLine, collectionEdited.Diagnostics));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [insertForEach, replaceCollection, populateBody]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string changedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains("foreach (char value in fallback)", changedSource, StringComparison.Ordinal);
+        Assert.Contains("result = value;", changedSource, StringComparison.Ordinal);
+        HirForEachStatement inserted = Assert.IsType<HirForEachStatement>(
+            Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods).Body.Statements[1]);
+        HirAssignmentExpression assignment = Assert.IsType<HirAssignmentExpression>(
+            Assert.IsType<HirExpressionStatement>(Assert.Single(inserted.Body.Statements)).Expression);
+        HirIdentifierExpression valueReference = Assert.IsType<HirIdentifierExpression>(
+            assignment.Value);
+        Assert.Equal(
+            inserted.Variable.Id,
+            Assert.Single(
+                result.Analysis.Semantics!.Nodes,
+                binding => binding.NodeId == valueReference.Id).ReferencedSymbolId);
+        GraphControlFlowLoop loop = Assert.Single(
+            new GraphControlFlowAnalyzer().AnalyzeAndValidate(
+                new HirGraphProjector().Project(
+                    result.Analysis.Hir,
+                    result.Analysis.Semantics)).Functions[0].Loops);
+        Assert.Equal(inserted.Variable.Id, loop.BodyEntryNodeId);
+    }
+
     private static SemanticPatchPlanDocument CreatePlan(
         CSharpAnalysisResult original,
         HirMethodDeclaration method,

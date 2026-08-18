@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "unifiedscript.patch-plan/v0.19",
+  "sourceCompilationId": "us_0269589e0e2d8838d8a3c3bd3d6caaba",
+  "semanticConfigurationId": "us_02f5fe78d296e2d4fe04bc50ca71acf1",
+  "steps": [
+    {
+      "step": "insertStatement",
+      "stepId": "insertForEach",
+      "targetNodeId": "us_c040ed1f5487ac83f9603bb29bdce660",
+      "expectedPreviousSiblingId": "us_25bff6cb0f959b8fc6d87eba40f5e66d",
+      "expectedNextSiblingId": "us_c329147e7d78a4248dc3395c2e626e60",
+      "newStatement": {
+        "statement": "forEach",
+        "typeName": "char",
+        "variableName": "value",
+        "expectedElementTypeId": "us_67c7e4972053dd29e354f55c7ca4a1e4",
+        "collection": {
+          "expression": "localReference",
+          "sourceDefinitionId": "us_f4ef5eab29fbdae106a0b3ca8b390eed",
+          "expectedName": "primary",
+          "expectedTypeId": "us_2234432826861fe9dfbf3bbe017c6a2c"
+        }
+      }
+    },
+    {
+      "step": "replaceProducedForEachCollection",
+      "stepId": "replaceProducedCollection",
+      "targetNodeId": "us_c040ed1f5487ac83f9603bb29bdce660",
+      "sourceStepId": "insertForEach",
+      "newCollection": {
+        "expression": "localReference",
+        "sourceDefinitionId": "us_718c8dd1efb6caa617ec0129d9b56a7d",
+        "expectedName": "fallback",
+        "expectedTypeId": "us_2234432826861fe9dfbf3bbe017c6a2c"
+      }
+    },
+    {
+      "step": "insertLoopBodyStatement",
+      "stepId": "assignCurrent",
+      "targetNodeId": "us_c040ed1f5487ac83f9603bb29bdce660",
+      "sourceStepId": "insertForEach",
+      "newStatement": {
+        "statement": "localAssignment",
+        "targetDefinitionId": "us_25bff6cb0f959b8fc6d87eba40f5e66d",
+        "expectedName": "result",
+        "expectedTypeId": "us_67c7e4972053dd29e354f55c7ca4a1e4",
+        "value": {
+          "expression": "producedLocalReference",
+          "sourceStepId": "insertForEach",
+          "expectedName": "value",
+          "expectedTypeId": "us_67c7e4972053dd29e354f55c7ca4a1e4"
+        }
+      }
+    }
+  ]
+}

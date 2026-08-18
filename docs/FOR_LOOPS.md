@@ -9,18 +9,18 @@ would route `continue` past the incrementors.
 
 The current strict-reader contracts are:
 
-- HIR `unifiedscript.hir/v0.6`;
-- Graph `unifiedscript.graph/v0.10`;
-- standalone patch `unifiedscript.patch/v0.17`;
-- patch plan `unifiedscript.patch-plan/v0.18`.
+- HIR `unifiedscript.hir/v0.7`;
+- Graph `unifiedscript.graph/v0.11`;
+- standalone patch `unifiedscript.patch/v0.18`;
+- patch plan `unifiedscript.patch-plan/v0.19`.
 
-Patch v0.17 carries construction plus the four existing-header endpoint
-operations. Plan v0.18 carries their direct wrappers, symbolic loop-body and
+Patch v0.18 carries construction plus the four existing-header endpoint
+operations. Plan v0.19 carries their direct wrappers, symbolic loop-body and
 generated-for-local use, and the generated-for condition handle.
 
 ## HIR structure
 
-HIR v0.6 adds `HirForStatement` with five execution-relevant components:
+HIR v0.7 adds `HirForStatement` with five execution-relevant components:
 
 ```text
 HirForStatement
@@ -46,7 +46,7 @@ use in the condition, incrementors, and body back to that ID. The declaration
 group separately retains its source type spelling, including `var`, while the
 semantic side table retains the resolved type.
 
-HIR v0.6 also adds `IsPostfix` to `HirUnaryExpression`. This distinguishes:
+HIR v0.7 also adds `IsPostfix` to `HirUnaryExpression`. This distinguishes:
 
 ```csharp
 ++index;
@@ -65,7 +65,7 @@ persistent identity reconciliation, and identity rewriting.
 
 ## Graph regions
 
-Graph v0.10 continues to use one `loop` decision node. A `while` retains its one
+Graph v0.11 continues to use one `loop` decision node. A `while` retains its one
 `loopBody` child. A `for` owns exactly three ordered child regions:
 
 ```text
@@ -298,8 +298,9 @@ and the ordered initializer/increment regions.
   assignments, and compound expressions remain text-authored.
 - A generated for-local may be consumed only where ordinary declaration scope
   and CFG dominance make it available, normally inside that loop's body.
-- `await foreach`, synchronous `foreach`, and enumerator disposal semantics
-  require a separate contract.
+- Indexed synchronous `foreach` has its separate M4.20 contract; general
+  enumerator/ref/async forms and disposal semantics remain later work. See
+  [FOREACH_LOOPS.md](FOREACH_LOOPS.md).
 - `do` uses its separate post-condition control shape and remains neither
   `while` nor `for`; see [DO_WHILE_LOOPS.md](DO_WHILE_LOOPS.md).
 - Declaration modifiers, ref locals, deconstruction, and unsupported expression

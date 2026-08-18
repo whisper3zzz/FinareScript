@@ -4659,6 +4659,68 @@ public sealed class CSharpSourcePatchApplierTests
             tombstone => tombstone.Id == oldOperand.Id);
     }
 
+    [Fact]
+    public void Apply_ReplacesForEachCollectionAndPreservesLoopIdentity()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int Count(string primary, string fallback)
+                {
+                    int total = 0;
+                    foreach (char value in primary)
+                    {
+                        total = total + 1;
+                    }
+
+                    return total;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/ForEachCollectionEdit.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirForEachStatement loop = Assert.IsType<HirForEachStatement>(method.Body.Statements[1]);
+        SemanticId stringType = GetTypeId(original, loop.Collection);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new ReplaceForEachCollectionPatchOperation(
+                loop.Id,
+                loop.Collection.Id,
+                stringType,
+                new LocalReferencePatchExpression(
+                    method.Parameters[1].Id,
+                    method.Parameters[1].Name,
+                    stringType))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Contains(
+            "foreach (char value in fallback)",
+            Assert.Single(result.PatchedRequest!.Sources).Source,
+            StringComparison.Ordinal);
+        HirMethodDeclaration changedMethod = Assert.Single(
+            Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirForEachStatement changedLoop = Assert.IsType<HirForEachStatement>(
+            changedMethod.Body.Statements[1]);
+        HirIdentifierExpression changedCollection = Assert.IsType<HirIdentifierExpression>(
+            changedLoop.Collection);
+        Assert.Equal(loop.Id, changedLoop.Id);
+        Assert.Equal(loop.Variable.Id, changedLoop.Variable.Id);
+        Assert.Equal(loop.Body.Id, changedLoop.Body.Id);
+        Assert.Equal(
+            method.Parameters[1].Id,
+            Assert.Single(
+                result.Analysis.Semantics!.Nodes,
+                binding => binding.NodeId == changedCollection.Id).ReferencedSymbolId);
+    }
+
     private static (CSharpCompilationRequest Request, CSharpAnalysisResult Analysis) CreatePersistentRequest(
         string source,
         string path)

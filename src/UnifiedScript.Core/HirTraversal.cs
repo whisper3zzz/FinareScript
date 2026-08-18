@@ -29,6 +29,7 @@ public static class HirTraversal
         HirWhileStatement statement => [statement.Condition, statement.Body],
         HirDoWhileStatement statement => [statement.Body, statement.Condition],
         HirForStatement statement => GetForChildren(statement),
+        HirForEachStatement statement => [statement.Variable, statement.Collection, statement.Body],
         HirForVariableDeclaration declaration => declaration.Variables,
         HirForVariableDeclarator { Initializer: not null } declarator => [declarator.Initializer],
         HirReturnStatement { Expression: not null } statement => [statement.Expression],

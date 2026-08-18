@@ -4,8 +4,9 @@
 
 `unifiedscript.graph/v0.3` introduced explicit structured regions to the
 semantic Graph, v0.4 added structured `while` loops, v0.9 added explicit `for`
-initializer/increment phases, and current `unifiedscript.graph/v0.10` adds the
-distinct initial-entry shape required by `do ... while`.
+initializer/increment phases, and current `unifiedscript.graph/v0.11` adds the
+distinct initial-entry shape required by `do ... while` plus a collection
+phase for indexed `foreach`.
 Nodes and control/data edges still describe computation; regions
 describe lexical ownership and structured control-flow nesting without
 inferring it from screen coordinates or reverse-engineering edge shapes.
@@ -51,7 +52,7 @@ editor could recover that location.
 
 ## Region kinds
 
-The v0.9 schema defines nine kinds:
+The current schema defines ten kinds:
 
 | Kind | Meaning | Parent |
 | --- | --- | --- |
@@ -60,9 +61,10 @@ The v0.9 schema defines nine kinds:
 | `if` | Branch condition and branch control node | block/branch region |
 | `then` | True branch body | corresponding `if` |
 | `else` | False branch body or implicit false path | corresponding `if` |
-| `loop` | While/do/for condition and loop decision node | enclosing structured region |
+| `loop` | While/do/for/foreach decision node and directly owned control | enclosing structured region |
 | `loopInitializer` | Ordered for initializers | corresponding `loop` |
-| `loopBody` | While/do/for body | corresponding `loop` |
+| `loopCollection` | Evaluate-once foreach collection and capture | corresponding `loop` |
+| `loopBody` | While/do/for/foreach body | corresponding `loop` |
 | `loopIncrement` | Ordered for incrementors | corresponding `loop` |
 
 An `if` region directly owns the condition expression nodes and its `branch`
@@ -81,6 +83,10 @@ node. A while has exactly one `loopBody` child sourced from the HIR body block.
 A do-while has the same child-region count plus one generated `loopEntry` node
 owned directly by `loop`; that node enters the body once before the condition.
 A for has ordered `loopInitializer`, `loopBody`, and `loopIncrement` children.
+A foreach has ordered `loopCollection` and `loopBody` children. Its collection
+phase owns the source expression and generated evaluate-once capture; its body
+starts with the source-backed iteration-variable binding. `loopCollection` is
+never implicit.
 A break or continue nested under an `if` remains directly owned by that lexical
 `then`/`else` region; the derived CFG separately records which nearest loop owns
 its transfer. See [LOOP_FOUNDATION.md](LOOP_FOUNDATION.md).
@@ -95,6 +101,8 @@ Every Graph node belongs to exactly one direct region through `nodeIds`:
 - branch-body statements and expressions belong to `then` or `else`;
 - loop conditions and decisions belong to `loop`; initializer, body, and
   increment nodes belong to their corresponding phase or nested child regions;
+- foreach collection/capture nodes belong to `loopCollection`, while its
+  iteration binding and statements belong to `loopBody`;
 - nodes inside a nested structured construct belong to its child region.
 
 Region node order is projection/evaluation order and is therefore preserved.
@@ -118,7 +126,7 @@ inside Graph JSON. See [CONTROL_FLOW_ANALYSIS.md](CONTROL_FLOW_ANALYSIS.md).
 
 Semantic regions are also separate from `.usgraph` comment regions. A semantic
 region affects program structure; a comment region is only visual canvas state.
-`GraphLayoutSynchronizer` validates Graph v0.10 but continues to preserve layout
+`GraphLayoutSynchronizer` validates Graph v0.11 but continues to preserve layout
 solely by function/node/edge IDs, so adding region metadata does not move nodes
 or change placement.
 

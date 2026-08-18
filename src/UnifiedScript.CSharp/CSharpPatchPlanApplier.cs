@@ -126,6 +126,9 @@ public sealed class CSharpPatchPlanApplier
                     HirForStatement insertedFor => new ProducedLoop(
                         insertedFor.Id,
                         insertedFor.Body.Id),
+                    HirForEachStatement insertedForEach => new ProducedLoop(
+                        insertedForEach.Id,
+                        insertedForEach.Body.Id),
                     _ => null,
                 };
                 if (producedLoop is null)
@@ -373,6 +376,22 @@ public sealed class CSharpPatchPlanApplier
                         SemanticPatchDiagnosticCodes.InvalidPatchPlan,
                         $"Produced-for condition step '{producedForCondition.StepId}' and source " +
                         $"step '{producedForCondition.SourceStepId}' target different methods.",
+                        target.Span,
+                        target.Id)];
+                }
+            }
+            else if (step is ReplaceProducedForEachCollectionPatchPlanStep producedForEachCollection)
+            {
+                if (!loopProducerMethods.TryGetValue(
+                        producedForEachCollection.SourceStepId,
+                        out SemanticId loopProducerMethodId) ||
+                    loopProducerMethodId != method!.Id)
+                {
+                    return [Diagnostic(
+                        SemanticPatchDiagnosticCodes.InvalidPatchPlan,
+                        $"Produced-foreach collection step '{producedForEachCollection.StepId}' " +
+                        $"and source step '{producedForEachCollection.SourceStepId}' target " +
+                        "different methods.",
                         target.Span,
                         target.Id)];
                 }
@@ -669,6 +688,18 @@ public sealed class CSharpPatchPlanApplier
             case ReplaceProducedForConditionPatchPlanStep producedForCondition:
                 return TryCreateProducedForConditionReplacement(
                     producedForCondition,
+                    nodes,
+                    producedLoops,
+                    out operation,
+                    out diagnostic);
+            case ReplaceForEachCollectionPatchPlanStep forEachCollection
+                when target is HirForEachStatement:
+                operation = forEachCollection.ToOperation();
+                diagnostic = null;
+                return true;
+            case ReplaceProducedForEachCollectionPatchPlanStep producedForEachCollection:
+                return TryCreateProducedForEachCollectionReplacement(
+                    producedForEachCollection,
                     nodes,
                     producedLoops,
                     out operation,
@@ -1131,6 +1162,37 @@ public sealed class CSharpPatchPlanApplier
         return true;
     }
 
+    private static bool TryCreateProducedForEachCollectionReplacement(
+        ReplaceProducedForEachCollectionPatchPlanStep step,
+        IReadOnlyDictionary<SemanticId, HirNode> nodes,
+        IReadOnlyDictionary<string, ProducedLoop> producedLoops,
+        out SemanticPatchOperation? operation,
+        out UnifiedDiagnostic? diagnostic)
+    {
+        if (!producedLoops.TryGetValue(step.SourceStepId, out ProducedLoop producedLoop) ||
+            !nodes.TryGetValue(producedLoop.LoopId, out HirNode? node) ||
+            node is not HirForEachStatement currentLoop ||
+            currentLoop.Body.Id != producedLoop.BodyBlockId)
+        {
+            operation = null;
+            diagnostic = Diagnostic(
+                SemanticPatchDiagnosticCodes.TargetNotFound,
+                $"Produced-foreach collection step '{step.StepId}' could not resolve loop " +
+                $"source '{step.SourceStepId}'.",
+                SourceSpan.Unknown("<patch-plan>"),
+                step.TargetNodeId);
+            return false;
+        }
+
+        operation = new ReplaceForEachCollectionPatchOperation(
+            currentLoop.Id,
+            currentLoop.Collection.Id,
+            step.NewCollection.ExpectedTypeId,
+            step.NewCollection);
+        diagnostic = null;
+        return true;
+    }
+
     private static bool TryCreateProducedExpressionInputReplacement(
         ReplaceProducedExpressionInputPatchPlanStep step,
         IReadOnlyDictionary<SemanticId, HirNode> nodes,
@@ -1501,6 +1563,9 @@ public sealed class CSharpPatchPlanApplier
             ReplaceForConditionPatchOperation replacement
                 when nodes.TryGetValue(replacement.TargetNodeId, out HirNode? node) &&
                 node is HirForStatement loop => loop.Condition,
+            ReplaceForEachCollectionPatchOperation replacement
+                when nodes.TryGetValue(replacement.TargetNodeId, out HirNode? node) &&
+                node is HirForEachStatement loop => loop.Collection,
             ReplaceForDeclarationInitializerPatchOperation replacement
                 when nodes.TryGetValue(replacement.TargetNodeId, out HirNode? node) &&
                 node is HirForVariableDeclarator variable => variable.Initializer,
@@ -1530,6 +1595,7 @@ public sealed class CSharpPatchPlanApplier
         HirIfStatement branch => branch.Condition,
         HirWhileStatement loop => loop.Condition,
         HirDoWhileStatement loop => loop.Condition,
+        HirForEachStatement loop => loop.Collection,
         HirReturnStatement valueReturn => valueReturn.Expression,
         _ => null,
     };
@@ -1539,6 +1605,7 @@ public sealed class CSharpPatchPlanApplier
         HirVariableDeclarationStatement variable => variable,
         HirForStatement { Declaration.Variables.Count: 1 } forStatement =>
             forStatement.Declaration.Variables[0],
+        HirForEachStatement forEachStatement => forEachStatement.Variable,
         _ => null,
     };
 
@@ -1552,6 +1619,8 @@ public sealed class CSharpPatchPlanApplier
                 loop.Id == producedLoop.LoopId && loop.Body.Id == producedLoop.BodyBlockId,
             HirForStatement loop =>
                 loop.Id == producedLoop.LoopId && loop.Body.Id == producedLoop.BodyBlockId,
+            HirForEachStatement loop =>
+                loop.Id == producedLoop.LoopId && loop.Body.Id == producedLoop.BodyBlockId,
             _ => false,
         };
 
@@ -1562,6 +1631,10 @@ public sealed class CSharpPatchPlanApplier
         {
             NewStatement: ForPatchStatement { Declaration: not null },
         } or
+            InsertStatementPatchPlanStep
+        {
+            NewStatement: ForEachPatchStatement,
+        } or
             InsertBranchStatementPatchPlanStep
         {
             NewStatement: LocalLiteralDeclarationPatchStatement
@@ -1570,6 +1643,10 @@ public sealed class CSharpPatchPlanApplier
         {
             NewStatement: ForPatchStatement { Declaration: not null },
         } or
+            InsertBranchStatementPatchPlanStep
+        {
+            NewStatement: ForEachPatchStatement,
+        } or
             InsertLoopBodyStatementPatchPlanStep
         {
             NewStatement: LocalLiteralDeclarationPatchStatement
@@ -1577,6 +1654,10 @@ public sealed class CSharpPatchPlanApplier
             InsertLoopBodyStatementPatchPlanStep
         {
             NewStatement: ForPatchStatement { Declaration: not null },
+        } or
+            InsertLoopBodyStatementPatchPlanStep
+        {
+            NewStatement: ForEachPatchStatement,
         };
 
     private static bool ProducesBranches(SemanticPatchPlanStep step) =>
@@ -1587,15 +1668,18 @@ public sealed class CSharpPatchPlanApplier
     private static bool ProducesLoop(SemanticPatchPlanStep step) =>
         step is InsertStatementPatchPlanStep
         {
-            NewStatement: WhilePatchStatement or DoWhilePatchStatement or ForPatchStatement,
+            NewStatement: WhilePatchStatement or DoWhilePatchStatement or ForPatchStatement or
+                ForEachPatchStatement,
         } or
             InsertBranchStatementPatchPlanStep
         {
-            NewStatement: WhilePatchStatement or DoWhilePatchStatement or ForPatchStatement,
+            NewStatement: WhilePatchStatement or DoWhilePatchStatement or ForPatchStatement or
+                ForEachPatchStatement,
         } or
             InsertLoopBodyStatementPatchPlanStep
         {
-            NewStatement: WhilePatchStatement or DoWhilePatchStatement or ForPatchStatement,
+            NewStatement: WhilePatchStatement or DoWhilePatchStatement or ForPatchStatement or
+                ForEachPatchStatement,
         };
 
     private static bool ProducesLocalInitializer(SemanticPatchPlanStep step) =>
@@ -1645,6 +1729,7 @@ public sealed class CSharpPatchPlanApplier
                 ReplaceProducedWhileConditionPatchPlanStep or
                 ReplaceProducedDoWhileConditionPatchPlanStep or
                 ReplaceProducedForConditionPatchPlanStep or
+                ReplaceProducedForEachCollectionPatchPlanStep or
                 ReplaceProducedIfConditionPatchPlanStep or
                 ReplaceProducedLocalInitializerPatchPlanStep or
                 ReplaceProducedReturnValuePatchPlanStep
@@ -1671,6 +1756,12 @@ public sealed class CSharpPatchPlanApplier
                 method = loopLocation!.Method;
                 return true;
             case ReplaceForConditionPatchPlanStep when target is HirForStatement loop &&
+                patchIndex.TryGetStatement(
+                    loop.Id,
+                    out HirPatchIndex.StatementLocation? loopLocation):
+                method = loopLocation!.Method;
+                return true;
+            case ReplaceForEachCollectionPatchPlanStep when target is HirForEachStatement loop &&
                 patchIndex.TryGetStatement(
                     loop.Id,
                     out HirPatchIndex.StatementLocation? loopLocation):
@@ -1763,6 +1854,11 @@ public sealed class CSharpPatchPlanApplier
         ReplaceForConditionPatchPlanStep forCondition => forCondition.ToOperation(),
         ReplaceProducedForConditionPatchPlanStep => throw new ArgumentException(
             "A symbolic produced-for condition edit cannot become an initial standalone operation.",
+            nameof(step)),
+        ReplaceForEachCollectionPatchPlanStep forEachCollection =>
+            forEachCollection.ToOperation(),
+        ReplaceProducedForEachCollectionPatchPlanStep => throw new ArgumentException(
+            "A symbolic produced-foreach collection edit cannot become an initial standalone operation.",
             nameof(step)),
         ReplaceForDeclarationInitializerPatchPlanStep forDeclaration =>
             forDeclaration.ToOperation(),

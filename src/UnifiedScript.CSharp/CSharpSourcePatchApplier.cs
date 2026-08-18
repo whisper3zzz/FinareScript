@@ -226,6 +226,15 @@ public sealed class CSharpSourcePatchApplier
                         types,
                         graphSafetyIndex,
                         documents),
+                ReplaceForEachCollectionPatchOperation forEachCollection =>
+                    PlanForEachCollectionReplacement(
+                        forEachCollection,
+                        hirNodes,
+                        patchIndex,
+                        boundNodes,
+                        types,
+                        graphSafetyIndex,
+                        documents),
                 ReplaceForDeclarationInitializerPatchOperation forDeclaration =>
                     PlanForDeclarationInitializerReplacement(
                         forDeclaration,
@@ -445,6 +454,7 @@ public sealed class CSharpSourcePatchApplier
             ReplaceWhileConditionPatchOperation replacement => replacement.NewCondition,
             ReplaceDoWhileConditionPatchOperation replacement => replacement.NewCondition,
             ReplaceForConditionPatchOperation replacement => replacement.NewCondition,
+            ReplaceForEachCollectionPatchOperation replacement => replacement.NewCollection,
             ReplaceForDeclarationInitializerPatchOperation replacement =>
                 replacement.NewInitializer,
             ReplaceForAssignmentInitializerValuePatchOperation replacement => replacement.NewValue,
@@ -468,6 +478,10 @@ public sealed class CSharpSourcePatchApplier
             {
                 NewStatement: DoWhilePatchStatement loop,
             } => loop.Condition,
+            InsertStatementPatchOperation
+            {
+                NewStatement: ForEachPatchStatement loop,
+            } => loop.Collection,
             InsertStatementPatchOperation
             {
                 NewStatement: ReturnPatchStatement { Expression: not null } valueReturn,
@@ -521,6 +535,10 @@ public sealed class CSharpSourcePatchApplier
                 when nodes.TryGetValue(replacement.TargetNodeId, out HirNode? targetNode) &&
                 targetNode is HirForStatement loop:
                 return loop.Condition;
+            case ReplaceForEachCollectionPatchOperation replacement
+                when nodes.TryGetValue(replacement.TargetNodeId, out HirNode? targetNode) &&
+                targetNode is HirForEachStatement loop:
+                return loop.Collection;
             case ReplaceForDeclarationInitializerPatchOperation replacement
                 when nodes.TryGetValue(replacement.TargetNodeId, out HirNode? targetNode) &&
                 targetNode is HirForVariableDeclarator variable:
@@ -590,6 +608,7 @@ public sealed class CSharpSourcePatchApplier
         HirIfStatement branch => branch.Condition,
         HirWhileStatement loop => loop.Condition,
         HirDoWhileStatement loop => loop.Condition,
+        HirForEachStatement loop => loop.Collection,
         HirReturnStatement valueReturn => valueReturn.Expression,
         _ => null,
     };
@@ -1490,6 +1509,15 @@ public sealed class CSharpSourcePatchApplier
                 graphSafetyIndex,
                 boundNodes,
                 types),
+            ForEachPatchStatement forEachStatement => BuildForEachStatement(
+                forEachStatement,
+                blockLocation!,
+                insertionIndex,
+                hirNodes,
+                patchIndex,
+                graphSafetyIndex,
+                boundNodes,
+                types),
             BreakPatchStatement => BuildLoopTransferStatement(
                 isContinue: false,
                 blockLocation!,
@@ -2283,6 +2311,58 @@ public sealed class CSharpSourcePatchApplier
             documents);
     }
 
+    private static OperationPlan PlanForEachCollectionReplacement(
+        ReplaceForEachCollectionPatchOperation operation,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
+        GraphPatchSafetyIndex graphSafetyIndex,
+        IReadOnlyDictionary<string, ParsedDocument> documents)
+    {
+        if (!hirNodes.TryGetValue(operation.TargetNodeId, out HirNode? target))
+        {
+            return MissingTarget(operation.TargetNodeId);
+        }
+
+        if (target is not HirForEachStatement loop ||
+            !patchIndex.TryGetStatement(
+                loop.Id,
+                out HirPatchIndex.StatementLocation? statementLocation) ||
+            !patchIndex.TryGetBlock(
+                statementLocation!.ParentBlock.Id,
+                out HirPatchIndex.BlockLocation? blockLocation))
+        {
+            return KindMismatch(target, operation.TargetNodeId, "a foreach statement");
+        }
+
+        if (loop.Collection.Id != operation.ExpectedCollectionNodeId)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.PreconditionFailed,
+                $"Foreach collection precondition failed: current endpoint is " +
+                $"'{loop.Collection.Id}', not '{operation.ExpectedCollectionNodeId}'.",
+                loop);
+        }
+
+        return PlanStatementExpressionReplacement(
+            "foreach collection",
+            loop,
+            loop.Collection,
+            operation.ExpectedCollectionTypeId,
+            operation.NewCollection,
+            requireBoolean: false,
+            blockLocation!,
+            statementLocation!,
+            hirNodes,
+            patchIndex,
+            boundNodes,
+            types,
+            graphSafetyIndex,
+            documents,
+            requireIndexedCollection: true);
+    }
+
     private static OperationPlan PlanLocalInitializerReplacement(
         ReplaceLocalInitializerPatchOperation operation,
         IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
@@ -2432,7 +2512,8 @@ public sealed class CSharpSourcePatchApplier
         IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
         GraphPatchSafetyIndex graphSafetyIndex,
         IReadOnlyDictionary<string, ParsedDocument> documents,
-        SemanticId? forHeaderLoopId = null)
+        SemanticId? forHeaderLoopId = null,
+        bool requireIndexedCollection = false)
     {
         OperationPlan? typeFailure = RequireType(
             currentExpression,
@@ -2452,17 +2533,27 @@ public sealed class CSharpSourcePatchApplier
                 containingStatement);
         }
 
-        ExpressionBuildResult replacement = BuildPatchExpression(
-            newExpression,
-            blockLocation,
-            statementLocation.Index,
-            hirNodes,
-            patchIndex,
-            graphSafetyIndex,
-            boundNodes,
-            types,
-            authoredForLocals: null,
-            forHeaderLoopId);
+        ExpressionBuildResult replacement = requireIndexedCollection
+            ? BuildIndexedCollectionExpression(
+                newExpression,
+                blockLocation,
+                statementLocation.Index,
+                hirNodes,
+                patchIndex,
+                graphSafetyIndex,
+                boundNodes,
+                types)
+            : BuildPatchExpression(
+                newExpression,
+                blockLocation,
+                statementLocation.Index,
+                hirNodes,
+                patchIndex,
+                graphSafetyIndex,
+                boundNodes,
+                types,
+                authoredForLocals: null,
+                forHeaderLoopId);
         if (replacement.Syntax is null || replacement.Type is null)
         {
             return DiagnosticPlan(
@@ -3290,6 +3381,9 @@ public sealed class CSharpSourcePatchApplier
             .Any(variable => variable.Name == name && variable.Id != exceptDefinitionId) ||
         method.DescendantsAndSelf()
             .OfType<HirForVariableDeclarator>()
+            .Any(variable => variable.Name == name && variable.Id != exceptDefinitionId) ||
+        method.DescendantsAndSelf()
+            .OfType<HirForEachVariable>()
             .Any(variable => variable.Name == name && variable.Id != exceptDefinitionId);
 
     private static bool IsStablePureExpression(
@@ -3864,6 +3958,103 @@ public sealed class CSharpSourcePatchApplier
             condition.Syntax,
             SyntaxFactory.Token(SyntaxKind.CloseParenToken),
             SyntaxFactory.Token(SyntaxKind.SemicolonToken));
+        return StatementBuildResult.Success(syntax);
+    }
+
+    private static StatementBuildResult BuildForEachStatement(
+        ForEachPatchStatement forEachStatement,
+        HirPatchIndex.BlockLocation blockLocation,
+        int insertionIndex,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        GraphPatchSafetyIndex graphSafetyIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types)
+    {
+        if (!graphSafetyIndex.IsInsertionReachable(blockLocation, insertionIndex))
+        {
+            return StatementBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.UnreachableInsertion,
+                "A graph-authored foreach requires a CFG-reachable insertion gap.");
+        }
+
+        if (!types.TryGetValue(
+                forEachStatement.ExpectedElementTypeId,
+                out TypeDescriptor? elementType) ||
+            !IsStableGraphExpressionType(elementType) ||
+            !TypeNameMatches(forEachStatement.TypeName, elementType))
+        {
+            return StatementBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.TypeMismatch,
+                $"Foreach element type '{forEachStatement.TypeName}' does not match graph-safe " +
+                $"semantic type '{forEachStatement.ExpectedElementTypeId}'.");
+        }
+
+        if (!SyntaxFacts.IsValidIdentifier(forEachStatement.VariableName) ||
+            SyntaxFacts.GetKeywordKind(forEachStatement.VariableName) != SyntaxKind.None)
+        {
+            return StatementBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.InvalidStatement,
+                $"Foreach variable name '{forEachStatement.VariableName}' is not one unescaped " +
+                "C# identifier.");
+        }
+
+        if (HasNameConflict(blockLocation.Method, forEachStatement.VariableName))
+        {
+            return StatementBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.NameConflict,
+                $"A parameter or local named '{forEachStatement.VariableName}' already exists in " +
+                $"method '{blockLocation.Method.Name}'.");
+        }
+
+        ExpressionBuildResult collection = BuildIndexedCollectionExpression(
+            forEachStatement.Collection,
+            blockLocation,
+            insertionIndex,
+            hirNodes,
+            patchIndex,
+            graphSafetyIndex,
+            boundNodes,
+            types);
+        if (collection.Syntax is null || collection.Type is null)
+        {
+            return StatementBuildResult.Failure(
+                collection.DiagnosticCode ?? SemanticPatchDiagnosticCodes.InvalidGraphExpression,
+                collection.DiagnosticMessage ?? "The graph-authored foreach collection is invalid.");
+        }
+
+        if (!IndexedCollectionElementMatches(collection.Type, elementType))
+        {
+            return StatementBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.TypeMismatch,
+                $"Foreach collection type '{collection.Type.MetadataName}' does not yield exact " +
+                $"element type '{elementType.MetadataName}'.");
+        }
+
+        TypeSyntax typeSyntax = SyntaxFactory.ParseTypeName(
+            forEachStatement.TypeName,
+            options: CSharpToHirLowerer.ParseOptions,
+            consumeFullText: true);
+        if (typeSyntax.ContainsDiagnostics ||
+            typeSyntax.SpanStart != 0 ||
+            typeSyntax.Span.Length != forEachStatement.TypeName.Length)
+        {
+            return StatementBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.InvalidStatement,
+                $"Foreach element type '{forEachStatement.TypeName}' is not one C# type name.");
+        }
+
+        ForEachStatementSyntax syntax = SyntaxFactory.ForEachStatement(
+            default,
+            default,
+            SyntaxFactory.Token(SyntaxKind.ForEachKeyword),
+            SyntaxFactory.Token(SyntaxKind.OpenParenToken),
+            typeSyntax.WithoutTrivia(),
+            SyntaxFactory.Identifier(forEachStatement.VariableName),
+            SyntaxFactory.Token(SyntaxKind.InKeyword),
+            collection.Syntax,
+            SyntaxFactory.Token(SyntaxKind.CloseParenToken),
+            SyntaxFactory.Block());
         return StatementBuildResult.Success(syntax);
     }
 
@@ -4476,6 +4667,14 @@ public sealed class CSharpSourcePatchApplier
                     variable.Id,
                     blockLocation,
                     insertionIndex) => variable.Name,
+            HirForEachVariable variable when
+                patchIndex.IsForEachVariableInScopeAtBlock(
+                    variable.Id,
+                    blockLocation.Block.Id) &&
+                graphSafetyIndex.DoesDefinitionDominateInsertion(
+                    variable.Id,
+                    blockLocation,
+                    insertionIndex) => variable.Name,
             _ => null,
         };
         if (actualName is null)
@@ -4506,6 +4705,55 @@ public sealed class CSharpSourcePatchApplier
             SyntaxFactory.IdentifierName(actualName),
             expectedType);
     }
+
+    private static ExpressionBuildResult BuildIndexedCollectionExpression(
+        PatchExpression expression,
+        HirPatchIndex.BlockLocation blockLocation,
+        int insertionIndex,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        GraphPatchSafetyIndex graphSafetyIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types)
+    {
+        if (expression is not LocalReferencePatchExpression local ||
+            !types.TryGetValue(expression.ExpectedTypeId, out TypeDescriptor? collectionType) ||
+            !IsIndexedCollectionType(collectionType))
+        {
+            return ExpressionBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.TypeMismatch,
+                "An indexed foreach collection must be a local/parameter reference with exact " +
+                "System.String or graph-safe one-dimensional array type.");
+        }
+
+        return BuildLocalReferenceExpression(
+            local,
+            collectionType,
+            blockLocation,
+            insertionIndex,
+            hirNodes,
+            patchIndex,
+            graphSafetyIndex,
+            boundNodes,
+            forHeaderLoopId: null);
+    }
+
+    private static bool IsIndexedCollectionType(TypeDescriptor type) =>
+        type.IsGraphSafe && type.Kind is UnifiedTypeKind.String or UnifiedTypeKind.Array;
+
+    private static bool IndexedCollectionElementMatches(
+        TypeDescriptor collectionType,
+        TypeDescriptor elementType) => collectionType.Kind switch
+        {
+            UnifiedTypeKind.String =>
+                string.Equals(elementType.MetadataName, "System.Char", StringComparison.Ordinal),
+            UnifiedTypeKind.Array when collectionType.MetadataName.EndsWith("[]", StringComparison.Ordinal) =>
+                string.Equals(
+                    collectionType.MetadataName[..^2],
+                    elementType.MetadataName,
+                    StringComparison.Ordinal),
+            _ => false,
+        };
 
     private static ExpressionBuildResult UnavailableGraphSource(
         LocalReferencePatchExpression local,
@@ -4733,7 +4981,8 @@ public sealed class CSharpSourcePatchApplier
         InsertionFormatting formatting)
     {
         if (statement is not (
-                IfStatementSyntax or WhileStatementSyntax or DoStatementSyntax or ForStatementSyntax))
+                IfStatementSyntax or WhileStatementSyntax or DoStatementSyntax or ForStatementSyntax or
+                ForEachStatementSyntax))
         {
             return statement
                 .WithLeadingTrivia(SyntaxFactory.Whitespace(formatting.Indentation))
@@ -4901,6 +5150,8 @@ public sealed class CSharpSourcePatchApplier
         HirWhileStatement => syntax is WhileStatementSyntax,
         HirDoWhileStatement => syntax is DoStatementSyntax,
         HirForStatement => syntax is ForStatementSyntax,
+        HirForEachStatement => syntax is ForEachStatementSyntax,
+        HirForEachVariable => syntax is TypeSyntax,
         HirForVariableDeclaration => syntax is VariableDeclarationSyntax,
         HirForVariableDeclarator => syntax is VariableDeclaratorSyntax,
         HirBreakStatement => syntax is BreakStatementSyntax,
@@ -5052,6 +5303,7 @@ public sealed class CSharpSourcePatchApplier
         HirWhileStatement => "while",
         HirDoWhileStatement => "doWhile",
         HirForStatement => "for",
+        HirForEachStatement => "forEach",
         HirBreakStatement => "break",
         HirContinueStatement => "continue",
         HirReturnStatement => "return",

@@ -91,6 +91,16 @@ internal static class HirIdentityRewriter
                     .ToArray(),
                 Body = RewriteBlock(forStatement.Body, identities),
             },
+            HirForEachStatement forEachStatement => forEachStatement with
+            {
+                Id = GetId(forEachStatement, identities),
+                Variable = forEachStatement.Variable with
+                {
+                    Id = GetId(forEachStatement.Variable, identities),
+                },
+                Collection = RewriteExpression(forEachStatement.Collection, identities),
+                Body = RewriteBlock(forEachStatement.Body, identities),
+            },
             HirBreakStatement breakStatement => breakStatement with
             {
                 Id = GetId(breakStatement, identities),

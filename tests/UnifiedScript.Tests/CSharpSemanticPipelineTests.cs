@@ -209,7 +209,7 @@ public sealed class CSharpSemanticPipelineTests
             conditionBinding.TypeId!.Value).Kind);
 
         GraphDocument document = new HirGraphProjector().Project(hir, semantics);
-        Assert.Equal("unifiedscript.graph/v0.10", document.SchemaVersion);
+        Assert.Equal("unifiedscript.graph/v0.11", document.SchemaVersion);
         GraphFunction graph = Assert.Single(document.Functions);
         GraphNode select = Assert.Single(graph.Nodes, static node => node.Kind == "conditional");
         Assert.Equal("Select", select.Label);
@@ -309,7 +309,7 @@ public sealed class CSharpSemanticPipelineTests
         HirCompilationUnit hir = Assert.IsType<HirCompilationUnit>(result.Hir);
         BoundCompilation semantics = Assert.IsType<BoundCompilation>(result.Semantics);
         GraphDocument document = new HirGraphProjector().Project(hir, semantics);
-        Assert.Equal("unifiedscript.graph/v0.10", document.SchemaVersion);
+        Assert.Equal("unifiedscript.graph/v0.11", document.SchemaVersion);
         GraphNode[] logicalNodes = document.Functions
             .SelectMany(static function => function.Nodes)
             .Where(static node => node.Kind == "binary" &&
@@ -527,7 +527,7 @@ public sealed class CSharpSemanticPipelineTests
         });
 
         GraphDocument document = new HirGraphProjector().Project(hir, semantics);
-        Assert.Equal("unifiedscript.graph/v0.10", document.SchemaVersion);
+        Assert.Equal("unifiedscript.graph/v0.11", document.SchemaVersion);
         GraphNode[] graphCoalesces = document.Functions
             .SelectMany(static function => function.Nodes)
             .Where(static node => node.Kind == "binary" &&
@@ -719,7 +719,7 @@ public sealed class CSharpSemanticPipelineTests
         Assert.Equal(UnifiedNullability.Nullable, resultType.Nullability);
 
         GraphDocument document = new HirGraphProjector().Project(hir, semantics);
-        Assert.Equal("unifiedscript.graph/v0.10", document.SchemaVersion);
+        Assert.Equal("unifiedscript.graph/v0.11", document.SchemaVersion);
         GraphFunction graph = Assert.Single(document.Functions);
         GraphNode conditionalNode = Assert.Single(
             graph.Nodes,
@@ -886,7 +886,7 @@ public sealed class CSharpSemanticPipelineTests
             FindNode(result.Semantics!, conditionLocal.Id).ReferencedSymbolId);
 
         GraphDocument document = new HirGraphProjector().Project(hir, result.Semantics);
-        Assert.Equal("unifiedscript.graph/v0.10", document.SchemaVersion);
+        Assert.Equal("unifiedscript.graph/v0.11", document.SchemaVersion);
         GraphFunction graph = Assert.Single(document.Functions);
         GraphNode loopNode = Assert.Single(graph.Nodes, node => node.Id == statement.Id);
         GraphNode variableNode = Assert.Single(graph.Nodes, node => node.Id == variable.Id);
@@ -936,6 +936,99 @@ public sealed class CSharpSemanticPipelineTests
         Assert.Contains(nextIteration.Id, flow.ContinueNodeIds);
         Assert.Contains(flow.BackEdgeArcIds, arcId =>
             flowFunction.Arcs.Single(arc => arc.Id == arcId).FromNodeId == increment.Id);
+    }
+
+    [Fact]
+    public void AnalyzeAndProject_PreservesIndexedForEachCaptureBindingAndLoopOrder()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int Sum(int[] values)
+                {
+                    int total = 0;
+                    foreach (int value in values)
+                    {
+                        total = total + value;
+                    }
+
+                    return total;
+                }
+            }
+            """;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(source, "ForEachPhases.cs");
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        HirForEachStatement statement = Assert.Single(
+            result.Hir!.DescendantsAndSelf().OfType<HirForEachStatement>());
+        HirIdentifierExpression use = Assert.IsType<HirIdentifierExpression>(
+            Assert.IsType<HirBinaryExpression>(
+                Assert.IsType<HirAssignmentExpression>(
+                    Assert.IsType<HirExpressionStatement>(
+                        Assert.Single(statement.Body.Statements)).Expression).Value).Right);
+        Assert.Equal(statement.Variable.Id, FindNode(result.Semantics!, use.Id).ReferencedSymbolId);
+
+        GraphDocument document = new HirGraphProjector().Project(result.Hir!, result.Semantics);
+        Assert.Equal("unifiedscript.graph/v0.11", document.SchemaVersion);
+        GraphFunction graph = Assert.Single(document.Functions);
+        GraphNode loop = graph.Nodes.Single(node => node.Id == statement.Id);
+        GraphNode variable = graph.Nodes.Single(node => node.Id == statement.Variable.Id);
+        GraphNode capture = Assert.Single(graph.Nodes, static node => node.Kind == "collectionCapture");
+        GraphRegion loopRegion = graph.Regions.Single(region =>
+            region.Kind == GraphRegionKind.Loop && region.SourceNodeId == statement.Id);
+        GraphRegion collectionRegion = graph.Regions.Single(region =>
+            region.Kind == GraphRegionKind.LoopCollection &&
+            region.ParentRegionId == loopRegion.Id);
+        GraphRegion bodyRegion = graph.Regions.Single(region =>
+            region.Kind == GraphRegionKind.LoopBody &&
+            region.ParentRegionId == loopRegion.Id);
+
+        Assert.Equal([collectionRegion.Id, bodyRegion.Id], loopRegion.ChildRegionIds);
+        Assert.Equal("forEach", loop.Properties["loopForm"]);
+        Assert.Equal("once", loop.Properties["collectionEvaluation"]);
+        Assert.Equal("indexed", loop.Properties["collectionStrategy"]);
+        Assert.Equal("moveNext", loop.Properties["continueTarget"]);
+        Assert.Equal("none", loop.Properties["disposal"]);
+        Assert.Equal("current", variable.Properties["binding"]);
+        Assert.Equal("true", variable.Properties["readOnly"]);
+        Assert.Equal("once", capture.Properties["evaluation"]);
+    }
+
+    [Fact]
+    public void Analyze_RejectsHiddenForEachElementConversions()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static long Sum(int[] values)
+                {
+                    long total = 0;
+                    foreach (long value in values)
+                    {
+                        total = total + value;
+                    }
+
+                    return total;
+                }
+            }
+            """;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            source,
+            "ConvertedForEach.cs");
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(
+            result.Diagnostics,
+            diagnostic => diagnostic.Code == SemanticDiagnosticCodes.ForEachCollectionNotSupported &&
+                diagnostic.Message.Contains("exact element type", StringComparison.Ordinal));
     }
 
     private static BoundNodeInfo FindNode(BoundCompilation semantics, SemanticId id) =>

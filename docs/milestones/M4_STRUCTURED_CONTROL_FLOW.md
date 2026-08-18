@@ -1183,6 +1183,76 @@ its implicit receiver as an explicit shared-VM contract.
 14. The full solution, 285-test suite, format check, repository validator, 22
     patch/plan CLI regressions, and five analyze regressions pass.
 
+## M4.20 implemented vertical slice
+
+- strict HIR `unifiedscript.hir/v0.7`, Graph
+  `unifiedscript.graph/v0.11`, patch `unifiedscript.patch/v0.18`, and plan
+  `unifiedscript.patch-plan/v0.19` readers
+- first-class `HirForEachStatement` and `HirForEachVariable`, with collection,
+  body, traversal, syntax identity, persistent identity, and use/definition
+  indexing kept distinct from `for`
+- an exact indexed collection boundary: `System.String` and one-dimensional
+  zero-based arrays with graph-safe elements; generic/pattern/ref/async
+  enumerators remain rejected through `UVS2008`
+- Roslyn-declared iteration-variable binding, read-only body scope, exact
+  element type validation, and nearest-loop break/continue recognition
+- Graph `loopCollection` plus `loopBody` regions, generated evaluate-once
+  collection capture, indexed move-next decision, source-backed current-value
+  binding, and explicit `collectionEvaluation`, `collectionStrategy`,
+  `iterationAdvance`, `continueTarget`, `disposal`, and `evaluationOrder`
+  properties
+- derived CFG collection-region identity, move-next header/continue target,
+  current-binding body entry, exhaustion/break exit, reducible back edges, and
+  nearest-loop transfers
+- standalone `replaceForEachCollection` with exact loop/collection/type/trivia,
+  same-method scope, supported collection-shape, identity, Graph, and CFG
+  validation
+- direct and symbolic `replaceProducedForEachCollection` plan resolution
+  through the real current collection root after every reanalysis stage
+- dedicated `ForEachPatchStatement` construction, symbolic body population,
+  produced iteration-local references, and nested root/branch/loop producer
+  registration
+- checked-in text-authored array loop plus a three-stage string foreach plan
+  that creates the loop, reconnects the collection, and consumes the generated
+  iteration local in its body
+- architecture, roadmap, README, Graph-region/CFG/patch-plan contracts,
+  dedicated foreach documentation, schema fixture, and repository-validator
+  migration
+
+## M4.20 acceptance criteria
+
+1. A supported text-authored foreach lowers to `HirForEachStatement` and never
+   becomes `HirForStatement` or `HirWhileStatement`.
+2. The collection is bound as string or a one-dimensional zero-based array and
+   its element exactly matches the iteration variable's graph-safe type.
+3. Ref, async, generic enumerable, pattern enumerator, multidimensional, and
+   non-zero-based collection shapes are rejected instead of approximated.
+4. Graph emits ordered collection/body regions, one generated collection
+   capture, one indexed move-next loop decision, and one iteration binding.
+5. Incoming control evaluates the collection once; body fallthrough and every
+   continue return to move-next without reevaluating it.
+6. Every body entry passes through the current-value binding; loop exhaustion
+   and every nearest break converge on the exit.
+7. Graph JSON validates every foreach region, node, and property invariant;
+   derived CFG publishes collection region, header, body entry, transfers, and
+   back edges while remaining reducible.
+8. Patch v0.18 round-trips both `replaceForEachCollection` and the `forEach`
+   statement payload with exact collection/element type IDs.
+9. Exact collection replacement preserves loop/body/iteration identities and
+   rejects stale roots, incompatible collections, or discarded meaningful
+   trivia atomically.
+10. Plan v0.19 round-trips direct and produced collection steps and rejects
+    producer-kind, original-parent, ordering, type, and scope mismatches.
+11. A visual plan can create foreach, resolve and edit its current collection,
+    populate its actual body, and consume the generated iteration local without
+    predicting persistent IDs.
+12. Generated foreach loops compose inside root blocks, generated branches,
+    and generated loop bodies; break/continue remain nearest-loop transfers.
+13. Formatting changes preserve foreach/variable/body identities and exact
+    endpoint edits preserve the unaffected statement spine.
+14. The full solution, 294-test suite, format check, repository validator, and
+    both checked-in foreach CLI paths pass.
+
 ## Deliberate limits
 
 M4 consumes derived CFG facts at patch time but does not serialize them or
@@ -1203,7 +1273,7 @@ queries. Branch and loop-body insertions append and cannot move or delete
 existing structures. Loop transfers cannot be retargeted.
 Existing-`for` whole-clause restructuring remains unavailable beyond M4.18's
 exact condition/declaration-initializer/assignment-value/incrementor endpoints.
-`foreach`, switch,
+General enumerator/ref/async `foreach`, switch,
 conditional element access,
 conditional effect subgraphs for lazy expression inputs, exception edges,
 standalone short-circuit CFG regions, async state-machine transitions, control
@@ -1211,9 +1281,10 @@ dependence, SSA, and automatic node placement remain outside the current slice.
 
 ## Next slice
 
-M4.20 should add `foreach` as the next independent structured loop. It must
-model collection evaluation once, enumerator acquisition, `MoveNext`, current
-value binding, iteration-variable scope, disposal/finally behavior, and
-continue/break targets explicitly. It must not be treated as a cosmetic `for`
-because doing so would erase lifetime and exception semantics needed by a
-shared VM.
+M4.21 should extend `foreach` from the exact indexed strategy to general
+enumerator-backed collections. It must model enumerator acquisition,
+`MoveNext`, `Current`, iteration-variable conversion, normal and exceptional
+`Dispose`/`finally` paths, and continue/break/return cleanup routing explicitly.
+Async enumeration must remain separate until `MoveNextAsync`,
+`DisposeAsync`, and suspension-state control also have a lossless shared-VM
+contract.

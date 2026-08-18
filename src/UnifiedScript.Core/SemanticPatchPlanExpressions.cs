@@ -59,6 +59,14 @@ public static class SemanticPatchPlanExpressions
             {
                 NewCondition = Rewrite(replacement.NewCondition, resolver),
             },
+            ReplaceForEachCollectionPatchPlanStep replacement => replacement with
+            {
+                NewCollection = Rewrite(replacement.NewCollection, resolver),
+            },
+            ReplaceProducedForEachCollectionPatchPlanStep replacement => replacement with
+            {
+                NewCollection = Rewrite(replacement.NewCollection, resolver),
+            },
             ReplaceForDeclarationInitializerPatchPlanStep replacement => replacement with
             {
                 NewInitializer = Rewrite(replacement.NewInitializer, resolver),
@@ -125,6 +133,8 @@ public static class SemanticPatchPlanExpressions
             ReplaceProducedDoWhileConditionPatchPlanStep replacement => replacement.NewCondition,
             ReplaceForConditionPatchPlanStep replacement => replacement.NewCondition,
             ReplaceProducedForConditionPatchPlanStep replacement => replacement.NewCondition,
+            ReplaceForEachCollectionPatchPlanStep replacement => replacement.NewCollection,
+            ReplaceProducedForEachCollectionPatchPlanStep replacement => replacement.NewCollection,
             ReplaceForDeclarationInitializerPatchPlanStep replacement => replacement.NewInitializer,
             ReplaceForAssignmentInitializerValuePatchPlanStep replacement => replacement.NewValue,
             ReplaceForIncrementorPatchPlanStep replacement => replacement.NewOperand,
@@ -209,6 +219,9 @@ public static class SemanticPatchPlanExpressions
                 }
 
                 break;
+            case ForEachPatchStatement forEachStatement:
+                yield return forEachStatement.Collection;
+                break;
             case ReturnPatchStatement { Expression: not null } valueReturn:
                 yield return valueReturn.Expression;
                 break;
@@ -221,6 +234,7 @@ public static class SemanticPatchPlanExpressions
         IfPatchStatement branch => branch.Condition,
         WhilePatchStatement loop => loop.Condition,
         DoWhilePatchStatement loop => loop.Condition,
+        ForEachPatchStatement loop => loop.Collection,
         ReturnPatchStatement valueReturn => valueReturn.Expression,
         _ => null,
     };
@@ -274,6 +288,10 @@ public static class SemanticPatchPlanExpressions
                 {
                     Operand = Rewrite(incrementor.Operand, resolver),
                 }).ToArray(),
+            },
+            ForEachPatchStatement loop => loop with
+            {
+                Collection = Rewrite(loop.Collection, resolver),
             },
             ReturnPatchStatement { Expression: not null } valueReturn => valueReturn with
             {

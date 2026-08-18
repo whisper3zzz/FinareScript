@@ -145,6 +145,10 @@ public sealed class CSharpToHirLowerer
                 LowerAsBlock(doStatement.Statement, filePath, ownerKey),
                 LowerExpression(doStatement.Condition, filePath, ownerKey)),
             ForStatementSyntax forStatement => LowerFor(forStatement, filePath, ownerKey),
+            ForEachStatementSyntax forEachStatement => LowerForEach(
+                forEachStatement,
+                filePath,
+                ownerKey),
             BreakStatementSyntax breakStatement => new HirBreakStatement(
                 CSharpSemanticIds.ForNode(filePath, ownerKey, breakStatement),
                 RoslynSourceSpan.FromNode(breakStatement, filePath)),
@@ -182,6 +186,24 @@ public sealed class CSharpToHirLowerer
             statement.Incrementors
                 .Select(incrementor => LowerExpression(incrementor, filePath, ownerKey))
                 .ToArray(),
+            LowerAsBlock(statement.Statement, filePath, ownerKey));
+
+    private static HirForEachStatement LowerForEach(
+        ForEachStatementSyntax statement,
+        string filePath,
+        string ownerKey) => new(
+            CSharpSemanticIds.ForNode(filePath, ownerKey, statement),
+            RoslynSourceSpan.FromNode(statement, filePath),
+            new HirForEachVariable(
+                CSharpSemanticIds.ForNode(
+                    filePath,
+                    ownerKey,
+                    statement,
+                    $"foreachVariable:{statement.Identifier.ValueText}"),
+                RoslynSourceSpan.FromNode(statement.Type, filePath),
+                statement.Identifier.ValueText,
+                statement.Type.ToString()),
+            LowerExpression(statement.Expression, filePath, ownerKey),
             LowerAsBlock(statement.Statement, filePath, ownerKey));
 
     private static HirForVariableDeclaration LowerForDeclaration(

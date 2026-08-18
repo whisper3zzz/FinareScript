@@ -599,6 +599,72 @@ public sealed class GraphControlFlowAnalyzerTests
     }
 
     [Fact]
+    public void Analyze_ForEachCapturesCollectionOnceAndRoutesTransfersToIndexedHeader()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int Sum(int[] values)
+                {
+                    int total = 0;
+                    foreach (int value in values)
+                    {
+                        if (value == 0)
+                        {
+                            continue;
+                        }
+
+                        total = total + value;
+                        if (total > 10)
+                        {
+                            break;
+                        }
+                    }
+
+                    return total;
+                }
+            }
+            """;
+        CSharpAnalysisResult analysis = new CSharpSemanticPipeline().Analyze(
+            source,
+            "ForEachFlow.cs");
+        Assert.True(analysis.Succeeded, string.Join(Environment.NewLine, analysis.Diagnostics));
+        HirForEachStatement statement = Assert.Single(
+            analysis.Hir!.DescendantsAndSelf().OfType<HirForEachStatement>());
+        HirContinueStatement next = Assert.Single(
+            statement.Body.DescendantsAndSelf().OfType<HirContinueStatement>());
+        HirBreakStatement stop = Assert.Single(
+            statement.Body.DescendantsAndSelf().OfType<HirBreakStatement>());
+        HirReturnStatement continuation = Assert.IsType<HirReturnStatement>(
+            Assert.Single(Assert.Single(analysis.Hir!.Types).Methods).Body.Statements[2]);
+        GraphDocument graph = new HirGraphProjector().Project(analysis.Hir!, analysis.Semantics);
+        GraphFunction projected = Assert.Single(graph.Functions);
+        GraphNode capture = Assert.Single(projected.Nodes, static node =>
+            node.Kind == "collectionCapture");
+
+        GraphControlFlowFunction flow = Assert.Single(new GraphControlFlowAnalyzer()
+            .AnalyzeAndValidate(graph)
+            .Functions);
+        GraphControlFlowLoop loop = Assert.Single(flow.Loops);
+
+        Assert.Equal(statement.Id, loop.HeaderEntryNodeId);
+        Assert.Equal(statement.Id, loop.ContinueTargetNodeId);
+        Assert.Equal(statement.Variable.Id, loop.BodyEntryNodeId);
+        Assert.NotNull(loop.CollectionRegionId);
+        Assert.Equal(continuation.Id, loop.ExitNodeId);
+        Assert.Equal([next.Id], loop.ContinueNodeIds);
+        Assert.Equal([stop.Id], loop.BreakNodeIds);
+        Assert.Equal(statement.Id, Node(flow, capture.Id).SuccessorIds.Single());
+        Assert.Equal(statement.Id, Node(flow, next.Id).SuccessorIds.Single());
+        Assert.Equal(continuation.Id, Node(flow, stop.Id).SuccessorIds.Single());
+        Assert.NotEmpty(loop.BackEdgeArcIds);
+        Assert.True(flow.IsReducible);
+    }
+
+    [Fact]
     public void Analyze_ForExecutesInitializerOnceAndRoutesContinueThroughIncrementors()
     {
         const string source = """

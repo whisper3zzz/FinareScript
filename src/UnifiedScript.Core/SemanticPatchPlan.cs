@@ -23,6 +23,10 @@ namespace UnifiedScript.Core;
 [JsonDerivedType(
     typeof(ReplaceProducedForConditionPatchPlanStep),
     "replaceProducedForCondition")]
+[JsonDerivedType(typeof(ReplaceForEachCollectionPatchPlanStep), "replaceForEachCollection")]
+[JsonDerivedType(
+    typeof(ReplaceProducedForEachCollectionPatchPlanStep),
+    "replaceProducedForEachCollection")]
 [JsonDerivedType(
     typeof(ReplaceForDeclarationInitializerPatchPlanStep),
     "replaceForDeclarationInitializer")]
@@ -211,6 +215,26 @@ public sealed record ReplaceProducedForConditionPatchPlanStep(
     SemanticId TargetNodeId,
     string SourceStepId,
     PatchExpression NewCondition) : SemanticPatchPlanStep(StepId, TargetNodeId);
+
+public sealed record ReplaceForEachCollectionPatchPlanStep(
+    string StepId,
+    SemanticId TargetNodeId,
+    SemanticId ExpectedCollectionNodeId,
+    SemanticId ExpectedCollectionTypeId,
+    PatchExpression NewCollection) : SemanticPatchPlanStep(StepId, TargetNodeId)
+{
+    public ReplaceForEachCollectionPatchOperation ToOperation() => new(
+        TargetNodeId,
+        ExpectedCollectionNodeId,
+        ExpectedCollectionTypeId,
+        NewCollection);
+}
+
+public sealed record ReplaceProducedForEachCollectionPatchPlanStep(
+    string StepId,
+    SemanticId TargetNodeId,
+    string SourceStepId,
+    PatchExpression NewCollection) : SemanticPatchPlanStep(StepId, TargetNodeId);
 
 public sealed record ReplaceForDeclarationInitializerPatchPlanStep(
     string StepId,
@@ -433,7 +457,7 @@ public sealed record SemanticPatchPlanDocument(
     SemanticId SemanticConfigurationId,
     IReadOnlyList<SemanticPatchPlanStep> Steps)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.patch-plan/v0.18";
+    public const string CurrentSchemaVersion = "unifiedscript.patch-plan/v0.19";
 
     public static SemanticPatchPlanDocument Create(
         SemanticId sourceCompilationId,

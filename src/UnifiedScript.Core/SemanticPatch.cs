@@ -11,6 +11,7 @@ namespace UnifiedScript.Core;
 [JsonDerivedType(typeof(ReplaceWhileConditionPatchOperation), "replaceWhileCondition")]
 [JsonDerivedType(typeof(ReplaceDoWhileConditionPatchOperation), "replaceDoWhileCondition")]
 [JsonDerivedType(typeof(ReplaceForConditionPatchOperation), "replaceForCondition")]
+[JsonDerivedType(typeof(ReplaceForEachCollectionPatchOperation), "replaceForEachCollection")]
 [JsonDerivedType(
     typeof(ReplaceForDeclarationInitializerPatchOperation),
     "replaceForDeclarationInitializer")]
@@ -85,6 +86,12 @@ public sealed record ReplaceForConditionPatchOperation(
     SemanticId ExpectedConditionTypeId,
     PatchExpression NewCondition) : SemanticPatchOperation(TargetNodeId);
 
+public sealed record ReplaceForEachCollectionPatchOperation(
+    SemanticId TargetNodeId,
+    SemanticId ExpectedCollectionNodeId,
+    SemanticId ExpectedCollectionTypeId,
+    PatchExpression NewCollection) : SemanticPatchOperation(TargetNodeId);
+
 public sealed record ReplaceForDeclarationInitializerPatchOperation(
     SemanticId TargetNodeId,
     SemanticId ExpectedForStatementId,
@@ -145,6 +152,7 @@ public sealed record ReplaceReturnValuePatchOperation(
 [JsonDerivedType(typeof(WhilePatchStatement), "while")]
 [JsonDerivedType(typeof(DoWhilePatchStatement), "doWhile")]
 [JsonDerivedType(typeof(ForPatchStatement), "for")]
+[JsonDerivedType(typeof(ForEachPatchStatement), "forEach")]
 [JsonDerivedType(typeof(BreakPatchStatement), "break")]
 [JsonDerivedType(typeof(ContinuePatchStatement), "continue")]
 [JsonDerivedType(typeof(ReturnPatchStatement), "return")]
@@ -256,6 +264,12 @@ public sealed record ForPatchStatement(
     PatchExpression? Condition,
     IReadOnlyList<ForMutationPatchExpression> Incrementors) : InsertPatchStatement;
 
+public sealed record ForEachPatchStatement(
+    string TypeName,
+    string VariableName,
+    SemanticId ExpectedElementTypeId,
+    PatchExpression Collection) : InsertPatchStatement;
+
 public sealed record BreakPatchStatement : InsertPatchStatement;
 
 public sealed record ContinuePatchStatement : InsertPatchStatement;
@@ -302,7 +316,7 @@ public sealed record SemanticPatchDocument(
     SemanticId SemanticConfigurationId,
     IReadOnlyList<SemanticPatchOperation> Operations)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.17";
+    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.18";
 
     public static SemanticPatchDocument Create(
         SemanticId sourceCompilationId,

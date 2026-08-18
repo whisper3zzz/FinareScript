@@ -466,7 +466,7 @@ public sealed class SemanticPatchJsonTests
         ReplaceReturnValuePatchOperation operation = Assert.IsType<ReplaceReturnValuePatchOperation>(
             Assert.Single(roundTrip.Operations));
         Assert.Equal(expression, Assert.IsType<ConditionalPatchExpression>(operation.NewValue));
-        Assert.Equal("unifiedscript.patch/v0.17", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch/v0.18", roundTrip.SchemaVersion);
         Assert.Contains("\"expression\": \"conditional\"", json);
         Assert.Contains("\"whenTrue\"", json);
         Assert.Contains("\"whenFalse\"", json);
@@ -500,7 +500,7 @@ public sealed class SemanticPatchJsonTests
         ReplaceReturnValuePatchOperation operation = Assert.IsType<ReplaceReturnValuePatchOperation>(
             Assert.Single(roundTrip.Operations));
         Assert.Equal(expression, Assert.IsType<BinaryPatchExpression>(operation.NewValue));
-        Assert.Equal("unifiedscript.patch/v0.17", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch/v0.18", roundTrip.SchemaVersion);
         Assert.Contains("\"operator\": \"??\"", json, StringComparison.Ordinal);
     }
 
@@ -533,10 +533,49 @@ public sealed class SemanticPatchJsonTests
         Assert.Equal(
             expression,
             Assert.IsType<ConditionalMemberAccessPatchExpression>(operation.NewValue));
-        Assert.Equal("unifiedscript.patch/v0.17", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch/v0.18", roundTrip.SchemaVersion);
         Assert.Contains("\"expression\": \"conditionalMemberAccess\"", json);
         Assert.Contains("\"memberName\": \"Length\"", json);
         Assert.Contains("\"receiver\"", json);
+    }
+
+    [Fact]
+    public void SerializeAndDeserialize_PreserveForEachCollectionEditAndInsertion()
+    {
+        SemanticId stringType = SemanticId.FromKey("foreach-string-type");
+        SemanticId charType = SemanticId.FromKey("foreach-char-type");
+        var collection = new LocalReferencePatchExpression(
+            SemanticId.FromKey("foreach-source"),
+            "values",
+            stringType);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            SemanticId.FromKey("foreach-compilation"),
+            SemanticId.FromKey("foreach-configuration"),
+            [
+                new ReplaceForEachCollectionPatchOperation(
+                    SemanticId.FromKey("foreach-loop"),
+                    SemanticId.FromKey("foreach-old-collection"),
+                    stringType,
+                    collection),
+                new InsertStatementPatchOperation(
+                    SemanticId.FromKey("foreach-block"),
+                    null,
+                    null,
+                    new ForEachPatchStatement("char", "value", charType, collection)),
+            ]);
+
+        string json = SemanticPatchJson.Serialize(patch);
+        SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
+
+        Assert.IsType<ReplaceForEachCollectionPatchOperation>(roundTrip.Operations[0]);
+        InsertStatementPatchOperation insertion = Assert.IsType<InsertStatementPatchOperation>(
+            roundTrip.Operations[1]);
+        Assert.Equal(
+            new ForEachPatchStatement("char", "value", charType, collection),
+            Assert.IsType<ForEachPatchStatement>(insertion.NewStatement));
+        Assert.Equal("unifiedscript.patch/v0.18", roundTrip.SchemaVersion);
+        Assert.Contains("\"operation\": \"replaceForEachCollection\"", json);
+        Assert.Contains("\"statement\": \"forEach\"", json);
     }
 
     [Fact]
