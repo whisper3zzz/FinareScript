@@ -49,9 +49,12 @@ The repository currently implements:
   `operand`, and positional `argN` ports emitted by Graph;
 - transaction expression handles that let later stages traverse and edit trees
   authored by earlier stages without predicting generated semantic IDs;
-- first-class conditional (`?:`) expressions across HIR v0.3 and Graph v0.5,
+- first-class conditional (`?:`) expressions across HIR v0.3 and Graph v0.6,
   with lazy-branch safety, typed source synthesis, canonical branch ports, and
   generated-tree handle traversal;
+- explicit `&&`/`||` right-side evaluation conditions in Graph v0.6, with
+  always-evaluated left effects and `UVS2003` rejection of conditional right
+  effects;
 - opt-in `.usids` sidecars that preserve node identity across formatting and edits;
 - semantic-independent `.usgraph` layout sidecars with deterministic positions,
   sizes, collapsed state, comment regions, routing hints, and orphan recovery;
@@ -81,6 +84,9 @@ M4.12 preserves conditional expressions directly instead of desugaring them,
 projects an explicit lazy `Select` node, rejects effectful arms, and extends the
 same standalone and produced-expression editing paths through `condition`,
 `whenTrue`, and `whenFalse` ports.
+M4.13 closes the equivalent logical-operator gap: Graph declares exactly when
+an `&&`/`||` right input is evaluated, preserves the left effect chain, and
+rejects right subtrees whose effects would require conditional control flow.
 
 The v0.2 profile accepts `[Visual]` methods containing local variables,
 expressions, calls, assignments, `if/else`, `while`, `break`, `continue`,
@@ -150,7 +156,7 @@ Without `--out`, the graph JSON is written to stdout.
 
 ### Analyze structured regions
 
-Graph v0.5 assigns every node to exactly one semantic region and preserves
+Graph v0.6 assigns every node to exactly one semantic region and preserves
 function, block, `if`, `then`, explicit/implicit `else`, `loop`, and `loopBody`
 nesting. Generate the early-return example with:
 
@@ -185,7 +191,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
   --out artifacts/loops
 ```
 
-HIR v0.3 emits explicit while/break/continue statements. Graph v0.5 emits a
+HIR v0.3 emits explicit while/break/continue statements. Graph v0.6 emits a
 `loop` region with one `loopBody` child, and derived CFG facts identify the
 effective condition header, body entry, exit successor, back-edge arcs, and
 break/continue nodes owned by the nearest loop. Effectful conditions route all
@@ -723,7 +729,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
 The editor supplies only the original method-body anchor and backward symbolic
 producer references. The coordinator resolves the generated while/body/branch
 IDs after each reanalysis. The final ordinary C# loop reprojects into the same
-HIR v0.3, Graph v0.5 regions, and nearest-loop CFG facts as a text-authored
+HIR v0.3, Graph v0.6 regions, and nearest-loop CFG facts as a text-authored
 loop. See [LOOP_PATCHING.md](docs/LOOP_PATCHING.md).
 
 ### Edit assignment values and loop conditions
@@ -883,7 +889,7 @@ identity, tombstone, and Graph-edge behavior stay on one code path. See
 ### Author and edit a conditional expression
 
 M4.12 adds `condition ? whenTrue : whenFalse` as a first-class expression in
-HIR v0.3, Graph v0.5, patch v0.13, and patch-plan v0.14. Graph emits one
+HIR v0.3, current Graph v0.6, patch v0.13, and patch-plan v0.14. Graph emits one
 `conditional`/`Select` node with `condition`, `whenTrue`, and `whenFalse` data
 inputs, a `value` output, and `evaluation: lazyBranches`. Text lowering keeps
 the original expression shape; it does not turn the expression into a call or
@@ -913,6 +919,31 @@ existing conditional use the same canonical ports, endpoint/type preconditions,
 stable-pure removal checks, identity pins, and tombstones as every other M4.10
 input edit. See
 [CONDITIONAL_EXPRESSIONS.md](docs/CONDITIONAL_EXPRESSIONS.md).
+
+### Analyze short-circuit logical expressions
+
+M4.13 makes the evaluation order of `&&` and `||` machine-readable. Their
+existing binary nodes retain `left`, `right`, and `value` data ports while
+Graph v0.6 adds `evaluation: shortCircuitRight`. `rightEvaluation` is
+`whenLeftTrue` for `&&` and `whenLeftFalse` for `||`. Ordinary `&` and `|`
+remain eager binary operators.
+
+Effects on the left are safe because C# always evaluates that operand and the
+projector retains its control chain. Assignment, await, mutation, or an
+effectful call anywhere under the conditional right operand produces
+`UVS2003`; use explicit statement-level control flow when that behavior is
+required.
+
+Generate the checked-in example with:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  analyze samples/Expressions/ShortCircuitRules.cs \
+  --out artifacts/short-circuit
+```
+
+See [SHORT_CIRCUIT_EXPRESSIONS.md](docs/SHORT_CIRCUIT_EXPRESSIONS.md) for the
+Graph and effect-safety contract.
 
 ## Persist and synchronize graph layout
 

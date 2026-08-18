@@ -614,6 +614,27 @@ public sealed class HirGraphProjector
                     {
                         ExpressionProjection left = ProjectExpression(binary.Left, regionId);
                         ExpressionProjection right = ProjectExpression(binary.Right, regionId);
+                        IReadOnlyList<KeyValuePair<string, string>> evaluationProperties =
+                            binary.Operator switch
+                            {
+                                "&&" =>
+                                [
+                                    KeyValuePair.Create("evaluation", "shortCircuitRight"),
+                                    KeyValuePair.Create("rightEvaluation", "whenLeftTrue"),
+                                ],
+                                "||" =>
+                                [
+                                    KeyValuePair.Create("evaluation", "shortCircuitRight"),
+                                    KeyValuePair.Create("rightEvaluation", "whenLeftFalse"),
+                                ],
+                                _ => [],
+                            };
+                        if (evaluationProperties.Count > 0 && right.Effects.Count > 0)
+                        {
+                            throw new InvalidOperationException(
+                                "Short-circuit Graph right operands must be effect-free.");
+                        }
+
                         AddNode(ValueNode(
                             binary,
                             "binary",
@@ -622,11 +643,14 @@ public sealed class HirGraphProjector
                             [
                                 new GraphPort("left", GraphPortDirection.Input, GraphPortKind.Data),
                             new GraphPort("right", GraphPortDirection.Input, GraphPortKind.Data),
-                            ]),
+                            ],
+                            additionalProperties: evaluationProperties),
                             regionId);
                         AddRequiredDataEdge(left.Value, new ValueEndpoint(binary.Id, "left"));
                         AddRequiredDataEdge(right.Value, new ValueEndpoint(binary.Id, "right"));
-                        effects = [.. left.Effects, .. right.Effects];
+                        effects = evaluationProperties.Count > 0
+                            ? left.Effects
+                            : [.. left.Effects, .. right.Effects];
                         break;
                     }
                 case HirUnaryExpression unary:
@@ -758,12 +782,21 @@ public sealed class HirGraphProjector
             string label,
             KeyValuePair<string, string>? property = null,
             IReadOnlyList<GraphPort>? extraPorts = null,
-            bool includeValuePort = true)
+            bool includeValuePort = true,
+            IReadOnlyList<KeyValuePair<string, string>>? additionalProperties = null)
         {
             var properties = new SortedDictionary<string, string>(StringComparer.Ordinal);
             if (property is not null)
             {
                 properties.Add(property.Value.Key, property.Value.Value);
+            }
+
+            if (additionalProperties is not null)
+            {
+                foreach (KeyValuePair<string, string> additionalProperty in additionalProperties)
+                {
+                    properties.Add(additionalProperty.Key, additionalProperty.Value);
+                }
             }
 
             semantics.ApplyNodeProperties(expression.Id, properties);

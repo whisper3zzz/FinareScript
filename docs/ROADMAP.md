@@ -114,6 +114,8 @@ Outcome: practical gameplay methods are fully visualizable.
   path with atomic rollback
 - [x] first-class conditional-expression HIR/Graph/source round trip with
   lazy-branch effect safety and canonical generated-tree ports
+- [x] explicit `&&`/`||` short-circuit Graph evaluation with left-effect
+  sequencing and effect-safe conditional right operands
 - [ ] general data/control rewiring and structural HIR operations
 - [ ] `for` and `foreach`
 - [ ] `switch` and supported patterns

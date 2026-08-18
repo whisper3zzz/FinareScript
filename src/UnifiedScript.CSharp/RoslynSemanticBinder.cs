@@ -86,6 +86,7 @@ public sealed class RoslynSemanticBinder
         RegisterMethodAndValueDeclarations(hir, diagnostics);
         BindExpressions(hir);
         ValidateConditionalExpressions(hir, diagnostics);
+        ValidateShortCircuitExpressions(hir, diagnostics);
 
         var bound = new BoundCompilation(
             BoundCompilation.CurrentSchemaVersion,
@@ -235,18 +236,8 @@ public sealed class RoslynSemanticBinder
                      .DescendantsAndSelf()
                      .OfType<HirConditionalExpression>())
         {
-            HirExpression? effectfulBranchNode = new[]
-                {
-                    conditional.WhenTrue,
-                    conditional.WhenFalse,
-                }
-                .SelectMany(static branch => branch.DescendantsAndSelf())
-                .OfType<HirExpression>()
-                .FirstOrDefault(node =>
-                    node is HirAssignmentExpression or HirAwaitExpression ||
-                    node is HirUnaryExpression { Operator: "++" or "--" } ||
-                    nodes.TryGetValue(node.Id, out BoundNodeInfo? binding) &&
-                    binding.Effects != MethodEffects.None);
+            HirExpression? effectfulBranchNode = FindEffectfulExpression(
+                [conditional.WhenTrue, conditional.WhenFalse]);
             if (effectfulBranchNode is null || !reportedNodes.Add(effectfulBranchNode.Id))
             {
                 continue;
@@ -262,6 +253,42 @@ public sealed class RoslynSemanticBinder
                 effectfulBranchNode.Id));
         }
     }
+
+    private void ValidateShortCircuitExpressions(
+        HirCompilationUnit hir,
+        ICollection<UnifiedDiagnostic> diagnostics)
+    {
+        var reportedNodes = new HashSet<SemanticId>();
+        foreach (HirBinaryExpression binary in hir
+                     .DescendantsAndSelf()
+                     .OfType<HirBinaryExpression>()
+                     .Where(static binary => binary.Operator is "&&" or "||"))
+        {
+            HirExpression? effectfulRightNode = FindEffectfulExpression([binary.Right]);
+            if (effectfulRightNode is null || !reportedNodes.Add(effectfulRightNode.Id))
+            {
+                continue;
+            }
+
+            diagnostics.Add(new UnifiedDiagnostic(
+                SemanticDiagnosticCodes.ShortCircuitRightEffectsNotSupported,
+                UnifiedDiagnosticSeverity.Error,
+                $"The right operand of '{binary.Operator}' must be effect-free so Graph can " +
+                "preserve C# short-circuit evaluation. Move mutation, await, or effectful " +
+                "calls into explicit control flow.",
+                effectfulRightNode.Span,
+                effectfulRightNode.Id));
+        }
+    }
+
+    private HirExpression? FindEffectfulExpression(IEnumerable<HirExpression> roots) => roots
+        .SelectMany(static root => root.DescendantsAndSelf())
+        .OfType<HirExpression>()
+        .FirstOrDefault(node =>
+            node is HirAssignmentExpression or HirAwaitExpression ||
+            node is HirUnaryExpression { Operator: "++" or "--" } ||
+            nodes.TryGetValue(node.Id, out BoundNodeInfo? binding) &&
+            binding.Effects != MethodEffects.None);
 
     private void ValidateGraphSafeType(
         SemanticId typeId,

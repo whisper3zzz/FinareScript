@@ -696,6 +696,61 @@ stages traverse and edit them through chainable structural port handles.
 15. The full solution, 228-test suite, format check, repository validator, and
     19 CLI regressions pass.
 
+## M4.13 implemented vertical slice
+
+- strict HIR v0.3, Graph v0.6, patch v0.13, and patch-plan v0.14 readers
+- explicit lazy-right evaluation metadata on existing binary Graph nodes
+- `evaluation: shortCircuitRight` on both conditional logical operators
+- `rightEvaluation: whenLeftTrue` for `&&`
+- `rightEvaluation: whenLeftFalse` for `||`
+- unchanged canonical `left`, `right`, and `value` data ports
+- always-evaluated left-side effects retained in the containing statement's
+  control chain
+- semantic `UVS2003` rejection of assignment, await, mutation, and bound
+  effectful calls anywhere in a conditional right subtree
+- defensive Graph projection rejection if an invalid effectful right subtree
+  reaches the projector without semantic validation
+- unchanged eager binary behavior for non-conditional `&` and `|`
+- unchanged HIR and patch schemas because their ordered binary shape was
+  already lossless
+- standalone and produced-expression edits continuing through the existing
+  binary ports and full post-patch semantic reanalysis
+- migrated Graph Golden manifest and repository schema checks
+- checked-in `ShortCircuitRules.cs` analyze sample covering both operators and
+  an effectful always-evaluated left operand
+- architecture/roadmap documentation and a dedicated short-circuit contract
+
+## M4.13 acceptance criteria
+
+1. Text-authored `&&` and `||` remain ordered `HirBinaryExpression` nodes under
+   HIR v0.3 rather than being rewritten into eager calls.
+2. Graph v0.6 emits `evaluation: shortCircuitRight` on both conditional logical
+   operators.
+3. `&&` emits `rightEvaluation: whenLeftTrue`; `||` emits
+   `rightEvaluation: whenLeftFalse`.
+4. Both nodes retain the existing canonical `left`, `right`, and `value` data
+   ports and edges.
+5. Ordinary `&` and `|` do not receive lazy-evaluation properties.
+6. An effectful left subtree remains valid because it is always evaluated.
+7. Left-side effect nodes remain sequenced before the containing statement's
+   control node.
+8. Assignment, await, increment/decrement, or a call with non-`None` effects
+   anywhere in the right subtree produces `UVS2003` before Graph projection.
+9. Nested short-circuit validation reports the effectful source node without
+   duplicating the same failing node through enclosing operators.
+10. A Graph consumer has enough serialized information to preserve C#
+    right-side evaluation without inferring semantics from the operator label.
+11. Patch-authored logical operators use the existing v0.13 binary algebra and
+    rerun the same effect check after ordinary C# source construction.
+12. No HIR, patch, or patch-plan version bump occurs because no serialized
+    source-expression shape changed.
+13. The checked-in sample analyzes to Graph v0.6 and covers `&&`, `||`, and an
+    effectful left call.
+14. Documentation directs conditional right effects to statement-level
+    structured control flow.
+15. The full solution, 232-test suite, format check, repository validator, 19
+    patch/plan CLI regressions, and the short-circuit analyze regression pass.
+
 ## Deliberate limits
 
 M4 consumes derived CFG facts at patch time but does not serialize them or
@@ -712,15 +767,16 @@ expressions can reference existing same-method definitions and locals produced
 earlier in one plan. Produced paths do not yet traverse members, calls,
 assignments, awaits, or wildcard/parent queries. Branch and loop-body insertions append and cannot move or delete
 existing structures. Loop transfers cannot be retargeted.
-`do`/`for`/`foreach`, switch, null-conditional/coalescing expressions, exception edges,
-short-circuit expression flow, async state-machine transitions, control
+`do`/`for`/`foreach`, switch, null-conditional/coalescing expressions,
+conditional effect subgraphs for lazy expression inputs, exception edges,
+standalone short-circuit CFG regions, async state-machine transitions, control
 dependence, SSA, and automatic node placement remain outside the current slice.
 
 ## Next slice
 
-M4.13 should make conditional evaluation explicit for the remaining lazy
-expression family, beginning with `&&`/`||` right operands and then deciding a
-lossless `??` contract. This closes a semantic gap before admitting
-null-conditional access. `for` and `foreach` still need an explicit lossless
-HIR decision before admission rather than silently desugaring source syntax
-into while loops.
+M4.14 should extend the explicit lazy-right contract to null coalescing (`??`),
+including an exact HIR result/type representation and a decision about nullable
+flow state before admitting null-conditional access. This reuses the v0.6
+evaluation vocabulary without treating null testing as Boolean logic. `for`
+and `foreach` still need an explicit lossless HIR decision before admission
+rather than silently desugaring source syntax into while loops.

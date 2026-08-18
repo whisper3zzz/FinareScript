@@ -253,13 +253,20 @@ captured HIR root, and lowers to the existing standalone
 consumer's replacement root is published again, so handles chain without a
 second VM, graph evaluator, or generated-ID prediction scheme.
 HIR v0.3 preserves a conditional expression as one node with condition, true,
-and false children. Graph v0.5 projects that node as a `conditional`/`Select`
+and false children. Graph v0.6 projects that node as a `conditional`/`Select`
 with canonical `condition`, `whenTrue`, and `whenFalse` inputs and an explicit
 `evaluation: lazyBranches` contract. Semantic binding rejects effectful arms so
 the data projection cannot eagerly execute mutation, latency, or effectful
 calls that C# would evaluate only on the selected path. Patch v0.13 and plan
 v0.14 use the same conditional shape in their closed expression algebra and
 allow exact or produced-handle edits through those Graph ports.
+The same HIR already preserves `&&` and `||` as ordered binary nodes. Graph
+v0.6 now marks their right input as `shortCircuitRight`, with
+`whenLeftTrue`/`whenLeftFalse` selecting the operator-specific condition.
+Always-evaluated left effects stay in the statement control chain. Semantic
+binding rejects effectful right subtrees with `UVS2003` until Graph has a
+conditional effect-subgraph contract. The full boundary is specified in
+[SHORT_CIRCUIT_EXPRESSIONS.md](SHORT_CIRCUIT_EXPRESSIONS.md).
 An `if` insertion publishes internal `then`/`else` block handles for later
 `insertBranchStatement` steps without masquerading as a reconnectable local
 definition. The branch steps repeat the producer's original parent block as
@@ -330,7 +337,7 @@ this proof until builtin operator effects include conditional evaluation,
 allocation, and throw behavior.
 
 M4.3 adds a `GraphPatchSafetyIndex` inside the C# patch boundary. It projects
-the same analyzed HIR and bound semantics through Graph v0.5, derives the M4.2
+the same analyzed HIR and bound semantics through Graph v0.6, derives the M4.2
 CFG, and resolves statement entries or region fallthrough sources as insertion
 anchors. A non-empty block whose paths terminate has no fallthrough anchor.
 Local assignment targets and graph-authored local references must satisfy both

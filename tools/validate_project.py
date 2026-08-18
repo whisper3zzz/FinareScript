@@ -39,6 +39,7 @@ DOCUMENTS = [
     ROOT / "docs" / "EXPRESSION_INPUT_PATCHING.md",
     ROOT / "docs" / "PRODUCED_EXPRESSION_HANDLES.md",
     ROOT / "docs" / "CONDITIONAL_EXPRESSIONS.md",
+    ROOT / "docs" / "SHORT_CIRCUIT_EXPRESSIONS.md",
     ROOT / "docs" / "PATCH_PLAN.md",
     ROOT / "docs" / "ROADMAP.md",
     ROOT / "docs" / "milestones" / "M1_ROSLYN_GRAPH_FOUNDATION.md",
@@ -171,6 +172,9 @@ def main() -> int:
     conditional_expression_identity_path = (
         ROOT / "samples" / "Patching" / "EditConditionalExpression.cs.usids"
     )
+    short_circuit_source_path = (
+        ROOT / "samples" / "Expressions" / "ShortCircuitRules.cs"
+    )
     region_source_path = ROOT / "samples" / "Regions" / "EarlyReturn.cs"
     loop_source_path = ROOT / "samples" / "Loops" / "Countdown.cs"
     loop_identity_path = ROOT / "samples" / "Loops" / "Countdown.cs.usids"
@@ -271,6 +275,7 @@ def main() -> int:
         and conditional_expression_identity_path.is_file(),
         "Missing conditional-expression round-trip sample",
     )
+    require(short_circuit_source_path.is_file(), "Missing short-circuit sample")
     require(region_source_path.is_file(), "Missing structured Graph-region sample")
     require(
         loop_source_path.is_file() and loop_identity_path.is_file(),
@@ -357,6 +362,7 @@ def main() -> int:
     conditional_expression_identity = json.loads(
         conditional_expression_identity_path.read_text(encoding="utf-8")
     )
+    short_circuit_source = short_circuit_source_path.read_text(encoding="utf-8")
     region_source = region_source_path.read_text(encoding="utf-8")
     loop_source = loop_source_path.read_text(encoding="utf-8")
     loop_identity = json.loads(loop_identity_path.read_text(encoding="utf-8"))
@@ -983,11 +989,17 @@ def main() -> int:
     )
     require(
         golden_manifest["artifacts"]["graph"]["schemaVersion"]
-        == "unifiedscript.graph/v0.5"
+        == "unifiedscript.graph/v0.6"
         and "if ((damage > threshold) && !disabled)" in region_source
         and "return true;" in region_source
         and "return false;" in region_source,
-        "Graph v0.5 Golden manifest or early-return region sample is inconsistent",
+        "Graph v0.6 Golden manifest or early-return region sample is inconsistent",
+    )
+    require(
+        "return enabled && ready;" in short_circuit_source
+        and "return cached || ready;" in short_circuit_source
+        and "return Poll() && enabled;" in short_circuit_source,
+        "Short-circuit sample does not cover both operators and left effects",
     )
     require(
         "while (value > 0)" in loop_source

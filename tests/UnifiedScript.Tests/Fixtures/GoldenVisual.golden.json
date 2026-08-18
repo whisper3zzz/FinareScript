@@ -13,8 +13,8 @@
       "utf8Bytes": 3459
     },
     "graph": {
-      "schemaVersion": "unifiedscript.graph/v0.5",
-      "sha256": "d5adf29cc6c4e387a6bd27660dd5a4d7454687b0aaaf6d4e6fd96f6603da34aa",
+      "schemaVersion": "unifiedscript.graph/v0.6",
+      "sha256": "dc526cd829acbb10e1582517cbb29f5bb500158f756391048bcb598aa79559df",
       "utf8Bytes": 7471
     }
   }
