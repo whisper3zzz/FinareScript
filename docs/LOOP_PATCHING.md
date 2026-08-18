@@ -4,11 +4,12 @@
 
 M4.6 closes the first bounded loop round trip for `while`; M4.17 extends the
 same symbolic protocol to a dedicated `for` constructor, and M4.19 adds the
-post-test `do ... while` form. M4.20 adds bounded indexed `foreach`. A visual edit can
+post-test `do ... while` form. M4.20 adds indexed `foreach`, and M4.21 extends
+the same constructor to disposal-aware synchronous enumerable loops. A visual edit can
 create ordinary C#, obtain a symbolic handle for its generated body, and
 populate that body with the same typed statements used elsewhere. The result
 is re-lowered into the current HIR v0.7 and projected into the current Graph
-v0.11/CFG loop model; there is no editor-only loop node or second runtime.
+v0.12/CFG loop model; there is no editor-only loop node or second runtime.
 
 This is structured construction, not arbitrary cyclic edge rewiring. The
 patch describes a supported structured loop and ordered body statements. The compiler owns the
@@ -17,14 +18,15 @@ targets.
 
 ## Protocol
 
-Current patch schema `unifiedscript.patch/v0.18` carries six loop statement payloads:
+Current patch schema `unifiedscript.patch/v0.19` carries six loop statement payloads:
 
 - `while`, carrying one closed, typed `PatchExpression` condition;
 - `doWhile`, carrying one closed, typed post-body condition;
 - `for`, carrying declaration or assignment initialization, an optional
   condition, and ordered prefix/postfix `++`/`--` incrementors;
-- `forEach`, carrying an explicit iteration variable and an indexed string or
-  one-dimensional zero-based array collection reference;
+- `forEach`, carrying an explicit iteration variable and a supported string,
+  one-dimensional zero-based array, or graph-safe `IEnumerable<T>` collection
+  reference;
 - `break`, carrying no target ID; and
 - `continue`, carrying no target ID.
 
@@ -32,7 +34,7 @@ The absence of a transfer target is intentional. C# and HIR bind each transfer
 to its nearest lexical loop, and the derived CFG verifies that target. A visual
 client cannot forge an edge to an outer or unrelated loop.
 
-Current patch-plan schema `unifiedscript.patch-plan/v0.19` carries
+Current patch-plan schema `unifiedscript.patch-plan/v0.20` carries
 `insertLoopBodyStatement`:
 
 ```json
@@ -143,10 +145,12 @@ Successful output is processed by the M4.5 loop contract:
 - nearest-loop break/continue ownership; and
 - reducible cyclic-component validation.
 
-Indexed foreach specializes that shape with an ordered `loopCollection`
-evaluate-once phase, a move-next header/continue target, and a current-value
-body entry. Its generated iteration local is available through the same
-produced-local mechanism but remains scoped to the loop body.
+Foreach specializes that shape with an ordered `loopCollection` evaluate-once
+phase, a move-next header/continue target, and a current-value body entry. The
+enumerator strategy adds bound acquisition and a `loopCleanup` region whose
+normal, return, and exception disposal nodes preserve pending transfers. Its
+generated iteration local is available through the same produced-local
+mechanism but remains scoped to the loop body.
 
 The layout synchronizer preserves every pre-existing placed node. Newly
 authored loop, condition, body, branch, assignment, and transfer nodes are
@@ -191,7 +195,8 @@ same program.
 The bounded `for` constructor and its four-stage CLI sample are documented in
 [FOR_LOOPS.md](FOR_LOOPS.md). It reuses the same body handle while additionally
 publishing the single generated for-local to later body expressions.
-The indexed foreach constructor, collection endpoint, and three-stage sample
+The indexed and enumerable foreach constructors, collection endpoint, cleanup
+contract, and three-stage samples
 are documented in [FOREACH_LOOPS.md](FOREACH_LOOPS.md).
 
 ## Current limits
@@ -209,7 +214,7 @@ M4.19 applies the same body-handle and exact-condition model to post-test
 `do ... while` while preserving its distinct initial-body entry and
 continue-to-condition CFG. See [DO_WHILE_LOOPS.md](DO_WHILE_LOOPS.md).
 
-General enumerator/ref/async `foreach`, existing-`for` clause restructuring,
+Pattern-only/conditional-disposal enumerators, ref/async `foreach`, existing-`for` clause restructuring,
 arbitrary cyclic Graph rewiring, general compound-assignment/mutation statements, effectful authored
 expression trees, exception flow, short-circuit expression CFG expansion,
 async state-machine flow, and automatic node placement remain later slices.

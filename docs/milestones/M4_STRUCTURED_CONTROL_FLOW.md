@@ -1253,6 +1253,65 @@ its implicit receiver as an explicit shared-VM contract.
 14. The full solution, 294-test suite, format check, repository validator, and
     both checked-in foreach CLI paths pass.
 
+## M4.21 implemented vertical slice
+
+- semantics `unifiedscript.semantics/v0.2`, Graph
+  `unifiedscript.graph/v0.12`, patch `unifiedscript.patch/v0.19`, and plan
+  `unifiedscript.patch-plan/v0.20` strict-reader contracts
+- `UnifiedTypeKind.Enumerable` plus exact element type identity and one
+  `BoundForEachInfo` per accepted foreach, selecting indexed or enumerator
+  strategy and retaining collection/element/enumerator type IDs
+- Roslyn-bound `GetEnumerator`, `MoveNext`, `Current` getter, and `Dispose`
+  method identities with a strict synchronous, graph-safe, identity-conversion,
+  disposable `IEnumerable<T>` boundary
+- Graph collection capture and enumerator acquisition, move-next/current
+  binding, and a dedicated `loopCleanup` child with normal/break, return, and
+  exception disposal nodes
+- explicit `disposal: finally`, cleanup reasons, evaluation order, pending
+  transfer preservation, and nested exceptional-cleanup ownership
+- derived CFG cleanup region/node identities, exhaustion and break routing
+  through normal cleanup, return routing through return cleanup, and protected
+  exceptional-source facts kept separate from normal dominance/SCC arcs
+- existing and produced foreach collection replacement broadened to exact
+  enumerable types; the visual `ForEachPatchStatement` and produced iteration
+  local require no new editor-only protocol
+- checked-in `EnumerableForEachRules.cs` plus an atomic three-stage
+  `BuildEnumerableForEach.plan.json` that constructs, reconnects, populates,
+  and reanalyzes an `IEnumerable<int>` loop through the public CLI
+- valid-protocol, malformed-cleanup, non-disposable-pattern, source-patch,
+  plan-patch, CFG-routing, schema, golden, and repository validation coverage
+
+## M4.21 acceptance criteria
+
+1. An accepted `IEnumerable<T>` foreach remains one `HirForEachStatement` and
+   receives an enumerator `BoundForEachInfo`; indexed foreach remains unchanged.
+2. The collection exposes exactly one graph-safe generic element contract and
+   the iteration variable, element conversion, and current conversion are exact.
+3. Semantics retains all four Roslyn protocol members and rejects async,
+   pattern-only, non-disposable, ambiguous, ref, or hidden-conversion forms.
+4. Graph evaluates and captures the collection once, acquires the enumerator
+   once, and sends every successful move-next through current binding.
+5. Enumerator loops own ordered collection/body/cleanup regions and exactly
+   three disposal nodes for normal-or-break, return, and exception transfers.
+6. Exhaustion and nearest break flow through normal cleanup; continue returns
+   to move-next without cleanup or collection reevaluation.
+7. Early return flows through return cleanup while preserving the pending
+   transfer, including nested cleanup propagation.
+8. Exception cleanup records protected sources and the next cleanup owner
+   without introducing synthetic exception arcs into normal CFG dominance.
+9. Graph JSON rejects missing, reordered, duplicated, or mislabeled enumerator
+   acquisition/current/cleanup structure and properties.
+10. Exact existing collection edits accept only same-method, exact enumerable
+    types and preserve loop/body/iteration identities atomically.
+11. Visual construction chooses enumerator strategy by semantic reanalysis,
+    supports produced body/local handles, and needs no separate graph opcode.
+12. The checked-in enumerable analysis and build-plan paths succeed through the
+    public CLI and reproject to `disposal: finally`.
+13. Schema/golden fixtures and current documentation consistently publish
+    semantics v0.2, Graph v0.12, patch v0.19, and plan v0.20.
+14. The full solution, 299-test suite, format check, repository validator, and
+    indexed plus enumerable foreach CLI regressions pass.
+
 ## Deliberate limits
 
 M4 consumes derived CFG facts at patch time but does not serialize them or
@@ -1273,7 +1332,8 @@ queries. Branch and loop-body insertions append and cannot move or delete
 existing structures. Loop transfers cannot be retargeted.
 Existing-`for` whole-clause restructuring remains unavailable beyond M4.18's
 exact condition/declaration-initializer/assignment-value/incrementor endpoints.
-General enumerator/ref/async `foreach`, switch,
+Pattern-only or ambiguous enumerators, conditional disposal, ref/async
+`foreach`, switch,
 conditional element access,
 conditional effect subgraphs for lazy expression inputs, exception edges,
 standalone short-circuit CFG regions, async state-machine transitions, control
@@ -1281,10 +1341,8 @@ dependence, SSA, and automatic node placement remain outside the current slice.
 
 ## Next slice
 
-M4.21 should extend `foreach` from the exact indexed strategy to general
-enumerator-backed collections. It must model enumerator acquisition,
-`MoveNext`, `Current`, iteration-variable conversion, normal and exceptional
-`Dispose`/`finally` paths, and continue/break/return cleanup routing explicitly.
-Async enumeration must remain separate until `MoveNextAsync`,
-`DisposeAsync`, and suspension-state control also have a lossless shared-VM
-contract.
+M4.22 should decide whether to broaden synchronous iteration to pattern
+enumerators with conditional disposal or move first into backend execution of
+the now-explicit loop protocol. `ref` iteration and async enumeration must stay
+separate until aliasing, `MoveNextAsync`, `DisposeAsync`, and suspension-state
+control have a lossless shared-VM contract.

@@ -1390,7 +1390,7 @@ public sealed class SemanticPatchPlanJsonTests
         Assert.Equal(third.StepId, roundTripThird.StepId);
         Assert.Equal(third.TargetPath, roundTripThird.TargetPath);
         Assert.Equal(third.NewInput, roundTripThird.NewInput);
-        Assert.Equal("unifiedscript.patch-plan/v0.19", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch-plan/v0.20", roundTrip.SchemaVersion);
         Assert.Contains("\"step\": \"replaceProducedExpressionInput\"", json);
         Assert.Contains("\"targetPath\": []", json);
     }
@@ -1444,7 +1444,7 @@ public sealed class SemanticPatchPlanJsonTests
         Assert.Equal(consumer.ExpectedInputTypeId, roundTripConsumer.ExpectedInputTypeId);
         Assert.Equal(consumer.ExpectedTargetTypeId, roundTripConsumer.ExpectedTargetTypeId);
         Assert.Equal(consumer.NewInput, roundTripConsumer.NewInput);
-        Assert.Equal("unifiedscript.patch-plan/v0.19", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch-plan/v0.20", roundTrip.SchemaVersion);
         Assert.Contains("\"expression\": \"conditionalMemberAccess\"", json);
         Assert.Contains("\"inputPort\": \"receiver\"", json);
     }
@@ -1682,7 +1682,7 @@ public sealed class SemanticPatchPlanJsonTests
         Assert.Equal(
             replacement,
             Assert.IsType<ReplaceProducedForEachCollectionPatchPlanStep>(roundTrip.Steps[1]));
-        Assert.Equal("unifiedscript.patch-plan/v0.19", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch-plan/v0.20", roundTrip.SchemaVersion);
         Assert.Contains("\"step\": \"replaceProducedForEachCollection\"", json);
     }
 }

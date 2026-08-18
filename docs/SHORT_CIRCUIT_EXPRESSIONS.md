@@ -8,9 +8,9 @@ an eager Boolean helper or a second evaluator.
 The current contracts are:
 
 - HIR `unifiedscript.hir/v0.7`;
-- Graph `unifiedscript.graph/v0.11`;
-- standalone patch `unifiedscript.patch/v0.18`;
-- patch plan `unifiedscript.patch-plan/v0.19`.
+- Graph `unifiedscript.graph/v0.12`;
+- standalone patch `unifiedscript.patch/v0.19`;
+- patch plan `unifiedscript.patch-plan/v0.20`.
 
 Only Graph changes in this slice. HIR and the patch protocols already preserve
 `&&` and `||` as binary operators with canonical `left` and `right` children.
@@ -20,7 +20,7 @@ Only Graph changes in this slice. HIR and the patch protocols already preserve
 C# always evaluates the left operand first. It evaluates the right operand of
 `&&` only when the left value is `true`, and the right operand of `||` only
 when the left value is `false`. Graph v0.6 introduced that rule directly on the
-existing binary node; current Graph v0.11 retains the same contract:
+existing binary node; current Graph v0.12 retains the same contract:
 
 | Operator | `evaluation` | `rightEvaluation` |
 | --- | --- | --- |
@@ -74,7 +74,7 @@ ordered left/right children. Traversal, semantic binding, persistent identity,
 source location, serialization, and structural fingerprints already share that
 shape.
 
-Patch v0.18 and patch-plan v0.19 likewise keep logical operators in the closed
+Patch v0.19 and patch-plan v0.20 likewise keep logical operators in the closed
 typed binary-expression algebra. Existing `replaceExpressionInput` and
 `replaceProducedExpressionInput` operations use `left` and `right`, matching
 the Graph ports. Source reconstruction emits ordinary C#, reruns semantic

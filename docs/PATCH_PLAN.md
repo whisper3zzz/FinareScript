@@ -2,9 +2,9 @@
 
 ## Purpose
 
-`unifiedscript.patch-plan/v0.19` represents one visual-editor gesture as an
+`unifiedscript.patch-plan/v0.20` represents one visual-editor gesture as an
 ordered, atomic sequence of the same bounded semantic operations supported by
-`unifiedscript.patch/v0.18`. It exists because a useful graph edit often needs
+`unifiedscript.patch/v0.19`. It exists because a useful graph edit often needs
 IDs created by an earlier edit or changes several overlapping source regions.
 Submitting those stages as unrelated filesystem transactions would expose
 partial programs and force the editor to predict random persistent IDs.
@@ -18,7 +18,7 @@ identity sidecar are eligible for a CLI filesystem transaction.
 
 ```json
 {
-  "schemaVersion": "unifiedscript.patch-plan/v0.19",
+  "schemaVersion": "unifiedscript.patch-plan/v0.20",
   "sourceCompilationId": "us_...",
   "semanticConfigurationId": "us_...",
   "steps": []
@@ -48,7 +48,7 @@ Version v0.19 supports these step discriminators:
 | `replaceForDeclarationInitializer` | Replace one existing for declarator's initializer | For, declaration, and declarator IDs survive |
 | `replaceForAssignmentInitializerValue` | Replace the value of one indexed simple-assignment initializer | For, slot, assignment, and target IDs survive |
 | `replaceForIncrementor` | Change an indexed root `++`/`--` mutation's local, operator, or position | For, slot, and mutation ID survive |
-| `replaceForEachCollection` | Replace an existing indexed foreach collection with an exact compatible reference | Foreach, body, and iteration-local IDs survive |
+| `replaceForEachCollection` | Replace an existing supported foreach collection with an exact compatible reference | Foreach, body, and iteration-local IDs survive |
 | `replaceProducedForEachCollection` | Resolve an earlier foreach producer and replace its current collection | Consumes a loop/local handle without predicting generated IDs |
 | `replaceIfCondition` | Replace an existing if condition with a closed typed Boolean expression | If and branch-block IDs survive |
 | `replaceProducedIfCondition` | Resolve an earlier if producer and replace its current condition | Consumes a branch producer without predicting generated IDs |
@@ -98,7 +98,7 @@ sidecar, finds exactly one produced declaration, and records its actual random
 
 ### Produced locals inside expression trees
 
-Plan v0.19 also exposes the same local handle as a transaction-only expression
+Plan v0.20 also exposes the same local handle as a transaction-only expression
 leaf. Unlike `reconnectValue`, which replaces a whole stable consumer with one
 identifier, `producedLocalReference` can participate at any depth inside a
 later literal/local/unary/binary/cast/conditional/conditional-member-access expression:
@@ -173,7 +173,7 @@ authored tree, and selects one final `inputPort`:
 The consumer repeats the producer's original structural `targetNodeId`. The
 JSON validator resolves the path against the earlier authored tree and checks
 both exact types. The coordinator then follows the same path from the real HIR
-root captured after `sourceStepId` and creates an ordinary patch v0.18
+root captured after `sourceStepId` and creates an ordinary patch v0.19
 `replaceExpressionInput` operation with the real current parent and child IDs.
 
 The consumer's `newInput` becomes a new published root, so handles can chain
@@ -346,7 +346,7 @@ and current condition root, then executes an ordinary
 condition continue target, and body-header back edge are revalidated after the
 edit. See [DO_WHILE_LOOPS.md](DO_WHILE_LOOPS.md).
 
-Plan v0.19 applies the same rule to `replaceProducedIfCondition`,
+Plan v0.20 applies the same rule to `replaceProducedIfCondition`,
 `replaceProducedLocalInitializer`, and `replaceProducedReturnValue`. Their
 source step must be an earlier compatible root, branch, or loop-body insertion:
 an `if`, a `localLiteralDeclaration`, or a value-bearing `return`, respectively.
@@ -365,7 +365,7 @@ remains valid.
 Direct `replaceAssignmentValue`, `replaceWhileCondition`,
 `replaceDoWhileCondition`, the four existing-for
 header edits, `replaceIfCondition`, `replaceLocalInitializer`, and `replaceReturnValue` steps
-use exactly the standalone patch v0.18 payload plus `stepId`. They are validated
+use exactly the standalone patch v0.19 payload plus `stepId`. They are validated
 against the original plan baseline and are intentionally single-target, because
 their explicit old endpoints describe the original rather than an intermediate
 stage. See
@@ -626,7 +626,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
 
 ## Deliberate limits
 
-Plan v0.19 composes all operations currently defined by patch v0.18 and resolves
+Plan v0.20 composes all operations currently defined by patch v0.19 and resolves
 recursive symbolic `then`/`else` and loop-body handles for bounded local,
 assignment, nested-if/loop, loop-transfer, and typed-return population. It
 also resolves repeatable expression-endpoint edits on produced while, do, for,
@@ -638,7 +638,7 @@ handle. It has no cross-method or cross-document symbolic handle. Generated
 locals may be consumed inside later typed expressions, and generated expression
 roots publish bounded structural handles. Existing-expression
 replacement supports complete assignment-value, while/do-condition, bounded
-existing-for header endpoints, indexed-foreach collection, if-condition, local-initializer, and return-value
+existing-for header endpoints, indexed/enumerable-foreach collection, if-condition, local-initializer, and return-value
 endpoints plus exact binary, bounded unary,
 cast, and positional-invocation argument inputs already present in the external
 baseline. Produced-expression paths are limited to the

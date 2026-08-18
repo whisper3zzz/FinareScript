@@ -2360,7 +2360,7 @@ public sealed class CSharpSourcePatchApplier
             types,
             graphSafetyIndex,
             documents,
-            requireIndexedCollection: true);
+            requireForEachCollection: true);
     }
 
     private static OperationPlan PlanLocalInitializerReplacement(
@@ -2513,7 +2513,7 @@ public sealed class CSharpSourcePatchApplier
         GraphPatchSafetyIndex graphSafetyIndex,
         IReadOnlyDictionary<string, ParsedDocument> documents,
         SemanticId? forHeaderLoopId = null,
-        bool requireIndexedCollection = false)
+        bool requireForEachCollection = false)
     {
         OperationPlan? typeFailure = RequireType(
             currentExpression,
@@ -2533,8 +2533,8 @@ public sealed class CSharpSourcePatchApplier
                 containingStatement);
         }
 
-        ExpressionBuildResult replacement = requireIndexedCollection
-            ? BuildIndexedCollectionExpression(
+        ExpressionBuildResult replacement = requireForEachCollection
+            ? BuildForEachCollectionExpression(
                 newExpression,
                 blockLocation,
                 statementLocation.Index,
@@ -4007,7 +4007,7 @@ public sealed class CSharpSourcePatchApplier
                 $"method '{blockLocation.Method.Name}'.");
         }
 
-        ExpressionBuildResult collection = BuildIndexedCollectionExpression(
+        ExpressionBuildResult collection = BuildForEachCollectionExpression(
             forEachStatement.Collection,
             blockLocation,
             insertionIndex,
@@ -4023,7 +4023,7 @@ public sealed class CSharpSourcePatchApplier
                 collection.DiagnosticMessage ?? "The graph-authored foreach collection is invalid.");
         }
 
-        if (!IndexedCollectionElementMatches(collection.Type, elementType))
+        if (!ForEachCollectionElementMatches(collection.Type, elementType))
         {
             return StatementBuildResult.Failure(
                 SemanticPatchDiagnosticCodes.TypeMismatch,
@@ -4706,7 +4706,7 @@ public sealed class CSharpSourcePatchApplier
             expectedType);
     }
 
-    private static ExpressionBuildResult BuildIndexedCollectionExpression(
+    private static ExpressionBuildResult BuildForEachCollectionExpression(
         PatchExpression expression,
         HirPatchIndex.BlockLocation blockLocation,
         int insertionIndex,
@@ -4718,12 +4718,12 @@ public sealed class CSharpSourcePatchApplier
     {
         if (expression is not LocalReferencePatchExpression local ||
             !types.TryGetValue(expression.ExpectedTypeId, out TypeDescriptor? collectionType) ||
-            !IsIndexedCollectionType(collectionType))
+            !IsForEachCollectionType(collectionType))
         {
             return ExpressionBuildResult.Failure(
                 SemanticPatchDiagnosticCodes.TypeMismatch,
-                "An indexed foreach collection must be a local/parameter reference with exact " +
-                "System.String or graph-safe one-dimensional array type.");
+                "A foreach collection must be a local/parameter reference with exact System.String, " +
+                "graph-safe one-dimensional array, or graph-safe IEnumerable<T>-backed type.");
         }
 
         return BuildLocalReferenceExpression(
@@ -4738,10 +4738,11 @@ public sealed class CSharpSourcePatchApplier
             forHeaderLoopId: null);
     }
 
-    private static bool IsIndexedCollectionType(TypeDescriptor type) =>
-        type.IsGraphSafe && type.Kind is UnifiedTypeKind.String or UnifiedTypeKind.Array;
+    private static bool IsForEachCollectionType(TypeDescriptor type) =>
+        type.IsGraphSafe &&
+        type.Kind is UnifiedTypeKind.String or UnifiedTypeKind.Array or UnifiedTypeKind.Enumerable;
 
-    private static bool IndexedCollectionElementMatches(
+    private static bool ForEachCollectionElementMatches(
         TypeDescriptor collectionType,
         TypeDescriptor elementType) => collectionType.Kind switch
         {
@@ -4752,6 +4753,7 @@ public sealed class CSharpSourcePatchApplier
                     collectionType.MetadataName[..^2],
                     elementType.MetadataName,
                     StringComparison.Ordinal),
+            UnifiedTypeKind.Enumerable => collectionType.ElementTypeId == elementType.Id,
             _ => false,
         };
 

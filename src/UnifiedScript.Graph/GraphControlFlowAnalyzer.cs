@@ -627,11 +627,14 @@ public sealed class GraphControlFlowAnalyzer
                 static region => region.Kind == GraphRegionKind.LoopIncrement);
             GraphRegion? collectionRegion = childRegions.SingleOrDefault(
                 static region => region.Kind == GraphRegionKind.LoopCollection);
+            GraphRegion? cleanupRegion = childRegions.SingleOrDefault(
+                static region => region.Kind == GraphRegionKind.LoopCleanup);
             HashSet<SemanticId> directControlNodes = loopRegion.NodeIds
                 .Where(controlNodes.ContainsKey)
                 .ToHashSet();
             SemanticId bodyEntry = RequireControlSuccessor(loopNode.Id, "body", arcs);
-            SemanticId loopExit = RequireControlSuccessor(loopNode.Id, "exit", arcs);
+            SemanticId loopDecisionExit = RequireControlSuccessor(loopNode.Id, "exit", arcs);
+            SemanticId loopExit = loopDecisionExit;
             bool isDoWhile = loopNode.Properties.TryGetValue("loopForm", out string? loopForm) &&
                 string.Equals(loopForm, "doWhile", StringComparison.Ordinal);
             SemanticId headerEntry;
@@ -693,6 +696,42 @@ public sealed class GraphControlFlowAnalyzer
                 : CollectRegionSubtree(incrementRegion.Id, regions)
                     .SelectMany(id => regions[id].NodeIds)
                     .ToHashSet();
+            SemanticId? normalCleanupNodeId = null;
+            SemanticId? returnCleanupNodeId = null;
+            SemanticId? exceptionCleanupNodeId = null;
+            SemanticId[] exceptionalSourceNodeIds = [];
+            if (cleanupRegion is not null)
+            {
+                GraphNode[] cleanupNodes = cleanupRegion.NodeIds
+                    .Select(id => controlNodes[id])
+                    .Where(static node => node.Kind == "enumeratorDispose")
+                    .ToArray();
+                GraphNode normalCleanup = cleanupNodes.Single(node =>
+                    node.Properties.GetValueOrDefault("reason") == "exhaustionOrBreak");
+                GraphNode returnCleanup = cleanupNodes.Single(node =>
+                    node.Properties.GetValueOrDefault("reason") == "return");
+                GraphNode exceptionCleanup = cleanupNodes.Single(node =>
+                    node.Properties.GetValueOrDefault("reason") == "exception");
+                if (loopDecisionExit != normalCleanup.Id)
+                {
+                    throw new InvalidOperationException(
+                        $"Enumerator loop '{loopNode.Id}' must route exhaustion through normal cleanup " +
+                        $"node '{normalCleanup.Id}'.");
+                }
+
+                normalCleanupNodeId = normalCleanup.Id;
+                returnCleanupNodeId = returnCleanup.Id;
+                exceptionCleanupNodeId = exceptionCleanup.Id;
+                loopExit = RequireControlSuccessor(normalCleanup.Id, "then", arcs);
+                _ = RequireControlSuccessor(returnCleanup.Id, "then", arcs);
+                _ = RequireControlSuccessor(exceptionCleanup.Id, "throw", arcs);
+                exceptionalSourceNodeIds = bodyNodes
+                    .Where(controlNodes.ContainsKey)
+                    .Append(loopNode.Id)
+                    .Distinct()
+                    .OrderBy(static id => id.Value, StringComparer.Ordinal)
+                    .ToArray();
+            }
             SemanticId[] incrementControlEntries = incrementNodes
                 .Where(controlNodes.ContainsKey)
                 .Where(nodeId => !arcs.Any(arc =>
@@ -726,10 +765,11 @@ public sealed class GraphControlFlowAnalyzer
             foreach (SemanticId breakNodeId in breaks)
             {
                 claimedTransfers.Add(breakNodeId);
-                if (RequireControlSuccessor(breakNodeId, "then", arcs) != loopExit)
+                if (RequireControlSuccessor(breakNodeId, "then", arcs) != loopDecisionExit)
                 {
                     throw new InvalidOperationException(
-                        $"Break node '{breakNodeId}' must target exit '{loopExit}' of its nearest loop.");
+                        $"Break node '{breakNodeId}' must target decision exit/cleanup " +
+                        $"'{loopDecisionExit}' of its nearest loop.");
                 }
             }
 
@@ -758,6 +798,11 @@ public sealed class GraphControlFlowAnalyzer
                 initializerRegion?.Id,
                 incrementRegion?.Id,
                 collectionRegion?.Id,
+                cleanupRegion?.Id,
+                normalCleanupNodeId,
+                returnCleanupNodeId,
+                exceptionCleanupNodeId,
+                exceptionalSourceNodeIds,
                 headerEntry,
                 continueTarget,
                 bodyEntry,

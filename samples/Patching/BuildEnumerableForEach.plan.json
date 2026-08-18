@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "unifiedscript.patch-plan/v0.20",
+  "sourceCompilationId": "us_bc8b03c5046c66d68550b6f3d94627e4",
+  "semanticConfigurationId": "us_02f5fe78d296e2d4fe04bc50ca71acf1",
+  "steps": [
+    {
+      "step": "insertStatement",
+      "stepId": "insertForEach",
+      "targetNodeId": "us_5b972618cc2e5648bc3c34cabee1d4fd",
+      "expectedPreviousSiblingId": "us_fe9b7c49326e5670009407d738c64cbf",
+      "expectedNextSiblingId": "us_5dc6a28e7c1254e08584486fc822bf70",
+      "newStatement": {
+        "statement": "forEach",
+        "typeName": "int",
+        "variableName": "value",
+        "expectedElementTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+        "collection": {
+          "expression": "localReference",
+          "sourceDefinitionId": "us_3ec6cfe3234f308e97c388e480b47fba",
+          "expectedName": "primary",
+          "expectedTypeId": "us_b8c346cdf8166a7663e58ce68a7d7799"
+        }
+      }
+    },
+    {
+      "step": "replaceProducedForEachCollection",
+      "stepId": "replaceProducedCollection",
+      "targetNodeId": "us_5b972618cc2e5648bc3c34cabee1d4fd",
+      "sourceStepId": "insertForEach",
+      "newCollection": {
+        "expression": "localReference",
+        "sourceDefinitionId": "us_16d8ab902ae8d99e00f551186d38131a",
+        "expectedName": "fallback",
+        "expectedTypeId": "us_b8c346cdf8166a7663e58ce68a7d7799"
+      }
+    },
+    {
+      "step": "insertLoopBodyStatement",
+      "stepId": "assignCurrent",
+      "targetNodeId": "us_5b972618cc2e5648bc3c34cabee1d4fd",
+      "sourceStepId": "insertForEach",
+      "newStatement": {
+        "statement": "localAssignment",
+        "targetDefinitionId": "us_fe9b7c49326e5670009407d738c64cbf",
+        "expectedName": "result",
+        "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+        "value": {
+          "expression": "producedLocalReference",
+          "sourceStepId": "insertForEach",
+          "expectedName": "value",
+          "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+        }
+      }
+    }
+  ]
+}

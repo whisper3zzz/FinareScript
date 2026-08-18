@@ -32,6 +32,7 @@ public enum GraphRegionKind
     LoopCollection,
     LoopBody,
     LoopIncrement,
+    LoopCleanup,
 }
 
 public sealed record GraphPort(
@@ -79,5 +80,5 @@ public sealed record GraphDocument(
     SemanticId? SemanticConfigurationId,
     IReadOnlyList<GraphFunction> Functions)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.graph/v0.11";
+    public const string CurrentSchemaVersion = "unifiedscript.graph/v0.12";
 }

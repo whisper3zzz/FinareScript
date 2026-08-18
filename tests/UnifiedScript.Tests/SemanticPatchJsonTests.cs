@@ -466,7 +466,7 @@ public sealed class SemanticPatchJsonTests
         ReplaceReturnValuePatchOperation operation = Assert.IsType<ReplaceReturnValuePatchOperation>(
             Assert.Single(roundTrip.Operations));
         Assert.Equal(expression, Assert.IsType<ConditionalPatchExpression>(operation.NewValue));
-        Assert.Equal("unifiedscript.patch/v0.18", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch/v0.19", roundTrip.SchemaVersion);
         Assert.Contains("\"expression\": \"conditional\"", json);
         Assert.Contains("\"whenTrue\"", json);
         Assert.Contains("\"whenFalse\"", json);
@@ -500,7 +500,7 @@ public sealed class SemanticPatchJsonTests
         ReplaceReturnValuePatchOperation operation = Assert.IsType<ReplaceReturnValuePatchOperation>(
             Assert.Single(roundTrip.Operations));
         Assert.Equal(expression, Assert.IsType<BinaryPatchExpression>(operation.NewValue));
-        Assert.Equal("unifiedscript.patch/v0.18", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch/v0.19", roundTrip.SchemaVersion);
         Assert.Contains("\"operator\": \"??\"", json, StringComparison.Ordinal);
     }
 
@@ -533,7 +533,7 @@ public sealed class SemanticPatchJsonTests
         Assert.Equal(
             expression,
             Assert.IsType<ConditionalMemberAccessPatchExpression>(operation.NewValue));
-        Assert.Equal("unifiedscript.patch/v0.18", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch/v0.19", roundTrip.SchemaVersion);
         Assert.Contains("\"expression\": \"conditionalMemberAccess\"", json);
         Assert.Contains("\"memberName\": \"Length\"", json);
         Assert.Contains("\"receiver\"", json);
@@ -573,7 +573,7 @@ public sealed class SemanticPatchJsonTests
         Assert.Equal(
             new ForEachPatchStatement("char", "value", charType, collection),
             Assert.IsType<ForEachPatchStatement>(insertion.NewStatement));
-        Assert.Equal("unifiedscript.patch/v0.18", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch/v0.19", roundTrip.SchemaVersion);
         Assert.Contains("\"operation\": \"replaceForEachCollection\"", json);
         Assert.Contains("\"statement\": \"forEach\"", json);
     }

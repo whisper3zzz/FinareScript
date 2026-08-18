@@ -171,6 +171,10 @@ target is the condition entry, and a generated one-time entry proves the body
 runs before the first condition. See [DO_WHILE_LOOPS.md](DO_WHILE_LOOPS.md).
 M4.20 adds indexed `foreach`: `CollectionRegionId` identifies the evaluate-once
 phase, the move-next decision is the header/continue target, and the current
-binding is the body entry. See [FOREACH_LOOPS.md](FOREACH_LOOPS.md). General
-enumerator acquisition, disposal/finally, and exceptional cleanup edges remain
-a later expansion.
+binding is the body entry. M4.21 adds the synchronous enumerable strategy:
+`CleanupRegionId` plus normal/return/exception cleanup IDs make disposal
+ownership explicit, exhaustion and break route through normal cleanup, and
+return cleanup preserves its pending transfer. Protected exceptional source
+IDs and their next cleanup target are derived separately from normal CFG arcs,
+preserving the existing dominance and reducibility definitions. See
+[FOREACH_LOOPS.md](FOREACH_LOOPS.md).

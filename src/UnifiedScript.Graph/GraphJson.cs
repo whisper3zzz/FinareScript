@@ -194,7 +194,8 @@ public static class GraphJson
             if (region.Kind is (GraphRegionKind.LoopInitializer or
                     GraphRegionKind.LoopCollection or
                     GraphRegionKind.LoopBody or
-                    GraphRegionKind.LoopIncrement) &&
+                    GraphRegionKind.LoopIncrement or
+                    GraphRegionKind.LoopCleanup) &&
                 (region.ParentRegionId is not SemanticId loopParentId ||
                     regions[loopParentId].Kind != GraphRegionKind.Loop))
             {
@@ -260,16 +261,27 @@ public static class GraphJson
                     string.Equals(loopForm, "doWhile", StringComparison.Ordinal);
                 bool isForEach = hasLoopForm &&
                     string.Equals(loopForm, "forEach", StringComparison.Ordinal);
+                string? collectionStrategy = null;
+                _ = loopNode?.Properties.TryGetValue("collectionStrategy", out collectionStrategy);
+                bool isIndexedForEach = isForEach &&
+                    string.Equals(collectionStrategy, "indexed", StringComparison.Ordinal);
+                bool isEnumeratorForEach = isForEach &&
+                    string.Equals(collectionStrategy, "enumerator", StringComparison.Ordinal);
                 bool hasSupportedLoopForm = !hasLoopForm || isFor || isDoWhile || isForEach;
                 bool hasValidChildren = isFor
                     ? children.Length == 3 &&
                         children[0].Kind == GraphRegionKind.LoopInitializer &&
                         children[1].Kind == GraphRegionKind.LoopBody &&
                         children[2].Kind == GraphRegionKind.LoopIncrement
-                    : isForEach
+                    : isIndexedForEach
                         ? children.Length == 2 &&
                             children[0].Kind == GraphRegionKind.LoopCollection &&
                             children[1].Kind == GraphRegionKind.LoopBody
+                        : isEnumeratorForEach
+                            ? children.Length == 3 &&
+                                children[0].Kind == GraphRegionKind.LoopCollection &&
+                                children[1].Kind == GraphRegionKind.LoopBody &&
+                                children[2].Kind == GraphRegionKind.LoopCleanup
                         : children.Length == 1 && children[0].Kind == GraphRegionKind.LoopBody;
                 GraphNode[] loopEntries = region.NodeIds
                     .Select(id => nodes[id])
@@ -290,31 +302,102 @@ public static class GraphJson
                 bool hasValidForEachProperties = !isForEach ||
                     loopNode!.Properties.TryGetValue("collectionEvaluation", out string? collectionEvaluation) &&
                     string.Equals(collectionEvaluation, "once", StringComparison.Ordinal) &&
-                    loopNode.Properties.TryGetValue("collectionStrategy", out string? collectionStrategy) &&
-                    string.Equals(collectionStrategy, "indexed", StringComparison.Ordinal) &&
                     loopNode.Properties.TryGetValue("iterationAdvance", out string? advance) &&
                     string.Equals(advance, "beforeBody", StringComparison.Ordinal) &&
                     loopNode.Properties.TryGetValue("continueTarget", out string? forEachContinueTarget) &&
                     string.Equals(forEachContinueTarget, "moveNext", StringComparison.Ordinal) &&
                     loopNode.Properties.TryGetValue("disposal", out string? disposal) &&
-                    string.Equals(disposal, "none", StringComparison.Ordinal) &&
                     loopNode.Properties.TryGetValue("evaluationOrder", out string? forEachOrder) &&
-                    string.Equals(
-                        forEachOrder,
-                        "collection,moveNext,current,body",
-                        StringComparison.Ordinal);
+                    (isIndexedForEach &&
+                        string.Equals(disposal, "none", StringComparison.Ordinal) &&
+                        string.Equals(
+                            forEachOrder,
+                            "collection,moveNext,current,body",
+                            StringComparison.Ordinal) ||
+                    isEnumeratorForEach &&
+                        string.Equals(disposal, "finally", StringComparison.Ordinal) &&
+                        string.Equals(
+                            forEachOrder,
+                            "collection,getEnumerator,moveNext,current,body,dispose",
+                            StringComparison.Ordinal) &&
+                        loopNode.Properties.TryGetValue("cleanupOn", out string? cleanupOn) &&
+                        string.Equals(
+                            cleanupOn,
+                            "exhaustion,break,return,exception",
+                            StringComparison.Ordinal) &&
+                        loopNode.Properties.TryGetValue("moveNextMethodId", out string? moveNextMethodId) &&
+                        SemanticId.TryParse(moveNextMethodId, out _));
+                GraphNode[] collectionNodes = isForEach && hasValidChildren
+                    ? children[0].NodeIds.Select(id => nodes[id]).ToArray()
+                    : [];
+                GraphNode[] bodyNodes = isForEach && hasValidChildren
+                    ? children[1].NodeIds.Select(id => nodes[id]).ToArray()
+                    : [];
+                GraphNode[] captures = collectionNodes
+                    .Where(static node => node.Kind == "collectionCapture")
+                    .ToArray();
+                GraphNode[] iterationVariables = bodyNodes
+                    .Where(static node => node.Kind == "iterationVariable")
+                    .ToArray();
+                GraphNode[] acquisitions = collectionNodes
+                    .Where(static node => node.Kind == "enumeratorAcquire")
+                    .ToArray();
+                GraphNode[] cleanupNodes = isEnumeratorForEach && hasValidChildren
+                    ? children[2].NodeIds
+                        .Select(id => nodes[id])
+                        .Where(static node => node.Kind == "enumeratorDispose")
+                        .ToArray()
+                    : [];
+                bool hasValidCommonForEachNodes = !isForEach ||
+                    captures.Length == 1 &&
+                    captures[0].Properties.GetValueOrDefault("evaluation") == "once" &&
+                    captures[0].Properties.GetValueOrDefault("strategy") == collectionStrategy &&
+                    iterationVariables.Length == 1 &&
+                    iterationVariables[0].Properties.GetValueOrDefault("binding") == "current" &&
+                    iterationVariables[0].Properties.GetValueOrDefault("readOnly") == "true";
+                bool hasValidEnumeratorNodes = !isEnumeratorForEach ||
+                    acquisitions.Length == 1 &&
+                    iterationVariables.Length == 1 &&
+                    HasSemanticIdProperty(acquisitions[0], "getEnumeratorMethodId") &&
+                    HasSemanticIdProperty(acquisitions[0], "enumeratorTypeId") &&
+                    HasSemanticIdProperty(iterationVariables[0], "currentGetterMethodId") &&
+                    cleanupNodes.Length == 3 &&
+                    cleanupNodes.All(static node =>
+                        node.Properties.GetValueOrDefault("cleanupSemantics") == "finally" &&
+                        HasSemanticIdProperty(node, "disposeMethodId")) &&
+                    cleanupNodes.Select(static node =>
+                            node.Properties.GetValueOrDefault("disposeMethodId"))
+                        .Distinct(StringComparer.Ordinal)
+                        .Count() == 1 &&
+                    cleanupNodes
+                        .Select(static node => node.Properties.GetValueOrDefault("reason"))
+                        .OrderBy(static reason => reason, StringComparer.Ordinal)
+                        .SequenceEqual([
+                            "exception",
+                            "exhaustionOrBreak",
+                            "return",
+                        ]) &&
+                    cleanupNodes.All(static node =>
+                        node.Properties.GetValueOrDefault("preservesPendingTransfer") ==
+                        (node.Properties.GetValueOrDefault("reason") == "exhaustionOrBreak"
+                            ? "false"
+                            : "true")) &&
+                    cleanupNodes.Single(static node =>
+                            node.Properties.GetValueOrDefault("reason") == "exception")
+                        .Properties.TryGetValue("nextExceptionalCleanup", out string? nextCleanup) &&
+                    (nextCleanup == "functionExit" || SemanticId.TryParse(nextCleanup, out _));
                 bool hasValidForEachNodes = !isForEach ||
                     hasValidChildren &&
-                    children[0].NodeIds.Count(id => nodes[id].Kind == "collectionCapture") == 1 &&
-                    children[1].NodeIds.Count(id => nodes[id].Kind == "iterationVariable") == 1;
+                    hasValidCommonForEachNodes &&
+                    (isIndexedForEach || hasValidEnumeratorNodes);
                 if (!hasLoopNode || !hasSupportedLoopForm || !hasValidChildren ||
                     !hasValidEntryShape || !hasValidDoWhileProperties ||
                     !hasValidForEachProperties || !hasValidForEachNodes)
                 {
                     throw new JsonException(
-                        $"Loop region '{region.Id}' requires a valid while, do-while, indexed " +
-                        "foreach shape, or ordered for initializer/body/increment children with " +
-                        "the required entry nodes and properties.");
+                        $"Loop region '{region.Id}' requires a valid while, do-while, indexed or " +
+                        "disposal-aware enumerator foreach shape, or ordered for " +
+                        "initializer/body/increment children with the required entry nodes and properties.");
                 }
             }
         }
@@ -400,6 +483,10 @@ public static class GraphJson
 
         return normalized;
     }
+
+    private static bool HasSemanticIdProperty(GraphNode node, string propertyName) =>
+        node.Properties.TryGetValue(propertyName, out string? value) &&
+        SemanticId.TryParse(value, out _);
 
     private static bool IsValidSpan(SourceSpan? span) =>
         span is not null &&

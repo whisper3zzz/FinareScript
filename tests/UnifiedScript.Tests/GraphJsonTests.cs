@@ -110,6 +110,56 @@ public sealed class GraphJsonTests
     }
 
     [Fact]
+    public void Serialize_RejectsMalformedEnumeratorCleanupReasons()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int Sum(IEnumerable<int> values)
+                {
+                    int total = 0;
+                    foreach (int value in values)
+                    {
+                        total = total + value;
+                    }
+
+                    return total;
+                }
+            }
+            """;
+        CSharpAnalysisResult analysis = new CSharpSemanticPipeline().Analyze(
+            source,
+            "MalformedEnumerableForEachGraph.cs");
+        Assert.True(analysis.Succeeded, string.Join(Environment.NewLine, analysis.Diagnostics));
+        GraphDocument graph = new HirGraphProjector().Project(analysis.Hir!, analysis.Semantics!);
+        GraphFunction function = Assert.Single(graph.Functions);
+        GraphNode exceptionCleanup = Assert.Single(function.Nodes, static node =>
+            node.Kind == "enumeratorDispose" &&
+            node.Properties.GetValueOrDefault("reason") == "exception");
+        Dictionary<string, string> invalidProperties = exceptionCleanup.Properties.ToDictionary(
+            static property => property.Key,
+            static property => property.Value,
+            StringComparer.Ordinal);
+        invalidProperties["reason"] = "break";
+        GraphFunction invalidFunction = function with
+        {
+            Nodes = function.Nodes.Select(node =>
+                node.Id == exceptionCleanup.Id
+                    ? node with { Properties = invalidProperties }
+                    : node).ToArray(),
+        };
+
+        JsonException exception = Assert.Throws<JsonException>(() =>
+            GraphJson.Serialize(graph with { Functions = [invalidFunction] }));
+
+        Assert.Contains("disposal-aware enumerator foreach", exception.Message);
+    }
+
+    [Fact]
     public void Serialize_RejectsNodeWithoutExactlyOneRegionOwner()
     {
         GraphDocument graph = CreateGraph();

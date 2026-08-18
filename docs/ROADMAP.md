@@ -136,8 +136,11 @@ Outcome: practical gameplay methods are fully visualizable.
 - [x] indexed `foreach` over strings and one-dimensional zero-based arrays,
   with collection capture, current-value binding, CFG routing, bounded
   construction, produced-local handles, and exact collection editing
+- [x] synchronous graph-safe `IEnumerable<T>` foreach with bound enumerator
+  protocol, explicit acquisition/current/disposal Graph nodes, cleanup-region
+  ownership, normal/return/exception CFG facts, and visual round trip
 - [ ] general data/control rewiring and structural HIR operations
-- [ ] general enumerator-backed/ref/async `foreach` and disposal/finally semantics
+- [ ] pattern-only/conditional-disposal, ref, and async `foreach` variants
 - [ ] `switch` and supported patterns
 - [ ] deterministic temporary naming
 

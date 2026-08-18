@@ -18,6 +18,7 @@ public enum UnifiedTypeKind
     Array,
     TypeParameter,
     TaskLike,
+    Enumerable,
 }
 
 public enum UnifiedNullability
@@ -49,7 +50,26 @@ public sealed record TypeDescriptor(
     string MetadataName,
     UnifiedTypeKind Kind,
     UnifiedNullability Nullability,
-    bool IsGraphSafe);
+    bool IsGraphSafe,
+    SemanticId? ElementTypeId = null);
+
+public enum ForEachIterationStrategy
+{
+    Indexed,
+    Enumerator,
+}
+
+public sealed record BoundForEachInfo(
+    SemanticId NodeId,
+    ForEachIterationStrategy Strategy,
+    SemanticId CollectionTypeId,
+    SemanticId ElementTypeId,
+    SemanticId? EnumeratorTypeId,
+    SemanticId? GetEnumeratorMethodId,
+    SemanticId? MoveNextMethodId,
+    SemanticId? CurrentGetterMethodId,
+    SemanticId? DisposeMethodId,
+    bool RequiresDisposal);
 
 public sealed record ParameterDescriptor(
     string Name,
@@ -79,7 +99,8 @@ public sealed record BoundCompilation(
     SemanticId ConfigurationId,
     IReadOnlyList<TypeDescriptor> Types,
     IReadOnlyList<MethodDescriptor> Methods,
-    IReadOnlyList<BoundNodeInfo> Nodes)
+    IReadOnlyList<BoundNodeInfo> Nodes,
+    IReadOnlyList<BoundForEachInfo> ForEachLoops)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.semantics/v0.1";
+    public const string CurrentSchemaVersion = "unifiedscript.semantics/v0.2";
 }

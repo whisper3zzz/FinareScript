@@ -3784,14 +3784,15 @@ public sealed class CSharpPatchPlanApplierTests
     public void Apply_ConstructsEditsAndPopulatesProducedForEachLoop()
     {
         const string source = """
+            using System.Collections.Generic;
             using UnifiedScript;
 
             static class Script
             {
                 [Visual]
-                static char Last(string primary, string fallback, char seed)
+                static int Last(IEnumerable<int> primary, IEnumerable<int> fallback, int seed)
                 {
-                    char result = seed;
+                    int result = seed;
                     return result;
                 }
             }
@@ -3803,21 +3804,21 @@ public sealed class CSharpPatchPlanApplierTests
         HirVariableDeclarationStatement resultLocal = Assert.IsType<HirVariableDeclarationStatement>(
             method.Body.Statements[0]);
         HirReturnStatement valueReturn = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
-        SemanticId stringType = GetTypeId(original, method.Parameters[0]);
-        SemanticId charType = GetTypeId(original, method.Parameters[2]);
+        SemanticId collectionType = GetTypeId(original, method.Parameters[0]);
+        SemanticId elementType = GetTypeId(original, method.Parameters[2]);
         var insertForEach = new InsertStatementPatchPlanStep(
             "insertForEach",
             method.Body.Id,
             resultLocal.Id,
             valueReturn.Id,
             new ForEachPatchStatement(
-                "char",
+                "int",
                 "value",
-                charType,
+                elementType,
                 new LocalReferencePatchExpression(
                     method.Parameters[0].Id,
                     method.Parameters[0].Name,
-                    stringType)));
+                    collectionType)));
         var replaceCollection = new ReplaceProducedForEachCollectionPatchPlanStep(
             "replaceProducedCollection",
             method.Body.Id,
@@ -3825,7 +3826,7 @@ public sealed class CSharpPatchPlanApplierTests
             new LocalReferencePatchExpression(
                 method.Parameters[1].Id,
                 method.Parameters[1].Name,
-                stringType));
+                collectionType));
         var populateBody = new InsertLoopBodyStatementPatchPlanStep(
             "assignCurrent",
             method.Body.Id,
@@ -3833,11 +3834,11 @@ public sealed class CSharpPatchPlanApplierTests
             new LocalAssignmentPatchStatement(
                 resultLocal.Id,
                 resultLocal.Name,
-                charType,
+                elementType,
                 new ProducedLocalReferencePatchExpression(
                     insertForEach.StepId,
                     "value",
-                    charType)));
+                    elementType)));
         CSharpPatchResult insertionOnly = new CSharpPatchPlanApplier().Apply(
             request,
             SemanticPatchPlanDocument.Create(
@@ -3865,7 +3866,7 @@ public sealed class CSharpPatchPlanApplierTests
 
         Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
         string changedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
-        Assert.Contains("foreach (char value in fallback)", changedSource, StringComparison.Ordinal);
+        Assert.Contains("foreach (int value in fallback)", changedSource, StringComparison.Ordinal);
         Assert.Contains("result = value;", changedSource, StringComparison.Ordinal);
         HirForEachStatement inserted = Assert.IsType<HirForEachStatement>(
             Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods).Body.Statements[1]);
@@ -3884,6 +3885,10 @@ public sealed class CSharpPatchPlanApplierTests
                     result.Analysis.Hir,
                     result.Analysis.Semantics)).Functions[0].Loops);
         Assert.Equal(inserted.Variable.Id, loop.BodyEntryNodeId);
+        Assert.NotNull(loop.CleanupRegionId);
+        Assert.Equal(
+            ForEachIterationStrategy.Enumerator,
+            Assert.Single(result.Analysis.Semantics.ForEachLoops).Strategy);
     }
 
     private static SemanticPatchPlanDocument CreatePlan(

@@ -9,9 +9,9 @@ evaluator or desugar the expression into an eager function call.
 The current contracts are:
 
 - HIR `unifiedscript.hir/v0.7`;
-- Graph `unifiedscript.graph/v0.11`;
-- standalone patch `unifiedscript.patch/v0.18`;
-- patch plan `unifiedscript.patch-plan/v0.19`.
+- Graph `unifiedscript.graph/v0.12`;
+- standalone patch `unifiedscript.patch/v0.19`;
+- patch plan `unifiedscript.patch-plan/v0.20`.
 
 ## HIR and semantic contract
 
@@ -50,7 +50,7 @@ each branch independently.
 
 ## Graph contract
 
-Graph v0.5 introduced the node; current Graph v0.11 retains it with:
+Graph v0.5 introduced the node; current Graph v0.12 retains it with:
 
 - `kind: "conditional"`;
 - label `Select`;
@@ -65,7 +65,7 @@ selection even though the currently admitted arms are effect-free.
 
 ## Graph-authored patch expression
 
-Patch v0.18 retains the conditional extension to the closed expression algebra:
+Patch v0.19 retains the conditional extension to the closed expression algebra:
 
 ```json
 {
@@ -116,7 +116,7 @@ scope/dominance, and persistent-identity checks. The conditional node,
 containing statement, unaffected arms, and surrounding expression spine retain
 their IDs; only the removed subtree becomes tombstones.
 
-Patch-plan v0.19 also allows these ports in `targetPath` and `inputPort` for
+Patch-plan v0.20 also allows these ports in `targetPath` and `inputPort` for
 `replaceProducedExpressionInput`. A stage may author a conditional, a later
 stage may replace `whenFalse`, and a third stage may use the second stage's
 published expression root to edit a nested binary input. No generated ID is

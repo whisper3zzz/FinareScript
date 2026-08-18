@@ -209,7 +209,7 @@ public sealed class CSharpSemanticPipelineTests
             conditionBinding.TypeId!.Value).Kind);
 
         GraphDocument document = new HirGraphProjector().Project(hir, semantics);
-        Assert.Equal("unifiedscript.graph/v0.11", document.SchemaVersion);
+        Assert.Equal("unifiedscript.graph/v0.12", document.SchemaVersion);
         GraphFunction graph = Assert.Single(document.Functions);
         GraphNode select = Assert.Single(graph.Nodes, static node => node.Kind == "conditional");
         Assert.Equal("Select", select.Label);
@@ -309,7 +309,7 @@ public sealed class CSharpSemanticPipelineTests
         HirCompilationUnit hir = Assert.IsType<HirCompilationUnit>(result.Hir);
         BoundCompilation semantics = Assert.IsType<BoundCompilation>(result.Semantics);
         GraphDocument document = new HirGraphProjector().Project(hir, semantics);
-        Assert.Equal("unifiedscript.graph/v0.11", document.SchemaVersion);
+        Assert.Equal("unifiedscript.graph/v0.12", document.SchemaVersion);
         GraphNode[] logicalNodes = document.Functions
             .SelectMany(static function => function.Nodes)
             .Where(static node => node.Kind == "binary" &&
@@ -527,7 +527,7 @@ public sealed class CSharpSemanticPipelineTests
         });
 
         GraphDocument document = new HirGraphProjector().Project(hir, semantics);
-        Assert.Equal("unifiedscript.graph/v0.11", document.SchemaVersion);
+        Assert.Equal("unifiedscript.graph/v0.12", document.SchemaVersion);
         GraphNode[] graphCoalesces = document.Functions
             .SelectMany(static function => function.Nodes)
             .Where(static node => node.Kind == "binary" &&
@@ -719,7 +719,7 @@ public sealed class CSharpSemanticPipelineTests
         Assert.Equal(UnifiedNullability.Nullable, resultType.Nullability);
 
         GraphDocument document = new HirGraphProjector().Project(hir, semantics);
-        Assert.Equal("unifiedscript.graph/v0.11", document.SchemaVersion);
+        Assert.Equal("unifiedscript.graph/v0.12", document.SchemaVersion);
         GraphFunction graph = Assert.Single(document.Functions);
         GraphNode conditionalNode = Assert.Single(
             graph.Nodes,
@@ -886,7 +886,7 @@ public sealed class CSharpSemanticPipelineTests
             FindNode(result.Semantics!, conditionLocal.Id).ReferencedSymbolId);
 
         GraphDocument document = new HirGraphProjector().Project(hir, result.Semantics);
-        Assert.Equal("unifiedscript.graph/v0.11", document.SchemaVersion);
+        Assert.Equal("unifiedscript.graph/v0.12", document.SchemaVersion);
         GraphFunction graph = Assert.Single(document.Functions);
         GraphNode loopNode = Assert.Single(graph.Nodes, node => node.Id == statement.Id);
         GraphNode variableNode = Assert.Single(graph.Nodes, node => node.Id == variable.Id);
@@ -973,7 +973,7 @@ public sealed class CSharpSemanticPipelineTests
         Assert.Equal(statement.Variable.Id, FindNode(result.Semantics!, use.Id).ReferencedSymbolId);
 
         GraphDocument document = new HirGraphProjector().Project(result.Hir!, result.Semantics);
-        Assert.Equal("unifiedscript.graph/v0.11", document.SchemaVersion);
+        Assert.Equal("unifiedscript.graph/v0.12", document.SchemaVersion);
         GraphFunction graph = Assert.Single(document.Functions);
         GraphNode loop = graph.Nodes.Single(node => node.Id == statement.Id);
         GraphNode variable = graph.Nodes.Single(node => node.Id == statement.Variable.Id);
@@ -1029,6 +1029,147 @@ public sealed class CSharpSemanticPipelineTests
             result.Diagnostics,
             diagnostic => diagnostic.Code == SemanticDiagnosticCodes.ForEachCollectionNotSupported &&
                 diagnostic.Message.Contains("exact element type", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AnalyzeAndProject_PreservesDisposableEnumeratorProtocol()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int Sum(IEnumerable<int> values)
+                {
+                    int total = 0;
+                    foreach (int value in values)
+                    {
+                        total = total + value;
+                    }
+
+                    return total;
+                }
+            }
+            """;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            source,
+            "EnumerableForEach.cs");
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        BoundCompilation semantics = result.Semantics!;
+        BoundForEachInfo binding = Assert.Single(semantics.ForEachLoops);
+        Assert.Equal(ForEachIterationStrategy.Enumerator, binding.Strategy);
+        Assert.True(binding.RequiresDisposal);
+        Assert.NotNull(binding.EnumeratorTypeId);
+        Assert.NotNull(binding.GetEnumeratorMethodId);
+        Assert.NotNull(binding.MoveNextMethodId);
+        Assert.NotNull(binding.CurrentGetterMethodId);
+        Assert.NotNull(binding.DisposeMethodId);
+        TypeDescriptor collectionType = FindType(semantics, binding.CollectionTypeId);
+        Assert.Equal(UnifiedTypeKind.Enumerable, collectionType.Kind);
+        Assert.Equal(binding.ElementTypeId, collectionType.ElementTypeId);
+
+        GraphDocument graph = new HirGraphProjector().Project(result.Hir!, semantics);
+        GraphFunction function = Assert.Single(graph.Functions);
+        GraphNode loop = Assert.Single(function.Nodes, node => node.Id == binding.NodeId);
+        Assert.Equal("enumerator", loop.Properties["collectionStrategy"]);
+        Assert.Equal("finally", loop.Properties["disposal"]);
+        Assert.Equal("exhaustion,break,return,exception", loop.Properties["cleanupOn"]);
+        Assert.Single(function.Nodes, static node => node.Kind == "enumeratorAcquire");
+        Assert.Equal(3, function.Nodes.Count(static node => node.Kind == "enumeratorDispose"));
+        Assert.Single(function.Regions, static region => region.Kind == GraphRegionKind.LoopCleanup);
+        string graphJson = GraphJson.Serialize(graph);
+        Assert.Equal(graphJson, GraphJson.Serialize(GraphJson.Deserialize(graphJson)));
+    }
+
+    [Fact]
+    public void Analyze_RejectsPatternEnumeratorWithoutDisposableEnumerableContract()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            struct Sequence
+            {
+                public Enumerator GetEnumerator() => new Enumerator();
+            }
+
+            struct Enumerator
+            {
+                public int Current => 0;
+                public bool MoveNext() => false;
+            }
+
+            static class Rules
+            {
+                [Visual]
+                static int Sum(Sequence values)
+                {
+                    int total = 0;
+                    foreach (int value in values)
+                    {
+                        total = total + value;
+                    }
+
+                    return total;
+                }
+            }
+            """;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            source,
+            "PatternForEach.cs");
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(
+            result.Diagnostics,
+            diagnostic => diagnostic.Code == SemanticDiagnosticCodes.ForEachCollectionNotSupported &&
+                diagnostic.Message.Contains("disposable enumerator", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Analyze_RejectsSelfEnumerableElementWithoutRecursiveTypeBinding()
+    {
+        const string source = """
+            using System;
+            using System.Collections;
+            using System.Collections.Generic;
+            using UnifiedScript;
+
+            sealed class Sequence : IEnumerable<Sequence>
+            {
+                public IEnumerator<Sequence> GetEnumerator() =>
+                    throw new NotImplementedException();
+
+                IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            }
+
+            static class Rules
+            {
+                [Visual]
+                static int Count(Sequence values)
+                {
+                    int count = 0;
+                    foreach (Sequence value in values)
+                    {
+                        count = count + 1;
+                    }
+
+                    return count;
+                }
+            }
+            """;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            source,
+            "SelfEnumerableForEach.cs");
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(
+            result.Diagnostics,
+            diagnostic => diagnostic.Code == SemanticDiagnosticCodes.ForEachCollectionNotSupported);
     }
 
     private static BoundNodeInfo FindNode(BoundCompilation semantics, SemanticId id) =>

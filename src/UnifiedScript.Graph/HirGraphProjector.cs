@@ -714,6 +714,12 @@ public sealed class HirGraphProjector
             IReadOnlyList<ControlEndpoint> incoming,
             SemanticId parentRegionId)
         {
+            BoundForEachInfo binding = semantics.GetForEach(statement.Id);
+            if (binding.Strategy == ForEachIterationStrategy.Enumerator)
+            {
+                return ProjectEnumeratorForEach(statement, binding, incoming, parentRegionId);
+            }
+
             SemanticId loopRegionId = RegionId(statement.Id, GraphRegionKind.Loop);
             AddRegion(new RegionBuilder(
                 loopRegionId,
@@ -851,6 +857,291 @@ public sealed class HirGraphProjector
 
             ConnectIncoming(bodyExits, statement.Id, "in");
             return [new ControlEndpoint(statement.Id, "exit"), .. context.BreakExits];
+        }
+
+        private IReadOnlyList<ControlEndpoint> ProjectEnumeratorForEach(
+            HirForEachStatement statement,
+            BoundForEachInfo binding,
+            IReadOnlyList<ControlEndpoint> incoming,
+            SemanticId parentRegionId)
+        {
+            if (!binding.RequiresDisposal ||
+                binding.EnumeratorTypeId is not SemanticId enumeratorTypeId ||
+                binding.GetEnumeratorMethodId is not SemanticId getEnumeratorMethodId ||
+                binding.MoveNextMethodId is not SemanticId moveNextMethodId ||
+                binding.CurrentGetterMethodId is not SemanticId currentGetterMethodId ||
+                binding.DisposeMethodId is not SemanticId disposeMethodId)
+            {
+                throw new InvalidOperationException(
+                    $"Enumerator foreach '{statement.Id}' requires a complete synchronous disposal protocol.");
+            }
+
+            SemanticId loopRegionId = RegionId(statement.Id, GraphRegionKind.Loop);
+            AddRegion(new RegionBuilder(
+                loopRegionId,
+                GraphRegionKind.Loop,
+                parentRegionId,
+                statement.Id,
+                statement.Span,
+                false));
+            SemanticId collectionRegionId = RegionId(
+                statement.Id,
+                GraphRegionKind.LoopCollection);
+            AddRegion(new RegionBuilder(
+                collectionRegionId,
+                GraphRegionKind.LoopCollection,
+                loopRegionId,
+                statement.Collection.Id,
+                statement.Collection.Span,
+                false));
+            SemanticId bodyRegionId = RegionId(statement.Id, GraphRegionKind.LoopBody);
+            AddRegion(new RegionBuilder(
+                bodyRegionId,
+                GraphRegionKind.LoopBody,
+                loopRegionId,
+                statement.Body.Id,
+                statement.Body.Span,
+                false));
+            SemanticId cleanupRegionId = RegionId(statement.Id, GraphRegionKind.LoopCleanup);
+            AddRegion(new RegionBuilder(
+                cleanupRegionId,
+                GraphRegionKind.LoopCleanup,
+                loopRegionId,
+                statement.Id,
+                statement.Span,
+                false));
+
+            ExpressionProjection collection = ProjectExpression(
+                statement.Collection,
+                collectionRegionId);
+            SemanticId captureId = SemanticId.FromKey(
+                $"{statement.Id}:graph:foreach:collectionCapture");
+            AddNode(new GraphNode(
+                captureId,
+                "collectionCapture",
+                "Capture Collection",
+                statement.Collection.Span,
+                [
+                    new GraphPort("in", GraphPortDirection.Input, GraphPortKind.Control),
+                    new GraphPort("then", GraphPortDirection.Output, GraphPortKind.Control),
+                    new GraphPort("value", GraphPortDirection.Input, GraphPortKind.Data),
+                    new GraphPort("collection", GraphPortDirection.Output, GraphPortKind.Data),
+                ],
+                new SortedDictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["evaluation"] = "once",
+                    ["strategy"] = "enumerator",
+                }),
+                collectionRegionId);
+            IReadOnlyList<ControlEndpoint> beforeCapture = ConnectEffectChain(
+                incoming,
+                collection.Effects.Distinct().ToArray());
+            ConnectIncoming(beforeCapture, captureId, "in");
+            AddRequiredDataEdge(collection.Value, new ValueEndpoint(captureId, "value"));
+
+            SemanticId acquireId = SemanticId.FromKey(
+                $"{statement.Id}:graph:foreach:enumeratorAcquire");
+            AddNode(new GraphNode(
+                acquireId,
+                "enumeratorAcquire",
+                "Get Enumerator",
+                statement.Collection.Span,
+                [
+                    new GraphPort("in", GraphPortDirection.Input, GraphPortKind.Control),
+                    new GraphPort("then", GraphPortDirection.Output, GraphPortKind.Control),
+                    new GraphPort("collection", GraphPortDirection.Input, GraphPortKind.Data),
+                    new GraphPort("enumerator", GraphPortDirection.Output, GraphPortKind.Data),
+                ],
+                new SortedDictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["getEnumeratorMethodId"] = getEnumeratorMethodId.Value,
+                    ["enumeratorTypeId"] = enumeratorTypeId.Value,
+                }),
+                collectionRegionId);
+            ConnectIncoming([new ControlEndpoint(captureId, "then")], acquireId, "in");
+            AddEdge(
+                GraphEdgeKind.Data,
+                new ValueEndpoint(captureId, "collection"),
+                new ValueEndpoint(acquireId, "collection"));
+
+            var loopProperties = new SortedDictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["loopForm"] = "forEach",
+                ["collectionEvaluation"] = "once",
+                ["collectionStrategy"] = "enumerator",
+                ["iterationAdvance"] = "beforeBody",
+                ["continueTarget"] = "moveNext",
+                ["disposal"] = "finally",
+                ["cleanupOn"] = "exhaustion,break,return,exception",
+                ["evaluationOrder"] = "collection,getEnumerator,moveNext,current,body,dispose",
+                ["moveNextMethodId"] = moveNextMethodId.Value,
+            };
+            semantics.ApplyNodeProperties(statement.Collection.Id, loopProperties);
+            AddNode(new GraphNode(
+                statement.Id,
+                "loop",
+                "Foreach Move Next",
+                statement.Span,
+                [
+                    new GraphPort("in", GraphPortDirection.Input, GraphPortKind.Control),
+                    new GraphPort("body", GraphPortDirection.Output, GraphPortKind.Control),
+                    new GraphPort("exit", GraphPortDirection.Output, GraphPortKind.Control),
+                    new GraphPort("enumerator", GraphPortDirection.Input, GraphPortKind.Data),
+                ],
+                loopProperties),
+                loopRegionId);
+            ConnectIncoming([new ControlEndpoint(acquireId, "then")], statement.Id, "in");
+            AddEdge(
+                GraphEdgeKind.Data,
+                new ValueEndpoint(acquireId, "enumerator"),
+                new ValueEndpoint(statement.Id, "enumerator"));
+
+            var variableProperties = new SortedDictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["name"] = statement.Variable.Name,
+                ["type"] = statement.Variable.TypeName,
+                ["binding"] = "current",
+                ["readOnly"] = "true",
+                ["currentGetterMethodId"] = currentGetterMethodId.Value,
+            };
+            semantics.ApplyNodeProperties(statement.Variable.Id, variableProperties);
+            AddNode(new GraphNode(
+                statement.Variable.Id,
+                "iterationVariable",
+                $"Current {statement.Variable.Name}",
+                statement.Variable.Span,
+                [
+                    new GraphPort("in", GraphPortDirection.Input, GraphPortKind.Control),
+                    new GraphPort("then", GraphPortDirection.Output, GraphPortKind.Control),
+                    new GraphPort("enumerator", GraphPortDirection.Input, GraphPortKind.Data),
+                    new GraphPort("value", GraphPortDirection.Output, GraphPortKind.Data),
+                ],
+                variableProperties),
+                bodyRegionId);
+            ConnectIncoming(
+                [new ControlEndpoint(statement.Id, "body")],
+                statement.Variable.Id,
+                "in");
+            AddEdge(
+                GraphEdgeKind.Data,
+                new ValueEndpoint(acquireId, "enumerator"),
+                new ValueEndpoint(statement.Variable.Id, "enumerator"));
+
+            SemanticId normalDisposeId = SemanticId.FromKey(
+                $"{statement.Id}:graph:foreach:dispose:normal");
+            SemanticId returnDisposeId = SemanticId.FromKey(
+                $"{statement.Id}:graph:foreach:dispose:return");
+            SemanticId exceptionDisposeId = SemanticId.FromKey(
+                $"{statement.Id}:graph:foreach:dispose:exception");
+            LoopContext? outerCleanup = FindCleanupContext();
+            AddEnumeratorDisposeNode(
+                normalDisposeId,
+                "Dispose Enumerator",
+                "exhaustionOrBreak",
+                "then",
+                disposeMethodId,
+                acquireId,
+                statement.Span,
+                cleanupRegionId,
+                nextExceptionalCleanupId: null);
+            AddEnumeratorDisposeNode(
+                returnDisposeId,
+                "Dispose Before Return",
+                "return",
+                "then",
+                disposeMethodId,
+                acquireId,
+                statement.Span,
+                cleanupRegionId,
+                nextExceptionalCleanupId: null);
+            AddEnumeratorDisposeNode(
+                exceptionDisposeId,
+                "Dispose Before Rethrow",
+                "exception",
+                "throw",
+                disposeMethodId,
+                acquireId,
+                statement.Span,
+                cleanupRegionId,
+                outerCleanup?.ExceptionCleanupNodeId);
+
+            var context = new LoopContext(
+                new ControlTarget(statement.Id, "in"),
+                returnDisposeId,
+                exceptionDisposeId);
+            loops.Push(context);
+            IReadOnlyList<ControlEndpoint> bodyExits;
+            try
+            {
+                bodyExits = ProjectBlockContents(
+                    statement.Body,
+                    [new ControlEndpoint(statement.Variable.Id, "then")],
+                    bodyRegionId);
+            }
+            finally
+            {
+                _ = loops.Pop();
+            }
+
+            ConnectIncoming(bodyExits, statement.Id, "in");
+            ConnectIncoming(
+                [new ControlEndpoint(statement.Id, "exit"), .. context.BreakExits],
+                normalDisposeId,
+                "in");
+            ConnectIncoming(context.ReturnExits, returnDisposeId, "in");
+            if (context.ReturnExits.Count > 0)
+            {
+                ControlEndpoint returnAfterCleanup = new(returnDisposeId, "then");
+                LoopContext? enclosingCleanup = FindCleanupContext();
+                if (enclosingCleanup is not null)
+                {
+                    enclosingCleanup.ReturnExits.Add(returnAfterCleanup);
+                }
+            }
+
+            return [new ControlEndpoint(normalDisposeId, "then")];
+        }
+
+        private void AddEnumeratorDisposeNode(
+            SemanticId nodeId,
+            string label,
+            string reason,
+            string outputPort,
+            SemanticId disposeMethodId,
+            SemanticId acquireId,
+            SourceSpan span,
+            SemanticId cleanupRegionId,
+            SemanticId? nextExceptionalCleanupId)
+        {
+            var properties = new SortedDictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["cleanupSemantics"] = "finally",
+                ["disposeMethodId"] = disposeMethodId.Value,
+                ["reason"] = reason,
+                ["preservesPendingTransfer"] = reason == "exhaustionOrBreak" ? "false" : "true",
+            };
+            if (reason == "exception")
+            {
+                properties["nextExceptionalCleanup"] =
+                    nextExceptionalCleanupId?.Value ?? "functionExit";
+            }
+
+            AddNode(new GraphNode(
+                nodeId,
+                "enumeratorDispose",
+                label,
+                span,
+                [
+                    new GraphPort("in", GraphPortDirection.Input, GraphPortKind.Control),
+                    new GraphPort(outputPort, GraphPortDirection.Output, GraphPortKind.Control),
+                    new GraphPort("enumerator", GraphPortDirection.Input, GraphPortKind.Data),
+                ],
+                properties),
+                cleanupRegionId);
+            AddEdge(
+                GraphEdgeKind.Data,
+                new ValueEndpoint(acquireId, "enumerator"),
+                new ValueEndpoint(nodeId, "enumerator"));
         }
 
         private IReadOnlyList<ControlEndpoint> ProjectForVariable(
@@ -998,6 +1289,7 @@ public sealed class HirGraphProjector
             IReadOnlyList<ControlEndpoint> incoming,
             SemanticId regionId)
         {
+            LoopContext? cleanupContext = FindCleanupContext();
             ExpressionProjection? expression = statement.Expression is null
                 ? null
                 : ProjectExpression(statement.Expression, regionId);
@@ -1008,6 +1300,11 @@ public sealed class HirGraphProjector
             if (expression?.Value is not null)
             {
                 ports.Add(new GraphPort("value", GraphPortDirection.Input, GraphPortKind.Data));
+            }
+
+            if (cleanupContext is not null)
+            {
+                ports.Add(new GraphPort("then", GraphPortDirection.Output, GraphPortKind.Control));
             }
 
             AddNode(
@@ -1027,6 +1324,8 @@ public sealed class HirGraphProjector
             {
                 AddEdge(GraphEdgeKind.Data, expression.Value, new ValueEndpoint(statement.Id, "value"));
             }
+
+            cleanupContext?.ReturnExits.Add(new ControlEndpoint(statement.Id, "then"));
 
             return [];
         }
@@ -1526,11 +1825,23 @@ public sealed class HirGraphProjector
             edges.TryAdd(edgeId, new GraphEdge(edgeId, kind, sourceNode, sourcePort, targetNode, targetPort));
         }
 
-        private sealed class LoopContext(ControlTarget continueTarget)
+        private LoopContext? FindCleanupContext() => loops.FirstOrDefault(
+            static context => context.ReturnCleanupNodeId is not null);
+
+        private sealed class LoopContext(
+            ControlTarget continueTarget,
+            SemanticId? returnCleanupNodeId = null,
+            SemanticId? exceptionCleanupNodeId = null)
         {
             public ControlTarget ContinueTarget { get; } = continueTarget;
 
             public List<ControlEndpoint> BreakExits { get; } = [];
+
+            public SemanticId? ReturnCleanupNodeId { get; } = returnCleanupNodeId;
+
+            public SemanticId? ExceptionCleanupNodeId { get; } = exceptionCleanupNodeId;
+
+            public List<ControlEndpoint> ReturnExits { get; } = [];
         }
     }
 
@@ -1539,6 +1850,7 @@ public sealed class HirGraphProjector
         private readonly IReadOnlyDictionary<SemanticId, BoundNodeInfo> nodes;
         private readonly IReadOnlyDictionary<SemanticId, TypeDescriptor> types;
         private readonly IReadOnlyDictionary<SemanticId, MethodDescriptor> methods;
+        private readonly IReadOnlyDictionary<SemanticId, BoundForEachInfo> forEachLoops;
 
         public SemanticIndex(BoundCompilation? compilation)
         {
@@ -1548,10 +1860,18 @@ public sealed class HirGraphProjector
                 new Dictionary<SemanticId, TypeDescriptor>();
             methods = compilation?.Methods.ToDictionary(static method => method.Id) ??
                 new Dictionary<SemanticId, MethodDescriptor>();
+            forEachLoops = compilation?.ForEachLoops.ToDictionary(static loop => loop.NodeId) ??
+                new Dictionary<SemanticId, BoundForEachInfo>();
         }
 
         public bool IsEffectful(SemanticId nodeId) =>
             nodes.TryGetValue(nodeId, out BoundNodeInfo? node) && node.Effects != MethodEffects.None;
+
+        public BoundForEachInfo GetForEach(SemanticId nodeId) =>
+            forEachLoops.TryGetValue(nodeId, out BoundForEachInfo? binding)
+                ? binding
+                : throw new InvalidOperationException(
+                    $"Foreach node '{nodeId}' has no bound iteration protocol.");
 
         public bool IsVoid(SemanticId nodeId) =>
             nodes.TryGetValue(nodeId, out BoundNodeInfo? node) &&

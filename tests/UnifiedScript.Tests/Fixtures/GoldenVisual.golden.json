@@ -8,13 +8,13 @@
       "utf8Bytes": 5284
     },
     "semantics": {
-      "schemaVersion": "unifiedscript.semantics/v0.1",
-      "sha256": "5fa5ac9da8960fce83ffd7bd09b8344c18bb471e7549120e9575f6219cf62531",
-      "utf8Bytes": 3459
+      "schemaVersion": "unifiedscript.semantics/v0.2",
+      "sha256": "72a922af6c2a8117810b372f9438191ba8cfc10ff5918c34927d5b651845767b",
+      "utf8Bytes": 3481
     },
     "graph": {
-      "schemaVersion": "unifiedscript.graph/v0.11",
-      "sha256": "8aded0ea62048b4fda455fd5bb907b5ab633089a7b5f5a8229b9d7ac3b373e16",
+      "schemaVersion": "unifiedscript.graph/v0.12",
+      "sha256": "3fc65885205f76b82aed6be622671ae5fc248b1555996b6438ac0883f550b05c",
       "utf8Bytes": 7472
     }
   }

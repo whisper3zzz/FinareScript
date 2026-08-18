@@ -138,6 +138,15 @@ def main() -> int:
     for_each_build_identity_path = (
         ROOT / "samples" / "Patching" / "ForEachBuildRules.cs.usids"
     )
+    enumerable_for_each_build_source_path = (
+        ROOT / "samples" / "Patching" / "EnumerableForEachBuildRules.cs"
+    )
+    enumerable_for_each_build_plan_path = (
+        ROOT / "samples" / "Patching" / "BuildEnumerableForEach.plan.json"
+    )
+    enumerable_for_each_build_identity_path = (
+        ROOT / "samples" / "Patching" / "EnumerableForEachBuildRules.cs.usids"
+    )
     for_edit_source_path = ROOT / "samples" / "Patching" / "EditForRules.cs"
     for_edit_plan_path = ROOT / "samples" / "Patching" / "EditForRules.plan.json"
     for_edit_identity_path = ROOT / "samples" / "Patching" / "EditForRules.cs.usids"
@@ -206,6 +215,9 @@ def main() -> int:
     for_source_path = ROOT / "samples" / "Loops" / "ForRules.cs"
     do_while_source_path = ROOT / "samples" / "Loops" / "DoWhileRules.cs"
     for_each_source_path = ROOT / "samples" / "Loops" / "ForEachRules.cs"
+    enumerable_for_each_source_path = (
+        ROOT / "samples" / "Loops" / "EnumerableForEachRules.cs"
+    )
     golden_manifest_path = (
         ROOT
         / "tests"
@@ -286,6 +298,12 @@ def main() -> int:
         "Missing graph-authored foreach plan sample",
     )
     require(
+        enumerable_for_each_build_source_path.is_file()
+        and enumerable_for_each_build_plan_path.is_file()
+        and enumerable_for_each_build_identity_path.is_file(),
+        "Missing graph-authored enumerable foreach plan sample",
+    )
+    require(
         for_edit_source_path.is_file()
         and for_edit_plan_path.is_file()
         and for_edit_identity_path.is_file(),
@@ -341,6 +359,10 @@ def main() -> int:
     require(for_source_path.is_file(), "Missing lossless for-loop sample")
     require(do_while_source_path.is_file(), "Missing lossless do-while sample")
     require(for_each_source_path.is_file(), "Missing indexed foreach sample")
+    require(
+        enumerable_for_each_source_path.is_file(),
+        "Missing disposal-aware enumerable foreach sample",
+    )
     require(golden_manifest_path.is_file(), "Missing Golden artifact manifest")
     require(layout_path.is_file(), "Missing graph layout sidecar sample")
     patch_source = patch_source_path.read_text(encoding="utf-8")
@@ -392,6 +414,15 @@ def main() -> int:
     )
     for_each_build_identity = json.loads(
         for_each_build_identity_path.read_text(encoding="utf-8")
+    )
+    enumerable_for_each_build_source = (
+        enumerable_for_each_build_source_path.read_text(encoding="utf-8")
+    )
+    enumerable_for_each_build_plan = json.loads(
+        enumerable_for_each_build_plan_path.read_text(encoding="utf-8")
+    )
+    enumerable_for_each_build_identity = json.loads(
+        enumerable_for_each_build_identity_path.read_text(encoding="utf-8")
     )
     for_edit_source = for_edit_source_path.read_text(encoding="utf-8")
     for_edit_plan = json.loads(for_edit_plan_path.read_text(encoding="utf-8"))
@@ -455,6 +486,9 @@ def main() -> int:
     for_source = for_source_path.read_text(encoding="utf-8")
     do_while_source = do_while_source_path.read_text(encoding="utf-8")
     for_each_source = for_each_source_path.read_text(encoding="utf-8")
+    enumerable_for_each_source = enumerable_for_each_source_path.read_text(
+        encoding="utf-8"
+    )
     golden_manifest = json.loads(golden_manifest_path.read_text(encoding="utf-8"))
     layout = json.loads(layout_path.read_text(encoding="utf-8"))
     patch_operation = patch_document["operations"][0]
@@ -484,6 +518,9 @@ def main() -> int:
     for_each_build_source_digest = hashlib.sha256(
         for_each_build_source.encode("utf-8")
     ).hexdigest()
+    enumerable_for_each_build_source_digest = hashlib.sha256(
+        enumerable_for_each_build_source.encode("utf-8")
+    ).hexdigest()
     for_edit_source_digest = hashlib.sha256(
         for_edit_source.encode("utf-8")
     ).hexdigest()
@@ -507,10 +544,10 @@ def main() -> int:
     ).hexdigest()
     loop_source_digest = hashlib.sha256(loop_source.encode("utf-8")).hexdigest()
     require(
-        patch_document["schemaVersion"] == "unifiedscript.patch/v0.18"
-        and operator_patch["schemaVersion"] == "unifiedscript.patch/v0.18"
-        and insert_patch["schemaVersion"] == "unifiedscript.patch/v0.18"
-        and temporary_patch["schemaVersion"] == "unifiedscript.patch/v0.18"
+        patch_document["schemaVersion"] == "unifiedscript.patch/v0.19"
+        and operator_patch["schemaVersion"] == "unifiedscript.patch/v0.19"
+        and insert_patch["schemaVersion"] == "unifiedscript.patch/v0.19"
+        and temporary_patch["schemaVersion"] == "unifiedscript.patch/v0.19"
         and operator_patch["sourceCompilationId"]
         == patch_document["sourceCompilationId"]
         and insert_patch["sourceCompilationId"]
@@ -558,7 +595,7 @@ def main() -> int:
         "Temporary-introduction sample does not contain the expected typed payload",
     )
     require(
-        reconnect_patch["schemaVersion"] == "unifiedscript.patch/v0.18"
+        reconnect_patch["schemaVersion"] == "unifiedscript.patch/v0.19"
         and reconnect_identity["sourcePath"]
         == "samples/Patching/SharedValueRules.cs"
         and reconnect_identity["sourceDigest"]
@@ -583,7 +620,7 @@ def main() -> int:
     assignment_statement = assignment_operation["newStatement"]
     assignment_value = assignment_statement["value"]
     require(
-        assignment_patch["schemaVersion"] == "unifiedscript.patch/v0.18"
+        assignment_patch["schemaVersion"] == "unifiedscript.patch/v0.19"
         and assignment_identity["sourcePath"]
         == "samples/Patching/AssignmentRules.cs"
         and assignment_identity["sourceDigest"]
@@ -614,7 +651,7 @@ def main() -> int:
     introduction_step = plan_steps[0]
     reconnect_steps = plan_steps[1:]
     require(
-        plan_document["schemaVersion"] == "unifiedscript.patch-plan/v0.19"
+        plan_document["schemaVersion"] == "unifiedscript.patch-plan/v0.20"
         and plan_identity["sourcePath"]
         == "samples/Patching/SharedExpressionPlan.cs"
         and plan_identity["sourceDigest"] == f"sha256:{plan_source_digest}"
@@ -649,7 +686,7 @@ def main() -> int:
     composed_identity_ids = {entry["id"] for entry in composed_identity["entries"]}
     composed_insert, composed_reconnect, composed_operator, composed_delete = composed_steps
     require(
-        composed_document["schemaVersion"] == "unifiedscript.patch-plan/v0.19"
+        composed_document["schemaVersion"] == "unifiedscript.patch-plan/v0.20"
         and composed_identity["sourcePath"] == "samples/Patching/ComposedPlan.cs"
         and composed_identity["sourceDigest"] == f"sha256:{composed_source_digest}"
         and [step["step"] for step in composed_steps]
@@ -679,7 +716,7 @@ def main() -> int:
     guard_comparison = guard_condition["left"]
     guard_negation = guard_condition["right"]
     require(
-        guard_document["schemaVersion"] == "unifiedscript.patch/v0.18"
+        guard_document["schemaVersion"] == "unifiedscript.patch/v0.19"
         and guard_identity["sourcePath"] == "samples/Patching/GuardRules.cs"
         and guard_identity["sourceDigest"] == f"sha256:{guard_source_digest}"
         and guard_operation["operation"] == "insertStatement"
@@ -703,7 +740,7 @@ def main() -> int:
     guard_plan_steps = guard_plan["steps"]
     guard_plan_source, *guard_branch_steps = guard_plan_steps
     require(
-        guard_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.19"
+        guard_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.20"
         and guard_plan["sourceCompilationId"] == guard_document["sourceCompilationId"]
         and guard_plan["semanticConfigurationId"]
         == guard_document["semanticConfigurationId"]
@@ -724,7 +761,7 @@ def main() -> int:
     )
     guard_return_source, guard_return_step, guard_fallback_step = guard_return_plan["steps"]
     require(
-        guard_return_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.19"
+        guard_return_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.20"
         and guard_return_plan["sourceCompilationId"] == guard_document["sourceCompilationId"]
         and guard_return_plan["semanticConfigurationId"]
         == guard_document["semanticConfigurationId"]
@@ -746,7 +783,7 @@ def main() -> int:
     nested_steps = nested_plan["steps"]
     nested_outer, nested_inner, nested_then, nested_else, nested_outer_else = nested_steps
     require(
-        nested_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.19"
+        nested_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.20"
         and nested_identity["sourcePath"]
         == "samples/Patching/NestedDecisionRules.cs"
         and nested_identity["sourceDigest"] == f"sha256:{nested_source_digest}"
@@ -790,7 +827,7 @@ def main() -> int:
         loop_plan_steps
     )
     require(
-        loop_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.19"
+        loop_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.20"
         and loop_plan_identity["sourcePath"]
         == "samples/Patching/LoopBuildRules.cs"
         and loop_plan_identity["sourceDigest"]
@@ -830,7 +867,7 @@ def main() -> int:
     }
     do_producer, do_condition_edit, do_assignment = do_while_build_plan["steps"]
     require(
-        do_while_build_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.19"
+        do_while_build_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.20"
         and do_while_build_identity["sourcePath"]
         == "samples/Patching/DoWhileBuildRules.cs"
         and do_while_build_identity["sourceDigest"]
@@ -866,7 +903,7 @@ def main() -> int:
     produced_iteration_reference = for_each_assignment["newStatement"]["value"]
     require(
         for_each_build_plan["schemaVersion"]
-        == "unifiedscript.patch-plan/v0.19"
+        == "unifiedscript.patch-plan/v0.20"
         and for_each_build_identity["sourcePath"]
         == "samples/Patching/ForEachBuildRules.cs"
         and for_each_build_identity["sourceDigest"]
@@ -908,6 +945,66 @@ def main() -> int:
         and "return result;" in for_each_build_source,
         "Graph-authored foreach source, sidecar, and plan are inconsistent",
     )
+    enumerable_identity_ids = {
+        entry["id"] for entry in enumerable_for_each_build_identity["entries"]
+    }
+    (
+        enumerable_producer,
+        enumerable_collection_edit,
+        enumerable_assignment,
+    ) = enumerable_for_each_build_plan["steps"]
+    enumerable_statement = enumerable_producer["newStatement"]
+    enumerable_iteration_reference = enumerable_assignment["newStatement"]["value"]
+    require(
+        enumerable_for_each_build_plan["schemaVersion"]
+        == "unifiedscript.patch-plan/v0.20"
+        and enumerable_for_each_build_identity["sourcePath"]
+        == "samples/Patching/EnumerableForEachBuildRules.cs"
+        and enumerable_for_each_build_identity["sourceDigest"]
+        == f"sha256:{enumerable_for_each_build_source_digest}"
+        and enumerable_for_each_build_identity["generation"] == 1
+        and enumerable_for_each_build_identity["tombstones"] == []
+        and len(enumerable_for_each_build_plan["steps"]) == 3
+        and len(
+            {step["stepId"] for step in enumerable_for_each_build_plan["steps"]}
+        )
+        == 3
+        and enumerable_producer["step"] == "insertStatement"
+        and enumerable_producer["targetNodeId"] in enumerable_identity_ids
+        and enumerable_producer["expectedPreviousSiblingId"]
+        in enumerable_identity_ids
+        and enumerable_producer["expectedNextSiblingId"] in enumerable_identity_ids
+        and enumerable_statement["statement"] == "forEach"
+        and enumerable_statement["typeName"] == "int"
+        and enumerable_statement["variableName"] == "value"
+        and enumerable_statement["collection"]["expectedName"] == "primary"
+        and enumerable_statement["collection"]["sourceDefinitionId"]
+        in enumerable_identity_ids
+        and enumerable_collection_edit["step"]
+        == "replaceProducedForEachCollection"
+        and enumerable_collection_edit["sourceStepId"]
+        == enumerable_producer["stepId"]
+        and enumerable_collection_edit["newCollection"]["expectedName"]
+        == "fallback"
+        and enumerable_collection_edit["newCollection"]["sourceDefinitionId"]
+        in enumerable_identity_ids
+        and enumerable_assignment["step"] == "insertLoopBodyStatement"
+        and enumerable_assignment["sourceStepId"] == enumerable_producer["stepId"]
+        and enumerable_assignment["newStatement"]["statement"]
+        == "localAssignment"
+        and enumerable_assignment["newStatement"]["targetDefinitionId"]
+        in enumerable_identity_ids
+        and enumerable_iteration_reference["expression"]
+        == "producedLocalReference"
+        and enumerable_iteration_reference["sourceStepId"]
+        == enumerable_producer["stepId"]
+        and enumerable_iteration_reference["expectedName"] == "value"
+        and enumerable_iteration_reference["expectedTypeId"]
+        == enumerable_statement["expectedElementTypeId"]
+        and "IEnumerable<int> primary" in enumerable_for_each_build_source
+        and "int result = seed;" in enumerable_for_each_build_source,
+        "Enumerable foreach source, sidecar, and plan are inconsistent",
+    )
     for_build_identity_ids = {
         entry["id"] for entry in for_build_identity["entries"]
     }
@@ -921,7 +1018,7 @@ def main() -> int:
         for_assignment["newStatement"]["value"]["right"],
     ]
     require(
-        for_build_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.19"
+        for_build_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.20"
         and for_build_identity["sourcePath"]
         == "samples/Patching/ForBuildRules.cs"
         and for_build_identity["sourceDigest"]
@@ -976,7 +1073,7 @@ def main() -> int:
         for_assignment_edit,
     ) = for_edit_plan["steps"]
     require(
-        for_edit_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.19"
+        for_edit_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.20"
         and for_edit_identity["sourcePath"] == "samples/Patching/EditForRules.cs"
         and for_edit_identity["sourceDigest"] == f"sha256:{for_edit_source_digest}"
         and for_edit_identity["generation"] == 1
@@ -1022,7 +1119,7 @@ def main() -> int:
     condition_payload = condition_edit["newCondition"]
     require(
         expression_edit_plan["schemaVersion"]
-        == "unifiedscript.patch-plan/v0.19"
+        == "unifiedscript.patch-plan/v0.20"
         and expression_edit_identity["sourcePath"]
         == "samples/Patching/EditLoopRules.cs"
         and expression_edit_identity["sourceDigest"]
@@ -1060,7 +1157,7 @@ def main() -> int:
     initializer_edit, if_edit, return_edit = general_expression_plan["steps"]
     require(
         general_expression_plan["schemaVersion"]
-        == "unifiedscript.patch-plan/v0.19"
+        == "unifiedscript.patch-plan/v0.20"
         and general_expression_identity["sourcePath"]
         == "samples/Patching/EditDecisionValues.cs"
         and general_expression_identity["sourceDigest"]
@@ -1103,7 +1200,7 @@ def main() -> int:
     produced_references = [guard_reference, branch_reference, fallback_reference]
     require(
         produced_value_plan["schemaVersion"]
-        == "unifiedscript.patch-plan/v0.19"
+        == "unifiedscript.patch-plan/v0.20"
         and produced_value_identity["sourcePath"]
         == "samples/Patching/ConnectGeneratedValues.cs"
         and produced_value_identity["sourceDigest"]
@@ -1150,7 +1247,7 @@ def main() -> int:
     nested_input_producer, nested_input_edit = nested_input_plan["steps"]
     require(
         nested_input_plan["schemaVersion"]
-        == "unifiedscript.patch-plan/v0.19"
+        == "unifiedscript.patch-plan/v0.20"
         and nested_input_identity["sourcePath"]
         == "samples/Patching/EditNestedInput.cs"
         and nested_input_identity["sourceDigest"]
@@ -1189,7 +1286,7 @@ def main() -> int:
     generated_handles = [generated_right, generated_nested_right]
     require(
         generated_expression_plan["schemaVersion"]
-        == "unifiedscript.patch-plan/v0.19"
+        == "unifiedscript.patch-plan/v0.20"
         and generated_expression_identity["sourcePath"]
         == "samples/Patching/EditGeneratedExpression.cs"
         and generated_expression_identity["sourceDigest"]
@@ -1235,7 +1332,7 @@ def main() -> int:
     conditional_payload = conditional_root["newValue"]
     require(
         conditional_expression_plan["schemaVersion"]
-        == "unifiedscript.patch-plan/v0.19"
+        == "unifiedscript.patch-plan/v0.20"
         and conditional_expression_identity["sourcePath"]
         == "samples/Patching/EditConditionalExpression.cs"
         and conditional_expression_identity["sourceDigest"]
@@ -1280,13 +1377,13 @@ def main() -> int:
     )
     require(
         golden_manifest["artifacts"]["graph"]["schemaVersion"]
-        == "unifiedscript.graph/v0.11"
+        == "unifiedscript.graph/v0.12"
         and golden_manifest["artifacts"]["hir"]["schemaVersion"]
         == "unifiedscript.hir/v0.7"
         and "if ((damage > threshold) && !disabled)" in region_source
         and "return true;" in region_source
         and "return false;" in region_source,
-        "HIR v0.7/Graph v0.11 Golden manifest or early-return region sample is inconsistent",
+        "HIR v0.7/Graph v0.12 Golden manifest or early-return region sample is inconsistent",
     )
     require(
         "return enabled && ready;" in short_circuit_source
@@ -1334,6 +1431,14 @@ def main() -> int:
         and "continue;" in for_each_source
         and "total = total + value;" in for_each_source,
         "Indexed foreach sample does not cover binding, transfers, and assignment",
+    )
+    require(
+        "IEnumerable<int> values" in enumerable_for_each_source
+        and "foreach (int value in values)" in enumerable_for_each_source
+        and "return total;" in enumerable_for_each_source
+        and "break;" in enumerable_for_each_source
+        and "continue;" in enumerable_for_each_source,
+        "Enumerable foreach sample does not cover disposal-relevant transfers",
     )
     loop_kinds = {entry["kind"] for entry in loop_identity["entries"]}
     require(

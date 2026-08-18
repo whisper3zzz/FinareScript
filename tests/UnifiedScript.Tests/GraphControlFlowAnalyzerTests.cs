@@ -665,6 +665,84 @@ public sealed class GraphControlFlowAnalyzerTests
     }
 
     [Fact]
+    public void Analyze_EnumeratorForEachRoutesNormalBreakReturnAndExceptionCleanup()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int Sum(IEnumerable<int> values, bool stop)
+                {
+                    int total = 0;
+                    foreach (int value in values)
+                    {
+                        if (value < 0)
+                        {
+                            continue;
+                        }
+
+                        if (stop)
+                        {
+                            return value;
+                        }
+
+                        total = total + value;
+                        if (total > 10)
+                        {
+                            break;
+                        }
+                    }
+
+                    return total;
+                }
+            }
+            """;
+        CSharpAnalysisResult analysis = new CSharpSemanticPipeline().Analyze(
+            source,
+            "EnumeratorForEachFlow.cs");
+        Assert.True(analysis.Succeeded, string.Join(Environment.NewLine, analysis.Diagnostics));
+        HirMethodDeclaration method = Assert.Single(Assert.Single(analysis.Hir!.Types).Methods);
+        HirForEachStatement statement = Assert.IsType<HirForEachStatement>(method.Body.Statements[1]);
+        HirContinueStatement next = Assert.Single(
+            statement.Body.DescendantsAndSelf().OfType<HirContinueStatement>());
+        HirBreakStatement stop = Assert.Single(
+            statement.Body.DescendantsAndSelf().OfType<HirBreakStatement>());
+        HirReturnStatement earlyReturn = Assert.Single(
+            statement.Body.DescendantsAndSelf().OfType<HirReturnStatement>());
+        HirReturnStatement continuation = Assert.IsType<HirReturnStatement>(method.Body.Statements[2]);
+        GraphDocument graph = new HirGraphProjector().Project(analysis.Hir, analysis.Semantics);
+
+        GraphControlFlowFunction flow = Assert.Single(new GraphControlFlowAnalyzer()
+            .AnalyzeAndValidate(graph)
+            .Functions);
+        GraphControlFlowLoop loop = Assert.Single(flow.Loops);
+
+        Assert.NotNull(loop.CleanupRegionId);
+        Assert.NotNull(loop.NormalCleanupNodeId);
+        Assert.NotNull(loop.ReturnCleanupNodeId);
+        Assert.NotNull(loop.ExceptionCleanupNodeId);
+        Assert.Equal(continuation.Id, loop.ExitNodeId);
+        Assert.Equal(statement.Id, loop.HeaderEntryNodeId);
+        Assert.Equal(statement.Id, loop.ContinueTargetNodeId);
+        Assert.Equal(statement.Variable.Id, loop.BodyEntryNodeId);
+        Assert.Equal(loop.NormalCleanupNodeId, Node(flow, stop.Id).SuccessorIds.Single());
+        Assert.Equal(statement.Id, Node(flow, next.Id).SuccessorIds.Single());
+        Assert.Equal(loop.ReturnCleanupNodeId, Node(flow, earlyReturn.Id).SuccessorIds.Single());
+        Assert.Equal(continuation.Id, Node(flow, loop.NormalCleanupNodeId!.Value).SuccessorIds.Single());
+        Assert.Equal(flow.ExitNodeId, Node(flow, loop.ReturnCleanupNodeId!.Value).SuccessorIds.Single());
+        Assert.Equal(flow.ExitNodeId, Node(flow, loop.ExceptionCleanupNodeId!.Value).SuccessorIds.Single());
+        Assert.False(Node(flow, loop.ExceptionCleanupNodeId.Value).IsReachable);
+        Assert.Contains(statement.Id, loop.ExceptionalSourceNodeIds);
+        Assert.Contains(statement.Variable.Id, loop.ExceptionalSourceNodeIds);
+        Assert.Contains(earlyReturn.Id, loop.ExceptionalSourceNodeIds);
+        Assert.NotEmpty(loop.BackEdgeArcIds);
+        Assert.True(flow.IsReducible);
+    }
+
+    [Fact]
     public void Analyze_ForExecutesInitializerOnceAndRoutesContinueThroughIncrementors()
     {
         const string source = """

@@ -8,9 +8,9 @@ conditional, or an editor-only node.
 The current strict-reader contracts are:
 
 - HIR `unifiedscript.hir/v0.7`;
-- Graph `unifiedscript.graph/v0.11`;
-- standalone patch `unifiedscript.patch/v0.18`;
-- patch plan `unifiedscript.patch-plan/v0.19`.
+- Graph `unifiedscript.graph/v0.12`;
+- standalone patch `unifiedscript.patch/v0.19`;
+- patch plan `unifiedscript.patch-plan/v0.20`.
 
 ## HIR structure
 
@@ -123,7 +123,7 @@ regions are represented.
 
 ## Visual construction
 
-Patch v0.18 adds a bounded `conditionalMemberAccess` expression payload:
+Patch v0.19 adds a bounded `conditionalMemberAccess` expression payload:
 
 ```json
 {
@@ -153,7 +153,7 @@ the bound semantic type. A member that exists only through an implicit result
 conversion therefore fails atomically instead of leaking a conversion into the
 shared-VM contract.
 
-Patch-plan v0.19 treats `receiver` as the canonical editable child of a
+Patch-plan v0.20 treats `receiver` as the canonical editable child of a
 `conditionalMemberAccess` payload. A producing step publishes the actual
 post-analysis conditional-access root; a later
 `replaceProducedExpressionInput` step can replace its receiver without
@@ -180,7 +180,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
 
 The sample covers a direct receiver, an effectful always-evaluated receiver,
 and composition with a null-coalescing receiver. Every `?.` emits HIR v0.7 and
-Graph v0.11 conditional-access/member-binding nodes with the explicit receiver
+Graph v0.12 conditional-access/member-binding nodes with the explicit receiver
 evaluation contract.
 
 ## Deliberate limits

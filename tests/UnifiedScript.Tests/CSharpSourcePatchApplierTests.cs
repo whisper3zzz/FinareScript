@@ -4663,15 +4663,16 @@ public sealed class CSharpSourcePatchApplierTests
     public void Apply_ReplacesForEachCollectionAndPreservesLoopIdentity()
     {
         const string source = """
+            using System.Collections.Generic;
             using UnifiedScript;
 
             static class Rules
             {
                 [Visual]
-                static int Count(string primary, string fallback)
+                static int Count(IEnumerable<int> primary, IEnumerable<int> fallback)
                 {
                     int total = 0;
-                    foreach (char value in primary)
+                    foreach (int value in primary)
                     {
                         total = total + 1;
                     }
@@ -4685,24 +4686,24 @@ public sealed class CSharpSourcePatchApplierTests
             "Game/ForEachCollectionEdit.cs");
         HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
         HirForEachStatement loop = Assert.IsType<HirForEachStatement>(method.Body.Statements[1]);
-        SemanticId stringType = GetTypeId(original, loop.Collection);
+        SemanticId collectionType = GetTypeId(original, loop.Collection);
         SemanticPatchDocument patch = SemanticPatchDocument.Create(
             original.Hir.Id,
             original.Semantics!.ConfigurationId,
             [new ReplaceForEachCollectionPatchOperation(
                 loop.Id,
                 loop.Collection.Id,
-                stringType,
+                collectionType,
                 new LocalReferencePatchExpression(
                     method.Parameters[1].Id,
                     method.Parameters[1].Name,
-                    stringType))]);
+                    collectionType))]);
 
         CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
 
         Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
         Assert.Contains(
-            "foreach (char value in fallback)",
+            "foreach (int value in fallback)",
             Assert.Single(result.PatchedRequest!.Sources).Source,
             StringComparison.Ordinal);
         HirMethodDeclaration changedMethod = Assert.Single(
@@ -4719,6 +4720,9 @@ public sealed class CSharpSourcePatchApplierTests
             Assert.Single(
                 result.Analysis.Semantics!.Nodes,
                 binding => binding.NodeId == changedCollection.Id).ReferencedSymbolId);
+        Assert.Equal(
+            ForEachIterationStrategy.Enumerator,
+            Assert.Single(result.Analysis.Semantics.ForEachLoops).Strategy);
     }
 
     private static (CSharpCompilationRequest Request, CSharpAnalysisResult Analysis) CreatePersistentRequest(

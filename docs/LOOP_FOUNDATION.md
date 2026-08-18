@@ -122,8 +122,8 @@ The current loop slices do not provide:
 - moving statements into or out of a loop;
 - moving or deleting an existing while loop (M4.7 can replace its condition);
 - changing a break/continue target;
-- general enumerator/ref/async `foreach`; the indexed string/array slice is
-  covered by [FOREACH_LOOPS.md](FOREACH_LOOPS.md), and post-test
+- pattern-only/conditional-disposal, ref, or async `foreach`; indexed and exact
+  synchronous enumerable slices are covered by [FOREACH_LOOPS.md](FOREACH_LOOPS.md), and post-test
   `do ... while` by [DO_WHILE_LOOPS.md](DO_WHILE_LOOPS.md);
 - restructuring/replacement of clauses on an existing `for`; M4.16 admits
   text-authored loops and M4.17 adds bounded whole-loop construction through

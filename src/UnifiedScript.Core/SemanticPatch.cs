@@ -316,7 +316,7 @@ public sealed record SemanticPatchDocument(
     SemanticId SemanticConfigurationId,
     IReadOnlyList<SemanticPatchOperation> Operations)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.18";
+    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.19";
 
     public static SemanticPatchDocument Create(
         SemanticId sourceCompilationId,
