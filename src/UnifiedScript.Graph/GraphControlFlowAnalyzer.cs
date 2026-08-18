@@ -628,22 +628,60 @@ public sealed class GraphControlFlowAnalyzer
             HashSet<SemanticId> directControlNodes = loopRegion.NodeIds
                 .Where(controlNodes.ContainsKey)
                 .ToHashSet();
-            SemanticId[] headerEntries = directControlNodes
-                .Where(nodeId => !arcs.Any(arc =>
-                    arc.ToNodeId == nodeId &&
-                    directControlNodes.Contains(arc.FromNodeId) &&
-                    !(arc.FromNodeId == loopNode.Id && arc.FromPort == "body")))
-                .OrderBy(static id => id.Value, StringComparer.Ordinal)
-                .ToArray();
-            if (headerEntries.Length != 1)
-            {
-                throw new InvalidOperationException(
-                    $"Loop region '{loopRegion.Id}' requires one control-flow header entry.");
-            }
-
-            SemanticId headerEntry = headerEntries[0];
             SemanticId bodyEntry = RequireControlSuccessor(loopNode.Id, "body", arcs);
             SemanticId loopExit = RequireControlSuccessor(loopNode.Id, "exit", arcs);
+            bool isDoWhile = loopNode.Properties.TryGetValue("loopForm", out string? loopForm) &&
+                string.Equals(loopForm, "doWhile", StringComparison.Ordinal);
+            SemanticId headerEntry;
+            SemanticId? doWhileConditionEntry = null;
+            if (isDoWhile)
+            {
+                SemanticId[] initialEntries = directControlNodes
+                    .Where(nodeId => controlNodes[nodeId].Kind == "loopEntry")
+                    .OrderBy(static id => id.Value, StringComparer.Ordinal)
+                    .ToArray();
+                if (initialEntries.Length != 1)
+                {
+                    throw new InvalidOperationException(
+                        $"Do-while region '{loopRegion.Id}' requires one initial body entry node.");
+                }
+
+                HashSet<SemanticId> conditionNodes = directControlNodes
+                    .Where(nodeId => nodeId != initialEntries[0])
+                    .ToHashSet();
+                SemanticId[] conditionEntries = conditionNodes
+                    .Where(nodeId => !arcs.Any(arc =>
+                        arc.ToNodeId == nodeId &&
+                        conditionNodes.Contains(arc.FromNodeId) &&
+                        !(arc.FromNodeId == loopNode.Id && arc.FromPort == "body")))
+                    .OrderBy(static id => id.Value, StringComparer.Ordinal)
+                    .ToArray();
+                if (conditionEntries.Length != 1)
+                {
+                    throw new InvalidOperationException(
+                        $"Do-while region '{loopRegion.Id}' requires one condition entry node.");
+                }
+
+                headerEntry = bodyEntry;
+                doWhileConditionEntry = conditionEntries[0];
+            }
+            else
+            {
+                SemanticId[] headerEntries = directControlNodes
+                    .Where(nodeId => !arcs.Any(arc =>
+                        arc.ToNodeId == nodeId &&
+                        directControlNodes.Contains(arc.FromNodeId) &&
+                        !(arc.FromNodeId == loopNode.Id && arc.FromPort == "body")))
+                    .OrderBy(static id => id.Value, StringComparer.Ordinal)
+                    .ToArray();
+                if (headerEntries.Length != 1)
+                {
+                    throw new InvalidOperationException(
+                        $"Loop region '{loopRegion.Id}' requires one control-flow header entry.");
+                }
+
+                headerEntry = headerEntries[0];
+            }
             HashSet<SemanticId> bodyRegions = CollectRegionSubtree(bodyRegion.Id, regions);
             HashSet<SemanticId> bodyNodes = bodyRegions
                 .SelectMany(id => regions[id].NodeIds)
@@ -665,9 +703,10 @@ public sealed class GraphControlFlowAnalyzer
                     $"Loop increment region '{incrementRegion!.Id}' requires at most one control entry.");
             }
 
-            SemanticId continueTarget = incrementControlEntries.Length == 1
-                ? incrementControlEntries[0]
-                : headerEntry;
+            SemanticId continueTarget = doWhileConditionEntry ??
+                (incrementControlEntries.Length == 1
+                    ? incrementControlEntries[0]
+                    : headerEntry);
             SemanticId[] breaks = controlNodes.Values
                 .Where(static node => node.Kind == "break")
                 .Where(node => nodeOwners.TryGetValue(node.Id, out SemanticId ownerId) &&

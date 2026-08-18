@@ -68,6 +68,12 @@ internal static class HirIdentityRewriter
                 Condition = RewriteExpression(whileStatement.Condition, identities),
                 Body = RewriteBlock(whileStatement.Body, identities),
             },
+            HirDoWhileStatement doWhileStatement => doWhileStatement with
+            {
+                Id = GetId(doWhileStatement, identities),
+                Body = RewriteBlock(doWhileStatement.Body, identities),
+                Condition = RewriteExpression(doWhileStatement.Condition, identities),
+            },
             HirForStatement forStatement => forStatement with
             {
                 Id = GetId(forStatement, identities),

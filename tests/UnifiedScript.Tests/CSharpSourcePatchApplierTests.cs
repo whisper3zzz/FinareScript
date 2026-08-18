@@ -4015,6 +4015,80 @@ public sealed class CSharpSourcePatchApplierTests
     }
 
     [Fact]
+    public void Apply_ReplacesDoWhileConditionWithoutRecreatingBodyOrLoopIdentity()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int Run(int value, int stopAt, bool enabled)
+                {
+                    int result = value;
+                    do
+                    {
+                        result = result - 1;
+                    }
+                    while (result > 0);
+
+                    return result;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) =
+            CreatePersistentRequest(source, "Game/DoWhileConditionEdit.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement resultDefinition = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirDoWhileStatement loop = Assert.IsType<HirDoWhileStatement>(method.Body.Statements[1]);
+        HirExpressionStatement bodyStatement = Assert.IsType<HirExpressionStatement>(
+            Assert.Single(loop.Body.Statements));
+        SemanticId intType = GetTypeId(original, resultDefinition);
+        SemanticId boolType = GetTypeId(original, loop.Condition);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new ReplaceDoWhileConditionPatchOperation(
+                loop.Id,
+                loop.Condition.Id,
+                boolType,
+                new BinaryPatchExpression(
+                    "&&",
+                    new LocalReferencePatchExpression(
+                        method.Parameters[2].Id,
+                        method.Parameters[2].Name,
+                        boolType),
+                    new BinaryPatchExpression(
+                        ">",
+                        new LocalReferencePatchExpression(
+                            resultDefinition.Id,
+                            resultDefinition.Name,
+                            intType),
+                        new LocalReferencePatchExpression(
+                            method.Parameters[1].Id,
+                            method.Parameters[1].Name,
+                            intType),
+                        boolType),
+                    boolType))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains("while (enabled && (result > stopAt));", patchedSource, StringComparison.Ordinal);
+        HirMethodDeclaration changedMethod = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirDoWhileStatement changedLoop = Assert.IsType<HirDoWhileStatement>(
+            changedMethod.Body.Statements[1]);
+        Assert.Equal(method.Id, changedMethod.Id);
+        Assert.Equal(method.Body.Id, changedMethod.Body.Id);
+        Assert.Equal(loop.Id, changedLoop.Id);
+        Assert.Equal(loop.Body.Id, changedLoop.Body.Id);
+        Assert.Equal(bodyStatement.Id, Assert.Single(changedLoop.Body.Statements).Id);
+        Assert.NotEqual(loop.Condition.Id, changedLoop.Condition.Id);
+    }
+
+    [Fact]
     public void Apply_RejectsAssignmentValueReplacementWithAStaleEndpoint()
     {
         const string source = """

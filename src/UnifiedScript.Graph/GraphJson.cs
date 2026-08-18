@@ -250,22 +250,43 @@ public static class GraphJson
                 GraphRegion[] children = region.ChildRegionIds.Select(id => regions[id]).ToArray();
                 bool hasLoopNode = region.NodeIds.Contains(region.SourceNodeId) &&
                     nodes[region.SourceNodeId].Kind == "loop";
-                bool isFor = hasLoopNode &&
-                    nodes[region.SourceNodeId].Properties.TryGetValue(
-                        "loopForm",
-                        out string? loopForm) &&
-                    string.Equals(loopForm, "for", StringComparison.Ordinal);
+                GraphNode? loopNode = hasLoopNode ? nodes[region.SourceNodeId] : null;
+                string? loopForm = null;
+                bool hasLoopForm = loopNode is not null &&
+                    loopNode.Properties.TryGetValue("loopForm", out loopForm);
+                bool isFor = hasLoopForm && string.Equals(loopForm, "for", StringComparison.Ordinal);
+                bool isDoWhile = hasLoopForm &&
+                    string.Equals(loopForm, "doWhile", StringComparison.Ordinal);
+                bool hasSupportedLoopForm = !hasLoopForm || isFor || isDoWhile;
                 bool hasValidChildren = isFor
                     ? children.Length == 3 &&
                         children[0].Kind == GraphRegionKind.LoopInitializer &&
                         children[1].Kind == GraphRegionKind.LoopBody &&
                         children[2].Kind == GraphRegionKind.LoopIncrement
                     : children.Length == 1 && children[0].Kind == GraphRegionKind.LoopBody;
-                if (!hasLoopNode || !hasValidChildren)
+                GraphNode[] loopEntries = region.NodeIds
+                    .Select(id => nodes[id])
+                    .Where(static node => node.Kind == "loopEntry")
+                    .ToArray();
+                bool hasValidEntryShape = isDoWhile
+                    ? loopEntries.Length == 1 &&
+                        loopEntries[0].Properties.TryGetValue("phase", out string? phase) &&
+                        string.Equals(phase, "initialBodyEntry", StringComparison.Ordinal)
+                    : loopEntries.Length == 0;
+                bool hasValidDoWhileProperties = !isDoWhile ||
+                    loopNode!.Properties.TryGetValue("conditionEvaluation", out string? evaluation) &&
+                    string.Equals(evaluation, "afterBody", StringComparison.Ordinal) &&
+                    loopNode.Properties.TryGetValue("continueTarget", out string? continueTarget) &&
+                    string.Equals(continueTarget, "condition", StringComparison.Ordinal) &&
+                    loopNode.Properties.TryGetValue("evaluationOrder", out string? order) &&
+                    string.Equals(order, "body,condition", StringComparison.Ordinal);
+                if (!hasLoopNode || !hasSupportedLoopForm || !hasValidChildren ||
+                    !hasValidEntryShape || !hasValidDoWhileProperties)
                 {
                     throw new JsonException(
-                        $"Loop region '{region.Id}' requires its loop node and either one while-body " +
-                        "child or ordered for initializer/body/increment children.");
+                        $"Loop region '{region.Id}' requires a valid while, do-while, or " +
+                        "ordered for initializer/body/increment children with the required " +
+                        "entry nodes and properties.");
                 }
             }
         }

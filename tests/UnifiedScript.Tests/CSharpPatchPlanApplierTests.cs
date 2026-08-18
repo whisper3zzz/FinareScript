@@ -2084,6 +2084,103 @@ public sealed class CSharpPatchPlanApplierTests
     }
 
     [Fact]
+    public void Apply_ConstructsDoWhileBodyAndEditsItsProducedConditionHandle()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int value, bool enabled)
+                {
+                    int result = value;
+                    return result;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/ProducedDoWhilePlan.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement resultDefinition = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+        SemanticId intType = GetTypeId(original, resultDefinition);
+        SemanticId boolType = GetTypeId(original, method.Parameters[1]);
+        var loopProducer = new InsertStatementPatchPlanStep(
+            "insertDoLoop",
+            method.Body.Id,
+            resultDefinition.Id,
+            returnStatement.Id,
+            new DoWhilePatchStatement(new LocalReferencePatchExpression(
+                method.Parameters[1].Id,
+                method.Parameters[1].Name,
+                boolType)));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                loopProducer,
+                new ReplaceProducedDoWhileConditionPatchPlanStep(
+                    "guardDoLoop",
+                    method.Body.Id,
+                    loopProducer.StepId,
+                    new BinaryPatchExpression(
+                        "&&",
+                        new LocalReferencePatchExpression(
+                            method.Parameters[1].Id,
+                            method.Parameters[1].Name,
+                            boolType),
+                        new BinaryPatchExpression(
+                            ">",
+                            new LocalReferencePatchExpression(
+                                resultDefinition.Id,
+                                resultDefinition.Name,
+                                intType),
+                            new LiteralPatchExpression("0", intType),
+                            boolType),
+                        boolType)),
+                new InsertLoopBodyStatementPatchPlanStep(
+                    "decrementResult",
+                    method.Body.Id,
+                    loopProducer.StepId,
+                    new LocalAssignmentPatchStatement(
+                        resultDefinition.Id,
+                        resultDefinition.Name,
+                        intType,
+                        new BinaryPatchExpression(
+                            "-",
+                            new LocalReferencePatchExpression(
+                                resultDefinition.Id,
+                                resultDefinition.Name,
+                                intType),
+                            new LiteralPatchExpression("1", intType),
+                            intType))),
+            ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains("do", patchedSource, StringComparison.Ordinal);
+        Assert.Contains("result = result - 1;", patchedSource, StringComparison.Ordinal);
+        Assert.Contains("while (enabled && (result > 0));", patchedSource, StringComparison.Ordinal);
+        HirMethodDeclaration changedMethod = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirDoWhileStatement insertedLoop = Assert.IsType<HirDoWhileStatement>(
+            changedMethod.Body.Statements[1]);
+        Assert.Single(insertedLoop.Body.Statements);
+        Assert.Equal(returnStatement.Id, changedMethod.Body.Statements[2].Id);
+        GraphDocument graph = new HirGraphProjector().Project(
+            result.Analysis.Hir,
+            result.Analysis.Semantics);
+        GraphNode graphLoop = Assert.Single(
+            Assert.Single(graph.Functions).Nodes,
+            node => node.Id == insertedLoop.Id);
+        Assert.Equal("doWhile", graphLoop.Properties["loopForm"]);
+    }
+
+    [Fact]
     public void Apply_RollsBackProducedLoopWhenItsConditionHandleReferencesAMissingLocal()
     {
         const string source = """

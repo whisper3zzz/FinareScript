@@ -317,6 +317,51 @@ public sealed class SemanticPatchPlanJsonTests
     }
 
     [Fact]
+    public void SerializeAndDeserialize_PreserveProducedDoWhileConditionHandle()
+    {
+        SemanticId blockId = SemanticId.FromKey("generated-do-loop-parent");
+        SemanticId boolType = SemanticId.FromKey("System.Boolean");
+        var producer = new InsertStatementPatchPlanStep(
+            "insertDoLoop",
+            blockId,
+            null,
+            SemanticId.FromKey("generated-do-loop-next"),
+            new DoWhilePatchStatement(new LiteralPatchExpression("true", boolType)));
+        var replacement = new ReplaceProducedDoWhileConditionPatchPlanStep(
+            "editGeneratedDoLoop",
+            blockId,
+            producer.StepId,
+            new LiteralPatchExpression("false", boolType));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("generated-do-loop-compilation"),
+            SemanticId.FromKey("generated-do-loop-configuration"),
+            [producer, replacement]);
+
+        string json = SemanticPatchPlanJson.Serialize(plan);
+        SemanticPatchPlanDocument roundTrip = SemanticPatchPlanJson.Deserialize(json);
+
+        Assert.Equal(producer, Assert.IsType<InsertStatementPatchPlanStep>(roundTrip.Steps[0]));
+        Assert.Equal(
+            replacement,
+            Assert.IsType<ReplaceProducedDoWhileConditionPatchPlanStep>(roundTrip.Steps[1]));
+        Assert.Contains(
+            "\"step\": \"replaceProducedDoWhileCondition\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Throws<JsonException>(() => SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("invalid-produced-do-compilation"),
+            SemanticId.FromKey("generated-do-loop-configuration"),
+            [
+                producer with
+                {
+                    NewStatement = new WhilePatchStatement(
+                        new LiteralPatchExpression("true", boolType)),
+                },
+                replacement,
+            ]));
+    }
+
+    [Fact]
     public void Create_RejectsInvalidGeneralProducedExpressionHandles()
     {
         SemanticId blockId = SemanticId.FromKey("invalid-general-produced-parent");
@@ -1345,7 +1390,7 @@ public sealed class SemanticPatchPlanJsonTests
         Assert.Equal(third.StepId, roundTripThird.StepId);
         Assert.Equal(third.TargetPath, roundTripThird.TargetPath);
         Assert.Equal(third.NewInput, roundTripThird.NewInput);
-        Assert.Equal("unifiedscript.patch-plan/v0.17", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch-plan/v0.18", roundTrip.SchemaVersion);
         Assert.Contains("\"step\": \"replaceProducedExpressionInput\"", json);
         Assert.Contains("\"targetPath\": []", json);
     }
@@ -1399,7 +1444,7 @@ public sealed class SemanticPatchPlanJsonTests
         Assert.Equal(consumer.ExpectedInputTypeId, roundTripConsumer.ExpectedInputTypeId);
         Assert.Equal(consumer.ExpectedTargetTypeId, roundTripConsumer.ExpectedTargetTypeId);
         Assert.Equal(consumer.NewInput, roundTripConsumer.NewInput);
-        Assert.Equal("unifiedscript.patch-plan/v0.17", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch-plan/v0.18", roundTrip.SchemaVersion);
         Assert.Contains("\"expression\": \"conditionalMemberAccess\"", json);
         Assert.Contains("\"inputPort\": \"receiver\"", json);
     }

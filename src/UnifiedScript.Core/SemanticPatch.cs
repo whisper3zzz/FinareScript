@@ -9,6 +9,7 @@ namespace UnifiedScript.Core;
 [JsonDerivedType(typeof(ReplaceExpressionInputPatchOperation), "replaceExpressionInput")]
 [JsonDerivedType(typeof(ReplaceAssignmentValuePatchOperation), "replaceAssignmentValue")]
 [JsonDerivedType(typeof(ReplaceWhileConditionPatchOperation), "replaceWhileCondition")]
+[JsonDerivedType(typeof(ReplaceDoWhileConditionPatchOperation), "replaceDoWhileCondition")]
 [JsonDerivedType(typeof(ReplaceForConditionPatchOperation), "replaceForCondition")]
 [JsonDerivedType(
     typeof(ReplaceForDeclarationInitializerPatchOperation),
@@ -67,6 +68,12 @@ public sealed record ReplaceAssignmentValuePatchOperation(
     PatchExpression NewValue) : SemanticPatchOperation(TargetNodeId);
 
 public sealed record ReplaceWhileConditionPatchOperation(
+    SemanticId TargetNodeId,
+    SemanticId ExpectedConditionNodeId,
+    SemanticId ExpectedConditionTypeId,
+    PatchExpression NewCondition) : SemanticPatchOperation(TargetNodeId);
+
+public sealed record ReplaceDoWhileConditionPatchOperation(
     SemanticId TargetNodeId,
     SemanticId ExpectedConditionNodeId,
     SemanticId ExpectedConditionTypeId,
@@ -136,6 +143,7 @@ public sealed record ReplaceReturnValuePatchOperation(
 [JsonDerivedType(typeof(LocalAssignmentPatchStatement), "localAssignment")]
 [JsonDerivedType(typeof(IfPatchStatement), "if")]
 [JsonDerivedType(typeof(WhilePatchStatement), "while")]
+[JsonDerivedType(typeof(DoWhilePatchStatement), "doWhile")]
 [JsonDerivedType(typeof(ForPatchStatement), "for")]
 [JsonDerivedType(typeof(BreakPatchStatement), "break")]
 [JsonDerivedType(typeof(ContinuePatchStatement), "continue")]
@@ -218,6 +226,9 @@ public sealed record IfPatchStatement(
 public sealed record WhilePatchStatement(
     PatchExpression Condition) : InsertPatchStatement;
 
+public sealed record DoWhilePatchStatement(
+    PatchExpression Condition) : InsertPatchStatement;
+
 public sealed record ForVariableDeclarationPatch(
     string TypeName,
     IReadOnlyList<ForVariableDeclaratorPatch> Variables);
@@ -291,7 +302,7 @@ public sealed record SemanticPatchDocument(
     SemanticId SemanticConfigurationId,
     IReadOnlyList<SemanticPatchOperation> Operations)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.16";
+    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.17";
 
     public static SemanticPatchDocument Create(
         SemanticId sourceCompilationId,

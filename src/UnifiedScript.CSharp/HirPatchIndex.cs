@@ -59,6 +59,13 @@ internal sealed class HirPatchIndex
                 return true;
             }
 
+            if (current.EntryStatement is HirDoWhileStatement doWhileLoop &&
+                doWhileLoop.Body.Id == current.Block.Id)
+            {
+                loop = doWhileLoop;
+                return true;
+            }
+
             if (current.EntryStatement is HirForStatement forLoop &&
                 forLoop.Body.Id == current.Block.Id)
             {
@@ -211,6 +218,10 @@ internal sealed class HirPatchIndex
                 case HirWhileStatement whileStatement:
                     AddExpression(whileStatement.Condition, whileStatement, block, method, null);
                     AddBlock(whileStatement.Body, method, block, whileStatement);
+                    break;
+                case HirDoWhileStatement doWhileStatement:
+                    AddBlock(doWhileStatement.Body, method, block, doWhileStatement);
+                    AddExpression(doWhileStatement.Condition, doWhileStatement, block, method, null);
                     break;
                 case HirForStatement forStatement:
                     if (forStatement.Declaration is not null)

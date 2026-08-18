@@ -1114,6 +1114,75 @@ its implicit receiver as an explicit shared-VM contract.
 13. The full solution, 276-test suite, format check, repository validator, 21
     patch/plan CLI regressions, and four analyze regressions pass.
 
+## M4.19 implemented vertical slice
+
+- strict HIR `unifiedscript.hir/v0.6`, Graph
+  `unifiedscript.graph/v0.10`, patch `unifiedscript.patch/v0.17`, and plan
+  `unifiedscript.patch-plan/v0.18` readers
+- first-class `HirDoWhileStatement` with body-before-condition traversal and
+  `doWhile` JSON identity, never desugared to a pre-test while
+- Visual C# acceptance for `DoStatementSyntax` and nearest-loop break/continue
+  resolution across while, do, and for
+- Roslyn lowering, semantic expression enumeration, patch indexing, syntax
+  matching, structural fingerprints, identity reconciliation, and identity
+  rewriting for the post-test statement
+- Graph v0.10 `loopForm: doWhile`, `conditionEvaluation: afterBody`,
+  `continueTarget: condition`, and `evaluationOrder: body,condition`
+- a generated `loopEntry` control node that enters the body once without
+  exposing the condition's false exit on initial entry
+- body fallthrough and continue routing to the first condition effect or loop
+  decision, with condition-true returning to the body and condition-false
+  reaching the loop exit
+- derived CFG facts using the first body control node as the cyclic header and
+  the condition entry as the distinct continue target, including empty bodies,
+  condition effects, reducible SCCs, breaks, continues, and back-edge arcs
+- standalone `replaceDoWhileCondition` with exact loop/condition/type/trivia,
+  same-method scope, Graph, and CFG validation
+- direct `replaceDoWhileCondition` plan wrapper and symbolic
+  `replaceProducedDoWhileCondition` resolution through a real post-reanalysis
+  loop/condition ID
+- dedicated `DoWhilePatchStatement` construction as Roslyn
+  `DoStatementSyntax`, Boolean condition validation, symbolic body population,
+  nested root/branch/loop producer registration, and nearest-loop transfers
+- checked-in text-authored `DoWhileRules.cs` and a three-stage
+  `BuildDoWhile.plan.json` construction/produced-condition/body sample
+- architecture, roadmap, README, patch-plan, dedicated do-while contract,
+  schema fixture, and repository-validator migration
+
+## M4.19 acceptance criteria
+
+1. A text-authored do-while lowers to `HirDoWhileStatement` under HIR v0.6 and
+   never becomes `HirWhileStatement`.
+2. HIR traversal and identity evidence preserve body-before-condition source
+   order; formatting changes retain the loop, body, transfers, and surviving
+   expression identities.
+3. Graph v0.10 emits one loop/body region pair, one generated initial-body
+   entry, one post-body condition decision, and explicit do-while properties.
+4. No initial control edge can reach the false exit before entering the body.
+5. Normal body fallthrough and every nearest-loop continue target the first
+   condition effect or the loop decision.
+6. A true condition returns to the body header, a false condition exits, and a
+   break bypasses the condition.
+7. Derived CFG publishes body header, condition continue target, exit,
+   transfers, and non-empty back-edge facts while remaining reducible for empty
+   and non-empty bodies.
+8. Patch v0.17 round-trips and validates `replaceDoWhileCondition` plus the
+   `doWhile` insertion payload.
+9. Exact condition replacement preserves loop/body/unrelated-statement
+   identities, requires Boolean type, and rejects stale endpoints or meaningful
+   discarded trivia atomically.
+10. Plan v0.18 round-trips direct and produced do-while condition steps and
+    rejects producer-kind, parent-target, order, or type mismatches.
+11. A visual plan can construct a do-while, populate its actual generated body,
+    and repeatedly resolve its current condition through the producer handle
+    without predicting IDs.
+12. Generated do-while loops compose inside root blocks, generated branches,
+    and generated loop bodies; break/continue remain nearest-loop transfers.
+13. The checked-in text sample analyzes through HIR/semantics/Graph/CFG and the
+    checked-in three-stage plan applies through the public CLI.
+14. The full solution, 285-test suite, format check, repository validator, 22
+    patch/plan CLI regressions, and five analyze regressions pass.
+
 ## Deliberate limits
 
 M4 consumes derived CFG facts at patch time but does not serialize them or
@@ -1134,7 +1203,7 @@ queries. Branch and loop-body insertions append and cannot move or delete
 existing structures. Loop transfers cannot be retargeted.
 Existing-`for` whole-clause restructuring remains unavailable beyond M4.18's
 exact condition/declaration-initializer/assignment-value/incrementor endpoints.
-`do`/`foreach`, switch,
+`foreach`, switch,
 conditional element access,
 conditional effect subgraphs for lazy expression inputs, exception edges,
 standalone short-circuit CFG regions, async state-machine transitions, control
@@ -1142,9 +1211,9 @@ dependence, SSA, and automatic node placement remain outside the current slice.
 
 ## Next slice
 
-M4.19 should add `do` as the next independent structured loop. It must preserve
-condition-after-body evaluation, at-least-once execution, condition effects,
-continue-to-condition routing, and exact source identity instead of lowering to
-`while`. `foreach` remains separate because enumerator acquisition, disposal,
-iteration-variable scope, and collection mutation semantics cannot be modeled
-as a cosmetic for-loop variant.
+M4.20 should add `foreach` as the next independent structured loop. It must
+model collection evaluation once, enumerator acquisition, `MoveNext`, current
+value binding, iteration-variable scope, disposal/finally behavior, and
+continue/break targets explicitly. It must not be treated as a cosmetic `for`
+because doing so would erase lifetime and exception semantics needed by a
+shared VM.

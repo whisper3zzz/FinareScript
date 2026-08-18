@@ -43,6 +43,14 @@ public static class SemanticPatchPlanExpressions
             {
                 NewCondition = Rewrite(replacement.NewCondition, resolver),
             },
+            ReplaceDoWhileConditionPatchPlanStep replacement => replacement with
+            {
+                NewCondition = Rewrite(replacement.NewCondition, resolver),
+            },
+            ReplaceProducedDoWhileConditionPatchPlanStep replacement => replacement with
+            {
+                NewCondition = Rewrite(replacement.NewCondition, resolver),
+            },
             ReplaceForConditionPatchPlanStep replacement => replacement with
             {
                 NewCondition = Rewrite(replacement.NewCondition, resolver),
@@ -113,6 +121,8 @@ public static class SemanticPatchPlanExpressions
             ReplaceProducedExpressionInputPatchPlanStep replacement => replacement.NewInput,
             ReplaceWhileConditionPatchPlanStep replacement => replacement.NewCondition,
             ReplaceProducedWhileConditionPatchPlanStep replacement => replacement.NewCondition,
+            ReplaceDoWhileConditionPatchPlanStep replacement => replacement.NewCondition,
+            ReplaceProducedDoWhileConditionPatchPlanStep replacement => replacement.NewCondition,
             ReplaceForConditionPatchPlanStep replacement => replacement.NewCondition,
             ReplaceProducedForConditionPatchPlanStep replacement => replacement.NewCondition,
             ReplaceForDeclarationInitializerPatchPlanStep replacement => replacement.NewInitializer,
@@ -170,6 +180,9 @@ public static class SemanticPatchPlanExpressions
             case WhilePatchStatement loop:
                 yield return loop.Condition;
                 break;
+            case DoWhilePatchStatement loop:
+                yield return loop.Condition;
+                break;
             case ForPatchStatement forStatement:
                 if (forStatement.Declaration is not null)
                 {
@@ -207,6 +220,7 @@ public static class SemanticPatchPlanExpressions
         LocalAssignmentPatchStatement assignment => assignment.Value,
         IfPatchStatement branch => branch.Condition,
         WhilePatchStatement loop => loop.Condition,
+        DoWhilePatchStatement loop => loop.Condition,
         ReturnPatchStatement valueReturn => valueReturn.Expression,
         _ => null,
     };
@@ -231,6 +245,10 @@ public static class SemanticPatchPlanExpressions
                 Condition = Rewrite(branch.Condition, resolver),
             },
             WhilePatchStatement loop => loop with
+            {
+                Condition = Rewrite(loop.Condition, resolver),
+            },
+            DoWhilePatchStatement loop => loop with
             {
                 Condition = Rewrite(loop.Condition, resolver),
             },

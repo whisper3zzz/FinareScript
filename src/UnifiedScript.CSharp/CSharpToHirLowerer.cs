@@ -139,6 +139,11 @@ public sealed class CSharpToHirLowerer
                 RoslynSourceSpan.FromNode(whileStatement, filePath),
                 LowerExpression(whileStatement.Condition, filePath, ownerKey),
                 LowerAsBlock(whileStatement.Statement, filePath, ownerKey)),
+            DoStatementSyntax doStatement => new HirDoWhileStatement(
+                CSharpSemanticIds.ForNode(filePath, ownerKey, doStatement),
+                RoslynSourceSpan.FromNode(doStatement, filePath),
+                LowerAsBlock(doStatement.Statement, filePath, ownerKey),
+                LowerExpression(doStatement.Condition, filePath, ownerKey)),
             ForStatementSyntax forStatement => LowerFor(forStatement, filePath, ownerKey),
             BreakStatementSyntax breakStatement => new HirBreakStatement(
                 CSharpSemanticIds.ForNode(filePath, ownerKey, breakStatement),

@@ -42,6 +42,7 @@ public sealed record HirParameter(
 [JsonDerivedType(typeof(HirExpressionStatement), "expressionStatement")]
 [JsonDerivedType(typeof(HirIfStatement), "if")]
 [JsonDerivedType(typeof(HirWhileStatement), "while")]
+[JsonDerivedType(typeof(HirDoWhileStatement), "doWhile")]
 [JsonDerivedType(typeof(HirForStatement), "for")]
 [JsonDerivedType(typeof(HirBreakStatement), "break")]
 [JsonDerivedType(typeof(HirContinueStatement), "continue")]
@@ -77,6 +78,12 @@ public sealed record HirWhileStatement(
     SourceSpan Span,
     HirExpression Condition,
     HirBlockStatement Body) : HirStatement(Id, Span);
+
+public sealed record HirDoWhileStatement(
+    SemanticId Id,
+    SourceSpan Span,
+    HirBlockStatement Body,
+    HirExpression Condition) : HirStatement(Id, Span);
 
 public sealed record HirForStatement(
     SemanticId Id,

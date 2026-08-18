@@ -215,6 +215,37 @@ public sealed class SemanticPatchJsonTests
     }
 
     [Fact]
+    public void SerializeAndDeserialize_PreserveDoWhileConditionEditAndConstructor()
+    {
+        SemanticId boolType = SemanticId.FromKey("System.Boolean");
+        var replacement = new ReplaceDoWhileConditionPatchOperation(
+            SemanticId.FromKey("edit-do-loop"),
+            SemanticId.FromKey("edit-do-condition"),
+            boolType,
+            new LiteralPatchExpression("false", boolType));
+        var insertion = new InsertStatementPatchOperation(
+            SemanticId.FromKey("do-parent"),
+            null,
+            null,
+            new DoWhilePatchStatement(new LiteralPatchExpression("true", boolType)));
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            SemanticId.FromKey("do-compilation"),
+            SemanticId.FromKey("do-configuration"),
+            [replacement, insertion]);
+
+        string json = SemanticPatchJson.Serialize(patch);
+        SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
+
+        Assert.Equal(
+            replacement,
+            Assert.IsType<ReplaceDoWhileConditionPatchOperation>(roundTrip.Operations[0]));
+        Assert.IsType<DoWhilePatchStatement>(
+            Assert.IsType<InsertStatementPatchOperation>(roundTrip.Operations[1]).NewStatement);
+        Assert.Contains("\"operation\": \"replaceDoWhileCondition\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"statement\": \"doWhile\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SerializeAndDeserialize_PreserveGeneralExpressionEndpointReplacements()
     {
         SemanticId intType = SemanticId.FromKey("System.Int32");
@@ -435,7 +466,7 @@ public sealed class SemanticPatchJsonTests
         ReplaceReturnValuePatchOperation operation = Assert.IsType<ReplaceReturnValuePatchOperation>(
             Assert.Single(roundTrip.Operations));
         Assert.Equal(expression, Assert.IsType<ConditionalPatchExpression>(operation.NewValue));
-        Assert.Equal("unifiedscript.patch/v0.16", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch/v0.17", roundTrip.SchemaVersion);
         Assert.Contains("\"expression\": \"conditional\"", json);
         Assert.Contains("\"whenTrue\"", json);
         Assert.Contains("\"whenFalse\"", json);
@@ -469,7 +500,7 @@ public sealed class SemanticPatchJsonTests
         ReplaceReturnValuePatchOperation operation = Assert.IsType<ReplaceReturnValuePatchOperation>(
             Assert.Single(roundTrip.Operations));
         Assert.Equal(expression, Assert.IsType<BinaryPatchExpression>(operation.NewValue));
-        Assert.Equal("unifiedscript.patch/v0.16", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch/v0.17", roundTrip.SchemaVersion);
         Assert.Contains("\"operator\": \"??\"", json, StringComparison.Ordinal);
     }
 
@@ -502,7 +533,7 @@ public sealed class SemanticPatchJsonTests
         Assert.Equal(
             expression,
             Assert.IsType<ConditionalMemberAccessPatchExpression>(operation.NewValue));
-        Assert.Equal("unifiedscript.patch/v0.16", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch/v0.17", roundTrip.SchemaVersion);
         Assert.Contains("\"expression\": \"conditionalMemberAccess\"", json);
         Assert.Contains("\"memberName\": \"Length\"", json);
         Assert.Contains("\"receiver\"", json);

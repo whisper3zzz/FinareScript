@@ -217,6 +217,7 @@ public sealed class HirGraphProjector
                 HirExpressionStatement expression => ProjectExpressionStatement(expression, incoming, regionId),
                 HirIfStatement ifStatement => ProjectIf(ifStatement, incoming, regionId),
                 HirWhileStatement whileStatement => ProjectWhile(whileStatement, incoming, regionId),
+                HirDoWhileStatement doWhileStatement => ProjectDoWhile(doWhileStatement, incoming, regionId),
                 HirForStatement forStatement => ProjectFor(forStatement, incoming, regionId),
                 HirBreakStatement breakStatement => ProjectBreak(breakStatement, incoming, regionId),
                 HirContinueStatement continueStatement => ProjectContinue(continueStatement, incoming, regionId),
@@ -606,6 +607,101 @@ public sealed class HirGraphProjector
                 ConnectIncoming(incrementExits, headerTarget.NodeId, headerTarget.Port);
             }
 
+            return [new ControlEndpoint(statement.Id, "exit"), .. context.BreakExits];
+        }
+
+        private IReadOnlyList<ControlEndpoint> ProjectDoWhile(
+            HirDoWhileStatement statement,
+            IReadOnlyList<ControlEndpoint> incoming,
+            SemanticId parentRegionId)
+        {
+            SemanticId loopRegionId = RegionId(statement.Id, GraphRegionKind.Loop);
+            AddRegion(new RegionBuilder(
+                loopRegionId,
+                GraphRegionKind.Loop,
+                parentRegionId,
+                statement.Id,
+                statement.Span,
+                false));
+            SemanticId bodyRegionId = RegionId(statement.Id, GraphRegionKind.LoopBody);
+            AddRegion(new RegionBuilder(
+                bodyRegionId,
+                GraphRegionKind.LoopBody,
+                loopRegionId,
+                statement.Body.Id,
+                statement.Body.Span,
+                false));
+
+            SemanticId entryId = SemanticId.FromKey($"{statement.Id}:graph:doEntry");
+            AddNode(new GraphNode(
+                entryId,
+                "loopEntry",
+                "Do Entry",
+                statement.Span,
+                [
+                    new GraphPort("in", GraphPortDirection.Input, GraphPortKind.Control),
+                    new GraphPort("then", GraphPortDirection.Output, GraphPortKind.Control),
+                ],
+                new SortedDictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["phase"] = "initialBodyEntry",
+                }),
+                loopRegionId);
+            ConnectIncoming(incoming, entryId, "in");
+
+            ExpressionProjection condition = ProjectExpression(statement.Condition, loopRegionId);
+            SemanticId[] conditionEffects = condition.Effects.Distinct().ToArray();
+            var properties = new SortedDictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["loopForm"] = "doWhile",
+                ["conditionEvaluation"] = "afterBody",
+                ["continueTarget"] = "condition",
+                ["evaluationOrder"] = "body,condition",
+            };
+            semantics.ApplyNodeProperties(statement.Condition.Id, properties);
+            AddNode(new GraphNode(
+                statement.Id,
+                "loop",
+                "Do While",
+                statement.Span,
+                [
+                    new GraphPort("in", GraphPortDirection.Input, GraphPortKind.Control),
+                    new GraphPort("body", GraphPortDirection.Output, GraphPortKind.Control),
+                    new GraphPort("exit", GraphPortDirection.Output, GraphPortKind.Control),
+                    new GraphPort("condition", GraphPortDirection.Input, GraphPortKind.Data),
+                ],
+                properties),
+                loopRegionId);
+            IReadOnlyList<ControlEndpoint> beforeCondition = ConnectEffectChain([], conditionEffects);
+            ConnectIncoming(beforeCondition, statement.Id, "in");
+            if (condition.Value is null)
+            {
+                throw new InvalidOperationException("A do-while condition must produce a value.");
+            }
+
+            AddEdge(GraphEdgeKind.Data, condition.Value, new ValueEndpoint(statement.Id, "condition"));
+            ControlTarget conditionTarget = conditionEffects.Length == 0
+                ? new ControlTarget(statement.Id, "in")
+                : new ControlTarget(conditionEffects[0], "execIn");
+            var context = new LoopContext(conditionTarget);
+            loops.Push(context);
+            IReadOnlyList<ControlEndpoint> bodyExits;
+            try
+            {
+                bodyExits = ProjectBlockContents(
+                    statement.Body,
+                    [
+                        new ControlEndpoint(entryId, "then"),
+                        new ControlEndpoint(statement.Id, "body"),
+                    ],
+                    bodyRegionId);
+            }
+            finally
+            {
+                _ = loops.Pop();
+            }
+
+            ConnectIncoming(bodyExits, conditionTarget.NodeId, conditionTarget.Port);
             return [new ControlEndpoint(statement.Id, "exit"), .. context.BreakExits];
         }
 

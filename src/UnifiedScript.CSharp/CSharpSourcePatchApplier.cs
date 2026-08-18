@@ -208,6 +208,15 @@ public sealed class CSharpSourcePatchApplier
                         types,
                         graphSafetyIndex,
                         documents),
+                ReplaceDoWhileConditionPatchOperation doWhileCondition =>
+                    PlanDoWhileConditionReplacement(
+                        doWhileCondition,
+                        hirNodes,
+                        patchIndex,
+                        boundNodes,
+                        types,
+                        graphSafetyIndex,
+                        documents),
                 ReplaceForConditionPatchOperation forCondition =>
                     PlanForConditionReplacement(
                         forCondition,
@@ -434,6 +443,7 @@ public sealed class CSharpSourcePatchApplier
             ReplaceExpressionInputPatchOperation replacement => replacement.NewInput,
             ReplaceAssignmentValuePatchOperation replacement => replacement.NewValue,
             ReplaceWhileConditionPatchOperation replacement => replacement.NewCondition,
+            ReplaceDoWhileConditionPatchOperation replacement => replacement.NewCondition,
             ReplaceForConditionPatchOperation replacement => replacement.NewCondition,
             ReplaceForDeclarationInitializerPatchOperation replacement =>
                 replacement.NewInitializer,
@@ -453,6 +463,10 @@ public sealed class CSharpSourcePatchApplier
             InsertStatementPatchOperation
             {
                 NewStatement: WhilePatchStatement loop,
+            } => loop.Condition,
+            InsertStatementPatchOperation
+            {
+                NewStatement: DoWhilePatchStatement loop,
             } => loop.Condition,
             InsertStatementPatchOperation
             {
@@ -498,6 +512,10 @@ public sealed class CSharpSourcePatchApplier
             case ReplaceWhileConditionPatchOperation replacement
                 when nodes.TryGetValue(replacement.TargetNodeId, out HirNode? targetNode) &&
                 targetNode is HirWhileStatement loop:
+                return loop.Condition;
+            case ReplaceDoWhileConditionPatchOperation replacement
+                when nodes.TryGetValue(replacement.TargetNodeId, out HirNode? targetNode) &&
+                targetNode is HirDoWhileStatement loop:
                 return loop.Condition;
             case ReplaceForConditionPatchOperation replacement
                 when nodes.TryGetValue(replacement.TargetNodeId, out HirNode? targetNode) &&
@@ -571,6 +589,7 @@ public sealed class CSharpSourcePatchApplier
         HirExpressionStatement { Expression: HirAssignmentExpression assignment } => assignment.Value,
         HirIfStatement branch => branch.Condition,
         HirWhileStatement loop => loop.Condition,
+        HirDoWhileStatement loop => loop.Condition,
         HirReturnStatement valueReturn => valueReturn.Expression,
         _ => null,
     };
@@ -1453,6 +1472,15 @@ public sealed class CSharpSourcePatchApplier
                 graphSafetyIndex,
                 boundNodes,
                 types),
+            DoWhilePatchStatement doWhileStatement => BuildDoWhileStatement(
+                doWhileStatement,
+                blockLocation!,
+                insertionIndex,
+                hirNodes,
+                patchIndex,
+                graphSafetyIndex,
+                boundNodes,
+                types),
             ForPatchStatement forStatement => BuildForStatement(
                 forStatement,
                 blockLocation!,
@@ -2191,6 +2219,57 @@ public sealed class CSharpSourcePatchApplier
             "if condition",
             branch,
             branch.Condition,
+            operation.ExpectedConditionTypeId,
+            operation.NewCondition,
+            requireBoolean: true,
+            blockLocation!,
+            statementLocation!,
+            hirNodes,
+            patchIndex,
+            boundNodes,
+            types,
+            graphSafetyIndex,
+            documents);
+    }
+
+    private static OperationPlan PlanDoWhileConditionReplacement(
+        ReplaceDoWhileConditionPatchOperation operation,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
+        GraphPatchSafetyIndex graphSafetyIndex,
+        IReadOnlyDictionary<string, ParsedDocument> documents)
+    {
+        if (!hirNodes.TryGetValue(operation.TargetNodeId, out HirNode? target))
+        {
+            return MissingTarget(operation.TargetNodeId);
+        }
+
+        if (target is not HirDoWhileStatement loop ||
+            !patchIndex.TryGetStatement(
+                loop.Id,
+                out HirPatchIndex.StatementLocation? statementLocation) ||
+            !patchIndex.TryGetBlock(
+                statementLocation!.ParentBlock.Id,
+                out HirPatchIndex.BlockLocation? blockLocation))
+        {
+            return KindMismatch(target, operation.TargetNodeId, "a do-while statement");
+        }
+
+        if (loop.Condition.Id != operation.ExpectedConditionNodeId)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.PreconditionFailed,
+                $"Do-while condition precondition failed: current endpoint is " +
+                $"'{loop.Condition.Id}', not '{operation.ExpectedConditionNodeId}'.",
+                loop);
+        }
+
+        return PlanStatementExpressionReplacement(
+            "do-while condition",
+            loop,
+            loop.Condition,
             operation.ExpectedConditionTypeId,
             operation.NewCondition,
             requireBoolean: true,
@@ -3734,6 +3813,60 @@ public sealed class CSharpSourcePatchApplier
         return StatementBuildResult.Success(syntax);
     }
 
+    private static StatementBuildResult BuildDoWhileStatement(
+        DoWhilePatchStatement doWhileStatement,
+        HirPatchIndex.BlockLocation blockLocation,
+        int insertionIndex,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        GraphPatchSafetyIndex graphSafetyIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types)
+    {
+        if (!graphSafetyIndex.IsInsertionReachable(blockLocation, insertionIndex))
+        {
+            return StatementBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.UnreachableInsertion,
+                "A graph-authored do-while requires a CFG-reachable insertion gap.");
+        }
+
+        ExpressionBuildResult condition = BuildPatchExpression(
+            doWhileStatement.Condition,
+            blockLocation,
+            insertionIndex,
+            hirNodes,
+            patchIndex,
+            graphSafetyIndex,
+            boundNodes,
+            types);
+        if (condition.Syntax is null || condition.Type is null)
+        {
+            return StatementBuildResult.Failure(
+                condition.DiagnosticCode ?? SemanticPatchDiagnosticCodes.InvalidGraphExpression,
+                condition.DiagnosticMessage ?? "The graph-authored do-while condition is invalid.");
+        }
+
+        if (condition.Type.Kind != UnifiedTypeKind.Boolean ||
+            !string.Equals(condition.Type.MetadataName, "System.Boolean", StringComparison.Ordinal))
+        {
+            return StatementBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.TypeMismatch,
+                $"A do-while condition must have semantic type 'System.Boolean', not " +
+                $"'{condition.Type.MetadataName}' " +
+                $"('{doWhileStatement.Condition.ExpectedTypeId}').");
+        }
+
+        DoStatementSyntax syntax = SyntaxFactory.DoStatement(
+            SyntaxFactory.Token(SyntaxKind.DoKeyword),
+            SyntaxFactory.Block(),
+            SyntaxFactory.Token(SyntaxKind.WhileKeyword),
+            SyntaxFactory.Token(SyntaxKind.OpenParenToken),
+            condition.Syntax,
+            SyntaxFactory.Token(SyntaxKind.CloseParenToken),
+            SyntaxFactory.Token(SyntaxKind.SemicolonToken));
+        return StatementBuildResult.Success(syntax);
+    }
+
     private static ExpressionBuildResult BuildForAssignmentExpression(
         ForAssignmentPatchExpression assignment,
         HirPatchIndex.BlockLocation blockLocation,
@@ -3874,7 +4007,7 @@ public sealed class CSharpSourcePatchApplier
             return StatementBuildResult.Failure(
                 SemanticPatchDiagnosticCodes.InvalidStatement,
                 $"A graph-authored {(isContinue ? "continue" : "break")} requires an enclosing " +
-                "while or for loop in the current HIR.");
+                "while, do, or for loop in the current HIR.");
         }
 
         if (!graphSafetyIndex.IsInsertionReachable(blockLocation, insertionIndex))
@@ -4599,7 +4732,8 @@ public sealed class CSharpSourcePatchApplier
         StatementSyntax statement,
         InsertionFormatting formatting)
     {
-        if (statement is not (IfStatementSyntax or WhileStatementSyntax or ForStatementSyntax))
+        if (statement is not (
+                IfStatementSyntax or WhileStatementSyntax or DoStatementSyntax or ForStatementSyntax))
         {
             return statement
                 .WithLeadingTrivia(SyntaxFactory.Whitespace(formatting.Indentation))
@@ -4765,6 +4899,7 @@ public sealed class CSharpSourcePatchApplier
         HirExpressionStatement => syntax is ExpressionStatementSyntax,
         HirIfStatement => syntax is IfStatementSyntax,
         HirWhileStatement => syntax is WhileStatementSyntax,
+        HirDoWhileStatement => syntax is DoStatementSyntax,
         HirForStatement => syntax is ForStatementSyntax,
         HirForVariableDeclaration => syntax is VariableDeclarationSyntax,
         HirForVariableDeclarator => syntax is VariableDeclaratorSyntax,
@@ -4915,6 +5050,7 @@ public sealed class CSharpSourcePatchApplier
         HirExpressionStatement => "expressionStatement",
         HirIfStatement => "if",
         HirWhileStatement => "while",
+        HirDoWhileStatement => "doWhile",
         HirForStatement => "for",
         HirBreakStatement => "break",
         HirContinueStatement => "continue",

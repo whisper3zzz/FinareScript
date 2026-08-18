@@ -165,5 +165,8 @@ their nearest structured owner. See [LOOP_FOUNDATION.md](LOOP_FOUNDATION.md).
 The analysis does not compute exception edges, short-circuit expression CFG,
 async suspension-state transitions, constant-condition reachability, control
 dependence, or SSA form. M4.16 extends the same analysis to lossless
-text-authored `for`, including distinct header and continue targets. `do`,
-`foreach`, and Graph-authored for-loop synthesis remain later expansions.
+text-authored `for`, including distinct header and continue targets. M4.19 adds
+post-test `do ... while`: the cyclic header is the body entry, the continue
+target is the condition entry, and a generated one-time entry proves the body
+runs before the first condition. See [DO_WHILE_LOOPS.md](DO_WHILE_LOOPS.md).
+`foreach` and its enumerator/disposal semantics remain a later expansion.

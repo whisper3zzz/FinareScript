@@ -330,6 +330,10 @@ public sealed class CSharpIdentityReconciler
                     Visit(whileStatement.Condition, owner, "condition", childParent);
                     Visit(whileStatement.Body, owner, "body", childParent);
                     break;
+                case HirDoWhileStatement doWhileStatement:
+                    Visit(doWhileStatement.Body, owner, "body", childParent);
+                    Visit(doWhileStatement.Condition, owner, "condition", childParent);
+                    break;
                 case HirForStatement forStatement:
                     if (forStatement.Declaration is not null)
                     {
@@ -444,6 +448,8 @@ public sealed class CSharpIdentityReconciler
                 Child(ifStatement.Condition) + Child(ifStatement.Then) + Child(ifStatement.Else),
             HirWhileStatement whileStatement => GetShapeKey(whileStatement) +
                 Child(whileStatement.Condition) + Child(whileStatement.Body),
+            HirDoWhileStatement doWhileStatement => GetShapeKey(doWhileStatement) +
+                Child(doWhileStatement.Body) + Child(doWhileStatement.Condition),
             HirForStatement forStatement => GetShapeKey(forStatement) +
                 Child(forStatement.Declaration) +
                 "[" + string.Join(',', forStatement.Initializers.Select(initializer =>
@@ -491,6 +497,7 @@ public sealed class CSharpIdentityReconciler
         HirExpressionStatement => "expressionStatement",
         HirIfStatement => "if",
         HirWhileStatement => "while",
+        HirDoWhileStatement => "doWhile",
         HirForStatement forStatement =>
             $"for|{forStatement.Declaration is not null}|{forStatement.Initializers.Count}|" +
             $"{forStatement.Condition is not null}|{forStatement.Incrementors.Count}",
@@ -525,6 +532,7 @@ public sealed class CSharpIdentityReconciler
         HirExpressionStatement => "expressionStatement",
         HirIfStatement => "if",
         HirWhileStatement => "while",
+        HirDoWhileStatement => "doWhile",
         HirForStatement => "for",
         HirForVariableDeclaration => "forVariableDeclaration",
         HirForVariableDeclarator => "forVariable",

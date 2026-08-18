@@ -89,6 +89,9 @@ public static class SemanticPatchJson
                 case ReplaceWhileConditionPatchOperation replaceWhileCondition:
                     ValidateReplaceWhileCondition(replaceWhileCondition);
                     break;
+                case ReplaceDoWhileConditionPatchOperation replaceDoWhileCondition:
+                    ValidateReplaceDoWhileCondition(replaceDoWhileCondition);
+                    break;
                 case ReplaceForConditionPatchOperation replaceForCondition:
                     ValidateReplaceForCondition(replaceForCondition);
                     break;
@@ -305,6 +308,27 @@ public static class SemanticPatchJson
         {
             throw new JsonException(
                 "A for replacement condition must declare the expected condition type.");
+        }
+
+        ValidatePatchExpression(operation.NewCondition, 0);
+    }
+
+    private static void ValidateReplaceDoWhileCondition(
+        ReplaceDoWhileConditionPatchOperation operation)
+    {
+        if (operation.ExpectedConditionNodeId.IsEmpty ||
+            operation.ExpectedConditionTypeId.IsEmpty ||
+            operation.NewCondition is null)
+        {
+            throw new JsonException(
+                "Do-while-condition replacement requires the current condition endpoint, expected " +
+                "type, and a typed new condition.");
+        }
+
+        if (operation.NewCondition.ExpectedTypeId != operation.ExpectedConditionTypeId)
+        {
+            throw new JsonException(
+                "A do-while replacement condition must declare the expected condition type.");
         }
 
         ValidatePatchExpression(operation.NewCondition, 0);
@@ -538,6 +562,15 @@ public static class SemanticPatchJson
                 }
 
                 ValidatePatchExpression(whileStatement.Condition, 0);
+                break;
+            case DoWhilePatchStatement doWhileStatement:
+                if (doWhileStatement.Condition is null)
+                {
+                    throw new JsonException(
+                        "A do-while insertion requires a typed condition expression.");
+                }
+
+                ValidatePatchExpression(doWhileStatement.Condition, 0);
                 break;
             case ForPatchStatement forStatement:
                 ValidateForStatement(forStatement);

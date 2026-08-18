@@ -15,6 +15,10 @@ namespace UnifiedScript.Core;
 [JsonDerivedType(
     typeof(ReplaceProducedWhileConditionPatchPlanStep),
     "replaceProducedWhileCondition")]
+[JsonDerivedType(typeof(ReplaceDoWhileConditionPatchPlanStep), "replaceDoWhileCondition")]
+[JsonDerivedType(
+    typeof(ReplaceProducedDoWhileConditionPatchPlanStep),
+    "replaceProducedDoWhileCondition")]
 [JsonDerivedType(typeof(ReplaceForConditionPatchPlanStep), "replaceForCondition")]
 [JsonDerivedType(
     typeof(ReplaceProducedForConditionPatchPlanStep),
@@ -163,6 +167,26 @@ public sealed record ReplaceWhileConditionPatchPlanStep(
 }
 
 public sealed record ReplaceProducedWhileConditionPatchPlanStep(
+    string StepId,
+    SemanticId TargetNodeId,
+    string SourceStepId,
+    PatchExpression NewCondition) : SemanticPatchPlanStep(StepId, TargetNodeId);
+
+public sealed record ReplaceDoWhileConditionPatchPlanStep(
+    string StepId,
+    SemanticId TargetNodeId,
+    SemanticId ExpectedConditionNodeId,
+    SemanticId ExpectedConditionTypeId,
+    PatchExpression NewCondition) : SemanticPatchPlanStep(StepId, TargetNodeId)
+{
+    public ReplaceDoWhileConditionPatchOperation ToOperation() => new(
+        TargetNodeId,
+        ExpectedConditionNodeId,
+        ExpectedConditionTypeId,
+        NewCondition);
+}
+
+public sealed record ReplaceProducedDoWhileConditionPatchPlanStep(
     string StepId,
     SemanticId TargetNodeId,
     string SourceStepId,
@@ -409,7 +433,7 @@ public sealed record SemanticPatchPlanDocument(
     SemanticId SemanticConfigurationId,
     IReadOnlyList<SemanticPatchPlanStep> Steps)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.patch-plan/v0.17";
+    public const string CurrentSchemaVersion = "unifiedscript.patch-plan/v0.18";
 
     public static SemanticPatchPlanDocument Create(
         SemanticId sourceCompilationId,

@@ -265,7 +265,7 @@ public sealed class VisualProfileValidator
         private void ValidateLoopControlTarget(StatementSyntax node)
         {
             if (node.Ancestors().Any(static ancestor =>
-                    ancestor is WhileStatementSyntax or ForStatementSyntax))
+                    ancestor is WhileStatementSyntax or DoStatementSyntax or ForStatementSyntax))
             {
                 return;
             }
@@ -273,7 +273,7 @@ public sealed class VisualProfileValidator
             Add(
                 diagnostics,
                 VisualProfileDiagnosticCodes.LoopControlTargetRequired,
-                $"'{node.Kind()}' requires an enclosing while or for loop in Visual C# profile v0.2.",
+                $"'{node.Kind()}' requires an enclosing while, do, or for loop in Visual C# profile v0.2.",
                 node,
                 filePath);
         }
@@ -383,6 +383,7 @@ public sealed class VisualProfileValidator
             SyntaxKind.ExpressionStatement or
             SyntaxKind.IfStatement or
             SyntaxKind.WhileStatement or
+            SyntaxKind.DoStatement or
             SyntaxKind.ForStatement or
             SyntaxKind.BreakStatement or
             SyntaxKind.ContinueStatement or

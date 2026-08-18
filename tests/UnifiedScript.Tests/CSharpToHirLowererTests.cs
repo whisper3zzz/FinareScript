@@ -198,9 +198,48 @@ public sealed class CSharpToHirLowererTests
 
         string json = UnifiedScript.Core.HirJson.Serialize(
             UnifiedScript.Core.HirDocument.Create(result.CompilationUnit));
-        Assert.Contains("\"schemaVersion\": \"unifiedscript.hir/v0.5\"", json);
+        Assert.Contains("\"schemaVersion\": \"unifiedscript.hir/v0.6\"", json);
         Assert.Contains("\"kind\": \"for\"", json);
         Assert.Contains("\"isPostfix\": true", json);
+    }
+
+    [Fact]
+    public void Lower_PreservesDoWhileBodyBeforeConditionWithoutWhileDesugaring()
+    {
+        const string source = """
+            static class Rules
+            {
+                [Visual]
+                static int Run(int value)
+                {
+                    do
+                    {
+                        value = value - 1;
+                        if (value == 2)
+                        {
+                            continue;
+                        }
+                    }
+                    while (value > 0);
+
+                    return value;
+                }
+            }
+            """;
+
+        CSharpLoweringResult result = new CSharpToHirLowerer().Lower(source, "DoWhileRules.cs");
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        HirMethodDeclaration method = Assert.Single(Assert.Single(result.CompilationUnit!.Types).Methods);
+        HirDoWhileStatement loop = Assert.IsType<HirDoWhileStatement>(method.Body.Statements[0]);
+        Assert.IsType<HirExpressionStatement>(loop.Body.Statements[0]);
+        Assert.IsType<HirBinaryExpression>(loop.Condition);
+        Assert.Single(loop.Body.DescendantsAndSelf().OfType<HirContinueStatement>());
+        Assert.DoesNotContain(method.DescendantsAndSelf(), static node => node is HirWhileStatement);
+
+        string json = UnifiedScript.Core.HirJson.Serialize(
+            UnifiedScript.Core.HirDocument.Create(result.CompilationUnit));
+        Assert.Contains("\"kind\": \"doWhile\"", json, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -260,7 +299,7 @@ public sealed class CSharpToHirLowererTests
 
         string json = UnifiedScript.Core.HirJson.Serialize(
             UnifiedScript.Core.HirDocument.Create(result.CompilationUnit));
-        Assert.Contains("\"schemaVersion\": \"unifiedscript.hir/v0.5\"", json);
+        Assert.Contains("\"schemaVersion\": \"unifiedscript.hir/v0.6\"", json);
         Assert.Contains("\"kind\": \"conditional\"", json);
     }
 
@@ -300,7 +339,7 @@ public sealed class CSharpToHirLowererTests
 
         string json = UnifiedScript.Core.HirJson.Serialize(
             UnifiedScript.Core.HirDocument.Create(result.CompilationUnit));
-        Assert.Contains("\"schemaVersion\": \"unifiedscript.hir/v0.5\"", json);
+        Assert.Contains("\"schemaVersion\": \"unifiedscript.hir/v0.6\"", json);
         Assert.Contains("\"kind\": \"conditionalAccess\"", json);
         Assert.Contains("\"kind\": \"conditionalMemberBinding\"", json);
     }

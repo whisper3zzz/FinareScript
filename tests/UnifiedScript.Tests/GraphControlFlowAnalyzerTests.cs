@@ -62,6 +62,8 @@ public sealed class GraphControlFlowAnalyzerTests
     public void Analyze_FindsStructuredMergeForTwoFallingThroughBranches()
     {
         const string source = """
+            using UnifiedScript;
+
             static class Rules
             {
                 [Visual]
@@ -473,6 +475,127 @@ public sealed class GraphControlFlowAnalyzerTests
             loop.BackEdgeArcIds,
             arcId => flow.Arcs.Single(arc => arc.Id == arcId).FromNodeId == continueStatement.Id);
         Assert.Equal([condition.Id], Assert.Single(flow.CyclicComponents).EntryNodeIds);
+    }
+
+    [Fact]
+    public void Analyze_PreservesDoWhileInitialBodyEntryAndConditionContinueTarget()
+    {
+        const string source = """
+            static class Rules
+            {
+                [Visual]
+                static int Run(int value)
+                {
+                    do
+                    {
+                        value = value - 1;
+                        if (value == 2)
+                        {
+                            continue;
+                        }
+
+                        if (value == 1)
+                        {
+                            break;
+                        }
+                    }
+                    while (value > 0);
+
+                    return value;
+                }
+            }
+            """;
+        (HirMethodDeclaration method, GraphDocument graph) = Project(source, "DoWhileFlow.cs");
+        HirDoWhileStatement statement = Assert.IsType<HirDoWhileStatement>(method.Body.Statements[0]);
+        HirExpressionStatement firstBodyStatement = Assert.IsType<HirExpressionStatement>(
+            statement.Body.Statements[0]);
+        HirAssignmentExpression firstBodyControl = Assert.IsType<HirAssignmentExpression>(
+            firstBodyStatement.Expression);
+        HirContinueStatement continueStatement = Assert.Single(
+            statement.Body.DescendantsAndSelf().OfType<HirContinueStatement>());
+        HirBreakStatement breakStatement = Assert.Single(
+            statement.Body.DescendantsAndSelf().OfType<HirBreakStatement>());
+        HirReturnStatement continuation = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+        GraphFunction projected = Assert.Single(graph.Functions);
+        GraphNode loopNode = projected.Nodes.Single(node => node.Id == statement.Id);
+        GraphNode initialEntry = Assert.Single(projected.Nodes, static node => node.Kind == "loopEntry");
+
+        Assert.Equal("doWhile", loopNode.Properties["loopForm"]);
+        Assert.Equal("afterBody", loopNode.Properties["conditionEvaluation"]);
+        Assert.Equal("body,condition", loopNode.Properties["evaluationOrder"]);
+        Assert.Equal("condition", loopNode.Properties["continueTarget"]);
+        Assert.Contains(projected.Edges, edge =>
+            edge.Kind == GraphEdgeKind.Control &&
+            edge.FromNode == initialEntry.Id && edge.FromPort == "then" &&
+            edge.ToNode == firstBodyControl.Id && edge.ToPort == "execIn");
+
+        GraphControlFlowFunction flow = Assert.Single(new GraphControlFlowAnalyzer()
+            .AnalyzeAndValidate(graph)
+            .Functions);
+        GraphControlFlowLoop loop = Assert.Single(flow.Loops);
+
+        Assert.Equal(firstBodyControl.Id, loop.HeaderEntryNodeId);
+        Assert.Equal(statement.Id, loop.ContinueTargetNodeId);
+        Assert.Equal(firstBodyControl.Id, loop.BodyEntryNodeId);
+        Assert.Equal(continuation.Id, loop.ExitNodeId);
+        Assert.Equal([continueStatement.Id], loop.ContinueNodeIds);
+        Assert.Equal([breakStatement.Id], loop.BreakNodeIds);
+        Assert.Contains(statement.Id, Node(flow, continueStatement.Id).SuccessorIds);
+        Assert.Contains(continuation.Id, Node(flow, breakStatement.Id).SuccessorIds);
+        Assert.NotEmpty(loop.BackEdgeArcIds);
+        Assert.True(flow.IsReducible);
+    }
+
+    [Fact]
+    public void Analyze_UsesEffectfulDoWhileConditionAsContinueTargetAfterBody()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                static bool Check(int value) => value > 0;
+
+                [Visual]
+                static int Run(int value)
+                {
+                    do
+                    {
+                        value = value - 1;
+                        if (value == 2)
+                        {
+                            continue;
+                        }
+                    }
+                    while (Check(value));
+
+                    return value;
+                }
+            }
+            """;
+        CSharpAnalysisResult analysis = new CSharpSemanticPipeline().Analyze(
+            source,
+            "EffectfulDoWhile.cs");
+        Assert.True(analysis.Succeeded, string.Join(Environment.NewLine, analysis.Diagnostics));
+        HirMethodDeclaration method = Assert.Single(Assert.Single(analysis.Hir!.Types).Methods);
+        GraphDocument graph = new HirGraphProjector().Project(analysis.Hir, analysis.Semantics);
+        HirDoWhileStatement statement = Assert.IsType<HirDoWhileStatement>(method.Body.Statements[0]);
+        HirInvocationExpression condition = Assert.IsType<HirInvocationExpression>(statement.Condition);
+        HirAssignmentExpression bodyEntry = Assert.IsType<HirAssignmentExpression>(
+            Assert.IsType<HirExpressionStatement>(statement.Body.Statements[0]).Expression);
+        HirContinueStatement continueStatement = Assert.Single(
+            statement.Body.DescendantsAndSelf().OfType<HirContinueStatement>());
+
+        GraphControlFlowFunction flow = Assert.Single(new GraphControlFlowAnalyzer()
+            .AnalyzeAndValidate(graph)
+            .Functions);
+        GraphControlFlowLoop loop = Assert.Single(flow.Loops);
+
+        Assert.Equal(bodyEntry.Id, loop.HeaderEntryNodeId);
+        Assert.Equal(condition.Id, loop.ContinueTargetNodeId);
+        Assert.Contains(condition.Id, Node(flow, continueStatement.Id).SuccessorIds);
+        Assert.NotEmpty(loop.BackEdgeArcIds);
+        Assert.True(flow.IsReducible);
     }
 
     [Fact]

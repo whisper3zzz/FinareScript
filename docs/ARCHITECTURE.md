@@ -139,8 +139,9 @@ Accepted statement forms:
 - expression statement
 - `if/else`
 - `while`
+- lossless `do ... while`
 - lossless text-authored `for`
-- `break` and `continue` inside an enclosing `while` or `for`
+- `break` and `continue` inside an enclosing `while`, `do`, or `for`
 - `return`
 
 Accepted expression forms:
@@ -157,7 +158,7 @@ Accepted expression forms:
 Explicitly rejected forms include dynamic binding, unsafe code, pointers, goto,
 yield, local functions, lambdas, exception control flow, locks, LINQ query
 syntax, stack allocation, ref/out/in parameters and arguments, generic visual
-methods, `do`/`foreach`, switch, and all other syntax not listed above.
+methods, `foreach`, switch, and all other syntax not listed above.
 
 ## Graph semantics
 
@@ -167,7 +168,7 @@ Pure expression statements use an explicit `Evaluate` control node. Effectful
 calls, assignments, and awaits instead expose their own control ports, so nested
 side effects are sequenced before their data consumers.
 
-Graph schema v0.9 separates structured ownership from connectivity. Every
+Graph schema v0.10 separates structured ownership from connectivity. Every
 function has a `function` root and method-body `block`; an `if` region owns its
 condition/branch nodes plus ordered `then` and `else` children. Every Graph node
 has exactly one direct region owner. An omitted C# `else` remains an empty
@@ -184,9 +185,16 @@ to the effective condition header; if the condition contains effects, that
 header is the first effect rather than the final decision node. See
 [LOOP_FOUNDATION.md](LOOP_FOUNDATION.md).
 
+A `do ... while` also owns one `loopBody`, but Graph v0.10 adds a generated
+`loopEntry` control node for the one-time initial body entry. Body fallthrough
+and `continue` target the first condition effect or the decision node; a true
+condition returns to the body header and a false condition exits. This topology
+proves at-least-once execution without overloading one decision node with two
+semantically different entry ports. See [DO_WHILE_LOOPS.md](DO_WHILE_LOOPS.md).
+
 A `for` remains a distinct HIR statement rather than being desugared to
-`while`. HIR v0.5 separately preserves its declaration or expression
-initializers, optional condition, ordered incrementors, and body. Graph v0.9
+`while`. HIR v0.6 separately preserves its declaration or expression
+initializers, optional condition, ordered incrementors, and body. Graph v0.10
 owns ordered `loopInitializer`, `loopBody`, and `loopIncrement` child regions.
 Initializer exits enter the effective condition header once; body fallthrough
 and `continue` enter the increment phase; completed incrementors return to the
@@ -225,33 +233,34 @@ compilation identity is not safe for editing.
 
 ## Semantic patch transaction
 
-Graph schema v0.9 carries both the source compilation ID and semantic
-configuration ID. A `unifiedscript.patch/v0.16` document repeats those IDs and
+Graph schema v0.10 carries both the source compilation ID and semantic
+configuration ID. A `unifiedscript.patch/v0.17` document repeats those IDs and
 contains typed operations keyed by graph/HIR `SemanticId`. Implemented
 operations are `replaceLiteral`, `changeOperator`, `reconnectArgument`,
 `replaceExpressionInput`,
-`replaceAssignmentValue`, `replaceWhileCondition`, `replaceForCondition`,
+`replaceAssignmentValue`, `replaceWhileCondition`, `replaceDoWhileCondition`,
+`replaceForCondition`,
 `replaceForDeclarationInitializer`, `replaceForAssignmentInitializerValue`,
 `replaceForIncrementor`, `replaceIfCondition`,
 `replaceLocalInitializer`, `replaceReturnValue`, `insertStatement`,
 `deleteStatement`, `introduceTemporary`, and `reconnectValue`.
 `insertStatement` accepts a local-literal declaration, a
-CFG-checked assignment to an existing local, an `if`, `while`, or bounded
+CFG-checked assignment to an existing local, an `if`, `while`, `doWhile`, or bounded
 `for` with closed typed clauses and explicit blocks, a nearest-loop
 `break`/`continue`, or a typed terminal `return`. Structural operations carry old
 operator/endpoint, semantic type,
 containing statement, parent block, and exact sibling preconditions rather than
 relying only on the compilation baseline.
 
-`unifiedscript.patch-plan/v0.17` is an ordered transaction above individual
+`unifiedscript.patch-plan/v0.18` is an ordered transaction above individual
 patches. It composes every current bounded operation: literal and operator
-changes, argument reconnection, structured assignment/while/for/branch/local/
+changes, argument reconnection, structured assignment/while/do/for/branch/local/
 return expression edits, exact nested expression-input replacement, statement
 insertion/deletion, temporary introduction, value
 reconnection, symbolic branch-body insertion, symbolic loop-body insertion,
 and symbolic replacement of expression endpoints on compatible statements
 produced earlier in the same plan, including explicit conditions on generated
-while and for loops.
+while, do-while, and for loops.
 `introduceTemporary` and local-literal root, branch, or loop-body insertion
 steps publish symbolic local handles. Later `reconnectValue` steps can consume
 an entire value port, while transaction-only `producedLocalReference` leaves
@@ -267,22 +276,22 @@ captured HIR root, and lowers to the existing standalone
 `replaceExpressionInput` operation with real current endpoint IDs. The
 consumer's replacement root is published again, so handles chain without a
 second VM, graph evaluator, or generated-ID prediction scheme.
-Current HIR v0.5 preserves a conditional expression as one node with condition,
-true, and false children. Graph v0.9 projects that node as a `conditional`/`Select`
+Current HIR v0.6 preserves a conditional expression as one node with condition,
+true, and false children. Graph v0.10 projects that node as a `conditional`/`Select`
 with canonical `condition`, `whenTrue`, and `whenFalse` inputs and an explicit
 `evaluation: lazyBranches` contract. Semantic binding rejects effectful arms so
 the data projection cannot eagerly execute mutation, latency, or effectful
-calls that C# would evaluate only on the selected path. Patch v0.16 and plan
-v0.17 use the same conditional shape in their closed expression algebra and
+calls that C# would evaluate only on the selected path. Patch v0.17 and plan
+v0.18 use the same conditional shape in their closed expression algebra and
 allow exact or produced-handle edits through those Graph ports.
 The same HIR already preserves `&&` and `||` as ordered binary nodes. Graph
-v0.9 retains their `shortCircuitRight` contract, with
+v0.10 retains their `shortCircuitRight` contract, with
 `whenLeftTrue`/`whenLeftFalse` selecting the operator-specific condition.
 Always-evaluated left effects stay in the statement control chain. Semantic
 binding rejects effectful right subtrees with `UVS2003` until Graph has a
 conditional effect-subgraph contract. The full boundary is specified in
 [SHORT_CIRCUIT_EXPRESSIONS.md](SHORT_CIRCUIT_EXPRESSIONS.md).
-Null coalescing also remains an ordered binary HIR node. Graph v0.9 marks its
+Null coalescing also remains an ordered binary HIR node. Graph v0.10 marks its
 right input `whenLeftNull` and its result selection `leftNonNullOrRight`.
 Roslyn remains authoritative for candidate text-authored operand/result types;
 `UVS2005` then rejects implicit or user-defined conversions absent from the
@@ -292,14 +301,14 @@ remain in the statement control chain. See
 [NULL_COALESCING_EXPRESSIONS.md](NULL_COALESCING_EXPRESSIONS.md).
 Null-conditional access is a distinct HIR node owning an always-evaluated
 receiver and a conditional `whenNotNull` subtree. A conditional member binding
-keeps the receiver implicit in HIR while Graph v0.9 makes both relationships
+keeps the receiver implicit in HIR while Graph v0.10 makes both relationships
 explicit: the receiver feeds the parent `receiver` input and the binding's
 `target` input. The parent records `conditionalWhenNotNull`,
 `whenReceiverNonNull`, and `whenNotNullOrNull`, so a VM can evaluate once,
 skip the selected subtree on null, and lift the result. `UVS2006` rejects
 effects in the selected subtree and `UVS2007` rejects void or hidden-conversion
-type shapes. Patch v0.16 can author a bounded simple conditional member access;
-plan v0.17 can replace its `receiver` through an actual produced root. See
+type shapes. Patch v0.17 can author a bounded simple conditional member access;
+plan v0.18 can replace its `receiver` through an actual produced root. See
 [NULL_CONDITIONAL_ACCESS.md](NULL_CONDITIONAL_ACCESS.md).
 An `if` insertion publishes internal `then`/`else` block handles for later
 `insertBranchStatement` steps without masquerading as a reconnectable local
@@ -314,7 +323,7 @@ one path; when both child paths terminate, termination propagates to the parent
 only if the nested `if` is still the parent's final statement. This rejects
 both direct and retroactive unreachability before execution while keeping
 unrelated sibling paths independently writable.
-A `while` or `for` insertion publishes one generated body handle for later
+A `while`, `do`, or `for` insertion publishes one generated body handle for later
 `insertLoopBodyStatement` steps. A declaration-form `for` additionally
 publishes its single generated declarator as a produced-local handle; normal
 lexical/CFG availability prevents use outside that loop. Loop bodies accept the
@@ -376,7 +385,7 @@ this proof until builtin operator effects include conditional evaluation,
 allocation, and throw behavior.
 
 M4.3 adds a `GraphPatchSafetyIndex` inside the C# patch boundary. It projects
-the same analyzed HIR and bound semantics through Graph v0.9, derives the M4.2
+the same analyzed HIR and bound semantics through Graph v0.10, derives the M4.2
 CFG, and resolves statement entries or region fallthrough sources as insertion
 anchors. A non-empty block whose paths terminate has no fallthrough anchor.
 Local assignment targets and graph-authored local references must satisfy both

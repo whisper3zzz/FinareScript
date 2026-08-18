@@ -64,6 +64,52 @@ public sealed class GraphJsonTests
     }
 
     [Fact]
+    public void Serialize_RejectsMalformedDoWhileExecutionProperties()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int Run(int value)
+                {
+                    do
+                    {
+                        value = value - 1;
+                    }
+                    while (value > 0);
+
+                    return value;
+                }
+            }
+            """;
+        CSharpAnalysisResult analysis = new CSharpSemanticPipeline().Analyze(
+            source,
+            "MalformedDoWhileGraph.cs");
+        Assert.True(analysis.Succeeded, string.Join(Environment.NewLine, analysis.Diagnostics));
+        GraphDocument graph = new HirGraphProjector().Project(analysis.Hir!, analysis.Semantics!);
+        GraphFunction function = Assert.Single(graph.Functions);
+        GraphNode loop = Assert.Single(function.Nodes, static node =>
+            node.Kind == "loop" && node.Properties.GetValueOrDefault("loopForm") == "doWhile");
+        Dictionary<string, string> invalidProperties = loop.Properties.ToDictionary(
+            static property => property.Key,
+            static property => property.Value,
+            StringComparer.Ordinal);
+        invalidProperties["conditionEvaluation"] = "beforeBody";
+        GraphFunction invalidFunction = function with
+        {
+            Nodes = function.Nodes.Select(node =>
+                node.Id == loop.Id ? node with { Properties = invalidProperties } : node).ToArray(),
+        };
+
+        JsonException exception = Assert.Throws<JsonException>(() =>
+            GraphJson.Serialize(graph with { Functions = [invalidFunction] }));
+
+        Assert.Contains("valid while, do-while", exception.Message);
+    }
+
+    [Fact]
     public void Serialize_RejectsNodeWithoutExactlyOneRegionOwner()
     {
         GraphDocument graph = CreateGraph();

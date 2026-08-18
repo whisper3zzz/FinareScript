@@ -680,6 +680,13 @@ public sealed class RoslynSemanticBinder
                     }
 
                     break;
+                case HirDoWhileStatement doWhileStatement:
+                    foreach (HirStatement child in EnumerateStatements(doWhileStatement.Body))
+                    {
+                        yield return child;
+                    }
+
+                    break;
                 case HirForStatement forStatement:
                     foreach (HirStatement child in EnumerateStatements(forStatement.Body))
                     {
@@ -702,6 +709,7 @@ public sealed class RoslynSemanticBinder
                 HirExpressionStatement expression => [expression.Expression],
                 HirIfStatement ifStatement => [ifStatement.Condition],
                 HirWhileStatement whileStatement => [whileStatement.Condition],
+                HirDoWhileStatement doWhileStatement => [doWhileStatement.Condition],
                 HirForStatement forStatement => GetForExpressionRoots(forStatement),
                 HirReturnStatement { Expression: not null } returnStatement =>
                     [returnStatement.Expression],

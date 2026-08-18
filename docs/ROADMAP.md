@@ -129,7 +129,10 @@ Outcome: practical gameplay methods are fully visualizable.
 - [x] exact existing-for condition, declaration-initializer,
   assignment-initializer-value, and mutation-incrementor editing, including a
   generated-for condition handle
-- [ ] lossless `do` loop projection, CFG, construction, and exact condition editing
+- [x] lossless `do` loop projection with explicit initial-body entry and
+  post-body condition/continue CFG routing
+- [x] bounded `do` construction, symbolic body population, and exact
+  existing/produced condition editing
 - [ ] general data/control rewiring and structural HIR operations
 - [ ] `foreach` and enumerator/disposal semantics
 - [ ] `switch` and supported patterns

@@ -403,6 +403,75 @@ public sealed class CSharpIdentityReconcilerTests
         Assert.Empty(sidecar.Tombstones);
     }
 
+    [Fact]
+    public void Analyze_PreservesDoWhileAndTransferIdentitiesAcrossFormattingChanges()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static void Run(bool ready)
+                {
+                    do
+                    {
+                        if (ready)
+                        {
+                            continue;
+                        }
+
+                        break;
+                    }
+                    while (ready);
+                }
+            }
+            """;
+        const string changed = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static void Run(bool ready)
+                {
+                    // Post-test formatting cannot recreate visual identities.
+                    do { if (ready) { continue; }
+
+                        break; }
+                    while ( ready );
+                }
+            }
+            """;
+        CSharpAnalysisResult initial = AnalyzeWithIdentity(
+            source,
+            IdentitySidecarDocument.CreateEmpty(Path));
+        HirDoWhileStatement initialLoop = Assert.Single(
+            initial.Hir!.DescendantsAndSelf().OfType<HirDoWhileStatement>());
+        HirBreakStatement initialBreak = Assert.Single(
+            initialLoop.DescendantsAndSelf().OfType<HirBreakStatement>());
+        HirContinueStatement initialContinue = Assert.Single(
+            initialLoop.DescendantsAndSelf().OfType<HirContinueStatement>());
+
+        CSharpAnalysisResult formatted = AnalyzeWithIdentity(
+            changed,
+            Assert.Single(initial.IdentitySidecars));
+        HirDoWhileStatement formattedLoop = Assert.Single(
+            formatted.Hir!.DescendantsAndSelf().OfType<HirDoWhileStatement>());
+
+        Assert.Equal(initialLoop.Id, formattedLoop.Id);
+        Assert.Equal(initialLoop.Body.Id, formattedLoop.Body.Id);
+        Assert.Equal(
+            initialBreak.Id,
+            Assert.Single(formattedLoop.DescendantsAndSelf().OfType<HirBreakStatement>()).Id);
+        Assert.Equal(
+            initialContinue.Id,
+            Assert.Single(formattedLoop.DescendantsAndSelf().OfType<HirContinueStatement>()).Id);
+        IdentitySidecarDocument sidecar = Assert.Single(formatted.IdentitySidecars);
+        Assert.Contains(sidecar.Entries, static entry => entry.Kind == "doWhile");
+        Assert.Empty(sidecar.Tombstones);
+    }
+
     private const string Path = "Game/Calculator.cs";
 
     private static CSharpAnalysisResult AnalyzeWithIdentity(

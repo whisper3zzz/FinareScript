@@ -27,6 +27,7 @@ public static class HirTraversal
             [statement.Condition, statement.Then, statement.Else],
         HirIfStatement statement => [statement.Condition, statement.Then],
         HirWhileStatement statement => [statement.Condition, statement.Body],
+        HirDoWhileStatement statement => [statement.Body, statement.Condition],
         HirForStatement statement => GetForChildren(statement),
         HirForVariableDeclaration declaration => declaration.Variables,
         HirForVariableDeclarator { Initializer: not null } declarator => [declarator.Initializer],

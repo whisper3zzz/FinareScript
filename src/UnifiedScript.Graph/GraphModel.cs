@@ -78,5 +78,5 @@ public sealed record GraphDocument(
     SemanticId? SemanticConfigurationId,
     IReadOnlyList<GraphFunction> Functions)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.graph/v0.9";
+    public const string CurrentSchemaVersion = "unifiedscript.graph/v0.10";
 }

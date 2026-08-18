@@ -1,0 +1,84 @@
+{
+  "schemaVersion": "unifiedscript.patch-plan/v0.18",
+  "sourceCompilationId": "us_7166e7c80b5f673fb7c8d8a201726cf6",
+  "semanticConfigurationId": "us_02f5fe78d296e2d4fe04bc50ca71acf1",
+  "steps": [
+    {
+      "step": "insertStatement",
+      "stepId": "insertDoLoop",
+      "targetNodeId": "us_473ddb43f8bd1d46cb99faf22f8a8a5c",
+      "expectedPreviousSiblingId": "us_9854e2c157ef2a15472db08335a053c9",
+      "expectedNextSiblingId": "us_fe5d1b39e0dee1e7ea20706c17d27741",
+      "newStatement": {
+        "statement": "doWhile",
+        "condition": {
+          "expression": "localReference",
+          "sourceDefinitionId": "us_67ece3a15bf5297909093739d1e46f19",
+          "expectedName": "enabled",
+          "expectedTypeId": "us_b5f84bcf933b6593d45e9e031353bfef"
+        }
+      }
+    },
+    {
+      "step": "replaceProducedDoWhileCondition",
+      "stepId": "addPositiveGuard",
+      "targetNodeId": "us_473ddb43f8bd1d46cb99faf22f8a8a5c",
+      "sourceStepId": "insertDoLoop",
+      "newCondition": {
+        "expression": "binary",
+        "operator": "&&",
+        "left": {
+          "expression": "localReference",
+          "sourceDefinitionId": "us_67ece3a15bf5297909093739d1e46f19",
+          "expectedName": "enabled",
+          "expectedTypeId": "us_b5f84bcf933b6593d45e9e031353bfef"
+        },
+        "right": {
+          "expression": "binary",
+          "operator": ">",
+          "left": {
+            "expression": "localReference",
+            "sourceDefinitionId": "us_9854e2c157ef2a15472db08335a053c9",
+            "expectedName": "result",
+            "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+          },
+          "right": {
+            "expression": "literal",
+            "valueText": "0",
+            "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+          },
+          "expectedTypeId": "us_b5f84bcf933b6593d45e9e031353bfef"
+        },
+        "expectedTypeId": "us_b5f84bcf933b6593d45e9e031353bfef"
+      }
+    },
+    {
+      "step": "insertLoopBodyStatement",
+      "stepId": "decrementResult",
+      "targetNodeId": "us_473ddb43f8bd1d46cb99faf22f8a8a5c",
+      "sourceStepId": "insertDoLoop",
+      "newStatement": {
+        "statement": "localAssignment",
+        "targetDefinitionId": "us_9854e2c157ef2a15472db08335a053c9",
+        "expectedName": "result",
+        "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+        "value": {
+          "expression": "binary",
+          "operator": "-",
+          "left": {
+            "expression": "localReference",
+            "sourceDefinitionId": "us_9854e2c157ef2a15472db08335a053c9",
+            "expectedName": "result",
+            "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+          },
+          "right": {
+            "expression": "literal",
+            "valueText": "1",
+            "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+          },
+          "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+        }
+      }
+    }
+  ]
+}

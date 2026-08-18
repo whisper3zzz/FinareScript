@@ -3,22 +3,24 @@
 ## Purpose
 
 M4.6 closes the first bounded loop round trip for `while`; M4.17 extends the
-same symbolic protocol to a dedicated `for` constructor. A visual edit can
+same symbolic protocol to a dedicated `for` constructor, and M4.19 adds the
+post-test `do ... while` form. A visual edit can
 create ordinary C#, obtain a symbolic handle for its generated body, and
 populate that body with the same typed statements used elsewhere. The result
-is re-lowered into the current HIR v0.5 and projected into the current Graph
-v0.9/CFG loop model; there is no editor-only loop node or second runtime.
+is re-lowered into the current HIR v0.6 and projected into the current Graph
+v0.10/CFG loop model; there is no editor-only loop node or second runtime.
 
 This is structured construction, not arbitrary cyclic edge rewiring. The
-patch describes a `while` and ordered body statements. The compiler owns the
+patch describes a supported structured loop and ordered body statements. The compiler owns the
 actual loop/body IDs, control edges, back edges, and nearest-loop transfer
 targets.
 
 ## Protocol
 
-Current patch schema `unifiedscript.patch/v0.16` carries four loop statement payloads:
+Current patch schema `unifiedscript.patch/v0.17` carries five loop statement payloads:
 
 - `while`, carrying one closed, typed `PatchExpression` condition;
+- `doWhile`, carrying one closed, typed post-body condition;
 - `for`, carrying declaration or assignment initialization, an optional
   condition, and ordered prefix/postfix `++`/`--` incrementors;
 - `break`, carrying no target ID; and
@@ -28,7 +30,7 @@ The absence of a transfer target is intentional. C# and HIR bind each transfer
 to its nearest lexical loop, and the derived CFG verifies that target. A visual
 client cannot forge an edge to an outer or unrelated loop.
 
-Current patch-plan schema `unifiedscript.patch-plan/v0.17` carries
+Current patch-plan schema `unifiedscript.patch-plan/v0.18` carries
 `insertLoopBodyStatement`:
 
 ```json
@@ -52,7 +54,7 @@ Current patch-plan schema `unifiedscript.patch-plan/v0.17` carries
 ```
 
 `sourceStepId` must refer backward to an earlier insertion whose payload is a
-`while` or `for`. The consumer repeats the producer's original `targetNodeId`;
+`while`, `doWhile`, or `for`. The consumer repeats the producer's original `targetNodeId`;
 it never predicts the generated HIR loop or Block ID.
 
 An `insertLoopBodyStatement` may itself insert another loop or `if`.
@@ -71,7 +73,7 @@ root block
 
 ## Typed condition and statement boundary
 
-A generated while condition uses the same bounded expression algebra as a
+A generated while or do-while condition uses the same bounded expression algebra as a
 generated if condition or assignment value: literal, local reference, unary,
 binary, and cast expressions. It must:
 
@@ -83,13 +85,13 @@ binary, and cast expressions. It must:
 - remain inside the expression nesting-depth limit.
 
 The generated body currently accepts local-literal declarations, assignments
-to existing locals, nested `if`, nested `while`/`for`, typed return, break, and
+to existing locals, nested `if`, nested `while`/`do`/`for`, typed return, break, and
 continue. Every stage retains the statement-specific name, type, scope,
 dominance, effect, and reachability checks.
 
 `break` and `continue` are accepted only at the end of an explicit reachable
-Block with a discoverable nearest enclosing `HirWhileStatement` or
-`HirForStatement`. This applies equally to direct library patches and symbolic
+Block with a discoverable nearest enclosing `HirWhileStatement`,
+`HirDoWhileStatement`, or `HirForStatement`. This applies equally to direct library patches and symbolic
 plan steps. A transfer outside a loop is rejected; a statement appended after
 a transfer is rejected as unreachable. A `for` continue is independently
 verified to target its increment phase.
@@ -193,7 +195,11 @@ locals can feed later expressions only where ordinary scope and CFG dominance
 hold; generated for-locals therefore stay inside their loop. The implementation
 does not prove loop termination or constant-fold conditions.
 
-`do`, `foreach`, existing-`for` clause restructuring, arbitrary cyclic Graph
+M4.19 applies the same body-handle and exact-condition model to post-test
+`do ... while` while preserving its distinct initial-body entry and
+continue-to-condition CFG. See [DO_WHILE_LOOPS.md](DO_WHILE_LOOPS.md).
+
+`foreach`, existing-`for` clause restructuring, arbitrary cyclic Graph
 rewiring, general compound-assignment/mutation statements, effectful authored
 expression trees, exception flow, short-circuit expression CFG expansion,
 async state-machine flow, and automatic node placement remain later slices.

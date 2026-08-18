@@ -80,6 +80,7 @@ public static class SemanticPatchPlanJson
                 InsertBranchStatementPatchPlanStep or
                 InsertLoopBodyStatementPatchPlanStep or
                 ReplaceProducedWhileConditionPatchPlanStep or
+                ReplaceProducedDoWhileConditionPatchPlanStep or
                 ReplaceProducedForConditionPatchPlanStep or
                 ReplaceProducedIfConditionPatchPlanStep or
                 ReplaceProducedLocalInitializerPatchPlanStep or
@@ -138,6 +139,15 @@ public static class SemanticPatchPlanJson
                     ValidateProducedWhileCondition(
                         document,
                         producedCondition,
+                        loopProducers);
+                    break;
+                case ReplaceDoWhileConditionPatchPlanStep replaceDoWhileCondition:
+                    ValidateOperation(document, replaceDoWhileCondition.ToOperation());
+                    break;
+                case ReplaceProducedDoWhileConditionPatchPlanStep producedDoWhileCondition:
+                    ValidateProducedDoWhileCondition(
+                        document,
+                        producedDoWhileCondition,
                         loopProducers);
                     break;
                 case ReplaceForConditionPatchPlanStep replaceForCondition:
@@ -214,7 +224,17 @@ public static class SemanticPatchPlanJson
                             insertion.StepId,
                             insertion.TargetNodeId,
                             insertedLoop.Condition.ExpectedTypeId,
-                            isWhile: true,
+                            LoopProducerKind.While,
+                            loopProducers,
+                            paths);
+                    }
+                    else if (insertion.NewStatement is DoWhilePatchStatement insertedDoLoop)
+                    {
+                        RegisterLoopProducer(
+                            insertion.StepId,
+                            insertion.TargetNodeId,
+                            insertedDoLoop.Condition.ExpectedTypeId,
+                            LoopProducerKind.DoWhile,
                             loopProducers,
                             paths);
                     }
@@ -224,7 +244,7 @@ public static class SemanticPatchPlanJson
                             insertion.StepId,
                             insertion.TargetNodeId,
                             insertedFor.Condition?.ExpectedTypeId,
-                            isWhile: false,
+                            LoopProducerKind.For,
                             loopProducers,
                             paths);
                         RegisterForLocalProducer(insertion.StepId, insertedFor, producedLocals);
@@ -281,7 +301,17 @@ public static class SemanticPatchPlanJson
                             branchInsertion.StepId,
                             branchInsertion.TargetNodeId,
                             insertedBranchLoop.Condition.ExpectedTypeId,
-                            isWhile: true,
+                            LoopProducerKind.While,
+                            loopProducers,
+                            paths);
+                    }
+                    else if (branchInsertion.NewStatement is DoWhilePatchStatement insertedBranchDoLoop)
+                    {
+                        RegisterLoopProducer(
+                            branchInsertion.StepId,
+                            branchInsertion.TargetNodeId,
+                            insertedBranchDoLoop.Condition.ExpectedTypeId,
+                            LoopProducerKind.DoWhile,
                             loopProducers,
                             paths);
                     }
@@ -291,7 +321,7 @@ public static class SemanticPatchPlanJson
                             branchInsertion.StepId,
                             branchInsertion.TargetNodeId,
                             insertedBranchFor.Condition?.ExpectedTypeId,
-                            isWhile: false,
+                            LoopProducerKind.For,
                             loopProducers,
                             paths);
                         RegisterForLocalProducer(
@@ -362,7 +392,17 @@ public static class SemanticPatchPlanJson
                             loopInsertion.StepId,
                             loopInsertion.TargetNodeId,
                             insertedNestedLoop.Condition.ExpectedTypeId,
-                            isWhile: true,
+                            LoopProducerKind.While,
+                            loopProducers,
+                            paths);
+                    }
+                    else if (loopInsertion.NewStatement is DoWhilePatchStatement insertedNestedDoLoop)
+                    {
+                        RegisterLoopProducer(
+                            loopInsertion.StepId,
+                            loopInsertion.TargetNodeId,
+                            insertedNestedDoLoop.Condition.ExpectedTypeId,
+                            LoopProducerKind.DoWhile,
                             loopProducers,
                             paths);
                     }
@@ -372,7 +412,7 @@ public static class SemanticPatchPlanJson
                             loopInsertion.StepId,
                             loopInsertion.TargetNodeId,
                             insertedNestedFor.Condition?.ExpectedTypeId,
-                            isWhile: false,
+                            LoopProducerKind.For,
                             loopProducers,
                             paths);
                         RegisterForLocalProducer(
@@ -625,6 +665,7 @@ public static class SemanticPatchPlanJson
                 LocalAssignmentPatchStatement or
                 IfPatchStatement or
                 WhilePatchStatement or
+                DoWhilePatchStatement or
                 ForPatchStatement or
                 BreakPatchStatement or
                 ContinuePatchStatement or
@@ -632,7 +673,7 @@ public static class SemanticPatchPlanJson
         {
             throw new JsonException(
                 $"Branch insertion step '{insertion.StepId}' currently accepts only a " +
-                "local-literal declaration, local assignment, nested if/while/for, loop transfer, " +
+                "local-literal declaration, local assignment, nested if/while/do/for, loop transfer, " +
                 "or return statement.");
         }
 
@@ -654,7 +695,7 @@ public static class SemanticPatchPlanJson
         {
             throw new JsonException(
                 $"Loop-body insertion step '{insertion.StepId}' must reference an earlier " +
-                "while/for-insertion step.");
+                "while/do/for-insertion step.");
         }
 
         if (source.OriginalTargetNodeId != insertion.TargetNodeId)
@@ -684,6 +725,7 @@ public static class SemanticPatchPlanJson
                 LocalAssignmentPatchStatement or
                 IfPatchStatement or
                 WhilePatchStatement or
+                DoWhilePatchStatement or
                 ForPatchStatement or
                 BreakPatchStatement or
                 ContinuePatchStatement or
@@ -707,7 +749,7 @@ public static class SemanticPatchPlanJson
     {
         if (string.IsNullOrWhiteSpace(replacement.SourceStepId) ||
             !loopProducers.TryGetValue(replacement.SourceStepId, out LoopProducerState? source) ||
-            !source.IsWhile ||
+            source.Kind != LoopProducerKind.While ||
             source.ConditionTypeId is not SemanticId conditionTypeId)
         {
             throw new JsonException(
@@ -737,6 +779,43 @@ public static class SemanticPatchPlanJson
             new WhilePatchStatement(replacement.NewCondition)));
     }
 
+    private static void ValidateProducedDoWhileCondition(
+        SemanticPatchPlanDocument document,
+        ReplaceProducedDoWhileConditionPatchPlanStep replacement,
+        IReadOnlyDictionary<string, LoopProducerState> loopProducers)
+    {
+        if (string.IsNullOrWhiteSpace(replacement.SourceStepId) ||
+            !loopProducers.TryGetValue(replacement.SourceStepId, out LoopProducerState? source) ||
+            source.Kind != LoopProducerKind.DoWhile ||
+            source.ConditionTypeId is not SemanticId conditionTypeId)
+        {
+            throw new JsonException(
+                $"Produced-do-while condition step '{replacement.StepId}' must reference an " +
+                "earlier do-while-insertion step.");
+        }
+
+        if (source.OriginalTargetNodeId != replacement.TargetNodeId)
+        {
+            throw new JsonException(
+                $"Produced-do-while condition step '{replacement.StepId}' and source step " +
+                $"'{replacement.SourceStepId}' must use the same original parent-block target.");
+        }
+
+        if (replacement.NewCondition is null ||
+            replacement.NewCondition.ExpectedTypeId != conditionTypeId)
+        {
+            throw new JsonException(
+                $"Produced-do-while condition step '{replacement.StepId}' must preserve the " +
+                "source do-while condition's declared semantic type.");
+        }
+
+        ValidateOperation(document, new InsertStatementPatchOperation(
+            replacement.TargetNodeId,
+            null,
+            null,
+            new DoWhilePatchStatement(replacement.NewCondition)));
+    }
+
     private static void ValidateProducedForCondition(
         SemanticPatchPlanDocument document,
         ReplaceProducedForConditionPatchPlanStep replacement,
@@ -744,7 +823,7 @@ public static class SemanticPatchPlanJson
     {
         if (string.IsNullOrWhiteSpace(replacement.SourceStepId) ||
             !loopProducers.TryGetValue(replacement.SourceStepId, out LoopProducerState? source) ||
-            source.IsWhile ||
+            source.Kind != LoopProducerKind.For ||
             source.ConditionTypeId is not SemanticId conditionTypeId)
         {
             throw new JsonException(
@@ -926,13 +1005,13 @@ public static class SemanticPatchPlanJson
         string stepId,
         SemanticId originalTargetNodeId,
         SemanticId? conditionTypeId,
-        bool isWhile,
+        LoopProducerKind kind,
         IDictionary<string, LoopProducerState> loopProducers,
         IDictionary<PlanPathKey, PlanPathState> paths)
     {
         loopProducers.Add(
             stepId,
-            new LoopProducerState(originalTargetNodeId, conditionTypeId, isWhile));
+            new LoopProducerState(originalTargetNodeId, conditionTypeId, kind));
         paths.Add(
             new PlanPathKey(stepId, PlanPathKind.LoopBody),
             new PlanPathState());
@@ -1073,10 +1152,17 @@ public static class SemanticPatchPlanJson
         SemanticId ConditionTypeId,
         PlanPathKey? ParentPath);
 
+    private enum LoopProducerKind
+    {
+        While,
+        DoWhile,
+        For,
+    }
+
     private sealed record LoopProducerState(
         SemanticId OriginalTargetNodeId,
         SemanticId? ConditionTypeId,
-        bool IsWhile);
+        LoopProducerKind Kind);
 
     private sealed record LocalInitializerProducerState(
         SemanticId OriginalTargetNodeId,
