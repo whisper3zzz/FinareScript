@@ -11,8 +11,8 @@ statements:
 - the initializer of an existing local declaration; and
 - the value of an existing non-void return.
 
-The standalone protocol is `unifiedscript.patch/v0.11`; the transaction
-protocol is `unifiedscript.patch-plan/v0.11`. All replacements consume the
+The standalone protocol is `unifiedscript.patch/v0.12`; the transaction
+protocol is `unifiedscript.patch-plan/v0.12`. All replacements consume the
 same closed `PatchExpression` algebra used by statement construction and by
 M4.7 expression editing: literal, existing local/parameter reference, unary,
 binary, and cast.
@@ -150,7 +150,7 @@ return facts, and CFG reducibility are recalculated after each stage.
 
 ## Patch-plan steps
 
-Patch plan v0.11 carries direct wrappers named `replaceIfCondition`,
+Patch plan v0.12 carries direct wrappers named `replaceIfCondition`,
 `replaceLocalInitializer`, and `replaceReturnValue`. Their payloads are the
 standalone fields plus a unique `stepId`. Like other direct replacements, they
 target IDs that exist in the external baseline and are not repeatable against
@@ -272,14 +272,19 @@ The declaration, `if`, branch block, and return identities stay live. The
 sidecar advances once per internal stage, from generation 1 to generation 4,
 and the final source is committed only after every stage succeeds.
 
+## Exact nested input follow-up
+
+M4.10 now complements these complete-endpoint operations with
+`replaceExpressionInput`. It edits binary `left`/`right`, bounded unary or cast
+`operand`, and resolved positional invocation `argN` ports without rebuilding
+the complete endpoint. It preserves the unaffected expression spine and uses
+the same type, scope, dominance, effect, trivia, Graph, and identity pipeline.
+See [EXPRESSION_INPUT_PATCHING.md](EXPRESSION_INPUT_PATCHING.md).
+
 ## Deliberate limits
 
-M4.8 edits complete expression endpoints, not arbitrary nested ports. A visual
-editor may rebuild a nested typed expression tree through its parent endpoint,
-but it cannot yet submit a generic operation against any inner input socket.
-
 An ordinary `localReference` still addresses only definitions present in the
-external source baseline. Plan v0.11 adds a transaction-only
+external source baseline. Plan v0.12 adds a transaction-only
 `producedLocalReference` leaf for locals created by earlier steps; it resolves
 to a normal definition ID before source patching and retains all scope and CFG
 dominance rules. See
@@ -292,7 +297,8 @@ sensitive forms remain outside the authored expression algebra. Void/task-like
 return editing, declaration type or name changes, branch restructuring, moving
 statements, and automatic graph placement are also out of scope.
 
-The next expression milestone should generalize exact nested data-port rewiring
-while retaining explicit old-port IDs and type/effect/order proofs.
+Generated arbitrary expression parents still do not publish symbolic node/port
+handles, and member receivers, invocation targets, assignment/mutation, and
+await inputs remain outside exact input replacement.
 `for`, `foreach`, and `switch` still require explicit lossless HIR designs
 before their control structure is admitted.

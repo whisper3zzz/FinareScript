@@ -2,9 +2,9 @@
 
 ## Purpose
 
-`unifiedscript.patch-plan/v0.11` represents one visual-editor gesture as an
+`unifiedscript.patch-plan/v0.12` represents one visual-editor gesture as an
 ordered, atomic sequence of the same bounded semantic operations supported by
-`unifiedscript.patch/v0.11`. It exists because a useful graph edit often needs
+`unifiedscript.patch/v0.12`. It exists because a useful graph edit often needs
 IDs created by an earlier edit or changes several overlapping source regions.
 Submitting those stages as unrelated filesystem transactions would expose
 partial programs and force the editor to predict random persistent IDs.
@@ -18,7 +18,7 @@ identity sidecar are eligible for a CLI filesystem transaction.
 
 ```json
 {
-  "schemaVersion": "unifiedscript.patch-plan/v0.11",
+  "schemaVersion": "unifiedscript.patch-plan/v0.12",
   "sourceCompilationId": "us_...",
   "semanticConfigurationId": "us_...",
   "steps": []
@@ -29,13 +29,14 @@ The source compilation and semantic configuration IDs are the external
 optimistic-concurrency baseline. Every step has a unique, non-empty `stepId`
 and a persistent `targetNodeId`.
 
-Version v0.11 supports these step discriminators:
+Version v0.12 supports these step discriminators:
 
 | `step` | Purpose | Structural result |
 | --- | --- | --- |
 | `replaceLiteral` | Replace one literal with a complete literal token | Target ID survives |
 | `changeOperator` | Change a unary/binary operator inside its result-preserving family | Operator node ID survives |
 | `reconnectArgument` | Exchange two pure, exactly typed positional arguments | Invocation and endpoint IDs survive |
+| `replaceExpressionInput` | Replace one exact binary/unary/cast/invocation-argument input | Parent and unaffected expression-spine IDs survive |
 | `replaceAssignmentValue` | Replace one root simple-local-assignment value with a closed typed expression | Statement, assignment, and target IDs survive |
 | `replaceWhileCondition` | Replace an existing while condition with a closed typed Boolean expression | While and body IDs survive |
 | `replaceProducedWhileCondition` | Resolve an earlier while producer and replace its current condition | Consumes a loop handle without predicting generated IDs |
@@ -84,7 +85,7 @@ sidecar, finds exactly one produced declaration, and records its actual random
 
 ### Produced locals inside expression trees
 
-Plan v0.11 also exposes the same local handle as a transaction-only expression
+Plan v0.12 also exposes the same local handle as a transaction-only expression
 leaf. Unlike `reconnectValue`, which replaces a whole stable consumer with one
 identifier, `producedLocalReference` can participate at any depth inside a
 later literal/local/unary/binary/cast expression:
@@ -110,6 +111,21 @@ The transaction-only leaf is accepted in insertion payloads and direct or
 produced assignment/while/if/initializer/return endpoint replacements. A
 standalone patch rejects it because no plan step namespace exists. See
 [PRODUCED_VALUE_REFERENCES.md](PRODUCED_VALUE_REFERENCES.md).
+
+### Exact nested expression inputs
+
+`replaceExpressionInput` addresses an existing parent expression and one of the
+same data ports emitted by Graph: binary `left`/`right`, bounded unary or cast
+`operand`, or resolved positional invocation `argN`. It carries the old child
+endpoint, exact child type, exact parent-result type, and a typed `newInput`.
+
+The plan form may consume a `producedLocalReference` in `newInput`. The
+coordinator resolves that leaf before creating the ordinary standalone
+operation, so generated-local scope and dominance are checked at the actual
+stage position. The old child must be effect-free; boundary trivia is retained;
+the parent, statement, unaffected ancestors, and sibling expressions receive
+identity pins. See
+[EXPRESSION_INPUT_PATCHING.md](EXPRESSION_INPUT_PATCHING.md).
 
 ## Symbolic branch-block handles
 
@@ -143,7 +159,7 @@ branch block ID. The coordinator captures the real `Then.Id` and `Else.Id`
 after the producer stage and uses the selected ID in an ordinary internal
 `InsertStatementPatchOperation`.
 
-Branch statements append in plan order. Version v0.11 accepts
+Branch statements append in plan order. Version v0.12 accepts
 `localLiteralDeclaration`, `localAssignment`, `if`, `while`, `break`,
 `continue`, or `return` here. An
 assignment may target only an existing same-method local that lexically and
@@ -245,7 +261,7 @@ steps may reference the same producer; each resolves the condition produced by
 the previous stage. Body insertions remain valid because the while and body
 identities are preserved.
 
-Plan v0.11 applies the same rule to `replaceProducedIfCondition`,
+Plan v0.12 applies the same rule to `replaceProducedIfCondition`,
 `replaceProducedLocalInitializer`, and `replaceProducedReturnValue`. Their
 source step must be an earlier compatible root, branch, or loop-body insertion:
 an `if`, a `localLiteralDeclaration`, or a value-bearing `return`, respectively.
@@ -263,7 +279,7 @@ remains valid.
 
 Direct `replaceAssignmentValue`, `replaceWhileCondition`,
 `replaceIfCondition`, `replaceLocalInitializer`, and `replaceReturnValue` steps
-use exactly the standalone patch v0.11 payload plus `stepId`. They are validated
+use exactly the standalone patch v0.12 payload plus `stepId`. They are validated
 against the original plan baseline and are intentionally single-target, because
 their explicit old endpoints describe the original rather than an intermediate
 stage. See
@@ -295,7 +311,7 @@ declared task type from the value returned inside an async body.
 
 A return may be inserted only at the end of an explicit block. No insertion may
 follow an existing return. Because every symbolic body step appends, the
-v0.11 JSON validator records each `(sourceStepId, branch)` path and rejects every
+v0.12 JSON validator records each `(sourceStepId, branch)` path and rejects every
 later append after a direct return. The other branch remains independently
 writable.
 
@@ -303,7 +319,7 @@ Terminal state also propagates through nested producers. When both branches of
 a nested `if` terminate, its parent path terminates if and only if that nested
 `if` is still the final statement on the parent path. If another statement was
 already appended after it, accepting the second child termination would make
-that later statement unreachable; v0.11 rejects the plan before executing any
+that later statement unreachable; v0.12 rejects the plan before executing any
 stage. This propagation is recursive across arbitrary acyclic nesting depth.
 
 `break` and `continue` are also terminal within their selected branch or loop
@@ -480,7 +496,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
 
 ## Deliberate limits
 
-Plan v0.11 composes all operations currently defined by patch v0.11 and resolves
+Plan v0.12 composes all operations currently defined by patch v0.12 and resolves
 recursive symbolic `then`/`else` and loop-body handles for bounded local,
 assignment, nested-if/while, loop-transfer, and typed-return population. It
 also resolves repeatable expression-endpoint edits on produced while, if,
@@ -489,13 +505,15 @@ calls, member writes, or arbitrary statement payloads through a structural
 handle. It has no cross-method or cross-document symbolic handle. Generated
 locals may be consumed inside later typed expressions, but arbitrary generated
 expression results still do not publish value handles. Existing-expression
-replacement is currently limited to complete
-assignment-value, while-condition, if-condition, local-initializer, and
-return-value endpoints. Multi-document in-memory analysis remains available
+replacement supports complete assignment-value, while-condition, if-condition,
+local-initializer, and return-value endpoints plus exact binary, bounded unary,
+cast, and positional-invocation argument inputs already present in the external
+baseline. Generated arbitrary expression nodes do not yet publish handles for
+later input edits. Multi-document in-memory analysis remains available
 below the CLI, while the CLI commit boundary is still one source/identity pair.
 
 There is no automatic reader migration for older patch-plan schemas; producers
 should reanalyze and emit the current schema and baselines. The original
 temporary-plus-reconnect and earlier composed step shapes remain representable
-in v0.11. Older plan documents must be regenerated because the reader accepts
+in v0.12. Older plan documents must be regenerated because the reader accepts
 only the current schema.

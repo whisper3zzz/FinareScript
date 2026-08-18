@@ -377,6 +377,44 @@ public sealed class SemanticPatchPlanJsonTests
     }
 
     [Fact]
+    public void SerializeAndDeserialize_PreserveProducedReferenceInExpressionInputReplacement()
+    {
+        SemanticId blockId = SemanticId.FromKey("input-plan-block");
+        SemanticId intType = SemanticId.FromKey("System.Int32");
+        var producer = new InsertStatementPatchPlanStep(
+            "insertOffset",
+            blockId,
+            null,
+            SemanticId.FromKey("input-plan-next"),
+            new LocalLiteralDeclarationPatchStatement("offset", "int", "2", intType));
+        var replacement = new ReplaceExpressionInputPatchPlanStep(
+            "connectOffset",
+            SemanticId.FromKey("input-plan-binary"),
+            "right",
+            SemanticId.FromKey("input-plan-old-right"),
+            intType,
+            intType,
+            new ProducedLocalReferencePatchExpression(
+                producer.StepId,
+                "offset",
+                intType));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("input-plan-compilation"),
+            SemanticId.FromKey("input-plan-configuration"),
+            [producer, replacement]);
+
+        string json = SemanticPatchPlanJson.Serialize(plan);
+        SemanticPatchPlanDocument roundTrip = SemanticPatchPlanJson.Deserialize(json);
+
+        Assert.Equal(producer, roundTrip.Steps[0]);
+        Assert.Equal(
+            replacement,
+            Assert.IsType<ReplaceExpressionInputPatchPlanStep>(roundTrip.Steps[1]));
+        Assert.Contains("\"step\": \"replaceExpressionInput\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"expression\": \"producedLocalReference\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Create_RejectsInvalidProducedLocalReferences()
     {
         SemanticId blockId = SemanticId.FromKey("invalid-produced-value-parent");

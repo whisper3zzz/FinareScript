@@ -109,6 +109,9 @@ public static class SemanticPatchPlanJson
                 case ReconnectArgumentPatchPlanStep reconnectArgument:
                     ValidateOperation(document, reconnectArgument.ToOperation());
                     break;
+                case ReplaceExpressionInputPatchPlanStep replaceExpressionInput:
+                    ValidateOperation(document, replaceExpressionInput.ToOperation());
+                    break;
                 case ReplaceAssignmentValuePatchPlanStep replaceAssignmentValue:
                     ValidateOperation(document, replaceAssignmentValue.ToOperation());
                     break;

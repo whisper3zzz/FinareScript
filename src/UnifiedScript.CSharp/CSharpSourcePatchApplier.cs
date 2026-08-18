@@ -171,6 +171,17 @@ public sealed class CSharpSourcePatchApplier
                     boundNodes,
                     methods,
                     documents),
+                ReplaceExpressionInputPatchOperation expressionInput =>
+                    PlanExpressionInputReplacement(
+                        expressionInput,
+                        hirNodes,
+                        patchIndex,
+                        useDefinitionIndex,
+                        boundNodes,
+                        methods,
+                        types,
+                        graphSafetyIndex,
+                        documents),
                 ReplaceAssignmentValuePatchOperation assignmentValue =>
                     PlanAssignmentValueReplacement(
                         assignmentValue,
@@ -680,6 +691,249 @@ public sealed class CSharpSourcePatchApplier
                 new PendingPin(argument.Id, GetIdentityKind(argument), argumentAnnotation),
                 new PendingPin(sourceArgument.Id, GetIdentityKind(sourceArgument), sourceAnnotation),
             ]));
+    }
+
+    private static OperationPlan PlanExpressionInputReplacement(
+        ReplaceExpressionInputPatchOperation operation,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        HirUseDefinitionIndex useDefinitionIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, MethodDescriptor> methods,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
+        GraphPatchSafetyIndex graphSafetyIndex,
+        IReadOnlyDictionary<string, ParsedDocument> documents)
+    {
+        if (!hirNodes.TryGetValue(operation.TargetNodeId, out HirNode? target))
+        {
+            return MissingTarget(operation.TargetNodeId);
+        }
+
+        if (target is not HirExpression targetExpression ||
+            !patchIndex.TryGetExpression(
+                targetExpression.Id,
+                out HirPatchIndex.ExpressionLocation? expressionLocation) ||
+            !patchIndex.TryGetStatement(
+                expressionLocation!.ContainingStatement.Id,
+                out HirPatchIndex.StatementLocation? statementLocation) ||
+            !patchIndex.TryGetBlock(
+                statementLocation!.ParentBlock.Id,
+                out HirPatchIndex.BlockLocation? blockLocation))
+        {
+            return KindMismatch(
+                target,
+                operation.TargetNodeId,
+                "an indexed expression with an editable Graph input port");
+        }
+
+        if (!TryGetExpressionInput(
+                targetExpression,
+                operation.InputPort,
+                out HirExpression? currentInput,
+                out int? invocationArgumentIndex))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidExpressionInputPort,
+                $"Expression '{targetExpression.Id}' of kind " +
+                $"'{targetExpression.GetType().Name}' does not expose supported Graph input " +
+                $"port '{operation.InputPort}'.",
+                targetExpression);
+        }
+
+        if (currentInput!.Id != operation.ExpectedInputNodeId)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.PreconditionFailed,
+                $"Expression input precondition failed for '{targetExpression.Id}." +
+                $"{operation.InputPort}': current endpoint is '{currentInput.Id}', not " +
+                $"'{operation.ExpectedInputNodeId}'.",
+                targetExpression);
+        }
+
+        OperationPlan? targetTypeFailure = RequireType(
+            targetExpression,
+            operation.ExpectedTargetTypeId,
+            "expression-input target",
+            boundNodes);
+        OperationPlan? inputTypeFailure = RequireType(
+            currentInput,
+            operation.ExpectedInputTypeId,
+            $"expression input '{operation.InputPort}'",
+            boundNodes);
+        if (targetTypeFailure is not null || inputTypeFailure is not null)
+        {
+            return targetTypeFailure ?? inputTypeFailure!;
+        }
+
+        if (targetExpression is HirInvocationExpression invocation)
+        {
+            if (invocationArgumentIndex is not int argumentIndex ||
+                !boundNodes.TryGetValue(invocation.Id, out BoundNodeInfo? invocationBinding) ||
+                invocationBinding.InvokedMethodId is not SemanticId methodId ||
+                !methods.TryGetValue(methodId, out MethodDescriptor? method) ||
+                method.Parameters.Count != invocation.Arguments.Count)
+            {
+                return DiagnosticPlan(
+                    SemanticPatchDiagnosticCodes.InvocationShapeNotSupported,
+                    "Invocation input editing requires a resolved, non-expanded positional " +
+                    "invocation whose argument count equals its parameter count.",
+                    invocation);
+            }
+
+            if (method.Parameters[argumentIndex].TypeId != operation.ExpectedInputTypeId)
+            {
+                return DiagnosticPlan(
+                    SemanticPatchDiagnosticCodes.PreconditionFailed,
+                    $"Invocation port '{operation.InputPort}' currently declares parameter type " +
+                    $"'{method.Parameters[argumentIndex].TypeId}', not " +
+                    $"'{operation.ExpectedInputTypeId}'.",
+                    invocation);
+            }
+        }
+
+        if (!graphSafetyIndex.IsInsertionReachable(blockLocation!, statementLocation.Index))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.UnreachableInsertion,
+                "An expression input can be edited only when its containing statement is " +
+                "CFG-reachable.",
+                expressionLocation.ContainingStatement);
+        }
+
+        if (!IsStablePureExpression(
+                currentInput,
+                useDefinitionIndex,
+                boundNodes,
+                methods,
+                types))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.EffectOrderViolation,
+                $"Expression input '{targetExpression.Id}.{operation.InputPort}' is not a stable, " +
+                "effect-free subtree. This bounded replacement cannot remove or reorder state " +
+                "reads, mutation, throws, short-circuit evaluation, or unknown effects.",
+                currentInput);
+        }
+
+        ExpressionBuildResult newInput = BuildPatchExpression(
+            operation.NewInput,
+            blockLocation!,
+            statementLocation.Index,
+            hirNodes,
+            patchIndex,
+            graphSafetyIndex,
+            boundNodes,
+            types);
+        if (newInput.Syntax is null || newInput.Type?.Id != operation.ExpectedInputTypeId)
+        {
+            return DiagnosticPlan(
+                newInput.DiagnosticCode ?? SemanticPatchDiagnosticCodes.TypeMismatch,
+                newInput.DiagnosticMessage ??
+                $"The replacement for input port '{operation.InputPort}' is invalid.",
+                targetExpression);
+        }
+
+        if (!TryFindSyntax(
+                documents,
+                expressionLocation.ContainingStatement,
+                out ParsedDocument? document,
+                out StatementSyntax? statementSyntax))
+        {
+            return MissingSyntax(
+                expressionLocation.ContainingStatement,
+                "expression-input containing statement");
+        }
+
+        HashSet<SemanticId> removedIds = currentInput
+            .DescendantsAndSelf()
+            .Select(static node => node.Id)
+            .ToHashSet();
+        if (!TryAnnotateExpressions(
+                document!,
+                statementSyntax!,
+                expressionLocation.ContainingStatement,
+                removedIds,
+                out StatementSyntax? annotatedStatement,
+                out IReadOnlyDictionary<SemanticId, SyntaxAnnotation>? expressionAnnotations,
+                out IReadOnlyList<PendingPin>? expressionPins) ||
+            !expressionAnnotations!.TryGetValue(
+                currentInput.Id,
+                out SyntaxAnnotation? inputAnnotation))
+        {
+            return MissingSyntax(currentInput, $"expression input '{operation.InputPort}'");
+        }
+
+        ExpressionSyntax annotatedInput = annotatedStatement!
+            .GetAnnotatedNodes(inputAnnotation)
+            .OfType<ExpressionSyntax>()
+            .Single();
+        if (annotatedInput.DescendantTrivia(descendIntoTrivia: true).Any(IsMeaningfulTrivia))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidReplacement,
+                $"Expression input '{targetExpression.Id}.{operation.InputPort}' contains comments " +
+                "or directives that cannot be discarded safely.",
+                currentInput);
+        }
+
+        ExpressionSyntax formattedInput = FormatReplacementExpression(
+            ParenthesizeCompositeExpression(newInput.Syntax),
+            annotatedInput);
+        StatementSyntax updatedStatement = annotatedStatement.ReplaceNode(
+            annotatedInput,
+            formattedInput);
+        var statementAnnotation = new SyntaxAnnotation(
+            IdentityAnnotationKind,
+            expressionLocation.ContainingStatement.Id.Value);
+        updatedStatement = updatedStatement.WithAdditionalAnnotations(statementAnnotation);
+        var pins = new List<PendingPin>(expressionPins!)
+        {
+            new(
+                expressionLocation.ContainingStatement.Id,
+                GetIdentityKind(expressionLocation.ContainingStatement),
+                statementAnnotation),
+        };
+        return SuccessPlan(document!, new PendingReplacement(
+            document!.Source.LogicalPath,
+            statementSyntax!,
+            updatedStatement,
+            pins));
+    }
+
+    private static bool TryGetExpressionInput(
+        HirExpression target,
+        string inputPort,
+        out HirExpression? input,
+        out int? invocationArgumentIndex)
+    {
+        invocationArgumentIndex = null;
+        input = (target, inputPort) switch
+        {
+            (HirBinaryExpression binary, "left") => binary.Left,
+            (HirBinaryExpression binary, "right") => binary.Right,
+            (HirUnaryExpression unary, "operand")
+                when GraphExpressionUnaryOperators.Contains(unary.Operator) => unary.Operand,
+            (HirCastExpression cast, "operand") => cast.Operand,
+            _ => null,
+        };
+        if (input is not null)
+        {
+            return true;
+        }
+
+        if (target is not HirInvocationExpression invocation ||
+            !inputPort.StartsWith("arg", StringComparison.Ordinal) ||
+            !int.TryParse(inputPort.AsSpan(3), out int argumentIndex) ||
+            argumentIndex < 0 ||
+            argumentIndex >= invocation.Arguments.Count ||
+            !string.Equals(inputPort, $"arg{argumentIndex}", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        invocationArgumentIndex = argumentIndex;
+        input = invocation.Arguments[argumentIndex];
+        return true;
     }
 
     private static OperationPlan PlanStatementInsertion(

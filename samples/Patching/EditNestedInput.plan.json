@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "unifiedscript.patch-plan/v0.12",
+  "sourceCompilationId": "us_ca7fa14396691d9fd059bf2c129062ba",
+  "semanticConfigurationId": "us_02f5fe78d296e2d4fe04bc50ca71acf1",
+  "steps": [
+    {
+      "step": "insertStatement",
+      "stepId": "insertOffset",
+      "targetNodeId": "us_3a2846a3d338a5f2916159475e32ef2d",
+      "expectedPreviousSiblingId": null,
+      "expectedNextSiblingId": "us_4cb874cbeefab8a4a4f62492626a7b75",
+      "newStatement": {
+        "statement": "localLiteralDeclaration",
+        "name": "offset",
+        "typeName": "int",
+        "valueText": "2",
+        "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+      }
+    },
+    {
+      "step": "replaceExpressionInput",
+      "stepId": "connectOffset",
+      "targetNodeId": "us_f86d690b291772f40e971c721ae9bca8",
+      "inputPort": "right",
+      "expectedInputNodeId": "us_6f75b4d28bb76c8380a76067fefd67a6",
+      "expectedInputTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+      "expectedTargetTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+      "newInput": {
+        "expression": "producedLocalReference",
+        "sourceStepId": "insertOffset",
+        "expectedName": "offset",
+        "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+      }
+    }
+  ]
+}

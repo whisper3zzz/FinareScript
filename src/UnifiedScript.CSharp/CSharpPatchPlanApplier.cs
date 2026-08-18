@@ -535,6 +535,11 @@ public sealed class CSharpPatchPlanApplier
                     invocation,
                     out operation,
                     out diagnostic);
+            case ReplaceExpressionInputPatchPlanStep expressionInput
+                when target is HirExpression:
+                operation = expressionInput.ToOperation();
+                diagnostic = null;
+                return true;
             case ReplaceAssignmentValuePatchPlanStep assignmentValue
                 when target is HirAssignmentExpression:
                 operation = assignmentValue.ToOperation();
@@ -1289,6 +1294,7 @@ public sealed class CSharpPatchPlanApplier
         ReplaceLiteralPatchPlanStep replace => replace.ToOperation(),
         ChangeOperatorPatchPlanStep changeOperator => changeOperator.ToOperation(),
         ReconnectArgumentPatchPlanStep reconnectArgument => reconnectArgument.ToOperation(),
+        ReplaceExpressionInputPatchPlanStep expressionInput => expressionInput.ToOperation(),
         ReplaceAssignmentValuePatchPlanStep assignmentValue => assignmentValue.ToOperation(),
         ReplaceWhileConditionPatchPlanStep whileCondition => whileCondition.ToOperation(),
         ReplaceProducedWhileConditionPatchPlanStep => throw new ArgumentException(

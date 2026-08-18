@@ -106,6 +106,8 @@ Outcome: practical gameplay methods are fully visualizable.
   and returns
 - [x] typed produced-local references inside later plan expression trees
 - [x] same-method, scope, and CFG-dominance validation for generated values
+- [x] exact nested binary/unary/cast/invocation-argument Graph input replacement
+- [x] old-endpoint/type/effect/trivia checks with unaffected-spine identity retention
 - [ ] general data/control rewiring and structural HIR operations
 - [ ] `for` and `foreach`
 - [ ] `switch` and supported patterns

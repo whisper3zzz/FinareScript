@@ -80,6 +80,9 @@ public static class SemanticPatchJson
                 case ReconnectArgumentPatchOperation reconnectArgument:
                     ValidateReconnectArgument(reconnectArgument);
                     break;
+                case ReplaceExpressionInputPatchOperation replaceExpressionInput:
+                    ValidateReplaceExpressionInput(replaceExpressionInput);
+                    break;
                 case ReplaceAssignmentValuePatchOperation replaceAssignmentValue:
                     ValidateReplaceAssignmentValue(replaceAssignmentValue);
                     break;
@@ -171,6 +174,55 @@ public static class SemanticPatchJson
         {
             throw new JsonException("Argument reconnection requires two distinct argument nodes.");
         }
+    }
+
+    private static void ValidateReplaceExpressionInput(
+        ReplaceExpressionInputPatchOperation operation)
+    {
+        if (!IsSupportedExpressionInputPort(operation.InputPort))
+        {
+            throw new JsonException(
+                "Expression-input replacement requires a canonical 'left', 'right', 'operand', " +
+                "or zero-based 'argN' Graph input port.");
+        }
+
+        if (operation.ExpectedInputNodeId.IsEmpty ||
+            operation.ExpectedInputTypeId.IsEmpty ||
+            operation.ExpectedTargetTypeId.IsEmpty ||
+            operation.NewInput is null)
+        {
+            throw new JsonException(
+                "Expression-input replacement requires current input, input type, target type, " +
+                "and typed new-input preconditions.");
+        }
+
+        if (operation.TargetNodeId == operation.ExpectedInputNodeId)
+        {
+            throw new JsonException(
+                "An expression input cannot also be its own target expression.");
+        }
+
+        if (operation.NewInput.ExpectedTypeId != operation.ExpectedInputTypeId)
+        {
+            throw new JsonException(
+                "A replacement expression input must declare the expected input-port type.");
+        }
+
+        ValidatePatchExpression(operation.NewInput, 0);
+    }
+
+    private static bool IsSupportedExpressionInputPort(string? inputPort)
+    {
+        if (inputPort is "left" or "right" or "operand")
+        {
+            return true;
+        }
+
+        return inputPort is not null &&
+            inputPort.StartsWith("arg", StringComparison.Ordinal) &&
+            int.TryParse(inputPort.AsSpan(3), out int argumentIndex) &&
+            argumentIndex >= 0 &&
+            string.Equals(inputPort, $"arg{argumentIndex}", StringComparison.Ordinal);
     }
 
     private static void ValidateReplaceAssignmentValue(

@@ -77,6 +77,79 @@ public sealed class SemanticPatchJsonTests
     }
 
     [Fact]
+    public void SerializeAndDeserialize_PreserveExpressionInputReplacement()
+    {
+        SemanticId intType = SemanticId.FromKey("System.Int32");
+        var replacement = new ReplaceExpressionInputPatchOperation(
+            SemanticId.FromKey("nested-binary"),
+            "right",
+            SemanticId.FromKey("nested-binary-right"),
+            intType,
+            intType,
+            new BinaryPatchExpression(
+                "+",
+                new LocalReferencePatchExpression(
+                    SemanticId.FromKey("replacement-local"),
+                    "offset",
+                    intType),
+                new LiteralPatchExpression("1", intType),
+                intType));
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            SemanticId.FromKey("input-replacement-compilation"),
+            SemanticId.FromKey("input-replacement-configuration"),
+            [replacement]);
+
+        string json = SemanticPatchJson.Serialize(patch);
+        SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
+
+        Assert.Equal(
+            replacement,
+            Assert.IsType<ReplaceExpressionInputPatchOperation>(Assert.Single(roundTrip.Operations)));
+        Assert.Contains("\"operation\": \"replaceExpressionInput\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"inputPort\": \"right\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Create_RejectsInvalidExpressionInputReplacementProtocol()
+    {
+        SemanticId intType = SemanticId.FromKey("System.Int32");
+        SemanticId boolType = SemanticId.FromKey("System.Boolean");
+        SemanticId targetId = SemanticId.FromKey("invalid-input-target");
+        SemanticId inputId = SemanticId.FromKey("invalid-input-endpoint");
+
+        Assert.Throws<JsonException>(() => SemanticPatchDocument.Create(
+            SemanticId.FromKey("invalid-input-port-compilation"),
+            SemanticId.FromKey("invalid-input-port-configuration"),
+            [new ReplaceExpressionInputPatchOperation(
+                targetId,
+                "arg01",
+                inputId,
+                intType,
+                intType,
+                new LiteralPatchExpression("1", intType))]));
+        Assert.Throws<JsonException>(() => SemanticPatchDocument.Create(
+            SemanticId.FromKey("self-input-compilation"),
+            SemanticId.FromKey("self-input-configuration"),
+            [new ReplaceExpressionInputPatchOperation(
+                targetId,
+                "left",
+                targetId,
+                intType,
+                intType,
+                new LiteralPatchExpression("1", intType))]));
+        Assert.Throws<JsonException>(() => SemanticPatchDocument.Create(
+            SemanticId.FromKey("wrong-input-type-compilation"),
+            SemanticId.FromKey("wrong-input-type-configuration"),
+            [new ReplaceExpressionInputPatchOperation(
+                targetId,
+                "operand",
+                inputId,
+                intType,
+                intType,
+                new LiteralPatchExpression("true", boolType))]));
+    }
+
+    [Fact]
     public void SerializeAndDeserialize_PreserveStructuredExpressionReplacementOperations()
     {
         SemanticId intType = SemanticId.FromKey("System.Int32");

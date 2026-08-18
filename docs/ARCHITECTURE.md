@@ -214,9 +214,10 @@ compilation identity is not safe for editing.
 ## Semantic patch transaction
 
 Graph schema v0.4 carries both the source compilation ID and semantic
-configuration ID. A `unifiedscript.patch/v0.11` document repeats those IDs and
+configuration ID. A `unifiedscript.patch/v0.12` document repeats those IDs and
 contains typed operations keyed by graph/HIR `SemanticId`. Implemented
 operations are `replaceLiteral`, `changeOperator`, `reconnectArgument`,
+`replaceExpressionInput`,
 `replaceAssignmentValue`, `replaceWhileCondition`, `replaceIfCondition`,
 `replaceLocalInitializer`, `replaceReturnValue`, `insertStatement`,
 `deleteStatement`, `introduceTemporary`, and `reconnectValue`.
@@ -228,10 +229,11 @@ operator/endpoint, semantic type,
 containing statement, parent block, and exact sibling preconditions rather than
 relying only on the compilation baseline.
 
-`unifiedscript.patch-plan/v0.11` is an ordered transaction above individual
+`unifiedscript.patch-plan/v0.12` is an ordered transaction above individual
 patches. It composes every current bounded operation: literal and operator
 changes, argument reconnection, structured assignment/loop/branch/local/return
-expression edits, statement insertion/deletion, temporary introduction, value
+expression edits, exact nested expression-input replacement, statement
+insertion/deletion, temporary introduction, value
 reconnection, symbolic branch-body insertion, symbolic loop-body insertion,
 and symbolic replacement of expression endpoints on compatible statements
 produced earlier in the same plan.
@@ -267,6 +269,8 @@ The endpoint replacement and generated-statement handle contract is specified
 in [GENERAL_EXPRESSION_EDITING.md](GENERAL_EXPRESSION_EDITING.md).
 The generated-local data-flow contract is specified in
 [PRODUCED_VALUE_REFERENCES.md](PRODUCED_VALUE_REFERENCES.md).
+The exact Graph-input edit and unaffected-spine identity contract is specified
+in [EXPRESSION_INPUT_PATCHING.md](EXPRESSION_INPUT_PATCHING.md).
 
 The C# patch boundary performs these steps without mutating files:
 

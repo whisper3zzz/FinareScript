@@ -27,4 +27,5 @@ public static class SemanticPatchDiagnosticCodes
     public const string InvalidGraphExpression = "UVS3023";
     public const string UnreachableInsertion = "UVS3024";
     public const string AssignmentTargetNotAvailable = "UVS3025";
+    public const string InvalidExpressionInputPort = "UVS3026";
 }

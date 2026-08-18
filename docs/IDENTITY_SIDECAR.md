@@ -152,14 +152,15 @@ internal reconciliation stages.
 Graph-authored branch insertion pins every existing sibling expression before
 adding the new `if`, condition subtree, and two explicit blocks. Those authored
 nodes receive fresh identities while layout synchronization leaves their Graph
-nodes explicitly unplaced. Patch-plan v0.11 captures those fresh block IDs after
+nodes explicitly unplaced. Patch-plan v0.12 captures those fresh block IDs after
 the producer stage and exposes them symbolically as `then`/`else` targets. Each
 branch-body stage adopts the preceding sidecar before resolving the block, so
 ordered insertions remain stable even though the editor never sees or predicts
 the generated IDs. Branch population can now also insert an assignment to an
 existing outer local; that assignment receives normal reconciled statement and
 expression identities without creating a new local handle. Broader
-expression/control-flow synthesis, arbitrary cross-expression rewiring,
+expression/control-flow synthesis, generated-parent input handles and broader
+cross-expression rewiring,
 declaration rename reconciliation, multi-file CLI patch commits, bounded
 tombstone compaction, and automatic `.usgraph` placement remain future work.
 

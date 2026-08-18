@@ -27,6 +27,10 @@ public static class SemanticPatchPlanExpressions
             {
                 NewValue = Rewrite(replacement.NewValue, resolver),
             },
+            ReplaceExpressionInputPatchPlanStep replacement => replacement with
+            {
+                NewInput = Rewrite(replacement.NewInput, resolver),
+            },
             ReplaceWhileConditionPatchPlanStep replacement => replacement with
             {
                 NewCondition = Rewrite(replacement.NewCondition, resolver),
@@ -80,6 +84,7 @@ public static class SemanticPatchPlanExpressions
         PatchExpression? expression = step switch
         {
             ReplaceAssignmentValuePatchPlanStep replacement => replacement.NewValue,
+            ReplaceExpressionInputPatchPlanStep replacement => replacement.NewInput,
             ReplaceWhileConditionPatchPlanStep replacement => replacement.NewCondition,
             ReplaceProducedWhileConditionPatchPlanStep replacement => replacement.NewCondition,
             ReplaceIfConditionPatchPlanStep replacement => replacement.NewCondition,

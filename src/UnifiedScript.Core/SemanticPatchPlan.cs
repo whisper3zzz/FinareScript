@@ -6,6 +6,7 @@ namespace UnifiedScript.Core;
 [JsonDerivedType(typeof(ReplaceLiteralPatchPlanStep), "replaceLiteral")]
 [JsonDerivedType(typeof(ChangeOperatorPatchPlanStep), "changeOperator")]
 [JsonDerivedType(typeof(ReconnectArgumentPatchPlanStep), "reconnectArgument")]
+[JsonDerivedType(typeof(ReplaceExpressionInputPatchPlanStep), "replaceExpressionInput")]
 [JsonDerivedType(typeof(ReplaceAssignmentValuePatchPlanStep), "replaceAssignmentValue")]
 [JsonDerivedType(typeof(ReplaceWhileConditionPatchPlanStep), "replaceWhileCondition")]
 [JsonDerivedType(
@@ -81,6 +82,24 @@ public sealed record ReconnectArgumentPatchPlanStep(
         ExpectedSourceArgumentNodeId,
         ExpectedArgumentTypeId,
         ExpectedSourceArgumentTypeId);
+}
+
+public sealed record ReplaceExpressionInputPatchPlanStep(
+    string StepId,
+    SemanticId TargetNodeId,
+    string InputPort,
+    SemanticId ExpectedInputNodeId,
+    SemanticId ExpectedInputTypeId,
+    SemanticId ExpectedTargetTypeId,
+    PatchExpression NewInput) : SemanticPatchPlanStep(StepId, TargetNodeId)
+{
+    public ReplaceExpressionInputPatchOperation ToOperation() => new(
+        TargetNodeId,
+        InputPort,
+        ExpectedInputNodeId,
+        ExpectedInputTypeId,
+        ExpectedTargetTypeId,
+        NewInput);
 }
 
 public sealed record ReplaceAssignmentValuePatchPlanStep(
@@ -272,7 +291,7 @@ public sealed record SemanticPatchPlanDocument(
     SemanticId SemanticConfigurationId,
     IReadOnlyList<SemanticPatchPlanStep> Steps)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.patch-plan/v0.11";
+    public const string CurrentSchemaVersion = "unifiedscript.patch-plan/v0.12";
 
     public static SemanticPatchPlanDocument Create(
         SemanticId sourceCompilationId,

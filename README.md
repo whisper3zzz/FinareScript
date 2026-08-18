@@ -45,6 +45,8 @@ The repository currently implements:
   return values, including repeatable edits through generated-statement handles;
 - transaction-only typed references from later expression trees to locals
   produced earlier in the same atomic plan;
+- exact nested expression-input replacement through the same `left`, `right`,
+  `operand`, and positional `argN` ports emitted by Graph;
 - opt-in `.usids` sidecars that preserve node identity across formatting and edits;
 - semantic-independent `.usgraph` layout sidecars with deterministic positions,
   sizes, collapsed state, comment regions, routing hints, and orphan recovery;
@@ -65,6 +67,9 @@ that exact-endpoint model to local initializers, `if` conditions, and return
 values, whether the enclosing statement already exists or is produced earlier
 in the same atomic plan. M4.9 connects the data side of those stages by letting
 later expressions consume earlier generated locals through typed plan handles.
+M4.10 edits one exact nested input without rebuilding its enclosing expression,
+while retaining type, effect, trivia, scope, dominance, Graph-edge, and
+unaffected-spine identity proofs.
 
 The v0.2 profile accepts `[Visual]` methods containing local variables,
 expressions, calls, assignments, `if/else`, `while`, `break`, `continue`,
@@ -237,7 +242,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
   --out-identity artifacts/patched/DamageRules.cs.usids
 ```
 
-`unifiedscript.patch/v0.11` binds every patch to both the source compilation ID
+`unifiedscript.patch/v0.12` binds every patch to both the source compilation ID
 and semantic configuration ID emitted in Graph schema v0.3. A `replaceLiteral`
 operation also carries the expected old literal text. A stale source, changed
 reference/effect configuration, missing target, changed old value, non-literal
@@ -251,7 +256,7 @@ ambiguous matches allocate new IDs and emit `UVS3101` rather than guessing.
 
 ## Apply structural graph patches
 
-Patch v0.11 includes `changeOperator` and `reconnectArgument`. The checked-in
+Patch v0.12 includes `changeOperator` and `reconnectArgument`. The checked-in
 operator sample changes the binary node from multiplication to division while
 requiring the expected result, left-port, and right-port type IDs:
 
@@ -287,7 +292,7 @@ single-document.
 
 ## Apply a statement insertion
 
-Patch v0.11 also includes bounded `insertStatement` and `deleteStatement`
+Patch v0.12 also includes bounded `insertStatement` and `deleteStatement`
 operations. The insertion sample adds a graph-authored local declaration before
 the existing return statement:
 
@@ -302,7 +307,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
 ```
 
 An insertion targets a parent block and records the exact adjacent sibling IDs.
-Patch v0.11 accepts a local declaration with one literal initializer, a
+Patch v0.12 accepts a local declaration with one literal initializer, a
 CFG-checked local assignment, a typed terminal return, or an `if` whose
 condition is a versioned graph-authored expression. A local's
 semantic type must already be present and graph-safe in the bound compilation,
@@ -378,7 +383,7 @@ It proves that source, HIR, Graph branch/data/control edges, persistent identity
 and `.usgraph` layout synchronization share one structure. New branch and
 condition nodes are explicitly `unplaced`; existing placements survive.
 
-Patch-plan v0.11 can populate those newly allocated blocks without predicting
+Patch-plan v0.12 can populate those newly allocated blocks without predicting
 their random IDs. The checked-in plan inserts the same guard, appends two typed
 locals to `then`, and appends one typed local to `else`:
 
@@ -528,7 +533,7 @@ pin. The moved expression, its descendants, the containing statement, sibling
 statements, and parent block therefore retain their IDs. Only the new local
 declaration and replacement identifier allocate new IDs. This is the first
 lowering primitive needed to represent a shared Graph value without duplicating
-C# evaluation. Patch v0.11 can connect additional compatible consumers to
+C# evaluation. Patch v0.12 can connect additional compatible consumers to
 that local definition.
 
 ## Reconnect a typed consumer
@@ -587,12 +592,13 @@ analyzed source baseline, or atomically with the patch-plan protocol below.
 
 ## Apply atomic semantic patch plans
 
-`unifiedscript.patch-plan/v0.11` composes `replaceLiteral`, `changeOperator`,
+`unifiedscript.patch-plan/v0.12` composes `replaceLiteral`, `changeOperator`,
 `reconnectArgument`, typed replacement of assignment, loop, branch,
 declaration-initializer, and return endpoints, their generated-statement
 handle variants, `insertStatement`, `insertBranchStatement`,
 `insertLoopBodyStatement`, `deleteStatement`, `introduceTemporary`, and
-`reconnectValue` as one ordered transaction. Plan expressions may also carry a
+`reconnectValue`, plus exact nested `replaceExpressionInput`, as one ordered
+transaction. Plan expressions may also carry a
 transaction-only `producedLocalReference` leaf that resolves an earlier local
 producer by `stepId`. The
 shared-value sample starts with:
@@ -680,9 +686,10 @@ more paths, and all-path termination propagates up that producer tree. A
 `while` insertion similarly publishes one symbolic body handle through
 `insertLoopBodyStatement`; nested if/while producers compose, while
 `break`/`continue` bind only to the nearest lexical loop. Local assignments are
-supported as direct, produced-branch, and produced-loop-body payloads. Calls,
-async/task-like returns, cyclic handle references, and cross-method handles
-remain outside v0.11.
+supported as direct, produced-branch, and produced-loop-body payloads. Authored
+call construction, async/task-like returns, cyclic handle references, and
+cross-method handles remain outside v0.12; exact inputs of already-resolved
+positional calls are covered by M4.10 below.
 
 ### Build a loop from a visual plan
 
@@ -796,6 +803,40 @@ dotnet run --project src/UnifiedScript.Cli -- \
 Standalone patch documents reject this leaf because they have no step
 namespace. See
 [PRODUCED_VALUE_REFERENCES.md](docs/PRODUCED_VALUE_REFERENCES.md).
+
+### Replace one exact nested expression input
+
+M4.10 maps a visual data-edge edit directly to Graph's existing input-port
+vocabulary. `replaceExpressionInput` targets a parent expression, names its
+`left`, `right`, `operand`, or positional `argN` port, and repeats the current
+child endpoint plus exact input and parent-result types. Binary, bounded unary,
+cast, and resolved positional-invocation inputs are supported.
+
+The old input must be effect-free, the replacement must come from the same
+closed typed expression algebra, and every referenced local must pass the usual
+scope and CFG-dominance checks. Boundary comments move with the replacement;
+unsafe internal trivia rejects the edit. The containing statement, parent,
+unaffected expression spine, and sibling nodes retain persistent IDs while the
+removed child subtree becomes tombstones.
+
+The checked-in plan inserts `offset` and connects it only to the inner
+addition's `right` port:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  apply-plan \
+  samples/Patching/EditNestedInput.cs \
+  --identity samples/Patching/EditNestedInput.cs.usids \
+  --plan samples/Patching/EditNestedInput.plan.json \
+  --out artifacts/nested-input/EditNestedInput.cs \
+  --out-identity artifacts/nested-input/EditNestedInput.cs.usids
+```
+
+It changes `return (value + 1) * 3;` into ordinary C# containing
+`int offset = 2;` and `return (value + offset) * 3;`. The generated local is
+resolved at stage time and then enters the normal standalone input-replacement
+path; there is no Graph-only evaluator. See
+[EXPRESSION_INPUT_PATCHING.md](docs/EXPRESSION_INPUT_PATCHING.md).
 
 ## Persist and synchronize graph layout
 

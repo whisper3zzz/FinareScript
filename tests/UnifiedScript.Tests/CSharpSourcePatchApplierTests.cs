@@ -392,6 +392,439 @@ public sealed class CSharpSourcePatchApplierTests
     }
 
     [Fact]
+    public void Apply_ReplacesNestedBinaryInputAndPreservesUnaffectedSpineIdentities()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int value)
+                {
+                    int offset = 2;
+                    return (value + 1) * 3;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/NestedInput.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement offset = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+        HirBinaryExpression outer = Assert.IsType<HirBinaryExpression>(returnStatement.Expression);
+        HirBinaryExpression addition = Assert.IsType<HirBinaryExpression>(outer.Left);
+        HirExpression oldInput = addition.Right;
+        SemanticId intType = GetTypeId(original, addition);
+        HashSet<SemanticId> preservedIds = Assert.Single(original.IdentitySidecars).Entries
+            .Select(static entry => entry.Id)
+            .Where(id => id != oldInput.Id)
+            .ToHashSet();
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new ReplaceExpressionInputPatchOperation(
+                addition.Id,
+                "right",
+                oldInput.Id,
+                intType,
+                intType,
+                new LocalReferencePatchExpression(offset.Id, offset.Name, intType))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Contains(
+            "return (value + offset) * 3;",
+            Assert.Single(result.PatchedRequest!.Sources).Source);
+        HirMethodDeclaration changedMethod = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirVariableDeclarationStatement changedOffset = Assert.IsType<HirVariableDeclarationStatement>(
+            changedMethod.Body.Statements[0]);
+        HirReturnStatement changedReturn = Assert.IsType<HirReturnStatement>(changedMethod.Body.Statements[1]);
+        HirBinaryExpression changedOuter = Assert.IsType<HirBinaryExpression>(changedReturn.Expression);
+        HirBinaryExpression changedAddition = Assert.IsType<HirBinaryExpression>(changedOuter.Left);
+        HirIdentifierExpression connectedOffset = Assert.IsType<HirIdentifierExpression>(changedAddition.Right);
+        Assert.Equal(returnStatement.Id, changedReturn.Id);
+        Assert.Equal(outer.Id, changedOuter.Id);
+        Assert.Equal(addition.Id, changedAddition.Id);
+        Assert.Equal(addition.Left.Id, changedAddition.Left.Id);
+        Assert.Equal(offset.Id, changedOffset.Id);
+        Assert.Equal(
+            changedOffset.Id,
+            Assert.Single(
+                result.Analysis.Semantics!.Nodes,
+                binding => binding.NodeId == connectedOffset.Id).ReferencedSymbolId);
+
+        IdentitySidecarDocument after = Assert.Single(result.Analysis.IdentitySidecars);
+        Assert.Subset(
+            after.Entries.Select(static entry => entry.Id).ToHashSet(),
+            preservedIds);
+        Assert.Contains(after.Tombstones, tombstone => tombstone.Id == oldInput.Id);
+        GraphFunction function = Assert.Single(new HirGraphProjector()
+            .Project(result.Analysis.Hir, result.Analysis.Semantics)
+            .Functions);
+        Assert.Contains(
+            function.Edges,
+            edge => edge.FromNode == connectedOffset.Id &&
+                edge.ToNode == changedAddition.Id &&
+                edge.ToPort == "right");
+    }
+
+    [Fact]
+    public void Apply_ReplacesInvocationArgumentInputUsingGraphPortName()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Api
+            {
+                public static int Combine(int first, int second) => first + second;
+            }
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int value)
+                {
+                    return Api.Combine(value, 1);
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/InvocationInput.cs");
+        HirInvocationExpression invocation = Assert.Single(
+            original.Hir!.DescendantsAndSelf().OfType<HirInvocationExpression>());
+        SemanticId intType = GetTypeId(original, invocation.Arguments[1]);
+        SemanticId invocationType = GetTypeId(original, invocation);
+        HirParameter value = Assert.Single(
+            original.Hir!.DescendantsAndSelf().OfType<HirParameter>(),
+            static parameter => parameter.Name == "value");
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir!.Id,
+            original.Semantics!.ConfigurationId,
+            [new ReplaceExpressionInputPatchOperation(
+                invocation.Id,
+                "arg1",
+                invocation.Arguments[1].Id,
+                intType,
+                invocationType,
+                new BinaryPatchExpression(
+                    "+",
+                    new LocalReferencePatchExpression(value.Id, value.Name, intType),
+                    new LiteralPatchExpression("2", intType),
+                    intType))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Contains(
+            "Api.Combine(value, (value + 2))",
+            Assert.Single(result.PatchedRequest!.Sources).Source);
+        HirInvocationExpression changedInvocation = Assert.Single(
+            result.Analysis!.Hir!.DescendantsAndSelf().OfType<HirInvocationExpression>());
+        Assert.Equal(invocation.Id, changedInvocation.Id);
+        Assert.Equal(invocation.Arguments[0].Id, changedInvocation.Arguments[0].Id);
+        Assert.IsType<HirBinaryExpression>(changedInvocation.Arguments[1]);
+    }
+
+    [Fact]
+    public void Apply_ReplacesUnaryAndCastOperandPorts()
+    {
+        const string unarySource = """
+            using UnifiedScript;
+
+            static class UnaryScript
+            {
+                [Visual]
+                static int Run(int value)
+                {
+                    return -value;
+                }
+            }
+            """;
+        (CSharpCompilationRequest unaryRequest, CSharpAnalysisResult unaryAnalysis) =
+            CreatePersistentRequest(unarySource, "Game/UnaryInput.cs");
+        HirUnaryExpression unary = Assert.Single(
+            unaryAnalysis.Hir!.DescendantsAndSelf().OfType<HirUnaryExpression>());
+        SemanticId unaryType = GetTypeId(unaryAnalysis, unary);
+        SemanticPatchDocument unaryPatch = SemanticPatchDocument.Create(
+            unaryAnalysis.Hir!.Id,
+            unaryAnalysis.Semantics!.ConfigurationId,
+            [new ReplaceExpressionInputPatchOperation(
+                unary.Id,
+                "operand",
+                unary.Operand.Id,
+                unaryType,
+                unaryType,
+                new LiteralPatchExpression("2", unaryType))]);
+
+        CSharpPatchResult unaryResult = new CSharpSourcePatchApplier().Apply(unaryRequest, unaryPatch);
+
+        Assert.True(unaryResult.Succeeded, string.Join(Environment.NewLine, unaryResult.Diagnostics));
+        Assert.Contains("return -2;", Assert.Single(unaryResult.PatchedRequest!.Sources).Source);
+        Assert.Equal(
+            unary.Id,
+            Assert.Single(unaryResult.Analysis!.Hir!.DescendantsAndSelf()
+                .OfType<HirUnaryExpression>()).Id);
+
+        const string castSource = """
+            using UnifiedScript;
+
+            static class CastScript
+            {
+                [Visual]
+                static int Run(float value)
+                {
+                    return (int)value;
+                }
+            }
+            """;
+        (CSharpCompilationRequest castRequest, CSharpAnalysisResult castAnalysis) =
+            CreatePersistentRequest(castSource, "Game/CastInput.cs");
+        HirCastExpression cast = Assert.Single(
+            castAnalysis.Hir!.DescendantsAndSelf().OfType<HirCastExpression>());
+        SemanticId operandType = GetTypeId(castAnalysis, cast.Operand);
+        SemanticPatchDocument castPatch = SemanticPatchDocument.Create(
+            castAnalysis.Hir!.Id,
+            castAnalysis.Semantics!.ConfigurationId,
+            [new ReplaceExpressionInputPatchOperation(
+                cast.Id,
+                "operand",
+                cast.Operand.Id,
+                operandType,
+                GetTypeId(castAnalysis, cast),
+                new LiteralPatchExpression("2.0f", operandType))]);
+
+        CSharpPatchResult castResult = new CSharpSourcePatchApplier().Apply(castRequest, castPatch);
+
+        Assert.True(castResult.Succeeded, string.Join(Environment.NewLine, castResult.Diagnostics));
+        Assert.Contains("return (int)2.0f;", Assert.Single(castResult.PatchedRequest!.Sources).Source);
+        Assert.Equal(
+            cast.Id,
+            Assert.Single(castResult.Analysis!.Hir!.DescendantsAndSelf()
+                .OfType<HirCastExpression>()).Id);
+    }
+
+    [Fact]
+    public void Apply_RejectsStaleOrIncompatibleExpressionInputPort()
+    {
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            Source,
+            "Game/RejectInputPort.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        HirBinaryExpression binary = Assert.Single(
+            original.Hir!.DescendantsAndSelf().OfType<HirBinaryExpression>());
+        SemanticId intType = GetTypeId(original, binary);
+        var applier = new CSharpSourcePatchApplier();
+        SemanticPatchDocument incompatiblePort = SemanticPatchDocument.Create(
+            original.Hir!.Id,
+            original.Semantics!.ConfigurationId,
+            [new ReplaceExpressionInputPatchOperation(
+                binary.Id,
+                "operand",
+                binary.Right.Id,
+                intType,
+                intType,
+                new LiteralPatchExpression("2", intType))]);
+        SemanticPatchDocument staleEndpoint = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics.ConfigurationId,
+            [new ReplaceExpressionInputPatchOperation(
+                binary.Id,
+                "right",
+                SemanticId.FromKey("stale-input-endpoint"),
+                intType,
+                intType,
+                new LiteralPatchExpression("2", intType))]);
+        SemanticId staleInputType = SemanticId.FromKey("stale-input-port-type");
+        SemanticPatchDocument staleInputTypePatch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics.ConfigurationId,
+            [new ReplaceExpressionInputPatchOperation(
+                binary.Id,
+                "right",
+                binary.Right.Id,
+                staleInputType,
+                intType,
+                new LiteralPatchExpression("2", staleInputType))]);
+        SemanticPatchDocument staleTargetTypePatch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics.ConfigurationId,
+            [new ReplaceExpressionInputPatchOperation(
+                binary.Id,
+                "right",
+                binary.Right.Id,
+                intType,
+                SemanticId.FromKey("stale-input-parent-type"),
+                new LiteralPatchExpression("2", intType))]);
+
+        CSharpPatchResult incompatibleResult = applier.Apply(request, incompatiblePort);
+        CSharpPatchResult staleResult = applier.Apply(request, staleEndpoint);
+        CSharpPatchResult staleInputTypeResult = applier.Apply(request, staleInputTypePatch);
+        CSharpPatchResult staleTargetTypeResult = applier.Apply(request, staleTargetTypePatch);
+
+        Assert.False(incompatibleResult.Succeeded);
+        Assert.Null(incompatibleResult.PatchedRequest);
+        Assert.Contains(
+            incompatibleResult.Diagnostics,
+            static diagnostic =>
+                diagnostic.Code == SemanticPatchDiagnosticCodes.InvalidExpressionInputPort);
+        Assert.False(staleResult.Succeeded);
+        Assert.Null(staleResult.PatchedRequest);
+        Assert.Contains(
+            staleResult.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.PreconditionFailed);
+        Assert.False(staleInputTypeResult.Succeeded);
+        Assert.Null(staleInputTypeResult.PatchedRequest);
+        Assert.Contains(
+            staleInputTypeResult.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.PreconditionFailed);
+        Assert.False(staleTargetTypeResult.Succeeded);
+        Assert.Null(staleTargetTypeResult.PatchedRequest);
+        Assert.Contains(
+            staleTargetTypeResult.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.PreconditionFailed);
+    }
+
+    [Fact]
+    public void Apply_RejectsEffectfulExpressionInputAndPreservesBoundaryComments()
+    {
+        const string effectfulSource = """
+            using UnifiedScript;
+
+            static class Api
+            {
+                public static int Next() => 1;
+                public static int Combine(int first, int second) => first + second;
+            }
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int value)
+                {
+                    return Api.Combine(Api.Next(), value);
+                }
+            }
+            """;
+        CSharpCompilationRequest effectfulRequest = CSharpCompilationRequest.Single(
+            effectfulSource,
+            "Game/RejectEffectfulInput.cs");
+        CSharpAnalysisResult effectfulAnalysis = new CSharpSemanticPipeline().Analyze(effectfulRequest);
+        HirInvocationExpression outerInvocation = Assert.Single(
+            effectfulAnalysis.Hir!.DescendantsAndSelf().OfType<HirInvocationExpression>(),
+            static invocation => invocation.Arguments.Count == 2);
+        SemanticId intType = GetTypeId(effectfulAnalysis, outerInvocation.Arguments[0]);
+        SemanticPatchDocument effectfulPatch = SemanticPatchDocument.Create(
+            effectfulAnalysis.Hir!.Id,
+            effectfulAnalysis.Semantics!.ConfigurationId,
+            [new ReplaceExpressionInputPatchOperation(
+                outerInvocation.Id,
+                "arg0",
+                outerInvocation.Arguments[0].Id,
+                intType,
+                GetTypeId(effectfulAnalysis, outerInvocation),
+                new LiteralPatchExpression("2", intType))]);
+
+        CSharpPatchResult effectfulResult = new CSharpSourcePatchApplier().Apply(
+            effectfulRequest,
+            effectfulPatch);
+
+        Assert.False(effectfulResult.Succeeded);
+        Assert.Null(effectfulResult.PatchedRequest);
+        Assert.Contains(
+            effectfulResult.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.EffectOrderViolation);
+
+        const string commentedSource = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int value)
+                {
+                    return value + /* keep input note */ 1;
+                }
+            }
+            """;
+        CSharpCompilationRequest commentedRequest = CSharpCompilationRequest.Single(
+            commentedSource,
+            "Game/RejectCommentedInput.cs");
+        CSharpAnalysisResult commentedAnalysis = new CSharpSemanticPipeline().Analyze(commentedRequest);
+        HirBinaryExpression commentedBinary = Assert.Single(
+            commentedAnalysis.Hir!.DescendantsAndSelf().OfType<HirBinaryExpression>());
+        SemanticPatchDocument commentedPatch = SemanticPatchDocument.Create(
+            commentedAnalysis.Hir!.Id,
+            commentedAnalysis.Semantics!.ConfigurationId,
+            [new ReplaceExpressionInputPatchOperation(
+                commentedBinary.Id,
+                "right",
+                commentedBinary.Right.Id,
+                GetTypeId(commentedAnalysis, commentedBinary.Right),
+                GetTypeId(commentedAnalysis, commentedBinary),
+                new LiteralPatchExpression(
+                    "2",
+                    GetTypeId(commentedAnalysis, commentedBinary.Right))) ]);
+
+        CSharpPatchResult commentedResult = new CSharpSourcePatchApplier().Apply(
+            commentedRequest,
+            commentedPatch);
+
+        Assert.True(commentedResult.Succeeded, string.Join(Environment.NewLine, commentedResult.Diagnostics));
+        Assert.Contains(
+            "return value + /* keep input note */ 2;",
+            Assert.Single(commentedResult.PatchedRequest!.Sources).Source);
+
+        const string embeddedCommentSource = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int value)
+                {
+                    return (value + /* embedded note */ 1) * 3;
+                }
+            }
+            """;
+        CSharpCompilationRequest embeddedCommentRequest = CSharpCompilationRequest.Single(
+            embeddedCommentSource,
+            "Game/RejectEmbeddedInputComment.cs");
+        CSharpAnalysisResult embeddedCommentAnalysis = new CSharpSemanticPipeline().Analyze(
+            embeddedCommentRequest);
+        HirReturnStatement embeddedReturn = Assert.Single(
+            embeddedCommentAnalysis.Hir!.DescendantsAndSelf().OfType<HirReturnStatement>());
+        HirBinaryExpression embeddedOuter = Assert.IsType<HirBinaryExpression>(
+            embeddedReturn.Expression);
+        SemanticId embeddedInputType = GetTypeId(embeddedCommentAnalysis, embeddedOuter.Left);
+        SemanticPatchDocument embeddedCommentPatch = SemanticPatchDocument.Create(
+            embeddedCommentAnalysis.Hir!.Id,
+            embeddedCommentAnalysis.Semantics!.ConfigurationId,
+            [new ReplaceExpressionInputPatchOperation(
+                embeddedOuter.Id,
+                "left",
+                embeddedOuter.Left.Id,
+                embeddedInputType,
+                GetTypeId(embeddedCommentAnalysis, embeddedOuter),
+                new LiteralPatchExpression("2", embeddedInputType))]);
+
+        CSharpPatchResult embeddedCommentResult = new CSharpSourcePatchApplier().Apply(
+            embeddedCommentRequest,
+            embeddedCommentPatch);
+
+        Assert.False(embeddedCommentResult.Succeeded);
+        Assert.Null(embeddedCommentResult.PatchedRequest);
+        Assert.Contains(
+            embeddedCommentResult.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.InvalidReplacement);
+        Assert.Equal(embeddedCommentSource, Assert.Single(embeddedCommentRequest.Sources).Source);
+    }
+
+    [Fact]
     public void Apply_RejectsArgumentReconnectionAcrossDifferentPortTypes()
     {
         const string source = """

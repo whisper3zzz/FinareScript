@@ -2595,6 +2595,151 @@ public sealed class CSharpPatchPlanApplierTests
     }
 
     [Fact]
+    public void Apply_ConnectsProducedLocalToNestedExpressionInputPort()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int value)
+                {
+                    return (value + 1) * 3;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/ProducedNestedInput.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(
+            Assert.Single(method.Body.Statements));
+        HirBinaryExpression outer = Assert.IsType<HirBinaryExpression>(returnStatement.Expression);
+        HirBinaryExpression addition = Assert.IsType<HirBinaryExpression>(outer.Left);
+        HirExpression oldInput = addition.Right;
+        SemanticId intType = GetTypeId(original, addition);
+        var producer = new InsertStatementPatchPlanStep(
+            "insertOffset",
+            method.Body.Id,
+            null,
+            returnStatement.Id,
+            new LocalLiteralDeclarationPatchStatement("offset", "int", "2", intType));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                producer,
+                new ReplaceExpressionInputPatchPlanStep(
+                    "connectOffset",
+                    addition.Id,
+                    "right",
+                    oldInput.Id,
+                    intType,
+                    intType,
+                    new ProducedLocalReferencePatchExpression(
+                        producer.StepId,
+                        "offset",
+                        intType)),
+            ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Contains(
+            "int offset = 2;\n        return (value + offset) * 3;",
+            Assert.Single(result.PatchedRequest!.Sources).Source);
+        HirMethodDeclaration changedMethod = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirVariableDeclarationStatement offset = Assert.IsType<HirVariableDeclarationStatement>(
+            changedMethod.Body.Statements[0]);
+        HirReturnStatement changedReturn = Assert.IsType<HirReturnStatement>(
+            changedMethod.Body.Statements[1]);
+        HirBinaryExpression changedOuter = Assert.IsType<HirBinaryExpression>(changedReturn.Expression);
+        HirBinaryExpression changedAddition = Assert.IsType<HirBinaryExpression>(changedOuter.Left);
+        HirIdentifierExpression connectedOffset = Assert.IsType<HirIdentifierExpression>(
+            changedAddition.Right);
+        Assert.Equal(method.Body.Id, changedMethod.Body.Id);
+        Assert.Equal(returnStatement.Id, changedReturn.Id);
+        Assert.Equal(outer.Id, changedOuter.Id);
+        Assert.Equal(addition.Id, changedAddition.Id);
+        Assert.Equal(
+            offset.Id,
+            Assert.Single(
+                result.Analysis.Semantics!.Nodes,
+                binding => binding.NodeId == connectedOffset.Id).ReferencedSymbolId);
+        IdentitySidecarDocument sidecar = Assert.Single(result.Analysis.IdentitySidecars);
+        Assert.Equal(3, sidecar.Generation);
+        Assert.Contains(sidecar.Tombstones, tombstone => tombstone.Id == oldInput.Id);
+        GraphFunction function = Assert.Single(new HirGraphProjector()
+            .Project(result.Analysis.Hir, result.Analysis.Semantics)
+            .Functions);
+        Assert.Contains(
+            function.Edges,
+            edge => edge.FromNode == connectedOffset.Id &&
+                edge.ToNode == changedAddition.Id &&
+                edge.ToPort == "right");
+    }
+
+    [Fact]
+    public void Apply_RollsBackProducedLocalWhenNestedInputPortFailsAtItsStage()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int value)
+                {
+                    return value + 1;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/RollbackNestedInput.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(
+            Assert.Single(method.Body.Statements));
+        HirBinaryExpression addition = Assert.IsType<HirBinaryExpression>(returnStatement.Expression);
+        SemanticId intType = GetTypeId(original, addition);
+        var producer = new InsertStatementPatchPlanStep(
+            "insertOffset",
+            method.Body.Id,
+            null,
+            returnStatement.Id,
+            new LocalLiteralDeclarationPatchStatement("offset", "int", "2", intType));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                producer,
+                new ReplaceExpressionInputPatchPlanStep(
+                    "connectInvalidPort",
+                    addition.Id,
+                    "operand",
+                    addition.Right.Id,
+                    intType,
+                    intType,
+                    new ProducedLocalReferencePatchExpression(
+                        producer.StepId,
+                        "offset",
+                        intType)),
+            ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.PatchedRequest);
+        Assert.Null(result.Analysis);
+        Assert.Equal(source, Assert.Single(request.Sources).Source);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic =>
+                diagnostic.Code == SemanticPatchDiagnosticCodes.InvalidExpressionInputPort);
+    }
+
+    [Fact]
     public void Apply_RollsBackDirectStepsWhenAnEarlierDeletionRemovesALaterTarget()
     {
         const string source = """

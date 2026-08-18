@@ -6,6 +6,7 @@ namespace UnifiedScript.Core;
 [JsonDerivedType(typeof(ReplaceLiteralPatchOperation), "replaceLiteral")]
 [JsonDerivedType(typeof(ChangeOperatorPatchOperation), "changeOperator")]
 [JsonDerivedType(typeof(ReconnectArgumentPatchOperation), "reconnectArgument")]
+[JsonDerivedType(typeof(ReplaceExpressionInputPatchOperation), "replaceExpressionInput")]
 [JsonDerivedType(typeof(ReplaceAssignmentValuePatchOperation), "replaceAssignmentValue")]
 [JsonDerivedType(typeof(ReplaceWhileConditionPatchOperation), "replaceWhileCondition")]
 [JsonDerivedType(typeof(ReplaceIfConditionPatchOperation), "replaceIfCondition")]
@@ -38,6 +39,14 @@ public sealed record ReconnectArgumentPatchOperation(
     SemanticId ExpectedSourceArgumentNodeId,
     SemanticId ExpectedArgumentTypeId,
     SemanticId ExpectedSourceArgumentTypeId) : SemanticPatchOperation(TargetNodeId);
+
+public sealed record ReplaceExpressionInputPatchOperation(
+    SemanticId TargetNodeId,
+    string InputPort,
+    SemanticId ExpectedInputNodeId,
+    SemanticId ExpectedInputTypeId,
+    SemanticId ExpectedTargetTypeId,
+    PatchExpression NewInput) : SemanticPatchOperation(TargetNodeId);
 
 public sealed record ReplaceAssignmentValuePatchOperation(
     SemanticId TargetNodeId,
@@ -187,7 +196,7 @@ public sealed record SemanticPatchDocument(
     SemanticId SemanticConfigurationId,
     IReadOnlyList<SemanticPatchOperation> Operations)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.11";
+    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.12";
 
     public static SemanticPatchDocument Create(
         SemanticId sourceCompilationId,

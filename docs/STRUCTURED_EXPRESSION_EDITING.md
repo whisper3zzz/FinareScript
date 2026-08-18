@@ -15,8 +15,8 @@ and CFG pipeline. There is no editor-only expression VM or second executable
 representation.
 
 These operations were introduced in patch v0.10 and plan v0.9. The current
-strict-reader versions are `unifiedscript.patch/v0.11` and
-`unifiedscript.patch-plan/v0.11`, extended by the M4.8 endpoint operations in
+strict-reader versions are `unifiedscript.patch/v0.12` and
+`unifiedscript.patch-plan/v0.12`, extended by the M4.8 endpoint operations in
 [GENERAL_EXPRESSION_EDITING.md](GENERAL_EXPRESSION_EDITING.md).
 
 ## Replace an assignment value
@@ -96,7 +96,7 @@ loop body is not replaced or regenerated.
 
 ## Plan steps
 
-Patch plan v0.11 exposes direct wrappers for both operations:
+Patch plan v0.12 exposes direct wrappers for both operations:
 
 - `replaceAssignmentValue`; and
 - `replaceWhileCondition`.
@@ -230,12 +230,15 @@ condition root become tombstones.
 
 ## Deliberate limits
 
-M4.7 is an editing primitive, not arbitrary syntax replacement. It does not yet
-support editing an `if` condition, declaration initializer, return expression,
-invocation argument payload, or arbitrary nested expression by a generated
-handle. It also does not introduce calls, member access, object construction,
-indexing, lambdas, mutation inside a value expression, or effect sequencing.
+M4.7 itself is an editing primitive, not arbitrary syntax replacement. M4.8
+later adds `if` conditions, declaration initializers, and return expressions;
+M4.10 adds exact nested binary/unary/cast and positional invocation-argument
+inputs already present in the external baseline. Arbitrary generated expression
+parents still do not publish handles. The authored algebra also does not
+introduce calls, member access, object construction, indexing, lambdas,
+mutation inside a value expression, or effect sequencing.
 
-Those shapes should be added as explicit typed operations with their own
-endpoint and effect preconditions. Keeping the bounded protocol explicit is
-what makes the same operation safe for both text and visual front ends.
+Every admitted shape uses an explicit typed operation with its own endpoint and
+effect preconditions. Keeping the bounded protocol explicit is what makes the
+same operation safe for both text and visual front ends. See
+[EXPRESSION_INPUT_PATCHING.md](EXPRESSION_INPUT_PATCHING.md).
