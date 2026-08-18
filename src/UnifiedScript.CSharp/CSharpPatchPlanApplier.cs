@@ -1062,6 +1062,9 @@ public sealed class CSharpPatchPlanApplier
             (HirBinaryExpression binary, "right") => binary.Right,
             (HirUnaryExpression unary, "operand") => unary.Operand,
             (HirCastExpression cast, "operand") => cast.Operand,
+            (HirConditionalExpression conditional, "condition") => conditional.Condition,
+            (HirConditionalExpression conditional, "whenTrue") => conditional.WhenTrue,
+            (HirConditionalExpression conditional, "whenFalse") => conditional.WhenFalse,
             _ => null,
         };
         if (input is not null)

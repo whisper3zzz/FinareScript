@@ -16,7 +16,7 @@ Neither approximation is accepted alone.
 
 ## Protocol
 
-Current patch schema `unifiedscript.patch/v0.12` includes the
+Current patch schema `unifiedscript.patch/v0.13` includes the
 `localAssignment` statement discriminator:
 
 ```json
@@ -62,7 +62,7 @@ decrement, member/property writes, indexers, deconstruction, tuple targets,
 ## CFG insertion proof
 
 `GraphPatchSafetyIndex` projects the already analyzed HIR and bound semantics
-to Graph v0.4, derives the validated CFG, and maps a source insertion gap to
+to Graph v0.5, derives the validated CFG, and maps a source insertion gap to
 control-flow anchors:
 
 - before an existing statement, the anchors are that statement's first
@@ -144,7 +144,7 @@ assignment node, target identifier, and value nodes receive fresh persistent
 IDs and immediately project through the ordinary HIR/Graph path. No special VM
 node or editor-only assignment representation exists.
 
-Patch-plan schema `unifiedscript.patch-plan/v0.13` carries the same payload in a
+Patch-plan schema `unifiedscript.patch-plan/v0.14` carries the same payload in a
 direct `insertStatement` step. `insertBranchStatement` may also place an
 assignment into a generated `then` or `else` block, allowing one atomic plan to
 create a branch and write different values to an existing outer local on each

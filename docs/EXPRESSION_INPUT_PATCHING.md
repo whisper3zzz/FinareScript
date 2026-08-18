@@ -5,7 +5,7 @@
 M4.10 adds an exact Graph-input edit that replaces one nested expression
 subtree without rebuilding its enclosing assignment, condition, initializer,
 return value, or invocation. The standalone and transaction protocols are
-`unifiedscript.patch/v0.12` and `unifiedscript.patch-plan/v0.13`.
+`unifiedscript.patch/v0.13` and `unifiedscript.patch-plan/v0.14`.
 
 The operation uses the same input-port vocabulary already emitted by the Graph
 projector. It therefore models a visual connection change directly instead of
@@ -44,6 +44,9 @@ The first slice accepts these canonical Graph data-input names:
 | binary | `right` | right operand |
 | bounded pure unary | `operand` | unary operand |
 | cast | `operand` | cast operand |
+| conditional | `condition` | Boolean selector |
+| conditional | `whenTrue` | selected-when-true arm |
+| conditional | `whenFalse` | selected-when-false arm |
 | resolved positional invocation | `arg0`, `arg1`, ... | corresponding argument |
 
 `argN` is zero-based and canonical. Spellings such as `arg01`, negative
@@ -76,7 +79,7 @@ string substitution is accepted at the patch boundary.
 
 ## Scope, dominance, and effects
 
-`newInput` uses the existing literal/local/unary/binary/cast algebra. Every
+`newInput` uses the existing literal/local/unary/binary/cast/conditional algebra. Every
 ordinary or produced local reference therefore reuses the normal checks:
 
 - same method;
@@ -195,9 +198,10 @@ on the same existing baseline parent must still be edited against freshly
 analyzed sequential baselines.
 
 Member/indexer receivers, invocation targets, assignments, mutation, await,
-conditional access, conditional expressions, lambdas, object construction,
+conditional access, lambdas, object construction,
 and arbitrary call construction remain outside the editable input set.
-Produced-expression paths are intentionally limited to binary `left`/`right`
-and unary/cast `operand` shapes constructible by the current patch-expression
-algebra; broadening that algebra or admitting effectful rewrites remains future
-work.
+Produced-expression paths are intentionally limited to binary `left`/`right`,
+unary/cast `operand`, and conditional `condition`/`whenTrue`/`whenFalse` shapes
+constructible by the current patch-expression algebra; broadening that algebra
+or admitting effectful rewrites remains future work. See
+[CONDITIONAL_EXPRESSIONS.md](CONDITIONAL_EXPRESSIONS.md) for lazy-arm safety.

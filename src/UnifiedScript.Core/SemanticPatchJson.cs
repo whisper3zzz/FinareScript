@@ -183,7 +183,7 @@ public static class SemanticPatchJson
         {
             throw new JsonException(
                 "Expression-input replacement requires a canonical 'left', 'right', 'operand', " +
-                "or zero-based 'argN' Graph input port.");
+                "'condition', 'whenTrue', 'whenFalse', or zero-based 'argN' Graph input port.");
         }
 
         if (operation.ExpectedInputNodeId.IsEmpty ||
@@ -213,7 +213,8 @@ public static class SemanticPatchJson
 
     private static bool IsSupportedExpressionInputPort(string? inputPort)
     {
-        if (inputPort is "left" or "right" or "operand")
+        if (inputPort is "left" or "right" or "operand" or
+            "condition" or "whenTrue" or "whenFalse")
         {
             return true;
         }
@@ -482,6 +483,26 @@ public static class SemanticPatchJson
                 }
 
                 ValidatePatchExpression(cast.Operand, depth + 1);
+                break;
+            case ConditionalPatchExpression conditional:
+                if (conditional.Condition is null ||
+                    conditional.WhenTrue is null ||
+                    conditional.WhenFalse is null)
+                {
+                    throw new JsonException(
+                        "A graph-authored conditional expression requires a condition and two branches.");
+                }
+
+                if (conditional.WhenTrue.ExpectedTypeId != conditional.ExpectedTypeId ||
+                    conditional.WhenFalse.ExpectedTypeId != conditional.ExpectedTypeId)
+                {
+                    throw new JsonException(
+                        "Both graph-authored conditional branches must declare the result type.");
+                }
+
+                ValidatePatchExpression(conditional.Condition, depth + 1);
+                ValidatePatchExpression(conditional.WhenTrue, depth + 1);
+                ValidatePatchExpression(conditional.WhenFalse, depth + 1);
                 break;
             default:
                 throw new JsonException(

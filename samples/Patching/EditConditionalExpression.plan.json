@@ -1,0 +1,77 @@
+{
+  "schemaVersion": "unifiedscript.patch-plan/v0.14",
+  "sourceCompilationId": "us_f08b5eeef572f922411cbec9597f42a1",
+  "semanticConfigurationId": "us_02f5fe78d296e2d4fe04bc50ca71acf1",
+  "steps": [
+    {
+      "step": "replaceReturnValue",
+      "stepId": "replaceReturn",
+      "targetNodeId": "us_d475227285348fb084b90c2753e99dad",
+      "expectedValueNodeId": "us_eb28eae7003221d2c7fdc4da886fdd38",
+      "expectedReturnTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+      "newValue": {
+        "expression": "conditional",
+        "condition": {
+          "expression": "localReference",
+          "sourceDefinitionId": "us_5e1889e08e478a14ccda01b1e3b4f4d1",
+          "expectedName": "enabled",
+          "expectedTypeId": "us_b5f84bcf933b6593d45e9e031353bfef"
+        },
+        "whenTrue": {
+          "expression": "localReference",
+          "sourceDefinitionId": "us_ddf0ef8d35baacee9a64ed29a6e7692f",
+          "expectedName": "value",
+          "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+        },
+        "whenFalse": {
+          "expression": "localReference",
+          "sourceDefinitionId": "us_e65808f09c0ac94c2f184f78420ee64a",
+          "expectedName": "fallback",
+          "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+        },
+        "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+      }
+    },
+    {
+      "step": "replaceProducedExpressionInput",
+      "stepId": "replaceGeneratedFallback",
+      "targetNodeId": "us_d475227285348fb084b90c2753e99dad",
+      "sourceStepId": "replaceReturn",
+      "targetPath": [],
+      "inputPort": "whenFalse",
+      "expectedInputTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+      "expectedTargetTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+      "newInput": {
+        "expression": "binary",
+        "operator": "+",
+        "left": {
+          "expression": "localReference",
+          "sourceDefinitionId": "us_ddf0ef8d35baacee9a64ed29a6e7692f",
+          "expectedName": "value",
+          "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+        },
+        "right": {
+          "expression": "literal",
+          "valueText": "1",
+          "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+        },
+        "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+      }
+    },
+    {
+      "step": "replaceProducedExpressionInput",
+      "stepId": "replaceGeneratedOffset",
+      "targetNodeId": "us_d475227285348fb084b90c2753e99dad",
+      "sourceStepId": "replaceGeneratedFallback",
+      "targetPath": [],
+      "inputPort": "right",
+      "expectedInputTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+      "expectedTargetTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+      "newInput": {
+        "expression": "literal",
+        "valueText": "2",
+        "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+      }
+    }
+  ]
+}

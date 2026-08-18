@@ -182,6 +182,17 @@ public static class SemanticPatchPlanExpressions
             {
                 Operand = Rewrite(cast.Operand, resolver),
             },
+            ConditionalPatchExpression
+            {
+                Condition: not null,
+                WhenTrue: not null,
+                WhenFalse: not null,
+            } conditional => conditional with
+            {
+                Condition = Rewrite(conditional.Condition, resolver),
+                WhenTrue = Rewrite(conditional.WhenTrue, resolver),
+                WhenFalse = Rewrite(conditional.WhenFalse, resolver),
+            },
             _ => expression,
         };
     }
@@ -204,6 +215,16 @@ public static class SemanticPatchPlanExpressions
                 break;
             case CastPatchExpression { Operand: not null } cast:
                 CollectProducedLocalReferences(cast.Operand, references);
+                break;
+            case ConditionalPatchExpression
+            {
+                Condition: not null,
+                WhenTrue: not null,
+                WhenFalse: not null,
+            } conditional:
+                CollectProducedLocalReferences(conditional.Condition, references);
+                CollectProducedLocalReferences(conditional.WhenTrue, references);
+                CollectProducedLocalReferences(conditional.WhenFalse, references);
                 break;
         }
     }

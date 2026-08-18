@@ -112,10 +112,12 @@ Outcome: practical gameplay methods are fully visualizable.
   earlier plan stages
 - [x] chainable produced-expression input edits lowered to the ordinary patch
   path with atomic rollback
+- [x] first-class conditional-expression HIR/Graph/source round trip with
+  lazy-branch effect safety and canonical generated-tree ports
 - [ ] general data/control rewiring and structural HIR operations
 - [ ] `for` and `foreach`
 - [ ] `switch` and supported patterns
-- [ ] conditional and null-conditional expressions
+- [ ] null-conditional and null-coalescing expressions
 - [ ] deterministic temporary naming
 
 ## M5 — CoreCLR execution backend

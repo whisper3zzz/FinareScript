@@ -218,6 +218,11 @@ internal sealed class HirPatchIndex
             case HirCastExpression cast:
                 AddExpression(cast.Operand, containingStatement, parentBlock, method, cast);
                 break;
+            case HirConditionalExpression conditional:
+                AddExpression(conditional.Condition, containingStatement, parentBlock, method, conditional);
+                AddExpression(conditional.WhenTrue, containingStatement, parentBlock, method, conditional);
+                AddExpression(conditional.WhenFalse, containingStatement, parentBlock, method, conditional);
+                break;
         }
     }
 

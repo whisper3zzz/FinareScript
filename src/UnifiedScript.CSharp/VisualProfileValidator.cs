@@ -381,6 +381,7 @@ public sealed class VisualProfileValidator
             ParenthesizedExpressionSyntax or
             AssignmentExpressionSyntax or
             AwaitExpressionSyntax or
-            CastExpressionSyntax;
+            CastExpressionSyntax or
+            ConditionalExpressionSyntax;
     }
 }

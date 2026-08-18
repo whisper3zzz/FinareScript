@@ -914,6 +914,9 @@ public sealed class CSharpSourcePatchApplier
             (HirUnaryExpression unary, "operand")
                 when GraphExpressionUnaryOperators.Contains(unary.Operator) => unary.Operand,
             (HirCastExpression cast, "operand") => cast.Operand,
+            (HirConditionalExpression conditional, "condition") => conditional.Condition,
+            (HirConditionalExpression conditional, "whenTrue") => conditional.WhenTrue,
+            (HirConditionalExpression conditional, "whenFalse") => conditional.WhenFalse,
             _ => null,
         };
         if (input is not null)
@@ -2397,6 +2400,28 @@ public sealed class CSharpSourcePatchApplier
                 HasStableOperatorType(cast, boundNodes, types) &&
                 HasStableOperatorType(cast.Operand, boundNodes, types) &&
                 IsStablePureExpression(cast.Operand, useDefinitionIndex, boundNodes, methods, types),
+            HirConditionalExpression conditional =>
+                HasStableOperatorType(conditional.Condition, boundNodes, types) &&
+                HasStableOperatorType(conditional.WhenTrue, boundNodes, types) &&
+                HasStableOperatorType(conditional.WhenFalse, boundNodes, types) &&
+                IsStablePureExpression(
+                    conditional.Condition,
+                    useDefinitionIndex,
+                    boundNodes,
+                    methods,
+                    types) &&
+                IsStablePureExpression(
+                    conditional.WhenTrue,
+                    useDefinitionIndex,
+                    boundNodes,
+                    methods,
+                    types) &&
+                IsStablePureExpression(
+                    conditional.WhenFalse,
+                    useDefinitionIndex,
+                    boundNodes,
+                    methods,
+                    types),
             HirInvocationExpression invocation =>
                 boundNodes.TryGetValue(invocation.Id, out BoundNodeInfo? invocationBinding) &&
                 invocationBinding.InvokedMethodId is SemanticId methodId &&
@@ -2969,6 +2994,67 @@ public sealed class CSharpSourcePatchApplier
                     return ExpressionBuildResult.Success(syntax, expectedType);
                 }
 
+            case ConditionalPatchExpression conditional:
+                {
+                    ExpressionBuildResult condition = BuildPatchExpression(
+                        conditional.Condition,
+                        blockLocation,
+                        insertionIndex,
+                        hirNodes,
+                        patchIndex,
+                        graphSafetyIndex,
+                        boundNodes,
+                        types);
+                    if (condition.Syntax is null || condition.Type is null)
+                    {
+                        return condition;
+                    }
+
+                    ExpressionBuildResult whenTrue = BuildPatchExpression(
+                        conditional.WhenTrue,
+                        blockLocation,
+                        insertionIndex,
+                        hirNodes,
+                        patchIndex,
+                        graphSafetyIndex,
+                        boundNodes,
+                        types);
+                    if (whenTrue.Syntax is null || whenTrue.Type is null)
+                    {
+                        return whenTrue;
+                    }
+
+                    ExpressionBuildResult whenFalse = BuildPatchExpression(
+                        conditional.WhenFalse,
+                        blockLocation,
+                        insertionIndex,
+                        hirNodes,
+                        patchIndex,
+                        graphSafetyIndex,
+                        boundNodes,
+                        types);
+                    if (whenFalse.Syntax is null || whenFalse.Type is null)
+                    {
+                        return whenFalse;
+                    }
+
+                    if (!IsBoolean(condition.Type) ||
+                        !IsSameType(whenTrue.Type, expectedType) ||
+                        !IsSameType(whenFalse.Type, expectedType))
+                    {
+                        return ExpressionBuildResult.Failure(
+                            SemanticPatchDiagnosticCodes.TypeMismatch,
+                            "A conditional expression requires a Boolean condition and two branches " +
+                            "whose semantic types exactly match its declared result type.");
+                    }
+
+                    ConditionalExpressionSyntax syntax = SyntaxFactory.ConditionalExpression(
+                        ParenthesizeCompositeExpression(condition.Syntax),
+                        ParenthesizeCompositeExpression(whenTrue.Syntax),
+                        ParenthesizeCompositeExpression(whenFalse.Syntax));
+                    return ExpressionBuildResult.Success(syntax, expectedType);
+                }
+
             default:
                 return ExpressionBuildResult.Failure(
                     SemanticPatchDiagnosticCodes.InvalidGraphExpression,
@@ -3426,6 +3512,7 @@ public sealed class CSharpSourcePatchApplier
         HirAssignmentExpression => syntax is AssignmentExpressionSyntax,
         HirAwaitExpression => syntax is AwaitExpressionSyntax,
         HirCastExpression => syntax is CastExpressionSyntax,
+        HirConditionalExpression => syntax is ConditionalExpressionSyntax,
         _ => false,
     };
 
@@ -3544,6 +3631,7 @@ public sealed class CSharpSourcePatchApplier
         HirAssignmentExpression => "assignment",
         HirAwaitExpression => "await",
         HirCastExpression => "cast",
+        HirConditionalExpression => "conditional",
         _ => throw new ArgumentOutOfRangeException(nameof(expression), expression.GetType().Name),
     };
 

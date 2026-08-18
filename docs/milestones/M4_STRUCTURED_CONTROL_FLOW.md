@@ -638,6 +638,64 @@ stages traverse and edit them through chainable structural port handles.
 15. The full solution, 221-test suite, format check, repository validator, and
     18 CLI regressions pass.
 
+## M4.12 implemented vertical slice
+
+- strict HIR v0.3, Graph v0.5, patch v0.13, and patch-plan v0.14 readers
+- first-class `HirConditionalExpression` with ordered condition/true/false
+  children rather than statement or invocation desugaring
+- Visual Profile admission and direct Roslyn lowering of C# `?:` syntax
+- conditional traversal, semantic binding, patch indexing, structural
+  fingerprinting, identity reconciliation, syntax matching, and identity kinds
+- semantic `UVS2002` rejection of assignment, await, mutation, and bound
+  effectful calls in lazy conditional arms
+- Graph `conditional`/`Select` node with `condition`, `whenTrue`, `whenFalse`,
+  and `value` data ports plus `evaluation: lazyBranches`
+- `ConditionalPatchExpression` in the closed typed graph-authored algebra
+- exact Boolean-condition and exact arm/result-type enforcement during source
+  construction
+- standalone exact input editing through all three conditional Graph ports
+- produced-expression path traversal and chained edits through generated
+  conditional trees
+- precedence-safe Roslyn construction, stable-pure checks, identity pins,
+  unaffected-arm retention, and ordinary tombstones
+- migrated patch/plan fixtures, HIR/Graph Golden manifest, validator checks,
+  architecture/roadmap documentation, and a dedicated conditional contract
+- checked-in `EditConditionalExpression.cs`, `.usids`, and three-stage plan
+  sample that authors and then edits a generated false arm
+
+## M4.12 acceptance criteria
+
+1. Visual C# lowers `condition ? whenTrue : whenFalse` to one first-class HIR
+   node and serializes it under HIR v0.3.
+2. Binding preserves Roslyn's Boolean condition and result types for
+   text-authored conditionals.
+3. Assignment, await, increment/decrement, or a call with non-`None` effects in
+   either arm produces `UVS2002` before Graph projection.
+4. Graph v0.5 emits one `conditional` node with canonical condition/arm inputs,
+   one value output, and an explicit lazy-evaluation property.
+5. Graph connects all three child values to the corresponding canonical port.
+6. Patch v0.13 JSON round-trips a typed conditional payload and rejects missing
+   children or arm/result declared-type mismatches.
+7. Source construction requires `System.Boolean` for the condition and exact
+   semantic equality between each arm and the result type.
+8. A graph-authored conditional reanalyzes as ordinary C# `?:` syntax and the
+   same HIR/Graph shape.
+9. `replaceExpressionInput` edits `condition`, `whenTrue`, or `whenFalse`
+   without rebuilding the conditional or unaffected arm.
+10. The containing statement, conditional, and unaffected expression spine
+    retain persistent IDs while the removed child subtree becomes tombstones.
+11. Patch-plan v0.14 validates conditional ports in both `targetPath` and
+    `inputPort` against an earlier producer's authored tree.
+12. A conditional-producing stage publishes its actual root; a later false-arm
+    edit publishes its replacement root so a third nested edit can chain.
+13. The CLI sample transforms `return value;` into
+    `return enabled ? value : (value + 2);` and advances the sidecar from
+    generation 1 to 4.
+14. Documentation distinguishes effect-free expression arms from explicit
+    effectful statement-level `if`/`else` branches.
+15. The full solution, 228-test suite, format check, repository validator, and
+    19 CLI regressions pass.
+
 ## Deliberate limits
 
 M4 consumes derived CFG facts at patch time but does not serialize them or
@@ -647,22 +705,22 @@ retarget the write, synthesize declarations with arbitrary initializers, write
 members/indexers, or support compound assignment, increment/decrement, calls,
 or effectful right-hand sides. Existing if/while conditions, local initializers,
 and value returns support whole-endpoint replacement. Existing binary,
-bounded-unary, cast, and positional-invocation argument inputs support exact
+bounded-unary, cast, conditional, and positional-invocation argument inputs support exact
 nested replacement. Generated expression roots now publish transaction-local
-handles with bounded binary/unary/cast paths. Authored
+handles with bounded binary/unary/cast/conditional paths. Authored
 expressions can reference existing same-method definitions and locals produced
 earlier in one plan. Produced paths do not yet traverse members, calls,
 assignments, awaits, or wildcard/parent queries. Branch and loop-body insertions append and cannot move or delete
 existing structures. Loop transfers cannot be retargeted.
-`do`/`for`/`foreach`, switch, conditional expressions, exception edges,
+`do`/`for`/`foreach`, switch, null-conditional/coalescing expressions, exception edges,
 short-circuit expression flow, async state-machine transitions, control
 dependence, SSA, and automatic node placement remain outside the current slice.
 
 ## Next slice
 
-M4.12 should use the now-stable generated-expression address model to broaden
-the closed expression algebra deliberately, starting with a lossless
-conditional-expression HIR/Graph/source contract rather than encoding it as an
-opaque call or eagerly desugaring it. `for` and `foreach` still need an
-explicit lossless HIR decision before admission rather than silently
-desugaring source syntax into while loops.
+M4.13 should make conditional evaluation explicit for the remaining lazy
+expression family, beginning with `&&`/`||` right operands and then deciding a
+lossless `??` contract. This closes a semantic gap before admitting
+null-conditional access. `for` and `foreach` still need an explicit lossless
+HIR decision before admission rather than silently desugaring source syntax
+into while loops.

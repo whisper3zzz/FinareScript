@@ -166,7 +166,7 @@ Pure expression statements use an explicit `Evaluate` control node. Effectful
 calls, assignments, and awaits instead expose their own control ports, so nested
 side effects are sequenced before their data consumers.
 
-Graph schema v0.4 also separates structured ownership from connectivity. Every
+Graph schema v0.5 also separates structured ownership from connectivity. Every
 function has a `function` root and method-body `block`; an `if` region owns its
 condition/branch nodes plus ordered `then` and `else` children. Every Graph node
 has exactly one direct region owner. An omitted C# `else` remains an empty
@@ -213,8 +213,8 @@ compilation identity is not safe for editing.
 
 ## Semantic patch transaction
 
-Graph schema v0.4 carries both the source compilation ID and semantic
-configuration ID. A `unifiedscript.patch/v0.12` document repeats those IDs and
+Graph schema v0.5 carries both the source compilation ID and semantic
+configuration ID. A `unifiedscript.patch/v0.13` document repeats those IDs and
 contains typed operations keyed by graph/HIR `SemanticId`. Implemented
 operations are `replaceLiteral`, `changeOperator`, `reconnectArgument`,
 `replaceExpressionInput`,
@@ -229,7 +229,7 @@ operator/endpoint, semantic type,
 containing statement, parent block, and exact sibling preconditions rather than
 relying only on the compilation baseline.
 
-`unifiedscript.patch-plan/v0.13` is an ordered transaction above individual
+`unifiedscript.patch-plan/v0.14` is an ordered transaction above individual
 patches. It composes every current bounded operation: literal and operator
 changes, argument reconnection, structured assignment/loop/branch/local/return
 expression edits, exact nested expression-input replacement, statement
@@ -252,6 +252,14 @@ captured HIR root, and lowers to the existing standalone
 `replaceExpressionInput` operation with real current endpoint IDs. The
 consumer's replacement root is published again, so handles chain without a
 second VM, graph evaluator, or generated-ID prediction scheme.
+HIR v0.3 preserves a conditional expression as one node with condition, true,
+and false children. Graph v0.5 projects that node as a `conditional`/`Select`
+with canonical `condition`, `whenTrue`, and `whenFalse` inputs and an explicit
+`evaluation: lazyBranches` contract. Semantic binding rejects effectful arms so
+the data projection cannot eagerly execute mutation, latency, or effectful
+calls that C# would evaluate only on the selected path. Patch v0.13 and plan
+v0.14 use the same conditional shape in their closed expression algebra and
+allow exact or produced-handle edits through those Graph ports.
 An `if` insertion publishes internal `then`/`else` block handles for later
 `insertBranchStatement` steps without masquerading as a reconnectable local
 definition. The branch steps repeat the producer's original parent block as
@@ -278,6 +286,8 @@ The generated-local data-flow contract is specified in
 [PRODUCED_VALUE_REFERENCES.md](PRODUCED_VALUE_REFERENCES.md).
 The exact Graph-input edit and unaffected-spine identity contract is specified
 in [EXPRESSION_INPUT_PATCHING.md](EXPRESSION_INPUT_PATCHING.md).
+The lazy conditional-expression projection and round-trip contract is
+specified in [CONDITIONAL_EXPRESSIONS.md](CONDITIONAL_EXPRESSIONS.md).
 
 The C# patch boundary performs these steps without mutating files:
 
@@ -320,7 +330,7 @@ this proof until builtin operator effects include conditional evaluation,
 allocation, and throw behavior.
 
 M4.3 adds a `GraphPatchSafetyIndex` inside the C# patch boundary. It projects
-the same analyzed HIR and bound semantics through Graph v0.4, derives the M4.2
+the same analyzed HIR and bound semantics through Graph v0.5, derives the M4.2
 CFG, and resolves statement entries or region fallthrough sources as insertion
 anchors. A non-empty block whose paths terminate has no fallthrough anchor.
 Local assignment targets and graph-authored local references must satisfy both

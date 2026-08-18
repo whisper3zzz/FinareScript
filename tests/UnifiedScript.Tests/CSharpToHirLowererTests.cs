@@ -141,9 +141,45 @@ public sealed class CSharpToHirLowererTests
         Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
         string json = UnifiedScript.Core.HirJson.Serialize(
             UnifiedScript.Core.HirDocument.Create(result.CompilationUnit));
-        Assert.Contains("\"schemaVersion\": \"unifiedscript.hir/v0.2\"", json);
+        Assert.Contains(
+            $"\"schemaVersion\": \"{UnifiedScript.Core.HirDocument.CurrentSchemaVersion}\"",
+            json);
         Assert.Contains("\"kind\": \"while\"", json);
         Assert.Contains("\"kind\": \"break\"", json);
         Assert.Contains("\"kind\": \"continue\"", json);
+    }
+
+    [Fact]
+    public void Lower_PreservesConditionalExpressionAsFirstClassHir()
+    {
+        const string source = """
+            static class Rules
+            {
+                [Visual]
+                static int Select(bool enabled, int whenEnabled, int fallback)
+                {
+                    return enabled ? whenEnabled : fallback;
+                }
+            }
+            """;
+
+        CSharpLoweringResult result = new CSharpToHirLowerer().Lower(
+            source,
+            "ConditionalRules.cs");
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        HirMethodDeclaration method = Assert.Single(Assert.Single(result.CompilationUnit!.Types).Methods);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(
+            Assert.Single(method.Body.Statements));
+        HirConditionalExpression conditional = Assert.IsType<HirConditionalExpression>(
+            returnStatement.Expression);
+        Assert.Equal("enabled", Assert.IsType<HirIdentifierExpression>(conditional.Condition).Name);
+        Assert.Equal("whenEnabled", Assert.IsType<HirIdentifierExpression>(conditional.WhenTrue).Name);
+        Assert.Equal("fallback", Assert.IsType<HirIdentifierExpression>(conditional.WhenFalse).Name);
+
+        string json = UnifiedScript.Core.HirJson.Serialize(
+            UnifiedScript.Core.HirDocument.Create(result.CompilationUnit));
+        Assert.Contains("\"schemaVersion\": \"unifiedscript.hir/v0.3\"", json);
+        Assert.Contains("\"kind\": \"conditional\"", json);
     }
 }

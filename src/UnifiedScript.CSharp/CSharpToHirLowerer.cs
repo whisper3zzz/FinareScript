@@ -228,6 +228,12 @@ public sealed class CSharpToHirLowerer
                 RoslynSourceSpan.FromNode(cast, filePath),
                 cast.Type.ToString(),
                 LowerExpression(cast.Expression, filePath, ownerKey)),
+            ConditionalExpressionSyntax conditional => new HirConditionalExpression(
+                CSharpSemanticIds.ForNode(filePath, ownerKey, conditional),
+                RoslynSourceSpan.FromNode(conditional, filePath),
+                LowerExpression(conditional.Condition, filePath, ownerKey),
+                LowerExpression(conditional.WhenTrue, filePath, ownerKey),
+                LowerExpression(conditional.WhenFalse, filePath, ownerKey)),
             _ => throw new InvalidOperationException($"Profile validator admitted unsupported expression {expression.Kind()}.")
         };
 

@@ -7,8 +7,8 @@ earlier step without predicting that declaration's random persistent ID. This
 closes the first transaction-time data-flow gap between structural graph
 construction and typed expression authoring.
 
-The feature belongs to `unifiedscript.patch-plan/v0.13`. The standalone patch
-protocol remains `unifiedscript.patch/v0.12`: a standalone patch has no earlier
+The feature belongs to `unifiedscript.patch-plan/v0.14`. The standalone patch
+protocol is `unifiedscript.patch/v0.13`: a standalone patch has no earlier
 step namespace, so it explicitly rejects transaction-only produced references.
 
 No second expression interpreter is introduced. Before each stage executes,
@@ -64,7 +64,7 @@ by its graph model.
 ## Consumer positions
 
 `producedLocalReference` may appear at any depth inside the existing
-literal/local/unary/binary/cast algebra carried by a patch-plan step. Supported
+literal/local/unary/binary/cast/conditional algebra carried by a patch-plan step. Supported
 consumer roots include:
 
 - direct `replaceAssignmentValue`;
@@ -115,7 +115,7 @@ step. Each occurrence is independently checked at its actual C# position.
 
 ### Plan protocol validation
 
-While reading plan v0.13, the validator walks every expression recursively and
+While reading plan v0.14, the validator walks every expression recursively and
 requires each produced reference to:
 
 1. name a non-empty earlier `stepId`;
@@ -160,7 +160,7 @@ Immediately before a consumer stage, every produced reference is rewritten to:
 }
 ```
 
-The resulting operation is an ordinary patch v0.12 operation. The standalone
+The resulting operation is an ordinary patch v0.13 operation. The standalone
 source patcher never needs to understand a plan handle.
 
 ## Scope and CFG dominance

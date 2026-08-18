@@ -49,6 +49,9 @@ The repository currently implements:
   `operand`, and positional `argN` ports emitted by Graph;
 - transaction expression handles that let later stages traverse and edit trees
   authored by earlier stages without predicting generated semantic IDs;
+- first-class conditional (`?:`) expressions across HIR v0.3 and Graph v0.5,
+  with lazy-branch safety, typed source synthesis, canonical branch ports, and
+  generated-tree handle traversal;
 - opt-in `.usids` sidecars that preserve node identity across formatting and edits;
 - semantic-independent `.usgraph` layout sidecars with deterministic positions,
   sizes, collapsed state, comment regions, routing hints, and orphan recovery;
@@ -74,10 +77,14 @@ while retaining type, effect, trivia, scope, dominance, Graph-edge, and
 unaffected-spine identity proofs. M4.11 publishes the actual roots of
 plan-authored expression trees and resolves later `targetPath`/`inputPort`
 edits through those step handles before reusing the same M4.10 patch path.
+M4.12 preserves conditional expressions directly instead of desugaring them,
+projects an explicit lazy `Select` node, rejects effectful arms, and extends the
+same standalone and produced-expression editing paths through `condition`,
+`whenTrue`, and `whenFalse` ports.
 
 The v0.2 profile accepts `[Visual]` methods containing local variables,
 expressions, calls, assignments, `if/else`, `while`, `break`, `continue`,
-`return`, casts, and `await`.
+`return`, conditional expressions, casts, and `await`.
 Unsupported syntax is rejected explicitly instead of being approximated.
 
 ## Architecture
@@ -143,7 +150,7 @@ Without `--out`, the graph JSON is written to stdout.
 
 ### Analyze structured regions
 
-Graph v0.4 assigns every node to exactly one semantic region and preserves
+Graph v0.5 assigns every node to exactly one semantic region and preserves
 function, block, `if`, `then`, explicit/implicit `else`, `loop`, and `loopBody`
 nesting. Generate the early-return example with:
 
@@ -178,7 +185,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
   --out artifacts/loops
 ```
 
-HIR v0.2 emits explicit while/break/continue statements. Graph v0.4 emits a
+HIR v0.3 emits explicit while/break/continue statements. Graph v0.5 emits a
 `loop` region with one `loopBody` child, and derived CFG facts identify the
 effective condition header, body entry, exit successor, back-edge arcs, and
 break/continue nodes owned by the nearest loop. Effectful conditions route all
@@ -246,7 +253,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
   --out-identity artifacts/patched/DamageRules.cs.usids
 ```
 
-`unifiedscript.patch/v0.12` binds every patch to both the source compilation ID
+`unifiedscript.patch/v0.13` binds every patch to both the source compilation ID
 and semantic configuration ID emitted in Graph schema v0.3. A `replaceLiteral`
 operation also carries the expected old literal text. A stale source, changed
 reference/effect configuration, missing target, changed old value, non-literal
@@ -260,7 +267,7 @@ ambiguous matches allocate new IDs and emit `UVS3101` rather than guessing.
 
 ## Apply structural graph patches
 
-Patch v0.12 includes `changeOperator` and `reconnectArgument`. The checked-in
+Patch v0.13 includes `changeOperator` and `reconnectArgument`. The checked-in
 operator sample changes the binary node from multiplication to division while
 requiring the expected result, left-port, and right-port type IDs:
 
@@ -296,7 +303,7 @@ single-document.
 
 ## Apply a statement insertion
 
-Patch v0.12 also includes bounded `insertStatement` and `deleteStatement`
+Patch v0.13 also includes bounded `insertStatement` and `deleteStatement`
 operations. The insertion sample adds a graph-authored local declaration before
 the existing return statement:
 
@@ -311,7 +318,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
 ```
 
 An insertion targets a parent block and records the exact adjacent sibling IDs.
-Patch v0.12 accepts a local declaration with one literal initializer, a
+Patch v0.13 accepts a local declaration with one literal initializer, a
 CFG-checked local assignment, a typed terminal return, or an `if` whose
 condition is a versioned graph-authored expression. A local's
 semantic type must already be present and graph-safe in the bound compilation,
@@ -387,7 +394,7 @@ It proves that source, HIR, Graph branch/data/control edges, persistent identity
 and `.usgraph` layout synchronization share one structure. New branch and
 condition nodes are explicitly `unplaced`; existing placements survive.
 
-Patch-plan v0.13 can populate those newly allocated blocks without predicting
+Patch-plan v0.14 can populate those newly allocated blocks without predicting
 their random IDs. The checked-in plan inserts the same guard, appends two typed
 locals to `then`, and appends one typed local to `else`:
 
@@ -537,7 +544,7 @@ pin. The moved expression, its descendants, the containing statement, sibling
 statements, and parent block therefore retain their IDs. Only the new local
 declaration and replacement identifier allocate new IDs. This is the first
 lowering primitive needed to represent a shared Graph value without duplicating
-C# evaluation. Patch v0.12 can connect additional compatible consumers to
+C# evaluation. Patch v0.13 can connect additional compatible consumers to
 that local definition.
 
 ## Reconnect a typed consumer
@@ -596,7 +603,7 @@ analyzed source baseline, or atomically with the patch-plan protocol below.
 
 ## Apply atomic semantic patch plans
 
-`unifiedscript.patch-plan/v0.13` composes `replaceLiteral`, `changeOperator`,
+`unifiedscript.patch-plan/v0.14` composes `replaceLiteral`, `changeOperator`,
 `reconnectArgument`, typed replacement of assignment, loop, branch,
 declaration-initializer, and return endpoints, their generated-statement
 handle variants, `insertStatement`, `insertBranchStatement`,
@@ -694,7 +701,7 @@ more paths, and all-path termination propagates up that producer tree. A
 `break`/`continue` bind only to the nearest lexical loop. Local assignments are
 supported as direct, produced-branch, and produced-loop-body payloads. Authored
 call construction, async/task-like returns, cyclic handle references, and
-cross-method handles remain outside v0.13; exact inputs of already-resolved
+cross-method handles remain outside v0.14; exact inputs of already-resolved
 positional calls are covered by M4.10 below.
 
 ### Build a loop from a visual plan
@@ -716,7 +723,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
 The editor supplies only the original method-body anchor and backward symbolic
 producer references. The coordinator resolves the generated while/body/branch
 IDs after each reanalysis. The final ordinary C# loop reprojects into the same
-HIR v0.2, Graph v0.4 regions, and nearest-loop CFG facts as a text-authored
+HIR v0.3, Graph v0.5 regions, and nearest-loop CFG facts as a text-authored
 loop. See [LOOP_PATCHING.md](docs/LOOP_PATCHING.md).
 
 ### Edit assignment values and loop conditions
@@ -726,7 +733,7 @@ control structure. `replaceAssignmentValue` preserves an existing simple
 assignment, statement, and target identity while replacing its typed right-hand
 tree. `replaceWhileCondition` preserves an existing while and body while
 rebuilding its Boolean condition. Both use the same bounded literal/local/
-unary/binary/cast expression algebra and rerun scope, dominance, type, Graph,
+unary/binary/cast/conditional expression algebra and rerun scope, dominance, type, Graph,
 and CFG validation.
 
 The checked-in two-step sample changes `result - 1` to `result - 2` and changes
@@ -868,10 +875,44 @@ dotnet run --project src/UnifiedScript.Cli -- \
 ```
 
 The result is `return value + (value * 3);`, and the sidecar advances from
-generation 1 to 4. The symbolic step becomes an ordinary patch v0.12
+generation 1 to 4. The symbolic step becomes an ordinary patch v0.13
 `replaceExpressionInput` at execution time, so type, purity, dominance, trivia,
 identity, tombstone, and Graph-edge behavior stay on one code path. See
 [PRODUCED_EXPRESSION_HANDLES.md](docs/PRODUCED_EXPRESSION_HANDLES.md).
+
+### Author and edit a conditional expression
+
+M4.12 adds `condition ? whenTrue : whenFalse` as a first-class expression in
+HIR v0.3, Graph v0.5, patch v0.13, and patch-plan v0.14. Graph emits one
+`conditional`/`Select` node with `condition`, `whenTrue`, and `whenFalse` data
+inputs, a `value` output, and `evaluation: lazyBranches`. Text lowering keeps
+the original expression shape; it does not turn the expression into a call or
+an eager select primitive.
+
+Because C# evaluates only the selected arm, assignment, await, mutation, and
+effectful calls inside either arm are rejected with `UVS2002`. The condition
+may carry effects because it always executes. When an arm needs effects, use an
+explicit statement-level `if`/`else`, whose branch regions can sequence them.
+
+The checked-in three-stage plan changes `return value;` into a conditional,
+replaces its generated `whenFalse` input with `value + 1`, and then edits the
+new binary input to `2`:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  apply-plan \
+  samples/Patching/EditConditionalExpression.cs \
+  --identity samples/Patching/EditConditionalExpression.cs.usids \
+  --plan samples/Patching/EditConditionalExpression.plan.json \
+  --out artifacts/conditional-expression/EditConditionalExpression.cs \
+  --out-identity artifacts/conditional-expression/EditConditionalExpression.cs.usids
+```
+
+The result is `return enabled ? value : (value + 2);`. Exact edits of an
+existing conditional use the same canonical ports, endpoint/type preconditions,
+stable-pure removal checks, identity pins, and tombstones as every other M4.10
+input edit. See
+[CONDITIONAL_EXPRESSIONS.md](docs/CONDITIONAL_EXPRESSIONS.md).
 
 ## Persist and synchronize graph layout
 
@@ -932,7 +973,8 @@ This milestone does not include:
 - flow-sensitive nullable state in the interchange model;
 - general expression/statement synthesis and arbitrary data/control rewiring
   beyond bounded local/assignment/`if`/`while`/loop-transfer/`return`
-  insertion, safe deletion, temporary introduction, compatible local consumer
+  insertion, conditional-expression synthesis, safe deletion, temporary
+  introduction, compatible local consumer
   reconnection, and atomic composition of the current patch operations;
 - automatic graph placement, layout merge drivers, and editor viewport/session
   state;
@@ -948,6 +990,7 @@ See [ARCHITECTURE.md](docs/ARCHITECTURE.md),
 [NESTED_BRANCH_PATCHING.md](docs/NESTED_BRANCH_PATCHING.md),
 [LOOP_FOUNDATION.md](docs/LOOP_FOUNDATION.md),
 [LOOP_PATCHING.md](docs/LOOP_PATCHING.md),
+[CONDITIONAL_EXPRESSIONS.md](docs/CONDITIONAL_EXPRESSIONS.md),
 [PATCH_PLAN.md](docs/PATCH_PLAN.md),
 [M1_ROSLYN_GRAPH_FOUNDATION.md](docs/milestones/M1_ROSLYN_GRAPH_FOUNDATION.md),
 [M2_SEMANTIC_BINDING.md](docs/milestones/M2_SEMANTIC_BINDING.md), and

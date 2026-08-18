@@ -459,6 +459,9 @@ public static class SemanticPatchPlanJson
             (BinaryPatchExpression binary, "right") => binary.Right,
             (UnaryPatchExpression unary, "operand") => unary.Operand,
             (CastPatchExpression cast, "operand") => cast.Operand,
+            (ConditionalPatchExpression conditional, "condition") => conditional.Condition,
+            (ConditionalPatchExpression conditional, "whenTrue") => conditional.WhenTrue,
+            (ConditionalPatchExpression conditional, "whenFalse") => conditional.WhenFalse,
             _ => null,
         };
         return input is not null;

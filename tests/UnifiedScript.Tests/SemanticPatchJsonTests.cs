@@ -408,6 +408,60 @@ public sealed class SemanticPatchJsonTests
     }
 
     [Fact]
+    public void SerializeAndDeserialize_PreserveTypedConditionalExpression()
+    {
+        SemanticId intType = SemanticId.FromKey("System.Int32");
+        SemanticId boolType = SemanticId.FromKey("System.Boolean");
+        var expression = new ConditionalPatchExpression(
+            new LocalReferencePatchExpression(
+                SemanticId.FromKey("enabled-parameter"),
+                "enabled",
+                boolType),
+            new LiteralPatchExpression("1", intType),
+            new LiteralPatchExpression("2", intType),
+            intType);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            SemanticId.FromKey("conditional-compilation"),
+            SemanticId.FromKey("conditional-configuration"),
+            [new ReplaceReturnValuePatchOperation(
+                SemanticId.FromKey("conditional-return"),
+                SemanticId.FromKey("conditional-old-value"),
+                intType,
+                expression)]);
+
+        string json = SemanticPatchJson.Serialize(patch);
+        SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
+
+        ReplaceReturnValuePatchOperation operation = Assert.IsType<ReplaceReturnValuePatchOperation>(
+            Assert.Single(roundTrip.Operations));
+        Assert.Equal(expression, Assert.IsType<ConditionalPatchExpression>(operation.NewValue));
+        Assert.Equal("unifiedscript.patch/v0.13", roundTrip.SchemaVersion);
+        Assert.Contains("\"expression\": \"conditional\"", json);
+        Assert.Contains("\"whenTrue\"", json);
+        Assert.Contains("\"whenFalse\"", json);
+    }
+
+    [Fact]
+    public void Create_RejectsConditionalBranchesWithMismatchedDeclaredTypes()
+    {
+        SemanticId intType = SemanticId.FromKey("System.Int32");
+        SemanticId boolType = SemanticId.FromKey("System.Boolean");
+
+        Assert.Throws<JsonException>(() => SemanticPatchDocument.Create(
+            SemanticId.FromKey("invalid-conditional-compilation"),
+            SemanticId.FromKey("invalid-conditional-configuration"),
+            [new ReplaceReturnValuePatchOperation(
+                SemanticId.FromKey("invalid-conditional-return"),
+                SemanticId.FromKey("invalid-conditional-value"),
+                intType,
+                new ConditionalPatchExpression(
+                    new LiteralPatchExpression("true", boolType),
+                    new LiteralPatchExpression("1", intType),
+                    new LiteralPatchExpression("false", boolType),
+                    intType))]));
+    }
+
+    [Fact]
     public void SerializeAndDeserialize_PreserveTypedWhileAndLoopTransfers()
     {
         SemanticId boolType = SemanticId.FromKey("System.Boolean");

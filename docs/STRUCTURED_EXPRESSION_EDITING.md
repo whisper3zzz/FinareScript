@@ -15,8 +15,8 @@ and CFG pipeline. There is no editor-only expression VM or second executable
 representation.
 
 These operations were introduced in patch v0.10 and plan v0.9. The current
-strict-reader versions are `unifiedscript.patch/v0.12` and
-`unifiedscript.patch-plan/v0.13`, extended by the M4.8 endpoint operations in
+strict-reader versions are `unifiedscript.patch/v0.13` and
+`unifiedscript.patch-plan/v0.14`, extended by the M4.8 endpoint operations in
 [GENERAL_EXPRESSION_EDITING.md](GENERAL_EXPRESSION_EDITING.md).
 
 ## Replace an assignment value
@@ -96,7 +96,7 @@ loop body is not replaced or regenerated.
 
 ## Plan steps
 
-Patch plan v0.13 exposes direct wrappers for both operations:
+Patch plan v0.14 exposes direct wrappers for both operations:
 
 - `replaceAssignmentValue`; and
 - `replaceWhileCondition`.
@@ -235,7 +235,8 @@ later adds `if` conditions, declaration initializers, and return expressions;
 M4.10 adds exact nested binary/unary/cast and positional invocation-argument
 inputs already present in the external baseline. M4.11 publishes generated
 expression roots and bounded binary/unary/cast port paths for later plan
-stages. The authored algebra still does not
+stages. M4.12 adds conditional expression construction and canonical
+condition/arm paths. The authored algebra still does not
 introduce calls, member access, object construction, indexing, lambdas,
 mutation inside a value expression, or effect sequencing.
 

@@ -101,6 +101,7 @@ public sealed record HirReturnStatement(
 [JsonDerivedType(typeof(HirAssignmentExpression), "assignment")]
 [JsonDerivedType(typeof(HirAwaitExpression), "await")]
 [JsonDerivedType(typeof(HirCastExpression), "cast")]
+[JsonDerivedType(typeof(HirConditionalExpression), "conditional")]
 public abstract record HirExpression(SemanticId Id, SourceSpan Span) : HirNode(Id, Span);
 
 public sealed record HirLiteralExpression(
@@ -159,3 +160,10 @@ public sealed record HirCastExpression(
     SourceSpan Span,
     string TypeName,
     HirExpression Operand) : HirExpression(Id, Span);
+
+public sealed record HirConditionalExpression(
+    SemanticId Id,
+    SourceSpan Span,
+    HirExpression Condition,
+    HirExpression WhenTrue,
+    HirExpression WhenFalse) : HirExpression(Id, Span);

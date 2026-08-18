@@ -361,6 +361,11 @@ public sealed class CSharpIdentityReconciler
                 case HirCastExpression cast:
                     Visit(cast.Operand, owner, "operand", childParent);
                     break;
+                case HirConditionalExpression conditional:
+                    Visit(conditional.Condition, owner, "condition", childParent);
+                    Visit(conditional.WhenTrue, owner, "whenTrue", childParent);
+                    Visit(conditional.WhenFalse, owner, "whenFalse", childParent);
+                    break;
             }
         }
 
@@ -414,6 +419,10 @@ public sealed class CSharpIdentityReconciler
                 Child(assignment.Target) + Child(assignment.Value),
             HirAwaitExpression awaitExpression => GetShapeKey(awaitExpression) + Child(awaitExpression.Operand),
             HirCastExpression cast => GetShapeKey(cast) + Child(cast.Operand),
+            HirConditionalExpression conditional => GetShapeKey(conditional) +
+                Child(conditional.Condition) +
+                Child(conditional.WhenTrue) +
+                Child(conditional.WhenFalse),
             _ => GetShapeKey(node),
         };
         fingerprint = GetDigest(key);
@@ -444,6 +453,7 @@ public sealed class CSharpIdentityReconciler
         HirAssignmentExpression assignment => $"assignment|{assignment.Operator}",
         HirAwaitExpression => "await",
         HirCastExpression cast => $"cast|{cast.TypeName}",
+        HirConditionalExpression => "conditional",
         _ => node.GetType().Name,
     };
 
@@ -468,6 +478,7 @@ public sealed class CSharpIdentityReconciler
         HirAssignmentExpression => "assignment",
         HirAwaitExpression => "await",
         HirCastExpression => "cast",
+        HirConditionalExpression => "conditional",
         _ => node.GetType().Name,
     };
 

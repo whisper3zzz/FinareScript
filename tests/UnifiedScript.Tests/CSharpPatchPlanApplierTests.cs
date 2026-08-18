@@ -2836,6 +2836,109 @@ public sealed class CSharpPatchPlanApplierTests
     }
 
     [Fact]
+    public void Apply_ChainsProducedHandlesThroughConditionalPorts()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int Select(bool enabled, int value, int fallback)
+                {
+                    return value;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/ProducedConditional.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(
+            Assert.Single(method.Body.Statements));
+        HirExpression oldValue = Assert.IsAssignableFrom<HirExpression>(returnStatement.Expression);
+        SemanticId boolType = GetTypeId(original, method.Parameters[0]);
+        SemanticId intType = GetTypeId(original, oldValue);
+        var replaceReturn = new ReplaceReturnValuePatchPlanStep(
+            "replaceReturn",
+            returnStatement.Id,
+            oldValue.Id,
+            intType,
+            new ConditionalPatchExpression(
+                new LocalReferencePatchExpression(
+                    method.Parameters[0].Id,
+                    method.Parameters[0].Name,
+                    boolType),
+                new LocalReferencePatchExpression(
+                    method.Parameters[1].Id,
+                    method.Parameters[1].Name,
+                    intType),
+                new LocalReferencePatchExpression(
+                    method.Parameters[2].Id,
+                    method.Parameters[2].Name,
+                    intType),
+                intType));
+        var replaceGeneratedFalse = new ReplaceProducedExpressionInputPatchPlanStep(
+            "replaceGeneratedFalse",
+            returnStatement.Id,
+            replaceReturn.StepId,
+            [],
+            "whenFalse",
+            intType,
+            intType,
+            new BinaryPatchExpression(
+                "+",
+                new LocalReferencePatchExpression(
+                    method.Parameters[1].Id,
+                    method.Parameters[1].Name,
+                    intType),
+                new LiteralPatchExpression("1", intType),
+                intType));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                replaceReturn,
+                replaceGeneratedFalse,
+                new ReplaceProducedExpressionInputPatchPlanStep(
+                    "replaceGeneratedFalseRight",
+                    returnStatement.Id,
+                    replaceGeneratedFalse.StepId,
+                    [],
+                    "right",
+                    intType,
+                    intType,
+                    new LiteralPatchExpression("2", intType)),
+            ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Contains(
+            "return enabled ? value : (value + 2);",
+            Assert.Single(result.PatchedRequest!.Sources).Source,
+            StringComparison.Ordinal);
+        CSharpAnalysisResult analysis = Assert.IsType<CSharpAnalysisResult>(result.Analysis);
+        HirCompilationUnit hir = Assert.IsType<HirCompilationUnit>(analysis.Hir);
+        HirConditionalExpression conditional = Assert.Single(
+            hir.DescendantsAndSelf().OfType<HirConditionalExpression>());
+        HirBinaryExpression whenFalse = Assert.IsType<HirBinaryExpression>(conditional.WhenFalse);
+        HirLiteralExpression two = Assert.IsType<HirLiteralExpression>(whenFalse.Right);
+        Assert.Equal("2", two.ValueText);
+        Assert.Equal(returnStatement.Id, Assert.Single(
+            hir.DescendantsAndSelf().OfType<HirReturnStatement>()).Id);
+        Assert.Equal(4, Assert.Single(analysis.IdentitySidecars).Generation);
+        GraphFunction graph = Assert.Single(new HirGraphProjector()
+            .Project(hir, analysis.Semantics)
+            .Functions);
+        Assert.Contains(
+            graph.Edges,
+            edge => edge.FromNode == whenFalse.Id &&
+                edge.ToNode == conditional.Id &&
+                edge.ToPort == "whenFalse");
+    }
+
+    [Fact]
     public void Apply_ResolvesNestedPathInsideAnInsertedExpressionTree()
     {
         const string source = """

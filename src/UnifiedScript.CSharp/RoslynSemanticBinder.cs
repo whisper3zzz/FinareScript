@@ -85,6 +85,7 @@ public sealed class RoslynSemanticBinder
         RegisterTypeDeclarations(hir);
         RegisterMethodAndValueDeclarations(hir, diagnostics);
         BindExpressions(hir);
+        ValidateConditionalExpressions(hir, diagnostics);
 
         var bound = new BoundCompilation(
             BoundCompilation.CurrentSchemaVersion,
@@ -222,6 +223,43 @@ public sealed class RoslynSemanticBinder
                 ReferencedSymbolId: referencedSymbolId,
                 InvokedMethodId: invokedMethodId,
                 Effects: effects);
+        }
+    }
+
+    private void ValidateConditionalExpressions(
+        HirCompilationUnit hir,
+        ICollection<UnifiedDiagnostic> diagnostics)
+    {
+        var reportedNodes = new HashSet<SemanticId>();
+        foreach (HirConditionalExpression conditional in hir
+                     .DescendantsAndSelf()
+                     .OfType<HirConditionalExpression>())
+        {
+            HirExpression? effectfulBranchNode = new[]
+                {
+                    conditional.WhenTrue,
+                    conditional.WhenFalse,
+                }
+                .SelectMany(static branch => branch.DescendantsAndSelf())
+                .OfType<HirExpression>()
+                .FirstOrDefault(node =>
+                    node is HirAssignmentExpression or HirAwaitExpression ||
+                    node is HirUnaryExpression { Operator: "++" or "--" } ||
+                    nodes.TryGetValue(node.Id, out BoundNodeInfo? binding) &&
+                    binding.Effects != MethodEffects.None);
+            if (effectfulBranchNode is null || !reportedNodes.Add(effectfulBranchNode.Id))
+            {
+                continue;
+            }
+
+            diagnostics.Add(new UnifiedDiagnostic(
+                SemanticDiagnosticCodes.ConditionalBranchEffectsNotSupported,
+                UnifiedDiagnosticSeverity.Error,
+                "Conditional-expression branches must be effect-free so Graph can preserve " +
+                "C# lazy branch evaluation. Move mutation, await, or effectful calls into " +
+                "explicit if/else statements.",
+                effectfulBranchNode.Span,
+                effectfulBranchNode.Id));
         }
     }
 
@@ -515,6 +553,8 @@ public sealed class RoslynSemanticBinder
             HirAssignmentExpression assignment => [assignment.Target, assignment.Value],
             HirAwaitExpression awaitExpression => [awaitExpression.Operand],
             HirCastExpression cast => [cast.Operand],
+            HirConditionalExpression conditional =>
+                [conditional.Condition, conditional.WhenTrue, conditional.WhenFalse],
             _ => [],
         };
         foreach (HirExpression child in children)

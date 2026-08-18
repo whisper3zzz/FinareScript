@@ -37,6 +37,8 @@ public static class HirTraversal
         HirAssignmentExpression expression => [expression.Target, expression.Value],
         HirAwaitExpression expression => [expression.Operand],
         HirCastExpression expression => [expression.Operand],
+        HirConditionalExpression expression =>
+            [expression.Condition, expression.WhenTrue, expression.WhenFalse],
         _ => [],
     };
 }

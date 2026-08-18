@@ -175,6 +175,98 @@ public sealed class CSharpSemanticPipelineTests
         Assert.Equal("int", awaitNode.Properties["resolvedType"]);
     }
 
+    [Fact]
+    public void AnalyzeAndProject_PreserveTypedLazyConditionalBranches()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int Select(bool enabled, int value, int fallback)
+                {
+                    return enabled ? value + 1 : fallback;
+                }
+            }
+            """;
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            source,
+            "ConditionalRules.cs");
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        HirCompilationUnit hir = Assert.IsType<HirCompilationUnit>(result.Hir);
+        BoundCompilation semantics = Assert.IsType<BoundCompilation>(result.Semantics);
+        HirConditionalExpression conditional = Assert.Single(
+            hir.DescendantsAndSelf().OfType<HirConditionalExpression>());
+        BoundNodeInfo conditionalBinding = FindNode(semantics, conditional.Id);
+        BoundNodeInfo conditionBinding = FindNode(semantics, conditional.Condition.Id);
+        Assert.Equal(UnifiedTypeKind.Integer, FindType(
+            semantics,
+            conditionalBinding.TypeId!.Value).Kind);
+        Assert.Equal(UnifiedTypeKind.Boolean, FindType(
+            semantics,
+            conditionBinding.TypeId!.Value).Kind);
+
+        GraphDocument document = new HirGraphProjector().Project(hir, semantics);
+        Assert.Equal("unifiedscript.graph/v0.5", document.SchemaVersion);
+        GraphFunction graph = Assert.Single(document.Functions);
+        GraphNode select = Assert.Single(graph.Nodes, static node => node.Kind == "conditional");
+        Assert.Equal("Select", select.Label);
+        Assert.Equal("lazyBranches", select.Properties["evaluation"]);
+        Assert.Contains(select.Ports, static port => port.Name == "condition");
+        Assert.Contains(select.Ports, static port => port.Name == "whenTrue");
+        Assert.Contains(select.Ports, static port => port.Name == "whenFalse");
+        Assert.Contains(select.Ports, static port =>
+            port.Name == "value" && port.Direction == GraphPortDirection.Output);
+        Assert.Contains(graph.Edges, edge =>
+            edge.Kind == GraphEdgeKind.Data && edge.ToNode == select.Id &&
+            edge.ToPort == "condition");
+        Assert.Contains(graph.Edges, edge =>
+            edge.Kind == GraphEdgeKind.Data && edge.ToNode == select.Id &&
+            edge.ToPort == "whenTrue");
+        Assert.Contains(graph.Edges, edge =>
+            edge.Kind == GraphEdgeKind.Data && edge.ToNode == select.Id &&
+            edge.ToPort == "whenFalse");
+    }
+
+    [Fact]
+    public void Analyze_RejectsEffectfulConditionalBranchesThatCannotRemainLazy()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int Select(bool enabled, int value)
+                {
+                    return enabled ? Mutate(value) : value;
+                }
+
+                static int Mutate(int value)
+                {
+                    return value + 1;
+                }
+            }
+            """;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            source,
+            "EffectfulConditional.cs");
+
+        Assert.False(result.Succeeded);
+        Assert.NotNull(result.Hir);
+        Assert.Null(result.Semantics);
+        UnifiedDiagnostic diagnostic = Assert.Single(
+            result.Diagnostics,
+            static diagnostic =>
+                diagnostic.Code == SemanticDiagnosticCodes.ConditionalBranchEffectsNotSupported);
+        Assert.Contains("lazy branch evaluation", diagnostic.Message, StringComparison.Ordinal);
+        Assert.IsType<HirInvocationExpression>(Assert.Single(
+            result.Hir!.DescendantsAndSelf().OfType<HirInvocationExpression>()));
+    }
+
     private static BoundNodeInfo FindNode(BoundCompilation semantics, SemanticId id) =>
         Assert.Single(semantics.Nodes, node => node.NodeId == id);
 

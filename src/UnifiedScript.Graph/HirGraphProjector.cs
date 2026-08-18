@@ -696,6 +696,55 @@ public sealed class HirGraphProjector
                         effects = operand.Effects;
                         break;
                     }
+                case HirConditionalExpression conditional:
+                    {
+                        ExpressionProjection condition = ProjectExpression(
+                            conditional.Condition,
+                            regionId);
+                        ExpressionProjection whenTrue = ProjectExpression(
+                            conditional.WhenTrue,
+                            regionId);
+                        ExpressionProjection whenFalse = ProjectExpression(
+                            conditional.WhenFalse,
+                            regionId);
+                        if (whenTrue.Effects.Count > 0 || whenFalse.Effects.Count > 0)
+                        {
+                            throw new InvalidOperationException(
+                                "Conditional Graph branches must be effect-free to preserve lazy evaluation.");
+                        }
+
+                        AddNode(ValueNode(
+                            conditional,
+                            "conditional",
+                            "Select",
+                            KeyValuePair.Create("evaluation", "lazyBranches"),
+                            [
+                                new GraphPort(
+                                    "condition",
+                                    GraphPortDirection.Input,
+                                    GraphPortKind.Data),
+                                new GraphPort(
+                                    "whenTrue",
+                                    GraphPortDirection.Input,
+                                    GraphPortKind.Data),
+                                new GraphPort(
+                                    "whenFalse",
+                                    GraphPortDirection.Input,
+                                    GraphPortKind.Data),
+                            ]),
+                            regionId);
+                        AddRequiredDataEdge(
+                            condition.Value,
+                            new ValueEndpoint(conditional.Id, "condition"));
+                        AddRequiredDataEdge(
+                            whenTrue.Value,
+                            new ValueEndpoint(conditional.Id, "whenTrue"));
+                        AddRequiredDataEdge(
+                            whenFalse.Value,
+                            new ValueEndpoint(conditional.Id, "whenFalse"));
+                        effects = condition.Effects;
+                        break;
+                    }
                 default:
                     throw new ArgumentOutOfRangeException(nameof(expression), expression.GetType().Name);
             }

@@ -609,6 +609,146 @@ public sealed class CSharpSourcePatchApplierTests
     }
 
     [Fact]
+    public void Apply_BuildsTypedConditionalAndEditsItsExactInputPort()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int Select(bool enabled, int value, int fallback)
+                {
+                    return value;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/ConditionalPatch.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(
+            Assert.Single(method.Body.Statements));
+        HirExpression oldValue = Assert.IsAssignableFrom<HirExpression>(returnStatement.Expression);
+        SemanticId boolType = GetTypeId(original, method.Parameters[0]);
+        SemanticId intType = GetTypeId(original, oldValue);
+        var applier = new CSharpSourcePatchApplier();
+        SemanticPatchDocument buildPatch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new ReplaceReturnValuePatchOperation(
+                returnStatement.Id,
+                oldValue.Id,
+                intType,
+                new ConditionalPatchExpression(
+                    new LocalReferencePatchExpression(
+                        method.Parameters[0].Id,
+                        method.Parameters[0].Name,
+                        boolType),
+                    new LocalReferencePatchExpression(
+                        method.Parameters[1].Id,
+                        method.Parameters[1].Name,
+                        intType),
+                    new LocalReferencePatchExpression(
+                        method.Parameters[2].Id,
+                        method.Parameters[2].Name,
+                        intType),
+                    intType))]);
+
+        CSharpPatchResult built = applier.Apply(request, buildPatch);
+
+        Assert.True(built.Succeeded, string.Join(Environment.NewLine, built.Diagnostics));
+        CSharpCompilationRequest builtRequest = Assert.IsType<CSharpCompilationRequest>(built.PatchedRequest);
+        Assert.Contains(
+            "return enabled ? value : fallback;",
+            Assert.Single(builtRequest.Sources).Source,
+            StringComparison.Ordinal);
+        CSharpAnalysisResult builtAnalysis = Assert.IsType<CSharpAnalysisResult>(built.Analysis);
+        HirCompilationUnit builtHir = Assert.IsType<HirCompilationUnit>(builtAnalysis.Hir);
+        BoundCompilation builtSemantics = Assert.IsType<BoundCompilation>(builtAnalysis.Semantics);
+        HirConditionalExpression conditional = Assert.Single(
+            builtHir.DescendantsAndSelf().OfType<HirConditionalExpression>());
+        SemanticId originalTrueId = conditional.WhenTrue.Id;
+        SemanticId oldFalseId = conditional.WhenFalse.Id;
+        SemanticPatchDocument editPortPatch = SemanticPatchDocument.Create(
+            builtHir.Id,
+            builtSemantics.ConfigurationId,
+            [new ReplaceExpressionInputPatchOperation(
+                conditional.Id,
+                "whenFalse",
+                oldFalseId,
+                intType,
+                intType,
+                new BinaryPatchExpression(
+                    "+",
+                    new LocalReferencePatchExpression(
+                        method.Parameters[1].Id,
+                        method.Parameters[1].Name,
+                        intType),
+                    new LiteralPatchExpression("1", intType),
+                    intType))]);
+
+        IReadOnlyDictionary<string, IdentitySidecarDocument> builtSidecars = builtAnalysis.IdentitySidecars
+            .ToDictionary(static sidecar => sidecar.SourcePath, StringComparer.Ordinal);
+        var advancedRequest = new CSharpCompilationRequest(
+            builtRequest.AssemblyName,
+            builtRequest.Sources.Select(source => new CSharpSourceDocument(
+                source.LogicalPath,
+                source.Source,
+                builtSidecars[source.LogicalPath])),
+            builtRequest.ReferencePaths,
+            builtRequest.EffectCatalog);
+        CSharpPatchResult edited = applier.Apply(advancedRequest, editPortPatch);
+
+        Assert.True(edited.Succeeded, string.Join(Environment.NewLine, edited.Diagnostics));
+        Assert.Contains(
+            "return enabled ? value : (value + 1);",
+            Assert.Single(edited.PatchedRequest!.Sources).Source,
+            StringComparison.Ordinal);
+        CSharpAnalysisResult editedAnalysis = Assert.IsType<CSharpAnalysisResult>(edited.Analysis);
+        HirCompilationUnit editedHir = Assert.IsType<HirCompilationUnit>(editedAnalysis.Hir);
+        HirConditionalExpression changed = Assert.Single(
+            editedHir.DescendantsAndSelf().OfType<HirConditionalExpression>());
+        HirBinaryExpression newFalse = Assert.IsType<HirBinaryExpression>(changed.WhenFalse);
+        Assert.Equal(conditional.Id, changed.Id);
+        Assert.Equal(originalTrueId, changed.WhenTrue.Id);
+        Assert.Contains(
+            Assert.Single(editedAnalysis.IdentitySidecars).Tombstones,
+            tombstone => tombstone.Id == oldFalseId);
+        GraphFunction graph = Assert.Single(new HirGraphProjector()
+            .Project(editedHir, editedAnalysis.Semantics)
+            .Functions);
+        Assert.Contains(
+            graph.Edges,
+            edge => edge.FromNode == newFalse.Id &&
+                edge.ToNode == changed.Id &&
+                edge.ToPort == "whenFalse");
+
+        SemanticPatchDocument invalidConditionPatch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics.ConfigurationId,
+            [new ReplaceReturnValuePatchOperation(
+                returnStatement.Id,
+                oldValue.Id,
+                intType,
+                new ConditionalPatchExpression(
+                    new LocalReferencePatchExpression(
+                        method.Parameters[1].Id,
+                        method.Parameters[1].Name,
+                        intType),
+                    new LiteralPatchExpression("1", intType),
+                    new LiteralPatchExpression("2", intType),
+                    intType))]);
+
+        CSharpPatchResult invalid = applier.Apply(request, invalidConditionPatch);
+
+        Assert.False(invalid.Succeeded);
+        Assert.Contains(
+            invalid.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.TypeMismatch);
+    }
+
+    [Fact]
     public void Apply_RejectsStaleOrIncompatibleExpressionInputPort()
     {
         CSharpCompilationRequest request = CSharpCompilationRequest.Single(

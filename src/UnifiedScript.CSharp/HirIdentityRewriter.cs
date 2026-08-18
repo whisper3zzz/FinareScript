@@ -133,6 +133,13 @@ internal static class HirIdentityRewriter
                 Id = GetId(cast, identities),
                 Operand = RewriteExpression(cast.Operand, identities),
             },
+            HirConditionalExpression conditional => conditional with
+            {
+                Id = GetId(conditional, identities),
+                Condition = RewriteExpression(conditional.Condition, identities),
+                WhenTrue = RewriteExpression(conditional.WhenTrue, identities),
+                WhenFalse = RewriteExpression(conditional.WhenFalse, identities),
+            },
             _ => throw new ArgumentOutOfRangeException(nameof(expression), expression.GetType().Name),
         };
 
