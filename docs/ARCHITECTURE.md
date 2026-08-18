@@ -228,7 +228,7 @@ operator/endpoint, semantic type,
 containing statement, parent block, and exact sibling preconditions rather than
 relying only on the compilation baseline.
 
-`unifiedscript.patch-plan/v0.10` is an ordered transaction above individual
+`unifiedscript.patch-plan/v0.11` is an ordered transaction above individual
 patches. It composes every current bounded operation: literal and operator
 changes, argument reconnection, structured assignment/loop/branch/local/return
 expression edits, statement insertion/deletion, temporary introduction, value
@@ -236,9 +236,11 @@ reconnection, symbolic branch-body insertion, symbolic loop-body insertion,
 and symbolic replacement of expression endpoints on compatible statements
 produced earlier in the same plan.
 `introduceTemporary` and local-literal root, branch, or loop-body insertion
-steps publish symbolic local handles. Later
-`reconnectValue` steps reference those handles instead of guessing a random
-declaration ID that does not exist in the initial HIR. The complete plan still
+steps publish symbolic local handles. Later `reconnectValue` steps can consume
+an entire value port, while transaction-only `producedLocalReference` leaves
+can use the same handle inside nested authored expression trees. The
+coordinator resolves both forms to an ordinary local definition ID instead of
+guessing a random ID that does not exist in the initial HIR. The complete plan still
 carries one external source/configuration baseline and records every target's
 original value, endpoint, statement, block, sibling, and type preconditions.
 An `if` insertion publishes internal `then`/`else` block handles for later
@@ -263,6 +265,8 @@ The complete transaction and internal rebasing contract is specified in
 [PATCH_PLAN.md](PATCH_PLAN.md).
 The endpoint replacement and generated-statement handle contract is specified
 in [GENERAL_EXPRESSION_EDITING.md](GENERAL_EXPRESSION_EDITING.md).
+The generated-local data-flow contract is specified in
+[PRODUCED_VALUE_REFERENCES.md](PRODUCED_VALUE_REFERENCES.md).
 
 The C# patch boundary performs these steps without mutating files:
 

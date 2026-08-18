@@ -2529,7 +2529,10 @@ public sealed class CSharpSourcePatchApplier
         ReturnStatementSyntax syntax = SyntaxFactory
             .ReturnStatement(expression.Syntax)
             .WithReturnKeyword(SyntaxFactory.Token(SyntaxKind.ReturnKeyword)
-                .WithTrailingTrivia(SyntaxFactory.Space));
+                .WithTrailingTrivia(SyntaxFactory.Space))
+            .NormalizeWhitespace()
+            .WithoutLeadingTrivia()
+            .WithoutTrailingTrivia();
         return StatementBuildResult.Success(syntax);
     }
 

@@ -12,7 +12,7 @@ statements:
 - the value of an existing non-void return.
 
 The standalone protocol is `unifiedscript.patch/v0.11`; the transaction
-protocol is `unifiedscript.patch-plan/v0.10`. All replacements consume the
+protocol is `unifiedscript.patch-plan/v0.11`. All replacements consume the
 same closed `PatchExpression` algebra used by statement construction and by
 M4.7 expression editing: literal, existing local/parameter reference, unary,
 binary, and cast.
@@ -150,7 +150,7 @@ return facts, and CFG reducibility are recalculated after each stage.
 
 ## Patch-plan steps
 
-Patch plan v0.10 carries direct wrappers named `replaceIfCondition`,
+Patch plan v0.11 carries direct wrappers named `replaceIfCondition`,
 `replaceLocalInitializer`, and `replaceReturnValue`. Their payloads are the
 standalone fields plus a unique `stepId`. Like other direct replacements, they
 target IDs that exist in the external baseline and are not repeatable against
@@ -278,12 +278,13 @@ M4.8 edits complete expression endpoints, not arbitrary nested ports. A visual
 editor may rebuild a nested typed expression tree through its parent endpoint,
 but it cannot yet submit a generic operation against any inner input socket.
 
-`PatchExpression` references only definitions already present in the external
-source baseline. A generated local can itself expose a symbolic initializer
-endpoint and can be used by existing reconnect-handle operations, but another
-generated expression cannot yet name that local from inside its
-`PatchExpression` payload. General symbolic value references need a separate
-typed handle algebra rather than overloading persistent IDs.
+An ordinary `localReference` still addresses only definitions present in the
+external source baseline. Plan v0.11 adds a transaction-only
+`producedLocalReference` leaf for locals created by earlier steps; it resolves
+to a normal definition ID before source patching and retains all scope and CFG
+dominance rules. See
+[PRODUCED_VALUE_REFERENCES.md](PRODUCED_VALUE_REFERENCES.md). Arbitrary
+generated expression results still do not publish value handles.
 
 Calls, member/indexer access, assignment expressions, increment/decrement,
 conditional access, lambdas, `await`, and other effectful or evaluation-order
@@ -291,7 +292,7 @@ sensitive forms remain outside the authored expression algebra. Void/task-like
 return editing, declaration type or name changes, branch restructuring, moving
 statements, and automatic graph placement are also out of scope.
 
-The next expression milestone should generalize typed symbolic value handles
-and nested data-port rewiring while retaining exact type/effect/order proofs.
+The next expression milestone should generalize exact nested data-port rewiring
+while retaining explicit old-port IDs and type/effect/order proofs.
 `for`, `foreach`, and `switch` still require explicit lossless HIR designs
 before their control structure is admitted.

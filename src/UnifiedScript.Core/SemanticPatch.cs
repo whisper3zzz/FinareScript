@@ -99,6 +99,7 @@ public sealed record LocalAssignmentPatchStatement(
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "expression")]
 [JsonDerivedType(typeof(LiteralPatchExpression), "literal")]
 [JsonDerivedType(typeof(LocalReferencePatchExpression), "localReference")]
+[JsonDerivedType(typeof(ProducedLocalReferencePatchExpression), "producedLocalReference")]
 [JsonDerivedType(typeof(UnaryPatchExpression), "unary")]
 [JsonDerivedType(typeof(BinaryPatchExpression), "binary")]
 [JsonDerivedType(typeof(CastPatchExpression), "cast")]
@@ -110,6 +111,11 @@ public sealed record LiteralPatchExpression(
 
 public sealed record LocalReferencePatchExpression(
     SemanticId SourceDefinitionId,
+    string ExpectedName,
+    SemanticId ExpectedTypeId) : PatchExpression(ExpectedTypeId);
+
+public sealed record ProducedLocalReferencePatchExpression(
+    string SourceStepId,
     string ExpectedName,
     SemanticId ExpectedTypeId) : PatchExpression(ExpectedTypeId);
 

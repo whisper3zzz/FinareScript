@@ -323,6 +323,120 @@ public sealed class SemanticPatchPlanJsonTests
     }
 
     [Fact]
+    public void SerializeAndDeserialize_PreserveNestedProducedLocalReferences()
+    {
+        SemanticId blockId = SemanticId.FromKey("produced-value-parent");
+        SemanticId nextId = SemanticId.FromKey("produced-value-next");
+        SemanticId intType = SemanticId.FromKey("System.Int32");
+        SemanticId boolType = SemanticId.FromKey("System.Boolean");
+        var producer = new InsertStatementPatchPlanStep(
+            "insertOffset",
+            blockId,
+            null,
+            nextId,
+            new LocalLiteralDeclarationPatchStatement("offset", "int", "2", intType));
+        var reference = new ProducedLocalReferencePatchExpression(
+            producer.StepId,
+            "offset",
+            intType);
+        SemanticPatchPlanStep[] steps =
+        [
+            producer,
+            new InsertStatementPatchPlanStep(
+                "insertGuard",
+                blockId,
+                null,
+                nextId,
+                new IfPatchStatement(new BinaryPatchExpression(
+                    ">",
+                    reference,
+                    new LiteralPatchExpression("0", intType),
+                    boolType))),
+            new ReplaceReturnValuePatchPlanStep(
+                "editReturn",
+                SemanticId.FromKey("produced-value-return"),
+                SemanticId.FromKey("produced-value-return-expression"),
+                intType,
+                new BinaryPatchExpression(
+                    "+",
+                    reference,
+                    new LiteralPatchExpression("1", intType),
+                    intType)),
+        ];
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("produced-value-compilation"),
+            SemanticId.FromKey("produced-value-configuration"),
+            steps);
+
+        string json = SemanticPatchPlanJson.Serialize(plan);
+        SemanticPatchPlanDocument roundTrip = SemanticPatchPlanJson.Deserialize(json);
+
+        Assert.Equal(steps, roundTrip.Steps);
+        Assert.Equal(2, json.Split("\"expression\": \"producedLocalReference\"").Length - 1);
+        Assert.Contains("\"sourceStepId\": \"insertOffset\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Create_RejectsInvalidProducedLocalReferences()
+    {
+        SemanticId blockId = SemanticId.FromKey("invalid-produced-value-parent");
+        SemanticId intType = SemanticId.FromKey("System.Int32");
+        SemanticId boolType = SemanticId.FromKey("System.Boolean");
+        var producer = new InsertStatementPatchPlanStep(
+            "insertOffset",
+            blockId,
+            null,
+            null,
+            new LocalLiteralDeclarationPatchStatement("offset", "int", "2", intType));
+
+        Assert.Throws<JsonException>(() => SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("future-produced-value-compilation"),
+            SemanticId.FromKey("future-produced-value-configuration"),
+            [
+                new InsertStatementPatchPlanStep(
+                    "consumeFutureOffset",
+                    blockId,
+                    null,
+                    null,
+                    new IfPatchStatement(new ProducedLocalReferencePatchExpression(
+                        producer.StepId,
+                        "offset",
+                        intType))),
+                producer,
+            ]));
+        Assert.Throws<JsonException>(() => SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("wrong-produced-value-name-compilation"),
+            SemanticId.FromKey("wrong-produced-value-name-configuration"),
+            [
+                producer,
+                new InsertStatementPatchPlanStep(
+                    "consumeRenamedOffset",
+                    blockId,
+                    null,
+                    null,
+                    new IfPatchStatement(new ProducedLocalReferencePatchExpression(
+                        producer.StepId,
+                        "renamedOffset",
+                        intType))),
+            ]));
+        Assert.Throws<JsonException>(() => SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("wrong-produced-value-type-compilation"),
+            SemanticId.FromKey("wrong-produced-value-type-configuration"),
+            [
+                producer,
+                new InsertStatementPatchPlanStep(
+                    "consumeBooleanOffset",
+                    blockId,
+                    null,
+                    null,
+                    new IfPatchStatement(new ProducedLocalReferencePatchExpression(
+                        producer.StepId,
+                        "offset",
+                        boolType))),
+            ]));
+    }
+
+    [Fact]
     public void Create_RejectsInvalidProducedWhileConditionHandles()
     {
         SemanticId blockId = SemanticId.FromKey("invalid-generated-loop-parent");

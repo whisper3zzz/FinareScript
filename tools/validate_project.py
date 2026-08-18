@@ -35,6 +35,7 @@ DOCUMENTS = [
     ROOT / "docs" / "LOOP_PATCHING.md",
     ROOT / "docs" / "STRUCTURED_EXPRESSION_EDITING.md",
     ROOT / "docs" / "GENERAL_EXPRESSION_EDITING.md",
+    ROOT / "docs" / "PRODUCED_VALUE_REFERENCES.md",
     ROOT / "docs" / "PATCH_PLAN.md",
     ROOT / "docs" / "ROADMAP.md",
     ROOT / "docs" / "milestones" / "M1_ROSLYN_GRAPH_FOUNDATION.md",
@@ -131,6 +132,15 @@ def main() -> int:
     general_expression_identity_path = (
         ROOT / "samples" / "Patching" / "EditDecisionValues.cs.usids"
     )
+    produced_value_source_path = (
+        ROOT / "samples" / "Patching" / "ConnectGeneratedValues.cs"
+    )
+    produced_value_plan_path = (
+        ROOT / "samples" / "Patching" / "ConnectGeneratedValues.plan.json"
+    )
+    produced_value_identity_path = (
+        ROOT / "samples" / "Patching" / "ConnectGeneratedValues.cs.usids"
+    )
     region_source_path = ROOT / "samples" / "Regions" / "EarlyReturn.cs"
     loop_source_path = ROOT / "samples" / "Loops" / "Countdown.cs"
     loop_identity_path = ROOT / "samples" / "Loops" / "Countdown.cs.usids"
@@ -207,6 +217,12 @@ def main() -> int:
         and general_expression_identity_path.is_file(),
         "Missing generalized expression-endpoint edit sample",
     )
+    require(
+        produced_value_source_path.is_file()
+        and produced_value_plan_path.is_file()
+        and produced_value_identity_path.is_file(),
+        "Missing produced-value expression reference sample",
+    )
     require(region_source_path.is_file(), "Missing structured Graph-region sample")
     require(
         loop_source_path.is_file() and loop_identity_path.is_file(),
@@ -261,6 +277,13 @@ def main() -> int:
     general_expression_identity = json.loads(
         general_expression_identity_path.read_text(encoding="utf-8")
     )
+    produced_value_source = produced_value_source_path.read_text(encoding="utf-8")
+    produced_value_plan = json.loads(
+        produced_value_plan_path.read_text(encoding="utf-8")
+    )
+    produced_value_identity = json.loads(
+        produced_value_identity_path.read_text(encoding="utf-8")
+    )
     region_source = region_source_path.read_text(encoding="utf-8")
     loop_source = loop_source_path.read_text(encoding="utf-8")
     loop_identity = json.loads(loop_identity_path.read_text(encoding="utf-8"))
@@ -289,6 +312,9 @@ def main() -> int:
     ).hexdigest()
     general_expression_source_digest = hashlib.sha256(
         general_expression_source.encode("utf-8")
+    ).hexdigest()
+    produced_value_source_digest = hashlib.sha256(
+        produced_value_source.encode("utf-8")
     ).hexdigest()
     loop_source_digest = hashlib.sha256(loop_source.encode("utf-8")).hexdigest()
     require(
@@ -399,7 +425,7 @@ def main() -> int:
     introduction_step = plan_steps[0]
     reconnect_steps = plan_steps[1:]
     require(
-        plan_document["schemaVersion"] == "unifiedscript.patch-plan/v0.10"
+        plan_document["schemaVersion"] == "unifiedscript.patch-plan/v0.11"
         and plan_identity["sourcePath"]
         == "samples/Patching/SharedExpressionPlan.cs"
         and plan_identity["sourceDigest"] == f"sha256:{plan_source_digest}"
@@ -434,7 +460,7 @@ def main() -> int:
     composed_identity_ids = {entry["id"] for entry in composed_identity["entries"]}
     composed_insert, composed_reconnect, composed_operator, composed_delete = composed_steps
     require(
-        composed_document["schemaVersion"] == "unifiedscript.patch-plan/v0.10"
+        composed_document["schemaVersion"] == "unifiedscript.patch-plan/v0.11"
         and composed_identity["sourcePath"] == "samples/Patching/ComposedPlan.cs"
         and composed_identity["sourceDigest"] == f"sha256:{composed_source_digest}"
         and [step["step"] for step in composed_steps]
@@ -488,7 +514,7 @@ def main() -> int:
     guard_plan_steps = guard_plan["steps"]
     guard_plan_source, *guard_branch_steps = guard_plan_steps
     require(
-        guard_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.10"
+        guard_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.11"
         and guard_plan["sourceCompilationId"] == guard_document["sourceCompilationId"]
         and guard_plan["semanticConfigurationId"]
         == guard_document["semanticConfigurationId"]
@@ -509,7 +535,7 @@ def main() -> int:
     )
     guard_return_source, guard_return_step, guard_fallback_step = guard_return_plan["steps"]
     require(
-        guard_return_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.10"
+        guard_return_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.11"
         and guard_return_plan["sourceCompilationId"] == guard_document["sourceCompilationId"]
         and guard_return_plan["semanticConfigurationId"]
         == guard_document["semanticConfigurationId"]
@@ -531,7 +557,7 @@ def main() -> int:
     nested_steps = nested_plan["steps"]
     nested_outer, nested_inner, nested_then, nested_else, nested_outer_else = nested_steps
     require(
-        nested_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.10"
+        nested_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.11"
         and nested_identity["sourcePath"]
         == "samples/Patching/NestedDecisionRules.cs"
         and nested_identity["sourceDigest"] == f"sha256:{nested_source_digest}"
@@ -575,7 +601,7 @@ def main() -> int:
         loop_plan_steps
     )
     require(
-        loop_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.10"
+        loop_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.11"
         and loop_plan_identity["sourcePath"]
         == "samples/Patching/LoopBuildRules.cs"
         and loop_plan_identity["sourceDigest"]
@@ -617,7 +643,7 @@ def main() -> int:
     condition_payload = condition_edit["newCondition"]
     require(
         expression_edit_plan["schemaVersion"]
-        == "unifiedscript.patch-plan/v0.10"
+        == "unifiedscript.patch-plan/v0.11"
         and expression_edit_identity["sourcePath"]
         == "samples/Patching/EditLoopRules.cs"
         and expression_edit_identity["sourceDigest"]
@@ -655,7 +681,7 @@ def main() -> int:
     initializer_edit, if_edit, return_edit = general_expression_plan["steps"]
     require(
         general_expression_plan["schemaVersion"]
-        == "unifiedscript.patch-plan/v0.10"
+        == "unifiedscript.patch-plan/v0.11"
         and general_expression_identity["sourcePath"]
         == "samples/Patching/EditDecisionValues.cs"
         and general_expression_identity["sourceDigest"]
@@ -685,6 +711,59 @@ def main() -> int:
         and "if (enabled)" in general_expression_source
         and "return result;" in general_expression_source,
         "Generalized expression-endpoint source, sidecar, and plan are inconsistent",
+    )
+    produced_value_identity_ids = {
+        entry["id"] for entry in produced_value_identity["entries"]
+    }
+    value_producer, guard_consumer, branch_consumer, fallback_consumer = (
+        produced_value_plan["steps"]
+    )
+    guard_reference = guard_consumer["newStatement"]["condition"]["right"]["left"]
+    branch_reference = branch_consumer["newStatement"]["expression"]["right"]
+    fallback_reference = fallback_consumer["newValue"]["right"]
+    produced_references = [guard_reference, branch_reference, fallback_reference]
+    require(
+        produced_value_plan["schemaVersion"]
+        == "unifiedscript.patch-plan/v0.11"
+        and produced_value_identity["sourcePath"]
+        == "samples/Patching/ConnectGeneratedValues.cs"
+        and produced_value_identity["sourceDigest"]
+        == f"sha256:{produced_value_source_digest}"
+        and produced_value_identity["generation"] == 1
+        and produced_value_identity["tombstones"] == []
+        and [step["step"] for step in produced_value_plan["steps"]]
+        == [
+            "insertStatement",
+            "insertStatement",
+            "insertBranchStatement",
+            "replaceReturnValue",
+        ]
+        and len({step["stepId"] for step in produced_value_plan["steps"]}) == 4
+        and value_producer["targetNodeId"] in produced_value_identity_ids
+        and value_producer["expectedNextSiblingId"] in produced_value_identity_ids
+        and value_producer["newStatement"]["statement"]
+        == "localLiteralDeclaration"
+        and value_producer["newStatement"]["name"] == "offset",
+        "Produced-value expression reference sample has an invalid envelope",
+    )
+    require(
+        guard_consumer["targetNodeId"] == value_producer["targetNodeId"]
+        and guard_consumer["newStatement"]["statement"] == "if"
+        and branch_consumer["sourceStepId"] == guard_consumer["stepId"]
+        and branch_consumer["branch"] == "then"
+        and branch_consumer["newStatement"]["statement"] == "return"
+        and fallback_consumer["targetNodeId"] in produced_value_identity_ids
+        and fallback_consumer["expectedValueNodeId"] in produced_value_identity_ids
+        and all(
+            reference["expression"] == "producedLocalReference"
+            and reference["sourceStepId"] == value_producer["stepId"]
+            and reference["expectedName"] == "offset"
+            and reference["expectedTypeId"]
+            == value_producer["newStatement"]["expectedTypeId"]
+            for reference in produced_references
+        )
+        and "return value;" in produced_value_source,
+        "Produced-value expression reference source, sidecar, and plan are inconsistent",
     )
     require(
         any((ROOT / "tests" / "UnifiedScript.Tests").glob("*Tests.cs")),

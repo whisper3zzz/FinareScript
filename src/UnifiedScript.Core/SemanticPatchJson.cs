@@ -397,6 +397,10 @@ public static class SemanticPatchJson
                 }
 
                 break;
+            case ProducedLocalReferencePatchExpression:
+                throw new JsonException(
+                    "A produced-local reference is transaction-only and cannot appear in a " +
+                    "standalone semantic patch.");
             case UnaryPatchExpression unary:
                 if (string.IsNullOrWhiteSpace(unary.Operator) || unary.Operand is null)
                 {

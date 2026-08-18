@@ -216,6 +216,26 @@ public sealed class SemanticPatchJsonTests
     }
 
     [Fact]
+    public void Create_RejectsTransactionOnlyProducedLocalReference()
+    {
+        SemanticId intType = SemanticId.FromKey("System.Int32");
+
+        JsonException exception = Assert.Throws<JsonException>(() => SemanticPatchDocument.Create(
+            SemanticId.FromKey("standalone-produced-reference-compilation"),
+            SemanticId.FromKey("standalone-produced-reference-configuration"),
+            [new ReplaceReturnValuePatchOperation(
+                SemanticId.FromKey("standalone-produced-reference-return"),
+                SemanticId.FromKey("standalone-produced-reference-value"),
+                intType,
+                new ProducedLocalReferencePatchExpression(
+                    "insertValue",
+                    "value",
+                    intType))]));
+
+        Assert.Contains("transaction-only", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SerializeAndDeserialize_PreserveStatementTemporaryAndSiblingPreconditions()
     {
         SemanticId blockId = SemanticId.FromKey("statement-block");

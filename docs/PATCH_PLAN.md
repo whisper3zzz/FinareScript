@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`unifiedscript.patch-plan/v0.10` represents one visual-editor gesture as an
+`unifiedscript.patch-plan/v0.11` represents one visual-editor gesture as an
 ordered, atomic sequence of the same bounded semantic operations supported by
 `unifiedscript.patch/v0.11`. It exists because a useful graph edit often needs
 IDs created by an earlier edit or changes several overlapping source regions.
@@ -18,7 +18,7 @@ identity sidecar are eligible for a CLI filesystem transaction.
 
 ```json
 {
-  "schemaVersion": "unifiedscript.patch-plan/v0.10",
+  "schemaVersion": "unifiedscript.patch-plan/v0.11",
   "sourceCompilationId": "us_...",
   "semanticConfigurationId": "us_...",
   "steps": []
@@ -29,7 +29,7 @@ The source compilation and semantic configuration IDs are the external
 optimistic-concurrency baseline. Every step has a unique, non-empty `stepId`
 and a persistent `targetNodeId`.
 
-Version v0.10 supports these step discriminators:
+Version v0.11 supports these step discriminators:
 
 | `step` | Purpose | Structural result |
 | --- | --- | --- |
@@ -82,6 +82,35 @@ sidecar, finds exactly one produced declaration, and records its actual random
 `SemanticId`. The reconnect stage then uses that ID in a normal
 `ReconnectValuePatchOperation`.
 
+### Produced locals inside expression trees
+
+Plan v0.11 also exposes the same local handle as a transaction-only expression
+leaf. Unlike `reconnectValue`, which replaces a whole stable consumer with one
+identifier, `producedLocalReference` can participate at any depth inside a
+later literal/local/unary/binary/cast expression:
+
+```json
+{
+  "expression": "producedLocalReference",
+  "sourceStepId": "insertScale",
+  "expectedName": "scale",
+  "expectedTypeId": "us_float_type"
+}
+```
+
+The source must be an earlier local-literal insertion or
+`introduceTemporary`, and its exact name and semantic type must match. Before
+the consumer stage, the coordinator substitutes the producer's actual current
+declaration ID and creates an ordinary `localReference`. The source patcher
+then enforces same-method membership, lexical scope, CFG dominance, name, and
+type at the real consumer position. A root local can feed later nested
+statements; a branch local cannot escape or feed its sibling branch.
+
+The transaction-only leaf is accepted in insertion payloads and direct or
+produced assignment/while/if/initializer/return endpoint replacements. A
+standalone patch rejects it because no plan step namespace exists. See
+[PRODUCED_VALUE_REFERENCES.md](PRODUCED_VALUE_REFERENCES.md).
+
 ## Symbolic branch-block handles
 
 An `insertStatement` whose payload is `if` publishes two internal block handles
@@ -114,7 +143,7 @@ branch block ID. The coordinator captures the real `Then.Id` and `Else.Id`
 after the producer stage and uses the selected ID in an ordinary internal
 `InsertStatementPatchOperation`.
 
-Branch statements append in plan order. Version v0.10 accepts
+Branch statements append in plan order. Version v0.11 accepts
 `localLiteralDeclaration`, `localAssignment`, `if`, `while`, `break`,
 `continue`, or `return` here. An
 assignment may target only an existing same-method local that lexically and
@@ -216,7 +245,7 @@ steps may reference the same producer; each resolves the condition produced by
 the previous stage. Body insertions remain valid because the while and body
 identities are preserved.
 
-Plan v0.10 applies the same rule to `replaceProducedIfCondition`,
+Plan v0.11 applies the same rule to `replaceProducedIfCondition`,
 `replaceProducedLocalInitializer`, and `replaceProducedReturnValue`. Their
 source step must be an earlier compatible root, branch, or loop-body insertion:
 an `if`, a `localLiteralDeclaration`, or a value-bearing `return`, respectively.
@@ -266,7 +295,7 @@ declared task type from the value returned inside an async body.
 
 A return may be inserted only at the end of an explicit block. No insertion may
 follow an existing return. Because every symbolic body step appends, the
-v0.10 JSON validator records each `(sourceStepId, branch)` path and rejects every
+v0.11 JSON validator records each `(sourceStepId, branch)` path and rejects every
 later append after a direct return. The other branch remains independently
 writable.
 
@@ -274,7 +303,7 @@ Terminal state also propagates through nested producers. When both branches of
 a nested `if` terminate, its parent path terminates if and only if that nested
 `if` is still the final statement on the parent path. If another statement was
 already appended after it, accepting the second child termination would make
-that later statement unreachable; v0.10 rejects the plan before executing any
+that later statement unreachable; v0.11 rejects the plan before executing any
 stage. This propagation is recursive across arbitrary acyclic nesting depth.
 
 `break` and `continue` are also terminal within their selected branch or loop
@@ -451,15 +480,16 @@ dotnet run --project src/UnifiedScript.Cli -- \
 
 ## Deliberate limits
 
-Plan v0.10 composes all operations currently defined by patch v0.11 and resolves
+Plan v0.11 composes all operations currently defined by patch v0.11 and resolves
 recursive symbolic `then`/`else` and loop-body handles for bounded local,
 assignment, nested-if/while, loop-transfer, and typed-return population. It
 also resolves repeatable expression-endpoint edits on produced while, if,
 local-literal declaration, and value-return statements. It cannot insert
 calls, member writes, or arbitrary statement payloads through a structural
-handle. It has no cross-method or cross-document symbolic handle and does not
-support a handle to an arbitrary expression or generated local inside a later
-condition. Existing-expression replacement is currently limited to complete
+handle. It has no cross-method or cross-document symbolic handle. Generated
+locals may be consumed inside later typed expressions, but arbitrary generated
+expression results still do not publish value handles. Existing-expression
+replacement is currently limited to complete
 assignment-value, while-condition, if-condition, local-initializer, and
 return-value endpoints. Multi-document in-memory analysis remains available
 below the CLI, while the CLI commit boundary is still one source/identity pair.
@@ -467,5 +497,5 @@ below the CLI, while the CLI commit boundary is still one source/identity pair.
 There is no automatic reader migration for older patch-plan schemas; producers
 should reanalyze and emit the current schema and baselines. The original
 temporary-plus-reconnect and earlier composed step shapes remain representable
-in v0.10. Older plan documents must be regenerated because the reader accepts
+in v0.11. Older plan documents must be regenerated because the reader accepts
 only the current schema.

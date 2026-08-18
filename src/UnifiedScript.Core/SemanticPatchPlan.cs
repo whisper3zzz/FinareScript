@@ -272,7 +272,7 @@ public sealed record SemanticPatchPlanDocument(
     SemanticId SemanticConfigurationId,
     IReadOnlyList<SemanticPatchPlanStep> Steps)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.patch-plan/v0.10";
+    public const string CurrentSchemaVersion = "unifiedscript.patch-plan/v0.11";
 
     public static SemanticPatchPlanDocument Create(
         SemanticId sourceCompilationId,

@@ -43,6 +43,8 @@ The repository currently implements:
   including repeatable condition edits through produced-loop plan handles;
 - exact typed editing of existing local initializers, `if` conditions, and
   return values, including repeatable edits through generated-statement handles;
+- transaction-only typed references from later expression trees to locals
+  produced earlier in the same atomic plan;
 - opt-in `.usids` sidecars that preserve node identity across formatting and edits;
 - semantic-independent `.usgraph` layout sidecars with deterministic positions,
   sizes, collapsed state, comment regions, routing hints, and orphan recovery;
@@ -61,7 +63,8 @@ those loops atomically. M4.7 preserves those structures while editing existing
 assignment values and existing or plan-produced while conditions. M4.8 extends
 that exact-endpoint model to local initializers, `if` conditions, and return
 values, whether the enclosing statement already exists or is produced earlier
-in the same atomic plan.
+in the same atomic plan. M4.9 connects the data side of those stages by letting
+later expressions consume earlier generated locals through typed plan handles.
 
 The v0.2 profile accepts `[Visual]` methods containing local variables,
 expressions, calls, assignments, `if/else`, `while`, `break`, `continue`,
@@ -375,7 +378,7 @@ It proves that source, HIR, Graph branch/data/control edges, persistent identity
 and `.usgraph` layout synchronization share one structure. New branch and
 condition nodes are explicitly `unplaced`; existing placements survive.
 
-Patch-plan v0.10 can populate those newly allocated blocks without predicting
+Patch-plan v0.11 can populate those newly allocated blocks without predicting
 their random IDs. The checked-in plan inserts the same guard, appends two typed
 locals to `then`, and appends one typed local to `else`:
 
@@ -584,12 +587,14 @@ analyzed source baseline, or atomically with the patch-plan protocol below.
 
 ## Apply atomic semantic patch plans
 
-`unifiedscript.patch-plan/v0.10` composes `replaceLiteral`, `changeOperator`,
+`unifiedscript.patch-plan/v0.11` composes `replaceLiteral`, `changeOperator`,
 `reconnectArgument`, typed replacement of assignment, loop, branch,
 declaration-initializer, and return endpoints, their generated-statement
 handle variants, `insertStatement`, `insertBranchStatement`,
 `insertLoopBodyStatement`, `deleteStatement`, `introduceTemporary`, and
-`reconnectValue` as one ordered transaction. The
+`reconnectValue` as one ordered transaction. Plan expressions may also carry a
+transaction-only `producedLocalReference` leaf that resolves an earlier local
+producer by `stepId`. The
 shared-value sample starts with:
 
 ```csharp
@@ -624,11 +629,15 @@ fresh internal source baseline and structural context, and then executes the
 next validated step. This is why the editor does not need to predict an
 intermediate ID or submit several external transactions.
 
-All target, containing-statement, parent-block, sibling, and semantic-type
-preconditions are first checked against the original plan baseline. Internal
-rebasing applies only to changes made by earlier steps in that same plan. Every
-stage reruns parsing, Visual Profile validation, C# compilation, semantic
-binding, identity reconciliation, and Graph safety. If any later stage fails,
+All independently executable target, containing-statement, parent-block,
+sibling, and semantic-type preconditions are first checked against the original
+plan baseline. A consumer that references a generated local has its baseline,
+target method, sidecar, backward source, name, and type checked initially; its
+complete endpoint/gap and dominance checks run after that local exists in the
+reanalyzed in-memory source. Internal rebasing applies only to changes made by
+earlier steps in that same plan. Every stage reruns parsing, Visual Profile
+validation, C# compilation, semantic binding, identity reconciliation, and
+Graph safety. If any later stage fails,
 the API returns no patched request and the CLI writes neither source nor
 sidecar. A persistent `.usids` input is mandatory because span-derived IDs
 cannot identify later targets after the first insertion changes source ranges.
@@ -673,7 +682,7 @@ more paths, and all-path termination propagates up that producer tree. A
 `break`/`continue` bind only to the nearest lexical loop. Local assignments are
 supported as direct, produced-branch, and produced-loop-body payloads. Calls,
 async/task-like returns, cyclic handle references, and cross-method handles
-remain outside v0.10.
+remain outside v0.11.
 
 ### Build a loop from a visual plan
 
@@ -757,6 +766,36 @@ reanalysis, and may edit one generated endpoint repeatedly without predicting
 IDs. A generated return remains terminal for appends but its value can still be
 edited in place. See
 [GENERAL_EXPRESSION_EDITING.md](docs/GENERAL_EXPRESSION_EDITING.md).
+
+### Connect expressions to locals generated earlier in a plan
+
+M4.9 adds `producedLocalReference`, a transaction-only expression leaf whose
+`sourceStepId` names an earlier `introduceTemporary` or local-literal insertion.
+It may be nested inside later unary, binary, or cast trees used by root,
+branch, loop-body, direct-endpoint, or generated-endpoint plan steps.
+
+The coordinator resolves the generated declaration's real ID immediately
+before the consumer stage and converts the leaf into an ordinary
+`localReference`. Existing same-method, exact-name/type, lexical-scope, CFG
+dominance, and graph-safety checks then run at the actual source position.
+Branch locals therefore cannot escape to an outer or sibling path.
+
+The checked-in four-stage sample inserts `offset`, uses it in a generated guard,
+a generated branch return, and the original fallback return:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  apply-plan \
+  samples/Patching/ConnectGeneratedValues.cs \
+  --identity samples/Patching/ConnectGeneratedValues.cs.usids \
+  --plan samples/Patching/ConnectGeneratedValues.plan.json \
+  --out artifacts/produced-values/ConnectGeneratedValues.cs \
+  --out-identity artifacts/produced-values/ConnectGeneratedValues.cs.usids
+```
+
+Standalone patch documents reject this leaf because they have no step
+namespace. See
+[PRODUCED_VALUE_REFERENCES.md](docs/PRODUCED_VALUE_REFERENCES.md).
 
 ## Persist and synchronize graph layout
 

@@ -48,7 +48,7 @@ public static class SemanticPatchPlanJson
 
         var stepIds = new HashSet<string>(StringComparer.Ordinal);
         var targetKinds = new Dictionary<SemanticId, bool>();
-        var producedTypes = new Dictionary<string, SemanticId>(StringComparer.Ordinal);
+        var producedLocals = new Dictionary<string, LocalProducerState>(StringComparer.Ordinal);
         var branchProducers = new Dictionary<string, BranchProducerState>(StringComparer.Ordinal);
         var loopProducers = new Dictionary<string, LoopProducerState>(StringComparer.Ordinal);
         var localInitializerProducers = new Dictionary<string, LocalInitializerProducerState>(
@@ -95,7 +95,10 @@ public static class SemanticPatchPlanJson
                 targetKinds.Add(step.TargetNodeId, isRepeatableTarget);
             }
 
-            switch (step)
+            SemanticPatchPlanStep resolvedStep = ResolveProducedLocalReferences(
+                step,
+                producedLocals);
+            switch (resolvedStep)
             {
                 case ReplaceLiteralPatchPlanStep replace:
                     ValidateOperation(document, replace.ToOperation());
@@ -149,7 +152,9 @@ public static class SemanticPatchPlanJson
                     ValidateOperation(document, insertion.ToOperation());
                     if (insertion.NewStatement is LocalLiteralDeclarationPatchStatement insertedLocal)
                     {
-                        producedTypes.Add(insertion.StepId, insertedLocal.ExpectedTypeId);
+                        producedLocals.Add(
+                            insertion.StepId,
+                            new LocalProducerState(insertedLocal.Name, insertedLocal.ExpectedTypeId));
                         RegisterLocalInitializerProducer(
                             insertion.StepId,
                             insertion.TargetNodeId,
@@ -202,7 +207,9 @@ public static class SemanticPatchPlanJson
                     paths[sourcePath].LastStatementStepId = branchInsertion.StepId;
                     if (branchInsertion.NewStatement is LocalLiteralDeclarationPatchStatement branchLocal)
                     {
-                        producedTypes.Add(branchInsertion.StepId, branchLocal.ExpectedTypeId);
+                        producedLocals.Add(
+                            branchInsertion.StepId,
+                            new LocalProducerState(branchLocal.Name, branchLocal.ExpectedTypeId));
                         RegisterLocalInitializerProducer(
                             branchInsertion.StepId,
                             branchInsertion.TargetNodeId,
@@ -266,7 +273,9 @@ public static class SemanticPatchPlanJson
                     paths[loopPath].LastStatementStepId = loopInsertion.StepId;
                     if (loopInsertion.NewStatement is LocalLiteralDeclarationPatchStatement loopLocal)
                     {
-                        producedTypes.Add(loopInsertion.StepId, loopLocal.ExpectedTypeId);
+                        producedLocals.Add(
+                            loopInsertion.StepId,
+                            new LocalProducerState(loopLocal.Name, loopLocal.ExpectedTypeId));
                         RegisterLocalInitializerProducer(
                             loopInsertion.StepId,
                             loopInsertion.TargetNodeId,
@@ -323,10 +332,12 @@ public static class SemanticPatchPlanJson
                     break;
                 case IntroduceTemporaryPatchPlanStep introduction:
                     ValidateIntroduction(document, introduction);
-                    producedTypes.Add(introduction.StepId, introduction.ExpectedTypeId);
+                    producedLocals.Add(
+                        introduction.StepId,
+                        new LocalProducerState(introduction.Name, introduction.ExpectedTypeId));
                     break;
                 case ReconnectValuePatchPlanStep reconnect:
-                    ValidateReconnection(reconnect, producedTypes);
+                    ValidateReconnection(reconnect, producedLocals);
                     break;
                 default:
                     throw new JsonException(
@@ -344,6 +355,43 @@ public static class SemanticPatchPlanJson
             document.SourceCompilationId,
             document.SemanticConfigurationId,
             [operation]));
+    }
+
+    private static SemanticPatchPlanStep ResolveProducedLocalReferences(
+        SemanticPatchPlanStep step,
+        IReadOnlyDictionary<string, LocalProducerState> producedLocals)
+    {
+        IReadOnlyList<ProducedLocalReferencePatchExpression> references =
+            SemanticPatchPlanExpressions.FindProducedLocalReferences(step);
+        foreach (ProducedLocalReferencePatchExpression reference in references)
+        {
+            if (string.IsNullOrWhiteSpace(reference.SourceStepId) ||
+                !producedLocals.TryGetValue(reference.SourceStepId, out LocalProducerState? source))
+            {
+                throw new JsonException(
+                    $"Plan step '{step.StepId}' contains a produced-local reference that must " +
+                    "name an earlier local-producing step.");
+            }
+
+            if (!string.Equals(reference.ExpectedName, source.Name, StringComparison.Ordinal) ||
+                reference.ExpectedTypeId != source.TypeId)
+            {
+                throw new JsonException(
+                    $"Plan step '{step.StepId}' and local source step " +
+                    $"'{reference.SourceStepId}' must declare the same name and semantic type ID.");
+            }
+        }
+
+        return SemanticPatchPlanExpressions.ResolveProducedLocalReferences(
+            step,
+            reference =>
+            {
+                LocalProducerState source = producedLocals[reference.SourceStepId];
+                return new LocalReferencePatchExpression(
+                    SemanticId.FromKey($"patch-plan-produced-local:{reference.SourceStepId}"),
+                    source.Name,
+                    source.TypeId);
+            });
     }
 
     private static void ValidateIntroduction(
@@ -722,7 +770,7 @@ public static class SemanticPatchPlanJson
 
     private static void ValidateReconnection(
         ReconnectValuePatchPlanStep reconnect,
-        IReadOnlyDictionary<string, SemanticId> producedTypes)
+        IReadOnlyDictionary<string, LocalProducerState> producedLocals)
     {
         ValidateContext(
             reconnect.ExpectedContainingStatementId,
@@ -731,13 +779,13 @@ public static class SemanticPatchPlanJson
             reconnect.ExpectedNextSiblingId,
             reconnect.ExpectedTypeId);
         if (string.IsNullOrWhiteSpace(reconnect.SourceStepId) ||
-            !producedTypes.TryGetValue(reconnect.SourceStepId, out SemanticId sourceTypeId))
+            !producedLocals.TryGetValue(reconnect.SourceStepId, out LocalProducerState? source))
         {
             throw new JsonException(
                 $"Reconnect step '{reconnect.StepId}' must reference an earlier local-producing step.");
         }
 
-        if (sourceTypeId != reconnect.ExpectedTypeId)
+        if (source.TypeId != reconnect.ExpectedTypeId)
         {
             throw new JsonException(
                 $"Reconnect step '{reconnect.StepId}' and source step '{reconnect.SourceStepId}' " +
@@ -800,6 +848,10 @@ public static class SemanticPatchPlanJson
     private sealed record ReturnProducerState(
         SemanticId OriginalTargetNodeId,
         SemanticId ReturnTypeId);
+
+    private sealed record LocalProducerState(
+        string Name,
+        SemanticId TypeId);
 
     private sealed class PlanPathState
     {

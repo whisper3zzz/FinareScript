@@ -236,6 +236,24 @@ public sealed class CSharpPatchPlanApplier
                     target.Id)];
             }
 
+            IReadOnlyList<ProducedLocalReferencePatchExpression> producedReferences =
+                SemanticPatchPlanExpressions.FindProducedLocalReferences(step);
+            foreach (ProducedLocalReferencePatchExpression reference in producedReferences)
+            {
+                if (!producerMethods.TryGetValue(
+                        reference.SourceStepId,
+                        out SemanticId valueProducerMethodId) ||
+                    valueProducerMethodId != method!.Id)
+                {
+                    return [Diagnostic(
+                        SemanticPatchDiagnosticCodes.InvalidPatchPlan,
+                        $"Plan step '{step.StepId}' and produced-local source step " +
+                        $"'{reference.SourceStepId}' target different methods.",
+                        target.Span,
+                        target.Id)];
+                }
+            }
+
             if (step is ReconnectValuePatchPlanStep reconnect)
             {
                 UnifiedDiagnostic? reconnectFailure = ValidateInitialReconnection(
@@ -292,7 +310,7 @@ public sealed class CSharpPatchPlanApplier
                         $"Produced-while condition step '{producedCondition.StepId}' and source " +
                         $"step '{producedCondition.SourceStepId}' target different methods.",
                         target.Span,
-                    target.Id)];
+                        target.Id)];
                 }
             }
             else if (step is ReplaceProducedIfConditionPatchPlanStep producedIfCondition)
@@ -340,7 +358,10 @@ public sealed class CSharpPatchPlanApplier
                         target.Id)];
                 }
             }
-            else
+            // A produced value does not exist in the external baseline. Its method relationship
+            // was checked above; the complete operation is validated against the reanalyzed
+            // in-memory source when that stage executes.
+            else if (producedReferences.Count == 0)
             {
                 SemanticPatchOperation initialOperation = GetInitialOperation(step);
                 CSharpPatchResult validationResult = stageApplier.Apply(
@@ -470,6 +491,17 @@ public sealed class CSharpPatchPlanApplier
     {
         HirCompilationUnit compilation = current.Hir ??
             throw new ArgumentException("Plan-step rebasing requires HIR.", nameof(current));
+        if (!TryResolveProducedLocalReferences(
+                step,
+                producedDefinitions,
+                out SemanticPatchPlanStep? resolvedStep,
+                out diagnostic))
+        {
+            operation = null;
+            return false;
+        }
+
+        step = resolvedStep!;
         IReadOnlyDictionary<SemanticId, HirNode> nodes = compilation
             .DescendantsAndSelf()
             .ToDictionary(static node => node.Id);
@@ -657,6 +689,39 @@ public sealed class CSharpPatchPlanApplier
             expression.Span,
             expression.Id);
         return false;
+    }
+
+    private static bool TryResolveProducedLocalReferences(
+        SemanticPatchPlanStep step,
+        IReadOnlyDictionary<string, SemanticId> producedDefinitions,
+        out SemanticPatchPlanStep? resolvedStep,
+        out UnifiedDiagnostic? diagnostic)
+    {
+        IReadOnlyList<ProducedLocalReferencePatchExpression> references =
+            SemanticPatchPlanExpressions.FindProducedLocalReferences(step);
+        foreach (ProducedLocalReferencePatchExpression reference in references)
+        {
+            if (!producedDefinitions.ContainsKey(reference.SourceStepId))
+            {
+                resolvedStep = null;
+                diagnostic = Diagnostic(
+                    SemanticPatchDiagnosticCodes.InvalidPatchPlan,
+                    $"Plan step '{step.StepId}' could not resolve produced-local source step " +
+                    $"'{reference.SourceStepId}'.",
+                    SourceSpan.Unknown("<patch-plan>"),
+                    step.TargetNodeId);
+                return false;
+            }
+        }
+
+        resolvedStep = SemanticPatchPlanExpressions.ResolveProducedLocalReferences(
+            step,
+            reference => new LocalReferencePatchExpression(
+                producedDefinitions[reference.SourceStepId],
+                reference.ExpectedName,
+                reference.ExpectedTypeId));
+        diagnostic = null;
+        return true;
     }
 
     private static bool TryRebaseArgumentReconnection(

@@ -104,6 +104,8 @@ Outcome: practical gameplay methods are fully visualizable.
   and return values
 - [x] repeatable symbolic endpoint editing for plan-produced locals, branches,
   and returns
+- [x] typed produced-local references inside later plan expression trees
+- [x] same-method, scope, and CFG-dominance validation for generated values
 - [ ] general data/control rewiring and structural HIR operations
 - [ ] `for` and `foreach`
 - [ ] `switch` and supported patterns
