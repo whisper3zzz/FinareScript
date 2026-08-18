@@ -965,6 +965,89 @@ its implicit receiver as an explicit shared-VM contract.
 18. The full solution, 258-test suite, format check, repository validator, 19
     patch/plan CLI regressions, and four analyze regressions pass.
 
+## M4.17 implemented vertical slice
+
+- strict patch `unifiedscript.patch/v0.15` and patch-plan
+  `unifiedscript.patch-plan/v0.16` readers while HIR v0.5 and Graph v0.9 remain
+  unchanged
+- dedicated `ForPatchStatement` rather than widening the lossy while payload
+- explicit declaration-form or ordered assignment-form initialization, with
+  mutual exclusion enforced by JSON validation
+- bounded declaration construction with exactly one initialized, graph-safe,
+  same-typed variable and validated C# type/name spelling
+- payload-local `ForLocalReferencePatchExpression` addressed by variable
+  index, expected name, and exact semantic type
+- optional Boolean condition preserving the C# implicit-true form
+- ordered `ForMutationPatchExpression` incrementors limited to writable local
+  `++`/`--`, preserving prefix/postfix position and exact arithmetic/enum type
+- assignment initializers restricted to existing, unshadowed same-method locals
+  that lexically and CFG-dominate the insertion gap
+- ordinary Roslyn `ForStatementSyntax` construction followed by complete
+  profile/compiler/semantic/HIR/Graph/CFG reanalysis
+- `for` registered as a loop producer for root, generated branch, and generated
+  loop-body insertion steps
+- body appends resolved through the actual persistent `HirForStatement.Body.Id`
+  after each plan stage
+- declaration-form for producers publishing their actual single
+  `HirForVariableDeclarator` through `producedLocalReference`
+- ordinary lexical scope and CFG dominance preventing generated for-locals from
+  escaping the loop body
+- nearest-loop transfer construction generalized to both while and for, with
+  derived CFG proof that continue reaches the increment phase
+- while-specific produced-condition edits rejecting a for producer rather than
+  confusing two different loop contracts
+- produced-expression traversal/rewrite across every for clause without
+  publishing an ambiguous whole-for expression root
+- identity pinning, sidecar reconciliation, layout compatibility, and atomic
+  rollback across generated loop/body/local stages
+- checked-in `ForBuildRules.cs`, `.usids`, and four-stage `BuildFor.plan.json`
+  CLI sample
+- architecture, loop, plan, roadmap, README, schema fixture, and repository
+  validator migration
+
+## M4.17 acceptance criteria
+
+1. Patch v0.15 JSON round-trips a declaration-form `for`, its scoped local
+   references, optional condition, and ordered prefix/postfix mutations.
+2. Declaration and assignment initializer forms are mutually exclusive; a
+   malformed mixed or null collection shape is rejected by the strict reader.
+3. A `forLocalReference` is legal only inside its containing for payload and
+   must match the addressed declarator index, name, and exact type.
+4. The bounded declaration constructor accepts exactly one initialized variable
+   so one producer step maps unambiguously to one local handle.
+5. The declared type must be graph-safe and match both the authored type name
+   and initializer result exactly; the name must be one conflict-free C#
+   identifier.
+6. Expression-form initialization emits ordered simple assignments only to
+   unshadowed existing locals that dominate the insertion gap lexically and in
+   the derived CFG.
+7. An omitted condition stays omitted; an explicit condition binds exactly to
+   `System.Boolean`.
+8. Incrementors accept only local operands, `++` or `--`, exact supported
+   arithmetic/enum types, and preserve prefix/postfix position and source order.
+9. Successful standalone construction emits ordinary `for (...) { }` C# and
+   reprojects to `HirForStatement`, the three Graph phase regions, and reducible
+   loop CFG facts.
+10. Patch-plan v0.16 recognizes a for insertion as a loop producer and resolves
+    later `insertLoopBodyStatement` steps without predicted loop/body IDs.
+11. A declaration-form for producer publishes its actual post-reanalysis
+    declarator ID; body expressions can consume it through
+    `producedLocalReference`.
+12. A generated for-local that is shadowed or consumed outside the loop causes
+    the complete plan to roll back with no proposed source or analysis.
+13. Graph-authored `break` and `continue` can be inserted into text- or
+    graph-authored for bodies and bind to the nearest loop.
+14. Derived CFG metadata proves that a for `continue` targets the first
+    incrementor, while `break` bypasses incrementors and reaches the loop exit.
+15. `replaceProducedWhileCondition` rejects a for producer before execution;
+    no for clause is edited through a while-only endpoint contract.
+16. The checked-in plan creates a declaration for, nested skip guard,
+    `continue`, and outer-local accumulation with a tombstone-free sidecar.
+17. Late name, type, scope, dominance, reachability, semantic, or CFG failure
+    returns no partial source or identity output.
+18. The full solution, 268-test suite, format check, repository validator, 20
+    patch/plan CLI regressions, and four analyze regressions pass.
+
 ## Deliberate limits
 
 M4 consumes derived CFG facts at patch time but does not serialize them or
@@ -983,7 +1066,7 @@ earlier in one plan. Produced paths do not yet traverse ordinary members,
 conditional selected bindings, calls, assignments, awaits, or wildcard/parent
 queries. Branch and loop-body insertions append and cannot move or delete
 existing structures. Loop transfers cannot be retargeted.
-Whole-`for` construction, for-clause restructuring, `do`/`foreach`, switch,
+Existing-`for` clause restructuring/replacement, `do`/`foreach`, switch,
 conditional element access,
 conditional effect subgraphs for lazy expression inputs, exception edges,
 standalone short-circuit CFG regions, async state-machine transitions, control
@@ -991,11 +1074,10 @@ dependence, SSA, and automatic node placement remain outside the current slice.
 
 ## Next slice
 
-M4.17 should add a dedicated, versioned `ForPatchStatement` rather than widen
-`WhilePatchStatement`. It must author declaration or expression initializers,
-an optional Boolean condition, ordered incrementors, and an explicit body while
-proving declaration scope, mutation effects, continue routing, identity pins,
-and atomic rollback after Roslyn reanalysis. Whole-clause replacement should be
-considered only after construction proves the same invariants. `foreach`
-remains separate because enumerator acquisition, disposal, and iteration
-variable semantics cannot be modeled as a cosmetic for-loop variant.
+M4.18 should choose between exact existing-`for` clause editing and the next
+independent control structure. Clause editing must retain initializer-kind,
+declaration-scope, mutation-order, continue-target, trivia, and identity proofs;
+it cannot be implemented as a generic expression replacement over the whole
+header. `foreach` remains separate because enumerator acquisition, disposal,
+iteration-variable scope, and collection mutation semantics cannot be modeled
+as a cosmetic for-loop variant.

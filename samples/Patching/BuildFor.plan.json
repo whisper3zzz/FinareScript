@@ -1,0 +1,126 @@
+{
+  "schemaVersion": "unifiedscript.patch-plan/v0.16",
+  "sourceCompilationId": "us_98abe3dfef1e6058b5f13d1add60c180",
+  "semanticConfigurationId": "us_02f5fe78d296e2d4fe04bc50ca71acf1",
+  "steps": [
+    {
+      "step": "insertStatement",
+      "stepId": "insertFor",
+      "targetNodeId": "us_8df0d25d3e2703b4f340130d9242107d",
+      "expectedPreviousSiblingId": "us_68080467cadad6f749b413f9b95d140c",
+      "expectedNextSiblingId": "us_d31cbc440ed8b086fa8f38a42db86f5a",
+      "newStatement": {
+        "statement": "for",
+        "declaration": {
+          "typeName": "int",
+          "variables": [
+            {
+              "name": "index",
+              "initializer": {
+                "expression": "literal",
+                "valueText": "0",
+                "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+              },
+              "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+            }
+          ]
+        },
+        "initializers": [],
+        "condition": {
+          "expression": "binary",
+          "operator": "<",
+          "left": {
+            "expression": "forLocalReference",
+            "variableIndex": 0,
+            "expectedName": "index",
+            "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+          },
+          "right": {
+            "expression": "localReference",
+            "sourceDefinitionId": "us_abda4d068c39a65c3d57c8a80c5098c1",
+            "expectedName": "count",
+            "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+          },
+          "expectedTypeId": "us_b5f84bcf933b6593d45e9e031353bfef"
+        },
+        "incrementors": [
+          {
+            "operand": {
+              "expression": "forLocalReference",
+              "variableIndex": 0,
+              "expectedName": "index",
+              "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+            },
+            "operator": "++",
+            "isPostfix": true,
+            "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+          }
+        ]
+      }
+    },
+    {
+      "step": "insertLoopBodyStatement",
+      "stepId": "skipTwo",
+      "targetNodeId": "us_8df0d25d3e2703b4f340130d9242107d",
+      "sourceStepId": "insertFor",
+      "newStatement": {
+        "statement": "if",
+        "condition": {
+          "expression": "binary",
+          "operator": "==",
+          "left": {
+            "expression": "producedLocalReference",
+            "sourceStepId": "insertFor",
+            "expectedName": "index",
+            "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+          },
+          "right": {
+            "expression": "literal",
+            "valueText": "2",
+            "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+          },
+          "expectedTypeId": "us_b5f84bcf933b6593d45e9e031353bfef"
+        }
+      }
+    },
+    {
+      "step": "insertBranchStatement",
+      "stepId": "continueAtTwo",
+      "targetNodeId": "us_8df0d25d3e2703b4f340130d9242107d",
+      "sourceStepId": "skipTwo",
+      "branch": "then",
+      "newStatement": {
+        "statement": "continue"
+      }
+    },
+    {
+      "step": "insertLoopBodyStatement",
+      "stepId": "accumulateIndex",
+      "targetNodeId": "us_8df0d25d3e2703b4f340130d9242107d",
+      "sourceStepId": "insertFor",
+      "newStatement": {
+        "statement": "localAssignment",
+        "targetDefinitionId": "us_68080467cadad6f749b413f9b95d140c",
+        "expectedName": "total",
+        "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+        "value": {
+          "expression": "binary",
+          "operator": "+",
+          "left": {
+            "expression": "localReference",
+            "sourceDefinitionId": "us_68080467cadad6f749b413f9b95d140c",
+            "expectedName": "total",
+            "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+          },
+          "right": {
+            "expression": "producedLocalReference",
+            "sourceStepId": "insertFor",
+            "expectedName": "index",
+            "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+          },
+          "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+        }
+      }
+    }
+  ]
+}

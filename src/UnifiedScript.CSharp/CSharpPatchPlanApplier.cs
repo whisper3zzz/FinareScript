@@ -54,7 +54,7 @@ public sealed class CSharpPatchPlanApplier
         CSharpCompilationRequest currentRequest = request;
         var producedDefinitions = new Dictionary<string, SemanticId>(StringComparer.Ordinal);
         var producedBranches = new Dictionary<string, ProducedIfBranches>(StringComparer.Ordinal);
-        var producedLoops = new Dictionary<string, ProducedWhileLoop>(StringComparer.Ordinal);
+        var producedLoops = new Dictionary<string, ProducedLoop>(StringComparer.Ordinal);
         var producedReturns = new Dictionary<string, SemanticId>(StringComparer.Ordinal);
         var producedExpressions = new Dictionary<string, SemanticId>(StringComparer.Ordinal);
         CSharpPatchResult? lastResult = null;
@@ -115,7 +115,17 @@ public sealed class CSharpPatchPlanApplier
 
             if (ProducesLoop(step))
             {
-                if (insertedStatement is not HirWhileStatement insertedWhile)
+                ProducedLoop? producedLoop = insertedStatement switch
+                {
+                    HirWhileStatement insertedWhile => new ProducedLoop(
+                        insertedWhile.Id,
+                        insertedWhile.Body.Id),
+                    HirForStatement insertedFor => new ProducedLoop(
+                        insertedFor.Id,
+                        insertedFor.Body.Id),
+                    _ => null,
+                };
+                if (producedLoop is null)
                 {
                     return Failure(new UnifiedDiagnostic(
                         SemanticPatchDiagnosticCodes.InvalidPatchPlan,
@@ -126,9 +136,7 @@ public sealed class CSharpPatchPlanApplier
                         step.TargetNodeId));
                 }
 
-                producedLoops.Add(
-                    step.StepId,
-                    new ProducedWhileLoop(insertedWhile.Id, insertedWhile.Body.Id));
+                producedLoops.Add(step.StepId, producedLoop.Value);
             }
 
             if (ProducesReturnValue(step))
@@ -147,7 +155,7 @@ public sealed class CSharpPatchPlanApplier
                 producedReturns.Add(step.StepId, insertedReturn.Id);
             }
 
-            HirVariableDeclarationStatement? introduced = step switch
+            HirNode? introduced = step switch
             {
                 IntroduceTemporaryPatchPlanStep introduction => FindIntroducedDefinition(
                     stageResult.Analysis.Hir,
@@ -155,7 +163,7 @@ public sealed class CSharpPatchPlanApplier
                 InsertStatementPatchPlanStep or
                     InsertBranchStatementPatchPlanStep or
                     InsertLoopBodyStatementPatchPlanStep =>
-                    insertedStatement as HirVariableDeclarationStatement,
+                    GetInsertedDefinition(insertedStatement),
                 _ => null,
             };
             if (ProducesLocal(step))
@@ -527,7 +535,7 @@ public sealed class CSharpPatchPlanApplier
         CSharpAnalysisResult current,
         IReadOnlyDictionary<string, SemanticId> producedDefinitions,
         IReadOnlyDictionary<string, ProducedIfBranches> producedBranches,
-        IReadOnlyDictionary<string, ProducedWhileLoop> producedLoops,
+        IReadOnlyDictionary<string, ProducedLoop> producedLoops,
         IReadOnlyDictionary<string, SemanticId> producedReturns,
         IReadOnlyDictionary<string, SemanticId> producedExpressions,
         out SemanticPatchOperation? operation,
@@ -915,11 +923,11 @@ public sealed class CSharpPatchPlanApplier
     private static bool TryCreateLoopBodyInsertion(
         InsertLoopBodyStatementPatchPlanStep step,
         HirPatchIndex patchIndex,
-        IReadOnlyDictionary<string, ProducedWhileLoop> producedLoops,
+        IReadOnlyDictionary<string, ProducedLoop> producedLoops,
         out SemanticPatchOperation? operation,
         out UnifiedDiagnostic? diagnostic)
     {
-        if (!producedLoops.TryGetValue(step.SourceStepId, out ProducedWhileLoop loop))
+        if (!producedLoops.TryGetValue(step.SourceStepId, out ProducedLoop loop))
         {
             operation = null;
             diagnostic = Diagnostic(
@@ -934,8 +942,7 @@ public sealed class CSharpPatchPlanApplier
         if (!patchIndex.TryGetBlock(
                 loop.BodyBlockId,
                 out HirPatchIndex.BlockLocation? bodyLocation) ||
-            bodyLocation!.EntryStatement is not HirWhileStatement currentLoop ||
-            currentLoop.Id != loop.LoopId)
+            !IsMatchingProducedLoop(bodyLocation!.EntryStatement, loop))
         {
             operation = null;
             diagnostic = Diagnostic(
@@ -962,11 +969,11 @@ public sealed class CSharpPatchPlanApplier
     private static bool TryCreateProducedWhileConditionReplacement(
         ReplaceProducedWhileConditionPatchPlanStep step,
         IReadOnlyDictionary<SemanticId, HirNode> nodes,
-        IReadOnlyDictionary<string, ProducedWhileLoop> producedLoops,
+        IReadOnlyDictionary<string, ProducedLoop> producedLoops,
         out SemanticPatchOperation? operation,
         out UnifiedDiagnostic? diagnostic)
     {
-        if (!producedLoops.TryGetValue(step.SourceStepId, out ProducedWhileLoop producedLoop) ||
+        if (!producedLoops.TryGetValue(step.SourceStepId, out ProducedLoop producedLoop) ||
             !nodes.TryGetValue(producedLoop.LoopId, out HirNode? node) ||
             node is not HirWhileStatement currentLoop ||
             currentLoop.Body.Id != producedLoop.BodyBlockId)
@@ -1377,16 +1384,47 @@ public sealed class CSharpPatchPlanApplier
         _ => null,
     };
 
+    private static HirNode? GetInsertedDefinition(HirStatement? statement) => statement switch
+    {
+        HirVariableDeclarationStatement variable => variable,
+        HirForStatement { Declaration.Variables.Count: 1 } forStatement =>
+            forStatement.Declaration.Variables[0],
+        _ => null,
+    };
+
+    private static bool IsMatchingProducedLoop(
+        HirStatement? statement,
+        ProducedLoop producedLoop) => statement switch
+        {
+            HirWhileStatement loop =>
+                loop.Id == producedLoop.LoopId && loop.Body.Id == producedLoop.BodyBlockId,
+            HirForStatement loop =>
+                loop.Id == producedLoop.LoopId && loop.Body.Id == producedLoop.BodyBlockId,
+            _ => false,
+        };
+
     private static bool ProducesLocal(SemanticPatchPlanStep step) =>
         step is IntroduceTemporaryPatchPlanStep or
             InsertStatementPatchPlanStep { NewStatement: LocalLiteralDeclarationPatchStatement } or
+            InsertStatementPatchPlanStep
+        {
+            NewStatement: ForPatchStatement { Declaration: not null },
+        } or
             InsertBranchStatementPatchPlanStep
+        {
+            NewStatement: LocalLiteralDeclarationPatchStatement
+        } or
+            InsertBranchStatementPatchPlanStep
+        {
+            NewStatement: ForPatchStatement { Declaration: not null },
+        } or
+            InsertLoopBodyStatementPatchPlanStep
         {
             NewStatement: LocalLiteralDeclarationPatchStatement
         } or
             InsertLoopBodyStatementPatchPlanStep
         {
-            NewStatement: LocalLiteralDeclarationPatchStatement
+            NewStatement: ForPatchStatement { Declaration: not null },
         };
 
     private static bool ProducesBranches(SemanticPatchPlanStep step) =>
@@ -1395,9 +1433,18 @@ public sealed class CSharpPatchPlanApplier
             InsertLoopBodyStatementPatchPlanStep { NewStatement: IfPatchStatement };
 
     private static bool ProducesLoop(SemanticPatchPlanStep step) =>
-        step is InsertStatementPatchPlanStep { NewStatement: WhilePatchStatement } or
-            InsertBranchStatementPatchPlanStep { NewStatement: WhilePatchStatement } or
-            InsertLoopBodyStatementPatchPlanStep { NewStatement: WhilePatchStatement };
+        step is InsertStatementPatchPlanStep
+        {
+            NewStatement: WhilePatchStatement or ForPatchStatement,
+        } or
+            InsertBranchStatementPatchPlanStep
+        {
+            NewStatement: WhilePatchStatement or ForPatchStatement,
+        } or
+            InsertLoopBodyStatementPatchPlanStep
+        {
+            NewStatement: WhilePatchStatement or ForPatchStatement,
+        };
 
     private static bool ProducesLocalInitializer(SemanticPatchPlanStep step) =>
         step is InsertStatementPatchPlanStep
@@ -1567,7 +1614,7 @@ public sealed class CSharpPatchPlanApplier
         SemanticId ThenBlockId,
         SemanticId ElseBlockId);
 
-    private readonly record struct ProducedWhileLoop(
+    private readonly record struct ProducedLoop(
         SemanticId LoopId,
         SemanticId BodyBlockId);
 

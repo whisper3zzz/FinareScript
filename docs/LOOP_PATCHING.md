@@ -2,8 +2,9 @@
 
 ## Purpose
 
-M4.6 closes the first bounded loop round trip. A visual edit can now create an
-ordinary C# `while`, obtain a symbolic handle for its generated body, and
+M4.6 closes the first bounded loop round trip for `while`; M4.17 extends the
+same symbolic protocol to a dedicated `for` constructor. A visual edit can
+create ordinary C#, obtain a symbolic handle for its generated body, and
 populate that body with the same typed statements used elsewhere. The result
 is re-lowered into the current HIR v0.5 and projected into the current Graph
 v0.9/CFG loop model; there is no editor-only loop node or second runtime.
@@ -15,9 +16,11 @@ targets.
 
 ## Protocol
 
-Current patch schema `unifiedscript.patch/v0.14` carries three loop statement payloads:
+Current patch schema `unifiedscript.patch/v0.15` carries four loop statement payloads:
 
 - `while`, carrying one closed, typed `PatchExpression` condition;
+- `for`, carrying declaration or assignment initialization, an optional
+  condition, and ordered prefix/postfix `++`/`--` incrementors;
 - `break`, carrying no target ID; and
 - `continue`, carrying no target ID.
 
@@ -25,7 +28,7 @@ The absence of a transfer target is intentional. C# and HIR bind each transfer
 to its nearest lexical loop, and the derived CFG verifies that target. A visual
 client cannot forge an edge to an outer or unrelated loop.
 
-Current patch-plan schema `unifiedscript.patch-plan/v0.15` carries
+Current patch-plan schema `unifiedscript.patch-plan/v0.16` carries
 `insertLoopBodyStatement`:
 
 ```json
@@ -49,10 +52,10 @@ Current patch-plan schema `unifiedscript.patch-plan/v0.15` carries
 ```
 
 `sourceStepId` must refer backward to an earlier insertion whose payload is a
-`while`. The consumer repeats the producer's original `targetNodeId`; it never
-predicts the generated HIR loop or Block ID.
+`while` or `for`. The consumer repeats the producer's original `targetNodeId`;
+it never predicts the generated HIR loop or Block ID.
 
-An `insertLoopBodyStatement` may itself insert another `while` or `if`.
+An `insertLoopBodyStatement` may itself insert another loop or `if`.
 Therefore loop-body and branch handles compose recursively:
 
 ```text
@@ -80,25 +83,26 @@ binary, and cast expressions. It must:
 - remain inside the expression nesting-depth limit.
 
 The generated body currently accepts local-literal declarations, assignments
-to existing locals, nested `if`, nested `while`, typed return, break, and
+to existing locals, nested `if`, nested `while`/`for`, typed return, break, and
 continue. Every stage retains the statement-specific name, type, scope,
 dominance, effect, and reachability checks.
 
 `break` and `continue` are accepted only at the end of an explicit reachable
-Block with a discoverable nearest enclosing `HirWhileStatement`. This applies
-equally to direct library patches and symbolic plan steps. A transfer outside
-a loop is rejected; a statement appended after a transfer is rejected as
-unreachable.
+Block with a discoverable nearest enclosing `HirWhileStatement` or
+`HirForStatement`. This applies equally to direct library patches and symbolic
+plan steps. A transfer outside a loop is rejected; a statement appended after
+a transfer is rejected as unreachable. A `for` continue is independently
+verified to target its increment phase.
 
 ## Symbolic rebasing and identity
 
-After a successful while-producing stage, the plan coordinator finds the
-actual inserted `HirWhileStatement`, records its persistent loop and body IDs,
-and advances the request with the reconciled identity sidecar. A later body
-step resolves that current body, appends after its current final statement,
-and invokes a normal `InsertStatementPatchOperation`.
+After a successful loop-producing stage, the plan coordinator finds the actual
+inserted `HirWhileStatement` or `HirForStatement`, records its persistent loop
+and body IDs, and advances the request with the reconciled identity sidecar. A
+later body step resolves that current body, appends after its current final
+statement, and invokes a normal `InsertStatementPatchOperation`.
 
-Replacing the generated body changes the spans of its enclosing while and
+Replacing the generated body changes the spans of its enclosing loop and
 method ancestors. Global ancestor identity pins preserve those nodes, while
 operation-specific pins preserve the body and existing statements. This keeps
 the loop handle valid across all later stages and avoids incidental
@@ -116,7 +120,7 @@ terminal. If both branches of a generated nested `if` terminate and that `if`
 is the body's final statement, the containing body path becomes terminal as
 well. Later appends to that body are rejected before execution.
 
-Termination does not propagate through the surrounding `while` to its parent
+Termination does not propagate through the surrounding loop to its parent
 path: the condition may be false on entry, so code after the loop remains
 reachable. Likewise, a terminal inner-loop body does not terminate its outer
 loop body. This boundary is what makes nested loop construction compositional
@@ -174,17 +178,22 @@ The output is normal C#, so text edits, HIR/Graph projection, semantic
 analysis, identity reconciliation, and eventual execution continue to use the
 same program.
 
+The bounded `for` constructor and its four-stage CLI sample are documented in
+[FOR_LOOPS.md](FOR_LOOPS.md). It reuses the same body handle while additionally
+publishing the single generated for-local to later body expressions.
+
 ## Current limits
 
 Loop-body steps append; they cannot move an existing statement into or out of
 a loop, select an arbitrary generated-body gap, delete a generated loop, or
 retarget a transfer. M4.7 can edit an existing condition or repeatedly edit a
 condition through a produced-while handle; see
-[STRUCTURED_EXPRESSION_EDITING.md](STRUCTURED_EXPRESSION_EDITING.md). A patch
-expression cannot yet reference a newly inserted local through a symbolic value handle. The
-implementation does not prove loop termination or constant-fold conditions.
+[STRUCTURED_EXPRESSION_EDITING.md](STRUCTURED_EXPRESSION_EDITING.md). Produced
+locals can feed later expressions only where ordinary scope and CFG dominance
+hold; generated for-locals therefore stay inside their loop. The implementation
+does not prove loop termination or constant-fold conditions.
 
-`do`, `foreach`, whole-`for` construction/restructuring, arbitrary cyclic Graph
-rewiring, compound assignment, increment/decrement payloads, effectful authored expressions, exception flow,
-short-circuit expression CFG expansion, async state-machine flow, and automatic
-node placement remain later slices.
+`do`, `foreach`, existing-`for` clause restructuring, arbitrary cyclic Graph
+rewiring, general compound-assignment/mutation statements, effectful authored
+expression trees, exception flow, short-circuit expression CFG expansion,
+async state-machine flow, and automatic node placement remain later slices.

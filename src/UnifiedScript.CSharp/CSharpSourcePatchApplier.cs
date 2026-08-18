@@ -1396,6 +1396,15 @@ public sealed class CSharpSourcePatchApplier
                 graphSafetyIndex,
                 boundNodes,
                 types),
+            ForPatchStatement forStatement => BuildForStatement(
+                forStatement,
+                blockLocation!,
+                insertionIndex,
+                hirNodes,
+                patchIndex,
+                graphSafetyIndex,
+                boundNodes,
+                types),
             BreakPatchStatement => BuildLoopTransferStatement(
                 isContinue: false,
                 blockLocation!,
@@ -2740,6 +2749,9 @@ public sealed class CSharpSourcePatchApplier
             parameter.Name == name && parameter.Id != exceptDefinitionId) ||
         method.DescendantsAndSelf()
             .OfType<HirVariableDeclarationStatement>()
+            .Any(variable => variable.Name == name && variable.Id != exceptDefinitionId) ||
+        method.DescendantsAndSelf()
+            .OfType<HirForVariableDeclarator>()
             .Any(variable => variable.Name == name && variable.Id != exceptDefinitionId);
 
     private static bool IsStablePureExpression(
@@ -3085,6 +3097,312 @@ public sealed class CSharpSourcePatchApplier
         return StatementBuildResult.Success(syntax);
     }
 
+    private static StatementBuildResult BuildForStatement(
+        ForPatchStatement forStatement,
+        HirPatchIndex.BlockLocation blockLocation,
+        int insertionIndex,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        GraphPatchSafetyIndex graphSafetyIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types)
+    {
+        if (!graphSafetyIndex.IsInsertionReachable(blockLocation, insertionIndex))
+        {
+            return StatementBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.UnreachableInsertion,
+                "A graph-authored for requires a CFG-reachable insertion gap.");
+        }
+
+        var authoredLocals = new Dictionary<int, AuthoredForLocal>();
+        VariableDeclarationSyntax? declarationSyntax = null;
+        if (forStatement.Declaration is not null)
+        {
+            if (forStatement.Declaration.Variables.Count != 1)
+            {
+                return StatementBuildResult.Failure(
+                    SemanticPatchDiagnosticCodes.InvalidStatement,
+                    "The bounded for constructor requires exactly one declaration variable.");
+            }
+
+            ForVariableDeclaratorPatch variable = forStatement.Declaration.Variables[0];
+            if (!types.TryGetValue(variable.ExpectedTypeId, out TypeDescriptor? variableType) ||
+                !IsStableGraphExpressionType(variableType) ||
+                !TypeNameMatches(forStatement.Declaration.TypeName, variableType))
+            {
+                return StatementBuildResult.Failure(
+                    SemanticPatchDiagnosticCodes.TypeMismatch,
+                    $"For variable type '{forStatement.Declaration.TypeName}' does not match " +
+                    $"graph-safe semantic type '{variable.ExpectedTypeId}'.");
+            }
+
+            if (!SyntaxFacts.IsValidIdentifier(variable.Name) ||
+                SyntaxFacts.GetKeywordKind(variable.Name) != SyntaxKind.None)
+            {
+                return StatementBuildResult.Failure(
+                    SemanticPatchDiagnosticCodes.InvalidStatement,
+                    $"For variable name '{variable.Name}' is not one unescaped C# identifier.");
+            }
+
+            if (HasNameConflict(blockLocation.Method, variable.Name))
+            {
+                return StatementBuildResult.Failure(
+                    SemanticPatchDiagnosticCodes.NameConflict,
+                    $"A parameter or local named '{variable.Name}' already exists in method " +
+                    $"'{blockLocation.Method.Name}'.");
+            }
+
+            ExpressionBuildResult initializer = BuildPatchExpression(
+                variable.Initializer,
+                blockLocation,
+                insertionIndex,
+                hirNodes,
+                patchIndex,
+                graphSafetyIndex,
+                boundNodes,
+                types,
+                authoredLocals);
+            if (initializer.Syntax is null || initializer.Type?.Id != variable.ExpectedTypeId)
+            {
+                return StatementBuildResult.Failure(
+                    initializer.DiagnosticCode ?? SemanticPatchDiagnosticCodes.TypeMismatch,
+                    initializer.DiagnosticMessage ?? "The for declaration initializer is invalid.");
+            }
+
+            TypeSyntax typeSyntax = SyntaxFactory.ParseTypeName(
+                forStatement.Declaration.TypeName,
+                options: CSharpToHirLowerer.ParseOptions,
+                consumeFullText: true);
+            if (typeSyntax.ContainsDiagnostics ||
+                typeSyntax.SpanStart != 0 ||
+                typeSyntax.Span.Length != forStatement.Declaration.TypeName.Length)
+            {
+                return StatementBuildResult.Failure(
+                    SemanticPatchDiagnosticCodes.InvalidStatement,
+                    $"For variable type '{forStatement.Declaration.TypeName}' is not one C# type name.");
+            }
+
+            VariableDeclaratorSyntax variableSyntax = SyntaxFactory.VariableDeclarator(
+                    SyntaxFactory.Identifier(variable.Name))
+                .WithInitializer(SyntaxFactory.EqualsValueClause(initializer.Syntax));
+            declarationSyntax = SyntaxFactory.VariableDeclaration(
+                typeSyntax.WithoutTrivia(),
+                SyntaxFactory.SingletonSeparatedList(variableSyntax));
+            authoredLocals.Add(0, new AuthoredForLocal(variable.Name, variableType));
+        }
+
+        var initializerSyntaxes = new List<ExpressionSyntax>(forStatement.Initializers.Count);
+        foreach (ForAssignmentPatchExpression initializer in forStatement.Initializers)
+        {
+            ExpressionBuildResult builtInitializer = BuildForAssignmentExpression(
+                initializer,
+                blockLocation,
+                insertionIndex,
+                hirNodes,
+                patchIndex,
+                graphSafetyIndex,
+                boundNodes,
+                types);
+            if (builtInitializer.Syntax is null)
+            {
+                return StatementBuildResult.Failure(
+                    builtInitializer.DiagnosticCode ?? SemanticPatchDiagnosticCodes.InvalidStatement,
+                    builtInitializer.DiagnosticMessage ?? "A for assignment initializer is invalid.");
+            }
+
+            initializerSyntaxes.Add(builtInitializer.Syntax);
+        }
+
+        ExpressionSyntax? conditionSyntax = null;
+        if (forStatement.Condition is not null)
+        {
+            ExpressionBuildResult condition = BuildPatchExpression(
+                forStatement.Condition,
+                blockLocation,
+                insertionIndex,
+                hirNodes,
+                patchIndex,
+                graphSafetyIndex,
+                boundNodes,
+                types,
+                authoredLocals);
+            if (condition.Syntax is null || condition.Type is null)
+            {
+                return StatementBuildResult.Failure(
+                    condition.DiagnosticCode ?? SemanticPatchDiagnosticCodes.InvalidGraphExpression,
+                    condition.DiagnosticMessage ?? "The graph-authored for condition is invalid.");
+            }
+
+            if (!IsBoolean(condition.Type))
+            {
+                return StatementBuildResult.Failure(
+                    SemanticPatchDiagnosticCodes.TypeMismatch,
+                    $"A for condition must have semantic type 'System.Boolean', not " +
+                    $"'{condition.Type.MetadataName}' ('{forStatement.Condition.ExpectedTypeId}').");
+            }
+
+            conditionSyntax = condition.Syntax;
+        }
+
+        var incrementorSyntaxes = new List<ExpressionSyntax>(forStatement.Incrementors.Count);
+        foreach (ForMutationPatchExpression incrementor in forStatement.Incrementors)
+        {
+            ExpressionBuildResult builtIncrementor = BuildForMutationExpression(
+                incrementor,
+                blockLocation,
+                insertionIndex,
+                hirNodes,
+                patchIndex,
+                graphSafetyIndex,
+                boundNodes,
+                types,
+                authoredLocals);
+            if (builtIncrementor.Syntax is null)
+            {
+                return StatementBuildResult.Failure(
+                    builtIncrementor.DiagnosticCode ?? SemanticPatchDiagnosticCodes.InvalidStatement,
+                    builtIncrementor.DiagnosticMessage ?? "A for mutation incrementor is invalid.");
+            }
+
+            incrementorSyntaxes.Add(builtIncrementor.Syntax);
+        }
+
+        ForStatementSyntax syntax = SyntaxFactory.ForStatement(SyntaxFactory.Block())
+            .WithDeclaration(declarationSyntax)
+            .WithInitializers(SyntaxFactory.SeparatedList(initializerSyntaxes))
+            .WithCondition(conditionSyntax)
+            .WithIncrementors(SyntaxFactory.SeparatedList(incrementorSyntaxes));
+        return StatementBuildResult.Success(syntax);
+    }
+
+    private static ExpressionBuildResult BuildForAssignmentExpression(
+        ForAssignmentPatchExpression assignment,
+        HirPatchIndex.BlockLocation blockLocation,
+        int insertionIndex,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        GraphPatchSafetyIndex graphSafetyIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types)
+    {
+        if (!hirNodes.TryGetValue(assignment.TargetDefinitionId, out HirNode? targetNode) ||
+            targetNode is not HirVariableDeclarationStatement target ||
+            !patchIndex.TryGetStatement(
+                target.Id,
+                out HirPatchIndex.StatementLocation? targetLocation) ||
+            targetLocation!.Method.Id != blockLocation.Method.Id ||
+            !string.Equals(target.Name, assignment.ExpectedName, StringComparison.Ordinal) ||
+            HasNameConflict(blockLocation.Method, target.Name, target.Id) ||
+            !patchIndex.DoesStatementDominateInsertion(
+                target.Id,
+                blockLocation.Block.Id,
+                insertionIndex) ||
+            !graphSafetyIndex.DoesDefinitionDominateInsertion(
+                target.Id,
+                blockLocation,
+                insertionIndex))
+        {
+            return ExpressionBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.AssignmentTargetNotAvailable,
+                $"For initializer target '{assignment.TargetDefinitionId}' is not an unshadowed " +
+                "dominating local in the target method.");
+        }
+
+        if (!types.TryGetValue(assignment.ExpectedTypeId, out TypeDescriptor? targetType) ||
+            !IsStableGraphExpressionType(targetType) ||
+            !boundNodes.TryGetValue(target.Id, out BoundNodeInfo? targetBinding) ||
+            targetBinding.TypeId != assignment.ExpectedTypeId)
+        {
+            return ExpressionBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.TypeMismatch,
+                $"For initializer target '{target.Name}' no longer has graph-safe semantic type " +
+                $"'{assignment.ExpectedTypeId}'.");
+        }
+
+        ExpressionBuildResult value = BuildPatchExpression(
+            assignment.Value,
+            blockLocation,
+            insertionIndex,
+            hirNodes,
+            patchIndex,
+            graphSafetyIndex,
+            boundNodes,
+            types);
+        if (value.Syntax is null || value.Type?.Id != assignment.ExpectedTypeId)
+        {
+            return value.Syntax is null
+                ? value
+                : ExpressionBuildResult.Failure(
+                    SemanticPatchDiagnosticCodes.TypeMismatch,
+                    "A for assignment initializer value must exactly match its target type.");
+        }
+
+        AssignmentExpressionSyntax syntax = SyntaxFactory.AssignmentExpression(
+            SyntaxKind.SimpleAssignmentExpression,
+            SyntaxFactory.IdentifierName(target.Name),
+            value.Syntax);
+        return ExpressionBuildResult.Success(syntax, targetType);
+    }
+
+    private static ExpressionBuildResult BuildForMutationExpression(
+        ForMutationPatchExpression mutation,
+        HirPatchIndex.BlockLocation blockLocation,
+        int insertionIndex,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        GraphPatchSafetyIndex graphSafetyIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
+        IReadOnlyDictionary<int, AuthoredForLocal> authoredLocals)
+    {
+        if (!types.TryGetValue(mutation.ExpectedTypeId, out TypeDescriptor? mutationType) ||
+            (!IsArithmeticOperatorType(mutationType) && mutationType.Kind != UnifiedTypeKind.Enum))
+        {
+            return ExpressionBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.TypeMismatch,
+                $"For mutation type '{mutation.ExpectedTypeId}' does not support ++ or --.");
+        }
+
+        ExpressionBuildResult operand = BuildPatchExpression(
+            mutation.Operand,
+            blockLocation,
+            insertionIndex,
+            hirNodes,
+            patchIndex,
+            graphSafetyIndex,
+            boundNodes,
+            types,
+            authoredLocals);
+        if (operand.Syntax is not IdentifierNameSyntax || operand.Type?.Id != mutation.ExpectedTypeId)
+        {
+            return operand.Syntax is null
+                ? operand
+                : ExpressionBuildResult.Failure(
+                    SemanticPatchDiagnosticCodes.InvalidGraphExpression,
+                    "A for mutation operand must resolve to one same-typed writable local.");
+        }
+
+        SyntaxKind kind = (mutation.Operator, mutation.IsPostfix) switch
+        {
+            ("++", false) => SyntaxKind.PreIncrementExpression,
+            ("--", false) => SyntaxKind.PreDecrementExpression,
+            ("++", true) => SyntaxKind.PostIncrementExpression,
+            ("--", true) => SyntaxKind.PostDecrementExpression,
+            _ => SyntaxKind.None,
+        };
+        if (kind == SyntaxKind.None)
+        {
+            return ExpressionBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.InvalidGraphExpression,
+                $"For incrementor operator '{mutation.Operator}' is not supported.");
+        }
+
+        ExpressionSyntax syntax = mutation.IsPostfix
+            ? SyntaxFactory.PostfixUnaryExpression(kind, operand.Syntax)
+            : SyntaxFactory.PrefixUnaryExpression(kind, operand.Syntax);
+        return ExpressionBuildResult.Success(syntax, mutationType);
+    }
+
     private static StatementBuildResult BuildLoopTransferStatement(
         bool isContinue,
         HirPatchIndex.BlockLocation blockLocation,
@@ -3092,12 +3410,12 @@ public sealed class CSharpSourcePatchApplier
         HirPatchIndex patchIndex,
         GraphPatchSafetyIndex graphSafetyIndex)
     {
-        if (!patchIndex.TryGetNearestEnclosingLoop(blockLocation.Block.Id, out HirWhileStatement? loop))
+        if (!patchIndex.TryGetNearestEnclosingLoop(blockLocation.Block.Id, out HirStatement? loop))
         {
             return StatementBuildResult.Failure(
                 SemanticPatchDiagnosticCodes.InvalidStatement,
                 $"A graph-authored {(isContinue ? "continue" : "break")} requires an enclosing " +
-                "while loop in the current HIR.");
+                "while or for loop in the current HIR.");
         }
 
         if (!graphSafetyIndex.IsInsertionReachable(blockLocation, insertionIndex))
@@ -3201,7 +3519,8 @@ public sealed class CSharpSourcePatchApplier
         HirPatchIndex patchIndex,
         GraphPatchSafetyIndex graphSafetyIndex,
         IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
-        IReadOnlyDictionary<SemanticId, TypeDescriptor> types)
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
+        IReadOnlyDictionary<int, AuthoredForLocal>? authoredForLocals = null)
     {
         if (!types.TryGetValue(expression.ExpectedTypeId, out TypeDescriptor? expectedType) ||
             !IsStableGraphExpressionType(expectedType))
@@ -3241,6 +3560,27 @@ public sealed class CSharpSourcePatchApplier
                     graphSafetyIndex,
                     boundNodes);
 
+            case ForLocalReferencePatchExpression forLocal:
+                if (authoredForLocals is null ||
+                    !authoredForLocals.TryGetValue(
+                        forLocal.VariableIndex,
+                        out AuthoredForLocal authoredLocal) ||
+                    !string.Equals(
+                        forLocal.ExpectedName,
+                        authoredLocal.Name,
+                        StringComparison.Ordinal) ||
+                    forLocal.ExpectedTypeId != authoredLocal.Type.Id)
+                {
+                    return ExpressionBuildResult.Failure(
+                        SemanticPatchDiagnosticCodes.ValueSourceNotAvailable,
+                        $"For-local source '{forLocal.VariableIndex}:{forLocal.ExpectedName}' " +
+                        "does not resolve to a currently declared for variable.");
+                }
+
+                return ExpressionBuildResult.Success(
+                    SyntaxFactory.IdentifierName(authoredLocal.Name),
+                    authoredLocal.Type);
+
             case UnaryPatchExpression unary:
                 {
                     if (!GraphExpressionUnaryOperators.Contains(unary.Operator) ||
@@ -3259,7 +3599,8 @@ public sealed class CSharpSourcePatchApplier
                         patchIndex,
                         graphSafetyIndex,
                         boundNodes,
-                        types);
+                        types,
+                        authoredForLocals);
                     if (operand.Syntax is null || operand.Type is null)
                     {
                         return operand;
@@ -3299,7 +3640,8 @@ public sealed class CSharpSourcePatchApplier
                         patchIndex,
                         graphSafetyIndex,
                         boundNodes,
-                        types);
+                        types,
+                        authoredForLocals);
                     if (left.Syntax is null || left.Type is null)
                     {
                         return left;
@@ -3313,7 +3655,8 @@ public sealed class CSharpSourcePatchApplier
                         patchIndex,
                         graphSafetyIndex,
                         boundNodes,
-                        types);
+                        types,
+                        authoredForLocals);
                     if (right.Syntax is null || right.Type is null)
                     {
                         return right;
@@ -3345,7 +3688,8 @@ public sealed class CSharpSourcePatchApplier
                         patchIndex,
                         graphSafetyIndex,
                         boundNodes,
-                        types);
+                        types,
+                        authoredForLocals);
                     if (operand.Syntax is null || operand.Type is null)
                     {
                         return operand;
@@ -3382,7 +3726,8 @@ public sealed class CSharpSourcePatchApplier
                         patchIndex,
                         graphSafetyIndex,
                         boundNodes,
-                        types);
+                        types,
+                        authoredForLocals);
                     if (condition.Syntax is null || condition.Type is null)
                     {
                         return condition;
@@ -3396,7 +3741,8 @@ public sealed class CSharpSourcePatchApplier
                         patchIndex,
                         graphSafetyIndex,
                         boundNodes,
-                        types);
+                        types,
+                        authoredForLocals);
                     if (whenTrue.Syntax is null || whenTrue.Type is null)
                     {
                         return whenTrue;
@@ -3410,7 +3756,8 @@ public sealed class CSharpSourcePatchApplier
                         patchIndex,
                         graphSafetyIndex,
                         boundNodes,
-                        types);
+                        types,
+                        authoredForLocals);
                     if (whenFalse.Syntax is null || whenFalse.Type is null)
                     {
                         return whenFalse;
@@ -3452,7 +3799,8 @@ public sealed class CSharpSourcePatchApplier
                         patchIndex,
                         graphSafetyIndex,
                         boundNodes,
-                        types);
+                        types,
+                        authoredForLocals);
                     if (receiver.Syntax is null || receiver.Type is null)
                     {
                         return receiver;
@@ -3511,6 +3859,14 @@ public sealed class CSharpSourcePatchApplier
                     variable.Id,
                     blockLocation.Block.Id,
                     insertionIndex) &&
+                graphSafetyIndex.DoesDefinitionDominateInsertion(
+                    variable.Id,
+                    blockLocation,
+                    insertionIndex) => variable.Name,
+            HirForVariableDeclarator variable when
+                patchIndex.IsForVariableInScopeAtBlock(
+                    variable.Id,
+                    blockLocation.Block.Id) &&
                 graphSafetyIndex.DoesDefinitionDominateInsertion(
                     variable.Id,
                     blockLocation,
@@ -3771,7 +4127,7 @@ public sealed class CSharpSourcePatchApplier
         StatementSyntax statement,
         InsertionFormatting formatting)
     {
-        if (statement is not (IfStatementSyntax or WhileStatementSyntax))
+        if (statement is not (IfStatementSyntax or WhileStatementSyntax or ForStatementSyntax))
         {
             return statement
                 .WithLeadingTrivia(SyntaxFactory.Whitespace(formatting.Indentation))
@@ -4208,6 +4564,10 @@ public sealed class CSharpSourcePatchApplier
         public static ExpressionBuildResult Failure(string code, string message) =>
             new(null, null, code, message);
     }
+
+    private readonly record struct AuthoredForLocal(
+        string Name,
+        TypeDescriptor Type);
 
     private sealed record PendingReplacement(
         string DocumentPath,

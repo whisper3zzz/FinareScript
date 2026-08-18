@@ -2352,6 +2352,72 @@ public sealed class CSharpSourcePatchApplierTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public void Apply_InsertsLoopTransferIntoTextAuthoredFor(bool isContinue)
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int count)
+                {
+                    for (int index = 0; index < count; index++)
+                    {
+                    }
+
+                    return count;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/ForLoopTransfer.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirForStatement loop = Assert.IsType<HirForStatement>(method.Body.Statements[0]);
+        InsertPatchStatement transfer = isContinue
+            ? new ContinuePatchStatement()
+            : new BreakPatchStatement();
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new InsertStatementPatchOperation(loop.Body.Id, null, null, transfer)]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains(isContinue ? "continue;" : "break;", patchedSource, StringComparison.Ordinal);
+        HirMethodDeclaration changedMethod = Assert.Single(
+            Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirForStatement changedLoop = Assert.IsType<HirForStatement>(changedMethod.Body.Statements[0]);
+        HirStatement insertedTransfer = Assert.Single(changedLoop.Body.Statements);
+        HirUnaryExpression increment = Assert.IsType<HirUnaryExpression>(
+            Assert.Single(changedLoop.Incrementors));
+        GraphControlFlowLoop flow = Assert.Single(
+            Assert.Single(new GraphControlFlowAnalyzer().AnalyzeAndValidate(
+                new HirGraphProjector().Project(
+                    result.Analysis.Hir,
+                    result.Analysis.Semantics)).Functions).Loops);
+        Assert.Equal(changedLoop.Id, flow.LoopNodeId);
+        Assert.Equal(increment.Id, flow.ContinueTargetNodeId);
+        if (isContinue)
+        {
+            Assert.IsType<HirContinueStatement>(insertedTransfer);
+            Assert.Contains(insertedTransfer.Id, flow.ContinueNodeIds);
+            Assert.Empty(flow.BreakNodeIds);
+        }
+        else
+        {
+            Assert.IsType<HirBreakStatement>(insertedTransfer);
+            Assert.Contains(insertedTransfer.Id, flow.BreakNodeIds);
+            Assert.Empty(flow.ContinueNodeIds);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public void Apply_RejectsLoopTransferOutsideAnEnclosingLoop(bool isContinue)
     {
         const string source = """
@@ -2478,6 +2544,165 @@ public sealed class CSharpSourcePatchApplierTests
         Assert.Contains(
             result.Diagnostics,
             static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.TypeMismatch);
+    }
+
+    [Fact]
+    public void Apply_ConstructsTypedForAndReprojectsItsPhaseContract()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int count, bool enabled)
+                {
+                    return count;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/ForBuild.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement valueReturn = Assert.IsType<HirReturnStatement>(
+            Assert.Single(method.Body.Statements));
+        SemanticId intType = GetTypeId(original, method.Parameters[0]);
+        SemanticId boolType = GetTypeId(original, method.Parameters[1]);
+        var index = new ForLocalReferencePatchExpression(0, "index", intType);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new InsertStatementPatchOperation(
+                method.Body.Id,
+                null,
+                valueReturn.Id,
+                new ForPatchStatement(
+                    new ForVariableDeclarationPatch(
+                        "int",
+                        [new ForVariableDeclaratorPatch(
+                            "index",
+                            new LiteralPatchExpression("0", intType),
+                            intType)]),
+                    [],
+                    new BinaryPatchExpression(
+                        "<",
+                        index,
+                        new LocalReferencePatchExpression(
+                            method.Parameters[0].Id,
+                            method.Parameters[0].Name,
+                            intType),
+                        boolType),
+                    [new ForMutationPatchExpression(index, "++", true, intType)]))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Contains(
+            "for (int index = 0; index < count; index++)",
+            Assert.Single(result.PatchedRequest!.Sources).Source,
+            StringComparison.Ordinal);
+        HirMethodDeclaration changedMethod = Assert.Single(
+            Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirForStatement inserted = Assert.IsType<HirForStatement>(changedMethod.Body.Statements[0]);
+        HirForVariableDeclarator variable = Assert.Single(inserted.Declaration!.Variables);
+        HirUnaryExpression increment = Assert.IsType<HirUnaryExpression>(
+            Assert.Single(inserted.Incrementors));
+        Assert.True(increment.IsPostfix);
+        Assert.Equal(method.Id, changedMethod.Id);
+        Assert.Equal(method.Body.Id, changedMethod.Body.Id);
+        Assert.Equal(valueReturn.Id, changedMethod.Body.Statements[1].Id);
+        Assert.Equal(
+            variable.Id,
+            Assert.Single(
+                result.Analysis.Semantics!.Nodes,
+                binding => binding.NodeId ==
+                    Assert.IsType<HirIdentifierExpression>(
+                        Assert.IsType<HirBinaryExpression>(inserted.Condition).Left).Id)
+                .ReferencedSymbolId);
+
+        GraphDocument graph = new HirGraphProjector().Project(
+            result.Analysis.Hir,
+            result.Analysis.Semantics);
+        GraphControlFlowLoop flow = Assert.Single(
+            Assert.Single(new GraphControlFlowAnalyzer().AnalyzeAndValidate(graph).Functions).Loops);
+        Assert.Equal(inserted.Id, flow.LoopNodeId);
+        Assert.NotNull(flow.InitializerRegionId);
+        Assert.NotNull(flow.IncrementRegionId);
+        Assert.Equal(increment.Id, flow.ContinueTargetNodeId);
+    }
+
+    [Fact]
+    public void Apply_ConstructsForWithOrderedAssignmentInitializer()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int count, bool enabled)
+                {
+                    int index = count;
+                    return index;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/ForAssignmentBuild.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement indexDefinition = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirReturnStatement valueReturn = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+        SemanticId intType = GetTypeId(original, indexDefinition);
+        SemanticId boolType = GetTypeId(original, method.Parameters[1]);
+        var index = new LocalReferencePatchExpression(
+            indexDefinition.Id,
+            indexDefinition.Name,
+            intType);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new InsertStatementPatchOperation(
+                method.Body.Id,
+                indexDefinition.Id,
+                valueReturn.Id,
+                new ForPatchStatement(
+                    null,
+                    [new ForAssignmentPatchExpression(
+                        indexDefinition.Id,
+                        indexDefinition.Name,
+                        intType,
+                        new LiteralPatchExpression("0", intType))],
+                    new BinaryPatchExpression(
+                        "<",
+                        index,
+                        new LocalReferencePatchExpression(
+                            method.Parameters[0].Id,
+                            method.Parameters[0].Name,
+                            intType),
+                        boolType),
+                    [new ForMutationPatchExpression(index, "++", true, intType)]))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Contains(
+            "for (index = 0; index < count; index++)",
+            Assert.Single(result.PatchedRequest!.Sources).Source,
+            StringComparison.Ordinal);
+        CSharpAnalysisResult changedAnalysis = Assert.IsType<CSharpAnalysisResult>(result.Analysis);
+        HirCompilationUnit changedHir = Assert.IsType<HirCompilationUnit>(changedAnalysis.Hir);
+        HirForStatement inserted = Assert.IsType<HirForStatement>(
+            Assert.Single(changedHir.DescendantsAndSelf().OfType<HirForStatement>()));
+        Assert.Null(inserted.Declaration);
+        Assert.Single(inserted.Initializers);
+        GraphFunction graph = Assert.Single(new HirGraphProjector()
+            .Project(changedHir, changedAnalysis.Semantics)
+            .Functions);
+        GraphNode loopNode = Assert.Single(graph.Nodes, node => node.Id == inserted.Id);
+        Assert.Equal("expressions", loopNode.Properties["initializerKind"]);
     }
 
     [Fact]

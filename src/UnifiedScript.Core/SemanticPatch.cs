@@ -88,6 +88,7 @@ public sealed record ReplaceReturnValuePatchOperation(
 [JsonDerivedType(typeof(LocalAssignmentPatchStatement), "localAssignment")]
 [JsonDerivedType(typeof(IfPatchStatement), "if")]
 [JsonDerivedType(typeof(WhilePatchStatement), "while")]
+[JsonDerivedType(typeof(ForPatchStatement), "for")]
 [JsonDerivedType(typeof(BreakPatchStatement), "break")]
 [JsonDerivedType(typeof(ContinuePatchStatement), "continue")]
 [JsonDerivedType(typeof(ReturnPatchStatement), "return")]
@@ -109,6 +110,7 @@ public sealed record LocalAssignmentPatchStatement(
 [JsonDerivedType(typeof(LiteralPatchExpression), "literal")]
 [JsonDerivedType(typeof(LocalReferencePatchExpression), "localReference")]
 [JsonDerivedType(typeof(ProducedLocalReferencePatchExpression), "producedLocalReference")]
+[JsonDerivedType(typeof(ForLocalReferencePatchExpression), "forLocalReference")]
 [JsonDerivedType(typeof(UnaryPatchExpression), "unary")]
 [JsonDerivedType(typeof(BinaryPatchExpression), "binary")]
 [JsonDerivedType(typeof(CastPatchExpression), "cast")]
@@ -127,6 +129,11 @@ public sealed record LocalReferencePatchExpression(
 
 public sealed record ProducedLocalReferencePatchExpression(
     string SourceStepId,
+    string ExpectedName,
+    SemanticId ExpectedTypeId) : PatchExpression(ExpectedTypeId);
+
+public sealed record ForLocalReferencePatchExpression(
+    int VariableIndex,
     string ExpectedName,
     SemanticId ExpectedTypeId) : PatchExpression(ExpectedTypeId);
 
@@ -162,6 +169,33 @@ public sealed record IfPatchStatement(
 
 public sealed record WhilePatchStatement(
     PatchExpression Condition) : InsertPatchStatement;
+
+public sealed record ForVariableDeclarationPatch(
+    string TypeName,
+    IReadOnlyList<ForVariableDeclaratorPatch> Variables);
+
+public sealed record ForVariableDeclaratorPatch(
+    string Name,
+    PatchExpression Initializer,
+    SemanticId ExpectedTypeId);
+
+public sealed record ForAssignmentPatchExpression(
+    SemanticId TargetDefinitionId,
+    string ExpectedName,
+    SemanticId ExpectedTypeId,
+    PatchExpression Value);
+
+public sealed record ForMutationPatchExpression(
+    PatchExpression Operand,
+    string Operator,
+    bool IsPostfix,
+    SemanticId ExpectedTypeId);
+
+public sealed record ForPatchStatement(
+    ForVariableDeclarationPatch? Declaration,
+    IReadOnlyList<ForAssignmentPatchExpression> Initializers,
+    PatchExpression? Condition,
+    IReadOnlyList<ForMutationPatchExpression> Incrementors) : InsertPatchStatement;
 
 public sealed record BreakPatchStatement : InsertPatchStatement;
 
@@ -209,7 +243,7 @@ public sealed record SemanticPatchDocument(
     SemanticId SemanticConfigurationId,
     IReadOnlyList<SemanticPatchOperation> Operations)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.14";
+    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.15";
 
     public static SemanticPatchDocument Create(
         SemanticId sourceCompilationId,

@@ -1,19 +1,21 @@
-# Lossless For Loops
+# Lossless and Graph-Authored For Loops
 
 M4.16 admits text-authored C# `for` loops to the shared source/HIR/Graph
-contract. A `for` remains a first-class structure; it is never rewritten into a
-`while`, because that would lose clause ownership and would route `continue`
-past the incrementors.
+contract. M4.17 closes the bounded reverse path with a dedicated
+`ForPatchStatement`. A `for` remains a first-class structure in both
+directions; it is never rewritten into a `while`, because that would lose
+clause ownership and would route `continue` past the incrementors.
 
 The current strict-reader contracts are:
 
 - HIR `unifiedscript.hir/v0.5`;
 - Graph `unifiedscript.graph/v0.9`;
-- standalone patch `unifiedscript.patch/v0.14`;
-- patch plan `unifiedscript.patch-plan/v0.15`.
+- standalone patch `unifiedscript.patch/v0.15`;
+- patch plan `unifiedscript.patch-plan/v0.16`.
 
-Patch schemas do not change in this slice because whole-loop construction and
-clause restructuring remain read-only.
+Patch v0.15 adds the dedicated statement and for-local expression payloads;
+plan v0.16 adds symbolic loop-body and generated-for-local use without changing
+the existing plan-step discriminators.
 
 ## HIR structure
 
@@ -145,30 +147,58 @@ Condition effects remain valid and are reevaluated on every iteration. Ordered
 initializer and incrementor effects are connected using the same effect-chain
 logic as ordinary expression statements.
 
-## Source and visual editing boundary
+## Bounded visual construction
 
-M4.16 is text-authored and visually inspectable. Existing exact operations can
-still edit ordinary supported expression nodes nested inside admitted clauses
-when their normal type, endpoint, effect, trivia, identity, scope, and dominance
-checks pass. Existing non-transfer insertions into an explicit body also
-continue through the ordinary block and CFG safety path. Graph-authored
-`break`/`continue` insertion into a `for` remains unavailable until the loop
-patch model can express its increment-phase target explicitly.
+`ForPatchStatement` owns four explicit parts:
 
-The patch algebra does not yet create or restructure a whole `for`. In
-particular, it does not add, remove, reorder, or change the kind of initializer
-or incrementor clauses, and it does not offer a whole-condition endpoint
-operation analogous to `replaceWhileCondition`.
+- either one declaration group or an ordered list of assignment initializers;
+- an optional Boolean condition, where omission preserves C# implicit true;
+- ordered `++`/`--` incrementors with prefix/postfix position; and
+- the explicit empty body created by the normal structured-insertion path.
 
-Reusing `WhilePatchStatement` would be unsafe: that payload has only a
+The bounded declaration constructor deliberately accepts exactly one variable
+with an exact graph-safe type and required initializer. Clause-local references
+use `forLocalReference(variableIndex, expectedName, expectedTypeId)`, which is
+valid only inside the same `for` payload. Expression initialization instead
+accepts ordered simple assignments to existing, unshadowed same-method locals
+that lexically and CFG-dominate the insertion gap. Declaration and expression
+initializer forms are mutually exclusive.
+
+Mutation incrementors accept only writable local identifiers, exact arithmetic
+or enum types, and `++`/`--`. This makes mutation and its effect ordering
+explicit without admitting arbitrary effectful authored expression trees. The
+complete generated statement is emitted as ordinary C#, reparsed, rebound,
+reprojected, and checked against the same HIR/Graph/CFG contract as text input.
+
+When a plan inserts a declaration-form `for`, its step publishes two compatible
+transaction handles:
+
+- a loop-body handle consumed by `insertLoopBodyStatement`; and
+- one produced-local handle for the single generated declarator.
+
+Later body expressions use `producedLocalReference` and are resolved to the
+actual post-reanalysis declarator ID. The ordinary lexical and CFG gates prevent
+that local from escaping the loop body. `break` and `continue` now discover the
+nearest `HirWhileStatement` or `HirForStatement`; Graph/CFG validation proves
+that a generated `for` continue enters the increment phase rather than jumping
+directly to the condition.
+
+Existing exact operations can still edit supported expression nodes nested
+inside text- or graph-authored clauses when their normal type, endpoint, effect,
+trivia, identity, scope, and dominance checks pass.
+
+The patch algebra does not yet restructure an existing whole `for`. It cannot
+add, remove, reorder, or change the kind of existing initializer/incrementor
+clauses, and it does not offer a whole-condition endpoint operation analogous
+to `replaceWhileCondition`.
+
+Reusing `WhilePatchStatement` remains invalid: that payload has only a
 condition and body, so it cannot express one-time initialization, incrementor
-order, declaration scope, or the distinct continue target. A future visual
-constructor must introduce a dedicated versioned `ForPatchStatement` and prove
-all those properties before source emission.
+order, declaration scope, or the distinct continue target.
 
 ## Checked-in sample
 
-Generate the sample artifacts with:
+Analyze the lossless text-authored sample with:
 
 ```bash
 dotnet run --project src/UnifiedScript.Cli -- \
@@ -185,13 +215,34 @@ The sample covers:
 - nearest-loop `break`;
 - initializer execution outside the cyclic CFG component.
 
+Run the bounded visual-construction sample with:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  apply-plan \
+  samples/Patching/ForBuildRules.cs \
+  --identity samples/Patching/ForBuildRules.cs.usids \
+  --plan samples/Patching/BuildFor.plan.json \
+  --out artifacts/for-plan/ForBuildRules.cs \
+  --out-identity artifacts/for-plan/ForBuildRules.cs.usids
+```
+
+The four-stage plan creates `for (int index = 0; index < count; index++)`,
+inserts an `index == 2` guard and `continue`, then accumulates `index` into an
+outer `total`. It demonstrates both symbolic handles and verifies that the
+continue target remains the generated incrementor.
+
 ## Deliberate limits
 
-- Whole-`for` visual construction and clause restructuring are not exposed.
-- A `for`-declaration local is semantically bound and visible in Graph, but is
-  not yet an authored `localReference` source in the bounded patch algebra.
-- Graph-authored `break`/`continue` insertion currently recognizes `while`
-  ancestry only; text-authored transfers in `for` are preserved and validated.
+- Existing-`for` whole-clause replacement/restructuring is not exposed.
+- Visual declaration construction is limited to exactly one initialized local;
+  text-authored multiple declarators remain losslessly readable.
+- Visual expression initializers are exact assignments to available locals;
+  arbitrary calls and mutations are not admitted in that phase.
+- Visual incrementors are ordered local `++`/`--` only; general calls,
+  assignments, and compound expressions remain text-authored.
+- A generated for-local may be consumed only where ordinary declaration scope
+  and CFG dominance make it available, normally inside that loop's body.
 - `await foreach`, synchronous `foreach`, and enumerator disposal semantics
   require a separate contract.
 - `do` requires a separate post-condition region and is not represented as

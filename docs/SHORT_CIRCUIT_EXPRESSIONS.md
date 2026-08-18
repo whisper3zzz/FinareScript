@@ -9,8 +9,8 @@ The current contracts are:
 
 - HIR `unifiedscript.hir/v0.5`;
 - Graph `unifiedscript.graph/v0.9`;
-- standalone patch `unifiedscript.patch/v0.14`;
-- patch plan `unifiedscript.patch-plan/v0.15`.
+- standalone patch `unifiedscript.patch/v0.15`;
+- patch plan `unifiedscript.patch-plan/v0.16`.
 
 Only Graph changes in this slice. HIR and the patch protocols already preserve
 `&&` and `||` as binary operators with canonical `left` and `right` children.
@@ -74,7 +74,7 @@ ordered left/right children. Traversal, semantic binding, persistent identity,
 source location, serialization, and structural fingerprints already share that
 shape.
 
-Patch v0.14 and patch-plan v0.15 likewise keep logical operators in the closed
+Patch v0.15 and patch-plan v0.16 likewise keep logical operators in the closed
 typed binary-expression algebra. Existing `replaceExpressionInput` and
 `replaceProducedExpressionInput` operations use `left` and `right`, matching
 the Graph ports. Source reconstruction emits ordinary C#, reruns semantic

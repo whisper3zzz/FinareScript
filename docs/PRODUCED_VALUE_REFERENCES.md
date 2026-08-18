@@ -7,8 +7,8 @@ earlier step without predicting that declaration's random persistent ID. This
 closes the first transaction-time data-flow gap between structural graph
 construction and typed expression authoring.
 
-The feature belongs to `unifiedscript.patch-plan/v0.15`. The standalone patch
-protocol is `unifiedscript.patch/v0.14`: a standalone patch has no earlier
+The feature belongs to `unifiedscript.patch-plan/v0.16`. The standalone patch
+protocol is `unifiedscript.patch/v0.15`: a standalone patch has no earlier
 step namespace, so it explicitly rejects transaction-only produced references.
 
 No second expression interpreter is introduced. Before each stage executes,
@@ -50,11 +50,14 @@ The following earlier steps publish a local-value handle under their `stepId`:
 - `introduceTemporary`;
 - root `insertStatement` with `localLiteralDeclaration`;
 - `insertBranchStatement` with `localLiteralDeclaration`; and
-- `insertLoopBodyStatement` with `localLiteralDeclaration`.
+- `insertLoopBodyStatement` with `localLiteralDeclaration`;
+- any root, branch, or loop-body insertion with a declaration-form `for`.
 
-An `if`, `while`, assignment, return, break, or continue insertion is not a
-local producer. A future or unknown `sourceStepId` is rejected while validating
-the plan JSON, before source analysis or execution starts.
+The bounded for producer declares exactly one initialized variable, keeping the
+one-step/one-definition handle rule intact. An expression-form `for`, `if`,
+`while`, assignment, return, break, or continue insertion is not a local
+producer. A future or unknown `sourceStepId` is rejected while validating the
+plan JSON, before source analysis or execution starts.
 
 The producer must declare exactly the same `expectedName` and `expectedTypeId`
 as every reference that consumes it. Type inference across plan steps is
@@ -72,7 +75,7 @@ consumer roots include:
 - direct or produced `replaceIfCondition`;
 - direct or produced `replaceLocalInitializer`;
 - direct or produced `replaceReturnValue`;
-- root `insertStatement` payloads for local assignment, `if`, `while`, or
+- root `insertStatement` payloads for local assignment, `if`, `while`, `for`, or
   value return;
 - generated `insertBranchStatement` payloads; and
 - generated `insertLoopBodyStatement` payloads.
@@ -115,7 +118,7 @@ step. Each occurrence is independently checked at its actual C# position.
 
 ### Plan protocol validation
 
-While reading plan v0.15, the validator walks every expression recursively and
+While reading plan v0.16, the validator walks every expression recursively and
 requires each produced reference to:
 
 1. name a non-empty earlier `stepId`;
@@ -146,8 +149,9 @@ rolls back the complete external transaction.
 ### Execution-time materialization
 
 After a local-producing stage succeeds, the coordinator finds the one generated
-`HirVariableDeclarationStatement` and records its real persistent ID under the
-producer's `stepId`.
+`HirVariableDeclarationStatement`, or the single
+`HirForVariableDeclarator` owned by a generated declaration-form `for`, and
+records its real persistent ID under the producer's `stepId`.
 
 Immediately before a consumer stage, every produced reference is rewritten to:
 
@@ -160,7 +164,7 @@ Immediately before a consumer stage, every produced reference is rewritten to:
 }
 ```
 
-The resulting operation is an ordinary patch v0.14 operation. The standalone
+The resulting operation is an ordinary patch v0.15 operation. The standalone
 source patcher never needs to understand a plan handle.
 
 ## Scope and CFG dominance
@@ -181,6 +185,8 @@ Consequently:
 - a branch local cannot feed its sibling branch or escape to the outer block;
 - a loop-body local cannot feed the loop header or code outside its lexical
   body; and
+- a generated for-local may feed that for's body but cannot escape after the
+  loop or feed its own declaration initializer; and
 - a generated local cannot reference itself from its own initializer.
 
 These are semantic rejections, not best-effort graph rewrites. The plan returns

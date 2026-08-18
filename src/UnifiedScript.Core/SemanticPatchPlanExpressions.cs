@@ -108,10 +108,72 @@ public static class SemanticPatchPlanExpressions
 
     private static IEnumerable<PatchExpression> GetExpressions(SemanticPatchPlanStep step)
     {
+        InsertPatchStatement? statement = step switch
+        {
+            InsertStatementPatchPlanStep insertion => insertion.NewStatement,
+            InsertBranchStatementPatchPlanStep insertion => insertion.NewStatement,
+            InsertLoopBodyStatementPatchPlanStep insertion => insertion.NewStatement,
+            _ => null,
+        };
+        if (statement is not null)
+        {
+            foreach (PatchExpression statementExpression in GetExpressions(statement))
+            {
+                yield return statementExpression;
+            }
+
+            yield break;
+        }
+
         PatchExpression? expression = GetAuthoredExpression(step);
         if (expression is not null)
         {
             yield return expression;
+        }
+    }
+
+    private static IEnumerable<PatchExpression> GetExpressions(InsertPatchStatement statement)
+    {
+        switch (statement)
+        {
+            case LocalAssignmentPatchStatement assignment:
+                yield return assignment.Value;
+                break;
+            case IfPatchStatement branch:
+                yield return branch.Condition;
+                break;
+            case WhilePatchStatement loop:
+                yield return loop.Condition;
+                break;
+            case ForPatchStatement forStatement:
+                if (forStatement.Declaration is not null)
+                {
+                    foreach (ForVariableDeclaratorPatch variable in
+                        forStatement.Declaration.Variables ?? [])
+                    {
+                        yield return variable.Initializer;
+                    }
+                }
+
+                foreach (ForAssignmentPatchExpression initializer in forStatement.Initializers ?? [])
+                {
+                    yield return initializer.Value;
+                }
+
+                if (forStatement.Condition is not null)
+                {
+                    yield return forStatement.Condition;
+                }
+
+                foreach (ForMutationPatchExpression incrementor in forStatement.Incrementors ?? [])
+                {
+                    yield return incrementor.Operand;
+                }
+
+                break;
+            case ReturnPatchStatement { Expression: not null } valueReturn:
+                yield return valueReturn.Expression;
+                break;
         }
     }
 
@@ -146,6 +208,29 @@ public static class SemanticPatchPlanExpressions
             WhilePatchStatement loop => loop with
             {
                 Condition = Rewrite(loop.Condition, resolver),
+            },
+            ForPatchStatement loop => loop with
+            {
+                Declaration = loop.Declaration is null
+                    ? null
+                    : loop.Declaration with
+                    {
+                        Variables = (loop.Declaration.Variables ?? []).Select(variable => variable with
+                        {
+                            Initializer = Rewrite(variable.Initializer, resolver),
+                        }).ToArray(),
+                    },
+                Initializers = (loop.Initializers ?? []).Select(initializer => initializer with
+                {
+                    Value = Rewrite(initializer.Value, resolver),
+                }).ToArray(),
+                Condition = loop.Condition is null
+                    ? null
+                    : Rewrite(loop.Condition, resolver),
+                Incrementors = (loop.Incrementors ?? []).Select(incrementor => incrementor with
+                {
+                    Operand = Rewrite(incrementor.Operand, resolver),
+                }).ToArray(),
             },
             ReturnPatchStatement { Expression: not null } valueReturn => valueReturn with
             {

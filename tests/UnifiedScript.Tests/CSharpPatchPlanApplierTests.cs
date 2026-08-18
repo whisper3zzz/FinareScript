@@ -1548,6 +1548,276 @@ public sealed class CSharpPatchPlanApplierTests
     }
 
     [Fact]
+    public void Apply_ConstructsForAndUsesItsProducedLocalInsideBodyAtomically()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int count, bool enabled)
+                {
+                    int total = 0;
+                    return total;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/ForBuildPlan.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement total = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirReturnStatement valueReturn = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+        SemanticId intType = GetTypeId(original, total);
+        SemanticId boolType = GetTypeId(original, method.Parameters[1]);
+        var index = new ForLocalReferencePatchExpression(0, "index", intType);
+        var insertFor = new InsertStatementPatchPlanStep(
+            "insertFor",
+            method.Body.Id,
+            total.Id,
+            valueReturn.Id,
+            new ForPatchStatement(
+                new ForVariableDeclarationPatch(
+                    "int",
+                    [new ForVariableDeclaratorPatch(
+                        "index",
+                        new LiteralPatchExpression("0", intType),
+                        intType)]),
+                [],
+                new BinaryPatchExpression(
+                    "<",
+                    index,
+                    new LocalReferencePatchExpression(
+                        method.Parameters[0].Id,
+                        method.Parameters[0].Name,
+                        intType),
+                    boolType),
+                [new ForMutationPatchExpression(index, "++", true, intType)]));
+        var producedIndex = new ProducedLocalReferencePatchExpression(
+            insertFor.StepId,
+            "index",
+            intType);
+        var skipGuard = new InsertLoopBodyStatementPatchPlanStep(
+            "skipTwo",
+            method.Body.Id,
+            insertFor.StepId,
+            new IfPatchStatement(new BinaryPatchExpression(
+                "==",
+                producedIndex,
+                new LiteralPatchExpression("2", intType),
+                boolType)));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                insertFor,
+                skipGuard,
+                new InsertBranchStatementPatchPlanStep(
+                    "continueAtTwo",
+                    method.Body.Id,
+                    skipGuard.StepId,
+                    IfBranchKind.Then,
+                    new ContinuePatchStatement()),
+                new InsertLoopBodyStatementPatchPlanStep(
+                    "accumulate",
+                    method.Body.Id,
+                    insertFor.StepId,
+                    new LocalAssignmentPatchStatement(
+                        total.Id,
+                        total.Name,
+                        intType,
+                        new BinaryPatchExpression(
+                            "+",
+                            new LocalReferencePatchExpression(total.Id, total.Name, intType),
+                            producedIndex,
+                            intType))),
+            ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains("for (int index = 0; index < count; index++)", patchedSource,
+            StringComparison.Ordinal);
+        Assert.Contains("if (index == 2)", patchedSource, StringComparison.Ordinal);
+        Assert.Contains("continue;", patchedSource, StringComparison.Ordinal);
+        Assert.Contains("total = total + index;", patchedSource, StringComparison.Ordinal);
+        HirMethodDeclaration changedMethod = Assert.Single(
+            Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirForStatement insertedFor = Assert.IsType<HirForStatement>(changedMethod.Body.Statements[1]);
+        HirForVariableDeclarator insertedIndex = Assert.Single(insertedFor.Declaration!.Variables);
+        HirIfStatement insertedGuard = Assert.IsType<HirIfStatement>(insertedFor.Body.Statements[0]);
+        HirContinueStatement insertedContinue = Assert.IsType<HirContinueStatement>(
+            Assert.Single(insertedGuard.Then.Statements));
+        HirAssignmentExpression insertedAssignment = Assert.IsType<HirAssignmentExpression>(
+            Assert.IsType<HirExpressionStatement>(insertedFor.Body.Statements[1]).Expression);
+        HirIdentifierExpression assignedIndex = Assert.IsType<HirIdentifierExpression>(
+            Assert.IsType<HirBinaryExpression>(insertedAssignment.Value).Right);
+        Assert.Equal(
+            insertedIndex.Id,
+            Assert.Single(
+                result.Analysis.Semantics!.Nodes,
+                binding => binding.NodeId == assignedIndex.Id).ReferencedSymbolId);
+        HirUnaryExpression increment = Assert.IsType<HirUnaryExpression>(
+            Assert.Single(insertedFor.Incrementors));
+        GraphDocument graph = new HirGraphProjector().Project(
+            result.Analysis.Hir,
+            result.Analysis.Semantics);
+        GraphControlFlowLoop flow = Assert.Single(
+            Assert.Single(new GraphControlFlowAnalyzer().AnalyzeAndValidate(graph).Functions).Loops);
+        Assert.Equal(insertedFor.Id, flow.LoopNodeId);
+        Assert.Equal(increment.Id, flow.ContinueTargetNodeId);
+        Assert.Contains(insertedContinue.Id, flow.ContinueNodeIds);
+        Assert.Equal(valueReturn.Id, changedMethod.Body.Statements[2].Id);
+        Assert.Empty(Assert.Single(result.Analysis.IdentitySidecars).Tombstones);
+    }
+
+    [Fact]
+    public void Apply_RollsBackForPlanWhenBodyShadowsItsProducedLocal()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int count, bool enabled)
+                {
+                    return count;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/ForRollbackPlan.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement valueReturn = Assert.IsType<HirReturnStatement>(
+            Assert.Single(method.Body.Statements));
+        SemanticId intType = GetTypeId(original, method.Parameters[0]);
+        SemanticId boolType = GetTypeId(original, method.Parameters[1]);
+        var index = new ForLocalReferencePatchExpression(0, "index", intType);
+        var insertFor = new InsertStatementPatchPlanStep(
+            "insertFor",
+            method.Body.Id,
+            null,
+            valueReturn.Id,
+            new ForPatchStatement(
+                new ForVariableDeclarationPatch(
+                    "int",
+                    [new ForVariableDeclaratorPatch(
+                        "index",
+                        new LiteralPatchExpression("0", intType),
+                        intType)]),
+                [],
+                new BinaryPatchExpression(
+                    "<",
+                    index,
+                    new LocalReferencePatchExpression(
+                        method.Parameters[0].Id,
+                        method.Parameters[0].Name,
+                        intType),
+                    boolType),
+                [new ForMutationPatchExpression(index, "++", true, intType)]));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                insertFor,
+                new InsertLoopBodyStatementPatchPlanStep(
+                    "shadowIndex",
+                    method.Body.Id,
+                    insertFor.StepId,
+                    new LocalLiteralDeclarationPatchStatement("index", "int", "1", intType)),
+            ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.PatchedRequest);
+        Assert.Null(result.Analysis);
+        Assert.Equal(source, Assert.Single(request.Sources).Source);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.NameConflict);
+    }
+
+    [Fact]
+    public void Apply_RollsBackForPlanWhenItsProducedLocalEscapesTheLoop()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int count, bool enabled)
+                {
+                    return count;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/ForLocalEscapeRollback.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement valueReturn = Assert.IsType<HirReturnStatement>(
+            Assert.Single(method.Body.Statements));
+        SemanticId intType = GetTypeId(original, method.Parameters[0]);
+        SemanticId boolType = GetTypeId(original, method.Parameters[1]);
+        var index = new ForLocalReferencePatchExpression(0, "index", intType);
+        var insertFor = new InsertStatementPatchPlanStep(
+            "insertFor",
+            method.Body.Id,
+            null,
+            valueReturn.Id,
+            new ForPatchStatement(
+                new ForVariableDeclarationPatch(
+                    "int",
+                    [new ForVariableDeclaratorPatch(
+                        "index",
+                        new LiteralPatchExpression("0", intType),
+                        intType)]),
+                [],
+                new BinaryPatchExpression(
+                    "<",
+                    index,
+                    new LocalReferencePatchExpression(
+                        method.Parameters[0].Id,
+                        method.Parameters[0].Name,
+                        intType),
+                    boolType),
+                [new ForMutationPatchExpression(index, "++", true, intType)]));
+        var producedIndex = new ProducedLocalReferencePatchExpression(
+            insertFor.StepId,
+            "index",
+            intType);
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                insertFor,
+                new ReplaceReturnValuePatchPlanStep(
+                    "escapeIndex",
+                    valueReturn.Id,
+                    valueReturn.Expression!.Id,
+                    intType,
+                    producedIndex),
+            ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.PatchedRequest);
+        Assert.Null(result.Analysis);
+        Assert.Equal(source, Assert.Single(request.Sources).Source);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.ValueSourceNotAvailable);
+    }
+
+    [Fact]
     public void Apply_ReplacesExistingAssignmentValueAndWhileConditionAtomically()
     {
         const string source = """

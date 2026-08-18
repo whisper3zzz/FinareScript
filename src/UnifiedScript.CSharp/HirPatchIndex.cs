@@ -8,6 +8,7 @@ internal sealed class HirPatchIndex
     private readonly Dictionary<SemanticId, BlockLocation> blocks = [];
     private readonly Dictionary<SemanticId, StatementLocation> statements = [];
     private readonly Dictionary<SemanticId, ExpressionLocation> expressions = [];
+    private readonly Dictionary<SemanticId, HirForStatement> forVariables = [];
 
     public HirPatchIndex(HirCompilationUnit compilation)
     {
@@ -30,7 +31,7 @@ internal sealed class HirPatchIndex
 
     public bool TryGetNearestEnclosingLoop(
         SemanticId blockId,
-        out HirWhileStatement? loop)
+        out HirStatement? loop)
     {
         if (!blocks.TryGetValue(blockId, out BlockLocation? current))
         {
@@ -40,10 +41,17 @@ internal sealed class HirPatchIndex
 
         while (true)
         {
-            if (current.EntryStatement is HirWhileStatement candidate &&
-                candidate.Body.Id == current.Block.Id)
+            if (current.EntryStatement is HirWhileStatement whileLoop &&
+                whileLoop.Body.Id == current.Block.Id)
             {
-                loop = candidate;
+                loop = whileLoop;
+                return true;
+            }
+
+            if (current.EntryStatement is HirForStatement forLoop &&
+                forLoop.Body.Id == current.Block.Id)
+            {
+                loop = forLoop;
                 return true;
             }
 
@@ -51,6 +59,33 @@ internal sealed class HirPatchIndex
                 !blocks.TryGetValue(current.ParentBlock.Id, out current))
             {
                 loop = null;
+                return false;
+            }
+        }
+    }
+
+    public bool IsForVariableInScopeAtBlock(
+        SemanticId variableId,
+        SemanticId blockId)
+    {
+        if (!forVariables.TryGetValue(variableId, out HirForStatement? declaringLoop) ||
+            !blocks.TryGetValue(blockId, out BlockLocation? current))
+        {
+            return false;
+        }
+
+        while (true)
+        {
+            if (current.EntryStatement is HirForStatement candidate &&
+                candidate.Id == declaringLoop.Id &&
+                candidate.Body.Id == current.Block.Id)
+            {
+                return true;
+            }
+
+            if (current.ParentBlock is null ||
+                !blocks.TryGetValue(current.ParentBlock.Id, out current))
+            {
                 return false;
             }
         }
@@ -171,6 +206,7 @@ internal sealed class HirPatchIndex
                     {
                         foreach (HirForVariableDeclarator variable in forStatement.Declaration.Variables)
                         {
+                            forVariables.Add(variable.Id, forStatement);
                             if (variable.Initializer is not null)
                             {
                                 AddExpression(variable.Initializer, forStatement, block, method, null);

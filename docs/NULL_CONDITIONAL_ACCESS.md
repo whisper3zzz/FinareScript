@@ -9,8 +9,8 @@ The current strict-reader contracts are:
 
 - HIR `unifiedscript.hir/v0.5`;
 - Graph `unifiedscript.graph/v0.9`;
-- standalone patch `unifiedscript.patch/v0.14`;
-- patch plan `unifiedscript.patch-plan/v0.15`.
+- standalone patch `unifiedscript.patch/v0.15`;
+- patch plan `unifiedscript.patch-plan/v0.16`.
 
 ## HIR structure
 
@@ -123,7 +123,7 @@ regions are represented.
 
 ## Visual construction
 
-Patch v0.14 adds a bounded `conditionalMemberAccess` expression payload:
+Patch v0.15 adds a bounded `conditionalMemberAccess` expression payload:
 
 ```json
 {
@@ -153,7 +153,7 @@ the bound semantic type. A member that exists only through an implicit result
 conversion therefore fails atomically instead of leaking a conversion into the
 shared-VM contract.
 
-Patch-plan v0.15 treats `receiver` as the canonical editable child of a
+Patch-plan v0.16 treats `receiver` as the canonical editable child of a
 `conditionalMemberAccess` payload. A producing step publishes the actual
 post-analysis conditional-access root; a later
 `replaceProducedExpressionInput` step can replace its receiver without

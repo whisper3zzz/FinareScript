@@ -399,6 +399,9 @@ public static class SemanticPatchJson
 
                 ValidatePatchExpression(whileStatement.Condition, 0);
                 break;
+            case ForPatchStatement forStatement:
+                ValidateForStatement(forStatement);
+                break;
             case BreakPatchStatement:
             case ContinuePatchStatement:
                 break;
@@ -421,7 +424,88 @@ public static class SemanticPatchJson
         }
     }
 
-    private static void ValidatePatchExpression(PatchExpression expression, int depth)
+    private static void ValidateForStatement(ForPatchStatement statement)
+    {
+        if (statement.Initializers is null || statement.Incrementors is null)
+        {
+            throw new JsonException(
+                "A for insertion requires non-null initializer and incrementor lists.");
+        }
+
+        if (statement.Declaration is not null && statement.Initializers.Count > 0)
+        {
+            throw new JsonException(
+                "A for insertion cannot combine a declaration initializer with expression initializers.");
+        }
+
+        IReadOnlyList<ForVariableDeclaratorPatch> variables =
+            statement.Declaration?.Variables ?? [];
+        if (statement.Declaration is not null)
+        {
+            if (string.IsNullOrWhiteSpace(statement.Declaration.TypeName) ||
+                statement.Declaration.Variables is null ||
+                statement.Declaration.Variables.Count != 1)
+            {
+                throw new JsonException(
+                    "The bounded for constructor requires one typed declaration variable.");
+            }
+
+            ForVariableDeclaratorPatch variable = statement.Declaration.Variables[0];
+            if (string.IsNullOrWhiteSpace(variable.Name) ||
+                variable.ExpectedTypeId.IsEmpty ||
+                variable.Initializer is null ||
+                variable.Initializer.ExpectedTypeId != variable.ExpectedTypeId)
+            {
+                throw new JsonException(
+                    "A for declaration variable requires a name, expected type, and same-typed initializer.");
+            }
+
+            ValidatePatchExpression(variable.Initializer, 0, []);
+        }
+
+        foreach (ForAssignmentPatchExpression? initializer in statement.Initializers)
+        {
+            if (initializer is null ||
+                initializer.TargetDefinitionId.IsEmpty ||
+                string.IsNullOrWhiteSpace(initializer.ExpectedName) ||
+                initializer.ExpectedTypeId.IsEmpty ||
+                initializer.Value is null ||
+                initializer.Value.ExpectedTypeId != initializer.ExpectedTypeId)
+            {
+                throw new JsonException(
+                    "A for assignment initializer requires an existing target, expected name/type, " +
+                    "and same-typed value.");
+            }
+
+            ValidatePatchExpression(initializer.Value, 0);
+        }
+
+        if (statement.Condition is not null)
+        {
+            ValidatePatchExpression(statement.Condition, 0, variables);
+        }
+
+        foreach (ForMutationPatchExpression? incrementor in statement.Incrementors)
+        {
+            if (incrementor is null ||
+                incrementor.Operand is not (
+                    LocalReferencePatchExpression or ForLocalReferencePatchExpression) ||
+                incrementor.Operator is not ("++" or "--") ||
+                incrementor.ExpectedTypeId.IsEmpty ||
+                incrementor.Operand.ExpectedTypeId != incrementor.ExpectedTypeId)
+            {
+                throw new JsonException(
+                    "A for incrementor requires a local/for-local operand, ++ or --, and one exact type.");
+            }
+
+            ValidatePatchExpression(incrementor.Operand, 0, variables);
+        }
+    }
+
+    private static void ValidatePatchExpression(
+        PatchExpression expression,
+        int depth,
+        IReadOnlyList<ForVariableDeclaratorPatch>? forVariables = null)
     {
         if (depth > 16)
         {
@@ -454,6 +538,23 @@ public static class SemanticPatchJson
                 throw new JsonException(
                     "A produced-local reference is transaction-only and cannot appear in a " +
                     "standalone semantic patch.");
+            case ForLocalReferencePatchExpression forLocal:
+                if (forVariables is null ||
+                    forLocal.VariableIndex < 0 ||
+                    forLocal.VariableIndex >= forVariables.Count ||
+                    string.IsNullOrWhiteSpace(forLocal.ExpectedName) ||
+                    !string.Equals(
+                        forLocal.ExpectedName,
+                        forVariables[forLocal.VariableIndex].Name,
+                        StringComparison.Ordinal) ||
+                    forLocal.ExpectedTypeId !=
+                        forVariables[forLocal.VariableIndex].ExpectedTypeId)
+                {
+                    throw new JsonException(
+                        "A for-local reference must resolve by index to the declared name and exact type.");
+                }
+
+                break;
             case UnaryPatchExpression unary:
                 if (string.IsNullOrWhiteSpace(unary.Operator) || unary.Operand is null)
                 {
@@ -461,7 +562,7 @@ public static class SemanticPatchJson
                         "A graph-authored unary expression requires an operator and operand.");
                 }
 
-                ValidatePatchExpression(unary.Operand, depth + 1);
+                ValidatePatchExpression(unary.Operand, depth + 1, forVariables);
                 break;
             case BinaryPatchExpression binary:
                 if (string.IsNullOrWhiteSpace(binary.Operator) ||
@@ -472,8 +573,8 @@ public static class SemanticPatchJson
                         "A graph-authored binary expression requires an operator and two operands.");
                 }
 
-                ValidatePatchExpression(binary.Left, depth + 1);
-                ValidatePatchExpression(binary.Right, depth + 1);
+                ValidatePatchExpression(binary.Left, depth + 1, forVariables);
+                ValidatePatchExpression(binary.Right, depth + 1, forVariables);
                 break;
             case CastPatchExpression cast:
                 if (string.IsNullOrWhiteSpace(cast.TypeName) || cast.Operand is null)
@@ -482,7 +583,7 @@ public static class SemanticPatchJson
                         "A graph-authored cast requires a type name and operand.");
                 }
 
-                ValidatePatchExpression(cast.Operand, depth + 1);
+                ValidatePatchExpression(cast.Operand, depth + 1, forVariables);
                 break;
             case ConditionalPatchExpression conditional:
                 if (conditional.Condition is null ||
@@ -500,9 +601,9 @@ public static class SemanticPatchJson
                         "Both graph-authored conditional branches must declare the result type.");
                 }
 
-                ValidatePatchExpression(conditional.Condition, depth + 1);
-                ValidatePatchExpression(conditional.WhenTrue, depth + 1);
-                ValidatePatchExpression(conditional.WhenFalse, depth + 1);
+                ValidatePatchExpression(conditional.Condition, depth + 1, forVariables);
+                ValidatePatchExpression(conditional.WhenTrue, depth + 1, forVariables);
+                ValidatePatchExpression(conditional.WhenFalse, depth + 1, forVariables);
                 break;
             case ConditionalMemberAccessPatchExpression conditionalMemberAccess:
                 if (conditionalMemberAccess.Receiver is null ||
@@ -512,7 +613,10 @@ public static class SemanticPatchJson
                         "A graph-authored conditional member access requires a receiver and member name.");
                 }
 
-                ValidatePatchExpression(conditionalMemberAccess.Receiver, depth + 1);
+                ValidatePatchExpression(
+                    conditionalMemberAccess.Receiver,
+                    depth + 1,
+                    forVariables);
                 break;
             default:
                 throw new JsonException(

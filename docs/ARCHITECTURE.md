@@ -167,7 +167,7 @@ Pure expression statements use an explicit `Evaluate` control node. Effectful
 calls, assignments, and awaits instead expose their own control ports, so nested
 side effects are sequenced before their data consumers.
 
-Graph schema v0.5 also separates structured ownership from connectivity. Every
+Graph schema v0.9 separates structured ownership from connectivity. Every
 function has a `function` root and method-body `block`; an `if` region owns its
 condition/branch nodes plus ordered `then` and `else` children. Every Graph node
 has exactly one direct region owner. An omitted C# `else` remains an empty
@@ -225,8 +225,8 @@ compilation identity is not safe for editing.
 
 ## Semantic patch transaction
 
-Graph schema v0.5 carries both the source compilation ID and semantic
-configuration ID. A `unifiedscript.patch/v0.14` document repeats those IDs and
+Graph schema v0.9 carries both the source compilation ID and semantic
+configuration ID. A `unifiedscript.patch/v0.15` document repeats those IDs and
 contains typed operations keyed by graph/HIR `SemanticId`. Implemented
 operations are `replaceLiteral`, `changeOperator`, `reconnectArgument`,
 `replaceExpressionInput`,
@@ -234,14 +234,14 @@ operations are `replaceLiteral`, `changeOperator`, `reconnectArgument`,
 `replaceLocalInitializer`, `replaceReturnValue`, `insertStatement`,
 `deleteStatement`, `introduceTemporary`, and `reconnectValue`.
 `insertStatement` accepts a local-literal declaration, a
-CFG-checked assignment to an existing local, an `if` or `while` with a closed
-typed expression tree and explicit blocks, a nearest-loop `break`/`continue`,
-or a typed terminal `return`. Structural operations carry old
+CFG-checked assignment to an existing local, an `if`, `while`, or bounded
+`for` with closed typed clauses and explicit blocks, a nearest-loop
+`break`/`continue`, or a typed terminal `return`. Structural operations carry old
 operator/endpoint, semantic type,
 containing statement, parent block, and exact sibling preconditions rather than
 relying only on the compilation baseline.
 
-`unifiedscript.patch-plan/v0.15` is an ordered transaction above individual
+`unifiedscript.patch-plan/v0.16` is an ordered transaction above individual
 patches. It composes every current bounded operation: literal and operator
 changes, argument reconnection, structured assignment/loop/branch/local/return
 expression edits, exact nested expression-input replacement, statement
@@ -269,8 +269,8 @@ true, and false children. Graph v0.9 projects that node as a `conditional`/`Sele
 with canonical `condition`, `whenTrue`, and `whenFalse` inputs and an explicit
 `evaluation: lazyBranches` contract. Semantic binding rejects effectful arms so
 the data projection cannot eagerly execute mutation, latency, or effectful
-calls that C# would evaluate only on the selected path. Patch v0.14 and plan
-v0.15 use the same conditional shape in their closed expression algebra and
+calls that C# would evaluate only on the selected path. Patch v0.15 and plan
+v0.16 use the same conditional shape in their closed expression algebra and
 allow exact or produced-handle edits through those Graph ports.
 The same HIR already preserves `&&` and `||` as ordered binary nodes. Graph
 v0.9 retains their `shortCircuitRight` contract, with
@@ -295,15 +295,15 @@ explicit: the receiver feeds the parent `receiver` input and the binding's
 `whenReceiverNonNull`, and `whenNotNullOrNull`, so a VM can evaluate once,
 skip the selected subtree on null, and lift the result. `UVS2006` rejects
 effects in the selected subtree and `UVS2007` rejects void or hidden-conversion
-type shapes. Patch v0.14 can author a bounded simple conditional member access;
-plan v0.15 can replace its `receiver` through an actual produced root. See
+type shapes. Patch v0.15 can author a bounded simple conditional member access;
+plan v0.16 can replace its `receiver` through an actual produced root. See
 [NULL_CONDITIONAL_ACCESS.md](NULL_CONDITIONAL_ACCESS.md).
 An `if` insertion publishes internal `then`/`else` block handles for later
 `insertBranchStatement` steps without masquerading as a reconnectable local
 definition. The branch steps repeat the producer's original parent block as
 their stable initial anchor; the coordinator records the generated branch IDs
 after the `if` stage and turns each append into a normal bounded insertion.
-Local-literal, existing-local assignment, nested `if`/`while`, nearest-loop
+Local-literal, existing-local assignment, nested `if`/loop, nearest-loop
 transfer, and typed-return payloads are accepted in a produced branch. A nested
 `if` publishes another pair of branch handles, forming an acyclic producer
 tree. A return terminates
@@ -311,11 +311,16 @@ one path; when both child paths terminate, termination propagates to the parent
 only if the nested `if` is still the parent's final statement. This rejects
 both direct and retroactive unreachability before execution while keeping
 unrelated sibling paths independently writable.
-A `while` insertion publishes one generated body handle for later
-`insertLoopBodyStatement` steps. Loop bodies accept the same bounded statements,
-including nested `if`/`while` producers and nearest-loop transfers. Terminal
-state stops at the loop boundary because a while condition may be false on
-entry; execution and CFG validation still determine the actual current flow.
+A `while` or `for` insertion publishes one generated body handle for later
+`insertLoopBodyStatement` steps. A declaration-form `for` additionally
+publishes its single generated declarator as a produced-local handle; normal
+lexical/CFG availability prevents use outside that loop. Loop bodies accept the
+same bounded statements, including nested `if`/loop producers and nearest-loop
+transfers. Terminal state stops at the loop boundary because a loop condition
+may be false on entry; execution and CFG validation still determine the actual
+current flow. The `for` constructor separately preserves initializer form,
+optional condition, ordered prefix/postfix mutations, declaration scope, and
+continue routing through the increment phase.
 The complete transaction and internal rebasing contract is specified in
 [PATCH_PLAN.md](PATCH_PLAN.md).
 The endpoint replacement and generated-statement handle contract is specified

@@ -1014,6 +1014,73 @@ public sealed class SemanticPatchPlanJsonTests
     }
 
     [Fact]
+    public void SerializeAndDeserialize_PreserveForProducerAndBodyLocalReference()
+    {
+        SemanticId boolType = SemanticId.FromKey("System.Boolean");
+        SemanticId intType = SemanticId.FromKey("System.Int32");
+        SemanticId blockId = SemanticId.FromKey("for-plan-block");
+        var forLocal = new ForLocalReferencePatchExpression(0, "index", intType);
+        var loop = new InsertStatementPatchPlanStep(
+            "insertFor",
+            blockId,
+            null,
+            null,
+            new ForPatchStatement(
+                new ForVariableDeclarationPatch(
+                    "int",
+                    [new ForVariableDeclaratorPatch(
+                        "index",
+                        new LiteralPatchExpression("0", intType),
+                        intType)]),
+                [],
+                new BinaryPatchExpression(
+                    "<",
+                    forLocal,
+                    new LiteralPatchExpression("10", intType),
+                    boolType),
+                [new ForMutationPatchExpression(forLocal, "++", true, intType)]));
+        var body = new InsertLoopBodyStatementPatchPlanStep(
+            "guardIndex",
+            blockId,
+            loop.StepId,
+            new IfPatchStatement(new BinaryPatchExpression(
+                "==",
+                new ProducedLocalReferencePatchExpression(loop.StepId, "index", intType),
+                new LiteralPatchExpression("2", intType),
+                boolType)));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("for-plan-compilation"),
+            SemanticId.FromKey("for-plan-configuration"),
+            [loop, body]);
+
+        string json = SemanticPatchPlanJson.Serialize(plan);
+        SemanticPatchPlanDocument roundTrip = SemanticPatchPlanJson.Deserialize(json);
+
+        ForPatchStatement roundTrippedFor = Assert.IsType<ForPatchStatement>(
+            Assert.IsType<InsertStatementPatchPlanStep>(roundTrip.Steps[0]).NewStatement);
+        Assert.Equal("index", Assert.Single(roundTrippedFor.Declaration!.Variables).Name);
+        IfPatchStatement roundTrippedBody = Assert.IsType<IfPatchStatement>(
+            Assert.IsType<InsertLoopBodyStatementPatchPlanStep>(roundTrip.Steps[1]).NewStatement);
+        Assert.IsType<ProducedLocalReferencePatchExpression>(
+            Assert.IsType<BinaryPatchExpression>(roundTrippedBody.Condition).Left);
+        Assert.Contains("\"statement\": \"for\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"expression\": \"producedLocalReference\"", json,
+            StringComparison.Ordinal);
+
+        Assert.Throws<JsonException>(() => SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("invalid-for-condition-compilation"),
+            SemanticId.FromKey("invalid-for-condition-configuration"),
+            [
+                loop,
+                new ReplaceProducedWhileConditionPatchPlanStep(
+                    "editAsWhile",
+                    blockId,
+                    loop.StepId,
+                    new LiteralPatchExpression("true", boolType)),
+            ]));
+    }
+
+    [Fact]
     public void Create_RejectsInvalidLoopSourcesAnchorsAndUnreachableAppends()
     {
         SemanticId boolType = SemanticId.FromKey("System.Boolean");
@@ -1223,7 +1290,7 @@ public sealed class SemanticPatchPlanJsonTests
         Assert.Equal(third.StepId, roundTripThird.StepId);
         Assert.Equal(third.TargetPath, roundTripThird.TargetPath);
         Assert.Equal(third.NewInput, roundTripThird.NewInput);
-        Assert.Equal("unifiedscript.patch-plan/v0.15", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch-plan/v0.16", roundTrip.SchemaVersion);
         Assert.Contains("\"step\": \"replaceProducedExpressionInput\"", json);
         Assert.Contains("\"targetPath\": []", json);
     }
@@ -1277,7 +1344,7 @@ public sealed class SemanticPatchPlanJsonTests
         Assert.Equal(consumer.ExpectedInputTypeId, roundTripConsumer.ExpectedInputTypeId);
         Assert.Equal(consumer.ExpectedTargetTypeId, roundTripConsumer.ExpectedTargetTypeId);
         Assert.Equal(consumer.NewInput, roundTripConsumer.NewInput);
-        Assert.Equal("unifiedscript.patch-plan/v0.15", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch-plan/v0.16", roundTrip.SchemaVersion);
         Assert.Contains("\"expression\": \"conditionalMemberAccess\"", json);
         Assert.Contains("\"inputPort\": \"receiver\"", json);
     }

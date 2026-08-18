@@ -117,14 +117,14 @@ Insertion after a direct `break` or `continue` is rejected as unreachable, and
 patch CFG anchors do not mistake those terminal transfers for normal block
 fallthrough.
 
-The combined M4.5-M4.7 while slices do not provide:
+The current loop slices do not provide:
 
 - moving statements into or out of a loop;
 - moving or deleting an existing while loop (M4.7 can replace its condition);
 - changing a break/continue target;
 - `do` or `foreach`;
-- whole-`for` visual construction or clause restructuring; M4.16 now admits
-  text-authored for loops through the lossless contract in
+- restructuring/replacement of clauses on an existing `for`; M4.16 admits
+  text-authored loops and M4.17 adds bounded whole-loop construction through
   [FOR_LOOPS.md](FOR_LOOPS.md);
 - constant-condition folding or proof of loop termination;
 - short-circuit expression CFG, exception edges, or async state-machine edges.

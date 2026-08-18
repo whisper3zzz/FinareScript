@@ -2,9 +2,9 @@
 
 ## Purpose
 
-`unifiedscript.patch-plan/v0.15` represents one visual-editor gesture as an
+`unifiedscript.patch-plan/v0.16` represents one visual-editor gesture as an
 ordered, atomic sequence of the same bounded semantic operations supported by
-`unifiedscript.patch/v0.14`. It exists because a useful graph edit often needs
+`unifiedscript.patch/v0.15`. It exists because a useful graph edit often needs
 IDs created by an earlier edit or changes several overlapping source regions.
 Submitting those stages as unrelated filesystem transactions would expose
 partial programs and force the editor to predict random persistent IDs.
@@ -18,7 +18,7 @@ identity sidecar are eligible for a CLI filesystem transaction.
 
 ```json
 {
-  "schemaVersion": "unifiedscript.patch-plan/v0.15",
+  "schemaVersion": "unifiedscript.patch-plan/v0.16",
   "sourceCompilationId": "us_...",
   "semanticConfigurationId": "us_...",
   "steps": []
@@ -29,7 +29,7 @@ The source compilation and semantic configuration IDs are the external
 optimistic-concurrency baseline. Every step has a unique, non-empty `stepId`
 and a persistent `targetNodeId`.
 
-Version v0.15 supports these step discriminators:
+Version v0.16 supports these step discriminators:
 
 | `step` | Purpose | Structural result |
 | --- | --- | --- |
@@ -47,9 +47,9 @@ Version v0.15 supports these step discriminators:
 | `replaceProducedLocalInitializer` | Resolve an earlier local-literal producer and replace its current initializer | Consumes a local producer without predicting generated IDs |
 | `replaceReturnValue` | Replace an existing synchronous value-return expression | Return statement ID survives |
 | `replaceProducedReturnValue` | Resolve an earlier value-return producer and replace its current value | Consumes a terminal-statement producer without predicting generated IDs |
-| `insertStatement` | Insert a local-literal declaration, local assignment, typed `if`/`while`, loop transfer, or terminal `return` | Local payload produces a handle; `if` produces branch handles; `while` produces a body handle |
-| `insertBranchStatement` | Append a bounded statement to a produced branch | Consumes a branch handle; a declaration produces a value handle; an `if` or `while` produces structural handles |
-| `insertLoopBodyStatement` | Append a bounded statement to a produced while body | Consumes a loop-body handle; a declaration, `if`, or nested `while` can publish more handles |
+| `insertStatement` | Insert a local-literal declaration, local assignment, typed `if`/`while`/`for`, loop transfer, or terminal `return` | Local payload produces a handle; `if` produces branch handles; loops produce body handles; a declaration-form `for` also produces its local |
+| `insertBranchStatement` | Append a bounded statement to a produced branch | Consumes a branch handle; a declaration produces a value handle; an `if` or loop produces structural handles |
+| `insertLoopBodyStatement` | Append a bounded statement to a produced loop body | Consumes a loop-body handle; a declaration, `if`, or nested loop can publish more handles |
 | `deleteStatement` | Delete one proven-safe unused/effect-free statement | Removed subtree becomes tombstones |
 | `introduceTemporary` | Move one stable expression into a single-evaluation local | Produces a local handle |
 | `reconnectValue` | Replace a stable consumer with a produced local reference | Consumes a local handle |
@@ -60,9 +60,12 @@ weaken operation safety.
 
 ## Symbolic local handles
 
-`introduceTemporary` and a local-literal root, branch, or loop-body insertion
-publish their `stepId` as a symbolic local handle. A later `reconnectValue`
-supplies that value as `sourceStepId`:
+`introduceTemporary`, a local-literal root/branch/loop-body insertion, and a
+declaration-form `for` insertion publish their `stepId` as a symbolic local
+handle. A later `reconnectValue` or expression leaf can consume that value.
+A for producer is deliberately limited to one declarator, so every producing
+step still maps to exactly one definition. A later `reconnectValue` supplies
+the handle as `sourceStepId`:
 
 ```json
 {
@@ -86,7 +89,7 @@ sidecar, finds exactly one produced declaration, and records its actual random
 
 ### Produced locals inside expression trees
 
-Plan v0.15 also exposes the same local handle as a transaction-only expression
+Plan v0.16 also exposes the same local handle as a transaction-only expression
 leaf. Unlike `reconnectValue`, which replaces a whole stable consumer with one
 identifier, `producedLocalReference` can participate at any depth inside a
 later literal/local/unary/binary/cast/conditional/conditional-member-access expression:
@@ -100,13 +103,14 @@ later literal/local/unary/binary/cast/conditional/conditional-member-access expr
 }
 ```
 
-The source must be an earlier local-literal insertion or
-`introduceTemporary`, and its exact name and semantic type must match. Before
+The source must be an earlier local-literal insertion, declaration-form `for`,
+or `introduceTemporary`, and its exact name and semantic type must match. Before
 the consumer stage, the coordinator substitutes the producer's actual current
 declaration ID and creates an ordinary `localReference`. The source patcher
 then enforces same-method membership, lexical scope, CFG dominance, name, and
 type at the real consumer position. A root local can feed later nested
-statements; a branch local cannot escape or feed its sibling branch.
+statements; a branch local cannot escape or feed its sibling branch, and a
+for-local cannot escape its loop body.
 
 The transaction-only leaf is accepted in insertion payloads and direct or
 produced assignment/while/if/initializer/return endpoint replacements. A
@@ -160,7 +164,7 @@ authored tree, and selects one final `inputPort`:
 The consumer repeats the producer's original structural `targetNodeId`. The
 JSON validator resolves the path against the earlier authored tree and checks
 both exact types. The coordinator then follows the same path from the real HIR
-root captured after `sourceStepId` and creates an ordinary patch v0.14
+root captured after `sourceStepId` and creates an ordinary patch v0.15
 `replaceExpressionInput` operation with the real current parent and child IDs.
 
 The consumer's `newInput` becomes a new published root, so handles can chain
@@ -201,8 +205,8 @@ branch block ID. The coordinator captures the real `Then.Id` and `Else.Id`
 after the producer stage and uses the selected ID in an ordinary internal
 `InsertStatementPatchOperation`.
 
-Branch statements append in plan order. Version v0.15 accepts
-`localLiteralDeclaration`, `localAssignment`, `if`, `while`, `break`,
+Branch statements append in plan order. Version v0.16 accepts
+`localLiteralDeclaration`, `localAssignment`, `if`, `while`, `for`, `break`,
 `continue`, or `return` here. An
 assignment may target only an existing same-method local that lexically and
 CFG-dominates the generated branch gap. A local declaration publishes its own
@@ -247,9 +251,9 @@ HIR node is proven to be an `if` with two explicit blocks.
 
 ## Symbolic loop-body handles
 
-An insertion whose payload is `while` publishes one internal body handle under
-its `stepId`. A later `insertLoopBodyStatement` names that producer and carries
-a bounded statement payload:
+An insertion whose payload is `while` or `for` publishes one internal body
+handle under its `stepId`. A later `insertLoopBodyStatement` names that producer
+and carries a bounded statement payload:
 
 ```json
 {
@@ -264,11 +268,17 @@ a bounded statement payload:
 ```
 
 The producer must occur earlier, target the same original parent Block and
-method, and contain a `while` payload. After the producer stage, the coordinator
-proves the inserted HIR node is a `HirWhileStatement`, records its actual
-persistent loop and body IDs, and resolves later appends against the current
-body. A body insertion containing `if` or another `while` publishes recursive
-branch or loop handles under its own `stepId`.
+method, and contain a `while` or `for` payload. After the producer stage, the
+coordinator proves the inserted HIR node is a matching `HirWhileStatement` or
+`HirForStatement`, records its actual persistent loop and body IDs, and resolves
+later appends against the current body. A body insertion containing `if` or
+another loop publishes recursive branch or loop handles under its own `stepId`.
+
+A declaration-form `for` additionally publishes its single actual
+`HirForVariableDeclarator` through the same produced-local namespace. Clause
+expressions use the payload-local `forLocalReference`; body expressions use
+`producedLocalReference` after the real declarator exists. An expression-form
+`for` has no declaration and therefore publishes no local handle.
 
 `break` and `continue` do not carry a target ID. The source applier requires a
 reachable insertion gap and discovers the nearest enclosing HIR loop; the
@@ -303,7 +313,12 @@ steps may reference the same producer; each resolves the condition produced by
 the previous stage. Body insertions remain valid because the while and body
 identities are preserved.
 
-Plan v0.15 applies the same rule to `replaceProducedIfCondition`,
+This endpoint handle is intentionally while-specific. A `for` producer is a
+valid loop-body/local producer but is rejected as a
+`replaceProducedWhileCondition` source until a dedicated whole-clause edit can
+preserve all for-phase invariants.
+
+Plan v0.16 applies the same rule to `replaceProducedIfCondition`,
 `replaceProducedLocalInitializer`, and `replaceProducedReturnValue`. Their
 source step must be an earlier compatible root, branch, or loop-body insertion:
 an `if`, a `localLiteralDeclaration`, or a value-bearing `return`, respectively.
@@ -321,7 +336,7 @@ remains valid.
 
 Direct `replaceAssignmentValue`, `replaceWhileCondition`,
 `replaceIfCondition`, `replaceLocalInitializer`, and `replaceReturnValue` steps
-use exactly the standalone patch v0.14 payload plus `stepId`. They are validated
+use exactly the standalone patch v0.15 payload plus `stepId`. They are validated
 against the original plan baseline and are intentionally single-target, because
 their explicit old endpoints describe the original rather than an intermediate
 stage. See
@@ -353,7 +368,7 @@ declared task type from the value returned inside an async body.
 
 A return may be inserted only at the end of an explicit block. No insertion may
 follow an existing return. Because every symbolic body step appends, the
-v0.15 JSON validator records each `(sourceStepId, branch)` path and rejects every
+v0.16 JSON validator records each `(sourceStepId, branch)` path and rejects every
 later append after a direct return. The other branch remains independently
 writable.
 
@@ -361,11 +376,11 @@ Terminal state also propagates through nested producers. When both branches of
 a nested `if` terminate, its parent path terminates if and only if that nested
 `if` is still the final statement on the parent path. If another statement was
 already appended after it, accepting the second child termination would make
-that later statement unreachable; v0.15 rejects the plan before executing any
+that later statement unreachable; v0.16 rejects the plan before executing any
 stage. This propagation is recursive across arbitrary acyclic nesting depth.
 
 `break` and `continue` are also terminal within their selected branch or loop
-body path. Terminal propagation stops at a `while` boundary: the condition may
+body path. Terminal propagation stops at a loop boundary: the condition may
 be false before the first iteration, so a terminal body does not make the
 parent path terminal. The same rule lets an outer loop body continue after a
 nested loop whose own body terminates.
@@ -416,7 +431,8 @@ in the same validated plan:
   `if` producer and appends after the current last statement in the selected
   branch;
 - `insertLoopBodyStatement` resolves the actual body ID captured from its
-  earlier `while` producer and appends after the current last body statement;
+  earlier `while` or `for` producer and appends after the current last body
+  statement;
 - `replaceProducedWhileCondition` resolves the actual loop ID and current
   condition ID captured through its earlier while producer on every stage;
 - `reconnectArgument` locates both endpoint roots by persistent ID and derives
@@ -431,11 +447,11 @@ condition edits through a dynamic producer handle without giving direct
 literal/operator/endpoint edits ambiguous original-versus-intermediate
 preconditions.
 
-Any insertion step carrying an `if` or `while` payload executes through the
-same staged transaction and rebasing. It publishes structural handles, but does
-not publish a local handle. A `reconnectValue` whose `sourceStepId` names that
-step is rejected during JSON validation rather than failing after source
-mutation.
+Any insertion step carrying an `if` or loop payload executes through the same
+staged transaction and rebasing. An `if` publishes branch handles; either loop
+publishes a body handle; a declaration-form `for` additionally publishes its
+single declarator as a local handle. Other structural producers are rejected as
+`reconnectValue` sources during JSON validation rather than after mutation.
 
 If an earlier step deletes a later target or removes every anchor needed to
 reconstruct an insertion gap, execution fails atomically. Internal rebasing is
@@ -523,6 +539,19 @@ dotnet run --project src/UnifiedScript.Cli -- \
   --out-identity artifacts/loop-plan/LoopBuildRules.cs.usids
 ```
 
+The for-construction sample creates a declaration-form loop, publishes its
+generated `index`, and consumes that local in later body stages:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  apply-plan \
+  samples/Patching/ForBuildRules.cs \
+  --identity samples/Patching/ForBuildRules.cs.usids \
+  --plan samples/Patching/BuildFor.plan.json \
+  --out artifacts/for-plan/ForBuildRules.cs \
+  --out-identity artifacts/for-plan/ForBuildRules.cs.usids
+```
+
 The structured expression-edit sample uses the direct assignment and existing
 while wrappers in one transaction:
 
@@ -538,9 +567,9 @@ dotnet run --project src/UnifiedScript.Cli -- \
 
 ## Deliberate limits
 
-Plan v0.15 composes all operations currently defined by patch v0.14 and resolves
+Plan v0.16 composes all operations currently defined by patch v0.15 and resolves
 recursive symbolic `then`/`else` and loop-body handles for bounded local,
-assignment, nested-if/while, loop-transfer, and typed-return population. It
+assignment, nested-if/loop, loop-transfer, and typed-return population. It
 also resolves repeatable expression-endpoint edits on produced while, if,
 local-literal declaration, and value-return statements, plus exact input edits
 inside arbitrary expression trees authored by earlier stages. It cannot insert
@@ -560,5 +589,5 @@ below the CLI, while the CLI commit boundary is still one source/identity pair.
 There is no automatic reader migration for older patch-plan schemas; producers
 should reanalyze and emit the current schema and baselines. The original
 temporary-plus-reconnect and earlier composed step shapes remain representable
-in v0.15. Older plan documents must be regenerated because the reader accepts
+in v0.16. Older plan documents must be regenerated because the reader accepts
 only the current schema.

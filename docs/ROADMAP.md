@@ -124,7 +124,7 @@ Outcome: practical gameplay methods are fully visualizable.
 - [x] lossless text-authored `for` HIR/Graph projection with explicit
   initializer/body/increment regions, postfix identity, and correct continue
   routing through incrementors
-- [ ] dedicated bounded `ForPatchStatement` construction with declaration
+- [x] dedicated bounded `ForPatchStatement` construction with declaration
   scope, clause ordering, and continue-target proofs
 - [ ] general data/control rewiring and structural HIR operations
 - [ ] `foreach` and enumerator/disposal semantics

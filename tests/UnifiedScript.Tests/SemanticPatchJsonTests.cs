@@ -435,7 +435,7 @@ public sealed class SemanticPatchJsonTests
         ReplaceReturnValuePatchOperation operation = Assert.IsType<ReplaceReturnValuePatchOperation>(
             Assert.Single(roundTrip.Operations));
         Assert.Equal(expression, Assert.IsType<ConditionalPatchExpression>(operation.NewValue));
-        Assert.Equal("unifiedscript.patch/v0.14", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch/v0.15", roundTrip.SchemaVersion);
         Assert.Contains("\"expression\": \"conditional\"", json);
         Assert.Contains("\"whenTrue\"", json);
         Assert.Contains("\"whenFalse\"", json);
@@ -469,7 +469,7 @@ public sealed class SemanticPatchJsonTests
         ReplaceReturnValuePatchOperation operation = Assert.IsType<ReplaceReturnValuePatchOperation>(
             Assert.Single(roundTrip.Operations));
         Assert.Equal(expression, Assert.IsType<BinaryPatchExpression>(operation.NewValue));
-        Assert.Equal("unifiedscript.patch/v0.14", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch/v0.15", roundTrip.SchemaVersion);
         Assert.Contains("\"operator\": \"??\"", json, StringComparison.Ordinal);
     }
 
@@ -502,7 +502,7 @@ public sealed class SemanticPatchJsonTests
         Assert.Equal(
             expression,
             Assert.IsType<ConditionalMemberAccessPatchExpression>(operation.NewValue));
-        Assert.Equal("unifiedscript.patch/v0.14", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch/v0.15", roundTrip.SchemaVersion);
         Assert.Contains("\"expression\": \"conditionalMemberAccess\"", json);
         Assert.Contains("\"memberName\": \"Length\"", json);
         Assert.Contains("\"receiver\"", json);
@@ -619,6 +619,95 @@ public sealed class SemanticPatchJsonTests
                 null,
                 null,
                 new WhilePatchStatement(new LiteralPatchExpression("true", default)))]));
+    }
+
+    [Fact]
+    public void SerializeAndDeserialize_PreserveBoundedForStatement()
+    {
+        SemanticId intType = SemanticId.FromKey("System.Int32");
+        SemanticId boolType = SemanticId.FromKey("System.Boolean");
+        var local = new ForLocalReferencePatchExpression(0, "index", intType);
+        var forStatement = new ForPatchStatement(
+            new ForVariableDeclarationPatch(
+                "int",
+                [new ForVariableDeclaratorPatch(
+                    "index",
+                    new LiteralPatchExpression("0", intType),
+                    intType)]),
+            [],
+            new BinaryPatchExpression(
+                "<",
+                local,
+                new LiteralPatchExpression("10", intType),
+                boolType),
+            [new ForMutationPatchExpression(local, "++", true, intType)]);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            SemanticId.FromKey("for-compilation"),
+            SemanticId.FromKey("for-configuration"),
+            [new InsertStatementPatchOperation(
+                SemanticId.FromKey("for-parent-block"),
+                null,
+                null,
+                forStatement)]);
+
+        string json = SemanticPatchJson.Serialize(patch);
+        SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
+
+        ForPatchStatement roundTrippedFor = Assert.IsType<ForPatchStatement>(
+            Assert.IsType<InsertStatementPatchOperation>(
+                Assert.Single(roundTrip.Operations)).NewStatement);
+        Assert.Equal(forStatement.Declaration!.TypeName, roundTrippedFor.Declaration!.TypeName);
+        Assert.Equal(
+            Assert.Single(forStatement.Declaration.Variables),
+            Assert.Single(roundTrippedFor.Declaration.Variables));
+        Assert.Empty(roundTrippedFor.Initializers);
+        Assert.Equal(forStatement.Condition, roundTrippedFor.Condition);
+        Assert.Equal(
+            Assert.Single(forStatement.Incrementors),
+            Assert.Single(roundTrippedFor.Incrementors));
+        Assert.Contains("\"statement\": \"for\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"expression\": \"forLocalReference\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"isPostfix\": true", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Create_RejectsLossyOrOutOfScopeForPayloads()
+    {
+        SemanticId intType = SemanticId.FromKey("System.Int32");
+        SemanticId boolType = SemanticId.FromKey("System.Boolean");
+        ForVariableDeclarationPatch declaration = new(
+            "int",
+            [new ForVariableDeclaratorPatch(
+                "index",
+                new LiteralPatchExpression("0", intType),
+                intType)]);
+        ForAssignmentPatchExpression initializer = new(
+            SemanticId.FromKey("existing-index"),
+            "index",
+            intType,
+            new LiteralPatchExpression("0", intType));
+
+        Assert.Throws<JsonException>(() => SemanticPatchDocument.Create(
+            SemanticId.FromKey("mixed-for-compilation"),
+            SemanticId.FromKey("mixed-for-configuration"),
+            [new InsertStatementPatchOperation(
+                SemanticId.FromKey("mixed-for-block"),
+                null,
+                null,
+                new ForPatchStatement(
+                    declaration,
+                    [initializer],
+                    new LiteralPatchExpression("true", boolType),
+                    []))]));
+        Assert.Throws<JsonException>(() => SemanticPatchDocument.Create(
+            SemanticId.FromKey("unscoped-for-local-compilation"),
+            SemanticId.FromKey("unscoped-for-local-configuration"),
+            [new InsertStatementPatchOperation(
+                SemanticId.FromKey("unscoped-for-local-block"),
+                null,
+                null,
+                new IfPatchStatement(
+                    new ForLocalReferencePatchExpression(0, "index", boolType)))]));
     }
 
     [Fact]
