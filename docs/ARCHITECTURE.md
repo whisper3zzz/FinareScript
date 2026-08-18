@@ -229,7 +229,7 @@ operator/endpoint, semantic type,
 containing statement, parent block, and exact sibling preconditions rather than
 relying only on the compilation baseline.
 
-`unifiedscript.patch-plan/v0.12` is an ordered transaction above individual
+`unifiedscript.patch-plan/v0.13` is an ordered transaction above individual
 patches. It composes every current bounded operation: literal and operator
 changes, argument reconnection, structured assignment/loop/branch/local/return
 expression edits, exact nested expression-input replacement, statement
@@ -245,6 +245,13 @@ coordinator resolves both forms to an ordinary local definition ID instead of
 guessing a random ID that does not exist in the initial HIR. The complete plan still
 carries one external source/configuration baseline and records every target's
 original value, endpoint, statement, block, sibling, and type preconditions.
+Every expression-bearing stage also publishes its actual post-reanalysis root
+under the stage `stepId`. A later `replaceProducedExpressionInput` validates a
+`targetPath` against the producer's authored tree, follows that path from the
+captured HIR root, and lowers to the existing standalone
+`replaceExpressionInput` operation with real current endpoint IDs. The
+consumer's replacement root is published again, so handles chain without a
+second VM, graph evaluator, or generated-ID prediction scheme.
 An `if` insertion publishes internal `then`/`else` block handles for later
 `insertBranchStatement` steps without masquerading as a reconnectable local
 definition. The branch steps repeat the producer's original parent block as

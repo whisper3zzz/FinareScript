@@ -56,6 +56,7 @@ public sealed class CSharpPatchPlanApplier
         var producedBranches = new Dictionary<string, ProducedIfBranches>(StringComparer.Ordinal);
         var producedLoops = new Dictionary<string, ProducedWhileLoop>(StringComparer.Ordinal);
         var producedReturns = new Dictionary<string, SemanticId>(StringComparer.Ordinal);
+        var producedExpressions = new Dictionary<string, SemanticId>(StringComparer.Ordinal);
         CSharpPatchResult? lastResult = null;
         foreach (SemanticPatchPlanStep step in plan.Steps)
         {
@@ -72,6 +73,7 @@ public sealed class CSharpPatchPlanApplier
                     producedBranches,
                     producedLoops,
                     producedReturns,
+                    producedExpressions,
                     out SemanticPatchOperation? operation,
                     out UnifiedDiagnostic? operationFailure))
             {
@@ -172,6 +174,26 @@ public sealed class CSharpPatchPlanApplier
                 producedDefinitions.Add(step.StepId, introduced.Id);
             }
 
+            if (SemanticPatchPlanExpressions.GetAuthoredExpression(step) is not null)
+            {
+                HirExpression? producedExpression = FindProducedExpression(
+                    stageResult.Analysis.Hir,
+                    operation!,
+                    insertedStatement);
+                if (producedExpression is null)
+                {
+                    return Failure(new UnifiedDiagnostic(
+                        SemanticPatchDiagnosticCodes.InvalidPatchPlan,
+                        UnifiedDiagnosticSeverity.Error,
+                        $"Plan step '{step.StepId}' succeeded but its produced expression root " +
+                        "could not be resolved for later steps.",
+                        SourceSpan.Unknown("<patch-plan>"),
+                        step.TargetNodeId));
+                }
+
+                producedExpressions.Add(step.StepId, producedExpression.Id);
+            }
+
             currentRequest = AdvanceRequest(
                 stageResult.PatchedRequest,
                 stageResult.Analysis);
@@ -203,6 +225,7 @@ public sealed class CSharpPatchPlanApplier
         var loopProducerMethods = new Dictionary<string, SemanticId>(StringComparer.Ordinal);
         var localInitializerProducerMethods = new Dictionary<string, SemanticId>(StringComparer.Ordinal);
         var returnProducerMethods = new Dictionary<string, SemanticId>(StringComparer.Ordinal);
+        var expressionProducerMethods = new Dictionary<string, SemanticId>(StringComparer.Ordinal);
         foreach (SemanticPatchPlanStep step in plan.Steps)
         {
             if (!nodes.TryGetValue(step.TargetNodeId, out HirNode? target))
@@ -358,6 +381,21 @@ public sealed class CSharpPatchPlanApplier
                         target.Id)];
                 }
             }
+            else if (step is ReplaceProducedExpressionInputPatchPlanStep producedExpressionInput)
+            {
+                if (!expressionProducerMethods.TryGetValue(
+                        producedExpressionInput.SourceStepId,
+                        out SemanticId expressionProducerMethodId) ||
+                    expressionProducerMethodId != method!.Id)
+                {
+                    return [Diagnostic(
+                        SemanticPatchDiagnosticCodes.InvalidPatchPlan,
+                        $"Produced-expression input step '{producedExpressionInput.StepId}' and " +
+                        $"source step '{producedExpressionInput.SourceStepId}' target different methods.",
+                        target.Span,
+                        target.Id)];
+                }
+            }
             // A produced value does not exist in the external baseline. Its method relationship
             // was checked above; the complete operation is validated against the reanalyzed
             // in-memory source when that stage executes.
@@ -399,6 +437,11 @@ public sealed class CSharpPatchPlanApplier
             if (ProducesReturnValue(step))
             {
                 returnProducerMethods.Add(step.StepId, method!.Id);
+            }
+
+            if (SemanticPatchPlanExpressions.GetAuthoredExpression(step) is not null)
+            {
+                expressionProducerMethods.Add(step.StepId, method!.Id);
             }
         }
 
@@ -486,6 +529,7 @@ public sealed class CSharpPatchPlanApplier
         IReadOnlyDictionary<string, ProducedIfBranches> producedBranches,
         IReadOnlyDictionary<string, ProducedWhileLoop> producedLoops,
         IReadOnlyDictionary<string, SemanticId> producedReturns,
+        IReadOnlyDictionary<string, SemanticId> producedExpressions,
         out SemanticPatchOperation? operation,
         out UnifiedDiagnostic? diagnostic)
     {
@@ -540,6 +584,13 @@ public sealed class CSharpPatchPlanApplier
                 operation = expressionInput.ToOperation();
                 diagnostic = null;
                 return true;
+            case ReplaceProducedExpressionInputPatchPlanStep producedExpressionInput:
+                return TryCreateProducedExpressionInputReplacement(
+                    producedExpressionInput,
+                    nodes,
+                    producedExpressions,
+                    out operation,
+                    out diagnostic);
             case ReplaceAssignmentValuePatchPlanStep assignmentValue
                 when target is HirAssignmentExpression:
                 operation = assignmentValue.ToOperation();
@@ -939,6 +990,99 @@ public sealed class CSharpPatchPlanApplier
         return true;
     }
 
+    private static bool TryCreateProducedExpressionInputReplacement(
+        ReplaceProducedExpressionInputPatchPlanStep step,
+        IReadOnlyDictionary<SemanticId, HirNode> nodes,
+        IReadOnlyDictionary<string, SemanticId> producedExpressions,
+        out SemanticPatchOperation? operation,
+        out UnifiedDiagnostic? diagnostic)
+    {
+        if (!producedExpressions.TryGetValue(step.SourceStepId, out SemanticId rootId) ||
+            !nodes.TryGetValue(rootId, out HirNode? rootNode) ||
+            rootNode is not HirExpression target)
+        {
+            operation = null;
+            diagnostic = Diagnostic(
+                SemanticPatchDiagnosticCodes.TargetNotFound,
+                $"Produced-expression input step '{step.StepId}' could not resolve expression " +
+                $"source step '{step.SourceStepId}'.",
+                SourceSpan.Unknown("<patch-plan>"),
+                step.TargetNodeId);
+            return false;
+        }
+
+        foreach (string pathPort in step.TargetPath)
+        {
+            if (!TryGetHirExpressionInput(target, pathPort, out HirExpression? child))
+            {
+                operation = null;
+                diagnostic = Diagnostic(
+                    SemanticPatchDiagnosticCodes.InvalidPatchPlan,
+                    $"Produced-expression input step '{step.StepId}' could not follow runtime " +
+                    $"target-path port '{pathPort}' from source step '{step.SourceStepId}'.",
+                    target.Span,
+                    target.Id);
+                return false;
+            }
+
+            target = child!;
+        }
+
+        if (!TryGetHirExpressionInput(target, step.InputPort, out HirExpression? input))
+        {
+            operation = null;
+            diagnostic = Diagnostic(
+                SemanticPatchDiagnosticCodes.InvalidExpressionInputPort,
+                $"Produced-expression input step '{step.StepId}' could not resolve runtime input " +
+                $"port '{step.InputPort}'.",
+                target.Span,
+                target.Id);
+            return false;
+        }
+
+        operation = new ReplaceExpressionInputPatchOperation(
+            target.Id,
+            step.InputPort,
+            input!.Id,
+            step.ExpectedInputTypeId,
+            step.ExpectedTargetTypeId,
+            step.NewInput);
+        diagnostic = null;
+        return true;
+    }
+
+    private static bool TryGetHirExpressionInput(
+        HirExpression target,
+        string inputPort,
+        out HirExpression? input)
+    {
+        input = (target, inputPort) switch
+        {
+            (HirBinaryExpression binary, "left") => binary.Left,
+            (HirBinaryExpression binary, "right") => binary.Right,
+            (HirUnaryExpression unary, "operand") => unary.Operand,
+            (HirCastExpression cast, "operand") => cast.Operand,
+            _ => null,
+        };
+        if (input is not null)
+        {
+            return true;
+        }
+
+        if (target is not HirInvocationExpression invocation ||
+            !inputPort.StartsWith("arg", StringComparison.Ordinal) ||
+            !int.TryParse(inputPort.AsSpan(3), out int argumentIndex) ||
+            argumentIndex < 0 ||
+            argumentIndex >= invocation.Arguments.Count ||
+            !string.Equals(inputPort, $"arg{argumentIndex}", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        input = invocation.Arguments[argumentIndex];
+        return true;
+    }
+
     private static bool TryCreateProducedIfConditionReplacement(
         ReplaceProducedIfConditionPatchPlanStep step,
         IReadOnlyDictionary<SemanticId, HirNode> nodes,
@@ -1184,6 +1328,50 @@ public sealed class CSharpPatchPlanApplier
         return statements[insertionIndex];
     }
 
+    private static HirExpression? FindProducedExpression(
+        HirCompilationUnit compilation,
+        SemanticPatchOperation operation,
+        HirStatement? insertedStatement)
+    {
+        IReadOnlyDictionary<SemanticId, HirNode> nodes = compilation
+            .DescendantsAndSelf()
+            .ToDictionary(static node => node.Id);
+        return operation switch
+        {
+            ReplaceExpressionInputPatchOperation replacement
+                when nodes.TryGetValue(replacement.TargetNodeId, out HirNode? node) &&
+                node is HirExpression target &&
+                TryGetHirExpressionInput(target, replacement.InputPort, out HirExpression? input) =>
+                    input,
+            ReplaceAssignmentValuePatchOperation replacement
+                when nodes.TryGetValue(replacement.TargetNodeId, out HirNode? node) &&
+                node is HirAssignmentExpression assignment => assignment.Value,
+            ReplaceWhileConditionPatchOperation replacement
+                when nodes.TryGetValue(replacement.TargetNodeId, out HirNode? node) &&
+                node is HirWhileStatement loop => loop.Condition,
+            ReplaceIfConditionPatchOperation replacement
+                when nodes.TryGetValue(replacement.TargetNodeId, out HirNode? node) &&
+                node is HirIfStatement branch => branch.Condition,
+            ReplaceLocalInitializerPatchOperation replacement
+                when nodes.TryGetValue(replacement.TargetNodeId, out HirNode? node) &&
+                node is HirVariableDeclarationStatement variable => variable.Initializer,
+            ReplaceReturnValuePatchOperation replacement
+                when nodes.TryGetValue(replacement.TargetNodeId, out HirNode? node) &&
+                node is HirReturnStatement valueReturn => valueReturn.Expression,
+            InsertStatementPatchOperation => GetInsertedExpression(insertedStatement),
+            _ => null,
+        };
+    }
+
+    private static HirExpression? GetInsertedExpression(HirStatement? statement) => statement switch
+    {
+        HirExpressionStatement { Expression: HirAssignmentExpression assignment } => assignment.Value,
+        HirIfStatement branch => branch.Condition,
+        HirWhileStatement loop => loop.Condition,
+        HirReturnStatement valueReturn => valueReturn.Expression,
+        _ => null,
+    };
+
     private static bool ProducesLocal(SemanticPatchPlanStep step) =>
         step is IntroduceTemporaryPatchPlanStep or
             InsertStatementPatchPlanStep { NewStatement: LocalLiteralDeclarationPatchStatement } or
@@ -1240,6 +1428,11 @@ public sealed class CSharpPatchPlanApplier
         HirPatchIndex patchIndex,
         out HirMethodDeclaration? method)
     {
+        if (step is ReplaceProducedExpressionInputPatchPlanStep)
+        {
+            return TryGetContainingMethod(target, patchIndex, out method);
+        }
+
         switch (step)
         {
             case InsertStatementPatchPlanStep or
@@ -1289,12 +1482,49 @@ public sealed class CSharpPatchPlanApplier
         }
     }
 
+    private static bool TryGetContainingMethod(
+        HirNode target,
+        HirPatchIndex patchIndex,
+        out HirMethodDeclaration? method)
+    {
+        if (target is HirBlockStatement block &&
+            patchIndex.TryGetBlock(block.Id, out HirPatchIndex.BlockLocation? blockLocation))
+        {
+            method = blockLocation!.Method;
+            return true;
+        }
+
+        if (target is HirStatement statement &&
+            patchIndex.TryGetStatement(
+                statement.Id,
+                out HirPatchIndex.StatementLocation? statementLocation))
+        {
+            method = statementLocation!.Method;
+            return true;
+        }
+
+        if (target is HirExpression expression &&
+            patchIndex.TryGetExpression(
+                expression.Id,
+                out HirPatchIndex.ExpressionLocation? expressionLocation))
+        {
+            method = expressionLocation!.Method;
+            return true;
+        }
+
+        method = null;
+        return false;
+    }
+
     private static SemanticPatchOperation GetInitialOperation(SemanticPatchPlanStep step) => step switch
     {
         ReplaceLiteralPatchPlanStep replace => replace.ToOperation(),
         ChangeOperatorPatchPlanStep changeOperator => changeOperator.ToOperation(),
         ReconnectArgumentPatchPlanStep reconnectArgument => reconnectArgument.ToOperation(),
         ReplaceExpressionInputPatchPlanStep expressionInput => expressionInput.ToOperation(),
+        ReplaceProducedExpressionInputPatchPlanStep => throw new ArgumentException(
+            "A symbolic produced-expression input edit cannot become an initial standalone operation.",
+            nameof(step)),
         ReplaceAssignmentValuePatchPlanStep assignmentValue => assignmentValue.ToOperation(),
         ReplaceWhileConditionPatchPlanStep whileCondition => whileCondition.ToOperation(),
         ReplaceProducedWhileConditionPatchPlanStep => throw new ArgumentException(

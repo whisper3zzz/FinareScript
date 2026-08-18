@@ -54,6 +54,8 @@ public static class SemanticPatchPlanJson
         var localInitializerProducers = new Dictionary<string, LocalInitializerProducerState>(
             StringComparer.Ordinal);
         var returnProducers = new Dictionary<string, ReturnProducerState>(StringComparer.Ordinal);
+        var expressionProducers = new Dictionary<string, ExpressionProducerState>(
+            StringComparer.Ordinal);
         var paths = new Dictionary<PlanPathKey, PlanPathState>();
         foreach (SemanticPatchPlanStep? step in document.Steps)
         {
@@ -81,9 +83,16 @@ public static class SemanticPatchPlanJson
                 ReplaceProducedIfConditionPatchPlanStep or
                 ReplaceProducedLocalInitializerPatchPlanStep or
                 ReplaceProducedReturnValuePatchPlanStep;
+            bool isProducedExpressionTarget =
+                step is ReplaceProducedExpressionInputPatchPlanStep producedExpressionInput &&
+                expressionProducers.TryGetValue(
+                    producedExpressionInput.SourceStepId,
+                    out ExpressionProducerState? expressionSource) &&
+                expressionSource.OriginalTargetNodeId == step.TargetNodeId;
             if (targetKinds.TryGetValue(step.TargetNodeId, out bool previousWasRepeatable))
             {
-                if (!isRepeatableTarget || !previousWasRepeatable)
+                if ((!isRepeatableTarget || !previousWasRepeatable) &&
+                    !isProducedExpressionTarget)
                 {
                     throw new JsonException(
                         $"Semantic patch plan target '{step.TargetNodeId}' can be repeated only " +
@@ -111,6 +120,12 @@ public static class SemanticPatchPlanJson
                     break;
                 case ReplaceExpressionInputPatchPlanStep replaceExpressionInput:
                     ValidateOperation(document, replaceExpressionInput.ToOperation());
+                    break;
+                case ReplaceProducedExpressionInputPatchPlanStep producedInputReplacement:
+                    ValidateProducedExpressionInput(
+                        document,
+                        producedInputReplacement,
+                        expressionProducers);
                     break;
                 case ReplaceAssignmentValuePatchPlanStep replaceAssignmentValue:
                     ValidateOperation(document, replaceAssignmentValue.ToOperation());
@@ -346,6 +361,15 @@ public static class SemanticPatchPlanJson
                     throw new JsonException(
                         $"Unsupported semantic patch plan step '{step.GetType().Name}'.");
             }
+
+            PatchExpression? authoredExpression =
+                SemanticPatchPlanExpressions.GetAuthoredExpression(resolvedStep);
+            if (authoredExpression is not null)
+            {
+                expressionProducers.Add(
+                    step.StepId,
+                    new ExpressionProducerState(step.TargetNodeId, authoredExpression));
+            }
         }
     }
 
@@ -358,6 +382,86 @@ public static class SemanticPatchPlanJson
             document.SourceCompilationId,
             document.SemanticConfigurationId,
             [operation]));
+    }
+
+    private static void ValidateProducedExpressionInput(
+        SemanticPatchPlanDocument document,
+        ReplaceProducedExpressionInputPatchPlanStep replacement,
+        IReadOnlyDictionary<string, ExpressionProducerState> producers)
+    {
+        if (string.IsNullOrWhiteSpace(replacement.SourceStepId) ||
+            !producers.TryGetValue(replacement.SourceStepId, out ExpressionProducerState? source))
+        {
+            throw new JsonException(
+                $"Produced-expression input step '{replacement.StepId}' must reference an " +
+                "earlier expression-producing step.");
+        }
+
+        if (source.OriginalTargetNodeId != replacement.TargetNodeId)
+        {
+            throw new JsonException(
+                $"Produced-expression input step '{replacement.StepId}' and source step " +
+                $"'{replacement.SourceStepId}' must use the same original structural target.");
+        }
+
+        if (replacement.TargetPath is null)
+        {
+            throw new JsonException(
+                $"Produced-expression input step '{replacement.StepId}' requires a target path.");
+        }
+
+        PatchExpression target = source.Root;
+        foreach (string? pathPort in replacement.TargetPath)
+        {
+            if (!TryGetPatchExpressionInput(target, pathPort, out PatchExpression? child))
+            {
+                throw new JsonException(
+                    $"Produced-expression input step '{replacement.StepId}' cannot follow " +
+                    $"target-path port '{pathPort ?? "<null>"}' through the authored " +
+                    $"'{target.GetType().Name}' expression.");
+            }
+
+            target = child!;
+        }
+
+        if (!TryGetPatchExpressionInput(target, replacement.InputPort, out PatchExpression? input))
+        {
+            throw new JsonException(
+                $"Produced-expression input step '{replacement.StepId}' cannot resolve input " +
+                $"port '{replacement.InputPort}' on the selected authored expression.");
+        }
+
+        if (replacement.ExpectedTargetTypeId != target.ExpectedTypeId ||
+            replacement.ExpectedInputTypeId != input!.ExpectedTypeId)
+        {
+            throw new JsonException(
+                $"Produced-expression input step '{replacement.StepId}' must exactly match the " +
+                "selected authored target and input semantic types.");
+        }
+
+        ValidateOperation(document, new ReplaceExpressionInputPatchOperation(
+            SemanticId.FromKey($"patch-plan-produced-expression-target:{replacement.StepId}"),
+            replacement.InputPort,
+            SemanticId.FromKey($"patch-plan-produced-expression-input:{replacement.StepId}"),
+            replacement.ExpectedInputTypeId,
+            replacement.ExpectedTargetTypeId,
+            replacement.NewInput));
+    }
+
+    private static bool TryGetPatchExpressionInput(
+        PatchExpression target,
+        string? inputPort,
+        out PatchExpression? input)
+    {
+        input = (target, inputPort) switch
+        {
+            (BinaryPatchExpression binary, "left") => binary.Left,
+            (BinaryPatchExpression binary, "right") => binary.Right,
+            (UnaryPatchExpression unary, "operand") => unary.Operand,
+            (CastPatchExpression cast, "operand") => cast.Operand,
+            _ => null,
+        };
+        return input is not null;
     }
 
     private static SemanticPatchPlanStep ResolveProducedLocalReferences(
@@ -855,6 +959,10 @@ public static class SemanticPatchPlanJson
     private sealed record LocalProducerState(
         string Name,
         SemanticId TypeId);
+
+    private sealed record ExpressionProducerState(
+        SemanticId OriginalTargetNodeId,
+        PatchExpression Root);
 
     private sealed class PlanPathState
     {

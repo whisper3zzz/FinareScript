@@ -47,6 +47,8 @@ The repository currently implements:
   produced earlier in the same atomic plan;
 - exact nested expression-input replacement through the same `left`, `right`,
   `operand`, and positional `argN` ports emitted by Graph;
+- transaction expression handles that let later stages traverse and edit trees
+  authored by earlier stages without predicting generated semantic IDs;
 - opt-in `.usids` sidecars that preserve node identity across formatting and edits;
 - semantic-independent `.usgraph` layout sidecars with deterministic positions,
   sizes, collapsed state, comment regions, routing hints, and orphan recovery;
@@ -69,7 +71,9 @@ in the same atomic plan. M4.9 connects the data side of those stages by letting
 later expressions consume earlier generated locals through typed plan handles.
 M4.10 edits one exact nested input without rebuilding its enclosing expression,
 while retaining type, effect, trivia, scope, dominance, Graph-edge, and
-unaffected-spine identity proofs.
+unaffected-spine identity proofs. M4.11 publishes the actual roots of
+plan-authored expression trees and resolves later `targetPath`/`inputPort`
+edits through those step handles before reusing the same M4.10 patch path.
 
 The v0.2 profile accepts `[Visual]` methods containing local variables,
 expressions, calls, assignments, `if/else`, `while`, `break`, `continue`,
@@ -383,7 +387,7 @@ It proves that source, HIR, Graph branch/data/control edges, persistent identity
 and `.usgraph` layout synchronization share one structure. New branch and
 condition nodes are explicitly `unplaced`; existing placements survive.
 
-Patch-plan v0.12 can populate those newly allocated blocks without predicting
+Patch-plan v0.13 can populate those newly allocated blocks without predicting
 their random IDs. The checked-in plan inserts the same guard, appends two typed
 locals to `then`, and appends one typed local to `else`:
 
@@ -592,13 +596,13 @@ analyzed source baseline, or atomically with the patch-plan protocol below.
 
 ## Apply atomic semantic patch plans
 
-`unifiedscript.patch-plan/v0.12` composes `replaceLiteral`, `changeOperator`,
+`unifiedscript.patch-plan/v0.13` composes `replaceLiteral`, `changeOperator`,
 `reconnectArgument`, typed replacement of assignment, loop, branch,
 declaration-initializer, and return endpoints, their generated-statement
 handle variants, `insertStatement`, `insertBranchStatement`,
 `insertLoopBodyStatement`, `deleteStatement`, `introduceTemporary`, and
-`reconnectValue`, plus exact nested `replaceExpressionInput`, as one ordered
-transaction. Plan expressions may also carry a
+`reconnectValue`, plus exact nested `replaceExpressionInput` and symbolic
+`replaceProducedExpressionInput`, as one ordered transaction. Plan expressions may also carry a
 transaction-only `producedLocalReference` leaf that resolves an earlier local
 producer by `stepId`. The
 shared-value sample starts with:
@@ -673,8 +677,10 @@ Before execution, every independently executable step is checked against the
 original source. During execution, statement siblings and insertion gaps are
 rebased only over earlier stages in the same plan. Multiple insertions into one
 original gap retain plan order, and argument reconnection relocates its current
-indices by persistent endpoint ID. Non-insertion targets remain unique to avoid
-ambiguous repeated old-value preconditions. Reconnect handles must reference an
+indices by persistent endpoint ID. Direct non-symbolic targets remain unique to
+avoid ambiguous repeated old-value preconditions; compatible produced
+endpoint/expression consumers may repeat only their producer's stable original
+anchor. Reconnect handles must reference an
 earlier local producer in the same method with the same graph-safe type. An `if`
 insertion publishes symbolic `then` and `else` block handles only through later
 `insertBranchStatement` steps; it still is not a local value handle. Branch
@@ -688,7 +694,7 @@ more paths, and all-path termination propagates up that producer tree. A
 `break`/`continue` bind only to the nearest lexical loop. Local assignments are
 supported as direct, produced-branch, and produced-loop-body payloads. Authored
 call construction, async/task-like returns, cyclic handle references, and
-cross-method handles remain outside v0.12; exact inputs of already-resolved
+cross-method handles remain outside v0.13; exact inputs of already-resolved
 positional calls are covered by M4.10 below.
 
 ### Build a loop from a visual plan
@@ -837,6 +843,35 @@ It changes `return (value + 1) * 3;` into ordinary C# containing
 resolved at stage time and then enters the normal standalone input-replacement
 path; there is no Graph-only evaluator. See
 [EXPRESSION_INPUT_PATCHING.md](docs/EXPRESSION_INPUT_PATCHING.md).
+
+### Edit an expression created by an earlier plan stage
+
+M4.11 adds the plan-only `replaceProducedExpressionInput` step. Its
+`sourceStepId` selects an earlier expression-producing stage, `targetPath`
+walks that stage's authored tree using canonical `left`/`right`/`operand`
+ports, and `inputPort` selects the exact child to replace. The plan never
+contains generated expression IDs; the applier captures them only after each
+successful reanalysis and resolves the handle in memory.
+
+The checked-in three-stage chain first authors `value + 1`, replaces its
+generated `right` input with `value * 2`, then uses that second step as a new
+handle and changes its generated `right` input to `3`:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  apply-plan \
+  samples/Patching/EditGeneratedExpression.cs \
+  --identity samples/Patching/EditGeneratedExpression.cs.usids \
+  --plan samples/Patching/EditGeneratedExpression.plan.json \
+  --out artifacts/generated-expression/EditGeneratedExpression.cs \
+  --out-identity artifacts/generated-expression/EditGeneratedExpression.cs.usids
+```
+
+The result is `return value + (value * 3);`, and the sidecar advances from
+generation 1 to 4. The symbolic step becomes an ordinary patch v0.12
+`replaceExpressionInput` at execution time, so type, purity, dominance, trivia,
+identity, tombstone, and Graph-edge behavior stay on one code path. See
+[PRODUCED_EXPRESSION_HANDLES.md](docs/PRODUCED_EXPRESSION_HANDLES.md).
 
 ## Persist and synchronize graph layout
 

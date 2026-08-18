@@ -31,6 +31,10 @@ public static class SemanticPatchPlanExpressions
             {
                 NewInput = Rewrite(replacement.NewInput, resolver),
             },
+            ReplaceProducedExpressionInputPatchPlanStep replacement => replacement with
+            {
+                NewInput = Rewrite(replacement.NewInput, resolver),
+            },
             ReplaceWhileConditionPatchPlanStep replacement => replacement with
             {
                 NewCondition = Rewrite(replacement.NewCondition, resolver),
@@ -79,12 +83,14 @@ public static class SemanticPatchPlanExpressions
         };
     }
 
-    private static IEnumerable<PatchExpression> GetExpressions(SemanticPatchPlanStep step)
+    public static PatchExpression? GetAuthoredExpression(SemanticPatchPlanStep step)
     {
-        PatchExpression? expression = step switch
+        ArgumentNullException.ThrowIfNull(step);
+        return step switch
         {
             ReplaceAssignmentValuePatchPlanStep replacement => replacement.NewValue,
             ReplaceExpressionInputPatchPlanStep replacement => replacement.NewInput,
+            ReplaceProducedExpressionInputPatchPlanStep replacement => replacement.NewInput,
             ReplaceWhileConditionPatchPlanStep replacement => replacement.NewCondition,
             ReplaceProducedWhileConditionPatchPlanStep replacement => replacement.NewCondition,
             ReplaceIfConditionPatchPlanStep replacement => replacement.NewCondition,
@@ -98,6 +104,11 @@ public static class SemanticPatchPlanExpressions
             InsertLoopBodyStatementPatchPlanStep insertion => GetExpression(insertion.NewStatement),
             _ => null,
         };
+    }
+
+    private static IEnumerable<PatchExpression> GetExpressions(SemanticPatchPlanStep step)
+    {
+        PatchExpression? expression = GetAuthoredExpression(step);
         if (expression is not null)
         {
             yield return expression;

@@ -108,6 +108,10 @@ Outcome: practical gameplay methods are fully visualizable.
 - [x] same-method, scope, and CFG-dominance validation for generated values
 - [x] exact nested binary/unary/cast/invocation-argument Graph input replacement
 - [x] old-endpoint/type/effect/trivia checks with unaffected-spine identity retention
+- [x] symbolic roots and canonical port paths for expressions authored by
+  earlier plan stages
+- [x] chainable produced-expression input edits lowered to the ordinary patch
+  path with atomic rollback
 - [ ] general data/control rewiring and structural HIR operations
 - [ ] `for` and `foreach`
 - [ ] `switch` and supported patterns

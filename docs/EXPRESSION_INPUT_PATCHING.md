@@ -5,7 +5,7 @@
 M4.10 adds an exact Graph-input edit that replaces one nested expression
 subtree without rebuilding its enclosing assignment, condition, initializer,
 return value, or invocation. The standalone and transaction protocols are
-`unifiedscript.patch/v0.12` and `unifiedscript.patch-plan/v0.12`.
+`unifiedscript.patch/v0.12` and `unifiedscript.patch-plan/v0.13`.
 
 The operation uses the same input-port vocabulary already emitted by the Graph
 projector. It therefore models a visual connection change directly instead of
@@ -181,17 +181,23 @@ returned or written.
 ## Deliberate limits
 
 M4.10 addresses inputs on expressions already present in the external
-baseline. A plan-created arbitrary expression does not yet publish a symbolic
-expression-node or input-port handle, so the editor cannot target an unknown
-generated parent ID in a later step.
+baseline. M4.11 adds the plan-only `replaceProducedExpressionInput` step for
+trees created by earlier stages. It uses `sourceStepId`, a canonical
+`targetPath`, and `inputPort`, then resolves to the same ordinary operation
+described here. See
+[PRODUCED_EXPRESSION_HANDLES.md](PRODUCED_EXPRESSION_HANDLES.md).
 
-One patch document still permits only one operation per target node, and one
-plan keeps non-structural targets unique. Multiple ports on the same parent
-must therefore be edited against freshly analyzed sequential baselines rather
-than carrying ambiguous shared old-value preconditions.
+One patch document still permits only one operation per target node, and direct
+plan steps keep non-structural targets unique. A produced-expression consumer
+may repeat its producer's original anchor because it resolves a transaction
+handle rather than replaying an external old-value precondition. Multiple ports
+on the same existing baseline parent must still be edited against freshly
+analyzed sequential baselines.
 
 Member/indexer receivers, invocation targets, assignments, mutation, await,
 conditional access, conditional expressions, lambdas, object construction,
-and arbitrary call construction remain outside the editable input set. M4.11
-should add stable handles for expression nodes produced by earlier plan stages
-before broadening the expression algebra or admitting effectful rewrites.
+and arbitrary call construction remain outside the editable input set.
+Produced-expression paths are intentionally limited to binary `left`/`right`
+and unary/cast `operand` shapes constructible by the current patch-expression
+algebra; broadening that algebra or admitting effectful rewrites remains future
+work.

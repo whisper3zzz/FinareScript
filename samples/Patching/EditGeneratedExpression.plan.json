@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "unifiedscript.patch-plan/v0.13",
+  "sourceCompilationId": "us_91bf4cfbc57543efab003fe895afaec3",
+  "semanticConfigurationId": "us_02f5fe78d296e2d4fe04bc50ca71acf1",
+  "steps": [
+    {
+      "step": "replaceReturnValue",
+      "stepId": "replaceReturn",
+      "targetNodeId": "us_fd241f8bd68772fe5b9a02ab9b65afcb",
+      "expectedValueNodeId": "us_f9c63535d767aa3e2327c9f9c3619361",
+      "expectedReturnTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+      "newValue": {
+        "expression": "binary",
+        "operator": "+",
+        "left": {
+          "expression": "localReference",
+          "sourceDefinitionId": "us_6353bd836a386df3dd58bce9b67dbd83",
+          "expectedName": "value",
+          "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+        },
+        "right": {
+          "expression": "literal",
+          "valueText": "1",
+          "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+        },
+        "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+      }
+    },
+    {
+      "step": "replaceProducedExpressionInput",
+      "stepId": "replaceGeneratedRight",
+      "targetNodeId": "us_fd241f8bd68772fe5b9a02ab9b65afcb",
+      "sourceStepId": "replaceReturn",
+      "targetPath": [],
+      "inputPort": "right",
+      "expectedInputTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+      "expectedTargetTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+      "newInput": {
+        "expression": "binary",
+        "operator": "*",
+        "left": {
+          "expression": "localReference",
+          "sourceDefinitionId": "us_6353bd836a386df3dd58bce9b67dbd83",
+          "expectedName": "value",
+          "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+        },
+        "right": {
+          "expression": "literal",
+          "valueText": "2",
+          "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+        },
+        "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+      }
+    },
+    {
+      "step": "replaceProducedExpressionInput",
+      "stepId": "replaceNestedGeneratedRight",
+      "targetNodeId": "us_fd241f8bd68772fe5b9a02ab9b65afcb",
+      "sourceStepId": "replaceGeneratedRight",
+      "targetPath": [],
+      "inputPort": "right",
+      "expectedInputTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+      "expectedTargetTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+      "newInput": {
+        "expression": "literal",
+        "valueText": "3",
+        "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+      }
+    }
+  ]
+}

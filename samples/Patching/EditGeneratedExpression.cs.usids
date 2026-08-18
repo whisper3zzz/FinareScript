@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "unifiedscript.identity/v0.1",
+  "sourcePath": "samples/Patching/EditGeneratedExpression.cs",
+  "sourceDigest": "sha256:835d19fb4fb4ab024d81f50a3b295b6cfbccca8473094522b2fe213b208a307a",
+  "generation": 1,
+  "entries": [
+    {
+      "id": "us_0d8e111241316d41fd72b5f0b21260ae",
+      "kind": "block",
+      "owner": "Game.GeneratedExpressionRules.Run(int)",
+      "role": "body",
+      "fingerprint": "sha256:4cc4f4499db4e6311533991168c87fb7294eda3745eea6ef76f3bc43c2c7e699",
+      "shapeFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
+      "parentFingerprint": "sha256:93d3171c9b528f43782b976aa46a0c661f6ccc1f3391bb53a2325031475c2a59",
+      "anchor": {
+        "start": 140,
+        "length": 29
+      },
+      "contextBefore": "sha256:f206b58da67eecf05561bf3793b1daac74076d6722df4669be01772da8d913b5",
+      "contextAfter": "sha256:9ef6e8522f55e488b50f21e6decd3327e24380a184ca3d5aa1f484ad5e3cc271",
+      "generation": 1
+    },
+    {
+      "id": "us_6353bd836a386df3dd58bce9b67dbd83",
+      "kind": "parameter",
+      "owner": "Game.GeneratedExpressionRules.Run(int)",
+      "role": "parameter",
+      "fingerprint": "sha256:2c2db5f2f6bffc62d4b35d0a58b87bff81cdb0f111f39ad32ea9e4a97db93e97",
+      "shapeFingerprint": "sha256:2c2db5f2f6bffc62d4b35d0a58b87bff81cdb0f111f39ad32ea9e4a97db93e97",
+      "parentFingerprint": "sha256:93d3171c9b528f43782b976aa46a0c661f6ccc1f3391bb53a2325031475c2a59",
+      "anchor": {
+        "start": 125,
+        "length": 9
+      },
+      "contextBefore": "sha256:e764406da39e2ca4379ddb80d770a265413c7e440ddb0278a0287d82906b5f0e",
+      "contextAfter": "sha256:78ba8e36ac97808bfce5a45599c815ed680dc800c8ae99e6a253d26d07308be1",
+      "generation": 1
+    },
+    {
+      "id": "us_f9c63535d767aa3e2327c9f9c3619361",
+      "kind": "identifier",
+      "owner": "Game.GeneratedExpressionRules.Run(int)",
+      "role": "returnValue",
+      "fingerprint": "sha256:590247c6dc5408588f68c6c4483f1f459badc7a67712c2e9b20e2bedd3535199",
+      "shapeFingerprint": "sha256:590247c6dc5408588f68c6c4483f1f459badc7a67712c2e9b20e2bedd3535199",
+      "parentFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
+      "anchor": {
+        "start": 157,
+        "length": 5
+      },
+      "contextBefore": "sha256:e8e55acde43bc932cbb0dc730d18b1775db132c406ed9bb0cf10caffd743e8f1",
+      "contextAfter": "sha256:38a79062b48cd41f7e38f93dc2b1d073f8ae28a8d051c02f950b7846f36805b1",
+      "generation": 1
+    },
+    {
+      "id": "us_fd241f8bd68772fe5b9a02ab9b65afcb",
+      "kind": "return",
+      "owner": "Game.GeneratedExpressionRules.Run(int)",
+      "role": "statement",
+      "fingerprint": "sha256:376f899193a974e50b8f6c29811cbe84be9ebbd28042438928b1da243887a0c0",
+      "shapeFingerprint": "sha256:7187f0675eb3827939741acf7342ba78836ecec21a31ecf3f34a55309d3bee8a",
+      "parentFingerprint": "sha256:496aca80e4d8f29fb8e8cd816c3afb48d3f103970b3a2ee1600c08ca67326dee",
+      "anchor": {
+        "start": 150,
+        "length": 13
+      },
+      "contextBefore": "sha256:f20474240e265b99c6e3d429b017e3100d94193a112f6d409b45892cfc945bfc",
+      "contextAfter": "sha256:3f885f681d71faa5a866645c2bdfdf0b04dd30d36b07a33b817e798695a980fd",
+      "generation": 1
+    }
+  ],
+  "tombstones": []
+}

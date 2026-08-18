@@ -1156,6 +1156,143 @@ public sealed class SemanticPatchPlanJsonTests
     }
 
     [Fact]
+    public void SerializeAndDeserialize_PreserveChainedProducedExpressionInputHandles()
+    {
+        SemanticId intType = SemanticId.FromKey("System.Int32");
+        SemanticId returnId = SemanticId.FromKey("produced-expression-return");
+        var first = new ReplaceReturnValuePatchPlanStep(
+            "replaceReturn",
+            returnId,
+            SemanticId.FromKey("old-return-value"),
+            intType,
+            new BinaryPatchExpression(
+                "+",
+                new LocalReferencePatchExpression(
+                    SemanticId.FromKey("value-parameter"),
+                    "value",
+                    intType),
+                new LiteralPatchExpression("1", intType),
+                intType));
+        var second = new ReplaceProducedExpressionInputPatchPlanStep(
+            "replaceGeneratedRight",
+            returnId,
+            first.StepId,
+            [],
+            "right",
+            intType,
+            intType,
+            new BinaryPatchExpression(
+                "*",
+                new LocalReferencePatchExpression(
+                    SemanticId.FromKey("value-parameter"),
+                    "value",
+                    intType),
+                new LiteralPatchExpression("2", intType),
+                intType));
+        var third = new ReplaceProducedExpressionInputPatchPlanStep(
+            "replaceNestedGeneratedRight",
+            returnId,
+            second.StepId,
+            [],
+            "right",
+            intType,
+            intType,
+            new LiteralPatchExpression("3", intType));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("produced-expression-compilation"),
+            SemanticId.FromKey("produced-expression-configuration"),
+            [first, second, third]);
+
+        string json = SemanticPatchPlanJson.Serialize(plan);
+        SemanticPatchPlanDocument roundTrip = SemanticPatchPlanJson.Deserialize(json);
+
+        Assert.Equal(plan.SchemaVersion, roundTrip.SchemaVersion);
+        Assert.Equal(plan.SourceCompilationId, roundTrip.SourceCompilationId);
+        Assert.Equal(plan.SemanticConfigurationId, roundTrip.SemanticConfigurationId);
+        Assert.Equal(first, roundTrip.Steps[0]);
+        ReplaceProducedExpressionInputPatchPlanStep roundTripSecond = Assert.IsType<
+            ReplaceProducedExpressionInputPatchPlanStep>(roundTrip.Steps[1]);
+        ReplaceProducedExpressionInputPatchPlanStep roundTripThird = Assert.IsType<
+            ReplaceProducedExpressionInputPatchPlanStep>(roundTrip.Steps[2]);
+        Assert.Equal(second.StepId, roundTripSecond.StepId);
+        Assert.Equal(second.TargetNodeId, roundTripSecond.TargetNodeId);
+        Assert.Equal(second.SourceStepId, roundTripSecond.SourceStepId);
+        Assert.Equal(second.TargetPath, roundTripSecond.TargetPath);
+        Assert.Equal(second.InputPort, roundTripSecond.InputPort);
+        Assert.Equal(second.NewInput, roundTripSecond.NewInput);
+        Assert.Equal(third.StepId, roundTripThird.StepId);
+        Assert.Equal(third.TargetPath, roundTripThird.TargetPath);
+        Assert.Equal(third.NewInput, roundTripThird.NewInput);
+        Assert.Equal("unifiedscript.patch-plan/v0.13", roundTrip.SchemaVersion);
+        Assert.Contains("\"step\": \"replaceProducedExpressionInput\"", json);
+        Assert.Contains("\"targetPath\": []", json);
+    }
+
+    [Fact]
+    public void Create_RejectsInvalidProducedExpressionHandlesPathsAndTypes()
+    {
+        SemanticId intType = SemanticId.FromKey("System.Int32");
+        SemanticId boolType = SemanticId.FromKey("System.Boolean");
+        SemanticId returnId = SemanticId.FromKey("invalid-produced-expression-return");
+        var producer = new ReplaceReturnValuePatchPlanStep(
+            "replaceReturn",
+            returnId,
+            SemanticId.FromKey("old-return-value"),
+            intType,
+            new BinaryPatchExpression(
+                "+",
+                new LiteralPatchExpression("1", intType),
+                new LiteralPatchExpression("2", intType),
+                intType));
+
+        ReplaceProducedExpressionInputPatchPlanStep Consumer(
+            string sourceStepId,
+            SemanticId targetNodeId,
+            IReadOnlyList<string> targetPath,
+            string inputPort,
+            SemanticId inputType,
+            SemanticId targetType) => new(
+            "consumeExpression",
+            targetNodeId,
+            sourceStepId,
+            targetPath,
+            inputPort,
+            inputType,
+            targetType,
+            new LiteralPatchExpression("3", inputType));
+
+        Assert.Throws<JsonException>(() => SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("missing-expression-source-compilation"),
+            SemanticId.FromKey("missing-expression-source-configuration"),
+            [producer, Consumer("missing", returnId, [], "right", intType, intType)]));
+        Assert.Throws<JsonException>(() => SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("wrong-expression-anchor-compilation"),
+            SemanticId.FromKey("wrong-expression-anchor-configuration"),
+            [
+                producer,
+                Consumer(
+                    producer.StepId,
+                    SemanticId.FromKey("other-anchor"),
+                    [],
+                    "right",
+                    intType,
+                    intType),
+            ]));
+        Assert.Throws<JsonException>(() => SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("invalid-expression-path-compilation"),
+            SemanticId.FromKey("invalid-expression-path-configuration"),
+            [producer, Consumer(producer.StepId, returnId, ["right"], "right", intType, intType)]));
+        Assert.Throws<JsonException>(() => SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("invalid-expression-port-compilation"),
+            SemanticId.FromKey("invalid-expression-port-configuration"),
+            [producer, Consumer(producer.StepId, returnId, [], "operand", intType, intType)]));
+        Assert.Throws<JsonException>(() => SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("wrong-expression-type-compilation"),
+            SemanticId.FromKey("wrong-expression-type-configuration"),
+            [producer, Consumer(producer.StepId, returnId, [], "right", boolType, intType)]));
+    }
+
+    [Fact]
     public void Create_RejectsDuplicateTargetsAndMismatchedHandleTypes()
     {
         SemanticId floatType = SemanticId.FromKey("System.Single");

@@ -2740,6 +2740,261 @@ public sealed class CSharpPatchPlanApplierTests
     }
 
     [Fact]
+    public void Apply_ChainsProducedExpressionHandlesWithoutPredictingGeneratedIds()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int value)
+                {
+                    return value;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/ProducedExpressionChain.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement valueReturn = Assert.IsType<HirReturnStatement>(
+            Assert.Single(method.Body.Statements));
+        HirIdentifierExpression oldValue = Assert.IsType<HirIdentifierExpression>(valueReturn.Expression);
+        SemanticId intType = GetTypeId(original, oldValue);
+        var replaceReturn = new ReplaceReturnValuePatchPlanStep(
+            "replaceReturn",
+            valueReturn.Id,
+            oldValue.Id,
+            intType,
+            new BinaryPatchExpression(
+                "+",
+                new LocalReferencePatchExpression(
+                    method.Parameters[0].Id,
+                    method.Parameters[0].Name,
+                    intType),
+                new LiteralPatchExpression("1", intType),
+                intType));
+        var replaceGeneratedRight = new ReplaceProducedExpressionInputPatchPlanStep(
+            "replaceGeneratedRight",
+            valueReturn.Id,
+            replaceReturn.StepId,
+            [],
+            "right",
+            intType,
+            intType,
+            new BinaryPatchExpression(
+                "*",
+                new LocalReferencePatchExpression(
+                    method.Parameters[0].Id,
+                    method.Parameters[0].Name,
+                    intType),
+                new LiteralPatchExpression("2", intType),
+                intType));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                replaceReturn,
+                replaceGeneratedRight,
+                new ReplaceProducedExpressionInputPatchPlanStep(
+                    "replaceNestedGeneratedRight",
+                    valueReturn.Id,
+                    replaceGeneratedRight.StepId,
+                    [],
+                    "right",
+                    intType,
+                    intType,
+                    new LiteralPatchExpression("3", intType)),
+            ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Contains(
+            "return value + (value * 3);",
+            Assert.Single(result.PatchedRequest!.Sources).Source);
+        HirMethodDeclaration changedMethod = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirReturnStatement changedReturn = Assert.IsType<HirReturnStatement>(
+            Assert.Single(changedMethod.Body.Statements));
+        HirBinaryExpression addition = Assert.IsType<HirBinaryExpression>(changedReturn.Expression);
+        HirBinaryExpression multiplication = Assert.IsType<HirBinaryExpression>(addition.Right);
+        HirLiteralExpression three = Assert.IsType<HirLiteralExpression>(multiplication.Right);
+        Assert.Equal("+", addition.Operator);
+        Assert.Equal("*", multiplication.Operator);
+        Assert.Equal("3", three.ValueText);
+        Assert.Equal(valueReturn.Id, changedReturn.Id);
+        Assert.Equal(4, Assert.Single(result.Analysis.IdentitySidecars).Generation);
+        GraphFunction function = Assert.Single(new HirGraphProjector()
+            .Project(result.Analysis.Hir, result.Analysis.Semantics)
+            .Functions);
+        Assert.Contains(
+            function.Edges,
+            edge => edge.FromNode == three.Id &&
+                edge.ToNode == multiplication.Id &&
+                edge.ToPort == "right");
+    }
+
+    [Fact]
+    public void Apply_ResolvesNestedPathInsideAnInsertedExpressionTree()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(bool enabled, int value)
+                {
+                    return value;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/InsertedExpressionPath.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement valueReturn = Assert.IsType<HirReturnStatement>(
+            Assert.Single(method.Body.Statements));
+        SemanticId boolType = GetTypeId(original, method.Parameters[0]);
+        SemanticId intType = GetTypeId(original, method.Parameters[1]);
+        var insertOffset = new InsertStatementPatchPlanStep(
+            "insertOffset",
+            method.Body.Id,
+            null,
+            valueReturn.Id,
+            new LocalLiteralDeclarationPatchStatement("offset", "int", "2", intType));
+        var insertIf = new InsertStatementPatchPlanStep(
+            "insertIf",
+            method.Body.Id,
+            null,
+            valueReturn.Id,
+            new IfPatchStatement(new BinaryPatchExpression(
+                "&&",
+                new LocalReferencePatchExpression(
+                    method.Parameters[0].Id,
+                    method.Parameters[0].Name,
+                    boolType),
+                new BinaryPatchExpression(
+                    ">",
+                    new BinaryPatchExpression(
+                        "+",
+                        new LocalReferencePatchExpression(
+                            method.Parameters[1].Id,
+                            method.Parameters[1].Name,
+                            intType),
+                        new LiteralPatchExpression("1", intType),
+                        intType),
+                    new LiteralPatchExpression("0", intType),
+                    boolType),
+                boolType)));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                insertOffset,
+                insertIf,
+                new ReplaceProducedExpressionInputPatchPlanStep(
+                    "connectOffsetToComparison",
+                    method.Body.Id,
+                    insertIf.StepId,
+                    ["right", "left"],
+                    "right",
+                    intType,
+                    intType,
+                    new ProducedLocalReferencePatchExpression(
+                        insertOffset.StepId,
+                        "offset",
+                        intType)),
+            ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains("int offset = 2;", patchedSource);
+        Assert.Contains("value + offset", patchedSource);
+        HirMethodDeclaration changedMethod = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirVariableDeclarationStatement offset = Assert.IsType<HirVariableDeclarationStatement>(
+            changedMethod.Body.Statements[0]);
+        HirIfStatement branch = Assert.IsType<HirIfStatement>(changedMethod.Body.Statements[1]);
+        HirBinaryExpression conjunction = Assert.IsType<HirBinaryExpression>(branch.Condition);
+        HirBinaryExpression comparison = Assert.IsType<HirBinaryExpression>(conjunction.Right);
+        HirBinaryExpression addition = Assert.IsType<HirBinaryExpression>(comparison.Left);
+        HirIdentifierExpression offsetUse = Assert.IsType<HirIdentifierExpression>(addition.Right);
+        Assert.Equal(
+            offset.Id,
+            Assert.Single(
+                result.Analysis.Semantics!.Nodes,
+                binding => binding.NodeId == offsetUse.Id).ReferencedSymbolId);
+        Assert.Equal(4, Assert.Single(result.Analysis.IdentitySidecars).Generation);
+    }
+
+    [Fact]
+    public void Apply_RollsBackWhenAProducedExpressionEditFailsAtRuntime()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int value)
+                {
+                    return value;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/RollbackProducedExpression.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement valueReturn = Assert.IsType<HirReturnStatement>(
+            Assert.Single(method.Body.Statements));
+        HirIdentifierExpression oldValue = Assert.IsType<HirIdentifierExpression>(valueReturn.Expression);
+        SemanticId intType = GetTypeId(original, oldValue);
+        var producer = new ReplaceReturnValuePatchPlanStep(
+            "replaceReturn",
+            valueReturn.Id,
+            oldValue.Id,
+            intType,
+            new BinaryPatchExpression(
+                "+",
+                new LocalReferencePatchExpression(
+                    method.Parameters[0].Id,
+                    method.Parameters[0].Name,
+                    intType),
+                new LiteralPatchExpression("1", intType),
+                intType));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                producer,
+                new ReplaceProducedExpressionInputPatchPlanStep(
+                    "connectMissingLocal",
+                    valueReturn.Id,
+                    producer.StepId,
+                    [],
+                    "right",
+                    intType,
+                    intType,
+                    new LocalReferencePatchExpression(
+                        SemanticId.FromKey("missing-local"),
+                        "missing",
+                        intType)),
+            ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.PatchedRequest);
+        Assert.Null(result.Analysis);
+        Assert.Equal(source, Assert.Single(request.Sources).Source);
+        Assert.NotEmpty(result.Diagnostics);
+    }
+
+    [Fact]
     public void Apply_RollsBackDirectStepsWhenAnEarlierDeletionRemovesALaterTarget()
     {
         const string source = """

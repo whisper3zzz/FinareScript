@@ -37,6 +37,7 @@ DOCUMENTS = [
     ROOT / "docs" / "GENERAL_EXPRESSION_EDITING.md",
     ROOT / "docs" / "PRODUCED_VALUE_REFERENCES.md",
     ROOT / "docs" / "EXPRESSION_INPUT_PATCHING.md",
+    ROOT / "docs" / "PRODUCED_EXPRESSION_HANDLES.md",
     ROOT / "docs" / "PATCH_PLAN.md",
     ROOT / "docs" / "ROADMAP.md",
     ROOT / "docs" / "milestones" / "M1_ROSLYN_GRAPH_FOUNDATION.md",
@@ -151,6 +152,15 @@ def main() -> int:
     nested_input_identity_path = (
         ROOT / "samples" / "Patching" / "EditNestedInput.cs.usids"
     )
+    generated_expression_source_path = (
+        ROOT / "samples" / "Patching" / "EditGeneratedExpression.cs"
+    )
+    generated_expression_plan_path = (
+        ROOT / "samples" / "Patching" / "EditGeneratedExpression.plan.json"
+    )
+    generated_expression_identity_path = (
+        ROOT / "samples" / "Patching" / "EditGeneratedExpression.cs.usids"
+    )
     region_source_path = ROOT / "samples" / "Regions" / "EarlyReturn.cs"
     loop_source_path = ROOT / "samples" / "Loops" / "Countdown.cs"
     loop_identity_path = ROOT / "samples" / "Loops" / "Countdown.cs.usids"
@@ -239,6 +249,12 @@ def main() -> int:
         and nested_input_identity_path.is_file(),
         "Missing nested expression-input edit sample",
     )
+    require(
+        generated_expression_source_path.is_file()
+        and generated_expression_plan_path.is_file()
+        and generated_expression_identity_path.is_file(),
+        "Missing produced-expression handle sample",
+    )
     require(region_source_path.is_file(), "Missing structured Graph-region sample")
     require(
         loop_source_path.is_file() and loop_identity_path.is_file(),
@@ -307,6 +323,15 @@ def main() -> int:
     nested_input_identity = json.loads(
         nested_input_identity_path.read_text(encoding="utf-8")
     )
+    generated_expression_source = generated_expression_source_path.read_text(
+        encoding="utf-8"
+    )
+    generated_expression_plan = json.loads(
+        generated_expression_plan_path.read_text(encoding="utf-8")
+    )
+    generated_expression_identity = json.loads(
+        generated_expression_identity_path.read_text(encoding="utf-8")
+    )
     region_source = region_source_path.read_text(encoding="utf-8")
     loop_source = loop_source_path.read_text(encoding="utf-8")
     loop_identity = json.loads(loop_identity_path.read_text(encoding="utf-8"))
@@ -341,6 +366,9 @@ def main() -> int:
     ).hexdigest()
     nested_input_source_digest = hashlib.sha256(
         nested_input_source.encode("utf-8")
+    ).hexdigest()
+    generated_expression_source_digest = hashlib.sha256(
+        generated_expression_source.encode("utf-8")
     ).hexdigest()
     loop_source_digest = hashlib.sha256(loop_source.encode("utf-8")).hexdigest()
     require(
@@ -451,7 +479,7 @@ def main() -> int:
     introduction_step = plan_steps[0]
     reconnect_steps = plan_steps[1:]
     require(
-        plan_document["schemaVersion"] == "unifiedscript.patch-plan/v0.12"
+        plan_document["schemaVersion"] == "unifiedscript.patch-plan/v0.13"
         and plan_identity["sourcePath"]
         == "samples/Patching/SharedExpressionPlan.cs"
         and plan_identity["sourceDigest"] == f"sha256:{plan_source_digest}"
@@ -486,7 +514,7 @@ def main() -> int:
     composed_identity_ids = {entry["id"] for entry in composed_identity["entries"]}
     composed_insert, composed_reconnect, composed_operator, composed_delete = composed_steps
     require(
-        composed_document["schemaVersion"] == "unifiedscript.patch-plan/v0.12"
+        composed_document["schemaVersion"] == "unifiedscript.patch-plan/v0.13"
         and composed_identity["sourcePath"] == "samples/Patching/ComposedPlan.cs"
         and composed_identity["sourceDigest"] == f"sha256:{composed_source_digest}"
         and [step["step"] for step in composed_steps]
@@ -540,7 +568,7 @@ def main() -> int:
     guard_plan_steps = guard_plan["steps"]
     guard_plan_source, *guard_branch_steps = guard_plan_steps
     require(
-        guard_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.12"
+        guard_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.13"
         and guard_plan["sourceCompilationId"] == guard_document["sourceCompilationId"]
         and guard_plan["semanticConfigurationId"]
         == guard_document["semanticConfigurationId"]
@@ -561,7 +589,7 @@ def main() -> int:
     )
     guard_return_source, guard_return_step, guard_fallback_step = guard_return_plan["steps"]
     require(
-        guard_return_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.12"
+        guard_return_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.13"
         and guard_return_plan["sourceCompilationId"] == guard_document["sourceCompilationId"]
         and guard_return_plan["semanticConfigurationId"]
         == guard_document["semanticConfigurationId"]
@@ -583,7 +611,7 @@ def main() -> int:
     nested_steps = nested_plan["steps"]
     nested_outer, nested_inner, nested_then, nested_else, nested_outer_else = nested_steps
     require(
-        nested_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.12"
+        nested_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.13"
         and nested_identity["sourcePath"]
         == "samples/Patching/NestedDecisionRules.cs"
         and nested_identity["sourceDigest"] == f"sha256:{nested_source_digest}"
@@ -627,7 +655,7 @@ def main() -> int:
         loop_plan_steps
     )
     require(
-        loop_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.12"
+        loop_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.13"
         and loop_plan_identity["sourcePath"]
         == "samples/Patching/LoopBuildRules.cs"
         and loop_plan_identity["sourceDigest"]
@@ -669,7 +697,7 @@ def main() -> int:
     condition_payload = condition_edit["newCondition"]
     require(
         expression_edit_plan["schemaVersion"]
-        == "unifiedscript.patch-plan/v0.12"
+        == "unifiedscript.patch-plan/v0.13"
         and expression_edit_identity["sourcePath"]
         == "samples/Patching/EditLoopRules.cs"
         and expression_edit_identity["sourceDigest"]
@@ -707,7 +735,7 @@ def main() -> int:
     initializer_edit, if_edit, return_edit = general_expression_plan["steps"]
     require(
         general_expression_plan["schemaVersion"]
-        == "unifiedscript.patch-plan/v0.12"
+        == "unifiedscript.patch-plan/v0.13"
         and general_expression_identity["sourcePath"]
         == "samples/Patching/EditDecisionValues.cs"
         and general_expression_identity["sourceDigest"]
@@ -750,7 +778,7 @@ def main() -> int:
     produced_references = [guard_reference, branch_reference, fallback_reference]
     require(
         produced_value_plan["schemaVersion"]
-        == "unifiedscript.patch-plan/v0.12"
+        == "unifiedscript.patch-plan/v0.13"
         and produced_value_identity["sourcePath"]
         == "samples/Patching/ConnectGeneratedValues.cs"
         and produced_value_identity["sourceDigest"]
@@ -797,7 +825,7 @@ def main() -> int:
     nested_input_producer, nested_input_edit = nested_input_plan["steps"]
     require(
         nested_input_plan["schemaVersion"]
-        == "unifiedscript.patch-plan/v0.12"
+        == "unifiedscript.patch-plan/v0.13"
         and nested_input_identity["sourcePath"]
         == "samples/Patching/EditNestedInput.cs"
         and nested_input_identity["sourceDigest"]
@@ -826,6 +854,52 @@ def main() -> int:
         and nested_input_edit["newInput"]["expectedName"] == "offset"
         and "return (value + 1) * 3;" in nested_input_source,
         "Nested expression-input source, sidecar, and plan are inconsistent",
+    )
+    generated_expression_identity_ids = {
+        entry["id"] for entry in generated_expression_identity["entries"]
+    }
+    generated_root, generated_right, generated_nested_right = (
+        generated_expression_plan["steps"]
+    )
+    generated_handles = [generated_right, generated_nested_right]
+    require(
+        generated_expression_plan["schemaVersion"]
+        == "unifiedscript.patch-plan/v0.13"
+        and generated_expression_identity["sourcePath"]
+        == "samples/Patching/EditGeneratedExpression.cs"
+        and generated_expression_identity["sourceDigest"]
+        == f"sha256:{generated_expression_source_digest}"
+        and generated_expression_identity["generation"] == 1
+        and generated_expression_identity["tombstones"] == []
+        and [step["step"] for step in generated_expression_plan["steps"]]
+        == [
+            "replaceReturnValue",
+            "replaceProducedExpressionInput",
+            "replaceProducedExpressionInput",
+        ]
+        and len(
+            {step["stepId"] for step in generated_expression_plan["steps"]}
+        )
+        == 3
+        and generated_root["targetNodeId"] in generated_expression_identity_ids
+        and generated_root["expectedValueNodeId"]
+        in generated_expression_identity_ids
+        and generated_root["newValue"]["operator"] == "+"
+        and generated_root["newValue"]["left"]["sourceDefinitionId"]
+        in generated_expression_identity_ids
+        and all(
+            handle["targetNodeId"] == generated_root["targetNodeId"]
+            and handle["targetPath"] == []
+            and handle["inputPort"] == "right"
+            and "expectedInputNodeId" not in handle
+            for handle in generated_handles
+        )
+        and generated_right["sourceStepId"] == generated_root["stepId"]
+        and generated_nested_right["sourceStepId"] == generated_right["stepId"]
+        and generated_right["newInput"]["operator"] == "*"
+        and generated_nested_right["newInput"]["valueText"] == "3"
+        and "return value;" in generated_expression_source,
+        "Produced-expression handle source, sidecar, and chained plan are inconsistent",
     )
     require(
         any((ROOT / "tests" / "UnifiedScript.Tests").glob("*Tests.cs")),
