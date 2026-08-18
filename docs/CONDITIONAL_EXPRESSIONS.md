@@ -9,7 +9,7 @@ evaluator or desugar the expression into an eager function call.
 The current contracts are:
 
 - HIR `unifiedscript.hir/v0.3`;
-- Graph `unifiedscript.graph/v0.6`;
+- Graph `unifiedscript.graph/v0.7`;
 - standalone patch `unifiedscript.patch/v0.13`;
 - patch plan `unifiedscript.patch-plan/v0.14`.
 
@@ -50,7 +50,7 @@ each branch independently.
 
 ## Graph contract
 
-Graph v0.5 introduced the node; current Graph v0.6 retains it with:
+Graph v0.5 introduced the node; current Graph v0.7 retains it with:
 
 - `kind: "conditional"`;
 - label `Select`;
@@ -155,7 +155,8 @@ subtrees as ordinary tombstones.
   reference, nullable, tuple, or user-defined conversions.
 - The closed authored algebra still excludes new call/member construction,
   assignment, and `await`.
-- Null-conditional access (`?.`), null coalescing (`??`), switch expressions,
-  pattern arms, and conditional `ref` expressions remain outside this slice.
+- Null coalescing (`??`) is covered by the subsequent lazy-right contract.
+  Null-conditional access (`?.`), switch expressions, pattern arms, and
+  conditional `ref` expressions remain outside this slice.
 - Conditional-expression control flow and exception edges are not yet
   materialized as standalone CFG regions.

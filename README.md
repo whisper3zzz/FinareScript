@@ -49,12 +49,14 @@ The repository currently implements:
   `operand`, and positional `argN` ports emitted by Graph;
 - transaction expression handles that let later stages traverse and edit trees
   authored by earlier stages without predicting generated semantic IDs;
-- first-class conditional (`?:`) expressions across HIR v0.3 and Graph v0.6,
+- first-class conditional (`?:`) expressions across HIR v0.3 and Graph v0.7,
   with lazy-branch safety, typed source synthesis, canonical branch ports, and
   generated-tree handle traversal;
-- explicit `&&`/`||` right-side evaluation conditions in Graph v0.6, with
+- explicit `&&`/`||` right-side evaluation conditions in Graph v0.7, with
   always-evaluated left effects and `UVS2003` rejection of conditional right
   effects;
+- null-coalescing (`??`) across text, HIR, Graph v0.7, exact visual
+  construction, and produced-expression editing, with `UVS2004` effect safety;
 - opt-in `.usids` sidecars that preserve node identity across formatting and edits;
 - semantic-independent `.usgraph` layout sidecars with deterministic positions,
   sizes, collapsed state, comment regions, routing hints, and orphan recovery;
@@ -87,10 +89,13 @@ same standalone and produced-expression editing paths through `condition`,
 M4.13 closes the equivalent logical-operator gap: Graph declares exactly when
 an `&&`/`||` right input is evaluated, preserves the left effect chain, and
 rejects right subtrees whose effects would require conditional control flow.
+M4.14 applies the same explicit lazy-right contract to `??`, preserves
+Roslyn-bound nullable/result types, and adds exact scalar visual construction
+and produced-handle editing through the existing binary ports.
 
 The v0.2 profile accepts `[Visual]` methods containing local variables,
 expressions, calls, assignments, `if/else`, `while`, `break`, `continue`,
-`return`, conditional expressions, casts, and `await`.
+`return`, conditional and null-coalescing expressions, casts, and `await`.
 Unsupported syntax is rejected explicitly instead of being approximated.
 
 ## Architecture
@@ -156,7 +161,7 @@ Without `--out`, the graph JSON is written to stdout.
 
 ### Analyze structured regions
 
-Graph v0.6 assigns every node to exactly one semantic region and preserves
+Graph v0.7 assigns every node to exactly one semantic region and preserves
 function, block, `if`, `then`, explicit/implicit `else`, `loop`, and `loopBody`
 nesting. Generate the early-return example with:
 
@@ -191,7 +196,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
   --out artifacts/loops
 ```
 
-HIR v0.3 emits explicit while/break/continue statements. Graph v0.6 emits a
+HIR v0.3 emits explicit while/break/continue statements. Graph v0.7 emits a
 `loop` region with one `loopBody` child, and derived CFG facts identify the
 effective condition header, body entry, exit successor, back-edge arcs, and
 break/continue nodes owned by the nearest loop. Effectful conditions route all
@@ -729,7 +734,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
 The editor supplies only the original method-body anchor and backward symbolic
 producer references. The coordinator resolves the generated while/body/branch
 IDs after each reanalysis. The final ordinary C# loop reprojects into the same
-HIR v0.3, Graph v0.6 regions, and nearest-loop CFG facts as a text-authored
+HIR v0.3, Graph v0.7 regions, and nearest-loop CFG facts as a text-authored
 loop. See [LOOP_PATCHING.md](docs/LOOP_PATCHING.md).
 
 ### Edit assignment values and loop conditions
@@ -889,7 +894,7 @@ identity, tombstone, and Graph-edge behavior stay on one code path. See
 ### Author and edit a conditional expression
 
 M4.12 adds `condition ? whenTrue : whenFalse` as a first-class expression in
-HIR v0.3, current Graph v0.6, patch v0.13, and patch-plan v0.14. Graph emits one
+HIR v0.3, current Graph v0.7, patch v0.13, and patch-plan v0.14. Graph emits one
 `conditional`/`Select` node with `condition`, `whenTrue`, and `whenFalse` data
 inputs, a `value` output, and `evaluation: lazyBranches`. Text lowering keeps
 the original expression shape; it does not turn the expression into a call or
@@ -924,7 +929,8 @@ input edit. See
 
 M4.13 makes the evaluation order of `&&` and `||` machine-readable. Their
 existing binary nodes retain `left`, `right`, and `value` data ports while
-Graph v0.6 adds `evaluation: shortCircuitRight`. `rightEvaluation` is
+Graph v0.6 introduced `evaluation: shortCircuitRight`; current Graph v0.7
+retains it. `rightEvaluation` is
 `whenLeftTrue` for `&&` and `whenLeftFalse` for `||`. Ordinary `&` and `|`
 remain eager binary operators.
 
@@ -944,6 +950,34 @@ dotnet run --project src/UnifiedScript.Cli -- \
 
 See [SHORT_CIRCUIT_EXPRESSIONS.md](docs/SHORT_CIRCUIT_EXPRESSIONS.md) for the
 Graph and effect-safety contract.
+
+### Analyze and edit null-coalescing expressions
+
+M4.14 admits `left ?? right` without desugaring it into an eager call or a
+Boolean conditional. HIR retains the ordered binary expression. Graph v0.7
+adds `rightEvaluation: whenLeftNull` and
+`resultSelection: leftNonNullOrRight`, so a visual runtime or shared VM can
+preserve both evaluation and value selection directly.
+
+The left subtree may carry effects because it always executes exactly once.
+An effectful right subtree produces `UVS2004`; effect-catalogued pure calls are
+allowed but remain conditionally evaluated. Roslyn supplies text-authored
+nullable/result types, then `UVS2005` rejects conversions that are not explicit
+in the Graph contract. Visual construction uses the existing binary patch
+payload and the same exact graph-safe scalar families such as `T? ?? T` and
+`T? ?? T?`, without hidden conversions.
+
+Generate the checked-in example with:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  analyze samples/Expressions/CoalesceRules.cs \
+  --out artifacts/coalesce
+```
+
+Existing `left`/`right` input edits and produced-expression handles operate on
+the same coalescing tree. See
+[NULL_COALESCING_EXPRESSIONS.md](docs/NULL_COALESCING_EXPRESSIONS.md).
 
 ## Persist and synchronize graph layout
 

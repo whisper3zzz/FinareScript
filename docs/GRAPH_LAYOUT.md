@@ -66,7 +66,7 @@ route. Identical normalized inputs therefore emit byte-identical JSON.
 sidecar and returns a new layout document. It has no API reference to HIR or an
 identity sidecar and cannot modify either artifact.
 
-The synchronizer validates the complete Graph v0.6 region hierarchy before
+The synchronizer validates the complete Graph v0.7 region hierarchy before
 reading nodes and edges, but it does not copy semantic regions into layout.
 `GraphRegion` represents executable program structure; `GraphCommentRegion`
 represents a user-drawn canvas annotation. Their identities and lifecycles are

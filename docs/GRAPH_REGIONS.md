@@ -4,7 +4,7 @@
 
 `unifiedscript.graph/v0.3` introduced explicit structured regions to the
 semantic Graph, v0.4 added structured `while` loops, and current
-`unifiedscript.graph/v0.6` retains both. Nodes and control/data edges still describe computation; regions
+`unifiedscript.graph/v0.7` retains both. Nodes and control/data edges still describe computation; regions
 describe lexical ownership and structured control-flow nesting without
 inferring it from screen coordinates or reverse-engineering edge shapes.
 
@@ -111,7 +111,7 @@ inside Graph JSON. See [CONTROL_FLOW_ANALYSIS.md](CONTROL_FLOW_ANALYSIS.md).
 
 Semantic regions are also separate from `.usgraph` comment regions. A semantic
 region affects program structure; a comment region is only visual canvas state.
-`GraphLayoutSynchronizer` validates Graph v0.6 but continues to preserve layout
+`GraphLayoutSynchronizer` validates Graph v0.7 but continues to preserve layout
 solely by function/node/edge IDs, so adding region metadata does not move nodes
 or change placement.
 

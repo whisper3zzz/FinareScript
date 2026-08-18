@@ -87,6 +87,7 @@ public sealed class RoslynSemanticBinder
         BindExpressions(hir);
         ValidateConditionalExpressions(hir, diagnostics);
         ValidateShortCircuitExpressions(hir, diagnostics);
+        ValidateCoalesceExpressions(hir, diagnostics);
 
         var bound = new BoundCompilation(
             BoundCompilation.CurrentSchemaVersion,
@@ -280,6 +281,74 @@ public sealed class RoslynSemanticBinder
                 effectfulRightNode.Id));
         }
     }
+
+    private void ValidateCoalesceExpressions(
+        HirCompilationUnit hir,
+        ICollection<UnifiedDiagnostic> diagnostics)
+    {
+        var reportedNodes = new HashSet<SemanticId>();
+        foreach (HirBinaryExpression binary in hir
+                     .DescendantsAndSelf()
+                     .OfType<HirBinaryExpression>()
+                     .Where(static binary => binary.Operator == "??"))
+        {
+            TypeDescriptor? leftType = GetBoundType(binary.Left);
+            TypeDescriptor? rightType = GetBoundType(binary.Right);
+            TypeDescriptor? resultType = GetBoundType(binary);
+            if (leftType is null ||
+                rightType is null ||
+                resultType is null ||
+                !IsSupportedCoalesceTypeShape(leftType, rightType, resultType))
+            {
+                diagnostics.Add(new UnifiedDiagnostic(
+                    SemanticDiagnosticCodes.CoalesceConversionNotSupported,
+                    UnifiedDiagnosticSeverity.Error,
+                    "Null coalescing in the Visual Profile requires a nullable, graph-safe " +
+                    "left operand plus right and result types with the same base metadata " +
+                    "type. Implicit and user-defined coalescing conversions are not yet " +
+                    "serialized for shared VM execution.",
+                    binary.Span,
+                    binary.Id));
+            }
+
+            HirExpression? effectfulRightNode = FindEffectfulExpression([binary.Right]);
+            if (effectfulRightNode is null || !reportedNodes.Add(effectfulRightNode.Id))
+            {
+                continue;
+            }
+
+            diagnostics.Add(new UnifiedDiagnostic(
+                SemanticDiagnosticCodes.CoalesceRightEffectsNotSupported,
+                UnifiedDiagnosticSeverity.Error,
+                "The right operand of '??' must be effect-free so Graph can preserve C# " +
+                "null-coalescing evaluation. Move mutation, await, or effectful calls into " +
+                "explicit control flow.",
+                effectfulRightNode.Span,
+                effectfulRightNode.Id));
+        }
+    }
+
+    private TypeDescriptor? GetBoundType(HirExpression expression) =>
+        nodes.TryGetValue(expression.Id, out BoundNodeInfo? binding) &&
+        binding.TypeId is SemanticId typeId &&
+        types.TryGetValue(typeId, out TypeDescriptor? type)
+            ? type
+            : null;
+
+    private static bool IsSupportedCoalesceTypeShape(
+        TypeDescriptor left,
+        TypeDescriptor right,
+        TypeDescriptor result) =>
+        left.IsGraphSafe &&
+        right.IsGraphSafe &&
+        result.IsGraphSafe &&
+        left.Nullability == UnifiedNullability.Nullable &&
+        right.Id == result.Id &&
+        left.Kind == result.Kind &&
+        string.Equals(
+            left.MetadataName.TrimEnd('?'),
+            result.MetadataName.TrimEnd('?'),
+            StringComparison.Ordinal);
 
     private HirExpression? FindEffectfulExpression(IEnumerable<HirExpression> roots) => roots
         .SelectMany(static root => root.DescendantsAndSelf())

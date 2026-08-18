@@ -627,12 +627,20 @@ public sealed class HirGraphProjector
                                     KeyValuePair.Create("evaluation", "shortCircuitRight"),
                                     KeyValuePair.Create("rightEvaluation", "whenLeftFalse"),
                                 ],
+                                "??" =>
+                                [
+                                    KeyValuePair.Create("evaluation", "shortCircuitRight"),
+                                    KeyValuePair.Create("rightEvaluation", "whenLeftNull"),
+                                    KeyValuePair.Create(
+                                        "resultSelection",
+                                        "leftNonNullOrRight"),
+                                ],
                                 _ => [],
                             };
                         if (evaluationProperties.Count > 0 && right.Effects.Count > 0)
                         {
                             throw new InvalidOperationException(
-                                "Short-circuit Graph right operands must be effect-free.");
+                                "Lazy-right Graph operands must be effect-free.");
                         }
 
                         AddNode(ValueNode(

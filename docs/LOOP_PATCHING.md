@@ -6,7 +6,7 @@ M4.6 closes the first bounded loop round trip. A visual edit can now create an
 ordinary C# `while`, obtain a symbolic handle for its generated body, and
 populate that body with the same typed statements used elsewhere. The result
 is re-lowered into the current HIR v0.3 and projected into the current Graph
-v0.6/CFG loop model; there is no editor-only loop node or second runtime.
+v0.7/CFG loop model; there is no editor-only loop node or second runtime.
 
 This is structured construction, not arbitrary cyclic edge rewiring. The
 patch describes a `while` and ordered body statements. The compiler owns the

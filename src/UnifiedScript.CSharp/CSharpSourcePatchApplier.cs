@@ -79,6 +79,7 @@ public sealed class CSharpSourcePatchApplier
             "|",
             "&&",
             "||",
+            "??",
         };
     private static readonly IReadOnlySet<string> GraphExpressionUnaryOperators =
         new HashSet<string>(StringComparer.Ordinal)
@@ -3201,6 +3202,13 @@ public sealed class CSharpSourcePatchApplier
             return IsBoolean(left) && IsBoolean(right) && IsBoolean(result);
         }
 
+        if (operatorText == "??")
+        {
+            return left.Nullability == UnifiedNullability.Nullable &&
+                IsSameType(right, result) &&
+                IsSameTypeIgnoringNullability(left, result);
+        }
+
         return (operatorText is "&" or "^" or "|") &&
             IsSameType(left, right) &&
             IsSameType(left, result) &&
@@ -3228,6 +3236,15 @@ public sealed class CSharpSourcePatchApplier
             "System.UInt64";
 
     private static bool IsSameType(TypeDescriptor left, TypeDescriptor right) => left.Id == right.Id;
+
+    private static bool IsSameTypeIgnoringNullability(
+        TypeDescriptor left,
+        TypeDescriptor right) =>
+        left.Kind == right.Kind &&
+        string.Equals(
+            left.MetadataName.TrimEnd('?'),
+            right.MetadataName.TrimEnd('?'),
+            StringComparison.Ordinal);
 
     private static ExpressionSyntax ParenthesizeCompositeExpression(ExpressionSyntax expression) =>
         expression is LiteralExpressionSyntax or IdentifierNameSyntax

@@ -209,7 +209,7 @@ public sealed class CSharpSemanticPipelineTests
             conditionBinding.TypeId!.Value).Kind);
 
         GraphDocument document = new HirGraphProjector().Project(hir, semantics);
-        Assert.Equal("unifiedscript.graph/v0.6", document.SchemaVersion);
+        Assert.Equal("unifiedscript.graph/v0.7", document.SchemaVersion);
         GraphFunction graph = Assert.Single(document.Functions);
         GraphNode select = Assert.Single(graph.Nodes, static node => node.Kind == "conditional");
         Assert.Equal("Select", select.Label);
@@ -309,7 +309,7 @@ public sealed class CSharpSemanticPipelineTests
         HirCompilationUnit hir = Assert.IsType<HirCompilationUnit>(result.Hir);
         BoundCompilation semantics = Assert.IsType<BoundCompilation>(result.Semantics);
         GraphDocument document = new HirGraphProjector().Project(hir, semantics);
-        Assert.Equal("unifiedscript.graph/v0.6", document.SchemaVersion);
+        Assert.Equal("unifiedscript.graph/v0.7", document.SchemaVersion);
         GraphNode[] logicalNodes = document.Functions
             .SelectMany(static function => function.Nodes)
             .Where(static node => node.Kind == "binary" &&
@@ -479,6 +479,201 @@ public sealed class CSharpSemanticPipelineTests
         Assert.Equal("whenLeftTrue", logicalAnd.Properties["rightEvaluation"]);
         Assert.DoesNotContain(invocation.Ports, static port =>
             port.Kind == GraphPortKind.Control);
+    }
+
+    [Fact]
+    public void AnalyzeAndProject_DeclareNullCoalescingRightEvaluationAndTypes()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int ResolveNumber(int? value, int fallback)
+                {
+                    return value ?? fallback;
+                }
+
+                [Visual]
+                static string ResolveText(string? value, string fallback)
+                {
+                    return value ?? fallback;
+                }
+            }
+            """;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            source,
+            "CoalesceRules.cs");
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        HirCompilationUnit hir = Assert.IsType<HirCompilationUnit>(result.Hir);
+        BoundCompilation semantics = Assert.IsType<BoundCompilation>(result.Semantics);
+        HirBinaryExpression[] coalesces = hir.DescendantsAndSelf()
+            .OfType<HirBinaryExpression>()
+            .Where(static binary => binary.Operator == "??")
+            .ToArray();
+        Assert.Equal(2, coalesces.Length);
+        Assert.All(coalesces, coalesce =>
+        {
+            TypeDescriptor leftType = FindType(
+                semantics,
+                FindNode(semantics, coalesce.Left.Id).TypeId!.Value);
+            Assert.Equal(UnifiedNullability.Nullable, leftType.Nullability);
+            Assert.Equal(
+                FindNode(semantics, coalesce.Right.Id).TypeId,
+                FindNode(semantics, coalesce.Id).TypeId);
+        });
+
+        GraphDocument document = new HirGraphProjector().Project(hir, semantics);
+        Assert.Equal("unifiedscript.graph/v0.7", document.SchemaVersion);
+        GraphNode[] graphCoalesces = document.Functions
+            .SelectMany(static function => function.Nodes)
+            .Where(static node => node.Kind == "binary" &&
+                node.Properties["operator"] == "??")
+            .ToArray();
+        Assert.Equal(2, graphCoalesces.Length);
+        Assert.All(graphCoalesces, static node =>
+        {
+            Assert.Equal("shortCircuitRight", node.Properties["evaluation"]);
+            Assert.Equal("whenLeftNull", node.Properties["rightEvaluation"]);
+            Assert.Equal("leftNonNullOrRight", node.Properties["resultSelection"]);
+            Assert.Contains(node.Ports, static port => port.Name == "left");
+            Assert.Contains(node.Ports, static port => port.Name == "right");
+            Assert.Contains(node.Ports, static port => port.Name == "value");
+        });
+    }
+
+    [Fact]
+    public void Analyze_RejectsEffectfulNullCoalescingRightOperands()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int Resolve(int? value)
+                {
+                    return value ?? Probe();
+                }
+
+                [Visual]
+                static int ResolveNested(int? first, int? second)
+                {
+                    return first ?? (second ?? Probe());
+                }
+
+                static int Probe()
+                {
+                    return 1;
+                }
+            }
+            """;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            source,
+            "EffectfulCoalesceRight.cs");
+
+        Assert.False(result.Succeeded);
+        Assert.NotNull(result.Hir);
+        Assert.Null(result.Semantics);
+        UnifiedDiagnostic[] diagnostics = result.Diagnostics
+            .Where(static diagnostic =>
+                diagnostic.Code == SemanticDiagnosticCodes.CoalesceRightEffectsNotSupported)
+            .ToArray();
+        Assert.Equal(2, diagnostics.Length);
+        Assert.All(diagnostics, static diagnostic =>
+            Assert.Contains("null-coalescing evaluation", diagnostic.Message, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Analyze_RejectsNullCoalescingConversionsNotSerializedForTheSharedVm()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int Resolve(short? value, int fallback)
+                {
+                    return value ?? fallback;
+                }
+            }
+            """;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            source,
+            "ConvertedCoalesce.cs");
+
+        Assert.False(result.Succeeded);
+        Assert.NotNull(result.Hir);
+        Assert.Null(result.Semantics);
+        UnifiedDiagnostic diagnostic = Assert.Single(
+            result.Diagnostics,
+            static diagnostic =>
+                diagnostic.Code == SemanticDiagnosticCodes.CoalesceConversionNotSupported);
+        Assert.Contains("shared VM execution", diagnostic.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AnalyzeAndProject_SequenceNullCoalescingLeftEffectsAndAllowPureRightCalls()
+    {
+        const string source = """
+            using System;
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int PollThenFallback(int fallback)
+                {
+                    return Poll() ?? fallback;
+                }
+
+                [Visual]
+                static int PureFallback(int? value, int fallback)
+                {
+                    return value ?? Math.Abs(fallback);
+                }
+
+                static int? Poll()
+                {
+                    return null;
+                }
+            }
+            """;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            source,
+            "CoalesceEffects.cs");
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        HirCompilationUnit hir = Assert.IsType<HirCompilationUnit>(result.Hir);
+        BoundCompilation semantics = Assert.IsType<BoundCompilation>(result.Semantics);
+        GraphDocument document = new HirGraphProjector().Project(hir, semantics);
+        GraphFunction effectfulGraph = Assert.Single(document.Functions, static function =>
+            function.QualifiedName.EndsWith("PollThenFallback", StringComparison.Ordinal));
+        GraphNode poll = Assert.Single(effectfulGraph.Nodes, static node =>
+            node.Kind == "invocation" && node.Properties["method"].Contains("Rules.Poll"));
+        GraphNode effectfulReturn = Assert.Single(
+            effectfulGraph.Nodes,
+            static node => node.Kind == "return");
+        Assert.Contains(effectfulGraph.Edges, edge =>
+            edge.Kind == GraphEdgeKind.Control &&
+            edge.FromNode == poll.Id && edge.FromPort == "execOut" &&
+            edge.ToNode == effectfulReturn.Id && edge.ToPort == "in");
+
+        GraphFunction pureGraph = Assert.Single(document.Functions, static function =>
+            function.QualifiedName.EndsWith("PureFallback", StringComparison.Ordinal));
+        GraphNode math = Assert.Single(pureGraph.Nodes, static node =>
+            node.Kind == "invocation" && node.Properties["method"].Contains("System.Math.Abs"));
+        GraphNode coalesce = Assert.Single(pureGraph.Nodes, static node =>
+            node.Kind == "binary" && node.Properties["operator"] == "??");
+        Assert.Equal("whenLeftNull", coalesce.Properties["rightEvaluation"]);
+        Assert.DoesNotContain(math.Ports, static port => port.Kind == GraphPortKind.Control);
     }
 
     private static BoundNodeInfo FindNode(BoundCompilation semantics, SemanticId id) =>

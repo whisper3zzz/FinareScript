@@ -8,7 +8,7 @@ an eager Boolean helper or a second evaluator.
 The current contracts are:
 
 - HIR `unifiedscript.hir/v0.3`;
-- Graph `unifiedscript.graph/v0.6`;
+- Graph `unifiedscript.graph/v0.7`;
 - standalone patch `unifiedscript.patch/v0.13`;
 - patch plan `unifiedscript.patch-plan/v0.14`.
 
@@ -19,8 +19,8 @@ Only Graph changes in this slice. HIR and the patch protocols already preserve
 
 C# always evaluates the left operand first. It evaluates the right operand of
 `&&` only when the left value is `true`, and the right operand of `||` only
-when the left value is `false`. Graph v0.6 records that rule directly on the
-existing binary node:
+when the left value is `false`. Graph v0.6 introduced that rule; current Graph
+v0.7 records it directly on the existing binary node:
 
 | Operator | `evaluation` | `rightEvaluation` |
 | --- | --- | --- |
@@ -82,8 +82,8 @@ analysis, and applies `UVS2003`; therefore a visual edit cannot introduce an
 effectful conditional right operand through a patch.
 
 No patch-schema bump is required because the authored syntax shape and ports
-do not change. Graph v0.6 is required because consumers gain a new mandatory
-evaluation meaning for these operators.
+do not change. Graph v0.6 was required because consumers gained a new mandatory
+evaluation meaning for these operators; v0.7 retains that contract.
 
 ## Checked-in sample
 
@@ -103,8 +103,8 @@ The resulting Graph uses v0.6 and the properties in the table above.
 
 - Conditional effects on the right are rejected instead of being represented
   by a dedicated lazy subregion.
-- Null coalescing (`??`) and null-conditional access (`?.`) are not admitted by
-  this slice.
+- Null coalescing (`??`) is covered by the subsequent Graph v0.7 contract;
+  null-conditional access (`?.`) remains outside this slice.
 - Flow-sensitive nullable state, exception edges, and speculative-allocation
   effects are not modeled yet.
 - `&&`/`||` remain binary HIR nodes rather than standalone CFG regions; their

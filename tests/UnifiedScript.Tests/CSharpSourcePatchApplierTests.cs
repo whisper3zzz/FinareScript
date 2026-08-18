@@ -749,6 +749,140 @@ public sealed class CSharpSourcePatchApplierTests
     }
 
     [Fact]
+    public void Apply_BuildsTypedNullCoalescingAndEditsItsExactInputPort()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int Resolve(int? value, int fallback)
+                {
+                    return fallback;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/CoalescePatch.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(
+            Assert.Single(method.Body.Statements));
+        HirExpression oldValue = Assert.IsAssignableFrom<HirExpression>(returnStatement.Expression);
+        SemanticId nullableIntType = GetTypeId(original, method.Parameters[0]);
+        SemanticId intType = GetTypeId(original, method.Parameters[1]);
+        var applier = new CSharpSourcePatchApplier();
+        SemanticPatchDocument buildPatch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new ReplaceReturnValuePatchOperation(
+                returnStatement.Id,
+                oldValue.Id,
+                intType,
+                new BinaryPatchExpression(
+                    "??",
+                    new LocalReferencePatchExpression(
+                        method.Parameters[0].Id,
+                        method.Parameters[0].Name,
+                        nullableIntType),
+                    new LocalReferencePatchExpression(
+                        method.Parameters[1].Id,
+                        method.Parameters[1].Name,
+                        intType),
+                    intType))]);
+
+        CSharpPatchResult built = applier.Apply(request, buildPatch);
+
+        Assert.True(built.Succeeded, string.Join(Environment.NewLine, built.Diagnostics));
+        CSharpCompilationRequest builtRequest = Assert.IsType<CSharpCompilationRequest>(built.PatchedRequest);
+        Assert.Contains(
+            "return value ?? fallback;",
+            Assert.Single(builtRequest.Sources).Source,
+            StringComparison.Ordinal);
+        CSharpAnalysisResult builtAnalysis = Assert.IsType<CSharpAnalysisResult>(built.Analysis);
+        HirCompilationUnit builtHir = Assert.IsType<HirCompilationUnit>(builtAnalysis.Hir);
+        BoundCompilation builtSemantics = Assert.IsType<BoundCompilation>(builtAnalysis.Semantics);
+        HirBinaryExpression coalesce = Assert.Single(
+            builtHir.DescendantsAndSelf().OfType<HirBinaryExpression>(),
+            static binary => binary.Operator == "??");
+        SemanticId originalLeftId = coalesce.Left.Id;
+        SemanticId oldRightId = coalesce.Right.Id;
+        SemanticPatchDocument editPortPatch = SemanticPatchDocument.Create(
+            builtHir.Id,
+            builtSemantics.ConfigurationId,
+            [new ReplaceExpressionInputPatchOperation(
+                coalesce.Id,
+                "right",
+                oldRightId,
+                intType,
+                intType,
+                new LiteralPatchExpression("2", intType))]);
+        IReadOnlyDictionary<string, IdentitySidecarDocument> builtSidecars = builtAnalysis.IdentitySidecars
+            .ToDictionary(static sidecar => sidecar.SourcePath, StringComparer.Ordinal);
+        var advancedRequest = new CSharpCompilationRequest(
+            builtRequest.AssemblyName,
+            builtRequest.Sources.Select(source => new CSharpSourceDocument(
+                source.LogicalPath,
+                source.Source,
+                builtSidecars[source.LogicalPath])),
+            builtRequest.ReferencePaths,
+            builtRequest.EffectCatalog);
+
+        CSharpPatchResult edited = applier.Apply(advancedRequest, editPortPatch);
+
+        Assert.True(edited.Succeeded, string.Join(Environment.NewLine, edited.Diagnostics));
+        Assert.Contains(
+            "return value ?? 2;",
+            Assert.Single(edited.PatchedRequest!.Sources).Source,
+            StringComparison.Ordinal);
+        CSharpAnalysisResult editedAnalysis = Assert.IsType<CSharpAnalysisResult>(edited.Analysis);
+        HirCompilationUnit editedHir = Assert.IsType<HirCompilationUnit>(editedAnalysis.Hir);
+        BoundCompilation editedSemantics = Assert.IsType<BoundCompilation>(editedAnalysis.Semantics);
+        HirBinaryExpression changed = Assert.Single(
+            editedHir.DescendantsAndSelf().OfType<HirBinaryExpression>(),
+            static binary => binary.Operator == "??");
+        Assert.Equal(coalesce.Id, changed.Id);
+        Assert.Equal(originalLeftId, changed.Left.Id);
+        Assert.Contains(
+            Assert.Single(editedAnalysis.IdentitySidecars).Tombstones,
+            tombstone => tombstone.Id == oldRightId);
+        GraphNode graphCoalesce = Assert.Single(
+            Assert.Single(new HirGraphProjector()
+                .Project(editedHir, editedSemantics)
+                .Functions)
+                .Nodes,
+            static node => node.Kind == "binary" && node.Properties["operator"] == "??");
+        Assert.Equal("whenLeftNull", graphCoalesce.Properties["rightEvaluation"]);
+
+        SemanticPatchDocument invalidPatch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics.ConfigurationId,
+            [new ReplaceReturnValuePatchOperation(
+                returnStatement.Id,
+                oldValue.Id,
+                intType,
+                new BinaryPatchExpression(
+                    "??",
+                    new LocalReferencePatchExpression(
+                        method.Parameters[1].Id,
+                        method.Parameters[1].Name,
+                        intType),
+                    new LocalReferencePatchExpression(
+                        method.Parameters[0].Id,
+                        method.Parameters[0].Name,
+                        nullableIntType),
+                    intType))]);
+
+        CSharpPatchResult invalid = applier.Apply(request, invalidPatch);
+
+        Assert.False(invalid.Succeeded);
+        Assert.Contains(
+            invalid.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.TypeMismatch);
+    }
+
+    [Fact]
     public void Apply_RejectsStaleOrIncompatibleExpressionInputPort()
     {
         CSharpCompilationRequest request = CSharpCompilationRequest.Single(

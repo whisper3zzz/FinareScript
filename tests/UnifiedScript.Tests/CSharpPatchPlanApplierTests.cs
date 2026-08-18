@@ -2939,6 +2939,87 @@ public sealed class CSharpPatchPlanApplierTests
     }
 
     [Fact]
+    public void Apply_ChainsProducedHandlesThroughNullCoalescingPorts()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int Resolve(int? value, int fallback)
+                {
+                    return fallback;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/ProducedCoalesce.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement returnStatement = Assert.IsType<HirReturnStatement>(
+            Assert.Single(method.Body.Statements));
+        HirExpression oldValue = Assert.IsAssignableFrom<HirExpression>(returnStatement.Expression);
+        SemanticId nullableIntType = GetTypeId(original, method.Parameters[0]);
+        SemanticId intType = GetTypeId(original, method.Parameters[1]);
+        var replaceReturn = new ReplaceReturnValuePatchPlanStep(
+            "replaceReturn",
+            returnStatement.Id,
+            oldValue.Id,
+            intType,
+            new BinaryPatchExpression(
+                "??",
+                new LocalReferencePatchExpression(
+                    method.Parameters[0].Id,
+                    method.Parameters[0].Name,
+                    nullableIntType),
+                new LocalReferencePatchExpression(
+                    method.Parameters[1].Id,
+                    method.Parameters[1].Name,
+                    intType),
+                intType));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                replaceReturn,
+                new ReplaceProducedExpressionInputPatchPlanStep(
+                    "replaceGeneratedRight",
+                    returnStatement.Id,
+                    replaceReturn.StepId,
+                    [],
+                    "right",
+                    intType,
+                    intType,
+                    new LiteralPatchExpression("2", intType)),
+            ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Contains(
+            "return value ?? 2;",
+            Assert.Single(result.PatchedRequest!.Sources).Source,
+            StringComparison.Ordinal);
+        CSharpAnalysisResult analysis = Assert.IsType<CSharpAnalysisResult>(result.Analysis);
+        HirCompilationUnit hir = Assert.IsType<HirCompilationUnit>(analysis.Hir);
+        HirBinaryExpression coalesce = Assert.Single(
+            hir.DescendantsAndSelf().OfType<HirBinaryExpression>(),
+            static binary => binary.Operator == "??");
+        Assert.Equal("2", Assert.IsType<HirLiteralExpression>(coalesce.Right).ValueText);
+        Assert.Equal(returnStatement.Id, Assert.Single(
+            hir.DescendantsAndSelf().OfType<HirReturnStatement>()).Id);
+        Assert.Equal(3, Assert.Single(analysis.IdentitySidecars).Generation);
+        GraphNode graphCoalesce = Assert.Single(
+            Assert.Single(new HirGraphProjector()
+                .Project(hir, analysis.Semantics)
+                .Functions)
+                .Nodes,
+            static node => node.Kind == "binary" && node.Properties["operator"] == "??");
+        Assert.Equal("whenLeftNull", graphCoalesce.Properties["rightEvaluation"]);
+    }
+
+    [Fact]
     public void Apply_ResolvesNestedPathInsideAnInsertedExpressionTree()
     {
         const string source = """

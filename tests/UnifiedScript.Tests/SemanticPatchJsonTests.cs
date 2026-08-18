@@ -442,6 +442,38 @@ public sealed class SemanticPatchJsonTests
     }
 
     [Fact]
+    public void SerializeAndDeserialize_PreserveTypedNullCoalescingBinaryExpression()
+    {
+        SemanticId nullableIntType = SemanticId.FromKey("System.Nullable<System.Int32>");
+        SemanticId intType = SemanticId.FromKey("System.Int32");
+        var expression = new BinaryPatchExpression(
+            "??",
+            new LocalReferencePatchExpression(
+                SemanticId.FromKey("optional-value-parameter"),
+                "value",
+                nullableIntType),
+            new LiteralPatchExpression("1", intType),
+            intType);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            SemanticId.FromKey("coalesce-compilation"),
+            SemanticId.FromKey("coalesce-configuration"),
+            [new ReplaceReturnValuePatchOperation(
+                SemanticId.FromKey("coalesce-return"),
+                SemanticId.FromKey("coalesce-old-value"),
+                intType,
+                expression)]);
+
+        string json = SemanticPatchJson.Serialize(patch);
+        SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
+
+        ReplaceReturnValuePatchOperation operation = Assert.IsType<ReplaceReturnValuePatchOperation>(
+            Assert.Single(roundTrip.Operations));
+        Assert.Equal(expression, Assert.IsType<BinaryPatchExpression>(operation.NewValue));
+        Assert.Equal("unifiedscript.patch/v0.13", roundTrip.SchemaVersion);
+        Assert.Contains("\"operator\": \"??\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Create_RejectsConditionalBranchesWithMismatchedDeclaredTypes()
     {
         SemanticId intType = SemanticId.FromKey("System.Int32");

@@ -751,6 +751,71 @@ stages traverse and edit them through chainable structural port handles.
 15. The full solution, 232-test suite, format check, repository validator, 19
     patch/plan CLI regressions, and the short-circuit analyze regression pass.
 
+## M4.14 implemented vertical slice
+
+- strict HIR v0.3, Graph v0.7, patch v0.13, and patch-plan v0.14 readers
+- lossless reuse of `HirBinaryExpression("??")` with ordered left/right children
+- Roslyn-authoritative text operand, nullable, and candidate result binding
+- semantic `UVS2005` rejection of implicit or user-defined coalescing
+  conversions that are not serialized for shared VM execution
+- Graph `evaluation: shortCircuitRight` metadata on null coalescing
+- Graph `rightEvaluation: whenLeftNull` evaluation condition
+- Graph `resultSelection: leftNonNullOrRight` value-selection contract
+- unchanged canonical `left`, `right`, and `value` data ports
+- always-evaluated left effects retained in the containing statement control
+  chain
+- semantic `UVS2004` rejection of assignment, await, mutation, and bound
+  effectful calls anywhere in a coalescing right subtree
+- catalogued-pure right calls admitted while retaining conditional evaluation
+- graph-authored `??` through the existing `BinaryPatchExpression` payload
+- exact nullable scalar type validation for bounded visual construction, with
+  no implicit numeric, reference, or user-defined conversion synthesis
+- direct `left`/`right` input replacement with persistent parent/sibling
+  identity, ordinary tombstones, and Graph-edge regeneration
+- produced-expression root publication and chained right-port editing without
+  generated-ID prediction
+- unchanged HIR and patch schemas because their binary shape and port grammar
+  were already lossless
+- migrated Graph Golden manifest, repository validator, architecture/roadmap,
+  and lazy-expression documentation
+- checked-in `CoalesceRules.cs` analyze sample covering nullable value/reference
+  types, left effects, and a catalogued-pure right call
+
+## M4.14 acceptance criteria
+
+1. Text-authored `left ?? right` lowers to one ordered
+   `HirBinaryExpression("??")` under HIR v0.3 rather than an eager call or
+   synthetic Boolean conditional.
+2. Binding preserves Roslyn's nullable left type plus the actual right and
+   result types, while `UVS2005` rejects shapes requiring an unserialized
+   implicit or user-defined conversion.
+3. Graph v0.7 emits `evaluation: shortCircuitRight` and
+   `rightEvaluation: whenLeftNull`.
+4. Graph also emits `resultSelection: leftNonNullOrRight`, making both
+   evaluation and value selection explicit to a future shared VM.
+5. Coalescing retains canonical `left`, `right`, and `value` ports and data
+   edges.
+6. An effectful left subtree remains valid and its effect chain is sequenced
+   before the containing statement.
+7. Assignment, await, increment/decrement, or a call with non-`None` effects
+   anywhere in the right subtree produces `UVS2004` before Graph projection.
+8. Nested coalescing reports a shared failing right node once within the
+   coalescing diagnostic pass.
+9. A catalogued-pure right call is admitted without control ports while the
+   parent still declares conditional evaluation.
+10. Patch v0.13 authors `??` with a nullable left operand, an exact right/result
+    type, and matching base scalar metadata.
+11. A non-nullable left operand or a mismatched right/result type is rejected
+    atomically with a type diagnostic.
+12. Exact right-port editing retains the coalescing and left IDs, tombstones the
+    removed right subtree, and reprojects the correct Graph edge.
+13. Patch-plan v0.14 publishes a generated coalescing root and resolves a later
+    produced-expression right-port edit without serialized generated IDs.
+14. The checked-in sample analyzes nullable value/reference cases, an effectful
+    left call, and a pure right call to Graph v0.7.
+15. The full solution, 239-test suite, format check, repository validator, 19
+    patch/plan CLI regressions, and the coalescing analyze regression pass.
+
 ## Deliberate limits
 
 M4 consumes derived CFG facts at patch time but does not serialize them or
@@ -767,16 +832,18 @@ expressions can reference existing same-method definitions and locals produced
 earlier in one plan. Produced paths do not yet traverse members, calls,
 assignments, awaits, or wildcard/parent queries. Branch and loop-body insertions append and cannot move or delete
 existing structures. Loop transfers cannot be retargeted.
-`do`/`for`/`foreach`, switch, null-conditional/coalescing expressions,
+`do`/`for`/`foreach`, switch, null-conditional access,
 conditional effect subgraphs for lazy expression inputs, exception edges,
 standalone short-circuit CFG regions, async state-machine transitions, control
 dependence, SSA, and automatic node placement remain outside the current slice.
 
 ## Next slice
 
-M4.14 should extend the explicit lazy-right contract to null coalescing (`??`),
-including an exact HIR result/type representation and a decision about nullable
-flow state before admitting null-conditional access. This reuses the v0.6
-evaluation vocabulary without treating null testing as Boolean logic. `for`
-and `foreach` still need an explicit lossless HIR decision before admission
-rather than silently desugaring source syntax into while loops.
+M4.15 should admit null-conditional access (`?.`) with a first-class HIR shape
+for conditional member/call chains, lifted result typing, and explicit Graph
+receiver-evaluation semantics. It must decide how chained invocation arguments
+and effects remain skipped when the receiver is null before exposing visual
+construction. Flow-sensitive nullable state can then build on the same
+declared/bound type evidence. `for` and `foreach` still need an explicit
+lossless HIR decision before admission rather than silently desugaring source
+syntax into while loops.

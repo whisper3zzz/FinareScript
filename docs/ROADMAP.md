@@ -116,10 +116,12 @@ Outcome: practical gameplay methods are fully visualizable.
   lazy-branch effect safety and canonical generated-tree ports
 - [x] explicit `&&`/`||` short-circuit Graph evaluation with left-effect
   sequencing and effect-safe conditional right operands
+- [x] null-coalescing text/HIR/Graph/patch round trip with nullable result
+  typing, lazy-right metadata, and produced-expression editing
 - [ ] general data/control rewiring and structural HIR operations
 - [ ] `for` and `foreach`
 - [ ] `switch` and supported patterns
-- [ ] null-conditional and null-coalescing expressions
+- [ ] null-conditional access
 - [ ] deterministic temporary naming
 
 ## M5 — CoreCLR execution backend
