@@ -10,7 +10,9 @@ Status: in progress. M4.1 explicit regions, M4.2 derived CFG analysis, M4.3
 CFG-checked local assignment/data reconnection, M4.4 recursive nested branch
 construction, M4.5 structured loop projection/analysis, and M4.6 bounded
 Graph-authored loop construction are implemented. M4.7 adds exact typed editing
-of assignment values and existing or plan-produced while conditions.
+of assignment values and existing or plan-produced while conditions. M4.8
+generalizes exact endpoint editing to local initializers, if conditions, and
+return values on both existing and plan-produced statements.
 
 ## M4.1 implemented vertical slice
 
@@ -380,6 +382,73 @@ of assignment values and existing or plan-produced while conditions.
 16. The full solution, 191-test suite, format check, repository validator, and
     CLI regression pass.
 
+## M4.8 implemented vertical slice
+
+- `unifiedscript.patch/v0.11` exact `replaceIfCondition`,
+  `replaceLocalInitializer`, and `replaceReturnValue` operations
+- structural endpoint, expected-name, exact type, reachability, lexical scope,
+  and CFG-dominance preconditions at the real statement position
+- reuse of the same bounded literal/local/unary/binary/cast expression algebra
+  and Roslyn binding path as insertion and M4.7 editing
+- preservation of local-declaration definitions, if/branch blocks, return
+  statements, containing blocks, and unaffected siblings
+- lossless rejection when a discarded initializer, condition, or return value
+  contains comments or directives
+- rejection of void, async, or task-like return-value edits in the bounded
+  synchronous value-return profile
+- `unifiedscript.patch-plan/v0.10` direct wrappers for all three endpoints
+- repeatable `replaceProducedIfCondition`,
+  `replaceProducedLocalInitializer`, and `replaceProducedReturnValue` symbolic
+  steps for compatible earlier root, branch, or loop-body insertions
+- generated-statement resolution after each reanalysis without editor-predicted
+  statement or expression IDs
+- allowance for editing a generated terminal return's existing value while
+  continuing to reject later statement appends on that terminal path
+- initial symbolic validation of producer order, original anchor, method,
+  statement shape, and exact payload type before any stage executes
+- atomic rollback when a late generated endpoint cannot be resolved or a new
+  expression fails type, scope, dominance, profile, Graph, or CFG checks
+- checked-in `EditDecisionValues.cs`, `.usids`, and three-step
+  `EditDecisionValues.plan.json` CLI sample
+- dedicated protocol, direct-source, dynamic-plan, identity/Graph/CFG, trivia,
+  and rollback regression coverage
+
+## M4.8 acceptance criteria
+
+1. Patch v0.11 JSON round-trips all three generalized endpoint operations and
+   rejects missing endpoints, names, or mismatched expression/type payloads.
+2. Plan v0.10 JSON round-trips direct and produced variants and requires every
+   produced endpoint to reference an earlier compatible producer.
+3. A produced endpoint repeats the same original target and method as its
+   source producer and matches the producer payload's exact declared type.
+4. An if-condition edit requires the current endpoint and graph-safe
+   `System.Boolean` type while preserving the if and both branch blocks.
+5. A local-initializer edit requires the current declaration name, initializer
+   endpoint, and exact graph-safe type while preserving its definition ID.
+6. A return-value edit requires a reachable value return whose synchronous
+   method return type, old value, and replacement have the same exact type.
+7. Every referenced definition is checked for same-method membership, name,
+   type, lexical visibility, and availability on every incoming CFG path.
+8. Comments or directives within any discarded endpoint reject the operation
+   rather than being silently lost.
+9. Direct multi-endpoint plans preserve all enclosing statement identities and
+   atomically emit reprojected Graph nodes and valid branch/return CFG facts.
+10. Root, generated-branch, and generated-loop-body producers publish the
+    appropriate condition, initializer, or value endpoint handle.
+11. Produced endpoint edits resolve current IDs after each internal stage and
+    may repeat through one stable producer handle.
+12. A value-return producer remains terminal for appends but accepts an edit to
+    its own existing value endpoint.
+13. A late missing return producer or unavailable source returns no patched
+    request or analysis and leaves the external source untouched.
+14. Existing graph layouts stay placed, genuinely new expression nodes remain
+    unplaced, and preserved structures do not become false orphans.
+15. The CLI sample atomically changes the initializer, if condition, and branch
+    return, keeps structural IDs live, and advances the sidecar from generation
+    1 to 4.
+16. The full solution, 200-test suite, format check, repository validator, and
+    CLI regression pass.
+
 ## Deliberate limits
 
 M4 consumes derived CFG facts at patch time but does not serialize them or
@@ -387,21 +456,23 @@ materialize source/Graph merge nodes. Assignment editing is limited to the
 right-hand value of a root simple assignment to an existing local; it cannot
 retarget the write, synthesize declarations with arbitrary initializers, write
 members/indexers, or support compound assignment, increment/decrement, calls,
-or effectful right-hand sides. Existing-condition editing is limited to while;
-if conditions, declaration initializers, returns, and arbitrary nested value
-ports do not yet have equivalent replacement operations. Nested conditions can
-reference existing same-method definitions but cannot consume a symbolic newly
-generated local handle. Branch and loop-body insertions append and cannot move
-or delete existing structures. Loop transfers cannot be retargeted.
+or effectful right-hand sides. Existing if/while conditions, local initializers,
+and value returns now support whole-endpoint replacement, but arbitrary nested
+value ports do not yet have generic replacement operations. Authored
+expressions can reference existing same-method definitions but cannot consume a
+symbolic newly generated local handle. Branch and loop-body insertions append
+and cannot move or delete existing structures. Loop transfers cannot be
+retargeted.
 `do`/`for`/`foreach`, switch, conditional expressions, exception edges,
 short-circuit expression flow, async state-machine transitions, control
 dependence, SSA, and automatic node placement remain outside the current slice.
 
 ## Next slice
 
-M4.8 should generalize the proven exact-endpoint expression replacement model
-to existing `if` conditions, local initializers, and return values, then expose
-the same dynamic producer-handle rule where generated structures make endpoint
-IDs unknowable at the external baseline. `for` and `foreach` still need an
-explicit lossless HIR decision before admission rather than silently desugaring
-source syntax into while loops.
+M4.9 should add a typed symbolic value-reference algebra so a later authored
+expression can consume a local produced earlier in the same plan without
+guessing its persistent ID. That mechanism should become the basis for general
+nested data-port rewiring while retaining exact type, effect, evaluation-order,
+scope, and dominance proofs. `for` and `foreach` still need an explicit
+lossless HIR decision before admission rather than silently desugaring source
+syntax into while loops.

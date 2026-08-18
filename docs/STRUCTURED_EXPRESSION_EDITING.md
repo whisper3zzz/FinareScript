@@ -14,8 +14,10 @@ complete parse, Visual Profile, compiler, semantic-binding, identity, Graph,
 and CFG pipeline. There is no editor-only expression VM or second executable
 representation.
 
-The standalone protocol is `unifiedscript.patch/v0.10`; the transaction
-protocol is `unifiedscript.patch-plan/v0.9`.
+These operations were introduced in patch v0.10 and plan v0.9. The current
+strict-reader versions are `unifiedscript.patch/v0.11` and
+`unifiedscript.patch-plan/v0.10`, extended by the M4.8 endpoint operations in
+[GENERAL_EXPRESSION_EDITING.md](GENERAL_EXPRESSION_EDITING.md).
 
 ## Replace an assignment value
 
@@ -94,7 +96,7 @@ loop body is not replaced or regenerated.
 
 ## Plan steps
 
-Patch plan v0.9 exposes direct wrappers for both operations:
+Patch plan v0.10 exposes direct wrappers for both operations:
 
 - `replaceAssignmentValue`; and
 - `replaceWhileCondition`.

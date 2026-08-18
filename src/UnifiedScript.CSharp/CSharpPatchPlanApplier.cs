@@ -55,6 +55,7 @@ public sealed class CSharpPatchPlanApplier
         var producedDefinitions = new Dictionary<string, SemanticId>(StringComparer.Ordinal);
         var producedBranches = new Dictionary<string, ProducedIfBranches>(StringComparer.Ordinal);
         var producedLoops = new Dictionary<string, ProducedWhileLoop>(StringComparer.Ordinal);
+        var producedReturns = new Dictionary<string, SemanticId>(StringComparer.Ordinal);
         CSharpPatchResult? lastResult = null;
         foreach (SemanticPatchPlanStep step in plan.Steps)
         {
@@ -70,6 +71,7 @@ public sealed class CSharpPatchPlanApplier
                     producedDefinitions,
                     producedBranches,
                     producedLoops,
+                    producedReturns,
                     out SemanticPatchOperation? operation,
                     out UnifiedDiagnostic? operationFailure))
             {
@@ -106,7 +108,7 @@ public sealed class CSharpPatchPlanApplier
 
                 producedBranches.Add(
                     step.StepId,
-                    new ProducedIfBranches(insertedIf.Then.Id, insertedIf.Else.Id));
+                    new ProducedIfBranches(insertedIf.Id, insertedIf.Then.Id, insertedIf.Else.Id));
             }
 
             if (ProducesLoop(step))
@@ -125,6 +127,22 @@ public sealed class CSharpPatchPlanApplier
                 producedLoops.Add(
                     step.StepId,
                     new ProducedWhileLoop(insertedWhile.Id, insertedWhile.Body.Id));
+            }
+
+            if (ProducesReturnValue(step))
+            {
+                if (insertedStatement is not HirReturnStatement { Expression: not null } insertedReturn)
+                {
+                    return Failure(new UnifiedDiagnostic(
+                        SemanticPatchDiagnosticCodes.InvalidPatchPlan,
+                        UnifiedDiagnosticSeverity.Error,
+                        $"Plan step '{step.StepId}' succeeded but its produced return value could " +
+                        "not be resolved for later steps.",
+                        SourceSpan.Unknown("<patch-plan>"),
+                        step.TargetNodeId));
+                }
+
+                producedReturns.Add(step.StepId, insertedReturn.Id);
             }
 
             HirVariableDeclarationStatement? introduced = step switch
@@ -183,6 +201,8 @@ public sealed class CSharpPatchPlanApplier
         var producerMethods = new Dictionary<string, SemanticId>(StringComparer.Ordinal);
         var branchProducerMethods = new Dictionary<string, SemanticId>(StringComparer.Ordinal);
         var loopProducerMethods = new Dictionary<string, SemanticId>(StringComparer.Ordinal);
+        var localInitializerProducerMethods = new Dictionary<string, SemanticId>(StringComparer.Ordinal);
+        var returnProducerMethods = new Dictionary<string, SemanticId>(StringComparer.Ordinal);
         foreach (SemanticPatchPlanStep step in plan.Steps)
         {
             if (!nodes.TryGetValue(step.TargetNodeId, out HirNode? target))
@@ -272,6 +292,51 @@ public sealed class CSharpPatchPlanApplier
                         $"Produced-while condition step '{producedCondition.StepId}' and source " +
                         $"step '{producedCondition.SourceStepId}' target different methods.",
                         target.Span,
+                    target.Id)];
+                }
+            }
+            else if (step is ReplaceProducedIfConditionPatchPlanStep producedIfCondition)
+            {
+                if (!branchProducerMethods.TryGetValue(
+                        producedIfCondition.SourceStepId,
+                        out SemanticId branchProducerMethodId) ||
+                    branchProducerMethodId != method!.Id)
+                {
+                    return [Diagnostic(
+                        SemanticPatchDiagnosticCodes.InvalidPatchPlan,
+                        $"Produced-if condition step '{producedIfCondition.StepId}' and source " +
+                        $"step '{producedIfCondition.SourceStepId}' target different methods.",
+                        target.Span,
+                        target.Id)];
+                }
+            }
+            else if (step is ReplaceProducedLocalInitializerPatchPlanStep producedInitializer)
+            {
+                if (!localInitializerProducerMethods.TryGetValue(
+                        producedInitializer.SourceStepId,
+                        out SemanticId localProducerMethodId) ||
+                    localProducerMethodId != method!.Id)
+                {
+                    return [Diagnostic(
+                        SemanticPatchDiagnosticCodes.InvalidPatchPlan,
+                        $"Produced-local initializer step '{producedInitializer.StepId}' and " +
+                        $"source step '{producedInitializer.SourceStepId}' target different methods.",
+                        target.Span,
+                        target.Id)];
+                }
+            }
+            else if (step is ReplaceProducedReturnValuePatchPlanStep producedReturn)
+            {
+                if (!returnProducerMethods.TryGetValue(
+                        producedReturn.SourceStepId,
+                        out SemanticId returnProducerMethodId) ||
+                    returnProducerMethodId != method!.Id)
+                {
+                    return [Diagnostic(
+                        SemanticPatchDiagnosticCodes.InvalidPatchPlan,
+                        $"Produced-return value step '{producedReturn.StepId}' and source step " +
+                        $"'{producedReturn.SourceStepId}' target different methods.",
+                        target.Span,
                         target.Id)];
                 }
             }
@@ -303,6 +368,16 @@ public sealed class CSharpPatchPlanApplier
             if (ProducesLoop(step))
             {
                 loopProducerMethods.Add(step.StepId, method!.Id);
+            }
+
+            if (ProducesLocalInitializer(step))
+            {
+                localInitializerProducerMethods.Add(step.StepId, method!.Id);
+            }
+
+            if (ProducesReturnValue(step))
+            {
+                returnProducerMethods.Add(step.StepId, method!.Id);
             }
         }
 
@@ -389,6 +464,7 @@ public sealed class CSharpPatchPlanApplier
         IReadOnlyDictionary<string, SemanticId> producedDefinitions,
         IReadOnlyDictionary<string, ProducedIfBranches> producedBranches,
         IReadOnlyDictionary<string, ProducedWhileLoop> producedLoops,
+        IReadOnlyDictionary<string, SemanticId> producedReturns,
         out SemanticPatchOperation? operation,
         out UnifiedDiagnostic? diagnostic)
     {
@@ -442,6 +518,42 @@ public sealed class CSharpPatchPlanApplier
                     producedCondition,
                     nodes,
                     producedLoops,
+                    out operation,
+                    out diagnostic);
+            case ReplaceIfConditionPatchPlanStep ifCondition
+                when target is HirIfStatement:
+                operation = ifCondition.ToOperation();
+                diagnostic = null;
+                return true;
+            case ReplaceProducedIfConditionPatchPlanStep producedIfCondition:
+                return TryCreateProducedIfConditionReplacement(
+                    producedIfCondition,
+                    nodes,
+                    producedBranches,
+                    out operation,
+                    out diagnostic);
+            case ReplaceLocalInitializerPatchPlanStep localInitializer
+                when target is HirVariableDeclarationStatement:
+                operation = localInitializer.ToOperation();
+                diagnostic = null;
+                return true;
+            case ReplaceProducedLocalInitializerPatchPlanStep producedInitializer:
+                return TryCreateProducedLocalInitializerReplacement(
+                    producedInitializer,
+                    nodes,
+                    producedDefinitions,
+                    out operation,
+                    out diagnostic);
+            case ReplaceReturnValuePatchPlanStep returnValue
+                when target is HirReturnStatement:
+                operation = returnValue.ToOperation();
+                diagnostic = null;
+                return true;
+            case ReplaceProducedReturnValuePatchPlanStep producedReturn:
+                return TryCreateProducedReturnValueReplacement(
+                    producedReturn,
+                    nodes,
+                    producedReturns,
                     out operation,
                     out diagnostic);
             case InsertStatementPatchPlanStep insertion
@@ -757,6 +869,99 @@ public sealed class CSharpPatchPlanApplier
         return true;
     }
 
+    private static bool TryCreateProducedIfConditionReplacement(
+        ReplaceProducedIfConditionPatchPlanStep step,
+        IReadOnlyDictionary<SemanticId, HirNode> nodes,
+        IReadOnlyDictionary<string, ProducedIfBranches> producedBranches,
+        out SemanticPatchOperation? operation,
+        out UnifiedDiagnostic? diagnostic)
+    {
+        if (!producedBranches.TryGetValue(step.SourceStepId, out ProducedIfBranches producedIf) ||
+            !nodes.TryGetValue(producedIf.IfId, out HirNode? node) ||
+            node is not HirIfStatement currentIf ||
+            currentIf.Then.Id != producedIf.ThenBlockId ||
+            currentIf.Else?.Id != producedIf.ElseBlockId)
+        {
+            operation = null;
+            diagnostic = Diagnostic(
+                SemanticPatchDiagnosticCodes.TargetNotFound,
+                $"Produced-if condition step '{step.StepId}' could not resolve source step " +
+                $"'{step.SourceStepId}'.",
+                SourceSpan.Unknown("<patch-plan>"),
+                step.TargetNodeId);
+            return false;
+        }
+
+        operation = new ReplaceIfConditionPatchOperation(
+            currentIf.Id,
+            currentIf.Condition.Id,
+            step.NewCondition.ExpectedTypeId,
+            step.NewCondition);
+        diagnostic = null;
+        return true;
+    }
+
+    private static bool TryCreateProducedLocalInitializerReplacement(
+        ReplaceProducedLocalInitializerPatchPlanStep step,
+        IReadOnlyDictionary<SemanticId, HirNode> nodes,
+        IReadOnlyDictionary<string, SemanticId> producedDefinitions,
+        out SemanticPatchOperation? operation,
+        out UnifiedDiagnostic? diagnostic)
+    {
+        if (!producedDefinitions.TryGetValue(step.SourceStepId, out SemanticId definitionId) ||
+            !nodes.TryGetValue(definitionId, out HirNode? node) ||
+            node is not HirVariableDeclarationStatement { Initializer: not null } variable)
+        {
+            operation = null;
+            diagnostic = Diagnostic(
+                SemanticPatchDiagnosticCodes.TargetNotFound,
+                $"Produced-local initializer step '{step.StepId}' could not resolve source step " +
+                $"'{step.SourceStepId}'.",
+                SourceSpan.Unknown("<patch-plan>"),
+                step.TargetNodeId);
+            return false;
+        }
+
+        operation = new ReplaceLocalInitializerPatchOperation(
+            variable.Id,
+            variable.Name,
+            variable.Initializer.Id,
+            step.NewInitializer.ExpectedTypeId,
+            step.NewInitializer);
+        diagnostic = null;
+        return true;
+    }
+
+    private static bool TryCreateProducedReturnValueReplacement(
+        ReplaceProducedReturnValuePatchPlanStep step,
+        IReadOnlyDictionary<SemanticId, HirNode> nodes,
+        IReadOnlyDictionary<string, SemanticId> producedReturns,
+        out SemanticPatchOperation? operation,
+        out UnifiedDiagnostic? diagnostic)
+    {
+        if (!producedReturns.TryGetValue(step.SourceStepId, out SemanticId returnId) ||
+            !nodes.TryGetValue(returnId, out HirNode? node) ||
+            node is not HirReturnStatement { Expression: not null } returnStatement)
+        {
+            operation = null;
+            diagnostic = Diagnostic(
+                SemanticPatchDiagnosticCodes.TargetNotFound,
+                $"Produced-return value step '{step.StepId}' could not resolve source step " +
+                $"'{step.SourceStepId}'.",
+                SourceSpan.Unknown("<patch-plan>"),
+                step.TargetNodeId);
+            return false;
+        }
+
+        operation = new ReplaceReturnValuePatchOperation(
+            returnStatement.Id,
+            returnStatement.Expression.Id,
+            step.NewValue.ExpectedTypeId,
+            step.NewValue);
+        diagnostic = null;
+        return true;
+    }
+
     private static bool TryResolveInsertionGap(
         HirBlockStatement block,
         SemanticId? expectedPreviousSiblingId,
@@ -931,6 +1136,34 @@ public sealed class CSharpPatchPlanApplier
             InsertBranchStatementPatchPlanStep { NewStatement: WhilePatchStatement } or
             InsertLoopBodyStatementPatchPlanStep { NewStatement: WhilePatchStatement };
 
+    private static bool ProducesLocalInitializer(SemanticPatchPlanStep step) =>
+        step is InsertStatementPatchPlanStep
+        {
+            NewStatement: LocalLiteralDeclarationPatchStatement,
+        } or
+            InsertBranchStatementPatchPlanStep
+        {
+            NewStatement: LocalLiteralDeclarationPatchStatement,
+        } or
+            InsertLoopBodyStatementPatchPlanStep
+        {
+            NewStatement: LocalLiteralDeclarationPatchStatement,
+        };
+
+    private static bool ProducesReturnValue(SemanticPatchPlanStep step) =>
+        step is InsertStatementPatchPlanStep
+        {
+            NewStatement: ReturnPatchStatement { Expression: not null },
+        } or
+            InsertBranchStatementPatchPlanStep
+        {
+            NewStatement: ReturnPatchStatement { Expression: not null },
+        } or
+            InsertLoopBodyStatementPatchPlanStep
+        {
+            NewStatement: ReturnPatchStatement { Expression: not null },
+        };
+
     private static bool TryGetStepMethod(
         SemanticPatchPlanStep step,
         HirNode target,
@@ -942,7 +1175,10 @@ public sealed class CSharpPatchPlanApplier
             case InsertStatementPatchPlanStep or
                 InsertBranchStatementPatchPlanStep or
                 InsertLoopBodyStatementPatchPlanStep or
-                ReplaceProducedWhileConditionPatchPlanStep
+                ReplaceProducedWhileConditionPatchPlanStep or
+                ReplaceProducedIfConditionPatchPlanStep or
+                ReplaceProducedLocalInitializerPatchPlanStep or
+                ReplaceProducedReturnValuePatchPlanStep
                 when target is HirBlockStatement block &&
                 patchIndex.TryGetBlock(block.Id, out HirPatchIndex.BlockLocation? blockLocation):
                 method = blockLocation!.Method;
@@ -958,6 +1194,15 @@ public sealed class CSharpPatchPlanApplier
                     loop.Id,
                     out HirPatchIndex.StatementLocation? loopLocation):
                 method = loopLocation!.Method;
+                return true;
+            case ReplaceIfConditionPatchPlanStep or
+                ReplaceLocalInitializerPatchPlanStep or
+                ReplaceReturnValuePatchPlanStep
+                when target is HirStatement editableStatement &&
+                patchIndex.TryGetStatement(
+                    editableStatement.Id,
+                    out HirPatchIndex.StatementLocation? editableLocation):
+                method = editableLocation!.Method;
                 return true;
             default:
                 if (target is HirExpression expression &&
@@ -984,6 +1229,18 @@ public sealed class CSharpPatchPlanApplier
         ReplaceProducedWhileConditionPatchPlanStep => throw new ArgumentException(
             "A symbolic produced-while condition edit cannot become an initial standalone operation.",
             nameof(step)),
+        ReplaceIfConditionPatchPlanStep ifCondition => ifCondition.ToOperation(),
+        ReplaceProducedIfConditionPatchPlanStep => throw new ArgumentException(
+            "A symbolic produced-if condition edit cannot become an initial standalone operation.",
+            nameof(step)),
+        ReplaceLocalInitializerPatchPlanStep initializer => initializer.ToOperation(),
+        ReplaceProducedLocalInitializerPatchPlanStep => throw new ArgumentException(
+            "A symbolic produced-local initializer edit cannot become an initial standalone operation.",
+            nameof(step)),
+        ReplaceReturnValuePatchPlanStep returnValue => returnValue.ToOperation(),
+        ReplaceProducedReturnValuePatchPlanStep => throw new ArgumentException(
+            "A symbolic produced-return value edit cannot become an initial standalone operation.",
+            nameof(step)),
         InsertStatementPatchPlanStep insertion => insertion.ToOperation(),
         InsertBranchStatementPatchPlanStep => throw new ArgumentException(
             "A symbolic branch insertion cannot become an initial standalone operation.",
@@ -1000,6 +1257,7 @@ public sealed class CSharpPatchPlanApplier
     };
 
     private readonly record struct ProducedIfBranches(
+        SemanticId IfId,
         SemanticId ThenBlockId,
         SemanticId ElseBlockId);
 

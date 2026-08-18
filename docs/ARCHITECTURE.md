@@ -214,10 +214,11 @@ compilation identity is not safe for editing.
 ## Semantic patch transaction
 
 Graph schema v0.4 carries both the source compilation ID and semantic
-configuration ID. A `unifiedscript.patch/v0.10` document repeats those IDs and
+configuration ID. A `unifiedscript.patch/v0.11` document repeats those IDs and
 contains typed operations keyed by graph/HIR `SemanticId`. Implemented
 operations are `replaceLiteral`, `changeOperator`, `reconnectArgument`,
-`replaceAssignmentValue`, `replaceWhileCondition`, `insertStatement`,
+`replaceAssignmentValue`, `replaceWhileCondition`, `replaceIfCondition`,
+`replaceLocalInitializer`, `replaceReturnValue`, `insertStatement`,
 `deleteStatement`, `introduceTemporary`, and `reconnectValue`.
 `insertStatement` accepts a local-literal declaration, a
 CFG-checked assignment to an existing local, an `if` or `while` with a closed
@@ -227,12 +228,13 @@ operator/endpoint, semantic type,
 containing statement, parent block, and exact sibling preconditions rather than
 relying only on the compilation baseline.
 
-`unifiedscript.patch-plan/v0.9` is an ordered transaction above individual
+`unifiedscript.patch-plan/v0.10` is an ordered transaction above individual
 patches. It composes every current bounded operation: literal and operator
-changes, argument reconnection, structured assignment/while expression edits,
-statement insertion/deletion, temporary introduction, value reconnection,
-symbolic branch-body insertion, symbolic loop-body insertion, and symbolic
-replacement of a condition on a while produced earlier in the same plan.
+changes, argument reconnection, structured assignment/loop/branch/local/return
+expression edits, statement insertion/deletion, temporary introduction, value
+reconnection, symbolic branch-body insertion, symbolic loop-body insertion,
+and symbolic replacement of expression endpoints on compatible statements
+produced earlier in the same plan.
 `introduceTemporary` and local-literal root, branch, or loop-body insertion
 steps publish symbolic local handles. Later
 `reconnectValue` steps reference those handles instead of guessing a random
@@ -259,6 +261,8 @@ state stops at the loop boundary because a while condition may be false on
 entry; execution and CFG validation still determine the actual current flow.
 The complete transaction and internal rebasing contract is specified in
 [PATCH_PLAN.md](PATCH_PLAN.md).
+The endpoint replacement and generated-statement handle contract is specified
+in [GENERAL_EXPRESSION_EDITING.md](GENERAL_EXPRESSION_EDITING.md).
 
 The C# patch boundary performs these steps without mutating files:
 

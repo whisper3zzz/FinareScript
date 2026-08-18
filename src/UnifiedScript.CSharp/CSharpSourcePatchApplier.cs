@@ -189,6 +189,34 @@ public sealed class CSharpSourcePatchApplier
                         types,
                         graphSafetyIndex,
                         documents),
+                ReplaceIfConditionPatchOperation ifCondition =>
+                    PlanIfConditionReplacement(
+                        ifCondition,
+                        hirNodes,
+                        patchIndex,
+                        boundNodes,
+                        types,
+                        graphSafetyIndex,
+                        documents),
+                ReplaceLocalInitializerPatchOperation localInitializer =>
+                    PlanLocalInitializerReplacement(
+                        localInitializer,
+                        hirNodes,
+                        patchIndex,
+                        boundNodes,
+                        types,
+                        graphSafetyIndex,
+                        documents),
+                ReplaceReturnValuePatchOperation returnValue =>
+                    PlanReturnValueReplacement(
+                        returnValue,
+                        hirNodes,
+                        patchIndex,
+                        boundNodes,
+                        methods,
+                        types,
+                        graphSafetyIndex,
+                        documents),
                 InsertStatementPatchOperation insertStatement => PlanStatementInsertion(
                     insertStatement,
                     hirNodes,
@@ -1022,81 +1050,297 @@ public sealed class CSharpSourcePatchApplier
                 loop);
         }
 
-        OperationPlan? conditionTypeFailure = RequireType(
+        return PlanStatementExpressionReplacement(
+            "while condition",
+            loop,
             loop.Condition,
             operation.ExpectedConditionTypeId,
-            "while condition",
-            boundNodes);
-        if (conditionTypeFailure is not null)
+            operation.NewCondition,
+            requireBoolean: true,
+            blockLocation!,
+            statementLocation!,
+            hirNodes,
+            patchIndex,
+            boundNodes,
+            types,
+            graphSafetyIndex,
+            documents);
+    }
+
+    private static OperationPlan PlanIfConditionReplacement(
+        ReplaceIfConditionPatchOperation operation,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
+        GraphPatchSafetyIndex graphSafetyIndex,
+        IReadOnlyDictionary<string, ParsedDocument> documents)
+    {
+        if (!hirNodes.TryGetValue(operation.TargetNodeId, out HirNode? target))
         {
-            return conditionTypeFailure;
+            return MissingTarget(operation.TargetNodeId);
         }
 
-        if (!graphSafetyIndex.IsInsertionReachable(blockLocation!, statementLocation.Index))
+        if (target is not HirIfStatement branch ||
+            !patchIndex.TryGetStatement(
+                branch.Id,
+                out HirPatchIndex.StatementLocation? statementLocation) ||
+            !patchIndex.TryGetBlock(
+                statementLocation!.ParentBlock.Id,
+                out HirPatchIndex.BlockLocation? blockLocation))
+        {
+            return KindMismatch(target, operation.TargetNodeId, "an if statement");
+        }
+
+        if (branch.Condition.Id != operation.ExpectedConditionNodeId)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.PreconditionFailed,
+                $"If condition precondition failed: current endpoint is '{branch.Condition.Id}', " +
+                $"not '{operation.ExpectedConditionNodeId}'.",
+                branch);
+        }
+
+        return PlanStatementExpressionReplacement(
+            "if condition",
+            branch,
+            branch.Condition,
+            operation.ExpectedConditionTypeId,
+            operation.NewCondition,
+            requireBoolean: true,
+            blockLocation!,
+            statementLocation!,
+            hirNodes,
+            patchIndex,
+            boundNodes,
+            types,
+            graphSafetyIndex,
+            documents);
+    }
+
+    private static OperationPlan PlanLocalInitializerReplacement(
+        ReplaceLocalInitializerPatchOperation operation,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
+        GraphPatchSafetyIndex graphSafetyIndex,
+        IReadOnlyDictionary<string, ParsedDocument> documents)
+    {
+        if (!hirNodes.TryGetValue(operation.TargetNodeId, out HirNode? target))
+        {
+            return MissingTarget(operation.TargetNodeId);
+        }
+
+        if (target is not HirVariableDeclarationStatement { Initializer: not null } variable ||
+            !patchIndex.TryGetStatement(
+                variable.Id,
+                out HirPatchIndex.StatementLocation? statementLocation) ||
+            !patchIndex.TryGetBlock(
+                statementLocation!.ParentBlock.Id,
+                out HirPatchIndex.BlockLocation? blockLocation))
+        {
+            return KindMismatch(
+                target,
+                operation.TargetNodeId,
+                "a local declaration with an initializer");
+        }
+
+        if (!string.Equals(variable.Name, operation.ExpectedName, StringComparison.Ordinal) ||
+            variable.Initializer.Id != operation.ExpectedInitializerNodeId)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.PreconditionFailed,
+                $"Local initializer precondition failed for '{variable.Id}'. Current name/endpoint " +
+                $"are '{variable.Name}' and '{variable.Initializer.Id}'.",
+                variable);
+        }
+
+        OperationPlan? variableTypeFailure = RequireType(
+            variable,
+            operation.ExpectedTypeId,
+            "local declaration",
+            boundNodes);
+        if (variableTypeFailure is not null)
+        {
+            return variableTypeFailure;
+        }
+
+        return PlanStatementExpressionReplacement(
+            "local initializer",
+            variable,
+            variable.Initializer,
+            operation.ExpectedTypeId,
+            operation.NewInitializer,
+            requireBoolean: false,
+            blockLocation!,
+            statementLocation!,
+            hirNodes,
+            patchIndex,
+            boundNodes,
+            types,
+            graphSafetyIndex,
+            documents);
+    }
+
+    private static OperationPlan PlanReturnValueReplacement(
+        ReplaceReturnValuePatchOperation operation,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, MethodDescriptor> methods,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
+        GraphPatchSafetyIndex graphSafetyIndex,
+        IReadOnlyDictionary<string, ParsedDocument> documents)
+    {
+        if (!hirNodes.TryGetValue(operation.TargetNodeId, out HirNode? target))
+        {
+            return MissingTarget(operation.TargetNodeId);
+        }
+
+        if (target is not HirReturnStatement { Expression: not null } returnStatement ||
+            !patchIndex.TryGetStatement(
+                returnStatement.Id,
+                out HirPatchIndex.StatementLocation? statementLocation) ||
+            !patchIndex.TryGetBlock(
+                statementLocation!.ParentBlock.Id,
+                out HirPatchIndex.BlockLocation? blockLocation))
+        {
+            return KindMismatch(
+                target,
+                operation.TargetNodeId,
+                "a value-return statement");
+        }
+
+        if (returnStatement.Expression.Id != operation.ExpectedValueNodeId)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.PreconditionFailed,
+                $"Return value precondition failed: current endpoint is " +
+                $"'{returnStatement.Expression.Id}', not '{operation.ExpectedValueNodeId}'.",
+                returnStatement);
+        }
+
+        if (!methods.TryGetValue(blockLocation!.Method.Id, out MethodDescriptor? method) ||
+            method.ReturnTypeId != operation.ExpectedReturnTypeId ||
+            blockLocation.Method.IsAsync ||
+            !types.TryGetValue(operation.ExpectedReturnTypeId, out TypeDescriptor? returnType) ||
+            !returnType.IsGraphSafe ||
+            returnType.Kind is UnifiedTypeKind.Void or UnifiedTypeKind.TaskLike)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.TypeMismatch,
+                $"Return replacement type '{operation.ExpectedReturnTypeId}' does not match a " +
+                $"supported graph-safe value return of method '{blockLocation.Method.Name}'.",
+                returnStatement);
+        }
+
+        return PlanStatementExpressionReplacement(
+            "return value",
+            returnStatement,
+            returnStatement.Expression,
+            operation.ExpectedReturnTypeId,
+            operation.NewValue,
+            requireBoolean: false,
+            blockLocation,
+            statementLocation!,
+            hirNodes,
+            patchIndex,
+            boundNodes,
+            types,
+            graphSafetyIndex,
+            documents);
+    }
+
+    private static OperationPlan PlanStatementExpressionReplacement(
+        string role,
+        HirStatement containingStatement,
+        HirExpression currentExpression,
+        SemanticId expectedTypeId,
+        PatchExpression newExpression,
+        bool requireBoolean,
+        HirPatchIndex.BlockLocation blockLocation,
+        HirPatchIndex.StatementLocation statementLocation,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
+        GraphPatchSafetyIndex graphSafetyIndex,
+        IReadOnlyDictionary<string, ParsedDocument> documents)
+    {
+        OperationPlan? typeFailure = RequireType(
+            currentExpression,
+            expectedTypeId,
+            role,
+            boundNodes);
+        if (typeFailure is not null)
+        {
+            return typeFailure;
+        }
+
+        if (!graphSafetyIndex.IsInsertionReachable(blockLocation, statementLocation.Index))
         {
             return DiagnosticPlan(
                 SemanticPatchDiagnosticCodes.UnreachableInsertion,
-                "A while condition can be edited only when its loop statement is CFG-reachable.",
-                loop);
+                $"A {role} can be edited only when its containing statement is CFG-reachable.",
+                containingStatement);
         }
 
-        ExpressionBuildResult newCondition = BuildPatchExpression(
-            operation.NewCondition,
-            blockLocation!,
+        ExpressionBuildResult replacement = BuildPatchExpression(
+            newExpression,
+            blockLocation,
             statementLocation.Index,
             hirNodes,
             patchIndex,
             graphSafetyIndex,
             boundNodes,
             types);
-        if (newCondition.Syntax is null || newCondition.Type is null)
+        if (replacement.Syntax is null || replacement.Type is null)
         {
             return DiagnosticPlan(
-                newCondition.DiagnosticCode ?? SemanticPatchDiagnosticCodes.InvalidGraphExpression,
-                newCondition.DiagnosticMessage ?? "The replacement while condition is invalid.",
-                loop);
+                replacement.DiagnosticCode ?? SemanticPatchDiagnosticCodes.InvalidGraphExpression,
+                replacement.DiagnosticMessage ?? $"The replacement {role} is invalid.",
+                containingStatement);
         }
 
-        if (newCondition.Type.Id != operation.ExpectedConditionTypeId ||
-            newCondition.Type.Kind != UnifiedTypeKind.Boolean ||
-            !string.Equals(
-                newCondition.Type.MetadataName,
-                "System.Boolean",
-                StringComparison.Ordinal))
+        if (replacement.Type.Id != expectedTypeId ||
+            requireBoolean &&
+            (replacement.Type.Kind != UnifiedTypeKind.Boolean ||
+                !string.Equals(
+                    replacement.Type.MetadataName,
+                    "System.Boolean",
+                    StringComparison.Ordinal)))
         {
             return DiagnosticPlan(
                 SemanticPatchDiagnosticCodes.TypeMismatch,
-                "A replacement while condition must have semantic type 'System.Boolean'.",
-                loop);
+                requireBoolean
+                    ? $"A replacement {role} must have semantic type 'System.Boolean'."
+                    : $"A replacement {role} must preserve semantic type '{expectedTypeId}'.",
+                containingStatement);
         }
 
         if (!TryFindSyntax(
                 documents,
-                loop,
+                currentExpression,
                 out ParsedDocument? document,
-                out WhileStatementSyntax? syntax))
+                out ExpressionSyntax? syntax))
         {
-            return MissingSyntax(loop, "while statement");
+            return MissingSyntax(currentExpression, role);
         }
 
-        if (syntax!.Condition
-            .DescendantTrivia(descendIntoTrivia: true)
-            .Any(IsMeaningfulTrivia))
+        if (syntax!.DescendantTrivia(descendIntoTrivia: true).Any(IsMeaningfulTrivia))
         {
             return DiagnosticPlan(
                 SemanticPatchDiagnosticCodes.InvalidReplacement,
-                "The existing while condition contains comments or directives that cannot be " +
-                "discarded safely.",
-                loop.Condition);
+                $"The existing {role} contains comments or directives that cannot be discarded safely.",
+                currentExpression);
         }
 
-        ExpressionSyntax formattedCondition = FormatReplacementExpression(
-            newCondition.Syntax,
-            syntax.Condition);
+        ExpressionSyntax formatted = FormatReplacementExpression(replacement.Syntax, syntax);
         return SuccessPlan(document!, new PendingReplacement(
             document!.Source.LogicalPath,
-            syntax.Condition,
-            formattedCondition,
+            syntax,
+            formatted,
             []));
     }
 

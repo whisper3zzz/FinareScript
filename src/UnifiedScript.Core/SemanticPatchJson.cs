@@ -86,6 +86,15 @@ public static class SemanticPatchJson
                 case ReplaceWhileConditionPatchOperation replaceWhileCondition:
                     ValidateReplaceWhileCondition(replaceWhileCondition);
                     break;
+                case ReplaceIfConditionPatchOperation replaceIfCondition:
+                    ValidateReplaceIfCondition(replaceIfCondition);
+                    break;
+                case ReplaceLocalInitializerPatchOperation replaceLocalInitializer:
+                    ValidateReplaceLocalInitializer(replaceLocalInitializer);
+                    break;
+                case ReplaceReturnValuePatchOperation replaceReturnValue:
+                    ValidateReplaceReturnValue(replaceReturnValue);
+                    break;
                 case InsertStatementPatchOperation insertStatement:
                     ValidateInsertStatement(insertStatement);
                     break;
@@ -213,6 +222,70 @@ public static class SemanticPatchJson
         }
 
         ValidatePatchExpression(operation.NewCondition, 0);
+    }
+
+    private static void ValidateReplaceIfCondition(
+        ReplaceIfConditionPatchOperation operation)
+    {
+        if (operation.ExpectedConditionNodeId.IsEmpty ||
+            operation.ExpectedConditionTypeId.IsEmpty ||
+            operation.NewCondition is null)
+        {
+            throw new JsonException(
+                "If-condition replacement requires the current condition endpoint, expected type, " +
+                "and a typed new condition.");
+        }
+
+        if (operation.NewCondition.ExpectedTypeId != operation.ExpectedConditionTypeId)
+        {
+            throw new JsonException(
+                "An if replacement condition must declare the expected condition type.");
+        }
+
+        ValidatePatchExpression(operation.NewCondition, 0);
+    }
+
+    private static void ValidateReplaceLocalInitializer(
+        ReplaceLocalInitializerPatchOperation operation)
+    {
+        if (string.IsNullOrWhiteSpace(operation.ExpectedName) ||
+            operation.ExpectedInitializerNodeId.IsEmpty ||
+            operation.ExpectedTypeId.IsEmpty ||
+            operation.NewInitializer is null)
+        {
+            throw new JsonException(
+                "Local-initializer replacement requires the expected local name, current initializer " +
+                "endpoint, semantic type, and a typed new initializer.");
+        }
+
+        if (operation.NewInitializer.ExpectedTypeId != operation.ExpectedTypeId)
+        {
+            throw new JsonException(
+                "A replacement local initializer must declare the expected local type.");
+        }
+
+        ValidatePatchExpression(operation.NewInitializer, 0);
+    }
+
+    private static void ValidateReplaceReturnValue(
+        ReplaceReturnValuePatchOperation operation)
+    {
+        if (operation.ExpectedValueNodeId.IsEmpty ||
+            operation.ExpectedReturnTypeId.IsEmpty ||
+            operation.NewValue is null)
+        {
+            throw new JsonException(
+                "Return-value replacement requires the current value endpoint, expected method return " +
+                "type, and a typed new value.");
+        }
+
+        if (operation.NewValue.ExpectedTypeId != operation.ExpectedReturnTypeId)
+        {
+            throw new JsonException(
+                "A replacement return value must declare the expected method return type.");
+        }
+
+        ValidatePatchExpression(operation.NewValue, 0);
     }
 
     private static void ValidateInsertStatement(InsertStatementPatchOperation operation)

@@ -2927,6 +2927,191 @@ public sealed class CSharpSourcePatchApplierTests
             static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.InvalidReplacement);
     }
 
+    [Fact]
+    public void Apply_ReplacesIfConditionLocalInitializerAndReturnValueWithoutRecreatingStatements()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int Run(int value, int stopAt, bool enabled)
+                {
+                    int result = value + 1;
+                    if (enabled)
+                    {
+                        return result;
+                    }
+
+                    return value;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/GeneralExpressionEndpointEdit.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement local = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirIfStatement branch = Assert.IsType<HirIfStatement>(method.Body.Statements[1]);
+        HirReturnStatement branchReturn = Assert.IsType<HirReturnStatement>(
+            Assert.Single(branch.Then.Statements));
+        HirExpression originalInitializer = Assert.IsAssignableFrom<HirExpression>(local.Initializer);
+        HirExpression originalReturnValue = Assert.IsAssignableFrom<HirExpression>(branchReturn.Expression);
+        SemanticId intType = GetTypeId(original, local);
+        SemanticId boolType = GetTypeId(original, branch.Condition);
+        HashSet<SemanticId> oldEndpointIds = originalInitializer
+            .DescendantsAndSelf()
+            .Concat(branch.Condition.DescendantsAndSelf())
+            .Concat(originalReturnValue.DescendantsAndSelf())
+            .Select(static node => node.Id)
+            .ToHashSet();
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                new ReplaceLocalInitializerPatchOperation(
+                    local.Id,
+                    local.Name,
+                    originalInitializer.Id,
+                    intType,
+                    new BinaryPatchExpression(
+                        "-",
+                        new LocalReferencePatchExpression(
+                            method.Parameters[0].Id,
+                            method.Parameters[0].Name,
+                            intType),
+                        new LiteralPatchExpression("2", intType),
+                        intType)),
+                new ReplaceIfConditionPatchOperation(
+                    branch.Id,
+                    branch.Condition.Id,
+                    boolType,
+                    new BinaryPatchExpression(
+                        "&&",
+                        new LocalReferencePatchExpression(
+                            method.Parameters[2].Id,
+                            method.Parameters[2].Name,
+                            boolType),
+                        new BinaryPatchExpression(
+                            ">",
+                            new LocalReferencePatchExpression(local.Id, local.Name, intType),
+                            new LocalReferencePatchExpression(
+                                method.Parameters[1].Id,
+                                method.Parameters[1].Name,
+                                intType),
+                            boolType),
+                        boolType)),
+                new ReplaceReturnValuePatchOperation(
+                    branchReturn.Id,
+                    originalReturnValue.Id,
+                    intType,
+                    new BinaryPatchExpression(
+                        "+",
+                        new LocalReferencePatchExpression(local.Id, local.Name, intType),
+                        new LocalReferencePatchExpression(
+                            method.Parameters[1].Id,
+                            method.Parameters[1].Name,
+                            intType),
+                        intType)),
+            ]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains("int result = value - 2;", patchedSource, StringComparison.Ordinal);
+        Assert.Contains("if (enabled && (result > stopAt))", patchedSource, StringComparison.Ordinal);
+        Assert.Contains("return result + stopAt;", patchedSource, StringComparison.Ordinal);
+        HirMethodDeclaration changedMethod = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirVariableDeclarationStatement changedLocal = Assert.IsType<HirVariableDeclarationStatement>(
+            changedMethod.Body.Statements[0]);
+        HirIfStatement changedBranch = Assert.IsType<HirIfStatement>(changedMethod.Body.Statements[1]);
+        HirReturnStatement changedBranchReturn = Assert.IsType<HirReturnStatement>(
+            Assert.Single(changedBranch.Then.Statements));
+        Assert.Equal(method.Id, changedMethod.Id);
+        Assert.Equal(method.Body.Id, changedMethod.Body.Id);
+        Assert.Equal(local.Id, changedLocal.Id);
+        Assert.Equal(branch.Id, changedBranch.Id);
+        Assert.Equal(branch.Then.Id, changedBranch.Then.Id);
+        Assert.Null(branch.Else);
+        Assert.Null(changedBranch.Else);
+        Assert.Equal(branchReturn.Id, changedBranchReturn.Id);
+        Assert.Equal(method.Body.Statements[2].Id, changedMethod.Body.Statements[2].Id);
+
+        IdentitySidecarDocument identity = Assert.Single(result.Analysis.IdentitySidecars);
+        HashSet<SemanticId> liveIds = identity.Entries.Select(static entry => entry.Id).ToHashSet();
+        HashSet<SemanticId> tombstoneIds = identity.Tombstones
+            .Select(static tombstone => tombstone.Id)
+            .ToHashSet();
+        Assert.All(oldEndpointIds, id => Assert.True(liveIds.Contains(id) ^ tombstoneIds.Contains(id)));
+        Assert.All(
+            new[] { local.Id, branch.Id, branch.Then.Id, branchReturn.Id },
+            id => Assert.Contains(id, liveIds));
+        Assert.NotEmpty(tombstoneIds.Intersect(oldEndpointIds));
+
+        GraphDocument graph = new HirGraphProjector().Project(
+            result.Analysis.Hir,
+            result.Analysis.Semantics);
+        GraphFunction function = Assert.Single(graph.Functions);
+        Assert.Contains(function.Nodes, node => node.Id == local.Id && node.Kind == "variable");
+        Assert.Contains(function.Nodes, node => node.Id == branch.Id && node.Kind == "branch");
+        Assert.Contains(function.Nodes, node => node.Id == branchReturn.Id && node.Kind == "return");
+        GraphControlFlowFunction flow = Assert.Single(
+            new GraphControlFlowAnalyzer().AnalyzeAndValidate(graph).Functions);
+        GraphControlFlowBranch branchFlow = Assert.Single(flow.Branches);
+        Assert.True(flow.IsReducible);
+        Assert.Equal(branch.Id, branchFlow.BranchNodeId);
+        Assert.True(branchFlow.ThenExitsFunction);
+        Assert.False(branchFlow.ElseExitsFunction);
+    }
+
+    [Fact]
+    public void Apply_RejectsGeneralEndpointReplacementThatWouldDiscardAComment()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int Run(int value)
+                {
+                    int result = value /* preserve rationale */ + 1;
+                    return result;
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            source,
+            "Game/CommentedInitializerEdit.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement local = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        SemanticId intType = GetTypeId(original, local);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new ReplaceLocalInitializerPatchOperation(
+                local.Id,
+                local.Name,
+                local.Initializer!.Id,
+                intType,
+                new LiteralPatchExpression("2", intType))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.PatchedRequest);
+        Assert.Null(result.Analysis);
+        Assert.Equal(source, Assert.Single(request.Sources).Source);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.InvalidReplacement);
+    }
+
     private static (CSharpCompilationRequest Request, CSharpAnalysisResult Analysis) CreatePersistentRequest(
         string source,
         string path)

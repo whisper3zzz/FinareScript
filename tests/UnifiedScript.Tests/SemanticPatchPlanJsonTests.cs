@@ -94,6 +94,27 @@ public sealed class SemanticPatchPlanJsonTests
                 new LiteralPatchExpression(
                     "false",
                     SemanticId.FromKey("System.Boolean"))),
+            new ReplaceIfConditionPatchPlanStep(
+                "replaceIfCondition",
+                SemanticId.FromKey("if-statement"),
+                SemanticId.FromKey("if-condition"),
+                SemanticId.FromKey("System.Boolean"),
+                new LiteralPatchExpression(
+                    "true",
+                    SemanticId.FromKey("System.Boolean"))),
+            new ReplaceLocalInitializerPatchPlanStep(
+                "replaceLocalInitializer",
+                SemanticId.FromKey("local-statement"),
+                "value",
+                SemanticId.FromKey("local-initializer"),
+                intType,
+                new LiteralPatchExpression("3", intType)),
+            new ReplaceReturnValuePatchPlanStep(
+                "replaceReturnValue",
+                SemanticId.FromKey("return-statement"),
+                SemanticId.FromKey("return-value"),
+                intType,
+                new LiteralPatchExpression("4", intType)),
             new InsertStatementPatchPlanStep(
                 "insert",
                 SemanticId.FromKey("block"),
@@ -131,6 +152,9 @@ public sealed class SemanticPatchPlanJsonTests
         Assert.Contains("\"step\": \"reconnectArgument\"", json, StringComparison.Ordinal);
         Assert.Contains("\"step\": \"replaceAssignmentValue\"", json, StringComparison.Ordinal);
         Assert.Contains("\"step\": \"replaceWhileCondition\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"step\": \"replaceIfCondition\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"step\": \"replaceLocalInitializer\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"step\": \"replaceReturnValue\"", json, StringComparison.Ordinal);
         Assert.Contains("\"step\": \"insertStatement\"", json, StringComparison.Ordinal);
         Assert.Contains("\"statement\": \"localAssignment\"", json, StringComparison.Ordinal);
         Assert.Contains("\"step\": \"deleteStatement\"", json, StringComparison.Ordinal);
@@ -166,6 +190,136 @@ public sealed class SemanticPatchPlanJsonTests
             Assert.IsType<ReplaceProducedWhileConditionPatchPlanStep>(roundTrip.Steps[1]));
         Assert.Contains("\"step\": \"replaceProducedWhileCondition\"", json, StringComparison.Ordinal);
         Assert.Contains("\"sourceStepId\": \"insertLoop\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SerializeAndDeserialize_PreserveGeneralProducedExpressionHandles()
+    {
+        SemanticId blockId = SemanticId.FromKey("general-produced-parent");
+        SemanticId nextId = SemanticId.FromKey("general-produced-next");
+        SemanticId intType = SemanticId.FromKey("System.Int32");
+        SemanticId boolType = SemanticId.FromKey("System.Boolean");
+        var localProducer = new InsertStatementPatchPlanStep(
+            "insertLocal",
+            blockId,
+            null,
+            nextId,
+            new LocalLiteralDeclarationPatchStatement("offset", "int", "1", intType));
+        var ifProducer = new InsertStatementPatchPlanStep(
+            "insertIf",
+            blockId,
+            null,
+            nextId,
+            new IfPatchStatement(new LiteralPatchExpression("true", boolType)));
+        var returnProducer = new InsertBranchStatementPatchPlanStep(
+            "insertReturn",
+            blockId,
+            ifProducer.StepId,
+            IfBranchKind.Then,
+            new ReturnPatchStatement(new LiteralPatchExpression("0", intType), intType));
+        SemanticPatchPlanStep[] steps =
+        [
+            localProducer,
+            new ReplaceProducedLocalInitializerPatchPlanStep(
+                "editProducedInitializer",
+                blockId,
+                localProducer.StepId,
+                new LiteralPatchExpression("2", intType)),
+            ifProducer,
+            new ReplaceProducedIfConditionPatchPlanStep(
+                "editProducedIf",
+                blockId,
+                ifProducer.StepId,
+                new LiteralPatchExpression("false", boolType)),
+            returnProducer,
+            new ReplaceProducedReturnValuePatchPlanStep(
+                "editProducedReturn",
+                blockId,
+                returnProducer.StepId,
+                new LiteralPatchExpression("3", intType)),
+        ];
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("general-produced-compilation"),
+            SemanticId.FromKey("general-produced-configuration"),
+            steps);
+
+        string json = SemanticPatchPlanJson.Serialize(plan);
+        SemanticPatchPlanDocument roundTrip = SemanticPatchPlanJson.Deserialize(json);
+
+        Assert.Equal(steps, roundTrip.Steps);
+        Assert.Contains(
+            "\"step\": \"replaceProducedLocalInitializer\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"step\": \"replaceProducedIfCondition\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"step\": \"replaceProducedReturnValue\"",
+            json,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Create_RejectsInvalidGeneralProducedExpressionHandles()
+    {
+        SemanticId blockId = SemanticId.FromKey("invalid-general-produced-parent");
+        SemanticId intType = SemanticId.FromKey("System.Int32");
+        SemanticId boolType = SemanticId.FromKey("System.Boolean");
+        var localProducer = new InsertStatementPatchPlanStep(
+            "insertLocal",
+            blockId,
+            null,
+            null,
+            new LocalLiteralDeclarationPatchStatement("offset", "int", "1", intType));
+        var ifProducer = new InsertStatementPatchPlanStep(
+            "insertIf",
+            blockId,
+            null,
+            null,
+            new IfPatchStatement(new LiteralPatchExpression("true", boolType)));
+        var voidReturnProducer = new InsertBranchStatementPatchPlanStep(
+            "insertVoidReturn",
+            blockId,
+            ifProducer.StepId,
+            IfBranchKind.Then,
+            new ReturnPatchStatement(null, SemanticId.FromKey("System.Void")));
+
+        Assert.Throws<JsonException>(() => SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("wrong-produced-initializer-type-compilation"),
+            SemanticId.FromKey("wrong-produced-initializer-type-configuration"),
+            [
+                localProducer,
+                new ReplaceProducedLocalInitializerPatchPlanStep(
+                    "wrongInitializerType",
+                    blockId,
+                    localProducer.StepId,
+                    new LiteralPatchExpression("false", boolType)),
+            ]));
+        Assert.Throws<JsonException>(() => SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("future-produced-if-compilation"),
+            SemanticId.FromKey("future-produced-if-configuration"),
+            [
+                new ReplaceProducedIfConditionPatchPlanStep(
+                    "editFutureIf",
+                    blockId,
+                    ifProducer.StepId,
+                    new LiteralPatchExpression("false", boolType)),
+                ifProducer,
+            ]));
+        Assert.Throws<JsonException>(() => SemanticPatchPlanDocument.Create(
+            SemanticId.FromKey("void-produced-return-compilation"),
+            SemanticId.FromKey("void-produced-return-configuration"),
+            [
+                ifProducer,
+                voidReturnProducer,
+                new ReplaceProducedReturnValuePatchPlanStep(
+                    "editVoidReturn",
+                    blockId,
+                    voidReturnProducer.StepId,
+                    new LiteralPatchExpression("0", intType)),
+            ]));
     }
 
     [Fact]

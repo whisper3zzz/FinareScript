@@ -11,6 +11,18 @@ namespace UnifiedScript.Core;
 [JsonDerivedType(
     typeof(ReplaceProducedWhileConditionPatchPlanStep),
     "replaceProducedWhileCondition")]
+[JsonDerivedType(typeof(ReplaceIfConditionPatchPlanStep), "replaceIfCondition")]
+[JsonDerivedType(
+    typeof(ReplaceProducedIfConditionPatchPlanStep),
+    "replaceProducedIfCondition")]
+[JsonDerivedType(typeof(ReplaceLocalInitializerPatchPlanStep), "replaceLocalInitializer")]
+[JsonDerivedType(
+    typeof(ReplaceProducedLocalInitializerPatchPlanStep),
+    "replaceProducedLocalInitializer")]
+[JsonDerivedType(typeof(ReplaceReturnValuePatchPlanStep), "replaceReturnValue")]
+[JsonDerivedType(
+    typeof(ReplaceProducedReturnValuePatchPlanStep),
+    "replaceProducedReturnValue")]
 [JsonDerivedType(typeof(InsertStatementPatchPlanStep), "insertStatement")]
 [JsonDerivedType(typeof(InsertBranchStatementPatchPlanStep), "insertBranchStatement")]
 [JsonDerivedType(typeof(InsertLoopBodyStatementPatchPlanStep), "insertLoopBodyStatement")]
@@ -113,6 +125,68 @@ public sealed record ReplaceProducedWhileConditionPatchPlanStep(
     string SourceStepId,
     PatchExpression NewCondition) : SemanticPatchPlanStep(StepId, TargetNodeId);
 
+public sealed record ReplaceIfConditionPatchPlanStep(
+    string StepId,
+    SemanticId TargetNodeId,
+    SemanticId ExpectedConditionNodeId,
+    SemanticId ExpectedConditionTypeId,
+    PatchExpression NewCondition) : SemanticPatchPlanStep(StepId, TargetNodeId)
+{
+    public ReplaceIfConditionPatchOperation ToOperation() => new(
+        TargetNodeId,
+        ExpectedConditionNodeId,
+        ExpectedConditionTypeId,
+        NewCondition);
+}
+
+public sealed record ReplaceProducedIfConditionPatchPlanStep(
+    string StepId,
+    SemanticId TargetNodeId,
+    string SourceStepId,
+    PatchExpression NewCondition) : SemanticPatchPlanStep(StepId, TargetNodeId);
+
+public sealed record ReplaceLocalInitializerPatchPlanStep(
+    string StepId,
+    SemanticId TargetNodeId,
+    string ExpectedName,
+    SemanticId ExpectedInitializerNodeId,
+    SemanticId ExpectedTypeId,
+    PatchExpression NewInitializer) : SemanticPatchPlanStep(StepId, TargetNodeId)
+{
+    public ReplaceLocalInitializerPatchOperation ToOperation() => new(
+        TargetNodeId,
+        ExpectedName,
+        ExpectedInitializerNodeId,
+        ExpectedTypeId,
+        NewInitializer);
+}
+
+public sealed record ReplaceProducedLocalInitializerPatchPlanStep(
+    string StepId,
+    SemanticId TargetNodeId,
+    string SourceStepId,
+    PatchExpression NewInitializer) : SemanticPatchPlanStep(StepId, TargetNodeId);
+
+public sealed record ReplaceReturnValuePatchPlanStep(
+    string StepId,
+    SemanticId TargetNodeId,
+    SemanticId ExpectedValueNodeId,
+    SemanticId ExpectedReturnTypeId,
+    PatchExpression NewValue) : SemanticPatchPlanStep(StepId, TargetNodeId)
+{
+    public ReplaceReturnValuePatchOperation ToOperation() => new(
+        TargetNodeId,
+        ExpectedValueNodeId,
+        ExpectedReturnTypeId,
+        NewValue);
+}
+
+public sealed record ReplaceProducedReturnValuePatchPlanStep(
+    string StepId,
+    SemanticId TargetNodeId,
+    string SourceStepId,
+    PatchExpression NewValue) : SemanticPatchPlanStep(StepId, TargetNodeId);
+
 public sealed record InsertStatementPatchPlanStep(
     string StepId,
     SemanticId TargetNodeId,
@@ -198,7 +272,7 @@ public sealed record SemanticPatchPlanDocument(
     SemanticId SemanticConfigurationId,
     IReadOnlyList<SemanticPatchPlanStep> Steps)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.patch-plan/v0.9";
+    public const string CurrentSchemaVersion = "unifiedscript.patch-plan/v0.10";
 
     public static SemanticPatchPlanDocument Create(
         SemanticId sourceCompilationId,

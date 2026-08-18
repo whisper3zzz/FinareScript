@@ -51,6 +51,9 @@ public static class SemanticPatchPlanJson
         var producedTypes = new Dictionary<string, SemanticId>(StringComparer.Ordinal);
         var branchProducers = new Dictionary<string, BranchProducerState>(StringComparer.Ordinal);
         var loopProducers = new Dictionary<string, LoopProducerState>(StringComparer.Ordinal);
+        var localInitializerProducers = new Dictionary<string, LocalInitializerProducerState>(
+            StringComparer.Ordinal);
+        var returnProducers = new Dictionary<string, ReturnProducerState>(StringComparer.Ordinal);
         var paths = new Dictionary<PlanPathKey, PlanPathState>();
         foreach (SemanticPatchPlanStep? step in document.Steps)
         {
@@ -74,7 +77,10 @@ public static class SemanticPatchPlanJson
             bool isRepeatableTarget = step is InsertStatementPatchPlanStep or
                 InsertBranchStatementPatchPlanStep or
                 InsertLoopBodyStatementPatchPlanStep or
-                ReplaceProducedWhileConditionPatchPlanStep;
+                ReplaceProducedWhileConditionPatchPlanStep or
+                ReplaceProducedIfConditionPatchPlanStep or
+                ReplaceProducedLocalInitializerPatchPlanStep or
+                ReplaceProducedReturnValuePatchPlanStep;
             if (targetKinds.TryGetValue(step.TargetNodeId, out bool previousWasRepeatable))
             {
                 if (!isRepeatableTarget || !previousWasRepeatable)
@@ -112,17 +118,50 @@ public static class SemanticPatchPlanJson
                         producedCondition,
                         loopProducers);
                     break;
+                case ReplaceIfConditionPatchPlanStep replaceIfCondition:
+                    ValidateOperation(document, replaceIfCondition.ToOperation());
+                    break;
+                case ReplaceProducedIfConditionPatchPlanStep producedIfCondition:
+                    ValidateProducedIfCondition(
+                        document,
+                        producedIfCondition,
+                        branchProducers);
+                    break;
+                case ReplaceLocalInitializerPatchPlanStep replaceLocalInitializer:
+                    ValidateOperation(document, replaceLocalInitializer.ToOperation());
+                    break;
+                case ReplaceProducedLocalInitializerPatchPlanStep producedInitializer:
+                    ValidateProducedLocalInitializer(
+                        document,
+                        producedInitializer,
+                        localInitializerProducers);
+                    break;
+                case ReplaceReturnValuePatchPlanStep replaceReturnValue:
+                    ValidateOperation(document, replaceReturnValue.ToOperation());
+                    break;
+                case ReplaceProducedReturnValuePatchPlanStep producedReturn:
+                    ValidateProducedReturnValue(
+                        document,
+                        producedReturn,
+                        returnProducers);
+                    break;
                 case InsertStatementPatchPlanStep insertion:
                     ValidateOperation(document, insertion.ToOperation());
                     if (insertion.NewStatement is LocalLiteralDeclarationPatchStatement insertedLocal)
                     {
                         producedTypes.Add(insertion.StepId, insertedLocal.ExpectedTypeId);
+                        RegisterLocalInitializerProducer(
+                            insertion.StepId,
+                            insertion.TargetNodeId,
+                            insertedLocal,
+                            localInitializerProducers);
                     }
-                    else if (insertion.NewStatement is IfPatchStatement)
+                    else if (insertion.NewStatement is IfPatchStatement insertedIf)
                     {
                         RegisterBranchProducer(
                             insertion.StepId,
                             insertion.TargetNodeId,
+                            insertedIf.Condition.ExpectedTypeId,
                             null,
                             branchProducers,
                             paths);
@@ -135,6 +174,17 @@ public static class SemanticPatchPlanJson
                             insertedLoop.Condition.ExpectedTypeId,
                             loopProducers,
                             paths);
+                    }
+                    else if (insertion.NewStatement is ReturnPatchStatement
+                    {
+                        Expression: not null,
+                    } insertedReturn)
+                    {
+                        RegisterReturnProducer(
+                            insertion.StepId,
+                            insertion.TargetNodeId,
+                            insertedReturn,
+                            returnProducers);
                     }
 
                     break;
@@ -153,12 +203,18 @@ public static class SemanticPatchPlanJson
                     if (branchInsertion.NewStatement is LocalLiteralDeclarationPatchStatement branchLocal)
                     {
                         producedTypes.Add(branchInsertion.StepId, branchLocal.ExpectedTypeId);
+                        RegisterLocalInitializerProducer(
+                            branchInsertion.StepId,
+                            branchInsertion.TargetNodeId,
+                            branchLocal,
+                            localInitializerProducers);
                     }
-                    else if (branchInsertion.NewStatement is IfPatchStatement)
+                    else if (branchInsertion.NewStatement is IfPatchStatement insertedBranchIf)
                     {
                         RegisterBranchProducer(
                             branchInsertion.StepId,
                             branchInsertion.TargetNodeId,
+                            insertedBranchIf.Condition.ExpectedTypeId,
                             sourcePath,
                             branchProducers,
                             paths);
@@ -170,6 +226,22 @@ public static class SemanticPatchPlanJson
                             branchInsertion.TargetNodeId,
                             insertedBranchLoop.Condition.ExpectedTypeId,
                             loopProducers,
+                            paths);
+                    }
+                    else if (branchInsertion.NewStatement is ReturnPatchStatement
+                    {
+                        Expression: not null,
+                    } branchReturn)
+                    {
+                        RegisterReturnProducer(
+                            branchInsertion.StepId,
+                            branchInsertion.TargetNodeId,
+                            branchReturn,
+                            returnProducers);
+                        MarkPathTerminated(
+                            sourcePath,
+                            branchInsertion.StepId,
+                            branchProducers,
                             paths);
                     }
                     else if (IsTerminalStatement(branchInsertion.NewStatement))
@@ -195,12 +267,18 @@ public static class SemanticPatchPlanJson
                     if (loopInsertion.NewStatement is LocalLiteralDeclarationPatchStatement loopLocal)
                     {
                         producedTypes.Add(loopInsertion.StepId, loopLocal.ExpectedTypeId);
+                        RegisterLocalInitializerProducer(
+                            loopInsertion.StepId,
+                            loopInsertion.TargetNodeId,
+                            loopLocal,
+                            localInitializerProducers);
                     }
-                    else if (loopInsertion.NewStatement is IfPatchStatement)
+                    else if (loopInsertion.NewStatement is IfPatchStatement insertedLoopIf)
                     {
                         RegisterBranchProducer(
                             loopInsertion.StepId,
                             loopInsertion.TargetNodeId,
+                            insertedLoopIf.Condition.ExpectedTypeId,
                             loopPath,
                             branchProducers,
                             paths);
@@ -212,6 +290,22 @@ public static class SemanticPatchPlanJson
                             loopInsertion.TargetNodeId,
                             insertedNestedLoop.Condition.ExpectedTypeId,
                             loopProducers,
+                            paths);
+                    }
+                    else if (loopInsertion.NewStatement is ReturnPatchStatement
+                    {
+                        Expression: not null,
+                    } loopReturn)
+                    {
+                        RegisterReturnProducer(
+                            loopInsertion.StepId,
+                            loopInsertion.TargetNodeId,
+                            loopReturn,
+                            returnProducers);
+                        MarkPathTerminated(
+                            loopPath,
+                            loopInsertion.StepId,
+                            branchProducers,
                             paths);
                     }
                     else if (IsTerminalStatement(loopInsertion.NewStatement))
@@ -418,16 +512,125 @@ public static class SemanticPatchPlanJson
             new WhilePatchStatement(replacement.NewCondition)));
     }
 
+    private static void ValidateProducedIfCondition(
+        SemanticPatchPlanDocument document,
+        ReplaceProducedIfConditionPatchPlanStep replacement,
+        IReadOnlyDictionary<string, BranchProducerState> branchProducers)
+    {
+        if (string.IsNullOrWhiteSpace(replacement.SourceStepId) ||
+            !branchProducers.TryGetValue(replacement.SourceStepId, out BranchProducerState? source))
+        {
+            throw new JsonException(
+                $"Produced-if condition step '{replacement.StepId}' must reference an earlier " +
+                "if-insertion step.");
+        }
+
+        if (source.OriginalTargetNodeId != replacement.TargetNodeId)
+        {
+            throw new JsonException(
+                $"Produced-if condition step '{replacement.StepId}' and source step " +
+                $"'{replacement.SourceStepId}' must use the same original parent-block target.");
+        }
+
+        if (replacement.NewCondition is null ||
+            replacement.NewCondition.ExpectedTypeId != source.ConditionTypeId)
+        {
+            throw new JsonException(
+                $"Produced-if condition step '{replacement.StepId}' must preserve the source " +
+                "if condition's declared semantic type.");
+        }
+
+        ValidateOperation(document, new ReplaceIfConditionPatchOperation(
+            replacement.TargetNodeId,
+            SemanticId.FromKey("produced-if-condition-endpoint"),
+            source.ConditionTypeId,
+            replacement.NewCondition));
+    }
+
+    private static void ValidateProducedLocalInitializer(
+        SemanticPatchPlanDocument document,
+        ReplaceProducedLocalInitializerPatchPlanStep replacement,
+        IReadOnlyDictionary<string, LocalInitializerProducerState> producers)
+    {
+        if (string.IsNullOrWhiteSpace(replacement.SourceStepId) ||
+            !producers.TryGetValue(
+                replacement.SourceStepId,
+                out LocalInitializerProducerState? source))
+        {
+            throw new JsonException(
+                $"Produced-local initializer step '{replacement.StepId}' must reference an earlier " +
+                "local-literal insertion step.");
+        }
+
+        if (source.OriginalTargetNodeId != replacement.TargetNodeId)
+        {
+            throw new JsonException(
+                $"Produced-local initializer step '{replacement.StepId}' and source step " +
+                $"'{replacement.SourceStepId}' must use the same original structural target.");
+        }
+
+        if (replacement.NewInitializer is null ||
+            replacement.NewInitializer.ExpectedTypeId != source.TypeId)
+        {
+            throw new JsonException(
+                $"Produced-local initializer step '{replacement.StepId}' must preserve the source " +
+                "local's declared semantic type.");
+        }
+
+        ValidateOperation(document, new ReplaceLocalInitializerPatchOperation(
+            replacement.TargetNodeId,
+            source.Name,
+            SemanticId.FromKey("produced-local-initializer-endpoint"),
+            source.TypeId,
+            replacement.NewInitializer));
+    }
+
+    private static void ValidateProducedReturnValue(
+        SemanticPatchPlanDocument document,
+        ReplaceProducedReturnValuePatchPlanStep replacement,
+        IReadOnlyDictionary<string, ReturnProducerState> producers)
+    {
+        if (string.IsNullOrWhiteSpace(replacement.SourceStepId) ||
+            !producers.TryGetValue(replacement.SourceStepId, out ReturnProducerState? source))
+        {
+            throw new JsonException(
+                $"Produced-return value step '{replacement.StepId}' must reference an earlier " +
+                "value-return insertion step.");
+        }
+
+        if (source.OriginalTargetNodeId != replacement.TargetNodeId)
+        {
+            throw new JsonException(
+                $"Produced-return value step '{replacement.StepId}' and source step " +
+                $"'{replacement.SourceStepId}' must use the same original structural target.");
+        }
+
+        if (replacement.NewValue is null ||
+            replacement.NewValue.ExpectedTypeId != source.ReturnTypeId)
+        {
+            throw new JsonException(
+                $"Produced-return value step '{replacement.StepId}' must preserve the source " +
+                "return's declared semantic type.");
+        }
+
+        ValidateOperation(document, new ReplaceReturnValuePatchOperation(
+            replacement.TargetNodeId,
+            SemanticId.FromKey("produced-return-value-endpoint"),
+            source.ReturnTypeId,
+            replacement.NewValue));
+    }
+
     private static void RegisterBranchProducer(
         string stepId,
         SemanticId originalTargetNodeId,
+        SemanticId conditionTypeId,
         PlanPathKey? parentPath,
         IDictionary<string, BranchProducerState> branchProducers,
         IDictionary<PlanPathKey, PlanPathState> paths)
     {
         branchProducers.Add(
             stepId,
-            new BranchProducerState(originalTargetNodeId, parentPath));
+            new BranchProducerState(originalTargetNodeId, conditionTypeId, parentPath));
         paths.Add(
             new PlanPathKey(stepId, PlanPathKind.Then),
             new PlanPathState());
@@ -435,6 +638,27 @@ public static class SemanticPatchPlanJson
             new PlanPathKey(stepId, PlanPathKind.Else),
             new PlanPathState());
     }
+
+    private static void RegisterLocalInitializerProducer(
+        string stepId,
+        SemanticId originalTargetNodeId,
+        LocalLiteralDeclarationPatchStatement local,
+        IDictionary<string, LocalInitializerProducerState> producers) => producers.Add(
+        stepId,
+        new LocalInitializerProducerState(
+            originalTargetNodeId,
+            local.Name,
+            local.ExpectedTypeId));
+
+    private static void RegisterReturnProducer(
+        string stepId,
+        SemanticId originalTargetNodeId,
+        ReturnPatchStatement returnStatement,
+        IDictionary<string, ReturnProducerState> producers) => producers.Add(
+        stepId,
+        new ReturnProducerState(
+            originalTargetNodeId,
+            returnStatement.ExpectedReturnTypeId));
 
     private static void RegisterLoopProducer(
         string stepId,
@@ -561,11 +785,21 @@ public static class SemanticPatchPlanJson
 
     private sealed record BranchProducerState(
         SemanticId OriginalTargetNodeId,
+        SemanticId ConditionTypeId,
         PlanPathKey? ParentPath);
 
     private sealed record LoopProducerState(
         SemanticId OriginalTargetNodeId,
         SemanticId ConditionTypeId);
+
+    private sealed record LocalInitializerProducerState(
+        SemanticId OriginalTargetNodeId,
+        string Name,
+        SemanticId TypeId);
+
+    private sealed record ReturnProducerState(
+        SemanticId OriginalTargetNodeId,
+        SemanticId ReturnTypeId);
 
     private sealed class PlanPathState
     {

@@ -34,6 +34,7 @@ DOCUMENTS = [
     ROOT / "docs" / "LOOP_FOUNDATION.md",
     ROOT / "docs" / "LOOP_PATCHING.md",
     ROOT / "docs" / "STRUCTURED_EXPRESSION_EDITING.md",
+    ROOT / "docs" / "GENERAL_EXPRESSION_EDITING.md",
     ROOT / "docs" / "PATCH_PLAN.md",
     ROOT / "docs" / "ROADMAP.md",
     ROOT / "docs" / "milestones" / "M1_ROSLYN_GRAPH_FOUNDATION.md",
@@ -121,6 +122,15 @@ def main() -> int:
     expression_edit_identity_path = (
         ROOT / "samples" / "Patching" / "EditLoopRules.cs.usids"
     )
+    general_expression_source_path = (
+        ROOT / "samples" / "Patching" / "EditDecisionValues.cs"
+    )
+    general_expression_plan_path = (
+        ROOT / "samples" / "Patching" / "EditDecisionValues.plan.json"
+    )
+    general_expression_identity_path = (
+        ROOT / "samples" / "Patching" / "EditDecisionValues.cs.usids"
+    )
     region_source_path = ROOT / "samples" / "Regions" / "EarlyReturn.cs"
     loop_source_path = ROOT / "samples" / "Loops" / "Countdown.cs"
     loop_identity_path = ROOT / "samples" / "Loops" / "Countdown.cs.usids"
@@ -191,6 +201,12 @@ def main() -> int:
         and expression_edit_identity_path.is_file(),
         "Missing structured expression-edit plan sample",
     )
+    require(
+        general_expression_source_path.is_file()
+        and general_expression_plan_path.is_file()
+        and general_expression_identity_path.is_file(),
+        "Missing generalized expression-endpoint edit sample",
+    )
     require(region_source_path.is_file(), "Missing structured Graph-region sample")
     require(
         loop_source_path.is_file() and loop_identity_path.is_file(),
@@ -236,6 +252,15 @@ def main() -> int:
     expression_edit_identity = json.loads(
         expression_edit_identity_path.read_text(encoding="utf-8")
     )
+    general_expression_source = general_expression_source_path.read_text(
+        encoding="utf-8"
+    )
+    general_expression_plan = json.loads(
+        general_expression_plan_path.read_text(encoding="utf-8")
+    )
+    general_expression_identity = json.loads(
+        general_expression_identity_path.read_text(encoding="utf-8")
+    )
     region_source = region_source_path.read_text(encoding="utf-8")
     loop_source = loop_source_path.read_text(encoding="utf-8")
     loop_identity = json.loads(loop_identity_path.read_text(encoding="utf-8"))
@@ -262,12 +287,15 @@ def main() -> int:
     expression_edit_source_digest = hashlib.sha256(
         expression_edit_source.encode("utf-8")
     ).hexdigest()
+    general_expression_source_digest = hashlib.sha256(
+        general_expression_source.encode("utf-8")
+    ).hexdigest()
     loop_source_digest = hashlib.sha256(loop_source.encode("utf-8")).hexdigest()
     require(
-        patch_document["schemaVersion"] == "unifiedscript.patch/v0.10"
-        and operator_patch["schemaVersion"] == "unifiedscript.patch/v0.10"
-        and insert_patch["schemaVersion"] == "unifiedscript.patch/v0.10"
-        and temporary_patch["schemaVersion"] == "unifiedscript.patch/v0.10"
+        patch_document["schemaVersion"] == "unifiedscript.patch/v0.11"
+        and operator_patch["schemaVersion"] == "unifiedscript.patch/v0.11"
+        and insert_patch["schemaVersion"] == "unifiedscript.patch/v0.11"
+        and temporary_patch["schemaVersion"] == "unifiedscript.patch/v0.11"
         and operator_patch["sourceCompilationId"]
         == patch_document["sourceCompilationId"]
         and insert_patch["sourceCompilationId"]
@@ -315,7 +343,7 @@ def main() -> int:
         "Temporary-introduction sample does not contain the expected typed payload",
     )
     require(
-        reconnect_patch["schemaVersion"] == "unifiedscript.patch/v0.10"
+        reconnect_patch["schemaVersion"] == "unifiedscript.patch/v0.11"
         and reconnect_identity["sourcePath"]
         == "samples/Patching/SharedValueRules.cs"
         and reconnect_identity["sourceDigest"]
@@ -340,7 +368,7 @@ def main() -> int:
     assignment_statement = assignment_operation["newStatement"]
     assignment_value = assignment_statement["value"]
     require(
-        assignment_patch["schemaVersion"] == "unifiedscript.patch/v0.10"
+        assignment_patch["schemaVersion"] == "unifiedscript.patch/v0.11"
         and assignment_identity["sourcePath"]
         == "samples/Patching/AssignmentRules.cs"
         and assignment_identity["sourceDigest"]
@@ -371,7 +399,7 @@ def main() -> int:
     introduction_step = plan_steps[0]
     reconnect_steps = plan_steps[1:]
     require(
-        plan_document["schemaVersion"] == "unifiedscript.patch-plan/v0.9"
+        plan_document["schemaVersion"] == "unifiedscript.patch-plan/v0.10"
         and plan_identity["sourcePath"]
         == "samples/Patching/SharedExpressionPlan.cs"
         and plan_identity["sourceDigest"] == f"sha256:{plan_source_digest}"
@@ -406,7 +434,7 @@ def main() -> int:
     composed_identity_ids = {entry["id"] for entry in composed_identity["entries"]}
     composed_insert, composed_reconnect, composed_operator, composed_delete = composed_steps
     require(
-        composed_document["schemaVersion"] == "unifiedscript.patch-plan/v0.9"
+        composed_document["schemaVersion"] == "unifiedscript.patch-plan/v0.10"
         and composed_identity["sourcePath"] == "samples/Patching/ComposedPlan.cs"
         and composed_identity["sourceDigest"] == f"sha256:{composed_source_digest}"
         and [step["step"] for step in composed_steps]
@@ -436,7 +464,7 @@ def main() -> int:
     guard_comparison = guard_condition["left"]
     guard_negation = guard_condition["right"]
     require(
-        guard_document["schemaVersion"] == "unifiedscript.patch/v0.10"
+        guard_document["schemaVersion"] == "unifiedscript.patch/v0.11"
         and guard_identity["sourcePath"] == "samples/Patching/GuardRules.cs"
         and guard_identity["sourceDigest"] == f"sha256:{guard_source_digest}"
         and guard_operation["operation"] == "insertStatement"
@@ -460,7 +488,7 @@ def main() -> int:
     guard_plan_steps = guard_plan["steps"]
     guard_plan_source, *guard_branch_steps = guard_plan_steps
     require(
-        guard_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.9"
+        guard_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.10"
         and guard_plan["sourceCompilationId"] == guard_document["sourceCompilationId"]
         and guard_plan["semanticConfigurationId"]
         == guard_document["semanticConfigurationId"]
@@ -481,7 +509,7 @@ def main() -> int:
     )
     guard_return_source, guard_return_step, guard_fallback_step = guard_return_plan["steps"]
     require(
-        guard_return_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.9"
+        guard_return_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.10"
         and guard_return_plan["sourceCompilationId"] == guard_document["sourceCompilationId"]
         and guard_return_plan["semanticConfigurationId"]
         == guard_document["semanticConfigurationId"]
@@ -503,7 +531,7 @@ def main() -> int:
     nested_steps = nested_plan["steps"]
     nested_outer, nested_inner, nested_then, nested_else, nested_outer_else = nested_steps
     require(
-        nested_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.9"
+        nested_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.10"
         and nested_identity["sourcePath"]
         == "samples/Patching/NestedDecisionRules.cs"
         and nested_identity["sourceDigest"] == f"sha256:{nested_source_digest}"
@@ -547,7 +575,7 @@ def main() -> int:
         loop_plan_steps
     )
     require(
-        loop_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.9"
+        loop_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.10"
         and loop_plan_identity["sourcePath"]
         == "samples/Patching/LoopBuildRules.cs"
         and loop_plan_identity["sourceDigest"]
@@ -589,7 +617,7 @@ def main() -> int:
     condition_payload = condition_edit["newCondition"]
     require(
         expression_edit_plan["schemaVersion"]
-        == "unifiedscript.patch-plan/v0.9"
+        == "unifiedscript.patch-plan/v0.10"
         and expression_edit_identity["sourcePath"]
         == "samples/Patching/EditLoopRules.cs"
         and expression_edit_identity["sourceDigest"]
@@ -620,6 +648,43 @@ def main() -> int:
         and "while (result > 0)" in expression_edit_source
         and "result = result - 1;" in expression_edit_source,
         "Structured expression-edit source, sidecar, and plan are inconsistent",
+    )
+    general_expression_identity_ids = {
+        entry["id"] for entry in general_expression_identity["entries"]
+    }
+    initializer_edit, if_edit, return_edit = general_expression_plan["steps"]
+    require(
+        general_expression_plan["schemaVersion"]
+        == "unifiedscript.patch-plan/v0.10"
+        and general_expression_identity["sourcePath"]
+        == "samples/Patching/EditDecisionValues.cs"
+        and general_expression_identity["sourceDigest"]
+        == f"sha256:{general_expression_source_digest}"
+        and general_expression_identity["generation"] == 1
+        and general_expression_identity["tombstones"] == []
+        and [step["step"] for step in general_expression_plan["steps"]]
+        == ["replaceLocalInitializer", "replaceIfCondition", "replaceReturnValue"]
+        and len({step["stepId"] for step in general_expression_plan["steps"]}) == 3
+        and initializer_edit["targetNodeId"] in general_expression_identity_ids
+        and initializer_edit["expectedInitializerNodeId"]
+        in general_expression_identity_ids
+        and initializer_edit["expectedName"] == "result"
+        and initializer_edit["newInitializer"]["operator"] == "-"
+        and if_edit["targetNodeId"] in general_expression_identity_ids
+        and if_edit["expectedConditionNodeId"] in general_expression_identity_ids
+        and if_edit["newCondition"]["operator"] == "&&"
+        and if_edit["newCondition"]["right"]["operator"] == ">"
+        and return_edit["targetNodeId"] in general_expression_identity_ids
+        and return_edit["expectedValueNodeId"] in general_expression_identity_ids
+        and return_edit["newValue"]["operator"] == "+"
+        and initializer_edit["expectedTypeId"]
+        == return_edit["expectedReturnTypeId"]
+        and if_edit["expectedConditionTypeId"]
+        == if_edit["newCondition"]["expectedTypeId"]
+        and "int result = value + 1;" in general_expression_source
+        and "if (enabled)" in general_expression_source
+        and "return result;" in general_expression_source,
+        "Generalized expression-endpoint source, sidecar, and plan are inconsistent",
     )
     require(
         any((ROOT / "tests" / "UnifiedScript.Tests").glob("*Tests.cs")),

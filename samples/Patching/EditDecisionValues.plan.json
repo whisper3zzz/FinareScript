@@ -1,0 +1,90 @@
+{
+  "schemaVersion": "unifiedscript.patch-plan/v0.10",
+  "sourceCompilationId": "us_db7347f7d10e03abad6d4eaacf70ec5b",
+  "semanticConfigurationId": "us_02f5fe78d296e2d4fe04bc50ca71acf1",
+  "steps": [
+    {
+      "step": "replaceLocalInitializer",
+      "stepId": "editInitializer",
+      "targetNodeId": "us_905bf233cb9f1d70b62817c28fddba05",
+      "expectedName": "result",
+      "expectedInitializerNodeId": "us_3a58e213a3d4222a5d66b764269d2b3c",
+      "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+      "newInitializer": {
+        "expression": "binary",
+        "operator": "-",
+        "left": {
+          "expression": "localReference",
+          "sourceDefinitionId": "us_93a2999d3a376c4394c47570dad6761f",
+          "expectedName": "value",
+          "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+        },
+        "right": {
+          "expression": "literal",
+          "valueText": "2",
+          "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+        },
+        "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+      }
+    },
+    {
+      "step": "replaceIfCondition",
+      "stepId": "editCondition",
+      "targetNodeId": "us_d786536f298413a34a6c7b99b370d919",
+      "expectedConditionNodeId": "us_7f13bf8e400ab7ac254f60a23bf366c9",
+      "expectedConditionTypeId": "us_b5f84bcf933b6593d45e9e031353bfef",
+      "newCondition": {
+        "expression": "binary",
+        "operator": "&&",
+        "left": {
+          "expression": "localReference",
+          "sourceDefinitionId": "us_04decb8e61e9ad67a8e41695d7def77d",
+          "expectedName": "enabled",
+          "expectedTypeId": "us_b5f84bcf933b6593d45e9e031353bfef"
+        },
+        "right": {
+          "expression": "binary",
+          "operator": ">",
+          "left": {
+            "expression": "localReference",
+            "sourceDefinitionId": "us_905bf233cb9f1d70b62817c28fddba05",
+            "expectedName": "result",
+            "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+          },
+          "right": {
+            "expression": "localReference",
+            "sourceDefinitionId": "us_7bf63ef4d46875f01bcd771bf0226c74",
+            "expectedName": "stopAt",
+            "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+          },
+          "expectedTypeId": "us_b5f84bcf933b6593d45e9e031353bfef"
+        },
+        "expectedTypeId": "us_b5f84bcf933b6593d45e9e031353bfef"
+      }
+    },
+    {
+      "step": "replaceReturnValue",
+      "stepId": "editReturn",
+      "targetNodeId": "us_fa8f2c7305067e035308141cbc1d3ab1",
+      "expectedValueNodeId": "us_ef0cc5aecd8d892541c4818e60d1507b",
+      "expectedReturnTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+      "newValue": {
+        "expression": "binary",
+        "operator": "+",
+        "left": {
+          "expression": "localReference",
+          "sourceDefinitionId": "us_905bf233cb9f1d70b62817c28fddba05",
+          "expectedName": "result",
+          "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+        },
+        "right": {
+          "expression": "localReference",
+          "sourceDefinitionId": "us_7bf63ef4d46875f01bcd771bf0226c74",
+          "expectedName": "stopAt",
+          "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+        },
+        "expectedTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+      }
+    }
+  ]
+}

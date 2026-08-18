@@ -152,7 +152,7 @@ internal reconciliation stages.
 Graph-authored branch insertion pins every existing sibling expression before
 adding the new `if`, condition subtree, and two explicit blocks. Those authored
 nodes receive fresh identities while layout synchronization leaves their Graph
-nodes explicitly unplaced. Patch-plan v0.7 captures those fresh block IDs after
+nodes explicitly unplaced. Patch-plan v0.10 captures those fresh block IDs after
 the producer stage and exposes them symbolically as `then`/`else` targets. Each
 branch-body stage adopts the preceding sidecar before resolving the block, so
 ordered insertions remain stable even though the editor never sees or predicts

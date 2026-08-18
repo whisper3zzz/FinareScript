@@ -142,6 +142,80 @@ public sealed class SemanticPatchJsonTests
     }
 
     [Fact]
+    public void SerializeAndDeserialize_PreserveGeneralExpressionEndpointReplacements()
+    {
+        SemanticId intType = SemanticId.FromKey("System.Int32");
+        SemanticId boolType = SemanticId.FromKey("System.Boolean");
+        var branch = new ReplaceIfConditionPatchOperation(
+            SemanticId.FromKey("edit-if"),
+            SemanticId.FromKey("edit-if-condition"),
+            boolType,
+            new LiteralPatchExpression("false", boolType));
+        var initializer = new ReplaceLocalInitializerPatchOperation(
+            SemanticId.FromKey("edit-local"),
+            "result",
+            SemanticId.FromKey("edit-initializer"),
+            intType,
+            new LiteralPatchExpression("2", intType));
+        var returnValue = new ReplaceReturnValuePatchOperation(
+            SemanticId.FromKey("edit-return"),
+            SemanticId.FromKey("edit-return-value"),
+            intType,
+            new LiteralPatchExpression("3", intType));
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            SemanticId.FromKey("general-endpoint-compilation"),
+            SemanticId.FromKey("general-endpoint-configuration"),
+            [branch, initializer, returnValue]);
+
+        string json = SemanticPatchJson.Serialize(patch);
+        SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
+
+        Assert.Equal(branch, Assert.IsType<ReplaceIfConditionPatchOperation>(roundTrip.Operations[0]));
+        Assert.Equal(
+            initializer,
+            Assert.IsType<ReplaceLocalInitializerPatchOperation>(roundTrip.Operations[1]));
+        Assert.Equal(
+            returnValue,
+            Assert.IsType<ReplaceReturnValuePatchOperation>(roundTrip.Operations[2]));
+        Assert.Contains("\"operation\": \"replaceIfCondition\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"operation\": \"replaceLocalInitializer\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"operation\": \"replaceReturnValue\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Create_RejectsGeneralEndpointReplacementTypeOrShapeMismatch()
+    {
+        SemanticId intType = SemanticId.FromKey("System.Int32");
+        SemanticId boolType = SemanticId.FromKey("System.Boolean");
+
+        Assert.Throws<JsonException>(() => SemanticPatchDocument.Create(
+            SemanticId.FromKey("invalid-if-edit-compilation"),
+            SemanticId.FromKey("invalid-if-edit-configuration"),
+            [new ReplaceIfConditionPatchOperation(
+                SemanticId.FromKey("invalid-if"),
+                SemanticId.FromKey("invalid-if-condition"),
+                boolType,
+                new LiteralPatchExpression("1", intType))]));
+        Assert.Throws<JsonException>(() => SemanticPatchDocument.Create(
+            SemanticId.FromKey("invalid-initializer-edit-compilation"),
+            SemanticId.FromKey("invalid-initializer-edit-configuration"),
+            [new ReplaceLocalInitializerPatchOperation(
+                SemanticId.FromKey("invalid-local"),
+                " ",
+                SemanticId.FromKey("invalid-initializer"),
+                intType,
+                new LiteralPatchExpression("1", intType))]));
+        Assert.Throws<JsonException>(() => SemanticPatchDocument.Create(
+            SemanticId.FromKey("invalid-return-edit-compilation"),
+            SemanticId.FromKey("invalid-return-edit-configuration"),
+            [new ReplaceReturnValuePatchOperation(
+                SemanticId.FromKey("invalid-return"),
+                SemanticId.FromKey("invalid-return-value"),
+                intType,
+                new LiteralPatchExpression("false", boolType))]));
+    }
+
+    [Fact]
     public void SerializeAndDeserialize_PreserveStatementTemporaryAndSiblingPreconditions()
     {
         SemanticId blockId = SemanticId.FromKey("statement-block");

@@ -41,6 +41,8 @@ The repository currently implements:
   branch/loop composition, and nearest-loop `break`/`continue` validation;
 - exact typed editing of existing assignment values and while conditions,
   including repeatable condition edits through produced-loop plan handles;
+- exact typed editing of existing local initializers, `if` conditions, and
+  return values, including repeatable edits through generated-statement handles;
 - opt-in `.usids` sidecars that preserve node identity across formatting and edits;
 - semantic-independent `.usgraph` layout sidecars with deterministic positions,
   sizes, collapsed state, comment regions, routing hints, and orphan recovery;
@@ -56,7 +58,10 @@ authors nested acyclic decisions through the same HIR/Graph path. M4.5 now
 projects and validates structured loops through that same path. M4.6 completes
 the first bounded Graph-to-C# loop round trip by constructing and populating
 those loops atomically. M4.7 preserves those structures while editing existing
-assignment values and existing or plan-produced while conditions.
+assignment values and existing or plan-produced while conditions. M4.8 extends
+that exact-endpoint model to local initializers, `if` conditions, and return
+values, whether the enclosing statement already exists or is produced earlier
+in the same atomic plan.
 
 The v0.2 profile accepts `[Visual]` methods containing local variables,
 expressions, calls, assignments, `if/else`, `while`, `break`, `continue`,
@@ -229,7 +234,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
   --out-identity artifacts/patched/DamageRules.cs.usids
 ```
 
-`unifiedscript.patch/v0.10` binds every patch to both the source compilation ID
+`unifiedscript.patch/v0.11` binds every patch to both the source compilation ID
 and semantic configuration ID emitted in Graph schema v0.3. A `replaceLiteral`
 operation also carries the expected old literal text. A stale source, changed
 reference/effect configuration, missing target, changed old value, non-literal
@@ -243,7 +248,7 @@ ambiguous matches allocate new IDs and emit `UVS3101` rather than guessing.
 
 ## Apply structural graph patches
 
-Patch v0.10 includes `changeOperator` and `reconnectArgument`. The checked-in
+Patch v0.11 includes `changeOperator` and `reconnectArgument`. The checked-in
 operator sample changes the binary node from multiplication to division while
 requiring the expected result, left-port, and right-port type IDs:
 
@@ -279,7 +284,7 @@ single-document.
 
 ## Apply a statement insertion
 
-Patch v0.10 also includes bounded `insertStatement` and `deleteStatement`
+Patch v0.11 also includes bounded `insertStatement` and `deleteStatement`
 operations. The insertion sample adds a graph-authored local declaration before
 the existing return statement:
 
@@ -294,7 +299,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
 ```
 
 An insertion targets a parent block and records the exact adjacent sibling IDs.
-Patch v0.10 accepts a local declaration with one literal initializer, a
+Patch v0.11 accepts a local declaration with one literal initializer, a
 CFG-checked local assignment, a typed terminal return, or an `if` whose
 condition is a versioned graph-authored expression. A local's
 semantic type must already be present and graph-safe in the bound compilation,
@@ -370,7 +375,7 @@ It proves that source, HIR, Graph branch/data/control edges, persistent identity
 and `.usgraph` layout synchronization share one structure. New branch and
 condition nodes are explicitly `unplaced`; existing placements survive.
 
-Patch-plan v0.7 can populate those newly allocated blocks without predicting
+Patch-plan v0.10 can populate those newly allocated blocks without predicting
 their random IDs. The checked-in plan inserts the same guard, appends two typed
 locals to `then`, and appends one typed local to `else`:
 
@@ -520,7 +525,7 @@ pin. The moved expression, its descendants, the containing statement, sibling
 statements, and parent block therefore retain their IDs. Only the new local
 declaration and replacement identifier allocate new IDs. This is the first
 lowering primitive needed to represent a shared Graph value without duplicating
-C# evaluation. Patch v0.10 can connect additional compatible consumers to
+C# evaluation. Patch v0.11 can connect additional compatible consumers to
 that local definition.
 
 ## Reconnect a typed consumer
@@ -579,9 +584,10 @@ analyzed source baseline, or atomically with the patch-plan protocol below.
 
 ## Apply atomic semantic patch plans
 
-`unifiedscript.patch-plan/v0.9` composes `replaceLiteral`, `changeOperator`,
-`reconnectArgument`, `replaceAssignmentValue`, `replaceWhileCondition`,
-`replaceProducedWhileCondition`, `insertStatement`, `insertBranchStatement`,
+`unifiedscript.patch-plan/v0.10` composes `replaceLiteral`, `changeOperator`,
+`reconnectArgument`, typed replacement of assignment, loop, branch,
+declaration-initializer, and return endpoints, their generated-statement
+handle variants, `insertStatement`, `insertBranchStatement`,
 `insertLoopBodyStatement`, `deleteStatement`, `introduceTemporary`, and
 `reconnectValue` as one ordered transaction. The
 shared-value sample starts with:
@@ -667,7 +673,7 @@ more paths, and all-path termination propagates up that producer tree. A
 `break`/`continue` bind only to the nearest lexical loop. Local assignments are
 supported as direct, produced-branch, and produced-loop-body payloads. Calls,
 async/task-like returns, cyclic handle references, and cross-method handles
-remain outside v0.9.
+remain outside v0.10.
 
 ### Build a loop from a visual plan
 
@@ -720,6 +726,37 @@ loop and its current condition after every stage, so repeated edits and later
 body population require no predicted intermediate ID. Comments or directives
 inside a discarded old expression reject the edit rather than being lost. See
 [STRUCTURED_EXPRESSION_EDITING.md](docs/STRUCTURED_EXPRESSION_EDITING.md).
+
+### Edit local initializers, branch conditions, and return values
+
+M4.8 applies the same exact-endpoint and typed-expression rules to the other
+high-frequency value ports. `replaceLocalInitializer` preserves the declaration
+and local definition, `replaceIfCondition` preserves the branch and both
+blocks, and `replaceReturnValue` preserves the terminal statement. Scope,
+dominance, exact types, reachability, lossless trivia, Graph, and CFG are all
+revalidated at the real source position.
+
+The checked-in three-step sample changes `value + 1` to `value - 2`, expands
+`enabled` to `enabled && (result > stopAt)`, and changes `return result` to
+`return result + stopAt` atomically:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  apply-plan \
+  samples/Patching/EditDecisionValues.cs \
+  --identity samples/Patching/EditDecisionValues.cs.usids \
+  --plan samples/Patching/EditDecisionValues.plan.json \
+  --out artifacts/general-expression-edit/EditDecisionValues.cs \
+  --out-identity artifacts/general-expression-edit/EditDecisionValues.cs.usids
+```
+
+The corresponding `replaceProducedIfCondition`,
+`replaceProducedLocalInitializer`, and `replaceProducedReturnValue` steps use
+an earlier insertion's `stepId`, resolve the actual current endpoint after each
+reanalysis, and may edit one generated endpoint repeatedly without predicting
+IDs. A generated return remains terminal for appends but its value can still be
+edited in place. See
+[GENERAL_EXPRESSION_EDITING.md](docs/GENERAL_EXPRESSION_EDITING.md).
 
 ## Persist and synchronize graph layout
 

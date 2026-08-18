@@ -100,6 +100,10 @@ Outcome: practical gameplay methods are fully visualizable.
 - [x] nearest-loop break/continue construction with atomic rollback
 - [x] exact typed replacement of existing assignment values and while conditions
 - [x] repeatable symbolic condition editing for plan-produced while loops
+- [x] exact typed replacement of existing local initializers, if conditions,
+  and return values
+- [x] repeatable symbolic endpoint editing for plan-produced locals, branches,
+  and returns
 - [ ] general data/control rewiring and structural HIR operations
 - [ ] `for` and `foreach`
 - [ ] `switch` and supported patterns

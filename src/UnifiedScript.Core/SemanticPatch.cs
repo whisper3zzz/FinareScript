@@ -8,6 +8,9 @@ namespace UnifiedScript.Core;
 [JsonDerivedType(typeof(ReconnectArgumentPatchOperation), "reconnectArgument")]
 [JsonDerivedType(typeof(ReplaceAssignmentValuePatchOperation), "replaceAssignmentValue")]
 [JsonDerivedType(typeof(ReplaceWhileConditionPatchOperation), "replaceWhileCondition")]
+[JsonDerivedType(typeof(ReplaceIfConditionPatchOperation), "replaceIfCondition")]
+[JsonDerivedType(typeof(ReplaceLocalInitializerPatchOperation), "replaceLocalInitializer")]
+[JsonDerivedType(typeof(ReplaceReturnValuePatchOperation), "replaceReturnValue")]
 [JsonDerivedType(typeof(InsertStatementPatchOperation), "insertStatement")]
 [JsonDerivedType(typeof(DeleteStatementPatchOperation), "deleteStatement")]
 [JsonDerivedType(typeof(IntroduceTemporaryPatchOperation), "introduceTemporary")]
@@ -51,6 +54,25 @@ public sealed record ReplaceWhileConditionPatchOperation(
     SemanticId ExpectedConditionNodeId,
     SemanticId ExpectedConditionTypeId,
     PatchExpression NewCondition) : SemanticPatchOperation(TargetNodeId);
+
+public sealed record ReplaceIfConditionPatchOperation(
+    SemanticId TargetNodeId,
+    SemanticId ExpectedConditionNodeId,
+    SemanticId ExpectedConditionTypeId,
+    PatchExpression NewCondition) : SemanticPatchOperation(TargetNodeId);
+
+public sealed record ReplaceLocalInitializerPatchOperation(
+    SemanticId TargetNodeId,
+    string ExpectedName,
+    SemanticId ExpectedInitializerNodeId,
+    SemanticId ExpectedTypeId,
+    PatchExpression NewInitializer) : SemanticPatchOperation(TargetNodeId);
+
+public sealed record ReplaceReturnValuePatchOperation(
+    SemanticId TargetNodeId,
+    SemanticId ExpectedValueNodeId,
+    SemanticId ExpectedReturnTypeId,
+    PatchExpression NewValue) : SemanticPatchOperation(TargetNodeId);
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "statement")]
 [JsonDerivedType(typeof(LocalLiteralDeclarationPatchStatement), "localLiteralDeclaration")]
@@ -159,7 +181,7 @@ public sealed record SemanticPatchDocument(
     SemanticId SemanticConfigurationId,
     IReadOnlyList<SemanticPatchOperation> Operations)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.10";
+    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.11";
 
     public static SemanticPatchDocument Create(
         SemanticId sourceCompilationId,

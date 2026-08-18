@@ -2021,6 +2021,322 @@ public sealed class CSharpPatchPlanApplierTests
     }
 
     [Fact]
+    public void Apply_ReplacesExistingGeneralExpressionEndpointsAtomically()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int value, bool enabled)
+                {
+                    int result = value;
+                    if (enabled)
+                    {
+                        return result;
+                    }
+
+                    return value;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/DirectGeneralEndpointPlan.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement local = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirIfStatement branch = Assert.IsType<HirIfStatement>(method.Body.Statements[1]);
+        HirReturnStatement branchReturn = Assert.IsType<HirReturnStatement>(
+            Assert.Single(branch.Then.Statements));
+        HirExpression initializer = Assert.IsAssignableFrom<HirExpression>(local.Initializer);
+        HirExpression returnValue = Assert.IsAssignableFrom<HirExpression>(branchReturn.Expression);
+        SemanticId intType = GetTypeId(original, local);
+        SemanticId boolType = GetTypeId(original, branch.Condition);
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                new ReplaceLocalInitializerPatchPlanStep(
+                    "editInitializer",
+                    local.Id,
+                    local.Name,
+                    initializer.Id,
+                    intType,
+                    new LiteralPatchExpression("2", intType)),
+                new ReplaceIfConditionPatchPlanStep(
+                    "editIf",
+                    branch.Id,
+                    branch.Condition.Id,
+                    boolType,
+                    new LiteralPatchExpression("false", boolType)),
+                new ReplaceReturnValuePatchPlanStep(
+                    "editReturn",
+                    branchReturn.Id,
+                    returnValue.Id,
+                    intType,
+                    new BinaryPatchExpression(
+                        "+",
+                        new LocalReferencePatchExpression(local.Id, local.Name, intType),
+                        new LiteralPatchExpression("1", intType),
+                        intType)),
+            ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains("int result = 2;", patchedSource, StringComparison.Ordinal);
+        Assert.Contains("if (false)", patchedSource, StringComparison.Ordinal);
+        Assert.Contains("return result + 1;", patchedSource, StringComparison.Ordinal);
+        HirMethodDeclaration changedMethod = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirVariableDeclarationStatement changedLocal = Assert.IsType<HirVariableDeclarationStatement>(
+            changedMethod.Body.Statements[0]);
+        HirIfStatement changedBranch = Assert.IsType<HirIfStatement>(changedMethod.Body.Statements[1]);
+        HirReturnStatement changedReturn = Assert.IsType<HirReturnStatement>(
+            Assert.Single(changedBranch.Then.Statements));
+        Assert.Equal(local.Id, changedLocal.Id);
+        Assert.Equal(branch.Id, changedBranch.Id);
+        Assert.Equal(branch.Then.Id, changedBranch.Then.Id);
+        Assert.Equal(branchReturn.Id, changedReturn.Id);
+    }
+
+    [Fact]
+    public void Apply_EditsProducedLocalIfAndReturnEndpointsWithoutPredictingIds()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int value, int stopAt, bool enabled)
+                {
+                    int result = value;
+                    return result;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/ProducedGeneralEndpointPlan.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement resultDefinition = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirReturnStatement originalReturn = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+        SemanticId intType = GetTypeId(original, resultDefinition);
+        SemanticId boolType = GetTypeId(original, method.Parameters[2]);
+        GraphDocument beforeGraph = new HirGraphProjector().Project(original.Hir, original.Semantics);
+        GraphFunction beforeFunction = Assert.Single(beforeGraph.Functions);
+        GraphLayoutDocument beforeLayout = new(
+            GraphLayoutDocument.CurrentSchemaVersion,
+            [new GraphFunctionLayout(
+                beforeFunction.Id,
+                beforeFunction.Nodes.Select((node, index) => new GraphNodeLayout(
+                    node.Id,
+                    GraphNodePlacement.Placed,
+                    new GraphLayoutPoint(index * 100, index * 50),
+                    new GraphLayoutSize(160, 80),
+                    false)).ToArray(),
+                [],
+                [])],
+            []);
+        var localProducer = new InsertStatementPatchPlanStep(
+            "insertOffset",
+            method.Body.Id,
+            resultDefinition.Id,
+            originalReturn.Id,
+            new LocalLiteralDeclarationPatchStatement("offset", "int", "1", intType));
+        var ifProducer = new InsertStatementPatchPlanStep(
+            "insertGuard",
+            method.Body.Id,
+            resultDefinition.Id,
+            originalReturn.Id,
+            new IfPatchStatement(new LocalReferencePatchExpression(
+                method.Parameters[2].Id,
+                method.Parameters[2].Name,
+                boolType)));
+        var returnProducer = new InsertBranchStatementPatchPlanStep(
+            "insertGuardReturn",
+            method.Body.Id,
+            ifProducer.StepId,
+            IfBranchKind.Then,
+            new ReturnPatchStatement(new LiteralPatchExpression("0", intType), intType));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                localProducer,
+                new ReplaceProducedLocalInitializerPatchPlanStep(
+                    "editOffset",
+                    method.Body.Id,
+                    localProducer.StepId,
+                    new BinaryPatchExpression(
+                        "+",
+                        new LocalReferencePatchExpression(
+                            method.Parameters[0].Id,
+                            method.Parameters[0].Name,
+                            intType),
+                        new LiteralPatchExpression("2", intType),
+                        intType)),
+                ifProducer,
+                new ReplaceProducedIfConditionPatchPlanStep(
+                    "editGuard",
+                    method.Body.Id,
+                    ifProducer.StepId,
+                    new BinaryPatchExpression(
+                        "&&",
+                        new LocalReferencePatchExpression(
+                            method.Parameters[2].Id,
+                            method.Parameters[2].Name,
+                            boolType),
+                        new BinaryPatchExpression(
+                            ">",
+                            new LocalReferencePatchExpression(
+                                resultDefinition.Id,
+                                resultDefinition.Name,
+                                intType),
+                            new LocalReferencePatchExpression(
+                                method.Parameters[1].Id,
+                                method.Parameters[1].Name,
+                                intType),
+                            boolType),
+                        boolType)),
+                returnProducer,
+                new ReplaceProducedReturnValuePatchPlanStep(
+                    "editGuardReturn",
+                    method.Body.Id,
+                    returnProducer.StepId,
+                    new BinaryPatchExpression(
+                        "+",
+                        new LocalReferencePatchExpression(
+                            resultDefinition.Id,
+                            resultDefinition.Name,
+                            intType),
+                        new LocalReferencePatchExpression(
+                            method.Parameters[1].Id,
+                            method.Parameters[1].Name,
+                            intType),
+                        intType)),
+            ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains("int offset = value + 2;", patchedSource, StringComparison.Ordinal);
+        Assert.Contains("if (enabled && (result > stopAt))", patchedSource, StringComparison.Ordinal);
+        Assert.Contains("return result + stopAt;", patchedSource, StringComparison.Ordinal);
+        HirMethodDeclaration changedMethod = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirVariableDeclarationStatement producedLocal = Assert.IsType<HirVariableDeclarationStatement>(
+            changedMethod.Body.Statements[1]);
+        HirIfStatement producedIf = Assert.IsType<HirIfStatement>(changedMethod.Body.Statements[2]);
+        HirReturnStatement producedReturn = Assert.IsType<HirReturnStatement>(
+            Assert.Single(producedIf.Then.Statements));
+        Assert.Equal(resultDefinition.Id, changedMethod.Body.Statements[0].Id);
+        Assert.Equal(originalReturn.Id, changedMethod.Body.Statements[3].Id);
+        Assert.Equal("offset", producedLocal.Name);
+        Assert.IsType<HirBinaryExpression>(producedLocal.Initializer);
+        Assert.IsType<HirBinaryExpression>(producedIf.Condition);
+        Assert.IsType<HirBinaryExpression>(producedReturn.Expression);
+
+        GraphDocument afterGraph = new HirGraphProjector().Project(
+            result.Analysis.Hir,
+            result.Analysis.Semantics);
+        GraphControlFlowFunction flow = Assert.Single(
+            new GraphControlFlowAnalyzer().AnalyzeAndValidate(afterGraph).Functions);
+        GraphControlFlowBranch branchFlow = Assert.Single(flow.Branches);
+        Assert.True(flow.IsReducible);
+        Assert.Equal(producedIf.Id, branchFlow.BranchNodeId);
+        Assert.True(branchFlow.ThenExitsFunction);
+        GraphLayoutDocument synchronized = new GraphLayoutSynchronizer().Synchronize(
+            afterGraph,
+            beforeLayout);
+        GraphFunctionLayout synchronizedFunction = Assert.Single(synchronized.Functions);
+        HashSet<SemanticId> beforeNodeIds = beforeFunction.Nodes
+            .Select(static node => node.Id)
+            .ToHashSet();
+        Assert.All(
+            synchronizedFunction.Nodes.Where(node => beforeNodeIds.Contains(node.NodeId)),
+            node => Assert.Equal(GraphNodePlacement.Placed, node.Placement));
+        Assert.All(
+            synchronizedFunction.Nodes.Where(node => !beforeNodeIds.Contains(node.NodeId)),
+            node => Assert.Equal(GraphNodePlacement.Unplaced, node.Placement));
+        Assert.Empty(synchronized.OrphanedNodes);
+    }
+
+    [Fact]
+    public void Apply_RollsBackProducedEndpointsWhenALateReturnValueSourceIsUnavailable()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int value, bool enabled)
+                {
+                    return value;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/ProducedEndpointRollback.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement originalReturn = Assert.IsType<HirReturnStatement>(
+            Assert.Single(method.Body.Statements));
+        SemanticId intType = GetTypeId(original, method.Parameters[0]);
+        SemanticId boolType = GetTypeId(original, method.Parameters[1]);
+        var ifProducer = new InsertStatementPatchPlanStep(
+            "insertGuard",
+            method.Body.Id,
+            null,
+            originalReturn.Id,
+            new IfPatchStatement(new LocalReferencePatchExpression(
+                method.Parameters[1].Id,
+                method.Parameters[1].Name,
+                boolType)));
+        var returnProducer = new InsertBranchStatementPatchPlanStep(
+            "insertGuardReturn",
+            method.Body.Id,
+            ifProducer.StepId,
+            IfBranchKind.Then,
+            new ReturnPatchStatement(new LiteralPatchExpression("0", intType), intType));
+        SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [
+                ifProducer,
+                new ReplaceProducedIfConditionPatchPlanStep(
+                    "editGuard",
+                    method.Body.Id,
+                    ifProducer.StepId,
+                    new LiteralPatchExpression("true", boolType)),
+                returnProducer,
+                new ReplaceProducedReturnValuePatchPlanStep(
+                    "invalidReturnValue",
+                    method.Body.Id,
+                    returnProducer.StepId,
+                    new LocalReferencePatchExpression(
+                        SemanticId.FromKey("missing-produced-return-source"),
+                        "missingValue",
+                        intType)),
+            ]);
+
+        CSharpPatchResult result = new CSharpPatchPlanApplier().Apply(request, plan);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.PatchedRequest);
+        Assert.Null(result.Analysis);
+        Assert.Equal(source, Assert.Single(request.Sources).Source);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.ValueSourceNotAvailable);
+    }
+
+    [Fact]
     public void Apply_RollsBackDirectStepsWhenAnEarlierDeletionRemovesALaterTarget()
     {
         const string source = """
