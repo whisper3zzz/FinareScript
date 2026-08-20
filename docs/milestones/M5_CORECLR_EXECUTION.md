@@ -179,9 +179,14 @@ and debugger integration.
 
 ## Next slice
 
-M5.5 should choose between the native managed-debug backend (ICorDebug or a
-vendored adapter) and the async/cancellation execution contract. The native
-backend would add expression traps, deeper-frame locals, and serialized remote
-framing behind `ICoreClrDebugTransport`; the execution slice would add async
-state-machine invocation, cancellation, and time budgets needed before UE world
-domains.
+Runtime expansion pauses for the M5.5 Script Asset and Authoring Experience
+slice. The current method-body Graph omits type-level state/default/exposure
+declarations, so proceeding directly to async/native-debug or UE binding would
+leave a Blueprint-only authoring dependency. M5.5 adds Declaration IR and
+connects a non-spaghetti Structure/Split/Code editor to real artifacts. See
+[M5_5_AUTHORING_EXPERIENCE.md](M5_5_AUTHORING_EXPERIENCE.md) and
+[VISUAL_AUTHORING_MODEL.md](../VISUAL_AUTHORING_MODEL.md).
+
+Native managed debugging and async/cancellation remain subsequent runtime
+tracks behind the already established `ICoreClrDebugTransport` and execution
+contracts.

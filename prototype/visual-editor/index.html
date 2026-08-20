@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>UnifiedScript — Behavior Workbench</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand-block">
+        <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div>
+          <div class="eyebrow">UnifiedScript / Experience Build 01</div>
+          <div class="brand-title">Behavior Workbench</div>
+        </div>
+      </div>
+
+      <div class="asset-crumbs" aria-label="当前资产">
+        <button class="crumb ghost-button" type="button">Combat</button>
+        <span>/</span>
+        <button class="crumb active" type="button">DamagePolicy.uscript</button>
+        <span class="dirty-dot" title="有未保存更改"></span>
+      </div>
+
+      <div class="top-actions">
+        <div class="sync-status" title="文本、结构视图和语义模型共享身份">
+          <i></i>
+          <span>Semantic sync</span>
+          <strong>clean</strong>
+        </div>
+        <button id="aiViewButton" class="button secondary" type="button" data-testid="ai-view-button">
+          <span class="button-icon">⌁</span> AI VIEW
+        </button>
+        <button id="runButton" class="button primary" type="button" data-testid="run-button">
+          <span class="play-icon"></span> DEBUG RUN
+        </button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="declarations-panel panel-border">
+        <div class="panel-heading">
+          <div>
+            <div class="eyebrow">Asset contract</div>
+            <h2>声明与入口</h2>
+          </div>
+          <button id="addVariableButton" class="square-button" type="button" aria-label="新增状态变量" data-testid="add-variable-button">+</button>
+        </div>
+
+        <label class="search-box">
+          <span>⌕</span>
+          <input id="declarationSearch" type="search" placeholder="搜索声明…" autocomplete="off">
+          <kbd>⌘K</kbd>
+        </label>
+
+        <div class="contract-summary">
+          <div><strong id="stateCount">3</strong><span>STATE</span></div>
+          <div><strong>1</strong><span>FUNCTION</span></div>
+          <div><strong>0</strong><span>BP-ONLY</span></div>
+        </div>
+
+        <section class="declaration-section">
+          <button class="section-label" type="button" aria-expanded="true">
+            <span>▾ SCRIPT STATE</span>
+            <em>TEXT + VISUAL</em>
+          </button>
+          <div id="stateList" class="declaration-list" data-testid="state-list">
+            <button class="declaration-item selected" type="button" data-kind="state" data-id="baseDamage">
+              <span class="declaration-glyph state-glyph">S</span>
+              <span class="declaration-copy"><strong>BaseDamage</strong><small>int · 20</small></span>
+              <span class="exposure-dot" title="Instance Editable"></span>
+            </button>
+            <button class="declaration-item" type="button" data-kind="state" data-id="criticalMultiplier">
+              <span class="declaration-glyph state-glyph">S</span>
+              <span class="declaration-copy"><strong>CriticalMultiplier</strong><small>float · 2.0</small></span>
+              <span class="exposure-dot" title="Instance Editable"></span>
+            </button>
+            <button class="declaration-item" type="button" data-kind="state" data-id="maxDamage">
+              <span class="declaration-glyph state-glyph">S</span>
+              <span class="declaration-copy"><strong>MaxDamage</strong><small>int · 999</small></span>
+              <span class="save-dot" title="SaveGame"></span>
+            </button>
+          </div>
+        </section>
+
+        <section class="declaration-section">
+          <button class="section-label" type="button" aria-expanded="true">
+            <span>▾ VISUAL FUNCTIONS</span>
+            <em>1</em>
+          </button>
+          <div class="declaration-list">
+            <button class="declaration-item function-item" type="button" data-kind="function" data-id="applyDamage">
+              <span class="declaration-glyph function-glyph">ƒ</span>
+              <span class="declaration-copy"><strong>ApplyDamage</strong><small>(int, bool) → int</small></span>
+              <span class="function-arrow">›</span>
+            </button>
+          </div>
+        </section>
+
+        <section class="declaration-section api-section">
+          <button class="section-label" type="button" aria-expanded="true">
+            <span>▾ ENGINE API</span>
+            <em>BOUND</em>
+          </button>
+          <div class="api-row"><span class="api-icon">UE</span><div><strong>Math.Clamp</strong><small>pure · graph safe</small></div></div>
+          <div class="api-row"><span class="api-icon muted">UE</span><div><strong>DamageResult</strong><small>value type</small></div></div>
+        </section>
+
+        <div class="declaration-footer">
+          <div class="footer-rule"></div>
+          <p><strong>声明不属于 Blueprint。</strong><br>状态、默认值和暴露策略都写回规范文本，并进入 AI 可读语义模型。</p>
+        </div>
+      </aside>
+
+      <section class="editor-stage">
+        <div class="editor-toolbar">
+          <div class="function-identity">
+            <span class="function-chip">VISUAL</span>
+            <div>
+              <h1>ApplyDamage</h1>
+              <p>DamagePolicy · synchronous · graph safe</p>
+            </div>
+          </div>
+
+          <div class="view-switch" role="group" aria-label="编辑器视图模式">
+            <button class="view-button active" type="button" data-view="structure" data-testid="view-structure">STRUCTURE</button>
+            <button class="view-button" type="button" data-view="split" data-testid="view-split">SPLIT</button>
+            <button class="view-button" type="button" data-view="code" data-testid="view-code">CODE</button>
+          </div>
+
+          <div class="canvas-tools">
+            <button id="fitButton" class="tool-button" type="button" title="适应视图">⌗</button>
+            <button id="zoomOutButton" class="tool-button" type="button" title="缩小">−</button>
+            <span id="zoomLabel">100%</span>
+            <button id="zoomInButton" class="tool-button" type="button" title="放大">+</button>
+          </div>
+        </div>
+
+        <div id="editorBody" class="editor-body view-structure">
+          <div id="canvasViewport" class="canvas-viewport" data-testid="canvas-viewport">
+            <div class="canvas-backdrop"></div>
+            <div id="flowCanvas" class="flow-canvas">
+              <div class="flow-rail" aria-hidden="true"></div>
+
+              <article class="flow-node entry-node selected" data-node-id="entry" data-line="11" tabindex="0">
+                <div class="node-ordinal">01</div>
+                <div class="node-content">
+                  <div class="node-kicker">ENTRY</div>
+                  <h3>ApplyDamage</h3>
+                  <div class="token-row">
+                    <span class="data-token parameter"><i></i>incomingDamage <em>int</em></span>
+                    <span class="data-token parameter"><i></i>critical <em>bool</em></span>
+                  </div>
+                </div>
+                <button class="breakpoint-toggle" type="button" aria-label="切换断点"></button>
+              </article>
+
+              <div class="flow-connector"><span>then</span></div>
+
+              <article class="flow-node compute-node" data-node-id="scale" data-line="13" tabindex="0">
+                <div class="node-ordinal">02</div>
+                <div class="node-content">
+                  <div class="node-kicker">COMPUTE LOCAL</div>
+                  <h3><span class="local-name">scaled</span> <b>=</b> <span class="inline-expression">incomingDamage × BaseDamage</span></h3>
+                  <p>普通表达式内联，不拆成 4 个小节点。</p>
+                </div>
+                <button class="breakpoint-toggle" type="button" aria-label="切换断点"></button>
+              </article>
+
+              <div class="flow-connector"><span>then</span></div>
+
+              <section class="branch-region" data-node-id="criticalBranch" data-line="15" tabindex="0">
+                <header class="region-header">
+                  <div>
+                    <span class="region-index">03</span>
+                    <span class="node-kicker">DECISION REGION</span>
+                    <h3>critical?</h3>
+                  </div>
+                  <span class="region-badge">IF</span>
+                </header>
+                <div class="branch-columns">
+                  <div class="branch-lane true-lane">
+                    <div class="lane-label"><span>TRUE</span><i></i></div>
+                    <article class="region-action flow-node compact" data-node-id="criticalScale" data-line="17" tabindex="0">
+                      <div class="node-content">
+                        <div class="node-kicker">MUTATE LOCAL</div>
+                        <h3><span class="local-name">scaled</span> <b>×=</b> <span class="state-reference">CriticalMultiplier</span></h3>
+                      </div>
+                      <button class="breakpoint-toggle" type="button" aria-label="切换断点"></button>
+                    </article>
+                  </div>
+                  <div class="branch-lane false-lane">
+                    <div class="lane-label"><span>FALSE</span><i></i></div>
+                    <div class="pass-through"><span>NO OP</span><small>保持 scaled</small></div>
+                  </div>
+                </div>
+              </section>
+
+              <div class="flow-connector merge"><span>merge</span></div>
+
+              <article class="flow-node call-node has-breakpoint" data-node-id="clamp" data-line="20" tabindex="0">
+                <div class="node-ordinal">04</div>
+                <div class="node-content">
+                  <div class="node-kicker">PURE ENGINE CALL</div>
+                  <h3>Math.Clamp</h3>
+                  <div class="argument-table">
+                    <span>value</span><strong class="local-name">scaled</strong>
+                    <span>min</span><strong>0</strong>
+                    <span>max</span><strong class="state-reference">MaxDamage</strong>
+                  </div>
+                </div>
+                <button class="breakpoint-toggle active" type="button" aria-label="切换断点"></button>
+              </article>
+
+              <div class="flow-connector"><span>then</span></div>
+
+              <article class="flow-node return-node" data-node-id="return" data-line="21" tabindex="0">
+                <div class="node-ordinal">05</div>
+                <div class="node-content">
+                  <div class="node-kicker">RETURN</div>
+                  <h3><span class="local-name">scaled</span> <em>int</em></h3>
+                </div>
+                <button class="breakpoint-toggle" type="button" aria-label="切换断点"></button>
+              </article>
+            </div>
+
+            <div class="minimap" aria-hidden="true">
+              <div class="mini-viewport"></div>
+              <i></i><i></i><i class="wide"></i><i></i><i></i>
+            </div>
+            <div class="canvas-legend"><span><i class="control"></i>CONTROL REGION</span><span><i class="data"></i>INLINE DATA</span></div>
+          </div>
+
+          <section id="codePane" class="code-pane" aria-label="规范 C# 文本视图" data-testid="code-pane">
+            <div class="code-heading">
+              <div><span class="language-dot"></span>DamagePolicy.cs <em>CANONICAL TEXT</em></div>
+              <div class="code-actions"><button id="copyCodeButton" type="button">COPY</button><span>UTF-8</span></div>
+            </div>
+            <pre id="codeEditor" class="code-editor"><code><span data-line="1"><b>1</b><i>using</i> UnifiedScript;</span>
+<span data-line="2"><b>2</b></span>
+<span data-line="3"><b>3</b><i>namespace</i> Game.Combat;</span>
+<span data-line="4"><b>4</b></span>
+<span data-line="5"><b>5</b>[<u>ScriptAsset</u>(<s>"Combat/DamagePolicy"</s>)]</span>
+<span data-line="6"><b>6</b><i>public sealed class</i> <u>DamagePolicy</u></span>
+<span data-line="7"><b>7</b>{</span>
+<span data-line="8" class="state-line" data-state-id="baseDamage"><b>8</b>    [<u>Expose</u>(InstanceEditable = <i>true</i>)] <i>public int</i> BaseDamage { <i>get</i>; <i>set</i>; } = <n>20</n>;</span>
+<span data-line="9" class="state-line" data-state-id="criticalMultiplier"><b>9</b>    [<u>Expose</u>(InstanceEditable = <i>true</i>)] <i>public float</i> CriticalMultiplier { <i>get</i>; <i>set</i>; } = <n>2.0f</n>;</span>
+<span data-line="10" class="state-line" data-state-id="maxDamage"><b>10</b>    [<u>Expose</u>(SaveGame = <i>true</i>)] <i>public int</i> MaxDamage { <i>get</i>; <i>set</i>; } = <n>999</n>;</span>
+<span data-line="11"><b>11</b></span>
+<span data-line="12"><b>12</b>    [<u>Visual</u>]</span>
+<span data-line="13"><b>13</b>    <i>public int</i> ApplyDamage(<i>int</i> incomingDamage, <i>bool</i> critical)</span>
+<span data-line="14"><b>14</b>    {</span>
+<span data-line="15"><b>15</b>        <i>int</i> scaled = incomingDamage * BaseDamage;</span>
+<span data-line="16"><b>16</b>        <i>if</i> (critical)</span>
+<span data-line="17"><b>17</b>        {</span>
+<span data-line="18"><b>18</b>            scaled *= CriticalMultiplier;</span>
+<span data-line="19"><b>19</b>        }</span>
+<span data-line="20"><b>20</b></span>
+<span data-line="21"><b>21</b>        scaled = Math.Clamp(scaled, <n>0</n>, MaxDamage);</span>
+<span data-line="22"><b>22</b>        <i>return</i> scaled;</span>
+<span data-line="23"><b>23</b>    }</span>
+<span data-line="24"><b>24</b>}</span></code></pre>
+            <div class="code-status"><span>Ln <strong id="selectedLine">13</strong>, Col 9</span><span>Semantic ID preserved</span><span class="target-label">vNEXT DECLARATION IR</span></div>
+          </section>
+        </div>
+
+        <div id="debugStrip" class="debug-strip" data-testid="debug-strip">
+          <div class="debug-pulse"><span></span></div>
+          <div class="debug-copy"><strong>PAUSED</strong><span>Math.Clamp · statement breakpoint</span></div>
+          <div class="debug-locals"><span>incomingDamage <b>12</b></span><span>critical <b>true</b></span><span>scaled <b>480</b></span></div>
+          <button id="continueButton" class="button primary small" type="button">CONTINUE <span>▶</span></button>
+        </div>
+      </section>
+
+      <aside class="inspector-panel panel-border">
+        <div class="panel-heading inspector-heading">
+          <div>
+            <div class="eyebrow">Selection inspector</div>
+            <h2 id="inspectorTitle">BaseDamage</h2>
+          </div>
+          <button id="closeInspectorButton" class="more-button" type="button" aria-label="关闭检查器">•••</button>
+        </div>
+
+        <div id="inspectorBody" class="inspector-body" data-testid="inspector-body">
+          <div class="selection-kind"><span class="selection-icon">S</span><div><strong>SCRIPT STATE</strong><small>Declaration · persistent identity</small></div></div>
+
+          <section class="inspector-section">
+            <h3>DECLARATION</h3>
+            <label class="field-label">Name<input id="propertyName" type="text" value="BaseDamage"></label>
+            <div class="field-grid">
+              <label class="field-label">Type<select id="propertyType"><option selected>int</option><option>float</option><option>bool</option><option>string</option></select></label>
+              <label class="field-label">Default<input id="propertyDefault" type="text" value="20"></label>
+            </div>
+          </section>
+
+          <section class="inspector-section">
+            <h3>ENGINE EXPOSURE</h3>
+            <label class="toggle-row"><span><strong>Instance Editable</strong><small>UE Details panel</small></span><input id="toggleEditable" type="checkbox" checked><i></i></label>
+            <label class="toggle-row"><span><strong>Save Game</strong><small>Persistent state</small></span><input id="toggleSave" type="checkbox"><i></i></label>
+            <label class="toggle-row"><span><strong>Replicated</strong><small>Network contract</small></span><input id="toggleReplicated" type="checkbox"><i></i></label>
+          </section>
+
+          <section class="inspector-section source-contract">
+            <div class="section-title-row"><h3>CANONICAL TEXT</h3><span>AI READABLE</span></div>
+            <pre id="canonicalDeclaration">[Expose(InstanceEditable = true)]
+public int BaseDamage { get; set; } = 20;</pre>
+          </section>
+
+          <section class="inspector-section identity-section">
+            <h3>SEMANTIC IDENTITY</h3>
+            <button id="semanticId" class="identity-value" type="button" title="复制语义 ID">us_8ad1c4…7f2e</button>
+            <div class="identity-facts"><span>TEXT <b>✓</b></span><span>VISUAL <b>✓</b></span><span>AI <b>✓</b></span></div>
+          </section>
+
+          <div class="prototype-warning">
+            <strong>vNEXT TARGET</strong>
+            <p>此声明交互是产品模型原型；当前编译器尚未把类型级状态纳入统一 Declaration IR。</p>
+          </div>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <div id="aiDrawer" class="ai-drawer" aria-hidden="true" data-testid="ai-drawer">
+    <div class="drawer-header">
+      <div><span class="ai-sigil">⌁</span><div><div class="eyebrow">Machine-readable semantic outline</div><h2>AI sees intent, not coordinates</h2></div></div>
+      <button id="closeAiDrawer" class="square-button" type="button" aria-label="关闭 AI 视图">×</button>
+    </div>
+    <div class="ai-columns">
+      <section>
+        <h3>DECLARATIONS</h3>
+        <pre id="aiDeclarations">state BaseDamage: int = 20
+  expose: instanceEditable
+state CriticalMultiplier: float = 2.0
+  expose: instanceEditable
+state MaxDamage: int = 999
+  expose: saveGame</pre>
+      </section>
+      <section>
+        <h3>BEHAVIOR OUTLINE</h3>
+        <pre>function ApplyDamage(incomingDamage: int, critical: bool) → int
+  let scaled = incomingDamage × BaseDamage
+  when critical
+    scaled ×= CriticalMultiplier
+  scaled = Math.Clamp(scaled, 0, MaxDamage)
+  return scaled</pre>
+      </section>
+      <section class="ai-prompt-section">
+        <h3>TRY AN AI PATCH</h3>
+        <label><textarea id="aiPrompt" rows="4">把 MaxDamage 改成 Instance Editable，并在 critical 分支前增加最小伤害 1 的保护。</textarea></label>
+        <button id="previewPatchButton" class="button primary" type="button">PREVIEW SEMANTIC PATCH</button>
+        <div id="patchPreview" class="patch-preview"><span>PATCH PREVIEW</span><strong>2 semantic operations</strong><small>1 declaration edit · 1 structured statement insert</small></div>
+      </section>
+    </div>
+  </div>
+
+  <dialog id="variableDialog" class="variable-dialog" data-testid="variable-dialog">
+    <form id="variableForm" method="dialog">
+      <div class="dialog-heading">
+        <div><div class="eyebrow">Declaration IR · prototype</div><h2>新增脚本状态</h2></div>
+        <button id="closeVariableDialog" class="square-button" value="cancel" formmethod="dialog" type="submit" aria-label="关闭">×</button>
+      </div>
+      <p class="dialog-intro">这里创建的变量同时属于规范文本、可视化声明列表和 AI 语义模型，不生成 Blueprint-only 资产。</p>
+      <label class="field-label">Name<input id="newVariableName" name="name" type="text" value="ArmorRatio" required pattern="[A-Za-z_][A-Za-z0-9_]*"></label>
+      <div class="field-grid">
+        <label class="field-label">Type<select id="newVariableType" name="type"><option>float</option><option>int</option><option>bool</option><option>string</option></select></label>
+        <label class="field-label">Default<input id="newVariableDefault" name="default" type="text" value="0.25"></label>
+      </div>
+      <div class="dialog-exposure">
+        <label><input id="newVariableEditable" type="checkbox" checked><span>Instance Editable</span></label>
+        <label><input id="newVariableSave" type="checkbox"><span>Save Game</span></label>
+        <label><input id="newVariableReplicated" type="checkbox"><span>Replicated</span></label>
+      </div>
+      <div class="generated-preview"><span>WILL GENERATE</span><code id="newVariablePreview">[Expose(InstanceEditable = true)] public float ArmorRatio { get; set; } = 0.25f;</code></div>
+      <div class="dialog-actions">
+        <button class="button secondary" value="cancel" formmethod="dialog" type="submit">CANCEL</button>
+        <button id="createVariableButton" class="button primary" value="default" type="submit" data-testid="create-variable-button">CREATE DECLARATION</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"><span>✓</span><div><strong>Declaration created</strong><small>Text · Visual · AI views updated</small></div></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

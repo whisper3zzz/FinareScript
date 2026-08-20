@@ -165,6 +165,20 @@ Outcome: text and graph versions compile to and execute the same IL.
   remote transport framing
 - async invocation and cancellation/time-budget contract
 
+## M5.5 — Script asset and authoring experience
+
+Outcome: state and behavior are text/visual/AI-authorable without Blueprint-only
+declarations or one-node-per-expression graphs.
+
+- [ ] backend-neutral Script Asset and Declaration IR
+- [ ] stable state/property identity, type, default, and exposure metadata
+- [ ] declaration semantic patching and transactional C# round trip
+- [ ] compact structure regions with inline ordinary expressions
+- [ ] actual Declaration/Graph artifacts connected to the editor prototype
+- [ ] coordinate-free AI outline and typed patch preview
+- [ ] live CoreCLR pause/locals painted on real semantic statement cards
+- [ ] sample workflow with zero required Blueprint variables
+
 ## M6 — Unreal Engine adapter
 
 Outcome: the proven language pipeline becomes usable from UE.

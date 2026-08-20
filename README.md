@@ -168,6 +168,12 @@ post-validation debug image installs statement probes into the same CoreCLR
 method body, the adapter truly suspends its execution thread, and the loopback
 transport supports pause/continue, semantic step-over, live stack frames, and
 bounded cycle-safe locals under strict generation and pause identities.
+The first visual authoring experience prototype is now available under
+`prototype/visual-editor`. It intentionally uses declaration lists, inline
+expressions, and owned control-flow regions instead of Blueprint-style
+one-node-per-expression wiring. The prototype also exposes the next critical
+backend gap: type-level state/default/exposure declarations need a shared
+Declaration IR before UE binding.
 
 The v0.2 profile accepts `[Visual]` methods containing local variables,
 expressions, calls, assignments, `if/else`, `while`, `do`, `for`, bounded
@@ -1322,6 +1328,7 @@ src/UnifiedScript.Runtime/   CoreCLR invocation contracts and collectible host
 src/UnifiedScript.Cli/       Analysis, patching, layout, and execution CLI
 tests/UnifiedScript.Tests/   Unit and vertical-slice tests
 samples/                     Input programs for manual inspection
+prototype/visual-editor/     Clickable authoring-experience prototype
 docs/                        Architecture and milestone plans
 ```
 
@@ -1370,6 +1377,7 @@ See [ARCHITECTURE.md](docs/ARCHITECTURE.md),
 [SOURCE_MAP.md](docs/SOURCE_MAP.md),
 [BREAKPOINT_RELOAD.md](docs/BREAKPOINT_RELOAD.md),
 [DEBUG_ADAPTER.md](docs/DEBUG_ADAPTER.md),
+[VISUAL_AUTHORING_MODEL.md](docs/VISUAL_AUTHORING_MODEL.md),
 [M1_ROSLYN_GRAPH_FOUNDATION.md](docs/milestones/M1_ROSLYN_GRAPH_FOUNDATION.md),
 [M2_SEMANTIC_BINDING.md](docs/milestones/M2_SEMANTIC_BINDING.md),
 [M3_BIDIRECTIONAL_PATCHING.md](docs/milestones/M3_BIDIRECTIONAL_PATCHING.md), and
