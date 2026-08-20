@@ -2,6 +2,7 @@ using System.Text.Json;
 using UnifiedScript.CSharp;
 using UnifiedScript.Core;
 using UnifiedScript.Graph;
+using UnifiedScript.Runtime;
 using UnifiedScript.Semantics;
 
 namespace UnifiedScript.Cli;
@@ -58,7 +59,64 @@ internal static class Program
             return RunApply(args, isPlan: true);
         }
 
+        if (args.Count > 0 && args[0] == "execute")
+        {
+            return RunExecute(args);
+        }
+
         return RunAnalyze(args);
+    }
+
+    private static int RunExecute(IReadOnlyList<string> args)
+    {
+        if (!TryParseExecuteArguments(args, out ExecuteOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+
+        options = options ?? throw new InvalidOperationException(
+            "Argument parsing succeeded without execution options.");
+        if (!File.Exists(options.InputPath))
+        {
+            Console.Error.WriteLine($"Input file does not exist: {options.InputPath}");
+            return 66;
+        }
+
+        MethodEffectCatalog effectCatalog = LoadEffectCatalog(options.EffectCatalogPath);
+        CSharpSourceDocument[] sources = LoadSources(
+            [options.InputPath],
+            options.IdentityPath is null ? [] : [options.IdentityPath]);
+        var request = new CSharpCompilationRequest(
+            options.AssemblyName,
+            sources,
+            options.ReferencePaths,
+            effectCatalog);
+        try
+        {
+            using CoreClrExecutionSession session = new CoreClrExecutionHost().CompileAndLoad(request);
+            SemanticId methodId = options.MethodId ??
+                session.ResolveVisualMethodId(options.QualifiedMethodName!);
+            ExecutionArgument[] arguments = ParseExecutionArguments(options.ArgumentsJson);
+            ExecutionResult result = session.Execute(new ExecutionInvocation(methodId, arguments));
+            Console.WriteLine(ExecutionJson.Serialize(result));
+            return result.Outcome == ExecutionOutcome.Returned ? 0 : 3;
+        }
+        catch (ExecutionCompilationException exception)
+        {
+            foreach (UnifiedDiagnostic diagnostic in exception.Diagnostics)
+            {
+                Console.Error.WriteLine(FormatDiagnostic(diagnostic));
+            }
+
+            Console.Error.WriteLine(exception.Message);
+            return 2;
+        }
+        catch (ExecutionInvocationException exception)
+        {
+            Console.Error.WriteLine($"error {exception.Code}: {exception.Message}");
+            return 3;
+        }
     }
 
     private static int RunLayout(IReadOnlyList<string> args, bool synchronize)
@@ -475,6 +533,97 @@ internal static class Program
         return true;
     }
 
+    private static bool TryParseExecuteArguments(
+        IReadOnlyList<string> args,
+        out ExecuteOptions? options)
+    {
+        options = null;
+        if (args.Count < 4 || args[0] != "execute" || args[1].StartsWith("--", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        string inputPath = args[1];
+        string? qualifiedMethodName = null;
+        SemanticId? methodId = null;
+        string argumentsJson = "[]";
+        bool hasArguments = false;
+        string? effectCatalogPath = null;
+        string? assemblyName = null;
+        string? identityPath = null;
+        var referencePaths = new List<string>();
+        int index = 2;
+        while (index < args.Count)
+        {
+            string option = args[index++];
+            if (index >= args.Count)
+            {
+                return false;
+            }
+
+            string value = args[index++];
+            switch (option)
+            {
+                case "--method" when qualifiedMethodName is null:
+                    qualifiedMethodName = value;
+                    break;
+                case "--method-id" when methodId is null && SemanticId.TryParse(value, out SemanticId parsed):
+                    methodId = parsed;
+                    break;
+                case "--args" when !hasArguments:
+                    argumentsJson = value;
+                    hasArguments = true;
+                    break;
+                case "--effects" when effectCatalogPath is null:
+                    effectCatalogPath = value;
+                    break;
+                case "--assembly" when assemblyName is null:
+                    assemblyName = value;
+                    break;
+                case "--reference":
+                    referencePaths.Add(value);
+                    break;
+                case "--identity" when identityPath is null:
+                    identityPath = value;
+                    break;
+                default:
+                    return false;
+            }
+        }
+
+        if ((qualifiedMethodName is null) == (methodId is null))
+        {
+            return false;
+        }
+
+        options = new ExecuteOptions(
+            inputPath,
+            qualifiedMethodName,
+            methodId,
+            argumentsJson,
+            effectCatalogPath,
+            assemblyName ?? "UnifiedScript.Execution",
+            referencePaths,
+            identityPath);
+        return true;
+    }
+
+    private static ExecutionArgument[] ParseExecutionArguments(string argumentsJson)
+    {
+        using JsonDocument document = JsonDocument.Parse(argumentsJson);
+        if (document.RootElement.ValueKind != JsonValueKind.Array)
+        {
+            throw new ExecutionInvocationException(
+                "UVR1005",
+                "--args must contain one JSON array whose elements match the method parameters.");
+        }
+
+        return document.RootElement
+            .EnumerateArray()
+            .Select(static element => new ExecutionArgument(element.GetRawText()))
+            .ToArray();
+    }
+
     private static bool TryParseIdentityArguments(IReadOnlyList<string> args, out IdentityOptions? options)
     {
         options = null;
@@ -819,12 +968,16 @@ internal static class Program
         "  unifiedscript layout-sync <graph.json> --layout <layout.usgraph> --out <updated.usgraph>\n" +
         "  unifiedscript apply-patch <input.cs> --patch <patch.json> --out <output.cs> [options]\n" +
         "  unifiedscript apply-plan <input.cs> --plan <plan.json> --out <output.cs> [options]\n" +
+        "  unifiedscript execute <input.cs> (--method <name> | --method-id <us_...>) [options]\n" +
         "Options:\n" +
         "  --out <path>            Artifact directory, initialized sidecar, or patched source output.\n" +
         "  --patch <patch.json>    Semantic patch document required by apply-patch.\n" +
         "  --plan <plan.json>      Ordered semantic patch plan required by apply-plan.\n" +
         "  --identity <file.usids> Use a persistent identity sidecar; may repeat for analyze-files.\n" +
         "  --out-identity <file>   Updated sidecar output required by sidecar-enabled apply-patch.\n" +
+        "  --method <name>         Fully qualified Visual method required by execute.\n" +
+        "  --method-id <us_...>    Exact semantic method ID alternative for overloaded methods.\n" +
+        "  --args <json-array>     Execute arguments; defaults to an empty array.\n" +
         "  --layout <file.usgraph> Existing visual layout required by layout-sync.\n" +
         "  --assembly <name>        Set the analysis assembly name.\n" +
         "  --effects <catalog.json> Apply effect catalog overrides.\n" +
@@ -838,6 +991,16 @@ internal static class Program
         string AssemblyName,
         IReadOnlyList<string> ReferencePaths,
         IReadOnlyList<string> IdentityPaths);
+
+    private sealed record ExecuteOptions(
+        string InputPath,
+        string? QualifiedMethodName,
+        SemanticId? MethodId,
+        string ArgumentsJson,
+        string? EffectCatalogPath,
+        string AssemblyName,
+        IReadOnlyList<string> ReferencePaths,
+        string? IdentityPath);
 
     private sealed record IdentityOptions(
         string InputPath,

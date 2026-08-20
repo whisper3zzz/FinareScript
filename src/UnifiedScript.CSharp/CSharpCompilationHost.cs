@@ -1,5 +1,6 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Text;
 using UnifiedScript;
 
 namespace UnifiedScript.CSharp;
@@ -40,6 +41,18 @@ public sealed class CSharpCompilationHost
         references.AddRange(request.ReferencePaths.Select(
             static path => MetadataReference.CreateFromFile(path)));
         return CreateCore(request.AssemblyName, syntaxTrees, references);
+    }
+
+    public CSharpCompilation Create(CSharpCompilationRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        SyntaxTree[] syntaxTrees = request.Sources
+            .Select(static source => CSharpSyntaxTree.ParseText(
+                SourceText.From(source.Source, System.Text.Encoding.UTF8),
+                CSharpToHirLowerer.ParseOptions,
+                source.LogicalPath))
+            .ToArray();
+        return Create(request, syntaxTrees);
     }
 
     private static CSharpCompilation CreateCore(

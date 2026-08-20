@@ -148,12 +148,14 @@ Outcome: practical gameplay methods are fully visualizable.
 
 Outcome: text and graph versions compile to and execute the same IL.
 
-- Roslyn IL-emission host
-- assembly and PDB emission
+- [x] Roslyn IL-emission host
+- [x] deterministic in-memory assembly and portable PDB emission
+- [x] reloadable collectible development assembly context
+- [x] backend-neutral invocation and execution-result v0.1 contract
+- [x] text-authored versus visual-plan-authored execution equivalence proof
 - method/node source map
-- reloadable development assembly context
-- backend-neutral execution contract
 - shared breakpoint identity
+- async invocation and cancellation/time-budget contract
 
 ## M6 — Unreal Engine adapter
 

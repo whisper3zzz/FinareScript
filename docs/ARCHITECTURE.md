@@ -59,6 +59,11 @@ flowchart LR
     StableHIR --> Projector["Effect-aware Graph Projector"]
     Bound --> Projector
     Projector --> Graph["Graph JSON"]
+    Projector --> EmitGate["Execution Graph/CFG gate"]
+    EmitGate --> Emitter["Deterministic PE + portable PDB"]
+    Emitter --> Runtime["Collectible CoreCLR session"]
+    Invocation["Semantic method ID + JSON arguments"] --> Runtime
+    Runtime --> Result["Typed return or structured fault"]
     Graph --> LayoutSync["Layout Synchronizer"]
     Layout[".usgraph sidecar"] --> LayoutSync
     LayoutSync --> UpdatedLayout["Updated .usgraph"]
@@ -93,8 +98,9 @@ This project has no Roslyn, graph UI, CLR hosting, or UE dependency.
 - Roslyn symbol/type/method translation into bound semantics
 - transactional semantic-patch validation and localized source rewriting
 - HIR structural fingerprinting, context reconciliation, pins, and tombstones
+- deterministic program-image and portable-PDB emission after Graph/CFG gates
 
-It may depend on Core and Roslyn, but not on Graph or UE.
+It may depend on Core, Semantics, Graph, and Roslyn, but not on Runtime or UE.
 
 ### UnifiedScript.Semantics
 
@@ -122,13 +128,37 @@ translate into this contract.
 It depends on Core and Semantics. This lets later frontends render a typed,
 effect-aware graph without hosting Roslyn.
 
+### UnifiedScript.Runtime
+
+- backend-neutral semantic-ID invocation and typed result/fault contracts
+- strict execution-result JSON
+- exact JSON-to-graph-safe-value conversion
+- emitted-method resolution without leaking reflection objects
+- collectible CoreCLR assembly loading and dependency resolution
+- explicit reload-session lifetime and unloading
+
+It depends on Core, Semantics, and the C# emission boundary. It does not parse
+source, project Graph, apply patches, or depend on UE. A collectible load
+context is a reload mechanism, not a security sandbox.
+
 ### UnifiedScript.Cli
 
 - filesystem input/output
 - diagnostics rendering
 - HIR, bound semantics, and graph artifact emission
+- qualified Visual-method resolution and CoreCLR execution
 
 The CLI is a test harness and integration boundary, not the final editor.
+
+## Execution semantics
+
+M5.1 emits executable code only after the same Visual Profile, compiler,
+semantic, Graph, and derived-CFG gates used by analysis and patching. A static
+synchronous `[Visual]` method is invoked by its existing semantic ID; JSON is
+only the transport representation for bounded graph-safe arguments and results.
+Returned values and target faults never expose `Assembly`, `Type`,
+`MethodInfo`, exception, or source-defined object references outside the
+collectible session. See [EXECUTION_RUNTIME.md](EXECUTION_RUNTIME.md).
 
 ## Profile v0.2
 

@@ -86,6 +86,11 @@ The repository currently implements:
   sizes, collapsed state, comment regions, routing hints, and orphan recovery;
 - explicit patch identity pins and tombstones for deleted semantic nodes;
 - versioned HIR, semantics, and graph JSON emission through a small CLI;
+- deterministic PE/portable-PDB emission plus a collectible CoreCLR execution
+  host, semantic-ID invocation, strict typed return/fault JSON, and a public
+  `execute` command;
+- automated execution equivalence between independently text-authored code and
+  C# produced by a checked-in visual semantic patch plan;
 - xUnit coverage for validation, lowering, identity, graph projection, and
   deterministic output.
 
@@ -140,6 +145,12 @@ to indexed access: semantics binds `GetEnumerator`, `MoveNext`, `Current`, and
 `Dispose`, Graph owns a `loopCleanup` region, normal/break/return/exception
 transfers preserve `finally` cleanup, and visual plans use the same loop and
 produced-local handles.
+M5.1 closes the first executable loop: validated HIR/semantics/Graph emit a
+deterministic in-memory DLL and portable PDB, a collectible CoreCLR session
+invokes a static synchronous Visual method by semantic ID, and only canonical
+typed values or structured faults cross the session boundary. The checked-in
+enumerable plan and an independently text-authored equivalent method execute to
+the same result through that single backend.
 
 The v0.2 profile accepts `[Visual]` methods containing local variables,
 expressions, calls, assignments, `if/else`, `while`, `do`, `for`, bounded
@@ -165,10 +176,14 @@ Graph edit
   -> full profile and semantic revalidation
   -> updated C# source (only if the whole patch succeeds)
 
+Current execution path:
+  -> Graph/CFG execution gate
+  -> deterministic Roslyn PE + portable PDB
+  -> collectible CoreCLR session
+  -> semantic-ID invocation and typed result/fault
+
 Later:
-  -> semantic MIR
-  -> Roslyn IL/CoreCLR backend
-  -> shared debugger/source map
+  -> semantic-ID/IL source map and shared debugger
   -> Unreal Engine adapter
 ```
 
@@ -177,6 +192,26 @@ artifacts; neither is used as a decompilation source.
 
 CLI inputs inside the current working directory use normalized relative source
 paths, so artifacts remain stable when the repository is checked out elsewhere.
+
+### Execute a Visual method
+
+M5.1 executes the same validated method body regardless of whether its C# was
+authored as text or produced through visual semantic patches:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  execute samples/Execution/RuntimeRules.cs \
+  --method Samples.Execution.RuntimeRules.LastNonNegative \
+  --args '[[1,-2,9],4]'
+```
+
+The command returns execution-result v0.1 with `System.Int32` JSON value `9`.
+An exact `--method-id us_...` may replace `--method` for overloaded entry
+points.
+Target exceptions are emitted as structured faults and use exit status `3`;
+profile or compilation failures emit no program image. The host uses a
+collectible reload context, not a security sandbox. See
+[EXECUTION_RUNTIME.md](docs/EXECUTION_RUNTIME.md).
 
 ## Requirements
 
@@ -1245,7 +1280,8 @@ src/UnifiedScript.Core/      Semantic IDs, diagnostics, HIR, [Visual]
 src/UnifiedScript.Semantics/ Language-neutral types, symbols, effects, bindings
 src/UnifiedScript.CSharp/    Roslyn profile validation and lowering
 src/UnifiedScript.Graph/     Graph projection, regions, CFG analysis, layout
-src/UnifiedScript.Cli/       Analysis command-line interface
+src/UnifiedScript.Runtime/   CoreCLR invocation contracts and collectible host
+src/UnifiedScript.Cli/       Analysis, patching, layout, and execution CLI
 tests/UnifiedScript.Tests/   Unit and vertical-slice tests
 samples/                     Input programs for manual inspection
 docs/                        Architecture and milestone plans
@@ -1257,7 +1293,8 @@ This milestone does not include:
 
 - Unreal Engine bindings;
 - a UE graph editor;
-- IL emission or CoreCLR hosting inside another process;
+- persistent engine runtime domains, execution sandboxing, time budgets, async
+  scheduling, hot-reload generations, and shared debugger/source maps;
 - semantic type binding against UE APIs;
 - `.csproj`/MSBuild compilation loading;
 - namespace/API allow and deny policies;
@@ -1290,7 +1327,9 @@ See [ARCHITECTURE.md](docs/ARCHITECTURE.md),
 [LOOP_PATCHING.md](docs/LOOP_PATCHING.md),
 [CONDITIONAL_EXPRESSIONS.md](docs/CONDITIONAL_EXPRESSIONS.md),
 [PATCH_PLAN.md](docs/PATCH_PLAN.md),
+[EXECUTION_RUNTIME.md](docs/EXECUTION_RUNTIME.md),
 [M1_ROSLYN_GRAPH_FOUNDATION.md](docs/milestones/M1_ROSLYN_GRAPH_FOUNDATION.md),
-[M2_SEMANTIC_BINDING.md](docs/milestones/M2_SEMANTIC_BINDING.md), and
-[M3_BIDIRECTIONAL_PATCHING.md](docs/milestones/M3_BIDIRECTIONAL_PATCHING.md)
+[M2_SEMANTIC_BINDING.md](docs/milestones/M2_SEMANTIC_BINDING.md),
+[M3_BIDIRECTIONAL_PATCHING.md](docs/milestones/M3_BIDIRECTIONAL_PATCHING.md), and
+[M5_CORECLR_EXECUTION.md](docs/milestones/M5_CORECLR_EXECUTION.md)
 for the planned sequence.

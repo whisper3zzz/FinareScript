@@ -13,11 +13,21 @@
     <ProjectReference Include="../../src/UnifiedScript.Core/UnifiedScript.Core.csproj" />
     <ProjectReference Include="../../src/UnifiedScript.CSharp/UnifiedScript.CSharp.csproj" />
     <ProjectReference Include="../../src/UnifiedScript.Graph/UnifiedScript.Graph.csproj" />
+    <ProjectReference Include="../../src/UnifiedScript.Runtime/UnifiedScript.Runtime.csproj" />
     <ProjectReference Include="../../src/UnifiedScript.Semantics/UnifiedScript.Semantics.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Compile Remove="Fixtures/**/*.cs" />
     <None Include="Fixtures/**/*.cs" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/**/*.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../samples/Patching/EnumerableForEachBuildRules.cs"
+          Link="ExecutionFixtures/EnumerableForEachBuildRules.cs"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../samples/Patching/EnumerableForEachBuildRules.cs.usids"
+          Link="ExecutionFixtures/EnumerableForEachBuildRules.cs.usids"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../samples/Patching/BuildEnumerableForEach.plan.json"
+          Link="ExecutionFixtures/BuildEnumerableForEach.plan.json"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

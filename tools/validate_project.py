@@ -17,6 +17,7 @@ PROJECTS = [
     ROOT / "src" / "UnifiedScript.Semantics" / "UnifiedScript.Semantics.csproj",
     ROOT / "src" / "UnifiedScript.CSharp" / "UnifiedScript.CSharp.csproj",
     ROOT / "src" / "UnifiedScript.Graph" / "UnifiedScript.Graph.csproj",
+    ROOT / "src" / "UnifiedScript.Runtime" / "UnifiedScript.Runtime.csproj",
     ROOT / "src" / "UnifiedScript.Cli" / "UnifiedScript.Cli.csproj",
     ROOT / "tests" / "UnifiedScript.Tests" / "UnifiedScript.Tests.csproj",
 ]
@@ -46,11 +47,13 @@ DOCUMENTS = [
     ROOT / "docs" / "NULL_COALESCING_EXPRESSIONS.md",
     ROOT / "docs" / "NULL_CONDITIONAL_ACCESS.md",
     ROOT / "docs" / "PATCH_PLAN.md",
+    ROOT / "docs" / "EXECUTION_RUNTIME.md",
     ROOT / "docs" / "ROADMAP.md",
     ROOT / "docs" / "milestones" / "M1_ROSLYN_GRAPH_FOUNDATION.md",
     ROOT / "docs" / "milestones" / "M2_SEMANTIC_BINDING.md",
     ROOT / "docs" / "milestones" / "M3_BIDIRECTIONAL_PATCHING.md",
     ROOT / "docs" / "milestones" / "M4_STRUCTURED_CONTROL_FLOW.md",
+    ROOT / "docs" / "milestones" / "M5_CORECLR_EXECUTION.md",
 ]
 
 
@@ -90,6 +93,19 @@ def main() -> int:
     checks.append("architecture and milestone documents exist")
 
     require((ROOT / "samples" / "DoorController.cs").is_file(), "Missing vertical-slice sample")
+    runtime_source_path = ROOT / "samples" / "Execution" / "RuntimeRules.cs"
+    require(runtime_source_path.is_file(), "Missing CoreCLR execution sample")
+    runtime_source = runtime_source_path.read_text(encoding="utf-8")
+    cli_source = (ROOT / "src" / "UnifiedScript.Cli" / "Program.cs").read_text(
+        encoding="utf-8"
+    )
+    require(
+        "LastNonNegative(IEnumerable<int> values, int seed)" in runtime_source
+        and "return Math.Abs(value);" in runtime_source
+        and 'args[0] == "execute"' in cli_source
+        and "ExecutionJson.Serialize(result)" in cli_source,
+        "CoreCLR execution sample or CLI command is inconsistent",
+    )
     require(
         (ROOT / "samples" / "MultiFile" / "GameplayApi.cs").is_file()
         and (ROOT / "samples" / "MultiFile" / "DamageScript.cs").is_file()
