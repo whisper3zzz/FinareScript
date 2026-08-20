@@ -101,5 +101,7 @@ belongs with the future suspension-aware execution and debugger contract.
 
 M5.2 provides location identity. M5.3 now consumes it for breakpoint
 set/bind/hit records, reload-generation migration, and stale-image rejection;
-see [BREAKPOINT_RELOAD.md](BREAKPOINT_RELOAD.md). CLR trap installation,
-pause/resume, stack inspection, and stepping remain debugger-adapter work.
+see [BREAKPOINT_RELOAD.md](BREAKPOINT_RELOAD.md). M5.4 adds the first cooperative
+CoreCLR adapter over that identity, with actual pause/resume, stack inspection,
+top-frame locals, and step-over; see [DEBUG_ADAPTER.md](DEBUG_ADAPTER.md).
+Native managed-debug traps and async state-machine stepping remain later work.

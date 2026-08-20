@@ -26,7 +26,8 @@ public sealed class CSharpCompilationHost
 
     public CSharpCompilation Create(
         CSharpCompilationRequest request,
-        IReadOnlyList<SyntaxTree> syntaxTrees)
+        IReadOnlyList<SyntaxTree> syntaxTrees,
+        IEnumerable<MetadataReference>? additionalReferences = null)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(syntaxTrees);
@@ -40,6 +41,11 @@ public sealed class CSharpCompilationHost
         var references = new List<MetadataReference>(PlatformReferences.Value);
         references.AddRange(request.ReferencePaths.Select(
             static path => MetadataReference.CreateFromFile(path)));
+        if (additionalReferences is not null)
+        {
+            references.AddRange(additionalReferences);
+        }
+
         return CreateCore(request.AssemblyName, syntaxTrees, references);
     }
 

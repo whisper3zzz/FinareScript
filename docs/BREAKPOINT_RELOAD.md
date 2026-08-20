@@ -145,8 +145,9 @@ the same.
 ## Deliberate boundary
 
 M5.3 supplies cache, reload lifetime, breakpoint migration, strict JSON, and
-hit identity resolution. It does not yet provide CLR breakpoint injection,
-pause/resume, stepping, stack frames, locals, expression evaluation, async
-state-machine locations, remote transport, or UE editor UI. Those consumers
-must use this protocol rather than replacing semantic node identity with source
-line numbers.
+hit identity resolution. M5.4 now consumes the same generation and semantic
+node identities in a cooperative CoreCLR adapter with real pause/resume,
+step-over, stack frames, bounded top-frame locals, and an in-process loopback
+transport. Native managed-debug traps, deeper-frame locals, expression
+evaluation, async state-machine locations, serialized remote transport, and UE
+editor UI remain later work. See [DEBUG_ADAPTER.md](DEBUG_ADAPTER.md).

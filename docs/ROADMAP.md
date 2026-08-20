@@ -158,7 +158,11 @@ Outcome: text and graph versions compile to and execute the same IL.
 - [x] content-addressed bounded program-image cache
 - [x] monotonic collectible reload generations with transactional failure
 - [x] shared semantic breakpoint bind/migrate/hit identity protocols
-- CLR breakpoint trap, pause/resume, stack/locals, and stepping adapter
+- [x] cooperative CoreCLR statement traps with real pause/resume
+- [x] live CLR stack, bounded graph-safe top-frame locals, and step-over
+- [x] generation-safe in-process loopback debug transport
+- native managed-debug traps, deeper-frame locals, expression evaluation, and
+  remote transport framing
 - async invocation and cancellation/time-budget contract
 
 ## M6 — Unreal Engine adapter

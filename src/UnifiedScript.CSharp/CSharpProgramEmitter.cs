@@ -31,7 +31,9 @@ public sealed class CSharpProgramEmitter
     private readonly CSharpSemanticPipeline semanticPipeline = new();
     private readonly CSharpCompilationHost compilationHost = new();
 
-    public CSharpProgramEmitResult Emit(CSharpCompilationRequest request)
+    public CSharpProgramEmitResult Emit(
+        CSharpCompilationRequest request,
+        CSharpDebugInstrumentation? debugInstrumentation = null)
     {
         ArgumentNullException.ThrowIfNull(request);
         CSharpAnalysisResult analysis = semanticPipeline.Analyze(request);
@@ -42,16 +44,38 @@ public sealed class CSharpProgramEmitter
 
         _ = new HirGraphProjector().Project(analysis.Hir, analysis.Semantics);
 
-        using var portableExecutable = new MemoryStream();
-        using var portablePdb = new MemoryStream();
-        EmitResult emit = compilationHost.Create(request).Emit(
-            portableExecutable,
-            portablePdb,
+        using var sourceMapPortableExecutable = new MemoryStream();
+        using var sourceMapPortablePdb = new MemoryStream();
+        EmitResult sourceMapEmit = compilationHost.Create(request).Emit(
+            sourceMapPortableExecutable,
+            sourceMapPortablePdb,
             options: new EmitOptions(
                 debugInformationFormat: DebugInformationFormat.PortablePdb,
                 pdbFilePath: $"{request.AssemblyName}.pdb"));
+        byte[] portableExecutableBytes = sourceMapPortableExecutable.ToArray();
+        byte[] portablePdbBytes = sourceMapPortablePdb.ToArray();
+        EmitResult? debugEmit = null;
+        if (debugInstrumentation is not null && sourceMapEmit.Success)
+        {
+            IReadOnlyList<SyntaxTree> instrumentedTrees = new CSharpDebugInstrumenter()
+                .Instrument(request, analysis.Hir, compilationHost);
+            MetadataReference[] debugReferences =
+                [MetadataReference.CreateFromFile(debugInstrumentation.ProbeAssemblyPath)];
+            using var debugPortableExecutable = new MemoryStream();
+            using var debugPortablePdb = new MemoryStream();
+            debugEmit = compilationHost.Create(request, instrumentedTrees, debugReferences).Emit(
+                debugPortableExecutable,
+                debugPortablePdb,
+                options: new EmitOptions(
+                    debugInformationFormat: DebugInformationFormat.PortablePdb,
+                    pdbFilePath: $"{request.AssemblyName}.pdb"));
+            portableExecutableBytes = debugPortableExecutable.ToArray();
+            portablePdbBytes = debugPortablePdb.ToArray();
+        }
+
         UnifiedDiagnostic[] diagnostics = analysis.Diagnostics
-            .Concat(emit.Diagnostics
+            .Concat(sourceMapEmit.Diagnostics
+                .Concat(debugEmit?.Diagnostics ?? [])
                 .Where(static diagnostic =>
                     diagnostic.Severity is DiagnosticSeverity.Warning or DiagnosticSeverity.Error)
                 .Select(static diagnostic => CSharpToHirLowerer.FromRoslynDiagnostic(
@@ -59,18 +83,16 @@ public sealed class CSharpProgramEmitter
                     diagnostic.Location.SourceTree?.FilePath ?? "<compilation>")))
             .Distinct()
             .ToArray();
-        if (!emit.Success || diagnostics.Any(static diagnostic =>
+        if (!sourceMapEmit.Success || debugEmit is { Success: false } || diagnostics.Any(static diagnostic =>
                 diagnostic.Severity == UnifiedDiagnosticSeverity.Error))
         {
             return new CSharpProgramEmitResult(null, diagnostics);
         }
 
-        byte[] portableExecutableBytes = portableExecutable.ToArray();
-        byte[] portablePdbBytes = portablePdb.ToArray();
         CSharpProgramSourceMap sourceMap = new CSharpProgramSourceMapBuilder().Build(
             request.AssemblyName,
-            portableExecutableBytes,
-            portablePdbBytes,
+            sourceMapPortableExecutable.ToArray(),
+            sourceMapPortablePdb.ToArray(),
             analysis.Hir,
             analysis.Semantics);
         return new CSharpProgramEmitResult(

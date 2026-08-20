@@ -1,0 +1,330 @@
+using System.Runtime.CompilerServices;
+using UnifiedScript.Core;
+using UnifiedScript.Core.Hir;
+using UnifiedScript.CSharp;
+using UnifiedScript.Runtime;
+
+namespace UnifiedScript.Tests;
+
+public sealed class CoreClrDebugAdapterTests
+{
+    private const string Path = "Tests/Debug/Rules.cs";
+    private const string Source = """
+        using UnifiedScript;
+
+        namespace Tests.Debug;
+
+        public static class Rules
+        {
+            [Visual]
+            public static int Run(int value)
+            {
+                int offset = 1;
+                int result = value + offset;
+                return result;
+            }
+        }
+        """;
+
+    [Fact]
+    public async Task Breakpoint_ReallySuspendsCoreClrAndExposesStackAndLocalsThenSteps()
+    {
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(Source, Path);
+        CSharpAnalysisResult analysis = new CSharpSemanticPipeline().Analyze(request);
+        HirVariableDeclarationStatement resultDeclaration = analysis.Hir!
+            .DescendantsAndSelf()
+            .OfType<HirVariableDeclarationStatement>()
+            .Single(statement => statement.Name == "result");
+        HirReturnStatement returnStatement = Assert.Single(
+            analysis.Hir!.DescendantsAndSelf().OfType<HirReturnStatement>());
+        using var adapter = new CoreClrDebugAdapter(SemanticId.FromKey("debug-adapter-test"));
+        CoreClrDebugReloadResult reload = adapter.Reload(request);
+        BreakpointBindingSnapshot bindings = adapter.SetBreakpoint(new SemanticBreakpoint(
+            SemanticId.FromKey("debug-result-breakpoint"),
+            resultDeclaration.Id));
+        Assert.Equal(BreakpointBindingState.Bound, Assert.Single(bindings.Bindings).State);
+        SemanticId methodId = adapter.ResolveVisualMethodId("Tests.Debug.Rules.Run");
+
+        CoreClrDebugExecution execution = adapter.Start(new ExecutionInvocation(
+            methodId,
+            [new ExecutionArgument("41")]));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        CoreClrDebugPause first = await adapter.WaitForPauseAsync(
+            execution.ExecutionId,
+            timeout.Token);
+        Task<ExecutionResult> completion = adapter.WaitForCompletionAsync(
+            execution.ExecutionId,
+            timeout.Token);
+
+        Assert.Equal(CoreClrDebugPauseReason.Breakpoint, first.Reason);
+        Assert.Equal(resultDeclaration.Id, first.NodeId);
+        Assert.False(completion.IsCompleted);
+        CoreClrDebugStackFrame top = Assert.Single(
+            adapter.GetStackTrace(reload.Generation.GenerationId, first.PauseId));
+        Assert.Equal("Tests.Debug.Rules.Run", top.MethodMetadataName);
+        Assert.Equal(resultDeclaration.Span, top.SourceSpan);
+        IReadOnlyList<CoreClrDebugValue> locals = adapter.GetLocals(
+            reload.Generation.GenerationId,
+            first.PauseId,
+            top.FrameId);
+        Assert.Equal("1", locals.Single(local => local.Name == "offset").Display);
+        Assert.Equal("41", locals.Single(local => local.Name == "value").Display);
+
+        adapter.StepOver(reload.Generation.GenerationId, first.PauseId);
+        CoreClrDebugPause second = await adapter.WaitForPauseAsync(
+            execution.ExecutionId,
+            timeout.Token);
+
+        Assert.Equal(CoreClrDebugPauseReason.Step, second.Reason);
+        Assert.Equal(returnStatement.Id, second.NodeId);
+        CoreClrDebugStackFrame secondTop = Assert.Single(
+            adapter.GetStackTrace(reload.Generation.GenerationId, second.PauseId));
+        IReadOnlyList<CoreClrDebugValue> secondLocals = adapter.GetLocals(
+            reload.Generation.GenerationId,
+            second.PauseId,
+            secondTop.FrameId);
+        Assert.Equal("42", secondLocals.Single(local => local.Name == "result").Display);
+
+        adapter.Continue(reload.Generation.GenerationId, second.PauseId);
+        ExecutionResult result = await completion;
+        Assert.Equal("42", result.ReturnValue!.Json);
+    }
+
+    [Fact]
+    public async Task PauseRequestStopsAtNextProbeAndReloadRejectsStaleGeneration()
+    {
+        using var transport = new CoreClrDebugLoopbackTransport(
+            new CoreClrDebugAdapter(SemanticId.FromKey("debug-loopback-test")));
+        CoreClrDebugReloadResult firstReload = transport.Reload(
+            CSharpCompilationRequest.Single(Source, Path));
+        SemanticId methodId = transport.ResolveVisualMethodId("Tests.Debug.Rules.Run");
+        CoreClrDebugExecution execution = transport.Start(new ExecutionInvocation(
+            methodId,
+            [new ExecutionArgument("10")]));
+        transport.Pause(firstReload.Generation.GenerationId, execution.ExecutionId);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        CoreClrDebugPause pause = await transport.WaitForPauseAsync(
+            execution.ExecutionId,
+            timeout.Token);
+
+        Assert.Equal(CoreClrDebugPauseReason.Pause, pause.Reason);
+        BreakpointProtocolException activeReload = Assert.Throws<BreakpointProtocolException>(() =>
+            transport.Reload(CSharpCompilationRequest.Single(Source, Path)));
+        Assert.Equal("UDB1004", activeReload.Code);
+
+        transport.Continue(firstReload.Generation.GenerationId, pause.PauseId);
+        ExecutionResult result = await transport.WaitForCompletionAsync(
+            execution.ExecutionId,
+            timeout.Token);
+        Assert.Equal("11", result.ReturnValue!.Json);
+        CoreClrDebugReloadResult secondReload = transport.Reload(
+            CSharpCompilationRequest.Single(Source, Path));
+        Assert.Equal(2, secondReload.Generation.Number);
+        BreakpointProtocolException stale = Assert.Throws<BreakpointProtocolException>(() =>
+            transport.Pause(firstReload.Generation.GenerationId, execution.ExecutionId));
+        Assert.Equal("UDB1002", stale.Code);
+    }
+
+    [Fact]
+    public void ExpressionBreakpointIsPendingBecauseCooperativeBackendProbesStatements()
+    {
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(Source, Path);
+        CSharpAnalysisResult analysis = new CSharpSemanticPipeline().Analyze(request);
+        HirBinaryExpression expression = Assert.Single(
+            analysis.Hir!.DescendantsAndSelf().OfType<HirBinaryExpression>());
+        using var adapter = new CoreClrDebugAdapter();
+        _ = adapter.Reload(request);
+
+        BreakpointBindingSnapshot bindings = adapter.SetBreakpoint(new SemanticBreakpoint(
+            SemanticId.FromKey("debug-expression-breakpoint"),
+            expression.Id));
+
+        SemanticBreakpointBinding binding = Assert.Single(bindings.Bindings);
+        Assert.Equal(BreakpointBindingState.Pending, binding.State);
+        Assert.Contains("statement nodes", binding.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CaptureCreatesBoundedCycleSafeValueTreeWithoutObjectReferences()
+    {
+        var root = new DebugNode { Value = 7 };
+        root.Next = root;
+
+        CoreClrDebugValue captured = CoreClrDebugProbe.Capture("root", root);
+
+        Assert.Equal(CoreClrDebugValueKind.Object, captured.Kind);
+        Assert.Equal("7", captured.Children.Single(child => child.Name == "Value").Display);
+        CoreClrDebugValue next = captured.Children.Single(child => child.Name == "Next");
+        Assert.Equal(CoreClrDebugValueKind.Cycle, next.Kind);
+        Assert.Equal("<cycle>", next.Display);
+    }
+
+    [Fact]
+    public async Task StepOverSkipsProbesInCalledMethodWhileBreakpointStillShowsBothFrames()
+    {
+        const string nestedSource = """
+            using UnifiedScript;
+
+            namespace Tests.Debug;
+
+            public static class NestedRules
+            {
+                [Visual]
+                public static int Caller(int value)
+                {
+                    int result = Callee(value);
+                    return result;
+                }
+
+                [Visual]
+                public static int Callee(int value)
+                {
+                    int result = value + 1;
+                    return result;
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(nestedSource, Path);
+        CSharpAnalysisResult analysis = new CSharpSemanticPipeline().Analyze(request);
+        HirMethodDeclaration caller = analysis.Hir!.Types
+            .SelectMany(static type => type.Methods)
+            .Single(static method => method.Name == "Caller");
+        HirMethodDeclaration callee = analysis.Hir.Types
+            .SelectMany(static type => type.Methods)
+            .Single(static method => method.Name == "Callee");
+        HirVariableDeclarationStatement callerCall = Assert.IsType<HirVariableDeclarationStatement>(
+            caller.Body.Statements[0]);
+        HirVariableDeclarationStatement calleeResult = Assert.IsType<HirVariableDeclarationStatement>(
+            callee.Body.Statements[0]);
+        using var adapter = new CoreClrDebugAdapter();
+        CoreClrDebugReloadResult reload = adapter.Reload(request);
+        SemanticId callerBreakpointId = SemanticId.FromKey("caller-call-breakpoint");
+        _ = adapter.SetBreakpoint(new SemanticBreakpoint(
+            callerBreakpointId,
+            callerCall.Id));
+        SemanticId methodId = adapter.ResolveVisualMethodId("Tests.Debug.NestedRules.Caller");
+        CoreClrDebugExecution execution = adapter.Start(new ExecutionInvocation(
+            methodId,
+            [new ExecutionArgument("41")]));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        CoreClrDebugPause callerPause = await adapter.WaitForPauseAsync(
+            execution.ExecutionId,
+            timeout.Token);
+
+        adapter.StepOver(reload.Generation.GenerationId, callerPause.PauseId);
+        CoreClrDebugPause afterCall = await adapter.WaitForPauseAsync(
+            execution.ExecutionId,
+            timeout.Token);
+
+        Assert.Equal(CoreClrDebugPauseReason.Step, afterCall.Reason);
+        Assert.Equal(Assert.IsType<HirReturnStatement>(caller.Body.Statements[1]).Id, afterCall.NodeId);
+        Assert.NotEqual(calleeResult.Id, afterCall.NodeId);
+        adapter.Continue(reload.Generation.GenerationId, afterCall.PauseId);
+        Assert.Equal(
+            "42",
+            (await adapter.WaitForCompletionAsync(execution.ExecutionId, timeout.Token))
+                .ReturnValue!.Json);
+
+        Assert.True(adapter.RemoveBreakpoint(callerBreakpointId));
+        _ = adapter.SetBreakpoint(new SemanticBreakpoint(
+            SemanticId.FromKey("callee-result-breakpoint"),
+            calleeResult.Id));
+        CoreClrDebugExecution nestedExecution = adapter.Start(new ExecutionInvocation(
+            methodId,
+            [new ExecutionArgument("1")]));
+        CoreClrDebugPause nestedPause = await adapter.WaitForPauseAsync(
+            nestedExecution.ExecutionId,
+            timeout.Token);
+        IReadOnlyList<CoreClrDebugStackFrame> frames = adapter.GetStackTrace(
+            reload.Generation.GenerationId,
+            nestedPause.PauseId);
+
+        Assert.Equal(2, frames.Count);
+        Assert.Equal("Tests.Debug.NestedRules.Callee", frames[0].MethodMetadataName);
+        Assert.Equal("Tests.Debug.NestedRules.Caller", frames[1].MethodMetadataName);
+        Assert.True(frames[0].HasLocals);
+        Assert.False(frames[1].HasLocals);
+        adapter.Continue(reload.Generation.GenerationId, nestedPause.PauseId);
+        _ = await adapter.WaitForCompletionAsync(nestedExecution.ExecutionId, timeout.Token);
+    }
+
+    [Fact]
+    public void DisposedDebugAdapterReleasesCollectibleContextAfterCapturedSourceEnum()
+    {
+        WeakReference loadContext = CaptureSourceEnumAndDispose();
+
+        for (int attempt = 0; attempt < 10 && loadContext.IsAlive; attempt++)
+        {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+        }
+
+        Assert.False(loadContext.IsAlive);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static WeakReference CaptureSourceEnumAndDispose()
+    {
+        const string enumSource = """
+            using UnifiedScript;
+
+            namespace Tests.Debug;
+
+            public enum Mode
+            {
+                Off,
+                On,
+            }
+
+            public static class EnumRules
+            {
+                [Visual]
+                public static Mode Echo(Mode value)
+                {
+                    return value;
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(enumSource, Path);
+        CSharpAnalysisResult analysis = new CSharpSemanticPipeline().Analyze(request);
+        HirReturnStatement returnStatement = Assert.Single(
+            analysis.Hir!.DescendantsAndSelf().OfType<HirReturnStatement>());
+        var adapter = new CoreClrDebugAdapter();
+        CoreClrDebugReloadResult reload = adapter.Reload(request);
+        WeakReference loadContext = Assert.IsType<WeakReference>(
+            adapter.CurrentLoadContextReference);
+        _ = adapter.SetBreakpoint(new SemanticBreakpoint(
+            SemanticId.FromKey("enum-return-breakpoint"),
+            returnStatement.Id));
+        SemanticId methodId = adapter.ResolveVisualMethodId("Tests.Debug.EnumRules.Echo");
+        CoreClrDebugExecution execution = adapter.Start(new ExecutionInvocation(
+            methodId,
+            [new ExecutionArgument("\"On\"")]));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        CoreClrDebugPause pause = adapter.WaitForPauseAsync(execution.ExecutionId, timeout.Token)
+            .GetAwaiter()
+            .GetResult();
+        CoreClrDebugStackFrame frame = Assert.Single(adapter.GetStackTrace(
+            reload.Generation.GenerationId,
+            pause.PauseId));
+        CoreClrDebugValue value = Assert.Single(adapter.GetLocals(
+            reload.Generation.GenerationId,
+            pause.PauseId,
+            frame.FrameId));
+        Assert.Equal("\"On\"", value.Display);
+        adapter.Continue(reload.Generation.GenerationId, pause.PauseId);
+        _ = adapter.WaitForCompletionAsync(execution.ExecutionId, timeout.Token)
+            .GetAwaiter()
+            .GetResult();
+        adapter.Dispose();
+        return loadContext;
+    }
+
+    private sealed class DebugNode
+    {
+        public DebugNode? Next;
+
+        public int Value;
+    }
+}

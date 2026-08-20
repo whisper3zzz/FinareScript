@@ -133,8 +133,55 @@ and debugger integration.
     cache/reload, breakpoint JSON, identity migration, CLI, and execution gates
     pass.
 
+## M5.4 implemented live-debug-adapter slice
+
+- post-validation debug instrumentation that preserves original HIR, semantic,
+  source-map, and sidecar identity and still executes Roslyn-emitted CoreCLR IL
+- statement-node probe installation with honest `Pending` expression
+  breakpoint behavior
+- actual execution-thread suspension rather than post-execution hit simulation
+- cooperative pause-at-next-probe, continue, and call-depth-aware step-over
+- deeper-call breakpoint precedence while stepping over a call
+- live CoreCLR stack frames reduced to detached method/token/offset/source data
+- Roslyn-definitely-assigned top-frame parameters and locals
+- bounded depth/width value trees using public fields only, with explicit cycle,
+  truncation, and unavailable states and no collectible-object leakage
+- strict generation, execution, and pause lifetime checks with stable `UDB`
+  failures
+- `ICoreClrDebugTransport` plus an in-process loopback implementation suitable
+  for editor integration and later backend replacement
+- running/suspended reload rejection and completed-generation stale-command
+  rejection
+
+## M5.4 acceptance criteria
+
+1. Debug instrumentation runs only after every normal validation gate and does
+   not become part of HIR or Graph identity.
+2. A breakpoint event is published while the CoreCLR invocation task is still
+   incomplete and the execution thread remains blocked.
+3. Continue releases the exact current pause; resumed or unknown pauses are
+   rejected.
+4. Step-over ignores probes in a deeper called Visual method and stops at the
+   next same/shallower frame, while an explicit nested breakpoint still wins.
+5. A nested breakpoint exposes the actual two-frame managed stack.
+6. Top-frame locals contain only parameters and locals definitely assigned at
+   the statement entry.
+7. Local values retain no source objects or reflection metadata and bound
+   arrays/objects by depth and width while detecting cycles.
+8. Expression breakpoints remain explicitly pending rather than moving to a
+   nearby statement.
+9. Reload is rejected while running/suspended; commands using a completed old
+   generation fail with `UDB1002` after reload.
+10. Normal emission retains its single-emission path and existing deterministic
+    image/source-map behavior.
+11. The full solution, 337-test suite, formatting, repository validation,
+    execution/source-map/reload regressions, and live debug tests pass.
+
 ## Next slice
 
-M5.4 should implement the first actual debug adapter over these contracts:
-breakpoint trap installation, pause/resume, stack frames, graph-safe locals,
-step-over identity, and a loopback transport suitable for later UE editor use.
+M5.5 should choose between the native managed-debug backend (ICorDebug or a
+vendored adapter) and the async/cancellation execution contract. The native
+backend would add expression traps, deeper-frame locals, and serialized remote
+framing behind `ICoreClrDebugTransport`; the execution slice would add async
+state-machine invocation, cancellation, and time budgets needed before UE world
+domains.

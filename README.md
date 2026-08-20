@@ -163,6 +163,11 @@ M5.3 makes that identity reload-safe: identical requests reuse a bounded LRU
 program-image cache, every load receives a distinct monotonic generation, and
 semantic-node breakpoints automatically rebind, become pending on deletion,
 and reject hits from stale unloaded generations.
+M5.4 closes the first live debugging loop without adding a second VM: a
+post-validation debug image installs statement probes into the same CoreCLR
+method body, the adapter truly suspends its execution thread, and the loopback
+transport supports pause/continue, semantic step-over, live stack frames, and
+bounded cycle-safe locals under strict generation and pause identities.
 
 The v0.2 profile accepts `[Visual]` methods containing local variables,
 expressions, calls, assignments, `if/else`, `while`, `do`, `for`, bounded
@@ -194,10 +199,11 @@ Current execution path:
   -> semantic method/node IDs mapped to MethodDef tokens + IL sequence points
   -> collectible CoreCLR session
   -> content-addressed cache + reload generation + semantic breakpoint binding
+  -> cooperative CoreCLR debug adapter + loopback transport
   -> semantic-ID invocation and typed result/fault
 
 Later:
-  -> CLR trap installation, pause/resume, stack/locals, and stepping
+  -> native managed-debug trap backend, remote framing, and async stepping
   -> Unreal Engine adapter
 ```
 
@@ -1326,8 +1332,8 @@ This milestone does not include:
 - Unreal Engine bindings;
 - a UE graph editor;
 - persistent engine runtime domains, execution sandboxing, time budgets, async
-  scheduling, CLR trap installation, pause/resume, stack/locals inspection,
-  stepping, and remote debug transport;
+  scheduling, native managed-debug traps, expression/watch evaluation,
+  deeper-frame locals, async stepping, and serialized remote debug transport;
 - semantic type binding against UE APIs;
 - `.csproj`/MSBuild compilation loading;
 - namespace/API allow and deny policies;
@@ -1363,6 +1369,7 @@ See [ARCHITECTURE.md](docs/ARCHITECTURE.md),
 [EXECUTION_RUNTIME.md](docs/EXECUTION_RUNTIME.md),
 [SOURCE_MAP.md](docs/SOURCE_MAP.md),
 [BREAKPOINT_RELOAD.md](docs/BREAKPOINT_RELOAD.md),
+[DEBUG_ADAPTER.md](docs/DEBUG_ADAPTER.md),
 [M1_ROSLYN_GRAPH_FOUNDATION.md](docs/milestones/M1_ROSLYN_GRAPH_FOUNDATION.md),
 [M2_SEMANTIC_BINDING.md](docs/milestones/M2_SEMANTIC_BINDING.md),
 [M3_BIDIRECTIONAL_PATCHING.md](docs/milestones/M3_BIDIRECTIONAL_PATCHING.md), and

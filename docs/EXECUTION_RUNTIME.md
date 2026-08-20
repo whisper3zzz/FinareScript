@@ -131,7 +131,9 @@ isolation are not enforced by M5.1.
 M5.2 adds semantic-ID-to-MethodDef/IL/PDB sequence-point mapping, and M5.3 adds
 content-addressed cached images, reload generations, semantic breakpoint
 migration, and stale-hit protection; see [SOURCE_MAP.md](SOURCE_MAP.md) and
-[BREAKPOINT_RELOAD.md](BREAKPOINT_RELOAD.md). The next execution slices should
-add async invocation, engine-owned receivers, cancellation/time budgets, and a
-CLR/UE trap and stepping adapter. UE embedding must consume this contract rather
-than bypassing it with a separate scripting VM.
+[BREAKPOINT_RELOAD.md](BREAKPOINT_RELOAD.md). M5.4 adds a cooperative CoreCLR
+debug image, actual suspension, step-over, stack/value snapshots, and loopback
+transport; see [DEBUG_ADAPTER.md](DEBUG_ADAPTER.md). The next execution slices
+should add async invocation, engine-owned receivers, cancellation/time budgets,
+and native/remote CLR/UE debug backends. UE embedding must consume this contract
+rather than bypassing it with a separate scripting VM.

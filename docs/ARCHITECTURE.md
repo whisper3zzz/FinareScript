@@ -148,6 +148,8 @@ effect-aware graph without hosting Roslyn.
 - immutable semantic-ID/IL/PDB source-map exposure without reflection leakage
 - bounded content-addressed program-image cache and monotonic reload generations
 - semantic breakpoint binding/migration and stale-generation hit rejection
+- cooperative CoreCLR suspension, step-over, stack/value snapshots, and
+  generation-safe loopback debug transport
 
 It depends on Core, Semantics, and the C# emission boundary. It does not parse
 source, project Graph, apply patches, or depend on UE. A collectible load
@@ -197,6 +199,19 @@ generations. Failed reloads preserve the previous executable session and
 bindings transactionally. This is the transport-neutral boundary for a later
 CLR/UE trap and stepping adapter. See
 [BREAKPOINT_RELOAD.md](BREAKPOINT_RELOAD.md).
+
+## Live debug adapter boundary
+
+M5.4 emits a separate debug image after the original program has passed the
+same profile, compiler, semantic, Graph, and CFG gates. Statement probes call a
+shared-runtime sink while the actual method continues to execute as CoreCLR IL;
+there is no HIR interpreter and no second VM. `CoreClrDebugAdapter` blocks the
+real execution thread on a pause, implements continue/cooperative pause and
+call-depth-aware step-over, and detaches stack frames plus bounded cycle-safe
+locals from the collectible context. `ICoreClrDebugTransport` separates these
+operations from `CoreClrDebugLoopbackTransport`, allowing a later native or UE
+backend to replace probe mechanics without changing semantic IDs and stale
+generation rules. See [DEBUG_ADAPTER.md](DEBUG_ADAPTER.md).
 
 ## Profile v0.2
 
