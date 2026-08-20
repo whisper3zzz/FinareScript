@@ -49,6 +49,7 @@ DOCUMENTS = [
     ROOT / "docs" / "PATCH_PLAN.md",
     ROOT / "docs" / "EXECUTION_RUNTIME.md",
     ROOT / "docs" / "SOURCE_MAP.md",
+    ROOT / "docs" / "BREAKPOINT_RELOAD.md",
     ROOT / "docs" / "ROADMAP.md",
     ROOT / "docs" / "milestones" / "M1_ROSLYN_GRAPH_FOUNDATION.md",
     ROOT / "docs" / "milestones" / "M2_SEMANTIC_BINDING.md",

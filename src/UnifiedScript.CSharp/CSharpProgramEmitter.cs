@@ -13,7 +13,8 @@ public sealed record CSharpProgramImage(
     byte[] PortablePdb,
     CSharpProgramSourceMap SourceMap,
     HirCompilationUnit Hir,
-    BoundCompilation Semantics);
+    BoundCompilation Semantics,
+    IReadOnlyList<IdentitySidecarDocument> IdentitySidecars);
 
 public sealed record CSharpProgramEmitResult(
     CSharpProgramImage? Image,
@@ -79,7 +80,8 @@ public sealed class CSharpProgramEmitter
                 portablePdbBytes,
                 sourceMap,
                 analysis.Hir,
-                analysis.Semantics),
+                analysis.Semantics,
+                analysis.IdentitySidecars),
             diagnostics);
     }
 }

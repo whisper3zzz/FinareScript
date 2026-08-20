@@ -64,6 +64,11 @@ flowchart LR
     Emitter --> SourceMap["Semantic ID -> MethodDef + IL/PDB source map"]
     Emitter --> Runtime["Collectible CoreCLR session"]
     SourceMap --> Runtime
+    Runtime --> Reload["Image cache + reload generation"]
+    SourceMap --> Breakpoints["Semantic breakpoint binder"]
+    Reload --> Breakpoints
+    Hit["Generation + token + IL hit"] --> Breakpoints
+    Breakpoints --> Resolution["Semantic breakpoint/node resolution"]
     Invocation["Semantic method ID + JSON arguments"] --> Runtime
     Runtime --> Result["Typed return or structured fault"]
     Graph --> LayoutSync["Layout Synchronizer"]
@@ -102,6 +107,7 @@ This project has no Roslyn, graph UI, CLR hosting, or UE dependency.
 - HIR structural fingerprinting, context reconciliation, pins, and tombstones
 - deterministic program-image and portable-PDB emission after Graph/CFG gates
 - PE/PDB-derived semantic method/node source-map generation and strict JSON
+- reconciled identity sidecars retained in the executable program image
 
 It may depend on Core, Semantics, Graph, and Roslyn, but not on Runtime or UE.
 
@@ -140,6 +146,8 @@ effect-aware graph without hosting Roslyn.
 - collectible CoreCLR assembly loading and dependency resolution
 - explicit reload-session lifetime and unloading
 - immutable semantic-ID/IL/PDB source-map exposure without reflection leakage
+- bounded content-addressed program-image cache and monotonic reload generations
+- semantic breakpoint binding/migration and stale-generation hit rejection
 
 It depends on Core, Semantics, and the C# emission boundary. It does not parse
 source, project Graph, apply patches, or depend on UE. A collectible load
@@ -176,6 +184,19 @@ versioned, exposed by the collectible session, and generated equally for text
 source and visual-patch-produced source. It is the location substrate for a
 later breakpoint/stepping controller, not itself a debugger. See
 [SOURCE_MAP.md](SOURCE_MAP.md).
+
+## Reload and debugger protocol boundary
+
+M5.3 gives each successful load a domain-scoped monotonic generation identity
+and a `sha256:` program-image content address. A bounded LRU cache skips repeated
+Roslyn emission for an identical request, while every reload still creates a
+fresh collectible lifetime. Semantic breakpoint requests bind through the
+source map, migrate to new IL/PDB locations when their persistent node survives,
+remain pending when it is absent, and reject token/offset hits from stale
+generations. Failed reloads preserve the previous executable session and
+bindings transactionally. This is the transport-neutral boundary for a later
+CLR/UE trap and stepping adapter. See
+[BREAKPOINT_RELOAD.md](BREAKPOINT_RELOAD.md).
 
 ## Profile v0.2
 

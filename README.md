@@ -91,6 +91,8 @@ The repository currently implements:
   `execute` command;
 - deterministic `unifiedscript.source-map/v0.1` artifacts connecting semantic
   method/node IDs to real MethodDef tokens, IL offsets, and portable-PDB spans;
+- content-addressed program-image caching, collectible reload generations, and
+  semantic breakpoint bind/pending/disabled plus stale-hit protocols;
 - automated execution equivalence between independently text-authored code and
   C# produced by a checked-in visual semantic patch plan;
 - xUnit coverage for validation, lowering, identity, graph projection, and
@@ -157,6 +159,10 @@ M5.2 closes the executable identity loop: every synchronous Visual method maps
 its stable method ID to a real MethodDef token, and executable HIR IDs carried
 into Graph map to validated IL offsets and portable-PDB spans. The public
 `emit` command writes the DLL, PDB, and canonical source map together.
+M5.3 makes that identity reload-safe: identical requests reuse a bounded LRU
+program-image cache, every load receives a distinct monotonic generation, and
+semantic-node breakpoints automatically rebind, become pending on deletion,
+and reject hits from stale unloaded generations.
 
 The v0.2 profile accepts `[Visual]` methods containing local variables,
 expressions, calls, assignments, `if/else`, `while`, `do`, `for`, bounded
@@ -187,10 +193,11 @@ Current execution path:
   -> deterministic Roslyn PE + portable PDB
   -> semantic method/node IDs mapped to MethodDef tokens + IL sequence points
   -> collectible CoreCLR session
+  -> content-addressed cache + reload generation + semantic breakpoint binding
   -> semantic-ID invocation and typed result/fault
 
 Later:
-  -> breakpoint binding, stepping, and reload-generation migration
+  -> CLR trap installation, pause/resume, stack/locals, and stepping
   -> Unreal Engine adapter
 ```
 
@@ -233,8 +240,10 @@ dotnet run --project src/UnifiedScript.Cli -- \
 The command emits `RuntimeRules.dll`, `RuntimeRules.pdb`, and
 `RuntimeRules.sourcemap.json`. The source map resolves stable semantic method
 IDs to CLR MethodDef tokens and executable node IDs to portable-PDB-backed IL
-offsets. `emit-files` handles a multi-source compilation. See
-[SOURCE_MAP.md](docs/SOURCE_MAP.md).
+offsets. When identity inputs are present, their reconciled `.usids` files are
+written in the same transaction. `emit-files` handles a multi-source
+compilation. See [SOURCE_MAP.md](docs/SOURCE_MAP.md) and
+[BREAKPOINT_RELOAD.md](docs/BREAKPOINT_RELOAD.md).
 
 ## Requirements
 
@@ -1317,7 +1326,8 @@ This milestone does not include:
 - Unreal Engine bindings;
 - a UE graph editor;
 - persistent engine runtime domains, execution sandboxing, time budgets, async
-  scheduling, hot-reload generations, and breakpoint/stepping control;
+  scheduling, CLR trap installation, pause/resume, stack/locals inspection,
+  stepping, and remote debug transport;
 - semantic type binding against UE APIs;
 - `.csproj`/MSBuild compilation loading;
 - namespace/API allow and deny policies;
@@ -1352,6 +1362,7 @@ See [ARCHITECTURE.md](docs/ARCHITECTURE.md),
 [PATCH_PLAN.md](docs/PATCH_PLAN.md),
 [EXECUTION_RUNTIME.md](docs/EXECUTION_RUNTIME.md),
 [SOURCE_MAP.md](docs/SOURCE_MAP.md),
+[BREAKPOINT_RELOAD.md](docs/BREAKPOINT_RELOAD.md),
 [M1_ROSLYN_GRAPH_FOUNDATION.md](docs/milestones/M1_ROSLYN_GRAPH_FOUNDATION.md),
 [M2_SEMANTIC_BINDING.md](docs/milestones/M2_SEMANTIC_BINDING.md),
 [M3_BIDIRECTIONAL_PATCHING.md](docs/milestones/M3_BIDIRECTIONAL_PATCHING.md), and

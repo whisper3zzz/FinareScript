@@ -114,17 +114,27 @@ internal static class Program
         string assemblyPath = Path.Combine(outputDirectory, $"{baseName}.dll");
         string pdbPath = Path.Combine(outputDirectory, $"{baseName}.pdb");
         string sourceMapPath = Path.Combine(outputDirectory, $"{baseName}.sourcemap.json");
-        WriteTransactionally(
-        [
+        var outputs = new List<OutputFile>
+        {
             new OutputFile(assemblyPath, result.Image.PortableExecutable),
             new OutputFile(pdbPath, result.Image.PortablePdb),
             new OutputFile(
                 sourceMapPath,
                 CSharpProgramSourceMapJson.Serialize(result.Image.SourceMap) + "\n"),
-        ]);
-        Console.WriteLine(assemblyPath);
-        Console.WriteLine(pdbPath);
-        Console.WriteLine(sourceMapPath);
+        };
+        foreach (IdentitySidecarDocument sidecar in result.Image.IdentitySidecars)
+        {
+            outputs.Add(new OutputFile(
+                Path.Combine(outputDirectory, GetIdentityArtifactName(sidecar.SourcePath)),
+                IdentitySidecarJson.Serialize(sidecar) + "\n"));
+        }
+
+        WriteTransactionally(outputs);
+        foreach (OutputFile output in outputs)
+        {
+            Console.WriteLine(Path.GetFullPath(output.Path));
+        }
+
         return 0;
     }
 

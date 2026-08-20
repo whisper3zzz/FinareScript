@@ -155,7 +155,10 @@ Outcome: text and graph versions compile to and execute the same IL.
 - [x] text-authored versus visual-plan-authored execution equivalence proof
 - [x] deterministic method/node-to-MethodDef/IL/PDB source map v0.1
 - [x] PE/PDB/source-map `emit` and `emit-files` CLI artifact commands
-- shared breakpoint identity
+- [x] content-addressed bounded program-image cache
+- [x] monotonic collectible reload generations with transactional failure
+- [x] shared semantic breakpoint bind/migrate/hit identity protocols
+- CLR breakpoint trap, pause/resume, stack/locals, and stepping adapter
 - async invocation and cancellation/time-budget contract
 
 ## M6 — Unreal Engine adapter

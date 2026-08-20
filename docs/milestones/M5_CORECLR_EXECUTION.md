@@ -92,8 +92,49 @@ and debugger integration.
 9. The full solution, 318-test suite, format check, repository validator,
    source-map CLI, nullable-signature, and execution regressions pass.
 
+## M5.3 implemented reload/debug-protocol slice
+
+- deterministic request fingerprints plus `sha256:` PE/PDB/source-map image
+  content addresses
+- thread-safe bounded LRU cache with hit/miss statistics that retains only
+  successfully emitted images
+- domain-scoped monotonic reload numbers and distinct semantic generation IDs
+- cached-image reload into a fresh collectible context without recompilation
+- transactional reload failure preserving the previous session and bindings
+- reconciled identity-sidecar propagation through images, reload results, and
+  transactional CLI emission
+- strict breakpoint binding, hit, and resolution JSON v0.1 protocols
+- bound/pending/disabled semantic breakpoint states with multi-offset locations
+- automatic persistent-node rebind, deletion-to-pending migration, and
+  pending-to-bound restoration
+- domain/generation/image-key stale-hit rejection with stable `UDB1002`
+- exact current-hit reverse mapping to semantic method/breakpoint/node IDs
+- disposal of superseded collectible contexts and permanent domain closure
+
+## M5.3 acceptance criteria
+
+1. Repeating an identical request skips emission and returns the same image
+   content address.
+2. Every successful load receives a higher generation number and distinct
+   generation ID, including cached-image reloads.
+3. Formatting changes preserve sidecar-backed breakpoint node IDs while
+   rebinding their new PDB/IL locations.
+4. Deleted nodes become tombstones and pending breakpoints; reappearing nodes
+   automatically bind again.
+5. A failed compilation leaves the previous generation executable and its
+   breakpoint snapshot unchanged.
+6. Hits must match domain ID, generation ID, image key, MethodDef token, and IL
+   offset before semantic resolution.
+7. Hits from superseded generations fail with `UDB1002`; unbound locations fail
+   with `UDB1003`.
+8. DLL, PDB, source map, and updated identity sidecars emit transactionally.
+9. Superseded collectible contexts unload, and disposed domains cannot reload.
+10. The full solution, 331-test suite, formatting, repository validation,
+    cache/reload, breakpoint JSON, identity migration, CLI, and execution gates
+    pass.
+
 ## Next slice
 
-M5.3 should define breakpoint set/bind/hit records against semantic node IDs,
-introduce program-image cache keys and reload generation IDs, and specify stale
-breakpoint migration before UE hosts a world-scoped runtime domain.
+M5.4 should implement the first actual debug adapter over these contracts:
+breakpoint trap installation, pause/resume, stack frames, graph-safe locals,
+step-over identity, and a loopback transport suitable for later UE editor use.

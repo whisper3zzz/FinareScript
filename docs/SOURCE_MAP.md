@@ -99,6 +99,7 @@ offset and empty sequence-point/node tables instead of publishing a false
 location. Mapping state-machine states back to the original semantic method
 belongs with the future suspension-aware execution and debugger contract.
 
-M5.2 provides location identity, not a breakpoint controller. Breakpoint set,
-bind, hit, step, generation migration, and stale-image protocols remain the
-next debugger-facing slice.
+M5.2 provides location identity. M5.3 now consumes it for breakpoint
+set/bind/hit records, reload-generation migration, and stale-image rejection;
+see [BREAKPOINT_RELOAD.md](BREAKPOINT_RELOAD.md). CLR trap installation,
+pause/resume, stack inspection, and stepping remain debugger-adapter work.
