@@ -82,6 +82,11 @@ The repository currently implements:
   normal/return/exception cleanup, CFG ownership facts, and the same visual
   construction/editing protocol;
 - opt-in `.usids` sidecars that preserve node identity across formatting and edits;
+- backend-neutral Script Asset / Declaration IR v0.1 with scalar and enum
+  state, canonical defaults, engine exposure metadata, Visual signatures, and
+  strict deterministic JSON;
+- persistent state-property identity across formatting and safe renames through
+  the same `.usids` reconciliation and tombstone contract;
 - semantic-independent `.usgraph` layout sidecars with deterministic positions,
   sizes, collapsed state, comment regions, routing hints, and orphan recovery;
 - explicit patch identity pins and tombstones for deleted semantic nodes;
@@ -168,12 +173,16 @@ post-validation debug image installs statement probes into the same CoreCLR
 method body, the adapter truly suspends its execution thread, and the loopback
 transport supports pause/continue, semantic step-over, live stack frames, and
 bounded cycle-safe locals under strict generation and pause identities.
-The first visual authoring experience prototype is now available under
-`prototype/visual-editor`. It intentionally uses declaration lists, inline
-expressions, and owned control-flow regions instead of Blueprint-style
-one-node-per-expression wiring. The prototype also exposes the next critical
-backend gap: type-level state/default/exposure declarations need a shared
-Declaration IR before UE binding.
+M5.5.1 closes the first declaration-authoring gap before UE binding. C# types
+marked `[ScriptAsset]` lower auto-properties, constant defaults, exposure
+policy, and Visual signatures into strict `unifiedscript.script-asset/v0.1`
+JSON. State identities are deterministic in batch analysis and join `.usids`
+structural reconciliation when persistent editing is enabled, including safe
+property renames. The prototype under `prototype/visual-editor` now loads a
+real artifact generated from `samples/Authoring/DamagePolicy.cs`; its state
+list, inspector, canonical declaration, AI declaration outline, and IDs are no
+longer embedded mock data. Declaration patch/write-back plus real Graph/debug
+transport remain the next connected slices.
 
 The v0.2 profile accepts `[Visual]` methods containing local variables,
 expressions, calls, assignments, `if/else`, `while`, `do`, `for`, bounded
@@ -188,7 +197,8 @@ Unsupported syntax is rejected explicitly instead of being approximated.
 C# source
   -> Roslyn full-fidelity syntax tree
   -> Visual Profile validation
-  -> Unified HIR
+  -> Script Asset / Declaration IR (type-level contract)
+  -> Unified HIR (Visual method bodies)
   -> Roslyn SemanticModel
   -> language-neutral bound semantics
   -> deterministic, effect-aware graph projection
@@ -249,10 +259,11 @@ dotnet run --project src/UnifiedScript.Cli -- \
   --out artifacts/runtime-image
 ```
 
-The command emits `RuntimeRules.dll`, `RuntimeRules.pdb`, and
-`RuntimeRules.sourcemap.json`. The source map resolves stable semantic method
+The command emits `RuntimeRules.dll`, `RuntimeRules.pdb`,
+`RuntimeRules.sourcemap.json`, and `RuntimeRules.asset.json`. The source map resolves stable semantic method
 IDs to CLR MethodDef tokens and executable node IDs to portable-PDB-backed IL
-offsets. When identity inputs are present, their reconciled `.usids` files are
+offsets; the declaration artifact travels with the same executable program
+image and compilation identities. When identity inputs are present, their reconciled `.usids` files are
 written in the same transaction. `emit-files` handles a multi-source
 compilation. See [SOURCE_MAP.md](docs/SOURCE_MAP.md) and
 [BREAKPOINT_RELOAD.md](docs/BREAKPOINT_RELOAD.md).
@@ -284,9 +295,21 @@ This emits:
 artifacts/sample/DoorController.hir.json
 artifacts/sample/DoorController.semantics.json
 artifacts/sample/DoorController.graph.json
+artifacts/sample/DoorController.asset.json
 ```
 
 Without `--out`, the graph JSON is written to stdout.
+
+To inspect the first authoring asset directly:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  analyze samples/Authoring/DamagePolicy.cs \
+  --out artifacts/authoring
+```
+
+See [DECLARATION_IR.md](docs/DECLARATION_IR.md) and
+[VISUAL_AUTHORING_MODEL.md](docs/VISUAL_AUTHORING_MODEL.md).
 
 ### Analyze structured regions
 

@@ -35,6 +35,7 @@ public sealed class CSharpSemanticPipeline
         }
 
         var identitySidecars = new List<IdentitySidecarDocument>();
+        var declarationIdentities = new Dictionary<SemanticId, SemanticId>();
         var identityReconciler = new CSharpIdentityReconciler();
         for (int index = 0; index < request.Sources.Count; index++)
         {
@@ -50,6 +51,10 @@ public sealed class CSharpSemanticPipeline
                 lowerings[index].CompilationUnit!);
             diagnostics.AddRange(reconciliation.Diagnostics);
             identitySidecars.Add(reconciliation.Sidecar);
+            foreach (KeyValuePair<SemanticId, SemanticId> identity in reconciliation.DeclarationIdentities)
+            {
+                declarationIdentities.Add(identity.Key, identity.Value);
+            }
             lowerings[index] = lowerings[index] with
             {
                 CompilationUnit = reconciliation.CompilationUnit,
@@ -88,14 +93,26 @@ public sealed class CSharpSemanticPipeline
         diagnostics.AddRange(binding.Diagnostics);
         bool hasBindingErrors = diagnostics.Any(
             static diagnostic => diagnostic.Severity == UnifiedDiagnosticSeverity.Error);
+        ScriptAssetLoweringResult assetLowering = hasBindingErrors || binding.Compilation is null
+            ? new ScriptAssetLoweringResult(null, [])
+            : new CSharpScriptAssetLowerer().Lower(
+                compilation,
+                syntaxTrees,
+                hir,
+                binding.Compilation,
+                declarationIdentities);
+        diagnostics.AddRange(assetLowering.Diagnostics);
+        bool hasErrors = diagnostics.Any(
+            static diagnostic => diagnostic.Severity == UnifiedDiagnosticSeverity.Error);
         return new CSharpAnalysisResult(
             hir,
-            hasBindingErrors ? null : binding.Compilation,
+            hasErrors ? null : binding.Compilation,
             diagnostics)
         {
-            IdentitySidecars = hasBindingErrors
+            IdentitySidecars = hasErrors
                 ? GetOriginalIdentitySidecars(request)
                 : identitySidecars,
+            ScriptAssets = hasErrors ? null : assetLowering.Document,
         };
     }
 

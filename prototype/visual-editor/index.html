@@ -94,7 +94,7 @@
           <div class="declaration-list">
             <button class="declaration-item function-item" type="button" data-kind="function" data-id="applyDamage">
               <span class="declaration-glyph function-glyph">ƒ</span>
-              <span class="declaration-copy"><strong>ApplyDamage</strong><small>(int, bool) → int</small></span>
+              <span class="declaration-copy"><strong>ApplyDamage</strong><small>(int, bool) → float</small></span>
               <span class="function-arrow">›</span>
             </button>
           </div>
@@ -221,7 +221,7 @@
                 <div class="node-ordinal">05</div>
                 <div class="node-content">
                   <div class="node-kicker">RETURN</div>
-                  <h3><span class="local-name">scaled</span> <em>int</em></h3>
+                  <h3><span class="local-name">scaled</span> <em>float</em></h3>
                 </div>
                 <button class="breakpoint-toggle" type="button" aria-label="切换断点"></button>
               </article>
@@ -251,19 +251,19 @@
 <span data-line="10" class="state-line" data-state-id="maxDamage"><b>10</b>    [<u>Expose</u>(SaveGame = <i>true</i>)] <i>public int</i> MaxDamage { <i>get</i>; <i>set</i>; } = <n>999</n>;</span>
 <span data-line="11"><b>11</b></span>
 <span data-line="12"><b>12</b>    [<u>Visual</u>]</span>
-<span data-line="13"><b>13</b>    <i>public int</i> ApplyDamage(<i>int</i> incomingDamage, <i>bool</i> critical)</span>
+<span data-line="13"><b>13</b>    <i>public float</i> ApplyDamage(<i>int</i> incomingDamage, <i>bool</i> critical)</span>
 <span data-line="14"><b>14</b>    {</span>
-<span data-line="15"><b>15</b>        <i>int</i> scaled = incomingDamage * BaseDamage;</span>
+<span data-line="15"><b>15</b>        <i>float</i> scaled = incomingDamage * BaseDamage;</span>
 <span data-line="16"><b>16</b>        <i>if</i> (critical)</span>
 <span data-line="17"><b>17</b>        {</span>
 <span data-line="18"><b>18</b>            scaled *= CriticalMultiplier;</span>
 <span data-line="19"><b>19</b>        }</span>
 <span data-line="20"><b>20</b></span>
-<span data-line="21"><b>21</b>        scaled = Math.Clamp(scaled, <n>0</n>, MaxDamage);</span>
+<span data-line="21"><b>21</b>        scaled = Math.Clamp(scaled, <n>0f</n>, MaxDamage);</span>
 <span data-line="22"><b>22</b>        <i>return</i> scaled;</span>
 <span data-line="23"><b>23</b>    }</span>
 <span data-line="24"><b>24</b>}</span></code></pre>
-            <div class="code-status"><span>Ln <strong id="selectedLine">13</strong>, Col 9</span><span>Semantic ID preserved</span><span class="target-label">vNEXT DECLARATION IR</span></div>
+            <div class="code-status"><span>Ln <strong id="selectedLine">13</strong>, Col 9</span><span>Semantic ID preserved</span><span class="target-label">DECLARATION IR v0.1</span></div>
           </section>
         </div>
 
@@ -341,7 +341,7 @@ state MaxDamage: int = 999
       </section>
       <section>
         <h3>BEHAVIOR OUTLINE</h3>
-        <pre>function ApplyDamage(incomingDamage: int, critical: bool) → int
+        <pre>function ApplyDamage(incomingDamage: int, critical: bool) → float
   let scaled = incomingDamage × BaseDamage
   when critical
     scaled ×= CriticalMultiplier

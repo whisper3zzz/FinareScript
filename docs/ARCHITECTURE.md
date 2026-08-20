@@ -23,9 +23,11 @@ Only methods marked `[Visual]` promise lossless visual projection. Unsupported
 syntax is diagnosed before lowering. Ordinary C# library methods may later be
 exposed as opaque call nodes when their signatures use graph-safe types.
 
-### HIR is the shared semantic contract
+### Declaration IR and HIR are the shared semantic contracts
 
-The graph is projected from HIR, not from IL. Future graph edits will apply
+Declaration IR owns the asset path, type-level state, defaults, exposure policy,
+and Visual signatures. HIR owns executable Visual method bodies. The graph is
+projected from HIR, not from IL. Future graph edits will apply
 semantic patches to HIR and then construct localized Roslyn syntax changes.
 
 Bound semantics are stored as deterministic side tables keyed by HIR
@@ -54,6 +56,9 @@ flowchart LR
     Sidecar[".usids sidecar"] --> Reconcile["Identity Reconciler"]
     HIR --> Reconcile
     Reconcile --> StableHIR["Identity-stable HIR"]
+    Roslyn --> Declaration["Script Asset / Declaration IR"]
+    Reconcile --> Declaration
+    Declaration --> AssetJson["Declaration JSON"]
     StableHIR --> Binder["Roslyn Semantic Binder"]
     Binder --> Bound["Bound semantic side tables"]
     StableHIR --> Projector["Effect-aware Graph Projector"]
@@ -84,12 +89,14 @@ flowchart LR
 ### UnifiedScript.Core
 
 - `VisualAttribute`
+- `ScriptAssetAttribute` and `ExposeAttribute`
 - stable identity
 - source positions
 - diagnostics
 - HIR declarations, statements, and expressions
 - HIR traversal and the language-neutral semantic patch contract
 - identity sidecar schema, deterministic JSON, and random ID allocation
+- engine-neutral Script Asset / Declaration IR schema and strict JSON
 - common JSON conventions
 
 This project has no Roslyn, graph UI, CLR hosting, or UE dependency.
@@ -105,7 +112,10 @@ This project has no Roslyn, graph UI, CLR hosting, or UE dependency.
 - Roslyn symbol/type/method translation into bound semantics
 - transactional semantic-patch validation and localized source rewriting
 - HIR structural fingerprinting, context reconciliation, pins, and tombstones
+- Roslyn type/property/default/exposure lowering into Declaration IR
+- persistent state-property reconciliation through the identity sidecar
 - deterministic program-image and portable-PDB emission after Graph/CFG gates
+- Declaration IR retained in the executable program image
 - PE/PDB-derived semantic method/node source-map generation and strict JSON
 - reconciled identity sidecars retained in the executable program image
 
@@ -160,6 +170,7 @@ context is a reload mechanism, not a security sandbox.
 - filesystem input/output
 - diagnostics rendering
 - HIR, bound semantics, and graph artifact emission
+- Script Asset / Declaration IR artifact emission
 - deterministic PE, portable-PDB, and semantic source-map artifact emission
 - qualified Visual-method resolution and CoreCLR execution
 

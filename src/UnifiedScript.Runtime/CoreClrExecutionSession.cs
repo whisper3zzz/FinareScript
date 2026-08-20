@@ -33,6 +33,8 @@ public sealed class CoreClrExecutionSession : IDisposable
 
     public CSharpProgramSourceMap SourceMap => image.SourceMap;
 
+    public ScriptAssetDocument ScriptAssets => image.ScriptAssets;
+
     public IReadOnlyList<IdentitySidecarDocument> IdentitySidecars => image.IdentitySidecars;
 
     public SemanticId ResolveVisualMethodId(string qualifiedMethodName)

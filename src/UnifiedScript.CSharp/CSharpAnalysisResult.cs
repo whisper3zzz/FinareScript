@@ -11,8 +11,11 @@ public sealed record CSharpAnalysisResult(
 {
     public IReadOnlyList<IdentitySidecarDocument> IdentitySidecars { get; init; } = [];
 
+    public ScriptAssetDocument? ScriptAssets { get; init; }
+
     public bool Succeeded =>
         Hir is not null &&
         Semantics is not null &&
+        ScriptAssets is not null &&
         Diagnostics.All(static diagnostic => diagnostic.Severity != UnifiedDiagnosticSeverity.Error);
 }

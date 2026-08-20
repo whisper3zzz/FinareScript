@@ -36,6 +36,17 @@ public sealed record HirParameter(
     string Name,
     string TypeName) : HirNode(Id, Span);
 
+/// <summary>
+/// Identity-only HIR node used while reconciling type-level script state.
+/// Declaration IR owns the full state contract; this compact node lets the
+/// existing sidecar machinery preserve identity across source edits.
+/// </summary>
+public sealed record HirStateDeclaration(
+    SemanticId Id,
+    SourceSpan Span,
+    string Name,
+    string TypeName) : HirNode(Id, Span);
+
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]
 [JsonDerivedType(typeof(HirBlockStatement), "block")]
 [JsonDerivedType(typeof(HirVariableDeclarationStatement), "variableDeclaration")]

@@ -50,12 +50,15 @@ DOCUMENTS = [
     ROOT / "docs" / "EXECUTION_RUNTIME.md",
     ROOT / "docs" / "SOURCE_MAP.md",
     ROOT / "docs" / "BREAKPOINT_RELOAD.md",
+    ROOT / "docs" / "DECLARATION_IR.md",
+    ROOT / "docs" / "VISUAL_AUTHORING_MODEL.md",
     ROOT / "docs" / "ROADMAP.md",
     ROOT / "docs" / "milestones" / "M1_ROSLYN_GRAPH_FOUNDATION.md",
     ROOT / "docs" / "milestones" / "M2_SEMANTIC_BINDING.md",
     ROOT / "docs" / "milestones" / "M3_BIDIRECTIONAL_PATCHING.md",
     ROOT / "docs" / "milestones" / "M4_STRUCTURED_CONTROL_FLOW.md",
     ROOT / "docs" / "milestones" / "M5_CORECLR_EXECUTION.md",
+    ROOT / "docs" / "milestones" / "M5_5_AUTHORING_EXPERIENCE.md",
 ]
 
 
@@ -94,6 +97,24 @@ def main() -> int:
         require(document.is_file(), f"Missing document: {document}")
     checks.append("architecture and milestone documents exist")
 
+    authoring_source = ROOT / "samples" / "Authoring" / "DamagePolicy.cs"
+    authoring_artifact = (
+        ROOT / "prototype" / "visual-editor" / "data" / "damage-policy.asset.json"
+    )
+    require(authoring_source.is_file(), "Missing Script Asset authoring sample")
+    require(authoring_artifact.is_file(), "Missing visual-editor Declaration IR artifact")
+    with authoring_artifact.open("r", encoding="utf-8") as handle:
+        declaration_document = json.load(handle)
+    require(
+        declaration_document["schemaVersion"] == "unifiedscript.script-asset/v0.1"
+        and len(declaration_document["assets"]) == 1
+        and declaration_document["assets"][0]["assetPath"] == "Combat/DamagePolicy"
+        and len(declaration_document["assets"][0]["states"]) == 3
+        and len(declaration_document["assets"][0]["functions"]) == 1,
+        "Authoring Declaration IR sample is inconsistent",
+    )
+    checks.append("Script Asset sample and Declaration IR artifact are consistent")
+
     require((ROOT / "samples" / "DoorController.cs").is_file(), "Missing vertical-slice sample")
     runtime_source_path = ROOT / "samples" / "Execution" / "RuntimeRules.cs"
     require(runtime_source_path.is_file(), "Missing CoreCLR execution sample")
@@ -108,6 +129,11 @@ def main() -> int:
         and 'args[0] is "emit" or "emit-files"' in cli_source
         and "ExecutionJson.Serialize(result)" in cli_source,
         "CoreCLR execution sample or CLI command is inconsistent",
+    )
+    require(
+        "ScriptAssetJson.Serialize(result.ScriptAssets)" in cli_source
+        and "ScriptAssetJson.Serialize(result.Image.ScriptAssets)" in cli_source,
+        "CLI analysis/emission does not publish Declaration IR",
     )
     require(
         (ROOT / "samples" / "MultiFile" / "GameplayApi.cs").is_file()

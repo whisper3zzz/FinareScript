@@ -170,14 +170,14 @@ Outcome: text and graph versions compile to and execute the same IL.
 Outcome: state and behavior are text/visual/AI-authorable without Blueprint-only
 declarations or one-node-per-expression graphs.
 
-- [ ] backend-neutral Script Asset and Declaration IR
-- [ ] stable state/property identity, type, default, and exposure metadata
+- [x] backend-neutral Script Asset and Declaration IR v0.1
+- [x] stable state/property identity, type, default, and exposure metadata
 - [ ] declaration semantic patching and transactional C# round trip
 - [ ] compact structure regions with inline ordinary expressions
 - [ ] actual Declaration/Graph artifacts connected to the editor prototype
 - [ ] coordinate-free AI outline and typed patch preview
 - [ ] live CoreCLR pause/locals painted on real semantic statement cards
-- [ ] sample workflow with zero required Blueprint variables
+- [x] sample source workflow with zero required Blueprint variables
 
 ## M6 — Unreal Engine adapter
 

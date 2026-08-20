@@ -1,0 +1,120 @@
+{
+  "schemaVersion": "unifiedscript.script-asset/v0.1",
+  "sourceCompilationId": "us_9c565600166a847b78177c5c25c03ba5",
+  "semanticConfigurationId": "us_02f5fe78d296e2d4fe04bc50ca71acf1",
+  "assets": [
+    {
+      "id": "us_ec99464009da0bae5c25014c050902b7",
+      "qualifiedName": "Game.Combat.DamagePolicy",
+      "assetPath": "Combat/DamagePolicy",
+      "span": {
+        "filePath": "samples/Authoring/DamagePolicy.cs",
+        "start": {
+          "line": 6,
+          "column": 1
+        },
+        "end": {
+          "line": 30,
+          "column": 2
+        }
+      },
+      "states": [
+        {
+          "id": "us_8bc5970ccb62f81bbb2d7e0f7185eea4",
+          "name": "BaseDamage",
+          "typeDisplayName": "int",
+          "typeMetadataName": "System.Int32",
+          "typeKind": "integer",
+          "defaultValue": 20,
+          "span": {
+            "filePath": "samples/Authoring/DamagePolicy.cs",
+            "start": {
+              "line": 9,
+              "column": 5
+            },
+            "end": {
+              "line": 10,
+              "column": 46
+            }
+          },
+          "exposure": {
+            "instanceEditable": true,
+            "saveGame": false,
+            "replicated": false,
+            "category": "Damage"
+          }
+        },
+        {
+          "id": "us_934c08ffff55696230b33faa88d27af9",
+          "name": "CriticalMultiplier",
+          "typeDisplayName": "float",
+          "typeMetadataName": "System.Single",
+          "typeKind": "floatingPoint",
+          "defaultValue": 2,
+          "span": {
+            "filePath": "samples/Authoring/DamagePolicy.cs",
+            "start": {
+              "line": 12,
+              "column": 5
+            },
+            "end": {
+              "line": 13,
+              "column": 58
+            }
+          },
+          "exposure": {
+            "instanceEditable": true,
+            "saveGame": false,
+            "replicated": false,
+            "category": "Damage"
+          }
+        },
+        {
+          "id": "us_466fab9c566c7f4284b97d4bbb08fa60",
+          "name": "MaxDamage",
+          "typeDisplayName": "int",
+          "typeMetadataName": "System.Int32",
+          "typeKind": "integer",
+          "defaultValue": 999,
+          "span": {
+            "filePath": "samples/Authoring/DamagePolicy.cs",
+            "start": {
+              "line": 15,
+              "column": 5
+            },
+            "end": {
+              "line": 16,
+              "column": 46
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": true,
+            "replicated": false
+          }
+        }
+      ],
+      "functions": [
+        {
+          "id": "us_f8ca585f8cc118ccb88836645e63068b",
+          "name": "ApplyDamage",
+          "qualifiedName": "Game.Combat.DamagePolicy.ApplyDamage(System.Int32,System.Boolean)",
+          "returnTypeMetadataName": "System.Single",
+          "isStatic": false,
+          "parameters": [
+            {
+              "id": "us_ff55e3121a27108b2214b7fed6afb084",
+              "name": "incomingDamage",
+              "typeMetadataName": "System.Int32"
+            },
+            {
+              "id": "us_e2214bcbbd20572d190c3e2f9fa2cb30",
+              "name": "critical",
+              "typeMetadataName": "System.Boolean"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

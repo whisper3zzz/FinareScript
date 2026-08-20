@@ -14,6 +14,7 @@ public sealed record CSharpProgramImage(
     CSharpProgramSourceMap SourceMap,
     HirCompilationUnit Hir,
     BoundCompilation Semantics,
+    ScriptAssetDocument ScriptAssets,
     IReadOnlyList<IdentitySidecarDocument> IdentitySidecars);
 
 public sealed record CSharpProgramEmitResult(
@@ -37,7 +38,8 @@ public sealed class CSharpProgramEmitter
     {
         ArgumentNullException.ThrowIfNull(request);
         CSharpAnalysisResult analysis = semanticPipeline.Analyze(request);
-        if (!analysis.Succeeded || analysis.Hir is null || analysis.Semantics is null)
+        if (!analysis.Succeeded || analysis.Hir is null || analysis.Semantics is null ||
+            analysis.ScriptAssets is null)
         {
             return new CSharpProgramEmitResult(null, analysis.Diagnostics);
         }
@@ -103,6 +105,7 @@ public sealed class CSharpProgramEmitter
                 sourceMap,
                 analysis.Hir,
                 analysis.Semantics,
+                analysis.ScriptAssets,
                 analysis.IdentitySidecars),
             diagnostics);
     }

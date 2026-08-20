@@ -104,7 +104,8 @@ internal static class Program
 
         if (!result.Succeeded || result.Image is null)
         {
-            Console.Error.WriteLine("Emission failed; PE, PDB, and source-map artifacts were not emitted.");
+            Console.Error.WriteLine(
+                "Emission failed; PE, PDB, source-map, and declaration artifacts were not emitted.");
             return 2;
         }
 
@@ -114,6 +115,7 @@ internal static class Program
         string assemblyPath = Path.Combine(outputDirectory, $"{baseName}.dll");
         string pdbPath = Path.Combine(outputDirectory, $"{baseName}.pdb");
         string sourceMapPath = Path.Combine(outputDirectory, $"{baseName}.sourcemap.json");
+        string assetPath = Path.Combine(outputDirectory, $"{baseName}.asset.json");
         var outputs = new List<OutputFile>
         {
             new OutputFile(assemblyPath, result.Image.PortableExecutable),
@@ -121,6 +123,9 @@ internal static class Program
             new OutputFile(
                 sourceMapPath,
                 CSharpProgramSourceMapJson.Serialize(result.Image.SourceMap) + "\n"),
+            new OutputFile(
+                assetPath,
+                ScriptAssetJson.Serialize(result.Image.ScriptAssets) + "\n"),
         };
         foreach (IdentitySidecarDocument sidecar in result.Image.IdentitySidecars)
         {
@@ -272,9 +277,11 @@ internal static class Program
             Console.Error.WriteLine(FormatDiagnostic(diagnostic));
         }
 
-        if (!result.Succeeded || result.Hir is null || result.Semantics is null)
+        if (!result.Succeeded || result.Hir is null || result.Semantics is null ||
+            result.ScriptAssets is null)
         {
-            Console.Error.WriteLine("Analysis failed; HIR, semantics, and graph artifacts were not emitted.");
+            Console.Error.WriteLine(
+                "Analysis failed; declaration, HIR, semantics, and graph artifacts were not emitted.");
             return 2;
         }
 
@@ -282,6 +289,7 @@ internal static class Program
         string hirJson = HirJson.Serialize(HirDocument.Create(result.Hir));
         string semanticJson = SemanticJson.Serialize(result.Semantics);
         string graphJson = GraphJson.Serialize(graph);
+        string assetJson = ScriptAssetJson.Serialize(result.ScriptAssets);
         if (options.OutputDirectory is null)
         {
             Console.WriteLine(graphJson);
@@ -294,12 +302,15 @@ internal static class Program
         string hirPath = Path.Combine(fullOutputDirectory, $"{baseName}.hir.json");
         string semanticPath = Path.Combine(fullOutputDirectory, $"{baseName}.semantics.json");
         string graphPath = Path.Combine(fullOutputDirectory, $"{baseName}.graph.json");
+        string assetPath = Path.Combine(fullOutputDirectory, $"{baseName}.asset.json");
         File.WriteAllText(hirPath, hirJson + "\n");
         File.WriteAllText(semanticPath, semanticJson + "\n");
         File.WriteAllText(graphPath, graphJson + "\n");
+        File.WriteAllText(assetPath, assetJson + "\n");
         Console.WriteLine(hirPath);
         Console.WriteLine(semanticPath);
         Console.WriteLine(graphPath);
+        Console.WriteLine(assetPath);
         foreach (IdentitySidecarDocument sidecar in result.IdentitySidecars)
         {
             string identityPath = Path.Combine(

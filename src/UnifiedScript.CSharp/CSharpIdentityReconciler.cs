@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 using UnifiedScript.Core;
 using UnifiedScript.Core.Hir;
@@ -84,7 +85,14 @@ public sealed class CSharpIdentityReconciler
         return new IdentityReconciliationResult(
             HirIdentityRewriter.Rewrite(compilation, rewriteMap),
             sidecar,
-            diagnostics);
+            diagnostics)
+        {
+            DeclarationIdentities = candidates
+                .Where(static candidate => candidate.Kind == "state")
+                .ToDictionary(
+                    static candidate => candidate.Node.Id,
+                    candidate => rewriteMap[candidate.Node.Id]),
+        };
     }
 
     private static void ApplyPins(
@@ -280,6 +288,30 @@ public sealed class CSharpIdentityReconciler
         SyntaxToken[] tokens = syntaxTree.GetRoot().DescendantTokens().ToArray();
         var fingerprintCache = new Dictionary<HirNode, string>(ReferenceEqualityComparer.Instance);
         var candidates = new List<IdentityCandidate>();
+        foreach (TypeDeclarationSyntax typeSyntax in syntaxTree.GetRoot()
+                     .DescendantNodes()
+                     .OfType<TypeDeclarationSyntax>())
+        {
+            string qualifiedTypeName = GetQualifiedTypeName(typeSyntax);
+            bool ownsProperties = HasAttribute(typeSyntax.AttributeLists, "ScriptAsset");
+            string typeParent = GetDigest($"scriptAsset|{qualifiedTypeName}");
+            foreach (PropertyDeclarationSyntax property in typeSyntax.Members
+                         .OfType<PropertyDeclarationSyntax>()
+                         .Where(property =>
+                             !property.Modifiers.Any(static modifier => modifier.ValueText == "static") &&
+                             (ownsProperties || HasAttribute(property.AttributeLists, "Expose"))))
+            {
+                var state = new HirStateDeclaration(
+                    CSharpSemanticIds.ForSymbol(
+                        "state",
+                        $"{qualifiedTypeName}.{property.Identifier.ValueText}"),
+                    RoslynSourceSpan.FromNode(property, source.LogicalPath),
+                    property.Identifier.ValueText,
+                    property.Type.ToString());
+                Add(state, qualifiedTypeName, "state", typeParent);
+            }
+        }
+
         foreach (HirTypeDeclaration type in compilation.Types)
         {
             foreach (HirMethodDeclaration method in type.Methods)
@@ -500,6 +532,7 @@ public sealed class CSharpIdentityReconciler
 
     private static string GetShapeKey(HirNode node) => node switch
     {
+        HirStateDeclaration state => $"state|{state.TypeName}",
         HirParameter parameter => $"parameter|{parameter.Name}|{parameter.TypeName}",
         HirBlockStatement => "block",
         HirVariableDeclarationStatement variable => $"variable|{variable.Name}|{variable.TypeName}",
@@ -537,6 +570,7 @@ public sealed class CSharpIdentityReconciler
 
     private static string GetKind(HirNode node) => node switch
     {
+        HirStateDeclaration => "state",
         HirParameter => "parameter",
         HirBlockStatement => "block",
         HirVariableDeclarationStatement => "variableDeclaration",
@@ -606,6 +640,30 @@ public sealed class CSharpIdentityReconciler
     {
         byte[] digest = SHA256.HashData(Encoding.UTF8.GetBytes(value));
         return $"sha256:{Convert.ToHexString(digest).ToLowerInvariant()}";
+    }
+
+    private static bool HasAttribute(SyntaxList<AttributeListSyntax> lists, string shortName) => lists
+        .SelectMany(static list => list.Attributes)
+        .Any(attribute => attribute.Name.ToString() is var name &&
+            (name == shortName || name == $"{shortName}Attribute" ||
+                name.EndsWith($".{shortName}", StringComparison.Ordinal) ||
+                name.EndsWith($".{shortName}Attribute", StringComparison.Ordinal)));
+
+    private static string GetQualifiedTypeName(TypeDeclarationSyntax type)
+    {
+        string @namespace = string.Join(
+            ".",
+            type.Ancestors()
+                .OfType<BaseNamespaceDeclarationSyntax>()
+                .Reverse()
+                .Select(static declaration => declaration.Name.ToString()));
+        string nestedName = string.Join(
+            ".",
+            type.AncestorsAndSelf()
+                .OfType<TypeDeclarationSyntax>()
+                .Reverse()
+                .Select(static declaration => declaration.Identifier.ValueText));
+        return string.IsNullOrEmpty(@namespace) ? nestedName : $"{@namespace}.{nestedName}";
     }
 
     private sealed class IdentityCandidate(

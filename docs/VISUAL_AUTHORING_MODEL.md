@@ -6,15 +6,15 @@ The compiler/runtime foundation proves that text, HIR, Graph, source maps, and
 CoreCLR execution can share semantic identity. It does not yet constitute a
 visual authoring product.
 
-The current `UnifiedScript.Graph` artifact projects executable method bodies.
-It does not make type-level script state, defaults, exposure metadata, or asset
-configuration first-class. A user could therefore still be forced to declare
-state in a Blueprint or another engine-owned binary surface even if all method
-logic lived in UnifiedScript. That would preserve the worst Blueprint/AI
-failure mode and is not an acceptable product boundary.
+`UnifiedScript.Graph` projects executable method bodies. M5.5.1 now complements
+it with `unifiedscript.script-asset/v0.1`, making type-level state, defaults,
+exposure metadata, asset paths, and Visual signatures first-class. The first
+prototype connection consumes that compiler artifact, so those declarations no
+longer require a Blueprint or another engine-owned binary surface.
 
-Before UE binding, UnifiedScript needs a shared Declaration IR and a real
-authoring vertical slice.
+The remaining product work is to carry actual editor edits back through typed
+declaration patches and to connect real Graph/debug artifacts to the behavior
+surface.
 
 ## The visual editor is not a code sentence renderer
 
@@ -38,7 +38,7 @@ reserved for non-local dependencies, not used as punctuation.
 
 ## Declaration IR
 
-The next shared model should represent a script asset independently of UE,
+The implemented v0.1 model represents a script asset independently of UE,
 Roslyn, and any editor layout:
 
 ```text
@@ -96,7 +96,7 @@ AI receives a coordinate-free semantic outline such as:
 state BaseDamage: int = 20
   expose: instanceEditable
 
-function ApplyDamage(incomingDamage: int, critical: bool) -> int
+function ApplyDamage(incomingDamage: int, critical: bool) -> float
   let scaled = incomingDamage * BaseDamage
   when critical
     scaled *= CriticalMultiplier
@@ -129,8 +129,10 @@ types, and preconditions; it does not manipulate pixels or Blueprint nodes.
 ## Experience prototype
 
 The dependency-free prototype in `prototype/visual-editor` demonstrates the
-intended information density and interactions. It includes declaration editing,
-Structure/Split/Code views, coordinate-free AI outline and patch preview, and a
-debug-pause presentation. It is deliberately marked as a product-model
-prototype: method-body Graph and live CoreCLR debugging exist in the backend,
-but Declaration IR and UI-to-compiler transport are not connected yet.
+intended information density and interactions. Its declaration list, inspector,
+canonical declaration preview, AI declaration outline, and IDs load the real
+Declaration IR artifact generated from `samples/Authoring/DamagePolicy.cs`. It
+also includes Structure/Split/Code views, body outline/patch preview, and a
+debug-pause presentation. UI-to-compiler declaration patch transport and the
+real Graph/live-debug connections remain explicit boundaries rather than being
+simulated as completed backend work.

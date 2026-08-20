@@ -1,10 +1,11 @@
 const state = {
   view: 'structure',
   zoom: 1,
+  artifactLoaded: false,
   selected: { kind: 'state', id: 'baseDamage' },
   declarations: [
-    { id: 'baseDamage', name: 'BaseDamage', type: 'int', defaultValue: '20', editable: true, save: false, replicated: false, semanticId: 'us_8ad1c44ff31210aaec986daa117f7f2e' },
-    { id: 'criticalMultiplier', name: 'CriticalMultiplier', type: 'float', defaultValue: '2.0', editable: true, save: false, replicated: false, semanticId: 'us_a738a8a6775e38c5a3fac2f1470b8c22' },
+    { id: 'baseDamage', name: 'BaseDamage', type: 'int', defaultValue: '20', editable: true, save: false, replicated: false, category: 'Damage', semanticId: 'us_8ad1c44ff31210aaec986daa117f7f2e' },
+    { id: 'criticalMultiplier', name: 'CriticalMultiplier', type: 'float', defaultValue: '2.0', editable: true, save: false, replicated: false, category: 'Damage', semanticId: 'us_a738a8a6775e38c5a3fac2f1470b8c22' },
     { id: 'maxDamage', name: 'MaxDamage', type: 'int', defaultValue: '999', editable: false, save: true, replicated: false, semanticId: 'us_b35294ef19765cd35e1388fc4ff15de3' },
   ],
   nodes: {
@@ -42,11 +43,80 @@ function semanticShort(value) {
   return `${value.slice(0, 10)}…${value.slice(-4)}`;
 }
 
+function declarationDomId(name) {
+  return `${name.charAt(0).toLowerCase()}${name.slice(1)}`;
+}
+
+function artifactDefaultText(item) {
+  if (item.typeKind === 'floatingPoint' && Number.isInteger(item.defaultValue)) return `${item.defaultValue}.0`;
+  return String(item.defaultValue);
+}
+
+function renderDeclarationList() {
+  const list = document.getElementById('stateList');
+  list.replaceChildren();
+  state.declarations.forEach(item => {
+    const button = document.createElement('button');
+    button.className = 'declaration-item';
+    button.type = 'button';
+    button.dataset.kind = 'state';
+    button.dataset.id = item.id;
+    button.innerHTML = `<span class="declaration-glyph state-glyph">S</span><span class="declaration-copy"><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.type)} · ${escapeHtml(item.defaultValue)}</small></span>${item.editable ? '<span class="exposure-dot" title="Instance Editable"></span>' : item.save ? '<span class="save-dot" title="SaveGame"></span>' : '<span></span>'}`;
+    button.addEventListener('click', () => selectDeclaration(item.id));
+    list.appendChild(button);
+  });
+  document.getElementById('stateCount').textContent = String(state.declarations.length);
+}
+
+function synchronizeStateCodeLines() {
+  const lines = [...document.querySelectorAll('.state-line')];
+  state.declarations.forEach((item, index) => {
+    const line = lines[index];
+    if (!line) return;
+    line.dataset.stateId = item.id;
+    updateStateCodeLine(item);
+  });
+}
+
+async function loadDeclarationArtifact() {
+  try {
+    const response = await fetch('data/damage-policy.asset.json', { cache: 'no-store' });
+    if (!response.ok) throw new Error(`Declaration artifact returned ${response.status}`);
+    const artifact = await response.json();
+    if (artifact.schemaVersion !== 'unifiedscript.script-asset/v0.1' || artifact.assets?.length !== 1) {
+      throw new Error('Unsupported Declaration IR artifact');
+    }
+
+    const asset = artifact.assets[0];
+    state.declarations = asset.states.map(item => ({
+      id: declarationDomId(item.name),
+      name: item.name,
+      type: item.typeDisplayName,
+      typeKind: item.typeKind,
+      defaultValue: artifactDefaultText(item),
+      editable: item.exposure.instanceEditable,
+      save: item.exposure.saveGame,
+      replicated: item.exposure.replicated,
+      category: item.exposure.category || '',
+      semanticId: item.id,
+    }));
+    state.artifactLoaded = true;
+    renderDeclarationList();
+    synchronizeStateCodeLines();
+    renderAiDeclarations();
+    selectDeclaration(state.declarations[0].id, false);
+    document.querySelector('.sync-status strong').textContent = 'IR v0.1';
+  } catch (error) {
+    console.warn('Falling back to embedded prototype declarations.', error);
+  }
+}
+
 function exposureText(item) {
   const values = [];
   if (item.editable) values.push('InstanceEditable = true');
   if (item.save) values.push('SaveGame = true');
   if (item.replicated) values.push('Replicated = true');
+  if (item.category) values.push(`Category = "${item.category}"`);
   return values.length ? `[Expose(${values.join(', ')})]\n` : '';
 }
 
@@ -65,6 +135,7 @@ function codeDeclarationMarkup(item) {
   if (item.editable) flags.push('InstanceEditable = <i>true</i>');
   if (item.save) flags.push('SaveGame = <i>true</i>');
   if (item.replicated) flags.push('Replicated = <i>true</i>');
+  if (item.category) flags.push(`Category = <s>"${escapeHtml(item.category)}"</s>`);
   const attribute = flags.length ? `[<u>Expose</u>(${flags.join(', ')})] ` : '';
   return `    ${attribute}<i>public ${escapeHtml(item.type)}</i> ${escapeHtml(item.name)} { <i>get</i>; <i>set</i>; } = <n>${escapeHtml(normalizedDefault(item))}</n>;`;
 }
@@ -128,6 +199,7 @@ function renderStateInspector(item) {
         <label class="field-label">Type<select id="propertyType">${['int','float','bool','string'].map(type => `<option${type === item.type ? ' selected' : ''}>${type}</option>`).join('')}</select></label>
         <label class="field-label">Default<input id="propertyDefault" type="text" value="${escapeHtml(item.defaultValue)}"></label>
       </div>
+      <label class="field-label">Category<input id="propertyCategory" type="text" value="${escapeHtml(item.category || '')}" placeholder="Optional"></label>
     </section>
     <section class="inspector-section">
       <h3>ENGINE EXPOSURE</h3>
@@ -144,7 +216,7 @@ function renderStateInspector(item) {
       <button id="semanticId" class="identity-value" type="button" title="复制语义 ID">${semanticShort(item.semanticId)}</button>
       <div class="identity-facts"><span>TEXT <b>✓</b></span><span>VISUAL <b>✓</b></span><span>AI <b>✓</b></span></div>
     </section>
-    <div class="prototype-warning"><strong>vNEXT TARGET</strong><p>此声明交互是产品模型原型；当前编译器尚未把类型级状态纳入统一 Declaration IR。</p></div>`;
+    <div class="prototype-warning"><strong>${state.artifactLoaded ? 'LIVE DECLARATION IR' : 'EMBEDDED FALLBACK'}</strong><p>${state.artifactLoaded ? '名称、类型、默认值、暴露策略和 Semantic ID 来自编译器生成的严格 asset.json。' : '本地服务器未加载真实产物，当前显示内嵌演示数据。'}</p></div>`;
   bindStateInspector(item);
 }
 
@@ -156,6 +228,7 @@ function bindStateInspector(item) {
   const name = document.getElementById('propertyName');
   const type = document.getElementById('propertyType');
   const defaultValue = document.getElementById('propertyDefault');
+  const category = document.getElementById('propertyCategory');
   const editable = document.getElementById('toggleEditable');
   const save = document.getElementById('toggleSave');
   const replicated = document.getElementById('toggleReplicated');
@@ -163,6 +236,7 @@ function bindStateInspector(item) {
     item.name = name.value || item.name;
     item.type = type.value;
     item.defaultValue = defaultValue.value;
+    item.category = category.value.trim();
     item.editable = editable.checked;
     item.save = save.checked;
     item.replicated = replicated.checked;
@@ -176,7 +250,7 @@ function bindStateInspector(item) {
     updateStateCodeLine(item);
     renderAiDeclarations();
   };
-  [name, type, defaultValue, editable, save, replicated].forEach(control => control.addEventListener('input', update));
+  [name, type, defaultValue, category, editable, save, replicated].forEach(control => control.addEventListener('input', update));
   document.getElementById('semanticId').addEventListener('click', () => copyText(item.semanticId, 'Semantic ID copied'));
 }
 
@@ -378,3 +452,4 @@ document.addEventListener('keydown', event => {
 document.getElementById('copyCodeButton').addEventListener('click', () => copyText(document.getElementById('codeEditor').innerText, 'Canonical text copied'));
 
 selectDeclaration('baseDamage', false);
+loadDeclarationArtifact();

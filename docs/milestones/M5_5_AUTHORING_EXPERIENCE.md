@@ -28,6 +28,38 @@ model that still omits state declarations.
 - existing CoreCLR debug pause painted onto real visual statement cards
 - a sample asset with zero Blueprint-only declarations
 
+## M5.5.1 completed — Declaration IR foundation
+
+The first connected slice is now implemented:
+
+1. `[ScriptAsset]` defines an engine-neutral asset path in canonical C#.
+2. Script-asset auto-properties lower to state declarations; `[Expose]` carries
+   instance-editable, save-game, replicated, and category policy.
+3. Scalar and enum types plus explicit constant defaults are bound through
+   Roslyn and emitted as typed JSON values.
+4. Script Assets, state, Visual functions, and parameters share existing
+   Semantic IDs and semantic-configuration/source-compilation preconditions.
+5. Strict `unifiedscript.script-asset/v0.1` JSON rejects unknown fields,
+   duplicates, invalid spans/paths, and default/type mismatches, then emits a
+   deterministic order.
+6. State properties join optional `.usids` reconciliation, preserving identity
+   across formatting and safe renames while retaining ambiguity/tombstone rules.
+7. `analyze`/`analyze-files --out` emit `.asset.json` next to HIR, semantics,
+   and Graph artifacts; `emit`/`emit-files` retain and write the same document
+   with the executable program image.
+8. `samples/Authoring/DamagePolicy.cs` owns all gameplay declarations in text;
+   no Blueprint-only variable is required.
+9. The visual prototype loads the generated Declaration IR and uses it for the
+   state list, inspector, canonical text, AI declaration outline, and IDs. It
+   visibly falls back only when the artifact cannot be fetched.
+10. The full 347-test suite, zero-warning build, formatting check, repository
+    validator, exact analyze/emit artifact comparison, and browser interaction
+    regression pass.
+
+The next M5.5 slice is declaration patching and transactional Roslyn write-back.
+After that, the prototype must consume its real Graph artifact and live debug
+transport instead of behavior/debug fixtures.
+
 ## Deliberate limits
 
 The first slice does not bind Unreal reflection, cook assets, or generate

@@ -25,11 +25,16 @@ Try these interactions:
 5. Click `DEBUG RUN`; execution stops on the `Math.Clamp` statement breakpoint
    and exposes a small live-locals strip.
 
-## Honest boundary
+## Current integration boundary
 
-The existing compiler owns method-body HIR/Graph, semantic patching, CoreCLR
-emission, reload-safe breakpoints, and cooperative live debugging. This UI is
-not yet connected to those services. More importantly, type-level script state,
-defaults, and UE exposure metadata are not yet first-class in the shared HIR.
-The prototype is intended to validate that Declaration IR and the non-spaghetti
-editing model before implementing that backend slice.
+The declaration list and inspector load
+`data/damage-policy.asset.json`, a real `unifiedscript.script-asset/v0.1`
+artifact generated from `samples/Authoring/DamagePolicy.cs`. Names, types,
+defaults, exposure flags, and Semantic IDs therefore come from the compiler
+pipeline rather than embedded UI mock data. If the artifact cannot be fetched,
+the prototype visibly falls back to its embedded demonstration declarations.
+
+Editing still mutates browser state only. Declaration semantic patches and
+transactional C# write-back are the next M5.5 slice. The structure cards and
+debug animation also remain experience fixtures until the real Graph artifact
+and CoreCLR debug protocol are connected.

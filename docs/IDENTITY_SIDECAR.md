@@ -58,11 +58,12 @@ previous sidecar in this order:
    context, and anchor evidence; require one best candidate.
 4. Match a unique shallow shape within an owner/kind/role group.
 5. Allocate a cryptographically random `SemanticId` for every unmatched new
-   semantic node.
+   semantic node or state declaration.
 6. Move unmatched old entries to tombstones rather than reusing their IDs.
 
 Structural fingerprints exclude trivia and absolute positions. They include HIR
-shape plus child structure. Shallow shape fingerprints include execution-
+shape plus child structure; Script Asset state candidates use their owning type
+and declared type shape. Shallow shape fingerprints include execution-
 relevant attributes such as operators, names, types, argument counts, and
 literal text. Parent fingerprints and four normalized Roslyn tokens on each
 side add local evidence without making comments or whitespace significant.
@@ -106,12 +107,15 @@ must never be assigned to a different node.
 ## Implemented slice
 
 The sidecar is now implemented as an opt-in input on each C# source document.
-It covers parameters, blocks, statements, and expressions; declarations retain
-their deterministic symbol IDs. Unchanged source produces a byte-identical
+It covers Script Asset state properties, parameters, blocks, statements, and
+expressions. Type and method declarations retain deterministic symbol IDs.
+Unchanged source produces a byte-identical
 sidecar. Formatting and comment changes reconcile persistent IDs, deleted nodes
 become tombstones, and ambiguous evidence emits `UVS3101` while allocating a
 fresh ID rather than guessing. Invalid explicit pins emit `UVS3102` and stop
-analysis.
+analysis. State property candidates use `kind: "state"`; their owner/type shape
+plus parent, context, and anchor evidence preserves IDs across safe renames and
+refuses ambiguous same-shape guesses under the same `UVS3101` rule.
 
 Graph-authored replacements attach Roslyn annotations to proposed syntax nodes
 and convert them into explicit identity pins. Changing `1` to `100` therefore
@@ -161,7 +165,7 @@ existing outer local; that assignment receives normal reconciled statement and
 expression identities without creating a new local handle. Broader
 expression/control-flow synthesis, generated-parent input handles and broader
 cross-expression rewiring,
-declaration rename reconciliation, multi-file CLI patch commits, bounded
+broader declaration patch reconciliation, multi-file CLI patch commits, bounded
 tombstone compaction, and automatic `.usgraph` placement remain future work.
 
 Nested-block insertion additionally pins every unaffected live syntax node in
