@@ -153,7 +153,8 @@ Outcome: text and graph versions compile to and execute the same IL.
 - [x] reloadable collectible development assembly context
 - [x] backend-neutral invocation and execution-result v0.1 contract
 - [x] text-authored versus visual-plan-authored execution equivalence proof
-- method/node source map
+- [x] deterministic method/node-to-MethodDef/IL/PDB source map v0.1
+- [x] PE/PDB/source-map `emit` and `emit-files` CLI artifact commands
 - shared breakpoint identity
 - async invocation and cancellation/time-budget contract
 

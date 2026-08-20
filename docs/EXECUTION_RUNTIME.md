@@ -128,7 +128,8 @@ Executing source runs trusted development code inside the CLI process. CPU,
 memory, filesystem, network, native interop, API allow/deny policy, and process
 isolation are not enforced by M5.1.
 
-The next execution slices should add semantic-ID-to-IL/PDB sequence-point
-mapping, cached program images, async invocation, engine-owned receivers,
-cancellation/time budgets, and debugger/breakpoint identity. UE embedding must
+M5.2 now adds semantic-ID-to-MethodDef/IL/PDB sequence-point mapping; see
+[SOURCE_MAP.md](SOURCE_MAP.md). The next execution slices should add cached
+program images, reload generations, async invocation, engine-owned receivers,
+cancellation/time budgets, and debugger/breakpoint control. UE embedding must
 consume this contract rather than bypassing it with a separate scripting VM.

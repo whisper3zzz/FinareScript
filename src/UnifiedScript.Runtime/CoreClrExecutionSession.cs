@@ -31,6 +31,8 @@ public sealed class CoreClrExecutionSession : IDisposable
 
     public BoundCompilation Semantics => image.Semantics;
 
+    public CSharpProgramSourceMap SourceMap => image.SourceMap;
+
     public SemanticId ResolveVisualMethodId(string qualifiedMethodName)
     {
         lock (gate)

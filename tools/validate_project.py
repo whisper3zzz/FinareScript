@@ -48,6 +48,7 @@ DOCUMENTS = [
     ROOT / "docs" / "NULL_CONDITIONAL_ACCESS.md",
     ROOT / "docs" / "PATCH_PLAN.md",
     ROOT / "docs" / "EXECUTION_RUNTIME.md",
+    ROOT / "docs" / "SOURCE_MAP.md",
     ROOT / "docs" / "ROADMAP.md",
     ROOT / "docs" / "milestones" / "M1_ROSLYN_GRAPH_FOUNDATION.md",
     ROOT / "docs" / "milestones" / "M2_SEMANTIC_BINDING.md",
@@ -103,6 +104,7 @@ def main() -> int:
         "LastNonNegative(IEnumerable<int> values, int seed)" in runtime_source
         and "return Math.Abs(value);" in runtime_source
         and 'args[0] == "execute"' in cli_source
+        and 'args[0] is "emit" or "emit-files"' in cli_source
         and "ExecutionJson.Serialize(result)" in cli_source,
         "CoreCLR execution sample or CLI command is inconsistent",
     )

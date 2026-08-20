@@ -183,6 +183,10 @@ public sealed class CoreClrExecutionHostTests
         using CoreClrExecutionSession session = CreateSession(source);
         Core.SemanticId methodId = session.ResolveVisualMethodId(
             "Tests.Execution.AsyncRules.Echo");
+        CSharpMethodSourceMap sourceMap = Assert.Single(session.SourceMap.Methods);
+        Assert.Null(sourceMap.EntryIlOffset);
+        Assert.Empty(sourceMap.SequencePoints);
+        Assert.Empty(sourceMap.Nodes);
 
         ExecutionInvocationException exception = Assert.Throws<ExecutionInvocationException>(() =>
             session.Execute(new ExecutionInvocation(

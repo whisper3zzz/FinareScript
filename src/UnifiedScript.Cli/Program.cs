@@ -64,7 +64,68 @@ internal static class Program
             return RunExecute(args);
         }
 
+        if (args.Count > 0 && args[0] is "emit" or "emit-files")
+        {
+            return RunEmit(args);
+        }
+
         return RunAnalyze(args);
+    }
+
+    private static int RunEmit(IReadOnlyList<string> args)
+    {
+        if (!TryParseCompilationArguments(args, out AnalyzeOptions? options) ||
+            string.IsNullOrWhiteSpace(options?.OutputDirectory))
+        {
+            PrintUsage();
+            return 64;
+        }
+
+        foreach (string inputPath in options.InputPaths)
+        {
+            if (!File.Exists(inputPath))
+            {
+                Console.Error.WriteLine($"Input file does not exist: {inputPath}");
+                return 66;
+            }
+        }
+
+        CSharpSourceDocument[] sources = LoadSources(options.InputPaths, options.IdentityPaths);
+        var request = new CSharpCompilationRequest(
+            options.AssemblyName,
+            sources,
+            options.ReferencePaths,
+            LoadEffectCatalog(options.EffectCatalogPath));
+        CSharpProgramEmitResult result = new CSharpProgramEmitter().Emit(request);
+        foreach (UnifiedDiagnostic diagnostic in result.Diagnostics)
+        {
+            Console.Error.WriteLine(FormatDiagnostic(diagnostic));
+        }
+
+        if (!result.Succeeded || result.Image is null)
+        {
+            Console.Error.WriteLine("Emission failed; PE, PDB, and source-map artifacts were not emitted.");
+            return 2;
+        }
+
+        string outputDirectory = Path.GetFullPath(options.OutputDirectory);
+        Directory.CreateDirectory(outputDirectory);
+        string baseName = GetOutputBaseName(options);
+        string assemblyPath = Path.Combine(outputDirectory, $"{baseName}.dll");
+        string pdbPath = Path.Combine(outputDirectory, $"{baseName}.pdb");
+        string sourceMapPath = Path.Combine(outputDirectory, $"{baseName}.sourcemap.json");
+        WriteTransactionally(
+        [
+            new OutputFile(assemblyPath, result.Image.PortableExecutable),
+            new OutputFile(pdbPath, result.Image.PortablePdb),
+            new OutputFile(
+                sourceMapPath,
+                CSharpProgramSourceMapJson.Serialize(result.Image.SourceMap) + "\n"),
+        ]);
+        Console.WriteLine(assemblyPath);
+        Console.WriteLine(pdbPath);
+        Console.WriteLine(sourceMapPath);
+        return 0;
     }
 
     private static int RunExecute(IReadOnlyList<string> args)
@@ -172,7 +233,7 @@ internal static class Program
 
     private static int RunAnalyze(IReadOnlyList<string> args)
     {
-        if (!TryParseAnalyzeArguments(args, out AnalyzeOptions? options))
+        if (!TryParseCompilationArguments(args, out AnalyzeOptions? options))
         {
             PrintUsage();
             return 64;
@@ -466,10 +527,13 @@ internal static class Program
         return catalog.WithOverrides(document.Rules);
     }
 
-    private static bool TryParseAnalyzeArguments(IReadOnlyList<string> args, out AnalyzeOptions? options)
+    private static bool TryParseCompilationArguments(
+        IReadOnlyList<string> args,
+        out AnalyzeOptions? options)
     {
         options = null;
-        if (args.Count < 2 || args[0] is not ("analyze" or "analyze-files"))
+        if (args.Count < 2 ||
+            args[0] is not ("analyze" or "analyze-files" or "emit" or "emit-files"))
         {
             return false;
         }
@@ -482,7 +546,8 @@ internal static class Program
             inputPaths.Add(args[index++]);
         }
 
-        if (inputPaths.Count == 0 || command == "analyze" && inputPaths.Count != 1)
+        if (inputPaths.Count == 0 ||
+            command is "analyze" or "emit" && inputPaths.Count != 1)
         {
             return false;
         }
@@ -898,7 +963,7 @@ internal static class Program
                 string nonce = Guid.NewGuid().ToString("N");
                 string temporaryPath = Path.Combine(directory, $".{Path.GetFileName(fullPath)}.{nonce}.tmp");
                 string backupPath = Path.Combine(directory, $".{Path.GetFileName(fullPath)}.{nonce}.bak");
-                File.WriteAllText(temporaryPath, outputs[index].Content);
+                File.WriteAllBytes(temporaryPath, outputs[index].Content);
                 pending.Add(new PendingOutput(fullPath, temporaryPath, backupPath));
             }
 
@@ -963,6 +1028,8 @@ internal static class Program
         "Usage:\n" +
         "  unifiedscript analyze <input.cs> [options]\n" +
         "  unifiedscript analyze-files <input.cs> <additional.cs>... [options]\n" +
+        "  unifiedscript emit <input.cs> --out <directory> [options]\n" +
+        "  unifiedscript emit-files <input.cs> <additional.cs>... --out <directory> [options]\n" +
         "  unifiedscript identity-init <input.cs> --out <identity.usids> [options]\n" +
         "  unifiedscript layout-init <graph.json> --out <layout.usgraph>\n" +
         "  unifiedscript layout-sync <graph.json> --layout <layout.usgraph> --out <updated.usgraph>\n" +
@@ -973,7 +1040,7 @@ internal static class Program
         "  --out <path>            Artifact directory, initialized sidecar, or patched source output.\n" +
         "  --patch <patch.json>    Semantic patch document required by apply-patch.\n" +
         "  --plan <plan.json>      Ordered semantic patch plan required by apply-plan.\n" +
-        "  --identity <file.usids> Use a persistent identity sidecar; may repeat for analyze-files.\n" +
+        "  --identity <file.usids> Use a persistent identity sidecar; may repeat for *-files commands.\n" +
         "  --out-identity <file>   Updated sidecar output required by sidecar-enabled apply-patch.\n" +
         "  --method <name>         Fully qualified Visual method required by execute.\n" +
         "  --method-id <us_...>    Exact semantic method ID alternative for overloaded methods.\n" +
@@ -982,7 +1049,7 @@ internal static class Program
         "  --assembly <name>        Set the analysis assembly name.\n" +
         "  --effects <catalog.json> Apply effect catalog overrides.\n" +
         "  --reference <assembly>   Add a metadata reference; may be repeated.\n" +
-        "Analyze writes graph JSON to stdout when --out is omitted; apply commands require --out.");
+        "Analyze writes graph JSON to stdout when --out is omitted; emit and apply commands require --out.");
 
     private sealed record AnalyzeOptions(
         IReadOnlyList<string> InputPaths,
@@ -1024,7 +1091,13 @@ internal static class Program
         string? IdentityPath,
         string? IdentityOutputPath);
 
-    private sealed record OutputFile(string Path, string Content);
+    private sealed record OutputFile(string Path, byte[] Content)
+    {
+        public OutputFile(string path, string content)
+            : this(path, System.Text.Encoding.UTF8.GetBytes(content))
+        {
+        }
+    }
 
     private sealed record PendingOutput(string Path, string TemporaryPath, string BackupPath);
 }

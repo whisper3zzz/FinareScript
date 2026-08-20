@@ -61,7 +61,9 @@ flowchart LR
     Projector --> Graph["Graph JSON"]
     Projector --> EmitGate["Execution Graph/CFG gate"]
     EmitGate --> Emitter["Deterministic PE + portable PDB"]
+    Emitter --> SourceMap["Semantic ID -> MethodDef + IL/PDB source map"]
     Emitter --> Runtime["Collectible CoreCLR session"]
+    SourceMap --> Runtime
     Invocation["Semantic method ID + JSON arguments"] --> Runtime
     Runtime --> Result["Typed return or structured fault"]
     Graph --> LayoutSync["Layout Synchronizer"]
@@ -99,6 +101,7 @@ This project has no Roslyn, graph UI, CLR hosting, or UE dependency.
 - transactional semantic-patch validation and localized source rewriting
 - HIR structural fingerprinting, context reconciliation, pins, and tombstones
 - deterministic program-image and portable-PDB emission after Graph/CFG gates
+- PE/PDB-derived semantic method/node source-map generation and strict JSON
 
 It may depend on Core, Semantics, Graph, and Roslyn, but not on Runtime or UE.
 
@@ -136,6 +139,7 @@ effect-aware graph without hosting Roslyn.
 - emitted-method resolution without leaking reflection objects
 - collectible CoreCLR assembly loading and dependency resolution
 - explicit reload-session lifetime and unloading
+- immutable semantic-ID/IL/PDB source-map exposure without reflection leakage
 
 It depends on Core, Semantics, and the C# emission boundary. It does not parse
 source, project Graph, apply patches, or depend on UE. A collectible load
@@ -146,6 +150,7 @@ context is a reload mechanism, not a security sandbox.
 - filesystem input/output
 - diagnostics rendering
 - HIR, bound semantics, and graph artifact emission
+- deterministic PE, portable-PDB, and semantic source-map artifact emission
 - qualified Visual-method resolution and CoreCLR execution
 
 The CLI is a test harness and integration boundary, not the final editor.
@@ -159,6 +164,18 @@ only the transport representation for bounded graph-safe arguments and results.
 Returned values and target faults never expose `Assembly`, `Type`,
 `MethodInfo`, exception, or source-defined object references outside the
 collectible session. See [EXECUTION_RUNTIME.md](EXECUTION_RUNTIME.md).
+
+## Executable identity
+
+M5.2 reads the emitted PE and portable PDB to create
+`unifiedscript.source-map/v0.1`. A method semantic ID resolves to its actual CLR
+MethodDef metadata token. Each executable statement/expression semantic ID then
+resolves to one or more IL offsets, and every offset is validated against the
+same method's visible portable-PDB sequence points. The map is deterministic,
+versioned, exposed by the collectible session, and generated equally for text
+source and visual-patch-produced source. It is the location substrate for a
+later breakpoint/stepping controller, not itself a debugger. See
+[SOURCE_MAP.md](SOURCE_MAP.md).
 
 ## Profile v0.2
 

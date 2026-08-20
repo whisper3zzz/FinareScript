@@ -11,6 +11,7 @@ public sealed record CSharpProgramImage(
     string AssemblyName,
     byte[] PortableExecutable,
     byte[] PortablePdb,
+    CSharpProgramSourceMap SourceMap,
     HirCompilationUnit Hir,
     BoundCompilation Semantics);
 
@@ -63,11 +64,20 @@ public sealed class CSharpProgramEmitter
             return new CSharpProgramEmitResult(null, diagnostics);
         }
 
+        byte[] portableExecutableBytes = portableExecutable.ToArray();
+        byte[] portablePdbBytes = portablePdb.ToArray();
+        CSharpProgramSourceMap sourceMap = new CSharpProgramSourceMapBuilder().Build(
+            request.AssemblyName,
+            portableExecutableBytes,
+            portablePdbBytes,
+            analysis.Hir,
+            analysis.Semantics);
         return new CSharpProgramEmitResult(
             new CSharpProgramImage(
                 request.AssemblyName,
-                portableExecutable.ToArray(),
-                portablePdb.ToArray(),
+                portableExecutableBytes,
+                portablePdbBytes,
+                sourceMap,
                 analysis.Hir,
                 analysis.Semantics),
             diagnostics);
