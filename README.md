@@ -181,8 +181,13 @@ structural reconciliation when persistent editing is enabled, including safe
 property renames. The prototype under `prototype/visual-editor` now loads a
 real artifact generated from `samples/Authoring/DamagePolicy.cs`; its state
 list, inspector, canonical declaration, AI declaration outline, and IDs are no
-longer embedded mock data. Declaration patch/write-back plus real Graph/debug
-transport remain the next connected slices.
+longer embedded mock data. M5.5.2 adds the strict typed declaration-patch
+protocol and transactional Roslyn write-back. Add/update/remove operations use
+asset/state Semantic IDs, complete old-value preconditions, full recompilation,
+and identity pins for sidecar-backed renames. The CLI commits patched source,
+revalidated Declaration IR, and an optional updated `.usids` together. The
+prototype generates the same directly applicable JSON instead of a static
+preview. Real Graph/debug transport remains the next connected slice.
 
 The v0.2 profile accepts `[Visual]` methods containing local variables,
 expressions, calls, assignments, `if/else`, `while`, `do`, `for`, bounded
@@ -208,6 +213,13 @@ Graph edit
   -> typed/preconditioned Roslyn replacement
   -> full profile and semantic revalidation
   -> updated C# source (only if the whole patch succeeds)
+
+Declaration edit
+  -> typed patch bound to source + semantic configuration IDs
+  -> asset/state Semantic ID and complete old-contract preconditions
+  -> transactional Roslyn declaration/reference rewrite
+  -> full compilation + Declaration IR postcondition validation
+  -> updated C# + asset JSON + optional .usids (only as one commit)
 
 Current execution path:
   -> Graph/CFG execution gate
@@ -310,6 +322,20 @@ dotnet run --project src/UnifiedScript.Cli -- \
 
 See [DECLARATION_IR.md](docs/DECLARATION_IR.md) and
 [VISUAL_AUTHORING_MODEL.md](docs/VISUAL_AUTHORING_MODEL.md).
+
+Apply the checked-in state-exposure edit and emit a revalidated source/artifact
+pair:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  apply-declaration-patch samples/Authoring/DamagePolicy.cs \
+  --declaration-patch samples/Authoring/MakeMaxDamageEditable.declaration.patch.json \
+  --out artifacts/authoring/DamagePolicy.cs \
+  --out-asset artifacts/authoring/DamagePolicy.asset.json
+```
+
+Add `--identity <input.usids> --out-identity <output.usids>` when persistent
+identity is enabled; this pair is required for declaration renames.
 
 ### Analyze structured regions
 

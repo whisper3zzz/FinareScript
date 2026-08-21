@@ -311,6 +311,7 @@ textarea:focus-visible,
 .patch-preview span { color: var(--mint); font: 700 7px var(--mono); }
 .patch-preview strong { margin-top: 4px; color: #b8c4bd; font-size: 10px; }
 .patch-preview small { margin-top: 3px; color: #65736d; font-size: 8px; }
+.patch-preview pre { max-height: 118px; margin-top: 8px; padding: 8px; overflow: auto; border: 1px solid #263b32; background: #080d0b; color: #90bca8; font-size: 7px; line-height: 1.45; white-space: pre; }
 
 .variable-dialog { width: 485px; padding: 0; border: 1px solid #55442e; border-radius: 3px; background: #111415; color: var(--text); box-shadow: 0 30px 80px rgba(0,0,0,.65); }
 .variable-dialog::backdrop { background: rgba(4,6,6,.76); backdrop-filter: blur(3px); }

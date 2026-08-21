@@ -316,8 +316,8 @@ public int BaseDamage { get; set; } = 20;</pre>
           </section>
 
           <div class="prototype-warning">
-            <strong>vNEXT TARGET</strong>
-            <p>此声明交互是产品模型原型；当前编译器尚未把类型级状态纳入统一 Declaration IR。</p>
+            <strong>DECLARATION IR + PATCH v0.1</strong>
+            <p>状态来自编译器产物；Inspector 与 AI 视图可以生成带前置条件的类型化声明补丁。</p>
           </div>
         </div>
       </aside>
@@ -350,9 +350,14 @@ state MaxDamage: int = 999
       </section>
       <section class="ai-prompt-section">
         <h3>TRY AN AI PATCH</h3>
-        <label><textarea id="aiPrompt" rows="4">把 MaxDamage 改成 Instance Editable，并在 critical 分支前增加最小伤害 1 的保护。</textarea></label>
-        <button id="previewPatchButton" class="button primary" type="button">PREVIEW SEMANTIC PATCH</button>
-        <div id="patchPreview" class="patch-preview"><span>PATCH PREVIEW</span><strong>2 semantic operations</strong><small>1 declaration edit · 1 structured statement insert</small></div>
+        <label><textarea id="aiPrompt" rows="3">把 MaxDamage 改成 Instance Editable，并归入 Damage 分类。</textarea></label>
+        <button id="previewPatchButton" class="button primary" type="button">PREVIEW DECLARATION PATCH</button>
+        <div id="patchPreview" class="patch-preview">
+          <span>DECLARATION PATCH v0.1</span>
+          <strong id="patchPreviewSummary">等待生成类型化操作</strong>
+          <small>包含 source/configuration ID、目标 Semantic ID 与完整旧值前置条件</small>
+          <pre id="patchPreviewJson"></pre>
+        </div>
       </section>
     </div>
   </div>

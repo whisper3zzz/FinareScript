@@ -59,6 +59,11 @@ internal static class Program
             return RunApply(args, isPlan: true);
         }
 
+        if (args.Count > 0 && args[0] == "apply-declaration-patch")
+        {
+            return RunDeclarationApply(args);
+        }
+
         if (args.Count > 0 && args[0] == "execute")
         {
             return RunExecute(args);
@@ -485,6 +490,126 @@ internal static class Program
         return 0;
     }
 
+    private static int RunDeclarationApply(IReadOnlyList<string> args)
+    {
+        if (!TryParseDeclarationPatchArguments(args, out DeclarationPatchOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+
+        options = options ?? throw new InvalidOperationException(
+            "Argument parsing succeeded without declaration patch options.");
+        if (!File.Exists(options.InputPath))
+        {
+            Console.Error.WriteLine($"Input file does not exist: {options.InputPath}");
+            return 66;
+        }
+
+        if (!File.Exists(options.PatchPath))
+        {
+            Console.Error.WriteLine($"Declaration patch file does not exist: {options.PatchPath}");
+            return 66;
+        }
+
+        string fullInputPath = Path.GetFullPath(options.InputPath);
+        string fullPatchPath = Path.GetFullPath(options.PatchPath);
+        string fullOutputPath = Path.GetFullPath(options.OutputPath);
+        string fullAssetOutputPath = Path.GetFullPath(options.AssetOutputPath);
+        var inputPaths = new List<string> { fullInputPath, fullPatchPath };
+        if (options.IdentityPath is not null)
+        {
+            inputPaths.Add(Path.GetFullPath(options.IdentityPath));
+        }
+
+        var outputPaths = new List<string> { fullOutputPath, fullAssetOutputPath };
+        if (options.IdentityOutputPath is not null)
+        {
+            outputPaths.Add(Path.GetFullPath(options.IdentityOutputPath));
+        }
+
+        foreach (string inputPath in inputPaths)
+        {
+            foreach (string outputPath in outputPaths)
+            {
+                EnsureDifferentPath(
+                    inputPath,
+                    outputPath,
+                    "Declaration patch outputs cannot overwrite source, patch, or identity inputs.");
+            }
+        }
+
+        IdentitySidecarDocument? identitySidecar = options.IdentityPath is null
+            ? null
+            : LoadIdentitySidecar(options.IdentityPath);
+        MethodEffectCatalog effectCatalog = LoadEffectCatalog(options.EffectCatalogPath);
+        var request = new CSharpCompilationRequest(
+            options.AssemblyName,
+            [new CSharpSourceDocument(
+                GetLogicalInputPath(fullInputPath),
+                File.ReadAllText(fullInputPath),
+                identitySidecar)],
+            options.ReferencePaths,
+            effectCatalog);
+        DeclarationPatchDocument patch = DeclarationPatchJson.Deserialize(File.ReadAllText(fullPatchPath));
+        CSharpPatchResult result = new CSharpDeclarationPatchApplier().Apply(request, patch);
+        foreach (UnifiedDiagnostic diagnostic in result.Diagnostics)
+        {
+            Console.Error.WriteLine(FormatDiagnostic(diagnostic));
+        }
+
+        if (!result.Succeeded || result.PatchedRequest is null || result.Analysis?.ScriptAssets is null)
+        {
+            Console.Error.WriteLine(
+                "Declaration patch failed; source, identity, and asset outputs were not written.");
+            return 3;
+        }
+
+        string patchedSource = AssertSinglePatchedSource(result.PatchedRequest);
+        string outputLogicalPath = GetLogicalInputPath(fullOutputPath);
+        IdentitySidecarDocument? updatedSidecar = identitySidecar is null
+            ? null
+            : AssertSingleIdentitySidecar(result.Analysis) with { SourcePath = outputLogicalPath };
+        var outputRequest = new CSharpCompilationRequest(
+            options.AssemblyName,
+            [new CSharpSourceDocument(outputLogicalPath, patchedSource, updatedSidecar)],
+            options.ReferencePaths,
+            effectCatalog);
+        CSharpAnalysisResult outputAnalysis = new CSharpSemanticPipeline().Analyze(outputRequest);
+        foreach (UnifiedDiagnostic diagnostic in outputAnalysis.Diagnostics)
+        {
+            Console.Error.WriteLine(FormatDiagnostic(diagnostic));
+        }
+
+        if (!outputAnalysis.Succeeded || outputAnalysis.ScriptAssets is null)
+        {
+            Console.Error.WriteLine(
+                "Declaration patch output validation failed; no output files were written.");
+            return 3;
+        }
+
+        var outputs = new List<OutputFile>
+        {
+            new(fullOutputPath, patchedSource),
+            new(fullAssetOutputPath, ScriptAssetJson.Serialize(outputAnalysis.ScriptAssets) + "\n"),
+        };
+        if (updatedSidecar is not null)
+        {
+            IdentitySidecarDocument outputSidecar = AssertSingleIdentitySidecar(outputAnalysis);
+            outputs.Add(new OutputFile(
+                Path.GetFullPath(options.IdentityOutputPath!),
+                IdentitySidecarJson.Serialize(outputSidecar) + "\n"));
+        }
+
+        WriteTransactionally(outputs);
+        foreach (OutputFile output in outputs)
+        {
+            Console.WriteLine(Path.GetFullPath(output.Path));
+        }
+
+        return 0;
+    }
+
     private static CSharpSourceDocument[] LoadSources(
         IReadOnlyList<string> inputPaths,
         IReadOnlyList<string> identityPaths)
@@ -893,6 +1018,86 @@ internal static class Program
         return true;
     }
 
+    private static bool TryParseDeclarationPatchArguments(
+        IReadOnlyList<string> args,
+        out DeclarationPatchOptions? options)
+    {
+        options = null;
+        if (args.Count < 8 || args[0] != "apply-declaration-patch" ||
+            args[1].StartsWith("--", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        string inputPath = args[1];
+        string? patchPath = null;
+        string? outputPath = null;
+        string? assetOutputPath = null;
+        string? effectCatalogPath = null;
+        string? assemblyName = null;
+        string? identityPath = null;
+        string? identityOutputPath = null;
+        var referencePaths = new List<string>();
+        int index = 2;
+        while (index < args.Count)
+        {
+            string option = args[index++];
+            if (index >= args.Count)
+            {
+                return false;
+            }
+
+            string value = args[index++];
+            switch (option)
+            {
+                case "--declaration-patch" when patchPath is null:
+                    patchPath = value;
+                    break;
+                case "--out" when outputPath is null:
+                    outputPath = value;
+                    break;
+                case "--out-asset" when assetOutputPath is null:
+                    assetOutputPath = value;
+                    break;
+                case "--effects" when effectCatalogPath is null:
+                    effectCatalogPath = value;
+                    break;
+                case "--assembly" when assemblyName is null:
+                    assemblyName = value;
+                    break;
+                case "--reference":
+                    referencePaths.Add(value);
+                    break;
+                case "--identity" when identityPath is null:
+                    identityPath = value;
+                    break;
+                case "--out-identity" when identityOutputPath is null:
+                    identityOutputPath = value;
+                    break;
+                default:
+                    return false;
+            }
+        }
+
+        if (patchPath is null || outputPath is null || assetOutputPath is null ||
+            (identityPath is null) != (identityOutputPath is null))
+        {
+            return false;
+        }
+
+        options = new DeclarationPatchOptions(
+            inputPath,
+            patchPath,
+            outputPath,
+            assetOutputPath,
+            effectCatalogPath,
+            assemblyName ?? "UnifiedScript.Analysis",
+            referencePaths,
+            identityPath,
+            identityOutputPath);
+        return true;
+    }
+
     private static string FormatDiagnostic(UnifiedDiagnostic diagnostic) =>
         $"{diagnostic.Span.FilePath}({diagnostic.Span.Start.Line},{diagnostic.Span.Start.Column}): " +
         $"{diagnostic.Severity.ToString().ToLowerInvariant()} {diagnostic.Code}: {diagnostic.Message}";
@@ -1056,11 +1261,15 @@ internal static class Program
         "  unifiedscript layout-sync <graph.json> --layout <layout.usgraph> --out <updated.usgraph>\n" +
         "  unifiedscript apply-patch <input.cs> --patch <patch.json> --out <output.cs> [options]\n" +
         "  unifiedscript apply-plan <input.cs> --plan <plan.json> --out <output.cs> [options]\n" +
+        "  unifiedscript apply-declaration-patch <input.cs> --declaration-patch <patch.json> " +
+        "--out <output.cs> --out-asset <asset.json> [options]\n" +
         "  unifiedscript execute <input.cs> (--method <name> | --method-id <us_...>) [options]\n" +
         "Options:\n" +
         "  --out <path>            Artifact directory, initialized sidecar, or patched source output.\n" +
         "  --patch <patch.json>    Semantic patch document required by apply-patch.\n" +
         "  --plan <plan.json>      Ordered semantic patch plan required by apply-plan.\n" +
+        "  --declaration-patch <file> Typed declaration patch required by apply-declaration-patch.\n" +
+        "  --out-asset <file>      Revalidated Declaration IR output.\n" +
         "  --identity <file.usids> Use a persistent identity sidecar; may repeat for *-files commands.\n" +
         "  --out-identity <file>   Updated sidecar output required by sidecar-enabled apply-patch.\n" +
         "  --method <name>         Fully qualified Visual method required by execute.\n" +
@@ -1106,6 +1315,17 @@ internal static class Program
         string InputPath,
         string EditDocumentPath,
         string OutputPath,
+        string? EffectCatalogPath,
+        string AssemblyName,
+        IReadOnlyList<string> ReferencePaths,
+        string? IdentityPath,
+        string? IdentityOutputPath);
+
+    private sealed record DeclarationPatchOptions(
+        string InputPath,
+        string PatchPath,
+        string OutputPath,
+        string AssetOutputPath,
         string? EffectCatalogPath,
         string AssemblyName,
         IReadOnlyList<string> ReferencePaths,

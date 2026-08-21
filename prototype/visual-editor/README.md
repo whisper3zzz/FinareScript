@@ -20,8 +20,8 @@ Try these interactions:
 2. Add `ArmorRatio` with the `+` button. The prototype updates the declaration,
    canonical-text preview, and AI outline together.
 3. Switch between Structure, Split, and Code.
-4. Click `AI VIEW` to inspect the compact semantic outline and preview a
-   semantic patch.
+4. Click `AI VIEW` to inspect the compact semantic outline and preview a real
+   `unifiedscript.declaration-patch/v0.1` document.
 5. Click `DEBUG RUN`; execution stops on the `Math.Clamp` statement breakpoint
    and exposes a small live-locals strip.
 
@@ -34,7 +34,12 @@ defaults, exposure flags, and Semantic IDs therefore come from the compiler
 pipeline rather than embedded UI mock data. If the artifact cannot be fetched,
 the prototype visibly falls back to its embedded demonstration declarations.
 
-Editing still mutates browser state only. Declaration semantic patches and
-transactional C# write-back are the next M5.5 slice. The structure cards and
-debug animation also remain experience fixtures until the real Graph artifact
-and CoreCLR debug protocol are connected.
+Inspector edits and the AI suggestion are translated into typed `addState` or
+`updateState` operations with real baseline IDs, target Semantic IDs, and full
+old-value preconditions. The preview JSON is accepted by
+`apply-declaration-patch`, whose backend transaction writes C#, Declaration IR,
+and an optional `.usids` sidecar only after full reanalysis. This dependency-
+free page does not itself invoke the local CLI, so browser editing remains
+unsaved until a host integration sends that patch to the backend. The structure
+cards and debug animation remain experience fixtures until the real Graph
+artifact and CoreCLR debug protocol are connected.

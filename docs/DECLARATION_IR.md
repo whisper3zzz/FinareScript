@@ -68,6 +68,38 @@ blank categories, and defaults whose JSON kind conflicts with the declared
 state kind. Serialization normalizes asset, state, and function order before
 writing, so editor and CI artifacts do not depend on source-document order.
 
+## Declaration patch v0.1
+
+`unifiedscript.declaration-patch/v0.1` is the typed edit contract for state
+declarations. Every document carries the exact source-compilation and semantic-
+configuration IDs from the Declaration IR artifact on which the edit was
+authored. It supports three bounded operations:
+
+- `addState` targets one Script Asset ID and supplies name, C# type spelling,
+  state kind, typed default, and exposure policy;
+- `updateState` targets one state ID, supplies the complete old declaration as
+  a precondition, and supplies a complete replacement contract;
+- `removeState` targets one state ID and supplies the same complete old-value
+  precondition.
+
+The JSON reader rejects unknown fields, empty targets, duplicate update/remove
+targets, no-op updates, blank categories, and defaults incompatible with their
+declared kind. A patch never uses display order or canvas coordinates as an
+identity or precondition.
+
+`CSharpDeclarationPatchApplier` analyzes the original compilation, validates
+all operations, annotates the exact Roslyn declarations, renames bound property
+references when necessary, applies every addition/update/removal in memory, and
+then runs the complete declaration/HIR/semantic analysis again. Source is
+returned only if compilation and every postcondition succeed. A late failure
+therefore rolls back the entire patch.
+
+State renames require an input `.usids` sidecar. The applier installs an exact
+identity pin on the rewritten property before reanalysis, so references receive
+the new identifier while Declaration IR retains the original state Semantic ID.
+Removals become normal sidecar tombstones; additions receive identities during
+the same reconciliation pass.
+
 ## Diagnostics
 
 The Roslyn declaration lowering boundary emits stable codes:
@@ -80,6 +112,13 @@ The Roslyn declaration lowering boundary emits stable codes:
 | `UAD1004` | State type is outside the scalar/enum v0.1 boundary. |
 | `UAD1005` | Two source types claim the same asset path. |
 | `UAD1006` | Exposure metadata contains a blank category. |
+| `UAD2001` | Patch source-compilation precondition is stale. |
+| `UAD2002` | Patch semantic-configuration precondition is stale. |
+| `UAD2003` | Target asset/state or its exact source syntax is missing. |
+| `UAD2004` | A state no longer matches its complete old-value precondition. |
+| `UAD2005` | Replacement name, type syntax, or enum member is invalid. |
+| `UAD2006` | A rename was requested without persistent identity. |
+| `UAD2007` | Reanalysis did not satisfy an operation postcondition. |
 
 Any declaration error fails the same `CSharpAnalysisResult` transaction used by
 HIR and semantic binding. No partial asset document is emitted.
@@ -112,10 +151,29 @@ portable PDB, and source map. `CSharpProgramImage` and a loaded
 UE host does not need to reconstruct declarations from IL or maintain a second
 runtime-side model.
 
+Apply the checked-in declaration patch and atomically write the patched source
+plus its revalidated Declaration IR:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  apply-declaration-patch samples/Authoring/DamagePolicy.cs \
+  --declaration-patch samples/Authoring/MakeMaxDamageEditable.declaration.patch.json \
+  --out artifacts/authoring/DamagePolicy.cs \
+  --out-asset artifacts/authoring/DamagePolicy.asset.json
+```
+
+When persistent identity is enabled, `--identity <input.usids>` and
+`--out-identity <output.usids>` are a required pair. Source, asset, and optional
+sidecar outputs are staged and committed as one filesystem transaction; the
+command never patches the source in place.
+
 The checked-in visual prototype consumes a byte-for-byte-equivalent generated
 artifact at `prototype/visual-editor/data/damage-policy.asset.json`. The state
 list, inspector, canonical declaration preview, AI declaration outline, and
-Semantic ID display therefore share real compiler data. Browser edits are
-still local UI state; typed declaration patches and transactional Roslyn
-write-back are the next M5.5 slice. Structure cards and the debug animation are
-also still fixtures until the real Graph/debug transports are connected.
+Semantic ID display therefore share real compiler data. Its AI preview now
+builds the strict patch document above from the loaded artifact, including
+source/configuration IDs, target state ID, full old contract, and typed
+replacement. The preview JSON can be given directly to the CLI. Applying it is
+still an explicit CLI/backend action rather than an HTTP mutation from the
+dependency-free prototype. Structure cards and the debug animation remain
+fixtures until the real Graph/debug transports are connected.

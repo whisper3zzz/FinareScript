@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "unifiedscript.declaration-patch/v0.1",
+  "sourceCompilationId": "us_9c565600166a847b78177c5c25c03ba5",
+  "semanticConfigurationId": "us_02f5fe78d296e2d4fe04bc50ca71acf1",
+  "operations": [
+    {
+      "operation": "updateState",
+      "targetStateId": "us_466fab9c566c7f4284b97d4bbb08fa60",
+      "expected": {
+        "name": "MaxDamage",
+        "typeMetadataName": "System.Int32",
+        "typeKind": "integer",
+        "defaultValue": 999,
+        "exposure": {
+          "instanceEditable": false,
+          "saveGame": true,
+          "replicated": false
+        }
+      },
+      "replacement": {
+        "name": "MaxDamage",
+        "typeName": "int",
+        "typeKind": "integer",
+        "defaultValue": 999,
+        "exposure": {
+          "instanceEditable": true,
+          "saveGame": true,
+          "replicated": false,
+          "category": "Damage"
+        }
+      }
+    }
+  ]
+}

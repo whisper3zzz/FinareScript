@@ -1,0 +1,213 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+namespace UnifiedScript.Core;
+
+public static class DeclarationPatchJson
+{
+    public static string Serialize(DeclarationPatchDocument document, bool writeIndented = true)
+    {
+        DeclarationPatchDocument normalized = NormalizeAndValidate(document);
+        return JsonSerializer.Serialize(normalized, CreateOptions(writeIndented));
+    }
+
+    public static DeclarationPatchDocument Deserialize(string json)
+    {
+        ArgumentNullException.ThrowIfNull(json);
+        DeclarationPatchDocument? document = JsonSerializer.Deserialize<DeclarationPatchDocument>(
+            json,
+            CreateOptions(writeIndented: true));
+        if (document is null)
+        {
+            throw new JsonException("The declaration patch document was empty.");
+        }
+
+        return NormalizeAndValidate(document);
+    }
+
+    public static void Validate(DeclarationPatchDocument document) =>
+        _ = NormalizeAndValidate(document);
+
+    public static DeclarationPatchDocument NormalizeAndValidate(DeclarationPatchDocument document)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        if (document.SchemaVersion != DeclarationPatchDocument.CurrentSchemaVersion)
+        {
+            throw new JsonException(
+                $"Unsupported declaration patch schema '{document.SchemaVersion}'. " +
+                $"Expected '{DeclarationPatchDocument.CurrentSchemaVersion}'.");
+        }
+
+        if (document.SourceCompilationId.IsEmpty || document.SemanticConfigurationId.IsEmpty ||
+            document.Operations is null || document.Operations.Count == 0)
+        {
+            throw new JsonException(
+                "A declaration patch requires source/configuration IDs and at least one operation.");
+        }
+
+        var stateTargets = new HashSet<SemanticId>();
+        var normalized = new List<DeclarationPatchOperation>(document.Operations.Count);
+        foreach (DeclarationPatchOperation? operation in document.Operations)
+        {
+            switch (operation)
+            {
+                case AddScriptStatePatchOperation add:
+                    if (add.TargetAssetId.IsEmpty)
+                    {
+                        throw new JsonException("An add-state operation requires a target asset ID.");
+                    }
+
+                    normalized.Add(add with { State = NormalizeSpec(add.State, "added state") });
+                    break;
+                case UpdateScriptStatePatchOperation update:
+                    ValidateUniqueStateTarget(update.TargetStateId, stateTargets, "update-state");
+                    ScriptStatePatchPrecondition expected = NormalizeExpected(
+                        update.Expected,
+                        "updated state precondition");
+                    ScriptStatePatchSpec replacement = NormalizeSpec(
+                        update.Replacement,
+                        "updated state replacement");
+                    if (IsNoOp(expected, replacement))
+                    {
+                        throw new JsonException("An update-state operation must change the state contract.");
+                    }
+
+                    normalized.Add(update with
+                    {
+                        Expected = expected,
+                        Replacement = replacement,
+                    });
+                    break;
+                case RemoveScriptStatePatchOperation remove:
+                    ValidateUniqueStateTarget(remove.TargetStateId, stateTargets, "remove-state");
+                    normalized.Add(remove with
+                    {
+                        Expected = NormalizeExpected(remove.Expected, "removed state precondition"),
+                    });
+                    break;
+                case null:
+                    throw new JsonException("Declaration patch operations cannot be null.");
+                default:
+                    throw new JsonException(
+                        $"Unsupported declaration patch operation '{operation.GetType().Name}'.");
+            }
+        }
+
+        return document with { Operations = normalized };
+    }
+
+    private static ScriptStatePatchPrecondition NormalizeExpected(
+        ScriptStatePatchPrecondition? expected,
+        string role)
+    {
+        if (expected is null || string.IsNullOrWhiteSpace(expected.Name) ||
+            string.IsNullOrWhiteSpace(expected.TypeMetadataName) || expected.Exposure is null)
+        {
+            throw new JsonException($"The {role} has invalid required fields.");
+        }
+
+        ValidateStateValue(expected.TypeKind, expected.DefaultValue, role);
+        ValidateExposure(expected.Exposure, role);
+        return expected with { DefaultValue = expected.DefaultValue.Clone() };
+    }
+
+    private static ScriptStatePatchSpec NormalizeSpec(ScriptStatePatchSpec? spec, string role)
+    {
+        if (spec is null || string.IsNullOrWhiteSpace(spec.Name) ||
+            string.IsNullOrWhiteSpace(spec.TypeName) || spec.Exposure is null)
+        {
+            throw new JsonException($"The {role} has invalid required fields.");
+        }
+
+        ValidateStateValue(spec.TypeKind, spec.DefaultValue, role);
+        ValidateExposure(spec.Exposure, role);
+        return spec with { DefaultValue = spec.DefaultValue.Clone() };
+    }
+
+    private static void ValidateStateValue(
+        ScriptStateTypeKind typeKind,
+        JsonElement value,
+        string role)
+    {
+        if (!Enum.IsDefined(typeKind) || value.ValueKind == JsonValueKind.Undefined)
+        {
+            throw new JsonException($"The {role} has an invalid type kind or default value.");
+        }
+
+        bool valid = typeKind switch
+        {
+            ScriptStateTypeKind.Boolean => value.ValueKind is JsonValueKind.True or JsonValueKind.False,
+            ScriptStateTypeKind.Integer => value.ValueKind == JsonValueKind.Number &&
+                (value.TryGetInt64(out _) || value.TryGetUInt64(out _)),
+            ScriptStateTypeKind.FloatingPoint => value.ValueKind == JsonValueKind.Number &&
+                value.TryGetDouble(out double number) && double.IsFinite(number),
+            ScriptStateTypeKind.String => value.ValueKind is JsonValueKind.String or JsonValueKind.Null,
+            ScriptStateTypeKind.Enum => value.ValueKind == JsonValueKind.String &&
+                !string.IsNullOrWhiteSpace(value.GetString()),
+            _ => false,
+        };
+        if (!valid)
+        {
+            throw new JsonException(
+                $"The {role} default is incompatible with state kind '{typeKind}'.");
+        }
+    }
+
+    private static void ValidateExposure(ScriptExposure exposure, string role)
+    {
+        if (exposure.Category is not null && string.IsNullOrWhiteSpace(exposure.Category))
+        {
+            throw new JsonException($"The {role} exposure category cannot be blank.");
+        }
+    }
+
+    private static void ValidateUniqueStateTarget(
+        SemanticId target,
+        ISet<SemanticId> targets,
+        string operation)
+    {
+        if (target.IsEmpty || !targets.Add(target))
+        {
+            throw new JsonException(
+                $"A {operation} operation requires a unique non-empty target state ID.");
+        }
+    }
+
+    private static bool IsNoOp(
+        ScriptStatePatchPrecondition expected,
+        ScriptStatePatchSpec replacement) =>
+        string.Equals(expected.Name, replacement.Name, StringComparison.Ordinal) &&
+        IsSameType(expected.TypeMetadataName, replacement.TypeName) &&
+        expected.TypeKind == replacement.TypeKind &&
+        JsonElement.DeepEquals(expected.DefaultValue, replacement.DefaultValue) &&
+        expected.Exposure == replacement.Exposure;
+
+    private static bool IsSameType(string metadataName, string sourceName)
+    {
+        IReadOnlyDictionary<string, string> aliases = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["bool"] = "System.Boolean",
+            ["byte"] = "System.Byte",
+            ["sbyte"] = "System.SByte",
+            ["short"] = "System.Int16",
+            ["ushort"] = "System.UInt16",
+            ["int"] = "System.Int32",
+            ["uint"] = "System.UInt32",
+            ["long"] = "System.Int64",
+            ["ulong"] = "System.UInt64",
+            ["float"] = "System.Single",
+            ["double"] = "System.Double",
+            ["decimal"] = "System.Decimal",
+            ["string"] = "System.String",
+        };
+        string normalized = aliases.GetValueOrDefault(sourceName, sourceName);
+        return string.Equals(metadataName, normalized, StringComparison.Ordinal);
+    }
+
+    private static JsonSerializerOptions CreateOptions(bool writeIndented)
+    {
+        JsonSerializerOptions options = UnifiedJson.CreateOptions(writeIndented);
+        options.UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow;
+        return options;
+    }
+}

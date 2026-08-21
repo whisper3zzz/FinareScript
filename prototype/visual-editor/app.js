@@ -2,6 +2,9 @@ const state = {
   view: 'structure',
   zoom: 1,
   artifactLoaded: false,
+  sourceCompilationId: null,
+  semanticConfigurationId: null,
+  assetId: null,
   selected: { kind: 'state', id: 'baseDamage' },
   declarations: [
     { id: 'baseDamage', name: 'BaseDamage', type: 'int', defaultValue: '20', editable: true, save: false, replicated: false, category: 'Damage', semanticId: 'us_8ad1c44ff31210aaec986daa117f7f2e' },
@@ -88,6 +91,9 @@ async function loadDeclarationArtifact() {
     }
 
     const asset = artifact.assets[0];
+    state.sourceCompilationId = artifact.sourceCompilationId;
+    state.semanticConfigurationId = artifact.semanticConfigurationId;
+    state.assetId = asset.id;
     state.declarations = asset.states.map(item => ({
       id: declarationDomId(item.name),
       name: item.name,
@@ -99,6 +105,18 @@ async function loadDeclarationArtifact() {
       replicated: item.exposure.replicated,
       category: item.exposure.category || '',
       semanticId: item.id,
+      original: {
+        name: item.name,
+        typeMetadataName: item.typeMetadataName,
+        typeKind: item.typeKind,
+        defaultValue: item.defaultValue,
+        exposure: {
+          instanceEditable: item.exposure.instanceEditable,
+          saveGame: item.exposure.saveGame,
+          replicated: item.exposure.replicated,
+          ...(item.exposure.category ? { category: item.exposure.category } : {}),
+        },
+      },
     }));
     state.artifactLoaded = true;
     renderDeclarationList();
@@ -128,6 +146,114 @@ function normalizedDefault(item) {
 
 function canonicalDeclaration(item) {
   return `${exposureText(item)}public ${item.type} ${item.name} { get; set; } = ${normalizedDefault(item)};`;
+}
+
+function typeKindFor(type) {
+  return ({ bool: 'boolean', int: 'integer', float: 'floatingPoint', string: 'string' })[type];
+}
+
+function metadataTypeFor(type) {
+  return ({ bool: 'System.Boolean', int: 'System.Int32', float: 'System.Single', string: 'System.String' })[type];
+}
+
+function typedDefault(item) {
+  const text = item.defaultValue.trim();
+  if (item.type === 'bool') {
+    if (!/^(true|false)$/i.test(text)) throw new Error(`${item.name} 的 bool 默认值必须是 true 或 false`);
+    return text.toLowerCase() === 'true';
+  }
+  if (item.type === 'int') {
+    const value = Number(text);
+    if (!/^[+-]?\d+$/.test(text) || !Number.isSafeInteger(value)) throw new Error(`${item.name} 的 int 默认值无效`);
+    return value;
+  }
+  if (item.type === 'float') {
+    const value = Number(text);
+    if (text.length === 0 || !Number.isFinite(value)) throw new Error(`${item.name} 的 float 默认值无效`);
+    return value;
+  }
+  return item.defaultValue;
+}
+
+function exposureContract(item) {
+  return {
+    instanceEditable: item.editable,
+    saveGame: item.save,
+    replicated: item.replicated,
+    ...(item.category ? { category: item.category } : {}),
+  };
+}
+
+function replacementContract(item) {
+  return {
+    name: item.name,
+    typeName: item.type,
+    typeKind: typeKindFor(item.type),
+    defaultValue: typedDefault(item),
+    exposure: exposureContract(item),
+  };
+}
+
+function declarationChanged(item) {
+  if (!item.original) return true;
+  const current = {
+    name: item.name,
+    typeMetadataName: metadataTypeFor(item.type),
+    typeKind: typeKindFor(item.type),
+    defaultValue: typedDefault(item),
+    exposure: exposureContract(item),
+  };
+  return JSON.stringify(current) !== JSON.stringify(item.original);
+}
+
+function buildDeclarationPatch(includeAiSuggestion = false) {
+  const declarations = state.declarations.map(item => ({ ...item }));
+  if (includeAiSuggestion) {
+    const maxDamage = declarations.find(item => item.name === 'MaxDamage');
+    if (maxDamage) {
+      maxDamage.editable = true;
+      maxDamage.category ||= 'Damage';
+    }
+  }
+
+  const operations = declarations.flatMap(item => {
+    if (!item.original) {
+      return [{ operation: 'addState', targetAssetId: state.assetId, state: replacementContract(item) }];
+    }
+    if (!declarationChanged(item)) return [];
+    return [{
+      operation: 'updateState',
+      targetStateId: item.semanticId,
+      expected: item.original,
+      replacement: replacementContract(item),
+    }];
+  });
+  return {
+    schemaVersion: 'unifiedscript.declaration-patch/v0.1',
+    sourceCompilationId: state.sourceCompilationId,
+    semanticConfigurationId: state.semanticConfigurationId,
+    operations,
+  };
+}
+
+function showDeclarationPatchPreview() {
+  const preview = document.getElementById('patchPreview');
+  const summary = document.getElementById('patchPreviewSummary');
+  const json = document.getElementById('patchPreviewJson');
+  if (!state.artifactLoaded) {
+    summary.textContent = '真实 Declaration IR 未加载，不能生成带编译前置条件的补丁';
+    json.textContent = '';
+  } else {
+    try {
+      const patch = buildDeclarationPatch(true);
+      summary.textContent = `${patch.operations.length} 个可由 CLI 直接应用的类型化声明操作`;
+      json.textContent = JSON.stringify(patch, null, 2);
+    } catch (error) {
+      summary.textContent = error.message;
+      json.textContent = '';
+    }
+  }
+  preview.classList.add('visible');
 }
 
 function codeDeclarationMarkup(item) {
@@ -408,7 +534,7 @@ document.getElementById('closeAiDrawer').addEventListener('click', () => {
   aiDrawer.classList.remove('visible');
   aiDrawer.setAttribute('aria-hidden', 'true');
 });
-document.getElementById('previewPatchButton').addEventListener('click', () => document.getElementById('patchPreview').classList.add('visible'));
+document.getElementById('previewPatchButton').addEventListener('click', showDeclarationPatchPreview);
 
 document.getElementById('addVariableButton').addEventListener('click', () => {
   updateNewVariablePreview();
@@ -429,7 +555,7 @@ document.getElementById('variableForm').addEventListener('submit', event => {
     editable: document.getElementById('newVariableEditable').checked,
     save: document.getElementById('newVariableSave').checked,
     replicated: document.getElementById('newVariableReplicated').checked,
-    semanticId: `us_${crypto.getRandomValues(new Uint32Array(4)).reduce((value, part) => value + part.toString(16).padStart(8, '0'), '')}`,
+    semanticId: `pending_${crypto.getRandomValues(new Uint32Array(2)).reduce((value, part) => value + part.toString(16).padStart(8, '0'), '')}`,
   };
   variableDialog.close();
   addDeclaration(item);

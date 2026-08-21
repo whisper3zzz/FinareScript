@@ -56,9 +56,38 @@ The first connected slice is now implemented:
     validator, exact analyze/emit artifact comparison, and browser interaction
     regression pass.
 
-The next M5.5 slice is declaration patching and transactional Roslyn write-back.
-After that, the prototype must consume its real Graph artifact and live debug
-transport instead of behavior/debug fixtures.
+## M5.5.2 completed — Declaration semantic patch and write-back
+
+The second connected slice is now implemented:
+
+1. Strict `unifiedscript.declaration-patch/v0.1` JSON carries source and
+   semantic-configuration preconditions.
+2. Typed `addState`, `updateState`, and `removeState` operations address asset
+   or state Semantic IDs rather than visual coordinates.
+3. Update/remove operations include the complete old state contract, rejecting
+   concurrent name, type, default, or exposure changes.
+4. Roslyn applies declaration changes in memory and renames all bound property
+   references across the compilation.
+5. Validated C# identifier/type/default/exposure rendering supports every
+   scalar and enum boundary already accepted by Declaration IR v0.1.
+6. State renames require `.usids` and use an exact identity pin, retaining the
+   original Semantic ID after source and reference renaming.
+7. The entire patched compilation is reanalyzed; compile, declaration,
+   semantic, identity, or postcondition failure returns no patched request.
+8. `apply-declaration-patch` atomically writes patched source, revalidated
+   `.asset.json`, and an optional updated `.usids` sidecar.
+9. `MakeMaxDamageEditable.declaration.patch.json` is a checked-in executable
+   sample against the generated authoring artifact.
+10. The prototype's AI view generates that real typed protocol dynamically,
+    including baseline IDs and full expected/replacement contracts.
+11. Desktop and 760 px browser checks pass with scroll-contained JSON and no
+    console errors.
+12. The full 360-test suite, zero-warning build, formatting check, repository
+    validator, and CLI source/asset transaction pass.
+
+The next M5.5 slice connects the prototype's behavior cards to its generated
+Graph artifact. After that, live debug transport replaces the current pause and
+locals fixture.
 
 ## Deliberate limits
 

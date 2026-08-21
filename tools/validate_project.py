@@ -115,6 +115,38 @@ def main() -> int:
     )
     checks.append("Script Asset sample and Declaration IR artifact are consistent")
 
+    declaration_patch_path = (
+        ROOT
+        / "samples"
+        / "Authoring"
+        / "MakeMaxDamageEditable.declaration.patch.json"
+    )
+    require(declaration_patch_path.is_file(), "Missing declaration patch sample")
+    with declaration_patch_path.open("r", encoding="utf-8") as handle:
+        declaration_patch = json.load(handle)
+    max_damage = next(
+        state
+        for state in declaration_document["assets"][0]["states"]
+        if state["name"] == "MaxDamage"
+    )
+    declaration_operation = declaration_patch["operations"][0]
+    require(
+        declaration_patch["schemaVersion"]
+        == "unifiedscript.declaration-patch/v0.1"
+        and declaration_patch["sourceCompilationId"]
+        == declaration_document["sourceCompilationId"]
+        and declaration_patch["semanticConfigurationId"]
+        == declaration_document["semanticConfigurationId"]
+        and len(declaration_patch["operations"]) == 1
+        and declaration_operation["operation"] == "updateState"
+        and declaration_operation["targetStateId"] == max_damage["id"]
+        and declaration_operation["expected"]["defaultValue"] == 999
+        and declaration_operation["replacement"]["exposure"]["instanceEditable"]
+        is True,
+        "Declaration patch sample does not match its generated baseline artifact",
+    )
+    checks.append("Declaration patch sample targets the generated authoring baseline")
+
     require((ROOT / "samples" / "DoorController.cs").is_file(), "Missing vertical-slice sample")
     runtime_source_path = ROOT / "samples" / "Execution" / "RuntimeRules.cs"
     require(runtime_source_path.is_file(), "Missing CoreCLR execution sample")
@@ -135,6 +167,18 @@ def main() -> int:
         and "ScriptAssetJson.Serialize(result.Image.ScriptAssets)" in cli_source,
         "CLI analysis/emission does not publish Declaration IR",
     )
+    prototype_source = (
+        ROOT / "prototype" / "visual-editor" / "app.js"
+    ).read_text(encoding="utf-8")
+    require(
+        'args[0] == "apply-declaration-patch"' in cli_source
+        and "new CSharpDeclarationPatchApplier().Apply" in cli_source
+        and "ScriptAssetJson.Serialize(outputAnalysis.ScriptAssets)" in cli_source
+        and "unifiedscript.declaration-patch/v0.1" in prototype_source
+        and "buildDeclarationPatch" in prototype_source,
+        "Declaration patch CLI or prototype integration is missing",
+    )
+    checks.append("Declaration patch CLI and visual preview are connected")
     require(
         (ROOT / "samples" / "MultiFile" / "GameplayApi.cs").is_file()
         and (ROOT / "samples" / "MultiFile" / "DamageScript.cs").is_file()
