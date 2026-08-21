@@ -224,6 +224,13 @@ operations from `CoreClrDebugLoopbackTransport`, allowing a later native or UE
 backend to replace probe mechanics without changing semantic IDs and stale
 generation rules. See [DEBUG_ADAPTER.md](DEBUG_ADAPTER.md).
 
+M5.5.4 exposes that boundary to the authoring prototype through a loopback-only
+`debug-serve` host. Graph effect nodes carry `debugTargetId` when their visible
+expression identity differs from the enclosing HIR statement probe. A
+`ScriptAssetReceiver` constructs declared instance state from Declaration IR
+IDs before invoking the same emitted CoreCLR method. The HTTP bridge adds no VM
+and no alternate execution semantics.
+
 ## Profile v0.2
 
 Accepted statement forms:

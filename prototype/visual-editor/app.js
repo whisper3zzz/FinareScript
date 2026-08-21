@@ -11,6 +11,10 @@ const state = {
   sourcePath: 'DamagePolicy.cs',
   graphSchemaVersion: null,
   graphFunction: null,
+  debugConnected: false,
+  debugBusy: false,
+  debugHealth: null,
+  debugSession: null,
   selected: { kind: 'state', id: 'baseDamage' },
   declarations: [
     { id: 'baseDamage', name: 'BaseDamage', type: 'int', defaultValue: '20', editable: true, save: false, replicated: false, category: 'Damage', semanticId: 'us_8ad1c44ff31210aaec986daa117f7f2e' },
@@ -25,7 +29,6 @@ const state = {
     clamp: { title: 'Math.Clamp', kind: 'PURE ENGINE CALL', line: 21, semanticId: 'us_494225517602e96082587c810710439e', detail: 'Bound engine call. Breakpoint installed on this semantic statement.' },
     return: { title: 'Return scaled', kind: 'RETURN', line: 22, semanticId: 'us_d8de098855897c9a7c8ad6532df103a2', detail: 'Returns the final graph-safe scalar.' },
   },
-  debugTimers: [],
 };
 
 const editorBody = document.getElementById('editorBody');
@@ -142,6 +145,7 @@ async function loadWorkspaceArtifacts() {
     selectDeclaration(state.declarations[0].id, false);
     document.querySelector('.sync-status strong').textContent = 'IR + GRAPH';
     document.querySelector('.target-label').textContent = 'GRAPH v0.12 · DECLARATION IR v0.1';
+    await connectDebugBridge();
   } catch (error) {
     document.querySelector('.sync-status strong').textContent = 'FALLBACK';
     console.warn('Falling back to embedded prototype workspace data.', error);
@@ -274,6 +278,10 @@ function adaptGraphArtifact(graphFunction, asset) {
   assertArtifact(assignments.length === 2, `Expected two assignment statements, found ${assignments.length}`);
   const clampAssignment = exactlyOne(assignments.filter(node => containsKind(inputNode(node, 'assignedValue'), 'invocation')), 'call assignment');
   const criticalAssignment = exactlyOne(assignments.filter(node => node.id !== clampAssignment.id), 'branch assignment');
+  assertArtifact(
+    clampAssignment.properties.debugTargetId && criticalAssignment.properties.debugTargetId,
+    'Assignment Graph nodes are missing executable debug statement identities',
+  );
   const invocation = containsKind(inputNode(clampAssignment, 'assignedValue'), 'invocation');
   const ifRegion = exactlyOne(graphFunction.regions.filter(region => region.kind === 'if'), 'if region');
   const thenRegion = exactlyOne(graphFunction.regions.filter(region => region.kind === 'then'), 'then region');
@@ -306,6 +314,7 @@ function adaptGraphArtifact(graphFunction, asset) {
       kind: 'FUNCTION ENTRY',
       line: lineOf(entry),
       semanticId: entry.id,
+      debugSemanticId: null,
       detail: `${declarationFunction.name} enters the shared semantic method body.`,
       parameters: declarationFunction.parameters.map(parameter => ({ name: parameter.name, type: simpleType(parameter.typeMetadataName) })),
       returnType: simpleType(declarationFunction.returnTypeMetadataName),
@@ -315,6 +324,7 @@ function adaptGraphArtifact(graphFunction, asset) {
       kind: 'LOCAL DECLARATION',
       line: lineOf(variable),
       semanticId: variable.id,
+      debugSemanticId: variable.id,
       detail: `${variable.properties.name} = ${localValue.text}; ordinary expression nodes stay inline.`,
       localName: variable.properties.name,
       localType: variable.properties.type || variable.properties.resolvedType,
@@ -326,6 +336,7 @@ function adaptGraphArtifact(graphFunction, asset) {
       kind: 'DECISION REGION',
       line: lineOf(branch),
       semanticId: branch.id,
+      debugSemanticId: branch.id,
       regionId: ifRegion.id,
       detail: `Structured if region evaluates ${branchCondition.text} and owns explicit true plus implicit false lanes.`,
       condition: branchCondition.text,
@@ -336,6 +347,7 @@ function adaptGraphArtifact(graphFunction, asset) {
       kind: 'LOCAL MUTATION',
       line: lineOf(criticalAssignment),
       semanticId: criticalAssignment.id,
+      debugSemanticId: criticalAssignment.properties.debugTargetId,
       regionId: thenRegion.id,
       detail: `Mutates ${criticalTarget.text} inside the true control region.`,
       target: criticalTarget.text,
@@ -348,6 +360,7 @@ function adaptGraphArtifact(graphFunction, asset) {
       kind: 'PURE ENGINE CALL',
       line: lineOf(clampAssignment),
       semanticId: clampAssignment.id,
+      debugSemanticId: clampAssignment.properties.debugTargetId,
       expressionNodeId: invocation.id,
       detail: `Assignment statement owns ${clampExpression.text}; breakpoints target the outer executable statement.`,
       target: clampTarget.text,
@@ -360,6 +373,7 @@ function adaptGraphArtifact(graphFunction, asset) {
       kind: 'RETURN',
       line: lineOf(returned),
       semanticId: returned.id,
+      debugSemanticId: returned.id,
       detail: `Returns ${returnValue.text} from the graph-safe method.`,
       expression: returnValue.text,
       returnType: simpleType(declarationFunction.returnTypeMetadataName),
@@ -382,31 +396,31 @@ function renderBehaviorGraph() {
     <article class="flow-node entry-node" data-node-id="entry" data-semantic-id="${entry.semanticId}" data-line="${entry.line}" tabindex="0">
       <div class="node-ordinal">01</div><div class="node-content"><div class="node-kicker">ENTRY</div><h3>${escapeHtml(entry.title)}</h3>
       <div class="token-row">${entry.parameters.map(parameter => `<span class="data-token parameter"><i></i>${escapeHtml(parameter.name)} <em>${escapeHtml(parameter.type)}</em></span>`).join('')}</div></div>
-      <button class="breakpoint-toggle" type="button" aria-label="切换断点"></button>
+      <button class="breakpoint-toggle" type="button" aria-label="函数入口暂不支持语句断点" disabled></button>
     </article>
     <div class="flow-connector"><span>then</span></div>
-    <article class="flow-node compute-node" data-node-id="scale" data-semantic-id="${scale.semanticId}" data-line="${scale.line}" tabindex="0">
+    <article class="flow-node compute-node" data-node-id="scale" data-semantic-id="${scale.semanticId}" data-debug-semantic-id="${scale.debugSemanticId}" data-line="${scale.line}" tabindex="0">
       <div class="node-ordinal">02</div><div class="node-content"><div class="node-kicker">COMPUTE LOCAL</div>
       <h3><span class="local-name">${escapeHtml(scale.localName)}</span> <b>=</b> <span class="inline-expression">${expressionMarkup(scale.expression, scale.declarationRefs)}</span></h3>
       <p>普通表达式内联，不拆成细粒度小节点。</p></div><button class="breakpoint-toggle" type="button" aria-label="切换断点"></button>
     </article>
     <div class="flow-connector"><span>then</span></div>
-    <section class="branch-region" data-node-id="criticalBranch" data-semantic-id="${criticalBranch.semanticId}" data-region-id="${criticalBranch.regionId}" data-line="${criticalBranch.line}" tabindex="0">
+    <section class="branch-region" data-node-id="criticalBranch" data-semantic-id="${criticalBranch.semanticId}" data-debug-semantic-id="${criticalBranch.debugSemanticId}" data-region-id="${criticalBranch.regionId}" data-line="${criticalBranch.line}" tabindex="0">
       <header class="region-header"><div><span class="region-index">03</span><span class="node-kicker">DECISION REGION</span><h3>${expressionMarkup(criticalBranch.condition, criticalBranch.declarationRefs)}?</h3></div><span class="region-badge">IF</span></header>
       <div class="branch-columns"><div class="branch-lane true-lane"><div class="lane-label"><span>TRUE</span><i></i></div>
-      <article class="region-action flow-node compact" data-node-id="criticalScale" data-semantic-id="${criticalScale.semanticId}" data-region-id="${criticalScale.regionId}" data-line="${criticalScale.line}" tabindex="0">
+      <article class="region-action flow-node compact" data-node-id="criticalScale" data-semantic-id="${criticalScale.semanticId}" data-debug-semantic-id="${criticalScale.debugSemanticId}" data-region-id="${criticalScale.regionId}" data-line="${criticalScale.line}" tabindex="0">
         <div class="node-content"><div class="node-kicker">MUTATE LOCAL</div><h3><span class="local-name">${escapeHtml(criticalScale.target)}</span> <b>${escapeHtml(criticalScale.operator)}</b> ${expressionMarkup(criticalScale.operand, criticalScale.declarationRefs)}</h3></div>
         <button class="breakpoint-toggle" type="button" aria-label="切换断点"></button>
       </article></div><div class="branch-lane false-lane"><div class="lane-label"><span>FALSE · IMPLICIT</span><i></i></div><div class="pass-through"><span>NO OP</span><small>保持 ${escapeHtml(criticalScale.target)}</small></div></div></div>
     </section>
     <div class="flow-connector merge"><span>merge</span></div>
-    <article class="flow-node call-node has-breakpoint" data-node-id="clamp" data-semantic-id="${clamp.semanticId}" data-expression-node-id="${clamp.expressionNodeId}" data-line="${clamp.line}" tabindex="0">
+    <article class="flow-node call-node has-breakpoint" data-node-id="clamp" data-semantic-id="${clamp.semanticId}" data-debug-semantic-id="${clamp.debugSemanticId}" data-expression-node-id="${clamp.expressionNodeId}" data-line="${clamp.line}" tabindex="0">
       <div class="node-ordinal">04</div><div class="node-content"><div class="node-kicker">ASSIGN · PURE ENGINE CALL</div><h3><span class="local-name">${escapeHtml(clamp.target)}</span> <b>=</b> ${escapeHtml(clamp.title)}</h3>
       <div class="argument-table">${clamp.arguments.map(argument => `<span>${escapeHtml(argument.label)}</span><strong>${expressionMarkup(argument.value, argument.refs)}</strong>`).join('')}</div></div>
       <button class="breakpoint-toggle active" type="button" aria-label="切换断点"></button>
     </article>
     <div class="flow-connector"><span>then</span></div>
-    <article class="flow-node return-node" data-node-id="return" data-semantic-id="${returned.semanticId}" data-line="${returned.line}" tabindex="0">
+    <article class="flow-node return-node" data-node-id="return" data-semantic-id="${returned.semanticId}" data-debug-semantic-id="${returned.debugSemanticId}" data-line="${returned.line}" tabindex="0">
       <div class="node-ordinal">05</div><div class="node-content"><div class="node-kicker">RETURN</div><h3><span class="local-name">${expressionMarkup(returned.expression, returned.declarationRefs)}</span> <em>${escapeHtml(returned.returnType)}</em></h3></div>
       <button class="breakpoint-toggle" type="button" aria-label="切换断点"></button>
     </article>`;
@@ -766,9 +780,10 @@ function renderNodeInspector(node) {
     <section class="inspector-section"><h3>INTENT</h3><div class="node-inspector-title">${escapeHtml(node.title)}</div><p class="node-inspector-copy">${escapeHtml(node.detail)}</p></section>
     <section class="inspector-section"><h3>SOURCE LOCATION</h3><div class="fact-grid"><span>${escapeHtml(state.sourcePath.split('/').at(-1))}</span><strong>Line ${node.line}</strong></div><div class="fact-grid"><span>Graph representation</span><strong>compact projection</strong></div>${node.expressionNodeId ? `<div class="fact-grid"><span>Inline expression</span><strong>${semanticShort(node.expressionNodeId)}</strong></div>` : ''}</section>
     <section class="inspector-section source-contract"><div class="section-title-row"><h3>AI OUTLINE</h3><span>SEMANTIC</span></div><pre>${escapeHtml(node.detail)}</pre></section>
-    <section class="inspector-section identity-section"><h3>SEMANTIC IDENTITY</h3><button id="semanticId" class="identity-value" type="button">${semanticShort(node.semanticId)}</button><div class="identity-facts"><span>TEXT <b>✓</b></span><span>GRAPH <b>✓</b></span><span>DEBUG <b>✓</b></span></div></section>
+    <section class="inspector-section identity-section"><h3>GRAPH IDENTITY</h3><button id="semanticId" class="identity-value" type="button">${semanticShort(node.semanticId)}</button>${node.debugSemanticId ? `<h3 class="debug-identity-heading">DEBUG STATEMENT</h3><button id="debugSemanticId" class="identity-value debug-identity" type="button">${semanticShort(node.debugSemanticId)}</button>` : ''}<div class="identity-facts"><span>TEXT <b>✓</b></span><span>GRAPH <b>✓</b></span><span>DEBUG <b>${node.debugSemanticId ? '✓' : '—'}</b></span></div></section>
     <div class="prototype-warning"><strong>REAL GRAPH PROJECTION</strong><p>卡片直接绑定 Graph Semantic ID；字面量和普通运算作为可追溯的内联表达式，不制造逐行节点。</p></div>`;
   document.getElementById('semanticId').addEventListener('click', () => copyText(node.semanticId, 'Semantic ID copied'));
+  document.getElementById('debugSemanticId')?.addEventListener('click', () => copyText(node.debugSemanticId, 'Debug statement ID copied'));
 }
 
 function renderAiDeclarations() {
@@ -845,44 +860,156 @@ function setZoom(next) {
   zoomLabel.textContent = `${Math.round(state.zoom * 100)}%`;
 }
 
-function clearDebug() {
-  state.debugTimers.forEach(clearTimeout);
-  state.debugTimers = [];
-  document.querySelectorAll('.executing, .paused').forEach(element => element.classList.remove('executing', 'paused'));
-  debugStrip.classList.remove('visible');
+async function connectDebugBridge() {
+  try {
+    const response = await fetch('/api/debug/health', { cache: 'no-store' });
+    if (!response.ok) throw new Error(`Debug health returned ${response.status}`);
+    const health = await response.json();
+    assertArtifact(health.schemaVersion === 'unifiedscript.debug-health/v0.1', 'Unsupported debug health protocol');
+    assertArtifact(health.status === 'ready', 'CoreCLR debug bridge is not ready');
+    assertArtifact(health.sourceCompilationId === state.sourceCompilationId, 'Debug/source compilation identity mismatch');
+    assertArtifact(health.semanticConfigurationId === state.semanticConfigurationId, 'Debug/semantic configuration identity mismatch');
+    state.debugConnected = true;
+    state.debugHealth = health;
+    document.querySelector('.sync-status strong').textContent = 'IR + GRAPH + CLR';
+    document.querySelector('.target-label').textContent = `CLR ${semanticShort(health.generationId)} · GRAPH v0.12`;
+  } catch (error) {
+    state.debugConnected = false;
+    state.debugHealth = null;
+    console.info('CoreCLR debug bridge is offline; run debug-serve to enable live debugging.', error.message);
+  }
 }
 
-function runDebug() {
-  clearDebug();
+function clearDebugVisuals(hideStrip = true) {
+  document.querySelectorAll('.executing, .paused').forEach(element => element.classList.remove('executing', 'paused'));
+  if (hideStrip) debugStrip.classList.remove('visible');
+}
+
+function setDebugBusy(busy) {
+  state.debugBusy = busy;
+  document.getElementById('runButton').disabled = busy || state.debugSession?.state === 'paused';
+  document.getElementById('continueButton').disabled = busy || state.debugSession?.state !== 'paused';
+  document.getElementById('stepOverButton').disabled = busy || state.debugSession?.state !== 'paused';
+}
+
+async function debugRequest(path, body = {}) {
+  const response = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error?.message || `Debug request returned ${response.status}`);
+  if (payload.schemaVersion !== 'unifiedscript.debug-session/v0.1') throw new Error('Unsupported debug session response');
+  return payload;
+}
+
+function activeBreakpointNodeIds() {
+  return [...document.querySelectorAll('.breakpoint-toggle.active:not(:disabled)')]
+    .map(button => button.closest('[data-debug-semantic-id]')?.dataset.debugSemanticId)
+    .filter((value, index, values) => value && values.indexOf(value) === index);
+}
+
+function renderLiveDebugPause(response) {
+  clearDebugVisuals(false);
+  state.debugSession = response;
+  const pausedElement = [...document.querySelectorAll('[data-debug-semantic-id]')]
+    .find(element => element.dataset.debugSemanticId === response.pause.nodeId);
+  if (!pausedElement) throw new Error(`Paused statement ${response.pause.nodeId} has no visual card`);
+  pausedElement.classList.add('executing', 'paused');
+  pausedElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  selectNode(pausedElement.dataset.nodeId, false);
+
+  const frame = response.frames[0];
+  const reason = response.pause.reason === 'breakpoint' ? 'BREAKPOINT' : response.pause.reason.toUpperCase();
+  document.getElementById('debugReason').textContent = `PAUSED · ${reason}`;
+  document.getElementById('debugLocation').textContent = `${frame.methodMetadataName} · IL ${frame.ilOffset} · generation ${response.generation.number}`;
+  document.getElementById('debugLocals').innerHTML = response.locals.map(local =>
+    `<span title="${escapeHtml(local.typeMetadataName)}">${escapeHtml(local.name)} <b>${escapeHtml(local.display)}</b></span>`).join('');
+  debugStrip.classList.add('visible');
+  document.querySelector('.target-label').textContent = `LIVE CLR · ${semanticShort(response.pause.pauseId)}`;
+  setDebugBusy(false);
+}
+
+function renderDebugCompletion(response) {
+  state.debugSession = null;
+  clearDebugVisuals();
+  const result = response.result;
+  const returned = result?.returnValue?.json ?? '<void>';
+  document.querySelector('.sync-status strong').textContent = state.graphDirty ? 'PATCH PENDING' : 'IR + GRAPH + CLR';
+  document.querySelector('.target-label').textContent = `CLR GENERATION ${response.generation.number} · COMPLETED`;
+  setDebugBusy(false);
+  showToast(`Execution returned ${returned}`, 'Live CoreCLR debug session completed');
+}
+
+function renderDebugError(error) {
+  state.debugSession = null;
+  clearDebugVisuals(false);
+  document.getElementById('debugReason').textContent = 'DEBUG ERROR';
+  document.getElementById('debugLocation').textContent = error.message;
+  document.getElementById('debugLocals').replaceChildren();
+  debugStrip.classList.add('visible');
+  setDebugBusy(false);
+  showToast('CoreCLR debug failed', error.message);
+}
+
+function applyDebugResponse(response) {
+  if (response.state === 'paused') renderLiveDebugPause(response);
+  else if (response.state === 'completed') renderDebugCompletion(response);
+  else throw new Error(`Unknown debug session state ${response.state}`);
+}
+
+async function runDebug() {
+  clearDebugVisuals();
   document.querySelector('.inspector-panel').classList.remove('compact-visible');
   changeView('structure');
-  const sequence = ['entry', 'scale', 'criticalBranch', 'criticalScale', 'clamp'];
-  sequence.forEach((id, index) => {
-    state.debugTimers.push(setTimeout(() => {
-      document.querySelectorAll('.executing').forEach(element => element.classList.remove('executing'));
-      const element = document.querySelector(`[data-node-id="${id}"]`);
-      element?.classList.add('executing');
-      element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      if (id === 'clamp') {
-        element?.classList.add('paused');
-        debugStrip.classList.add('visible');
-        selectNode('clamp', false);
-      }
-    }, 260 + index * 480));
-  });
+  if (!state.debugConnected) {
+    await connectDebugBridge();
+    if (!state.debugConnected) {
+      renderDebugError(new Error('Start the workbench with `unifiedscript debug-serve` to enable live CoreCLR debugging.'));
+      return;
+    }
+  }
+
+  const breakpointNodeIds = activeBreakpointNodeIds();
+  if (breakpointNodeIds.length === 0) {
+    renderDebugError(new Error('Enable at least one statement breakpoint before running.'));
+    return;
+  }
+
+  setDebugBusy(true);
+  try {
+    const response = await debugRequest('/api/debug/start', {
+      methodId: state.graphFunction.id,
+      arguments: [12, true],
+      receiver: {
+        assetId: state.assetId,
+        stateOverrides: state.declarations
+          .filter(item => !item.semanticId.startsWith('pending_'))
+          .map(item => ({ stateId: item.semanticId, value: typedDefault(item) })),
+      },
+      breakpointNodeIds,
+    });
+    applyDebugResponse(response);
+  } catch (error) {
+    renderDebugError(error);
+  }
 }
 
-function continueDebug() {
-  debugStrip.classList.remove('visible');
-  const clamp = document.querySelector('[data-node-id="clamp"]');
-  clamp?.classList.remove('paused', 'executing');
-  const returnNode = document.querySelector('[data-node-id="return"]');
-  returnNode?.classList.add('executing');
-  setTimeout(() => {
-    returnNode?.classList.remove('executing');
-    showToast('Execution returned 480', 'CoreCLR debug experience simulation');
-  }, 650);
+async function resumeDebug(stepOver) {
+  if (state.debugSession?.state !== 'paused') return;
+  setDebugBusy(true);
+  clearDebugVisuals(false);
+  try {
+    const response = await debugRequest(stepOver ? '/api/debug/step-over' : '/api/debug/continue');
+    applyDebugResponse(response);
+  } catch (error) {
+    renderDebugError(error);
+  }
 }
+
+const continueDebug = () => resumeDebug(false);
+const stepOverDebug = () => resumeDebug(true);
 
 function showToast(title, subtitle) {
   toast.querySelector('strong').textContent = title;
@@ -905,6 +1032,7 @@ document.getElementById('zoomOutButton').addEventListener('click', () => setZoom
 document.getElementById('fitButton').addEventListener('click', () => setZoom(.9));
 document.getElementById('runButton').addEventListener('click', runDebug);
 document.getElementById('continueButton').addEventListener('click', continueDebug);
+document.getElementById('stepOverButton').addEventListener('click', stepOverDebug);
 document.getElementById('closeInspectorButton').addEventListener('click', () => document.querySelector('.inspector-panel').classList.remove('compact-visible'));
 
 document.getElementById('aiViewButton').addEventListener('click', () => {

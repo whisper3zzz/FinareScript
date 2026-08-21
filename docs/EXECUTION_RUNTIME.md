@@ -46,9 +46,15 @@ semantic method ID before invoking it. Overloaded entry points can instead use
 
 ## M5.1 invocation boundary
 
-The initial entry-point contract deliberately accepts only synchronous static
-`[Visual]` methods. Object receivers require the future UE object/lifetime
-bridge, and async methods require a suspension-aware scheduler contract.
+The initial M5.1 entry-point contract accepted only synchronous static
+`[Visual]` methods. M5.5.4 adds an engine-neutral `ScriptAssetReceiver` for
+synchronous instance Visual methods: it identifies one Declaration IR asset
+and supplies optional typed JSON overrides by state Semantic ID. The host
+constructs the declared script asset, retains source initializers for states
+without overrides, applies validated overrides, and invokes the same emitted
+CoreCLR method. Arbitrary object receivers still remain outside the contract;
+the future UE object/lifetime bridge will own engine instances. Async methods
+still require a suspension-aware scheduler contract.
 
 JSON arguments currently materialize exact graph-safe scalar values, enums,
 one-dimensional arrays, `IEnumerable<T>` interfaces, and `List<T>`. The

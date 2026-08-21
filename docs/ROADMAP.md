@@ -176,7 +176,7 @@ declarations or one-node-per-expression graphs.
 - [x] compact structure regions with inline ordinary expressions
 - [x] actual Declaration/Graph artifacts connected to the editor prototype
 - [x] coordinate-free AI outline and typed declaration patch preview
-- [ ] live CoreCLR pause/locals painted on real semantic statement cards
+- [x] live CoreCLR pause/locals/step-over painted on real semantic statement cards
 - [x] sample source workflow with zero required Blueprint variables
 
 ## M6 — Unreal Engine adapter

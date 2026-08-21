@@ -12,10 +12,10 @@ exposure metadata, asset paths, and Visual signatures first-class. The first
 prototype connection consumes that compiler artifact, so those declarations no
 longer require a Blueprint or another engine-owned binary surface.
 
-Typed declaration edits now round-trip through semantic patches, and the
-behavior surface consumes the real Graph artifact. The remaining connection is
-to replace the prototype's timed debug fixture with the existing live CoreCLR
-debug transport.
+Typed declaration edits round-trip through semantic patches, the behavior
+surface consumes the real Graph artifact, and the workbench is now driven by
+the existing live CoreCLR debug transport. The remaining connection is a host
+mutation channel that submits visual/AI patches without a manual CLI handoff.
 
 ## The visual editor is not a code sentence renderer
 
@@ -122,8 +122,8 @@ types, and preconditions; it does not manipulate pixels or Blueprint nodes.
 5. Selecting a declaration or action highlights the exact canonical source.
 6. Text edits, visual edits, and AI patches pass the same compiler/semantic
    transaction gate.
-7. Debug breakpoints and pause state use the same statement IDs displayed by
-   the structure view.
+7. Debug breakpoints and pause state use the exact `debugTargetId` displayed by
+   each probeable structure card.
 8. UE exposure is generated from Declaration IR; there are zero required
    Blueprint-only variables in the sample workflow.
 
@@ -137,7 +137,10 @@ actions/regions from 17 fine-grained nodes and recursively renders ordinary
 data expressions inline. Every card and source selection uses the generated
 Graph Semantic ID; state-reference tokens also carry their Declaration IR IDs.
 Structure/Split/Code, the AI outline, and declaration patch preview therefore
-share compiler artifacts rather than embedded behavior fixtures. Sending a
-declaration patch to the local CLI and painting the existing live CoreCLR debug
-transport remain host-integration boundaries; only the current pause/locals
-timing is still simulated.
+share compiler artifacts rather than embedded behavior fixtures. `debug-serve`
+hosts the page and a same-origin loopback bridge: Run, breakpoint pause,
+Continue, Step Over, frame/IL location, locals, and result all come from the
+same collectible CoreCLR execution used by the runtime. Graph expression IDs
+remain distinct from their enclosing probeable HIR statement IDs and are joined
+explicitly through `debugTargetId`. Sending declaration/body patches back to a
+host remains the outstanding integration boundary.

@@ -132,7 +132,7 @@ public sealed class CoreClrExecutionHostTests
     }
 
     [Fact]
-    public void Execute_RejectsInstanceEntryPointUntilReceiverContractExists()
+    public void Execute_RejectsInstanceEntryPointWithoutScriptAssetReceiverContract()
     {
         const string source = """
             using UnifiedScript;
@@ -157,8 +157,64 @@ public sealed class CoreClrExecutionHostTests
                 methodId,
                 [new ExecutionArgument("1")])));
 
-        Assert.Equal("UVR1004", exception.Code);
-        Assert.Contains("object receivers", exception.Message, StringComparison.Ordinal);
+        Assert.Equal("UVR1008", exception.Code);
+        Assert.Contains("requires receiver", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Execute_RunsScriptAssetInstanceWithTypedStateOverrides()
+    {
+        const string source = """
+            using System;
+            using UnifiedScript;
+
+            namespace Tests.Execution;
+
+            [ScriptAsset("Tests/DamagePolicy")]
+            public sealed class DamagePolicy
+            {
+                public int BaseDamage { get; set; } = 20;
+
+                public float CriticalMultiplier { get; set; } = 2.0f;
+
+                public int MaxDamage { get; set; } = 999;
+
+                [Visual]
+                public float ApplyDamage(int incomingDamage, bool critical)
+                {
+                    float scaled = incomingDamage * BaseDamage;
+                    if (critical)
+                    {
+                        scaled *= CriticalMultiplier;
+                    }
+
+                    return Math.Clamp(scaled, 0f, MaxDamage);
+                }
+            }
+            """;
+        using CoreClrExecutionSession session = CreateSession(source);
+        Core.ScriptAssetDeclaration asset = Assert.Single(session.ScriptAssets.Assets);
+        IReadOnlyDictionary<string, Core.ScriptStateDeclaration> states = asset.States
+            .ToDictionary(static state => state.Name, StringComparer.Ordinal);
+        Core.SemanticId methodId = session.ResolveVisualMethodId(
+            "Tests.Execution.DamagePolicy.ApplyDamage");
+
+        ExecutionResult defaults = session.Execute(new ExecutionInvocation(
+            methodId,
+            [new ExecutionArgument("12"), new ExecutionArgument("true")],
+            new ScriptAssetReceiver(asset.Id)));
+        ExecutionResult overridden = session.Execute(new ExecutionInvocation(
+            methodId,
+            [new ExecutionArgument("12"), new ExecutionArgument("true")],
+            new ScriptAssetReceiver(asset.Id,
+            [
+                new ScriptStateOverride(states["BaseDamage"].Id, "10"),
+                new ScriptStateOverride(states["CriticalMultiplier"].Id, "3.0"),
+                new ScriptStateOverride(states["MaxDamage"].Id, "1000"),
+            ])));
+
+        Assert.Equal("480", defaults.ReturnValue!.Json);
+        Assert.Equal("360", overridden.ReturnValue!.Json);
     }
 
     [Fact]

@@ -21,11 +21,60 @@ public sealed record ExecutionArgument
     public string Json { get; }
 }
 
+public sealed record ScriptStateOverride
+{
+    public ScriptStateOverride(SemanticId stateId, string json)
+    {
+        if (stateId.IsEmpty)
+        {
+            throw new ArgumentException("A script state override requires a state ID.", nameof(stateId));
+        }
+
+        ArgumentException.ThrowIfNullOrWhiteSpace(json);
+        using JsonDocument document = JsonDocument.Parse(json);
+        StateId = stateId;
+        Json = document.RootElement.GetRawText();
+    }
+
+    public SemanticId StateId { get; }
+
+    public string Json { get; }
+}
+
+public sealed record ScriptAssetReceiver
+{
+    public ScriptAssetReceiver(
+        SemanticId assetId,
+        IEnumerable<ScriptStateOverride>? stateOverrides = null)
+    {
+        if (assetId.IsEmpty)
+        {
+            throw new ArgumentException("A script asset receiver requires an asset ID.", nameof(assetId));
+        }
+
+        ScriptStateOverride[] overrides = (stateOverrides ?? []).ToArray();
+        if (overrides.Select(static item => item.StateId).Distinct().Count() != overrides.Length)
+        {
+            throw new ArgumentException(
+                "A script asset receiver cannot override the same state more than once.",
+                nameof(stateOverrides));
+        }
+
+        AssetId = assetId;
+        StateOverrides = overrides;
+    }
+
+    public SemanticId AssetId { get; }
+
+    public IReadOnlyList<ScriptStateOverride> StateOverrides { get; }
+}
+
 public sealed record ExecutionInvocation
 {
     public ExecutionInvocation(
         SemanticId methodId,
-        IEnumerable<ExecutionArgument>? arguments = null)
+        IEnumerable<ExecutionArgument>? arguments = null,
+        ScriptAssetReceiver? receiver = null)
     {
         if (methodId.IsEmpty)
         {
@@ -34,11 +83,14 @@ public sealed record ExecutionInvocation
 
         MethodId = methodId;
         Arguments = (arguments ?? []).ToArray();
+        Receiver = receiver;
     }
 
     public SemanticId MethodId { get; }
 
     public IReadOnlyList<ExecutionArgument> Arguments { get; }
+
+    public ScriptAssetReceiver? Receiver { get; }
 }
 
 public sealed record ExecutionValue(

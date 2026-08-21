@@ -143,6 +143,11 @@ def main() -> int:
         kind: sum(node["kind"] == kind for node in graph_nodes)
         for kind in ("entry", "variable", "branch", "assignment", "invocation", "return")
     }
+    assignment_debug_targets = {
+        node["properties"].get("debugTargetId")
+        for node in graph_nodes
+        if node["kind"] == "assignment"
+    }
     require(
         graph_document["schemaVersion"] == "unifiedscript.graph/v0.12"
         and graph_document["sourceCompilationId"]
@@ -169,6 +174,9 @@ def main() -> int:
             "return": 1,
         }
         and state_references == declaration_ids
+        and len(assignment_debug_targets) == 2
+        and None not in assignment_debug_targets
+        and assignment_debug_targets.isdisjoint(graph_node_ids)
         and sum(region["kind"] == "if" for region in graph_regions) == 1
         and sum(
             region["kind"] == "else"
@@ -255,10 +263,27 @@ def main() -> int:
         and "adaptGraphArtifact" in prototype_source
         and "renderBehaviorGraph" in prototype_source
         and "data-semantic-id" in prototype_source
+        and "data-debug-semantic-id" in prototype_source
         and "unifiedscript.graph/v0.12" in prototype_source,
         "Visual prototype does not project the generated Graph artifact",
     )
     checks.append("visual behavior cards project real Graph semantic identities")
+    debug_server_source = (
+        ROOT / "src" / "UnifiedScript.Cli" / "CoreClrDebugHttpServer.cs"
+    ).read_text(encoding="utf-8")
+    require(
+        'args[0] == "debug-serve"' in cli_source
+        and "CoreClrDebugHttpServer" in cli_source
+        and '"/api/debug/start"' in debug_server_source
+        and '"/api/debug/step-over"' in debug_server_source
+        and '"/api/debug/continue"' in debug_server_source
+        and "ScriptAssetReceiver" in debug_server_source
+        and "debugTimers" not in prototype_source
+        and "CoreCLR debug experience simulation" not in prototype_source
+        and "unifiedscript.debug-session/v0.1" in prototype_source,
+        "Live CoreCLR visual debug bridge is not connected end to end",
+    )
+    checks.append("visual Run, Step Over, Continue, and locals use the live CoreCLR bridge")
     require(
         (ROOT / "samples" / "MultiFile" / "GameplayApi.cs").is_file()
         and (ROOT / "samples" / "MultiFile" / "DamageScript.cs").is_file()

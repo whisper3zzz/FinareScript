@@ -104,8 +104,9 @@ The third connected slice is now implemented:
    explicit `then` region and implicit empty `else` region.
 6. Every promoted card exposes its exact Graph Semantic ID and source line.
    Selecting the clamp assignment highlights line 27 of the real source.
-7. The breakpoint targets the executable outer assignment ID; the nested
-   `Math.Clamp` invocation keeps a separate inline expression ID for tracing.
+7. The assignment card keeps its Graph expression ID, and its generated
+   `debugTargetId` identifies the enclosing probeable HIR statement. The nested
+   `Math.Clamp` invocation keeps a third inline expression ID for tracing.
 8. Graph identifiers bound to Script Asset state now carry a
    `declarationId`, joining behavior references to Declaration IR without name
    matching.
@@ -120,8 +121,44 @@ The third connected slice is now implemented:
 12. The full 361-test suite, zero-warning build, formatting check, and ten
     repository invariants pass.
 
-The next M5.5 slice replaces the current pause/locals timing fixture with the
-existing CoreCLR live-debug transport while preserving these statement IDs.
+## M5.5.4 completed — Live CoreCLR visual debugging
+
+The fourth connected slice is now implemented:
+
+1. `ScriptAssetReceiver` is an engine-neutral instance invocation contract
+   carrying the asset ID and typed state-ID/JSON overrides.
+2. The collectible CoreCLR host constructs a validated Script Asset receiver,
+   applies overrides through its declared state properties, and invokes its
+   synchronous instance Visual method without introducing another VM.
+3. Missing, foreign, duplicate, or static-method receivers fail with stable
+   `UVR1008` invocation diagnostics.
+4. Top-level effect Graph nodes now carry `debugTargetId`, explicitly joining
+   an assignment expression card to its probeable enclosing HIR statement.
+5. `debug-serve` compiles the real DamagePolicy debug image once and serves the
+   workbench plus `/api/debug/health`, `start`, `continue`, and `step-over` from
+   one loopback origin.
+6. Every debug request and response retains generation, source-compilation,
+   semantic-configuration, method, execution, pause, statement, and breakpoint
+   identities.
+7. The workbench rejects a debug generation whose source/configuration IDs do
+   not match its loaded Graph and Declaration artifacts.
+8. Run executes `DamagePolicy.ApplyDamage(12, true)` against the current
+   Declaration state values and pauses the real CoreCLR thread at line 27.
+9. The pause strip renders the real top frame, IL offset, generation, and live
+   locals: `incomingDamage=12`, `critical=true`, and `scaled=480`.
+10. Step Over resumes that thread and pauses on the real return statement at
+    line 28; Continue completes with the canonical CoreCLR result `480`.
+11. Timed execution animation and hard-coded locals/return fixtures have been
+    removed; an offline bridge produces an explicit error rather than a fake
+    debug session.
+12. Runtime, graph-identity, CLI, repository, and browser regressions cover the
+    complete receiver → pause → locals → step → result path.
+13. The full 363-test suite, zero-warning build, formatting check, and eleven
+    repository invariants pass.
+
+The remaining M5.5 boundary is host integration for sending declaration/body
+patches without a manual CLI handoff. Native traps, async execution, and the UE
+object/lifetime adapter remain later runtime/M6 work.
 
 ## Deliberate limits
 

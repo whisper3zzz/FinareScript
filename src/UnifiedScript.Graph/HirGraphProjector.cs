@@ -285,6 +285,7 @@ public sealed class HirGraphProjector
             IReadOnlyList<ControlEndpoint> afterEffects = ConnectEffectChain(incoming, expression.Effects);
             if (expression.Effects.Count > 0)
             {
+                AnnotateDebugTarget(statement.Expression.Id, statement.Id);
                 return afterEffects;
             }
 
@@ -299,6 +300,10 @@ public sealed class HirGraphProjector
                 ports.Add(new GraphPort("expression", GraphPortDirection.Input, GraphPortKind.Data));
             }
 
+            var properties = new SortedDictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["debugTargetId"] = statement.Id.Value,
+            };
             AddNode(
                 new GraphNode(
                     evaluateId,
@@ -306,7 +311,7 @@ public sealed class HirGraphProjector
                     "Evaluate",
                     statement.Span,
                     ports,
-                    EmptyProperties()),
+                    properties),
                 regionId);
             ConnectIncoming(incoming, evaluateId, "in");
             if (expression.Value is not null)
@@ -315,6 +320,24 @@ public sealed class HirGraphProjector
             }
 
             return [new ControlEndpoint(evaluateId, "then")];
+        }
+
+        private void AnnotateDebugTarget(SemanticId graphNodeId, SemanticId statementId)
+        {
+            if (!nodes.TryGetValue(graphNodeId, out GraphNode? node))
+            {
+                throw new InvalidOperationException(
+                    $"Expression statement root '{graphNodeId}' has no projected Graph node.");
+            }
+
+            var properties = new SortedDictionary<string, string>(StringComparer.Ordinal);
+            foreach (KeyValuePair<string, string> property in node.Properties)
+            {
+                properties.Add(property.Key, property.Value);
+            }
+
+            properties.Add("debugTargetId", statementId.Value);
+            nodes[graphNodeId] = node with { Properties = properties };
         }
 
         private IReadOnlyList<ControlEndpoint> ProjectIf(

@@ -191,10 +191,14 @@ preview. M5.5.3 connects the behavior surface to the generated
 `unifiedscript.graph/v0.12` artifact and exact source snapshot. The adapter
 reduces 17 fine-grained Graph nodes to six semantic action/region cards while
 recursively retaining ordinary expressions inline. Cards, source selection,
-AI outline, and simulated statement breakpoint now share the real Graph IDs;
-state-reference nodes additionally carry their Declaration IR IDs, so the UI
-never joins state by display name. Live CoreCLR debug transport is the next
-connected slice.
+AI outline, and source selection now share real Graph IDs; state-reference
+nodes additionally carry their Declaration IR IDs, so the UI never joins state
+by display name. M5.5.4 closes the live authoring/debug loop. An engine-neutral
+`ScriptAssetReceiver` materializes instance state on the same collectible
+CoreCLR image, assignment Graph nodes expose their exact probeable HIR
+`debugTargetId`, and `debug-serve` hosts the workbench plus loopback debug API
+on one local origin. Run, Continue, Step Over, stack location, locals, and the
+returned value now come from the suspended CoreCLR thread rather than timers.
 
 The v0.2 profile accepts `[Visual]` methods containing local variables,
 expressions, calls, assignments, `if/else`, `while`, `do`, `for`, bounded
@@ -235,6 +239,7 @@ Current execution path:
   -> collectible CoreCLR session
   -> content-addressed cache + reload generation + semantic breakpoint binding
   -> cooperative CoreCLR debug adapter + loopback transport
+  -> Script Asset receiver + local visual debug HTTP bridge
   -> semantic-ID invocation and typed result/fault
 
 Later:

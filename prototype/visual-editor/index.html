@@ -269,9 +269,12 @@
 
         <div id="debugStrip" class="debug-strip" data-testid="debug-strip">
           <div class="debug-pulse"><span></span></div>
-          <div class="debug-copy"><strong>PAUSED</strong><span>Math.Clamp · statement breakpoint</span></div>
-          <div class="debug-locals"><span>incomingDamage <b>12</b></span><span>critical <b>true</b></span><span>scaled <b>480</b></span></div>
-          <button id="continueButton" class="button primary small" type="button">CONTINUE <span>▶</span></button>
+          <div class="debug-copy"><strong id="debugReason">CORECLR READY</strong><span id="debugLocation">Waiting for a live statement pause</span></div>
+          <div id="debugLocals" class="debug-locals"></div>
+          <div class="debug-actions">
+            <button id="stepOverButton" class="button secondary small" type="button" disabled>STEP OVER <span>⇥</span></button>
+            <button id="continueButton" class="button primary small" type="button" disabled>CONTINUE <span>▶</span></button>
+          </div>
         </div>
       </section>
 

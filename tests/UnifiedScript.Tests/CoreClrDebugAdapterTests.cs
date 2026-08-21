@@ -26,6 +26,36 @@ public sealed class CoreClrDebugAdapterTests
         }
         """;
 
+    private const string ScriptAssetSource = """
+        using System;
+        using UnifiedScript;
+
+        namespace Tests.Debug;
+
+        [ScriptAsset("Tests/DamagePolicy")]
+        public sealed class DamagePolicy
+        {
+            public int BaseDamage { get; set; } = 20;
+
+            public float CriticalMultiplier { get; set; } = 2.0f;
+
+            public int MaxDamage { get; set; } = 999;
+
+            [Visual]
+            public float ApplyDamage(int incomingDamage, bool critical)
+            {
+                float scaled = incomingDamage * BaseDamage;
+                if (critical)
+                {
+                    scaled *= CriticalMultiplier;
+                }
+
+                scaled = Math.Clamp(scaled, 0f, MaxDamage);
+                return scaled;
+            }
+        }
+        """;
+
     [Fact]
     public async Task Breakpoint_ReallySuspendsCoreClrAndExposesStackAndLocalsThenSteps()
     {
@@ -123,6 +153,56 @@ public sealed class CoreClrDebugAdapterTests
         BreakpointProtocolException stale = Assert.Throws<BreakpointProtocolException>(() =>
             transport.Pause(firstReload.Generation.GenerationId, execution.ExecutionId));
         Assert.Equal("UDB1002", stale.Code);
+    }
+
+    [Fact]
+    public async Task ScriptAssetReceiverPausesOnItsRealAssignmentAndExposesLiveLocals()
+    {
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            ScriptAssetSource,
+            "Tests/Debug/DamagePolicy.cs");
+        CSharpAnalysisResult analysis = new CSharpSemanticPipeline().Analyze(request);
+        HirExpressionStatement clampAssignment = analysis.Hir!
+            .DescendantsAndSelf()
+            .OfType<HirExpressionStatement>()
+            .Single(statement => statement.Span.Start.Line == 24);
+        Assert.IsType<HirAssignmentExpression>(clampAssignment.Expression);
+        ScriptAssetDeclaration asset = Assert.Single(analysis.ScriptAssets!.Assets);
+        using var transport = new CoreClrDebugLoopbackTransport();
+        CoreClrDebugReloadResult reload = transport.Reload(request);
+        _ = transport.SetBreakpoint(new SemanticBreakpoint(
+            SemanticId.FromKey("script-asset-clamp-breakpoint"),
+            clampAssignment.Id));
+        SemanticId methodId = transport.ResolveVisualMethodId(
+            "Tests.Debug.DamagePolicy.ApplyDamage");
+
+        CoreClrDebugExecution execution = transport.Start(new ExecutionInvocation(
+            methodId,
+            [new ExecutionArgument("12"), new ExecutionArgument("true")],
+            new ScriptAssetReceiver(asset.Id)));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        CoreClrDebugPause pause = await transport.WaitForPauseAsync(
+            execution.ExecutionId,
+            timeout.Token);
+        CoreClrDebugStackFrame frame = Assert.Single(transport.GetStackTrace(
+            reload.Generation.GenerationId,
+            pause.PauseId));
+        IReadOnlyList<CoreClrDebugValue> locals = transport.GetLocals(
+            reload.Generation.GenerationId,
+            pause.PauseId,
+            frame.FrameId);
+
+        Assert.Equal(CoreClrDebugPauseReason.Breakpoint, pause.Reason);
+        Assert.Equal(clampAssignment.Id, pause.NodeId);
+        Assert.Equal("12", locals.Single(local => local.Name == "incomingDamage").Display);
+        Assert.Equal("true", locals.Single(local => local.Name == "critical").Display);
+        Assert.Equal("480", locals.Single(local => local.Name == "scaled").Display);
+
+        transport.Continue(reload.Generation.GenerationId, pause.PauseId);
+        ExecutionResult result = await transport.WaitForCompletionAsync(
+            execution.ExecutionId,
+            timeout.Token);
+        Assert.Equal("480", result.ReturnValue!.Json);
     }
 
     [Fact]

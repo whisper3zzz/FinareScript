@@ -103,12 +103,11 @@ public sealed class CoreClrExecutionSession : IDisposable
 
         MethodDescriptor descriptor = image.Semantics.Methods.Single(method =>
             method.Id == invocation.MethodId);
-        if (!descriptor.IsStatic || !hirMethod.IsStatic)
+        if (descriptor.IsStatic != hirMethod.IsStatic)
         {
             throw new ExecutionInvocationException(
                 "UVR1004",
-                "Execution-result v0.1 requires a static Visual method; object receivers are reserved " +
-                "for the engine host contract.");
+                "The bound and lowered method disagree about whether a receiver is required.");
         }
 
         if (hirMethod.IsAsync || image.Semantics.Types.Single(type =>
@@ -130,6 +129,11 @@ public sealed class CoreClrExecutionSession : IDisposable
             hirMethod,
             descriptor,
             parameterTypeNames);
+        object? receiver = ResolveReceiver(
+            loadedAssembly,
+            hirType,
+            hirMethod,
+            invocation.Receiver);
         ParameterInfo[] parameters = method.GetParameters();
         if (parameters.Length != invocation.Arguments.Count)
         {
@@ -146,7 +150,7 @@ public sealed class CoreClrExecutionSession : IDisposable
             .ToArray();
         try
         {
-            object? returnValue = method.Invoke(null, arguments);
+            object? returnValue = method.Invoke(receiver, arguments);
             TypeDescriptor returnType = image.Semantics.Types.Single(type =>
                 type.Id == descriptor.ReturnTypeId);
             string json = returnType.Kind == UnifiedTypeKind.Void
@@ -168,6 +172,93 @@ public sealed class CoreClrExecutionSession : IDisposable
                     ExecutionValueCodec.GetMetadataName(target.GetType()),
                     target.Message));
         }
+    }
+
+    private object? ResolveReceiver(
+        Assembly assembly,
+        HirTypeDeclaration hirType,
+        HirMethodDeclaration hirMethod,
+        ScriptAssetReceiver? requestedReceiver)
+    {
+        if (hirMethod.IsStatic)
+        {
+            if (requestedReceiver is not null)
+            {
+                throw new ExecutionInvocationException(
+                    "UVR1008",
+                    "A static Visual method cannot receive Script Asset instance state.");
+            }
+
+            return null;
+        }
+
+        ScriptAssetDeclaration? asset = image.ScriptAssets.Assets.SingleOrDefault(candidate =>
+            string.Equals(candidate.QualifiedName, hirType.QualifiedName, StringComparison.Ordinal));
+        if (asset is null)
+        {
+            throw new ExecutionInvocationException(
+                "UVR1004",
+                "An instance Visual method is executable only through a declared Script Asset receiver.");
+        }
+
+        if (requestedReceiver is null || requestedReceiver.AssetId != asset.Id)
+        {
+            throw new ExecutionInvocationException(
+                "UVR1008",
+                $"Script Asset method '{hirType.QualifiedName}.{hirMethod.Name}' requires receiver '{asset.Id}'.");
+        }
+
+        Type runtimeType = assembly.GetType(hirType.QualifiedName, throwOnError: false) ??
+            throw new ExecutionInvocationException(
+                "UVR1007",
+                $"Emitted type '{hirType.QualifiedName}' was not found in the CoreCLR image.");
+        object receiver;
+        try
+        {
+            receiver = Activator.CreateInstance(runtimeType) ??
+                throw new ExecutionInvocationException(
+                    "UVR1008",
+                    $"Script Asset '{hirType.QualifiedName}' could not be constructed.");
+        }
+        catch (Exception exception) when (exception is MissingMethodException or MemberAccessException)
+        {
+            throw new ExecutionInvocationException(
+                "UVR1008",
+                $"Script Asset '{hirType.QualifiedName}' requires an accessible parameterless constructor.");
+        }
+
+        IReadOnlyDictionary<SemanticId, ScriptStateDeclaration> states = asset.States
+            .ToDictionary(static state => state.Id);
+        foreach (ScriptStateOverride stateOverride in requestedReceiver.StateOverrides)
+        {
+            if (!states.TryGetValue(stateOverride.StateId, out ScriptStateDeclaration? state))
+            {
+                throw new ExecutionInvocationException(
+                    "UVR1008",
+                    $"State '{stateOverride.StateId}' does not belong to Script Asset '{asset.Id}'.");
+            }
+
+            PropertyInfo property = runtimeType.GetProperty(
+                state.Name,
+                BindingFlags.Public | BindingFlags.NonPublic |
+                BindingFlags.Instance | BindingFlags.DeclaredOnly) ??
+                throw new ExecutionInvocationException(
+                    "UVR1008",
+                    $"Runtime state property '{state.Name}' was not found on Script Asset '{asset.Id}'.");
+            if (property.SetMethod is null)
+            {
+                throw new ExecutionInvocationException(
+                    "UVR1008",
+                    $"Runtime state property '{state.Name}' is not writable.");
+            }
+
+            object? value = ExecutionValueCodec.Decode(
+                new ExecutionArgument(stateOverride.Json),
+                property.PropertyType);
+            property.SetValue(receiver, value);
+        }
+
+        return receiver;
     }
 
     private (HirTypeDeclaration Type, HirMethodDeclaration Method) FindHirMethod(

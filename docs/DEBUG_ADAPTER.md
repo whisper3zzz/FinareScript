@@ -53,7 +53,7 @@ performs the extra instrumented emission.
 
 `ICoreClrDebugTransport` is the editor-facing boundary.
 `CoreClrDebugLoopbackTransport` delegates it in process and is the integration
-path for a future visual editor before process or UE transport framing exists.
+path used by the visual editor before process or UE transport framing exists.
 Every stateful command carries a generation, execution, or pause identity, so a
 consumer cannot accidentally continue a superseded image or inspect a resumed
 pause.
@@ -80,6 +80,25 @@ IReadOnlyList<CoreClrDebugValue> locals = debug.GetLocals(
 
 debug.StepOver(loaded.Generation.GenerationId, pause.PauseId);
 ```
+
+## Visual workbench loopback bridge
+
+`unifiedscript debug-serve` is the development-only editor host. It serves the
+static workbench and a same-origin loopback JSON API from `127.0.0.1`:
+
+- `GET /api/debug/health` reports the loaded generation plus source and
+  semantic-configuration IDs;
+- `POST /api/debug/start` installs statement breakpoints, materializes an
+  optional `ScriptAssetReceiver`, starts CoreCLR, and returns the first pause;
+- `POST /api/debug/step-over` resumes the exact pause and returns the next pause
+  or completion;
+- `POST /api/debug/continue` resumes and returns the next pause or completion.
+
+The bridge never interprets HIR. It adapts HTTP requests directly to
+`ICoreClrDebugTransport`, caps request bodies, serves only a path-confined
+content root, and exposes the generation identities that the workbench checks
+against its loaded artifacts. It is loopback development plumbing, not the
+later remote or UE process transport.
 
 ## Suspension and step-over semantics
 
@@ -125,7 +144,8 @@ frames later without changing consumers.
 
 ## Deliberate limits
 
-M5.4 supports synchronous Visual methods and statement-node breakpoints.
+M5.4 supports synchronous Visual methods and statement-node breakpoints;
+M5.5.4 also supplies declared Script Asset receivers for instance methods.
 Expression-node breakpoint requests remain `Pending` with an explicit backend
 message instead of pretending that a nearby statement is exact. The current
 slice does not provide:

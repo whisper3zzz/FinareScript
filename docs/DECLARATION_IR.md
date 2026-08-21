@@ -183,5 +183,8 @@ builds the strict patch document above from the loaded artifact, including
 source/configuration IDs, target state ID, full old contract, and typed
 replacement. The preview JSON can be given directly to the CLI. Applying it is
 still an explicit CLI/backend action rather than an HTTP mutation from the
-dependency-free prototype. Structure cards and the debug animation remain
-fixtures until the real Graph/debug transports are connected.
+dependency-free prototype. Structure cards consume the real Graph artifact.
+The `debug-serve` authoring host can materialize a `ScriptAssetReceiver` from
+the asset ID and typed state-ID overrides, then drive the existing CoreCLR
+loopback debugger. Browser mutation submission remains explicit rather than
+being hidden inside this read/execute bridge.

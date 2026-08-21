@@ -69,6 +69,11 @@ internal static class Program
             return RunExecute(args);
         }
 
+        if (args.Count > 0 && args[0] == "debug-serve")
+        {
+            return RunDebugServe(args);
+        }
+
         if (args.Count > 0 && args[0] is "emit" or "emit-files")
         {
             return RunEmit(args);
@@ -197,6 +202,74 @@ internal static class Program
         {
             Console.Error.WriteLine($"error {exception.Code}: {exception.Message}");
             return 3;
+        }
+    }
+
+    private static int RunDebugServe(IReadOnlyList<string> args)
+    {
+        if (!TryParseDebugServeArguments(args, out DebugServeOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+
+        options = options ?? throw new InvalidOperationException(
+            "Argument parsing succeeded without debug server options.");
+        if (!File.Exists(options.InputPath))
+        {
+            Console.Error.WriteLine($"Input file does not exist: {options.InputPath}");
+            return 66;
+        }
+
+        if (!Directory.Exists(options.ContentRoot))
+        {
+            Console.Error.WriteLine($"Visual workbench root does not exist: {options.ContentRoot}");
+            return 66;
+        }
+
+        CSharpSourceDocument[] sources = LoadSources(
+            [options.InputPath],
+            options.IdentityPath is null ? [] : [options.IdentityPath]);
+        var request = new CSharpCompilationRequest(
+            options.AssemblyName,
+            sources,
+            options.ReferencePaths,
+            LoadEffectCatalog(options.EffectCatalogPath));
+        try
+        {
+            using var server = new CoreClrDebugHttpServer(
+                request,
+                options.ContentRoot,
+                options.Port);
+            using var cancellation = new CancellationTokenSource();
+            ConsoleCancelEventHandler cancelHandler = (_, eventArgs) =>
+            {
+                eventArgs.Cancel = true;
+                cancellation.Cancel();
+            };
+            Console.CancelKeyPress += cancelHandler;
+            try
+            {
+                Console.WriteLine(
+                    $"UnifiedScript visual debug server ready at http://127.0.0.1:{options.Port}/");
+                server.RunAsync(cancellation.Token).GetAwaiter().GetResult();
+            }
+            finally
+            {
+                Console.CancelKeyPress -= cancelHandler;
+            }
+
+            return 0;
+        }
+        catch (ExecutionCompilationException exception)
+        {
+            foreach (UnifiedDiagnostic diagnostic in exception.Diagnostics)
+            {
+                Console.Error.WriteLine(FormatDiagnostic(diagnostic));
+            }
+
+            Console.Error.WriteLine(exception.Message);
+            return 2;
         }
     }
 
@@ -822,6 +895,76 @@ internal static class Program
         return true;
     }
 
+    private static bool TryParseDebugServeArguments(
+        IReadOnlyList<string> args,
+        out DebugServeOptions? options)
+    {
+        options = null;
+        if (args.Count < 4 || args[0] != "debug-serve" || args[1].StartsWith("--", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        string inputPath = args[1];
+        string? contentRoot = null;
+        string? effectCatalogPath = null;
+        string? assemblyName = null;
+        string? identityPath = null;
+        int port = 4173;
+        bool hasPort = false;
+        var referencePaths = new List<string>();
+        int index = 2;
+        while (index < args.Count)
+        {
+            string option = args[index++];
+            if (index >= args.Count)
+            {
+                return false;
+            }
+
+            string value = args[index++];
+            switch (option)
+            {
+                case "--root" when contentRoot is null:
+                    contentRoot = value;
+                    break;
+                case "--port" when !hasPort && int.TryParse(value, out int parsedPort):
+                    port = parsedPort;
+                    hasPort = true;
+                    break;
+                case "--effects" when effectCatalogPath is null:
+                    effectCatalogPath = value;
+                    break;
+                case "--assembly" when assemblyName is null:
+                    assemblyName = value;
+                    break;
+                case "--reference":
+                    referencePaths.Add(value);
+                    break;
+                case "--identity" when identityPath is null:
+                    identityPath = value;
+                    break;
+                default:
+                    return false;
+            }
+        }
+
+        if (contentRoot is null || port is < 1024 or > 65535)
+        {
+            return false;
+        }
+
+        options = new DebugServeOptions(
+            inputPath,
+            contentRoot,
+            port,
+            effectCatalogPath,
+            assemblyName ?? "UnifiedScript.Analysis",
+            referencePaths,
+            identityPath);
+        return true;
+    }
+
     private static ExecutionArgument[] ParseExecutionArguments(string argumentsJson)
     {
         using JsonDocument document = JsonDocument.Parse(argumentsJson);
@@ -1267,6 +1410,7 @@ internal static class Program
         "  unifiedscript apply-declaration-patch <input.cs> --declaration-patch <patch.json> " +
         "--out <output.cs> --out-asset <asset.json> [options]\n" +
         "  unifiedscript execute <input.cs> (--method <name> | --method-id <us_...>) [options]\n" +
+        "  unifiedscript debug-serve <input.cs> --root <visual-editor-directory> [--port <number>] [options]\n" +
         "Options:\n" +
         "  --out <path>            Artifact directory, initialized sidecar, or patched source output.\n" +
         "  --patch <patch.json>    Semantic patch document required by apply-patch.\n" +
@@ -1279,6 +1423,8 @@ internal static class Program
         "  --method-id <us_...>    Exact semantic method ID alternative for overloaded methods.\n" +
         "  --args <json-array>     Execute arguments; defaults to an empty array.\n" +
         "  --layout <file.usgraph> Existing visual layout required by layout-sync.\n" +
+        "  --root <directory>      Static visual workbench root required by debug-serve.\n" +
+        "  --port <number>         Loopback debug server port; defaults to 4173.\n" +
         "  --assembly <name>        Set the analysis assembly name.\n" +
         "  --effects <catalog.json> Apply effect catalog overrides.\n" +
         "  --reference <assembly>   Add a metadata reference; may be repeated.\n" +
@@ -1297,6 +1443,15 @@ internal static class Program
         string? QualifiedMethodName,
         SemanticId? MethodId,
         string ArgumentsJson,
+        string? EffectCatalogPath,
+        string AssemblyName,
+        IReadOnlyList<string> ReferencePaths,
+        string? IdentityPath);
+
+    private sealed record DebugServeOptions(
+        string InputPath,
+        string ContentRoot,
+        int Port,
         string? EffectCatalogPath,
         string AssemblyName,
         IReadOnlyList<string> ReferencePaths,

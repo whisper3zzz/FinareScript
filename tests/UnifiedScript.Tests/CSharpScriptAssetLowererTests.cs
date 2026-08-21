@@ -1,4 +1,5 @@
 using UnifiedScript.Core;
+using UnifiedScript.Core.Hir;
 using UnifiedScript.CSharp;
 using UnifiedScript.Graph;
 
@@ -112,6 +113,17 @@ public sealed class CSharpScriptAssetLowererTests
         Assert.DoesNotContain(function.Nodes, static node =>
             node.Properties.GetValueOrDefault("name") == "scaled" &&
             node.Properties.ContainsKey("declarationId"));
+
+        HirExpressionStatement multiplyStatement = result.Hir!
+            .DescendantsAndSelf()
+            .OfType<HirExpressionStatement>()
+            .Single();
+        GraphNode multiplyAssignment = function.Nodes.Single(node =>
+            node.Kind == "assignment" &&
+            node.Properties.GetValueOrDefault("operator") == "*=");
+        Assert.Equal(
+            multiplyStatement.Id.Value,
+            multiplyAssignment.Properties["debugTargetId"]);
     }
 
     [Fact]
