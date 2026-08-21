@@ -284,6 +284,24 @@ def main() -> int:
         "Live CoreCLR visual debug bridge is not connected end to end",
     )
     checks.append("visual Run, Step Over, Continue, and locals use the live CoreCLR bridge")
+    authoring_workspace_source = (
+        ROOT / "src" / "UnifiedScript.CSharp" / "CSharpAuthoringWorkspace.cs"
+    ).read_text(encoding="utf-8")
+    require(
+        '"/api/authoring/workspace"' in debug_server_source
+        and '"/api/authoring/declaration-patch"' in debug_server_source
+        and '"/api/authoring/semantic-patch"' in debug_server_source
+        and "WriteTransactionally" in debug_server_source
+        and "EnsureFilesUnchanged" in debug_server_source
+        and "CSharpAuthoringMutation" in authoring_workspace_source
+        and "AttachReconciledSidecars" in authoring_workspace_source
+        and "saveDeclarationChanges" in prototype_source
+        and "saveSemanticPatch" in prototype_source
+        and "unifiedscript.authoring-workspace/v0.1" in prototype_source
+        and "unifiedscript.patch/v0.19" in prototype_source,
+        "Visual authoring changes do not commit through the transactional host",
+    )
+    checks.append("declaration and behavior patches write source and reload one CoreCLR generation")
     require(
         (ROOT / "samples" / "MultiFile" / "GameplayApi.cs").is_file()
         and (ROOT / "samples" / "MultiFile" / "DamageScript.cs").is_file()

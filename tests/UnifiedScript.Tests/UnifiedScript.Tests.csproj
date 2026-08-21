@@ -12,6 +12,7 @@
   <ItemGroup>
     <ProjectReference Include="../../src/UnifiedScript.Core/UnifiedScript.Core.csproj" />
     <ProjectReference Include="../../src/UnifiedScript.CSharp/UnifiedScript.CSharp.csproj" />
+    <ProjectReference Include="../../src/UnifiedScript.Cli/UnifiedScript.Cli.csproj" />
     <ProjectReference Include="../../src/UnifiedScript.Graph/UnifiedScript.Graph.csproj" />
     <ProjectReference Include="../../src/UnifiedScript.Runtime/UnifiedScript.Runtime.csproj" />
     <ProjectReference Include="../../src/UnifiedScript.Semantics/UnifiedScript.Semantics.csproj" />

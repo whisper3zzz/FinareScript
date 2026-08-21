@@ -11,6 +11,12 @@ const state = {
   sourcePath: 'DamagePolicy.cs',
   graphSchemaVersion: null,
   graphFunction: null,
+  authoringConnected: false,
+  authoringBusy: false,
+  authoringRevision: null,
+  generation: null,
+  removedDeclarations: [],
+  previewPatch: null,
   debugConnected: false,
   debugBusy: false,
   debugHealth: null,
@@ -82,6 +88,19 @@ function renderDeclarationList() {
 
 async function loadWorkspaceArtifacts() {
   try {
+    const workspaceResponse = await fetch('/api/authoring/workspace', { cache: 'no-store' });
+    if (!workspaceResponse.ok) throw new Error(`Authoring workspace returned ${workspaceResponse.status}`);
+    const workspace = await workspaceResponse.json();
+    assertArtifact(workspace.schemaVersion === 'unifiedscript.authoring-workspace/v0.1', 'Unsupported authoring workspace protocol');
+    applyWorkspaceArtifacts(workspace.scriptAssets, workspace.graph, workspace.sourceText, workspace);
+    state.authoringConnected = true;
+    await connectDebugBridge();
+    return;
+  } catch (authoringError) {
+    console.info('Live authoring host is offline; loading checked-in read-only artifacts.', authoringError.message);
+  }
+
+  try {
     const [assetResponse, graphResponse, sourceResponse] = await Promise.all([
       fetch('data/damage-policy.asset.json', { cache: 'no-store' }),
       fetch('data/damage-policy.graph.json', { cache: 'no-store' }),
@@ -95,61 +114,97 @@ async function loadWorkspaceArtifacts() {
       graphResponse.json(),
       sourceResponse.text(),
     ]);
-    if (artifact.schemaVersion !== 'unifiedscript.script-asset/v0.1' || artifact.assets?.length !== 1) {
-      throw new Error('Unsupported Declaration IR artifact');
-    }
-
-    const asset = artifact.assets[0];
-    const graphFunction = validateGraphArtifact(graph, artifact, asset, sourceText);
-    state.sourceCompilationId = artifact.sourceCompilationId;
-    state.semanticConfigurationId = artifact.semanticConfigurationId;
-    state.assetId = asset.id;
-    state.sourceText = sourceText;
-    state.sourcePath = asset.span.filePath;
-    state.graphSchemaVersion = graph.schemaVersion;
-    state.graphFunction = graphFunction;
-    state.declarations = asset.states.map(item => ({
-      id: declarationDomId(item.name),
-      name: item.name,
-      type: item.typeDisplayName,
-      typeKind: item.typeKind,
-      defaultValue: artifactDefaultText(item),
-      editable: item.exposure.instanceEditable,
-      save: item.exposure.saveGame,
-      replicated: item.exposure.replicated,
-      category: item.exposure.category || '',
-      semanticId: item.id,
-      sourceStartLine: item.span.start.line,
-      sourceEndLine: item.span.end.line,
-      original: {
-        name: item.name,
-        typeMetadataName: item.typeMetadataName,
-        typeKind: item.typeKind,
-        defaultValue: item.defaultValue,
-        exposure: {
-          instanceEditable: item.exposure.instanceEditable,
-          saveGame: item.exposure.saveGame,
-          replicated: item.exposure.replicated,
-          ...(item.exposure.category ? { category: item.exposure.category } : {}),
-        },
-      },
-    }));
-    state.artifactLoaded = true;
-    state.graphArtifactLoaded = true;
-    state.nodes = adaptGraphArtifact(graphFunction, asset);
-    renderDeclarationList();
-    renderSourceArtifact();
-    renderBehaviorGraph();
-    renderAiDeclarations();
-    renderAiBehavior();
-    selectDeclaration(state.declarations[0].id, false);
-    document.querySelector('.sync-status strong').textContent = 'IR + GRAPH';
-    document.querySelector('.target-label').textContent = 'GRAPH v0.12 · DECLARATION IR v0.1';
-    await connectDebugBridge();
+    applyWorkspaceArtifacts(artifact, graph, sourceText);
   } catch (error) {
     document.querySelector('.sync-status strong').textContent = 'FALLBACK';
     console.warn('Falling back to embedded prototype workspace data.', error);
   }
+}
+
+function applyWorkspaceArtifacts(artifact, graph, sourceText, workspace = null) {
+  if (artifact.schemaVersion !== 'unifiedscript.script-asset/v0.1' || artifact.assets?.length !== 1) {
+    throw new Error('Unsupported Declaration IR artifact');
+  }
+
+  const selectedStateId = state.selected.kind === 'state'
+    ? state.declarations.find(item => item.id === state.selected.id)?.semanticId
+    : null;
+  const selectedNodeId = state.selected.kind === 'node'
+    ? state.nodes[state.selected.id]?.semanticId
+    : null;
+  const breakpointIds = activeBreakpointNodeIds();
+  const asset = artifact.assets[0];
+  const graphFunction = validateGraphArtifact(graph, artifact, asset, sourceText);
+  state.sourceCompilationId = artifact.sourceCompilationId;
+  state.semanticConfigurationId = artifact.semanticConfigurationId;
+  state.assetId = asset.id;
+  state.sourceText = sourceText;
+  state.sourcePath = workspace?.sourcePath || asset.span.filePath;
+  state.graphSchemaVersion = graph.schemaVersion;
+  state.graphFunction = graphFunction;
+  state.authoringConnected = Boolean(workspace);
+  state.authoringRevision = workspace?.revision ?? null;
+  state.generation = workspace?.generation ?? null;
+  if (workspace) {
+    state.debugConnected = true;
+    state.debugHealth = {
+      generationId: workspace.generation.generationId,
+      sourceCompilationId: workspace.generation.sourceCompilationId,
+      semanticConfigurationId: workspace.generation.semanticConfigurationId,
+    };
+  }
+  state.declarations = asset.states.map(item => ({
+    id: declarationDomId(item.name),
+    name: item.name,
+    type: item.typeDisplayName,
+    typeKind: item.typeKind,
+    defaultValue: artifactDefaultText(item),
+    editable: item.exposure.instanceEditable,
+    save: item.exposure.saveGame,
+    replicated: item.exposure.replicated,
+    category: item.exposure.category || '',
+    semanticId: item.id,
+    sourceStartLine: item.span.start.line,
+    sourceEndLine: item.span.end.line,
+    original: {
+      name: item.name,
+      typeMetadataName: item.typeMetadataName,
+      typeKind: item.typeKind,
+      defaultValue: item.defaultValue,
+      exposure: {
+        instanceEditable: item.exposure.instanceEditable,
+        saveGame: item.exposure.saveGame,
+        replicated: item.exposure.replicated,
+        ...(item.exposure.category ? { category: item.exposure.category } : {}),
+      },
+    },
+  }));
+  state.removedDeclarations = [];
+  state.artifactLoaded = true;
+  state.graphArtifactLoaded = true;
+  state.graphDirty = false;
+  state.nodes = adaptGraphArtifact(graphFunction, asset);
+  renderDeclarationList();
+  renderSourceArtifact();
+  renderBehaviorGraph();
+  restoreBreakpoints(breakpointIds);
+  renderAiDeclarations();
+  renderAiBehavior();
+  setAuthoringBusy(false);
+
+  const selectedDeclaration = state.declarations.find(item => item.semanticId === selectedStateId);
+  const selectedNode = Object.entries(state.nodes).find(([, node]) => node.semanticId === selectedNodeId);
+  if (selectedDeclaration) selectDeclaration(selectedDeclaration.id, false);
+  else if (selectedNode) selectNode(selectedNode[0], false);
+  else if (state.declarations.length > 0) selectDeclaration(state.declarations[0].id, false);
+  else selectNode('entry', false);
+
+  document.querySelector('.sync-status strong').textContent = workspace
+    ? `SYNCED · R${workspace.revision}`
+    : 'IR + GRAPH';
+  document.querySelector('.target-label').textContent = workspace
+    ? `CLR GENERATION ${workspace.generation.number} · GRAPH v0.12`
+    : 'GRAPH v0.12 · DECLARATION IR v0.1';
 }
 
 function assertArtifact(condition, message) {
@@ -190,10 +245,6 @@ function validateGraphArtifact(graph, artifact, asset, sourceText) {
       node.properties.declarationId === declarationIds.get(node.properties.name),
       `Graph state reference ${node.properties.name} lost Declaration IR identity`,
   ));
-  assertArtifact(
-    new Set(stateReferences.map(node => node.properties.name)).size === declarationIds.size,
-    'Not every Script Asset state is connected to the Graph',
-  );
   const sourceLineCount = sourceText.replace(/\r\n/g, '\n').replace(/\n$/, '').split('\n').length;
   graphFunction.nodes.forEach(node => assertArtifact(
     node.span?.filePath === asset.span.filePath
@@ -302,6 +353,8 @@ function adaptGraphArtifact(graphFunction, asset) {
   const criticalValue = expression(inputNode(criticalAssignment, 'assignedValue'));
   const clampTarget = expression(inputNode(clampAssignment, 'target'));
   const clampExpression = expression(inputNode(clampAssignment, 'assignedValue'));
+  const clampMinimum = inputNode(invocation, 'arg1');
+  assertArtifact(clampMinimum.kind === 'literal', 'Compact prototype expects a literal clamp minimum');
   const returnValue = expression(inputNode(returned, 'value'));
   const invocationArguments = ['arg0', 'arg1', 'arg2'].map((port, index) => {
     const value = expression(inputNode(invocation, port));
@@ -366,6 +419,8 @@ function adaptGraphArtifact(graphFunction, asset) {
       target: clampTarget.text,
       expression: clampExpression.text,
       arguments: invocationArguments,
+      minimumLiteralId: clampMinimum.id,
+      minimumValue: clampMinimum.properties.value,
       declarationRefs: mergeRefs(clampTarget.refs, clampExpression.refs),
     },
     return: {
@@ -567,7 +622,11 @@ function buildDeclarationPatch(includeAiSuggestion = false) {
       expected: item.original,
       replacement: replacementContract(item),
     }];
-  });
+  }).concat(state.removedDeclarations.map(item => ({
+    operation: 'removeState',
+    targetStateId: item.semanticId,
+    expected: item.original,
+  })));
   return {
     schemaVersion: 'unifiedscript.declaration-patch/v0.1',
     sourceCompilationId: state.sourceCompilationId,
@@ -580,6 +639,9 @@ function showDeclarationPatchPreview() {
   const preview = document.getElementById('patchPreview');
   const summary = document.getElementById('patchPreviewSummary');
   const json = document.getElementById('patchPreviewJson');
+  const applyButton = document.getElementById('applyPreviewPatchButton');
+  state.previewPatch = null;
+  applyButton.disabled = true;
   if (!state.artifactLoaded) {
     summary.textContent = '真实 Declaration IR 未加载，不能生成带编译前置条件的补丁';
     json.textContent = '';
@@ -588,6 +650,8 @@ function showDeclarationPatchPreview() {
       const patch = buildDeclarationPatch(true);
       summary.textContent = `${patch.operations.length} 个可由 CLI 直接应用的类型化声明操作`;
       json.textContent = JSON.stringify(patch, null, 2);
+      state.previewPatch = patch;
+      applyButton.disabled = !state.authoringConnected || patch.operations.length === 0;
     } catch (error) {
       summary.textContent = error.message;
       json.textContent = '';
@@ -649,6 +713,89 @@ function markGraphDirty() {
   state.graphDirty = true;
   document.querySelector('.sync-status strong').textContent = 'PATCH PENDING';
   document.querySelector('.target-label').textContent = 'GRAPH BASELINE · DECLARATION PATCH PENDING';
+  document.querySelector('.dirty-dot').classList.add('visible');
+  document.getElementById('saveButton').disabled = !state.authoringConnected || state.authoringBusy;
+}
+
+function setAuthoringBusy(busy) {
+  state.authoringBusy = busy;
+  const saveButton = document.getElementById('saveButton');
+  saveButton.disabled = busy || !state.authoringConnected || !state.graphDirty;
+  saveButton.textContent = busy ? 'SAVING…' : 'SAVE PATCH';
+  document.querySelector('.dirty-dot').classList.toggle('visible', state.graphDirty);
+}
+
+function restoreBreakpoints(debugNodeIds) {
+  if (!debugNodeIds.length) return;
+  document.querySelectorAll('.breakpoint-toggle.active').forEach(button => button.classList.remove('active'));
+  document.querySelectorAll('[data-debug-semantic-id]').forEach(element => {
+    if (debugNodeIds.includes(element.dataset.debugSemanticId)) {
+      element.querySelector('.breakpoint-toggle:not(:disabled)')?.classList.add('active');
+    }
+  });
+}
+
+async function authoringRequest(path, patch) {
+  const response = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const diagnostics = payload.diagnostics || [];
+    const detail = diagnostics[0]?.message || payload.error?.message || `Authoring request returned ${response.status}`;
+    const error = new Error(detail);
+    error.code = payload.error?.code;
+    error.diagnostics = diagnostics;
+    throw error;
+  }
+  if (payload.schemaVersion !== 'unifiedscript.authoring-workspace/v0.1') {
+    throw new Error('Unsupported authoring workspace response');
+  }
+  return payload;
+}
+
+async function saveDeclarationChanges(patch = null) {
+  if (!state.authoringConnected) {
+    showToast('Authoring host unavailable', 'Start this workbench with debug-serve to write source changes');
+    return;
+  }
+
+  try {
+    const nextPatch = patch || buildDeclarationPatch();
+    if (nextPatch.operations.length === 0) {
+      showToast('Nothing to save', `Workspace revision ${state.authoringRevision} is already synchronized`);
+      return;
+    }
+
+    setAuthoringBusy(true);
+    const workspace = await authoringRequest('/api/authoring/declaration-patch', nextPatch);
+    applyWorkspaceArtifacts(workspace.scriptAssets, workspace.graph, workspace.sourceText, workspace);
+    showToast(`Saved revision ${workspace.revision}`, `CoreCLR generation ${workspace.generation.number} is live`);
+  } catch (error) {
+    document.querySelector('.sync-status strong').textContent = error.code === 'UAW1002' ? 'EXTERNAL CONFLICT' : 'PATCH REJECTED';
+    showToast(error.code || 'Save failed', error.message);
+    setAuthoringBusy(false);
+  }
+}
+
+async function saveSemanticPatch(patch) {
+  if (!state.authoringConnected) {
+    showToast('Authoring host unavailable', 'Semantic body patches require debug-serve');
+    return;
+  }
+
+  try {
+    setAuthoringBusy(true);
+    const workspace = await authoringRequest('/api/authoring/semantic-patch', patch);
+    applyWorkspaceArtifacts(workspace.scriptAssets, workspace.graph, workspace.sourceText, workspace);
+    showToast(`Behavior saved · R${workspace.revision}`, `CoreCLR generation ${workspace.generation.number} reloaded`);
+  } catch (error) {
+    document.querySelector('.sync-status strong').textContent = error.code === 'UAW1002' ? 'EXTERNAL CONFLICT' : 'PATCH REJECTED';
+    showToast(error.code || 'Behavior patch failed', error.message);
+    setAuthoringBusy(false);
+  }
 }
 
 function renameBehaviorReference(declarationId, previousName, nextName) {
@@ -719,6 +866,7 @@ function renderStateInspector(item) {
       <button id="semanticId" class="identity-value" type="button" title="复制语义 ID">${semanticShort(item.semanticId)}</button>
       <div class="identity-facts"><span>TEXT <b>✓</b></span><span>VISUAL <b>✓</b></span><span>AI <b>✓</b></span></div>
     </section>
+    <button id="removeStateButton" class="inspector-danger" type="button">REMOVE STATE</button>
     <div class="prototype-warning"><strong>${state.artifactLoaded ? 'LIVE DECLARATION IR' : 'EMBEDDED FALLBACK'}</strong><p>${state.artifactLoaded ? '名称、类型、默认值、暴露策略和 Semantic ID 来自编译器生成的严格 asset.json。' : '本地服务器未加载真实产物，当前显示内嵌演示数据。'}</p></div>`;
   bindStateInspector(item);
 }
@@ -758,6 +906,22 @@ function bindStateInspector(item) {
   };
   [name, type, defaultValue, category, editable, save, replicated].forEach(control => control.addEventListener('input', update));
   document.getElementById('semanticId').addEventListener('click', () => copyText(item.semanticId, 'Semantic ID copied'));
+  document.getElementById('removeStateButton').addEventListener('click', () => removeDeclaration(item));
+}
+
+function removeDeclaration(item) {
+  const index = state.declarations.indexOf(item);
+  if (index < 0) return;
+  if (item.original) state.removedDeclarations.push(item);
+  state.declarations.splice(index, 1);
+  document.querySelectorAll(`.state-line[data-state-id="${item.id}"]`).forEach(line => line.remove());
+  renderDeclarationList();
+  renderAiDeclarations();
+  markGraphDirty();
+  const next = state.declarations[Math.min(index, state.declarations.length - 1)];
+  if (next) selectDeclaration(next.id, false);
+  else selectNode('entry', false);
+  showToast(`${item.name} marked for removal`, 'Save Patch will validate all behavior references');
 }
 
 function selectNode(id, revealInspector = true) {
@@ -775,15 +939,41 @@ function selectNode(id, revealInspector = true) {
 
 function renderNodeInspector(node) {
   inspectorTitle.textContent = node.title;
+  const behaviorEditor = node.minimumLiteralId ? `
+    <section class="inspector-section behavior-editor">
+      <div class="section-title-row"><h3>BEHAVIOR INPUT</h3><span>SEMANTIC PATCH</span></div>
+      <label class="field-label">Clamp minimum<input id="behaviorLiteralValue" type="text" value="${escapeHtml(node.minimumValue)}" spellcheck="false"></label>
+      <button id="saveBehaviorButton" class="button primary inspector-save" type="button">SAVE EXPRESSION</button>
+      <small>Writes a replaceLiteral operation against ${semanticShort(node.minimumLiteralId)} and reloads CoreCLR.</small>
+    </section>` : '';
   inspectorBody.innerHTML = `
     <div class="selection-kind"><span class="selection-icon">N</span><div><strong>${node.kind}</strong><small>Executable semantic node</small></div></div>
     <section class="inspector-section"><h3>INTENT</h3><div class="node-inspector-title">${escapeHtml(node.title)}</div><p class="node-inspector-copy">${escapeHtml(node.detail)}</p></section>
     <section class="inspector-section"><h3>SOURCE LOCATION</h3><div class="fact-grid"><span>${escapeHtml(state.sourcePath.split('/').at(-1))}</span><strong>Line ${node.line}</strong></div><div class="fact-grid"><span>Graph representation</span><strong>compact projection</strong></div>${node.expressionNodeId ? `<div class="fact-grid"><span>Inline expression</span><strong>${semanticShort(node.expressionNodeId)}</strong></div>` : ''}</section>
+    ${behaviorEditor}
     <section class="inspector-section source-contract"><div class="section-title-row"><h3>AI OUTLINE</h3><span>SEMANTIC</span></div><pre>${escapeHtml(node.detail)}</pre></section>
     <section class="inspector-section identity-section"><h3>GRAPH IDENTITY</h3><button id="semanticId" class="identity-value" type="button">${semanticShort(node.semanticId)}</button>${node.debugSemanticId ? `<h3 class="debug-identity-heading">DEBUG STATEMENT</h3><button id="debugSemanticId" class="identity-value debug-identity" type="button">${semanticShort(node.debugSemanticId)}</button>` : ''}<div class="identity-facts"><span>TEXT <b>✓</b></span><span>GRAPH <b>✓</b></span><span>DEBUG <b>${node.debugSemanticId ? '✓' : '—'}</b></span></div></section>
     <div class="prototype-warning"><strong>REAL GRAPH PROJECTION</strong><p>卡片直接绑定 Graph Semantic ID；字面量和普通运算作为可追溯的内联表达式，不制造逐行节点。</p></div>`;
   document.getElementById('semanticId').addEventListener('click', () => copyText(node.semanticId, 'Semantic ID copied'));
   document.getElementById('debugSemanticId')?.addEventListener('click', () => copyText(node.debugSemanticId, 'Debug statement ID copied'));
+  document.getElementById('saveBehaviorButton')?.addEventListener('click', () => {
+    const newValueText = document.getElementById('behaviorLiteralValue').value.trim();
+    if (!newValueText || newValueText === node.minimumValue) {
+      showToast('No expression change', `Clamp minimum is already ${node.minimumValue}`);
+      return;
+    }
+    saveSemanticPatch({
+      schemaVersion: 'unifiedscript.patch/v0.19',
+      sourceCompilationId: state.sourceCompilationId,
+      semanticConfigurationId: state.semanticConfigurationId,
+      operations: [{
+        operation: 'replaceLiteral',
+        targetNodeId: node.minimumLiteralId,
+        expectedValueText: node.minimumValue,
+        newValueText,
+      }],
+    });
+  });
 }
 
 function renderAiDeclarations() {
@@ -871,7 +1061,9 @@ async function connectDebugBridge() {
     assertArtifact(health.semanticConfigurationId === state.semanticConfigurationId, 'Debug/semantic configuration identity mismatch');
     state.debugConnected = true;
     state.debugHealth = health;
-    document.querySelector('.sync-status strong').textContent = 'IR + GRAPH + CLR';
+    document.querySelector('.sync-status strong').textContent = state.authoringConnected
+      ? `SYNCED · R${state.authoringRevision} · CLR`
+      : 'IR + GRAPH + CLR';
     document.querySelector('.target-label').textContent = `CLR ${semanticShort(health.generationId)} · GRAPH v0.12`;
   } catch (error) {
     state.debugConnected = false;
@@ -936,7 +1128,11 @@ function renderDebugCompletion(response) {
   clearDebugVisuals();
   const result = response.result;
   const returned = result?.returnValue?.json ?? '<void>';
-  document.querySelector('.sync-status strong').textContent = state.graphDirty ? 'PATCH PENDING' : 'IR + GRAPH + CLR';
+  document.querySelector('.sync-status strong').textContent = state.graphDirty
+    ? 'PATCH PENDING'
+    : state.authoringConnected
+      ? `SYNCED · R${state.authoringRevision} · CLR`
+      : 'IR + GRAPH + CLR';
   document.querySelector('.target-label').textContent = `CLR GENERATION ${response.generation.number} · COMPLETED`;
   setDebugBusy(false);
   showToast(`Execution returned ${returned}`, 'Live CoreCLR debug session completed');
@@ -1046,6 +1242,10 @@ document.getElementById('closeAiDrawer').addEventListener('click', () => {
   aiDrawer.setAttribute('aria-hidden', 'true');
 });
 document.getElementById('previewPatchButton').addEventListener('click', showDeclarationPatchPreview);
+document.getElementById('applyPreviewPatchButton').addEventListener('click', () => {
+  if (state.previewPatch) saveDeclarationChanges(state.previewPatch);
+});
+document.getElementById('saveButton').addEventListener('click', () => saveDeclarationChanges());
 
 document.getElementById('addVariableButton').addEventListener('click', () => {
   updateNewVariablePreview();
@@ -1078,6 +1278,13 @@ declarationSearch.addEventListener('input', () => {
   document.querySelectorAll('.declaration-item').forEach(item => {
     item.hidden = query.length > 0 && !item.textContent.toLowerCase().includes(query);
   });
+});
+
+document.addEventListener('keydown', event => {
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+    event.preventDefault();
+    if (state.graphDirty && !state.authoringBusy) saveDeclarationChanges();
+  }
 });
 document.addEventListener('keydown', event => {
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {

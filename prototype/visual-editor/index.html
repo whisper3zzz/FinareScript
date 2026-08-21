@@ -34,6 +34,9 @@
         <button id="aiViewButton" class="button secondary" type="button" data-testid="ai-view-button">
           <span class="button-icon">⌁</span> AI VIEW
         </button>
+        <button id="saveButton" class="button secondary save-button" type="button" data-testid="save-button" disabled>
+          SAVE PATCH
+        </button>
         <button id="runButton" class="button primary" type="button" data-testid="run-button">
           <span class="play-icon"></span> DEBUG RUN
         </button>
@@ -360,6 +363,7 @@ state MaxDamage: int = 999
           <strong id="patchPreviewSummary">等待生成类型化操作</strong>
           <small>包含 source/configuration ID、目标 Semantic ID 与完整旧值前置条件</small>
           <pre id="patchPreviewJson"></pre>
+          <button id="applyPreviewPatchButton" class="button secondary" type="button" disabled>APPLY TO SOURCE + CLR</button>
         </div>
       </section>
     </div>

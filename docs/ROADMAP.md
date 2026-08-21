@@ -178,6 +178,9 @@ declarations or one-node-per-expression graphs.
 - [x] coordinate-free AI outline and typed declaration patch preview
 - [x] live CoreCLR pause/locals/step-over painted on real semantic statement cards
 - [x] sample source workflow with zero required Blueprint variables
+- [x] transactional Workbench declaration/body submission and source write-back
+- [x] CoreCLR hot reload with semantic selection and breakpoint migration
+- [x] external-file conflict rejection and persistent rename identity
 
 ## M6 — Unreal Engine adapter
 

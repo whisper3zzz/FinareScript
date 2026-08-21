@@ -28,13 +28,20 @@ Try these interactions:
    statement breakpoint and exposes its live frame, IL offset, and locals.
 6. Click `STEP OVER` to pause on `return scaled`, then `CONTINUE` to receive the
    canonical runtime result.
+7. Change a declaration and click `SAVE PATCH` (or press Ctrl/Cmd+S). The host
+   writes canonical C# plus `.usids`, regenerates the artifacts, and reloads the
+   same CoreCLR transport.
+8. Select the `Math.Clamp` card, edit `Clamp minimum`, and click
+   `SAVE EXPRESSION`. This submits Semantic Patch v0.19 by literal Semantic ID.
+9. In `AI VIEW`, preview the declaration patch and click
+   `APPLY TO SOURCE + CLR` to apply that exact typed document.
 
-## Current integration boundary
+## Live integration
 
-The workbench loads `data/damage-policy.asset.json`,
-`data/damage-policy.graph.json`, and `data/damage-policy.source.cs`: real
-Declaration IR v0.1, Graph v0.12, and source artifacts generated from the same
-`samples/Authoring/DamagePolicy.cs` compilation. Names, types, defaults,
+The workbench first loads `/api/authoring/workspace`, whose Declaration IR v0.1,
+Graph v0.12, source, revision, and CoreCLR generation come from one committed
+`samples/Authoring/DamagePolicy.cs` compilation. The checked-in
+`data/damage-policy.*` artifacts remain a read-only fallback. Names, types, defaults,
 exposure flags, card identities, source lines, control regions, and inline
 expressions therefore come from the compiler pipeline rather than embedded UI
 mock data. If any artifact or cross-artifact identity check fails, the
@@ -47,14 +54,14 @@ Declaration IR IDs. The `Math.Clamp` card owns the Graph assignment-expression
 ID, `debugTargetId` identifies the enclosing probeable HIR expression
 statement, and the nested invocation retains its own third expression ID.
 
-Inspector edits and the AI suggestion are translated into typed `addState` or
-`updateState` operations with real baseline IDs, target Semantic IDs, and full
-old-value preconditions. The preview JSON is accepted by
-`apply-declaration-patch`, whose backend transaction writes C#, Declaration IR,
-and an optional `.usids` sidecar only after full reanalysis. This dependency-
-free page does not itself submit mutations, so browser editing remains unsaved
-until a host integration sends that patch to the backend. `debug-serve` does
-connect the read/execute side: it validates artifact identities, materializes a
-Script Asset receiver from state IDs and current values, and drives Run,
-Continue, Step Over, pause location, locals, and result through the live
-CoreCLR loopback transport. No execution timing or local-value fixture remains.
+Inspector edits and the AI suggestion are translated into typed `addState`,
+`updateState`, or `removeState` operations with real baseline IDs, target
+Semantic IDs, and full old-value preconditions. The same JSON accepted by the
+CLI is submitted to `/api/authoring/declaration-patch`; promoted behavior inputs
+use `/api/authoring/semantic-patch`. `debug-serve` prepares an immutable
+candidate, reloads CoreCLR, transactionally writes C# plus `.usids`, and returns
+the regenerated Declaration IR/Graph/source generation. It refuses a write if
+an external editor changed either file. The same host validates artifact
+identities, materializes Script Asset receivers, and drives Run, Continue, Step
+Over, pause location, locals, and result through the live CoreCLR transport. No
+execution timing, local-value fixture, or browser-only mutation remains.

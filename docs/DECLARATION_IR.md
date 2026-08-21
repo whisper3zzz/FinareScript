@@ -182,9 +182,11 @@ Semantic ID display therefore share real compiler data. Its AI preview now
 builds the strict patch document above from the loaded artifact, including
 source/configuration IDs, target state ID, full old contract, and typed
 replacement. The preview JSON can be given directly to the CLI. Applying it is
-still an explicit CLI/backend action rather than an HTTP mutation from the
-dependency-free prototype. Structure cards consume the real Graph artifact.
-The `debug-serve` authoring host can materialize a `ScriptAssetReceiver` from
-the asset ID and typed state-ID overrides, then drive the existing CoreCLR
-loopback debugger. Browser mutation submission remains explicit rather than
-being hidden inside this read/execute bridge.
+also a direct Workbench action: `debug-serve` exposes the same declaration
+applier at `/api/authoring/declaration-patch`, prepares a complete candidate
+analysis, writes source plus reconciled sidecar transactionally, and returns
+the regenerated Declaration IR/Graph with the next CoreCLR generation.
+Structure cards consume that live Graph. The host also materializes a
+`ScriptAssetReceiver` from the asset ID and typed state-ID overrides, then
+drives the existing CoreCLR loopback debugger. Declaration write-back and
+execution therefore share one committed source/identity baseline.

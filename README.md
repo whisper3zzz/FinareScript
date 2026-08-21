@@ -199,6 +199,15 @@ CoreCLR image, assignment Graph nodes expose their exact probeable HIR
 `debugTargetId`, and `debug-serve` hosts the workbench plus loopback debug API
 on one local origin. Run, Continue, Step Over, stack location, locals, and the
 returned value now come from the suspended CoreCLR thread rather than timers.
+M5.5.5 closes the remaining write side. `debug-serve` now publishes one live
+authoring workspace and accepts the existing declaration/body patch protocols.
+It prepares a complete candidate analysis and Graph, reloads the same CoreCLR
+transport, transactionally commits source plus identity sidecar, and only then
+publishes the next revision/generation. The Workbench can save declarations,
+apply an AI declaration patch, or edit a promoted behavior input without source-
+line operations. External file changes are rejected instead of overwritten,
+and persistent IDs restore selection and breakpoints across the regenerated
+artifacts. M5.5 is therefore complete before Unreal integration begins.
 
 The v0.2 profile accepts `[Visual]` methods containing local variables,
 expressions, calls, assignments, `if/else`, `while`, `do`, `for`, bounded
@@ -231,6 +240,13 @@ Declaration edit
   -> transactional Roslyn declaration/reference rewrite
   -> full compilation + Declaration IR postcondition validation
   -> updated C# + asset JSON + optional .usids (only as one commit)
+
+Workbench authoring commit
+  -> declaration-patch v0.1 or semantic-patch v0.19
+  -> immutable candidate analysis + regenerated Graph
+  -> same CoreCLR transport reload
+  -> rollback-capable source + .usids transaction
+  -> next revision/generation response or explicit conflict
 
 Current execution path:
   -> Graph/CFG execution gate

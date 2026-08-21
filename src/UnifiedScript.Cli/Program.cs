@@ -227,9 +227,19 @@ internal static class Program
             return 66;
         }
 
-        CSharpSourceDocument[] sources = LoadSources(
-            [options.InputPath],
-            options.IdentityPath is null ? [] : [options.IdentityPath]);
+        string fullInputPath = Path.GetFullPath(options.InputPath);
+        string logicalPath = GetLogicalInputPath(fullInputPath);
+        string identityPath = options.IdentityPath ?? options.InputPath + ".usids";
+        IdentitySidecarDocument identitySidecar = File.Exists(identityPath)
+            ? LoadIdentitySidecar(identityPath)
+            : IdentitySidecarDocument.CreateEmpty(logicalPath);
+        CSharpSourceDocument[] sources =
+        [
+            new CSharpSourceDocument(
+                logicalPath,
+                File.ReadAllText(fullInputPath),
+                identitySidecar),
+        ];
         var request = new CSharpCompilationRequest(
             options.AssemblyName,
             sources,
@@ -239,6 +249,8 @@ internal static class Program
         {
             using var server = new CoreClrDebugHttpServer(
                 request,
+                fullInputPath,
+                identityPath,
                 options.ContentRoot,
                 options.Port);
             using var cancellation = new CancellationTokenSource();

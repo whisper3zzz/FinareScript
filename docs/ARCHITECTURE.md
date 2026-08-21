@@ -231,6 +231,16 @@ expression identity differs from the enclosing HIR statement probe. A
 IDs before invoking the same emitted CoreCLR method. The HTTP bridge adds no VM
 and no alternate execution semantics.
 
+M5.5.5 adds the write side without moving authoring policy into HTTP. A
+`CSharpAuthoringWorkspace` prepares immutable candidate snapshots through the
+existing Declaration Patch and Semantic Patch appliers. The loopback host
+serializes authoring with debug control, refuses writes during a live execution,
+checks the physical source and sidecar against its committed bytes, reloads the
+same CoreCLR transport, and commits source plus reconciled identity sidecar as a
+rollback-capable file transaction. Only then does it expose the next workspace
+revision and program generation. HTTP is therefore an adapter over the compiler
+transaction, not a second editor model or VM.
+
 ## Profile v0.2
 
 Accepted statement forms:

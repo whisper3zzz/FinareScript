@@ -94,6 +94,18 @@ static workbench and a same-origin loopback JSON API from `127.0.0.1`:
   or completion;
 - `POST /api/debug/continue` resumes and returns the next pause or completion.
 
+The same loopback process owns the authoring transaction boundary:
+
+- `GET /api/authoring/workspace` returns source, Declaration IR, Graph, revision,
+  and the loaded CoreCLR generation;
+- `POST /api/authoring/declaration-patch` applies typed state operations;
+- `POST /api/authoring/semantic-patch` applies body edits by Semantic ID.
+
+Authoring and debug control share one gate, so source cannot reload while an
+execution is active. A successful candidate reloads the same transport and
+commits canonical source plus `.usids`; external disk changes and stale patch
+preconditions fail without replacing the current generation.
+
 The bridge never interprets HIR. It adapts HTTP requests directly to
 `ICoreClrDebugTransport`, caps request bodies, serves only a path-confined
 content root, and exposes the generation identities that the workbench checks

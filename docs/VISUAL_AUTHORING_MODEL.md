@@ -121,7 +121,7 @@ types, and preconditions; it does not manipulate pixels or Blueprint nodes.
    lower than syntax-node or Blueprint projections of the same behavior.
 5. Selecting a declaration or action highlights the exact canonical source.
 6. Text edits, visual edits, and AI patches pass the same compiler/semantic
-   transaction gate.
+   transaction gate and publish a new source/Graph/CoreCLR generation together.
 7. Debug breakpoints and pause state use the exact `debugTargetId` displayed by
    each probeable structure card.
 8. UE exposure is generated from Declaration IR; there are zero required
@@ -143,4 +143,8 @@ Continue, Step Over, frame/IL location, locals, and result all come from the
 same collectible CoreCLR execution used by the runtime. Graph expression IDs
 remain distinct from their enclosing probeable HIR statement IDs and are joined
 explicitly through `debugTargetId`. Sending declaration/body patches back to a
-host remains the outstanding integration boundary.
+host is now part of the same command: `SAVE PATCH`, AI apply, and promoted
+behavior-input edits call the existing strict patch protocols, write canonical
+C#, reconcile `.usids`, regenerate the artifacts, and hot-reload CoreCLR. The
+UI restores selection and breakpoints by Semantic ID and reports external-file
+conflicts rather than overwriting them.

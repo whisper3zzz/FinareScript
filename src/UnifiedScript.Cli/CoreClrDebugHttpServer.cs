@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using UnifiedScript.Core;
 using UnifiedScript.CSharp;
+using UnifiedScript.Graph;
 using UnifiedScript.Runtime;
 
 namespace UnifiedScript.Cli;
@@ -13,11 +14,13 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
     private static readonly JsonSerializerOptions JsonOptions = UnifiedJson.CreateOptions();
     private readonly HttpListener listener = new();
     private readonly string contentRoot;
-    private readonly DebugSessionController debug;
+    private readonly AuthoringSessionController session;
     private bool disposed;
 
     public CoreClrDebugHttpServer(
         CSharpCompilationRequest request,
+        string sourcePath,
+        string? identityPath,
         string contentRoot,
         int port)
     {
@@ -35,7 +38,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 $"The visual workbench root does not exist: {this.contentRoot}");
         }
 
-        debug = new DebugSessionController(request);
+        session = new AuthoringSessionController(request, sourcePath, identityPath);
         listener.Prefixes.Add($"http://127.0.0.1:{port}/");
     }
 
@@ -70,7 +73,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
 
         disposed = true;
         listener.Close();
-        debug.Dispose();
+        session.Dispose();
     }
 
     private async Task HandleAsync(HttpListenerContext context, CancellationToken cancellationToken)
@@ -82,6 +85,12 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             if (path.StartsWith("/api/debug/", StringComparison.Ordinal))
             {
                 await HandleDebugApiAsync(context, path, cancellationToken);
+                return;
+            }
+
+            if (path.StartsWith("/api/authoring/", StringComparison.Ordinal))
+            {
+                await HandleAuthoringApiAsync(context, path, cancellationToken);
                 return;
             }
 
@@ -104,7 +113,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
     {
         if (context.Request.HttpMethod == "GET" && path == "/api/debug/health")
         {
-            await WriteJsonAsync(context.Response, debug.Health, cancellationToken);
+            await WriteJsonAsync(context.Response, session.Health, cancellationToken);
             return;
         }
 
@@ -117,12 +126,44 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
 
         DebugSessionResponse response = path switch
         {
-            "/api/debug/start" => await debug.StartAsync(
+            "/api/debug/start" => await session.StartAsync(
                 await ReadJsonAsync<DebugStartRequest>(context.Request, cancellationToken),
                 cancellationToken),
-            "/api/debug/continue" => await debug.ResumeAsync(stepOver: false, cancellationToken),
-            "/api/debug/step-over" => await debug.ResumeAsync(stepOver: true, cancellationToken),
+            "/api/debug/continue" => await session.ResumeAsync(stepOver: false, cancellationToken),
+            "/api/debug/step-over" => await session.ResumeAsync(stepOver: true, cancellationToken),
             _ => throw new HttpProtocolException(HttpStatusCode.NotFound, "Unknown debug endpoint."),
+        };
+        await WriteJsonAsync(context.Response, response, cancellationToken);
+    }
+
+    private async Task HandleAuthoringApiAsync(
+        HttpListenerContext context,
+        string path,
+        CancellationToken cancellationToken)
+    {
+        if (context.Request.HttpMethod == "GET" && path == "/api/authoring/workspace")
+        {
+            await WriteJsonAsync(context.Response, session.Workspace, cancellationToken);
+            return;
+        }
+
+        if (context.Request.HttpMethod != "POST")
+        {
+            context.Response.StatusCode = (int)HttpStatusCode.MethodNotAllowed;
+            context.Response.Headers[HttpResponseHeader.Allow] = "GET, POST";
+            return;
+        }
+
+        string json = await ReadJsonTextAsync(context.Request, cancellationToken);
+        AuthoringWorkspaceResponse response = path switch
+        {
+            "/api/authoring/declaration-patch" => await session.ApplyAsync(
+                DeclarationPatchJson.Deserialize(json),
+                cancellationToken),
+            "/api/authoring/semantic-patch" => await session.ApplyAsync(
+                SemanticPatchJson.Deserialize(json),
+                cancellationToken),
+            _ => throw new HttpProtocolException(HttpStatusCode.NotFound, "Unknown authoring endpoint."),
         };
         await WriteJsonAsync(context.Response, response, cancellationToken);
     }
@@ -164,9 +205,18 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         HttpListenerRequest request,
         CancellationToken cancellationToken)
     {
+        string json = await ReadJsonTextAsync(request, cancellationToken);
+        T? value = JsonSerializer.Deserialize<T>(json, JsonOptions);
+        return value ?? throw new JsonException("The request body was empty.");
+    }
+
+    private static async Task<string> ReadJsonTextAsync(
+        HttpListenerRequest request,
+        CancellationToken cancellationToken)
+    {
         if (request.ContentLength64 > MaximumRequestBytes)
         {
-            throw new HttpProtocolException(HttpStatusCode.RequestEntityTooLarge, "Debug request is too large.");
+            throw new HttpProtocolException(HttpStatusCode.RequestEntityTooLarge, "Request body is too large.");
         }
 
         using var limited = new MemoryStream();
@@ -183,14 +233,18 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             total = checked(total + read);
             if (total > MaximumRequestBytes)
             {
-                throw new HttpProtocolException(HttpStatusCode.RequestEntityTooLarge, "Debug request is too large.");
+                throw new HttpProtocolException(HttpStatusCode.RequestEntityTooLarge, "Request body is too large.");
             }
 
             limited.Write(buffer, 0, read);
         }
 
-        T? value = JsonSerializer.Deserialize<T>(limited.ToArray(), JsonOptions);
-        return value ?? throw new JsonException("The debug request body was empty.");
+        if (limited.Length == 0)
+        {
+            throw new JsonException("The request body was empty.");
+        }
+
+        return Encoding.UTF8.GetString(limited.ToArray());
     }
 
     private static async Task WriteJsonAsync<T>(
@@ -212,6 +266,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
     {
         HttpStatusCode status = exception switch
         {
+            AuthoringProtocolException authoring => authoring.Status,
             HttpProtocolException protocol => protocol.Status,
             JsonException or ArgumentException or ExecutionInvocationException => HttpStatusCode.BadRequest,
             BreakpointProtocolException => HttpStatusCode.Conflict,
@@ -219,12 +274,15 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         };
         string code = exception switch
         {
+            AuthoringProtocolException authoring => authoring.Code,
             ExecutionInvocationException invocation => invocation.Code,
             BreakpointProtocolException breakpoint => breakpoint.Code,
             _ => "UDB5000",
         };
         byte[] body = JsonSerializer.SerializeToUtf8Bytes(
-            new DebugErrorResponse(new DebugError(code, exception.Message)),
+            new DebugErrorResponse(
+                new DebugError(code, exception.Message),
+                (exception as AuthoringProtocolException)?.Diagnostics),
             JsonOptions);
         response.StatusCode = (int)status;
         response.ContentType = "application/json; charset=utf-8";
@@ -251,28 +309,52 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         _ => "application/octet-stream",
     };
 
-    private sealed class DebugSessionController : IDisposable
+    private sealed class AuthoringSessionController : IDisposable
     {
         private readonly SemaphoreSlim gate = new(1, 1);
         private readonly CoreClrDebugLoopbackTransport transport = new();
-        private readonly CoreClrDebugReloadResult reload;
+        private readonly CSharpAuthoringWorkspace authoring;
+        private readonly string sourcePath;
+        private readonly string? identityPath;
         private readonly List<SemanticId> breakpointIds = [];
         private IReadOnlyList<SemanticBreakpointBinding> bindings = [];
+        private CoreClrDebugReloadResult reload;
         private CoreClrDebugExecution? execution;
         private CoreClrDebugPause? pause;
+        private string persistedSource;
+        private string? persistedIdentity;
 
-        public DebugSessionController(CSharpCompilationRequest request)
+        public AuthoringSessionController(
+            CSharpCompilationRequest request,
+            string sourcePath,
+            string? identityPath)
         {
-            reload = transport.Reload(request);
-            Health = new DebugHealthResponse(
-                "unifiedscript.debug-health/v0.1",
-                "ready",
-                reload.Generation.GenerationId,
-                reload.Generation.SourceCompilationId,
-                reload.Generation.SemanticConfigurationId);
+            ArgumentNullException.ThrowIfNull(request);
+            ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
+            if (request.Sources.Count != 1)
+            {
+                throw new ArgumentException(
+                    "The local authoring host currently requires exactly one source document.",
+                    nameof(request));
+            }
+
+            this.sourcePath = Path.GetFullPath(sourcePath);
+            this.identityPath = identityPath is null ? null : Path.GetFullPath(identityPath);
+            persistedSource = File.ReadAllText(this.sourcePath);
+            persistedIdentity = this.identityPath is null
+                ? null
+                : File.Exists(this.identityPath)
+                    ? File.ReadAllText(this.identityPath)
+                    : null;
+            authoring = new CSharpAuthoringWorkspace(request);
+            reload = transport.Reload(authoring.Current.Request);
+            Health = CreateHealth(reload.Generation);
+            Workspace = CreateWorkspace(authoring.Current, reload.Generation);
         }
 
-        public DebugHealthResponse Health { get; }
+        public DebugHealthResponse Health { get; private set; }
+
+        public AuthoringWorkspaceResponse Workspace { get; private set; }
 
         public async Task<DebugSessionResponse> StartAsync(
             DebugStartRequest request,
@@ -367,10 +449,219 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             }
         }
 
+        public Task<AuthoringWorkspaceResponse> ApplyAsync(
+            DeclarationPatchDocument patch,
+            CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(patch);
+            return ApplyAsync(() => authoring.Prepare(patch), cancellationToken);
+        }
+
+        public Task<AuthoringWorkspaceResponse> ApplyAsync(
+            SemanticPatchDocument patch,
+            CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(patch);
+            return ApplyAsync(() => authoring.Prepare(patch), cancellationToken);
+        }
+
         public void Dispose()
         {
             gate.Dispose();
             transport.Dispose();
+        }
+
+        private async Task<AuthoringWorkspaceResponse> ApplyAsync(
+            Func<CSharpAuthoringMutation> prepare,
+            CancellationToken cancellationToken)
+        {
+            await gate.WaitAsync(cancellationToken);
+            try
+            {
+                if (execution is not null)
+                {
+                    throw new AuthoringProtocolException(
+                        HttpStatusCode.Conflict,
+                        "UAW1001",
+                        "Finish the active debug execution before changing the authoring workspace.");
+                }
+
+                EnsureFilesUnchanged();
+                CSharpAuthoringMutation mutation = prepare();
+                if (!mutation.Succeeded || mutation.Snapshot is null)
+                {
+                    throw new AuthoringProtocolException(
+                        HttpStatusCode.Conflict,
+                        "UAW1003",
+                        "The semantic patch was rejected; no source or runtime generation was changed.",
+                        mutation.Diagnostics);
+                }
+
+                CSharpAuthoringSnapshot previous = authoring.Current;
+                CoreClrDebugReloadResult nextReload = transport.Reload(mutation.Snapshot.Request);
+                try
+                {
+                    Persist(mutation.Snapshot);
+                }
+                catch
+                {
+                    reload = transport.Reload(previous.Request);
+                    Health = CreateHealth(reload.Generation);
+                    Workspace = CreateWorkspace(previous, reload.Generation);
+                    throw;
+                }
+
+                authoring.Commit(mutation);
+                reload = nextReload;
+                bindings = reload.Breakpoints.Bindings;
+                Health = CreateHealth(reload.Generation);
+                Workspace = CreateWorkspace(authoring.Current, reload.Generation);
+                return Workspace;
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
+
+        private void EnsureFilesUnchanged()
+        {
+            string diskSource = File.ReadAllText(sourcePath);
+            string? diskIdentity = identityPath is null || !File.Exists(identityPath)
+                ? null
+                : File.ReadAllText(identityPath);
+            if (!string.Equals(diskSource, persistedSource, StringComparison.Ordinal) ||
+                !string.Equals(diskIdentity, persistedIdentity, StringComparison.Ordinal))
+            {
+                throw new AuthoringProtocolException(
+                    HttpStatusCode.Conflict,
+                    "UAW1002",
+                    "The source or identity sidecar changed outside the workbench; reload before saving.");
+            }
+        }
+
+        private void Persist(CSharpAuthoringSnapshot snapshot)
+        {
+            string nextSource = snapshot.Request.Sources.Single().Source;
+            var outputs = new List<AuthoringOutput>
+            {
+                new(sourcePath, Encoding.UTF8.GetBytes(nextSource)),
+            };
+            string? nextIdentity = null;
+            if (identityPath is not null)
+            {
+                IdentitySidecarDocument sidecar = snapshot.Analysis.IdentitySidecars.Single();
+                nextIdentity = IdentitySidecarJson.Serialize(sidecar) + "\n";
+                outputs.Add(new AuthoringOutput(
+                    identityPath,
+                    Encoding.UTF8.GetBytes(nextIdentity)));
+            }
+
+            WriteTransactionally(outputs);
+            persistedSource = nextSource;
+            persistedIdentity = nextIdentity;
+        }
+
+        private static DebugHealthResponse CreateHealth(CoreClrProgramGeneration generation) => new(
+            "unifiedscript.debug-health/v0.1",
+            "ready",
+            generation.GenerationId,
+            generation.SourceCompilationId,
+            generation.SemanticConfigurationId);
+
+        private static AuthoringWorkspaceResponse CreateWorkspace(
+            CSharpAuthoringSnapshot snapshot,
+            CoreClrProgramGeneration generation) => new(
+            "unifiedscript.authoring-workspace/v0.1",
+            snapshot.Revision,
+            snapshot.Request.Sources.Single().LogicalPath,
+            snapshot.Request.Sources.Single().Source,
+            snapshot.Analysis.ScriptAssets!,
+            snapshot.Graph,
+            generation);
+
+        private static void WriteTransactionally(IReadOnlyList<AuthoringOutput> outputs)
+        {
+            string[] fullPaths = outputs.Select(output => Path.GetFullPath(output.Path)).ToArray();
+            if (fullPaths.Distinct(StringComparer.OrdinalIgnoreCase).Count() != fullPaths.Length)
+            {
+                throw new ArgumentException("Authoring output paths must be distinct.", nameof(outputs));
+            }
+
+            var pending = new List<PendingAuthoringOutput>(outputs.Count);
+            var moved = new List<PendingAuthoringOutput>(outputs.Count);
+            bool committed = false;
+            try
+            {
+                for (int index = 0; index < outputs.Count; index++)
+                {
+                    string fullPath = fullPaths[index];
+                    string directory = Path.GetDirectoryName(fullPath) ?? Environment.CurrentDirectory;
+                    Directory.CreateDirectory(directory);
+                    string nonce = Guid.NewGuid().ToString("N");
+                    string temporary = Path.Combine(
+                        directory,
+                        $".{Path.GetFileName(fullPath)}.{nonce}.tmp");
+                    string backup = Path.Combine(
+                        directory,
+                        $".{Path.GetFileName(fullPath)}.{nonce}.bak");
+                    File.WriteAllBytes(temporary, outputs[index].Content);
+                    pending.Add(new PendingAuthoringOutput(fullPath, temporary, backup));
+                }
+
+                foreach (PendingAuthoringOutput output in pending)
+                {
+                    if (File.Exists(output.Path))
+                    {
+                        File.Move(output.Path, output.BackupPath);
+                    }
+
+                    File.Move(output.TemporaryPath, output.Path);
+                    moved.Add(output);
+                }
+
+                committed = true;
+            }
+            catch
+            {
+                foreach (PendingAuthoringOutput output in moved.AsEnumerable().Reverse())
+                {
+                    TryDelete(output.Path);
+                }
+
+                foreach (PendingAuthoringOutput output in pending.AsEnumerable().Reverse())
+                {
+                    if (File.Exists(output.BackupPath))
+                    {
+                        File.Move(output.BackupPath, output.Path, overwrite: true);
+                    }
+                }
+
+                throw;
+            }
+            finally
+            {
+                foreach (PendingAuthoringOutput output in pending)
+                {
+                    TryDelete(output.TemporaryPath);
+                    if (committed)
+                    {
+                        TryDelete(output.BackupPath);
+                    }
+                }
+            }
+        }
+
+        private static void TryDelete(string path)
+        {
+            try
+            {
+                File.Delete(path);
+            }
+            catch (Exception exception) when (
+                exception is IOException or UnauthorizedAccessException)
+            {
+            }
         }
 
         private async Task<DebugSessionResponse> WaitForNextStateAsync(
@@ -419,6 +710,13 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 result,
                 bindings);
         }
+
+        private sealed record AuthoringOutput(string Path, byte[] Content);
+
+        private sealed record PendingAuthoringOutput(
+            string Path,
+            string TemporaryPath,
+            string BackupPath);
     }
 
     private sealed class HttpProtocolException(HttpStatusCode status, string message)
@@ -426,7 +724,30 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
     {
         public HttpStatusCode Status { get; } = status;
     }
+
+    private sealed class AuthoringProtocolException(
+        HttpStatusCode status,
+        string code,
+        string message,
+        IReadOnlyList<UnifiedDiagnostic>? diagnostics = null)
+        : Exception(message)
+    {
+        public HttpStatusCode Status { get; } = status;
+
+        public string Code { get; } = code;
+
+        public IReadOnlyList<UnifiedDiagnostic> Diagnostics { get; } = diagnostics ?? [];
+    }
 }
+
+internal sealed record AuthoringWorkspaceResponse(
+    string SchemaVersion,
+    long Revision,
+    string SourcePath,
+    string SourceText,
+    ScriptAssetDocument ScriptAssets,
+    GraphDocument Graph,
+    CoreClrProgramGeneration Generation);
 
 internal sealed record DebugHealthResponse(
     string SchemaVersion,
@@ -491,6 +812,8 @@ internal sealed record DebugSessionResponse(
         breakpoints);
 }
 
-internal sealed record DebugErrorResponse(DebugError Error);
+internal sealed record DebugErrorResponse(
+    DebugError Error,
+    IReadOnlyList<UnifiedDiagnostic>? Diagnostics = null);
 
 internal sealed record DebugError(string Code, string Message);

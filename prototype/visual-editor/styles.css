@@ -76,7 +76,8 @@ textarea:focus-visible,
 .crumb { padding: 6px 4px; border: 0; background: none; cursor: pointer; color: var(--text-dim); white-space: nowrap; }
 .crumb:hover { color: var(--text); }
 .crumb.active { color: var(--text); font-weight: 600; }
-.dirty-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 9px rgba(240,167,74,.5); }
+.dirty-dot { width: 6px; height: 6px; border-radius: 50%; opacity: 0; background: var(--amber); box-shadow: 0 0 9px rgba(240,167,74,.5); transition: opacity .18s ease; }
+.dirty-dot.visible { opacity: 1; }
 .ghost-button { border: 0; }
 
 .top-actions { height: 100%; display: flex; align-items: center; gap: 8px; padding-right: 12px; }
@@ -89,6 +90,9 @@ textarea:focus-visible,
 .button.primary { border-color: #c78332; color: #17110a; background: var(--amber); box-shadow: inset 0 1px rgba(255,255,255,.25), 0 4px 15px rgba(240,167,74,.12); }
 .button.primary:hover { background: var(--amber-bright); }
 .button.secondary { background: #171a1b; }
+.button.save-button { border-color: #385148; color: var(--mint); }
+.button.save-button:not(:disabled)::before { content: "●"; margin-right: 7px; color: var(--mint); font-size: 7px; }
+.button:disabled { opacity: .42; cursor: not-allowed; transform: none; }
 .button.small { height: 30px; padding: 0 11px; }
 .button-icon { font-size: 15px; vertical-align: -1px; }
 .play-icon { display: inline-block; width: 0; height: 0; margin-right: 7px; border-top: 4px solid transparent; border-bottom: 4px solid transparent; border-left: 7px solid currentColor; }
@@ -282,6 +286,11 @@ textarea:focus-visible,
 .prototype-warning { margin: 14px; padding: 11px; border: 1px solid #54452f; background: #19160f; color: #887d69; }
 .prototype-warning strong { color: var(--amber); font: 700 8px var(--mono); letter-spacing: .1em; }
 .prototype-warning p { margin: 7px 0 0; font-size: 9px; line-height: 1.55; }
+.inspector-danger { width: 100%; height: 30px; margin-bottom: 10px; border: 1px solid #57352f; background: #211512; color: #be7568; font: 700 8px var(--mono); letter-spacing: .09em; cursor: pointer; }
+.inspector-danger:hover { border-color: #8b4a3f; color: #e59a8c; }
+.behavior-editor { border-left: 2px solid var(--mint); background: #111917; }
+.behavior-editor .inspector-save { width: 100%; margin-top: 8px; }
+.behavior-editor > small { display: block; margin-top: 7px; color: #65736d; font: 8px/1.5 var(--mono); }
 
 .debug-strip { position: absolute; z-index: 20; left: 15px; right: 15px; bottom: -58px; height: 46px; display: grid; grid-template-columns: 25px minmax(180px, .75fr) minmax(250px, 1.2fr) auto; gap: 10px; align-items: center; padding: 0 9px; border: 1px solid #72562f; background: #1e1911; box-shadow: 0 10px 35px rgba(0,0,0,.45); transition: bottom .25s cubic-bezier(.2,.8,.2,1); }
 .debug-strip.visible { bottom: 12px; }
@@ -306,7 +315,7 @@ textarea:focus-visible,
 .drawer-header h2 { margin: 4px 0 0; font: 650 17px var(--display); letter-spacing: .03em; }
 .ai-sigil { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid #3f6757; color: var(--mint); background: #102019; font-size: 20px; }
 .ai-columns { height: calc(100% - 69px); display: grid; grid-template-columns: 1fr 1.15fr .95fr; gap: 13px; padding-top: 14px; }
-.ai-columns section { min-width: 0; padding: 12px; border: 1px solid #293631; background: #0b100e; }
+.ai-columns section { min-width: 0; min-height: 0; padding: 12px; overflow: auto; border: 1px solid #293631; background: #0b100e; }
 .ai-columns h3 { margin: 0 0 10px; color: #698478; font: 700 8px var(--mono); letter-spacing: .1em; }
 .ai-columns pre { margin: 0; white-space: pre-wrap; color: #a8b6af; font: 9px/1.65 var(--mono); }
 .ai-prompt-section textarea { width: 100%; resize: none; padding: 9px; border: 1px solid #304039; outline: 0; background: #090d0b; color: #b7c2bc; font: 9px/1.5 var(--mono); }
@@ -318,6 +327,7 @@ textarea:focus-visible,
 .patch-preview strong { margin-top: 4px; color: #b8c4bd; font-size: 10px; }
 .patch-preview small { margin-top: 3px; color: #65736d; font-size: 8px; }
 .patch-preview pre { max-height: 118px; margin-top: 8px; padding: 8px; overflow: auto; border: 1px solid #263b32; background: #080d0b; color: #90bca8; font-size: 7px; line-height: 1.45; white-space: pre; }
+.patch-preview .button { margin-top: 8px; border-color: #385148; color: var(--mint); }
 
 .variable-dialog { width: 485px; padding: 0; border: 1px solid #55442e; border-radius: 3px; background: #111415; color: var(--text); box-shadow: 0 30px 80px rgba(0,0,0,.65); }
 .variable-dialog::backdrop { background: rgba(4,6,6,.76); backdrop-filter: blur(3px); }

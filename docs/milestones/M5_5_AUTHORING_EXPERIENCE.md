@@ -24,7 +24,7 @@ model that still omits state declarations.
 - transactional Roslyn application and identity-sidecar reconciliation
 - actual Graph/Declaration artifacts consumed by the visual editor
 - declaration list, inspector, and Structure/Split/Code synchronization
-- coordinate-free AI outline plus declaration/body semantic patch preview
+- coordinate-free AI outline plus declaration/body semantic patch submission
 - existing CoreCLR debug pause painted onto real visual statement cards
 - a sample asset with zero Blueprint-only declarations
 
@@ -156,9 +156,51 @@ The fourth connected slice is now implemented:
 13. The full 363-test suite, zero-warning build, formatting check, and eleven
     repository invariants pass.
 
-The remaining M5.5 boundary is host integration for sending declaration/body
-patches without a manual CLI handoff. Native traps, async execution, and the UE
-object/lifetime adapter remain later runtime/M6 work.
+## M5.5.5 completed — Transactional authoring host and hot reload
+
+The final M5.5 slice closes the write-back loop:
+
+1. `CSharpAuthoringWorkspace` owns one immutable committed snapshot containing
+   its request, analysis, Script Asset document, HIR-derived Graph, and revision.
+2. Declaration Patch v0.1 and Semantic Patch v0.19 produce candidate snapshots;
+   the current workspace is unchanged until an explicit revision-checked commit.
+3. The first reconciliation result from an empty identity sidecar is attached to
+   the in-memory baseline before any edit, so the first rename cannot drift IDs.
+4. `GET /api/authoring/workspace` returns source, Declaration IR, Graph, revision,
+   and the exact CoreCLR generation from one same-origin response.
+5. `POST /api/authoring/declaration-patch` accepts add/update/remove operations
+   directly from the Workbench instead of requiring a manual CLI handoff.
+6. `POST /api/authoring/semantic-patch` accepts the existing body-edit protocol;
+   the first UI operation edits the Clamp literal by Semantic ID rather than by
+   source line or visual coordinate.
+7. A successful mutation reloads the same `CoreClrDebugLoopbackTransport`, writes
+   source plus `.usids` through one rollback-capable file transaction, then
+   publishes the next workspace revision and CLR generation.
+8. Reload failure leaves files untouched; file-commit failure reloads the prior
+   CoreCLR request. A patch failure never mutates the committed snapshot.
+9. Before writing, the host compares source and sidecar bytes with its committed
+   baseline. External editor changes return `UAW1002` instead of being overwritten.
+10. The Workbench loads the live workspace before checked-in fallback artifacts,
+    exposes `SAVE PATCH`/Ctrl+S, and renders explicit pending, rejected, external-
+    conflict, synchronized-revision, and reloaded-generation states.
+11. State creation, update, rename, exposure changes, and removal share one
+    Declaration Patch transaction. AI preview can apply that same document to
+    source and CoreCLR directly.
+12. Selection and active breakpoint intent are captured by Semantic ID before
+    reload and restored against the regenerated Declaration IR and Graph.
+13. Browser regression proves a persistent state rename, transactional default
+    update, literal body edit, generation-4 breakpoint hit, and changed CoreCLR
+    return value (`480` before Clamp, `500` after it).
+14. Conflict regression proves an external source edit is rejected while the
+    Workbench remains dirty, and restart regression proves the renamed state ID
+    plus behavior edit survive through the generated sidecar and source.
+15. The full 369-test suite, zero-warning build, formatting check, twelve
+    repository invariants, artifact reproduction, and browser interaction gate
+    pass.
+
+M5.5 is complete. Native traps, async execution, remote framing, and the UE
+object/lifetime adapter remain later runtime/M6 work; they do not alter the
+authoring contracts proven here.
 
 ## Deliberate limits
 
