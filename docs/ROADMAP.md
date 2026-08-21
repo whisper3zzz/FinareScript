@@ -173,8 +173,8 @@ declarations or one-node-per-expression graphs.
 - [x] backend-neutral Script Asset and Declaration IR v0.1
 - [x] stable state/property identity, type, default, and exposure metadata
 - [x] declaration semantic patching and transactional C# round trip
-- [ ] compact structure regions with inline ordinary expressions
-- [ ] actual Declaration/Graph artifacts connected to the editor prototype
+- [x] compact structure regions with inline ordinary expressions
+- [x] actual Declaration/Graph artifacts connected to the editor prototype
 - [x] coordinate-free AI outline and typed declaration patch preview
 - [ ] live CoreCLR pause/locals painted on real semantic statement cards
 - [x] sample source workflow with zero required Blueprint variables

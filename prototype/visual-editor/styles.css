@@ -185,6 +185,7 @@ textarea:focus-visible,
 .data-token em { margin-left: 4px; color: #606967; font-style: normal; }
 .local-name { color: #82b8e9; }
 .state-reference { color: var(--amber-bright); }
+.state-reference[data-declaration-id] { border-bottom: 1px dotted rgba(248,190,110,.42); }
 .inline-expression { color: #c5c2b8; }
 .breakpoint-toggle { align-self: start; width: 11px; height: 11px; margin-top: 15px; padding: 0; border: 1px solid #454c4c; border-radius: 50%; background: #15191a; cursor: pointer; }
 .breakpoint-toggle:hover { border-color: var(--red); }
@@ -245,6 +246,7 @@ textarea:focus-visible,
 .code-status { display: flex; align-items: center; gap: 15px; padding: 0 10px; border-top: 1px solid var(--line); color: #59605f; font: 7px var(--mono); }
 .code-status strong { color: #929895; font-weight: 500; }
 .target-label { margin-left: auto; color: var(--amber); }
+.code-comment { color: #64766d; font-style: italic; }
 
 .inspector-heading { background: #111415; }
 .more-button { width: auto; padding: 0 8px; border: 0; font-size: 11px; }

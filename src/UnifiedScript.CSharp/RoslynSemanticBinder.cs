@@ -664,9 +664,7 @@ public sealed class RoslynSemanticBinder
             return GetMethodDescriptor(method).Id;
         }
 
-        string assemblyName = symbol.ContainingAssembly?.Identity.Name ?? "source";
-        string displayName = TrimGlobalPrefix(symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
-        return SemanticId.FromKey($"roslyn-symbol|{assemblyName}|{symbol.Kind}|{displayName}");
+        return CSharpSemanticIds.ForRoslynSymbol(symbol);
     }
 
     private (UnifiedTypeKind Kind, UnifiedNullability Nullability, bool IsGraphSafe) ClassifyType(
@@ -835,9 +833,6 @@ public sealed class RoslynSemanticBinder
         string displayName = method.ToDisplayString(MethodMetadataFormat);
         return $"{assemblyName}|{displayName}";
     }
-
-    private static string TrimGlobalPrefix(string value) =>
-        value.Replace("global::", string.Empty, StringComparison.Ordinal);
 
     private static IEnumerable<HirStatement> EnumerateStatements(HirBlockStatement block)
     {

@@ -94,7 +94,10 @@ public sealed class CSharpSemanticPipeline
         bool hasBindingErrors = diagnostics.Any(
             static diagnostic => diagnostic.Severity == UnifiedDiagnosticSeverity.Error);
         ScriptAssetLoweringResult assetLowering = hasBindingErrors || binding.Compilation is null
-            ? new ScriptAssetLoweringResult(null, [])
+            ? new ScriptAssetLoweringResult(
+                null,
+                new Dictionary<SemanticId, SemanticId>(),
+                [])
             : new CSharpScriptAssetLowerer().Lower(
                 compilation,
                 syntaxTrees,
@@ -113,6 +116,9 @@ public sealed class CSharpSemanticPipeline
                 ? GetOriginalIdentitySidecars(request)
                 : identitySidecars,
             ScriptAssets = hasErrors ? null : assetLowering.Document,
+            DeclarationReferences = hasErrors
+                ? new Dictionary<SemanticId, SemanticId>()
+                : assetLowering.DeclarationReferences,
         };
     }
 

@@ -341,7 +341,7 @@ state MaxDamage: int = 999
       </section>
       <section>
         <h3>BEHAVIOR OUTLINE</h3>
-        <pre>function ApplyDamage(incomingDamage: int, critical: bool) → float
+        <pre id="aiBehavior">function ApplyDamage(incomingDamage: int, critical: bool) → float
   let scaled = incomingDamage × BaseDamage
   when critical
     scaled ×= CriticalMultiplier

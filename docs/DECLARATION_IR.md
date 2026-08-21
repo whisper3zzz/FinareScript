@@ -100,6 +100,14 @@ the new identifier while Declaration IR retains the original state Semantic ID.
 Removals become normal sidecar tombstones; additions receive identities during
 the same reconciliation pass.
 
+Graph projection receives the lowering result's Roslyn-symbol-to-declaration
+map. Identifier nodes that read Script Asset state retain their normal
+`referencedSymbolId` and additionally expose the corresponding
+`declarationId`. Visual and AI consumers can therefore join executable state
+reads to their type/default/exposure contract by Semantic ID rather than by
+mutable display name. Locals and parameters deliberately have no
+`declarationId`.
+
 ## Diagnostics
 
 The Roslyn declaration lowering boundary emits stable codes:

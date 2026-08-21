@@ -85,9 +85,43 @@ The second connected slice is now implemented:
 12. The full 360-test suite, zero-warning build, formatting check, repository
     validator, and CLI source/asset transaction pass.
 
-The next M5.5 slice connects the prototype's behavior cards to its generated
-Graph artifact. After that, live debug transport replaces the current pause and
-locals fixture.
+## M5.5.3 completed — Real Graph compact visual projection
+
+The third connected slice is now implemented:
+
+1. The prototype loads checked-in Graph v0.12, Declaration IR v0.1, and exact
+   C# source artifacts produced from the same compilation.
+2. A strict browser-side gate verifies source/configuration/function identity,
+   unique nodes/regions, edge endpoints, region ownership, and state-reference
+   declaration identity before rendering.
+3. The DamagePolicy Graph's 17 fine-grained nodes project to six promoted
+   semantic cards: entry, local declaration, decision region, branch mutation,
+   call-owning assignment, and return.
+4. Identifier, literal, binary, member-access, and invocation nodes remain
+   recursively reconstructable inline expressions instead of becoming a
+   Blueprint-style wire/card explosion.
+5. The `if` card retains the real branch node and region IDs, including its
+   explicit `then` region and implicit empty `else` region.
+6. Every promoted card exposes its exact Graph Semantic ID and source line.
+   Selecting the clamp assignment highlights line 27 of the real source.
+7. The breakpoint targets the executable outer assignment ID; the nested
+   `Math.Clamp` invocation keeps a separate inline expression ID for tracing.
+8. Graph identifiers bound to Script Asset state now carry a
+   `declarationId`, joining behavior references to Declaration IR without name
+   matching.
+9. Inspector state renames update canonical source, inline behavior references,
+   and the coordinate-free AI outline while retaining identity and visibly
+   entering `PATCH PENDING`.
+10. The repository validator checks the three checked-in artifacts together,
+    including compact statement counts and all state declaration links.
+11. Browser regression verifies the six real IDs, three Declaration IR links,
+    exact source selection, cross-view rename, AI outline, and assignment-level
+    debug pause.
+12. The full 361-test suite, zero-warning build, formatting check, and ten
+    repository invariants pass.
+
+The next M5.5 slice replaces the current pause/locals timing fixture with the
+existing CoreCLR live-debug transport while preserving these statement IDs.
 
 ## Deliberate limits
 

@@ -7,7 +7,10 @@ namespace UnifiedScript.Graph;
 
 public sealed class HirGraphProjector
 {
-    public GraphDocument Project(HirCompilationUnit compilationUnit, BoundCompilation? semantics = null)
+    public GraphDocument Project(
+        HirCompilationUnit compilationUnit,
+        BoundCompilation? semantics = null,
+        IReadOnlyDictionary<SemanticId, SemanticId>? declarationReferences = null)
     {
         ArgumentNullException.ThrowIfNull(compilationUnit);
         if (semantics is not null && semantics.SourceCompilationId != compilationUnit.Id)
@@ -17,7 +20,7 @@ public sealed class HirGraphProjector
                 nameof(semantics));
         }
 
-        var semanticIndex = new SemanticIndex(semantics);
+        var semanticIndex = new SemanticIndex(semantics, declarationReferences);
         IReadOnlyList<GraphFunction> functions = compilationUnit.Types
             .SelectMany(type => type.Methods.Select(method => ProjectMethod(type, method, semanticIndex)))
             .OrderBy(static function => function.QualifiedName, StringComparer.Ordinal)
@@ -1851,8 +1854,11 @@ public sealed class HirGraphProjector
         private readonly IReadOnlyDictionary<SemanticId, TypeDescriptor> types;
         private readonly IReadOnlyDictionary<SemanticId, MethodDescriptor> methods;
         private readonly IReadOnlyDictionary<SemanticId, BoundForEachInfo> forEachLoops;
+        private readonly IReadOnlyDictionary<SemanticId, SemanticId> declarationReferences;
 
-        public SemanticIndex(BoundCompilation? compilation)
+        public SemanticIndex(
+            BoundCompilation? compilation,
+            IReadOnlyDictionary<SemanticId, SemanticId>? declarationReferences)
         {
             nodes = compilation?.Nodes.ToDictionary(static node => node.NodeId) ??
                 new Dictionary<SemanticId, BoundNodeInfo>();
@@ -1862,6 +1868,8 @@ public sealed class HirGraphProjector
                 new Dictionary<SemanticId, MethodDescriptor>();
             forEachLoops = compilation?.ForEachLoops.ToDictionary(static loop => loop.NodeId) ??
                 new Dictionary<SemanticId, BoundForEachInfo>();
+            this.declarationReferences = declarationReferences ??
+                new Dictionary<SemanticId, SemanticId>();
         }
 
         public bool IsEffectful(SemanticId nodeId) =>
@@ -1913,6 +1921,12 @@ public sealed class HirGraphProjector
             if (node.ReferencedSymbolId is SemanticId referencedSymbolId)
             {
                 properties["referencedSymbolId"] = referencedSymbolId.Value;
+                if (declarationReferences.TryGetValue(
+                        referencedSymbolId,
+                        out SemanticId declarationId))
+                {
+                    properties["declarationId"] = declarationId.Value;
+                }
             }
 
             if (node.InvokedMethodId is SemanticId invokedMethodId)

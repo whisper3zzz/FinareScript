@@ -44,7 +44,10 @@ public sealed class CSharpProgramEmitter
             return new CSharpProgramEmitResult(null, analysis.Diagnostics);
         }
 
-        _ = new HirGraphProjector().Project(analysis.Hir, analysis.Semantics);
+        _ = new HirGraphProjector().Project(
+            analysis.Hir,
+            analysis.Semantics,
+            analysis.DeclarationReferences);
 
         using var sourceMapPortableExecutable = new MemoryStream();
         using var sourceMapPortablePdb = new MemoryStream();

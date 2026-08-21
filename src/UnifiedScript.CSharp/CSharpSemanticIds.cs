@@ -8,6 +8,16 @@ internal static class CSharpSemanticIds
     public static SemanticId ForSymbol(string kind, string qualifiedName) =>
         SemanticId.FromKey($"symbol|{kind}|{qualifiedName}");
 
+    public static SemanticId ForRoslynSymbol(ISymbol symbol)
+    {
+        ArgumentNullException.ThrowIfNull(symbol);
+        string assemblyName = symbol.ContainingAssembly?.Identity.Name ?? "source";
+        string displayName = symbol
+            .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+            .Replace("global::", string.Empty, StringComparison.Ordinal);
+        return SemanticId.FromKey($"roslyn-symbol|{assemblyName}|{symbol.Kind}|{displayName}");
+    }
+
     public static SemanticId ForNode(string filePath, string ownerKey, SyntaxNode node, string? role = null)
     {
         string normalizedPath = filePath.Replace('\\', '/');
@@ -22,4 +32,3 @@ internal static class CSharpSemanticIds
         return SemanticId.FromKey(key);
     }
 }
-

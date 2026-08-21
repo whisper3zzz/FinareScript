@@ -1,5 +1,6 @@
 using UnifiedScript.Core;
 using UnifiedScript.CSharp;
+using UnifiedScript.Graph;
 
 namespace UnifiedScript.Tests;
 
@@ -80,6 +81,37 @@ public sealed class CSharpScriptAssetLowererTests
             function.QualifiedName);
         Assert.Equal(["System.Single", "System.Boolean"],
             function.Parameters.Select(static parameter => parameter.TypeMetadataName));
+    }
+
+    [Fact]
+    public void GraphStateReferencesCarryDeclarationIdentity()
+    {
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            Source,
+            "Game/DamagePolicy.cs");
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        GraphFunction function = Assert.Single(new HirGraphProjector().Project(
+            result.Hir!,
+            result.Semantics!,
+            result.DeclarationReferences).Functions);
+        IReadOnlyDictionary<string, SemanticId> declarationIds = Assert.Single(
+                result.ScriptAssets!.Assets)
+            .States
+            .ToDictionary(static state => state.Name, static state => state.Id, StringComparer.Ordinal);
+
+        foreach (string name in new[] { "BaseDamage", "MaxDamage" })
+        {
+            SemanticId declarationId = declarationIds[name];
+            GraphNode reference = Assert.Single(function.Nodes, node =>
+                node.Kind == "identifier" &&
+                node.Properties.GetValueOrDefault("name") == name);
+            Assert.Equal(declarationId.Value, reference.Properties["declarationId"]);
+        }
+
+        Assert.DoesNotContain(function.Nodes, static node =>
+            node.Properties.GetValueOrDefault("name") == "scaled" &&
+            node.Properties.ContainsKey("declarationId"));
     }
 
     [Fact]

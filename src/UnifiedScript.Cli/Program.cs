@@ -290,7 +290,10 @@ internal static class Program
             return 2;
         }
 
-        GraphDocument graph = new HirGraphProjector().Project(result.Hir, result.Semantics);
+        GraphDocument graph = new HirGraphProjector().Project(
+            result.Hir,
+            result.Semantics,
+            result.DeclarationReferences);
         string hirJson = HirJson.Serialize(HirDocument.Create(result.Hir));
         string semanticJson = SemanticJson.Serialize(result.Semantics);
         string graphJson = GraphJson.Serialize(graph);

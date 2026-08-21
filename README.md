@@ -187,7 +187,14 @@ asset/state Semantic IDs, complete old-value preconditions, full recompilation,
 and identity pins for sidecar-backed renames. The CLI commits patched source,
 revalidated Declaration IR, and an optional updated `.usids` together. The
 prototype generates the same directly applicable JSON instead of a static
-preview. Real Graph/debug transport remains the next connected slice.
+preview. M5.5.3 connects the behavior surface to the generated
+`unifiedscript.graph/v0.12` artifact and exact source snapshot. The adapter
+reduces 17 fine-grained Graph nodes to six semantic action/region cards while
+recursively retaining ordinary expressions inline. Cards, source selection,
+AI outline, and simulated statement breakpoint now share the real Graph IDs;
+state-reference nodes additionally carry their Declaration IR IDs, so the UI
+never joins state by display name. Live CoreCLR debug transport is the next
+connected slice.
 
 The v0.2 profile accepts `[Visual]` methods containing local variables,
 expressions, calls, assignments, `if/else`, `while`, `do`, `for`, bounded

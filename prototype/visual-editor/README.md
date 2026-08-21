@@ -27,12 +27,21 @@ Try these interactions:
 
 ## Current integration boundary
 
-The declaration list and inspector load
-`data/damage-policy.asset.json`, a real `unifiedscript.script-asset/v0.1`
-artifact generated from `samples/Authoring/DamagePolicy.cs`. Names, types,
-defaults, exposure flags, and Semantic IDs therefore come from the compiler
-pipeline rather than embedded UI mock data. If the artifact cannot be fetched,
-the prototype visibly falls back to its embedded demonstration declarations.
+The workbench loads `data/damage-policy.asset.json`,
+`data/damage-policy.graph.json`, and `data/damage-policy.source.cs`: real
+Declaration IR v0.1, Graph v0.12, and source artifacts generated from the same
+`samples/Authoring/DamagePolicy.cs` compilation. Names, types, defaults,
+exposure flags, card identities, source lines, control regions, and inline
+expressions therefore come from the compiler pipeline rather than embedded UI
+mock data. If any artifact or cross-artifact identity check fails, the
+prototype visibly falls back to its embedded demonstration workspace.
+
+The Graph contains 17 nodes. The UI intentionally promotes only six semantic
+actions/regions and reconstructs identifiers, literals, binary expressions,
+member access, and invocation arguments inline. State-reference tokens carry
+Declaration IR IDs. The `Math.Clamp` card is the outer assignment statement,
+so its breakpoint uses the executable assignment ID while the nested invocation
+retains a separate expression ID.
 
 Inspector edits and the AI suggestion are translated into typed `addState` or
 `updateState` operations with real baseline IDs, target Semantic IDs, and full
@@ -40,6 +49,6 @@ old-value preconditions. The preview JSON is accepted by
 `apply-declaration-patch`, whose backend transaction writes C#, Declaration IR,
 and an optional `.usids` sidecar only after full reanalysis. This dependency-
 free page does not itself invoke the local CLI, so browser editing remains
-unsaved until a host integration sends that patch to the backend. The structure
-cards and debug animation remain experience fixtures until the real Graph
-artifact and CoreCLR debug protocol are connected.
+unsaved until a host integration sends that patch to the backend. Structure
+cards now come from the real Graph artifact; only the debug animation and locals
+remain fixtures until the CoreCLR debug protocol is connected.

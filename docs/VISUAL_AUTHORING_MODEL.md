@@ -12,9 +12,10 @@ exposure metadata, asset paths, and Visual signatures first-class. The first
 prototype connection consumes that compiler artifact, so those declarations no
 longer require a Blueprint or another engine-owned binary surface.
 
-The remaining product work is to carry actual editor edits back through typed
-declaration patches and to connect real Graph/debug artifacts to the behavior
-surface.
+Typed declaration edits now round-trip through semantic patches, and the
+behavior surface consumes the real Graph artifact. The remaining connection is
+to replace the prototype's timed debug fixture with the existing live CoreCLR
+debug transport.
 
 ## The visual editor is not a code sentence renderer
 
@@ -129,10 +130,14 @@ types, and preconditions; it does not manipulate pixels or Blueprint nodes.
 ## Experience prototype
 
 The dependency-free prototype in `prototype/visual-editor` demonstrates the
-intended information density and interactions. Its declaration list, inspector,
-canonical declaration preview, AI declaration outline, and IDs load the real
-Declaration IR artifact generated from `samples/Authoring/DamagePolicy.cs`. It
-also includes Structure/Split/Code views, body outline/patch preview, and a
-debug-pause presentation. UI-to-compiler declaration patch transport and the
-real Graph/live-debug connections remain explicit boundaries rather than being
-simulated as completed backend work.
+intended information density and interactions. It loads real Declaration IR,
+Graph v0.12, and exact source artifacts generated from
+`samples/Authoring/DamagePolicy.cs`. A strict adapter promotes six executable
+actions/regions from 17 fine-grained nodes and recursively renders ordinary
+data expressions inline. Every card and source selection uses the generated
+Graph Semantic ID; state-reference tokens also carry their Declaration IR IDs.
+Structure/Split/Code, the AI outline, and declaration patch preview therefore
+share compiler artifacts rather than embedded behavior fixtures. Sending a
+declaration patch to the local CLI and painting the existing live CoreCLR debug
+transport remain host-integration boundaries; only the current pause/locals
+timing is still simulated.

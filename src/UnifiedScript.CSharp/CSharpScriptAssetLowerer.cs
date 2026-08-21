@@ -10,6 +10,7 @@ namespace UnifiedScript.CSharp;
 
 internal sealed record ScriptAssetLoweringResult(
     ScriptAssetDocument? Document,
+    IReadOnlyDictionary<SemanticId, SemanticId> DeclarationReferences,
     IReadOnlyList<UnifiedDiagnostic> Diagnostics);
 
 internal sealed class CSharpScriptAssetLowerer
@@ -42,6 +43,7 @@ internal sealed class CSharpScriptAssetLowerer
         var semanticTypes = semantics.Types.ToDictionary(static type => type.Id);
         var semanticMethods = semantics.Methods.ToDictionary(static method => method.Id);
         var declarations = new List<ScriptAssetDeclaration>();
+        var declarationReferences = new Dictionary<SemanticId, SemanticId>();
         var visitedTypes = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
 
         foreach (SyntaxTree syntaxTree in syntaxTrees)
@@ -86,6 +88,7 @@ internal sealed class CSharpScriptAssetLowerer
                     assetAttribute is not null,
                     compilation,
                     declarationIdentities ?? new Dictionary<SemanticId, SemanticId>(),
+                    declarationReferences,
                     diagnostics);
                 IReadOnlyList<ScriptFunctionDeclaration> functions = hirType is null
                     ? []
@@ -117,14 +120,14 @@ internal sealed class CSharpScriptAssetLowerer
 
         if (diagnostics.Any(static diagnostic => diagnostic.Severity == UnifiedDiagnosticSeverity.Error))
         {
-            return new ScriptAssetLoweringResult(null, diagnostics);
+            return new ScriptAssetLoweringResult(null, declarationReferences, diagnostics);
         }
 
         ScriptAssetDocument document = ScriptAssetJson.NormalizeAndValidate(ScriptAssetDocument.Create(
             hir.Id,
             semantics.ConfigurationId,
             declarations));
-        return new ScriptAssetLoweringResult(document, diagnostics);
+        return new ScriptAssetLoweringResult(document, declarationReferences, diagnostics);
     }
 
     private static IReadOnlyList<ScriptStateDeclaration> LowerStates(
@@ -132,6 +135,7 @@ internal sealed class CSharpScriptAssetLowerer
         bool ownsAllProperties,
         CSharpCompilation compilation,
         IReadOnlyDictionary<SemanticId, SemanticId> declarationIdentities,
+        IDictionary<SemanticId, SemanticId> declarationReferences,
         ICollection<UnifiedDiagnostic> diagnostics)
     {
         var states = new List<ScriptStateDeclaration>();
@@ -217,8 +221,12 @@ internal sealed class CSharpScriptAssetLowerer
                 continue;
             }
 
+            SemanticId declarationId = declarationIdentities.GetValueOrDefault(
+                deterministicId,
+                deterministicId);
+            declarationReferences.Add(CSharpSemanticIds.ForRoslynSymbol(property), declarationId);
             states.Add(new ScriptStateDeclaration(
-                declarationIdentities.GetValueOrDefault(deterministicId, deterministicId),
+                declarationId,
                 property.Name,
                 property.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat),
                 property.Type.ToDisplayString(TypeMetadataFormat),

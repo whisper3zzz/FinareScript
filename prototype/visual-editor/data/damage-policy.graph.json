@@ -1,0 +1,1006 @@
+{
+  "schemaVersion": "unifiedscript.graph/v0.12",
+  "sourceCompilationId": "us_9c565600166a847b78177c5c25c03ba5",
+  "semanticConfigurationId": "us_02f5fe78d296e2d4fe04bc50ca71acf1",
+  "functions": [
+    {
+      "id": "us_f8ca585f8cc118ccb88836645e63068b",
+      "qualifiedName": "Game.Combat.DamagePolicy.ApplyDamage",
+      "nodes": [
+        {
+          "id": "us_04cd17548f588d033b9e2c3c376a487d",
+          "kind": "identifier",
+          "label": "CriticalMultiplier",
+          "span": {
+            "filePath": "samples/Authoring/DamagePolicy.cs",
+            "start": {
+              "line": 24,
+              "column": 23
+            },
+            "end": {
+              "line": 24,
+              "column": 41
+            }
+          },
+          "ports": [
+            {
+              "name": "value",
+              "direction": "output",
+              "kind": "data"
+            }
+          ],
+          "properties": {
+            "declarationId": "us_934c08ffff55696230b33faa88d27af9",
+            "graphSafe": "true",
+            "name": "CriticalMultiplier",
+            "referencedSymbolId": "us_4f35fd4e0359a6546ff5cacc319c6036",
+            "resolvedType": "float",
+            "typeId": "us_26a5b44da19acd678d268ed608e9829f"
+          }
+        },
+        {
+          "id": "us_27393be68a2b8cd68ea420f494910eee",
+          "kind": "return",
+          "label": "Return",
+          "span": {
+            "filePath": "samples/Authoring/DamagePolicy.cs",
+            "start": {
+              "line": 28,
+              "column": 9
+            },
+            "end": {
+              "line": 28,
+              "column": 23
+            }
+          },
+          "ports": [
+            {
+              "name": "in",
+              "direction": "input",
+              "kind": "control"
+            },
+            {
+              "name": "value",
+              "direction": "input",
+              "kind": "data"
+            }
+          ],
+          "properties": {}
+        },
+        {
+          "id": "us_4734b1e54218f5be689bf666e7cca4a3",
+          "kind": "identifier",
+          "label": "BaseDamage",
+          "span": {
+            "filePath": "samples/Authoring/DamagePolicy.cs",
+            "start": {
+              "line": 21,
+              "column": 41
+            },
+            "end": {
+              "line": 21,
+              "column": 51
+            }
+          },
+          "ports": [
+            {
+              "name": "value",
+              "direction": "output",
+              "kind": "data"
+            }
+          ],
+          "properties": {
+            "declarationId": "us_8bc5970ccb62f81bbb2d7e0f7185eea4",
+            "graphSafe": "true",
+            "name": "BaseDamage",
+            "referencedSymbolId": "us_09439bc04eefd8103777b0fc15b081d9",
+            "resolvedType": "int",
+            "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+          }
+        },
+        {
+          "id": "us_49097fb28d65f178d1f6a871b47ec679",
+          "kind": "identifier",
+          "label": "incomingDamage",
+          "span": {
+            "filePath": "samples/Authoring/DamagePolicy.cs",
+            "start": {
+              "line": 21,
+              "column": 24
+            },
+            "end": {
+              "line": 21,
+              "column": 38
+            }
+          },
+          "ports": [
+            {
+              "name": "value",
+              "direction": "output",
+              "kind": "data"
+            }
+          ],
+          "properties": {
+            "graphSafe": "true",
+            "name": "incomingDamage",
+            "referencedSymbolId": "us_ff55e3121a27108b2214b7fed6afb084",
+            "resolvedType": "int",
+            "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+          }
+        },
+        {
+          "id": "us_74e258069ab374d49becf631181b9a47",
+          "kind": "identifier",
+          "label": "critical",
+          "span": {
+            "filePath": "samples/Authoring/DamagePolicy.cs",
+            "start": {
+              "line": 22,
+              "column": 13
+            },
+            "end": {
+              "line": 22,
+              "column": 21
+            }
+          },
+          "ports": [
+            {
+              "name": "value",
+              "direction": "output",
+              "kind": "data"
+            }
+          ],
+          "properties": {
+            "graphSafe": "true",
+            "name": "critical",
+            "referencedSymbolId": "us_e2214bcbbd20572d190c3e2f9fa2cb30",
+            "resolvedType": "bool",
+            "typeId": "us_b5f84bcf933b6593d45e9e031353bfef"
+          }
+        },
+        {
+          "id": "us_78ceaa28ab965873b37a441b3162f427",
+          "kind": "assignment",
+          "label": "=",
+          "span": {
+            "filePath": "samples/Authoring/DamagePolicy.cs",
+            "start": {
+              "line": 27,
+              "column": 9
+            },
+            "end": {
+              "line": 27,
+              "column": 51
+            }
+          },
+          "ports": [
+            {
+              "name": "target",
+              "direction": "input",
+              "kind": "data"
+            },
+            {
+              "name": "assignedValue",
+              "direction": "input",
+              "kind": "data"
+            },
+            {
+              "name": "execIn",
+              "direction": "input",
+              "kind": "control"
+            },
+            {
+              "name": "execOut",
+              "direction": "output",
+              "kind": "control"
+            },
+            {
+              "name": "value",
+              "direction": "output",
+              "kind": "data"
+            }
+          ],
+          "properties": {
+            "graphSafe": "true",
+            "operator": "=",
+            "resolvedType": "float",
+            "typeId": "us_26a5b44da19acd678d268ed608e9829f"
+          }
+        },
+        {
+          "id": "us_860fad2c924bc2a597c555e6d2f42f95",
+          "kind": "assignment",
+          "label": "*=",
+          "span": {
+            "filePath": "samples/Authoring/DamagePolicy.cs",
+            "start": {
+              "line": 24,
+              "column": 13
+            },
+            "end": {
+              "line": 24,
+              "column": 41
+            }
+          },
+          "ports": [
+            {
+              "name": "target",
+              "direction": "input",
+              "kind": "data"
+            },
+            {
+              "name": "assignedValue",
+              "direction": "input",
+              "kind": "data"
+            },
+            {
+              "name": "execIn",
+              "direction": "input",
+              "kind": "control"
+            },
+            {
+              "name": "execOut",
+              "direction": "output",
+              "kind": "control"
+            },
+            {
+              "name": "value",
+              "direction": "output",
+              "kind": "data"
+            }
+          ],
+          "properties": {
+            "graphSafe": "true",
+            "operator": "*=",
+            "referencedSymbolId": "us_eec1783d356b821ff8fc5228c6562c6b",
+            "resolvedType": "float",
+            "typeId": "us_26a5b44da19acd678d268ed608e9829f"
+          }
+        },
+        {
+          "id": "us_91b4a3f92292810fadc147e37eae11ce",
+          "kind": "identifier",
+          "label": "scaled",
+          "span": {
+            "filePath": "samples/Authoring/DamagePolicy.cs",
+            "start": {
+              "line": 27,
+              "column": 9
+            },
+            "end": {
+              "line": 27,
+              "column": 15
+            }
+          },
+          "ports": [
+            {
+              "name": "value",
+              "direction": "output",
+              "kind": "data"
+            }
+          ],
+          "properties": {
+            "graphSafe": "true",
+            "name": "scaled",
+            "referencedSymbolId": "us_c9aba80313f5b206c3b5222407a549b3",
+            "resolvedType": "float",
+            "typeId": "us_26a5b44da19acd678d268ed608e9829f"
+          }
+        },
+        {
+          "id": "us_980e53a5ad492fd6a8fc4baa5f40d467",
+          "kind": "identifier",
+          "label": "scaled",
+          "span": {
+            "filePath": "samples/Authoring/DamagePolicy.cs",
+            "start": {
+              "line": 24,
+              "column": 13
+            },
+            "end": {
+              "line": 24,
+              "column": 19
+            }
+          },
+          "ports": [
+            {
+              "name": "value",
+              "direction": "output",
+              "kind": "data"
+            }
+          ],
+          "properties": {
+            "graphSafe": "true",
+            "name": "scaled",
+            "referencedSymbolId": "us_c9aba80313f5b206c3b5222407a549b3",
+            "resolvedType": "float",
+            "typeId": "us_26a5b44da19acd678d268ed608e9829f"
+          }
+        },
+        {
+          "id": "us_a28b196343d94a27dc8837c9cde8861f",
+          "kind": "entry",
+          "label": "ApplyDamage",
+          "span": {
+            "filePath": "samples/Authoring/DamagePolicy.cs",
+            "start": {
+              "line": 18,
+              "column": 5
+            },
+            "end": {
+              "line": 29,
+              "column": 6
+            }
+          },
+          "ports": [
+            {
+              "name": "then",
+              "direction": "output",
+              "kind": "control"
+            }
+          ],
+          "properties": {
+            "declaredSymbolId": "us_f8ca585f8cc118ccb88836645e63068b",
+            "effects": "readsState|writesState",
+            "graphSafe": "true",
+            "resolvedType": "float",
+            "typeId": "us_26a5b44da19acd678d268ed608e9829f"
+          }
+        },
+        {
+          "id": "us_b24eeff90a17601ddafdc500302e7bf1",
+          "kind": "branch",
+          "label": "Branch",
+          "span": {
+            "filePath": "samples/Authoring/DamagePolicy.cs",
+            "start": {
+              "line": 22,
+              "column": 9
+            },
+            "end": {
+              "line": 25,
+              "column": 10
+            }
+          },
+          "ports": [
+            {
+              "name": "in",
+              "direction": "input",
+              "kind": "control"
+            },
+            {
+              "name": "then",
+              "direction": "output",
+              "kind": "control"
+            },
+            {
+              "name": "else",
+              "direction": "output",
+              "kind": "control"
+            },
+            {
+              "name": "condition",
+              "direction": "input",
+              "kind": "data"
+            }
+          ],
+          "properties": {
+            "graphSafe": "true",
+            "referencedSymbolId": "us_e2214bcbbd20572d190c3e2f9fa2cb30",
+            "resolvedType": "bool",
+            "typeId": "us_b5f84bcf933b6593d45e9e031353bfef"
+          }
+        },
+        {
+          "id": "us_b626b33f628bc6c9093e945193831154",
+          "kind": "identifier",
+          "label": "scaled",
+          "span": {
+            "filePath": "samples/Authoring/DamagePolicy.cs",
+            "start": {
+              "line": 28,
+              "column": 16
+            },
+            "end": {
+              "line": 28,
+              "column": 22
+            }
+          },
+          "ports": [
+            {
+              "name": "value",
+              "direction": "output",
+              "kind": "data"
+            }
+          ],
+          "properties": {
+            "graphSafe": "true",
+            "name": "scaled",
+            "referencedSymbolId": "us_c9aba80313f5b206c3b5222407a549b3",
+            "resolvedType": "float",
+            "typeId": "us_26a5b44da19acd678d268ed608e9829f"
+          }
+        },
+        {
+          "id": "us_c891c49a43dab0c6ce858a92a6f2dbb4",
+          "kind": "identifier",
+          "label": "scaled",
+          "span": {
+            "filePath": "samples/Authoring/DamagePolicy.cs",
+            "start": {
+              "line": 27,
+              "column": 29
+            },
+            "end": {
+              "line": 27,
+              "column": 35
+            }
+          },
+          "ports": [
+            {
+              "name": "value",
+              "direction": "output",
+              "kind": "data"
+            }
+          ],
+          "properties": {
+            "graphSafe": "true",
+            "name": "scaled",
+            "referencedSymbolId": "us_c9aba80313f5b206c3b5222407a549b3",
+            "resolvedType": "float",
+            "typeId": "us_26a5b44da19acd678d268ed608e9829f"
+          }
+        },
+        {
+          "id": "us_c9aba80313f5b206c3b5222407a549b3",
+          "kind": "variable",
+          "label": "Declare scaled",
+          "span": {
+            "filePath": "samples/Authoring/DamagePolicy.cs",
+            "start": {
+              "line": 21,
+              "column": 9
+            },
+            "end": {
+              "line": 21,
+              "column": 52
+            }
+          },
+          "ports": [
+            {
+              "name": "in",
+              "direction": "input",
+              "kind": "control"
+            },
+            {
+              "name": "then",
+              "direction": "output",
+              "kind": "control"
+            },
+            {
+              "name": "value",
+              "direction": "input",
+              "kind": "data"
+            }
+          ],
+          "properties": {
+            "declaredSymbolId": "us_c9aba80313f5b206c3b5222407a549b3",
+            "graphSafe": "true",
+            "name": "scaled",
+            "resolvedType": "float",
+            "type": "float",
+            "typeId": "us_26a5b44da19acd678d268ed608e9829f"
+          }
+        },
+        {
+          "id": "us_cd1ac0cfc9ede79d03f4189b4253ce8b",
+          "kind": "literal",
+          "label": "0f",
+          "span": {
+            "filePath": "samples/Authoring/DamagePolicy.cs",
+            "start": {
+              "line": 27,
+              "column": 37
+            },
+            "end": {
+              "line": 27,
+              "column": 39
+            }
+          },
+          "ports": [
+            {
+              "name": "value",
+              "direction": "output",
+              "kind": "data"
+            }
+          ],
+          "properties": {
+            "graphSafe": "true",
+            "resolvedType": "float",
+            "typeId": "us_26a5b44da19acd678d268ed608e9829f",
+            "value": "0f"
+          }
+        },
+        {
+          "id": "us_d5f8e90aa9c2a67eb3fcf7df4d0aa440",
+          "kind": "memberAccess",
+          "label": "Clamp",
+          "span": {
+            "filePath": "samples/Authoring/DamagePolicy.cs",
+            "start": {
+              "line": 27,
+              "column": 18
+            },
+            "end": {
+              "line": 27,
+              "column": 28
+            }
+          },
+          "ports": [
+            {
+              "name": "target",
+              "direction": "input",
+              "kind": "data"
+            },
+            {
+              "name": "value",
+              "direction": "output",
+              "kind": "data"
+            }
+          ],
+          "properties": {
+            "member": "Clamp",
+            "referencedSymbolId": "us_46ee86cf36b0fbfed42155cd3ecd1457"
+          }
+        },
+        {
+          "id": "us_d669bb3980cddce07f64de04c3f245f1",
+          "kind": "invocation",
+          "label": "float Math.Clamp(float value, float min, float max)",
+          "span": {
+            "filePath": "samples/Authoring/DamagePolicy.cs",
+            "start": {
+              "line": 27,
+              "column": 18
+            },
+            "end": {
+              "line": 27,
+              "column": 51
+            }
+          },
+          "ports": [
+            {
+              "name": "target",
+              "direction": "input",
+              "kind": "data"
+            },
+            {
+              "name": "arg0",
+              "direction": "input",
+              "kind": "data"
+            },
+            {
+              "name": "arg1",
+              "direction": "input",
+              "kind": "data"
+            },
+            {
+              "name": "arg2",
+              "direction": "input",
+              "kind": "data"
+            },
+            {
+              "name": "value",
+              "direction": "output",
+              "kind": "data"
+            }
+          ],
+          "properties": {
+            "graphSafe": "true",
+            "method": "System.Math.Clamp(System.Single, System.Single, System.Single)",
+            "methodId": "us_46ee86cf36b0fbfed42155cd3ecd1457",
+            "referencedSymbolId": "us_46ee86cf36b0fbfed42155cd3ecd1457",
+            "resolvedType": "float",
+            "typeId": "us_26a5b44da19acd678d268ed608e9829f"
+          }
+        },
+        {
+          "id": "us_e459f4f713fe26395f665bbfa5a44665",
+          "kind": "binary",
+          "label": "*",
+          "span": {
+            "filePath": "samples/Authoring/DamagePolicy.cs",
+            "start": {
+              "line": 21,
+              "column": 24
+            },
+            "end": {
+              "line": 21,
+              "column": 51
+            }
+          },
+          "ports": [
+            {
+              "name": "left",
+              "direction": "input",
+              "kind": "data"
+            },
+            {
+              "name": "right",
+              "direction": "input",
+              "kind": "data"
+            },
+            {
+              "name": "value",
+              "direction": "output",
+              "kind": "data"
+            }
+          ],
+          "properties": {
+            "graphSafe": "true",
+            "operator": "*",
+            "referencedSymbolId": "us_ca0bdda82bee73fbd2745e614a0ab47a",
+            "resolvedType": "float",
+            "typeId": "us_26a5b44da19acd678d268ed608e9829f"
+          }
+        },
+        {
+          "id": "us_efeb1c15214838fefc6f4c37cbdfd6c5",
+          "kind": "identifier",
+          "label": "MaxDamage",
+          "span": {
+            "filePath": "samples/Authoring/DamagePolicy.cs",
+            "start": {
+              "line": 27,
+              "column": 41
+            },
+            "end": {
+              "line": 27,
+              "column": 50
+            }
+          },
+          "ports": [
+            {
+              "name": "value",
+              "direction": "output",
+              "kind": "data"
+            }
+          ],
+          "properties": {
+            "declarationId": "us_466fab9c566c7f4284b97d4bbb08fa60",
+            "graphSafe": "true",
+            "name": "MaxDamage",
+            "referencedSymbolId": "us_7d4631bb8cf651712550bebb77f4cb0b",
+            "resolvedType": "float",
+            "typeId": "us_26a5b44da19acd678d268ed608e9829f"
+          }
+        },
+        {
+          "id": "us_fec53b114b1ac9cfea472ca5d9c63917",
+          "kind": "identifier",
+          "label": "Math",
+          "span": {
+            "filePath": "samples/Authoring/DamagePolicy.cs",
+            "start": {
+              "line": 27,
+              "column": 18
+            },
+            "end": {
+              "line": 27,
+              "column": 22
+            }
+          },
+          "ports": [
+            {
+              "name": "value",
+              "direction": "output",
+              "kind": "data"
+            }
+          ],
+          "properties": {
+            "graphSafe": "false",
+            "name": "Math",
+            "referencedSymbolId": "us_92b74600f1beae070891cf5edb10dcca",
+            "resolvedType": "Math",
+            "typeId": "us_79aa6d536e97e45e08d4dcba6deb0837"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "us_0ae67f129e5316ddf326ab33e7a493db",
+          "kind": "control",
+          "fromNode": "us_860fad2c924bc2a597c555e6d2f42f95",
+          "fromPort": "execOut",
+          "toNode": "us_78ceaa28ab965873b37a441b3162f427",
+          "toPort": "execIn"
+        },
+        {
+          "id": "us_0bd01996d4fab7443ef45c15444d6dc8",
+          "kind": "data",
+          "fromNode": "us_980e53a5ad492fd6a8fc4baa5f40d467",
+          "fromPort": "value",
+          "toNode": "us_860fad2c924bc2a597c555e6d2f42f95",
+          "toPort": "target"
+        },
+        {
+          "id": "us_152d11739af054962a3e5b29baa82674",
+          "kind": "control",
+          "fromNode": "us_b24eeff90a17601ddafdc500302e7bf1",
+          "fromPort": "then",
+          "toNode": "us_860fad2c924bc2a597c555e6d2f42f95",
+          "toPort": "execIn"
+        },
+        {
+          "id": "us_2259c2baf6694cb6934792b7b91c9a73",
+          "kind": "data",
+          "fromNode": "us_d669bb3980cddce07f64de04c3f245f1",
+          "fromPort": "value",
+          "toNode": "us_78ceaa28ab965873b37a441b3162f427",
+          "toPort": "assignedValue"
+        },
+        {
+          "id": "us_2f5e8ad8d05b6b6b0f47bd37f07f0f5c",
+          "kind": "data",
+          "fromNode": "us_c891c49a43dab0c6ce858a92a6f2dbb4",
+          "fromPort": "value",
+          "toNode": "us_d669bb3980cddce07f64de04c3f245f1",
+          "toPort": "arg0"
+        },
+        {
+          "id": "us_32f96751c8545d1c1a81fbd30ad1df4f",
+          "kind": "data",
+          "fromNode": "us_b626b33f628bc6c9093e945193831154",
+          "fromPort": "value",
+          "toNode": "us_27393be68a2b8cd68ea420f494910eee",
+          "toPort": "value"
+        },
+        {
+          "id": "us_472162785f8cceba28fc6db03f03036e",
+          "kind": "data",
+          "fromNode": "us_91b4a3f92292810fadc147e37eae11ce",
+          "fromPort": "value",
+          "toNode": "us_78ceaa28ab965873b37a441b3162f427",
+          "toPort": "target"
+        },
+        {
+          "id": "us_47f9470cc4c04179f09dc4392dc33222",
+          "kind": "data",
+          "fromNode": "us_49097fb28d65f178d1f6a871b47ec679",
+          "fromPort": "value",
+          "toNode": "us_e459f4f713fe26395f665bbfa5a44665",
+          "toPort": "left"
+        },
+        {
+          "id": "us_4df99949c9faacdde94488942d09e6d0",
+          "kind": "control",
+          "fromNode": "us_78ceaa28ab965873b37a441b3162f427",
+          "fromPort": "execOut",
+          "toNode": "us_27393be68a2b8cd68ea420f494910eee",
+          "toPort": "in"
+        },
+        {
+          "id": "us_5bb9ccc7b0e3f034988d0b674882c1a3",
+          "kind": "data",
+          "fromNode": "us_4734b1e54218f5be689bf666e7cca4a3",
+          "fromPort": "value",
+          "toNode": "us_e459f4f713fe26395f665bbfa5a44665",
+          "toPort": "right"
+        },
+        {
+          "id": "us_5d094ac69b1aca71a4910b02a2c820e6",
+          "kind": "data",
+          "fromNode": "us_fec53b114b1ac9cfea472ca5d9c63917",
+          "fromPort": "value",
+          "toNode": "us_d5f8e90aa9c2a67eb3fcf7df4d0aa440",
+          "toPort": "target"
+        },
+        {
+          "id": "us_757b696a80857dbe4203f0fd8eb69c41",
+          "kind": "data",
+          "fromNode": "us_cd1ac0cfc9ede79d03f4189b4253ce8b",
+          "fromPort": "value",
+          "toNode": "us_d669bb3980cddce07f64de04c3f245f1",
+          "toPort": "arg1"
+        },
+        {
+          "id": "us_8b439a449f38acb7749a0befbf2faedd",
+          "kind": "data",
+          "fromNode": "us_d5f8e90aa9c2a67eb3fcf7df4d0aa440",
+          "fromPort": "value",
+          "toNode": "us_d669bb3980cddce07f64de04c3f245f1",
+          "toPort": "target"
+        },
+        {
+          "id": "us_a37fae3772af9073d023d35c462d8129",
+          "kind": "control",
+          "fromNode": "us_c9aba80313f5b206c3b5222407a549b3",
+          "fromPort": "then",
+          "toNode": "us_b24eeff90a17601ddafdc500302e7bf1",
+          "toPort": "in"
+        },
+        {
+          "id": "us_a62d1f16d7a9d491694dbddd7f01a609",
+          "kind": "data",
+          "fromNode": "us_e459f4f713fe26395f665bbfa5a44665",
+          "fromPort": "value",
+          "toNode": "us_c9aba80313f5b206c3b5222407a549b3",
+          "toPort": "value"
+        },
+        {
+          "id": "us_ac4868a9ffed86dc612a30d5cb042cb1",
+          "kind": "data",
+          "fromNode": "us_04cd17548f588d033b9e2c3c376a487d",
+          "fromPort": "value",
+          "toNode": "us_860fad2c924bc2a597c555e6d2f42f95",
+          "toPort": "assignedValue"
+        },
+        {
+          "id": "us_b083710ad5a8225a88624099be6816d8",
+          "kind": "data",
+          "fromNode": "us_74e258069ab374d49becf631181b9a47",
+          "fromPort": "value",
+          "toNode": "us_b24eeff90a17601ddafdc500302e7bf1",
+          "toPort": "condition"
+        },
+        {
+          "id": "us_beb96e11d8b2584e67726f09b6e464d4",
+          "kind": "control",
+          "fromNode": "us_b24eeff90a17601ddafdc500302e7bf1",
+          "fromPort": "else",
+          "toNode": "us_78ceaa28ab965873b37a441b3162f427",
+          "toPort": "execIn"
+        },
+        {
+          "id": "us_f263ab68a7e1733df16a9bab5baa1e9f",
+          "kind": "control",
+          "fromNode": "us_a28b196343d94a27dc8837c9cde8861f",
+          "fromPort": "then",
+          "toNode": "us_c9aba80313f5b206c3b5222407a549b3",
+          "toPort": "in"
+        },
+        {
+          "id": "us_f62e9737186e78ae2a46f59eb464094d",
+          "kind": "data",
+          "fromNode": "us_efeb1c15214838fefc6f4c37cbdfd6c5",
+          "fromPort": "value",
+          "toNode": "us_d669bb3980cddce07f64de04c3f245f1",
+          "toPort": "arg2"
+        }
+      ],
+      "rootRegionId": "us_063de8c4e9c45a178b0a820d49e31508",
+      "regions": [
+        {
+          "id": "us_063de8c4e9c45a178b0a820d49e31508",
+          "kind": "function",
+          "sourceNodeId": "us_f8ca585f8cc118ccb88836645e63068b",
+          "span": {
+            "filePath": "samples/Authoring/DamagePolicy.cs",
+            "start": {
+              "line": 18,
+              "column": 5
+            },
+            "end": {
+              "line": 29,
+              "column": 6
+            }
+          },
+          "isImplicit": false,
+          "nodeIds": [
+            "us_a28b196343d94a27dc8837c9cde8861f"
+          ],
+          "childRegionIds": [
+            "us_dd8beb4d9e9dd34d7b4a47d7928d870d"
+          ]
+        },
+        {
+          "id": "us_0bc76916776bbe3f0cf88f3ebb7650e1",
+          "kind": "else",
+          "parentRegionId": "us_76038a17c7b22d058ca203b2610cc9ea",
+          "sourceNodeId": "us_b24eeff90a17601ddafdc500302e7bf1",
+          "span": {
+            "filePath": "samples/Authoring/DamagePolicy.cs",
+            "start": {
+              "line": 22,
+              "column": 9
+            },
+            "end": {
+              "line": 25,
+              "column": 10
+            }
+          },
+          "isImplicit": true,
+          "nodeIds": [],
+          "childRegionIds": []
+        },
+        {
+          "id": "us_76038a17c7b22d058ca203b2610cc9ea",
+          "kind": "if",
+          "parentRegionId": "us_dd8beb4d9e9dd34d7b4a47d7928d870d",
+          "sourceNodeId": "us_b24eeff90a17601ddafdc500302e7bf1",
+          "span": {
+            "filePath": "samples/Authoring/DamagePolicy.cs",
+            "start": {
+              "line": 22,
+              "column": 9
+            },
+            "end": {
+              "line": 25,
+              "column": 10
+            }
+          },
+          "isImplicit": false,
+          "nodeIds": [
+            "us_74e258069ab374d49becf631181b9a47",
+            "us_b24eeff90a17601ddafdc500302e7bf1"
+          ],
+          "childRegionIds": [
+            "us_f65c20961b7318a60d1b46ca1e437373",
+            "us_0bc76916776bbe3f0cf88f3ebb7650e1"
+          ]
+        },
+        {
+          "id": "us_dd8beb4d9e9dd34d7b4a47d7928d870d",
+          "kind": "block",
+          "parentRegionId": "us_063de8c4e9c45a178b0a820d49e31508",
+          "sourceNodeId": "us_12a449c24418e69502863de18d686018",
+          "span": {
+            "filePath": "samples/Authoring/DamagePolicy.cs",
+            "start": {
+              "line": 20,
+              "column": 5
+            },
+            "end": {
+              "line": 29,
+              "column": 6
+            }
+          },
+          "isImplicit": false,
+          "nodeIds": [
+            "us_49097fb28d65f178d1f6a871b47ec679",
+            "us_4734b1e54218f5be689bf666e7cca4a3",
+            "us_e459f4f713fe26395f665bbfa5a44665",
+            "us_c9aba80313f5b206c3b5222407a549b3",
+            "us_91b4a3f92292810fadc147e37eae11ce",
+            "us_fec53b114b1ac9cfea472ca5d9c63917",
+            "us_d5f8e90aa9c2a67eb3fcf7df4d0aa440",
+            "us_c891c49a43dab0c6ce858a92a6f2dbb4",
+            "us_cd1ac0cfc9ede79d03f4189b4253ce8b",
+            "us_efeb1c15214838fefc6f4c37cbdfd6c5",
+            "us_d669bb3980cddce07f64de04c3f245f1",
+            "us_78ceaa28ab965873b37a441b3162f427",
+            "us_b626b33f628bc6c9093e945193831154",
+            "us_27393be68a2b8cd68ea420f494910eee"
+          ],
+          "childRegionIds": [
+            "us_76038a17c7b22d058ca203b2610cc9ea"
+          ]
+        },
+        {
+          "id": "us_f65c20961b7318a60d1b46ca1e437373",
+          "kind": "then",
+          "parentRegionId": "us_76038a17c7b22d058ca203b2610cc9ea",
+          "sourceNodeId": "us_595ecd56259ef57dd8d0116b99d9799c",
+          "span": {
+            "filePath": "samples/Authoring/DamagePolicy.cs",
+            "start": {
+              "line": 23,
+              "column": 9
+            },
+            "end": {
+              "line": 25,
+              "column": 10
+            }
+          },
+          "isImplicit": false,
+          "nodeIds": [
+            "us_980e53a5ad492fd6a8fc4baa5f40d467",
+            "us_04cd17548f588d033b9e2c3c376a487d",
+            "us_860fad2c924bc2a597c555e6d2f42f95"
+          ],
+          "childRegionIds": []
+        }
+      ]
+    }
+  ]
+}

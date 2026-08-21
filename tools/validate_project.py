@@ -101,8 +101,16 @@ def main() -> int:
     authoring_artifact = (
         ROOT / "prototype" / "visual-editor" / "data" / "damage-policy.asset.json"
     )
+    authoring_graph = (
+        ROOT / "prototype" / "visual-editor" / "data" / "damage-policy.graph.json"
+    )
+    authoring_source_snapshot = (
+        ROOT / "prototype" / "visual-editor" / "data" / "damage-policy.source.cs"
+    )
     require(authoring_source.is_file(), "Missing Script Asset authoring sample")
     require(authoring_artifact.is_file(), "Missing visual-editor Declaration IR artifact")
+    require(authoring_graph.is_file(), "Missing visual-editor Graph artifact")
+    require(authoring_source_snapshot.is_file(), "Missing visual-editor source snapshot")
     with authoring_artifact.open("r", encoding="utf-8") as handle:
         declaration_document = json.load(handle)
     require(
@@ -114,6 +122,68 @@ def main() -> int:
         "Authoring Declaration IR sample is inconsistent",
     )
     checks.append("Script Asset sample and Declaration IR artifact are consistent")
+
+    with authoring_graph.open("r", encoding="utf-8") as handle:
+        graph_document = json.load(handle)
+    graph_function = graph_document["functions"][0]
+    graph_nodes = graph_function["nodes"]
+    graph_node_ids = {node["id"] for node in graph_nodes}
+    graph_regions = graph_function["regions"]
+    declaration_ids = {
+        state["name"]: state["id"]
+        for state in declaration_document["assets"][0]["states"]
+    }
+    state_references = {
+        node["properties"]["name"]: node["properties"].get("declarationId")
+        for node in graph_nodes
+        if node["kind"] == "identifier"
+        and node["properties"].get("name") in declaration_ids
+    }
+    kind_counts = {
+        kind: sum(node["kind"] == kind for node in graph_nodes)
+        for kind in ("entry", "variable", "branch", "assignment", "invocation", "return")
+    }
+    require(
+        graph_document["schemaVersion"] == "unifiedscript.graph/v0.12"
+        and graph_document["sourceCompilationId"]
+        == declaration_document["sourceCompilationId"]
+        and graph_document["semanticConfigurationId"]
+        == declaration_document["semanticConfigurationId"]
+        and len(graph_document["functions"]) == 1
+        and graph_function["id"]
+        == declaration_document["assets"][0]["functions"][0]["id"]
+        and graph_function["rootRegionId"]
+        in {region["id"] for region in graph_regions}
+        and len(graph_node_ids) == len(graph_nodes)
+        and all(
+            edge["fromNode"] in graph_node_ids and edge["toNode"] in graph_node_ids
+            for edge in graph_function["edges"]
+        )
+        and kind_counts
+        == {
+            "entry": 1,
+            "variable": 1,
+            "branch": 1,
+            "assignment": 2,
+            "invocation": 1,
+            "return": 1,
+        }
+        and state_references == declaration_ids
+        and sum(region["kind"] == "if" for region in graph_regions) == 1
+        and sum(
+            region["kind"] == "else"
+            and region["isImplicit"] is True
+            and region["nodeIds"] == []
+            for region in graph_regions
+        )
+        == 1,
+        "Visual-editor Graph artifact is inconsistent with Declaration IR",
+    )
+    require(
+        authoring_source_snapshot.read_bytes() == authoring_source.read_bytes(),
+        "Visual-editor source snapshot differs from its authoring source",
+    )
+    checks.append("visual prototype Graph, Declaration IR, and source identities agree")
 
     declaration_patch_path = (
         ROOT
@@ -179,6 +249,16 @@ def main() -> int:
         "Declaration patch CLI or prototype integration is missing",
     )
     checks.append("Declaration patch CLI and visual preview are connected")
+    require(
+        "loadWorkspaceArtifacts" in prototype_source
+        and "validateGraphArtifact" in prototype_source
+        and "adaptGraphArtifact" in prototype_source
+        and "renderBehaviorGraph" in prototype_source
+        and "data-semantic-id" in prototype_source
+        and "unifiedscript.graph/v0.12" in prototype_source,
+        "Visual prototype does not project the generated Graph artifact",
+    )
+    checks.append("visual behavior cards project real Graph semantic identities")
     require(
         (ROOT / "samples" / "MultiFile" / "GameplayApi.cs").is_file()
         and (ROOT / "samples" / "MultiFile" / "DamageScript.cs").is_file()
