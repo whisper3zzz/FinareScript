@@ -21,20 +21,31 @@ Try these interactions:
    or engine exposure in the inspector.
 2. Add `ArmorRatio` with the `+` button. The prototype updates the declaration,
    canonical-text preview, and AI outline together.
-3. Switch between Structure, Split, and Code.
-4. Click `AI VIEW` to inspect the compact semantic outline and preview a real
+3. Switch between Behavior, Dual, and Source. Dual temporarily gives the
+   inspector width to the side-by-side semantic/source comparison.
+4. Click `AI LENS` to inspect the compact semantic outline and preview a real
    `unifiedscript.declaration-patch/v0.1` document.
-5. Click `DEBUG RUN`; the real CoreCLR thread stops on the `Math.Clamp`
+5. Click `RUN LIVE`; the real CoreCLR thread stops on the `Math.Clamp`
    statement breakpoint and exposes its live frame, IL offset, and locals.
 6. Click `STEP OVER` to pause on `return scaled`, then `CONTINUE` to receive the
    canonical runtime result.
-7. Change a declaration and click `SAVE PATCH` (or press Ctrl/Cmd+S). The host
+7. Change a declaration and click `COMMIT PATCH` (or press Ctrl/Cmd+S). The host
    writes canonical C# plus `.usids`, regenerates the artifacts, and reloads the
    same CoreCLR transport.
 8. Select the `Math.Clamp` card, edit `Clamp minimum`, and click
    `SAVE EXPRESSION`. This submits Semantic Patch v0.19 by literal Semantic ID.
-9. In `AI VIEW`, preview the declaration patch and click
+9. In `AI LENS`, preview the declaration patch and click
    `APPLY TO SOURCE + CLR` to apply that exact typed document.
+
+## Interface direction
+
+The workbench uses a semantic drafting-table model rather than Blueprint
+chrome. Dark surfaces own the asset contract, semantic inspector, authoring
+commands, and runtime state. The behavior itself sits on a light engineering
+canvas with one continuous semantic spine. Orange means control flow or a
+write transaction, green means synchronization or entry/return, and blue means
+data. This makes the same behavior readable at a glance without turning every
+operator or source line into a box.
 
 ## Live integration
 

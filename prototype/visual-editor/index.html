@@ -7,20 +7,22 @@
   <title>UnifiedScript — Behavior Workbench</title>
   <link rel="stylesheet" href="styles.css">
 </head>
-<body>
+<body data-view="structure">
   <div class="app-shell">
     <header class="topbar">
       <div class="brand-block">
         <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
         <div>
-          <div class="eyebrow">UnifiedScript / Experience Build 01</div>
-          <div class="brand-title">Behavior Workbench</div>
+          <div class="eyebrow">UnifiedScript / Semantic Runtime</div>
+          <div class="brand-title">Behavior Workbench <sup>M5.5</sup></div>
         </div>
       </div>
 
       <div class="asset-crumbs" aria-label="当前资产">
+        <span class="asset-kind" aria-hidden="true">US</span>
+        <span class="crumb-prefix">SCRIPT ASSET</span>
         <button class="crumb ghost-button" type="button">Combat</button>
-        <span>/</span>
+        <span class="crumb-separator">/</span>
         <button class="crumb active" type="button">DamagePolicy.uscript</button>
         <span class="dirty-dot" title="有未保存更改"></span>
       </div>
@@ -32,13 +34,13 @@
           <strong>clean</strong>
         </div>
         <button id="aiViewButton" class="button secondary" type="button" data-testid="ai-view-button">
-          <span class="button-icon">⌁</span> AI VIEW
+          <span class="button-icon">⌁</span> AI LENS
         </button>
         <button id="saveButton" class="button secondary save-button" type="button" data-testid="save-button" disabled>
-          SAVE PATCH
+          COMMIT PATCH
         </button>
         <button id="runButton" class="button primary" type="button" data-testid="run-button">
-          <span class="play-icon"></span> DEBUG RUN
+          <span class="play-icon"></span> RUN LIVE
         </button>
       </div>
     </header>
@@ -47,8 +49,8 @@
       <aside class="declarations-panel panel-border">
         <div class="panel-heading">
           <div>
-            <div class="eyebrow">Asset contract</div>
-            <h2>声明与入口</h2>
+            <div class="eyebrow">01 / Asset contract</div>
+            <h2>脚本契约</h2>
           </div>
           <button id="addVariableButton" class="square-button" type="button" aria-label="新增状态变量" data-testid="add-variable-button">+</button>
         </div>
@@ -121,17 +123,17 @@
       <section class="editor-stage">
         <div class="editor-toolbar">
           <div class="function-identity">
-            <span class="function-chip">VISUAL</span>
+            <span class="function-chip">FLOW 01</span>
             <div>
               <h1>ApplyDamage</h1>
-              <p>DamagePolicy · synchronous · graph safe</p>
+              <p>DamagePolicy / synchronous / graph-safe</p>
             </div>
           </div>
 
           <div class="view-switch" role="group" aria-label="编辑器视图模式">
-            <button class="view-button active" type="button" data-view="structure" data-testid="view-structure">STRUCTURE</button>
-            <button class="view-button" type="button" data-view="split" data-testid="view-split">SPLIT</button>
-            <button class="view-button" type="button" data-view="code" data-testid="view-code">CODE</button>
+            <button class="view-button active" type="button" data-view="structure" data-testid="view-structure">BEHAVIOR</button>
+            <button class="view-button" type="button" data-view="split" data-testid="view-split">DUAL</button>
+            <button class="view-button" type="button" data-view="code" data-testid="view-code">SOURCE</button>
           </div>
 
           <div class="canvas-tools">
@@ -145,6 +147,7 @@
         <div id="editorBody" class="editor-body view-structure">
           <div id="canvasViewport" class="canvas-viewport" data-testid="canvas-viewport">
             <div class="canvas-backdrop"></div>
+            <div class="canvas-caption" aria-hidden="true"><span>SEMANTIC FLOW</span><strong>CONTROL / DATA / EFFECT</strong></div>
             <div id="flowCanvas" class="flow-canvas">
               <div class="flow-rail" aria-hidden="true"></div>
 
@@ -284,7 +287,7 @@
       <aside class="inspector-panel panel-border">
         <div class="panel-heading inspector-heading">
           <div>
-            <div class="eyebrow">Selection inspector</div>
+            <div class="eyebrow">03 / Semantic inspector</div>
             <h2 id="inspectorTitle">BaseDamage</h2>
           </div>
           <button id="closeInspectorButton" class="more-button" type="button" aria-label="关闭检查器">•••</button>
@@ -332,7 +335,7 @@ public int BaseDamage { get; set; } = 20;</pre>
 
   <div id="aiDrawer" class="ai-drawer" aria-hidden="true" data-testid="ai-drawer">
     <div class="drawer-header">
-      <div><span class="ai-sigil">⌁</span><div><div class="eyebrow">Machine-readable semantic outline</div><h2>AI sees intent, not coordinates</h2></div></div>
+      <div><span class="ai-sigil">⌁</span><div><div class="eyebrow">04 / Machine-readable semantic lens</div><h2>意图可读，坐标无关</h2></div></div>
       <button id="closeAiDrawer" class="square-button" type="button" aria-label="关闭 AI 视图">×</button>
     </div>
     <div class="ai-columns">
@@ -372,7 +375,7 @@ state MaxDamage: int = 999
   <dialog id="variableDialog" class="variable-dialog" data-testid="variable-dialog">
     <form id="variableForm" method="dialog">
       <div class="dialog-heading">
-        <div><div class="eyebrow">Declaration IR · prototype</div><h2>新增脚本状态</h2></div>
+        <div><div class="eyebrow">Declaration IR / Authoring transaction</div><h2>新增脚本状态</h2></div>
         <button id="closeVariableDialog" class="square-button" value="cancel" formmethod="dialog" type="submit" aria-label="关闭">×</button>
       </div>
       <p class="dialog-intro">这里创建的变量同时属于规范文本、可视化声明列表和 AI 语义模型，不生成 Blueprint-only 资产。</p>

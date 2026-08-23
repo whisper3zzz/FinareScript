@@ -207,7 +207,11 @@ publishes the next revision/generation. The Workbench can save declarations,
 apply an AI declaration patch, or edit a promoted behavior input without source-
 line operations. External file changes are rejected instead of overwritten,
 and persistent IDs restore selection and breakpoints across the regenerated
-artifacts. M5.5 is therefore complete before Unreal integration begins.
+artifacts. The finished Workbench uses dark contract/runtime surfaces around a
+light semantic drafting canvas: Behavior keeps the compact flow primary, Dual
+temporarily yields inspector space to flow/source comparison, Source focuses
+the canonical C#, and AI Lens exposes the coordinate-free machine outline.
+M5.5 is therefore complete before Unreal integration begins.
 
 The v0.2 profile accepts `[Visual]` methods containing local variables,
 expressions, calls, assignments, `if/else`, `while`, `do`, `for`, bounded

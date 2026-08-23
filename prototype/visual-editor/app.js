@@ -721,7 +721,7 @@ function setAuthoringBusy(busy) {
   state.authoringBusy = busy;
   const saveButton = document.getElementById('saveButton');
   saveButton.disabled = busy || !state.authoringConnected || !state.graphDirty;
-  saveButton.textContent = busy ? 'SAVING…' : 'SAVE PATCH';
+  saveButton.textContent = busy ? 'COMMITTING…' : 'COMMIT PATCH';
   document.querySelector('.dirty-dot').classList.toggle('visible', state.graphDirty);
 }
 
@@ -921,7 +921,7 @@ function removeDeclaration(item) {
   const next = state.declarations[Math.min(index, state.declarations.length - 1)];
   if (next) selectDeclaration(next.id, false);
   else selectNode('entry', false);
-  showToast(`${item.name} marked for removal`, 'Save Patch will validate all behavior references');
+  showToast(`${item.name} marked for removal`, 'Commit Patch will validate all behavior references');
 }
 
 function selectNode(id, revealInspector = true) {
@@ -1040,6 +1040,7 @@ function updateNewVariablePreview() {
 
 function changeView(view) {
   state.view = view;
+  document.body.dataset.view = view;
   editorBody.className = `editor-body view-${view}`;
   document.querySelectorAll('.view-button').forEach(button => button.classList.toggle('active', button.dataset.view === view));
 }

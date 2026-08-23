@@ -23,7 +23,7 @@ model that still omits state declarations.
 - typed declaration semantic patches with source/configuration preconditions
 - transactional Roslyn application and identity-sidecar reconciliation
 - actual Graph/Declaration artifacts consumed by the visual editor
-- declaration list, inspector, and Structure/Split/Code synchronization
+- declaration list, inspector, and Behavior/Dual/Source synchronization
 - coordinate-free AI outline plus declaration/body semantic patch submission
 - existing CoreCLR debug pause painted onto real visual statement cards
 - a sample asset with zero Blueprint-only declarations
@@ -181,7 +181,7 @@ The final M5.5 slice closes the write-back loop:
 9. Before writing, the host compares source and sidecar bytes with its committed
    baseline. External editor changes return `UAW1002` instead of being overwritten.
 10. The Workbench loads the live workspace before checked-in fallback artifacts,
-    exposes `SAVE PATCH`/Ctrl+S, and renders explicit pending, rejected, external-
+    exposes `COMMIT PATCH`/Ctrl+S, and renders explicit pending, rejected, external-
     conflict, synchronized-revision, and reloaded-generation states.
 11. State creation, update, rename, exposure changes, and removal share one
     Declaration Patch transaction. AI preview can apply that same document to

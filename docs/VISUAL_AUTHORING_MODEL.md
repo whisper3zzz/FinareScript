@@ -136,14 +136,14 @@ Graph v0.12, and exact source artifacts generated from
 actions/regions from 17 fine-grained nodes and recursively renders ordinary
 data expressions inline. Every card and source selection uses the generated
 Graph Semantic ID; state-reference tokens also carry their Declaration IR IDs.
-Structure/Split/Code, the AI outline, and declaration patch preview therefore
+Behavior/Dual/Source, the AI outline, and declaration patch preview therefore
 share compiler artifacts rather than embedded behavior fixtures. `debug-serve`
 hosts the page and a same-origin loopback bridge: Run, breakpoint pause,
 Continue, Step Over, frame/IL location, locals, and result all come from the
 same collectible CoreCLR execution used by the runtime. Graph expression IDs
 remain distinct from their enclosing probeable HIR statement IDs and are joined
 explicitly through `debugTargetId`. Sending declaration/body patches back to a
-host is now part of the same command: `SAVE PATCH`, AI apply, and promoted
+host is now part of the same command: `COMMIT PATCH`, AI apply, and promoted
 behavior-input edits call the existing strict patch protocols, write canonical
 C#, reconcile `.usids`, regenerate the artifacts, and hot-reload CoreCLR. The
 UI restores selection and breakpoints by Semantic ID and reports external-file
