@@ -17,6 +17,7 @@ PROJECTS = [
     ROOT / "src" / "UnifiedScript.Semantics" / "UnifiedScript.Semantics.csproj",
     ROOT / "src" / "UnifiedScript.CSharp" / "UnifiedScript.CSharp.csproj",
     ROOT / "src" / "UnifiedScript.Graph" / "UnifiedScript.Graph.csproj",
+    ROOT / "src" / "UnifiedScript.Authoring" / "UnifiedScript.Authoring.csproj",
     ROOT / "src" / "UnifiedScript.Runtime" / "UnifiedScript.Runtime.csproj",
     ROOT / "src" / "UnifiedScript.Cli" / "UnifiedScript.Cli.csproj",
     ROOT / "tests" / "UnifiedScript.Tests" / "UnifiedScript.Tests.csproj",
@@ -52,6 +53,7 @@ DOCUMENTS = [
     ROOT / "docs" / "BREAKPOINT_RELOAD.md",
     ROOT / "docs" / "DECLARATION_IR.md",
     ROOT / "docs" / "VISUAL_AUTHORING_MODEL.md",
+    ROOT / "docs" / "AUTHORING_SURFACE.md",
     ROOT / "docs" / "ROADMAP.md",
     ROOT / "docs" / "milestones" / "M1_ROSLYN_GRAPH_FOUNDATION.md",
     ROOT / "docs" / "milestones" / "M2_SEMANTIC_BINDING.md",
@@ -59,6 +61,7 @@ DOCUMENTS = [
     ROOT / "docs" / "milestones" / "M4_STRUCTURED_CONTROL_FLOW.md",
     ROOT / "docs" / "milestones" / "M5_CORECLR_EXECUTION.md",
     ROOT / "docs" / "milestones" / "M5_5_AUTHORING_EXPERIENCE.md",
+    ROOT / "docs" / "milestones" / "M6_0_GENERIC_AUTHORING.md",
 ]
 
 
@@ -104,12 +107,16 @@ def main() -> int:
     authoring_graph = (
         ROOT / "prototype" / "visual-editor" / "data" / "damage-policy.graph.json"
     )
+    authoring_surface = (
+        ROOT / "prototype" / "visual-editor" / "data" / "damage-policy.surface.json"
+    )
     authoring_source_snapshot = (
         ROOT / "prototype" / "visual-editor" / "data" / "damage-policy.source.cs"
     )
     require(authoring_source.is_file(), "Missing Script Asset authoring sample")
     require(authoring_artifact.is_file(), "Missing visual-editor Declaration IR artifact")
     require(authoring_graph.is_file(), "Missing visual-editor Graph artifact")
+    require(authoring_surface.is_file(), "Missing visual-editor Authoring Surface artifact")
     require(authoring_source_snapshot.is_file(), "Missing visual-editor source snapshot")
     with authoring_artifact.open("r", encoding="utf-8") as handle:
         declaration_document = json.load(handle)
@@ -193,6 +200,47 @@ def main() -> int:
     )
     checks.append("visual prototype Graph, Declaration IR, and source identities agree")
 
+    with authoring_surface.open("r", encoding="utf-8") as handle:
+        surface_document = json.load(handle)
+    surface_asset = surface_document["assets"][0]
+    surface_function = surface_asset["functions"][0]
+    surface_actions = surface_function["actions"]
+    surface_action_ids = {action["id"] for action in surface_actions}
+    surface_regions = surface_function["regions"]
+    surface_region_ids = {region["id"] for region in surface_regions}
+    owned_action_ids = [
+        action_id
+        for region in surface_regions
+        for action_id in region["directActionIds"]
+    ]
+    edit_operations = {
+        edit["operation"]
+        for action in surface_actions
+        for edit in action["editCapabilities"]
+    }
+    require(
+        surface_document["schemaVersion"]
+        == "unifiedscript.authoring-surface/v0.1"
+        and surface_document["sourceCompilationId"]
+        == declaration_document["sourceCompilationId"]
+        and surface_document["semanticConfigurationId"]
+        == declaration_document["semanticConfigurationId"]
+        and surface_asset["id"] == declaration_document["assets"][0]["id"]
+        and surface_function["id"] == graph_function["id"]
+        and surface_function["rootRegionId"] in surface_region_ids
+        and len(surface_action_ids) == len(surface_actions)
+        and len(owned_action_ids) == len(surface_actions)
+        and set(owned_action_ids) == surface_action_ids
+        and all(
+            child_id in surface_region_ids
+            for region in surface_regions
+            for child_id in region["childRegionIds"]
+        )
+        and {"replaceLiteral", "changeOperator"}.issubset(edit_operations),
+        "Authoring Surface is inconsistent with Declaration IR and Graph",
+    )
+    checks.append("Authoring Surface owns every action and typed edit capability")
+
     declaration_patch_path = (
         ROOT
         / "samples"
@@ -248,6 +296,15 @@ def main() -> int:
     prototype_source = (
         ROOT / "prototype" / "visual-editor" / "app.js"
     ).read_text(encoding="utf-8")
+    authoring_projector_source = (
+        ROOT
+        / "src"
+        / "UnifiedScript.Authoring"
+        / "AuthoringSurfaceProjector.cs"
+    ).read_text(encoding="utf-8")
+    authoring_model_source = (
+        ROOT / "src" / "UnifiedScript.Authoring" / "AuthoringSurfaceModel.cs"
+    ).read_text(encoding="utf-8")
     require(
         'args[0] == "apply-declaration-patch"' in cli_source
         and "new CSharpDeclarationPatchApplier().Apply" in cli_source
@@ -259,15 +316,18 @@ def main() -> int:
     checks.append("Declaration patch CLI and visual preview are connected")
     require(
         "loadWorkspaceArtifacts" in prototype_source
-        and "validateGraphArtifact" in prototype_source
-        and "adaptGraphArtifact" in prototype_source
+        and "validateWorkspaceArtifacts" in prototype_source
         and "renderBehaviorGraph" in prototype_source
         and "data-semantic-id" in prototype_source
         and "data-debug-semantic-id" in prototype_source
-        and "unifiedscript.graph/v0.12" in prototype_source,
-        "Visual prototype does not project the generated Graph artifact",
+        and "unifiedscript.authoring-surface/v0.1" in prototype_source
+        and "unifiedscript.authoring-surface/v0.1" in authoring_model_source
+        and "CollectEditCapabilities" in authoring_projector_source
+        and "DamagePolicy" not in prototype_source
+        and "Math.Clamp" not in prototype_source,
+        "Visual prototype is not driven by the generic Authoring Surface",
     )
-    checks.append("visual behavior cards project real Graph semantic identities")
+    checks.append("visual cards and inspectors consume generic Surface identities")
     debug_server_source = (
         ROOT / "src" / "UnifiedScript.Cli" / "CoreClrDebugHttpServer.cs"
     ).read_text(encoding="utf-8")
@@ -297,11 +357,25 @@ def main() -> int:
         and "AttachReconciledSidecars" in authoring_workspace_source
         and "saveDeclarationChanges" in prototype_source
         and "saveSemanticPatch" in prototype_source
-        and "unifiedscript.authoring-workspace/v0.1" in prototype_source
+        and "unifiedscript.authoring-workspace/v0.2" in prototype_source
+        and "AuthoringSurfaceProjector" in debug_server_source
         and "unifiedscript.patch/v0.19" in prototype_source,
         "Visual authoring changes do not commit through the transactional host",
     )
     checks.append("declaration and behavior patches write source and reload one CoreCLR generation")
+    multi_asset_authoring_source = (
+        ROOT / "samples" / "Authoring" / "MultiAssetControlFlow.cs"
+    )
+    require(
+        multi_asset_authoring_source.is_file()
+        and multi_asset_authoring_source.read_text(encoding="utf-8").count("[ScriptAsset(")
+        == 2
+        and "while (value > 0)" in multi_asset_authoring_source.read_text(encoding="utf-8")
+        and "for (int index = 0; index < count; index++)"
+        in multi_asset_authoring_source.read_text(encoding="utf-8"),
+        "Missing generic multi-asset/if/while/for authoring sample",
+    )
+    checks.append("multi-asset authoring sample covers if, while, and for regions")
     require(
         (ROOT / "samples" / "MultiFile" / "GameplayApi.cs").is_file()
         and (ROOT / "samples" / "MultiFile" / "DamageScript.cs").is_file()

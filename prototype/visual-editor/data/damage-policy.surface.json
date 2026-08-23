@@ -1,0 +1,405 @@
+{
+  "schemaVersion": "unifiedscript.authoring-surface/v0.1",
+  "sourceCompilationId": "us_9c565600166a847b78177c5c25c03ba5",
+  "semanticConfigurationId": "us_02f5fe78d296e2d4fe04bc50ca71acf1",
+  "assets": [
+    {
+      "id": "us_ec99464009da0bae5c25014c050902b7",
+      "qualifiedName": "Game.Combat.DamagePolicy",
+      "assetPath": "Combat/DamagePolicy",
+      "span": {
+        "filePath": "samples/Authoring/DamagePolicy.cs",
+        "start": {
+          "line": 6,
+          "column": 1
+        },
+        "end": {
+          "line": 30,
+          "column": 2
+        }
+      },
+      "states": [
+        {
+          "id": "us_8bc5970ccb62f81bbb2d7e0f7185eea4",
+          "name": "BaseDamage",
+          "typeDisplayName": "int",
+          "typeMetadataName": "System.Int32",
+          "typeKind": "integer",
+          "defaultValue": 20,
+          "span": {
+            "filePath": "samples/Authoring/DamagePolicy.cs",
+            "start": {
+              "line": 9,
+              "column": 5
+            },
+            "end": {
+              "line": 10,
+              "column": 46
+            }
+          },
+          "exposure": {
+            "instanceEditable": true,
+            "saveGame": false,
+            "replicated": false,
+            "category": "Damage"
+          }
+        },
+        {
+          "id": "us_934c08ffff55696230b33faa88d27af9",
+          "name": "CriticalMultiplier",
+          "typeDisplayName": "float",
+          "typeMetadataName": "System.Single",
+          "typeKind": "floatingPoint",
+          "defaultValue": 2,
+          "span": {
+            "filePath": "samples/Authoring/DamagePolicy.cs",
+            "start": {
+              "line": 12,
+              "column": 5
+            },
+            "end": {
+              "line": 13,
+              "column": 58
+            }
+          },
+          "exposure": {
+            "instanceEditable": true,
+            "saveGame": false,
+            "replicated": false,
+            "category": "Damage"
+          }
+        },
+        {
+          "id": "us_466fab9c566c7f4284b97d4bbb08fa60",
+          "name": "MaxDamage",
+          "typeDisplayName": "int",
+          "typeMetadataName": "System.Int32",
+          "typeKind": "integer",
+          "defaultValue": 999,
+          "span": {
+            "filePath": "samples/Authoring/DamagePolicy.cs",
+            "start": {
+              "line": 15,
+              "column": 5
+            },
+            "end": {
+              "line": 16,
+              "column": 46
+            }
+          },
+          "exposure": {
+            "instanceEditable": false,
+            "saveGame": true,
+            "replicated": false
+          }
+        }
+      ],
+      "functions": [
+        {
+          "id": "us_f8ca585f8cc118ccb88836645e63068b",
+          "name": "ApplyDamage",
+          "qualifiedName": "Game.Combat.DamagePolicy.ApplyDamage(System.Int32,System.Boolean)",
+          "returnTypeMetadataName": "System.Single",
+          "isStatic": false,
+          "parameters": [
+            {
+              "id": "us_ff55e3121a27108b2214b7fed6afb084",
+              "name": "incomingDamage",
+              "typeMetadataName": "System.Int32"
+            },
+            {
+              "id": "us_e2214bcbbd20572d190c3e2f9fa2cb30",
+              "name": "critical",
+              "typeMetadataName": "System.Boolean"
+            }
+          ],
+          "rootRegionId": "us_063de8c4e9c45a178b0a820d49e31508",
+          "regions": [
+            {
+              "id": "us_063de8c4e9c45a178b0a820d49e31508",
+              "kind": "function",
+              "span": {
+                "filePath": "samples/Authoring/DamagePolicy.cs",
+                "start": {
+                  "line": 18,
+                  "column": 5
+                },
+                "end": {
+                  "line": 29,
+                  "column": 6
+                }
+              },
+              "isImplicit": false,
+              "directActionIds": [
+                "us_a28b196343d94a27dc8837c9cde8861f"
+              ],
+              "childRegionIds": [
+                "us_dd8beb4d9e9dd34d7b4a47d7928d870d"
+              ]
+            },
+            {
+              "id": "us_dd8beb4d9e9dd34d7b4a47d7928d870d",
+              "kind": "block",
+              "parentRegionId": "us_063de8c4e9c45a178b0a820d49e31508",
+              "span": {
+                "filePath": "samples/Authoring/DamagePolicy.cs",
+                "start": {
+                  "line": 20,
+                  "column": 5
+                },
+                "end": {
+                  "line": 29,
+                  "column": 6
+                }
+              },
+              "isImplicit": false,
+              "directActionIds": [
+                "us_c9aba80313f5b206c3b5222407a549b3",
+                "us_78ceaa28ab965873b37a441b3162f427",
+                "us_27393be68a2b8cd68ea420f494910eee"
+              ],
+              "childRegionIds": [
+                "us_76038a17c7b22d058ca203b2610cc9ea"
+              ]
+            },
+            {
+              "id": "us_0bc76916776bbe3f0cf88f3ebb7650e1",
+              "kind": "else",
+              "parentRegionId": "us_76038a17c7b22d058ca203b2610cc9ea",
+              "span": {
+                "filePath": "samples/Authoring/DamagePolicy.cs",
+                "start": {
+                  "line": 22,
+                  "column": 9
+                },
+                "end": {
+                  "line": 25,
+                  "column": 10
+                }
+              },
+              "isImplicit": true,
+              "directActionIds": [],
+              "childRegionIds": []
+            },
+            {
+              "id": "us_76038a17c7b22d058ca203b2610cc9ea",
+              "kind": "if",
+              "parentRegionId": "us_dd8beb4d9e9dd34d7b4a47d7928d870d",
+              "span": {
+                "filePath": "samples/Authoring/DamagePolicy.cs",
+                "start": {
+                  "line": 22,
+                  "column": 9
+                },
+                "end": {
+                  "line": 25,
+                  "column": 10
+                }
+              },
+              "isImplicit": false,
+              "anchorActionId": "us_b24eeff90a17601ddafdc500302e7bf1",
+              "directActionIds": [
+                "us_b24eeff90a17601ddafdc500302e7bf1"
+              ],
+              "childRegionIds": [
+                "us_f65c20961b7318a60d1b46ca1e437373",
+                "us_0bc76916776bbe3f0cf88f3ebb7650e1"
+              ]
+            },
+            {
+              "id": "us_f65c20961b7318a60d1b46ca1e437373",
+              "kind": "then",
+              "parentRegionId": "us_76038a17c7b22d058ca203b2610cc9ea",
+              "span": {
+                "filePath": "samples/Authoring/DamagePolicy.cs",
+                "start": {
+                  "line": 23,
+                  "column": 9
+                },
+                "end": {
+                  "line": 25,
+                  "column": 10
+                }
+              },
+              "isImplicit": false,
+              "directActionIds": [
+                "us_860fad2c924bc2a597c555e6d2f42f95"
+              ],
+              "childRegionIds": []
+            }
+          ],
+          "actions": [
+            {
+              "id": "us_a28b196343d94a27dc8837c9cde8861f",
+              "graphKind": "entry",
+              "category": "entry",
+              "title": "ApplyDamage",
+              "summary": "float ApplyDamage(int incomingDamage, bool critical)",
+              "span": {
+                "filePath": "samples/Authoring/DamagePolicy.cs",
+                "start": {
+                  "line": 18,
+                  "column": 5
+                },
+                "end": {
+                  "line": 29,
+                  "column": 6
+                }
+              },
+              "regionId": "us_063de8c4e9c45a178b0a820d49e31508",
+              "declarationReferenceIds": [],
+              "editCapabilities": []
+            },
+            {
+              "id": "us_c9aba80313f5b206c3b5222407a549b3",
+              "graphKind": "variable",
+              "category": "state",
+              "title": "Declare scaled",
+              "summary": "float scaled = (incomingDamage * BaseDamage)",
+              "span": {
+                "filePath": "samples/Authoring/DamagePolicy.cs",
+                "start": {
+                  "line": 21,
+                  "column": 9
+                },
+                "end": {
+                  "line": 21,
+                  "column": 52
+                }
+              },
+              "regionId": "us_dd8beb4d9e9dd34d7b4a47d7928d870d",
+              "debugTargetId": "us_c9aba80313f5b206c3b5222407a549b3",
+              "declarationReferenceIds": [
+                "us_8bc5970ccb62f81bbb2d7e0f7185eea4"
+              ],
+              "editCapabilities": [
+                {
+                  "id": "us_035c18db60423c48965ac2f76e670d6d",
+                  "kind": "operator",
+                  "label": "Operator \u00B7 line 21",
+                  "operation": "changeOperator",
+                  "targetNodeId": "us_e459f4f713fe26395f665bbfa5a44665",
+                  "currentValue": "*",
+                  "expectedOperator": "*",
+                  "expectedResultTypeId": "us_26a5b44da19acd678d268ed608e9829f",
+                  "expectedOperandTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "expectedRightOperandTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "options": [
+                    "\u002B",
+                    "-",
+                    "*",
+                    "/",
+                    "%"
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "us_b24eeff90a17601ddafdc500302e7bf1",
+              "graphKind": "branch",
+              "category": "flow",
+              "title": "Branch",
+              "summary": "if (critical)",
+              "span": {
+                "filePath": "samples/Authoring/DamagePolicy.cs",
+                "start": {
+                  "line": 22,
+                  "column": 9
+                },
+                "end": {
+                  "line": 25,
+                  "column": 10
+                }
+              },
+              "regionId": "us_76038a17c7b22d058ca203b2610cc9ea",
+              "debugTargetId": "us_b24eeff90a17601ddafdc500302e7bf1",
+              "declarationReferenceIds": [],
+              "editCapabilities": []
+            },
+            {
+              "id": "us_860fad2c924bc2a597c555e6d2f42f95",
+              "graphKind": "assignment",
+              "category": "state",
+              "title": "*=",
+              "summary": "scaled *= CriticalMultiplier",
+              "span": {
+                "filePath": "samples/Authoring/DamagePolicy.cs",
+                "start": {
+                  "line": 24,
+                  "column": 13
+                },
+                "end": {
+                  "line": 24,
+                  "column": 41
+                }
+              },
+              "regionId": "us_f65c20961b7318a60d1b46ca1e437373",
+              "debugTargetId": "us_03d5648dccd4efd248e71ddfa48ffb66",
+              "declarationReferenceIds": [
+                "us_934c08ffff55696230b33faa88d27af9"
+              ],
+              "editCapabilities": []
+            },
+            {
+              "id": "us_78ceaa28ab965873b37a441b3162f427",
+              "graphKind": "assignment",
+              "category": "state",
+              "title": "=",
+              "summary": "scaled = Math.Clamp(scaled, 0f, MaxDamage)",
+              "span": {
+                "filePath": "samples/Authoring/DamagePolicy.cs",
+                "start": {
+                  "line": 27,
+                  "column": 9
+                },
+                "end": {
+                  "line": 27,
+                  "column": 51
+                }
+              },
+              "regionId": "us_dd8beb4d9e9dd34d7b4a47d7928d870d",
+              "debugTargetId": "us_1f12be797ff449d62d658be629651b98",
+              "declarationReferenceIds": [
+                "us_466fab9c566c7f4284b97d4bbb08fa60"
+              ],
+              "editCapabilities": [
+                {
+                  "id": "us_6bdc733be47da1d97cb09641905759e6",
+                  "kind": "literal",
+                  "label": "Literal \u00B7 line 27",
+                  "operation": "replaceLiteral",
+                  "targetNodeId": "us_cd1ac0cfc9ede79d03f4189b4253ce8b",
+                  "currentValue": "0f",
+                  "expectedValueText": "0f",
+                  "options": []
+                }
+              ]
+            },
+            {
+              "id": "us_27393be68a2b8cd68ea420f494910eee",
+              "graphKind": "return",
+              "category": "exit",
+              "title": "Return",
+              "summary": "return scaled",
+              "span": {
+                "filePath": "samples/Authoring/DamagePolicy.cs",
+                "start": {
+                  "line": 28,
+                  "column": 9
+                },
+                "end": {
+                  "line": 28,
+                  "column": 23
+                }
+              },
+              "regionId": "us_dd8beb4d9e9dd34d7b4a47d7928d870d",
+              "debugTargetId": "us_27393be68a2b8cd68ea420f494910eee",
+              "declarationReferenceIds": [],
+              "editCapabilities": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

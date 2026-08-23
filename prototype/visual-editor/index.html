@@ -14,16 +14,15 @@
         <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
         <div>
           <div class="eyebrow">UnifiedScript / Semantic Runtime</div>
-          <div class="brand-title">Behavior Workbench <sup>M5.5</sup></div>
+          <div class="brand-title">Behavior Workbench <sup>M6.0</sup></div>
         </div>
       </div>
 
       <div class="asset-crumbs" aria-label="当前资产">
         <span class="asset-kind" aria-hidden="true">US</span>
         <span class="crumb-prefix">SCRIPT ASSET</span>
-        <button class="crumb ghost-button" type="button">Combat</button>
-        <span class="crumb-separator">/</span>
-        <button class="crumb active" type="button">DamagePolicy.uscript</button>
+        <select id="assetPicker" class="asset-picker" aria-label="选择 Script Asset"></select>
+        <span id="assetPathLabel" class="crumb active">LOADING SURFACE…</span>
         <span class="dirty-dot" title="有未保存更改"></span>
       </div>
 
@@ -62,8 +61,8 @@
         </label>
 
         <div class="contract-summary">
-          <div><strong id="stateCount">3</strong><span>STATE</span></div>
-          <div><strong>1</strong><span>FUNCTION</span></div>
+          <div><strong id="stateCount">0</strong><span>STATE</span></div>
+          <div><strong id="functionCount">0</strong><span>FUNCTION</span></div>
           <div><strong>0</strong><span>BP-ONLY</span></div>
         </div>
 
@@ -72,46 +71,24 @@
             <span>▾ SCRIPT STATE</span>
             <em>TEXT + VISUAL</em>
           </button>
-          <div id="stateList" class="declaration-list" data-testid="state-list">
-            <button class="declaration-item selected" type="button" data-kind="state" data-id="baseDamage">
-              <span class="declaration-glyph state-glyph">S</span>
-              <span class="declaration-copy"><strong>BaseDamage</strong><small>int · 20</small></span>
-              <span class="exposure-dot" title="Instance Editable"></span>
-            </button>
-            <button class="declaration-item" type="button" data-kind="state" data-id="criticalMultiplier">
-              <span class="declaration-glyph state-glyph">S</span>
-              <span class="declaration-copy"><strong>CriticalMultiplier</strong><small>float · 2.0</small></span>
-              <span class="exposure-dot" title="Instance Editable"></span>
-            </button>
-            <button class="declaration-item" type="button" data-kind="state" data-id="maxDamage">
-              <span class="declaration-glyph state-glyph">S</span>
-              <span class="declaration-copy"><strong>MaxDamage</strong><small>int · 999</small></span>
-              <span class="save-dot" title="SaveGame"></span>
-            </button>
-          </div>
+          <div id="stateList" class="declaration-list" data-testid="state-list"></div>
         </section>
 
         <section class="declaration-section">
           <button class="section-label" type="button" aria-expanded="true">
             <span>▾ VISUAL FUNCTIONS</span>
-            <em>1</em>
+            <em id="functionSectionCount">0</em>
           </button>
-          <div class="declaration-list">
-            <button class="declaration-item function-item" type="button" data-kind="function" data-id="applyDamage">
-              <span class="declaration-glyph function-glyph">ƒ</span>
-              <span class="declaration-copy"><strong>ApplyDamage</strong><small>(int, bool) → float</small></span>
-              <span class="function-arrow">›</span>
-            </button>
-          </div>
+          <div id="functionList" class="declaration-list" data-testid="function-list"></div>
         </section>
 
         <section class="declaration-section api-section">
           <button class="section-label" type="button" aria-expanded="true">
-            <span>▾ ENGINE API</span>
-            <em>BOUND</em>
+            <span>▾ AUTHORING SURFACE</span>
+            <em>v0.1</em>
           </button>
-          <div class="api-row"><span class="api-icon">UE</span><div><strong>Math.Clamp</strong><small>pure · graph safe</small></div></div>
-          <div class="api-row"><span class="api-icon muted">UE</span><div><strong>DamageResult</strong><small>value type</small></div></div>
+          <div class="api-row"><span class="api-icon">IR</span><div><strong>Structured regions</strong><small>if · loop · action hierarchy</small></div></div>
+          <div class="api-row"><span class="api-icon muted">AI</span><div><strong>Semantic edits</strong><small>identity · span · capability</small></div></div>
         </section>
 
         <div class="declaration-footer">
@@ -125,8 +102,8 @@
           <div class="function-identity">
             <span class="function-chip">FLOW 01</span>
             <div>
-              <h1>ApplyDamage</h1>
-              <p>DamagePolicy / synchronous / graph-safe</p>
+              <h1 id="functionTitle">Loading function…</h1>
+              <p id="functionSubtitle">Authoring Surface v0.1</p>
             </div>
           </div>
 
@@ -148,90 +125,7 @@
           <div id="canvasViewport" class="canvas-viewport" data-testid="canvas-viewport">
             <div class="canvas-backdrop"></div>
             <div class="canvas-caption" aria-hidden="true"><span>SEMANTIC FLOW</span><strong>CONTROL / DATA / EFFECT</strong></div>
-            <div id="flowCanvas" class="flow-canvas">
-              <div class="flow-rail" aria-hidden="true"></div>
-
-              <article class="flow-node entry-node selected" data-node-id="entry" data-line="11" tabindex="0">
-                <div class="node-ordinal">01</div>
-                <div class="node-content">
-                  <div class="node-kicker">ENTRY</div>
-                  <h3>ApplyDamage</h3>
-                  <div class="token-row">
-                    <span class="data-token parameter"><i></i>incomingDamage <em>int</em></span>
-                    <span class="data-token parameter"><i></i>critical <em>bool</em></span>
-                  </div>
-                </div>
-                <button class="breakpoint-toggle" type="button" aria-label="切换断点"></button>
-              </article>
-
-              <div class="flow-connector"><span>then</span></div>
-
-              <article class="flow-node compute-node" data-node-id="scale" data-line="13" tabindex="0">
-                <div class="node-ordinal">02</div>
-                <div class="node-content">
-                  <div class="node-kicker">COMPUTE LOCAL</div>
-                  <h3><span class="local-name">scaled</span> <b>=</b> <span class="inline-expression">incomingDamage × BaseDamage</span></h3>
-                  <p>普通表达式内联，不拆成 4 个小节点。</p>
-                </div>
-                <button class="breakpoint-toggle" type="button" aria-label="切换断点"></button>
-              </article>
-
-              <div class="flow-connector"><span>then</span></div>
-
-              <section class="branch-region" data-node-id="criticalBranch" data-line="15" tabindex="0">
-                <header class="region-header">
-                  <div>
-                    <span class="region-index">03</span>
-                    <span class="node-kicker">DECISION REGION</span>
-                    <h3>critical?</h3>
-                  </div>
-                  <span class="region-badge">IF</span>
-                </header>
-                <div class="branch-columns">
-                  <div class="branch-lane true-lane">
-                    <div class="lane-label"><span>TRUE</span><i></i></div>
-                    <article class="region-action flow-node compact" data-node-id="criticalScale" data-line="17" tabindex="0">
-                      <div class="node-content">
-                        <div class="node-kicker">MUTATE LOCAL</div>
-                        <h3><span class="local-name">scaled</span> <b>×=</b> <span class="state-reference">CriticalMultiplier</span></h3>
-                      </div>
-                      <button class="breakpoint-toggle" type="button" aria-label="切换断点"></button>
-                    </article>
-                  </div>
-                  <div class="branch-lane false-lane">
-                    <div class="lane-label"><span>FALSE</span><i></i></div>
-                    <div class="pass-through"><span>NO OP</span><small>保持 scaled</small></div>
-                  </div>
-                </div>
-              </section>
-
-              <div class="flow-connector merge"><span>merge</span></div>
-
-              <article class="flow-node call-node has-breakpoint" data-node-id="clamp" data-line="20" tabindex="0">
-                <div class="node-ordinal">04</div>
-                <div class="node-content">
-                  <div class="node-kicker">PURE ENGINE CALL</div>
-                  <h3>Math.Clamp</h3>
-                  <div class="argument-table">
-                    <span>value</span><strong class="local-name">scaled</strong>
-                    <span>min</span><strong>0</strong>
-                    <span>max</span><strong class="state-reference">MaxDamage</strong>
-                  </div>
-                </div>
-                <button class="breakpoint-toggle active" type="button" aria-label="切换断点"></button>
-              </article>
-
-              <div class="flow-connector"><span>then</span></div>
-
-              <article class="flow-node return-node" data-node-id="return" data-line="21" tabindex="0">
-                <div class="node-ordinal">05</div>
-                <div class="node-content">
-                  <div class="node-kicker">RETURN</div>
-                  <h3><span class="local-name">scaled</span> <em>float</em></h3>
-                </div>
-                <button class="breakpoint-toggle" type="button" aria-label="切换断点"></button>
-              </article>
-            </div>
+            <div id="flowCanvas" class="flow-canvas"><div class="surface-loading">PROJECTING AUTHORING SURFACE…</div></div>
 
             <div class="minimap" aria-hidden="true">
               <div class="mini-viewport"></div>
@@ -242,33 +136,10 @@
 
           <section id="codePane" class="code-pane" aria-label="规范 C# 文本视图" data-testid="code-pane">
             <div class="code-heading">
-              <div><span class="language-dot"></span>DamagePolicy.cs <em>CANONICAL TEXT</em></div>
+              <div><span class="language-dot"></span>workspace.cs <em>CANONICAL TEXT</em></div>
               <div class="code-actions"><button id="copyCodeButton" type="button">COPY</button><span>UTF-8</span></div>
             </div>
-            <pre id="codeEditor" class="code-editor"><code><span data-line="1"><b>1</b><i>using</i> UnifiedScript;</span>
-<span data-line="2"><b>2</b></span>
-<span data-line="3"><b>3</b><i>namespace</i> Game.Combat;</span>
-<span data-line="4"><b>4</b></span>
-<span data-line="5"><b>5</b>[<u>ScriptAsset</u>(<s>"Combat/DamagePolicy"</s>)]</span>
-<span data-line="6"><b>6</b><i>public sealed class</i> <u>DamagePolicy</u></span>
-<span data-line="7"><b>7</b>{</span>
-<span data-line="8" class="state-line" data-state-id="baseDamage"><b>8</b>    [<u>Expose</u>(InstanceEditable = <i>true</i>)] <i>public int</i> BaseDamage { <i>get</i>; <i>set</i>; } = <n>20</n>;</span>
-<span data-line="9" class="state-line" data-state-id="criticalMultiplier"><b>9</b>    [<u>Expose</u>(InstanceEditable = <i>true</i>)] <i>public float</i> CriticalMultiplier { <i>get</i>; <i>set</i>; } = <n>2.0f</n>;</span>
-<span data-line="10" class="state-line" data-state-id="maxDamage"><b>10</b>    [<u>Expose</u>(SaveGame = <i>true</i>)] <i>public int</i> MaxDamage { <i>get</i>; <i>set</i>; } = <n>999</n>;</span>
-<span data-line="11"><b>11</b></span>
-<span data-line="12"><b>12</b>    [<u>Visual</u>]</span>
-<span data-line="13"><b>13</b>    <i>public float</i> ApplyDamage(<i>int</i> incomingDamage, <i>bool</i> critical)</span>
-<span data-line="14"><b>14</b>    {</span>
-<span data-line="15"><b>15</b>        <i>float</i> scaled = incomingDamage * BaseDamage;</span>
-<span data-line="16"><b>16</b>        <i>if</i> (critical)</span>
-<span data-line="17"><b>17</b>        {</span>
-<span data-line="18"><b>18</b>            scaled *= CriticalMultiplier;</span>
-<span data-line="19"><b>19</b>        }</span>
-<span data-line="20"><b>20</b></span>
-<span data-line="21"><b>21</b>        scaled = Math.Clamp(scaled, <n>0f</n>, MaxDamage);</span>
-<span data-line="22"><b>22</b>        <i>return</i> scaled;</span>
-<span data-line="23"><b>23</b>    }</span>
-<span data-line="24"><b>24</b>}</span></code></pre>
+            <pre id="codeEditor" class="code-editor"><code></code></pre>
             <div class="code-status"><span>Ln <strong id="selectedLine">13</strong>, Col 9</span><span>Semantic ID preserved</span><span class="target-label">DECLARATION IR v0.1</span></div>
           </section>
         </div>
@@ -288,46 +159,13 @@
         <div class="panel-heading inspector-heading">
           <div>
             <div class="eyebrow">03 / Semantic inspector</div>
-            <h2 id="inspectorTitle">BaseDamage</h2>
+            <h2 id="inspectorTitle">Authoring Surface</h2>
           </div>
           <button id="closeInspectorButton" class="more-button" type="button" aria-label="关闭检查器">•••</button>
         </div>
 
         <div id="inspectorBody" class="inspector-body" data-testid="inspector-body">
-          <div class="selection-kind"><span class="selection-icon">S</span><div><strong>SCRIPT STATE</strong><small>Declaration · persistent identity</small></div></div>
-
-          <section class="inspector-section">
-            <h3>DECLARATION</h3>
-            <label class="field-label">Name<input id="propertyName" type="text" value="BaseDamage"></label>
-            <div class="field-grid">
-              <label class="field-label">Type<select id="propertyType"><option selected>int</option><option>float</option><option>bool</option><option>string</option></select></label>
-              <label class="field-label">Default<input id="propertyDefault" type="text" value="20"></label>
-            </div>
-          </section>
-
-          <section class="inspector-section">
-            <h3>ENGINE EXPOSURE</h3>
-            <label class="toggle-row"><span><strong>Instance Editable</strong><small>UE Details panel</small></span><input id="toggleEditable" type="checkbox" checked><i></i></label>
-            <label class="toggle-row"><span><strong>Save Game</strong><small>Persistent state</small></span><input id="toggleSave" type="checkbox"><i></i></label>
-            <label class="toggle-row"><span><strong>Replicated</strong><small>Network contract</small></span><input id="toggleReplicated" type="checkbox"><i></i></label>
-          </section>
-
-          <section class="inspector-section source-contract">
-            <div class="section-title-row"><h3>CANONICAL TEXT</h3><span>AI READABLE</span></div>
-            <pre id="canonicalDeclaration">[Expose(InstanceEditable = true)]
-public int BaseDamage { get; set; } = 20;</pre>
-          </section>
-
-          <section class="inspector-section identity-section">
-            <h3>SEMANTIC IDENTITY</h3>
-            <button id="semanticId" class="identity-value" type="button" title="复制语义 ID">us_8ad1c4…7f2e</button>
-            <div class="identity-facts"><span>TEXT <b>✓</b></span><span>VISUAL <b>✓</b></span><span>AI <b>✓</b></span></div>
-          </section>
-
-          <div class="prototype-warning">
-            <strong>DECLARATION IR + PATCH v0.1</strong>
-            <p>状态来自编译器产物；Inspector 与 AI 视图可以生成带前置条件的类型化声明补丁。</p>
-          </div>
+          <div class="surface-loading inspector-loading">LOADING VERSIONED SURFACE…</div>
         </div>
       </aside>
     </main>
@@ -341,25 +179,15 @@ public int BaseDamage { get; set; } = 20;</pre>
     <div class="ai-columns">
       <section>
         <h3>DECLARATIONS</h3>
-        <pre id="aiDeclarations">state BaseDamage: int = 20
-  expose: instanceEditable
-state CriticalMultiplier: float = 2.0
-  expose: instanceEditable
-state MaxDamage: int = 999
-  expose: saveGame</pre>
+        <pre id="aiDeclarations">Waiting for declaration identities…</pre>
       </section>
       <section>
         <h3>BEHAVIOR OUTLINE</h3>
-        <pre id="aiBehavior">function ApplyDamage(incomingDamage: int, critical: bool) → float
-  let scaled = incomingDamage × BaseDamage
-  when critical
-    scaled ×= CriticalMultiplier
-  scaled = Math.Clamp(scaled, 0, MaxDamage)
-  return scaled</pre>
+        <pre id="aiBehavior">Waiting for structured behavior regions…</pre>
       </section>
       <section class="ai-prompt-section">
         <h3>TRY AN AI PATCH</h3>
-        <label><textarea id="aiPrompt" rows="3">把 MaxDamage 改成 Instance Editable，并归入 Damage 分类。</textarea></label>
+        <label><textarea id="aiPrompt" rows="3">把第一个尚未暴露的状态改成 Instance Editable，并归入 Gameplay 分类。</textarea></label>
         <button id="previewPatchButton" class="button primary" type="button">PREVIEW DECLARATION PATCH</button>
         <div id="patchPreview" class="patch-preview">
           <span>DECLARATION PATCH v0.1</span>

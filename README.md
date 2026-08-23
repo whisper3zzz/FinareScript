@@ -85,6 +85,10 @@ The repository currently implements:
 - backend-neutral Script Asset / Declaration IR v0.1 with scalar and enum
   state, canonical defaults, engine exposure metadata, Visual signatures, and
   strict deterministic JSON;
+- engine-neutral Authoring Surface v0.1 projected from Declaration IR and Graph,
+  with multi-asset/function navigation, exact structured-region ownership,
+  compact expression summaries, source/debug identities, and typed edit
+  capabilities;
 - persistent state-property identity across formatting and safe renames through
   the same `.usids` reconciliation and tombstone contract;
 - semantic-independent `.usgraph` layout sidecars with deterministic positions,
@@ -212,6 +216,18 @@ light semantic drafting canvas: Behavior keeps the compact flow primary, Dual
 temporarily yields inspector space to flow/source comparison, Source focuses
 the canonical C#, and AI Lens exposes the coordinate-free machine outline.
 M5.5 is therefore complete before Unreal integration begins.
+
+M6.0 removes the last sample-specific browser adapter before that integration.
+The new `UnifiedScript.Authoring` project projects every Script Asset and Visual
+function into strict `unifiedscript.authoring-surface/v0.1` JSON. The Workbench
+now renders asset/function navigation, `if` and loop regions, compact actions,
+state references, semantic edit controls, source selection, AI outlines, and
+CoreCLR breakpoints from that Surface. `analyze --out` emits the Surface beside
+Declaration IR and Graph, while `debug-serve` returns it in authoring workspace
+v0.2 after every committed reload. The UI adapter contains no sample asset,
+function, state, or API-call names; `MultiAssetControlFlow.cs` and automated
+tests cover two assets, three functions, branches, while loops, and for loops.
+UE binding begins in M6.1 against this proven contract.
 
 The v0.2 profile accepts `[Visual]` methods containing local variables,
 expressions, calls, assignments, `if/else`, `while`, `do`, `for`, bounded

@@ -64,6 +64,10 @@ flowchart LR
     StableHIR --> Projector["Effect-aware Graph Projector"]
     Bound --> Projector
     Projector --> Graph["Graph JSON"]
+    Declaration --> Authoring["Authoring Surface Projector"]
+    Graph --> Authoring
+    Authoring --> Surface["Authoring Surface v0.1"]
+    Surface --> Workbench["Browser / future UE Workbench"]
     Projector --> EmitGate["Execution Graph/CFG gate"]
     EmitGate --> Emitter["Deterministic PE + portable PDB"]
     Emitter --> SourceMap["Semantic ID -> MethodDef + IL/PDB source map"]
@@ -165,12 +169,27 @@ It depends on Core, Semantics, and the C# emission boundary. It does not parse
 source, project Graph, apply patches, or depend on UE. A collectible load
 context is a reload mechanism, not a security sandbox.
 
+### UnifiedScript.Authoring
+
+- deterministic multi-asset and multi-function authoring hierarchy
+- compact action promotion from control-bearing Graph nodes
+- recursive pure-expression summaries without one-node-per-token UI expansion
+- exact function/block/if/loop region ownership
+- declaration references, source spans, and debug-target identities
+- schema-driven literal/operator Semantic Patch capabilities
+- strict Authoring Surface v0.1 JSON
+
+It depends only on Core and Graph. It does not parse source, host Roslyn or
+CoreCLR, render a browser/Slate UI, apply patches, or depend on UE. A frontend
+consumes this projection instead of becoming a second Graph interpreter.
+
 ### UnifiedScript.Cli
 
 - filesystem input/output
 - diagnostics rendering
 - HIR, bound semantics, and graph artifact emission
 - Script Asset / Declaration IR artifact emission
+- Authoring Surface artifact emission
 - deterministic PE, portable-PDB, and semantic source-map artifact emission
 - qualified Visual-method resolution and CoreCLR execution
 

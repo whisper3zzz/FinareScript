@@ -1,4 +1,5 @@
 using System.Text.Json;
+using UnifiedScript.Authoring;
 using UnifiedScript.CSharp;
 using UnifiedScript.Core;
 using UnifiedScript.Graph;
@@ -383,6 +384,8 @@ internal static class Program
         string semanticJson = SemanticJson.Serialize(result.Semantics);
         string graphJson = GraphJson.Serialize(graph);
         string assetJson = ScriptAssetJson.Serialize(result.ScriptAssets);
+        string authoringSurfaceJson = AuthoringSurfaceJson.Serialize(
+            new AuthoringSurfaceProjector().Project(result.ScriptAssets, graph));
         if (options.OutputDirectory is null)
         {
             Console.WriteLine(graphJson);
@@ -396,14 +399,19 @@ internal static class Program
         string semanticPath = Path.Combine(fullOutputDirectory, $"{baseName}.semantics.json");
         string graphPath = Path.Combine(fullOutputDirectory, $"{baseName}.graph.json");
         string assetPath = Path.Combine(fullOutputDirectory, $"{baseName}.asset.json");
+        string authoringSurfacePath = Path.Combine(
+            fullOutputDirectory,
+            $"{baseName}.surface.json");
         File.WriteAllText(hirPath, hirJson + "\n");
         File.WriteAllText(semanticPath, semanticJson + "\n");
         File.WriteAllText(graphPath, graphJson + "\n");
         File.WriteAllText(assetPath, assetJson + "\n");
+        File.WriteAllText(authoringSurfacePath, authoringSurfaceJson + "\n");
         Console.WriteLine(hirPath);
         Console.WriteLine(semanticPath);
         Console.WriteLine(graphPath);
         Console.WriteLine(assetPath);
+        Console.WriteLine(authoringSurfacePath);
         foreach (IdentitySidecarDocument sidecar in result.IdentitySidecars)
         {
             string identityPath = Path.Combine(

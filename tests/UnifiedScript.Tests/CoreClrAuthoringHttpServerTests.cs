@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using UnifiedScript.Authoring;
 using UnifiedScript.Cli;
 using UnifiedScript.Core;
 using UnifiedScript.CSharp;
@@ -69,7 +70,14 @@ public sealed class CoreClrAuthoringHttpServerTests
             using var client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}/") };
 
             AuthoringWorkspaceResponse baseline = await GetWorkspaceAsync(client);
+            Assert.Equal("unifiedscript.authoring-workspace/v0.2", baseline.SchemaVersion);
+            Assert.Equal(AuthoringSurfaceDocument.CurrentSchemaVersion, baseline.Surface.SchemaVersion);
             ScriptAssetDeclaration asset = Assert.Single(baseline.ScriptAssets.Assets);
+            AuthoringAssetSurface surfaceAsset = Assert.Single(baseline.Surface.Assets);
+            Assert.Equal(asset.Id, surfaceAsset.Id);
+            Assert.Contains(
+                Assert.Single(surfaceAsset.Functions).Actions,
+                static action => action.EditCapabilities.Count > 0);
             ScriptStateDeclaration maxDamage = asset.States.Single(static state =>
                 state.Name == "MaxDamage");
             DeclarationPatchDocument declarationPatch = DeclarationPatchDocument.Create(

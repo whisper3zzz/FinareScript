@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using UnifiedScript.Authoring;
 using UnifiedScript.Core;
 using UnifiedScript.CSharp;
 using UnifiedScript.Graph;
@@ -571,14 +572,22 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
 
         private static AuthoringWorkspaceResponse CreateWorkspace(
             CSharpAuthoringSnapshot snapshot,
-            CoreClrProgramGeneration generation) => new(
-            "unifiedscript.authoring-workspace/v0.1",
-            snapshot.Revision,
-            snapshot.Request.Sources.Single().LogicalPath,
-            snapshot.Request.Sources.Single().Source,
-            snapshot.Analysis.ScriptAssets!,
-            snapshot.Graph,
-            generation);
+            CoreClrProgramGeneration generation)
+        {
+            ScriptAssetDocument scriptAssets = snapshot.Analysis.ScriptAssets!;
+            AuthoringSurfaceDocument surface = new AuthoringSurfaceProjector().Project(
+                scriptAssets,
+                snapshot.Graph);
+            return new AuthoringWorkspaceResponse(
+                "unifiedscript.authoring-workspace/v0.2",
+                snapshot.Revision,
+                snapshot.Request.Sources.Single().LogicalPath,
+                snapshot.Request.Sources.Single().Source,
+                scriptAssets,
+                snapshot.Graph,
+                surface,
+                generation);
+        }
 
         private static void WriteTransactionally(IReadOnlyList<AuthoringOutput> outputs)
         {
@@ -747,6 +756,7 @@ internal sealed record AuthoringWorkspaceResponse(
     string SourceText,
     ScriptAssetDocument ScriptAssets,
     GraphDocument Graph,
+    AuthoringSurfaceDocument Surface,
     CoreClrProgramGeneration Generation);
 
 internal sealed record DebugHealthResponse(

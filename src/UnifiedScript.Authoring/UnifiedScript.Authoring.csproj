@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Engine-neutral authoring surfaces projected from UnifiedScript declarations and Graph IR.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../UnifiedScript.Core/UnifiedScript.Core.csproj" />
+    <ProjectReference Include="../UnifiedScript.Graph/UnifiedScript.Graph.csproj" />
+  </ItemGroup>
+</Project>

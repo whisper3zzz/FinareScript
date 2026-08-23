@@ -4,6 +4,7 @@
     <Project Path="src/UnifiedScript.Semantics/UnifiedScript.Semantics.csproj" />
     <Project Path="src/UnifiedScript.CSharp/UnifiedScript.CSharp.csproj" />
     <Project Path="src/UnifiedScript.Graph/UnifiedScript.Graph.csproj" />
+    <Project Path="src/UnifiedScript.Authoring/UnifiedScript.Authoring.csproj" />
     <Project Path="src/UnifiedScript.Runtime/UnifiedScript.Runtime.csproj" />
     <Project Path="src/UnifiedScript.Cli/UnifiedScript.Cli.csproj" />
   </Folder>

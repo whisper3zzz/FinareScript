@@ -182,7 +182,23 @@ declarations or one-node-per-expression graphs.
 - [x] CoreCLR hot reload with semantic selection and breakpoint migration
 - [x] external-file conflict rejection and persistent rename identity
 
-## M6 — Unreal Engine adapter
+## M6.0 — Generic authoring surface
+
+Outcome: every authoring client consumes one versioned, engine-neutral Surface
+instead of interpreting Graph or embedding sample behavior.
+
+- [x] dedicated `UnifiedScript.Authoring` project boundary
+- [x] deterministic Authoring Surface v0.1 JSON and strict invariants
+- [x] Declaration IR + Graph projection for multiple assets and functions
+- [x] structured if/loop region hierarchy with compact inline expressions
+- [x] source spans, state-reference IDs, and debug-target IDs on actions
+- [x] schema-driven literal and operator edit capabilities
+- [x] CLI Surface artifact emission and authoring workspace v0.2
+- [x] Surface-driven Workbench navigation, cards, inspector, AI lens, and debug
+- [x] multi-asset/if/while/for sample, tests, and browser verification
+- [x] zero sample-specific behavior names in the UI adapter
+
+## M6.1 — Unreal Engine adapter
 
 Outcome: the proven language pipeline becomes usable from UE.
 
