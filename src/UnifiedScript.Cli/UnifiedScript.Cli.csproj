@@ -10,6 +10,7 @@
     <ProjectReference Include="../UnifiedScript.Authoring/UnifiedScript.Authoring.csproj" />
     <ProjectReference Include="../UnifiedScript.Runtime/UnifiedScript.Runtime.csproj" />
     <ProjectReference Include="../UnifiedScript.Semantics/UnifiedScript.Semantics.csproj" />
+    <ProjectReference Include="../UnifiedScript.Unreal/UnifiedScript.Unreal.csproj" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="UnifiedScript.Tests" />

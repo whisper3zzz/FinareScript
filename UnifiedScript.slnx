@@ -6,6 +6,7 @@
     <Project Path="src/UnifiedScript.Graph/UnifiedScript.Graph.csproj" />
     <Project Path="src/UnifiedScript.Authoring/UnifiedScript.Authoring.csproj" />
     <Project Path="src/UnifiedScript.Runtime/UnifiedScript.Runtime.csproj" />
+    <Project Path="src/UnifiedScript.Unreal/UnifiedScript.Unreal.csproj" />
     <Project Path="src/UnifiedScript.Cli/UnifiedScript.Cli.csproj" />
   </Folder>
   <Folder Name="/tests/">

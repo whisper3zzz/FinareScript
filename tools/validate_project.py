@@ -19,6 +19,7 @@ PROJECTS = [
     ROOT / "src" / "UnifiedScript.Graph" / "UnifiedScript.Graph.csproj",
     ROOT / "src" / "UnifiedScript.Authoring" / "UnifiedScript.Authoring.csproj",
     ROOT / "src" / "UnifiedScript.Runtime" / "UnifiedScript.Runtime.csproj",
+    ROOT / "src" / "UnifiedScript.Unreal" / "UnifiedScript.Unreal.csproj",
     ROOT / "src" / "UnifiedScript.Cli" / "UnifiedScript.Cli.csproj",
     ROOT / "tests" / "UnifiedScript.Tests" / "UnifiedScript.Tests.csproj",
 ]
@@ -54,6 +55,7 @@ DOCUMENTS = [
     ROOT / "docs" / "DECLARATION_IR.md",
     ROOT / "docs" / "VISUAL_AUTHORING_MODEL.md",
     ROOT / "docs" / "AUTHORING_SURFACE.md",
+    ROOT / "docs" / "UNREAL_ADAPTER.md",
     ROOT / "docs" / "ROADMAP.md",
     ROOT / "docs" / "milestones" / "M1_ROSLYN_GRAPH_FOUNDATION.md",
     ROOT / "docs" / "milestones" / "M2_SEMANTIC_BINDING.md",
@@ -62,6 +64,7 @@ DOCUMENTS = [
     ROOT / "docs" / "milestones" / "M5_CORECLR_EXECUTION.md",
     ROOT / "docs" / "milestones" / "M5_5_AUTHORING_EXPERIENCE.md",
     ROOT / "docs" / "milestones" / "M6_0_GENERIC_AUTHORING.md",
+    ROOT / "docs" / "milestones" / "M6_1_UNREAL_ADAPTER.md",
 ]
 
 
@@ -376,6 +379,80 @@ def main() -> int:
         "Missing generic multi-asset/if/while/for authoring sample",
     )
     checks.append("multi-asset authoring sample covers if, while, and for regions")
+    unreal_manifest_path = (
+        ROOT / "samples" / "Unreal" / "UEUnifiedScriptRuntime.reflection.json"
+    )
+    unreal_bindings_path = (
+        ROOT / "samples" / "Unreal" / "UEUnifiedScriptRuntime.bindings.cs"
+    )
+    unreal_plugin_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "UEUnifiedScript.uplugin"
+    )
+    unreal_component_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Public"
+        / "UnifiedScriptComponent.h"
+    )
+    unreal_exporter_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptEditor"
+        / "Private"
+        / "UnifiedScriptReflectionExporter.cpp"
+    )
+    unreal_helper_path = ROOT / "tools" / "ue-adapter.sh"
+    require(
+        unreal_manifest_path.is_file()
+        and unreal_bindings_path.is_file()
+        and unreal_plugin_path.is_file()
+        and unreal_component_path.is_file()
+        and unreal_exporter_path.is_file()
+        and unreal_helper_path.is_file()
+        and (unreal_helper_path.stat().st_mode & 0o111) != 0,
+        "Missing Unreal adapter contract, plugin, fixture, or executable helper",
+    )
+    with unreal_manifest_path.open("r", encoding="utf-8") as handle:
+        unreal_manifest = json.load(handle)
+    with unreal_plugin_path.open("r", encoding="utf-8") as handle:
+        unreal_plugin = json.load(handle)
+    unreal_component = unreal_component_path.read_text(encoding="utf-8")
+    unreal_exporter = unreal_exporter_path.read_text(encoding="utf-8")
+    unreal_bindings = unreal_bindings_path.read_text(encoding="utf-8")
+    require(
+        unreal_manifest["schemaVersion"]
+        == "unifiedscript.unreal-reflection/v0.1"
+        and unreal_manifest["modules"] == ["UEUnifiedScriptRuntime"]
+        and len(unreal_manifest["types"]) == 1
+        and unreal_manifest["types"][0]["path"]
+        == "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent"
+        and {item["name"] for item in unreal_manifest["types"][0]["properties"]}
+        == {"ActiveGeneration", "ScriptAssetPath", "bStartAutomatically"}
+        and {item["name"] for item in unreal_manifest["types"][0]["functions"]}
+        == {"Add", "RequestReload"}
+        and {module["Name"] for module in unreal_plugin["Modules"]}
+        == {"UEUnifiedScriptRuntime", "UEUnifiedScriptEditor"}
+        and "UUnifiedScriptComponent : public UActorComponent" in unreal_component
+        and "unifiedscript.unreal-reflection/v0.1" in unreal_exporter
+        and "TObjectIterator<UClass>" in unreal_exporter
+        and "IUnrealInvocationBridge" in unreal_bindings
+        and "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:Add"
+        in unreal_bindings
+        and 'args[0] == "ue-bindings"' in cli_source,
+        "Unreal reflection fixture, plugin, exporter, bindings, or CLI is inconsistent",
+    )
+    checks.append("UE 5.7 reflection export and managed binding vertical slice is connected")
     require(
         (ROOT / "samples" / "MultiFile" / "GameplayApi.cs").is_file()
         and (ROOT / "samples" / "MultiFile" / "DamageScript.cs").is_file()

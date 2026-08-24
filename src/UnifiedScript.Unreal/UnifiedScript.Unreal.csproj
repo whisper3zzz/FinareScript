@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Versioned Unreal reflection contracts and deterministic managed binding generation.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../UnifiedScript.Core/UnifiedScript.Core.csproj" />
+  </ItemGroup>
+</Project>

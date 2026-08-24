@@ -3,8 +3,9 @@
 UnifiedScript is an experimental dual-modal gameplay authoring system. A
 restricted C# profile and a structured visual graph are intended to be two
 lossless projections of one program model. The first execution backend will use
-Roslyn and CoreCLR; Unreal Engine integration is intentionally deferred until
-the language and projection model are proven independently.
+Roslyn and CoreCLR. The language and projection model are now proven
+independently, and M6.1 has begun through a versioned Unreal adapter instead of
+adding UE dependencies to the compiler core.
 
 ## Current vertical slice
 
@@ -104,6 +105,12 @@ The repository currently implements:
   semantic breakpoint bind/pending/disabled plus stale-hit protocols;
 - automated execution equivalence between independently text-authored code and
   C# produced by a checked-in visual semantic patch plan;
+- a strict `unifiedscript.unreal-reflection/v0.1` contract, deterministic
+  managed-wrapper generator, and `ue-bindings` CLI command;
+- an UE 5.7 host project and `UEUnifiedScript` plugin with a reflected script
+  component plus headless reflection-export commandlet;
+- machine-local UE discovery, host build, reflection export, and managed
+  binding generation through one repository script;
 - xUnit coverage for validation, lowering, identity, graph projection, and
   deterministic output.
 
@@ -229,6 +236,18 @@ function, state, or API-call names; `MultiAssetControlFlow.cs` and automated
 tests cover two assets, three functions, branches, while loops, and for loops.
 UE binding begins in M6.1 against this proven contract.
 
+M6.1 Phase A now establishes the first real UE toolchain slice. The
+`UnifiedScript.Unreal` boundary validates and normalizes engine reflection
+without exposing `UClass` or `FProperty` to Core, Semantics, Graph, or
+Authoring. The UE 5.7 plugin exports selected native modules through a headless
+commandlet; the CLI consumes that manifest and generates typed managed wrappers
+over `IUnrealInvocationBridge`. `UUnifiedScriptComponent` is the initial host
+component and reflection fixture. UHT validation passes against the discovered
+UE 5.7.4 source tree; full native compilation and a live export smoke test are
+intentionally deferred. UObject lifetime, native invocation,
+world-scoped CoreCLR domains, Slate integration, and cook support remain later
+M6.1 phases; no placeholder claims that those are complete.
+
 The v0.2 profile accepts `[Visual]` methods containing local variables,
 expressions, calls, assignments, `if/else`, `while`, `do`, `for`, bounded
 indexed and synchronous disposal-aware enumerable `foreach`, `break`, `continue`,
@@ -278,9 +297,17 @@ Current execution path:
   -> Script Asset receiver + local visual debug HTTP bridge
   -> semantic-ID invocation and typed result/fault
 
+Current Unreal adapter path:
+  -> selected native UClass/UProperty/UFunction reflection
+  -> strict Unreal reflection manifest v0.1
+  -> deterministic C# managed wrappers
+  -> handle-based invocation bridge contract
+  -> generated component binding surface
+
 Later:
   -> native managed-debug trap backend, remote framing, and async stepping
-  -> Unreal Engine adapter
+  -> UObject lifetime/invocation bridge and world-scoped CoreCLR domain
+  -> Slate Authoring Surface frontend and cook/package integration
 ```
 
 The HIR is the semantic contract. IL and future visual layouts are derived
@@ -327,6 +354,33 @@ image and compilation identities. When identity inputs are present, their reconc
 written in the same transaction. `emit-files` handles a multi-source
 compilation. See [SOURCE_MAP.md](docs/SOURCE_MAP.md) and
 [BREAKPOINT_RELOAD.md](docs/BREAKPOINT_RELOAD.md).
+
+### Build and verify the Unreal adapter
+
+The host project is deliberately checked in without machine-specific engine
+paths. On macOS, the helper discovers common source and Launcher layouts; set
+`UNIFIEDSCRIPT_UE_ROOT` when the engine lives elsewhere:
+
+```bash
+tools/ue-adapter.sh detect
+tools/ue-adapter.sh build
+tools/ue-adapter.sh export
+tools/ue-adapter.sh bindings
+```
+
+`tools/ue-adapter.sh verify` runs the full sequence. Reflection and generated
+bindings are written under ignored `artifacts/ue/`; the canonical contract
+fixture and its deterministic output live under `samples/Unreal/`. Generate a
+wrapper directly with:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  ue-bindings samples/Unreal/UEUnifiedScriptRuntime.reflection.json \
+  --out artifacts/UEUnifiedScriptRuntime.bindings.cs
+```
+
+See [UNREAL_ADAPTER.md](docs/UNREAL_ADAPTER.md) for the contract, module
+boundaries, exFAT considerations, and remaining runtime phases.
 
 ## Requirements
 

@@ -6,9 +6,10 @@ UnifiedScript provides one gameplay language with two authoring projections:
 restricted C# text and a structured visual graph. Both projections must preserve
 semantic identity and ultimately execute the same compiled method body.
 
-The system is being developed outside Unreal Engine first. This keeps Roslyn,
-HIR, graph projection, and deterministic serialization fast to build and test.
-UE integration will be a consumer of these contracts rather than their owner.
+The language system was developed outside Unreal Engine first. This keeps
+Roslyn, HIR, graph projection, and deterministic serialization fast to build
+and test. M6.1 now integrates UE as a consumer of those contracts rather than
+their owner.
 
 ## Non-negotiable decisions
 
@@ -168,6 +169,23 @@ effect-aware graph without hosting Roslyn.
 It depends on Core, Semantics, and the C# emission boundary. It does not parse
 source, project Graph, apply patches, or depend on UE. A collectible load
 context is a reload mechanism, not a security sandbox.
+
+### UnifiedScript.Unreal
+
+- strict Unreal reflection manifest v0.1 model and canonical JSON
+- engine version and selected-module identity without absolute engine paths
+- recursive native type references for primitives, objects, containers,
+  structs, and enums
+- deterministic managed wrapper generation and stable unsupported-shape
+  diagnostics
+- handle-only `IUnrealInvocationBridge` boundary with no managed ownership
+  claim over a UObject
+
+It depends only on Core. It does not reference UE assemblies or headers, scan a
+local engine tree, load CoreCLR into UE, or reinterpret Declaration IR and
+Authoring Surface. The native plugin translates `UClass`, `FProperty`, and
+`UFunction` into this contract; later runtime code implements the handle and
+lifetime bridge.
 
 ### UnifiedScript.Authoring
 

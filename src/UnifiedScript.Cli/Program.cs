@@ -5,6 +5,7 @@ using UnifiedScript.Core;
 using UnifiedScript.Graph;
 using UnifiedScript.Runtime;
 using UnifiedScript.Semantics;
+using UnifiedScript.Unreal;
 
 namespace UnifiedScript.Cli;
 
@@ -75,12 +76,55 @@ internal static class Program
             return RunDebugServe(args);
         }
 
+        if (args.Count > 0 && args[0] == "ue-bindings")
+        {
+            return RunUnrealBindings(args);
+        }
+
         if (args.Count > 0 && args[0] is "emit" or "emit-files")
         {
             return RunEmit(args);
         }
 
         return RunAnalyze(args);
+    }
+
+    private static int RunUnrealBindings(IReadOnlyList<string> args)
+    {
+        if (!TryParseUnrealBindingArguments(args, out UnrealBindingOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+
+        options = options ?? throw new InvalidOperationException(
+            "Argument parsing succeeded without Unreal binding options.");
+        if (!File.Exists(options.ManifestPath))
+        {
+            Console.Error.WriteLine($"Unreal reflection manifest does not exist: {options.ManifestPath}");
+            return 66;
+        }
+
+        string fullManifestPath = Path.GetFullPath(options.ManifestPath);
+        string fullOutputPath = Path.GetFullPath(options.OutputPath);
+        EnsureDifferentPath(
+            fullManifestPath,
+            fullOutputPath,
+            "Generated bindings cannot overwrite the Unreal reflection manifest.");
+        UnrealReflectionManifest manifest = UnrealReflectionJson.Deserialize(
+            File.ReadAllText(fullManifestPath));
+        UnrealBindingGenerationResult result = new UnrealBindingGenerator().Generate(
+            manifest,
+            new UnrealBindingGeneratorOptions(options.Namespace));
+        foreach (UnrealBindingDiagnostic diagnostic in result.Diagnostics)
+        {
+            Console.Error.WriteLine(
+                $"warning {diagnostic.Code}: {diagnostic.Message} [{diagnostic.MemberPath}]");
+        }
+
+        WriteAtomically(fullOutputPath, result.Source);
+        Console.WriteLine(fullOutputPath);
+        return 0;
     }
 
     private static int RunEmit(IReadOnlyList<string> args)
@@ -840,6 +884,55 @@ internal static class Program
         return true;
     }
 
+    private static bool TryParseUnrealBindingArguments(
+        IReadOnlyList<string> args,
+        out UnrealBindingOptions? options)
+    {
+        options = null;
+        if (args.Count < 4 || args[0] != "ue-bindings" ||
+            args[1].StartsWith("--", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        string manifestPath = args[1];
+        string? outputPath = null;
+        string? bindingNamespace = null;
+        int index = 2;
+        while (index < args.Count)
+        {
+            string option = args[index++];
+            if (index >= args.Count)
+            {
+                return false;
+            }
+
+            string value = args[index++];
+            switch (option)
+            {
+                case "--out" when outputPath is null:
+                    outputPath = value;
+                    break;
+                case "--namespace" when bindingNamespace is null:
+                    bindingNamespace = value;
+                    break;
+                default:
+                    return false;
+            }
+        }
+
+        if (outputPath is null)
+        {
+            return false;
+        }
+
+        options = new UnrealBindingOptions(
+            manifestPath,
+            outputPath,
+            bindingNamespace ?? "UnifiedScript.Unreal.Generated");
+        return true;
+    }
+
     private static bool TryParseExecuteArguments(
         IReadOnlyList<string> args,
         out ExecuteOptions? options)
@@ -1431,6 +1524,7 @@ internal static class Program
         "--out <output.cs> --out-asset <asset.json> [options]\n" +
         "  unifiedscript execute <input.cs> (--method <name> | --method-id <us_...>) [options]\n" +
         "  unifiedscript debug-serve <input.cs> --root <visual-editor-directory> [--port <number>] [options]\n" +
+        "  unifiedscript ue-bindings <reflection.json> --out <bindings.cs> [--namespace <name>]\n" +
         "Options:\n" +
         "  --out <path>            Artifact directory, initialized sidecar, or patched source output.\n" +
         "  --patch <patch.json>    Semantic patch document required by apply-patch.\n" +
@@ -1445,6 +1539,7 @@ internal static class Program
         "  --layout <file.usgraph> Existing visual layout required by layout-sync.\n" +
         "  --root <directory>      Static visual workbench root required by debug-serve.\n" +
         "  --port <number>         Loopback debug server port; defaults to 4173.\n" +
+        "  --namespace <name>      Namespace for generated Unreal managed bindings.\n" +
         "  --assembly <name>        Set the analysis assembly name.\n" +
         "  --effects <catalog.json> Apply effect catalog overrides.\n" +
         "  --reference <assembly>   Add a metadata reference; may be repeated.\n" +
@@ -1476,6 +1571,11 @@ internal static class Program
         string AssemblyName,
         IReadOnlyList<string> ReferencePaths,
         string? IdentityPath);
+
+    private sealed record UnrealBindingOptions(
+        string ManifestPath,
+        string OutputPath,
+        string Namespace);
 
     private sealed record IdentityOptions(
         string InputPath,

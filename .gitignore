@@ -18,3 +18,12 @@ TestResults/
 .cache/
 artifacts/
 coverage/
+
+# Unreal host build output and machine-local project state
+HostProject/Binaries/
+HostProject/DerivedDataCache/
+HostProject/Intermediate/
+HostProject/Saved/
+HostProject/Plugins/*/Binaries/
+HostProject/Plugins/*/Intermediate/
+HostProject/*.sln

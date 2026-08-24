@@ -202,10 +202,17 @@ instead of interpreting Graph or embedding sample behavior.
 
 Outcome: the proven language pipeline becomes usable from UE.
 
-- reflection symbol extraction
-- C# binding source generator
-- UObject lifetime bridge
-- world-scoped runtime domain
-- visual editor integration
-- generated script host class/component
-- cook and packaging strategy
+- [x] UE 5.7 host project and runtime/editor plugin module boundary
+- [x] strict deterministic Unreal reflection manifest v0.1
+- [x] selected-module `UClass`/property/function extraction commandlet
+- [x] C# binding source generator and public `ue-bindings` CLI
+- [x] handle-only managed invocation contract
+- [x] initial generated-script host component and reflection fixture
+- [x] local engine discovery/build/export/binding verification script
+- [ ] full UE C++ compile and live commandlet export smoke test
+- [ ] native property/function invocation bridge
+- [ ] weak UObject handle table and destruction invalidation
+- [ ] world-scoped runtime domain
+- [ ] script declaration materialization on the host component
+- [ ] Slate integration consuming Authoring Surface v0.1
+- [ ] cook and packaging strategy

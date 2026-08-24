@@ -1,0 +1,19 @@
+{
+  "FileVersion": 3,
+  "EngineAssociation": "",
+  "Category": "UnifiedScript",
+  "Description": "Minimal host used to build and verify the UnifiedScript Unreal adapter.",
+  "Modules": [
+    {
+      "Name": "UEUnifiedScriptHost",
+      "Type": "Runtime",
+      "LoadingPhase": "Default"
+    }
+  ],
+  "Plugins": [
+    {
+      "Name": "UEUnifiedScript",
+      "Enabled": true
+    }
+  ]
+}
