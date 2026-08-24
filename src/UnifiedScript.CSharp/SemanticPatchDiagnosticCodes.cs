@@ -28,4 +28,5 @@ public static class SemanticPatchDiagnosticCodes
     public const string UnreachableInsertion = "UVS3024";
     public const string AssignmentTargetNotAvailable = "UVS3025";
     public const string InvalidExpressionInputPort = "UVS3026";
+    public const string InvalidDataEdgeReconnection = "UVS3027";
 }

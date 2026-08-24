@@ -466,7 +466,7 @@ public sealed class SemanticPatchJsonTests
         ReplaceReturnValuePatchOperation operation = Assert.IsType<ReplaceReturnValuePatchOperation>(
             Assert.Single(roundTrip.Operations));
         Assert.Equal(expression, Assert.IsType<ConditionalPatchExpression>(operation.NewValue));
-        Assert.Equal("unifiedscript.patch/v0.19", roundTrip.SchemaVersion);
+        Assert.Equal(SemanticPatchDocument.CurrentSchemaVersion, roundTrip.SchemaVersion);
         Assert.Contains("\"expression\": \"conditional\"", json);
         Assert.Contains("\"whenTrue\"", json);
         Assert.Contains("\"whenFalse\"", json);
@@ -500,7 +500,7 @@ public sealed class SemanticPatchJsonTests
         ReplaceReturnValuePatchOperation operation = Assert.IsType<ReplaceReturnValuePatchOperation>(
             Assert.Single(roundTrip.Operations));
         Assert.Equal(expression, Assert.IsType<BinaryPatchExpression>(operation.NewValue));
-        Assert.Equal("unifiedscript.patch/v0.19", roundTrip.SchemaVersion);
+        Assert.Equal(SemanticPatchDocument.CurrentSchemaVersion, roundTrip.SchemaVersion);
         Assert.Contains("\"operator\": \"??\"", json, StringComparison.Ordinal);
     }
 
@@ -533,7 +533,7 @@ public sealed class SemanticPatchJsonTests
         Assert.Equal(
             expression,
             Assert.IsType<ConditionalMemberAccessPatchExpression>(operation.NewValue));
-        Assert.Equal("unifiedscript.patch/v0.19", roundTrip.SchemaVersion);
+        Assert.Equal(SemanticPatchDocument.CurrentSchemaVersion, roundTrip.SchemaVersion);
         Assert.Contains("\"expression\": \"conditionalMemberAccess\"", json);
         Assert.Contains("\"memberName\": \"Length\"", json);
         Assert.Contains("\"receiver\"", json);
@@ -573,7 +573,7 @@ public sealed class SemanticPatchJsonTests
         Assert.Equal(
             new ForEachPatchStatement("char", "value", charType, collection),
             Assert.IsType<ForEachPatchStatement>(insertion.NewStatement));
-        Assert.Equal("unifiedscript.patch/v0.19", roundTrip.SchemaVersion);
+        Assert.Equal(SemanticPatchDocument.CurrentSchemaVersion, roundTrip.SchemaVersion);
         Assert.Contains("\"operation\": \"replaceForEachCollection\"", json);
         Assert.Contains("\"statement\": \"forEach\"", json);
     }
@@ -994,6 +994,72 @@ public sealed class SemanticPatchJsonTests
                     SemanticId.FromKey("System.Single"),
                     SemanticId.FromKey("System.Single")),
             ]));
+    }
+
+    [Fact]
+    public void SerializeAndDeserialize_PreserveDataEdgeReconnection()
+    {
+        SemanticId targetId = SemanticId.FromKey("data-edge-target");
+        SemanticId edgeId = SemanticId.FromKey("data-edge-old-edge");
+        SemanticId oldSourceId = SemanticId.FromKey("data-edge-old-source");
+        SemanticId newSourceId = SemanticId.FromKey("data-edge-new-source");
+        SemanticId typeId = SemanticId.FromKey("System.Int32");
+        var operation = new ReconnectDataEdgePatchOperation(
+            targetId,
+            "value",
+            edgeId,
+            oldSourceId,
+            "result",
+            newSourceId,
+            "result",
+            typeId);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            SemanticId.FromKey("data-edge-compilation"),
+            SemanticId.FromKey("data-edge-configuration"),
+            [operation]);
+
+        string json = SemanticPatchJson.Serialize(patch);
+        SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
+
+        Assert.Equal(
+            operation,
+            Assert.IsType<ReconnectDataEdgePatchOperation>(Assert.Single(roundTrip.Operations)));
+        Assert.Contains("\"operation\": \"reconnectDataEdge\"", json, StringComparison.Ordinal);
+        Assert.Equal(SemanticPatchDocument.CurrentSchemaVersion, roundTrip.SchemaVersion);
+    }
+
+    [Fact]
+    public void Create_RejectsNoOpOrSelfDataEdgeReconnection()
+    {
+        SemanticId targetId = SemanticId.FromKey("invalid-data-edge-target");
+        SemanticId sourceId = SemanticId.FromKey("invalid-data-edge-source");
+        SemanticId edgeId = SemanticId.FromKey("invalid-data-edge-edge");
+        SemanticId typeId = SemanticId.FromKey("System.Int32");
+
+        Assert.Throws<JsonException>(() => SemanticPatchDocument.Create(
+            SemanticId.FromKey("invalid-data-edge-no-op-compilation"),
+            SemanticId.FromKey("invalid-data-edge-no-op-configuration"),
+            [new ReconnectDataEdgePatchOperation(
+                targetId,
+                "value",
+                edgeId,
+                sourceId,
+                "result",
+                sourceId,
+                "result",
+                typeId)]));
+        Assert.Throws<JsonException>(() => SemanticPatchDocument.Create(
+            SemanticId.FromKey("invalid-data-edge-self-compilation"),
+            SemanticId.FromKey("invalid-data-edge-self-configuration"),
+            [new ReconnectDataEdgePatchOperation(
+                targetId,
+                "value",
+                edgeId,
+                sourceId,
+                "result",
+                targetId,
+                "result",
+                typeId)]));
     }
 
     [Fact]

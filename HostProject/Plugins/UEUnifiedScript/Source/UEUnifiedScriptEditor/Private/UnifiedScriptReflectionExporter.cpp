@@ -143,6 +143,32 @@ FString ModuleName(const UClass* Class)
     return Name.RemoveFromStart(TEXT("/Script/")) ? Name : FString();
 }
 
+const TCHAR* PropertyNativeAccess(const FProperty* Property)
+{
+    if (Property->HasAnyPropertyFlags(CPF_NativeAccessSpecifierPrivate))
+    {
+        return TEXT("private");
+    }
+    if (Property->HasAnyPropertyFlags(CPF_NativeAccessSpecifierProtected))
+    {
+        return TEXT("protected");
+    }
+    return TEXT("public");
+}
+
+const TCHAR* FunctionNativeAccess(const UFunction* Function)
+{
+    if (Function->HasAnyFunctionFlags(FUNC_Private))
+    {
+        return TEXT("private");
+    }
+    if (Function->HasAnyFunctionFlags(FUNC_Protected))
+    {
+        return TEXT("protected");
+    }
+    return TEXT("public");
+}
+
 TSharedRef<FJsonObject> ExportProperty(const UClass* Class, const FProperty* Property)
 {
     TSharedRef<FJsonObject> Json = MakeShared<FJsonObject>();
@@ -157,6 +183,7 @@ TSharedRef<FJsonObject> ExportProperty(const UClass* Class, const FProperty* Pro
         TEXT("writable"),
         !Property->HasAnyPropertyFlags(CPF_BlueprintReadOnly | CPF_EditConst));
     Access->SetBoolField(TEXT("editorVisible"), Property->HasAnyPropertyFlags(CPF_Edit));
+    Access->SetStringField(TEXT("nativeAccess"), PropertyNativeAccess(Property));
     Json->SetObjectField(TEXT("access"), Access);
     return Json;
 }
@@ -203,6 +230,7 @@ TSharedRef<FJsonObject> ExportFunction(const UClass* Class, const UFunction* Fun
     Traits->SetBoolField(
         TEXT("callable"),
         Function->HasAnyFunctionFlags(FUNC_BlueprintCallable | FUNC_BlueprintPure));
+    Traits->SetStringField(TEXT("nativeAccess"), FunctionNativeAccess(Function));
     Json->SetObjectField(TEXT("traits"), Traits);
     return Json;
 }
@@ -217,6 +245,15 @@ TSharedRef<FJsonObject> ExportClass(
     Json->SetStringField(TEXT("name"), Class->GetName());
     Json->SetStringField(TEXT("nativeName"), FString(Class->GetPrefixCPP()) + Class->GetName());
     Json->SetStringField(TEXT("module"), ModuleName(Class));
+    FString HeaderPath = Class->GetMetaData(TEXT("ModuleRelativePath"));
+    HeaderPath.ReplaceInline(TEXT("\\"), TEXT("/"));
+    HeaderPath.RemoveFromStart(TEXT("Public/"));
+    HeaderPath.RemoveFromStart(TEXT("Private/"));
+    HeaderPath.RemoveFromStart(TEXT("Classes/"));
+    if (!HeaderPath.IsEmpty())
+    {
+        Json->SetStringField(TEXT("headerPath"), HeaderPath);
+    }
     Json->SetStringField(TEXT("kind"), TEXT("class"));
     if (const UClass* Super = Class->GetSuperClass())
     {

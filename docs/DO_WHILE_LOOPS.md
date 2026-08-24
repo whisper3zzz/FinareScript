@@ -10,8 +10,8 @@ The strict-reader contracts for this slice are:
 
 - HIR `unifiedscript.hir/v0.7`;
 - Graph `unifiedscript.graph/v0.12`;
-- standalone patch `unifiedscript.patch/v0.19`;
-- patch plan `unifiedscript.patch-plan/v0.20`.
+- standalone patch `unifiedscript.patch/v0.21`;
+- patch plan `unifiedscript.patch-plan/v0.21`.
 
 ## HIR contract
 
@@ -103,7 +103,7 @@ These facts make the three critical claims independently testable:
 
 ## Exact condition editing
 
-Patch v0.19 adds `replaceDoWhileCondition`. Its preconditions include:
+Patch v0.20 adds `replaceDoWhileCondition`. Its preconditions include:
 
 - the exact `HirDoWhileStatement` ID;
 - the current condition root ID;

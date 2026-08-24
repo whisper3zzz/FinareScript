@@ -50,6 +50,227 @@ public sealed class CSharpSourcePatchApplierTests
     }
 
     [Fact]
+    public void Apply_ReconnectsCompilerOwnedDataEdgeThroughExistingSafeExpressionPipeline()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            namespace Game;
+
+            public static class RewireSample
+            {
+                [Visual]
+                public static int Resolve(int value)
+                {
+                    int seed = value + 1;
+                    int result = value + 2;
+                    return result;
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(
+            source,
+            "Game/RewireSample.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        Assert.True(original.Succeeded, string.Join(Environment.NewLine, original.Diagnostics));
+        GraphFunction function = Assert.Single(new HirGraphProjector().Project(
+            original.Hir!,
+            original.Semantics!).Functions);
+        GraphNode local = Assert.Single(function.Nodes, static node =>
+            node.Kind == "variable" && node.Properties["name"] == "seed");
+        GraphNode targetLocal = Assert.Single(function.Nodes, static node =>
+            node.Kind == "variable" && node.Properties["name"] == "result");
+        GraphEdge sourceEdge = Assert.Single(function.Edges, edge =>
+            edge.Kind == GraphEdgeKind.Data && edge.ToNode == local.Id && edge.ToPort == "value");
+        GraphEdge targetEdge = Assert.Single(function.Edges, edge =>
+            edge.Kind == GraphEdgeKind.Data && edge.ToNode == targetLocal.Id && edge.ToPort == "value");
+        GraphNode sourceExpression = Assert.Single(
+            function.Nodes,
+            node => node.Id == sourceEdge.FromNode);
+        SemanticId valueType = new(sourceExpression.Properties["typeId"]);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir!.Id,
+            original.Semantics!.ConfigurationId,
+            [new ReconnectDataEdgePatchOperation(
+                targetLocal.Id,
+                "value",
+                targetEdge.Id,
+                targetEdge.FromNode,
+                targetEdge.FromPort,
+                sourceExpression.Id,
+                sourceEdge.FromPort,
+                valueType)]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains("int seed = value + 1;", patchedSource);
+        Assert.Contains("int result = value + 1;", patchedSource);
+        Assert.DoesNotContain("int result = value + 2;", patchedSource);
+    }
+
+    [Fact]
+    public void Apply_DisconnectsDataEdgeToExplicitTypedDefault()
+    {
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(Source, "Game/Calculator.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        GraphFunction function = Assert.Single(new HirGraphProjector().Project(
+            original.Hir!, original.Semantics!).Functions);
+        GraphNode binary = Assert.Single(function.Nodes, static node => node.Kind == "binary");
+        GraphEdge edge = Assert.Single(function.Edges, candidate =>
+            candidate.Kind == GraphEdgeKind.Data && candidate.ToNode == binary.Id &&
+            candidate.ToPort == "right");
+        GraphNode source = Assert.Single(function.Nodes, node => node.Id == edge.FromNode);
+        SemanticId typeId = new(source.Properties["typeId"]);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir!.Id,
+            original.Semantics!.ConfigurationId,
+            [new DisconnectDataEdgePatchOperation(
+                binary.Id,
+                "right",
+                edge.Id,
+                edge.FromNode,
+                edge.FromPort,
+                typeId)]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Contains("return value + 0;", Assert.Single(result.PatchedRequest!.Sources).Source);
+    }
+
+    [Fact]
+    public void Apply_InsertsStructuredUnrealMemberInvocationLocal()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            namespace UnifiedScript.Unreal
+            {
+                [System.AttributeUsage(System.AttributeTargets.Class)]
+                public sealed class UnrealTypeAttribute(string path) : System.Attribute;
+            }
+
+            namespace Game
+            {
+                [UnifiedScript.Unreal.UnrealType("/Script/Game.Api")]
+                public sealed class Api
+                {
+                    public int Add(int left, int right) => left + right;
+                }
+
+                public static class Script
+                {
+                    [Visual]
+                    public static int Run(Api api, int left, int right)
+                    {
+                        return left;
+                    }
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(source, "Game/ApiGraph.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        Assert.True(original.Succeeded, string.Join(Environment.NewLine, original.Diagnostics));
+        HirMethodDeclaration method = Assert.Single(
+            Assert.Single(original.Hir!.Types, static type => type.Name == "Script").Methods);
+        HirReturnStatement valueReturn = Assert.IsType<HirReturnStatement>(Assert.Single(method.Body.Statements));
+        HirParameter api = method.Parameters.Single(static parameter => parameter.Name == "api");
+        HirParameter left = method.Parameters.Single(static parameter => parameter.Name == "left");
+        HirParameter right = method.Parameters.Single(static parameter => parameter.Name == "right");
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> bindings = original.Semantics!.Nodes
+            .ToDictionary(static node => node.NodeId);
+        SemanticId apiType = bindings[api.Id].TypeId!.Value;
+        SemanticId intType = bindings[left.Id].TypeId!.Value;
+        var invocation = new MemberInvocationPatchExpression(
+            new LocalReferencePatchExpression(api.Id, api.Name, apiType),
+            "Add",
+            [
+                new LocalReferencePatchExpression(left.Id, left.Name, intType),
+                new LocalReferencePatchExpression(right.Id, right.Name, intType),
+            ],
+            intType);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics.ConfigurationId,
+            [new InsertStatementPatchOperation(
+                method.Body.Id,
+                null,
+                valueReturn.Id,
+                new LocalDeclarationPatchStatement("apiResult", "int", invocation, intType))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains("int apiResult = api.Add(left, right);", patchedSource);
+        Assert.Contains("return left;", patchedSource);
+    }
+
+    [Fact]
+    public void Apply_InsertsStructuredUnrealMemberAccessLocal()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            namespace UnifiedScript.Unreal
+            {
+                [System.AttributeUsage(System.AttributeTargets.Class)]
+                public sealed class UnrealTypeAttribute(string path) : System.Attribute;
+            }
+
+            namespace Game
+            {
+                [UnifiedScript.Unreal.UnrealType("/Script/Game.Api")]
+                public sealed class Api
+                {
+                    public int Count { get; }
+                }
+
+                public static class Script
+                {
+                    [Visual]
+                    public static int Run(Api api)
+                    {
+                        return 0;
+                    }
+                }
+            }
+            """;
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(source, "Game/ApiPropertyGraph.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        Assert.True(original.Succeeded, string.Join(Environment.NewLine, original.Diagnostics));
+        HirMethodDeclaration method = Assert.Single(
+            Assert.Single(original.Hir!.Types, static type => type.Name == "Script").Methods);
+        HirReturnStatement valueReturn = Assert.IsType<HirReturnStatement>(Assert.Single(method.Body.Statements));
+        HirParameter api = Assert.Single(method.Parameters);
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> bindings = original.Semantics!.Nodes
+            .ToDictionary(static node => node.NodeId);
+        SemanticId apiType = bindings[api.Id].TypeId!.Value;
+        SemanticId intType = bindings[valueReturn.Expression!.Id].TypeId!.Value;
+        var access = new MemberAccessPatchExpression(
+            new LocalReferencePatchExpression(api.Id, api.Name, apiType),
+            "Count",
+            intType);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics.ConfigurationId,
+            [new InsertStatementPatchOperation(
+                method.Body.Id,
+                null,
+                valueReturn.Id,
+                new LocalDeclarationPatchStatement("propertyValue", "int", access, intType))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains("int propertyValue = api.Count;", patchedSource);
+        Assert.Contains("return 0;", patchedSource);
+    }
+
+    [Fact]
     public void Apply_RejectsStaleSourceCompilationBaseline()
     {
         CSharpCompilationRequest request = CSharpCompilationRequest.Single(Source, "Game/Calculator.cs");

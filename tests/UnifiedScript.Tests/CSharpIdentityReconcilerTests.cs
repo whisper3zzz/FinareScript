@@ -24,6 +24,7 @@ public sealed class CSharpIdentityReconcilerTests
     [Fact]
     public void Analyze_InitializesAndReusesPersistentIdentitiesForUnchangedSource()
     {
+        CSharpAnalysisResult deterministic = new CSharpSemanticPipeline().Analyze(Source, Path);
         CSharpAnalysisResult initial = AnalyzeWithIdentity(Source, IdentitySidecarDocument.CreateEmpty(Path));
         IdentitySidecarDocument sidecar = Assert.Single(initial.IdentitySidecars);
 
@@ -31,6 +32,9 @@ public sealed class CSharpIdentityReconcilerTests
 
         Assert.True(sidecar.Entries.Count > 0);
         Assert.Equal(1, sidecar.Generation);
+        Assert.Equal(
+            deterministic.Hir!.DescendantsAndSelf().Select(static node => node.Id),
+            initial.Hir!.DescendantsAndSelf().Select(static node => node.Id));
         Assert.Equal(
             initial.Hir!.DescendantsAndSelf().Select(static node => node.Id),
             repeated.Hir!.DescendantsAndSelf().Select(static node => node.Id));

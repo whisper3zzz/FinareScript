@@ -21,6 +21,11 @@ PROJECTS = [
     ROOT / "src" / "UnifiedScript.Runtime" / "UnifiedScript.Runtime.csproj",
     ROOT / "src" / "UnifiedScript.Unreal" / "UnifiedScript.Unreal.csproj",
     ROOT / "src" / "UnifiedScript.Cli" / "UnifiedScript.Cli.csproj",
+    ROOT
+    / "samples"
+    / "Unreal"
+    / "UnifiedScript.Unreal.Demo"
+    / "UnifiedScript.Unreal.Demo.csproj",
     ROOT / "tests" / "UnifiedScript.Tests" / "UnifiedScript.Tests.csproj",
 ]
 
@@ -209,6 +214,12 @@ def main() -> int:
     surface_function = surface_asset["functions"][0]
     surface_actions = surface_function["actions"]
     surface_action_ids = {action["id"] for action in surface_actions}
+    surface_edges = surface_function["edges"]
+    surface_ports = {
+        (action["id"], port["direction"], port["name"]): port
+        for action in surface_actions
+        for port in action["ports"]
+    }
     surface_regions = surface_function["regions"]
     surface_region_ids = {region["id"] for region in surface_regions}
     owned_action_ids = [
@@ -223,7 +234,7 @@ def main() -> int:
     }
     require(
         surface_document["schemaVersion"]
-        == "unifiedscript.authoring-surface/v0.1"
+        == "unifiedscript.authoring-surface/v0.3"
         and surface_document["sourceCompilationId"]
         == declaration_document["sourceCompilationId"]
         and surface_document["semanticConfigurationId"]
@@ -232,12 +243,19 @@ def main() -> int:
         and surface_function["id"] == graph_function["id"]
         and surface_function["rootRegionId"] in surface_region_ids
         and len(surface_action_ids) == len(surface_actions)
+        and surface_action_ids == graph_node_ids
         and len(owned_action_ids) == len(surface_actions)
         and set(owned_action_ids) == surface_action_ids
         and all(
             child_id in surface_region_ids
             for region in surface_regions
             for child_id in region["childRegionIds"]
+        )
+        and len(surface_edges) == len(graph_function["edges"])
+        and all(
+            (edge["fromNode"], "output", edge["fromPort"]) in surface_ports
+            and (edge["toNode"], "input", edge["toPort"]) in surface_ports
+            for edge in surface_edges
         )
         and {"replaceLiteral", "changeOperator"}.issubset(edit_operations),
         "Authoring Surface is inconsistent with Declaration IR and Graph",
@@ -323,8 +341,8 @@ def main() -> int:
         and "renderBehaviorGraph" in prototype_source
         and "data-semantic-id" in prototype_source
         and "data-debug-semantic-id" in prototype_source
-        and "unifiedscript.authoring-surface/v0.1" in prototype_source
-        and "unifiedscript.authoring-surface/v0.1" in authoring_model_source
+        and "unifiedscript.authoring-surface/v0.3" in prototype_source
+        and "unifiedscript.authoring-surface/v0.3" in authoring_model_source
         and "CollectEditCapabilities" in authoring_projector_source
         and "DamagePolicy" not in prototype_source
         and "Math.Clamp" not in prototype_source,
@@ -362,7 +380,7 @@ def main() -> int:
         and "saveSemanticPatch" in prototype_source
         and "unifiedscript.authoring-workspace/v0.2" in prototype_source
         and "AuthoringSurfaceProjector" in debug_server_source
-        and "unifiedscript.patch/v0.19" in prototype_source,
+        and "unifiedscript.patch/v0.21" in prototype_source,
         "Visual authoring changes do not commit through the transactional host",
     )
     checks.append("declaration and behavior patches write source and reload one CoreCLR generation")
@@ -385,6 +403,26 @@ def main() -> int:
     unreal_bindings_path = (
         ROOT / "samples" / "Unreal" / "UEUnifiedScriptRuntime.bindings.cs"
     )
+    unreal_native_thunk_generator_path = (
+        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealNativeThunkGenerator.cs"
+    )
+    unreal_generated_thunks_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Private"
+        / "Generated"
+        / "UEUnifiedScriptRuntime.native-thunks.generated.cpp"
+    )
+    unreal_native_thunk_test_path = (
+        ROOT
+        / "tests"
+        / "UnifiedScript.Tests"
+        / "UnrealNativeThunkGeneratorTests.cs"
+    )
     unreal_plugin_path = (
         ROOT
         / "HostProject"
@@ -402,6 +440,68 @@ def main() -> int:
         / "Public"
         / "UnifiedScriptComponent.h"
     )
+    unreal_script_asset_header_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Public"
+        / "UnifiedScriptAsset.h"
+    )
+    unreal_script_asset_source_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Private"
+        / "UnifiedScriptAsset.cpp"
+    )
+    unreal_script_asset_test_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Private"
+        / "Tests"
+        / "UnifiedScriptAssetTests.cpp"
+    )
+    unreal_declaration_materializer_header_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Public"
+        / "UnifiedScriptDeclarationMaterializer.h"
+    )
+    unreal_declaration_materializer_source_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Private"
+        / "UnifiedScriptDeclarationMaterializer.cpp"
+    )
+    unreal_declaration_materializer_test_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Private"
+        / "Tests"
+        / "UnifiedScriptDeclarationMaterializerTests.cpp"
+    )
     unreal_exporter_path = (
         ROOT
         / "HostProject"
@@ -412,15 +512,378 @@ def main() -> int:
         / "Private"
         / "UnifiedScriptReflectionExporter.cpp"
     )
+    unreal_registry_header_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Public"
+        / "UnifiedScriptObjectRegistry.h"
+    )
+    unreal_registry_source_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Private"
+        / "UnifiedScriptObjectRegistry.cpp"
+    )
+    unreal_registry_test_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Private"
+        / "Tests"
+        / "UnifiedScriptObjectRegistryTests.cpp"
+    )
+    unreal_invocation_header_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Public"
+        / "UnifiedScriptInvocationBridge.h"
+    )
+    unreal_invocation_source_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Private"
+        / "UnifiedScriptInvocationBridge.cpp"
+    )
+    unreal_invocation_test_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Private"
+        / "Tests"
+        / "UnifiedScriptInvocationBridgeTests.cpp"
+    )
+    unreal_native_transport_header_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Public"
+        / "UnifiedScriptNativeTransport.h"
+    )
+    unreal_native_transport_source_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Private"
+        / "UnifiedScriptNativeTransport.cpp"
+    )
+    unreal_native_transport_test_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Private"
+        / "Tests"
+        / "UnifiedScriptNativeTransportTests.cpp"
+    )
+    unreal_world_host_header_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Public"
+        / "UnifiedScriptWorldSubsystem.h"
+    )
+    unreal_world_host_source_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Private"
+        / "UnifiedScriptWorldSubsystem.cpp"
+    )
+    unreal_world_host_test_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Private"
+        / "Tests"
+        / "UnifiedScriptWorldSubsystemTests.cpp"
+    )
+    unreal_coreclr_host_header_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Public"
+        / "UnifiedScriptCoreClrHost.h"
+    )
+    unreal_coreclr_host_source_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Private"
+        / "UnifiedScriptCoreClrHost.cpp"
+    )
+    unreal_coreclr_runtime_config_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Resources"
+        / "Managed"
+        / "UnifiedScript.Unreal.runtimeconfig.json"
+    )
+    unreal_managed_bridge_path = (
+        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealManagedBridge.cs"
+    )
+    unreal_native_adapter_path = (
+        ROOT / "src" / "UnifiedScript.Unreal" / "NativeUnrealInvocationBridge.cs"
+    )
+    unreal_native_adapter_test_path = (
+        ROOT
+        / "tests"
+        / "UnifiedScript.Tests"
+        / "NativeUnrealInvocationBridgeTests.cs"
+    )
+    unreal_in_process_transport_path = (
+        ROOT
+        / "src"
+        / "UnifiedScript.Unreal"
+        / "InProcessUnrealNativeInvocationTransport.cs"
+    )
+    unreal_in_process_transport_test_path = (
+        ROOT
+        / "tests"
+        / "UnifiedScript.Tests"
+        / "InProcessUnrealNativeInvocationTransportTests.cs"
+    )
+    unreal_world_managed_entry_path = (
+        ROOT
+        / "src"
+        / "UnifiedScript.Unreal"
+        / "UnrealWorldManagedEntryPoint.cs"
+    )
+    unreal_demo_project_path = (
+        ROOT
+        / "samples"
+        / "Unreal"
+        / "UnifiedScript.Unreal.Demo"
+        / "UnifiedScript.Unreal.Demo.csproj"
+    )
+    unreal_demo_source_path = (
+        ROOT
+        / "samples"
+        / "Unreal"
+        / "UnifiedScript.Unreal.Demo"
+        / "DemoScript.cs"
+    )
+    unreal_demo_declaration_path = (
+        ROOT
+        / "samples"
+        / "Unreal"
+        / "UnifiedScript.Unreal.Demo"
+        / "UnifiedScript.Unreal.Demo.asset.json"
+    )
+    unreal_demo_surface_path = (
+        ROOT
+        / "samples"
+        / "Unreal"
+        / "UnifiedScript.Unreal.Demo"
+        / "UnifiedScript.Unreal.Demo.surface.json"
+    )
+    unreal_authoring_surface_header_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptEditor"
+        / "Public"
+        / "UnifiedScriptAuthoringSurface.h"
+    )
+    unreal_authoring_surface_source_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptEditor"
+        / "Private"
+        / "UnifiedScriptAuthoringSurface.cpp"
+    )
+    unreal_authoring_workbench_header_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptEditor"
+        / "Public"
+        / "UnifiedScriptAuthoringWorkbench.h"
+    )
+    unreal_authoring_workbench_source_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptEditor"
+        / "Private"
+        / "UnifiedScriptAuthoringWorkbench.cpp"
+    )
+    unreal_authoring_widget_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptEditor"
+        / "Private"
+        / "Widgets"
+        / "SUnifiedScriptAuthoringSurface.cpp"
+    )
+    unreal_graph_presentation_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptEditor"
+        / "Private"
+        / "Graph"
+        / "UnifiedScriptGraphPresentation.cpp"
+    )
+    unreal_authoring_test_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptEditor"
+        / "Private"
+        / "Tests"
+        / "UnifiedScriptAuthoringSurfaceTests.cpp"
+    )
+    unreal_editor_module_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptEditor"
+        / "Private"
+        / "UEUnifiedScriptEditorModule.cpp"
+    )
+    unreal_alternate_demo_source_path = (
+        ROOT
+        / "samples"
+        / "Unreal"
+        / "UnifiedScript.Unreal.Demo"
+        / "AlternateDemoScript.cs"
+    )
+    unreal_test_project_path = (
+        ROOT / "tests" / "UnifiedScript.Tests" / "UnifiedScript.Tests.csproj"
+    )
+    unreal_game_target_path = (
+        ROOT / "HostProject" / "Source" / "UEUnifiedScriptHost.Target.cs"
+    )
+    unreal_editor_target_path = (
+        ROOT / "HostProject" / "Source" / "UEUnifiedScriptHostEditor.Target.cs"
+    )
     unreal_helper_path = ROOT / "tools" / "ue-adapter.sh"
+    unreal_demo_helper_path = ROOT / "tools" / "run-unreal-demo.ps1"
+    unreal_authoring_helper_path = ROOT / "tools" / "run-unreal-authoring.ps1"
+    helper_is_executable = sys.platform == "win32" or (
+        unreal_helper_path.stat().st_mode & 0o111
+    ) != 0
     require(
         unreal_manifest_path.is_file()
         and unreal_bindings_path.is_file()
+        and unreal_native_thunk_generator_path.is_file()
+        and unreal_generated_thunks_path.is_file()
+        and unreal_native_thunk_test_path.is_file()
         and unreal_plugin_path.is_file()
         and unreal_component_path.is_file()
+        and unreal_script_asset_header_path.is_file()
+        and unreal_script_asset_source_path.is_file()
+        and unreal_script_asset_test_path.is_file()
+        and unreal_declaration_materializer_header_path.is_file()
+        and unreal_declaration_materializer_source_path.is_file()
+        and unreal_declaration_materializer_test_path.is_file()
         and unreal_exporter_path.is_file()
+        and unreal_registry_header_path.is_file()
+        and unreal_registry_source_path.is_file()
+        and unreal_registry_test_path.is_file()
+        and unreal_invocation_header_path.is_file()
+        and unreal_invocation_source_path.is_file()
+        and unreal_invocation_test_path.is_file()
+        and unreal_native_transport_header_path.is_file()
+        and unreal_native_transport_source_path.is_file()
+        and unreal_native_transport_test_path.is_file()
+        and unreal_world_host_header_path.is_file()
+        and unreal_world_host_source_path.is_file()
+        and unreal_world_host_test_path.is_file()
+        and unreal_coreclr_host_header_path.is_file()
+        and unreal_coreclr_host_source_path.is_file()
+        and unreal_coreclr_runtime_config_path.is_file()
+        and unreal_managed_bridge_path.is_file()
+        and unreal_native_adapter_path.is_file()
+        and unreal_native_adapter_test_path.is_file()
+        and unreal_in_process_transport_path.is_file()
+        and unreal_in_process_transport_test_path.is_file()
+        and unreal_world_managed_entry_path.is_file()
+        and unreal_demo_project_path.is_file()
+        and unreal_demo_source_path.is_file()
+        and unreal_demo_declaration_path.is_file()
+        and unreal_demo_surface_path.is_file()
+        and unreal_authoring_surface_header_path.is_file()
+        and unreal_authoring_surface_source_path.is_file()
+        and unreal_authoring_workbench_header_path.is_file()
+        and unreal_authoring_workbench_source_path.is_file()
+        and unreal_authoring_widget_path.is_file()
+        and unreal_graph_presentation_path.is_file()
+        and unreal_authoring_test_path.is_file()
+        and unreal_editor_module_path.is_file()
+        and unreal_alternate_demo_source_path.is_file()
+        and unreal_test_project_path.is_file()
+        and unreal_game_target_path.is_file()
+        and unreal_editor_target_path.is_file()
         and unreal_helper_path.is_file()
-        and (unreal_helper_path.stat().st_mode & 0o111) != 0,
+        and unreal_demo_helper_path.is_file()
+        and unreal_authoring_helper_path.is_file()
+        and helper_is_executable,
         "Missing Unreal adapter contract, plugin, fixture, or executable helper",
     )
     with unreal_manifest_path.open("r", encoding="utf-8") as handle:
@@ -428,19 +891,155 @@ def main() -> int:
     with unreal_plugin_path.open("r", encoding="utf-8") as handle:
         unreal_plugin = json.load(handle)
     unreal_component = unreal_component_path.read_text(encoding="utf-8")
+    unreal_script_asset_header = unreal_script_asset_header_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_script_asset_source = unreal_script_asset_source_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_script_asset_test = unreal_script_asset_test_path.read_text(encoding="utf-8")
+    unreal_declaration_materializer_header = (
+        unreal_declaration_materializer_header_path.read_text(encoding="utf-8")
+    )
+    unreal_declaration_materializer_source = (
+        unreal_declaration_materializer_source_path.read_text(encoding="utf-8")
+    )
+    unreal_declaration_materializer_test = (
+        unreal_declaration_materializer_test_path.read_text(encoding="utf-8")
+    )
     unreal_exporter = unreal_exporter_path.read_text(encoding="utf-8")
     unreal_bindings = unreal_bindings_path.read_text(encoding="utf-8")
+    unreal_native_thunk_generator = unreal_native_thunk_generator_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_generated_thunks = unreal_generated_thunks_path.read_text(encoding="utf-8")
+    unreal_native_thunk_test = unreal_native_thunk_test_path.read_text(encoding="utf-8")
+    unreal_registry_header = unreal_registry_header_path.read_text(encoding="utf-8")
+    unreal_registry_source = unreal_registry_source_path.read_text(encoding="utf-8")
+    unreal_registry_test = unreal_registry_test_path.read_text(encoding="utf-8")
+    unreal_invocation_header = unreal_invocation_header_path.read_text(encoding="utf-8")
+    unreal_invocation_source = unreal_invocation_source_path.read_text(encoding="utf-8")
+    unreal_invocation_test = unreal_invocation_test_path.read_text(encoding="utf-8")
+    unreal_native_transport_header = unreal_native_transport_header_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_native_transport_source = unreal_native_transport_source_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_native_transport_test = unreal_native_transport_test_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_world_host_header = unreal_world_host_header_path.read_text(encoding="utf-8")
+    unreal_world_host_source = unreal_world_host_source_path.read_text(encoding="utf-8")
+    unreal_world_host_test = unreal_world_host_test_path.read_text(encoding="utf-8")
+    unreal_coreclr_host_header = unreal_coreclr_host_header_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_coreclr_host_source = unreal_coreclr_host_source_path.read_text(
+        encoding="utf-8"
+    )
+    with unreal_coreclr_runtime_config_path.open("r", encoding="utf-8") as handle:
+        unreal_coreclr_runtime_config = json.load(handle)
+    unreal_managed_bridge = unreal_managed_bridge_path.read_text(encoding="utf-8")
+    unreal_native_adapter = unreal_native_adapter_path.read_text(encoding="utf-8")
+    unreal_native_adapter_test = unreal_native_adapter_test_path.read_text(encoding="utf-8")
+    unreal_in_process_transport = unreal_in_process_transport_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_in_process_transport_test = unreal_in_process_transport_test_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_world_managed_entry = unreal_world_managed_entry_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_demo_project = unreal_demo_project_path.read_text(encoding="utf-8")
+    unreal_demo_source = unreal_demo_source_path.read_text(encoding="utf-8")
+    with unreal_demo_declaration_path.open("r", encoding="utf-8") as handle:
+        unreal_demo_declaration = json.load(handle)
+    with unreal_demo_surface_path.open("r", encoding="utf-8") as handle:
+        unreal_demo_surface = json.load(handle)
+    unreal_authoring_surface_header = unreal_authoring_surface_header_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_authoring_surface_source = unreal_authoring_surface_source_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_authoring_workbench_header = unreal_authoring_workbench_header_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_authoring_workbench_source = unreal_authoring_workbench_source_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_authoring_widget = unreal_authoring_widget_path.read_text(encoding="utf-8")
+    unreal_graph_presentation = unreal_graph_presentation_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_authoring_test = unreal_authoring_test_path.read_text(encoding="utf-8")
+    unreal_editor_module = unreal_editor_module_path.read_text(encoding="utf-8")
+    unreal_alternate_demo_source = unreal_alternate_demo_source_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_demo_helper = unreal_demo_helper_path.read_text(encoding="utf-8")
+    unreal_authoring_helper = unreal_authoring_helper_path.read_text(encoding="utf-8")
+    unreal_test_project = unreal_test_project_path.read_text(encoding="utf-8")
+    unreal_game_target = unreal_game_target_path.read_text(encoding="utf-8")
+    unreal_editor_target = unreal_editor_target_path.read_text(encoding="utf-8")
+    unreal_component_manifest = next(
+        item
+        for item in unreal_manifest["types"]
+        if item["path"]
+        == "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent"
+    )
     require(
         unreal_manifest["schemaVersion"]
         == "unifiedscript.unreal-reflection/v0.1"
         and unreal_manifest["modules"] == ["UEUnifiedScriptRuntime"]
-        and len(unreal_manifest["types"]) == 1
-        and unreal_manifest["types"][0]["path"]
-        == "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent"
-        and {item["name"] for item in unreal_manifest["types"][0]["properties"]}
-        == {"ActiveGeneration", "ScriptAssetPath", "bStartAutomatically"}
-        and {item["name"] for item in unreal_manifest["types"][0]["functions"]}
-        == {"Add", "RequestReload"}
+        and len(unreal_manifest["types"]) == 3
+        and unreal_component_manifest["headerPath"] == "UnifiedScriptComponent.h"
+        and all(
+            item["access"]["nativeAccess"] == "public"
+            for item in unreal_component_manifest["properties"]
+        )
+        and all(
+            item["traits"]["nativeAccess"] == "public"
+            for item in unreal_component_manifest["functions"]
+        )
+        and {item["name"] for item in unreal_component_manifest["properties"]}
+        == {
+            "ActiveGeneration",
+            "ActiveDeclarationAssetPath",
+            "ActiveScriptAssetPath",
+            "LastScriptError",
+            "ManagedState",
+            "MaterializedStateCount",
+            "ScriptAssemblyPath",
+            "ScriptAssetPath",
+            "ScriptTypeName",
+            "bScriptRunning",
+            "bStartAutomatically",
+            "bTickAutomatically",
+        }
+        and {item["name"] for item in unreal_component_manifest["functions"]}
+        == {
+            "Add",
+            "GetScriptStateInt32",
+            "RefreshScriptState",
+            "ReloadScript",
+            "RequestReload",
+            "SetScriptStateInt32",
+            "StartScript",
+            "StopScript",
+        }
+        and any(
+            item["path"]
+            == "/Script/UEUnifiedScriptRuntime.UnifiedScriptAsset"
+            for item in unreal_manifest["types"]
+        )
+        and any(
+            item["path"]
+            == "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldSubsystem"
+            for item in unreal_manifest["types"]
+        )
         and {module["Name"] for module in unreal_plugin["Modules"]}
         == {"UEUnifiedScriptRuntime", "UEUnifiedScriptEditor"}
         and "UUnifiedScriptComponent : public UActorComponent" in unreal_component
@@ -452,7 +1051,350 @@ def main() -> int:
         and 'args[0] == "ue-bindings"' in cli_source,
         "Unreal reflection fixture, plugin, exporter, bindings, or CLI is inconsistent",
     )
-    checks.append("UE 5.7 reflection export and managed binding vertical slice is connected")
+    checks.append("UE reflection export and managed binding vertical slice is connected")
+    require(
+        "FUnifiedScriptObjectRegistry" in unreal_registry_header
+        and "EUnifiedScriptObjectHandleError" in unreal_registry_header
+        and "FUObjectArray::FUObjectDeleteListener" in unreal_registry_source
+        and "TWeakObjectPtr<UObject>" in unreal_registry_source
+        and "IsInGameThread()" in unreal_registry_source
+        and "AllocateGeneration" in unreal_registry_source
+        and "std::atomic<uint32>" in unreal_registry_source
+        and "ObjectRegistry.Lifecycle" in unreal_registry_test
+        and "CollectGarbage" in unreal_registry_test
+        and "record struct UnrealObjectHandle(ulong Value)" in unreal_managed_bridge
+        and "slotIndex + 1UL" in unreal_managed_bridge
+        and "BuildSettingsVersion.Latest" in unreal_game_target
+        and "EngineIncludeOrderVersion.Latest" in unreal_game_target
+        and "BuildSettingsVersion.Latest" in unreal_editor_target
+        and "EngineIncludeOrderVersion.Latest" in unreal_editor_target,
+        "Unreal weak-handle lifecycle boundary or UE 5.7/5.8 target compatibility is missing",
+    )
+    checks.append("UE weak handles are generation-checked, world-bound, and deletion-aware")
+    require(
+        "FUnifiedScriptInvocationBridge" in unreal_invocation_header
+        and "EUnifiedScriptInvocationError" in unreal_invocation_header
+        and "ObjectHandleFailure" in unreal_invocation_header
+        and "Registry.ResolveObject" in unreal_invocation_source
+        and "FStructOnScope" in unreal_invocation_source
+        and "ProcessEvent" in unreal_invocation_source
+        and "CPF_BlueprintVisible" in unreal_invocation_source
+        and "CPF_BlueprintReadOnly" in unreal_invocation_source
+        and "InvocationBridge.Primitives" in unreal_invocation_test
+        and "ValueTypeMismatch" in unreal_invocation_test
+        and "StaleHandle" in unreal_invocation_test,
+        "Unreal primitive property/function invocation boundary is missing",
+    )
+    checks.append("UE primitive invocation resolves handles before property access or ProcessEvent")
+    require(
+        "NativeUnrealInvocationBridge" in unreal_native_adapter
+        and "IUnrealFastInvocationBridge" in unreal_native_adapter
+        and "IUnrealNativeInvocationTransport" in unreal_native_adapter
+        and "UnrealInvocationException" in unreal_native_adapter
+        and "StaleHandle = 6" in unreal_native_adapter
+        and "UnsupportedParameter = 13" in unreal_native_adapter
+        and "GeneratedComponent" in unreal_native_adapter_test
+        and "CheckedInGeneratedWrapperUsesManagedNativeAdapter"
+        in unreal_native_adapter_test
+        and "NativeFailurePreservesInvocationAndHandleCategories"
+        in unreal_native_adapter_test
+        and "<Compile Include=\"../../samples/Unreal/UEUnifiedScriptRuntime.bindings.cs\""
+        in unreal_test_project,
+        "Managed Unreal invocation adapter or generated-wrapper integration is missing",
+    )
+    checks.append("generated UE wrapper uses the managed native invocation adapter contract")
+    require(
+        "FUnifiedScriptNativeTransportV1" in unreal_native_transport_header
+        and "FUnifiedScriptNativeResultCallbackV1" in unreal_native_transport_header
+        and "UEUnifiedScript_GetNativeTransportV1" in unreal_native_transport_header
+        and "AbiVersion" in unreal_native_transport_header
+        and "TableSize" in unreal_native_transport_header
+        and "ValueSize" in unreal_native_transport_header
+        and "RetainContext" in unreal_native_transport_header
+        and "ReleaseContext" in unreal_native_transport_header
+        and "UEUnifiedScript_GetNativeTransportV1" in unreal_native_transport_source
+        and "NativeTransport.Abi" in unreal_native_transport_test
+        and "InProcessUnrealNativeInvocationTransport"
+        in unreal_in_process_transport
+        and "UnrealNativeResultCallbackV1" in unreal_in_process_transport
+        and "IDisposable" in unreal_in_process_transport
+        and "retainContext(_context)" in unreal_in_process_transport
+        and "_releaseContext(_context)" in unreal_in_process_transport
+        and "GeneratedWrapperCrossesVersionedFunctionTable"
+        in unreal_in_process_transport_test
+        and "ConstructorRejectsAbiLayoutMismatch"
+        in unreal_in_process_transport_test,
+        "Versioned Unreal native transport ABI or managed process adapter is missing",
+    )
+    checks.append("versioned UE native transport copies synchronous UTF-8 ABI results")
+    require(
+        "UnrealMemberId" in unreal_managed_bridge
+        and "14695981039346656037UL" in unreal_managed_bridge
+        and "0xB324FB910D9CED26UL" in unreal_bindings
+        and "FUnifiedScriptNativeTransportV2" in unreal_native_transport_header
+        and "UEUnifiedScript_GetNativeTransportV2" in unreal_native_transport_source
+        and "ReadPropertyById" in unreal_native_transport_header
+        and "WritePropertyById" in unreal_native_transport_header
+        and "InvokeById" in unreal_native_transport_header
+        and "ReadPropertyById" in unreal_invocation_source
+        and "WritePropertyById" in unreal_invocation_source
+        and "InvokeById" in unreal_invocation_source
+        and "GeneratedWrapperPrefersStableMemberIdsWhenAbiV2IsAvailable"
+        in unreal_native_adapter_test
+        and "AbiV2GeneratedWrapperUsesAppendedMemberIdFunctions"
+        in unreal_in_process_transport_test
+        and "Generated Add invocation bypasses ProcessEvent"
+        in unreal_native_transport_test
+        and "Generated managed wrapper selects ABI v2 native thunks"
+        in unreal_world_host_test
+        and "class UnrealNativeThunkGenerator" in unreal_native_thunk_generator
+        and "--native-out" in cli_source
+        and "TypedTarget->ManagedState" in unreal_generated_thunks
+        and "TypedTarget->Add(Argument0, Argument1)" in unreal_generated_thunks
+        and "ProcessEvent" not in unreal_generated_thunks
+        and "FindFProperty" not in unreal_generated_thunks
+        and "CheckedInNativeFixtureMatchesGeneratorOutput" in unreal_native_thunk_test,
+        "Generated Unreal Member IDs or ABI v2 native fast-thunk path is missing",
+    )
+    checks.append("generated UE members use automatic ABI v2 direct native thunks with ABI v1 fallback")
+    require(
+        "UUnifiedScriptWorldSubsystem final" in unreal_world_host_header
+        and "public UWorldSubsystem" in unreal_world_host_header
+        and "FUnifiedScriptNativeBridgeContext" in unreal_world_host_header
+        and "NativeContext->Detach()" in unreal_world_host_source
+        and "ObjectRegistry->InvalidateAll" in unreal_world_host_source
+        and "InvocationBridge.Reset()" in unreal_world_host_source
+        and "ObjectRegistry.Reset()" in unreal_world_host_source
+        and "WorldHost.Lifecycle" in unreal_world_host_test
+        and "Active handles are unique across world registries"
+        in unreal_world_host_test
+        and "Retained context rejects calls after world teardown"
+        in unreal_world_host_test
+        and "DisposeReleasesContextAndRejectsFurtherCalls"
+        in unreal_in_process_transport_test,
+        "World-scoped Unreal host or retained bridge-context lifecycle is missing",
+    )
+    checks.append("UE World hosts detach retained bridge contexts before native teardown")
+    require(
+        "FUnifiedScriptCoreClrHost" in unreal_coreclr_host_header
+        and "GetLoadAssemblyAndGetFunctionPointer" in unreal_coreclr_host_header
+        and "UNIFIEDSCRIPT_DOTNET_ROOT" in unreal_coreclr_host_source
+        and "Binaries/ThirdParty/DotNet/10.0" in unreal_coreclr_host_source
+        and "hostfxr_initialize_for_runtime_config" in unreal_coreclr_host_source
+        and "hostfxr_get_runtime_delegate" in unreal_coreclr_host_source
+        and "LoadAssemblyAndGetFunctionPointerDelegateType = 5"
+        in unreal_coreclr_host_source
+        and "CoreClrHost.Initialize()" in unreal_world_host_source
+        and "Process CoreCLR host is ready" in unreal_world_host_test
+        and "CoreCLR load-assembly delegate exists" in unreal_world_host_test
+        and unreal_coreclr_runtime_config["runtimeOptions"]["tfm"] == "net10.0"
+        and unreal_coreclr_runtime_config["runtimeOptions"]["framework"]["name"]
+        == "Microsoft.NETCore.App",
+        "Process-wide hostfxr/CoreCLR bootstrap contract is missing",
+    )
+    checks.append("UE loads CoreCLR through hostfxr before managed World entry points")
+    require(
+        "UnrealWorldManagedEntryPoint" in unreal_world_managed_entry
+        and "UnmanagedCallersOnly" in unreal_world_managed_entry
+        and "ConcurrentDictionary<ulong, WorldEntry>" in unreal_world_managed_entry
+        and "InProcessUnrealNativeInvocationTransport" in unreal_world_managed_entry
+        and "AssemblyLoadContext" in unreal_world_managed_entry
+        and "isCollectible: true" in unreal_world_managed_entry
+        and "Worlds.TryAdd" in unreal_world_managed_entry
+        and "Worlds.TryRemove" in unreal_world_managed_entry,
+        "Managed World entry point or collectible load context is missing",
+    )
+    unreal_project = (
+        ROOT / "src" / "UnifiedScript.Unreal" / "UnifiedScript.Unreal.csproj"
+    ).read_text(encoding="utf-8")
+    require(
+        "StageUnrealManagedHost" in unreal_project
+        and "Binaries/Managed" in unreal_project
+        and "UnifiedScript.Unreal.dll" in unreal_coreclr_host_source
+        and "CreateWorldEntryPoint" in unreal_coreclr_host_source
+        and "DestroyWorldEntryPoint" in unreal_coreclr_host_source
+        and "GetWorldCountEntryPoint" in unreal_coreclr_host_source
+        and "CreateManagedWorld" in unreal_world_host_source
+        and "DestroyManagedWorld" in unreal_world_host_source
+        and "Two collectible managed World entries were created"
+        in unreal_world_host_test
+        and "Second World teardown restores the managed entry count"
+        in unreal_world_host_test,
+        "Managed World staging or native create/destroy lifecycle is missing",
+    )
+    checks.append("UE creates and destroys one collectible managed entry per World")
+    require(
+        "IUnrealManagedScript" in unreal_world_managed_entry
+        and "OnStart" in unreal_world_managed_entry
+        and "OnTick" in unreal_world_managed_entry
+        and "OnStop" in unreal_world_managed_entry
+        and "ScriptAssemblyLoadContext" in unreal_world_managed_entry
+        and "ManagedScriptInstance" in unreal_world_managed_entry
+        and "ReloadScript" in unreal_world_managed_entry
+        and "UnifiedScriptComponent(context.Target, context.Bridge)"
+        in unreal_demo_source
+        and '_component.Add(20, 22)' in unreal_demo_source
+        and "StageUnrealManagedDemo" in unreal_demo_project
+        and "CreateScriptEntryPoint" in unreal_coreclr_host_source
+        and "ReloadScriptEntryPoint" in unreal_coreclr_host_source
+        and "ScriptAssemblyPath" in unreal_component
+        and "ScriptTypeName" in unreal_component
+        and "StartScript" in unreal_component
+        and "BeginPlay" in unreal_component
+        and "TickComponent" in unreal_component
+        and "BeginPlay starts the configured managed script"
+        in unreal_world_host_test
+        and "Queued reload advances the collectible generation"
+        in unreal_world_host_test
+        and "Managed OnStop executes before handle release"
+        in unreal_world_host_test
+        and "UnifiedScript demo completed:" in unreal_world_host_test
+        and "WorldHost.Lifecycle" in unreal_demo_helper,
+        "Component-driven managed lifecycle or collectible reload is missing",
+    )
+    checks.append("UE component drives managed Start, Tick, reload, and Stop on a live UObject")
+    require(
+        "UUnifiedScriptAsset : public UDataAsset" in unreal_script_asset_header
+        and "SchemaVersion = 1" in unreal_script_asset_header
+        and "ResolveConfiguration" in unreal_script_asset_source
+        and "unsupported schema version" in unreal_script_asset_source
+        and "ScriptAsset.Configuration" in unreal_script_asset_test
+        and "TObjectPtr<UUnifiedScriptAsset> ScriptAsset" in unreal_component
+        and "ResolveScriptConfiguration" in unreal_component
+        and "ActiveScriptAssetPath" in unreal_component
+        and "ManagedState" in unreal_component
+        and "FSoftObjectPath" in (
+            ROOT
+            / "HostProject"
+            / "Plugins"
+            / "UEUnifiedScript"
+            / "Source"
+            / "UEUnifiedScriptRuntime"
+            / "Private"
+            / "UnifiedScriptComponent.cpp"
+        ).read_text(encoding="utf-8")
+        and "ReadUtf8(assemblyPathData, assemblyPathLength)"
+        in unreal_world_managed_entry
+        and "nextAssemblyPath" in unreal_world_managed_entry
+        and "Invalid Script Asset reload is rejected transactionally"
+        in unreal_world_host_test
+        and "Queued reload transaction changes the managed entry type"
+        in unreal_world_host_test
+        and "AlternateDemoScript" in unreal_alternate_demo_source,
+        "Script Asset resolution or configuration-aware reload contract is missing",
+    )
+    checks.append("UE Script Assets resolve managed entry points with transactional type reload")
+    require(
+        "FInstancedPropertyBag ScriptState" in unreal_component
+        and "FixedLayout" in unreal_component
+        and "RefreshScriptState" in unreal_component
+        and "GetScriptStateInt32" in unreal_component
+        and "MaterializeJson" in unreal_declaration_materializer_header
+        and "MigrateToNewBagInstance" in unreal_declaration_materializer_source
+        and "ParseSemanticId" in unreal_declaration_materializer_source
+        and "UnifiedScript.Unreal.Declaration.Materialization"
+        in unreal_declaration_materializer_test
+        and "Stable semantic ID preserves override across rename"
+        in unreal_declaration_materializer_test
+        and unreal_demo_declaration["schemaVersion"]
+        == "unifiedscript.script-asset/v0.1"
+        and unreal_demo_declaration["assets"][0]["assetPath"] == "Unreal/Demo"
+        and unreal_demo_declaration["assets"][0]["states"][0]["name"]
+        == "InitialValue"
+        and "[ScriptAsset(\"Unreal/Demo\")]" in unreal_demo_source
+        and "GetScriptStateInt32" in unreal_demo_source
+        and "DeclarationState=37" in unreal_world_host_test,
+        "Declaration IR state materialization or live component integration is missing",
+    )
+    checks.append("UE component materializes Declaration IR state with stable-ID migration")
+    unreal_demo_surface_asset = unreal_demo_surface["assets"][0]
+    unreal_demo_surface_function = unreal_demo_surface_asset["functions"][0]
+    unreal_demo_edit_capabilities = [
+        edit
+        for function in unreal_demo_surface_asset["functions"]
+        for action in function["actions"]
+        for edit in action["editCapabilities"]
+    ]
+    require(
+        unreal_demo_surface["schemaVersion"]
+        == "unifiedscript.authoring-surface/v0.3"
+        and len(unreal_demo_surface["assets"]) == 1
+        and len(unreal_demo_surface_asset["states"]) == 1
+        and len(unreal_demo_surface_asset["functions"]) == 3
+        and sum(
+            len(function["actions"])
+            for function in unreal_demo_surface_asset["functions"]
+        ) == 38
+        and sum(
+            len(function["edges"])
+            for function in unreal_demo_surface_asset["functions"]
+        ) == 37
+        and unreal_demo_surface_asset["functions"][1]["name"] == "RewirePreview"
+        and unreal_demo_surface_asset["functions"][2]["name"] == "UEApiPreview"
+        and len({edit["targetNodeId"] for edit in unreal_demo_edit_capabilities}) == 8
+        and "FUnifiedScriptAuthoringSurfaceReader" in unreal_authoring_surface_header
+        and "ParseJson" in unreal_authoring_surface_source
+        and "BuildSemanticPatch" in unreal_authoring_surface_source
+        and "BuildDataEdgeReconnectionPatch" in unreal_authoring_surface_source
+        and "BuildDataEdgeDisconnectionPatch" in unreal_authoring_surface_source
+        and "BuildSharedDataEdgePatchPlan" in unreal_authoring_surface_source
+        and "BuildBasicNodeInsertionPatch" in unreal_authoring_surface_source
+        and "BuildMemberInvocationInsertionPatch" in unreal_authoring_surface_source
+        and "BuildStatementDeletionPatch" in unreal_authoring_surface_source
+        and "reconnectDataEdge" in unreal_authoring_surface_source
+        and "unifiedscript.patch/v0.21" in unreal_authoring_surface_source
+        and "SUnifiedScriptAuthoringSurface" in unreal_authoring_widget
+        and "HandleDataRewireRequested" in unreal_authoring_widget
+        and "SubmitSemanticPatch" in unreal_authoring_widget
+        and "BuildSemanticPatchPlanUrl" in unreal_authoring_widget
+        and "RebuildNodePalette" in unreal_authoring_widget
+        and "PersistCurrentLayout" in unreal_authoring_widget
+        and "FUnifiedScriptGraphPresentation::ShouldInlineAction"
+        in unreal_graph_presentation
+        and "Value = 100" in unreal_authoring_test
+        and "CountVisibleActions(Function)" in unreal_authoring_test
+        and "ResolveAuthoringSurfacePath" in unreal_authoring_widget
+        and "Copy Patch" in unreal_authoring_widget
+        and "RegisterNomadTabSpawner" in unreal_editor_module
+        and "LevelEditor.MainMenu.Tools" in unreal_editor_module
+        and "UnifiedScript.Unreal.Editor.AuthoringSurface" in unreal_authoring_test
+        and "Old compiler-owned wire remains until the server commits"
+        in unreal_authoring_test
+        and "AuthoringSurfacePath" in unreal_script_asset_header,
+        "Native Slate Authoring Surface or transactional data-edge patch is missing",
+    )
+    checks.append(
+        "UE Slate losslessly compacts Surface v0.3 into author-facing nodes and pins"
+    )
+    identity_reconciler_source = (
+        ROOT / "src" / "UnifiedScript.CSharp" / "CSharpIdentityReconciler.cs"
+    ).read_text(encoding="utf-8")
+    require(
+        "FUnifiedScriptAuthoringWorkbench" in unreal_authoring_workbench_header
+        and "unifiedscript.authoring-workspace/v0.2"
+        in unreal_authoring_workbench_source
+        and "/api/authoring/semantic-patch" in unreal_authoring_workbench_source
+        and "FHttpModule::Get().CreateRequest" in unreal_authoring_widget
+        and "Apply & Reload" in unreal_authoring_widget
+        and "ReloadMatchingComponents" in unreal_authoring_widget
+        and "Component->ReloadScript()" in unreal_authoring_widget
+        and "AuthoringServerUrl" in unreal_script_asset_header
+        and "AuthoringArtifactOutputs" in debug_server_source
+        and "persistedSources" in debug_server_source
+        and "ScriptAssetJson.Serialize(scriptAssets)" in debug_server_source
+        and "AuthoringSurfaceJson.Serialize(surface)" in debug_server_source
+        and "emitter.Emit(snapshot.Request)" in debug_server_source
+        and 'case "--source"' in cli_source
+        and 'case "--managed-out"' in cli_source
+        and "isInitialBaseline" in identity_reconciler_source
+        and "run-unreal-authoring.ps1" in (
+            ROOT / "README.md"
+        ).read_text(encoding="utf-8")
+        and "--surface-out" in unreal_authoring_helper
+        and "--managed-out" in unreal_authoring_helper,
+        "Transactional Slate Workbench apply or managed artifact publication is missing",
+    )
+    checks.append("UE Slate applies patches transactionally and reloads matching components")
     require(
         (ROOT / "samples" / "MultiFile" / "GameplayApi.cs").is_file()
         and (ROOT / "samples" / "MultiFile" / "DamageScript.cs").is_file()
@@ -907,10 +1849,10 @@ def main() -> int:
     ).hexdigest()
     loop_source_digest = hashlib.sha256(loop_source.encode("utf-8")).hexdigest()
     require(
-        patch_document["schemaVersion"] == "unifiedscript.patch/v0.19"
-        and operator_patch["schemaVersion"] == "unifiedscript.patch/v0.19"
-        and insert_patch["schemaVersion"] == "unifiedscript.patch/v0.19"
-        and temporary_patch["schemaVersion"] == "unifiedscript.patch/v0.19"
+        patch_document["schemaVersion"] == "unifiedscript.patch/v0.21"
+        and operator_patch["schemaVersion"] == "unifiedscript.patch/v0.21"
+        and insert_patch["schemaVersion"] == "unifiedscript.patch/v0.21"
+        and temporary_patch["schemaVersion"] == "unifiedscript.patch/v0.21"
         and operator_patch["sourceCompilationId"]
         == patch_document["sourceCompilationId"]
         and insert_patch["sourceCompilationId"]
@@ -958,7 +1900,7 @@ def main() -> int:
         "Temporary-introduction sample does not contain the expected typed payload",
     )
     require(
-        reconnect_patch["schemaVersion"] == "unifiedscript.patch/v0.19"
+        reconnect_patch["schemaVersion"] == "unifiedscript.patch/v0.21"
         and reconnect_identity["sourcePath"]
         == "samples/Patching/SharedValueRules.cs"
         and reconnect_identity["sourceDigest"]
@@ -983,7 +1925,7 @@ def main() -> int:
     assignment_statement = assignment_operation["newStatement"]
     assignment_value = assignment_statement["value"]
     require(
-        assignment_patch["schemaVersion"] == "unifiedscript.patch/v0.19"
+        assignment_patch["schemaVersion"] == "unifiedscript.patch/v0.21"
         and assignment_identity["sourcePath"]
         == "samples/Patching/AssignmentRules.cs"
         and assignment_identity["sourceDigest"]
@@ -1014,7 +1956,7 @@ def main() -> int:
     introduction_step = plan_steps[0]
     reconnect_steps = plan_steps[1:]
     require(
-        plan_document["schemaVersion"] == "unifiedscript.patch-plan/v0.20"
+        plan_document["schemaVersion"] == "unifiedscript.patch-plan/v0.21"
         and plan_identity["sourcePath"]
         == "samples/Patching/SharedExpressionPlan.cs"
         and plan_identity["sourceDigest"] == f"sha256:{plan_source_digest}"
@@ -1049,7 +1991,7 @@ def main() -> int:
     composed_identity_ids = {entry["id"] for entry in composed_identity["entries"]}
     composed_insert, composed_reconnect, composed_operator, composed_delete = composed_steps
     require(
-        composed_document["schemaVersion"] == "unifiedscript.patch-plan/v0.20"
+        composed_document["schemaVersion"] == "unifiedscript.patch-plan/v0.21"
         and composed_identity["sourcePath"] == "samples/Patching/ComposedPlan.cs"
         and composed_identity["sourceDigest"] == f"sha256:{composed_source_digest}"
         and [step["step"] for step in composed_steps]
@@ -1079,7 +2021,7 @@ def main() -> int:
     guard_comparison = guard_condition["left"]
     guard_negation = guard_condition["right"]
     require(
-        guard_document["schemaVersion"] == "unifiedscript.patch/v0.19"
+        guard_document["schemaVersion"] == "unifiedscript.patch/v0.21"
         and guard_identity["sourcePath"] == "samples/Patching/GuardRules.cs"
         and guard_identity["sourceDigest"] == f"sha256:{guard_source_digest}"
         and guard_operation["operation"] == "insertStatement"
@@ -1103,7 +2045,7 @@ def main() -> int:
     guard_plan_steps = guard_plan["steps"]
     guard_plan_source, *guard_branch_steps = guard_plan_steps
     require(
-        guard_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.20"
+        guard_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.21"
         and guard_plan["sourceCompilationId"] == guard_document["sourceCompilationId"]
         and guard_plan["semanticConfigurationId"]
         == guard_document["semanticConfigurationId"]
@@ -1124,7 +2066,7 @@ def main() -> int:
     )
     guard_return_source, guard_return_step, guard_fallback_step = guard_return_plan["steps"]
     require(
-        guard_return_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.20"
+        guard_return_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.21"
         and guard_return_plan["sourceCompilationId"] == guard_document["sourceCompilationId"]
         and guard_return_plan["semanticConfigurationId"]
         == guard_document["semanticConfigurationId"]
@@ -1146,7 +2088,7 @@ def main() -> int:
     nested_steps = nested_plan["steps"]
     nested_outer, nested_inner, nested_then, nested_else, nested_outer_else = nested_steps
     require(
-        nested_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.20"
+        nested_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.21"
         and nested_identity["sourcePath"]
         == "samples/Patching/NestedDecisionRules.cs"
         and nested_identity["sourceDigest"] == f"sha256:{nested_source_digest}"
@@ -1190,7 +2132,7 @@ def main() -> int:
         loop_plan_steps
     )
     require(
-        loop_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.20"
+        loop_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.21"
         and loop_plan_identity["sourcePath"]
         == "samples/Patching/LoopBuildRules.cs"
         and loop_plan_identity["sourceDigest"]
@@ -1230,7 +2172,7 @@ def main() -> int:
     }
     do_producer, do_condition_edit, do_assignment = do_while_build_plan["steps"]
     require(
-        do_while_build_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.20"
+        do_while_build_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.21"
         and do_while_build_identity["sourcePath"]
         == "samples/Patching/DoWhileBuildRules.cs"
         and do_while_build_identity["sourceDigest"]
@@ -1266,7 +2208,7 @@ def main() -> int:
     produced_iteration_reference = for_each_assignment["newStatement"]["value"]
     require(
         for_each_build_plan["schemaVersion"]
-        == "unifiedscript.patch-plan/v0.20"
+        == "unifiedscript.patch-plan/v0.21"
         and for_each_build_identity["sourcePath"]
         == "samples/Patching/ForEachBuildRules.cs"
         and for_each_build_identity["sourceDigest"]
@@ -1320,7 +2262,7 @@ def main() -> int:
     enumerable_iteration_reference = enumerable_assignment["newStatement"]["value"]
     require(
         enumerable_for_each_build_plan["schemaVersion"]
-        == "unifiedscript.patch-plan/v0.20"
+        == "unifiedscript.patch-plan/v0.21"
         and enumerable_for_each_build_identity["sourcePath"]
         == "samples/Patching/EnumerableForEachBuildRules.cs"
         and enumerable_for_each_build_identity["sourceDigest"]
@@ -1381,7 +2323,7 @@ def main() -> int:
         for_assignment["newStatement"]["value"]["right"],
     ]
     require(
-        for_build_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.20"
+        for_build_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.21"
         and for_build_identity["sourcePath"]
         == "samples/Patching/ForBuildRules.cs"
         and for_build_identity["sourceDigest"]
@@ -1436,7 +2378,7 @@ def main() -> int:
         for_assignment_edit,
     ) = for_edit_plan["steps"]
     require(
-        for_edit_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.20"
+        for_edit_plan["schemaVersion"] == "unifiedscript.patch-plan/v0.21"
         and for_edit_identity["sourcePath"] == "samples/Patching/EditForRules.cs"
         and for_edit_identity["sourceDigest"] == f"sha256:{for_edit_source_digest}"
         and for_edit_identity["generation"] == 1
@@ -1482,7 +2424,7 @@ def main() -> int:
     condition_payload = condition_edit["newCondition"]
     require(
         expression_edit_plan["schemaVersion"]
-        == "unifiedscript.patch-plan/v0.20"
+        == "unifiedscript.patch-plan/v0.21"
         and expression_edit_identity["sourcePath"]
         == "samples/Patching/EditLoopRules.cs"
         and expression_edit_identity["sourceDigest"]
@@ -1520,7 +2462,7 @@ def main() -> int:
     initializer_edit, if_edit, return_edit = general_expression_plan["steps"]
     require(
         general_expression_plan["schemaVersion"]
-        == "unifiedscript.patch-plan/v0.20"
+        == "unifiedscript.patch-plan/v0.21"
         and general_expression_identity["sourcePath"]
         == "samples/Patching/EditDecisionValues.cs"
         and general_expression_identity["sourceDigest"]
@@ -1563,7 +2505,7 @@ def main() -> int:
     produced_references = [guard_reference, branch_reference, fallback_reference]
     require(
         produced_value_plan["schemaVersion"]
-        == "unifiedscript.patch-plan/v0.20"
+        == "unifiedscript.patch-plan/v0.21"
         and produced_value_identity["sourcePath"]
         == "samples/Patching/ConnectGeneratedValues.cs"
         and produced_value_identity["sourceDigest"]
@@ -1610,7 +2552,7 @@ def main() -> int:
     nested_input_producer, nested_input_edit = nested_input_plan["steps"]
     require(
         nested_input_plan["schemaVersion"]
-        == "unifiedscript.patch-plan/v0.20"
+        == "unifiedscript.patch-plan/v0.21"
         and nested_input_identity["sourcePath"]
         == "samples/Patching/EditNestedInput.cs"
         and nested_input_identity["sourceDigest"]
@@ -1649,7 +2591,7 @@ def main() -> int:
     generated_handles = [generated_right, generated_nested_right]
     require(
         generated_expression_plan["schemaVersion"]
-        == "unifiedscript.patch-plan/v0.20"
+        == "unifiedscript.patch-plan/v0.21"
         and generated_expression_identity["sourcePath"]
         == "samples/Patching/EditGeneratedExpression.cs"
         and generated_expression_identity["sourceDigest"]
@@ -1695,7 +2637,7 @@ def main() -> int:
     conditional_payload = conditional_root["newValue"]
     require(
         conditional_expression_plan["schemaVersion"]
-        == "unifiedscript.patch-plan/v0.20"
+        == "unifiedscript.patch-plan/v0.21"
         and conditional_expression_identity["sourcePath"]
         == "samples/Patching/EditConditionalExpression.cs"
         and conditional_expression_identity["sourceDigest"]

@@ -81,6 +81,7 @@ public static class UnrealReflectionJson
             string.IsNullOrWhiteSpace(type.NativeName) ||
             !modules.Contains(type.Module, StringComparer.Ordinal) ||
             !IsReflectedPath(type.Path, type.Module) ||
+            !IsValidHeaderPath(type.HeaderPath) ||
             type.Traits is null || type.Properties is null || type.Functions is null ||
             !typePaths.Add(type.Path))
         {
@@ -100,6 +101,7 @@ public static class UnrealReflectionJson
                 !IsIdentifier(property.Name) ||
                 !IsMemberPath(property.Path, type.Path, property.Name) ||
                 property.Access is null ||
+                !Enum.IsDefined(property.Access.NativeAccess) ||
                 !property.Access.Readable && !property.Access.Writable ||
                 !propertyPaths.Add(property.Path) || !propertyNames.Add(property.Name))
             {
@@ -116,6 +118,7 @@ public static class UnrealReflectionJson
                 !IsIdentifier(function.Name) ||
                 !IsMemberPath(function.Path, type.Path, function.Name) ||
                 function.Parameters is null || function.Traits is null ||
+                !Enum.IsDefined(function.Traits.NativeAccess) ||
                 !function.Traits.Callable || !functionPaths.Add(function.Path))
             {
                 throw new JsonException($"Unreal type '{type.Path}' has an invalid function.");
@@ -189,6 +192,7 @@ public static class UnrealReflectionJson
     private static UnrealReflectedType NormalizeType(UnrealReflectedType type) => type with
     {
         NativeName = type.NativeName.Trim(),
+        HeaderPath = type.HeaderPath?.Trim().Replace('\\', '/'),
         Properties = type.Properties
             .OrderBy(static property => property.Path, StringComparer.Ordinal)
             .ToArray(),
@@ -217,6 +221,20 @@ public static class UnrealReflectionJson
 
     private static bool IsMemberPath(string path, string ownerPath, string memberName) =>
         string.Equals(path, $"{ownerPath}:{memberName}", StringComparison.Ordinal);
+
+    private static bool IsValidHeaderPath(string? value)
+    {
+        if (value is null)
+        {
+            return true;
+        }
+
+        string path = value.Trim().Replace('\\', '/');
+        return path.Length > 2 &&
+            path.EndsWith(".h", StringComparison.OrdinalIgnoreCase) &&
+            !Path.IsPathRooted(path) &&
+            !path.Split('/').Any(static segment => segment is "" or "." or "..");
+    }
 
     private static JsonSerializerOptions CreateOptions(bool writeIndented)
     {

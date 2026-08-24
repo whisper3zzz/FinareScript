@@ -2,9 +2,9 @@
 
 ## Purpose
 
-`unifiedscript.patch-plan/v0.20` represents one visual-editor gesture as an
+`unifiedscript.patch-plan/v0.21` represents one visual-editor gesture as an
 ordered, atomic sequence of the same bounded semantic operations supported by
-`unifiedscript.patch/v0.19`. It exists because a useful graph edit often needs
+`unifiedscript.patch/v0.21`. It exists because a useful graph edit often needs
 IDs created by an earlier edit or changes several overlapping source regions.
 Submitting those stages as unrelated filesystem transactions would expose
 partial programs and force the editor to predict random persistent IDs.
@@ -18,7 +18,7 @@ identity sidecar are eligible for a CLI filesystem transaction.
 
 ```json
 {
-  "schemaVersion": "unifiedscript.patch-plan/v0.20",
+  "schemaVersion": "unifiedscript.patch-plan/v0.21",
   "sourceCompilationId": "us_...",
   "semanticConfigurationId": "us_...",
   "steps": []
@@ -98,7 +98,7 @@ sidecar, finds exactly one produced declaration, and records its actual random
 
 ### Produced locals inside expression trees
 
-Plan v0.20 also exposes the same local handle as a transaction-only expression
+Plan v0.21 also exposes the same local handle as a transaction-only expression
 leaf. Unlike `reconnectValue`, which replaces a whole stable consumer with one
 identifier, `producedLocalReference` can participate at any depth inside a
 later literal/local/unary/binary/cast/conditional/conditional-member-access expression:
@@ -173,7 +173,7 @@ authored tree, and selects one final `inputPort`:
 The consumer repeats the producer's original structural `targetNodeId`. The
 JSON validator resolves the path against the earlier authored tree and checks
 both exact types. The coordinator then follows the same path from the real HIR
-root captured after `sourceStepId` and creates an ordinary patch v0.19
+root captured after `sourceStepId` and creates an ordinary patch v0.21
 `replaceExpressionInput` operation with the real current parent and child IDs.
 
 The consumer's `newInput` becomes a new published root, so handles can chain
@@ -346,7 +346,7 @@ and current condition root, then executes an ordinary
 condition continue target, and body-header back edge are revalidated after the
 edit. See [DO_WHILE_LOOPS.md](DO_WHILE_LOOPS.md).
 
-Plan v0.20 applies the same rule to `replaceProducedIfCondition`,
+Plan v0.21 applies the same rule to `replaceProducedIfCondition`,
 `replaceProducedLocalInitializer`, and `replaceProducedReturnValue`. Their
 source step must be an earlier compatible root, branch, or loop-body insertion:
 an `if`, a `localLiteralDeclaration`, or a value-bearing `return`, respectively.
@@ -365,7 +365,7 @@ remains valid.
 Direct `replaceAssignmentValue`, `replaceWhileCondition`,
 `replaceDoWhileCondition`, the four existing-for
 header edits, `replaceIfCondition`, `replaceLocalInitializer`, and `replaceReturnValue` steps
-use exactly the standalone patch v0.19 payload plus `stepId`. They are validated
+use exactly the standalone patch v0.21 payload plus `stepId`. They are validated
 against the original plan baseline and are intentionally single-target, because
 their explicit old endpoints describe the original rather than an intermediate
 stage. See
@@ -626,7 +626,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
 
 ## Deliberate limits
 
-Plan v0.20 composes all operations currently defined by patch v0.19 and resolves
+Plan v0.21 composes all operations currently defined by patch v0.21 and resolves
 recursive symbolic `then`/`else` and loop-body handles for bounded local,
 assignment, nested-if/loop, loop-transfer, and typed-return population. It
 also resolves repeatable expression-endpoint edits on produced while, do, for,

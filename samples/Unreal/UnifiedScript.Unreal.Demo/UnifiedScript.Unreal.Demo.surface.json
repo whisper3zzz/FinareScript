@@ -1,0 +1,2408 @@
+{
+  "schemaVersion": "unifiedscript.authoring-surface/v0.3",
+  "sourceCompilationId": "us_723dfd6f81cb2cbf6fb1e7be7e357129",
+  "semanticConfigurationId": "us_e1bfef432a3a1f3cc43ef9e36bf2923a",
+  "assets": [
+    {
+      "id": "us_cefc9ee5805e3ed5610154145ea986dd",
+      "qualifiedName": "UnifiedScript.Unreal.Demo.DemoScript",
+      "assetPath": "Unreal/Demo",
+      "span": {
+        "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+        "start": {
+          "line": 7,
+          "column": 1
+        },
+        "end": {
+          "line": 72,
+          "column": 2
+        }
+      },
+      "states": [
+        {
+          "id": "us_d4463d57397c77264a0e282ca6c29432",
+          "name": "InitialValue",
+          "typeDisplayName": "int",
+          "typeMetadataName": "System.Int32",
+          "typeKind": "integer",
+          "defaultValue": 10,
+          "span": {
+            "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+            "start": {
+              "line": 12,
+              "column": 5
+            },
+            "end": {
+              "line": 13,
+              "column": 48
+            }
+          },
+          "exposure": {
+            "instanceEditable": true,
+            "saveGame": true,
+            "replicated": false,
+            "category": "Demo"
+          }
+        }
+      ],
+      "functions": [
+        {
+          "id": "us_53ede5680c125188e1ec147de92fa39d",
+          "name": "ResolveInitialValue",
+          "qualifiedName": "UnifiedScript.Unreal.Demo.DemoScript.ResolveInitialValue(System.Int32)",
+          "returnTypeMetadataName": "System.Int32",
+          "isStatic": false,
+          "parameters": [
+            {
+              "id": "us_a5aed8c61f77262017c39bd6ea90482b",
+              "name": "bonus",
+              "typeMetadataName": "System.Int32",
+              "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+              "typeDisplayName": "int"
+            }
+          ],
+          "rootRegionId": "us_e4736ed99bf08698bfb98620e748a1f6",
+          "regions": [
+            {
+              "id": "us_e4736ed99bf08698bfb98620e748a1f6",
+              "kind": "function",
+              "sourceNodeId": "us_53ede5680c125188e1ec147de92fa39d",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 15,
+                  "column": 5
+                },
+                "end": {
+                  "line": 25,
+                  "column": 6
+                }
+              },
+              "isImplicit": false,
+              "directStatementIds": [
+                "us_d86fe26b7253584964d16f71f376ffa6"
+              ],
+              "directActionIds": [
+                "us_d86fe26b7253584964d16f71f376ffa6"
+              ],
+              "childRegionIds": [
+                "us_4941fd018d2802c1341801499257217f"
+              ]
+            },
+            {
+              "id": "us_4941fd018d2802c1341801499257217f",
+              "kind": "block",
+              "parentRegionId": "us_e4736ed99bf08698bfb98620e748a1f6",
+              "sourceNodeId": "us_3fbc06fb8ab706a4502dff66d4879241",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 17,
+                  "column": 5
+                },
+                "end": {
+                  "line": 25,
+                  "column": 6
+                }
+              },
+              "isImplicit": false,
+              "directStatementIds": [
+                "us_49117d92bb5fea31c2a87bf5b9c5518f",
+                "us_a2238bb88e1f5c7d89fb6bd3879219f8",
+                "us_f344391e93f4716d0a0fef5a67c4c8c3"
+              ],
+              "directActionIds": [
+                "us_49117d92bb5fea31c2a87bf5b9c5518f",
+                "us_118f1f7b0f6b1aca599abedef070fd40",
+                "us_49bc534c0cc31b441e6a666257b5e957",
+                "us_311203641b2b2ed8dca16b24859c2a48",
+                "us_f344391e93f4716d0a0fef5a67c4c8c3",
+                "us_eca92e3d0e15c00d846ec323191f4e4e"
+              ],
+              "childRegionIds": [
+                "us_dd28af945717146e34a1135ee49d8bf3"
+              ]
+            },
+            {
+              "id": "us_cec4fa0dde2a8cb6687229796b4def66",
+              "kind": "else",
+              "parentRegionId": "us_dd28af945717146e34a1135ee49d8bf3",
+              "sourceNodeId": "us_a2238bb88e1f5c7d89fb6bd3879219f8",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 19,
+                  "column": 9
+                },
+                "end": {
+                  "line": 22,
+                  "column": 10
+                }
+              },
+              "isImplicit": true,
+              "directStatementIds": [],
+              "directActionIds": [],
+              "childRegionIds": []
+            },
+            {
+              "id": "us_dd28af945717146e34a1135ee49d8bf3",
+              "kind": "if",
+              "parentRegionId": "us_4941fd018d2802c1341801499257217f",
+              "sourceNodeId": "us_a2238bb88e1f5c7d89fb6bd3879219f8",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 19,
+                  "column": 9
+                },
+                "end": {
+                  "line": 22,
+                  "column": 10
+                }
+              },
+              "isImplicit": false,
+              "anchorActionId": "us_a2238bb88e1f5c7d89fb6bd3879219f8",
+              "directStatementIds": [
+                "us_a2238bb88e1f5c7d89fb6bd3879219f8"
+              ],
+              "directActionIds": [
+                "us_a2238bb88e1f5c7d89fb6bd3879219f8",
+                "us_44041565a30f4985f090e7e4e543a771",
+                "us_573bb698923505a9a6295e654f04465c",
+                "us_7b90acea2d894a4982ad3c85a368c85c"
+              ],
+              "childRegionIds": [
+                "us_975584a1df139a9b95184058665b6a05",
+                "us_cec4fa0dde2a8cb6687229796b4def66"
+              ]
+            },
+            {
+              "id": "us_975584a1df139a9b95184058665b6a05",
+              "kind": "then",
+              "parentRegionId": "us_dd28af945717146e34a1135ee49d8bf3",
+              "sourceNodeId": "us_c2de672348e77c9b9ac44c682f55fad6",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 20,
+                  "column": 9
+                },
+                "end": {
+                  "line": 22,
+                  "column": 10
+                }
+              },
+              "isImplicit": false,
+              "directStatementIds": [
+                "us_0668580c9b8299500fe6bd062c3058ee"
+              ],
+              "directActionIds": [
+                "us_0668580c9b8299500fe6bd062c3058ee",
+                "us_435992f283b0816749571b9a4f760892",
+                "us_9c5d2dc0d2af48596299fdd155cd4e4d"
+              ],
+              "childRegionIds": []
+            }
+          ],
+          "actions": [
+            {
+              "id": "us_d86fe26b7253584964d16f71f376ffa6",
+              "graphKind": "entry",
+              "category": "entry",
+              "title": "ResolveInitialValue",
+              "summary": "int ResolveInitialValue(int bonus)",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 15,
+                  "column": 5
+                },
+                "end": {
+                  "line": 25,
+                  "column": 6
+                }
+              },
+              "regionId": "us_e4736ed99bf08698bfb98620e748a1f6",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "then",
+                  "direction": "output",
+                  "kind": "control"
+                }
+              ]
+            },
+            {
+              "id": "us_49117d92bb5fea31c2a87bf5b9c5518f",
+              "graphKind": "variable",
+              "category": "state",
+              "title": "Declare result",
+              "summary": "int result = (InitialValue \u002B bonus)",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 18,
+                  "column": 9
+                },
+                "end": {
+                  "line": 18,
+                  "column": 43
+                }
+              },
+              "regionId": "us_4941fd018d2802c1341801499257217f",
+              "debugTargetId": "us_49117d92bb5fea31c2a87bf5b9c5518f",
+              "declarationReferenceIds": [
+                "us_d4463d57397c77264a0e282ca6c29432"
+              ],
+              "editCapabilities": [
+                {
+                  "id": "us_df0bbcdb75ae99eae1391bb8ad654107",
+                  "kind": "operator",
+                  "label": "Operator \u00B7 line 18",
+                  "operation": "changeOperator",
+                  "targetNodeId": "us_118f1f7b0f6b1aca599abedef070fd40",
+                  "currentValue": "\u002B",
+                  "expectedOperator": "\u002B",
+                  "expectedResultTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "expectedOperandTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "expectedRightOperandTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "options": [
+                    "\u002B",
+                    "-",
+                    "*",
+                    "/",
+                    "%"
+                  ]
+                }
+              ],
+              "ports": [
+                {
+                  "name": "in",
+                  "direction": "input",
+                  "kind": "control"
+                },
+                {
+                  "name": "value",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                },
+                {
+                  "name": "then",
+                  "direction": "output",
+                  "kind": "control"
+                }
+              ]
+            },
+            {
+              "id": "us_118f1f7b0f6b1aca599abedef070fd40",
+              "graphKind": "binary",
+              "category": "value",
+              "title": "\u002B",
+              "summary": "\u002B \u00B7 InitialValue, bonus",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 18,
+                  "column": 22
+                },
+                "end": {
+                  "line": 18,
+                  "column": 42
+                }
+              },
+              "regionId": "us_4941fd018d2802c1341801499257217f",
+              "declarationReferenceIds": [
+                "us_d4463d57397c77264a0e282ca6c29432"
+              ],
+              "editCapabilities": [
+                {
+                  "id": "us_fb0f71c6c955541114c0b7627e3bc205",
+                  "kind": "operator",
+                  "label": "Operator \u00B7 line 18",
+                  "operation": "changeOperator",
+                  "targetNodeId": "us_118f1f7b0f6b1aca599abedef070fd40",
+                  "currentValue": "\u002B",
+                  "expectedOperator": "\u002B",
+                  "expectedResultTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "expectedOperandTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "expectedRightOperandTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "options": [
+                    "\u002B",
+                    "-",
+                    "*",
+                    "/",
+                    "%"
+                  ]
+                }
+              ],
+              "ports": [
+                {
+                  "name": "left",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                },
+                {
+                  "name": "right",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                },
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ]
+            },
+            {
+              "id": "us_49bc534c0cc31b441e6a666257b5e957",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get InitialValue",
+              "summary": "InitialValue",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 18,
+                  "column": 22
+                },
+                "end": {
+                  "line": 18,
+                  "column": 34
+                }
+              },
+              "regionId": "us_4941fd018d2802c1341801499257217f",
+              "declarationReferenceIds": [
+                "us_d4463d57397c77264a0e282ca6c29432"
+              ],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ]
+            },
+            {
+              "id": "us_311203641b2b2ed8dca16b24859c2a48",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get bonus",
+              "summary": "bonus",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 18,
+                  "column": 37
+                },
+                "end": {
+                  "line": 18,
+                  "column": 42
+                }
+              },
+              "regionId": "us_4941fd018d2802c1341801499257217f",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ]
+            },
+            {
+              "id": "us_a2238bb88e1f5c7d89fb6bd3879219f8",
+              "graphKind": "branch",
+              "category": "flow",
+              "title": "Branch",
+              "summary": "if ((result \u003E 100))",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 19,
+                  "column": 9
+                },
+                "end": {
+                  "line": 22,
+                  "column": 10
+                }
+              },
+              "regionId": "us_dd28af945717146e34a1135ee49d8bf3",
+              "debugTargetId": "us_a2238bb88e1f5c7d89fb6bd3879219f8",
+              "declarationReferenceIds": [],
+              "editCapabilities": [
+                {
+                  "id": "us_44ba3979131a9217f54f7215a1dddc8f",
+                  "kind": "literal",
+                  "label": "Literal \u00B7 line 19",
+                  "operation": "replaceLiteral",
+                  "targetNodeId": "us_7b90acea2d894a4982ad3c85a368c85c",
+                  "currentValue": "100",
+                  "expectedValueText": "100",
+                  "options": []
+                },
+                {
+                  "id": "us_e53832c415ff23f30f3f396742e18633",
+                  "kind": "operator",
+                  "label": "Operator \u00B7 line 19",
+                  "operation": "changeOperator",
+                  "targetNodeId": "us_573bb698923505a9a6295e654f04465c",
+                  "currentValue": "\u003E",
+                  "expectedOperator": "\u003E",
+                  "expectedResultTypeId": "us_b5f84bcf933b6593d45e9e031353bfef",
+                  "expectedOperandTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "expectedRightOperandTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "options": [
+                    "\u003C",
+                    "\u003C=",
+                    "\u003E",
+                    "\u003E="
+                  ]
+                }
+              ],
+              "ports": [
+                {
+                  "name": "in",
+                  "direction": "input",
+                  "kind": "control"
+                },
+                {
+                  "name": "condition",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_b5f84bcf933b6593d45e9e031353bfef",
+                  "typeDisplayName": "bool"
+                },
+                {
+                  "name": "else",
+                  "direction": "output",
+                  "kind": "control"
+                },
+                {
+                  "name": "then",
+                  "direction": "output",
+                  "kind": "control"
+                }
+              ]
+            },
+            {
+              "id": "us_44041565a30f4985f090e7e4e543a771",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get result",
+              "summary": "result",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 19,
+                  "column": 13
+                },
+                "end": {
+                  "line": 19,
+                  "column": 19
+                }
+              },
+              "regionId": "us_dd28af945717146e34a1135ee49d8bf3",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ]
+            },
+            {
+              "id": "us_573bb698923505a9a6295e654f04465c",
+              "graphKind": "binary",
+              "category": "value",
+              "title": "\u003E",
+              "summary": "\u003E \u00B7 result, 100",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 19,
+                  "column": 13
+                },
+                "end": {
+                  "line": 19,
+                  "column": 25
+                }
+              },
+              "regionId": "us_dd28af945717146e34a1135ee49d8bf3",
+              "declarationReferenceIds": [],
+              "editCapabilities": [
+                {
+                  "id": "us_676bc8141c921c1664ac6091b8b365cb",
+                  "kind": "literal",
+                  "label": "Literal \u00B7 line 19",
+                  "operation": "replaceLiteral",
+                  "targetNodeId": "us_7b90acea2d894a4982ad3c85a368c85c",
+                  "currentValue": "100",
+                  "expectedValueText": "100",
+                  "options": []
+                },
+                {
+                  "id": "us_9ef24fe2db38d89e79688d549ba3c40a",
+                  "kind": "operator",
+                  "label": "Operator \u00B7 line 19",
+                  "operation": "changeOperator",
+                  "targetNodeId": "us_573bb698923505a9a6295e654f04465c",
+                  "currentValue": "\u003E",
+                  "expectedOperator": "\u003E",
+                  "expectedResultTypeId": "us_b5f84bcf933b6593d45e9e031353bfef",
+                  "expectedOperandTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "expectedRightOperandTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "options": [
+                    "\u003C",
+                    "\u003C=",
+                    "\u003E",
+                    "\u003E="
+                  ]
+                }
+              ],
+              "ports": [
+                {
+                  "name": "left",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                },
+                {
+                  "name": "right",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                },
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_b5f84bcf933b6593d45e9e031353bfef",
+                  "typeDisplayName": "bool"
+                }
+              ]
+            },
+            {
+              "id": "us_7b90acea2d894a4982ad3c85a368c85c",
+              "graphKind": "literal",
+              "category": "value",
+              "title": "100",
+              "summary": "100",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 19,
+                  "column": 22
+                },
+                "end": {
+                  "line": 19,
+                  "column": 25
+                }
+              },
+              "regionId": "us_dd28af945717146e34a1135ee49d8bf3",
+              "declarationReferenceIds": [],
+              "editCapabilities": [
+                {
+                  "id": "us_99a6c6d72478e820fb36969015651f84",
+                  "kind": "literal",
+                  "label": "Literal \u00B7 line 19",
+                  "operation": "replaceLiteral",
+                  "targetNodeId": "us_7b90acea2d894a4982ad3c85a368c85c",
+                  "currentValue": "100",
+                  "expectedValueText": "100",
+                  "options": []
+                }
+              ],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ]
+            },
+            {
+              "id": "us_0668580c9b8299500fe6bd062c3058ee",
+              "graphKind": "assignment",
+              "category": "state",
+              "title": "Set result",
+              "summary": "result = 100",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 21,
+                  "column": 13
+                },
+                "end": {
+                  "line": 21,
+                  "column": 25
+                }
+              },
+              "regionId": "us_975584a1df139a9b95184058665b6a05",
+              "debugTargetId": "us_1d3855d9d157dc41931de0c4f5823d43",
+              "declarationReferenceIds": [],
+              "editCapabilities": [
+                {
+                  "id": "us_28d2c2b6ea909335dead59a07bd63903",
+                  "kind": "literal",
+                  "label": "Literal \u00B7 line 21",
+                  "operation": "replaceLiteral",
+                  "targetNodeId": "us_9c5d2dc0d2af48596299fdd155cd4e4d",
+                  "currentValue": "100",
+                  "expectedValueText": "100",
+                  "options": []
+                }
+              ],
+              "ports": [
+                {
+                  "name": "execIn",
+                  "direction": "input",
+                  "kind": "control"
+                },
+                {
+                  "name": "assignedValue",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                },
+                {
+                  "name": "target",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                },
+                {
+                  "name": "execOut",
+                  "direction": "output",
+                  "kind": "control"
+                },
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ]
+            },
+            {
+              "id": "us_435992f283b0816749571b9a4f760892",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get result",
+              "summary": "result",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 21,
+                  "column": 13
+                },
+                "end": {
+                  "line": 21,
+                  "column": 19
+                }
+              },
+              "regionId": "us_975584a1df139a9b95184058665b6a05",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ]
+            },
+            {
+              "id": "us_9c5d2dc0d2af48596299fdd155cd4e4d",
+              "graphKind": "literal",
+              "category": "value",
+              "title": "100",
+              "summary": "100",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 21,
+                  "column": 22
+                },
+                "end": {
+                  "line": 21,
+                  "column": 25
+                }
+              },
+              "regionId": "us_975584a1df139a9b95184058665b6a05",
+              "declarationReferenceIds": [],
+              "editCapabilities": [
+                {
+                  "id": "us_c90f6aa4b4306f3bb34f934f55bcfc87",
+                  "kind": "literal",
+                  "label": "Literal \u00B7 line 21",
+                  "operation": "replaceLiteral",
+                  "targetNodeId": "us_9c5d2dc0d2af48596299fdd155cd4e4d",
+                  "currentValue": "100",
+                  "expectedValueText": "100",
+                  "options": []
+                }
+              ],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ]
+            },
+            {
+              "id": "us_f344391e93f4716d0a0fef5a67c4c8c3",
+              "graphKind": "return",
+              "category": "exit",
+              "title": "Return",
+              "summary": "return result",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 24,
+                  "column": 9
+                },
+                "end": {
+                  "line": 24,
+                  "column": 23
+                }
+              },
+              "regionId": "us_4941fd018d2802c1341801499257217f",
+              "debugTargetId": "us_f344391e93f4716d0a0fef5a67c4c8c3",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "in",
+                  "direction": "input",
+                  "kind": "control"
+                },
+                {
+                  "name": "value",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ]
+            },
+            {
+              "id": "us_eca92e3d0e15c00d846ec323191f4e4e",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get result",
+              "summary": "result",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 24,
+                  "column": 16
+                },
+                "end": {
+                  "line": 24,
+                  "column": 22
+                }
+              },
+              "regionId": "us_4941fd018d2802c1341801499257217f",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ]
+            }
+          ],
+          "edges": [
+            {
+              "id": "us_4cf4edaa200338bfbcd07e8de13ccfb4",
+              "kind": "control",
+              "fromNode": "us_0668580c9b8299500fe6bd062c3058ee",
+              "fromPort": "execOut",
+              "toNode": "us_f344391e93f4716d0a0fef5a67c4c8c3",
+              "toPort": "in"
+            },
+            {
+              "id": "us_338e0e3176954e00b836e7e9414e1c8f",
+              "kind": "control",
+              "fromNode": "us_49117d92bb5fea31c2a87bf5b9c5518f",
+              "fromPort": "then",
+              "toNode": "us_a2238bb88e1f5c7d89fb6bd3879219f8",
+              "toPort": "in"
+            },
+            {
+              "id": "us_f38a483b19adafd2a43467e46264baab",
+              "kind": "control",
+              "fromNode": "us_a2238bb88e1f5c7d89fb6bd3879219f8",
+              "fromPort": "else",
+              "toNode": "us_f344391e93f4716d0a0fef5a67c4c8c3",
+              "toPort": "in"
+            },
+            {
+              "id": "us_a68b78f91aa2eca5cc3d1aa508fd6929",
+              "kind": "control",
+              "fromNode": "us_a2238bb88e1f5c7d89fb6bd3879219f8",
+              "fromPort": "then",
+              "toNode": "us_0668580c9b8299500fe6bd062c3058ee",
+              "toPort": "execIn"
+            },
+            {
+              "id": "us_cd44f46a8f102beb3f24dfdad3f54fe7",
+              "kind": "control",
+              "fromNode": "us_d86fe26b7253584964d16f71f376ffa6",
+              "fromPort": "then",
+              "toNode": "us_49117d92bb5fea31c2a87bf5b9c5518f",
+              "toPort": "in"
+            },
+            {
+              "id": "us_1d21bbef2fdd369c5f6ea007d6adb6dd",
+              "kind": "data",
+              "fromNode": "us_118f1f7b0f6b1aca599abedef070fd40",
+              "fromPort": "value",
+              "toNode": "us_49117d92bb5fea31c2a87bf5b9c5518f",
+              "toPort": "value"
+            },
+            {
+              "id": "us_c218730d61d896e79aab9dc412040088",
+              "kind": "data",
+              "fromNode": "us_311203641b2b2ed8dca16b24859c2a48",
+              "fromPort": "value",
+              "toNode": "us_118f1f7b0f6b1aca599abedef070fd40",
+              "toPort": "right"
+            },
+            {
+              "id": "us_16c3887007d82fea83f27c268b7fa277",
+              "kind": "data",
+              "fromNode": "us_435992f283b0816749571b9a4f760892",
+              "fromPort": "value",
+              "toNode": "us_0668580c9b8299500fe6bd062c3058ee",
+              "toPort": "target"
+            },
+            {
+              "id": "us_30d43703af84eaf1893851df90f67695",
+              "kind": "data",
+              "fromNode": "us_44041565a30f4985f090e7e4e543a771",
+              "fromPort": "value",
+              "toNode": "us_573bb698923505a9a6295e654f04465c",
+              "toPort": "left"
+            },
+            {
+              "id": "us_13db98ff77ddf6c9e6ce51adbea2ef59",
+              "kind": "data",
+              "fromNode": "us_49bc534c0cc31b441e6a666257b5e957",
+              "fromPort": "value",
+              "toNode": "us_118f1f7b0f6b1aca599abedef070fd40",
+              "toPort": "left"
+            },
+            {
+              "id": "us_cc5c709c0a1579bd091f25db69829cad",
+              "kind": "data",
+              "fromNode": "us_573bb698923505a9a6295e654f04465c",
+              "fromPort": "value",
+              "toNode": "us_a2238bb88e1f5c7d89fb6bd3879219f8",
+              "toPort": "condition"
+            },
+            {
+              "id": "us_1a29662d8c3f9ca02386366fe5a7bd5b",
+              "kind": "data",
+              "fromNode": "us_7b90acea2d894a4982ad3c85a368c85c",
+              "fromPort": "value",
+              "toNode": "us_573bb698923505a9a6295e654f04465c",
+              "toPort": "right"
+            },
+            {
+              "id": "us_29f026c54373225e81db88bffc367460",
+              "kind": "data",
+              "fromNode": "us_9c5d2dc0d2af48596299fdd155cd4e4d",
+              "fromPort": "value",
+              "toNode": "us_0668580c9b8299500fe6bd062c3058ee",
+              "toPort": "assignedValue"
+            },
+            {
+              "id": "us_23f2b2b4c559665ecf835ba114991940",
+              "kind": "data",
+              "fromNode": "us_eca92e3d0e15c00d846ec323191f4e4e",
+              "fromPort": "value",
+              "toNode": "us_f344391e93f4716d0a0fef5a67c4c8c3",
+              "toPort": "value"
+            }
+          ]
+        },
+        {
+          "id": "us_4b2b9a44f72edea2e4f0cdf31376c2d1",
+          "name": "RewirePreview",
+          "qualifiedName": "UnifiedScript.Unreal.Demo.DemoScript.RewirePreview(System.Int32,System.Boolean)",
+          "returnTypeMetadataName": "System.Int32",
+          "isStatic": false,
+          "parameters": [
+            {
+              "id": "us_b0d72d5985b3dc542713ff3c91eede11",
+              "name": "value",
+              "typeMetadataName": "System.Int32",
+              "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+              "typeDisplayName": "int"
+            },
+            {
+              "id": "us_303f32d194eb3fba88a0b0ce7870f548",
+              "name": "doubleValue",
+              "typeMetadataName": "System.Boolean",
+              "typeId": "us_b5f84bcf933b6593d45e9e031353bfef",
+              "typeDisplayName": "bool"
+            }
+          ],
+          "rootRegionId": "us_1e98707ea1c1b42bcecdd7c1e5597da6",
+          "regions": [
+            {
+              "id": "us_1e98707ea1c1b42bcecdd7c1e5597da6",
+              "kind": "function",
+              "sourceNodeId": "us_4b2b9a44f72edea2e4f0cdf31376c2d1",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 27,
+                  "column": 5
+                },
+                "end": {
+                  "line": 38,
+                  "column": 6
+                }
+              },
+              "isImplicit": false,
+              "directStatementIds": [
+                "us_d5d13b68ea97cce7cccddebd465383e4"
+              ],
+              "directActionIds": [
+                "us_d5d13b68ea97cce7cccddebd465383e4"
+              ],
+              "childRegionIds": [
+                "us_120cef40561c6dda9268e83feb5d20f6"
+              ]
+            },
+            {
+              "id": "us_120cef40561c6dda9268e83feb5d20f6",
+              "kind": "block",
+              "parentRegionId": "us_1e98707ea1c1b42bcecdd7c1e5597da6",
+              "sourceNodeId": "us_685b698b8fd7cc5086e347f564766aa5",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 29,
+                  "column": 5
+                },
+                "end": {
+                  "line": 38,
+                  "column": 6
+                }
+              },
+              "isImplicit": false,
+              "directStatementIds": [
+                "us_a01e2ebdf2671abbc2afa5ef9e3d6c86",
+                "us_39c9cfab008cb8ca8cd0fa3dbadb1808",
+                "us_3d2911f4da25903a501922740425b21c",
+                "us_c1ecac39d3597318863f0a7f2b438af9"
+              ],
+              "directActionIds": [
+                "us_a01e2ebdf2671abbc2afa5ef9e3d6c86",
+                "us_5b170cc891b3e4b893455d363e326a3a",
+                "us_5deaad494325cf1b404a956aa3db6961",
+                "us_c6fb64e00549bfeefd2e0a5515461d2b",
+                "us_39c9cfab008cb8ca8cd0fa3dbadb1808",
+                "us_78825db72bbf733f272c550fd5b915b5",
+                "us_dedb001f69e949814c6d51cf844ab30f",
+                "us_95f8efe86b509e92fedf3d24b81e3a1f",
+                "us_c1ecac39d3597318863f0a7f2b438af9",
+                "us_6dc8b6b22cc114cbf47ac6b04542481e"
+              ],
+              "childRegionIds": [
+                "us_754196a95a0e210b1f1f67d2aca1fbaf"
+              ]
+            },
+            {
+              "id": "us_754196a95a0e210b1f1f67d2aca1fbaf",
+              "kind": "if",
+              "parentRegionId": "us_120cef40561c6dda9268e83feb5d20f6",
+              "sourceNodeId": "us_3d2911f4da25903a501922740425b21c",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 32,
+                  "column": 9
+                },
+                "end": {
+                  "line": 35,
+                  "column": 10
+                }
+              },
+              "isImplicit": false,
+              "anchorActionId": "us_3d2911f4da25903a501922740425b21c",
+              "directStatementIds": [
+                "us_3d2911f4da25903a501922740425b21c"
+              ],
+              "directActionIds": [
+                "us_3d2911f4da25903a501922740425b21c",
+                "us_64656e64fed0ec20dd051b8257855c5e"
+              ],
+              "childRegionIds": [
+                "us_d097e59fb3f4c97f2241cf3bd2f12652",
+                "us_9046ebdc9fa421934d73ca7843627332"
+              ]
+            },
+            {
+              "id": "us_9046ebdc9fa421934d73ca7843627332",
+              "kind": "else",
+              "parentRegionId": "us_754196a95a0e210b1f1f67d2aca1fbaf",
+              "sourceNodeId": "us_3d2911f4da25903a501922740425b21c",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 32,
+                  "column": 9
+                },
+                "end": {
+                  "line": 35,
+                  "column": 10
+                }
+              },
+              "isImplicit": true,
+              "directStatementIds": [],
+              "directActionIds": [],
+              "childRegionIds": []
+            },
+            {
+              "id": "us_d097e59fb3f4c97f2241cf3bd2f12652",
+              "kind": "then",
+              "parentRegionId": "us_754196a95a0e210b1f1f67d2aca1fbaf",
+              "sourceNodeId": "us_0bb0c8ce52739405d60ee5ae6487f741",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 33,
+                  "column": 9
+                },
+                "end": {
+                  "line": 35,
+                  "column": 10
+                }
+              },
+              "isImplicit": false,
+              "directStatementIds": [
+                "us_fb1e70318ebe0ef05cf077b7acd3d7e6"
+              ],
+              "directActionIds": [
+                "us_fb1e70318ebe0ef05cf077b7acd3d7e6",
+                "us_9b226801825097e4a205e43245e9fee1"
+              ],
+              "childRegionIds": []
+            }
+          ],
+          "actions": [
+            {
+              "id": "us_d5d13b68ea97cce7cccddebd465383e4",
+              "graphKind": "entry",
+              "category": "entry",
+              "title": "RewirePreview",
+              "summary": "int RewirePreview(int value, bool doubleValue)",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 27,
+                  "column": 5
+                },
+                "end": {
+                  "line": 38,
+                  "column": 6
+                }
+              },
+              "regionId": "us_1e98707ea1c1b42bcecdd7c1e5597da6",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "then",
+                  "direction": "output",
+                  "kind": "control"
+                }
+              ]
+            },
+            {
+              "id": "us_a01e2ebdf2671abbc2afa5ef9e3d6c86",
+              "graphKind": "variable",
+              "category": "state",
+              "title": "Declare doubled",
+              "summary": "int doubled = (value * 2)",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 30,
+                  "column": 9
+                },
+                "end": {
+                  "line": 30,
+                  "column": 33
+                }
+              },
+              "regionId": "us_120cef40561c6dda9268e83feb5d20f6",
+              "debugTargetId": "us_a01e2ebdf2671abbc2afa5ef9e3d6c86",
+              "declarationReferenceIds": [],
+              "editCapabilities": [
+                {
+                  "id": "us_afba2a60a35fe83e87ec5fab9146c9e3",
+                  "kind": "literal",
+                  "label": "Literal \u00B7 line 30",
+                  "operation": "replaceLiteral",
+                  "targetNodeId": "us_c6fb64e00549bfeefd2e0a5515461d2b",
+                  "currentValue": "2",
+                  "expectedValueText": "2",
+                  "options": []
+                },
+                {
+                  "id": "us_7b94de573e2a8888e4e81d0261f916fe",
+                  "kind": "operator",
+                  "label": "Operator \u00B7 line 30",
+                  "operation": "changeOperator",
+                  "targetNodeId": "us_5deaad494325cf1b404a956aa3db6961",
+                  "currentValue": "*",
+                  "expectedOperator": "*",
+                  "expectedResultTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "expectedOperandTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "expectedRightOperandTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "options": [
+                    "\u002B",
+                    "-",
+                    "*",
+                    "/",
+                    "%"
+                  ]
+                }
+              ],
+              "ports": [
+                {
+                  "name": "in",
+                  "direction": "input",
+                  "kind": "control"
+                },
+                {
+                  "name": "value",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                },
+                {
+                  "name": "then",
+                  "direction": "output",
+                  "kind": "control"
+                }
+              ]
+            },
+            {
+              "id": "us_5b170cc891b3e4b893455d363e326a3a",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get value",
+              "summary": "value",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 30,
+                  "column": 23
+                },
+                "end": {
+                  "line": 30,
+                  "column": 28
+                }
+              },
+              "regionId": "us_120cef40561c6dda9268e83feb5d20f6",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ]
+            },
+            {
+              "id": "us_5deaad494325cf1b404a956aa3db6961",
+              "graphKind": "binary",
+              "category": "value",
+              "title": "*",
+              "summary": "* \u00B7 value, 2",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 30,
+                  "column": 23
+                },
+                "end": {
+                  "line": 30,
+                  "column": 32
+                }
+              },
+              "regionId": "us_120cef40561c6dda9268e83feb5d20f6",
+              "declarationReferenceIds": [],
+              "editCapabilities": [
+                {
+                  "id": "us_cbce8ebc2fa9105bf91b5819fe715428",
+                  "kind": "literal",
+                  "label": "Literal \u00B7 line 30",
+                  "operation": "replaceLiteral",
+                  "targetNodeId": "us_c6fb64e00549bfeefd2e0a5515461d2b",
+                  "currentValue": "2",
+                  "expectedValueText": "2",
+                  "options": []
+                },
+                {
+                  "id": "us_6d9dd3cf9224f8f66dd7f278adbbb144",
+                  "kind": "operator",
+                  "label": "Operator \u00B7 line 30",
+                  "operation": "changeOperator",
+                  "targetNodeId": "us_5deaad494325cf1b404a956aa3db6961",
+                  "currentValue": "*",
+                  "expectedOperator": "*",
+                  "expectedResultTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "expectedOperandTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "expectedRightOperandTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "options": [
+                    "\u002B",
+                    "-",
+                    "*",
+                    "/",
+                    "%"
+                  ]
+                }
+              ],
+              "ports": [
+                {
+                  "name": "left",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                },
+                {
+                  "name": "right",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                },
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ]
+            },
+            {
+              "id": "us_c6fb64e00549bfeefd2e0a5515461d2b",
+              "graphKind": "literal",
+              "category": "value",
+              "title": "2",
+              "summary": "2",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 30,
+                  "column": 31
+                },
+                "end": {
+                  "line": 30,
+                  "column": 32
+                }
+              },
+              "regionId": "us_120cef40561c6dda9268e83feb5d20f6",
+              "declarationReferenceIds": [],
+              "editCapabilities": [
+                {
+                  "id": "us_cdaed622af84d19e3788885929803a05",
+                  "kind": "literal",
+                  "label": "Literal \u00B7 line 30",
+                  "operation": "replaceLiteral",
+                  "targetNodeId": "us_c6fb64e00549bfeefd2e0a5515461d2b",
+                  "currentValue": "2",
+                  "expectedValueText": "2",
+                  "options": []
+                }
+              ],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ]
+            },
+            {
+              "id": "us_39c9cfab008cb8ca8cd0fa3dbadb1808",
+              "graphKind": "variable",
+              "category": "state",
+              "title": "Declare incremented",
+              "summary": "int incremented = (value \u002B 1)",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 31,
+                  "column": 9
+                },
+                "end": {
+                  "line": 31,
+                  "column": 37
+                }
+              },
+              "regionId": "us_120cef40561c6dda9268e83feb5d20f6",
+              "debugTargetId": "us_39c9cfab008cb8ca8cd0fa3dbadb1808",
+              "declarationReferenceIds": [],
+              "editCapabilities": [
+                {
+                  "id": "us_8e192a14dd1867841dce0446626e2f21",
+                  "kind": "literal",
+                  "label": "Literal \u00B7 line 31",
+                  "operation": "replaceLiteral",
+                  "targetNodeId": "us_95f8efe86b509e92fedf3d24b81e3a1f",
+                  "currentValue": "1",
+                  "expectedValueText": "1",
+                  "options": []
+                },
+                {
+                  "id": "us_bbf266e2a862d3000a58413a6e7b0492",
+                  "kind": "operator",
+                  "label": "Operator \u00B7 line 31",
+                  "operation": "changeOperator",
+                  "targetNodeId": "us_dedb001f69e949814c6d51cf844ab30f",
+                  "currentValue": "\u002B",
+                  "expectedOperator": "\u002B",
+                  "expectedResultTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "expectedOperandTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "expectedRightOperandTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "options": [
+                    "\u002B",
+                    "-",
+                    "*",
+                    "/",
+                    "%"
+                  ]
+                }
+              ],
+              "ports": [
+                {
+                  "name": "in",
+                  "direction": "input",
+                  "kind": "control"
+                },
+                {
+                  "name": "value",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                },
+                {
+                  "name": "then",
+                  "direction": "output",
+                  "kind": "control"
+                }
+              ]
+            },
+            {
+              "id": "us_78825db72bbf733f272c550fd5b915b5",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get value",
+              "summary": "value",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 31,
+                  "column": 27
+                },
+                "end": {
+                  "line": 31,
+                  "column": 32
+                }
+              },
+              "regionId": "us_120cef40561c6dda9268e83feb5d20f6",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ]
+            },
+            {
+              "id": "us_dedb001f69e949814c6d51cf844ab30f",
+              "graphKind": "binary",
+              "category": "value",
+              "title": "\u002B",
+              "summary": "\u002B \u00B7 value, 1",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 31,
+                  "column": 27
+                },
+                "end": {
+                  "line": 31,
+                  "column": 36
+                }
+              },
+              "regionId": "us_120cef40561c6dda9268e83feb5d20f6",
+              "declarationReferenceIds": [],
+              "editCapabilities": [
+                {
+                  "id": "us_b7c51f38e28fe56ae6b00254f8f29a6e",
+                  "kind": "literal",
+                  "label": "Literal \u00B7 line 31",
+                  "operation": "replaceLiteral",
+                  "targetNodeId": "us_95f8efe86b509e92fedf3d24b81e3a1f",
+                  "currentValue": "1",
+                  "expectedValueText": "1",
+                  "options": []
+                },
+                {
+                  "id": "us_7a9c6eadd326a9f5bec300f74216d199",
+                  "kind": "operator",
+                  "label": "Operator \u00B7 line 31",
+                  "operation": "changeOperator",
+                  "targetNodeId": "us_dedb001f69e949814c6d51cf844ab30f",
+                  "currentValue": "\u002B",
+                  "expectedOperator": "\u002B",
+                  "expectedResultTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "expectedOperandTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "expectedRightOperandTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "options": [
+                    "\u002B",
+                    "-",
+                    "*",
+                    "/",
+                    "%"
+                  ]
+                }
+              ],
+              "ports": [
+                {
+                  "name": "left",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                },
+                {
+                  "name": "right",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                },
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ]
+            },
+            {
+              "id": "us_95f8efe86b509e92fedf3d24b81e3a1f",
+              "graphKind": "literal",
+              "category": "value",
+              "title": "1",
+              "summary": "1",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 31,
+                  "column": 35
+                },
+                "end": {
+                  "line": 31,
+                  "column": 36
+                }
+              },
+              "regionId": "us_120cef40561c6dda9268e83feb5d20f6",
+              "declarationReferenceIds": [],
+              "editCapabilities": [
+                {
+                  "id": "us_41994094cd95d3c3b0177ecfd5fbd988",
+                  "kind": "literal",
+                  "label": "Literal \u00B7 line 31",
+                  "operation": "replaceLiteral",
+                  "targetNodeId": "us_95f8efe86b509e92fedf3d24b81e3a1f",
+                  "currentValue": "1",
+                  "expectedValueText": "1",
+                  "options": []
+                }
+              ],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ]
+            },
+            {
+              "id": "us_3d2911f4da25903a501922740425b21c",
+              "graphKind": "branch",
+              "category": "flow",
+              "title": "Branch",
+              "summary": "if (doubleValue)",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 32,
+                  "column": 9
+                },
+                "end": {
+                  "line": 35,
+                  "column": 10
+                }
+              },
+              "regionId": "us_754196a95a0e210b1f1f67d2aca1fbaf",
+              "debugTargetId": "us_3d2911f4da25903a501922740425b21c",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "in",
+                  "direction": "input",
+                  "kind": "control"
+                },
+                {
+                  "name": "condition",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_b5f84bcf933b6593d45e9e031353bfef",
+                  "typeDisplayName": "bool"
+                },
+                {
+                  "name": "else",
+                  "direction": "output",
+                  "kind": "control"
+                },
+                {
+                  "name": "then",
+                  "direction": "output",
+                  "kind": "control"
+                }
+              ]
+            },
+            {
+              "id": "us_64656e64fed0ec20dd051b8257855c5e",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get doubleValue",
+              "summary": "doubleValue",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 32,
+                  "column": 13
+                },
+                "end": {
+                  "line": 32,
+                  "column": 24
+                }
+              },
+              "regionId": "us_754196a95a0e210b1f1f67d2aca1fbaf",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_b5f84bcf933b6593d45e9e031353bfef",
+                  "typeDisplayName": "bool"
+                }
+              ]
+            },
+            {
+              "id": "us_fb1e70318ebe0ef05cf077b7acd3d7e6",
+              "graphKind": "return",
+              "category": "exit",
+              "title": "Return",
+              "summary": "return doubled",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 34,
+                  "column": 13
+                },
+                "end": {
+                  "line": 34,
+                  "column": 28
+                }
+              },
+              "regionId": "us_d097e59fb3f4c97f2241cf3bd2f12652",
+              "debugTargetId": "us_fb1e70318ebe0ef05cf077b7acd3d7e6",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "in",
+                  "direction": "input",
+                  "kind": "control"
+                },
+                {
+                  "name": "value",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ]
+            },
+            {
+              "id": "us_9b226801825097e4a205e43245e9fee1",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get doubled",
+              "summary": "doubled",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 34,
+                  "column": 20
+                },
+                "end": {
+                  "line": 34,
+                  "column": 27
+                }
+              },
+              "regionId": "us_d097e59fb3f4c97f2241cf3bd2f12652",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ]
+            },
+            {
+              "id": "us_c1ecac39d3597318863f0a7f2b438af9",
+              "graphKind": "return",
+              "category": "exit",
+              "title": "Return",
+              "summary": "return incremented",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 37,
+                  "column": 9
+                },
+                "end": {
+                  "line": 37,
+                  "column": 28
+                }
+              },
+              "regionId": "us_120cef40561c6dda9268e83feb5d20f6",
+              "debugTargetId": "us_c1ecac39d3597318863f0a7f2b438af9",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "in",
+                  "direction": "input",
+                  "kind": "control"
+                },
+                {
+                  "name": "value",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ]
+            },
+            {
+              "id": "us_6dc8b6b22cc114cbf47ac6b04542481e",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get incremented",
+              "summary": "incremented",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 37,
+                  "column": 16
+                },
+                "end": {
+                  "line": 37,
+                  "column": 27
+                }
+              },
+              "regionId": "us_120cef40561c6dda9268e83feb5d20f6",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ]
+            }
+          ],
+          "edges": [
+            {
+              "id": "us_f81cc521925bb45b3421cc8b5465ca0d",
+              "kind": "control",
+              "fromNode": "us_39c9cfab008cb8ca8cd0fa3dbadb1808",
+              "fromPort": "then",
+              "toNode": "us_3d2911f4da25903a501922740425b21c",
+              "toPort": "in"
+            },
+            {
+              "id": "us_de5522ba4569059e875aecea6f1b37fc",
+              "kind": "control",
+              "fromNode": "us_3d2911f4da25903a501922740425b21c",
+              "fromPort": "else",
+              "toNode": "us_c1ecac39d3597318863f0a7f2b438af9",
+              "toPort": "in"
+            },
+            {
+              "id": "us_7e01f56b4c6f81c253e8f39bb39be988",
+              "kind": "control",
+              "fromNode": "us_3d2911f4da25903a501922740425b21c",
+              "fromPort": "then",
+              "toNode": "us_fb1e70318ebe0ef05cf077b7acd3d7e6",
+              "toPort": "in"
+            },
+            {
+              "id": "us_1a6b61e5b3f79e97a767c9629ba65889",
+              "kind": "control",
+              "fromNode": "us_a01e2ebdf2671abbc2afa5ef9e3d6c86",
+              "fromPort": "then",
+              "toNode": "us_39c9cfab008cb8ca8cd0fa3dbadb1808",
+              "toPort": "in"
+            },
+            {
+              "id": "us_32bba5329bf75989cd0eb1e0fe3a47e5",
+              "kind": "control",
+              "fromNode": "us_d5d13b68ea97cce7cccddebd465383e4",
+              "fromPort": "then",
+              "toNode": "us_a01e2ebdf2671abbc2afa5ef9e3d6c86",
+              "toPort": "in"
+            },
+            {
+              "id": "us_15ade3d07692e550f05fafaaf3af8acd",
+              "kind": "data",
+              "fromNode": "us_5b170cc891b3e4b893455d363e326a3a",
+              "fromPort": "value",
+              "toNode": "us_5deaad494325cf1b404a956aa3db6961",
+              "toPort": "left"
+            },
+            {
+              "id": "us_2aa5e0265b34cf457731f94fd10e1ac6",
+              "kind": "data",
+              "fromNode": "us_5deaad494325cf1b404a956aa3db6961",
+              "fromPort": "value",
+              "toNode": "us_a01e2ebdf2671abbc2afa5ef9e3d6c86",
+              "toPort": "value"
+            },
+            {
+              "id": "us_21e7006a91efe405eed93a9a78774564",
+              "kind": "data",
+              "fromNode": "us_64656e64fed0ec20dd051b8257855c5e",
+              "fromPort": "value",
+              "toNode": "us_3d2911f4da25903a501922740425b21c",
+              "toPort": "condition"
+            },
+            {
+              "id": "us_e562da93174d75f8dd3d9afef8a2dfdb",
+              "kind": "data",
+              "fromNode": "us_6dc8b6b22cc114cbf47ac6b04542481e",
+              "fromPort": "value",
+              "toNode": "us_c1ecac39d3597318863f0a7f2b438af9",
+              "toPort": "value"
+            },
+            {
+              "id": "us_439f0dfda2d3801ea3d5aea4db7984e8",
+              "kind": "data",
+              "fromNode": "us_78825db72bbf733f272c550fd5b915b5",
+              "fromPort": "value",
+              "toNode": "us_dedb001f69e949814c6d51cf844ab30f",
+              "toPort": "left"
+            },
+            {
+              "id": "us_f0ddf5d80a5cdaa83440e395dcada0be",
+              "kind": "data",
+              "fromNode": "us_95f8efe86b509e92fedf3d24b81e3a1f",
+              "fromPort": "value",
+              "toNode": "us_dedb001f69e949814c6d51cf844ab30f",
+              "toPort": "right"
+            },
+            {
+              "id": "us_16da03260a9dd8c6519acdc234e5e0ab",
+              "kind": "data",
+              "fromNode": "us_9b226801825097e4a205e43245e9fee1",
+              "fromPort": "value",
+              "toNode": "us_fb1e70318ebe0ef05cf077b7acd3d7e6",
+              "toPort": "value"
+            },
+            {
+              "id": "us_6aef9e113775d8587fc6bf0ad2bc6670",
+              "kind": "data",
+              "fromNode": "us_c6fb64e00549bfeefd2e0a5515461d2b",
+              "fromPort": "value",
+              "toNode": "us_5deaad494325cf1b404a956aa3db6961",
+              "toPort": "right"
+            },
+            {
+              "id": "us_66d49a31366880b61596467d3de1deae",
+              "kind": "data",
+              "fromNode": "us_dedb001f69e949814c6d51cf844ab30f",
+              "fromPort": "value",
+              "toNode": "us_39c9cfab008cb8ca8cd0fa3dbadb1808",
+              "toPort": "value"
+            }
+          ]
+        },
+        {
+          "id": "us_066ad528d7581de1cd7ae1725a1a16b4",
+          "name": "UEApiPreview",
+          "qualifiedName": "UnifiedScript.Unreal.Demo.DemoScript.UEApiPreview(UnifiedScript.Unreal.Generated.UnifiedScriptComponent,System.Int32,System.Int32)",
+          "returnTypeMetadataName": "System.Int32",
+          "isStatic": false,
+          "parameters": [
+            {
+              "id": "us_3fdc40ff1a2a732018245856fe7d8edd",
+              "name": "component",
+              "typeMetadataName": "UnifiedScript.Unreal.Generated.UnifiedScriptComponent",
+              "typeId": "us_f801bf9355044e2f114a87a3e07118e2",
+              "typeDisplayName": "UnifiedScriptComponent"
+            },
+            {
+              "id": "us_73099e3949dfcc446c110185afb660f7",
+              "name": "left",
+              "typeMetadataName": "System.Int32",
+              "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+              "typeDisplayName": "int"
+            },
+            {
+              "id": "us_1a8a2285d577a0ee7d68902d20bc6c95",
+              "name": "right",
+              "typeMetadataName": "System.Int32",
+              "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+              "typeDisplayName": "int"
+            }
+          ],
+          "rootRegionId": "us_34889e0692bcdb9efbe7b7a3a60af708",
+          "regions": [
+            {
+              "id": "us_34889e0692bcdb9efbe7b7a3a60af708",
+              "kind": "function",
+              "sourceNodeId": "us_066ad528d7581de1cd7ae1725a1a16b4",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 40,
+                  "column": 5
+                },
+                "end": {
+                  "line": 45,
+                  "column": 6
+                }
+              },
+              "isImplicit": false,
+              "directStatementIds": [
+                "us_e78ab8db1de24cc8e65cc2fc5bf2dcd6"
+              ],
+              "directActionIds": [
+                "us_e78ab8db1de24cc8e65cc2fc5bf2dcd6"
+              ],
+              "childRegionIds": [
+                "us_28cc41d4b41e3da68f435e914234ac2e"
+              ]
+            },
+            {
+              "id": "us_28cc41d4b41e3da68f435e914234ac2e",
+              "kind": "block",
+              "parentRegionId": "us_34889e0692bcdb9efbe7b7a3a60af708",
+              "sourceNodeId": "us_67526f8cf796327381c7ba10909db23c",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 42,
+                  "column": 5
+                },
+                "end": {
+                  "line": 45,
+                  "column": 6
+                }
+              },
+              "isImplicit": false,
+              "directStatementIds": [
+                "us_976c71f00295653d2d2e780eec9ab94f",
+                "us_6c17cf287ca5afa0aa1b906261eb535d",
+                "us_e25bb9260d1e391a5ff2aa0f685c86a6"
+              ],
+              "directActionIds": [
+                "us_976c71f00295653d2d2e780eec9ab94f",
+                "us_24b9e977952081982669c77bebe0973d",
+                "us_6c17cf287ca5afa0aa1b906261eb535d",
+                "us_8ee13f04542baf855172bd7097f8acc8",
+                "us_858e82cadd0ef49f699321e2bad1f392",
+                "us_0bcd5ce941cacda39ae637c8ac24c48e",
+                "us_e25bb9260d1e391a5ff2aa0f685c86a6",
+                "us_1f10fe0859e8ad4d4d7a79c2ed966b9f"
+              ],
+              "childRegionIds": []
+            }
+          ],
+          "actions": [
+            {
+              "id": "us_e78ab8db1de24cc8e65cc2fc5bf2dcd6",
+              "graphKind": "entry",
+              "category": "entry",
+              "title": "UEApiPreview",
+              "summary": "int UEApiPreview(UnifiedScriptComponent component, int left, int right)",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 40,
+                  "column": 5
+                },
+                "end": {
+                  "line": 45,
+                  "column": 6
+                }
+              },
+              "regionId": "us_34889e0692bcdb9efbe7b7a3a60af708",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "then",
+                  "direction": "output",
+                  "kind": "control"
+                }
+              ]
+            },
+            {
+              "id": "us_976c71f00295653d2d2e780eec9ab94f",
+              "graphKind": "variable",
+              "category": "state",
+              "title": "Declare sum",
+              "summary": "int sum = component.Add(left, right)",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 43,
+                  "column": 9
+                },
+                "end": {
+                  "line": 43,
+                  "column": 46
+                }
+              },
+              "regionId": "us_28cc41d4b41e3da68f435e914234ac2e",
+              "debugTargetId": "us_976c71f00295653d2d2e780eec9ab94f",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "in",
+                  "direction": "input",
+                  "kind": "control"
+                },
+                {
+                  "name": "value",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                },
+                {
+                  "name": "then",
+                  "direction": "output",
+                  "kind": "control"
+                }
+              ]
+            },
+            {
+              "id": "us_24b9e977952081982669c77bebe0973d",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get component",
+              "summary": "component",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 43,
+                  "column": 19
+                },
+                "end": {
+                  "line": 43,
+                  "column": 28
+                }
+              },
+              "regionId": "us_28cc41d4b41e3da68f435e914234ac2e",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_f801bf9355044e2f114a87a3e07118e2",
+                  "typeDisplayName": "UnifiedScriptComponent"
+                }
+              ]
+            },
+            {
+              "id": "us_6c17cf287ca5afa0aa1b906261eb535d",
+              "graphKind": "invocation",
+              "category": "call",
+              "title": "int UnifiedScriptComponent.Add(int left, int right)",
+              "summary": "component.Add(left, right)",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 43,
+                  "column": 19
+                },
+                "end": {
+                  "line": 43,
+                  "column": 45
+                }
+              },
+              "regionId": "us_28cc41d4b41e3da68f435e914234ac2e",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "execIn",
+                  "direction": "input",
+                  "kind": "control"
+                },
+                {
+                  "name": "arg0",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                },
+                {
+                  "name": "arg1",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                },
+                {
+                  "name": "target",
+                  "direction": "input",
+                  "kind": "data"
+                },
+                {
+                  "name": "execOut",
+                  "direction": "output",
+                  "kind": "control"
+                },
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ]
+            },
+            {
+              "id": "us_8ee13f04542baf855172bd7097f8acc8",
+              "graphKind": "memberAccess",
+              "category": "value",
+              "title": "Add",
+              "summary": "Add \u00B7 component",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 43,
+                  "column": 19
+                },
+                "end": {
+                  "line": 43,
+                  "column": 32
+                }
+              },
+              "regionId": "us_28cc41d4b41e3da68f435e914234ac2e",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "target",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_f801bf9355044e2f114a87a3e07118e2",
+                  "typeDisplayName": "UnifiedScriptComponent"
+                },
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data"
+                }
+              ]
+            },
+            {
+              "id": "us_858e82cadd0ef49f699321e2bad1f392",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get left",
+              "summary": "left",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 43,
+                  "column": 33
+                },
+                "end": {
+                  "line": 43,
+                  "column": 37
+                }
+              },
+              "regionId": "us_28cc41d4b41e3da68f435e914234ac2e",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ]
+            },
+            {
+              "id": "us_0bcd5ce941cacda39ae637c8ac24c48e",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get right",
+              "summary": "right",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 43,
+                  "column": 39
+                },
+                "end": {
+                  "line": 43,
+                  "column": 44
+                }
+              },
+              "regionId": "us_28cc41d4b41e3da68f435e914234ac2e",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ]
+            },
+            {
+              "id": "us_e25bb9260d1e391a5ff2aa0f685c86a6",
+              "graphKind": "return",
+              "category": "exit",
+              "title": "Return",
+              "summary": "return sum",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 44,
+                  "column": 9
+                },
+                "end": {
+                  "line": 44,
+                  "column": 20
+                }
+              },
+              "regionId": "us_28cc41d4b41e3da68f435e914234ac2e",
+              "debugTargetId": "us_e25bb9260d1e391a5ff2aa0f685c86a6",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "in",
+                  "direction": "input",
+                  "kind": "control"
+                },
+                {
+                  "name": "value",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ]
+            },
+            {
+              "id": "us_1f10fe0859e8ad4d4d7a79c2ed966b9f",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get sum",
+              "summary": "sum",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 44,
+                  "column": 16
+                },
+                "end": {
+                  "line": 44,
+                  "column": 19
+                }
+              },
+              "regionId": "us_28cc41d4b41e3da68f435e914234ac2e",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ]
+            }
+          ],
+          "edges": [
+            {
+              "id": "us_3b5f3bc7356b56b51d3a5167236a6aeb",
+              "kind": "control",
+              "fromNode": "us_6c17cf287ca5afa0aa1b906261eb535d",
+              "fromPort": "execOut",
+              "toNode": "us_976c71f00295653d2d2e780eec9ab94f",
+              "toPort": "in"
+            },
+            {
+              "id": "us_c080d068b8e924a6f2db4535fba2a3d4",
+              "kind": "control",
+              "fromNode": "us_976c71f00295653d2d2e780eec9ab94f",
+              "fromPort": "then",
+              "toNode": "us_e25bb9260d1e391a5ff2aa0f685c86a6",
+              "toPort": "in"
+            },
+            {
+              "id": "us_2b274806dca09628ebb6cb5c84a284bc",
+              "kind": "control",
+              "fromNode": "us_e78ab8db1de24cc8e65cc2fc5bf2dcd6",
+              "fromPort": "then",
+              "toNode": "us_6c17cf287ca5afa0aa1b906261eb535d",
+              "toPort": "execIn"
+            },
+            {
+              "id": "us_15dd3a03cfb87901ca8aaaba8264f068",
+              "kind": "data",
+              "fromNode": "us_0bcd5ce941cacda39ae637c8ac24c48e",
+              "fromPort": "value",
+              "toNode": "us_6c17cf287ca5afa0aa1b906261eb535d",
+              "toPort": "arg1"
+            },
+            {
+              "id": "us_dac03dd8c4cf3873355620777ef812b4",
+              "kind": "data",
+              "fromNode": "us_1f10fe0859e8ad4d4d7a79c2ed966b9f",
+              "fromPort": "value",
+              "toNode": "us_e25bb9260d1e391a5ff2aa0f685c86a6",
+              "toPort": "value"
+            },
+            {
+              "id": "us_d9330ed257bb88d2f78f433ae34d6785",
+              "kind": "data",
+              "fromNode": "us_24b9e977952081982669c77bebe0973d",
+              "fromPort": "value",
+              "toNode": "us_8ee13f04542baf855172bd7097f8acc8",
+              "toPort": "target"
+            },
+            {
+              "id": "us_f81188a94f2989a2c89da7106f2a0ef7",
+              "kind": "data",
+              "fromNode": "us_6c17cf287ca5afa0aa1b906261eb535d",
+              "fromPort": "value",
+              "toNode": "us_976c71f00295653d2d2e780eec9ab94f",
+              "toPort": "value"
+            },
+            {
+              "id": "us_afb78e336cb3b2eefad710d6cc2758bb",
+              "kind": "data",
+              "fromNode": "us_858e82cadd0ef49f699321e2bad1f392",
+              "fromPort": "value",
+              "toNode": "us_6c17cf287ca5afa0aa1b906261eb535d",
+              "toPort": "arg0"
+            },
+            {
+              "id": "us_74aa1196c701b68c2d2ea89bf6488232",
+              "kind": "data",
+              "fromNode": "us_8ee13f04542baf855172bd7097f8acc8",
+              "fromPort": "value",
+              "toNode": "us_6c17cf287ca5afa0aa1b906261eb535d",
+              "toPort": "target"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

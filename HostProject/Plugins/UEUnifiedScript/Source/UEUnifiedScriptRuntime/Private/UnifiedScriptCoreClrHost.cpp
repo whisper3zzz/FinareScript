@@ -1,0 +1,704 @@
+#include "UnifiedScriptCoreClrHost.h"
+
+#include "HAL/FileManager.h"
+#include "Interfaces/IPluginManager.h"
+#include "Misc/Paths.h"
+#include "Misc/ScopeLock.h"
+
+#if PLATFORM_WINDOWS
+#define UNIFIEDSCRIPT_HOSTFXR_CALLTYPE __cdecl
+#define UNIFIEDSCRIPT_CORECLR_DELEGATE_CALLTYPE __stdcall
+using FUnifiedScriptHostChar = wchar_t;
+#else
+#define UNIFIEDSCRIPT_HOSTFXR_CALLTYPE
+#define UNIFIEDSCRIPT_CORECLR_DELEGATE_CALLTYPE
+using FUnifiedScriptHostChar = char;
+#endif
+
+namespace UE::UnifiedScript::CoreClr::Private
+{
+using FHostFxrInitialize = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
+    const FUnifiedScriptHostChar* RuntimeConfigPath,
+    const void* Parameters,
+    void** HostContext);
+using FHostFxrGetRuntimeDelegate = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
+    void* HostContext,
+    int32 DelegateType,
+    void** Delegate);
+using FHostFxrClose = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(void* HostContext);
+using FLoadAssemblyAndGetFunctionPointer = int32(
+    UNIFIEDSCRIPT_CORECLR_DELEGATE_CALLTYPE *)(
+    const FUnifiedScriptHostChar* AssemblyPath,
+    const FUnifiedScriptHostChar* TypeName,
+    const FUnifiedScriptHostChar* MethodName,
+    const FUnifiedScriptHostChar* DelegateTypeName,
+    void* Reserved,
+    void** Delegate);
+using FCreateWorldEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
+    uint64 WorldHostId,
+    void* Context,
+    const FUnifiedScriptNativeTransportV2* Transport);
+using FDestroyWorldEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(uint64 WorldHostId);
+using FGetWorldCountEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)();
+using FCreateScriptEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
+    uint64 WorldHostId,
+    uint64 InstanceId,
+    uint64 Target,
+    const uint8* AssemblyPathData,
+    int32 AssemblyPathLength,
+    const uint8* TypeNameData,
+    int32 TypeNameLength);
+using FTickScriptEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
+    uint64 WorldHostId,
+    uint64 InstanceId,
+    float DeltaSeconds);
+using FReloadScriptEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
+    uint64 WorldHostId,
+    uint64 InstanceId,
+    const uint8* AssemblyPathData,
+    int32 AssemblyPathLength,
+    const uint8* TypeNameData,
+    int32 TypeNameLength);
+using FDestroyScriptEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
+    uint64 WorldHostId,
+    uint64 InstanceId);
+using FGetScriptCountEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
+    uint64 WorldHostId);
+
+constexpr int32 LoadAssemblyAndGetFunctionPointerDelegateType = 5;
+
+FString GetHostFxrFileName()
+{
+#if PLATFORM_WINDOWS
+    return TEXT("hostfxr.dll");
+#elif PLATFORM_MAC
+    return TEXT("libhostfxr.dylib");
+#else
+    return TEXT("libhostfxr.so");
+#endif
+}
+
+FString GetPlatformDotNetDirectory()
+{
+#if PLATFORM_WINDOWS
+    return TEXT("win-x64");
+#elif PLATFORM_MAC && PLATFORM_CPU_ARM_FAMILY
+    return TEXT("mac-arm64");
+#elif PLATFORM_MAC
+    return TEXT("mac-x64");
+#elif PLATFORM_CPU_ARM_FAMILY
+    return TEXT("linux-arm64");
+#else
+    return TEXT("linux-x64");
+#endif
+}
+
+void AddCandidate(TArray<FString>& Candidates, FString Candidate)
+{
+    if (!Candidate.IsEmpty())
+    {
+        FPaths::NormalizeDirectoryName(Candidate);
+        Candidates.AddUnique(MoveTemp(Candidate));
+    }
+}
+
+FString FindDotNetRoot()
+{
+    TArray<FString> Candidates;
+    AddCandidate(
+        Candidates,
+        FPlatformMisc::GetEnvironmentVariable(TEXT("UNIFIEDSCRIPT_DOTNET_ROOT")));
+    AddCandidate(
+        Candidates,
+        FPlatformMisc::GetEnvironmentVariable(TEXT("DOTNET_ROOT")));
+    AddCandidate(
+        Candidates,
+        FPaths::Combine(
+            FPaths::EngineDir(),
+            TEXT("Binaries/ThirdParty/DotNet/10.0"),
+            GetPlatformDotNetDirectory()));
+
+    for (const FString& Candidate : Candidates)
+    {
+        if (IFileManager::Get().DirectoryExists(*FPaths::Combine(Candidate, TEXT("host/fxr"))))
+        {
+            return Candidate;
+        }
+    }
+    return {};
+}
+
+FString FindHostFxr(const FString& DotNetRoot)
+{
+    const FString FxrRoot = FPaths::Combine(DotNetRoot, TEXT("host/fxr"));
+    TArray<FString> Versions;
+    IFileManager::Get().FindFiles(Versions, *FPaths::Combine(FxrRoot, TEXT("*")), false, true);
+    Versions.Sort(TGreater<FString>());
+    for (const FString& Version : Versions)
+    {
+        const FString Candidate = FPaths::Combine(
+            FxrRoot,
+            Version,
+            GetHostFxrFileName());
+        if (IFileManager::Get().FileExists(*Candidate))
+        {
+            return Candidate;
+        }
+    }
+    return {};
+}
+
+FString GetRuntimeConfigPath()
+{
+    const TSharedPtr<IPlugin> Plugin =
+        IPluginManager::Get().FindPlugin(TEXT("UEUnifiedScript"));
+    return Plugin.IsValid()
+        ? FPaths::Combine(
+              Plugin->GetBaseDir(),
+              TEXT("Resources/Managed/UnifiedScript.Unreal.runtimeconfig.json"))
+        : FString();
+}
+
+FString GetManagedAssemblyPath()
+{
+    const TSharedPtr<IPlugin> Plugin =
+        IPluginManager::Get().FindPlugin(TEXT("UEUnifiedScript"));
+    return Plugin.IsValid()
+        ? FPaths::Combine(
+              Plugin->GetBaseDir(),
+              TEXT("Binaries/Managed/UnifiedScript.Unreal.dll"))
+        : FString();
+}
+
+}
+
+FUnifiedScriptCoreClrHost& FUnifiedScriptCoreClrHost::Get()
+{
+    static FUnifiedScriptCoreClrHost Instance;
+    return Instance;
+}
+
+bool FUnifiedScriptCoreClrHost::Initialize()
+{
+    FScopeLock Lock(&StateLock);
+    if (State == EUnifiedScriptCoreClrHostState::Ready)
+    {
+        return true;
+    }
+    if (State == EUnifiedScriptCoreClrHostState::Failed)
+    {
+        return false;
+    }
+    return InitializeLocked();
+}
+
+void FUnifiedScriptCoreClrHost::Shutdown()
+{
+    FScopeLock Lock(&StateLock);
+    if (GetWorldCountEntryPoint != nullptr)
+    {
+        const int32 RemainingWorlds =
+            reinterpret_cast<UE::UnifiedScript::CoreClr::Private::FGetWorldCountEntryPoint>(
+                GetWorldCountEntryPoint)();
+        ensureMsgf(
+            RemainingWorlds == 0,
+            TEXT("UnifiedScript CoreCLR host stopped with %d managed Worlds."),
+            RemainingWorlds);
+    }
+    CreateWorldEntryPoint = nullptr;
+    DestroyWorldEntryPoint = nullptr;
+    GetWorldCountEntryPoint = nullptr;
+    CreateScriptEntryPoint = nullptr;
+    TickScriptEntryPoint = nullptr;
+    ReloadScriptEntryPoint = nullptr;
+    DestroyScriptEntryPoint = nullptr;
+    GetScriptCountEntryPoint = nullptr;
+    LoadAssemblyAndGetFunctionPointer = nullptr;
+    if (HostFxrLibrary != nullptr)
+    {
+        FPlatformProcess::FreeDllHandle(HostFxrLibrary);
+        HostFxrLibrary = nullptr;
+    }
+    LoadedHostFxrPath.Reset();
+    LastError.Reset();
+    State = EUnifiedScriptCoreClrHostState::Stopped;
+}
+
+EUnifiedScriptCoreClrHostState FUnifiedScriptCoreClrHost::GetState() const
+{
+    FScopeLock Lock(&StateLock);
+    return State;
+}
+
+bool FUnifiedScriptCoreClrHost::IsReady() const
+{
+    return GetState() == EUnifiedScriptCoreClrHostState::Ready;
+}
+
+void* FUnifiedScriptCoreClrHost::GetLoadAssemblyAndGetFunctionPointer() const
+{
+    FScopeLock Lock(&StateLock);
+    return LoadAssemblyAndGetFunctionPointer;
+}
+
+bool FUnifiedScriptCoreClrHost::CreateManagedWorld(
+    uint64 WorldHostId,
+    FUnifiedScriptNativeBridgeContext* Context,
+    const FUnifiedScriptNativeTransportV2* Transport,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::CoreClr::Private;
+    FScopeLock Lock(&StateLock);
+    if (State != EUnifiedScriptCoreClrHostState::Ready ||
+        CreateWorldEntryPoint == nullptr)
+    {
+        OutError = TEXT("The UnifiedScript managed World entry point is unavailable.");
+        return false;
+    }
+    const int32 Result = reinterpret_cast<FCreateWorldEntryPoint>(
+        CreateWorldEntryPoint)(WorldHostId, Context, Transport);
+    if (Result != 0)
+    {
+        OutError = FString::Printf(
+            TEXT("Managed World creation failed with status %d."),
+            Result);
+        return false;
+    }
+    OutError.Reset();
+    return true;
+}
+
+bool FUnifiedScriptCoreClrHost::DestroyManagedWorld(
+    uint64 WorldHostId,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::CoreClr::Private;
+    FScopeLock Lock(&StateLock);
+    if (State != EUnifiedScriptCoreClrHostState::Ready ||
+        DestroyWorldEntryPoint == nullptr)
+    {
+        OutError = TEXT("The UnifiedScript managed World entry point is unavailable.");
+        return false;
+    }
+    const int32 Result = reinterpret_cast<FDestroyWorldEntryPoint>(
+        DestroyWorldEntryPoint)(WorldHostId);
+    if (Result != 0)
+    {
+        OutError = FString::Printf(
+            TEXT("Managed World destruction failed with status %d."),
+            Result);
+        return false;
+    }
+    OutError.Reset();
+    return true;
+}
+
+bool FUnifiedScriptCoreClrHost::CreateManagedScript(
+    uint64 WorldHostId,
+    uint64 InstanceId,
+    uint64 Target,
+    const FString& AssemblyPath,
+    const FString& TypeName,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::CoreClr::Private;
+    check(IsInGameThread());
+    FCreateScriptEntryPoint EntryPoint = nullptr;
+    {
+        FScopeLock Lock(&StateLock);
+        if (State != EUnifiedScriptCoreClrHostState::Ready ||
+            CreateScriptEntryPoint == nullptr)
+        {
+            OutError = TEXT("The UnifiedScript managed script entry point is unavailable.");
+            return false;
+        }
+        EntryPoint = reinterpret_cast<FCreateScriptEntryPoint>(CreateScriptEntryPoint);
+    }
+    if (AssemblyPath.IsEmpty() || !IFileManager::Get().FileExists(*AssemblyPath))
+    {
+        OutError = FString::Printf(
+            TEXT("The managed script assembly does not exist: '%s'."),
+            *AssemblyPath);
+        return false;
+    }
+    if (TypeName.IsEmpty())
+    {
+        OutError = TEXT("The managed script type name is empty.");
+        return false;
+    }
+
+    const FTCHARToUTF8 AssemblyPathUtf8(*AssemblyPath);
+    const FTCHARToUTF8 TypeNameUtf8(*TypeName);
+    const int32 Result = EntryPoint(
+        WorldHostId,
+        InstanceId,
+        Target,
+        reinterpret_cast<const uint8*>(AssemblyPathUtf8.Get()),
+        AssemblyPathUtf8.Length(),
+        reinterpret_cast<const uint8*>(TypeNameUtf8.Get()),
+        TypeNameUtf8.Length());
+    if (Result != 0)
+    {
+        OutError = FString::Printf(
+            TEXT("Managed script creation failed with status %d."),
+            Result);
+        return false;
+    }
+    OutError.Reset();
+    return true;
+}
+
+bool FUnifiedScriptCoreClrHost::TickManagedScript(
+    uint64 WorldHostId,
+    uint64 InstanceId,
+    float DeltaSeconds,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::CoreClr::Private;
+    check(IsInGameThread());
+    FTickScriptEntryPoint EntryPoint = nullptr;
+    {
+        FScopeLock Lock(&StateLock);
+        if (State != EUnifiedScriptCoreClrHostState::Ready ||
+            TickScriptEntryPoint == nullptr)
+        {
+            OutError = TEXT("The UnifiedScript managed tick entry point is unavailable.");
+            return false;
+        }
+        EntryPoint = reinterpret_cast<FTickScriptEntryPoint>(TickScriptEntryPoint);
+    }
+    const int32 Result = EntryPoint(WorldHostId, InstanceId, DeltaSeconds);
+    if (Result != 0)
+    {
+        OutError = FString::Printf(
+            TEXT("Managed script tick failed with status %d."),
+            Result);
+        return false;
+    }
+    OutError.Reset();
+    return true;
+}
+
+bool FUnifiedScriptCoreClrHost::ReloadManagedScript(
+    uint64 WorldHostId,
+    uint64 InstanceId,
+    const FString& AssemblyPath,
+    const FString& TypeName,
+    int32& OutGeneration,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::CoreClr::Private;
+    check(IsInGameThread());
+    OutGeneration = 0;
+    FReloadScriptEntryPoint EntryPoint = nullptr;
+    {
+        FScopeLock Lock(&StateLock);
+        if (State != EUnifiedScriptCoreClrHostState::Ready ||
+            ReloadScriptEntryPoint == nullptr)
+        {
+            OutError = TEXT("The UnifiedScript managed reload entry point is unavailable.");
+            return false;
+        }
+        EntryPoint = reinterpret_cast<FReloadScriptEntryPoint>(ReloadScriptEntryPoint);
+    }
+    if (AssemblyPath.IsEmpty() || !IFileManager::Get().FileExists(*AssemblyPath))
+    {
+        OutError = FString::Printf(
+            TEXT("The managed script assembly does not exist: '%s'."),
+            *AssemblyPath);
+        return false;
+    }
+    if (TypeName.IsEmpty())
+    {
+        OutError = TEXT("The managed script type name is empty.");
+        return false;
+    }
+
+    const FTCHARToUTF8 AssemblyPathUtf8(*AssemblyPath);
+    const FTCHARToUTF8 TypeNameUtf8(*TypeName);
+    const int32 Result = EntryPoint(
+        WorldHostId,
+        InstanceId,
+        reinterpret_cast<const uint8*>(AssemblyPathUtf8.Get()),
+        AssemblyPathUtf8.Length(),
+        reinterpret_cast<const uint8*>(TypeNameUtf8.Get()),
+        TypeNameUtf8.Length());
+    if (Result <= 0)
+    {
+        OutError = FString::Printf(
+            TEXT("Managed script reload failed with status %d."),
+            Result);
+        return false;
+    }
+    OutGeneration = Result;
+    OutError.Reset();
+    return true;
+}
+
+bool FUnifiedScriptCoreClrHost::DestroyManagedScript(
+    uint64 WorldHostId,
+    uint64 InstanceId,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::CoreClr::Private;
+    check(IsInGameThread());
+    FDestroyScriptEntryPoint EntryPoint = nullptr;
+    {
+        FScopeLock Lock(&StateLock);
+        if (State != EUnifiedScriptCoreClrHostState::Ready ||
+            DestroyScriptEntryPoint == nullptr)
+        {
+            OutError = TEXT("The UnifiedScript managed destroy-script entry point is unavailable.");
+            return false;
+        }
+        EntryPoint = reinterpret_cast<FDestroyScriptEntryPoint>(DestroyScriptEntryPoint);
+    }
+    const int32 Result = EntryPoint(WorldHostId, InstanceId);
+    if (Result != 0)
+    {
+        OutError = FString::Printf(
+            TEXT("Managed script destruction failed with status %d."),
+            Result);
+        return false;
+    }
+    OutError.Reset();
+    return true;
+}
+
+int32 FUnifiedScriptCoreClrHost::GetManagedScriptCount(uint64 WorldHostId) const
+{
+    using namespace UE::UnifiedScript::CoreClr::Private;
+    FScopeLock Lock(&StateLock);
+    if (State != EUnifiedScriptCoreClrHostState::Ready ||
+        GetScriptCountEntryPoint == nullptr)
+    {
+        return 0;
+    }
+    const int32 Result = reinterpret_cast<FGetScriptCountEntryPoint>(
+        GetScriptCountEntryPoint)(WorldHostId);
+    return FMath::Max(Result, 0);
+}
+
+int32 FUnifiedScriptCoreClrHost::GetManagedWorldCount() const
+{
+    using namespace UE::UnifiedScript::CoreClr::Private;
+    FScopeLock Lock(&StateLock);
+    return State == EUnifiedScriptCoreClrHostState::Ready &&
+        GetWorldCountEntryPoint != nullptr
+        ? reinterpret_cast<FGetWorldCountEntryPoint>(GetWorldCountEntryPoint)()
+        : 0;
+}
+
+FString FUnifiedScriptCoreClrHost::GetHostFxrPath() const
+{
+    FScopeLock Lock(&StateLock);
+    return LoadedHostFxrPath;
+}
+
+FString FUnifiedScriptCoreClrHost::GetLastError() const
+{
+    FScopeLock Lock(&StateLock);
+    return LastError;
+}
+
+bool FUnifiedScriptCoreClrHost::InitializeLocked()
+{
+    using namespace UE::UnifiedScript::CoreClr::Private;
+
+    const FString RuntimeConfigPath = GetRuntimeConfigPath();
+    if (RuntimeConfigPath.IsEmpty() ||
+        !IFileManager::Get().FileExists(*RuntimeConfigPath))
+    {
+        return FailLocked(TEXT("UnifiedScript CoreCLR runtimeconfig is missing."));
+    }
+
+    const FString DotNetRoot = FindDotNetRoot();
+    if (DotNetRoot.IsEmpty())
+    {
+        return FailLocked(TEXT("A compatible .NET root could not be found."));
+    }
+
+    LoadedHostFxrPath = FindHostFxr(DotNetRoot);
+    if (LoadedHostFxrPath.IsEmpty())
+    {
+        return FailLocked(TEXT("hostfxr was not found under the selected .NET root."));
+    }
+
+    HostFxrLibrary = FPlatformProcess::GetDllHandle(*LoadedHostFxrPath);
+    if (HostFxrLibrary == nullptr)
+    {
+        return FailLocked(FString::Printf(
+            TEXT("Failed to load hostfxr from '%s'."),
+            *LoadedHostFxrPath));
+    }
+
+    const FHostFxrInitialize InitializeForRuntimeConfig =
+        reinterpret_cast<FHostFxrInitialize>(FPlatformProcess::GetDllExport(
+            HostFxrLibrary,
+            TEXT("hostfxr_initialize_for_runtime_config")));
+    const FHostFxrGetRuntimeDelegate GetRuntimeDelegate =
+        reinterpret_cast<FHostFxrGetRuntimeDelegate>(FPlatformProcess::GetDllExport(
+            HostFxrLibrary,
+            TEXT("hostfxr_get_runtime_delegate")));
+    const FHostFxrClose Close = reinterpret_cast<FHostFxrClose>(
+        FPlatformProcess::GetDllExport(HostFxrLibrary, TEXT("hostfxr_close")));
+    if (InitializeForRuntimeConfig == nullptr ||
+        GetRuntimeDelegate == nullptr ||
+        Close == nullptr)
+    {
+        return FailLocked(TEXT("hostfxr does not expose the required hosting API."));
+    }
+
+    void* HostContext = nullptr;
+#if PLATFORM_WINDOWS
+    const int32 InitializeResult = InitializeForRuntimeConfig(
+        *RuntimeConfigPath,
+        nullptr,
+        &HostContext);
+#else
+    const FTCHARToUTF8 RuntimeConfigUtf8(*RuntimeConfigPath);
+    const int32 InitializeResult = InitializeForRuntimeConfig(
+        RuntimeConfigUtf8.Get(),
+        nullptr,
+        &HostContext);
+#endif
+    if (InitializeResult < 0 || HostContext == nullptr)
+    {
+        return FailLocked(FString::Printf(
+            TEXT("hostfxr runtime initialization failed with 0x%08X."),
+            static_cast<uint32>(InitializeResult)));
+    }
+
+    void* LoadDelegate = nullptr;
+    const int32 DelegateResult = GetRuntimeDelegate(
+        HostContext,
+        LoadAssemblyAndGetFunctionPointerDelegateType,
+        &LoadDelegate);
+    Close(HostContext);
+    if (DelegateResult < 0 || LoadDelegate == nullptr)
+    {
+        return FailLocked(FString::Printf(
+            TEXT("hostfxr delegate acquisition failed with 0x%08X."),
+            static_cast<uint32>(DelegateResult)));
+    }
+
+    LoadAssemblyAndGetFunctionPointer = LoadDelegate;
+    const FString ManagedAssemblyPath = GetManagedAssemblyPath();
+    if (ManagedAssemblyPath.IsEmpty() ||
+        !IFileManager::Get().FileExists(*ManagedAssemblyPath))
+    {
+        return FailLocked(TEXT(
+            "UnifiedScript.Unreal.dll is not staged under the plugin Binaries/Managed directory."));
+    }
+
+    const FLoadAssemblyAndGetFunctionPointer LoadManagedEntry =
+        reinterpret_cast<FLoadAssemblyAndGetFunctionPointer>(LoadDelegate);
+    const FUnifiedScriptHostChar* UnmanagedCallersOnly =
+        reinterpret_cast<const FUnifiedScriptHostChar*>(MAX_uint64);
+#if PLATFORM_WINDOWS
+    const FUnifiedScriptHostChar* AssemblyPath = *ManagedAssemblyPath;
+    const FUnifiedScriptHostChar* TypeName =
+        TEXT("UnifiedScript.Unreal.UnrealWorldManagedEntryPoint, UnifiedScript.Unreal");
+    auto LoadEntryPoint = [&](const FUnifiedScriptHostChar* MethodName, void** OutEntryPoint)
+    {
+        return LoadManagedEntry(
+            AssemblyPath,
+            TypeName,
+            MethodName,
+            UnmanagedCallersOnly,
+            nullptr,
+            OutEntryPoint);
+    };
+#else
+    const FTCHARToUTF8 AssemblyPathUtf8(*ManagedAssemblyPath);
+    const FTCHARToUTF8 TypeNameUtf8(
+        TEXT("UnifiedScript.Unreal.UnrealWorldManagedEntryPoint, UnifiedScript.Unreal"));
+    auto LoadEntryPoint = [&](const FUnifiedScriptHostChar* MethodName, void** OutEntryPoint)
+    {
+        return LoadManagedEntry(
+            AssemblyPathUtf8.Get(),
+            TypeNameUtf8.Get(),
+            MethodName,
+            UnmanagedCallersOnly,
+            nullptr,
+            OutEntryPoint);
+    };
+#endif
+
+#if PLATFORM_WINDOWS
+    const int32 CreateResult = LoadEntryPoint(TEXT("CreateWorld"), &CreateWorldEntryPoint);
+    const int32 DestroyResult = LoadEntryPoint(TEXT("DestroyWorld"), &DestroyWorldEntryPoint);
+    const int32 CountResult = LoadEntryPoint(TEXT("GetWorldCount"), &GetWorldCountEntryPoint);
+    const int32 CreateScriptResult = LoadEntryPoint(TEXT("CreateScript"), &CreateScriptEntryPoint);
+    const int32 TickScriptResult = LoadEntryPoint(TEXT("TickScript"), &TickScriptEntryPoint);
+    const int32 ReloadScriptResult = LoadEntryPoint(TEXT("ReloadScript"), &ReloadScriptEntryPoint);
+    const int32 DestroyScriptResult = LoadEntryPoint(TEXT("DestroyScript"), &DestroyScriptEntryPoint);
+    const int32 ScriptCountResult = LoadEntryPoint(TEXT("GetScriptCount"), &GetScriptCountEntryPoint);
+#else
+    const int32 CreateResult = LoadEntryPoint("CreateWorld", &CreateWorldEntryPoint);
+    const int32 DestroyResult = LoadEntryPoint("DestroyWorld", &DestroyWorldEntryPoint);
+    const int32 CountResult = LoadEntryPoint("GetWorldCount", &GetWorldCountEntryPoint);
+    const int32 CreateScriptResult = LoadEntryPoint("CreateScript", &CreateScriptEntryPoint);
+    const int32 TickScriptResult = LoadEntryPoint("TickScript", &TickScriptEntryPoint);
+    const int32 ReloadScriptResult = LoadEntryPoint("ReloadScript", &ReloadScriptEntryPoint);
+    const int32 DestroyScriptResult = LoadEntryPoint("DestroyScript", &DestroyScriptEntryPoint);
+    const int32 ScriptCountResult = LoadEntryPoint("GetScriptCount", &GetScriptCountEntryPoint);
+#endif
+    if (CreateResult != 0 || DestroyResult != 0 || CountResult != 0 ||
+        CreateScriptResult != 0 || TickScriptResult != 0 || ReloadScriptResult != 0 ||
+        DestroyScriptResult != 0 || ScriptCountResult != 0 ||
+        CreateWorldEntryPoint == nullptr ||
+        DestroyWorldEntryPoint == nullptr ||
+        GetWorldCountEntryPoint == nullptr ||
+        CreateScriptEntryPoint == nullptr ||
+        TickScriptEntryPoint == nullptr ||
+        ReloadScriptEntryPoint == nullptr ||
+        DestroyScriptEntryPoint == nullptr ||
+        GetScriptCountEntryPoint == nullptr)
+    {
+        return FailLocked(FString::Printf(
+            TEXT("Managed entry-point loading failed: world=(0x%08X,0x%08X,0x%08X) script=(0x%08X,0x%08X,0x%08X,0x%08X,0x%08X)."),
+            static_cast<uint32>(CreateResult),
+            static_cast<uint32>(DestroyResult),
+            static_cast<uint32>(CountResult),
+            static_cast<uint32>(CreateScriptResult),
+            static_cast<uint32>(TickScriptResult),
+            static_cast<uint32>(ReloadScriptResult),
+            static_cast<uint32>(DestroyScriptResult),
+            static_cast<uint32>(ScriptCountResult)));
+    }
+
+    LastError.Reset();
+    State = EUnifiedScriptCoreClrHostState::Ready;
+    UE_LOG(
+        LogTemp,
+        Display,
+        TEXT("UnifiedScript loaded CoreCLR through %s"),
+        *LoadedHostFxrPath);
+    return true;
+}
+
+bool FUnifiedScriptCoreClrHost::FailLocked(FString Message)
+{
+    if (HostFxrLibrary != nullptr)
+    {
+        FPlatformProcess::FreeDllHandle(HostFxrLibrary);
+        HostFxrLibrary = nullptr;
+    }
+    LoadAssemblyAndGetFunctionPointer = nullptr;
+    CreateWorldEntryPoint = nullptr;
+    DestroyWorldEntryPoint = nullptr;
+    GetWorldCountEntryPoint = nullptr;
+    CreateScriptEntryPoint = nullptr;
+    TickScriptEntryPoint = nullptr;
+    ReloadScriptEntryPoint = nullptr;
+    DestroyScriptEntryPoint = nullptr;
+    GetScriptCountEntryPoint = nullptr;
+    LastError = MoveTemp(Message);
+    State = EUnifiedScriptCoreClrHostState::Failed;
+    UE_LOG(LogTemp, Error, TEXT("%s"), *LastError);
+    return false;
+}
+
+#undef UNIFIEDSCRIPT_HOSTFXR_CALLTYPE
+#undef UNIFIEDSCRIPT_CORECLR_DELEGATE_CALLTYPE

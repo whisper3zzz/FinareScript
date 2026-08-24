@@ -111,6 +111,20 @@ internal static class Program
             fullManifestPath,
             fullOutputPath,
             "Generated bindings cannot overwrite the Unreal reflection manifest.");
+        string? fullNativeOutputPath = options.NativeOutputPath is null
+            ? null
+            : Path.GetFullPath(options.NativeOutputPath);
+        if (fullNativeOutputPath is not null)
+        {
+            EnsureDifferentPath(
+                fullManifestPath,
+                fullNativeOutputPath,
+                "Generated native thunks cannot overwrite the Unreal reflection manifest.");
+            EnsureDifferentPath(
+                fullOutputPath,
+                fullNativeOutputPath,
+                "Managed bindings and native thunks require different output paths.");
+        }
         UnrealReflectionManifest manifest = UnrealReflectionJson.Deserialize(
             File.ReadAllText(fullManifestPath));
         UnrealBindingGenerationResult result = new UnrealBindingGenerator().Generate(
@@ -124,6 +138,18 @@ internal static class Program
 
         WriteAtomically(fullOutputPath, result.Source);
         Console.WriteLine(fullOutputPath);
+        if (fullNativeOutputPath is not null)
+        {
+            UnrealNativeThunkGenerationResult nativeResult =
+                new UnrealNativeThunkGenerator().Generate(manifest);
+            foreach (UnrealNativeThunkDiagnostic diagnostic in nativeResult.Diagnostics)
+            {
+                Console.Error.WriteLine(
+                    $"warning {diagnostic.Code}: {diagnostic.Message} [{diagnostic.MemberPath}]");
+            }
+            WriteAtomically(fullNativeOutputPath, nativeResult.Source);
+            Console.WriteLine(fullNativeOutputPath);
+        }
         return 0;
     }
 
@@ -278,13 +304,39 @@ internal static class Program
         IdentitySidecarDocument identitySidecar = File.Exists(identityPath)
             ? LoadIdentitySidecar(identityPath)
             : IdentitySidecarDocument.CreateEmpty(logicalPath);
+        string[] additionalSourcePaths = options.AdditionalSourcePaths
+            .Select(Path.GetFullPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        string? missingSource = additionalSourcePaths.FirstOrDefault(path => !File.Exists(path));
+        if (missingSource is not null)
+        {
+            Console.Error.WriteLine($"Additional source file does not exist: {missingSource}");
+            return 66;
+        }
+
         CSharpSourceDocument[] sources =
         [
             new CSharpSourceDocument(
                 logicalPath,
                 File.ReadAllText(fullInputPath),
                 identitySidecar),
+            .. additionalSourcePaths
+                .Where(path => !string.Equals(path, fullInputPath, StringComparison.OrdinalIgnoreCase))
+                .Select(path => new CSharpSourceDocument(
+                    GetLogicalInputPath(path),
+                    File.ReadAllText(path),
+                    IdentitySidecarDocument.CreateEmpty(GetLogicalInputPath(path)))),
         ];
+        var sourceFiles = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [logicalPath] = fullInputPath,
+        };
+        foreach (string path in additionalSourcePaths.Where(path =>
+            !string.Equals(path, fullInputPath, StringComparison.OrdinalIgnoreCase)))
+        {
+            sourceFiles.Add(GetLogicalInputPath(path), path);
+        }
         var request = new CSharpCompilationRequest(
             options.AssemblyName,
             sources,
@@ -297,7 +349,13 @@ internal static class Program
                 fullInputPath,
                 identityPath,
                 options.ContentRoot,
-                options.Port);
+                options.Port,
+                new AuthoringArtifactOutputs(
+                    options.DeclarationOutputPath,
+                    options.SurfaceOutputPath,
+                    options.ManagedAssemblyOutputPath,
+                    options.PortablePdbOutputPath),
+                sourceFiles);
             using var cancellation = new CancellationTokenSource();
             ConsoleCancelEventHandler cancelHandler = (_, eventArgs) =>
             {
@@ -897,6 +955,7 @@ internal static class Program
 
         string manifestPath = args[1];
         string? outputPath = null;
+        string? nativeOutputPath = null;
         string? bindingNamespace = null;
         int index = 2;
         while (index < args.Count)
@@ -916,6 +975,9 @@ internal static class Program
                 case "--namespace" when bindingNamespace is null:
                     bindingNamespace = value;
                     break;
+                case "--native-out" when nativeOutputPath is null:
+                    nativeOutputPath = value;
+                    break;
                 default:
                     return false;
             }
@@ -929,7 +991,8 @@ internal static class Program
         options = new UnrealBindingOptions(
             manifestPath,
             outputPath,
-            bindingNamespace ?? "UnifiedScript.Unreal.Generated");
+            bindingNamespace ?? "UnifiedScript.Unreal.Generated",
+            nativeOutputPath);
         return true;
     }
 
@@ -1023,9 +1086,14 @@ internal static class Program
         string? effectCatalogPath = null;
         string? assemblyName = null;
         string? identityPath = null;
+        string? declarationOutputPath = null;
+        string? surfaceOutputPath = null;
+        string? managedAssemblyOutputPath = null;
+        string? portablePdbOutputPath = null;
         int port = 4173;
         bool hasPort = false;
         var referencePaths = new List<string>();
+        var additionalSourcePaths = new List<string>();
         int index = 2;
         while (index < args.Count)
         {
@@ -1054,8 +1122,23 @@ internal static class Program
                 case "--reference":
                     referencePaths.Add(value);
                     break;
+                case "--source":
+                    additionalSourcePaths.Add(value);
+                    break;
                 case "--identity" when identityPath is null:
                     identityPath = value;
+                    break;
+                case "--asset-out" when declarationOutputPath is null:
+                    declarationOutputPath = value;
+                    break;
+                case "--surface-out" when surfaceOutputPath is null:
+                    surfaceOutputPath = value;
+                    break;
+                case "--managed-out" when managedAssemblyOutputPath is null:
+                    managedAssemblyOutputPath = value;
+                    break;
+                case "--pdb-out" when portablePdbOutputPath is null:
+                    portablePdbOutputPath = value;
                     break;
                 default:
                     return false;
@@ -1074,7 +1157,12 @@ internal static class Program
             effectCatalogPath,
             assemblyName ?? "UnifiedScript.Analysis",
             referencePaths,
-            identityPath);
+            identityPath,
+            additionalSourcePaths,
+            declarationOutputPath,
+            surfaceOutputPath,
+            managedAssemblyOutputPath,
+            portablePdbOutputPath);
         return true;
     }
 
@@ -1524,7 +1612,7 @@ internal static class Program
         "--out <output.cs> --out-asset <asset.json> [options]\n" +
         "  unifiedscript execute <input.cs> (--method <name> | --method-id <us_...>) [options]\n" +
         "  unifiedscript debug-serve <input.cs> --root <visual-editor-directory> [--port <number>] [options]\n" +
-        "  unifiedscript ue-bindings <reflection.json> --out <bindings.cs> [--namespace <name>]\n" +
+        "  unifiedscript ue-bindings <reflection.json> --out <bindings.cs> [--native-out <thunks.cpp>] [--namespace <name>]\n" +
         "Options:\n" +
         "  --out <path>            Artifact directory, initialized sidecar, or patched source output.\n" +
         "  --patch <patch.json>    Semantic patch document required by apply-patch.\n" +
@@ -1539,7 +1627,13 @@ internal static class Program
         "  --layout <file.usgraph> Existing visual layout required by layout-sync.\n" +
         "  --root <directory>      Static visual workbench root required by debug-serve.\n" +
         "  --port <number>         Loopback debug server port; defaults to 4173.\n" +
+        "  --source <input.cs>     Add a compilation source to debug-serve; may repeat.\n" +
+        "  --asset-out <path>      Transactional Declaration IR output for debug-serve.\n" +
+        "  --surface-out <path>    Transactional Authoring Surface output for debug-serve.\n" +
+        "  --managed-out <path>    Transactional managed assembly output for debug-serve.\n" +
+        "  --pdb-out <path>        Transactional portable PDB output for debug-serve.\n" +
         "  --namespace <name>      Namespace for generated Unreal managed bindings.\n" +
+        "  --native-out <path>     Also emit ABI v2 direct native thunk C++.\n" +
         "  --assembly <name>        Set the analysis assembly name.\n" +
         "  --effects <catalog.json> Apply effect catalog overrides.\n" +
         "  --reference <assembly>   Add a metadata reference; may be repeated.\n" +
@@ -1570,12 +1664,18 @@ internal static class Program
         string? EffectCatalogPath,
         string AssemblyName,
         IReadOnlyList<string> ReferencePaths,
-        string? IdentityPath);
+        string? IdentityPath,
+        IReadOnlyList<string> AdditionalSourcePaths,
+        string? DeclarationOutputPath,
+        string? SurfaceOutputPath,
+        string? ManagedAssemblyOutputPath,
+        string? PortablePdbOutputPath);
 
     private sealed record UnrealBindingOptions(
         string ManifestPath,
         string OutputPath,
-        string Namespace);
+        string Namespace,
+        string? NativeOutputPath);
 
     private sealed record IdentityOptions(
         string InputPath,

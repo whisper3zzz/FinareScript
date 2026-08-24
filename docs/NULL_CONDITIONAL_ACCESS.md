@@ -9,8 +9,8 @@ The current strict-reader contracts are:
 
 - HIR `unifiedscript.hir/v0.7`;
 - Graph `unifiedscript.graph/v0.12`;
-- standalone patch `unifiedscript.patch/v0.19`;
-- patch plan `unifiedscript.patch-plan/v0.20`.
+- standalone patch `unifiedscript.patch/v0.21`;
+- patch plan `unifiedscript.patch-plan/v0.21`.
 
 ## HIR structure
 
@@ -123,7 +123,7 @@ regions are represented.
 
 ## Visual construction
 
-Patch v0.19 adds a bounded `conditionalMemberAccess` expression payload:
+Patch v0.20 adds a bounded `conditionalMemberAccess` expression payload:
 
 ```json
 {

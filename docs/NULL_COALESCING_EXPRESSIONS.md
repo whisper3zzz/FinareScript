@@ -9,8 +9,8 @@ The current contracts are:
 
 - HIR `unifiedscript.hir/v0.7`;
 - Graph `unifiedscript.graph/v0.12`;
-- standalone patch `unifiedscript.patch/v0.19`;
-- patch plan `unifiedscript.patch-plan/v0.20`.
+- standalone patch `unifiedscript.patch/v0.21`;
+- patch plan `unifiedscript.patch-plan/v0.21`.
 
 At the M4.14 boundary only Graph changed version: HIR, persistent identity, and
 both patch protocols already represented `??` losslessly as an ordered binary
@@ -72,7 +72,7 @@ declared/bound nullability already present in semantic profile v0.1.
 
 ## Graph-authored type boundary
 
-Patch v0.19 reuses `BinaryPatchExpression` with operator `??`. No new payload
+Patch v0.20 reuses `BinaryPatchExpression` with operator `??`. No new payload
 or port is required. To avoid hiding conversions from the future shared VM,
 visual construction is deliberately narrower than all legal C# forms:
 

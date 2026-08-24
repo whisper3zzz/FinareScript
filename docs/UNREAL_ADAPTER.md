@@ -9,7 +9,7 @@ does not introduce a second graph or VM.
 The first slice has four explicit boundaries:
 
 ```text
-UE 5.7 native reflection
+UE 5.7/5.8 native reflection
   -> UnifiedScriptExport commandlet
   -> unifiedscript.unreal-reflection/v0.1
   -> UnifiedScript.Unreal binding generator
@@ -21,7 +21,7 @@ contains:
 
 - `UEUnifiedScriptRuntime`: `UUnifiedScriptComponent` and the eventual native
   runtime/lifetime bridge;
-- `UEUnifiedScriptEditor`: reflection export and future Slate/editor tooling.
+- `UEUnifiedScriptEditor`: reflection export and native Slate authoring tooling.
 
 The .NET `UnifiedScript.Unreal` project contains no UE dependency. It owns the
 wire contract, validation, normalization, managed wrapper generation, and the
@@ -66,10 +66,365 @@ recursive list/set/map shapes. Native structs and enums, static functions,
 and output/reference parameters remain explicit deferred diagnostics until the
 marshalling and class-default-object rules exist.
 
-`UnrealObject` rejects a zero handle and a null bridge. This is only the managed
-side of the ownership contract: Phase B must add a native weak-handle table,
-serial/generation validation, game-thread checks, and destruction notification
-before any real UObject access is allowed.
+`UnrealObject` rejects malformed handles and a null bridge. Handles are unsigned
+64-bit values rather than addresses: the low 32 bits encode `slot + 1`, the high
+32 bits encode a non-zero generation, and zero is null.
+
+## Phase B.1 UObject lifetime boundary
+
+`FUnifiedScriptObjectRegistry` is the native authority for those handles. Each
+registry is bound to one `UWorld`, stores only `TWeakObjectPtr<UObject>`, and
+requires the game thread for registration, resolution, release, and bulk
+invalidation. Duplicate registration returns the existing handle. A released or
+deleted object retires its slot; reuse receives a new process-wide generation.
+Active handles therefore cannot alias either a later UObject or an object in a
+different World registry.
+
+The registry is a `FUObjectArray::FUObjectDeleteListener`; deletion notification
+removes the object identity immediately rather than relying only on lazy weak
+pointer checks. Stable result categories distinguish off-thread access,
+unavailable worlds, null objects, world mismatch, malformed handles, and stale
+generations. No `FProperty` access or `ProcessEvent` invocation has been added in
+this slice.
+
+The native Automation Test covers registration identity, world isolation,
+release/reuse, off-thread rejection, GC deletion, and stale lookup. It compiles,
+links, and passes under an installed UE 5.8.1 Release build. The same host also
+runs `UnifiedScriptExport` successfully, producing one fixture type with three
+properties and two functions; that live manifest passes the managed binding
+generator. A separate source-engine checkout had corrupt local DLL outputs, but
+that was an engine-build artifact rather than a UE 5.8 compatibility boundary.
+
+## Phase B.2 primitive invocation core
+
+`FUnifiedScriptInvocationBridge` resolves every target through
+`FUnifiedScriptObjectRegistry` before member lookup. It accepts the exact
+`/Script/Module.Type:Member` identities emitted into generated wrappers, checks
+the target class and Blueprint access flags, and owns all transported values.
+No property address, parameter buffer, or UObject pointer escapes the call.
+
+The first marshalling slice supports `bool`, `int32`, `FString`, and void. It
+reads and writes the fixture properties and invokes `Add` and `RequestReload`
+through `ProcessEvent`. Unsupported types, output/reference parameters, wrong
+argument counts, wrong value kinds, non-callable functions, cross-thread use,
+and stale handles fail before invocation with stable categories. The installed
+UE 5.8.1 Automation run passes the lifetime, primitive invocation, and native
+transport ABI tests.
+
+## Phase B.3 managed invocation adapter
+
+`NativeUnrealInvocationBridge` implements `IUnrealInvocationBridge` and converts
+generated-wrapper CLR `bool`, `int`, and `string` values into the same owned
+value kinds used by the native core. Native invocation and handle categories are
+preserved in `UnrealInvocationException`; the numeric values are fixed on both
+sides of the boundary.
+
+The checked-in generated `UnifiedScriptComponent` wrapper is compiled into the
+.NET test suite. It reads and writes all fixture properties, calls `Add` and
+`RequestReload`, and preserves a simulated native stale-handle failure through
+an injected `IUnrealNativeInvocationTransport`. This proves generated-wrapper
+and CLR-side semantics without pretending that the process boundary exists.
+
+## Phase B.4 versioned in-process transport
+
+`UEUnifiedScript_GetNativeTransportV1` exports a size-checked native function
+table for property reads, property writes, and function calls. Responses use a
+synchronous callback whose UTF-8 slices are valid only for the callback, so the
+managed side copies them immediately and neither runtime frees memory allocated
+by the other.
+
+`InProcessUnrealNativeInvocationTransport` validates the ABI version, table
+size, value size, and required entry points before accepting calls. Native
+Automation covers the exported table against a live fixture UObject; managed
+tests drive the checked-in generated wrapper through an unmanaged function table
+and verify ABI-layout rejection and stable stale-handle propagation. The table
+also exposes context retain/release operations; the managed transport implements
+`IDisposable` and serializes calls against disposal.
+
+## Phase B.5 world host and bridge-context lifetime
+
+`UUnifiedScriptWorldSubsystem` is instantiated once for each supported Game,
+PIE, or Editor World. It exclusively owns that World's weak-object registry and
+invocation bridge. Its opaque `FUnifiedScriptNativeBridgeContext` starts with one
+host reference; each managed transport retains another reference during
+construction and releases it on disposal.
+
+World teardown first detaches the context, waiting for a current synchronous call
+to leave. It then invalidates every UObject handle, destroys the bridge before
+the registry, and releases the host reference. A managed reference may keep the
+small detached context object alive, but subsequent calls return
+`TransportUnavailable` and cannot reach freed UE state.
+
+The UE 5.8 Automation suite creates two Worlds, verifies distinct hosts and
+contexts, proves handles cannot alias across contexts, retains one context across
+World destruction, and verifies safe rejection afterward. Phases B.6-B.9 build
+the process host, managed World entry, and hosted C# demo on this lifetime base.
+
+## Phase B.6 process CoreCLR bootstrap
+
+`FUnifiedScriptCoreClrHost` discovers .NET through
+`UNIFIEDSCRIPT_DOTNET_ROOT`, `DOTNET_ROOT`, or the engine-bundled .NET 10 runtime.
+It dynamically loads hostfxr, initializes the checked-in runtimeconfig, and
+acquires `load_assembly_and_get_function_pointer`. CoreCLR is process-wide;
+World isolation will be provided by managed collectible load contexts rather
+than by attempting to start one CLR per World.
+
+The UE 5.8 lifecycle test confirms the real engine process loaded hostfxr 10.0.7
+and received a non-null load-assembly delegate. Managed assembly staging,
+entry-point invocation, and per-World unload are completed in Phase B.7.
+
+## Phase B.7 managed World entry and collectible domain
+
+The `UnifiedScript.Unreal` build stages its managed host DLL and dependency
+manifest under the plugin's ignored `Binaries/Managed` directory. The native
+process host resolves three `UnmanagedCallersOnly` methods: create World, destroy
+World, and query active World count.
+
+Each managed World entry constructs `InProcessUnrealNativeInvocationTransport`,
+retains the native context, and owns the script-instance registry. Native
+teardown invokes the managed destroy entry first, stopping and unloading every
+script generation and releasing the transport before native detach and registry
+destruction. UE 5.8 Automation verifies two entries are created and their count
+returns to baseline as both Worlds are destroyed.
+
+## Phase B.8 hosted managed demo
+
+`UnifiedScript.Unreal.Demo.dll` is staged beside the managed host. Its
+`DemoScript` constructs the checked-in generated `UnifiedScriptComponent`
+wrapper and proves live property access plus `Add(20, 22) == 42`.
+
+## Phase B.9 component-driven lifecycle and reload
+
+`UUnifiedScriptComponent` now exposes `ScriptAssemblyPath`, `ScriptTypeName`,
+automatic start/tick switches, running state, active generation, and last error.
+`BeginPlay` registers the component and dispatches managed `OnStart`; Tick calls
+`OnTick`; `EndPlay` calls `OnStop` before releasing the UObject handle.
+
+Each script instance loads into its own collectible generation context. Reload
+preloads the next generation, stops the old instance, starts the new instance,
+then unloads the old context. Assembly and PDB bytes are loaded from shared-read
+streams so Windows builds can replace staged files while an older generation is
+still alive. UE 5.8 Automation verifies automatic Start, Tick, two reload
+generations, Stop, handle release ordering, and zero remaining script instances.
+
+Run the complete build-and-demo path on Windows with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/run-unreal-demo.ps1 -EngineRoot D:\UE_5.8
+```
+
+The same demo can be attached to an Editor actor by creating a
+`UnifiedScriptAsset` Data Asset and configuring:
+
+```text
+ScriptAssemblyPath = {PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.dll
+ScriptTypeName     = UnifiedScript.Unreal.Demo.DemoScript
+```
+
+Assign the Data Asset to `UnifiedScriptComponent.Script Asset`. The component's
+direct fields remain available under advanced settings for compatibility.
+
+## Phase B.10 generated native fast thunks
+
+The binding generator now hashes each canonical member path with stable UTF-8
+FNV-1a and emits the 64-bit ID beside its readable path. `UnrealObject` selects
+`IUnrealFastInvocationBridge` when available and otherwise calls the original
+string-path bridge, so old injected bridges and ABI v1 hosts remain compatible.
+
+`UEUnifiedScript_GetNativeTransportV2` preserves the complete ABI v1 prefix and
+appends read/write/invoke entry points keyed by Member ID. The first generated
+native thunk table covers the full reflected `UUnifiedScriptComponent` surface.
+It still resolves the world-scoped weak handle first, then accesses fields or
+calls C++ methods directly without path decoding, `FProperty` lookup,
+`FStructOnScope`, or `ProcessEvent`. Native and managed tests cover both ABI
+versions. The live UE demo reports `FastCalls=16`, proving the hosted generated
+wrapper selected v2 during Start/Tick/Reload/Stop.
+
+This is now an executable component host with a measured route counter, not yet
+a cross-runtime performance claim. Dependency packaging, automatic thunk
+generation for arbitrary reflected types, and comparative Puerts benchmarks
+remain open.
+
+## Phase B.11 Script Asset resolution and transactional reload
+
+`UUnifiedScriptAsset` is a native UE Data Asset with schema version, managed
+assembly path, managed type name, and optional authoring source path. It can be
+created through the ordinary Content Browser Data Asset flow and selected on a
+`UUnifiedScriptComponent`. Components may alternatively load the same asset from
+`ScriptAssetPath`; direct assembly/type fields remain an advanced compatibility
+fallback.
+
+Start validates the asset schema and entry configuration, expands project/plugin
+path tokens, checks the DLL, and records the active asset identity. Reload now
+passes a freshly resolved assembly and type through the native CoreCLR entry
+point. Managed code preloads the candidate collectible generation before
+stopping the current one; a missing type or invalid asset therefore leaves the
+previous script running. The UE demo starts from a transient Script Asset,
+rejects an invalid asset reload without advancing generation, then switches to
+`AlternateDemoScript` and completes Tick/Stop successfully.
+
+The remaining asset work is cook/package dependency discovery.
+
+## Phase B.12 automatic native thunk generation
+
+The reflection manifest now carries each native class header and the native
+public/protected/private access of exported properties and functions. The same
+`ue-bindings` command accepts `--native-out` and deterministically emits a C++
+translation unit keyed by the exact Member IDs used in managed wrappers.
+
+For public `bool`, `int32`, `FString`, and void signatures in the current ABI,
+the generated dispatcher casts the already handle-validated UObject once and
+then accesses the native field or invokes the C++ method directly. It performs
+no member-path parsing, `FProperty` lookup, parameter-buffer allocation, or
+`ProcessEvent`. Read-only properties, bad target types, argument-count errors,
+and value-kind mismatches retain the existing stable bridge failures. Unsupported
+or non-public native shapes produce deterministic `USUE300x` diagnostics rather
+than silently falling back to unsafe direct access.
+
+The checked-in runtime thunk file is generated from the checked-in live UE 5.8
+manifest, and a golden test prevents it from drifting. ABI v1 remains available
+for older hosts and injected bridges; the next marshalling expansion will widen
+the generated fast path beyond the initial primitive set.
+
+## Phase B.13 Declaration IR state materialization
+
+`UUnifiedScriptAsset` now carries an optional declaration JSON path and exact
+asset key. `UUnifiedScriptComponent.RefreshScriptState` parses
+`unifiedscript.script-asset/v0.1`, maps supported scalar state into a
+fixed-layout `FInstancedPropertyBag`, and applies C# defaults plus Details
+metadata and Edit/SaveGame/Net flags. The C# declaration remains authoritative;
+Blueprint does not own duplicate field declarations.
+
+Each state semantic ID becomes the Property Bag descriptor GUID. A candidate
+layout therefore migrates compatible instance values by ID across renames,
+additions, removals, Start, and Reload. Parsing and managed generation swaps are
+transactional: a bad document or failed managed entry keeps the prior running
+generation and prior state bag. The generated primitive bridge exposes int32
+state access to gameplay C# without reflection lookup.
+
+The checked-in UE 5.8 demo stages its emitted declaration beside the managed
+assembly, overrides `InitialValue` from 10 to 37, reads 37 in `OnStart`, retains
+it across Reload, and reports `DeclarationState=37` with `FastCalls=16`.
+
+## Phase B.14 native Slate Authoring Surface
+
+The editor module now registers a `UnifiedScript Authoring` nomad tab and a
+Tools-menu entry. Its native Slate workspace consumes only the strict
+`unifiedscript.authoring-surface/v0.1` artifact; it does not parse C# or recreate
+Graph semantics inside Unreal. A surface can be opened directly, loaded from
+the selected `UUnifiedScriptAsset.AuthoringSurfacePath`, reset to the staged
+Demo, and automatically refreshed when its file changes.
+
+The workspace presents Script Asset state and behavior as a semantic hierarchy:
+function regions retain structured ownership of promoted actions, while the
+inspector exposes kind/category, exact semantic ID, source span, source preview,
+and source navigation. Literal and operator edit capabilities accept a candidate
+value and export a preconditioned `unifiedscript.patch/v0.21` document to the
+clipboard. This preserves one compiler-owned edit contract across browser and
+Slate frontends.
+
+The UE 5.8 editor Automation test loads the real Demo surface (one asset, one
+state, one visual function, five promoted actions), rejects an invalid schema
+transactionally, builds a typed patch, verifies tab registration, and constructs
+the real widget. Direct workbench/HTTP submission, source mutation, transaction
+undo, visual node layout, and live component reload are intentionally not yet
+claimed by this slice.
+
+## Phase B.15 transactional Slate Apply and component reload
+
+Each promoted literal/operator editor now exposes `Apply & Reload`. The Slate
+client posts the exact `unifiedscript.patch/v0.21` payload to the configured
+loopback Workbench URL and accepts only a strict
+`unifiedscript.authoring-workspace/v0.2` response. The returned Surface replaces
+the view without UE-side C# or Graph reconstruction; protocol diagnostics such
+as stale compilation IDs and external-file conflicts are shown in the tab.
+
+`debug-serve` now supports repeatable `--source` plus transactional
+`--asset-out`, `--surface-out`, `--managed-out`, and `--pdb-out` targets. A
+successful mutation validates the complete multi-source candidate and publishes
+C#, primary `.usids`, Declaration IR, Authoring Surface, uninstrumented managed
+DLL, and portable PDB through one rollback-capable file transaction. Initial
+sidecar creation retains existing deterministic Semantic IDs, so a checked-in
+Surface remains a valid first-edit baseline.
+
+After the response, Slate finds components associated with the selected Script
+Asset or loaded Surface. Running instances call their existing transactional
+`ReloadScript`; inactive instances refresh Declaration state. The real UE 5.8
+Demo was exercised through a `100 -> 101 -> 100` Workbench round trip, retained
+its stable IDs, emitted a loadable DLL, and then passed the live World-host Demo
+with `DeclarationState=37` and `FastCalls=16`.
+
+## Phase B.16 Blueprint-style GraphEditor workspace
+
+The authoring tab now uses Unreal's native `SGraphEditor` rather than a custom
+tree pretending to be a graph. Its Blueprint-style workbench keeps `My Script`
+navigation on the left, a zoomable/pannable/marquee-selectable behavior canvas
+in the center, and semantic Details/source/edit controls on the right. Function
+selection rebuilds a transient `UEdGraph` from the current Surface; graph-node
+selection drives the same inspector and double-click opens the exact C# span.
+
+Custom editor-only nodes preserve the Surface action and region identities,
+source order, scope depth, category colors, summaries, and source locations.
+They are a read model: moving a card is transient, deletion/duplication is
+disabled, and Surface v0.1 does not invent pins or execution wires that the
+compiler has not emitted. A later Surface edge/port contract can therefore add
+real Blueprint-like connections without creating a second semantic authority
+inside Unreal.
+
+## Phase B.17 Surface v0.3 native pins and wires
+
+Surface v0.3 now promotes the complete Graph IR projection instead of only
+control-bearing cards. Every node carries direction/kind/type-aware ports and
+every compiler-owned control/data edge retains its exact semantic ID and
+endpoints. Strict C# and UE readers reject dangling pins, wrong directions,
+kind/type mismatches, duplicate edges, and multiply driven data inputs.
+
+The Slate adapter allocates real `UEdGraphPin` objects, uses native Blueprint
+execution-pin widgets, colors known data pins by compiler type, links every
+Surface edge, and lays the graph out by dependency depth. Literal/operator
+capabilities still use the existing transactional C# patch, rebuild, Surface
+refresh, and live component reload loop. Manual rewiring is intentionally
+disabled until a graph-rewire patch contract can preserve source correctness.
+
+## Phase B.18 lossless Graph Presentation v1
+
+The compiler still publishes the complete Graph IR projection, but the Slate
+canvas no longer renders every identifier and literal as a full debug card.
+Connected value leaves are folded into their consumer pins (`A = result`,
+`Value = 100`), common execution-pin labels are hidden, unused data outputs are
+suppressed, and assignment actions use author-facing titles such as
+`Set result`. `ResolveInitialValue` therefore presents 7 nodes and 7 wires while
+that function's strict Surface remains 14 nodes and 14 edges.
+
+Kind/category, source location, semantic IDs, exact IR pin names, and type IDs
+remain available in Details and tooltips. This is deliberately a read-only
+projection policy: semantic selection, source navigation, literal/operator
+patch targets, workbench transactions, and live component reload still resolve
+against the unmodified Surface identities.
+
+## Phase B.19 transactional data-edge authoring
+
+Slate can now drag a compatible visible data output onto an occupied data input.
+The schema does not mutate the transient `UEdGraph` immediately. It serializes
+`reconnectDataEdge` with the exact compiler edge/endpoints/type from Surface
+v0.2, submits it through the existing Workbench endpoint, and rebuilds from the
+returned Surface only after the source/DLL/PDB transaction commits. A server,
+precondition, type, effect, scope, or compilation failure therefore leaves the
+old wire visible and reports the shared diagnostic.
+
+The C# reverse path deliberately starts with bounded copy semantics: literals,
+parameters/locals, and supported pure unary/binary/cast/conditional trees are
+projected into the target through the existing typed expression patcher. It
+rejects state reads and effects because copying those expressions could change
+evaluation count or ordering. General shared-value/control rewiring will use
+explicit temporaries and structural patch plans rather than silently changing
+runtime semantics.
+
+The staged Demo includes `RewirePreview(value, doubleValue)` as a positive
+round-trip path. Select it in `My Script`, then drag the `*` data output onto
+`Declare incremented` -> `Value`. The Workbench changes `value + 1` to
+`value * 2`, rebuilds the managed artifacts, and refreshes the graph from the
+new compiler-owned Surface.
 
 ## Commands
 
@@ -83,13 +438,23 @@ tools/ue-adapter.sh bindings
 tools/ue-adapter.sh verify
 ```
 
+Direct CLI generation of both managed and native sides:
+
+```bash
+unifiedscript ue-bindings reflection.json \
+  --out bindings.cs \
+  --native-out native-thunks.generated.cpp
+```
+
 Set an explicit engine when discovery is ambiguous:
 
 ```bash
 UNIFIEDSCRIPT_UE_ROOT=/path/to/UnrealEngine tools/ue-adapter.sh verify
 ```
 
-The build target is `UEUnifiedScriptHostEditor Mac Development`. Export invokes
+The TargetRules use the selected engine's `Latest` build settings and include
+order, mapping to V6/5.7 for UE 5.7 and V7/5.8 for UE 5.8. The helper build
+target is `UEUnifiedScriptHostEditor Mac Development`. Export invokes
 the editor headlessly with `-run=UnifiedScriptExport` and defaults to the
 `UEUnifiedScriptRuntime` module. Runtime artifacts are written to
 `artifacts/ue/`.
@@ -120,21 +485,20 @@ yet execute gameplay C#.
 
 Phase B adds native invocation and lifetime safety:
 
-- weak object handles with serial validation and explicit invalidation;
-- property marshalling and `ProcessEvent` invocation;
-- game-thread/world ownership and structured native errors;
-- generated wrapper integration tests against real fixture objects.
+- extend primitive marshalling beyond `bool`, `int32`, and `FString`;
+- add Script Asset cook/package dependency discovery;
+- widen generated typed thunks beyond the current primitive ABI.
 
-Phase C adds the shared runtime domain:
+Phase C completes the shared runtime domain:
 
-- one CoreCLR domain per `UWorld` policy;
-- component-to-script asset loading and hot reload;
-- C# declaration state materialized directly on the component/Details surface;
+- resolve generated gameplay assemblies from a script asset;
+- group compatible script instances into optimized runtime generations;
+- preserve component-driven hot reload and lifecycle ordering;
 - no duplicate Blueprint variable declarations.
 
 Phase D adds the editor and distribution surface:
 
-- Slate frontend consuming Authoring Surface v0.1 and the same patch APIs;
 - semantic selection/debug identities retained across UE reloads;
+- optional graph-canvas layout and undo/redo presentation;
 - cook staging, managed dependency closure, platform runtime selection, and
   packaging verification.

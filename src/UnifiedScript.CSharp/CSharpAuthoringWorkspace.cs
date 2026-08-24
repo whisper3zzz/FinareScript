@@ -25,6 +25,7 @@ public sealed class CSharpAuthoringWorkspace
     private readonly CSharpSemanticPipeline pipeline = new();
     private readonly CSharpDeclarationPatchApplier declarationPatchApplier = new();
     private readonly CSharpSourcePatchApplier semanticPatchApplier = new();
+    private readonly CSharpPatchPlanApplier patchPlanApplier = new();
 
     public CSharpAuthoringWorkspace(CSharpCompilationRequest request)
     {
@@ -52,6 +53,12 @@ public sealed class CSharpAuthoringWorkspace
     {
         ArgumentNullException.ThrowIfNull(patch);
         return CreateMutation(semanticPatchApplier.Apply(Current.Request, patch));
+    }
+
+    public CSharpAuthoringMutation Prepare(SemanticPatchPlanDocument plan)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        return CreateMutation(patchPlanApplier.Apply(Current.Request, plan));
     }
 
     public void Commit(CSharpAuthoringMutation mutation)

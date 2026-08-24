@@ -9,8 +9,20 @@ public class UEUnifiedScriptEditor : ModuleRules
         {
             "Core",
             "CoreUObject",
+            "ApplicationCore",
+            "ContentBrowser",
+            "DesktopPlatform",
             "Engine",
+            "GraphEditor",
+            "HTTP",
             "Json",
+            "InputCore",
+            "Projects",
+            "Slate",
+            "SlateCore",
+            "ToolMenus",
+            "UnrealEd",
+            "WorkspaceMenuStructure",
             "UEUnifiedScriptRuntime"
         });
     }

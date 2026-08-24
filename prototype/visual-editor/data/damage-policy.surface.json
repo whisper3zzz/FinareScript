@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "unifiedscript.authoring-surface/v0.1",
+  "schemaVersion": "unifiedscript.authoring-surface/v0.3",
   "sourceCompilationId": "us_9c565600166a847b78177c5c25c03ba5",
   "semanticConfigurationId": "us_02f5fe78d296e2d4fe04bc50ca71acf1",
   "assets": [
@@ -155,8 +155,19 @@
               "isImplicit": false,
               "directActionIds": [
                 "us_c9aba80313f5b206c3b5222407a549b3",
+                "us_49097fb28d65f178d1f6a871b47ec679",
+                "us_e459f4f713fe26395f665bbfa5a44665",
+                "us_4734b1e54218f5be689bf666e7cca4a3",
                 "us_78ceaa28ab965873b37a441b3162f427",
-                "us_27393be68a2b8cd68ea420f494910eee"
+                "us_91b4a3f92292810fadc147e37eae11ce",
+                "us_d5f8e90aa9c2a67eb3fcf7df4d0aa440",
+                "us_d669bb3980cddce07f64de04c3f245f1",
+                "us_fec53b114b1ac9cfea472ca5d9c63917",
+                "us_c891c49a43dab0c6ce858a92a6f2dbb4",
+                "us_cd1ac0cfc9ede79d03f4189b4253ce8b",
+                "us_efeb1c15214838fefc6f4c37cbdfd6c5",
+                "us_27393be68a2b8cd68ea420f494910eee",
+                "us_b626b33f628bc6c9093e945193831154"
               ],
               "childRegionIds": [
                 "us_76038a17c7b22d058ca203b2610cc9ea"
@@ -199,7 +210,8 @@
               "isImplicit": false,
               "anchorActionId": "us_b24eeff90a17601ddafdc500302e7bf1",
               "directActionIds": [
-                "us_b24eeff90a17601ddafdc500302e7bf1"
+                "us_b24eeff90a17601ddafdc500302e7bf1",
+                "us_74e258069ab374d49becf631181b9a47"
               ],
               "childRegionIds": [
                 "us_f65c20961b7318a60d1b46ca1e437373",
@@ -223,7 +235,9 @@
               },
               "isImplicit": false,
               "directActionIds": [
-                "us_860fad2c924bc2a597c555e6d2f42f95"
+                "us_860fad2c924bc2a597c555e6d2f42f95",
+                "us_980e53a5ad492fd6a8fc4baa5f40d467",
+                "us_04cd17548f588d033b9e2c3c376a487d"
               ],
               "childRegionIds": []
             }
@@ -248,7 +262,14 @@
               },
               "regionId": "us_063de8c4e9c45a178b0a820d49e31508",
               "declarationReferenceIds": [],
-              "editCapabilities": []
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "then",
+                  "direction": "output",
+                  "kind": "control"
+                }
+              ]
             },
             {
               "id": "us_c9aba80313f5b206c3b5222407a549b3",
@@ -292,6 +313,153 @@
                     "%"
                   ]
                 }
+              ],
+              "ports": [
+                {
+                  "name": "in",
+                  "direction": "input",
+                  "kind": "control"
+                },
+                {
+                  "name": "value",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_26a5b44da19acd678d268ed608e9829f",
+                  "typeDisplayName": "float"
+                },
+                {
+                  "name": "then",
+                  "direction": "output",
+                  "kind": "control"
+                }
+              ]
+            },
+            {
+              "id": "us_49097fb28d65f178d1f6a871b47ec679",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get incomingDamage",
+              "summary": "incomingDamage",
+              "span": {
+                "filePath": "samples/Authoring/DamagePolicy.cs",
+                "start": {
+                  "line": 21,
+                  "column": 24
+                },
+                "end": {
+                  "line": 21,
+                  "column": 38
+                }
+              },
+              "regionId": "us_dd8beb4d9e9dd34d7b4a47d7928d870d",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
+              ]
+            },
+            {
+              "id": "us_e459f4f713fe26395f665bbfa5a44665",
+              "graphKind": "binary",
+              "category": "value",
+              "title": "*",
+              "summary": "* \u00B7 incomingDamage, BaseDamage",
+              "span": {
+                "filePath": "samples/Authoring/DamagePolicy.cs",
+                "start": {
+                  "line": 21,
+                  "column": 24
+                },
+                "end": {
+                  "line": 21,
+                  "column": 51
+                }
+              },
+              "regionId": "us_dd8beb4d9e9dd34d7b4a47d7928d870d",
+              "declarationReferenceIds": [
+                "us_8bc5970ccb62f81bbb2d7e0f7185eea4"
+              ],
+              "editCapabilities": [
+                {
+                  "id": "us_212de0d5fd7d2c7f388c837c9a42de62",
+                  "kind": "operator",
+                  "label": "Operator \u00B7 line 21",
+                  "operation": "changeOperator",
+                  "targetNodeId": "us_e459f4f713fe26395f665bbfa5a44665",
+                  "currentValue": "*",
+                  "expectedOperator": "*",
+                  "expectedResultTypeId": "us_26a5b44da19acd678d268ed608e9829f",
+                  "expectedOperandTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "expectedRightOperandTypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "options": [
+                    "\u002B",
+                    "-",
+                    "*",
+                    "/",
+                    "%"
+                  ]
+                }
+              ],
+              "ports": [
+                {
+                  "name": "left",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                },
+                {
+                  "name": "right",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                },
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_26a5b44da19acd678d268ed608e9829f",
+                  "typeDisplayName": "float"
+                }
+              ]
+            },
+            {
+              "id": "us_4734b1e54218f5be689bf666e7cca4a3",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get BaseDamage",
+              "summary": "BaseDamage",
+              "span": {
+                "filePath": "samples/Authoring/DamagePolicy.cs",
+                "start": {
+                  "line": 21,
+                  "column": 41
+                },
+                "end": {
+                  "line": 21,
+                  "column": 51
+                }
+              },
+              "regionId": "us_dd8beb4d9e9dd34d7b4a47d7928d870d",
+              "declarationReferenceIds": [
+                "us_8bc5970ccb62f81bbb2d7e0f7185eea4"
+              ],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                  "typeDisplayName": "int"
+                }
               ]
             },
             {
@@ -314,13 +482,67 @@
               "regionId": "us_76038a17c7b22d058ca203b2610cc9ea",
               "debugTargetId": "us_b24eeff90a17601ddafdc500302e7bf1",
               "declarationReferenceIds": [],
-              "editCapabilities": []
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "in",
+                  "direction": "input",
+                  "kind": "control"
+                },
+                {
+                  "name": "condition",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_b5f84bcf933b6593d45e9e031353bfef",
+                  "typeDisplayName": "bool"
+                },
+                {
+                  "name": "else",
+                  "direction": "output",
+                  "kind": "control"
+                },
+                {
+                  "name": "then",
+                  "direction": "output",
+                  "kind": "control"
+                }
+              ]
+            },
+            {
+              "id": "us_74e258069ab374d49becf631181b9a47",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get critical",
+              "summary": "critical",
+              "span": {
+                "filePath": "samples/Authoring/DamagePolicy.cs",
+                "start": {
+                  "line": 22,
+                  "column": 13
+                },
+                "end": {
+                  "line": 22,
+                  "column": 21
+                }
+              },
+              "regionId": "us_76038a17c7b22d058ca203b2610cc9ea",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_b5f84bcf933b6593d45e9e031353bfef",
+                  "typeDisplayName": "bool"
+                }
+              ]
             },
             {
               "id": "us_860fad2c924bc2a597c555e6d2f42f95",
               "graphKind": "assignment",
               "category": "state",
-              "title": "*=",
+              "title": "Set scaled",
               "summary": "scaled *= CriticalMultiplier",
               "span": {
                 "filePath": "samples/Authoring/DamagePolicy.cs",
@@ -338,13 +560,108 @@
               "declarationReferenceIds": [
                 "us_934c08ffff55696230b33faa88d27af9"
               ],
-              "editCapabilities": []
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "execIn",
+                  "direction": "input",
+                  "kind": "control"
+                },
+                {
+                  "name": "assignedValue",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_26a5b44da19acd678d268ed608e9829f",
+                  "typeDisplayName": "float"
+                },
+                {
+                  "name": "target",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_26a5b44da19acd678d268ed608e9829f",
+                  "typeDisplayName": "float"
+                },
+                {
+                  "name": "execOut",
+                  "direction": "output",
+                  "kind": "control"
+                },
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_26a5b44da19acd678d268ed608e9829f",
+                  "typeDisplayName": "float"
+                }
+              ]
+            },
+            {
+              "id": "us_980e53a5ad492fd6a8fc4baa5f40d467",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get scaled",
+              "summary": "scaled",
+              "span": {
+                "filePath": "samples/Authoring/DamagePolicy.cs",
+                "start": {
+                  "line": 24,
+                  "column": 13
+                },
+                "end": {
+                  "line": 24,
+                  "column": 19
+                }
+              },
+              "regionId": "us_f65c20961b7318a60d1b46ca1e437373",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_26a5b44da19acd678d268ed608e9829f",
+                  "typeDisplayName": "float"
+                }
+              ]
+            },
+            {
+              "id": "us_04cd17548f588d033b9e2c3c376a487d",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get CriticalMultiplier",
+              "summary": "CriticalMultiplier",
+              "span": {
+                "filePath": "samples/Authoring/DamagePolicy.cs",
+                "start": {
+                  "line": 24,
+                  "column": 23
+                },
+                "end": {
+                  "line": 24,
+                  "column": 41
+                }
+              },
+              "regionId": "us_f65c20961b7318a60d1b46ca1e437373",
+              "declarationReferenceIds": [
+                "us_934c08ffff55696230b33faa88d27af9"
+              ],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_26a5b44da19acd678d268ed608e9829f",
+                  "typeDisplayName": "float"
+                }
+              ]
             },
             {
               "id": "us_78ceaa28ab965873b37a441b3162f427",
               "graphKind": "assignment",
               "category": "state",
-              "title": "=",
+              "title": "Set scaled",
               "summary": "scaled = Math.Clamp(scaled, 0f, MaxDamage)",
               "span": {
                 "filePath": "samples/Authoring/DamagePolicy.cs",
@@ -373,6 +690,306 @@
                   "expectedValueText": "0f",
                   "options": []
                 }
+              ],
+              "ports": [
+                {
+                  "name": "execIn",
+                  "direction": "input",
+                  "kind": "control"
+                },
+                {
+                  "name": "assignedValue",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_26a5b44da19acd678d268ed608e9829f",
+                  "typeDisplayName": "float"
+                },
+                {
+                  "name": "target",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_26a5b44da19acd678d268ed608e9829f",
+                  "typeDisplayName": "float"
+                },
+                {
+                  "name": "execOut",
+                  "direction": "output",
+                  "kind": "control"
+                },
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_26a5b44da19acd678d268ed608e9829f",
+                  "typeDisplayName": "float"
+                }
+              ]
+            },
+            {
+              "id": "us_91b4a3f92292810fadc147e37eae11ce",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get scaled",
+              "summary": "scaled",
+              "span": {
+                "filePath": "samples/Authoring/DamagePolicy.cs",
+                "start": {
+                  "line": 27,
+                  "column": 9
+                },
+                "end": {
+                  "line": 27,
+                  "column": 15
+                }
+              },
+              "regionId": "us_dd8beb4d9e9dd34d7b4a47d7928d870d",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_26a5b44da19acd678d268ed608e9829f",
+                  "typeDisplayName": "float"
+                }
+              ]
+            },
+            {
+              "id": "us_d5f8e90aa9c2a67eb3fcf7df4d0aa440",
+              "graphKind": "memberAccess",
+              "category": "value",
+              "title": "Clamp",
+              "summary": "Clamp \u00B7 Math",
+              "span": {
+                "filePath": "samples/Authoring/DamagePolicy.cs",
+                "start": {
+                  "line": 27,
+                  "column": 18
+                },
+                "end": {
+                  "line": 27,
+                  "column": 28
+                }
+              },
+              "regionId": "us_dd8beb4d9e9dd34d7b4a47d7928d870d",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "target",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_79aa6d536e97e45e08d4dcba6deb0837",
+                  "typeDisplayName": "Math"
+                },
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data"
+                }
+              ]
+            },
+            {
+              "id": "us_d669bb3980cddce07f64de04c3f245f1",
+              "graphKind": "invocation",
+              "category": "call",
+              "title": "float Math.Clamp(float value, float min, float max)",
+              "summary": "Math.Clamp(scaled, 0f, MaxDamage)",
+              "span": {
+                "filePath": "samples/Authoring/DamagePolicy.cs",
+                "start": {
+                  "line": 27,
+                  "column": 18
+                },
+                "end": {
+                  "line": 27,
+                  "column": 51
+                }
+              },
+              "regionId": "us_dd8beb4d9e9dd34d7b4a47d7928d870d",
+              "declarationReferenceIds": [
+                "us_466fab9c566c7f4284b97d4bbb08fa60"
+              ],
+              "editCapabilities": [
+                {
+                  "id": "us_67bec3d4b345a22ea10c8d108d108ab5",
+                  "kind": "literal",
+                  "label": "Literal \u00B7 line 27",
+                  "operation": "replaceLiteral",
+                  "targetNodeId": "us_cd1ac0cfc9ede79d03f4189b4253ce8b",
+                  "currentValue": "0f",
+                  "expectedValueText": "0f",
+                  "options": []
+                }
+              ],
+              "ports": [
+                {
+                  "name": "arg0",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_26a5b44da19acd678d268ed608e9829f",
+                  "typeDisplayName": "float"
+                },
+                {
+                  "name": "arg1",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_26a5b44da19acd678d268ed608e9829f",
+                  "typeDisplayName": "float"
+                },
+                {
+                  "name": "arg2",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_26a5b44da19acd678d268ed608e9829f",
+                  "typeDisplayName": "float"
+                },
+                {
+                  "name": "target",
+                  "direction": "input",
+                  "kind": "data"
+                },
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_26a5b44da19acd678d268ed608e9829f",
+                  "typeDisplayName": "float"
+                }
+              ]
+            },
+            {
+              "id": "us_fec53b114b1ac9cfea472ca5d9c63917",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get Math",
+              "summary": "Math",
+              "span": {
+                "filePath": "samples/Authoring/DamagePolicy.cs",
+                "start": {
+                  "line": 27,
+                  "column": 18
+                },
+                "end": {
+                  "line": 27,
+                  "column": 22
+                }
+              },
+              "regionId": "us_dd8beb4d9e9dd34d7b4a47d7928d870d",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_79aa6d536e97e45e08d4dcba6deb0837",
+                  "typeDisplayName": "Math"
+                }
+              ]
+            },
+            {
+              "id": "us_c891c49a43dab0c6ce858a92a6f2dbb4",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get scaled",
+              "summary": "scaled",
+              "span": {
+                "filePath": "samples/Authoring/DamagePolicy.cs",
+                "start": {
+                  "line": 27,
+                  "column": 29
+                },
+                "end": {
+                  "line": 27,
+                  "column": 35
+                }
+              },
+              "regionId": "us_dd8beb4d9e9dd34d7b4a47d7928d870d",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_26a5b44da19acd678d268ed608e9829f",
+                  "typeDisplayName": "float"
+                }
+              ]
+            },
+            {
+              "id": "us_cd1ac0cfc9ede79d03f4189b4253ce8b",
+              "graphKind": "literal",
+              "category": "value",
+              "title": "0f",
+              "summary": "0f",
+              "span": {
+                "filePath": "samples/Authoring/DamagePolicy.cs",
+                "start": {
+                  "line": 27,
+                  "column": 37
+                },
+                "end": {
+                  "line": 27,
+                  "column": 39
+                }
+              },
+              "regionId": "us_dd8beb4d9e9dd34d7b4a47d7928d870d",
+              "declarationReferenceIds": [],
+              "editCapabilities": [
+                {
+                  "id": "us_425df58aad1c92cd747ab5b002691195",
+                  "kind": "literal",
+                  "label": "Literal \u00B7 line 27",
+                  "operation": "replaceLiteral",
+                  "targetNodeId": "us_cd1ac0cfc9ede79d03f4189b4253ce8b",
+                  "currentValue": "0f",
+                  "expectedValueText": "0f",
+                  "options": []
+                }
+              ],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_26a5b44da19acd678d268ed608e9829f",
+                  "typeDisplayName": "float"
+                }
+              ]
+            },
+            {
+              "id": "us_efeb1c15214838fefc6f4c37cbdfd6c5",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get MaxDamage",
+              "summary": "MaxDamage",
+              "span": {
+                "filePath": "samples/Authoring/DamagePolicy.cs",
+                "start": {
+                  "line": 27,
+                  "column": 41
+                },
+                "end": {
+                  "line": 27,
+                  "column": 50
+                }
+              },
+              "regionId": "us_dd8beb4d9e9dd34d7b4a47d7928d870d",
+              "declarationReferenceIds": [
+                "us_466fab9c566c7f4284b97d4bbb08fa60"
+              ],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_26a5b44da19acd678d268ed608e9829f",
+                  "typeDisplayName": "float"
+                }
               ]
             },
             {
@@ -395,7 +1012,213 @@
               "regionId": "us_dd8beb4d9e9dd34d7b4a47d7928d870d",
               "debugTargetId": "us_27393be68a2b8cd68ea420f494910eee",
               "declarationReferenceIds": [],
-              "editCapabilities": []
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "in",
+                  "direction": "input",
+                  "kind": "control"
+                },
+                {
+                  "name": "value",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_26a5b44da19acd678d268ed608e9829f",
+                  "typeDisplayName": "float"
+                }
+              ]
+            },
+            {
+              "id": "us_b626b33f628bc6c9093e945193831154",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get scaled",
+              "summary": "scaled",
+              "span": {
+                "filePath": "samples/Authoring/DamagePolicy.cs",
+                "start": {
+                  "line": 28,
+                  "column": 16
+                },
+                "end": {
+                  "line": 28,
+                  "column": 22
+                }
+              },
+              "regionId": "us_dd8beb4d9e9dd34d7b4a47d7928d870d",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_26a5b44da19acd678d268ed608e9829f",
+                  "typeDisplayName": "float"
+                }
+              ]
+            }
+          ],
+          "edges": [
+            {
+              "id": "us_4df99949c9faacdde94488942d09e6d0",
+              "kind": "control",
+              "fromNode": "us_78ceaa28ab965873b37a441b3162f427",
+              "fromPort": "execOut",
+              "toNode": "us_27393be68a2b8cd68ea420f494910eee",
+              "toPort": "in"
+            },
+            {
+              "id": "us_0ae67f129e5316ddf326ab33e7a493db",
+              "kind": "control",
+              "fromNode": "us_860fad2c924bc2a597c555e6d2f42f95",
+              "fromPort": "execOut",
+              "toNode": "us_78ceaa28ab965873b37a441b3162f427",
+              "toPort": "execIn"
+            },
+            {
+              "id": "us_f263ab68a7e1733df16a9bab5baa1e9f",
+              "kind": "control",
+              "fromNode": "us_a28b196343d94a27dc8837c9cde8861f",
+              "fromPort": "then",
+              "toNode": "us_c9aba80313f5b206c3b5222407a549b3",
+              "toPort": "in"
+            },
+            {
+              "id": "us_beb96e11d8b2584e67726f09b6e464d4",
+              "kind": "control",
+              "fromNode": "us_b24eeff90a17601ddafdc500302e7bf1",
+              "fromPort": "else",
+              "toNode": "us_78ceaa28ab965873b37a441b3162f427",
+              "toPort": "execIn"
+            },
+            {
+              "id": "us_152d11739af054962a3e5b29baa82674",
+              "kind": "control",
+              "fromNode": "us_b24eeff90a17601ddafdc500302e7bf1",
+              "fromPort": "then",
+              "toNode": "us_860fad2c924bc2a597c555e6d2f42f95",
+              "toPort": "execIn"
+            },
+            {
+              "id": "us_a37fae3772af9073d023d35c462d8129",
+              "kind": "control",
+              "fromNode": "us_c9aba80313f5b206c3b5222407a549b3",
+              "fromPort": "then",
+              "toNode": "us_b24eeff90a17601ddafdc500302e7bf1",
+              "toPort": "in"
+            },
+            {
+              "id": "us_ac4868a9ffed86dc612a30d5cb042cb1",
+              "kind": "data",
+              "fromNode": "us_04cd17548f588d033b9e2c3c376a487d",
+              "fromPort": "value",
+              "toNode": "us_860fad2c924bc2a597c555e6d2f42f95",
+              "toPort": "assignedValue"
+            },
+            {
+              "id": "us_5bb9ccc7b0e3f034988d0b674882c1a3",
+              "kind": "data",
+              "fromNode": "us_4734b1e54218f5be689bf666e7cca4a3",
+              "fromPort": "value",
+              "toNode": "us_e459f4f713fe26395f665bbfa5a44665",
+              "toPort": "right"
+            },
+            {
+              "id": "us_47f9470cc4c04179f09dc4392dc33222",
+              "kind": "data",
+              "fromNode": "us_49097fb28d65f178d1f6a871b47ec679",
+              "fromPort": "value",
+              "toNode": "us_e459f4f713fe26395f665bbfa5a44665",
+              "toPort": "left"
+            },
+            {
+              "id": "us_b083710ad5a8225a88624099be6816d8",
+              "kind": "data",
+              "fromNode": "us_74e258069ab374d49becf631181b9a47",
+              "fromPort": "value",
+              "toNode": "us_b24eeff90a17601ddafdc500302e7bf1",
+              "toPort": "condition"
+            },
+            {
+              "id": "us_472162785f8cceba28fc6db03f03036e",
+              "kind": "data",
+              "fromNode": "us_91b4a3f92292810fadc147e37eae11ce",
+              "fromPort": "value",
+              "toNode": "us_78ceaa28ab965873b37a441b3162f427",
+              "toPort": "target"
+            },
+            {
+              "id": "us_0bd01996d4fab7443ef45c15444d6dc8",
+              "kind": "data",
+              "fromNode": "us_980e53a5ad492fd6a8fc4baa5f40d467",
+              "fromPort": "value",
+              "toNode": "us_860fad2c924bc2a597c555e6d2f42f95",
+              "toPort": "target"
+            },
+            {
+              "id": "us_32f96751c8545d1c1a81fbd30ad1df4f",
+              "kind": "data",
+              "fromNode": "us_b626b33f628bc6c9093e945193831154",
+              "fromPort": "value",
+              "toNode": "us_27393be68a2b8cd68ea420f494910eee",
+              "toPort": "value"
+            },
+            {
+              "id": "us_2f5e8ad8d05b6b6b0f47bd37f07f0f5c",
+              "kind": "data",
+              "fromNode": "us_c891c49a43dab0c6ce858a92a6f2dbb4",
+              "fromPort": "value",
+              "toNode": "us_d669bb3980cddce07f64de04c3f245f1",
+              "toPort": "arg0"
+            },
+            {
+              "id": "us_757b696a80857dbe4203f0fd8eb69c41",
+              "kind": "data",
+              "fromNode": "us_cd1ac0cfc9ede79d03f4189b4253ce8b",
+              "fromPort": "value",
+              "toNode": "us_d669bb3980cddce07f64de04c3f245f1",
+              "toPort": "arg1"
+            },
+            {
+              "id": "us_8b439a449f38acb7749a0befbf2faedd",
+              "kind": "data",
+              "fromNode": "us_d5f8e90aa9c2a67eb3fcf7df4d0aa440",
+              "fromPort": "value",
+              "toNode": "us_d669bb3980cddce07f64de04c3f245f1",
+              "toPort": "target"
+            },
+            {
+              "id": "us_2259c2baf6694cb6934792b7b91c9a73",
+              "kind": "data",
+              "fromNode": "us_d669bb3980cddce07f64de04c3f245f1",
+              "fromPort": "value",
+              "toNode": "us_78ceaa28ab965873b37a441b3162f427",
+              "toPort": "assignedValue"
+            },
+            {
+              "id": "us_a62d1f16d7a9d491694dbddd7f01a609",
+              "kind": "data",
+              "fromNode": "us_e459f4f713fe26395f665bbfa5a44665",
+              "fromPort": "value",
+              "toNode": "us_c9aba80313f5b206c3b5222407a549b3",
+              "toPort": "value"
+            },
+            {
+              "id": "us_f62e9737186e78ae2a46f59eb464094d",
+              "kind": "data",
+              "fromNode": "us_efeb1c15214838fefc6f4c37cbdfd6c5",
+              "fromPort": "value",
+              "toNode": "us_d669bb3980cddce07f64de04c3f245f1",
+              "toPort": "arg2"
+            },
+            {
+              "id": "us_5d094ac69b1aca71a4910b02a2c820e6",
+              "kind": "data",
+              "fromNode": "us_fec53b114b1ac9cfea472ca5d9c63917",
+              "fromPort": "value",
+              "toNode": "us_d5f8e90aa9c2a67eb3fcf7df4d0aa440",
+              "toPort": "target"
             }
           ]
         }

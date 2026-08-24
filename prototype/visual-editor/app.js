@@ -105,7 +105,7 @@ async function loadWorkspaceArtifacts() {
 function validateWorkspaceArtifacts(artifact, graph, surface) {
   assertArtifact(artifact?.schemaVersion === 'unifiedscript.script-asset/v0.1', 'Unsupported Declaration IR artifact');
   assertArtifact(graph?.schemaVersion === 'unifiedscript.graph/v0.12', 'Unsupported Graph artifact');
-  assertArtifact(surface?.schemaVersion === 'unifiedscript.authoring-surface/v0.1', 'Unsupported Authoring Surface artifact');
+  assertArtifact(surface?.schemaVersion === 'unifiedscript.authoring-surface/v0.3', 'Unsupported Authoring Surface artifact');
   assertArtifact(artifact.sourceCompilationId === graph.sourceCompilationId &&
     artifact.sourceCompilationId === surface.sourceCompilationId, 'Source compilation identity mismatch');
   assertArtifact(artifact.semanticConfigurationId === graph.semanticConfigurationId &&
@@ -564,7 +564,7 @@ function applySurfaceEdit(node, editId) {
     ...(edit.expectedRightOperandTypeId ? { expectedRightOperandTypeId: edit.expectedRightOperandTypeId } : {}),
   };
   saveSemanticPatch({
-    schemaVersion: 'unifiedscript.patch/v0.19',
+    schemaVersion: 'unifiedscript.patch/v0.21',
     sourceCompilationId: state.sourceCompilationId,
     semanticConfigurationId: state.semanticConfigurationId,
     operations: [operation],

@@ -718,11 +718,21 @@ public sealed class RoslynSemanticBinder
                 (UnifiedTypeKind.Delegate, nullability, false),
             INamedTypeSymbol { TypeKind: TypeKind.Struct } =>
                 (UnifiedTypeKind.Struct, nullability, false),
+            INamedTypeSymbol { TypeKind: TypeKind.Class } unrealType
+                when IsUnrealReflectedType(unrealType) =>
+                (UnifiedTypeKind.Object, nullability, true),
             INamedTypeSymbol { TypeKind: TypeKind.Class } =>
                 (UnifiedTypeKind.Object, nullability, false),
             _ => ClassifySpecialType(type.SpecialType, nullability),
         };
     }
+
+    private static bool IsUnrealReflectedType(INamedTypeSymbol type) =>
+        type.GetAttributes().Any(static attribute =>
+            string.Equals(
+                attribute.AttributeClass?.ToDisplayString(),
+                "UnifiedScript.Unreal.UnrealTypeAttribute",
+                StringComparison.Ordinal));
 
     private static bool TryGetEnumerableElementType(
         ITypeSymbol type,

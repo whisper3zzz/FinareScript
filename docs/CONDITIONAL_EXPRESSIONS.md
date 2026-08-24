@@ -10,8 +10,8 @@ The current contracts are:
 
 - HIR `unifiedscript.hir/v0.7`;
 - Graph `unifiedscript.graph/v0.12`;
-- standalone patch `unifiedscript.patch/v0.19`;
-- patch plan `unifiedscript.patch-plan/v0.20`.
+- standalone patch `unifiedscript.patch/v0.21`;
+- patch plan `unifiedscript.patch-plan/v0.21`.
 
 ## HIR and semantic contract
 
@@ -65,7 +65,7 @@ selection even though the currently admitted arms are effect-free.
 
 ## Graph-authored patch expression
 
-Patch v0.19 retains the conditional extension to the closed expression algebra:
+Patch v0.20 retains the conditional extension to the closed expression algebra:
 
 ```json
 {

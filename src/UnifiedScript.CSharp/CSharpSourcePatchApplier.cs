@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 using UnifiedScript.Core;
 using UnifiedScript.Core.Hir;
+using UnifiedScript.Graph;
 using UnifiedScript.Semantics;
 
 namespace UnifiedScript.CSharp;
@@ -149,6 +150,10 @@ public sealed class CSharpSourcePatchApplier
             original.Semantics,
             patchIndex);
         var useDefinitionIndex = new HirUseDefinitionIndex(original.Hir, boundNodes);
+        GraphDocument graph = new HirGraphProjector().Project(
+            original.Hir,
+            original.Semantics,
+            original.DeclarationReferences);
         var documents = request.Sources.ToDictionary(
             static source => source.LogicalPath,
             static source => new ParsedDocument(
@@ -326,6 +331,28 @@ public sealed class CSharpSourcePatchApplier
                     types,
                     graphSafetyIndex,
                     documents),
+                ReconnectDataEdgePatchOperation reconnectDataEdge => PlanDataEdgeReconnection(
+                    reconnectDataEdge,
+                    graph,
+                    hirNodes,
+                    patchIndex,
+                    useDefinitionIndex,
+                    boundNodes,
+                    methods,
+                    types,
+                    graphSafetyIndex,
+                    documents),
+                DisconnectDataEdgePatchOperation disconnectDataEdge => PlanDataEdgeDisconnection(
+                    disconnectDataEdge,
+                    graph,
+                    hirNodes,
+                    patchIndex,
+                    useDefinitionIndex,
+                    boundNodes,
+                    methods,
+                    types,
+                    graphSafetyIndex,
+                    documents),
                 _ => throw new InvalidOperationException(
                     $"Validated patch operation '{operation.GetType().Name}' was not handled."),
             };
@@ -468,6 +495,10 @@ public sealed class CSharpSourcePatchApplier
             } => assignment.Value,
             InsertStatementPatchOperation
             {
+                NewStatement: LocalDeclarationPatchStatement local,
+            } => local.Initializer,
+            InsertStatementPatchOperation
+            {
                 NewStatement: IfPatchStatement branch,
             } => branch.Condition,
             InsertStatementPatchOperation
@@ -501,6 +532,10 @@ public sealed class CSharpSourcePatchApplier
             ContainsConditionalMemberAccess(conditional.Condition) ||
             ContainsConditionalMemberAccess(conditional.WhenTrue) ||
             ContainsConditionalMemberAccess(conditional.WhenFalse),
+        MemberAccessPatchExpression member => ContainsConditionalMemberAccess(member.Receiver),
+        MemberInvocationPatchExpression invocation =>
+            ContainsConditionalMemberAccess(invocation.Receiver) ||
+            invocation.Arguments.Any(ContainsConditionalMemberAccess),
         _ => false,
     };
 
@@ -1150,6 +1185,532 @@ public sealed class CSharpSourcePatchApplier
             ]));
     }
 
+    private static OperationPlan PlanDataEdgeReconnection(
+        ReconnectDataEdgePatchOperation operation,
+        GraphDocument graph,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        HirUseDefinitionIndex useDefinitionIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, MethodDescriptor> methods,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
+        GraphPatchSafetyIndex graphSafetyIndex,
+        IReadOnlyDictionary<string, ParsedDocument> documents)
+    {
+        if (!hirNodes.TryGetValue(operation.TargetNodeId, out HirNode? target))
+        {
+            return MissingTarget(operation.TargetNodeId);
+        }
+
+        GraphFunction? function = graph.Functions.SingleOrDefault(candidate =>
+            candidate.Nodes.Any(node => node.Id == operation.TargetNodeId));
+        GraphNode? targetGraphNode = function?.Nodes.SingleOrDefault(
+            node => node.Id == operation.TargetNodeId);
+        GraphNode? sourceGraphNode = function?.Nodes.SingleOrDefault(
+            node => node.Id == operation.NewSourceNodeId);
+        GraphEdge? expectedEdge = function?.Edges.SingleOrDefault(
+            edge => edge.Id == operation.ExpectedEdgeId);
+        GraphPort? targetPort = targetGraphNode?.Ports.SingleOrDefault(port =>
+            port.Direction == GraphPortDirection.Input && port.Kind == GraphPortKind.Data &&
+            string.Equals(port.Name, operation.TargetPort, StringComparison.Ordinal));
+        GraphPort? sourcePort = sourceGraphNode?.Ports.SingleOrDefault(port =>
+            port.Direction == GraphPortDirection.Output && port.Kind == GraphPortKind.Data &&
+            string.Equals(port.Name, operation.NewSourcePort, StringComparison.Ordinal));
+        if (function is null || targetGraphNode is null || sourceGraphNode is null ||
+            targetPort is null || sourcePort is null || expectedEdge is null ||
+            expectedEdge.Kind != GraphEdgeKind.Data ||
+            expectedEdge.FromNode != operation.ExpectedSourceNodeId ||
+            !string.Equals(
+                expectedEdge.FromPort,
+                operation.ExpectedSourcePort,
+                StringComparison.Ordinal) ||
+            expectedEdge.ToNode != operation.TargetNodeId ||
+            !string.Equals(expectedEdge.ToPort, operation.TargetPort, StringComparison.Ordinal))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.PreconditionFailed,
+                $"Data-edge precondition '{operation.ExpectedEdgeId}' no longer matches " +
+                $"'{operation.ExpectedSourceNodeId}.{operation.ExpectedSourcePort} -> " +
+                $"{operation.TargetNodeId}.{operation.TargetPort}'.",
+                target);
+        }
+
+        if (!hirNodes.TryGetValue(operation.NewSourceNodeId, out HirNode? sourceNode) ||
+            sourceNode is not HirExpression sourceExpression)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidDataEdgeReconnection,
+                "Data-edge reconnection requires HIR-backed target and expression source nodes.",
+                target);
+        }
+
+        if (sourceExpression.DescendantsAndSelf().Any(node => node.Id == target.Id))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidDataEdgeReconnection,
+                "A data edge cannot reconnect an expression into itself or one of its descendants.",
+                target);
+        }
+
+        if (!boundNodes.TryGetValue(sourceExpression.Id, out BoundNodeInfo? sourceBinding) ||
+            sourceBinding.TypeId != operation.ExpectedTypeId)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.TypeMismatch,
+                $"Graph source '{sourceExpression.Id}' no longer has expected type " +
+                $"'{operation.ExpectedTypeId}'.",
+                sourceExpression);
+        }
+
+        if (!IsStablePureExpression(
+                sourceExpression,
+                useDefinitionIndex,
+                boundNodes,
+                methods,
+                types))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.EffectOrderViolation,
+                "The selected source is not a stable pure expression and cannot be copied " +
+                "without changing evaluation count or effect order.",
+                sourceExpression);
+        }
+
+        if (!TryProjectRewireExpression(
+                sourceExpression,
+                hirNodes,
+                boundNodes,
+                out PatchExpression? newInput,
+                out string? projectionFailure))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidGraphExpression,
+                projectionFailure ?? "The selected graph source cannot be authored as C#.",
+                sourceExpression);
+        }
+
+        SemanticPatchOperation? replacement = target switch
+        {
+            HirExpression expression when TryGetExpressionInput(
+                expression,
+                operation.TargetPort,
+                out HirExpression? currentInput,
+                out _) && boundNodes.TryGetValue(expression.Id, out BoundNodeInfo? targetBinding) &&
+                targetBinding.TypeId is SemanticId targetTypeId =>
+                new ReplaceExpressionInputPatchOperation(
+                    expression.Id,
+                    operation.TargetPort,
+                    currentInput!.Id,
+                    operation.ExpectedTypeId,
+                    targetTypeId,
+                    newInput!),
+            HirVariableDeclarationStatement { Initializer: not null } variable
+                when operation.TargetPort == "value" => new ReplaceLocalInitializerPatchOperation(
+                    variable.Id,
+                    variable.Name,
+                    variable.Initializer.Id,
+                    operation.ExpectedTypeId,
+                    newInput!),
+            HirAssignmentExpression assignment
+                when operation.TargetPort == "assignedValue" &&
+                assignment.Target is HirIdentifierExpression identifier &&
+                boundNodes.TryGetValue(identifier.Id, out BoundNodeInfo? identifierBinding) &&
+                identifierBinding.ReferencedSymbolId is SemanticId definitionId =>
+                new ReplaceAssignmentValuePatchOperation(
+                    assignment.Id,
+                    assignment.Operator,
+                    identifier.Id,
+                    definitionId,
+                    identifier.Name,
+                    assignment.Value.Id,
+                    operation.ExpectedTypeId,
+                    newInput!),
+            HirIfStatement branch when operation.TargetPort == "condition" =>
+                new ReplaceIfConditionPatchOperation(
+                    branch.Id,
+                    branch.Condition.Id,
+                    operation.ExpectedTypeId,
+                    newInput!),
+            HirWhileStatement loop when operation.TargetPort == "condition" =>
+                new ReplaceWhileConditionPatchOperation(
+                    loop.Id,
+                    loop.Condition.Id,
+                    operation.ExpectedTypeId,
+                    newInput!),
+            HirDoWhileStatement loop when operation.TargetPort == "condition" =>
+                new ReplaceDoWhileConditionPatchOperation(
+                    loop.Id,
+                    loop.Condition.Id,
+                    operation.ExpectedTypeId,
+                    newInput!),
+            HirForStatement { Condition: not null } loop when operation.TargetPort == "condition" =>
+                new ReplaceForConditionPatchOperation(
+                    loop.Id,
+                    loop.Condition.Id,
+                    operation.ExpectedTypeId,
+                    newInput!),
+            HirForEachStatement loop when operation.TargetPort == "collection" =>
+                new ReplaceForEachCollectionPatchOperation(
+                    loop.Id,
+                    loop.Collection.Id,
+                    operation.ExpectedTypeId,
+                    newInput!),
+            HirReturnStatement { Expression: not null } valueReturn
+                when operation.TargetPort == "value" => new ReplaceReturnValuePatchOperation(
+                    valueReturn.Id,
+                    valueReturn.Expression.Id,
+                    operation.ExpectedTypeId,
+                    newInput!),
+            _ => null,
+        };
+        if (replacement is null)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidExpressionInputPort,
+                $"Graph target '{operation.TargetNodeId}' does not expose reconnectable data " +
+                $"input '{operation.TargetPort}'.",
+                target);
+        }
+
+        return replacement switch
+        {
+            ReplaceExpressionInputPatchOperation input => PlanExpressionInputReplacement(
+                input,
+                hirNodes,
+                patchIndex,
+                useDefinitionIndex,
+                boundNodes,
+                methods,
+                types,
+                graphSafetyIndex,
+                documents),
+            ReplaceAssignmentValuePatchOperation assignment => PlanAssignmentValueReplacement(
+                assignment,
+                hirNodes,
+                patchIndex,
+                boundNodes,
+                types,
+                graphSafetyIndex,
+                documents),
+            ReplaceIfConditionPatchOperation branch => PlanIfConditionReplacement(
+                branch,
+                hirNodes,
+                patchIndex,
+                boundNodes,
+                types,
+                graphSafetyIndex,
+                documents),
+            ReplaceWhileConditionPatchOperation loop => PlanWhileConditionReplacement(
+                loop,
+                hirNodes,
+                patchIndex,
+                boundNodes,
+                types,
+                graphSafetyIndex,
+                documents),
+            ReplaceDoWhileConditionPatchOperation loop => PlanDoWhileConditionReplacement(
+                loop,
+                hirNodes,
+                patchIndex,
+                boundNodes,
+                types,
+                graphSafetyIndex,
+                documents),
+            ReplaceForConditionPatchOperation loop => PlanForConditionReplacement(
+                loop,
+                hirNodes,
+                patchIndex,
+                boundNodes,
+                types,
+                graphSafetyIndex,
+                documents),
+            ReplaceForEachCollectionPatchOperation loop => PlanForEachCollectionReplacement(
+                loop,
+                hirNodes,
+                patchIndex,
+                boundNodes,
+                types,
+                graphSafetyIndex,
+                documents),
+            ReplaceLocalInitializerPatchOperation local => PlanLocalInitializerReplacement(
+                local,
+                hirNodes,
+                patchIndex,
+                boundNodes,
+                types,
+                graphSafetyIndex,
+                documents),
+            ReplaceReturnValuePatchOperation valueReturn => PlanReturnValueReplacement(
+                valueReturn,
+                hirNodes,
+                patchIndex,
+                boundNodes,
+                methods,
+                types,
+                graphSafetyIndex,
+                documents),
+            _ => throw new InvalidOperationException(
+                $"Data-edge replacement '{replacement.GetType().Name}' was not handled."),
+        };
+    }
+
+    private static OperationPlan PlanDataEdgeDisconnection(
+        DisconnectDataEdgePatchOperation operation,
+        GraphDocument graph,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        HirUseDefinitionIndex useDefinitionIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, MethodDescriptor> methods,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
+        GraphPatchSafetyIndex graphSafetyIndex,
+        IReadOnlyDictionary<string, ParsedDocument> documents)
+    {
+        if (!hirNodes.TryGetValue(operation.TargetNodeId, out HirNode? target))
+        {
+            return MissingTarget(operation.TargetNodeId);
+        }
+
+        GraphFunction? function = graph.Functions.SingleOrDefault(candidate =>
+            candidate.Nodes.Any(node => node.Id == operation.TargetNodeId));
+        GraphNode? targetGraphNode = function?.Nodes.SingleOrDefault(
+            node => node.Id == operation.TargetNodeId);
+        GraphEdge? expectedEdge = function?.Edges.SingleOrDefault(
+            edge => edge.Id == operation.ExpectedEdgeId);
+        GraphPort? targetPort = targetGraphNode?.Ports.SingleOrDefault(port =>
+            port.Direction == GraphPortDirection.Input && port.Kind == GraphPortKind.Data &&
+            string.Equals(port.Name, operation.TargetPort, StringComparison.Ordinal));
+        if (function is null || targetGraphNode is null || targetPort is null ||
+            expectedEdge is null || expectedEdge.Kind != GraphEdgeKind.Data ||
+            expectedEdge.FromNode != operation.ExpectedSourceNodeId ||
+            !string.Equals(
+                expectedEdge.FromPort,
+                operation.ExpectedSourcePort,
+                StringComparison.Ordinal) ||
+            expectedEdge.ToNode != operation.TargetNodeId ||
+            !string.Equals(expectedEdge.ToPort, operation.TargetPort, StringComparison.Ordinal))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.PreconditionFailed,
+                $"Data-edge precondition '{operation.ExpectedEdgeId}' no longer matches " +
+                $"'{operation.ExpectedSourceNodeId}.{operation.ExpectedSourcePort} -> " +
+                $"{operation.TargetNodeId}.{operation.TargetPort}'.",
+                target);
+        }
+
+        if (!types.TryGetValue(operation.ExpectedTypeId, out TypeDescriptor? expectedType) ||
+            !expectedType.IsGraphSafe)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.TypeMismatch,
+                $"Data-edge input no longer has graph-safe type '{operation.ExpectedTypeId}'.",
+                target);
+        }
+
+        var newInput = new DefaultPatchExpression(expectedType.DisplayName, expectedType.Id);
+        SemanticPatchOperation? replacement = target switch
+        {
+            HirExpression expression when TryGetExpressionInput(
+                expression,
+                operation.TargetPort,
+                out HirExpression? currentInput,
+                out _) && boundNodes.TryGetValue(expression.Id, out BoundNodeInfo? targetBinding) &&
+                targetBinding.TypeId is SemanticId targetTypeId =>
+                new ReplaceExpressionInputPatchOperation(
+                    expression.Id,
+                    operation.TargetPort,
+                    currentInput!.Id,
+                    operation.ExpectedTypeId,
+                    targetTypeId,
+                    newInput),
+            HirVariableDeclarationStatement { Initializer: not null } variable
+                when operation.TargetPort == "value" => new ReplaceLocalInitializerPatchOperation(
+                    variable.Id,
+                    variable.Name,
+                    variable.Initializer.Id,
+                    operation.ExpectedTypeId,
+                    newInput),
+            HirAssignmentExpression assignment
+                when operation.TargetPort == "assignedValue" &&
+                assignment.Target is HirIdentifierExpression identifier &&
+                boundNodes.TryGetValue(identifier.Id, out BoundNodeInfo? identifierBinding) &&
+                identifierBinding.ReferencedSymbolId is SemanticId definitionId =>
+                new ReplaceAssignmentValuePatchOperation(
+                    assignment.Id,
+                    assignment.Operator,
+                    identifier.Id,
+                    definitionId,
+                    identifier.Name,
+                    assignment.Value.Id,
+                    operation.ExpectedTypeId,
+                    newInput),
+            HirIfStatement branch when operation.TargetPort == "condition" =>
+                new ReplaceIfConditionPatchOperation(
+                    branch.Id,
+                    branch.Condition.Id,
+                    operation.ExpectedTypeId,
+                    newInput),
+            HirWhileStatement loop when operation.TargetPort == "condition" =>
+                new ReplaceWhileConditionPatchOperation(
+                    loop.Id,
+                    loop.Condition.Id,
+                    operation.ExpectedTypeId,
+                    newInput),
+            HirDoWhileStatement loop when operation.TargetPort == "condition" =>
+                new ReplaceDoWhileConditionPatchOperation(
+                    loop.Id,
+                    loop.Condition.Id,
+                    operation.ExpectedTypeId,
+                    newInput),
+            HirForStatement { Condition: not null } loop when operation.TargetPort == "condition" =>
+                new ReplaceForConditionPatchOperation(
+                    loop.Id,
+                    loop.Condition.Id,
+                    operation.ExpectedTypeId,
+                    newInput),
+            HirForEachStatement loop when operation.TargetPort == "collection" =>
+                new ReplaceForEachCollectionPatchOperation(
+                    loop.Id,
+                    loop.Collection.Id,
+                    operation.ExpectedTypeId,
+                    newInput),
+            HirReturnStatement { Expression: not null } valueReturn
+                when operation.TargetPort == "value" => new ReplaceReturnValuePatchOperation(
+                    valueReturn.Id,
+                    valueReturn.Expression.Id,
+                    operation.ExpectedTypeId,
+                    newInput),
+            _ => null,
+        };
+        if (replacement is null)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidExpressionInputPort,
+                $"Graph target '{operation.TargetNodeId}' does not expose disconnectable data " +
+                $"input '{operation.TargetPort}'.",
+                target);
+        }
+
+        return replacement switch
+        {
+            ReplaceExpressionInputPatchOperation input => PlanExpressionInputReplacement(
+                input, hirNodes, patchIndex, useDefinitionIndex, boundNodes, methods, types,
+                graphSafetyIndex, documents),
+            ReplaceAssignmentValuePatchOperation assignment => PlanAssignmentValueReplacement(
+                assignment, hirNodes, patchIndex, boundNodes, types, graphSafetyIndex, documents),
+            ReplaceIfConditionPatchOperation branch => PlanIfConditionReplacement(
+                branch, hirNodes, patchIndex, boundNodes, types, graphSafetyIndex, documents),
+            ReplaceWhileConditionPatchOperation loop => PlanWhileConditionReplacement(
+                loop, hirNodes, patchIndex, boundNodes, types, graphSafetyIndex, documents),
+            ReplaceDoWhileConditionPatchOperation loop => PlanDoWhileConditionReplacement(
+                loop, hirNodes, patchIndex, boundNodes, types, graphSafetyIndex, documents),
+            ReplaceForConditionPatchOperation loop => PlanForConditionReplacement(
+                loop, hirNodes, patchIndex, boundNodes, types, graphSafetyIndex, documents),
+            ReplaceForEachCollectionPatchOperation loop => PlanForEachCollectionReplacement(
+                loop, hirNodes, patchIndex, boundNodes, types, graphSafetyIndex, documents),
+            ReplaceLocalInitializerPatchOperation local => PlanLocalInitializerReplacement(
+                local, hirNodes, patchIndex, boundNodes, types, graphSafetyIndex, documents),
+            ReplaceReturnValuePatchOperation valueReturn => PlanReturnValueReplacement(
+                valueReturn, hirNodes, patchIndex, boundNodes, methods, types, graphSafetyIndex,
+                documents),
+            _ => throw new InvalidOperationException(
+                $"Data-edge disconnection replacement '{replacement.GetType().Name}' was not handled."),
+        };
+    }
+
+    private static bool TryProjectRewireExpression(
+        HirExpression source,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        out PatchExpression? expression,
+        out string? failure)
+    {
+        expression = null;
+        failure = null;
+        if (!boundNodes.TryGetValue(source.Id, out BoundNodeInfo? binding) ||
+            binding.TypeId is not SemanticId typeId)
+        {
+            failure = $"Graph source '{source.Id}' has no bound semantic type.";
+            return false;
+        }
+
+        switch (source)
+        {
+            case HirLiteralExpression literal:
+                expression = new LiteralPatchExpression(literal.ValueText, typeId);
+                return true;
+            case HirIdentifierExpression identifier
+                when binding.ReferencedSymbolId is SemanticId definitionId &&
+                hirNodes.TryGetValue(definitionId, out HirNode? definition) &&
+                definition is HirParameter or HirVariableDeclarationStatement or
+                    HirForVariableDeclarator or HirForEachVariable:
+                expression = new LocalReferencePatchExpression(
+                    definitionId,
+                    identifier.Name,
+                    typeId);
+                return true;
+            case HirUnaryExpression { IsPostfix: false } unary
+                when TryProjectRewireExpression(
+                    unary.Operand,
+                    hirNodes,
+                    boundNodes,
+                    out PatchExpression? operand,
+                    out failure):
+                expression = new UnaryPatchExpression(unary.Operator, operand!, typeId);
+                return true;
+            case HirBinaryExpression binary
+                when TryProjectRewireExpression(
+                    binary.Left,
+                    hirNodes,
+                    boundNodes,
+                    out PatchExpression? left,
+                    out failure) && TryProjectRewireExpression(
+                    binary.Right,
+                    hirNodes,
+                    boundNodes,
+                    out PatchExpression? right,
+                    out failure):
+                expression = new BinaryPatchExpression(binary.Operator, left!, right!, typeId);
+                return true;
+            case HirCastExpression cast
+                when TryProjectRewireExpression(
+                    cast.Operand,
+                    hirNodes,
+                    boundNodes,
+                    out PatchExpression? castOperand,
+                    out failure):
+                expression = new CastPatchExpression(cast.TypeName, castOperand!, typeId);
+                return true;
+            case HirConditionalExpression conditional
+                when TryProjectRewireExpression(
+                    conditional.Condition,
+                    hirNodes,
+                    boundNodes,
+                    out PatchExpression? condition,
+                    out failure) && TryProjectRewireExpression(
+                    conditional.WhenTrue,
+                    hirNodes,
+                    boundNodes,
+                    out PatchExpression? whenTrue,
+                    out failure) && TryProjectRewireExpression(
+                    conditional.WhenFalse,
+                    hirNodes,
+                    boundNodes,
+                    out PatchExpression? whenFalse,
+                    out failure):
+                expression = new ConditionalPatchExpression(
+                    condition!,
+                    whenTrue!,
+                    whenFalse!,
+                    typeId);
+                return true;
+            default:
+                failure ??= $"Graph source '{source.Id}' of kind " +
+                    $"'{source.GetType().Name}' is not a supported pure reconnect expression.";
+                return false;
+        }
+    }
+
     private static OperationPlan PlanExpressionInputReplacement(
         ReplaceExpressionInputPatchOperation operation,
         IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
@@ -1463,6 +2024,15 @@ public sealed class CSharpSourcePatchApplier
             LocalLiteralDeclarationPatchStatement local => BuildLocalLiteralStatement(
                 local,
                 blockLocation!.Method,
+                types),
+            LocalDeclarationPatchStatement local => BuildLocalStatement(
+                local,
+                blockLocation!,
+                insertionIndex,
+                hirNodes,
+                patchIndex,
+                graphSafetyIndex,
+                boundNodes,
                 types),
             LocalAssignmentPatchStatement assignment => BuildLocalAssignmentStatement(
                 assignment,
@@ -3553,6 +4123,75 @@ public sealed class CSharpSourcePatchApplier
         return StatementBuildResult.Success(statement!);
     }
 
+    private static StatementBuildResult BuildLocalStatement(
+        LocalDeclarationPatchStatement local,
+        HirPatchIndex.BlockLocation blockLocation,
+        int insertionIndex,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        GraphPatchSafetyIndex graphSafetyIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types)
+    {
+        if (!types.TryGetValue(local.ExpectedTypeId, out TypeDescriptor? expectedType) ||
+            !expectedType.IsGraphSafe ||
+            !TypeNameMatches(local.TypeName, expectedType))
+        {
+            return StatementBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.TypeMismatch,
+                $"Inserted local type '{local.TypeName}' does not match graph-safe semantic type " +
+                $"'{local.ExpectedTypeId}'.");
+        }
+
+        if (HasNameConflict(blockLocation.Method, local.Name))
+        {
+            return StatementBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.NameConflict,
+                $"A parameter or local named '{local.Name}' already exists in method " +
+                $"'{blockLocation.Method.Name}'.");
+        }
+
+        ExpressionBuildResult initializer = BuildPatchExpression(
+            local.Initializer,
+            blockLocation,
+            insertionIndex,
+            hirNodes,
+            patchIndex,
+            graphSafetyIndex,
+            boundNodes,
+            types);
+        if (initializer.Syntax is null || initializer.Type is null ||
+            !IsSameType(initializer.Type, expectedType))
+        {
+            return StatementBuildResult.Failure(
+                initializer.DiagnosticCode ?? SemanticPatchDiagnosticCodes.TypeMismatch,
+                initializer.DiagnosticMessage ??
+                    "The local initializer does not match its declared semantic type.");
+        }
+
+        TypeSyntax typeSyntax = SyntaxFactory.ParseTypeName(
+            local.TypeName,
+            options: CSharpToHirLowerer.ParseOptions,
+            consumeFullText: true);
+        if (typeSyntax.ContainsDiagnostics || typeSyntax.Span.Length != local.TypeName.Length ||
+            !SyntaxFacts.IsValidIdentifier(local.Name) ||
+            SyntaxFacts.GetKeywordKind(local.Name) != SyntaxKind.None)
+        {
+            return StatementBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.InvalidStatement,
+                "The local name or explicit type cannot be represented as one C# declaration.");
+        }
+
+        LocalDeclarationStatementSyntax statement = SyntaxFactory.LocalDeclarationStatement(
+                SyntaxFactory.VariableDeclaration(typeSyntax.WithoutTrivia())
+                    .AddVariables(SyntaxFactory.VariableDeclarator(local.Name)
+                        .WithInitializer(SyntaxFactory.EqualsValueClause(initializer.Syntax))))
+            .NormalizeWhitespace()
+            .WithoutLeadingTrivia()
+            .WithoutTrailingTrivia();
+        return StatementBuildResult.Success(statement);
+    }
+
     private static StatementBuildResult BuildLocalAssignmentStatement(
         LocalAssignmentPatchStatement assignment,
         HirPatchIndex.BlockLocation blockLocation,
@@ -4333,6 +4972,60 @@ public sealed class CSharpSourcePatchApplier
 
                 return ExpressionBuildResult.Success(literalSyntax.WithoutTrivia(), expectedType);
 
+            case DefaultPatchExpression defaultExpression:
+                {
+                    TypeSyntax typeSyntax = SyntaxFactory.ParseTypeName(
+                        defaultExpression.TypeName,
+                        options: CSharpToHirLowerer.ParseOptions,
+                        consumeFullText: true);
+                    if (typeSyntax.ContainsDiagnostics ||
+                        typeSyntax.Span.Length != defaultExpression.TypeName.Length ||
+                        !TypeNameMatches(defaultExpression.TypeName, expectedType))
+                    {
+                        return ExpressionBuildResult.Failure(
+                            SemanticPatchDiagnosticCodes.TypeMismatch,
+                            $"Default type '{defaultExpression.TypeName}' does not match semantic " +
+                            $"type '{expression.ExpectedTypeId}'.");
+                    }
+
+                    string? defaultText = expectedType.MetadataName switch
+                    {
+                        "System.Boolean" => "false",
+                        "System.Char" => "'\\0'",
+                        "System.SByte" => "(sbyte)0",
+                        "System.Byte" => "(byte)0",
+                        "System.Int16" => "(short)0",
+                        "System.UInt16" => "(ushort)0",
+                        "System.Int32" => "0",
+                        "System.UInt32" => "0U",
+                        "System.Int64" => "0L",
+                        "System.UInt64" => "0UL",
+                        "System.Single" => "0.0f",
+                        "System.Double" => "0.0",
+                        "System.String" => "\"\"",
+                        _ when expectedType.Kind == UnifiedTypeKind.Enum =>
+                            $"({defaultExpression.TypeName})0",
+                        _ => null,
+                    };
+                    if (defaultText is null)
+                    {
+                        return ExpressionBuildResult.Failure(
+                            SemanticPatchDiagnosticCodes.InvalidGraphExpression,
+                            $"Type '{expectedType.DisplayName}' has no bounded graph default value.");
+                    }
+                    ExpressionSyntax syntax = SyntaxFactory.ParseExpression(
+                        defaultText,
+                        options: CSharpToHirLowerer.ParseOptions,
+                        consumeFullText: true);
+                    if (syntax.ContainsDiagnostics || syntax.Span.Length != defaultText.Length)
+                    {
+                        return ExpressionBuildResult.Failure(
+                            SemanticPatchDiagnosticCodes.InvalidGraphExpression,
+                            $"Type '{expectedType.DisplayName}' default could not be represented in C#.");
+                    }
+                    return ExpressionBuildResult.Success(syntax.WithoutTrivia(), expectedType);
+                }
+
             case LocalReferencePatchExpression local:
                 return BuildLocalReferenceExpression(
                     local,
@@ -4614,6 +5307,104 @@ public sealed class CSharpSourcePatchApplier
                             ParenthesizeCompositeExpression(receiver.Syntax),
                             SyntaxFactory.MemberBindingExpression(
                                 SyntaxFactory.IdentifierName(conditionalAccess.MemberName)));
+                    return ExpressionBuildResult.Success(syntax, expectedType);
+                }
+
+            case MemberAccessPatchExpression memberAccess:
+                {
+                    if (memberAccess.Receiver is not LocalReferencePatchExpression receiverReference ||
+                        !SyntaxFacts.IsValidIdentifier(memberAccess.MemberName) ||
+                        SyntaxFacts.GetKeywordKind(memberAccess.MemberName) != SyntaxKind.None ||
+                        !types.TryGetValue(
+                            receiverReference.ExpectedTypeId,
+                            out TypeDescriptor? receiverType) ||
+                        !receiverType.IsGraphSafe)
+                    {
+                        return ExpressionBuildResult.Failure(
+                            SemanticPatchDiagnosticCodes.InvalidGraphExpression,
+                            "A member access requires a graph-safe local receiver and one C# member name.");
+                    }
+
+                    ExpressionBuildResult receiver = BuildLocalReferenceExpression(
+                        receiverReference,
+                        receiverType,
+                        blockLocation,
+                        insertionIndex,
+                        hirNodes,
+                        patchIndex,
+                        graphSafetyIndex,
+                        boundNodes,
+                        forHeaderLoopId);
+                    if (receiver.Syntax is null)
+                    {
+                        return receiver;
+                    }
+
+                    MemberAccessExpressionSyntax syntax = SyntaxFactory.MemberAccessExpression(
+                        SyntaxKind.SimpleMemberAccessExpression,
+                        receiver.Syntax,
+                        SyntaxFactory.IdentifierName(memberAccess.MemberName));
+                    return ExpressionBuildResult.Success(syntax, expectedType);
+                }
+
+            case MemberInvocationPatchExpression invocation:
+                {
+                    if (invocation.Receiver is not LocalReferencePatchExpression receiverReference ||
+                        !SyntaxFacts.IsValidIdentifier(invocation.MemberName) ||
+                        SyntaxFacts.GetKeywordKind(invocation.MemberName) != SyntaxKind.None ||
+                        !types.TryGetValue(
+                            receiverReference.ExpectedTypeId,
+                            out TypeDescriptor? receiverType) ||
+                        !receiverType.IsGraphSafe)
+                    {
+                        return ExpressionBuildResult.Failure(
+                            SemanticPatchDiagnosticCodes.InvalidGraphExpression,
+                            "A member invocation requires a graph-safe local receiver and one C# method name.");
+                    }
+
+                    ExpressionBuildResult receiver = BuildLocalReferenceExpression(
+                        receiverReference,
+                        receiverType,
+                        blockLocation,
+                        insertionIndex,
+                        hirNodes,
+                        patchIndex,
+                        graphSafetyIndex,
+                        boundNodes,
+                        forHeaderLoopId);
+                    if (receiver.Syntax is null)
+                    {
+                        return receiver;
+                    }
+
+                    var arguments = new List<ArgumentSyntax>(invocation.Arguments.Count);
+                    foreach (PatchExpression argument in invocation.Arguments)
+                    {
+                        ExpressionBuildResult authoredArgument = BuildPatchExpression(
+                            argument,
+                            blockLocation,
+                            insertionIndex,
+                            hirNodes,
+                            patchIndex,
+                            graphSafetyIndex,
+                            boundNodes,
+                            types,
+                            authoredForLocals,
+                            forHeaderLoopId);
+                        if (authoredArgument.Syntax is null)
+                        {
+                            return authoredArgument;
+                        }
+                        arguments.Add(SyntaxFactory.Argument(authoredArgument.Syntax));
+                    }
+
+                    MemberAccessExpressionSyntax target = SyntaxFactory.MemberAccessExpression(
+                        SyntaxKind.SimpleMemberAccessExpression,
+                        receiver.Syntax,
+                        SyntaxFactory.IdentifierName(invocation.MemberName));
+                    InvocationExpressionSyntax syntax = SyntaxFactory.InvocationExpression(
+                        target,
+                        SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(arguments)));
                     return ExpressionBuildResult.Success(syntax, expectedType);
                 }
 

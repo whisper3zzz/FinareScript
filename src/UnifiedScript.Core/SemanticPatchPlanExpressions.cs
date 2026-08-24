@@ -181,6 +181,9 @@ public static class SemanticPatchPlanExpressions
     {
         switch (statement)
         {
+            case LocalDeclarationPatchStatement local:
+                yield return local.Initializer;
+                break;
             case LocalAssignmentPatchStatement assignment:
                 yield return assignment.Value;
                 break;
@@ -230,6 +233,7 @@ public static class SemanticPatchPlanExpressions
 
     private static PatchExpression? GetExpression(InsertPatchStatement? statement) => statement switch
     {
+        LocalDeclarationPatchStatement local => local.Initializer,
         LocalAssignmentPatchStatement assignment => assignment.Value,
         IfPatchStatement branch => branch.Condition,
         WhilePatchStatement loop => loop.Condition,
@@ -250,6 +254,10 @@ public static class SemanticPatchPlanExpressions
 
         return statement switch
         {
+            LocalDeclarationPatchStatement local => local with
+            {
+                Initializer = Rewrite(local.Initializer, resolver),
+            },
             LocalAssignmentPatchStatement assignment => assignment with
             {
                 Value = Rewrite(assignment.Value, resolver),
@@ -344,6 +352,18 @@ public static class SemanticPatchPlanExpressions
                 {
                     Receiver = Rewrite(conditionalAccess.Receiver, resolver),
                 },
+            MemberAccessPatchExpression { Receiver: not null } memberAccess => memberAccess with
+            {
+                Receiver = Rewrite(memberAccess.Receiver, resolver),
+            },
+            MemberInvocationPatchExpression { Receiver: not null, Arguments: not null } invocation =>
+                invocation with
+                {
+                    Receiver = Rewrite(invocation.Receiver, resolver),
+                    Arguments = invocation.Arguments
+                        .Select(argument => Rewrite(argument, resolver))
+                        .ToArray(),
+                },
             _ => expression,
         };
     }
@@ -379,6 +399,16 @@ public static class SemanticPatchPlanExpressions
                 break;
             case ConditionalMemberAccessPatchExpression { Receiver: not null } conditionalAccess:
                 CollectProducedLocalReferences(conditionalAccess.Receiver, references);
+                break;
+            case MemberAccessPatchExpression { Receiver: not null } memberAccess:
+                CollectProducedLocalReferences(memberAccess.Receiver, references);
+                break;
+            case MemberInvocationPatchExpression { Receiver: not null, Arguments: not null } invocation:
+                CollectProducedLocalReferences(invocation.Receiver, references);
+                foreach (PatchExpression argument in invocation.Arguments)
+                {
+                    CollectProducedLocalReferences(argument, references);
+                }
                 break;
         }
     }

@@ -112,13 +112,15 @@ public sealed class UnrealBindingGenerator
             if (property.Access.Readable)
             {
                 source.Append("        get => ReadProperty<").Append(managedType).Append(">(")
+                    .Append(MemberIdLiteral(property.Path)).Append(", ")
                     .Append(Literal(property.Path)).AppendLine(");");
             }
 
             if (property.Access.Writable)
             {
-                source.Append("        set => WriteProperty(").Append(Literal(property.Path))
-                    .AppendLine(", value);");
+                source.Append("        set => WriteProperty(")
+                    .Append(MemberIdLiteral(property.Path)).Append(", ")
+                    .Append(Literal(property.Path)).AppendLine(", value);");
             }
 
             source.AppendLine("    }");
@@ -186,7 +188,8 @@ public sealed class UnrealBindingGenerator
                 source.Append("Invoke");
             }
 
-            source.Append('(').Append(Literal(function.Path));
+            source.Append('(').Append(MemberIdLiteral(function.Path)).Append(", ")
+                .Append(Literal(function.Path));
             foreach (string parameterName in parameterNames)
             {
                 source.Append(", ").Append(parameterName);
@@ -288,4 +291,7 @@ public sealed class UnrealBindingGenerator
             !Keywords.Contains(segment));
 
     private static string Literal(string value) => JsonSerializer.Serialize(value);
+
+    private static string MemberIdLiteral(string memberPath) =>
+        $"0x{UnrealMemberId.FromPath(memberPath):X16}UL";
 }

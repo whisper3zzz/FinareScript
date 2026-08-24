@@ -8,6 +8,7 @@ host_project="${repository_root}/HostProject/UEUnifiedScriptHost.uproject"
 artifact_directory="${repository_root}/artifacts/ue"
 reflection_manifest="${artifact_directory}/UEUnifiedScriptRuntime.reflection.json"
 generated_bindings="${artifact_directory}/UEUnifiedScriptRuntime.bindings.cs"
+generated_native_thunks="${artifact_directory}/UEUnifiedScriptRuntime.native-thunks.generated.cpp"
 
 find_engine_root() {
     if [[ -n "${UNIFIEDSCRIPT_UE_ROOT:-}" ]]; then
@@ -114,7 +115,8 @@ generate_bindings() {
         -- \
         ue-bindings \
         "${reflection_manifest}" \
-        --out "${generated_bindings}"
+        --out "${generated_bindings}" \
+        --native-out "${generated_native_thunks}"
 }
 
 usage() {

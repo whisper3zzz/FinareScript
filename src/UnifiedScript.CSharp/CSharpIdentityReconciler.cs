@@ -56,11 +56,17 @@ public sealed class CSharpIdentityReconciler
             .Concat(previous.Tombstones.Select(static tombstone => tombstone.Id))
             .Concat(assignedIds)
             .ToHashSet();
+        bool isInitialBaseline = previous.Generation == 0 &&
+            previous.Entries.Count == 0 &&
+            previous.Tombstones.Count == 0;
         var entries = new List<IdentityEntry>(candidates.Count);
         var rewriteMap = new Dictionary<SemanticId, SemanticId>();
         foreach (IdentityCandidate candidate in candidates)
         {
-            SemanticId id = candidate.AssignedId ?? AllocateId(unavailableIds, assignedIds);
+            SemanticId id = candidate.AssignedId ??
+                (isInitialBaseline && !unavailableIds.Contains(candidate.Node.Id)
+                    ? candidate.Node.Id
+                    : AllocateId(unavailableIds, assignedIds));
             assignedIds.Add(id);
             unavailableIds.Add(id);
             rewriteMap.Add(candidate.Node.Id, id);

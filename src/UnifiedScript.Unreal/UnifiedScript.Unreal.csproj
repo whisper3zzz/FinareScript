@@ -1,8 +1,24 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <Description>Versioned Unreal reflection contracts and deterministic managed binding generation.</Description>
+    <GenerateDependencyFile>true</GenerateDependencyFile>
+    <UnifiedScriptManagedStageDir>$(MSBuildProjectDirectory)/../../HostProject/Plugins/UEUnifiedScript/Binaries/Managed</UnifiedScriptManagedStageDir>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../UnifiedScript.Core/UnifiedScript.Core.csproj" />
   </ItemGroup>
+  <Target Name="StageUnrealManagedHost" AfterTargets="Build"
+          Condition="'$(DesignTimeBuild)' != 'true'">
+    <ItemGroup>
+      <_UnifiedScriptManagedHostFile Include="$(TargetPath)" />
+      <_UnifiedScriptManagedHostFile Include="$(TargetDir)UnifiedScript.Unreal.deps.json"
+                                    Condition="Exists('$(TargetDir)UnifiedScript.Unreal.deps.json')" />
+      <_UnifiedScriptManagedHostFile Include="@(ReferenceCopyLocalPaths)"
+                                    Condition="'%(Extension)' == '.dll'" />
+    </ItemGroup>
+    <MakeDir Directories="$(UnifiedScriptManagedStageDir)" />
+    <Copy SourceFiles="@(_UnifiedScriptManagedHostFile)"
+          DestinationFolder="$(UnifiedScriptManagedStageDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
 </Project>

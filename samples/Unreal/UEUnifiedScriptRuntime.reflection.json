@@ -1,114 +1,450 @@
 {
-  "schemaVersion": "unifiedscript.unreal-reflection/v0.1",
-  "engine": {
-    "major": 5,
-    "minor": 7,
-    "patch": 4,
-    "branch": "UE5"
-  },
-  "modules": [
-    "UEUnifiedScriptRuntime"
-  ],
-  "types": [
-    {
-      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
-      "name": "UnifiedScriptComponent",
-      "nativeName": "UUnifiedScriptComponent",
-      "module": "UEUnifiedScriptRuntime",
-      "kind": "class",
-      "baseTypePath": "/Script/Engine.ActorComponent",
-      "traits": {
-        "abstract": false,
-        "blueprintType": true
-      },
-      "properties": [
-        {
-          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ActiveGeneration",
-          "name": "ActiveGeneration",
-          "type": {
-            "kind": "string",
-            "nativeName": "FString"
-          },
-          "access": {
-            "readable": true,
-            "writable": false,
-            "editorVisible": false
-          }
-        },
-        {
-          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ScriptAssetPath",
-          "name": "ScriptAssetPath",
-          "type": {
-            "kind": "string",
-            "nativeName": "FString"
-          },
-          "access": {
-            "readable": true,
-            "writable": true,
-            "editorVisible": true
-          }
-        },
-        {
-          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:bStartAutomatically",
-          "name": "bStartAutomatically",
-          "type": {
-            "kind": "boolean",
-            "nativeName": "bool"
-          },
-          "access": {
-            "readable": true,
-            "writable": true,
-            "editorVisible": true
-          }
-        }
-      ],
-      "functions": [
-        {
-          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:Add",
-          "name": "Add",
-          "returnType": {
-            "kind": "int32",
-            "nativeName": "int32"
-          },
-          "parameters": [
-            {
-              "name": "Left",
-              "type": {
-                "kind": "int32",
-                "nativeName": "int32"
-              },
-              "direction": "input"
-            },
-            {
-              "name": "Right",
-              "type": {
-                "kind": "int32",
-                "nativeName": "int32"
-              },
-              "direction": "input"
-            }
-          ],
-          "traits": {
-            "static": false,
-            "pure": true,
-            "callable": true
-          }
-        },
-        {
-          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:RequestReload",
-          "name": "RequestReload",
-          "returnType": {
-            "kind": "void",
-            "nativeName": "void"
-          },
-          "parameters": [],
-          "traits": {
-            "static": false,
-            "pure": false,
-            "callable": true
-          }
-        }
-      ]
-    }
-  ]
+	"schemaVersion": "unifiedscript.unreal-reflection/v0.1",
+	"engine":
+	{
+		"major": 5,
+		"minor": 8,
+		"patch": 1,
+		"branch": "//UE5/Release-5.8"
+	},
+	"modules": [
+		"UEUnifiedScriptRuntime"
+	],
+	"types": [
+		{
+			"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptAsset",
+			"name": "UnifiedScriptAsset",
+			"nativeName": "UUnifiedScriptAsset",
+			"module": "UEUnifiedScriptRuntime",
+			"headerPath": "UnifiedScriptAsset.h",
+			"kind": "class",
+			"baseTypePath": "/Script/Engine.DataAsset",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": true
+			},
+			"properties": [],
+			"functions": []
+		},
+		{
+			"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+			"name": "UnifiedScriptComponent",
+			"nativeName": "UUnifiedScriptComponent",
+			"module": "UEUnifiedScriptRuntime",
+			"headerPath": "UnifiedScriptComponent.h",
+			"kind": "class",
+			"baseTypePath": "/Script/Engine.ActorComponent",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": true
+			},
+			"properties": [
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ActiveDeclarationAssetPath",
+					"name": "ActiveDeclarationAssetPath",
+					"type":
+					{
+						"kind": "string",
+						"nativeName": "FString"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": false,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ActiveGeneration",
+					"name": "ActiveGeneration",
+					"type":
+					{
+						"kind": "string",
+						"nativeName": "FString"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": false,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ActiveScriptAssetPath",
+					"name": "ActiveScriptAssetPath",
+					"type":
+					{
+						"kind": "string",
+						"nativeName": "FString"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": false,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:bScriptRunning",
+					"name": "bScriptRunning",
+					"type":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": false,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:bStartAutomatically",
+					"name": "bStartAutomatically",
+					"type":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:bTickAutomatically",
+					"name": "bTickAutomatically",
+					"type":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:LastScriptError",
+					"name": "LastScriptError",
+					"type":
+					{
+						"kind": "string",
+						"nativeName": "FString"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": false,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ManagedState",
+					"name": "ManagedState",
+					"type":
+					{
+						"kind": "string",
+						"nativeName": "FString"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:MaterializedStateCount",
+					"name": "MaterializedStateCount",
+					"type":
+					{
+						"kind": "int32",
+						"nativeName": "int32"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": false,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ScriptAssemblyPath",
+					"name": "ScriptAssemblyPath",
+					"type":
+					{
+						"kind": "string",
+						"nativeName": "FString"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ScriptAssetPath",
+					"name": "ScriptAssetPath",
+					"type":
+					{
+						"kind": "string",
+						"nativeName": "FString"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ScriptTypeName",
+					"name": "ScriptTypeName",
+					"type":
+					{
+						"kind": "string",
+						"nativeName": "FString"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					}
+				}
+			],
+			"functions": [
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:Add",
+					"name": "Add",
+					"returnType":
+					{
+						"kind": "int32",
+						"nativeName": "int32"
+					},
+					"parameters": [
+						{
+							"name": "Left",
+							"type":
+							{
+								"kind": "int32",
+								"nativeName": "int32"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Right",
+							"type":
+							{
+								"kind": "int32",
+								"nativeName": "int32"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:GetScriptStateInt32",
+					"name": "GetScriptStateInt32",
+					"returnType":
+					{
+						"kind": "int32",
+						"nativeName": "int32"
+					},
+					"parameters": [
+						{
+							"name": "Name",
+							"type":
+							{
+								"kind": "string",
+								"nativeName": "FString"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Fallback",
+							"type":
+							{
+								"kind": "int32",
+								"nativeName": "int32"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:RefreshScriptState",
+					"name": "RefreshScriptState",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ReloadScript",
+					"name": "ReloadScript",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:RequestReload",
+					"name": "RequestReload",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:SetScriptStateInt32",
+					"name": "SetScriptStateInt32",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [
+						{
+							"name": "Name",
+							"type":
+							{
+								"kind": "string",
+								"nativeName": "FString"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Value",
+							"type":
+							{
+								"kind": "int32",
+								"nativeName": "int32"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:StartScript",
+					"name": "StartScript",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:StopScript",
+					"name": "StopScript",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					}
+				}
+			]
+		},
+		{
+			"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldSubsystem",
+			"name": "UnifiedScriptWorldSubsystem",
+			"nativeName": "UUnifiedScriptWorldSubsystem",
+			"module": "UEUnifiedScriptRuntime",
+			"headerPath": "UnifiedScriptWorldSubsystem.h",
+			"kind": "class",
+			"baseTypePath": "/Script/Engine.WorldSubsystem",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": false
+			},
+			"properties": [],
+			"functions": []
+		}
+	]
 }

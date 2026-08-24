@@ -41,6 +41,13 @@ public enum UnrealParameterDirection
     InputOutput,
 }
 
+public enum UnrealNativeAccess
+{
+    Public,
+    Protected,
+    Private,
+}
+
 public sealed record UnrealEngineIdentity(
     int Major,
     int Minor,
@@ -62,7 +69,8 @@ public sealed record UnrealTypeTraits(
 public sealed record UnrealPropertyAccess(
     bool Readable,
     bool Writable,
-    bool EditorVisible);
+    bool EditorVisible,
+    UnrealNativeAccess NativeAccess = UnrealNativeAccess.Public);
 
 public sealed record UnrealReflectedProperty(
     string Path,
@@ -78,7 +86,8 @@ public sealed record UnrealReflectedParameter(
 public sealed record UnrealFunctionTraits(
     bool Static,
     bool Pure,
-    bool Callable);
+    bool Callable,
+    UnrealNativeAccess NativeAccess = UnrealNativeAccess.Public);
 
 public sealed record UnrealReflectedFunction(
     string Path,
@@ -96,7 +105,8 @@ public sealed record UnrealReflectedType(
     string? BaseTypePath,
     UnrealTypeTraits Traits,
     IReadOnlyList<UnrealReflectedProperty> Properties,
-    IReadOnlyList<UnrealReflectedFunction> Functions);
+    IReadOnlyList<UnrealReflectedFunction> Functions,
+    string? HeaderPath = null);
 
 public sealed record UnrealReflectionManifest(
     string SchemaVersion,

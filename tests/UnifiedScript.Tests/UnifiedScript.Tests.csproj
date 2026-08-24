@@ -18,6 +18,8 @@
     <ProjectReference Include="../../src/UnifiedScript.Runtime/UnifiedScript.Runtime.csproj" />
     <ProjectReference Include="../../src/UnifiedScript.Semantics/UnifiedScript.Semantics.csproj" />
     <ProjectReference Include="../../src/UnifiedScript.Unreal/UnifiedScript.Unreal.csproj" />
+    <ProjectReference Include="../../samples/Unreal/UnifiedScript.Unreal.Demo/UnifiedScript.Unreal.Demo.csproj"
+                      ReferenceOutputAssembly="false" />
   </ItemGroup>
   <ItemGroup>
     <Compile Remove="Fixtures/**/*.cs" />
@@ -35,8 +37,11 @@
     <None Include="../../samples/Unreal/UEUnifiedScriptRuntime.reflection.json"
           Link="UnrealFixtures/UEUnifiedScriptRuntime.reflection.json"
           CopyToOutputDirectory="PreserveNewest" />
-    <None Include="../../samples/Unreal/UEUnifiedScriptRuntime.bindings.cs"
-          Link="UnrealFixtures/UEUnifiedScriptRuntime.bindings.cs"
+    <Compile Include="../../samples/Unreal/UEUnifiedScriptRuntime.bindings.cs"
+             Link="UnrealFixtures/UEUnifiedScriptRuntime.bindings.cs"
+             CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../HostProject/Plugins/UEUnifiedScript/Source/UEUnifiedScriptRuntime/Private/Generated/UEUnifiedScriptRuntime.native-thunks.generated.cpp"
+          Link="UnrealFixtures/UEUnifiedScriptRuntime.native-thunks.generated.cpp"
           CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

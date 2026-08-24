@@ -106,6 +106,12 @@ execution is active. A successful candidate reloads the same transport and
 commits canonical source plus `.usids`; external disk changes and stale patch
 preconditions fail without replacing the current generation.
 
+For Unreal authoring, `debug-serve` also accepts repeatable `--source` inputs
+and optional `--asset-out`, `--surface-out`, `--managed-out`, and `--pdb-out`
+targets. These outputs join source and identity in the same rollback-capable
+file transaction, allowing a successful Slate request to publish the exact
+artifacts consumed by UE before component reload begins.
+
 The bridge never interprets HIR. It adapts HTTP requests directly to
 `ICoreClrDebugTransport`, caps request bodies, serves only a path-confined
 content root, and exposes the generation identities that the workbench checks

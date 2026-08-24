@@ -9,7 +9,7 @@ typed `IfPatchStatement` inserted into a previously generated C# `then` or
 `else` Block, followed by the same full C# → HIR → semantics → Graph → CFG
 pipeline used by every other edit.
 
-Current patch-plan schema `unifiedscript.patch-plan/v0.20` extends the symbolic
+Current patch-plan schema `unifiedscript.patch-plan/v0.21` extends the symbolic
 branch-handle model recursively. No new step discriminator is required.
 
 ## Recursive producer model

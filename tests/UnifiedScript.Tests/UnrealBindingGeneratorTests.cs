@@ -24,12 +24,12 @@ public sealed class UnrealBindingGeneratorTests
             StringComparison.Ordinal);
         Assert.Contains("public string ScriptAssetPath", first.Source, StringComparison.Ordinal);
         Assert.Contains(
-            "get => ReadProperty<string>(\"/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ScriptAssetPath\");",
+            "get => ReadProperty<string>(0x61C4428EA10A780BUL, \"/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ScriptAssetPath\");",
             first.Source,
             StringComparison.Ordinal);
         Assert.Contains("public int Add(int left, int right)", first.Source, StringComparison.Ordinal);
         Assert.Contains(
-            "Invoke<int>(\"/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:Add\", left, right);",
+            "Invoke<int>(0xB324FB910D9CED26UL, \"/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:Add\", left, right);",
             first.Source,
             StringComparison.Ordinal);
 
@@ -41,6 +41,20 @@ public sealed class UnrealBindingGeneratorTests
             .Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
             .ToArray();
         Assert.Empty(errors);
+    }
+
+    [Fact]
+    public void MemberIdsAreStableUtf8Fnv1aValues()
+    {
+        Assert.Equal(
+            0x61C4428EA10A780BUL,
+            UnrealMemberId.FromPath(
+                "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ScriptAssetPath"));
+        Assert.Equal(
+            0xB324FB910D9CED26UL,
+            UnrealMemberId.FromPath(
+                "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:Add"));
+        Assert.Throws<ArgumentException>(() => UnrealMemberId.FromPath(" "));
     }
 
     [Fact]
@@ -91,8 +105,28 @@ public sealed class UnrealBindingGeneratorTests
             new UnrealObjectHandle(0),
             new FixtureBridge()));
         Assert.Throws<ArgumentNullException>(() => new FixtureWrapper(
-            new UnrealObjectHandle(1),
+            UnrealObjectHandle.Create(slotIndex: 0, generation: 1),
             null!));
+    }
+
+    [Fact]
+    public void ManagedHandleMatchesNativeSlotGenerationEncoding()
+    {
+        UnrealObjectHandle handle = UnrealObjectHandle.Create(slotIndex: 7, generation: 42);
+
+        Assert.Equal(0x0000002A00000008UL, handle.Value);
+        Assert.True(handle.IsWellFormed);
+        Assert.False(handle.IsNull);
+        Assert.Equal(7U, handle.SlotIndex);
+        Assert.Equal(42U, handle.Generation);
+
+        Assert.False(default(UnrealObjectHandle).IsWellFormed);
+        Assert.False(new UnrealObjectHandle(1).IsWellFormed);
+        Assert.Throws<InvalidOperationException>(() => new UnrealObjectHandle(1).SlotIndex);
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            UnrealObjectHandle.Create(uint.MaxValue, generation: 1));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            UnrealObjectHandle.Create(slotIndex: 0, generation: 0));
     }
 
     [Fact]
@@ -108,6 +142,12 @@ public sealed class UnrealBindingGeneratorTests
 
         Assert.Empty(generated.Diagnostics);
         Assert.Equal(expected.ReplaceLineEndings("\n"), generated.Source);
+        Assert.Contains("public string ScriptAssemblyPath", generated.Source, StringComparison.Ordinal);
+        Assert.Contains("public string ScriptTypeName", generated.Source, StringComparison.Ordinal);
+        Assert.Contains("public bool bScriptRunning", generated.Source, StringComparison.Ordinal);
+        Assert.Contains("public bool StartScript()", generated.Source, StringComparison.Ordinal);
+        Assert.Contains("public bool ReloadScript()", generated.Source, StringComparison.Ordinal);
+        Assert.Contains("public void StopScript()", generated.Source, StringComparison.Ordinal);
     }
 
     private static UnrealReflectionManifest CreateManifest()

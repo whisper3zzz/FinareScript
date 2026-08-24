@@ -139,7 +139,13 @@ Outcome: practical gameplay methods are fully visualizable.
 - [x] synchronous graph-safe `IEnumerable<T>` foreach with bound enumerator
   protocol, explicit acquisition/current/disposal Graph nodes, cleanup-region
   ownership, normal/return/exception CFG facts, and visual round trip
-- [ ] general data/control rewiring and structural HIR operations
+- [x] exact typed data-edge reconnection for stable pure expression sources,
+  with stale-edge/type/effect/scope/dominance rejection and transactional C#
+  reanalysis
+- [x] typed data-edge reconnection and typed-default disconnection
+- [x] automatic temporary extraction for shared computed values
+- [x] structured local/branch/loop/return creation and statement deletion from UE
+- [ ] arbitrary control-wire rewiring beyond structured region operations
 - [ ] pattern-only/conditional-disposal, ref, and async `foreach` variants
 - [ ] `switch` and supported patterns
 - [ ] deterministic temporary naming
@@ -189,6 +195,8 @@ instead of interpreting Graph or embedding sample behavior.
 
 - [x] dedicated `UnifiedScript.Authoring` project boundary
 - [x] deterministic Authoring Surface v0.1 JSON and strict invariants
+- [x] Surface v0.3 complete nodes, typed ports, control/data edges, real block
+  source IDs, ordered statement IDs, and available parameter type identities
 - [x] Declaration IR + Graph projection for multiple assets and functions
 - [x] structured if/loop region hierarchy with compact inline expressions
 - [x] source spans, state-reference IDs, and debug-target IDs on actions
@@ -202,17 +210,42 @@ instead of interpreting Graph or embedding sample behavior.
 
 Outcome: the proven language pipeline becomes usable from UE.
 
-- [x] UE 5.7 host project and runtime/editor plugin module boundary
+- [x] UE 5.7/5.8-compatible host project and runtime/editor plugin module boundary
 - [x] strict deterministic Unreal reflection manifest v0.1
 - [x] selected-module `UClass`/property/function extraction commandlet
 - [x] C# binding source generator and public `ue-bindings` CLI
 - [x] handle-only managed invocation contract
 - [x] initial generated-script host component and reflection fixture
 - [x] local engine discovery/build/export/binding verification script
-- [ ] full UE C++ compile and live commandlet export smoke test
-- [ ] native property/function invocation bridge
-- [ ] weak UObject handle table and destruction invalidation
-- [ ] world-scoped runtime domain
-- [ ] script declaration materialization on the host component
-- [ ] Slate integration consuming Authoring Surface v0.1
+- [x] full UE 5.8 C++ compile and live commandlet export smoke test
+- [x] native fixture primitive property/function dispatch with stable failures
+- [x] managed `IUnrealInvocationBridge` adapter over the native dispatch contract
+- [x] versioned in-process native transport for the managed adapter
+- [x] generation-checked weak UObject handle table and deletion invalidation
+- [x] live native lifecycle Automation test on installed UE 5.8.1
+- [x] world-scoped native host and retained bridge-context ownership
+- [x] process-wide hostfxr/CoreCLR bootstrap and load-assembly delegate
+- [x] managed World entry and collectible per-script generation contexts
+- [x] hosted demo assembly loading and generated-wrapper execution on a live UObject
+- [x] component-driven auto-registration, Start/Tick/Stop, and real DLL reload
+- [x] stable generated Member IDs, ABI v2 transport, and component native fast thunks
+- [x] `UUnifiedScriptAsset`, Content Browser/soft-path resolution, and transactional type reload
+- [x] automatic native thunk generation for arbitrary public reflected types
+- [x] script declaration materialization on the host component
+- [x] Slate integration consuming Authoring Surface v0.3, with native
+  GraphEditor pins/wires, semantic selection, source preview, auto reload, and
+  typed semantic-patch export
+- [x] Graph Presentation v1 with compact value leaves, author-facing pin labels,
+  dedicated assignment titles, hidden debug chrome, and lossless Surface access
+- [x] transactional Slate Apply through Workbench with regenerated
+  Declaration/Surface/DLL/PDB artifacts and matching component reload
+- [x] transactional occupied-data-input drag rewiring with server-owned commit,
+  Surface refresh, and failure rollback
+- [x] Graph Authoring v2 Alpha node palette and transaction-first create/delete
+- [x] typed-default wire disconnection without mutating compiler-owned links first
+- [x] automatic shared-value temporary plan through the Workbench plan endpoint
+- [x] reflection-driven readable-property and callable UE API node insertion
+  with structured C# output
+- [x] per-function `.usgraph` position persistence and atomic sidecar save
+- [ ] arbitrary control-wire authoring beyond structured block operations
 - [ ] cook and packaging strategy

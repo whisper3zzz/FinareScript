@@ -1,5 +1,6 @@
 using System.Text.Json;
 using UnifiedScript.Core;
+using UnifiedScript.Graph;
 
 namespace UnifiedScript.Authoring;
 
@@ -88,18 +89,22 @@ public static class AuthoringSurfaceJson
             string.IsNullOrWhiteSpace(function.QualifiedName) ||
             string.IsNullOrWhiteSpace(function.ReturnTypeMetadataName) ||
             function.Parameters is null || function.RootRegionId.IsEmpty ||
-            function.Regions is null || function.Actions is null || !functionIds.Add(function.Id))
+            function.Regions is null || function.Actions is null || function.Edges is null ||
+            !functionIds.Add(function.Id))
         {
             throw new JsonException("An authoring function has invalid or duplicate required fields.");
         }
 
         var parameterIds = new HashSet<SemanticId>();
         var parameterNames = new HashSet<string>(StringComparer.Ordinal);
-        foreach (ScriptParameterDeclaration? parameter in function.Parameters)
+        foreach (AuthoringParameterSurface? parameter in function.Parameters)
         {
             if (parameter is null || parameter.Id.IsEmpty ||
                 string.IsNullOrWhiteSpace(parameter.Name) ||
                 string.IsNullOrWhiteSpace(parameter.TypeMetadataName) ||
+                (parameter.TypeId is SemanticId typeId &&
+                    (typeId.IsEmpty || string.IsNullOrWhiteSpace(parameter.TypeDisplayName))) ||
+                (parameter.TypeId is null && parameter.TypeDisplayName is not null) ||
                 !parameterIds.Add(parameter.Id) || !parameterNames.Add(parameter.Name))
             {
                 throw new JsonException($"Authoring function '{function.Id}' has an invalid parameter.");
@@ -107,6 +112,8 @@ public static class AuthoringSurfaceJson
         }
 
         var actions = new Dictionary<SemanticId, AuthoringActionSurface>();
+        var inputPorts = new Dictionary<(SemanticId NodeId, string Name), AuthoringPortSurface>();
+        var outputPorts = new Dictionary<(SemanticId NodeId, string Name), AuthoringPortSurface>();
         foreach (AuthoringActionSurface? action in function.Actions)
         {
             if (action is null || action.Id.IsEmpty || string.IsNullOrWhiteSpace(action.GraphKind) ||
@@ -114,6 +121,7 @@ public static class AuthoringSurfaceJson
                 !IsValidSpan(action.Span) || action.RegionId.IsEmpty ||
                 action.DebugTargetId is SemanticId debugTargetId && debugTargetId.IsEmpty ||
                 action.DeclarationReferenceIds is null || action.EditCapabilities is null ||
+                action.Ports is null ||
                 action.DeclarationReferenceIds.Any(static id => id.IsEmpty) ||
                 action.DeclarationReferenceIds.Distinct().Count() !=
                     action.DeclarationReferenceIds.Count ||
@@ -123,13 +131,41 @@ public static class AuthoringSurfaceJson
             }
 
             ValidateEdits(action);
+            var portKeys = new HashSet<(string Name, GraphPortDirection Direction)>();
+            foreach (AuthoringPortSurface? port in action.Ports)
+            {
+                bool hasKnownDataType = port?.TypeId is SemanticId typeId && !typeId.IsEmpty &&
+                    !string.IsNullOrWhiteSpace(port.TypeDisplayName);
+                bool hasUnknownDataType = port?.TypeId is null && port?.TypeDisplayName is null;
+                bool validType = port?.Kind == GraphPortKind.Control
+                    ? port.TypeId is null && port.TypeDisplayName is null
+                    : hasKnownDataType || hasUnknownDataType;
+                if (port is null || string.IsNullOrWhiteSpace(port.Name) ||
+                    !Enum.IsDefined(port.Direction) || !Enum.IsDefined(port.Kind) || !validType ||
+                    !portKeys.Add((port.Name, port.Direction)))
+                {
+                    throw new JsonException(
+                        $"Authoring action '{action.Id}' has an invalid or duplicate port.");
+                }
+
+                var key = (action.Id, port.Name);
+                Dictionary<(SemanticId NodeId, string Name), AuthoringPortSurface> ports =
+                    port.Direction == GraphPortDirection.Input ? inputPorts : outputPorts;
+                if (!ports.TryAdd(key, port))
+                {
+                    throw new JsonException(
+                        $"Authoring action '{action.Id}' has an ambiguous port '{port.Name}'.");
+                }
+            }
         }
 
         var regions = new Dictionary<SemanticId, AuthoringRegionSurface>();
         foreach (AuthoringRegionSurface? region in function.Regions)
         {
-            if (region is null || region.Id.IsEmpty || !IsValidSpan(region.Span) ||
-                region.DirectActionIds is null || region.ChildRegionIds is null ||
+            if (region is null || region.Id.IsEmpty || region.SourceNodeId.IsEmpty ||
+                !IsValidSpan(region.Span) ||
+                region.DirectStatementIds is null || region.DirectActionIds is null ||
+                region.ChildRegionIds is null ||
                 !regions.TryAdd(region.Id, region))
             {
                 throw new JsonException($"Authoring function '{function.Id}' has an invalid region.");
@@ -154,6 +190,9 @@ public static class AuthoringSurfaceJson
 
             if (region.DirectActionIds.Any(static id => id.IsEmpty) ||
                 region.DirectActionIds.Distinct().Count() != region.DirectActionIds.Count ||
+                region.DirectStatementIds.Any(static id => id.IsEmpty) ||
+                region.DirectStatementIds.Distinct().Count() != region.DirectStatementIds.Count ||
+                region.DirectStatementIds.Any(id => !actions.ContainsKey(id)) ||
                 region.ChildRegionIds.Any(static id => id.IsEmpty) ||
                 region.ChildRegionIds.Distinct().Count() != region.ChildRegionIds.Count)
             {
@@ -195,6 +234,48 @@ public static class AuthoringSurfaceJson
         if (childOwners.Count != regions.Count - 1 || childOwners.ContainsKey(root.Id))
         {
             throw new JsonException($"Authoring function '{function.Id}' has orphaned regions.");
+        }
+
+        var edgeIds = new HashSet<SemanticId>();
+        var dataInputOwners = new HashSet<(SemanticId NodeId, string Name)>();
+        foreach (AuthoringEdgeSurface? edge in function.Edges)
+        {
+            if (edge is null || edge.Id.IsEmpty || edge.FromNode.IsEmpty || edge.ToNode.IsEmpty ||
+                string.IsNullOrWhiteSpace(edge.FromPort) || string.IsNullOrWhiteSpace(edge.ToPort) ||
+                !Enum.IsDefined(edge.Kind) || !edgeIds.Add(edge.Id))
+            {
+                throw new JsonException(
+                    $"Authoring function '{function.Id}' has an invalid edge.");
+            }
+
+            var fromKey = (edge.FromNode, edge.FromPort);
+            var toKey = (edge.ToNode, edge.ToPort);
+            if (!outputPorts.TryGetValue(fromKey, out AuthoringPortSurface? output) ||
+                !inputPorts.TryGetValue(toKey, out AuthoringPortSurface? input))
+            {
+                throw new JsonException(
+                    $"Authoring function '{function.Id}' has an edge with a missing endpoint.");
+            }
+
+            bool validConnection = edge.Kind switch
+            {
+                GraphEdgeKind.Control =>
+                    output.Kind == GraphPortKind.Control && input.Kind == GraphPortKind.Control,
+                GraphEdgeKind.Data =>
+                    output.Kind == GraphPortKind.Data && input.Kind == GraphPortKind.Data &&
+                    output.TypeId == input.TypeId &&
+                    string.Equals(
+                        output.TypeDisplayName,
+                        input.TypeDisplayName,
+                        StringComparison.Ordinal) &&
+                    dataInputOwners.Add(toKey),
+                _ => false,
+            };
+            if (!validConnection)
+            {
+                throw new JsonException(
+                    $"Authoring function '{function.Id}' has an incompatible edge.");
+            }
         }
     }
 
@@ -252,7 +333,20 @@ public static class AuthoringSurfaceJson
                     .OrderBy(static edit => edit.Label, StringComparer.Ordinal)
                     .ThenBy(static edit => edit.Id.Value, StringComparer.Ordinal)
                     .ToArray(),
+                Ports = action.Ports
+                    .OrderBy(static port => port.Direction)
+                    .ThenBy(static port => port.Kind)
+                    .ThenBy(static port => port.Name, StringComparer.Ordinal)
+                    .ToArray(),
             })
+            .ToArray(),
+        Edges = function.Edges
+            .OrderBy(static edge => edge.Kind)
+            .ThenBy(static edge => edge.FromNode.Value, StringComparer.Ordinal)
+            .ThenBy(static edge => edge.FromPort, StringComparer.Ordinal)
+            .ThenBy(static edge => edge.ToNode.Value, StringComparer.Ordinal)
+            .ThenBy(static edge => edge.ToPort, StringComparer.Ordinal)
+            .ThenBy(static edge => edge.Id.Value, StringComparer.Ordinal)
             .ToArray(),
     };
 

@@ -128,6 +128,12 @@ public static class SemanticPatchJson
                 case ReconnectValuePatchOperation reconnectValue:
                     ValidateReconnectValue(reconnectValue);
                     break;
+                case ReconnectDataEdgePatchOperation reconnectDataEdge:
+                    ValidateReconnectDataEdge(reconnectDataEdge);
+                    break;
+                case DisconnectDataEdgePatchOperation disconnectDataEdge:
+                    ValidateDisconnectDataEdge(disconnectDataEdge);
+                    break;
                 default:
                     throw new JsonException(
                         $"Unsupported semantic patch operation '{operation.GetType().Name}'.");
@@ -552,6 +558,19 @@ public static class SemanticPatchJson
                 }
 
                 break;
+            case LocalDeclarationPatchStatement local:
+                if (string.IsNullOrWhiteSpace(local.Name) ||
+                    string.IsNullOrWhiteSpace(local.TypeName) ||
+                    local.Initializer is null ||
+                    local.ExpectedTypeId.IsEmpty ||
+                    local.Initializer.ExpectedTypeId != local.ExpectedTypeId)
+                {
+                    throw new JsonException(
+                        "A local insertion requires a name, explicit type, and same-typed initializer.");
+                }
+
+                ValidatePatchExpression(local.Initializer, 0);
+                break;
             case LocalAssignmentPatchStatement assignment:
                 if (assignment.TargetDefinitionId.IsEmpty ||
                     string.IsNullOrWhiteSpace(assignment.ExpectedName) ||
@@ -736,6 +755,14 @@ public static class SemanticPatchJson
                 }
 
                 break;
+            case DefaultPatchExpression defaultExpression:
+                if (string.IsNullOrWhiteSpace(defaultExpression.TypeName))
+                {
+                    throw new JsonException(
+                        "A graph-authored default expression requires an explicit type name.");
+                }
+
+                break;
             case LocalReferencePatchExpression local:
                 if (local.SourceDefinitionId.IsEmpty || string.IsNullOrWhiteSpace(local.ExpectedName))
                 {
@@ -828,6 +855,32 @@ public static class SemanticPatchJson
                     depth + 1,
                     forVariables);
                 break;
+            case MemberAccessPatchExpression memberAccess:
+                if (memberAccess.Receiver is null ||
+                    string.IsNullOrWhiteSpace(memberAccess.MemberName))
+                {
+                    throw new JsonException(
+                        "A graph-authored member access requires a receiver and member name.");
+                }
+
+                ValidatePatchExpression(memberAccess.Receiver, depth + 1, forVariables);
+                break;
+            case MemberInvocationPatchExpression invocation:
+                if (invocation.Receiver is null ||
+                    string.IsNullOrWhiteSpace(invocation.MemberName) ||
+                    invocation.Arguments is null ||
+                    invocation.Arguments.Any(static argument => argument is null))
+                {
+                    throw new JsonException(
+                        "A graph-authored member invocation requires a receiver, member name, and arguments.");
+                }
+
+                ValidatePatchExpression(invocation.Receiver, depth + 1, forVariables);
+                foreach (PatchExpression argument in invocation.Arguments)
+                {
+                    ValidatePatchExpression(argument, depth + 1, forVariables);
+                }
+                break;
             default:
                 throw new JsonException(
                     $"Unsupported graph-authored expression '{expression.GetType().Name}'.");
@@ -902,6 +955,41 @@ public static class SemanticPatchJson
             operation.ExpectedPreviousSiblingId,
             operation.ExpectedNextSiblingId,
             "containing statement");
+    }
+
+    private static void ValidateReconnectDataEdge(ReconnectDataEdgePatchOperation operation)
+    {
+        if (operation.ExpectedEdgeId.IsEmpty || operation.ExpectedSourceNodeId.IsEmpty ||
+            operation.NewSourceNodeId.IsEmpty || operation.ExpectedTypeId.IsEmpty ||
+            string.IsNullOrWhiteSpace(operation.TargetPort) ||
+            string.IsNullOrWhiteSpace(operation.ExpectedSourcePort) ||
+            string.IsNullOrWhiteSpace(operation.NewSourcePort))
+        {
+            throw new JsonException(
+                "A data-edge reconnection requires exact edge, endpoint, port, and type preconditions.");
+        }
+
+        if (operation.TargetNodeId == operation.NewSourceNodeId ||
+            (operation.ExpectedSourceNodeId == operation.NewSourceNodeId &&
+                string.Equals(
+                    operation.ExpectedSourcePort,
+                    operation.NewSourcePort,
+                    StringComparison.Ordinal)))
+        {
+            throw new JsonException(
+                "A data-edge reconnection must select a distinct, non-self source endpoint.");
+        }
+    }
+
+    private static void ValidateDisconnectDataEdge(DisconnectDataEdgePatchOperation operation)
+    {
+        if (operation.ExpectedEdgeId.IsEmpty || operation.ExpectedSourceNodeId.IsEmpty ||
+            operation.ExpectedTypeId.IsEmpty || string.IsNullOrWhiteSpace(operation.TargetPort) ||
+            string.IsNullOrWhiteSpace(operation.ExpectedSourcePort))
+        {
+            throw new JsonException(
+                "A data-edge disconnection requires exact edge, endpoint, port, and type preconditions.");
+        }
     }
 
     private static void ValidateSiblingIds(

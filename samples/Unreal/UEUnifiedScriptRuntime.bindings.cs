@@ -3,6 +3,17 @@
 
 namespace UnifiedScript.Unreal.Generated;
 
+[global::UnifiedScript.Unreal.UnrealTypeAttribute("/Script/UEUnifiedScriptRuntime.UnifiedScriptAsset")]
+public sealed partial class UnifiedScriptAsset : global::UnifiedScript.Unreal.UnrealObject
+{
+    public UnifiedScriptAsset(
+        global::UnifiedScript.Unreal.UnrealObjectHandle handle,
+        global::UnifiedScript.Unreal.IUnrealInvocationBridge bridge)
+        : base(handle, bridge)
+    {
+    }
+}
+
 [global::UnifiedScript.Unreal.UnrealTypeAttribute("/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent")]
 public sealed partial class UnifiedScriptComponent : global::UnifiedScript.Unreal.UnrealObject
 {
@@ -13,26 +24,104 @@ public sealed partial class UnifiedScriptComponent : global::UnifiedScript.Unrea
     {
     }
 
+    public string ActiveDeclarationAssetPath
+    {
+        get => ReadProperty<string>(0x28736A9007707BEEUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ActiveDeclarationAssetPath");
+    }
+
     public string ActiveGeneration
     {
-        get => ReadProperty<string>("/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ActiveGeneration");
+        get => ReadProperty<string>(0x6DF75D872D39AE9FUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ActiveGeneration");
+    }
+
+    public string ActiveScriptAssetPath
+    {
+        get => ReadProperty<string>(0xE5A6A8D0834BD12DUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ActiveScriptAssetPath");
+    }
+
+    public string LastScriptError
+    {
+        get => ReadProperty<string>(0xEB91C292E1A34192UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:LastScriptError");
+    }
+
+    public string ManagedState
+    {
+        get => ReadProperty<string>(0x31BC2AC640227065UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ManagedState");
+        set => WriteProperty(0x31BC2AC640227065UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ManagedState", value);
+    }
+
+    public int MaterializedStateCount
+    {
+        get => ReadProperty<int>(0xB31F5AE7DDA6C984UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:MaterializedStateCount");
+    }
+
+    public string ScriptAssemblyPath
+    {
+        get => ReadProperty<string>(0xC2521576C7DFB237UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ScriptAssemblyPath");
+        set => WriteProperty(0xC2521576C7DFB237UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ScriptAssemblyPath", value);
     }
 
     public string ScriptAssetPath
     {
-        get => ReadProperty<string>("/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ScriptAssetPath");
-        set => WriteProperty("/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ScriptAssetPath", value);
+        get => ReadProperty<string>(0x61C4428EA10A780BUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ScriptAssetPath");
+        set => WriteProperty(0x61C4428EA10A780BUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ScriptAssetPath", value);
+    }
+
+    public string ScriptTypeName
+    {
+        get => ReadProperty<string>(0x9A655BDD0F446987UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ScriptTypeName");
+        set => WriteProperty(0x9A655BDD0F446987UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ScriptTypeName", value);
+    }
+
+    public bool bScriptRunning
+    {
+        get => ReadProperty<bool>(0x78520C5EC4FF73D3UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:bScriptRunning");
     }
 
     public bool bStartAutomatically
     {
-        get => ReadProperty<bool>("/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:bStartAutomatically");
-        set => WriteProperty("/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:bStartAutomatically", value);
+        get => ReadProperty<bool>(0xB65E27C23A2F39CEUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:bStartAutomatically");
+        set => WriteProperty(0xB65E27C23A2F39CEUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:bStartAutomatically", value);
+    }
+
+    public bool bTickAutomatically
+    {
+        get => ReadProperty<bool>(0x23071804223C4DFFUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:bTickAutomatically");
+        set => WriteProperty(0x23071804223C4DFFUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:bTickAutomatically", value);
     }
 
     public int Add(int left, int right)
-        => Invoke<int>("/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:Add", left, right);
+        => Invoke<int>(0xB324FB910D9CED26UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:Add", left, right);
+
+    public int GetScriptStateInt32(string name, int fallback)
+        => Invoke<int>(0x5B7CEF7BDAF29749UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:GetScriptStateInt32", name, fallback);
+
+    public bool RefreshScriptState()
+        => Invoke<bool>(0xBF8089C66CEB80D6UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:RefreshScriptState");
+
+    public bool ReloadScript()
+        => Invoke<bool>(0x7B868A110E45AFA1UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ReloadScript");
 
     public void RequestReload()
-        => Invoke("/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:RequestReload");
+        => Invoke(0x9FD30761744D70A1UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:RequestReload");
+
+    public bool SetScriptStateInt32(string name, int value)
+        => Invoke<bool>(0xF83092B1E5E45D7DUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:SetScriptStateInt32", name, value);
+
+    public bool StartScript()
+        => Invoke<bool>(0x335CA93AEB62A23EUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:StartScript");
+
+    public void StopScript()
+        => Invoke(0xC2B2365ACCA0171CUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:StopScript");
+}
+
+[global::UnifiedScript.Unreal.UnrealTypeAttribute("/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldSubsystem")]
+public sealed partial class UnifiedScriptWorldSubsystem : global::UnifiedScript.Unreal.UnrealObject
+{
+    public UnifiedScriptWorldSubsystem(
+        global::UnifiedScript.Unreal.UnrealObjectHandle handle,
+        global::UnifiedScript.Unreal.IUnrealInvocationBridge bridge)
+        : base(handle, bridge)
+    {
+    }
 }

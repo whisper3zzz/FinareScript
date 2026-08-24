@@ -4,18 +4,18 @@
   "artifacts": {
     "hir": {
       "schemaVersion": "unifiedscript.hir/v0.7",
-      "sha256": "6753a6a12ecdd595e026983e4393d1e043123bb615d464c78eed7039a45e0752",
-      "utf8Bytes": 5284
+      "sha256": "8bbdb0083853473f9fce0c8308dd55a455488eb8e8af878f84dc1fe1204f820d",
+      "utf8Bytes": 5453
     },
     "semantics": {
       "schemaVersion": "unifiedscript.semantics/v0.2",
-      "sha256": "72a922af6c2a8117810b372f9438191ba8cfc10ff5918c34927d5b651845767b",
-      "utf8Bytes": 3481
+      "sha256": "d90b6d4a920fb8a97e027aead5f9e2a6bc528039e4e6f42ea0b8bef4ee7d72fc",
+      "utf8Bytes": 3588
     },
     "graph": {
       "schemaVersion": "unifiedscript.graph/v0.12",
-      "sha256": "3fc65885205f76b82aed6be622671ae5fc248b1555996b6438ac0883f550b05c",
-      "utf8Bytes": 7472
+      "sha256": "7c1fafe802bf77b9e1e90c533a46d40b9c232488c278bbccd59740f0b7305250",
+      "utf8Bytes": 7728
     }
   }
 }

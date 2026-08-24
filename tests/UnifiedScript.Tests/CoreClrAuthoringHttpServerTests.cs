@@ -43,18 +43,30 @@ public sealed class CoreClrAuthoringHttpServerTests
             $"unifiedscript-authoring-http-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directory);
         string sourcePath = Path.Combine(directory, "DamagePolicy.cs");
+        string supportPath = Path.Combine(directory, "Support.cs");
         string identityPath = sourcePath + ".usids";
+        string declarationPath = Path.Combine(directory, "DamagePolicy.asset.json");
+        string surfacePath = Path.Combine(directory, "DamagePolicy.surface.json");
+        string managedPath = Path.Combine(directory, "UnifiedScript.Analysis.dll");
+        string pdbPath = Path.Combine(directory, "UnifiedScript.Analysis.pdb");
         string contentRoot = Path.Combine(directory, "workbench");
         Directory.CreateDirectory(contentRoot);
         await File.WriteAllTextAsync(sourcePath, Source);
+        const string supportSource = "namespace Tests.HttpAuthoring; internal static class Support { public const int Value = 1; }";
+        await File.WriteAllTextAsync(supportPath, supportSource);
         await File.WriteAllTextAsync(Path.Combine(contentRoot, "index.html"), "<!doctype html><title>test</title>");
         string logicalPath = sourcePath.Replace('\\', '/');
+        string logicalSupportPath = supportPath.Replace('\\', '/');
         var request = new CSharpCompilationRequest(
             "UnifiedScript.Analysis",
             [new CSharpSourceDocument(
                 logicalPath,
                 Source,
-                IdentitySidecarDocument.CreateEmpty(logicalPath))]);
+                IdentitySidecarDocument.CreateEmpty(logicalPath)),
+             new CSharpSourceDocument(
+                 logicalSupportPath,
+                 supportSource,
+                 IdentitySidecarDocument.CreateEmpty(logicalSupportPath))]);
         int port = ReserveLoopbackPort();
 
         try
@@ -64,7 +76,17 @@ public sealed class CoreClrAuthoringHttpServerTests
                 sourcePath,
                 identityPath,
                 contentRoot,
-                port);
+                port,
+                new AuthoringArtifactOutputs(
+                    declarationPath,
+                    surfacePath,
+                    managedPath,
+                    pdbPath),
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    [logicalPath] = sourcePath,
+                    [logicalSupportPath] = supportPath,
+                });
             using var cancellation = new CancellationTokenSource();
             Task serverTask = server.RunAsync(cancellation.Token);
             using var client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}/") };
@@ -139,6 +161,14 @@ public sealed class CoreClrAuthoringHttpServerTests
             Assert.Equal(2, declared.Generation.Number);
             Assert.Contains("= 120;", await File.ReadAllTextAsync(sourcePath), StringComparison.Ordinal);
             Assert.True(File.Exists(identityPath));
+            Assert.Equal(
+                "unifiedscript.script-asset/v0.1",
+                ScriptAssetJson.Deserialize(await File.ReadAllTextAsync(declarationPath)).SchemaVersion);
+            Assert.Equal(
+                AuthoringSurfaceDocument.CurrentSchemaVersion,
+                AuthoringSurfaceJson.Deserialize(await File.ReadAllTextAsync(surfacePath)).SchemaVersion);
+            Assert.True(new FileInfo(managedPath).Length > 0);
+            Assert.True(new FileInfo(pdbPath).Length > 0);
 
             GraphNode minimum = declared.Graph.Functions[0].Nodes.Single(static node =>
                 node.Kind == "literal" && node.Properties.GetValueOrDefault("value") == "0f");
@@ -157,14 +187,86 @@ public sealed class CoreClrAuthoringHttpServerTests
                 "Math.Clamp(scaled, 10f, MaxDamage)",
                 await File.ReadAllTextAsync(sourcePath),
                 StringComparison.Ordinal);
+            AuthoringSurfaceDocument persistedSurface = AuthoringSurfaceJson.Deserialize(
+                await File.ReadAllTextAsync(surfacePath));
+            Assert.Equal(
+                behavior.Surface.SourceCompilationId,
+                persistedSurface.SourceCompilationId);
 
-            await File.AppendAllTextAsync(sourcePath, "\n// external change\n");
-            GraphNode currentMinimum = behavior.Graph.Functions[0].Nodes.Single(static node =>
+            GraphNode plannedMinimum = behavior.Graph.Functions[0].Nodes.Single(static node =>
                 node.Kind == "literal" && node.Properties.GetValueOrDefault("value") == "10f");
-            SemanticPatchDocument conflictingPatch = SemanticPatchDocument.Create(
+            SemanticPatchPlanDocument plan = SemanticPatchPlanDocument.Create(
                 behavior.ScriptAssets.SourceCompilationId,
                 behavior.ScriptAssets.SemanticConfigurationId,
-                [new ReplaceLiteralPatchOperation(currentMinimum.Id, "10f", "20f")]);
+                [new ReplaceLiteralPatchPlanStep(
+                    "raiseMinimum",
+                    plannedMinimum.Id,
+                    "10f",
+                    "12f")]);
+            AuthoringWorkspaceResponse planned = await PostAsync(
+                client,
+                "api/authoring/semantic-patch-plan",
+                SemanticPatchPlanJson.Serialize(plan));
+
+            Assert.Equal(4, planned.Revision);
+            Assert.Equal(4, planned.Generation.Number);
+            Assert.Contains(
+                "Math.Clamp(scaled, 12f, MaxDamage)",
+                await File.ReadAllTextAsync(sourcePath),
+                StringComparison.Ordinal);
+
+            GraphFunction behaviorFunction = Assert.Single(planned.Graph.Functions);
+            GraphNode returnNode = behaviorFunction.Nodes.Single(static node => node.Kind == "return");
+            GraphEdge returnEdge = behaviorFunction.Edges.Single(edge =>
+                edge.Kind == GraphEdgeKind.Data &&
+                edge.ToNode == returnNode.Id &&
+                edge.ToPort == "value");
+            GraphNode reconnectSource = behaviorFunction.Nodes.Single(static node =>
+                node.Kind == "literal" && node.Properties.GetValueOrDefault("value") == "12f");
+            GraphPort reconnectSourcePort = reconnectSource.Ports.Single(static port =>
+                port.Direction == GraphPortDirection.Output && port.Kind == GraphPortKind.Data);
+            AuthoringFunctionSurface surfaceFunction = Assert.Single(
+                Assert.Single(behavior.Surface.Assets).Functions);
+            AuthoringActionSurface surfaceReturn = surfaceFunction.Actions.Single(action =>
+                action.Id == returnNode.Id);
+            AuthoringPortSurface surfaceReturnPort = surfaceReturn.Ports.Single(static port =>
+                port.Direction == GraphPortDirection.Input &&
+                port.Kind == GraphPortKind.Data &&
+                port.Name == "value");
+            SemanticPatchDocument rewirePatch = SemanticPatchDocument.Create(
+                planned.ScriptAssets.SourceCompilationId,
+                planned.ScriptAssets.SemanticConfigurationId,
+                [new ReconnectDataEdgePatchOperation(
+                    returnNode.Id,
+                    returnEdge.ToPort,
+                    returnEdge.Id,
+                    returnEdge.FromNode,
+                    returnEdge.FromPort,
+                    reconnectSource.Id,
+                    reconnectSourcePort.Name,
+                    surfaceReturnPort.TypeId!.Value)]);
+            AuthoringWorkspaceResponse rewired = await PostAsync(
+                client,
+                "api/authoring/semantic-patch",
+                SemanticPatchJson.Serialize(rewirePatch));
+
+            Assert.Equal(5, rewired.Revision);
+            Assert.Equal(5, rewired.Generation.Number);
+            Assert.Contains("return 12f;", await File.ReadAllTextAsync(sourcePath), StringComparison.Ordinal);
+            Assert.Equal(
+                rewired.Surface.SourceCompilationId,
+                AuthoringSurfaceJson.Deserialize(
+                    await File.ReadAllTextAsync(surfacePath)).SourceCompilationId);
+            string surfaceBeforeConflict = await File.ReadAllTextAsync(surfacePath);
+            byte[] assemblyBeforeConflict = await File.ReadAllBytesAsync(managedPath);
+
+            await File.AppendAllTextAsync(supportPath, "\n// external change\n");
+            GraphNode currentMinimum = rewired.Graph.Functions[0].Nodes.First(static node =>
+                node.Kind == "literal" && node.Properties.GetValueOrDefault("value") == "12f");
+            SemanticPatchDocument conflictingPatch = SemanticPatchDocument.Create(
+                rewired.ScriptAssets.SourceCompilationId,
+                rewired.ScriptAssets.SemanticConfigurationId,
+                [new ReplaceLiteralPatchOperation(currentMinimum.Id, "12f", "20f")]);
             using HttpResponseMessage conflict = await client.PostAsync(
                 "api/authoring/semantic-patch",
                 JsonContent(SemanticPatchJson.Serialize(conflictingPatch)));
@@ -173,6 +275,8 @@ public sealed class CoreClrAuthoringHttpServerTests
             string errorJson = await conflict.Content.ReadAsStringAsync();
             Assert.Contains("UAW1002", errorJson, StringComparison.Ordinal);
             Assert.DoesNotContain("20f", await File.ReadAllTextAsync(sourcePath), StringComparison.Ordinal);
+            Assert.Equal(surfaceBeforeConflict, await File.ReadAllTextAsync(surfacePath));
+            Assert.Equal(assemblyBeforeConflict, await File.ReadAllBytesAsync(managedPath));
 
             cancellation.Cancel();
             await serverTask.WaitAsync(TimeSpan.FromSeconds(5));

@@ -64,7 +64,7 @@ The repository currently implements:
 - lossless text-authored `for` loops across HIR v0.7 and Graph v0.12, with
   declaration/expression initializers, optional conditions, ordered incrementors,
   prefix/postfix mutation identity, and CFG-validated continue-to-increment routing;
-- dedicated bounded `for` construction through patch v0.19/plan v0.20, with
+- dedicated bounded `for` construction through patch v0.21/plan v0.21, with
   declaration or assignment initialization, scoped for-local references,
   ordered `++`/`--`, symbolic body/local handles, and atomic CFG revalidation;
 - exact editing of an existing `for` condition, declaration initializer,
@@ -86,10 +86,28 @@ The repository currently implements:
 - backend-neutral Script Asset / Declaration IR v0.1 with scalar and enum
   state, canonical defaults, engine exposure metadata, Visual signatures, and
   strict deterministic JSON;
-- engine-neutral Authoring Surface v0.1 projected from Declaration IR and Graph,
+- engine-neutral Authoring Surface v0.3 projected from Declaration IR and Graph,
   with multi-asset/function navigation, exact structured-region ownership,
-  compact expression summaries, source/debug identities, and typed edit
-  capabilities;
+  compiler-owned typed pins/control-data edges, source/debug identities, and
+  typed edit capabilities;
+- transactional typed data-edge dragging in the UE GraphEditor, with exact
+  edge/type preconditions, bounded pure-expression C# write-back, full
+  reanalysis, Surface refresh, and old-wire retention on failure;
+- Graph Authoring v2 Alpha in the UE GraphEditor: a Blueprint-style right-click
+  palette, structured local/binary-expression/branch/loop/return insertion, transaction-first
+  Delete and Alt-click disconnection, and automatic source/Surface/runtime
+  refresh after each accepted edit;
+- automatic shared-value extraction through an atomic
+  `introduceTemporary` + `reconnectValue` patch plan, preserving one evaluation
+  instead of copying a computed subtree into a second consumer;
+- reflection-driven UE API palette entries for readable properties and callable
+  functions whose typed receiver and arguments are available in the active
+  Visual function, emitted as structured member-access/invocation expressions
+  rather than raw C# text;
+- UE-reflected managed handle types as an explicit graph-safe object boundary,
+  while ordinary arbitrary CLR object types remain outside the Visual profile;
+- UE-side `.usgraph` load/save with atomic sidecar writes and per-function node
+  position recovery across Surface regeneration and editor restarts;
 - persistent state-property identity across formatting and safe renames through
   the same `.usids` reconciliation and tombstone contract;
 - semantic-independent `.usgraph` layout sidecars with deterministic positions,
@@ -107,8 +125,11 @@ The repository currently implements:
   C# produced by a checked-in visual semantic patch plan;
 - a strict `unifiedscript.unreal-reflection/v0.1` contract, deterministic
   managed-wrapper generator, and `ue-bindings` CLI command;
-- an UE 5.7 host project and `UEUnifiedScript` plugin with a reflected script
+- an UE 5.7/5.8-compatible host project and `UEUnifiedScript` plugin with a reflected script
   component plus headless reflection-export commandlet;
+- an opaque 64-bit slot/generation handle shared by managed wrappers and a
+  game-thread-only, world-bound native weak UObject registry with deletion
+  invalidation and stale-generation rejection;
 - machine-local UE discovery, host build, reflection export, and managed
   binding generation through one repository script;
 - xUnit coverage for validation, lowering, identity, graph projection, and
@@ -226,7 +247,7 @@ M5.5 is therefore complete before Unreal integration begins.
 
 M6.0 removes the last sample-specific browser adapter before that integration.
 The new `UnifiedScript.Authoring` project projects every Script Asset and Visual
-function into strict `unifiedscript.authoring-surface/v0.1` JSON. The Workbench
+function into strict `unifiedscript.authoring-surface/v0.3` JSON. The Workbench
 now renders asset/function navigation, `if` and loop regions, compact actions,
 state references, semantic edit controls, source selection, AI outlines, and
 CoreCLR breakpoints from that Surface. `analyze --out` emits the Surface beside
@@ -236,17 +257,123 @@ function, state, or API-call names; `MultiAssetControlFlow.cs` and automated
 tests cover two assets, three functions, branches, while loops, and for loops.
 UE binding begins in M6.1 against this proven contract.
 
-M6.1 Phase A now establishes the first real UE toolchain slice. The
+M6.1 Phase A establishes the first real UE toolchain slice. The
 `UnifiedScript.Unreal` boundary validates and normalizes engine reflection
 without exposing `UClass` or `FProperty` to Core, Semantics, Graph, or
-Authoring. The UE 5.7 plugin exports selected native modules through a headless
+Authoring. The UE plugin exports selected native modules through a headless
 commandlet; the CLI consumes that manifest and generates typed managed wrappers
 over `IUnrealInvocationBridge`. `UUnifiedScriptComponent` is the initial host
 component and reflection fixture. UHT validation passes against the discovered
-UE 5.7.4 source tree; full native compilation and a live export smoke test are
-intentionally deferred. UObject lifetime, native invocation,
-world-scoped CoreCLR domains, Slate integration, and cook support remain later
-M6.1 phases; no placeholder claims that those are complete.
+UE 5.7.4 source tree. Phase B.1 now defines the lifetime foundation: managed
+handles use the same 64-bit slot/generation encoding as a native weak registry,
+which rejects cross-world and off-game-thread access, allocates active
+generations process-wide to prevent cross-World aliasing, and listens for UObject
+deletion. Both plugin modules compile against
+UE 5.8.1 with version-following TargetRules. An installed UE 5.8.1 Release build
+now passes the native lifecycle Automation Test and the live reflection export
+smoke test; the latter exports one fixture type with three properties and two
+functions and feeds the managed binding generator successfully. The earlier
+5.7.4 environment still lacks a full native build and live export smoke test.
+Phase B.2 adds a native primitive invocation core: the same generated member
+paths now read and write fixture `bool`/`FString` properties and call `int32` or
+void UFunctions through `ProcessEvent`, only after weak-handle, world, thread,
+access, argument, and type validation. Phase B.3 now supplies the managed
+`NativeUnrealInvocationBridge`,
+which converts generated-wrapper CLR values into the same owned primitive value
+and stable error categories. The checked-in generated wrapper exercises this
+adapter for every fixture property and function. Phase B.4 adds a versioned
+in-process native function table and a managed transport that copies synchronous
+UTF-8 results before control returns. Phase B.5 adds one
+`UUnifiedScriptWorldSubsystem` per supported World. It owns the registry and
+bridge, exposes a retained native context, detaches it before teardown, and makes
+post-teardown calls fail safely. Phase B.6 now performs a real
+process-wide hostfxr bootstrap from the engine-bundled .NET runtime and acquires
+the CoreCLR load-assembly delegate. The per-World managed entry point and
+collectible load context are now connected in Phase B.7: each native World host
+creates a managed entry that retains its transport until native context
+detachment. Phase B.8 proved hosted generated-wrapper execution. Phase B.9 now
+makes `UUnifiedScriptComponent` a real runtime host: `BeginPlay` automatically
+registers and starts its configured managed type, component Tick dispatches
+`OnTick`, `EndPlay` calls `OnStop` before handle release, and Reload swaps to a
+fresh collectible script generation. Phase B.10 now gives every generated
+member a stable 64-bit ID and extends the in-process transport with ABI v2.
+Generated `UUnifiedScriptComponent` calls use direct native field/function
+thunks; ABI v1 and string/reflection dispatch remain as compatibility fallback.
+Phase B.11 adds `UUnifiedScriptAsset`, Content Browser selection, soft-path
+loading, schema/config validation, and transactional Reload into a different
+managed type. Phase B.12 removes the fixture-specific native switch: reflection
+now exports header/native-access metadata, and `ue-bindings --native-out`
+deterministically emits the ABI v2 C++ dispatcher for every supported public
+member. The generated path performs direct typed access/calls without
+`FProperty`, parameter buffers, or `ProcessEvent`.
+Phase B.13 closes the first declaration-to-engine loop: a Script Asset can point
+at emitted `.asset.json`, and the component materializes `[Expose]` state into a
+fixed-layout `FInstancedPropertyBag` in Details. Stable declaration IDs preserve
+compatible instance overrides across field renames and Reload; invalid JSON or
+managed reload failure leaves the previous state and generation intact.
+Phase B.14 adds the first native Slate authoring workspace. The Tools menu opens
+an Authoring Surface browser that can load the checked-in demo, a file, or
+the `AuthoringSurfacePath` of the selected Script Asset. It preserves semantic
+IDs while presenting state, functions, structured regions, actions, source
+spans, and source previews. Typed literal/operator capabilities export the same
+`semantic-patch/v0.20` contract used by the compiler pipeline; direct patch
+submission and live source transactions remain a later integration step.
+Phase B.15 closes that edit loop. `Apply & Reload` posts the typed patch to the
+loopback Workbench, which validates one multi-source candidate and atomically
+commits C#, `.usids`, Declaration IR, Authoring Surface, managed DLL, and PDB.
+Slate consumes the returned Surface and reloads matching running components;
+stale IDs, external source changes, compilation failures, and artifact-write
+failures leave the published artifact set unchanged.
+Phase B.16 replaces the hierarchy-only center pane with Unreal's native
+`SGraphEditor`. The workspace now follows the Blueprint layout: `My Script` on
+the left, a real zoom/pan/marquee graph canvas in the center, and semantic
+Details/source/edit controls on the right. Surface v0.3 now materializes every
+Graph node, real typed pins, and compiler-owned control/data wires. Manual
+occupied-data-input rewiring now uses that same transactional source-patch
+contract; control flow and structural construction remain compiler-owned.
+
+Graph Presentation v1 keeps `ResolveInitialValue`'s complete 14-node/14-edge
+Surface intact while projecting a compact 7-node/7-wire authoring canvas. Connected identifier
+and literal leaves become readable pin values such as `A = InitialValue` and
+`Value = 100`; assignment titles become `Set result`, common execution labels
+are suppressed, and kind/category/source/semantic-ID diagnostics live in
+tooltips or Details instead of permanently occupying every card.
+
+Run the verified UE 5.8 demo on Windows:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/run-unreal-demo.ps1 -EngineRoot D:\UE_5.8
+```
+
+Start the transactional authoring host in a second terminal while the Editor is
+open:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/run-unreal-authoring.ps1 -EngineRoot D:\UE_5.8
+```
+
+Open `Tools > UnifiedScript Authoring`, load the Demo or selected Script Asset,
+change a promoted literal/operator, and choose `Apply & Reload`. For a graph
+round trip, select `RewirePreview` and drag the `*` output onto
+`Declare incremented` -> `Value`; the committed C# changes from `value + 1` to
+`value * 2`, then Slate reloads the regenerated Surface.
+
+For an Editor actor, create a Data Asset using `UnifiedScriptAsset`, set:
+
+```text
+ScriptAssemblyPath = {PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.dll
+ScriptTypeName     = UnifiedScript.Unreal.Demo.DemoScript
+DeclarationPath   = {PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.asset.json
+DeclarationAssetPath = Unreal/Demo
+AuthoringSurfacePath = {PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.surface.json
+```
+
+Assign that asset to `UnifiedScriptComponent.Script Asset`. With automatic Start
+and Tick enabled, PIE drives managed `OnStart`, `OnTick`, reload generations,
+and `OnStop`. `Refresh Script State` makes C# defaults editable in the component
+Details panel; the verified demo overrides `InitialValue` to `37`, reads it from
+managed code through generated native thunks, and retains it on Reload. The
+component's direct assembly/type fields remain an advanced compatibility fallback.
 
 The v0.2 profile accepts `[Visual]` methods containing local variables,
 expressions, calls, assignments, `if/else`, `while`, `do`, `for`, bounded
@@ -281,7 +408,7 @@ Declaration edit
   -> updated C# + asset JSON + optional .usids (only as one commit)
 
 Workbench authoring commit
-  -> declaration-patch v0.1 or semantic-patch v0.19
+  -> declaration-patch v0.1 or semantic-patch v0.21
   -> immutable candidate analysis + regenerated Graph
   -> same CoreCLR transport reload
   -> rollback-capable source + .usids transaction
@@ -302,12 +429,21 @@ Current Unreal adapter path:
   -> strict Unreal reflection manifest v0.1
   -> deterministic C# managed wrappers
   -> handle-based invocation bridge contract
-  -> generated component binding surface
+  -> world-scoped native host + retained invocation context
+  -> component-driven Start/Tick/Stop lifecycle
+  -> collectible per-script reload generation
+  -> UE Script Asset resolution + transactional entry-type reload
+  -> Declaration IR -> fixed-layout Details state + stable-ID migration
+  -> stable generated Member ID -> ABI v2 native thunk -> live UObject
+  -> Authoring Surface v0.3 -> native Slate GraphEditor pins/wires + inspector
+  -> typed edit capability -> semantic-patch v0.21 Workbench transaction
+  -> atomic C#/identity/Declaration/Surface/DLL/PDB publication
+  -> matching component transactional reload
 
 Later:
   -> native managed-debug trap backend, remote framing, and async stepping
-  -> UObject lifetime/invocation bridge and world-scoped CoreCLR domain
-  -> Slate Authoring Surface frontend and cook/package integration
+  -> Script Asset cook/packaging dependency discovery
+  -> optional graph-canvas layout and cook/package integration
 ```
 
 The HIR is the semantic contract. IL and future visual layouts are derived
@@ -358,7 +494,9 @@ compilation. See [SOURCE_MAP.md](docs/SOURCE_MAP.md) and
 ### Build and verify the Unreal adapter
 
 The host project is deliberately checked in without machine-specific engine
-paths. On macOS, the helper discovers common source and Launcher layouts; set
+paths. Its TargetRules follow the selected engine's latest build settings and
+include order, which maps to V6/5.7 on UE 5.7 and V7/5.8 on UE 5.8. On macOS,
+the helper discovers common source and Launcher layouts; set
 `UNIFIEDSCRIPT_UE_ROOT` when the engine lives elsewhere:
 
 ```bash
@@ -572,7 +710,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
   --out-identity artifacts/patched/DamageRules.cs.usids
 ```
 
-`unifiedscript.patch/v0.19` binds every patch to both the source compilation ID
+`unifiedscript.patch/v0.21` binds every patch to both the source compilation ID
 and semantic configuration ID emitted in current Graph schema v0.12. A `replaceLiteral`
 operation also carries the expected old literal text. A stale source, changed
 reference/effect configuration, missing target, changed old value, non-literal
@@ -586,7 +724,7 @@ ambiguous matches allocate new IDs and emit `UVS3101` rather than guessing.
 
 ## Apply structural graph patches
 
-Patch v0.19 includes `changeOperator` and `reconnectArgument`. The checked-in
+Patch v0.21 includes `changeOperator` and `reconnectArgument`. The checked-in
 operator sample changes the binary node from multiplication to division while
 requiring the expected result, left-port, and right-port type IDs:
 
@@ -622,7 +760,7 @@ single-document.
 
 ## Apply a statement insertion
 
-Patch v0.19 also includes bounded `insertStatement` and `deleteStatement`
+Patch v0.21 also includes bounded `insertStatement` and `deleteStatement`
 operations. The insertion sample adds a graph-authored local declaration before
 the existing return statement:
 
@@ -637,7 +775,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
 ```
 
 An insertion targets a parent block and records the exact adjacent sibling IDs.
-Patch v0.19 accepts a local declaration with one literal initializer, a
+Patch v0.21 accepts a local declaration with one literal initializer, a
 CFG-checked local assignment, a typed terminal return, an `if`/`while`, or a
 dedicated bounded `for` whose clauses are versioned graph-authored expressions.
 A local's
@@ -718,7 +856,7 @@ It proves that source, HIR, Graph branch/data/control edges, persistent identity
 and `.usgraph` layout synchronization share one structure. New branch and
 condition nodes are explicitly `unplaced`; existing placements survive.
 
-Patch-plan v0.20 can populate those newly allocated blocks without predicting
+Patch-plan v0.21 can populate those newly allocated blocks without predicting
 their random IDs. The checked-in plan inserts the same guard, appends two typed
 locals to `then`, and appends one typed local to `else`:
 
@@ -868,7 +1006,7 @@ pin. The moved expression, its descendants, the containing statement, sibling
 statements, and parent block therefore retain their IDs. Only the new local
 declaration and replacement identifier allocate new IDs. This is the first
 lowering primitive needed to represent a shared Graph value without duplicating
-C# evaluation. Patch v0.19 can connect additional compatible consumers to
+C# evaluation. Patch v0.21 can connect additional compatible consumers to
 that local definition.
 
 ## Reconnect a typed consumer
@@ -927,7 +1065,7 @@ analyzed source baseline, or atomically with the patch-plan protocol below.
 
 ## Apply atomic semantic patch plans
 
-`unifiedscript.patch-plan/v0.20` composes `replaceLiteral`, `changeOperator`,
+`unifiedscript.patch-plan/v0.21` composes `replaceLiteral`, `changeOperator`,
 `reconnectArgument`, typed replacement of assignment, loop, branch,
 declaration-initializer, and return endpoints, their generated-statement
 handle variants, `insertStatement`, `insertBranchStatement`,
@@ -1028,7 +1166,7 @@ handle, and `foreach` publishes its iteration variable inside the body, usable
 only where scope and CFG dominance allow. Local assignments are
 supported as direct, produced-branch, and produced-loop-body payloads. Authored
 call construction, async/task-like returns, cyclic handle references, and
-cross-method handles remain outside plan v0.20; exact inputs of already-resolved
+cross-method handles remain outside plan v0.21; exact inputs of already-resolved
 positional calls are covered by M4.10 below.
 
 ### Build a loop from a visual plan
@@ -1306,7 +1444,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
 ```
 
 The result is `return value + (value * 3);`, and the sidecar advances from
-generation 1 to 4. The symbolic step becomes an ordinary patch v0.19
+generation 1 to 4. The symbolic step becomes an ordinary patch v0.21
 `replaceExpressionInput` at execution time, so type, purity, dominance, trivia,
 identity, tombstone, and Graph-edge behavior stay on one code path. See
 [PRODUCED_EXPRESSION_HANDLES.md](docs/PRODUCED_EXPRESSION_HANDLES.md).
@@ -1314,7 +1452,7 @@ identity, tombstone, and Graph-edge behavior stay on one code path. See
 ### Author and edit a conditional expression
 
 M4.12 adds `condition ? whenTrue : whenFalse` as a first-class expression in
-current HIR v0.7, Graph v0.12, patch v0.19, and patch-plan v0.20. Graph emits one
+current HIR v0.7, Graph v0.12, patch v0.21, and patch-plan v0.21. Graph emits one
 `conditional`/`Select` node with `condition`, `whenTrue`, and `whenFalse` data
 inputs, a `value` output, and `evaluation: lazyBranches`. Text lowering keeps
 the original expression shape; it does not turn the expression into a call or
@@ -1416,11 +1554,11 @@ subtree is skipped on null, so an assignment, await, mutation, or effectful call
 there produces `UVS2006` until Graph has conditional effect subregions.
 `UVS2007` rejects void, graph-unsafe, or hidden-conversion result shapes.
 
-Patch v0.19 adds a bounded `conditionalMemberAccess` payload for a simple member
+Patch v0.21 adds a bounded `conditionalMemberAccess` payload for a simple member
 identifier. It emits ordinary C#, reanalyzes it, and verifies every authored
 node against Roslyn's exact pre-conversion type. Existing and generated
 conditional-access roots expose `receiver` as an exact editable port under
-patch-plan v0.20. The conditional `whenNotNull` data port remains read-only for
+patch-plan v0.21. The conditional `whenNotNull` data port remains read-only for
 general edits until a closed call/member-binding payload can preserve its
 implicit receiver safely.
 

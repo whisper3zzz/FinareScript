@@ -79,6 +79,13 @@ public sealed class AuthoringSurfaceProjectorTests
         AuthoringFunctionSurface resolve = surface.Assets
             .SelectMany(static asset => asset.Functions)
             .Single(static function => function.Name == "Resolve");
+        GraphFunction resolveGraph = graph.Functions.Single(function => function.Id == resolve.Id);
+        Assert.Equal(
+            resolveGraph.Nodes.Select(static node => node.Id).OrderBy(static id => id.Value),
+            resolve.Actions.Select(static action => action.Id).OrderBy(static id => id.Value));
+        Assert.Equal(
+            resolveGraph.Edges.Select(static edge => edge.Id).OrderBy(static id => id.Value),
+            resolve.Edges.Select(static edge => edge.Id).OrderBy(static id => id.Value));
         Assert.Contains(resolve.Regions, static region => region.Kind == GraphRegionKind.If);
         Assert.Contains(resolve.Actions, static action => action.GraphKind == "branch");
         Assert.Contains(resolve.Actions, static action =>
@@ -89,6 +96,21 @@ public sealed class AuthoringSurfaceProjectorTests
         Assert.Contains(resolve.Actions.SelectMany(static action => action.EditCapabilities),
             static edit => edit.Kind == AuthoringEditKind.Operator &&
                 edit.Operation == "changeOperator" && edit.Options.Count > 1);
+        Assert.Contains(resolve.Edges, static edge => edge.Kind == GraphEdgeKind.Control);
+        Assert.Contains(resolve.Edges, static edge => edge.Kind == GraphEdgeKind.Data);
+        Assert.All(
+            resolve.Edges.Where(static edge => edge.Kind == GraphEdgeKind.Data),
+            edge =>
+            {
+                AuthoringPortSurface output = resolve.Actions.Single(action =>
+                    action.Id == edge.FromNode).Ports.Single(port =>
+                        port.Name == edge.FromPort && port.Direction == GraphPortDirection.Output);
+                AuthoringPortSurface input = resolve.Actions.Single(action =>
+                    action.Id == edge.ToNode).Ports.Single(port =>
+                        port.Name == edge.ToPort && port.Direction == GraphPortDirection.Input);
+                Assert.Equal(output.TypeId, input.TypeId);
+                Assert.False(string.IsNullOrWhiteSpace(output.TypeDisplayName));
+            });
 
         SemanticId limitId = surface.Assets
             .Single(static asset => asset.AssetPath == "Tests/CombatRules")
@@ -146,6 +168,58 @@ public sealed class AuthoringSurfaceProjectorTests
         };
 
         Assert.Throws<JsonException>(() => AuthoringSurfaceJson.Serialize(invalid));
+
+        AuthoringEdgeSurface firstEdge = firstFunction.Edges[0];
+        AuthoringFunctionSurface invalidEdgeFunction = firstFunction with
+        {
+            Edges = [firstEdge with { ToPort = "missing" }, .. firstFunction.Edges.Skip(1)],
+        };
+        AuthoringSurfaceDocument invalidEdge = roundTripped with
+        {
+            Assets = [firstAsset with
+            {
+                Functions = firstAsset.Functions
+                    .Select(function => function.Id == firstFunction.Id
+                        ? invalidEdgeFunction
+                        : function)
+                    .ToArray(),
+            }, .. roundTripped.Assets.Skip(1)],
+        };
+        Assert.Throws<JsonException>(() => AuthoringSurfaceJson.Serialize(invalidEdge));
+
+        AuthoringEdgeSurface dataEdge = firstFunction.Edges.First(
+            static edge => edge.Kind == GraphEdgeKind.Data);
+        AuthoringActionSurface dataTarget = firstFunction.Actions.Single(
+            action => action.Id == dataEdge.ToNode);
+        AuthoringActionSurface invalidDataTarget = dataTarget with
+        {
+            Ports = dataTarget.Ports.Select(port =>
+                port.Direction == GraphPortDirection.Input && port.Name == dataEdge.ToPort
+                    ? port with
+                    {
+                        TypeId = SemanticId.FromKey("authoring-test:mismatched-edge-type"),
+                        TypeDisplayName = "Mismatch",
+                    }
+                    : port).ToArray(),
+        };
+        AuthoringFunctionSurface invalidTypeFunction = firstFunction with
+        {
+            Actions = firstFunction.Actions.Select(action => action.Id == dataTarget.Id
+                ? invalidDataTarget
+                : action).ToArray(),
+        };
+        AuthoringSurfaceDocument invalidEdgeType = roundTripped with
+        {
+            Assets = [firstAsset with
+            {
+                Functions = firstAsset.Functions
+                    .Select(function => function.Id == firstFunction.Id
+                        ? invalidTypeFunction
+                        : function)
+                    .ToArray(),
+            }, .. roundTripped.Assets.Skip(1)],
+        };
+        Assert.Throws<JsonException>(() => AuthoringSurfaceJson.Serialize(invalidEdgeType));
     }
 
     private static (CSharpAnalysisResult Analysis, GraphDocument Graph) Analyze()

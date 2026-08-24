@@ -33,6 +33,28 @@ public sealed record AuthoringEditCapability(
     SemanticId? ExpectedRightOperandTypeId,
     IReadOnlyList<string> Options);
 
+public sealed record AuthoringPortSurface(
+    string Name,
+    GraphPortDirection Direction,
+    GraphPortKind Kind,
+    SemanticId? TypeId,
+    string? TypeDisplayName);
+
+public sealed record AuthoringEdgeSurface(
+    SemanticId Id,
+    GraphEdgeKind Kind,
+    SemanticId FromNode,
+    string FromPort,
+    SemanticId ToNode,
+    string ToPort);
+
+public sealed record AuthoringParameterSurface(
+    SemanticId Id,
+    string Name,
+    string TypeMetadataName,
+    SemanticId? TypeId,
+    string? TypeDisplayName);
+
 public sealed record AuthoringActionSurface(
     SemanticId Id,
     string GraphKind,
@@ -43,15 +65,18 @@ public sealed record AuthoringActionSurface(
     SemanticId RegionId,
     SemanticId? DebugTargetId,
     IReadOnlyList<SemanticId> DeclarationReferenceIds,
-    IReadOnlyList<AuthoringEditCapability> EditCapabilities);
+    IReadOnlyList<AuthoringEditCapability> EditCapabilities,
+    IReadOnlyList<AuthoringPortSurface> Ports);
 
 public sealed record AuthoringRegionSurface(
     SemanticId Id,
     GraphRegionKind Kind,
     SemanticId? ParentRegionId,
+    SemanticId SourceNodeId,
     SourceSpan Span,
     bool IsImplicit,
     SemanticId? AnchorActionId,
+    IReadOnlyList<SemanticId> DirectStatementIds,
     IReadOnlyList<SemanticId> DirectActionIds,
     IReadOnlyList<SemanticId> ChildRegionIds);
 
@@ -61,10 +86,11 @@ public sealed record AuthoringFunctionSurface(
     string QualifiedName,
     string ReturnTypeMetadataName,
     bool IsStatic,
-    IReadOnlyList<ScriptParameterDeclaration> Parameters,
+    IReadOnlyList<AuthoringParameterSurface> Parameters,
     SemanticId RootRegionId,
     IReadOnlyList<AuthoringRegionSurface> Regions,
-    IReadOnlyList<AuthoringActionSurface> Actions);
+    IReadOnlyList<AuthoringActionSurface> Actions,
+    IReadOnlyList<AuthoringEdgeSurface> Edges);
 
 public sealed record AuthoringAssetSurface(
     SemanticId Id,
@@ -80,5 +106,5 @@ public sealed record AuthoringSurfaceDocument(
     SemanticId SemanticConfigurationId,
     IReadOnlyList<AuthoringAssetSurface> Assets)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.authoring-surface/v0.1";
+    public const string CurrentSchemaVersion = "unifiedscript.authoring-surface/v0.3";
 }

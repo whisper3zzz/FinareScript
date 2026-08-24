@@ -23,7 +23,9 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         string sourcePath,
         string? identityPath,
         string contentRoot,
-        int port)
+        int port,
+        AuthoringArtifactOutputs? artifactOutputs = null,
+        IReadOnlyDictionary<string, string>? sourceFiles = null)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentException.ThrowIfNullOrWhiteSpace(contentRoot);
@@ -39,7 +41,12 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 $"The visual workbench root does not exist: {this.contentRoot}");
         }
 
-        session = new AuthoringSessionController(request, sourcePath, identityPath);
+        session = new AuthoringSessionController(
+            request,
+            sourcePath,
+            identityPath,
+            artifactOutputs ?? new AuthoringArtifactOutputs(),
+            sourceFiles);
         listener.Prefixes.Add($"http://127.0.0.1:{port}/");
     }
 
@@ -163,6 +170,9 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 cancellationToken),
             "/api/authoring/semantic-patch" => await session.ApplyAsync(
                 SemanticPatchJson.Deserialize(json),
+                cancellationToken),
+            "/api/authoring/semantic-patch-plan" => await session.ApplyAsync(
+                SemanticPatchPlanJson.Deserialize(json),
                 cancellationToken),
             _ => throw new HttpProtocolException(HttpStatusCode.NotFound, "Unknown authoring endpoint."),
         };
@@ -316,32 +326,67 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         private readonly CoreClrDebugLoopbackTransport transport = new();
         private readonly CSharpAuthoringWorkspace authoring;
         private readonly string sourcePath;
+        private readonly string sourceLogicalPath;
+        private readonly IReadOnlyDictionary<string, string> sourceFiles;
+        private readonly Dictionary<string, string> persistedSources = new(StringComparer.Ordinal);
         private readonly string? identityPath;
+        private readonly AuthoringArtifactOutputs artifactOutputs;
+        private readonly CSharpProgramEmitter emitter = new();
         private readonly List<SemanticId> breakpointIds = [];
         private IReadOnlyList<SemanticBreakpointBinding> bindings = [];
         private CoreClrDebugReloadResult reload;
         private CoreClrDebugExecution? execution;
         private CoreClrDebugPause? pause;
-        private string persistedSource;
         private string? persistedIdentity;
 
         public AuthoringSessionController(
             CSharpCompilationRequest request,
             string sourcePath,
-            string? identityPath)
+            string? identityPath,
+            AuthoringArtifactOutputs artifactOutputs,
+            IReadOnlyDictionary<string, string>? sourceFiles)
         {
             ArgumentNullException.ThrowIfNull(request);
             ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
-            if (request.Sources.Count != 1)
-            {
-                throw new ArgumentException(
-                    "The local authoring host currently requires exactly one source document.",
-                    nameof(request));
-            }
+            ArgumentNullException.ThrowIfNull(artifactOutputs);
 
             this.sourcePath = Path.GetFullPath(sourcePath);
             this.identityPath = identityPath is null ? null : Path.GetFullPath(identityPath);
-            persistedSource = File.ReadAllText(this.sourcePath);
+            this.artifactOutputs = artifactOutputs.Normalize();
+            string normalizedSourcePath = this.sourcePath.Replace('\\', '/');
+            CSharpSourceDocument primarySource = request.Sources.SingleOrDefault(source =>
+                    string.Equals(
+                        Path.GetFullPath(source.LogicalPath).Replace('\\', '/'),
+                        normalizedSourcePath,
+                        StringComparison.OrdinalIgnoreCase))
+                ?? throw new ArgumentException(
+                    $"The authoring source '{this.sourcePath}' is not present in the compilation request.",
+                    nameof(sourcePath));
+            sourceLogicalPath = primarySource.LogicalPath;
+            var normalizedSourceFiles = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach ((string logicalPath, string physicalPath) in sourceFiles ??
+                new Dictionary<string, string> { [sourceLogicalPath] = this.sourcePath })
+            {
+                normalizedSourceFiles.Add(logicalPath.Replace('\\', '/'), Path.GetFullPath(physicalPath));
+            }
+            this.sourceFiles = normalizedSourceFiles;
+            foreach (CSharpSourceDocument source in request.Sources)
+            {
+                if (!this.sourceFiles.TryGetValue(source.LogicalPath, out string? physicalPath))
+                {
+                    throw new ArgumentException(
+                        $"Compilation source '{source.LogicalPath}' has no physical authoring path.",
+                        nameof(sourceFiles));
+                }
+                string diskSource = File.ReadAllText(physicalPath);
+                if (!string.Equals(source.Source, diskSource, StringComparison.Ordinal))
+                {
+                    throw new ArgumentException(
+                        $"Compilation source '{source.LogicalPath}' does not match its file on disk.",
+                        nameof(request));
+                }
+                persistedSources.Add(source.LogicalPath, diskSource);
+            }
             persistedIdentity = this.identityPath is null
                 ? null
                 : File.Exists(this.identityPath)
@@ -466,6 +511,14 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             return ApplyAsync(() => authoring.Prepare(patch), cancellationToken);
         }
 
+        public Task<AuthoringWorkspaceResponse> ApplyAsync(
+            SemanticPatchPlanDocument plan,
+            CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(plan);
+            return ApplyAsync(() => authoring.Prepare(plan), cancellationToken);
+        }
+
         public void Dispose()
         {
             gate.Dispose();
@@ -527,39 +580,98 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
 
         private void EnsureFilesUnchanged()
         {
-            string diskSource = File.ReadAllText(sourcePath);
+            foreach ((string logicalPath, string physicalPath) in sourceFiles)
+            {
+                string diskSource = File.ReadAllText(physicalPath);
+                if (!string.Equals(diskSource, persistedSources[logicalPath], StringComparison.Ordinal))
+                {
+                    throw new AuthoringProtocolException(
+                        HttpStatusCode.Conflict,
+                        "UAW1002",
+                        $"Source '{logicalPath}' changed outside the workbench; reload before saving.");
+                }
+            }
             string? diskIdentity = identityPath is null || !File.Exists(identityPath)
                 ? null
                 : File.ReadAllText(identityPath);
-            if (!string.Equals(diskSource, persistedSource, StringComparison.Ordinal) ||
-                !string.Equals(diskIdentity, persistedIdentity, StringComparison.Ordinal))
+            if (!string.Equals(diskIdentity, persistedIdentity, StringComparison.Ordinal))
             {
                 throw new AuthoringProtocolException(
                     HttpStatusCode.Conflict,
                     "UAW1002",
-                    "The source or identity sidecar changed outside the workbench; reload before saving.");
+                    "The identity sidecar changed outside the workbench; reload before saving.");
             }
         }
 
         private void Persist(CSharpAuthoringSnapshot snapshot)
         {
-            string nextSource = snapshot.Request.Sources.Single().Source;
-            var outputs = new List<AuthoringOutput>
-            {
-                new(sourcePath, Encoding.UTF8.GetBytes(nextSource)),
-            };
+            var outputs = snapshot.Request.Sources
+                .Select(source => new AuthoringOutput(
+                    sourceFiles[source.LogicalPath],
+                    Encoding.UTF8.GetBytes(source.Source)))
+                .ToList();
             string? nextIdentity = null;
             if (identityPath is not null)
             {
-                IdentitySidecarDocument sidecar = snapshot.Analysis.IdentitySidecars.Single();
+                IdentitySidecarDocument sidecar = snapshot.Analysis.IdentitySidecars.Single(item =>
+                    string.Equals(item.SourcePath, sourceLogicalPath, StringComparison.Ordinal));
                 nextIdentity = IdentitySidecarJson.Serialize(sidecar) + "\n";
                 outputs.Add(new AuthoringOutput(
                     identityPath,
                     Encoding.UTF8.GetBytes(nextIdentity)));
             }
 
+            ScriptAssetDocument scriptAssets = snapshot.Analysis.ScriptAssets!;
+            AuthoringSurfaceDocument surface = new AuthoringSurfaceProjector().Project(
+                scriptAssets,
+                snapshot.Graph);
+            if (artifactOutputs.DeclarationPath is not null)
+            {
+                outputs.Add(new AuthoringOutput(
+                    artifactOutputs.DeclarationPath,
+                    Encoding.UTF8.GetBytes(ScriptAssetJson.Serialize(scriptAssets) + "\n")));
+            }
+
+            if (artifactOutputs.SurfacePath is not null)
+            {
+                outputs.Add(new AuthoringOutput(
+                    artifactOutputs.SurfacePath,
+                    Encoding.UTF8.GetBytes(AuthoringSurfaceJson.Serialize(surface) + "\n")));
+            }
+
+            if (artifactOutputs.ManagedAssemblyPath is not null ||
+                artifactOutputs.PortablePdbPath is not null)
+            {
+                CSharpProgramEmitResult emitted = emitter.Emit(snapshot.Request);
+                if (!emitted.Succeeded || emitted.Image is null)
+                {
+                    throw new AuthoringProtocolException(
+                        HttpStatusCode.Conflict,
+                        "UAW1004",
+                        "The candidate managed assembly could not be emitted; no authoring artifact was changed.",
+                        emitted.Diagnostics);
+                }
+
+                if (artifactOutputs.ManagedAssemblyPath is not null)
+                {
+                    outputs.Add(new AuthoringOutput(
+                        artifactOutputs.ManagedAssemblyPath,
+                        emitted.Image.PortableExecutable));
+                }
+
+                if (artifactOutputs.PortablePdbPath is not null)
+                {
+                    outputs.Add(new AuthoringOutput(
+                        artifactOutputs.PortablePdbPath,
+                        emitted.Image.PortablePdb));
+                }
+            }
+
             WriteTransactionally(outputs);
-            persistedSource = nextSource;
+            foreach (CSharpSourceDocument source in snapshot.Request.Sources)
+            {
+                persistedSources[source.LogicalPath] = source.Source;
+            }
             persistedIdentity = nextIdentity;
         }
 
@@ -570,7 +682,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             generation.SourceCompilationId,
             generation.SemanticConfigurationId);
 
-        private static AuthoringWorkspaceResponse CreateWorkspace(
+        private AuthoringWorkspaceResponse CreateWorkspace(
             CSharpAuthoringSnapshot snapshot,
             CoreClrProgramGeneration generation)
         {
@@ -581,8 +693,9 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             return new AuthoringWorkspaceResponse(
                 "unifiedscript.authoring-workspace/v0.2",
                 snapshot.Revision,
-                snapshot.Request.Sources.Single().LogicalPath,
-                snapshot.Request.Sources.Single().Source,
+                sourceLogicalPath,
+                snapshot.Request.Sources.Single(source =>
+                    string.Equals(source.LogicalPath, sourceLogicalPath, StringComparison.Ordinal)).Source,
                 scriptAssets,
                 snapshot.Graph,
                 surface,
@@ -747,6 +860,22 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
 
         public IReadOnlyList<UnifiedDiagnostic> Diagnostics { get; } = diagnostics ?? [];
     }
+}
+
+internal sealed record AuthoringArtifactOutputs(
+    string? DeclarationPath = null,
+    string? SurfacePath = null,
+    string? ManagedAssemblyPath = null,
+    string? PortablePdbPath = null)
+{
+    public AuthoringArtifactOutputs Normalize() => new(
+        NormalizePath(DeclarationPath),
+        NormalizePath(SurfacePath),
+        NormalizePath(ManagedAssemblyPath),
+        NormalizePath(PortablePdbPath));
+
+    private static string? NormalizePath(string? path) =>
+        string.IsNullOrWhiteSpace(path) ? null : Path.GetFullPath(path);
 }
 
 internal sealed record AuthoringWorkspaceResponse(

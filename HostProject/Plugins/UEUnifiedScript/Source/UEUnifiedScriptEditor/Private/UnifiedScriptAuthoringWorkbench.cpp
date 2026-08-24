@@ -1,0 +1,155 @@
+/**
+ * @Copyright: 2026 Tencent Inc. All rights reserved. reserved.
+ * @Author: whispersong
+ * @Date: 2026-08-24 18:41:46
+ * @LastEditors: whispersong
+ * @LastEditTime: 2026-08-24 19:01:04
+ * @FilePath: \Plugins\UEUnifiedScript\Source\UEUnifiedScriptEditor\Private\UnifiedScriptAuthoringWorkbench.cpp
+ * @Description:
+ */
+#include "UnifiedScriptAuthoringWorkbench.h"
+
+#include "Dom/JsonObject.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
+
+namespace UE::UnifiedScript::AuthoringWorkbench::Private
+{
+constexpr TCHAR WorkspaceSchema[] = TEXT("unifiedscript.authoring-workspace/v0.2");
+
+bool ReadPositiveInteger(
+    const TSharedPtr<FJsonObject>& Object,
+    const TCHAR* Field,
+    int64& OutValue,
+    FString& OutError)
+{
+    double Number = 0.0;
+    if (!Object.IsValid() || !Object->TryGetNumberField(Field, Number) ||
+        Number < 1.0 || Number != FMath::FloorToDouble(Number))
+    {
+        OutError = FString::Printf(TEXT("Authoring workspace field '%s' must be a positive integer."), Field);
+        return false;
+    }
+    OutValue = static_cast<int64>(Number);
+    return true;
+}
+}
+
+FString FUnifiedScriptAuthoringWorkbench::NormalizeServerUrl(const FString& ServerUrl)
+{
+    FString Result = ServerUrl;
+    Result.TrimStartAndEndInline();
+    while (Result.EndsWith(TEXT("/")))
+    {
+        Result.LeftChopInline(1);
+    }
+    return Result;
+}
+
+FString FUnifiedScriptAuthoringWorkbench::BuildSemanticPatchUrl(const FString& ServerUrl)
+{
+    const FString Normalized = NormalizeServerUrl(ServerUrl);
+    return Normalized.IsEmpty()
+        ? FString()
+        : Normalized + TEXT("/api/authoring/semantic-patch");
+}
+
+FString FUnifiedScriptAuthoringWorkbench::BuildSemanticPatchPlanUrl(const FString& ServerUrl)
+{
+    const FString Normalized = NormalizeServerUrl(ServerUrl);
+    return Normalized.IsEmpty()
+        ? FString()
+        : Normalized + TEXT("/api/authoring/semantic-patch-plan");
+}
+
+bool FUnifiedScriptAuthoringWorkbench::ParseWorkspaceResponse(
+    const FString& Json,
+    FUnifiedScriptAuthoringWorkspaceResult& OutWorkspace,
+    FString& OutError)
+{
+    TSharedPtr<FJsonObject> Root;
+    const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Json);
+    if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+    {
+        OutError = TEXT("The Workbench returned invalid workspace JSON.");
+        return false;
+    }
+
+    FString Schema;
+    if (!Root->TryGetStringField(TEXT("schemaVersion"), Schema) ||
+        Schema != UE::UnifiedScript::AuthoringWorkbench::Private::WorkspaceSchema)
+    {
+        OutError = FString::Printf(TEXT("Unsupported authoring workspace schema '%s'."), *Schema);
+        return false;
+    }
+
+    FUnifiedScriptAuthoringWorkspaceResult Candidate;
+    if (!UE::UnifiedScript::AuthoringWorkbench::Private::ReadPositiveInteger(
+            Root, TEXT("revision"), Candidate.Revision, OutError))
+    {
+        return false;
+    }
+    Root->TryGetStringField(TEXT("sourcePath"), Candidate.SourcePath);
+
+    const TSharedPtr<FJsonObject>* Generation = nullptr;
+    if (!Root->TryGetObjectField(TEXT("generation"), Generation) ||
+        !UE::UnifiedScript::AuthoringWorkbench::Private::ReadPositiveInteger(
+            *Generation, TEXT("number"), Candidate.Generation, OutError))
+    {
+        if (OutError.IsEmpty())
+        {
+            OutError = TEXT("The Workbench response has no runtime generation.");
+        }
+        return false;
+    }
+
+    const TSharedPtr<FJsonObject>* Surface = nullptr;
+    if (!Root->TryGetObjectField(TEXT("surface"), Surface) || !Surface->IsValid())
+    {
+        OutError = TEXT("The Workbench response has no Authoring Surface.");
+        return false;
+    }
+    FString SurfaceJson;
+    const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&SurfaceJson);
+    if (!FJsonSerializer::Serialize(Surface->ToSharedRef(), Writer) ||
+        !FUnifiedScriptAuthoringSurfaceReader::ParseJson(
+            SurfaceJson,
+            Candidate.Surface,
+            OutError))
+    {
+        if (OutError.IsEmpty())
+        {
+            OutError = TEXT("The Workbench Authoring Surface could not be decoded.");
+        }
+        return false;
+    }
+
+    OutWorkspace = MoveTemp(Candidate);
+    OutError.Reset();
+    return true;
+}
+
+FString FUnifiedScriptAuthoringWorkbench::ParseErrorResponse(
+    const FString& Json,
+    int32 StatusCode)
+{
+    TSharedPtr<FJsonObject> Root;
+    const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Json);
+    if (FJsonSerializer::Deserialize(Reader, Root) && Root.IsValid())
+    {
+        const TSharedPtr<FJsonObject>* Error = nullptr;
+        if (Root->TryGetObjectField(TEXT("error"), Error) && Error->IsValid())
+        {
+            FString Code;
+            FString Message;
+            (*Error)->TryGetStringField(TEXT("code"), Code);
+            (*Error)->TryGetStringField(TEXT("message"), Message);
+            if (!Code.IsEmpty() || !Message.IsEmpty())
+            {
+                return FString::Printf(TEXT("Workbench %d %s: %s"), StatusCode, *Code, *Message);
+            }
+        }
+    }
+    return FString::Printf(TEXT("Workbench request failed with HTTP %d."), StatusCode);
+}

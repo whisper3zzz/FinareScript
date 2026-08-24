@@ -75,22 +75,20 @@ public sealed class AuthoringSurfaceProjector
         var nodeOwners = function.Regions
             .SelectMany(static region => region.NodeIds.Select(nodeId => (nodeId, region.Id)))
             .ToDictionary(static item => item.nodeId, static item => item.Id);
-        GraphNode[] promotedNodes = function.Nodes
-            .Where(static node => node.Kind == "entry" || node.Ports.Any(
-                static port => port.Kind == GraphPortKind.Control))
+        GraphNode[] surfaceNodes = function.Nodes
             .OrderBy(static node => node.Span.Start.Line)
             .ThenBy(static node => node.Span.Start.Column)
             .ThenBy(static node => node.Id.Value, StringComparer.Ordinal)
             .ToArray();
-        var promotedIds = promotedNodes.Select(static node => node.Id).ToHashSet();
+        var surfaceNodeIds = surfaceNodes.Select(static node => node.Id).ToHashSet();
 
         var actions = new List<AuthoringActionSurface>();
-        foreach (GraphNode node in promotedNodes)
+        foreach (GraphNode node in surfaceNodes)
         {
             if (!nodeOwners.TryGetValue(node.Id, out SemanticId regionId))
             {
                 throw new InvalidOperationException(
-                    $"Promoted Graph node '{node.Id}' has no direct region owner.");
+                    $"Graph node '{node.Id}' has no direct region owner.");
             }
 
             var formatter = new ExpressionFormatter(nodes, incomingData);
@@ -98,13 +96,14 @@ public sealed class AuthoringSurfaceProjector
                 node.Id,
                 node.Kind,
                 Classify(node),
-                ActionTitle(node, declaration),
+                ActionTitle(node, declaration, formatter),
                 ActionSummary(node, declaration, formatter),
                 node.Span,
                 regionId,
                 DebugTarget(node),
                 CollectDeclarationReferences(node.Id, nodes, incomingData),
-                CollectEditCapabilities(node.Id, nodes, incomingData)));
+                CollectEditCapabilities(node.Id, nodes, incomingData),
+                ProjectPorts(node, nodes, incomingData)));
         }
 
         AuthoringRegionSurface[] regions = function.Regions.Select(region =>
@@ -112,14 +111,27 @@ public sealed class AuthoringSurfaceProjector
                 region.Id,
                 region.Kind,
                 region.ParentRegionId,
+                region.SourceNodeId,
                 region.Span,
                 region.IsImplicit,
-                promotedIds.Contains(region.SourceNodeId) &&
+                surfaceNodeIds.Contains(region.SourceNodeId) &&
                     region.NodeIds.Contains(region.SourceNodeId)
                     ? region.SourceNodeId
                     : null,
                 region.NodeIds
-                    .Where(promotedIds.Contains)
+                    .Where(id => surfaceNodeIds.Contains(id) && IsStatementNode(nodes[id]))
+                    .Concat(region.ChildRegionIds
+                        .Select(id => function.Regions.Single(candidate => candidate.Id == id))
+                        .Where(static child => child.Kind is GraphRegionKind.If or GraphRegionKind.Loop)
+                        .Select(static child => child.SourceNodeId)
+                        .Where(surfaceNodeIds.Contains))
+                    .Distinct()
+                    .OrderBy(id => nodes[id].Span.Start.Line)
+                    .ThenBy(id => nodes[id].Span.Start.Column)
+                    .ThenBy(static id => id.Value, StringComparer.Ordinal)
+                    .ToArray(),
+                region.NodeIds
+                    .Where(surfaceNodeIds.Contains)
                     .OrderBy(id => nodes[id].Span.Start.Line)
                     .ThenBy(id => nodes[id].Span.Start.Column)
                     .ThenBy(static id => id.Value, StringComparer.Ordinal)
@@ -127,16 +139,77 @@ public sealed class AuthoringSurfaceProjector
                 region.ChildRegionIds))
             .ToArray();
 
+        AuthoringParameterSurface[] parameters = declaration.Parameters.Select(parameter =>
+        {
+            GraphNode? reference = function.Nodes.FirstOrDefault(node =>
+                node.Properties.TryGetValue("referencedSymbolId", out string? declarationId) &&
+                declarationId == parameter.Id.Value &&
+                node.Properties.ContainsKey("typeId"));
+            SemanticId? typeId = reference is not null &&
+                SemanticId.TryParse(reference.Properties["typeId"], out SemanticId parsedTypeId)
+                    ? parsedTypeId
+                    : null;
+            return new AuthoringParameterSurface(
+                parameter.Id,
+                parameter.Name,
+                parameter.TypeMetadataName,
+                typeId,
+                reference?.Properties.GetValueOrDefault("resolvedType"));
+        }).ToArray();
+
         return new AuthoringFunctionSurface(
             declaration.Id,
             declaration.Name,
             declaration.QualifiedName,
             declaration.ReturnTypeMetadataName,
             declaration.IsStatic,
-            declaration.Parameters,
+            parameters,
             function.RootRegionId,
             regions,
-            actions);
+            actions,
+            function.Edges.Select(static edge => new AuthoringEdgeSurface(
+                edge.Id,
+                edge.Kind,
+                edge.FromNode,
+                edge.FromPort,
+                edge.ToNode,
+                edge.ToPort)).ToArray());
+    }
+
+    private static bool IsStatementNode(GraphNode node) => node.Ports.Any(static port =>
+        port.Kind == GraphPortKind.Control);
+
+    private static IReadOnlyList<AuthoringPortSurface> ProjectPorts(
+        GraphNode node,
+        IReadOnlyDictionary<SemanticId, GraphNode> nodes,
+        IReadOnlyDictionary<(SemanticId NodeId, string Port), GraphEdge> incomingData)
+    {
+        return node.Ports.Select(port =>
+        {
+            if (port.Kind == GraphPortKind.Control)
+            {
+                return new AuthoringPortSurface(port.Name, port.Direction, port.Kind, null, null);
+            }
+
+            GraphNode typeSource = node;
+            if (port.Direction == GraphPortDirection.Input &&
+                incomingData.TryGetValue((node.Id, port.Name), out GraphEdge? incoming) &&
+                nodes.TryGetValue(incoming.FromNode, out GraphNode? source))
+            {
+                typeSource = source;
+            }
+
+            SemanticId? typeId = TryIdProperty(typeSource, "typeId", out SemanticId parsedTypeId)
+                ? parsedTypeId
+                : null;
+            string? typeDisplayName = typeSource.Properties.GetValueOrDefault("resolvedType");
+            return new AuthoringPortSurface(
+                port.Name,
+                port.Direction,
+                port.Kind,
+                typeId,
+                typeDisplayName);
+        }).ToArray();
     }
 
     private static AuthoringActionCategory Classify(GraphNode node) => node.Kind switch
@@ -151,8 +224,17 @@ public sealed class AuthoringSurfaceProjector
         _ => AuthoringActionCategory.Value,
     };
 
-    private static string ActionTitle(GraphNode node, ScriptFunctionDeclaration declaration) =>
-        node.Kind == "entry" ? declaration.Name : node.Label;
+    private static string ActionTitle(
+        GraphNode node,
+        ScriptFunctionDeclaration declaration,
+        ExpressionFormatter formatter) => node.Kind switch
+    {
+        "entry" => declaration.Name,
+        "assignment" when formatter.TryInput(node.Id, "target", out string target) =>
+            $"Set {target}",
+        "identifier" => $"Get {Property(node, "name", node.Label)}",
+        _ => node.Label,
+    };
 
     private static string ActionSummary(
         GraphNode node,

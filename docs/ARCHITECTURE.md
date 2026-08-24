@@ -67,8 +67,9 @@ flowchart LR
     Projector --> Graph["Graph JSON"]
     Declaration --> Authoring["Authoring Surface Projector"]
     Graph --> Authoring
-    Authoring --> Surface["Authoring Surface v0.1"]
-    Surface --> Workbench["Browser / future UE Workbench"]
+    Authoring --> Surface["Authoring Surface v0.3 pins + edges"]
+    Surface --> Presentation["Lossless Graph Presentation policy"]
+    Presentation --> Workbench["Browser / native UE GraphEditor"]
     Projector --> EmitGate["Execution Graph/CFG gate"]
     EmitGate --> Emitter["Deterministic PE + portable PDB"]
     Emitter --> SourceMap["Semantic ID -> MethodDef + IL/PDB source map"]
@@ -180,22 +181,58 @@ context is a reload mechanism, not a security sandbox.
   diagnostics
 - handle-only `IUnrealInvocationBridge` boundary with no managed ownership
   claim over a UObject
+- unsigned 64-bit slot/generation handle encoding shared with the native plugin
 
 It depends only on Core. It does not reference UE assemblies or headers, scan a
 local engine tree, load CoreCLR into UE, or reinterpret Declaration IR and
 Authoring Surface. The native plugin translates `UClass`, `FProperty`, and
-`UFunction` into this contract; later runtime code implements the handle and
-lifetime bridge.
+`UFunction` into this contract. The native runtime plugin now implements the
+world-bound, game-thread-only weak handle registry and deletion invalidation.
+Its first invocation slice resolves the same generated member paths and supports
+validated `bool`, `int32`, `FString`, and void property/function dispatch through
+`ProcessEvent`. `NativeUnrealInvocationBridge` now carries matching owned values
+and stable failures into `IUnrealInvocationBridge`. A versioned native function
+table and `InProcessUnrealNativeInvocationTransport` now provide the concrete
+synchronous process boundary without sharing allocator ownership.
+`UUnifiedScriptWorldSubsystem` now owns one registry and bridge per supported
+World. Its ref-counted context detaches before handle invalidation and native
+destruction, so retained managed transports fail safely after World teardown.
+A process-wide `FUnifiedScriptCoreClrHost` now loads hostfxr from the selected or
+engine-bundled .NET root, initializes the checked-in runtimeconfig, and acquires
+the CoreCLR load-assembly delegate. Native World initialization calls an
+`UnmanagedCallersOnly` managed entry point, which retains the transport and owns
+the World's managed-script registry until World teardown. Each running component
+script owns a collectible generation context: Start loads its configured assembly
+and type, Tick dispatches the managed lifecycle, Reload creates a fresh context
+before unloading the previous generation, and Stop runs before UObject handle
+release. The demo drives all four operations through a generated wrapper against
+a live UObject. Generated wrapper members now carry deterministic 64-bit FNV-1a
+IDs. ABI v2 routes the component fixture through direct native fields and C++
+methods without member-path parsing, reflected property lookup, parameter-buffer
+construction, or `ProcessEvent`; ABI v1 remains a compatible reflection fallback.
+Reflection now exports header and native-access metadata. The managed binding
+command can emit a deterministic companion C++ translation unit whose Member-ID
+switches perform direct typed access for supported public members across any
+selected reflected class. The checked-in runtime dispatcher is generated from
+the same manifest as its managed wrapper. Wider value marshalling and cook-time
+asset dependency discovery remain open.
+
+`UUnifiedScriptAsset` now owns the managed assembly/type identity as a native
+UE Data Asset. A component can hold a Content Browser reference, load a soft
+`ScriptAssetPath`, or use legacy direct fields. Start resolves and validates one
+configuration snapshot. Reload resolves a new snapshot and loads its assembly
+and type before stopping the current generation, so invalid asset edits leave
+the previous script running. Cook-time dependency discovery remains open.
 
 ### UnifiedScript.Authoring
 
 - deterministic multi-asset and multi-function authoring hierarchy
-- compact action promotion from control-bearing Graph nodes
-- recursive pure-expression summaries without one-node-per-token UI expansion
+- complete Graph-node projection with UI-selectable expression compaction
+- direction/kind/type-aware ports and compiler-owned control/data edges
 - exact function/block/if/loop region ownership
 - declaration references, source spans, and debug-target identities
 - schema-driven literal/operator Semantic Patch capabilities
-- strict Authoring Surface v0.1 JSON
+- strict Authoring Surface v0.3 JSON with endpoint/type invariants
 
 It depends only on Core and Graph. It does not parse source, host Roslyn or
 CoreCLR, render a browser/Slate UI, apply patches, or depend on UE. A frontend
@@ -397,7 +434,7 @@ compilation identity is not safe for editing.
 ## Semantic patch transaction
 
 Graph schema v0.12 carries both the source compilation ID and semantic
-configuration ID. A `unifiedscript.patch/v0.19` document repeats those IDs and
+configuration ID. A `unifiedscript.patch/v0.21` document repeats those IDs and
 contains typed operations keyed by graph/HIR `SemanticId`. Implemented
 operations are `replaceLiteral`, `changeOperator`, `reconnectArgument`,
 `replaceExpressionInput`,
@@ -416,7 +453,7 @@ operator/endpoint, semantic type,
 containing statement, parent block, and exact sibling preconditions rather than
 relying only on the compilation baseline.
 
-`unifiedscript.patch-plan/v0.20` is an ordered transaction above individual
+`unifiedscript.patch-plan/v0.21` is an ordered transaction above individual
 patches. It composes every current bounded operation: literal and operator
 changes, argument reconnection, structured assignment/while/do/for/foreach/branch/local/
 return expression edits, exact nested expression-input replacement, statement
@@ -445,7 +482,7 @@ true, and false children. Graph v0.12 projects that node as a `conditional`/`Sel
 with canonical `condition`, `whenTrue`, and `whenFalse` inputs and an explicit
 `evaluation: lazyBranches` contract. Semantic binding rejects effectful arms so
 the data projection cannot eagerly execute mutation, latency, or effectful
-calls that C# would evaluate only on the selected path. Patch v0.19 and plan
+calls that C# would evaluate only on the selected path. Patch v0.20 and plan
 v0.19 use the same conditional shape in their closed expression algebra and
 allow exact or produced-handle edits through those Graph ports.
 The same HIR already preserves `&&` and `||` as ordered binary nodes. Graph
@@ -471,7 +508,7 @@ explicit: the receiver feeds the parent `receiver` input and the binding's
 `whenReceiverNonNull`, and `whenNotNullOrNull`, so a VM can evaluate once,
 skip the selected subtree on null, and lift the result. `UVS2006` rejects
 effects in the selected subtree and `UVS2007` rejects void or hidden-conversion
-type shapes. Patch v0.19 can author a bounded simple conditional member access;
+type shapes. Patch v0.20 can author a bounded simple conditional member access;
 plan v0.20 can replace its `receiver` through an actual produced root. See
 [NULL_CONDITIONAL_ACCESS.md](NULL_CONDITIONAL_ACCESS.md).
 An `if` insertion publishes internal `then`/`else` block handles for later
@@ -655,16 +692,31 @@ receivers until a richer graph-safe object-handle policy is defined.
   semantic-patch synchronization tests;
 - later, semantic equivalence tests between graph-edited and text-edited IL.
 
-## Deferred UE boundary
+## Current UE boundary
 
-UE binding is deliberately absent. When introduced, it will provide:
+M6.1 now provides the reflection contract, generated managed wrappers, native
+property/function dispatch, generation-checked weak UObject handles, a versioned
+process transport, and a native runtime host scoped to each supported World. The
+component runtime also proves generated gameplay assembly loading, live wrapper
+execution, lifecycle dispatch, collectible reload, and Declaration IR state
+materialization into a fixed-layout Details Property Bag with stable-ID
+migration. The editor now consumes Authoring Surface v0.3 in a native Slate
+GraphEditor. A read-only presentation policy folds connected identifier/literal
+leaves into author-facing pins while the complete Surface remains addressable;
+the editor materializes the remaining real pins/wires and submits
+compiler-owned semantic patches without reparsing C#.
+The Workbench atomically republishes source, identity, Declaration, Surface,
+DLL, and PDB before matching component instances enter their transactional
+reload path.
+The remaining boundary
+will provide:
 
 - a UE reflection symbol catalog consumed by semantic binding;
 - graph-safe type mappings;
-- generated C++/C# call thunks;
-- world-scoped runtime domains;
-- UObject lifetime bridges;
-- editor graph rendering and transactions.
+- Script Asset cook/package dependency discovery;
+- broader native property and function marshalling;
+- editor-facing undo/redo presentation and persisted graph-canvas layout;
+- transactional graph-rewire patches for user-created connections.
 
 None of these concerns may redefine HIR semantics implicitly.
 

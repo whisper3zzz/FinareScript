@@ -12,8 +12,8 @@ The strict-reader contracts for this slice are:
 - HIR `unifiedscript.hir/v0.7`;
 - semantics `unifiedscript.semantics/v0.2`;
 - Graph `unifiedscript.graph/v0.12`;
-- standalone patch `unifiedscript.patch/v0.19`;
-- patch plan `unifiedscript.patch-plan/v0.20`.
+- standalone patch `unifiedscript.patch/v0.21`;
+- patch plan `unifiedscript.patch-plan/v0.21`.
 
 ## Supported collection boundary
 
@@ -151,7 +151,7 @@ client-supplied edge target.
 
 ## Exact collection editing
 
-Patch v0.19 exposes `replaceForEachCollection`. It identifies the existing loop,
+Patch v0.20 exposes `replaceForEachCollection`. It identifies the existing loop,
 the exact current collection root, and the expected collection type. The new
 collection is a same-method local or parameter reference of exactly the same
 supported collection type, including graph-safe enumerable types. The rewriter

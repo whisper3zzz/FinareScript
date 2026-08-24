@@ -26,6 +26,8 @@ namespace UnifiedScript.Core;
 [JsonDerivedType(typeof(DeleteStatementPatchOperation), "deleteStatement")]
 [JsonDerivedType(typeof(IntroduceTemporaryPatchOperation), "introduceTemporary")]
 [JsonDerivedType(typeof(ReconnectValuePatchOperation), "reconnectValue")]
+[JsonDerivedType(typeof(ReconnectDataEdgePatchOperation), "reconnectDataEdge")]
+[JsonDerivedType(typeof(DisconnectDataEdgePatchOperation), "disconnectDataEdge")]
 public abstract record SemanticPatchOperation(SemanticId TargetNodeId);
 
 public sealed record ReplaceLiteralPatchOperation(
@@ -147,6 +149,7 @@ public sealed record ReplaceReturnValuePatchOperation(
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "statement")]
 [JsonDerivedType(typeof(LocalLiteralDeclarationPatchStatement), "localLiteralDeclaration")]
+[JsonDerivedType(typeof(LocalDeclarationPatchStatement), "localDeclaration")]
 [JsonDerivedType(typeof(LocalAssignmentPatchStatement), "localAssignment")]
 [JsonDerivedType(typeof(IfPatchStatement), "if")]
 [JsonDerivedType(typeof(WhilePatchStatement), "while")]
@@ -164,6 +167,12 @@ public sealed record LocalLiteralDeclarationPatchStatement(
     string ValueText,
     SemanticId ExpectedTypeId) : InsertPatchStatement;
 
+public sealed record LocalDeclarationPatchStatement(
+    string Name,
+    string TypeName,
+    PatchExpression Initializer,
+    SemanticId ExpectedTypeId) : InsertPatchStatement;
+
 public sealed record LocalAssignmentPatchStatement(
     SemanticId TargetDefinitionId,
     string ExpectedName,
@@ -172,6 +181,7 @@ public sealed record LocalAssignmentPatchStatement(
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "expression")]
 [JsonDerivedType(typeof(LiteralPatchExpression), "literal")]
+[JsonDerivedType(typeof(DefaultPatchExpression), "default")]
 [JsonDerivedType(typeof(LocalReferencePatchExpression), "localReference")]
 [JsonDerivedType(typeof(ProducedLocalReferencePatchExpression), "producedLocalReference")]
 [JsonDerivedType(typeof(ForLocalReferencePatchExpression), "forLocalReference")]
@@ -180,10 +190,16 @@ public sealed record LocalAssignmentPatchStatement(
 [JsonDerivedType(typeof(CastPatchExpression), "cast")]
 [JsonDerivedType(typeof(ConditionalPatchExpression), "conditional")]
 [JsonDerivedType(typeof(ConditionalMemberAccessPatchExpression), "conditionalMemberAccess")]
+[JsonDerivedType(typeof(MemberAccessPatchExpression), "memberAccess")]
+[JsonDerivedType(typeof(MemberInvocationPatchExpression), "memberInvocation")]
 public abstract record PatchExpression(SemanticId ExpectedTypeId);
 
 public sealed record LiteralPatchExpression(
     string ValueText,
+    SemanticId ExpectedTypeId) : PatchExpression(ExpectedTypeId);
+
+public sealed record DefaultPatchExpression(
+    string TypeName,
     SemanticId ExpectedTypeId) : PatchExpression(ExpectedTypeId);
 
 public sealed record LocalReferencePatchExpression(
@@ -226,6 +242,17 @@ public sealed record ConditionalPatchExpression(
 public sealed record ConditionalMemberAccessPatchExpression(
     PatchExpression Receiver,
     string MemberName,
+    SemanticId ExpectedTypeId) : PatchExpression(ExpectedTypeId);
+
+public sealed record MemberAccessPatchExpression(
+    PatchExpression Receiver,
+    string MemberName,
+    SemanticId ExpectedTypeId) : PatchExpression(ExpectedTypeId);
+
+public sealed record MemberInvocationPatchExpression(
+    PatchExpression Receiver,
+    string MemberName,
+    IReadOnlyList<PatchExpression> Arguments,
     SemanticId ExpectedTypeId) : PatchExpression(ExpectedTypeId);
 
 public sealed record IfPatchStatement(
@@ -310,13 +337,31 @@ public sealed record ReconnectValuePatchOperation(
     SemanticId ExpectedTargetTypeId,
     SemanticId ExpectedSourceTypeId) : SemanticPatchOperation(TargetNodeId);
 
+public sealed record ReconnectDataEdgePatchOperation(
+    SemanticId TargetNodeId,
+    string TargetPort,
+    SemanticId ExpectedEdgeId,
+    SemanticId ExpectedSourceNodeId,
+    string ExpectedSourcePort,
+    SemanticId NewSourceNodeId,
+    string NewSourcePort,
+    SemanticId ExpectedTypeId) : SemanticPatchOperation(TargetNodeId);
+
+public sealed record DisconnectDataEdgePatchOperation(
+    SemanticId TargetNodeId,
+    string TargetPort,
+    SemanticId ExpectedEdgeId,
+    SemanticId ExpectedSourceNodeId,
+    string ExpectedSourcePort,
+    SemanticId ExpectedTypeId) : SemanticPatchOperation(TargetNodeId);
+
 public sealed record SemanticPatchDocument(
     string SchemaVersion,
     SemanticId SourceCompilationId,
     SemanticId SemanticConfigurationId,
     IReadOnlyList<SemanticPatchOperation> Operations)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.19";
+    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.21";
 
     public static SemanticPatchDocument Create(
         SemanticId sourceCompilationId,
