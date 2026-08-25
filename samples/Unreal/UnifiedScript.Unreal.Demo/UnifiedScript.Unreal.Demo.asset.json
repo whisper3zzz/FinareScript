@@ -1,7 +1,7 @@
 {
   "schemaVersion": "unifiedscript.script-asset/v0.1",
-  "sourceCompilationId": "us_723dfd6f81cb2cbf6fb1e7be7e357129",
-  "semanticConfigurationId": "us_e1bfef432a3a1f3cc43ef9e36bf2923a",
+  "sourceCompilationId": "us_7f7eb78d7b6043c16502bfdb8a47d345",
+  "semanticConfigurationId": "us_38a1f623a4146094df6bc62d8e731651",
   "assets": [
     {
       "id": "us_cefc9ee5805e3ed5610154145ea986dd",
@@ -14,7 +14,7 @@
           "column": 1
         },
         "end": {
-          "line": 72,
+          "line": 81,
           "column": 2
         }
       },
@@ -47,6 +47,25 @@
       ],
       "functions": [
         {
+          "id": "us_f65690f6080bf7ccfb4f90350d38f1ba",
+          "name": "OnManagedSignal",
+          "qualifiedName": "UnifiedScript.Unreal.Demo.DemoScript.OnManagedSignal(System.Int32,UnifiedScript.Unreal.UnrealObjectHandle)",
+          "returnTypeMetadataName": "System.Void",
+          "isStatic": false,
+          "parameters": [
+            {
+              "id": "us_9246fd4f2614fdf60fc24a253db2da76",
+              "name": "value",
+              "typeMetadataName": "System.Int32"
+            },
+            {
+              "id": "us_42fb878589a53d0eee5b86b3fdb370f5",
+              "name": "signalContext",
+              "typeMetadataName": "UnifiedScript.Unreal.UnrealObjectHandle"
+            }
+          ]
+        },
+        {
           "id": "us_53ede5680c125188e1ec147de92fa39d",
           "name": "ResolveInitialValue",
           "qualifiedName": "UnifiedScript.Unreal.Demo.DemoScript.ResolveInitialValue(System.Int32)",
@@ -54,7 +73,7 @@
           "isStatic": false,
           "parameters": [
             {
-              "id": "us_a5aed8c61f77262017c39bd6ea90482b",
+              "id": "us_7412e315b43d22a504aba7cfdf441d35",
               "name": "bonus",
               "typeMetadataName": "System.Int32"
             }
@@ -68,12 +87,12 @@
           "isStatic": false,
           "parameters": [
             {
-              "id": "us_b0d72d5985b3dc542713ff3c91eede11",
+              "id": "us_51ef57fe36095aff407260fb1714ea62",
               "name": "value",
               "typeMetadataName": "System.Int32"
             },
             {
-              "id": "us_303f32d194eb3fba88a0b0ce7870f548",
+              "id": "us_a753c6f378d5357dc67f7f9812e0af7a",
               "name": "doubleValue",
               "typeMetadataName": "System.Boolean"
             }
@@ -87,17 +106,17 @@
           "isStatic": false,
           "parameters": [
             {
-              "id": "us_3fdc40ff1a2a732018245856fe7d8edd",
+              "id": "us_3e31927a08cbabc6e8258b4a591119f8",
               "name": "component",
               "typeMetadataName": "UnifiedScript.Unreal.Generated.UnifiedScriptComponent"
             },
             {
-              "id": "us_73099e3949dfcc446c110185afb660f7",
+              "id": "us_5fb1c8a78460cc4a043beead6880bd7a",
               "name": "left",
               "typeMetadataName": "System.Int32"
             },
             {
-              "id": "us_1a8a2285d577a0ee7d68902d20bc6c95",
+              "id": "us_34c8d7e2fb10736b35b35bd174c0d2f9",
               "name": "right",
               "typeMetadataName": "System.Int32"
             }

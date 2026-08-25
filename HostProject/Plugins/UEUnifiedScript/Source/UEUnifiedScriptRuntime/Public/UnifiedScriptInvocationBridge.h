@@ -6,6 +6,8 @@
 
 #include <atomic>
 
+class FMulticastDelegateProperty;
+
 /** Stable 64-bit FNV-1a identity shared with generated managed wrappers. */
 constexpr uint64 UnifiedScriptMemberId(const ANSICHAR* Path)
 {
@@ -226,6 +228,21 @@ public:
         FUnifiedScriptInvocationResult& OutResult);
 
     uint64 GetFastInvocationCount() const;
+
+    bool ResolveMulticastDelegate(
+        FUnifiedScriptObjectHandle Target,
+        const FString& EventPath,
+        UObject*& OutSource,
+        const FMulticastDelegateProperty*& OutProperty,
+        FUnifiedScriptInvocationResult& OutResult);
+
+    bool ReadDelegateArguments(
+        const UFunction* Signature,
+        const void* ParameterMemory,
+        TArray<FUnifiedScriptValue>& OutArguments,
+        FUnifiedScriptInvocationResult& OutResult);
+
+    void ReleaseEventArguments(TConstArrayView<FUnifiedScriptValue> Arguments);
 
 private:
     FUnifiedScriptObjectRegistry& Registry;

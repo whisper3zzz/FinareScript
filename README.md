@@ -126,8 +126,9 @@ The repository currently implements:
   semantic breakpoint bind/pending/disabled plus stale-hit protocols;
 - automated execution equivalence between independently text-authored code and
   C# produced by a checked-in visual semantic patch plan;
-- a strict `unifiedscript.unreal-reflection/v0.1` contract, deterministic
-  managed-wrapper generator, and `ue-bindings` CLI command;
+- a strict `unifiedscript.unreal-reflection/v0.2` contract with callable,
+  property, and multicast-delegate shapes, deterministic managed-wrapper/event
+  proxy generation, and the `ue-bindings` CLI command;
 - an UE 5.7/5.8-compatible host project and `UEUnifiedScript` plugin with a reflected script
   component plus headless reflection-export commandlet;
 - an opaque 64-bit slot/generation handle shared by managed wrappers and a
@@ -136,8 +137,9 @@ The repository currently implements:
 - a placeable, Blueprintable `AUnifiedScriptActor` and managed
   `UnrealObjectScript`/`UnrealActorScript` object model with distinct
   generation-safe host and gameplay-target handles;
-- World-safe Actor overlap events plus game-thread latent `DelayAsync`, both
-  canceled and unbound before reload, EndPlay, or World teardown;
+- World-safe Actor overlap events, arbitrary reflected multicast Event Entries,
+  and game-thread latent `DelayAsync`, all canceled or unbound before reload,
+  EndPlay, or World teardown;
 - machine-local UE discovery, host build, reflection export, and managed
   binding generation through one repository script;
 - xUnit coverage for validation, lowering, identity, graph projection, and
@@ -348,8 +350,9 @@ fixed call path. Variable-size overflow is staged in the retained World context;
 the managed retry expands the arena and copies the staged result without
 executing a UFunction twice. The World host discovers v3 through an append-only
 v2 bootstrap suffix and retains v1/v2 only for old hosts and unsupported
-reflected shapes. The live UE 5.8 lifecycle Demo reports `FastCalls=16`, all
-through `CallFrameCalls=16` with `LegacyCalls=0`.
+reflected shapes. The current UE 5.8 lifecycle Demo reports `FastCalls=20`, all
+through `CallFrameCalls=20` with `LegacyCalls=0`, and receives the reflected
+`OnManagedSignal(73, Context)` delegate through ABI v4 exactly once after reload.
 
 `ue-bindings --report` now emits deterministic per-member coverage as native
 thunk, reflected-path fallback, rejected, or deferred type. `--fail-on-rejected`
@@ -468,7 +471,7 @@ Declaration edit
   -> updated C# + asset JSON + optional .usids (only as one commit)
 
 Workbench authoring commit
-  -> declaration-patch v0.1 or semantic-patch v0.21
+  -> declaration-patch v0.2 or semantic-patch v0.21
   -> immutable candidate analysis + regenerated Graph
   -> same CoreCLR transport reload
   -> rollback-capable source + .usids transaction

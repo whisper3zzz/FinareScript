@@ -97,8 +97,62 @@ public sealed class CSharpToHirLowerer
             method.Modifiers.Any(SyntaxKind.StaticKeyword),
             method.Modifiers.Any(SyntaxKind.AsyncKeyword),
             parameters,
-            body);
+            body)
+        {
+            Attributes = LowerAttributes(method),
+        };
     }
+
+    private static IReadOnlyList<HirAttribute>? LowerAttributes(MethodDeclarationSyntax method) =>
+        method.AttributeLists
+            .SelectMany(static list => list.Attributes)
+            .Where(static attribute =>
+            {
+                string name = attribute.Name.ToString();
+                int separator = name.LastIndexOf('.');
+                name = separator >= 0 ? name[(separator + 1)..] : name;
+                return name is "UnrealEvent" or "UnrealEventAttribute";
+            })
+            .Select(attribute =>
+            {
+                string name = attribute.Name.ToString();
+                int separator = name.LastIndexOf('.');
+                name = separator >= 0 ? name[(separator + 1)..] : name;
+                if (name.EndsWith("Attribute", StringComparison.Ordinal))
+                {
+                    name = name[..^"Attribute".Length];
+                }
+
+                var positional = new List<string>();
+                var named = new SortedDictionary<string, string>(StringComparer.Ordinal);
+                foreach (AttributeArgumentSyntax argument in
+                         attribute.ArgumentList?.Arguments ?? default)
+                {
+                    string value = NormalizeAttributeArgument(argument.Expression);
+                    string? argumentName = argument.NameEquals?.Name.Identifier.ValueText ??
+                        argument.NameColon?.Name.Identifier.ValueText;
+                    if (argumentName is null)
+                    {
+                        positional.Add(value);
+                    }
+                    else
+                    {
+                        named[argumentName] = value;
+                    }
+                }
+                return new HirAttribute(name, positional, named);
+            })
+            .ToArray() is { Length: > 0 } attributes ? attributes : null;
+
+    private static string NormalizeAttributeArgument(ExpressionSyntax expression) => expression switch
+    {
+        LiteralExpressionSyntax literal when literal.IsKind(SyntaxKind.StringLiteralExpression) =>
+            literal.Token.ValueText,
+        TypeOfExpressionSyntax typeOf => typeOf.Type.ToString(),
+        MemberAccessExpressionSyntax member => member.Name.Identifier.ValueText,
+        IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
+        _ => expression.ToString(),
+    };
 
     private static HirBlockStatement LowerBlock(BlockSyntax block, string filePath, string ownerKey) =>
         new(

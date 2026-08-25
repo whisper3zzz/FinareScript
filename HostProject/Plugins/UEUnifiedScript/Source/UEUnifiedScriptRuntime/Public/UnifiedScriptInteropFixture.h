@@ -3,7 +3,7 @@
  * @Author: whispersong
  * @Date: 2026-08-25 10:42:29
  * @LastEditors: whispersong
- * @LastEditTime: 2026-08-25 10:47:07
+ * @LastEditTime: 2026-08-25 14:22:40
  * @FilePath: \Plugins\UEUnifiedScript\Source\UEUnifiedScriptRuntime\Public\UnifiedScriptInteropFixture.h
  * @Description:
  */
@@ -21,6 +21,13 @@ enum class EUnifiedScriptInteropMode : uint8
     Suspended,
 };
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
+    FUnifiedScriptInteropChanged,
+    int32,
+    NewValue,
+    UObject*,
+    Context);
+
 /** Public interop fixture used to keep generated common-type bindings executable. */
 UCLASS(BlueprintType)
 class UEUNIFIEDSCRIPTRUNTIME_API UUnifiedScriptInteropFixture : public UObject
@@ -28,6 +35,9 @@ class UEUNIFIEDSCRIPTRUNTIME_API UUnifiedScriptInteropFixture : public UObject
     GENERATED_BODY()
 
 public:
+    UPROPERTY(BlueprintAssignable, Category="UnifiedScript|Interop")
+    FUnifiedScriptInteropChanged OnInteropChanged;
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="UnifiedScript|Interop")
     uint8 ByteValue = 8;
 
@@ -120,4 +130,7 @@ public:
 
     UFUNCTION(BlueprintPure, Category="UnifiedScript|Interop")
     int64 AddInt64(int64 Left, int64 Right) const;
+
+    UFUNCTION(BlueprintCallable, Category="UnifiedScript|Interop")
+    void BroadcastInteropChanged(int32 NewValue, UObject* Context);
 };

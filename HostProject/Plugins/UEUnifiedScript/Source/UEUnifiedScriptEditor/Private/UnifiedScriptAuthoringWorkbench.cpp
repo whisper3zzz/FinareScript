@@ -3,7 +3,7 @@
  * @Author: whispersong
  * @Date: 2026-08-24 18:41:46
  * @LastEditors: whispersong
- * @LastEditTime: 2026-08-25 10:33:15
+ * @LastEditTime: 2026-08-25 14:22:40
  * @FilePath: \Plugins\UEUnifiedScript\Source\UEUnifiedScriptEditor\Private\UnifiedScriptAuthoringWorkbench.cpp
  * @Description:
  */
@@ -53,6 +53,14 @@ FString FUnifiedScriptAuthoringWorkbench::BuildSemanticPatchUrl(const FString& S
     return Normalized.IsEmpty()
         ? FString()
         : Normalized + TEXT("/api/authoring/semantic-patch");
+}
+
+FString FUnifiedScriptAuthoringWorkbench::BuildDeclarationPatchUrl(const FString& ServerUrl)
+{
+    const FString Normalized = NormalizeServerUrl(ServerUrl);
+    return Normalized.IsEmpty()
+        ? FString()
+        : Normalized + TEXT("/api/authoring/declaration-patch");
 }
 
 FString FUnifiedScriptAuthoringWorkbench::BuildSemanticPatchPlanUrl(const FString& ServerUrl)

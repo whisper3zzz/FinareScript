@@ -1,5 +1,5 @@
 {
-	"schemaVersion": "unifiedscript.unreal-reflection/v0.1",
+	"schemaVersion": "unifiedscript.unreal-reflection/v0.2",
 	"engine":
 	{
 		"major": 5,
@@ -75,6 +75,7 @@
 					}
 				}
 			],
+			"delegates": [],
 			"functions": [
 				{
 					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:GetUnifiedScriptComponent",
@@ -205,6 +206,7 @@
 				"blueprintType": true
 			},
 			"properties": [],
+			"delegates": [],
 			"functions": []
 		},
 		{
@@ -414,6 +416,47 @@
 					}
 				}
 			],
+			"delegates": [
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:OnManagedSignal",
+					"name": "OnManagedSignal",
+					"signaturePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptManagedSignal__DelegateSignature",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "Value",
+							"type":
+							{
+								"kind": "int32",
+								"nativeName": "int32"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Context",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UObject*",
+								"typePath": "/Script/CoreUObject.Object"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"kind": "multicast",
+						"blueprintAssignable": true,
+						"blueprintCallable": false,
+						"blueprintAuthorityOnly": false,
+						"nativeAccess": "public"
+					}
+				}
+			],
 			"functions": [
 				{
 					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:Add",
@@ -447,6 +490,43 @@
 					{
 						"static": false,
 						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:BroadcastManagedSignal",
+					"name": "BroadcastManagedSignal",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "Value",
+							"type":
+							{
+								"kind": "int32",
+								"nativeName": "int32"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Context",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UObject*",
+								"typePath": "/Script/CoreUObject.Object"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
 						"callable": true,
 						"nativeAccess": "public"
 					}
@@ -941,6 +1021,47 @@
 					}
 				}
 			],
+			"delegates": [
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:OnInteropChanged",
+					"name": "OnInteropChanged",
+					"signaturePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropChanged__DelegateSignature",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "NewValue",
+							"type":
+							{
+								"kind": "int32",
+								"nativeName": "int32"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Context",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UObject*",
+								"typePath": "/Script/CoreUObject.Object"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"kind": "multicast",
+						"blueprintAssignable": true,
+						"blueprintCallable": false,
+						"blueprintAuthorityOnly": false,
+						"nativeAccess": "public"
+					}
+				}
+			],
 			"functions": [
 				{
 					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:AddInt64",
@@ -1013,6 +1134,43 @@
 					{
 						"static": false,
 						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:BroadcastInteropChanged",
+					"name": "BroadcastInteropChanged",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "NewValue",
+							"type":
+							{
+								"kind": "int32",
+								"nativeName": "int32"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Context",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UObject*",
+								"typePath": "/Script/CoreUObject.Object"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
 						"callable": true,
 						"nativeAccess": "public"
 					}
@@ -1446,6 +1604,7 @@
 				"blueprintType": false
 			},
 			"properties": [],
+			"delegates": [],
 			"functions": []
 		}
 	]

@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "HAL/CriticalSection.h"
 #include "Templates/Function.h"
+#include "UObject/StrongObjectPtr.h"
 #include "UnifiedScriptInvocationBridge.h"
 
 #include <atomic>
@@ -86,6 +87,51 @@ using FUnifiedScriptNativeInvokeByIdV2 = void (*)(
 using FUnifiedScriptNativeRetainContextV1 = uint8 (*)(void* Context);
 using FUnifiedScriptNativeReleaseContextV1 = void (*)(void* Context);
 
+struct FUnifiedScriptNativeValueV3;
+
+/** Borrowed, synchronous reverse-call frame for one reflected delegate broadcast. */
+struct alignas(8) FUnifiedScriptNativeEventFrameV4
+{
+    uint32 AbiVersion = 4;
+    uint32 FrameSize = 0;
+    uint64 SubscriptionId = 0;
+    uint64 Source = 0;
+    uint64 EventId = 0;
+    const FUnifiedScriptNativeValueV3* Arguments = nullptr;
+    uint32 ArgumentCount = 0;
+    uint32 Reserved = 0;
+    const uint8* ByteBuffer = nullptr;
+    uint32 ByteCount = 0;
+    uint32 Reserved2 = 0;
+};
+
+using FUnifiedScriptNativeEventCallbackV4 = void (*)(
+    void* UserData,
+    const FUnifiedScriptNativeEventFrameV4* Frame);
+using FUnifiedScriptNativeSubscribeEventV4 = uint64 (*)(
+    void* Context,
+    uint64 Source,
+    uint64 EventId,
+    const uint8* EventPathData,
+    int32 EventPathLength,
+    FUnifiedScriptNativeEventCallbackV4 Callback,
+    void* UserData);
+using FUnifiedScriptNativeUnsubscribeEventV4 = uint8 (*)(
+    void* Context,
+    uint64 SubscriptionId);
+
+struct alignas(8) FUnifiedScriptNativeEventTransportV4
+{
+    uint32 AbiVersion = 4;
+    uint32 TableSize = 0;
+    uint32 FrameSize = 0;
+    uint32 ValueSize = 0;
+    FUnifiedScriptNativeRetainContextV1 RetainContext = nullptr;
+    FUnifiedScriptNativeReleaseContextV1 ReleaseContext = nullptr;
+    FUnifiedScriptNativeSubscribeEventV4 Subscribe = nullptr;
+    FUnifiedScriptNativeUnsubscribeEventV4 Unsubscribe = nullptr;
+};
+
 /**
  * Ref-counted lifetime guard between a world host and managed transports.
  *
@@ -128,6 +174,14 @@ public:
         TFunctionRef<void(
             FUnifiedScriptInvocationBridge&,
             FPendingCallFrameResult&)> Operation);
+    bool SubscribeEvent(
+        FUnifiedScriptObjectHandle Source,
+        uint64 EventId,
+        const FString& EventPath,
+        FUnifiedScriptNativeEventCallbackV4 Callback,
+        void* UserData,
+        uint64& OutSubscriptionId);
+    bool UnsubscribeEvent(uint64 SubscriptionId);
 
 private:
     ~FUnifiedScriptNativeBridgeContext() = default;
@@ -136,6 +190,8 @@ private:
     FCriticalSection BridgeLock;
     FUnifiedScriptInvocationBridge* Bridge = nullptr;
     FPendingCallFrameResult PendingCallFrameResult;
+    uint64 NextEventSubscriptionId = 1;
+    TMap<uint64, TStrongObjectPtr<UObject>> EventSubscriptions;
 };
 
 /**
@@ -177,6 +233,8 @@ struct FUnifiedScriptNativeTransportV2
     FUnifiedScriptNativeInvokeByIdV2 InvokeById = nullptr;
     /** Optional independent ABI v3 table; older v2 clients ignore this suffix. */
     const FUnifiedScriptNativeTransportV3* CallFrameTransport = nullptr;
+    /** Optional reverse event ABI; older v2 clients ignore this suffix. */
+    const FUnifiedScriptNativeEventTransportV4* EventTransport = nullptr;
 };
 
 /**
@@ -346,6 +404,15 @@ static_assert(alignof(FUnifiedScriptNativeTransportV3) == 8);
 static_assert(STRUCT_OFFSET(FUnifiedScriptNativeTransportV3, Capabilities) == 16);
 static_assert(STRUCT_OFFSET(FUnifiedScriptNativeTransportV3, RetainContext) == 24);
 static_assert(STRUCT_OFFSET(FUnifiedScriptNativeTransportV3, InvokeById) == 56);
+static_assert(std::is_standard_layout_v<FUnifiedScriptNativeEventFrameV4>);
+static_assert(std::is_trivially_copyable_v<FUnifiedScriptNativeEventFrameV4>);
+static_assert(sizeof(FUnifiedScriptNativeEventFrameV4) == 64);
+static_assert(alignof(FUnifiedScriptNativeEventFrameV4) == 8);
+static_assert(STRUCT_OFFSET(FUnifiedScriptNativeEventFrameV4, Arguments) == 32);
+static_assert(STRUCT_OFFSET(FUnifiedScriptNativeEventFrameV4, ByteBuffer) == 48);
+static_assert(std::is_standard_layout_v<FUnifiedScriptNativeEventTransportV4>);
+static_assert(std::is_trivially_copyable_v<FUnifiedScriptNativeEventTransportV4>);
+static_assert(sizeof(FUnifiedScriptNativeEventTransportV4) == 48);
 static_assert(
     STRUCT_OFFSET(FUnifiedScriptNativeTransportV2, ReadPropertyById) ==
     sizeof(FUnifiedScriptNativeTransportV1));
@@ -361,3 +428,6 @@ UEUnifiedScript_GetNativeTransportV2();
 
 extern "C" UEUNIFIEDSCRIPTRUNTIME_API const FUnifiedScriptNativeTransportV3*
 UEUnifiedScript_GetNativeTransportV3();
+
+extern "C" UEUNIFIEDSCRIPTRUNTIME_API const FUnifiedScriptNativeEventTransportV4*
+UEUnifiedScript_GetNativeEventTransportV4();

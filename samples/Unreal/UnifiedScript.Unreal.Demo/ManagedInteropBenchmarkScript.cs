@@ -10,6 +10,7 @@ public sealed class ManagedInteropBenchmarkScript : IUnrealManagedScript
 {
     private const int WarmupIterations = 4_096;
     private const int MeasuredIterations = 100_000;
+    private const int SampleCount = 5;
 
     public void OnStart(UnrealScriptContext context)
     {
@@ -20,18 +21,24 @@ public sealed class ManagedInteropBenchmarkScript : IUnrealManagedScript
             checksum += component.Add(index, 1);
         }
 
+        var samples = new double[SampleCount];
         long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
-        long started = Stopwatch.GetTimestamp();
-        for (int index = 0; index < MeasuredIterations; index++)
+        for (int sample = 0; sample < samples.Length; sample++)
         {
-            checksum += component.Add(index, 1);
+            long started = Stopwatch.GetTimestamp();
+            for (int index = 0; index < MeasuredIterations; index++)
+            {
+                checksum += component.Add(index, 1);
+            }
+            TimeSpan elapsed = Stopwatch.GetElapsedTime(started);
+            samples[sample] = elapsed.TotalNanoseconds / MeasuredIterations;
         }
-        TimeSpan elapsed = Stopwatch.GetElapsedTime(started);
         long allocatedBytes = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
-        double nanosecondsPerCall = elapsed.TotalNanoseconds / MeasuredIterations;
+        Array.Sort(samples);
+        double nanosecondsPerCall = samples[samples.Length / 2];
         component.ManagedState = string.Create(
             CultureInfo.InvariantCulture,
-            $"Benchmark:v1;Iterations={MeasuredIterations};NanosecondsPerCall={nanosecondsPerCall:F3};AllocatedBytes={allocatedBytes};Checksum={checksum}");
+            $"Benchmark:v2;Iterations={MeasuredIterations};SampleCount={SampleCount};NanosecondsPerCall={nanosecondsPerCall:F3};AllocatedBytes={allocatedBytes};Checksum={checksum}");
     }
 
     public void OnTick(float deltaSeconds)

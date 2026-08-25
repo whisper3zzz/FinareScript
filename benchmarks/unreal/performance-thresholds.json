@@ -1,6 +1,9 @@
 {
-  "schemaVersion": "unifiedscript.unreal-benchmark-thresholds/v0.1",
+  "schemaVersion": "unifiedscript.unreal-benchmark-thresholds/v0.2",
   "scenario": "generated-int32-add",
+  "minimumWarmupIterations": 4096,
+  "minimumIterations": 100000,
+  "minimumSampleCount": 5,
   "maxUnifiedScriptNsPerCall": 2500.0,
   "maxUnifiedScriptAllocatedBytes": 0,
   "maxUnifiedScriptToPuertsRatio": 0.95

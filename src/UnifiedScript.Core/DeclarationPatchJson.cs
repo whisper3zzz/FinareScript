@@ -31,7 +31,8 @@ public static class DeclarationPatchJson
     public static DeclarationPatchDocument NormalizeAndValidate(DeclarationPatchDocument document)
     {
         ArgumentNullException.ThrowIfNull(document);
-        if (document.SchemaVersion != DeclarationPatchDocument.CurrentSchemaVersion)
+        if (document.SchemaVersion != DeclarationPatchDocument.CurrentSchemaVersion &&
+            document.SchemaVersion != DeclarationPatchDocument.LegacySchemaVersion)
         {
             throw new JsonException(
                 $"Unsupported declaration patch schema '{document.SchemaVersion}'. " +
@@ -85,6 +86,17 @@ public static class DeclarationPatchJson
                         Expected = NormalizeExpected(remove.Expected, "removed state precondition"),
                     });
                     break;
+                case AddUnrealEventHandlerPatchOperation addEvent:
+                    if (addEvent.TargetAssetId.IsEmpty)
+                    {
+                        throw new JsonException(
+                            "An add-Unreal-event-handler operation requires a target asset ID.");
+                    }
+                    normalized.Add(addEvent with
+                    {
+                        Handler = NormalizeEventHandler(addEvent.Handler),
+                    });
+                    break;
                 case null:
                     throw new JsonException("Declaration patch operations cannot be null.");
                 default:
@@ -93,7 +105,38 @@ public static class DeclarationPatchJson
             }
         }
 
-        return document with { Operations = normalized };
+        return document with
+        {
+            SchemaVersion = DeclarationPatchDocument.CurrentSchemaVersion,
+            Operations = normalized,
+        };
+    }
+
+    private static UnrealEventHandlerPatchSpec NormalizeEventHandler(
+        UnrealEventHandlerPatchSpec? handler)
+    {
+        if (handler is null || string.IsNullOrWhiteSpace(handler.Name) ||
+            string.IsNullOrWhiteSpace(handler.SourceTypeName) ||
+            string.IsNullOrWhiteSpace(handler.EventPath) ||
+            handler.Source is not ("target" or "host") || handler.Parameters is null)
+        {
+            throw new JsonException(
+                "An Unreal Event Entry requires a name, source wrapper, canonical event path, " +
+                "target/host source, and parameters.");
+        }
+        if (handler.SourceMember is not null && string.IsNullOrWhiteSpace(handler.SourceMember))
+        {
+            throw new JsonException("An Unreal Event Entry source member cannot be blank.");
+        }
+        var parameterNames = new HashSet<string>(StringComparer.Ordinal);
+        UnrealEventHandlerParameterPatchSpec[] parameters = handler.Parameters
+            .Select(parameter => parameter is null || string.IsNullOrWhiteSpace(parameter.Name) ||
+                string.IsNullOrWhiteSpace(parameter.TypeName) || !parameterNames.Add(parameter.Name)
+                    ? throw new JsonException(
+                        "Unreal Event Entry parameters require unique names and type names.")
+                    : parameter)
+            .ToArray();
+        return handler with { Parameters = parameters };
     }
 
     private static ScriptStatePatchPrecondition NormalizeExpected(

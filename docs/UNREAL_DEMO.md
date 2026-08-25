@@ -20,22 +20,30 @@ the hidden authoring service.
 1. Select `ResolveInitialValue` in **My Script**. The center canvas shows the
    same typed control/data structure used by the compiler, presented as compact
    Blueprint-style cards.
-2. Select a literal or supported operator. Its semantic identity, type, source
+2. Select `OnManagedSignal`. Its red Event Entry exposes `value: int` and
+   `signalContext: UnrealObjectHandle` payload pins while retaining the exact UE
+   delegate path in Details.
+3. Right-click the graph and choose **Unreal Events >
+   UnifiedScriptComponent > Event OnManagedSignal**. The Workbench adds a new
+   strongly typed `[UnrealEvent]` C# handler through declaration-patch v0.2,
+   recompiles, and reloads the compiler-owned Surface.
+4. Select a literal or supported operator. Its semantic identity, type, source
    span, and legal edit capability appear in **Details**.
-3. Change an editable value and choose **Apply & Reload**. The Workbench checks
+5. Change an editable value and choose **Apply & Reload**. The Workbench checks
    the current source fingerprints, compiles one candidate, and atomically
    publishes C#, identity sidecars, Declaration IR, Authoring Surface, DLL, and
    PDB before reloading the matching component.
-4. Drag a typed data wire onto an occupied input to preview transactional
+6. Drag a typed data wire onto an occupied input to preview transactional
    rewiring. Invalid types and stale source are rejected without partially
    changing the graph or source.
-5. Use the source/debug controls to navigate the real C# span and inspect the
+7. Use the source/debug controls to navigate the real C# span and inspect the
    active CoreCLR statement/locals when a script is running.
 
 The checked-in headless smoke test remains available through
 `tools/run-unreal-demo.ps1`. A successful run proves component
 Start/Tick/Reload/Stop, declaration state migration, generated wrapper calls,
-and `LegacyCalls=0` on UE 5.8.
+the reflected `OnManagedSignal` Event Entry exactly once after reload, and
+`LegacyCalls=0` on UE 5.8.
 
 ## Diagnostics
 
@@ -48,4 +56,7 @@ and `LegacyCalls=0` on UE 5.8.
 The status bar reports source conflicts, semantic/type rejection, compile
 failure, artifact publication failure, and reload failure separately. A failed
 transaction leaves the previously published source and running generation
-unchanged.
+unchanged. Runtime failures are also returned through the managed/native
+diagnostic boundary: `UUnifiedScriptComponent.LastScriptError` contains the
+operation, managed exception type/message, and stack rather than only a numeric
+status.

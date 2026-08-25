@@ -51,12 +51,51 @@ public sealed class HirGraphProjector
         SemanticId entryId = SemanticId.FromKey($"{method.Id}:graph:entry");
         var properties = new SortedDictionary<string, string>(StringComparer.Ordinal);
         semantics.ApplyNodeProperties(method.Id, properties);
+        HirAttribute? unrealEvent = method.Attributes?.FirstOrDefault(static attribute =>
+            attribute.Name == "UnrealEvent" && attribute.Arguments.Count >= 2);
+        if (unrealEvent is not null)
+        {
+            properties["unrealEventSourceType"] = unrealEvent.Arguments[0];
+            properties["unrealEventPath"] = unrealEvent.Arguments[1];
+            properties["unrealEventSource"] = unrealEvent.NamedArguments.GetValueOrDefault(
+                "Source",
+                "Target");
+            if (unrealEvent.NamedArguments.TryGetValue("SourceMember", out string? sourceMember))
+            {
+                properties["unrealEventSourceMember"] = sourceMember;
+            }
+        }
+        var entryPorts = new List<GraphPort>
+        {
+            new("then", GraphPortDirection.Output, GraphPortKind.Control),
+        };
+        if (unrealEvent is not null)
+        {
+            for (int index = 0; index < method.Parameters.Count; index++)
+            {
+                var parameterProperties = new SortedDictionary<string, string>(
+                    StringComparer.Ordinal);
+                semantics.ApplyNodeProperties(method.Parameters[index].Id, parameterProperties);
+                if (parameterProperties.TryGetValue("typeId", out string? typeId))
+                {
+                    properties[$"eventParameter{index}TypeId"] = typeId;
+                }
+                if (parameterProperties.TryGetValue("resolvedType", out string? resolvedType))
+                {
+                    properties[$"eventParameter{index}ResolvedType"] = resolvedType;
+                }
+                entryPorts.Add(new GraphPort(
+                    $"eventArg{index}",
+                    GraphPortDirection.Output,
+                    GraphPortKind.Data));
+            }
+        }
         builder.AddNode(new GraphNode(
             entryId,
-            "entry",
+            unrealEvent is null ? "entry" : "unrealEventEntry",
             method.Name,
             method.Span,
-            [new GraphPort("then", GraphPortDirection.Output, GraphPortKind.Control)],
+            entryPorts,
             properties),
             functionRegionId);
 

@@ -1,6 +1,7 @@
 namespace UnifiedScript.Unreal;
 
 /// <summary>Strongly typed FName value used by generated Unreal bindings.</summary>
+[UnrealValue]
 public readonly record struct UnrealName
 {
     private readonly string? _value;
@@ -16,6 +17,7 @@ public readonly record struct UnrealName
 }
 
 /// <summary>Strongly typed FText value used by generated Unreal bindings.</summary>
+[UnrealValue]
 public readonly record struct UnrealText
 {
     private readonly string? _value;
@@ -31,6 +33,7 @@ public readonly record struct UnrealText
 }
 
 /// <summary>Type-checked value for a reflected UEnum whose symbols are not yet exported.</summary>
+[UnrealValue]
 public readonly record struct UnrealEnumValue
 {
     public UnrealEnumValue(string typePath, long value)
@@ -50,6 +53,7 @@ public readonly record struct UnrealEnumValue
 }
 
 /// <summary>Double-precision FVector shape used by UE5 large world coordinates.</summary>
+[UnrealValue]
 public readonly record struct UnrealVector(double X, double Y, double Z)
 {
     public static UnrealVector Zero => default;
@@ -58,6 +62,7 @@ public readonly record struct UnrealVector(double X, double Y, double Z)
 }
 
 /// <summary>Double-precision FRotator shape in Pitch/Yaw/Roll order.</summary>
+[UnrealValue]
 public readonly record struct UnrealRotator(double Pitch, double Yaw, double Roll)
 {
     public static UnrealRotator Zero => default;
@@ -70,6 +75,7 @@ public readonly record struct UnrealQuaternion(double X, double Y, double Z, dou
 }
 
 /// <summary>FTransform shape with quaternion rotation and double-precision vectors.</summary>
+[UnrealValue]
 public readonly record struct UnrealTransform(
     UnrealQuaternion Rotation,
     UnrealVector Translation,

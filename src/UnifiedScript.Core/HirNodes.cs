@@ -28,7 +28,20 @@ public sealed record HirMethodDeclaration(
     bool IsStatic,
     bool IsAsync,
     IReadOnlyList<HirParameter> Parameters,
-    HirBlockStatement Body) : HirNode(Id, Span);
+    HirBlockStatement Body) : HirNode(Id, Span)
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<HirAttribute>? Attributes { get; init; }
+}
+
+/// <summary>
+/// Lossless-enough declaration metadata for visual entry semantics. Attribute
+/// expressions are normalized to stable strings while executable code remains HIR.
+/// </summary>
+public sealed record HirAttribute(
+    string Name,
+    IReadOnlyList<string> Arguments,
+    IReadOnlyDictionary<string, string> NamedArguments);
 
 public sealed record HirParameter(
     SemanticId Id,

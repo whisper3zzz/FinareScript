@@ -3,7 +3,7 @@
  * @Author: whispersong
  * @Date: 2026-08-24 17:54:22
  * @LastEditors: whispersong
- * @LastEditTime: 2026-08-25 10:33:15
+ * @LastEditTime: 2026-08-25 14:22:40
  * @FilePath: \Plugins\UEUnifiedScript\Source\UEUnifiedScriptEditor\Private\UnifiedScriptAuthoringSurface.cpp
  * @Description:
  */
@@ -1511,6 +1511,64 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildMemberAccessInsertionPatch(
     SetOptionalId(Operation, TEXT("expectedNextSiblingId"), Next);
     Operation->SetObjectField(TEXT("newStatement"), Statement);
     return SerializeRoot(MakePatchRoot(Document, Operation), OutPatchJson, OutError, TEXT("the reflected property insertion patch"));
+}
+
+bool FUnifiedScriptAuthoringSurfaceReader::BuildUnrealEventHandlerInsertionPatch(
+    const FUnifiedScriptAuthoringSurfaceDocument& Document,
+    const FUnifiedScriptAuthoringAsset& Asset,
+    const FString& HandlerName,
+    const FString& SourceTypeName,
+    const FString& EventPath,
+    const TArray<FUnifiedScriptAuthoringParameter>& Parameters,
+    FString& OutPatchJson,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::AuthoringSurface::Private;
+    using namespace UE::UnifiedScript::AuthoringSurface::Editing::Private;
+    if (!IsSemanticId(Document.SourceCompilationId) ||
+        !IsSemanticId(Document.SemanticConfigurationId) || !IsSemanticId(Asset.Id) ||
+        HandlerName.IsEmpty() || SourceTypeName.IsEmpty() ||
+        !EventPath.StartsWith(TEXT("/Script/")) || !EventPath.Contains(TEXT(":")) ||
+        Parameters.ContainsByPredicate([](const FUnifiedScriptAuthoringParameter& Parameter)
+        {
+            return Parameter.Name.IsEmpty() || Parameter.TypeMetadataName.IsEmpty();
+        }))
+    {
+        OutError = TEXT("The UE Event Entry requires an asset, handler, source wrapper, event path, and typed payload.");
+        return false;
+    }
+
+    const TSharedRef<FJsonObject> Handler = MakeShared<FJsonObject>();
+    Handler->SetStringField(TEXT("name"), HandlerName);
+    Handler->SetStringField(TEXT("sourceTypeName"), SourceTypeName);
+    Handler->SetStringField(TEXT("eventPath"), EventPath);
+    Handler->SetStringField(TEXT("source"), TEXT("target"));
+    Handler->SetField(TEXT("sourceMember"), MakeShared<FJsonValueNull>());
+    TArray<TSharedPtr<FJsonValue>> JsonParameters;
+    for (const FUnifiedScriptAuthoringParameter& Parameter : Parameters)
+    {
+        const TSharedRef<FJsonObject> JsonParameter = MakeShared<FJsonObject>();
+        JsonParameter->SetStringField(TEXT("name"), Parameter.Name);
+        JsonParameter->SetStringField(TEXT("typeName"), Parameter.TypeMetadataName);
+        JsonParameters.Add(MakeShared<FJsonValueObject>(JsonParameter));
+    }
+    Handler->SetArrayField(TEXT("parameters"), MoveTemp(JsonParameters));
+
+    const TSharedRef<FJsonObject> Operation = MakeShared<FJsonObject>();
+    Operation->SetStringField(TEXT("operation"), TEXT("addUnrealEventHandler"));
+    Operation->SetStringField(TEXT("targetAssetId"), Asset.Id);
+    Operation->SetObjectField(TEXT("handler"), Handler);
+
+    const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
+    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.declaration-patch/v0.2"));
+    Root->SetStringField(TEXT("sourceCompilationId"), Document.SourceCompilationId);
+    Root->SetStringField(TEXT("semanticConfigurationId"), Document.SemanticConfigurationId);
+    Root->SetArrayField(TEXT("operations"), {MakeShared<FJsonValueObject>(Operation)});
+    return SerializeRoot(
+        Root,
+        OutPatchJson,
+        OutError,
+        TEXT("the Unreal Event Entry declaration patch"));
 }
 
 bool FUnifiedScriptAuthoringSurfaceReader::BuildStatementDeletionPatch(

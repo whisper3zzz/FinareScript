@@ -91,6 +91,7 @@ private:
     void* DestroyScriptEntryPoint = nullptr;
     void* GetScriptCountEntryPoint = nullptr;
     void* GetInvocationMetricsEntryPoint = nullptr;
+    void* GetLastManagedErrorEntryPoint = nullptr;
     FString LoadedHostFxrPath;
     FString LastError;
 };

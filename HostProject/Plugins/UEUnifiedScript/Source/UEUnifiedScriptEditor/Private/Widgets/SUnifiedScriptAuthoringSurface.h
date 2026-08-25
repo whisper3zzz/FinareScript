@@ -47,6 +47,11 @@ struct FUnifiedScriptReflectedPaletteAction
     FString ResultTypeName;
     FString ResultTypeId;
     TArray<FUnifiedScriptAuthoringParameter> Arguments;
+    bool bEvent = false;
+    FString EventPath;
+    FString SourceTypeName;
+    FString HandlerName;
+    TArray<FUnifiedScriptAuthoringParameter> EventParameters;
 };
 
 using FUnifiedScriptSurfaceTreeItemPtr = TSharedPtr<FUnifiedScriptSurfaceTreeItem>;
@@ -65,6 +70,7 @@ public:
     int32 GetVisibleGraphNodeCount() const;
     int32 GetVisibleGraphEdgeCount() const;
     FString GetActiveFunctionId() const;
+    bool HasNodePaletteAction(const FString& ActionId) const;
 
 private:
     FReply HandleLoad();

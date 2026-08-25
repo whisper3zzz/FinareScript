@@ -3,7 +3,7 @@
  * @Author: whispersong
  * @Date: 2026-08-24 17:54:22
  * @LastEditors: whispersong
- * @LastEditTime: 2026-08-25 10:33:15
+ * @LastEditTime: 2026-08-25 14:22:40
  * @FilePath: \Plugins\UEUnifiedScript\Source\UEUnifiedScriptEditor\Public\UnifiedScriptAuthoringSurface.h
  * @Description:
  */
@@ -245,6 +245,17 @@ public:
         const FString& MemberName,
         const FString& ResultTypeName,
         const FString& ResultTypeId,
+        FString& OutPatchJson,
+        FString& OutError);
+
+    /** Adds a declaration-authored visual method bound to one canonical UE event. */
+    static bool BuildUnrealEventHandlerInsertionPatch(
+        const FUnifiedScriptAuthoringSurfaceDocument& Document,
+        const FUnifiedScriptAuthoringAsset& Asset,
+        const FString& HandlerName,
+        const FString& SourceTypeName,
+        const FString& EventPath,
+        const TArray<FUnifiedScriptAuthoringParameter>& Parameters,
         FString& OutPatchJson,
         FString& OutError);
 

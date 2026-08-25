@@ -88,19 +88,48 @@ if ($null -eq $line) {
 $nativeResult = ($line.Line.Substring($line.Line.IndexOf($marker) + $marker.Length) |
     ConvertFrom-Json)
 $thresholds = Get-Content -Raw -LiteralPath $thresholdPath | ConvertFrom-Json
-if ($nativeResult.schemaVersion -ne 'unifiedscript.unreal-benchmark/v0.1' -or
-    $nativeResult.scenario -ne $thresholds.scenario) {
+if ($thresholds.schemaVersion -ne 'unifiedscript.unreal-benchmark-thresholds/v0.2' -or
+    $nativeResult.schemaVersion -ne 'unifiedscript.unreal-benchmark/v0.2' -or
+    $nativeResult.scenario -ne $thresholds.scenario -or
+    [int]$nativeResult.warmupIterations -lt [int]$thresholds.minimumWarmupIterations -or
+    [int]$nativeResult.iterations -lt [int]$thresholds.minimumIterations -or
+    [int]$nativeResult.sampleCount -lt [int]$thresholds.minimumSampleCount) {
     throw 'The benchmark result does not match the checked-in schema/scenario.'
 }
+
+$cpuName = (Get-ItemProperty `
+    -LiteralPath 'HKLM:\HARDWARE\DESCRIPTION\System\CentralProcessor\0' `
+    -ErrorAction SilentlyContinue).ProcessorNameString
+$machineDescriptor = [string]::Join('|', @(
+    [Environment]::MachineName,
+    [Environment]::OSVersion.VersionString,
+    $cpuName))
+$hasher = [Security.Cryptography.SHA256]::Create()
+try {
+    $machineHash = $hasher.ComputeHash([Text.Encoding]::UTF8.GetBytes($machineDescriptor))
+} finally {
+    $hasher.Dispose()
+}
+$machineFingerprint = -join ($machineHash | ForEach-Object { $_.ToString('x2') })
+$machineFingerprint = $machineFingerprint.Substring(0, 16)
 
 $puertsNsPerCall = $null
 if (![string]::IsNullOrWhiteSpace($PuertsResult)) {
     $puerts = Get-Content -Raw -LiteralPath $PuertsResult | ConvertFrom-Json
-    if ($puerts.schemaVersion -ne 'unifiedscript.unreal-benchmark/v0.1' -or
+    if ($puerts.schemaVersion -ne 'unifiedscript.unreal-benchmark/v0.2' -or
         $puerts.scenario -ne $nativeResult.scenario -or
+        $puerts.configuration -ne $nativeResult.configuration -or
+        $puerts.platform -ne $nativeResult.platform -or
+        [int]$puerts.engineMajor -ne [int]$nativeResult.engineMajor -or
+        [int]$puerts.engineMinor -ne [int]$nativeResult.engineMinor -or
+        [int]$puerts.enginePatch -ne [int]$nativeResult.enginePatch -or
+        [int]$puerts.warmupIterations -ne [int]$nativeResult.warmupIterations -or
+        [int]$puerts.iterations -ne [int]$nativeResult.iterations -or
+        [int]$puerts.sampleCount -ne [int]$nativeResult.sampleCount -or
+        $puerts.machineFingerprint -ne $machineFingerprint -or
         $null -eq $puerts.puertsNsPerCall -or
         [double]$puerts.puertsNsPerCall -le 0) {
-        throw 'The Puerts result must use the same v0.1 scenario and contain puertsNsPerCall.'
+        throw 'The Puerts result must use the same v0.2 machine, engine, configuration, workload, and contain puertsNsPerCall.'
     }
     $puertsNsPerCall = [double]$puerts.puertsNsPerCall
 }
@@ -117,16 +146,24 @@ $competitivePass = if ($null -ne $competitiveRatio) {
 } else { !$RequirePuerts }
 
 $report = [ordered]@{
-    schemaVersion = 'unifiedscript.unreal-benchmark-report/v0.1'
+    schemaVersion = 'unifiedscript.unreal-benchmark-report/v0.2'
     scenario = $nativeResult.scenario
     configuration = $nativeResult.configuration
+    platform = $nativeResult.platform
+    engineMajor = [int]$nativeResult.engineMajor
+    engineMinor = [int]$nativeResult.engineMinor
+    enginePatch = [int]$nativeResult.enginePatch
+    machineFingerprint = $machineFingerprint
+    warmupIterations = [int]$nativeResult.warmupIterations
     iterations = [int]$nativeResult.iterations
+    sampleCount = [int]$nativeResult.sampleCount
     cppDirectNsPerCall = [double]$nativeResult.cppDirectNsPerCall
     unifiedScriptNsPerCall = [double]$nativeResult.unifiedScriptNsPerCall
     unifiedScriptAllocatedBytes = [long]$nativeResult.unifiedScriptAllocatedBytes
     puertsNsPerCall = $puertsNsPerCall
     unifiedScriptToPuertsRatio = $competitiveRatio
     gates = [ordered]@{
+        matchedWorkload = $true
         absoluteLatency = $absolutePass
         zeroManagedAllocation = $allocationPass
         fasterThanPuerts = if ($null -ne $puertsNsPerCall) { $competitivePass } else { $null }

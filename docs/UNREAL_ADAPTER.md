@@ -11,7 +11,7 @@ The first slice has four explicit boundaries:
 ```text
 UE 5.7/5.8 native reflection
   -> UnifiedScriptExport commandlet
-  -> unifiedscript.unreal-reflection/v0.1
+  -> unifiedscript.unreal-reflection/v0.2
   -> UnifiedScript.Unreal binding generator
   -> typed C# wrappers over IUnrealInvocationBridge
 ```
@@ -29,7 +29,7 @@ handle-only bridge API. This makes the extractor and generator testable without
 launching an editor and prevents engine upgrades from contaminating HIR,
 Semantics, Graph, or Authoring.
 
-## Reflection manifest v0.1
+## Reflection manifest v0.2
 
 The manifest records only portable identity and callable shape:
 
@@ -38,6 +38,8 @@ The manifest records only portable identity and callable shape:
 - native class path, module, base path, and traits;
 - Blueprint-visible declared properties with access policy;
 - Blueprint-callable/pure declared functions with ordered parameters;
+- Blueprint-assignable multicast delegates with canonical paths, traits, and
+  ordered parameter types;
 - recursive value types for primitives, UObject/class handles, structs, enums,
   arrays, sets, and maps.
 
@@ -242,10 +244,10 @@ the hosted generated wrapper selected stable-ID v2 thunks during
 Start/Tick/Reload/Stop; the later ABI v3 activation splits that same counter by
 call-frame and legacy route.
 
-This is now an executable component host with a measured route counter, not yet
-a cross-runtime performance claim. Dependency packaging, automatic thunk
-generation for arbitrary reflected types, and comparative Puerts benchmarks
-remain open.
+This established an executable component host with a measured route counter.
+Later phases close automatic thunk generation and add a reproducible Puerts
+comparison gate; a faster-than-Puerts verdict still requires a matched external
+Puerts result and is never inferred from the C++ lower bound.
 
 ## Phase B.11 Script Asset resolution and transactional reload
 
@@ -333,14 +335,14 @@ state access to gameplay C# without reflection lookup.
 
 The checked-in UE 5.8 demo stages its emitted declaration beside the managed
 assembly, overrides `InitialValue` from 10 to 37, reads 37 in `OnStart`, retains
-it across Reload, and reports `DeclarationState=37`, `FastCalls=16`,
-`CallFrameCalls=16`, and `LegacyCalls=0`.
+it across Reload, and currently reports `DeclarationState=37`, `FastCalls=20`,
+`CallFrameCalls=20`, `LegacyCalls=0`, and `ReflectedEvent=73`.
 
 ## Phase B.14 native Slate Authoring Surface
 
 The editor module now registers a `UnifiedScript Authoring` nomad tab and a
 Tools-menu entry. Its native Slate workspace consumes only the strict
-`unifiedscript.authoring-surface/v0.1` artifact; it does not parse C# or recreate
+`unifiedscript.authoring-surface/v0.3` artifact; it does not parse C# or recreate
 Graph semantics inside Unreal. A surface can be opened directly, loaded from
 the selected `UUnifiedScriptAsset.AuthoringSurfacePath`, reset to the staged
 Demo, and automatically refreshed when its file changes.
@@ -354,11 +356,11 @@ clipboard. This preserves one compiler-owned edit contract across browser and
 Slate frontends.
 
 The UE 5.8 editor Automation test loads the real Demo surface (one asset, one
-state, one visual function, five promoted actions), rejects an invalid schema
-transactionally, builds a typed patch, verifies tab registration, and constructs
-the real widget. Direct workbench/HTTP submission, source mutation, transaction
-undo, visual node layout, and live component reload are intentionally not yet
-claimed by this slice.
+state, four visual functions, 45 lossless actions, and 43 edges), rejects an
+invalid schema transactionally, verifies the typed Event Entry payload pins,
+builds semantic and declaration patches, verifies tab registration, and
+constructs the real widget. Later phases add the live Workbench transaction and
+persisted visual layout.
 
 ## Phase B.15 transactional Slate Apply and component reload
 
@@ -382,8 +384,8 @@ Asset or loaded Surface. Running instances call their existing transactional
 `ReloadScript`; inactive instances refresh Declaration state. The real UE 5.8
 Demo was exercised through a `100 -> 101 -> 100` Workbench round trip, retained
 its stable IDs, emitted a loadable DLL, and then passed the live World-host Demo
-with `DeclarationState=37`, `FastCalls=16`, `CallFrameCalls=16`, and
-`LegacyCalls=0`.
+with `DeclarationState=37`, `FastCalls=20`, `CallFrameCalls=20`,
+`LegacyCalls=0`, and `ReflectedEvent=73`.
 
 ## Phase B.16 Blueprint-style GraphEditor workspace
 
@@ -496,9 +498,46 @@ is unloaded. `ActorDemoScript` proves latent resumption plus Begin/End overlap,
 temporary argument release, reload cancellation, and post-EndPlay unbinding in
 the live Automation gate.
 
-This phase intentionally covers the common Actor overlap signature. Arbitrary
-reflected delegate signatures still require generated native proxy functions
-and remain a separate roadmap item.
+This phase introduced the lifetime rules with common Actor overlap signatures.
+The next phase applies the same World/generation ownership to arbitrary
+reflected multicast delegates.
+
+## Phase B.22 arbitrary reflected delegates and visual Event Entries
+
+Reflection manifest v0.2 exports Blueprint-assignable delegates with canonical
+paths and ordered value shapes. Types tagged `UnifiedScriptBindingInternal` are
+excluded, so the transient native dispatch proxy never appears as a user API.
+The binding generator emits a strong handler delegate, a typed subscribe method,
+and an `UnrealEventEndpointAttribute` keyed by the canonical path.
+
+The independent ABI v4 reverse-event table carries borrowed ABI v3 values in a
+fixed 64-byte frame. Native code creates a transient proxy UObject whose runtime
+UFunction clones the reflected delegate signature, binds it on the game thread,
+and dispatches through the retained World context. A per-generation managed
+bridge owns every subscription and releases it before ALC unload, rollback,
+EndPlay, or World teardown. `[UnrealEvent]` methods are discovered after
+`OnStart`; endpoint resolution uses the canonical path rather than a generated
+C# member name.
+
+Authoring Surface projection recognizes the attributed method as a red
+`unrealEventEntry` node with a control continuation and typed payload outputs.
+The GraphEditor context menu is populated from the same reflection manifest;
+choosing `Unreal Events > <Type> > Event <Delegate>` submits declaration-patch
+v0.2, writes the strongly typed C# handler, recompiles, and reloads the Surface.
+The checked Demo receives `OnManagedSignal(73, Context)` before and after reload
+without duplicate subscriptions.
+
+Managed exceptions from Create/Start/Tick/event/reload/teardown boundaries are
+stored per World and returned to native as UTF-8, so `LastScriptError` contains
+the operation and managed stack instead of only a status code. The live UE 5.8
+gate proves a failed `MissingScript` reload reports `ReloadScript` plus the
+`TypeLoadException` while preserving the prior generation.
+
+The performance gate measures five 100,000-call samples and uses the median.
+The current local run is allocation-free and passes the checked 2,500 ns/call
+ceiling. A competitive Puerts result must match machine fingerprint, engine,
+platform, configuration, warm-up, iteration count, and sample count; without it
+the faster-than-Puerts verdict remains empty.
 
 ## Commands
 
@@ -563,7 +602,6 @@ typed C# edits through the Workbench. Win64 Development and Shipping builds
 stage a plugin-local .NET runtime plus managed dependency closure and pass a
 packaged managed Start/Tick/Stop smoke. See `UNREAL_RELEASE.md`.
 
-The remaining production work is arbitrary reflected delegate proxy generation,
-broader native debug traps and evaluation, arbitrary control-wire authoring
-outside structured operations, and platform-specific CoreCLR packaging beyond
-Win64.
+The remaining production work is broader native debug traps and evaluation,
+arbitrary control-wire authoring outside structured operations, direct matched
+Puerts benchmark capture, and platform-specific CoreCLR packaging beyond Win64.

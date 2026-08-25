@@ -87,6 +87,24 @@ public delegate byte UnrealNativeRetainContextV1(nint context);
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 public delegate void UnrealNativeReleaseContextV1(nint context);
 
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+public delegate void UnrealNativeEventCallbackV4(nint userData, nint frame);
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+public delegate ulong UnrealNativeSubscribeEventV4(
+    nint context,
+    ulong source,
+    ulong eventId,
+    nint eventPathData,
+    int eventPathLength,
+    UnrealNativeEventCallbackV4 callback,
+    nint userData);
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+public delegate byte UnrealNativeUnsubscribeEventV4(
+    nint context,
+    ulong subscriptionId);
+
 /// <summary>
 /// Calls the versioned synchronous function table exported by the UE plugin.
 /// The function table is borrowed from the plugin. The context is retained until
@@ -97,12 +115,14 @@ public sealed class InProcessUnrealNativeInvocationTransport
     : IUnrealNativeInvocationTransport,
       IUnrealNativeFastInvocationTransport,
       IUnrealNativeCallFrameTransportV3,
+      IUnrealNativeEventTransport,
       IDisposable
 {
     private const uint MinimumAbiVersion = 1;
     private const uint MaximumAbiVersion = 2;
 
     private static readonly UnrealNativeResultCallbackV1 ResultCallback = ReceiveResult;
+    private static readonly UnrealNativeEventCallbackV4 EventCallback = ReceiveEvent;
 
     private readonly nint _context;
     private readonly UnrealNativeReadPropertyV1 _readProperty;
@@ -115,8 +135,11 @@ public sealed class InProcessUnrealNativeInvocationTransport
     private readonly nint _writePropertyByIdV3;
     private readonly nint _invokeByIdV3;
     private readonly UnrealNativeCapabilitiesV3 _capabilitiesV3;
+    private readonly UnrealNativeSubscribeEventV4? _subscribeEvent;
+    private readonly UnrealNativeUnsubscribeEventV4? _unsubscribeEvent;
     private readonly UnrealNativeReleaseContextV1 _releaseContext;
     private readonly object _lifetimeGate = new();
+    private readonly HashSet<NativeEventSubscription> _eventSubscriptions = [];
     private bool _disposed;
 
     public InProcessUnrealNativeInvocationTransport(nint context, nint tablePointer)
@@ -232,6 +255,36 @@ public sealed class InProcessUnrealNativeInvocationTransport
                     _invokeByIdV3 = tableV3.InvokeById;
                 }
             }
+
+            uint eventV2Size = checked(
+                (uint)Marshal.SizeOf<NativeTransportTableV2Events>());
+            if (table.TableSize >= eventV2Size)
+            {
+                NativeTransportTableV2Events eventExtension =
+                    Marshal.PtrToStructure<NativeTransportTableV2Events>(tablePointer);
+                if (eventExtension.EventTransport != nint.Zero)
+                {
+                    UnrealNativeEventTransportTableV4 eventTable =
+                        Marshal.PtrToStructure<UnrealNativeEventTransportTableV4>(
+                            eventExtension.EventTransport);
+                    if (eventTable.AbiVersion != UnrealNativeEventAbiV4.Version ||
+                        eventTable.TableSize < UnrealNativeEventAbiV4.TransportTableSize ||
+                        eventTable.FrameSize != UnrealNativeEventAbiV4.FrameSize ||
+                        eventTable.ValueSize != UnrealNativeAbiV3.ValueSize ||
+                        eventTable.RetainContext != table.RetainContext ||
+                        eventTable.ReleaseContext != table.ReleaseContext ||
+                        eventTable.Subscribe == nint.Zero ||
+                        eventTable.Unsubscribe == nint.Zero)
+                    {
+                        throw new InvalidOperationException(
+                            "The optional native Unreal event ABI v4 table has an incompatible layout.");
+                    }
+                    _subscribeEvent = Marshal.GetDelegateForFunctionPointer<
+                        UnrealNativeSubscribeEventV4>(eventTable.Subscribe);
+                    _unsubscribeEvent = Marshal.GetDelegateForFunctionPointer<
+                        UnrealNativeUnsubscribeEventV4>(eventTable.Unsubscribe);
+                }
+            }
         }
 
         UnrealNativeRetainContextV1 retainContext =
@@ -252,6 +305,77 @@ public sealed class InProcessUnrealNativeInvocationTransport
         _invokeById is not null;
 
     public UnrealNativeCapabilitiesV3 Capabilities => _capabilitiesV3;
+
+    public bool SupportsEvents => _subscribeEvent is not null && _unsubscribeEvent is not null;
+
+    public IUnrealEventSubscription Subscribe(
+        UnrealObjectHandle source,
+        UnrealEventDescriptor descriptor,
+        Delegate handler)
+    {
+        ArgumentNullException.ThrowIfNull(descriptor);
+        ArgumentNullException.ThrowIfNull(handler);
+        if (!source.IsWellFormed)
+        {
+            throw new ArgumentException(
+                "A reflected event subscription requires a live source handle.",
+                nameof(source));
+        }
+        if (descriptor.EventId == 0 ||
+            descriptor.EventId != UnrealMemberId.FromPath(descriptor.EventPath))
+        {
+            throw new ArgumentException(
+                "The reflected event descriptor has an invalid stable identity.",
+                nameof(descriptor));
+        }
+        ValidateEventHandler(descriptor, handler);
+
+        lock (_lifetimeGate)
+        {
+            ThrowIfDisposed();
+            if (_subscribeEvent is null || _unsubscribeEvent is null)
+            {
+                throw new NotSupportedException(
+                    "The native Unreal transport does not advertise reflected event ABI v4.");
+            }
+
+            var box = new EventCallbackBox(descriptor, handler);
+            GCHandle callbackHandle = GCHandle.Alloc(box);
+            try
+            {
+                using var path = new Utf8Buffer(descriptor.EventPath);
+                ulong subscriptionId = _subscribeEvent(
+                    _context,
+                    source.Value,
+                    descriptor.EventId,
+                    path.Pointer,
+                    path.Length,
+                    EventCallback,
+                    GCHandle.ToIntPtr(callbackHandle));
+                if (subscriptionId == 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Native Unreal event subscription failed for '{descriptor.EventPath}'.");
+                }
+
+                var subscription = new NativeEventSubscription(
+                    this,
+                    subscriptionId,
+                    box,
+                    callbackHandle);
+                _eventSubscriptions.Add(subscription);
+                return subscription;
+            }
+            catch
+            {
+                if (callbackHandle.IsAllocated)
+                {
+                    callbackHandle.Free();
+                }
+                throw;
+            }
+        }
+    }
 
     public UnrealInvocationResponse ReadProperty(
         UnrealObjectHandle target,
@@ -472,6 +596,15 @@ public sealed class InProcessUnrealNativeInvocationTransport
             {
                 return;
             }
+            if (_unsubscribeEvent is not null)
+            {
+                foreach (NativeEventSubscription subscription in _eventSubscriptions.ToArray())
+                {
+                    _unsubscribeEvent(_context, subscription.SubscriptionId);
+                    subscription.Detach();
+                }
+                _eventSubscriptions.Clear();
+            }
             _disposed = true;
             _releaseContext(_context);
         }
@@ -480,6 +613,119 @@ public sealed class InProcessUnrealNativeInvocationTransport
     private void ThrowIfDisposed()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+    }
+
+    private void Unsubscribe(NativeEventSubscription subscription)
+    {
+        lock (_lifetimeGate)
+        {
+            if (!subscription.IsActive || !_eventSubscriptions.Remove(subscription))
+            {
+                return;
+            }
+            if (!_disposed && _unsubscribeEvent is not null)
+            {
+                _unsubscribeEvent(_context, subscription.SubscriptionId);
+            }
+            subscription.Detach();
+        }
+    }
+
+    private static void ValidateEventHandler(
+        UnrealEventDescriptor descriptor,
+        Delegate handler)
+    {
+        System.Reflection.MethodInfo invoke = handler.GetType().GetMethod("Invoke") ??
+            throw new ArgumentException("The event handler is not a delegate.", nameof(handler));
+        System.Reflection.ParameterInfo[] parameters = invoke.GetParameters();
+        if (invoke.ReturnType != descriptor.ReturnType ||
+            parameters.Length != descriptor.Parameters.Count)
+        {
+            throw new ArgumentException(
+                "The event handler does not match the reflected delegate signature.",
+                nameof(handler));
+        }
+        for (int index = 0; index < parameters.Length; index++)
+        {
+            Type expected = descriptor.Parameters[index].Type;
+            Type actual = parameters[index].ParameterType;
+            if (actual.IsByRef)
+            {
+                actual = actual.GetElementType()!;
+            }
+            if (actual != expected)
+            {
+                throw new ArgumentException(
+                    $"Event handler parameter {index} does not match '{descriptor.Parameters[index].Name}'.",
+                    nameof(handler));
+            }
+        }
+    }
+
+    private static unsafe void ReceiveEvent(nint userData, nint framePointer)
+    {
+        if (userData == nint.Zero || framePointer == nint.Zero)
+        {
+            return;
+        }
+        EventCallbackBox? box = null;
+        try
+        {
+            box = GCHandle.FromIntPtr(userData).Target as EventCallbackBox;
+            if (box is null)
+            {
+                return;
+            }
+            UnrealNativeEventFrameV4 frame =
+                Marshal.PtrToStructure<UnrealNativeEventFrameV4>(framePointer);
+            if (frame.AbiVersion != UnrealNativeEventAbiV4.Version ||
+                frame.FrameSize < UnrealNativeEventAbiV4.FrameSize ||
+                frame.Reserved != 0 || frame.Reserved2 != 0 ||
+                frame.SubscriptionId == 0 || frame.Source == 0 ||
+                frame.EventId != box.Descriptor.EventId ||
+                frame.ArgumentCount != box.Descriptor.Parameters.Count ||
+                (frame.ArgumentCount > 0 && frame.Arguments == nint.Zero) ||
+                (frame.ByteCount > 0 && frame.ByteBuffer == nint.Zero) ||
+                frame.ArgumentCount > int.MaxValue || frame.ByteCount > int.MaxValue)
+            {
+                throw new InvalidOperationException(
+                    "The native Unreal event ABI v4 callback returned an invalid frame.");
+            }
+
+            var values = new ReadOnlySpan<UnrealNativeValueV3>(
+                (void*)frame.Arguments,
+                checked((int)frame.ArgumentCount));
+            var arena = new ReadOnlySpan<byte>(
+                (void*)frame.ByteBuffer,
+                checked((int)frame.ByteCount));
+            object?[] arguments = new object?[values.Length];
+            for (int index = 0; index < values.Length; index++)
+            {
+                if (!UnrealNativeValueCodecV3.TryDecodeObject(
+                        box.Descriptor.Parameters[index].Type,
+                        values[index],
+                        arena,
+                        arena.Length,
+                        out arguments[index]))
+                {
+                    throw new InvalidOperationException(
+                        $"Native Unreal event parameter '{box.Descriptor.Parameters[index].Name}' could not be decoded.");
+                }
+            }
+            box.Handler.DynamicInvoke(arguments);
+            box.LastDispatchException = null;
+        }
+        catch (Exception exception)
+        {
+            if (box is not null)
+            {
+                box.LastDispatchException =
+                    exception is System.Reflection.TargetInvocationException invocation &&
+                    invocation.InnerException is not null
+                        ? invocation.InnerException
+                        : exception;
+            }
+        }
     }
 
     private static UnrealInvocationResponse Capture(Action<nint> invoke)
@@ -657,6 +903,25 @@ public sealed class InProcessUnrealNativeInvocationTransport
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    private struct NativeTransportTableV2Events
+    {
+        public uint AbiVersion;
+        public uint TableSize;
+        public uint ValueSize;
+        public uint Reserved;
+        public nint ReadProperty;
+        public nint WriteProperty;
+        public nint Invoke;
+        public nint RetainContext;
+        public nint ReleaseContext;
+        public nint ReadPropertyById;
+        public nint WritePropertyById;
+        public nint InvokeById;
+        public nint CallFrameTransport;
+        public nint EventTransport;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     private struct NativeValue
     {
         public byte Kind;
@@ -672,6 +937,45 @@ public sealed class InProcessUnrealNativeInvocationTransport
         public UnrealInvocationResponse? Response { get; set; }
 
         public Exception? Exception { get; set; }
+    }
+
+    private sealed class EventCallbackBox(
+        UnrealEventDescriptor descriptor,
+        Delegate handler)
+    {
+        public UnrealEventDescriptor Descriptor { get; } = descriptor;
+
+        public Delegate Handler { get; } = handler;
+
+        public Exception? LastDispatchException;
+    }
+
+    private sealed class NativeEventSubscription(
+        InProcessUnrealNativeInvocationTransport owner,
+        ulong subscriptionId,
+        EventCallbackBox box,
+        GCHandle callbackHandle) : IUnrealEventSubscription
+    {
+        private InProcessUnrealNativeInvocationTransport? _owner = owner;
+        private GCHandle _callbackHandle = callbackHandle;
+
+        public ulong SubscriptionId { get; } = subscriptionId;
+
+        public bool IsActive => _owner is not null;
+
+        public Exception? LastDispatchException =>
+            Volatile.Read(ref box.LastDispatchException);
+
+        public void Dispose() => _owner?.Unsubscribe(this);
+
+        public void Detach()
+        {
+            _owner = null;
+            if (_callbackHandle.IsAllocated)
+            {
+                _callbackHandle.Free();
+            }
+        }
     }
 
     private sealed class Utf8Buffer : IDisposable

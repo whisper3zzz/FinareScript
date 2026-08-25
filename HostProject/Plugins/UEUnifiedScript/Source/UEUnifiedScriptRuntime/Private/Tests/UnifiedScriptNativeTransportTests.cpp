@@ -24,6 +24,32 @@ struct FCapturedResult
     FString Message;
 };
 
+struct FCapturedEvent
+{
+    int32 CallCount = 0;
+    uint64 SubscriptionId = 0;
+    uint64 Source = 0;
+    uint64 EventId = 0;
+    int32 NewValue = 0;
+    uint64 ContextHandle = 0;
+};
+
+void CaptureEvent(void* UserData, const FUnifiedScriptNativeEventFrameV4* Frame)
+{
+    FCapturedEvent& Captured = *static_cast<FCapturedEvent*>(UserData);
+    if (Frame == nullptr || Frame->AbiVersion != 4 || Frame->FrameSize != sizeof(*Frame) ||
+        Frame->ArgumentCount != 2 || Frame->Arguments == nullptr)
+    {
+        return;
+    }
+    ++Captured.CallCount;
+    Captured.SubscriptionId = Frame->SubscriptionId;
+    Captured.Source = Frame->Source;
+    Captured.EventId = Frame->EventId;
+    Captured.NewValue = static_cast<int32>(Frame->Arguments[0].Payload0);
+    Captured.ContextHandle = Frame->Arguments[1].Payload0;
+}
+
 FString Decode(const uint8* Data, int32 Length)
 {
     if (Data == nullptr || Length == 0)
@@ -106,6 +132,26 @@ bool FUnifiedScriptNativeTransportAbiTest::RunTest(const FString& Parameters)
     TestNotNull(TEXT("Fast read function exists"), FastTransport->ReadPropertyById);
     TestNotNull(TEXT("Fast write function exists"), FastTransport->WritePropertyById);
     TestNotNull(TEXT("Fast invoke function exists"), FastTransport->InvokeById);
+    TestNotNull(TEXT("Fast transport publishes reverse event ABI"), FastTransport->EventTransport);
+
+    const FUnifiedScriptNativeEventTransportV4* EventTransport =
+        UEUnifiedScript_GetNativeEventTransportV4();
+    TestNotNull(TEXT("Version-four event transport exists"), EventTransport);
+    if (EventTransport == nullptr)
+    {
+        return false;
+    }
+    TestEqual(TEXT("Event transport ABI is version four"), EventTransport->AbiVersion, 4u);
+    TestEqual(
+        TEXT("Event frame layout is fixed"),
+        EventTransport->FrameSize,
+        static_cast<uint32>(sizeof(FUnifiedScriptNativeEventFrameV4)));
+    TestEqual(
+        TEXT("Event transport value layout reuses ABI v3"),
+        EventTransport->ValueSize,
+        static_cast<uint32>(sizeof(FUnifiedScriptNativeValueV3)));
+    TestNotNull(TEXT("Event subscribe function exists"), EventTransport->Subscribe);
+    TestNotNull(TEXT("Event unsubscribe function exists"), EventTransport->Unsubscribe);
 
     TestEqual(
         TEXT("ABI v3 value layout is fixed"),
@@ -356,6 +402,42 @@ bool FUnifiedScriptNativeTransportAbiTest::RunTest(const FString& Parameters)
         UUnifiedScriptInteropFixture* Interop = NewObject<UUnifiedScriptInteropFixture>(World);
         const FUnifiedScriptObjectHandle InteropHandle =
             Registry.RegisterObject(Interop, HandleResult);
+        constexpr uint64 InteropChangedId = UnifiedScriptMemberId(
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:OnInteropChanged");
+        const FTCHARToUTF8 InteropChangedPath(
+            TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:OnInteropChanged"));
+        FCapturedEvent CapturedEvent;
+        const int32 RegistryCountBeforeEvent = Registry.Num();
+        const uint64 EventSubscriptionId = EventTransport->Subscribe(
+            Context,
+            InteropHandle.Value,
+            InteropChangedId,
+            reinterpret_cast<const uint8*>(InteropChangedPath.Get()),
+            InteropChangedPath.Length(),
+            &CaptureEvent,
+            &CapturedEvent);
+        TestTrue(TEXT("Arbitrary reflected event subscription succeeds"), EventSubscriptionId != 0);
+        Interop->BroadcastInteropChanged(73, Interop);
+        TestTrue(
+            TEXT("Arbitrary delegate payload crosses reverse ABI v4"),
+            CapturedEvent.CallCount == 1 &&
+                CapturedEvent.SubscriptionId == EventSubscriptionId &&
+                CapturedEvent.Source == InteropHandle.Value &&
+                CapturedEvent.EventId == InteropChangedId &&
+                CapturedEvent.NewValue == 73 &&
+                CapturedEvent.ContextHandle == InteropHandle.Value);
+        TestEqual(
+            TEXT("Temporary event object handles are released after callback"),
+            Registry.Num(),
+            RegistryCountBeforeEvent);
+        TestTrue(
+            TEXT("Arbitrary reflected event subscription releases explicitly"),
+            EventTransport->Unsubscribe(Context, EventSubscriptionId) != 0);
+        Interop->BroadcastInteropChanged(99, Interop);
+        TestEqual(
+            TEXT("Released reflected event no longer dispatches"),
+            CapturedEvent.CallCount,
+            1);
         TestTrue(TEXT("ABI v3 interop fixture registration succeeds"), HandleResult.IsSuccess());
         constexpr uint64 ModeId = UnifiedScriptMemberId(
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:Mode");

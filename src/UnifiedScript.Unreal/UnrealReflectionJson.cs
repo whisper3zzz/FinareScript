@@ -26,7 +26,8 @@ public static class UnrealReflectionJson
     public static UnrealReflectionManifest NormalizeAndValidate(UnrealReflectionManifest manifest)
     {
         ArgumentNullException.ThrowIfNull(manifest);
-        if (manifest.SchemaVersion != UnrealReflectionManifest.CurrentSchemaVersion)
+        if (manifest.SchemaVersion != UnrealReflectionManifest.CurrentSchemaVersion &&
+            manifest.SchemaVersion != UnrealReflectionManifest.LegacySchemaVersion)
         {
             throw new JsonException(
                 $"Unsupported Unreal reflection schema '{manifest.SchemaVersion}'. " +
@@ -61,6 +62,7 @@ public static class UnrealReflectionJson
 
         return manifest with
         {
+            SchemaVersion = UnrealReflectionManifest.CurrentSchemaVersion,
             Engine = manifest.Engine with { Branch = manifest.Engine.Branch.Trim() },
             Modules = modules.Order(StringComparer.Ordinal).ToArray(),
             Types = manifest.Types
@@ -83,6 +85,7 @@ public static class UnrealReflectionJson
             !IsReflectedPath(type.Path, type.Module) ||
             !IsValidHeaderPath(type.HeaderPath) ||
             type.Traits is null || type.Properties is null || type.Functions is null ||
+            type.Delegates is null ||
             !typePaths.Add(type.Path))
         {
             throw new JsonException("The Unreal reflection manifest contains an invalid reflected type.");
@@ -138,6 +141,52 @@ public static class UnrealReflectionJson
                     parameter.Type,
                     allowVoid: false,
                     $"parameter '{function.Path}:{parameter.Name}'");
+            }
+        }
+
+        var delegatePaths = new HashSet<string>(StringComparer.Ordinal);
+        var delegateNames = new HashSet<string>(StringComparer.Ordinal);
+        foreach (UnrealReflectedDelegate? reflectedDelegate in type.Delegates)
+        {
+            if (reflectedDelegate is null ||
+                !IsIdentifier(reflectedDelegate.Name) ||
+                !IsMemberPath(reflectedDelegate.Path, type.Path, reflectedDelegate.Name) ||
+                !IsScriptPath(reflectedDelegate.SignaturePath) ||
+                reflectedDelegate.Parameters is null || reflectedDelegate.Traits is null ||
+                !Enum.IsDefined(reflectedDelegate.Traits.Kind) ||
+                !Enum.IsDefined(reflectedDelegate.Traits.NativeAccess) ||
+                !delegatePaths.Add(reflectedDelegate.Path) ||
+                !delegateNames.Add(reflectedDelegate.Name) ||
+                propertyNames.Contains(reflectedDelegate.Name))
+            {
+                throw new JsonException($"Unreal type '{type.Path}' has an invalid delegate.");
+            }
+
+            if (reflectedDelegate.Traits.Kind == UnrealDelegateKind.Multicast &&
+                reflectedDelegate.ReturnType.Kind != UnrealValueKind.Void)
+            {
+                throw new JsonException(
+                    $"Unreal multicast delegate '{reflectedDelegate.Path}' must return void.");
+            }
+
+            ValidateTypeReference(
+                reflectedDelegate.ReturnType,
+                allowVoid: true,
+                $"delegate '{reflectedDelegate.Path}' return");
+            var parameterNames = new HashSet<string>(StringComparer.Ordinal);
+            foreach (UnrealReflectedParameter? parameter in reflectedDelegate.Parameters)
+            {
+                if (parameter is null || !IsIdentifier(parameter.Name) ||
+                    !Enum.IsDefined(parameter.Direction) || !parameterNames.Add(parameter.Name))
+                {
+                    throw new JsonException(
+                        $"Unreal delegate '{reflectedDelegate.Path}' has an invalid parameter.");
+                }
+
+                ValidateTypeReference(
+                    parameter.Type,
+                    allowVoid: false,
+                    $"delegate parameter '{reflectedDelegate.Path}:{parameter.Name}'");
             }
         }
     }
@@ -201,6 +250,13 @@ public static class UnrealReflectionJson
             .Select(static function => function with
             {
                 Parameters = function.Parameters.ToArray(),
+            })
+            .ToArray(),
+        Delegates = type.Delegates
+            .OrderBy(static reflectedDelegate => reflectedDelegate.Path, StringComparer.Ordinal)
+            .Select(static reflectedDelegate => reflectedDelegate with
+            {
+                Parameters = reflectedDelegate.Parameters.ToArray(),
             })
             .ToArray(),
     };

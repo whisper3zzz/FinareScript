@@ -716,6 +716,9 @@ public sealed class RoslynSemanticBinder
                 (UnifiedTypeKind.Interface, nullability, false),
             INamedTypeSymbol { TypeKind: TypeKind.Delegate } =>
                 (UnifiedTypeKind.Delegate, nullability, false),
+            INamedTypeSymbol { TypeKind: TypeKind.Struct } unrealValue
+                when IsUnrealGraphValueType(unrealValue) =>
+                (UnifiedTypeKind.Struct, nullability, true),
             INamedTypeSymbol { TypeKind: TypeKind.Struct } =>
                 (UnifiedTypeKind.Struct, nullability, false),
             INamedTypeSymbol { TypeKind: TypeKind.Class } unrealType
@@ -732,6 +735,13 @@ public sealed class RoslynSemanticBinder
             string.Equals(
                 attribute.AttributeClass?.ToDisplayString(),
                 "UnifiedScript.Unreal.UnrealTypeAttribute",
+                StringComparison.Ordinal));
+
+    private static bool IsUnrealGraphValueType(INamedTypeSymbol type) =>
+        type.GetAttributes().Any(static attribute =>
+            string.Equals(
+                attribute.AttributeClass?.ToDisplayString(),
+                "UnifiedScript.Unreal.UnrealValueAttribute",
                 StringComparison.Ordinal));
 
     private static bool TryGetEnumerableElementType(

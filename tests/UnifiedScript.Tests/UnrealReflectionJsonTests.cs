@@ -25,6 +25,11 @@ public sealed class UnrealReflectionJsonTests
                         Function("/Script/AlphaRuntime.AlphaComponent:Zeta", "Zeta"),
                         Function("/Script/AlphaRuntime.AlphaComponent:Alpha", "Alpha"),
                     ],
+                    Delegates =
+                    [
+                        Delegate("/Script/AlphaRuntime.AlphaComponent:ZetaEvent", "ZetaEvent"),
+                        Delegate("/Script/AlphaRuntime.AlphaComponent:AlphaEvent", "AlphaEvent"),
+                    ],
                 },
             ]);
 
@@ -41,8 +46,30 @@ public sealed class UnrealReflectionJsonTests
         Assert.Equal(
             ["Alpha", "Zeta"],
             roundTripped.Types[0].Functions.Select(static function => function.Name));
+        Assert.Equal(
+            ["AlphaEvent", "ZetaEvent"],
+            roundTripped.Types[0].Delegates.Select(static item => item.Name));
         Assert.Equal("UE5", roundTripped.Engine.Branch);
+        Assert.Equal(UnrealReflectionManifest.CurrentSchemaVersion, roundTripped.SchemaVersion);
         Assert.Equal(json, UnrealReflectionJson.Serialize(roundTripped));
+    }
+
+    [Fact]
+    public void DeserializeMigratesLegacyManifestWithoutDelegates()
+    {
+        UnrealReflectionManifest manifest = UnrealReflectionManifest.Create(
+            new UnrealEngineIdentity(5, 7, 4, "UE5"),
+            ["FixtureRuntime"],
+            [Type("/Script/FixtureRuntime.FixtureObject", "FixtureObject", "FixtureRuntime")]);
+        string legacyJson = UnrealReflectionJson.Serialize(manifest).Replace(
+            UnrealReflectionManifest.CurrentSchemaVersion,
+            UnrealReflectionManifest.LegacySchemaVersion,
+            StringComparison.Ordinal);
+
+        UnrealReflectionManifest migrated = UnrealReflectionJson.Deserialize(legacyJson);
+
+        Assert.Equal(UnrealReflectionManifest.CurrentSchemaVersion, migrated.SchemaVersion);
+        Assert.Empty(migrated.Types[0].Delegates);
     }
 
     [Fact]
@@ -103,4 +130,19 @@ public sealed class UnrealReflectionJsonTests
         new UnrealTypeReference(UnrealValueKind.Void, "void"),
         [],
         new UnrealFunctionTraits(Static: false, Pure: false, Callable: true));
+
+    private static UnrealReflectedDelegate Delegate(string path, string name) => new(
+        path,
+        name,
+        $"/Script/AlphaRuntime.AlphaComponent:{name}__DelegateSignature",
+        new UnrealTypeReference(UnrealValueKind.Void, "void"),
+        [new UnrealReflectedParameter(
+            "Value",
+            new UnrealTypeReference(UnrealValueKind.Int32, "int32"),
+            UnrealParameterDirection.Input)],
+        new UnrealDelegateTraits(
+            UnrealDelegateKind.Multicast,
+            BlueprintAssignable: true,
+            BlueprintCallable: true,
+            BlueprintAuthorityOnly: false));
 }

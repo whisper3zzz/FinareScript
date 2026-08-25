@@ -21,6 +21,7 @@ public sealed record ScriptStatePatchSpec(
 [JsonDerivedType(typeof(AddScriptStatePatchOperation), "addState")]
 [JsonDerivedType(typeof(UpdateScriptStatePatchOperation), "updateState")]
 [JsonDerivedType(typeof(RemoveScriptStatePatchOperation), "removeState")]
+[JsonDerivedType(typeof(AddUnrealEventHandlerPatchOperation), "addUnrealEventHandler")]
 public abstract record DeclarationPatchOperation;
 
 public sealed record AddScriptStatePatchOperation(
@@ -36,13 +37,35 @@ public sealed record RemoveScriptStatePatchOperation(
     SemanticId TargetStateId,
     ScriptStatePatchPrecondition Expected) : DeclarationPatchOperation;
 
+public sealed record UnrealEventHandlerParameterPatchSpec(
+    string Name,
+    string TypeName);
+
+/// <summary>
+/// Declaration-level Event Entry contract shared by native authoring surfaces
+/// and the C# source rewriter. The canonical UE event path is the stable key;
+/// generated wrapper member names are intentionally absent.
+/// </summary>
+public sealed record UnrealEventHandlerPatchSpec(
+    string Name,
+    string SourceTypeName,
+    string EventPath,
+    string Source,
+    string? SourceMember,
+    IReadOnlyList<UnrealEventHandlerParameterPatchSpec> Parameters);
+
+public sealed record AddUnrealEventHandlerPatchOperation(
+    SemanticId TargetAssetId,
+    UnrealEventHandlerPatchSpec Handler) : DeclarationPatchOperation;
+
 public sealed record DeclarationPatchDocument(
     string SchemaVersion,
     SemanticId SourceCompilationId,
     SemanticId SemanticConfigurationId,
     IReadOnlyList<DeclarationPatchOperation> Operations)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.declaration-patch/v0.1";
+    public const string CurrentSchemaVersion = "unifiedscript.declaration-patch/v0.2";
+    public const string LegacySchemaVersion = "unifiedscript.declaration-patch/v0.1";
 
     public static DeclarationPatchDocument Create(
         SemanticId sourceCompilationId,

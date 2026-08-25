@@ -311,6 +311,7 @@ public sealed class NativeUnrealInvocationBridge
       IUnrealFastInvocationBridge,
       IUnrealTypedInvocationBridge,
       IUnrealOutputInvocationBridge,
+      IUnrealEventBridge,
       IUnrealInvocationMetrics
 {
     private const int CallFrameArenaByteCapacity = 4096;
@@ -336,6 +337,20 @@ public sealed class NativeUnrealInvocationBridge
     public long CallFrameInvocationCount => Interlocked.Read(ref _callFrameInvocationCount);
 
     public long LegacyInvocationCount => Interlocked.Read(ref _legacyInvocationCount);
+
+    public IUnrealEventSubscription Subscribe(
+        UnrealObjectHandle source,
+        UnrealEventDescriptor descriptor,
+        Delegate handler)
+    {
+        if (_transport is not IUnrealNativeEventTransport eventTransport ||
+            !eventTransport.SupportsEvents)
+        {
+            throw new NotSupportedException(
+                "The native Unreal transport does not support reflected delegate subscriptions.");
+        }
+        return eventTransport.Subscribe(source, descriptor, handler);
+    }
 
     public T ReadProperty<T>(UnrealObjectHandle target, string propertyPath)
     {

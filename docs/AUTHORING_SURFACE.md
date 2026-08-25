@@ -136,6 +136,15 @@ math entry can likewise create a typed binary-expression local from compatible
 function parameters. Screen positions load from and save to the adjacent
 `.usgraph` sidecar independently of program semantics.
 
+Reflection v0.2 delegates appear under `Unreal Events`. Selecting one is a
+declaration-level operation rather than a statement insertion: the client posts
+`addUnrealEventHandler` through declaration-patch v0.2, and Roslyn adds a
+strongly typed `[Visual] [UnrealEvent(...)]` method to the active Script Asset.
+The next compiler projection renders that method as a red `unrealEventEntry`
+with one control continuation and typed delegate-payload outputs. Canonical UE
+event path and source type are preserved in HIR metadata; generated C# endpoint
+names are deliberately not used as semantic identity.
+
 `FUnifiedScriptGraphPresentation` is a read-only display policy above that
 contract. It keeps every Surface record addressable while folding connected
 identifier/literal leaves into consumer labels, hiding unused data outputs,
@@ -152,3 +161,6 @@ both declarations to it. `UEApiPreview` supplies a typed
 reflection palette can insert another generated-wrapper `Add` call, read a
 reflected component property, or create a typed integer Add Expression and
 publish the result immediately through the same compile/reload transaction.
+`OnManagedSignal` demonstrates the reverse direction: its Event Entry receives
+an `int` plus generation-safe object handle through native ABI v4, updates C#
+state, and rebinds exactly once after reload.

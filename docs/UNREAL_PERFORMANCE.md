@@ -2,7 +2,7 @@
 
 `tools/run-unreal-benchmark.ps1` runs a live UE 5.8 Development Editor
 Automation test against the staged CoreCLR demo. The fixed scenario performs
-4,096 warm-up calls followed by 100,000 generated C# wrapper calls to
+4,096 warm-up calls followed by five samples of 100,000 generated C# wrapper calls to
 `UUnifiedScriptComponent.Add(int32, int32)`. The reported UnifiedScript time
 therefore includes the managed wrapper, ABI v3 call frame, native transport,
 generation-safe World handle resolution, and generated C++ thunk.
@@ -19,10 +19,11 @@ powershell -ExecutionPolicy Bypass -File tools/run-unreal-benchmark.ps1 `
   -EngineRoot D:\UE_5.8
 ```
 
-The report is written to `artifacts/ue/interop-benchmark.json`. A Puerts result
-must use `unifiedscript.unreal-benchmark/v0.1`, the same
-`generated-int32-add` scenario, build configuration, hardware, warm-up, and
-iteration count, with a positive `puertsNsPerCall`. Supply it with
+The report is written to `artifacts/ue/interop-benchmark.json`. The reported
+latency is the median of five samples. A Puerts result must use
+`unifiedscript.unreal-benchmark/v0.2`, the same `generated-int32-add` scenario,
+machine fingerprint, UE engine version, platform, build configuration, warm-up,
+iteration count, and sample count, with a positive `puertsNsPerCall`. Supply it with
 `-PuertsResult <file> -RequirePuerts`. The competitive gate only passes when
 UnifiedScript is at least 5% faster. Without that file the report deliberately
 leaves the Puerts result and competitive verdict empty; no performance claim

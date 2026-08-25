@@ -7,7 +7,7 @@ namespace UnifiedScript.Unreal.Demo;
 [ScriptAsset("Unreal/Demo")]
 public sealed class DemoScript : IUnrealManagedScript
 {
-    private UnifiedScriptComponent? _component;
+    private UnifiedScriptComponent _component = null!;
 
     [Expose(InstanceEditable = true, SaveGame = true, Category = "Demo")]
     public int InitialValue { get; set; } = 10;
@@ -54,6 +54,15 @@ public sealed class DemoScript : IUnrealManagedScript
         InitialValue = _component.GetScriptStateInt32(nameof(InitialValue), InitialValue);
         _component.ManagedState = $"Started:{InitialValue}";
         _component.bStartAutomatically = false;
+    }
+
+    [Visual]
+    [UnrealEvent(
+        typeof(UnifiedScriptComponent),
+        "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:OnManagedSignal")]
+    private void OnManagedSignal(int value, UnrealObjectHandle signalContext)
+    {
+        _component.ManagedState += "|Event:" + value;
     }
 
     public void OnTick(float deltaSeconds)

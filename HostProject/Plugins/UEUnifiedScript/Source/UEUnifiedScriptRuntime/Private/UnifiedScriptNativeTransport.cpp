@@ -2,7 +2,10 @@
 
 #include "Containers/StringConv.h"
 #include "Misc/ScopeLock.h"
+#include "Misc/ScopeExit.h"
+#include "UnifiedScriptDelegateProxy.h"
 #include "UnifiedScriptGeneratedThunks.h"
+#include "UObject/Field.h"
 
 #include <bit>
 
@@ -35,9 +38,23 @@ void FUnifiedScriptNativeBridgeContext::Release()
 
 void FUnifiedScriptNativeBridgeContext::Detach()
 {
-    FScopeLock Lock(&BridgeLock);
-    Bridge = nullptr;
-    PendingCallFrameResult.Reset();
+    TArray<TStrongObjectPtr<UObject>> Subscriptions;
+    {
+        FScopeLock Lock(&BridgeLock);
+        Bridge = nullptr;
+        PendingCallFrameResult.Reset();
+        EventSubscriptions.GenerateValueArray(Subscriptions);
+        EventSubscriptions.Reset();
+    }
+    for (TStrongObjectPtr<UObject>& Subscription : Subscriptions)
+    {
+        if (UUnifiedScriptDelegateProxy* Proxy =
+                Cast<UUnifiedScriptDelegateProxy>(Subscription.Get()))
+        {
+            Proxy->Unbind();
+        }
+        Release();
+    }
 }
 
 bool FUnifiedScriptNativeBridgeContext::Execute(
@@ -1228,6 +1245,11 @@ bool EncodeValueV3(
         break;
     case EUnifiedScriptValueKind::Transform:
     {
+        if (ByteCursor > Frame.ByteCapacity ||
+            V3TransformByteSize > Frame.ByteCapacity - ByteCursor)
+        {
+            return false;
+        }
         Native.Kind = EUnifiedScriptNativeValueKindV3::Transform;
         Native.Flags = EUnifiedScriptNativeValueFlagsV3::ArenaBacked;
         Native.Payload0 = ByteCursor;
@@ -1663,6 +1685,344 @@ void ReleaseContext(void* Context)
 }
 }
 
+UFunction* UUnifiedScriptDelegateProxy::FindOrCreateDispatchFunction(
+    const UFunction* Signature)
+{
+    check(IsInGameThread());
+    if (Signature == nullptr || Signature->GetReturnProperty() != nullptr)
+    {
+        return nullptr;
+    }
+
+    const uint64 SignatureId = UnifiedScriptMemberId(
+        TCHAR_TO_UTF8(*Signature->GetPathName()));
+    const FName FunctionName(*FString::Printf(
+        TEXT("UnifiedScriptEvent_%016llX"),
+        static_cast<unsigned long long>(SignatureId)));
+    UClass* ProxyClass = StaticClass();
+    if (UFunction* Existing = ProxyClass->FindFunctionByName(
+            FunctionName,
+            EIncludeSuperFlag::ExcludeSuper))
+    {
+        return Existing->IsSignatureCompatibleWith(Signature) ? Existing : nullptr;
+    }
+
+    UFunction* Function = NewObject<UFunction>(
+        ProxyClass,
+        FunctionName,
+        RF_Public | RF_Transient);
+    Function->FunctionFlags = FUNC_Native | FUNC_Public;
+    FField::FLinkedListBuilder PropertyListBuilder(&Function->ChildProperties);
+    for (TFieldIterator<FProperty> It(Signature, EFieldIteratorFlags::ExcludeSuper); It; ++It)
+    {
+        const FProperty* Parameter = *It;
+        if (!Parameter->HasAnyPropertyFlags(CPF_Parm))
+        {
+            continue;
+        }
+        FProperty* Clone = CastFieldChecked<FProperty>(
+            FField::Duplicate(Parameter, Function, Parameter->GetFName()));
+        Clone->Next = nullptr;
+        PropertyListBuilder.AppendNoTerminate(*Clone);
+    }
+    Function->StaticLink(true);
+    Function->SetNativeFunc(&UUnifiedScriptDelegateProxy::execDispatch);
+    ProxyClass->AddFunctionToFunctionMap(Function, FunctionName);
+    return Function->IsSignatureCompatibleWith(Signature) ? Function : nullptr;
+}
+
+bool UUnifiedScriptDelegateProxy::Bind(
+    FUnifiedScriptNativeBridgeContext* InContext,
+    uint64 InSubscriptionId,
+    FUnifiedScriptObjectHandle InSourceHandle,
+    uint64 InEventId,
+    UObject* InSource,
+    const FMulticastDelegateProperty* InProperty,
+    FUnifiedScriptNativeEventCallbackV4 InCallback,
+    void* InUserData)
+{
+    check(IsInGameThread());
+    if (Context != nullptr || InContext == nullptr || InSubscriptionId == 0 ||
+        InSourceHandle.IsNull() || InEventId == 0 || InSource == nullptr ||
+        InProperty == nullptr || InProperty->SignatureFunction == nullptr ||
+        InCallback == nullptr)
+    {
+        return false;
+    }
+
+    UFunction* Function = FindOrCreateDispatchFunction(InProperty->SignatureFunction);
+    if (Function == nullptr)
+    {
+        return false;
+    }
+
+    FScriptDelegate Delegate;
+    Delegate.BindUFunction(this, Function->GetFName());
+    InProperty->AddDelegate(Delegate, InSource);
+
+    Context = InContext;
+    SubscriptionId = InSubscriptionId;
+    SourceHandle = InSourceHandle;
+    EventId = InEventId;
+    Source = InSource;
+    Property = InProperty;
+    BoundDelegate = MoveTemp(Delegate);
+    Callback = InCallback;
+    UserData = InUserData;
+    return true;
+}
+
+void UUnifiedScriptDelegateProxy::Unbind()
+{
+    check(IsInGameThread());
+    if (Property != nullptr)
+    {
+        if (UObject* SourceObject = Source.Get())
+        {
+            Property->RemoveDelegate(BoundDelegate, SourceObject);
+        }
+    }
+    Context = nullptr;
+    SubscriptionId = 0;
+    SourceHandle = {};
+    EventId = 0;
+    Source.Reset();
+    Property = nullptr;
+    BoundDelegate.Unbind();
+    Callback = nullptr;
+    UserData = nullptr;
+}
+
+DEFINE_FUNCTION(UUnifiedScriptDelegateProxy::execDispatch)
+{
+    UUnifiedScriptDelegateProxy* Proxy = CastChecked<UUnifiedScriptDelegateProxy>(Context);
+    Proxy->Dispatch(Stack.Node, Stack.Locals);
+}
+
+void UUnifiedScriptDelegateProxy::Dispatch(
+    const UFunction* DispatchFunction,
+    const void* ParameterMemory)
+{
+    using namespace UE::UnifiedScript::NativeTransport::Private;
+    check(IsInGameThread());
+    FUnifiedScriptNativeBridgeContext* EventContext = Context;
+    FUnifiedScriptNativeEventCallbackV4 EventCallback = Callback;
+    void* EventUserData = UserData;
+    const uint64 LocalSubscriptionId = SubscriptionId;
+    const FUnifiedScriptObjectHandle LocalSourceHandle = SourceHandle;
+    const uint64 LocalEventId = EventId;
+    if (EventContext == nullptr || EventCallback == nullptr ||
+        DispatchFunction == nullptr || ParameterMemory == nullptr ||
+        !EventContext->TryRetain())
+    {
+        return;
+    }
+    ON_SCOPE_EXIT
+    {
+        EventContext->Release();
+    };
+
+    TArray<FUnifiedScriptValue> Arguments;
+    FUnifiedScriptInvocationResult Result;
+    const bool bRead = EventContext->Execute(
+        [&](FUnifiedScriptInvocationBridge& Bridge)
+        {
+            Bridge.ReadDelegateArguments(
+                DispatchFunction,
+                ParameterMemory,
+                Arguments,
+                Result);
+        });
+    if (!bRead || !Result.IsSuccess())
+    {
+        UE_LOG(
+            LogTemp,
+            Error,
+            TEXT("UnifiedScript event argument marshalling failed: %s"),
+            *Result.Message);
+        return;
+    }
+
+    ON_SCOPE_EXIT
+    {
+        EventContext->Execute(
+            [&](FUnifiedScriptInvocationBridge& Bridge)
+            {
+                Bridge.ReleaseEventArguments(Arguments);
+            });
+    };
+
+    TArray<FUnifiedScriptNativeValueV3> NativeArguments;
+    NativeArguments.SetNum(Arguments.Num());
+    TArray<uint8> ByteBuffer;
+    bool bEncoded = false;
+    uint32 ByteCount = 0;
+    constexpr uint32 MaximumByteCapacity = 16u * 1024u * 1024u;
+    for (uint32 Capacity = 4096; Capacity <= MaximumByteCapacity; Capacity *= 2)
+    {
+        ByteBuffer.SetNumUninitialized(static_cast<int32>(Capacity));
+        FUnifiedScriptNativeCallFrameV3 EncodingFrame;
+        EncodingFrame.ByteBuffer = ByteBuffer.GetData();
+        EncodingFrame.ByteCapacity = Capacity;
+        ByteCount = 0;
+        bEncoded = true;
+        for (int32 Index = 0; Index < Arguments.Num(); ++Index)
+        {
+            if (!EncodeValueV3(
+                    Arguments[Index],
+                    EncodingFrame,
+                    NativeArguments[Index],
+                    ByteCount))
+            {
+                bEncoded = false;
+                break;
+            }
+        }
+        if (bEncoded)
+        {
+            break;
+        }
+    }
+    if (!bEncoded)
+    {
+        UE_LOG(LogTemp, Error, TEXT("UnifiedScript event payload exceeded the ABI v4 limit."));
+        return;
+    }
+
+    FUnifiedScriptNativeEventFrameV4 Frame;
+    Frame.FrameSize = sizeof(Frame);
+    Frame.SubscriptionId = LocalSubscriptionId;
+    Frame.Source = LocalSourceHandle.Value;
+    Frame.EventId = LocalEventId;
+    Frame.Arguments = NativeArguments.GetData();
+    Frame.ArgumentCount = static_cast<uint32>(NativeArguments.Num());
+    Frame.ByteBuffer = ByteCount > 0 ? ByteBuffer.GetData() : nullptr;
+    Frame.ByteCount = ByteCount;
+    EventCallback(EventUserData, &Frame);
+}
+
+bool FUnifiedScriptNativeBridgeContext::SubscribeEvent(
+    FUnifiedScriptObjectHandle Source,
+    uint64 EventId,
+    const FString& EventPath,
+    FUnifiedScriptNativeEventCallbackV4 Callback,
+    void* UserData,
+    uint64& OutSubscriptionId)
+{
+    check(IsInGameThread());
+    OutSubscriptionId = 0;
+    if (Source.IsNull() || EventId == 0 || EventPath.IsEmpty() || Callback == nullptr ||
+        !TryRetain())
+    {
+        return false;
+    }
+
+    bool bBound = false;
+    {
+        FScopeLock Lock(&BridgeLock);
+        if (Bridge != nullptr)
+        {
+            UObject* SourceObject = nullptr;
+            const FMulticastDelegateProperty* DelegateProperty = nullptr;
+            FUnifiedScriptInvocationResult Result;
+            if (Bridge->ResolveMulticastDelegate(
+                    Source,
+                    EventPath,
+                    SourceObject,
+                    DelegateProperty,
+                    Result))
+            {
+                uint64 CandidateId = NextEventSubscriptionId++;
+                if (CandidateId == 0)
+                {
+                    CandidateId = NextEventSubscriptionId++;
+                }
+                TStrongObjectPtr<UObject> Proxy(NewObject<UUnifiedScriptDelegateProxy>());
+                if (CastChecked<UUnifiedScriptDelegateProxy>(Proxy.Get())->Bind(
+                        this,
+                        CandidateId,
+                        Source,
+                        EventId,
+                        SourceObject,
+                        DelegateProperty,
+                        Callback,
+                        UserData))
+                {
+                    EventSubscriptions.Add(CandidateId, MoveTemp(Proxy));
+                    OutSubscriptionId = CandidateId;
+                    bBound = true;
+                }
+            }
+            else
+            {
+                UE_LOG(LogTemp, Error, TEXT("%s"), *Result.Message);
+            }
+        }
+    }
+    if (!bBound)
+    {
+        Release();
+    }
+    return bBound;
+}
+
+bool FUnifiedScriptNativeBridgeContext::UnsubscribeEvent(uint64 SubscriptionId)
+{
+    check(IsInGameThread());
+    TStrongObjectPtr<UObject> Subscription;
+    {
+        FScopeLock Lock(&BridgeLock);
+        if (!EventSubscriptions.RemoveAndCopyValue(SubscriptionId, Subscription))
+        {
+            return false;
+        }
+    }
+    CastChecked<UUnifiedScriptDelegateProxy>(Subscription.Get())->Unbind();
+    Release();
+    return true;
+}
+
+namespace UE::UnifiedScript::NativeTransport::Private
+{
+uint64 SubscribeEvent(
+    void* Context,
+    uint64 Source,
+    uint64 EventId,
+    const uint8* EventPathData,
+    int32 EventPathLength,
+    FUnifiedScriptNativeEventCallbackV4 Callback,
+    void* UserData)
+{
+    FString EventPath;
+    if (Context == nullptr || Source == 0 || EventId == 0 || Callback == nullptr ||
+        !TryDecodeUtf8(EventPathData, EventPathLength, EventPath) ||
+        EventPath.IsEmpty() ||
+        UnifiedScriptMemberId(TCHAR_TO_UTF8(*EventPath)) != EventId)
+    {
+        return 0;
+    }
+    uint64 SubscriptionId = 0;
+    return static_cast<FUnifiedScriptNativeBridgeContext*>(Context)->SubscribeEvent(
+            {Source},
+            EventId,
+            EventPath,
+            Callback,
+            UserData,
+            SubscriptionId)
+        ? SubscriptionId
+        : 0;
+}
+
+uint8 UnsubscribeEvent(void* Context, uint64 SubscriptionId)
+{
+    return Context != nullptr && SubscriptionId != 0 &&
+        static_cast<FUnifiedScriptNativeBridgeContext*>(Context)->UnsubscribeEvent(
+            SubscriptionId)
+        ? 1
+        : 0;
+}
+}
+
 extern "C" const FUnifiedScriptNativeTransportV1*
 UEUnifiedScript_GetNativeTransportV1()
 {
@@ -1699,6 +2059,24 @@ UEUnifiedScript_GetNativeTransportV2()
         &WritePropertyById,
         &InvokeById,
         UEUnifiedScript_GetNativeTransportV3(),
+        UEUnifiedScript_GetNativeEventTransportV4(),
+    };
+    return &Transport;
+}
+
+extern "C" const FUnifiedScriptNativeEventTransportV4*
+UEUnifiedScript_GetNativeEventTransportV4()
+{
+    using namespace UE::UnifiedScript::NativeTransport::Private;
+    static const FUnifiedScriptNativeEventTransportV4 Transport = {
+        4,
+        sizeof(FUnifiedScriptNativeEventTransportV4),
+        sizeof(FUnifiedScriptNativeEventFrameV4),
+        sizeof(FUnifiedScriptNativeValueV3),
+        &RetainContext,
+        &ReleaseContext,
+        &SubscribeEvent,
+        &UnsubscribeEvent,
     };
     return &Transport;
 }

@@ -300,6 +300,9 @@ bool UE::UnifiedScript::Generated::DescribeInvokeResultCount(
     case 0xB324FB910D9CED26ull:
         OutResultCount = 1;
         return true;
+    case 0x5792FF1D76148D17ull:
+        OutResultCount = 0;
+        return true;
     case 0x5B7CEF7BDAF29749ull:
         OutResultCount = 1;
         return true;
@@ -329,6 +332,9 @@ bool UE::UnifiedScript::Generated::DescribeInvokeResultCount(
         return true;
     case 0x72F00766D165C3ACull:
         OutResultCount = 1;
+        return true;
+    case 0xB122BDB717D2DBECull:
+        OutResultCount = 0;
         return true;
     case 0x3CDA489A528A7F59ull:
         OutResultCount = 1;
@@ -425,6 +431,8 @@ bool UE::UnifiedScript::Generated::DescribeInvokeResult(
         default:
             return false;
         }
+    case 0x5792FF1D76148D17ull:
+        return false;
     case 0x5B7CEF7BDAF29749ull:
         switch (ResultIndex)
         {
@@ -509,6 +517,8 @@ bool UE::UnifiedScript::Generated::DescribeInvokeResult(
         default:
             return false;
         }
+    case 0xB122BDB717D2DBECull:
+        return false;
     case 0x3CDA489A528A7F59ull:
         switch (ResultIndex)
         {
@@ -1775,6 +1785,36 @@ bool UE::UnifiedScript::Generated::Invoke(
         Succeed(OutResult);
         return true;
     }
+    case 0x5792FF1D76148D17ull:
+    {
+        if (!RequireArgumentCount(Arguments, 2, OutResult))
+        {
+            return false;
+        }
+        UUnifiedScriptComponent* TypedTarget = ResolveTarget<UUnifiedScriptComponent>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        int32 Argument0 = 0;
+        if (!Arguments[0].TryGetInt32(Argument0))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:BroadcastManagedSignal' received an incompatible value."));
+        }
+        UObject* Argument1 = nullptr;
+        if (!DecodeObject(Registry, Arguments[1], false, Argument1, OutResult))
+        {
+            return false;
+        }
+        TypedTarget->BroadcastManagedSignal(Argument0, Argument1);
+        OutReturnValue = {};
+        Succeed(OutResult);
+        return true;
+    }
     case 0x5B7CEF7BDAF29749ull:
     {
         if (!RequireArgumentCount(Arguments, 2, OutResult))
@@ -2009,6 +2049,36 @@ bool UE::UnifiedScript::Generated::Invoke(
         }
         FVector ReturnValue = TypedTarget->AddVector(Argument0, Argument1);
         OutReturnValue = FUnifiedScriptValue::FromVector(ReturnValue);
+        Succeed(OutResult);
+        return true;
+    }
+    case 0xB122BDB717D2DBECull:
+    {
+        if (!RequireArgumentCount(Arguments, 2, OutResult))
+        {
+            return false;
+        }
+        UUnifiedScriptInteropFixture* TypedTarget = ResolveTarget<UUnifiedScriptInteropFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        int32 Argument0 = 0;
+        if (!Arguments[0].TryGetInt32(Argument0))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:BroadcastInteropChanged' received an incompatible value."));
+        }
+        UObject* Argument1 = nullptr;
+        if (!DecodeObject(Registry, Arguments[1], false, Argument1, OutResult))
+        {
+            return false;
+        }
+        TypedTarget->BroadcastInteropChanged(Argument0, Argument1);
+        OutReturnValue = {};
         Succeed(OutResult);
         return true;
     }

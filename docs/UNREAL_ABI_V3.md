@@ -167,5 +167,5 @@ Automation proves a retry increments the generated bridge invocation counter
 only once; and managed tests cover automatic arena expansion. The 10,000-call
 fixed-scalar test still reports zero steady-state managed allocations. ABI v1/v2
 remain available for old hosts and unsupported reflected shapes, while the live
-UE 5.8 lifecycle Demo continues to report `CallFrameCalls=16` and
+UE 5.8 lifecycle Demo now reports `CallFrameCalls=20` and
 `LegacyCalls=0`.

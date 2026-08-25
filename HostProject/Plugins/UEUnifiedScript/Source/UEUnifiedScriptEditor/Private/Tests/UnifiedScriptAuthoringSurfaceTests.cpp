@@ -40,15 +40,33 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
 
     TestEqual(TEXT("Demo Surface has one Script Asset"), Document.Assets.Num(), 1);
     TestEqual(TEXT("Demo Surface has one state"), Document.GetStateCount(), 1);
-    TestEqual(TEXT("Demo Surface has three Visual functions"), Document.GetFunctionCount(), 3);
-    TestEqual(TEXT("Demo Surface preserves all Graph nodes"), Document.GetActionCount(), 38);
-    TestEqual(TEXT("Demo Surface preserves all Graph edges"), Document.GetEdgeCount(), 37);
+    TestEqual(TEXT("Demo Surface has four Visual functions"), Document.GetFunctionCount(), 4);
+    TestEqual(TEXT("Demo Surface preserves all Graph nodes"), Document.GetActionCount(), 45);
+    TestEqual(TEXT("Demo Surface preserves all Graph edges"), Document.GetEdgeCount(), 43);
     TestEqual(
         TEXT("Demo Surface keeps the engine-neutral asset path"),
         Document.Assets[0].AssetPath,
         FString(TEXT("Unreal/Demo")));
 
-    const FUnifiedScriptAuthoringFunction& Function = Document.Assets[0].Functions[0];
+    const FUnifiedScriptAuthoringFunction* FunctionPtr =
+        Document.Assets[0].Functions.FindByPredicate([](
+            const FUnifiedScriptAuthoringFunction& Candidate)
+        {
+            return Candidate.Name == TEXT("ResolveInitialValue");
+        });
+    const FUnifiedScriptAuthoringFunction* EventFunction =
+        Document.Assets[0].Functions.FindByPredicate([](
+            const FUnifiedScriptAuthoringFunction& Candidate)
+        {
+            return Candidate.Name == TEXT("OnManagedSignal");
+        });
+    TestNotNull(TEXT("Demo retains the scalar Visual function"), FunctionPtr);
+    TestNotNull(TEXT("Demo projects the attributed UE Event Entry"), EventFunction);
+    if (FunctionPtr == nullptr || EventFunction == nullptr)
+    {
+        return false;
+    }
+    const FUnifiedScriptAuthoringFunction& Function = *FunctionPtr;
     TestEqual(
         TEXT("Presentation compacts leaf values without changing the Surface"),
         FUnifiedScriptGraphPresentation::CountVisibleActions(Function),
@@ -78,6 +96,43 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
                 FString(TEXT("Value = 100")));
         }
     }
+    const FUnifiedScriptAuthoringAction* EventEntry = EventFunction->Actions.FindByPredicate(
+        [](const FUnifiedScriptAuthoringAction& Action)
+        {
+            return Action.GraphKind == TEXT("unrealEventEntry");
+        });
+    TestNotNull(TEXT("Attributed method has a distinct Event Entry graph node"), EventEntry);
+    if (EventEntry != nullptr)
+    {
+        TestEqual(TEXT("Event Entry uses a Blueprint-style title"),
+            EventEntry->Title, FString(TEXT("Event OnManagedSignal")));
+        TestEqual(TEXT("Event Entry exposes two strongly typed payload pins"),
+            EventEntry->Ports.Num(), 3);
+        const FUnifiedScriptAuthoringPort* ValuePin = EventEntry->FindPort(
+            TEXT("eventArg0"), TEXT("output"));
+        const FUnifiedScriptAuthoringPort* ContextPin = EventEntry->FindPort(
+            TEXT("eventArg1"), TEXT("output"));
+        TestTrue(TEXT("Event payload pins retain int and UnrealObjectHandle types"),
+            ValuePin != nullptr && ValuePin->TypeDisplayName == TEXT("int") &&
+                ContextPin != nullptr &&
+                ContextPin->TypeDisplayName == TEXT("UnrealObjectHandle"));
+    }
+    FString EventPatchJson;
+    TestTrue(TEXT("Event palette can build a declaration-level Event Entry patch"),
+        FUnifiedScriptAuthoringSurfaceReader::BuildUnrealEventHandlerInsertionPatch(
+            Document,
+            Document.Assets[0],
+            TEXT("OnManagedSignalVisual2"),
+            TEXT("global::UnifiedScript.Unreal.Generated.UnifiedScriptComponent"),
+            TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:OnManagedSignal"),
+            EventFunction->Parameters,
+            EventPatchJson,
+            Error));
+    TestTrue(TEXT("Event Entry patch uses declaration v0.2 and the canonical event path"),
+        EventPatchJson.Contains(TEXT("unifiedscript.declaration-patch/v0.2")) &&
+            EventPatchJson.Contains(TEXT("addUnrealEventHandler")) &&
+            EventPatchJson.Contains(
+                TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:OnManagedSignal")));
     const FUnifiedScriptAuthoringEdit* LiteralEdit = nullptr;
     for (const FUnifiedScriptAuthoringAction& Action : Function.Actions)
     {
@@ -113,7 +168,12 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Patch carries the requested replacement"),
         PatchJson.Contains(TEXT("\"newValueText\": \"120\"")));
 
-    const FUnifiedScriptAuthoringFunction& RewireFunction = Document.Assets[0].Functions[1];
+    const FUnifiedScriptAuthoringFunction& RewireFunction =
+        *Document.Assets[0].Functions.FindByPredicate([](
+            const FUnifiedScriptAuthoringFunction& Candidate)
+        {
+            return Candidate.Name == TEXT("RewirePreview");
+        });
     TestEqual(
         TEXT("Demo publishes the positive graph round-trip function"),
         RewireFunction.Name,
@@ -212,7 +272,12 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
                 DeleteJson.Contains(TEXT("expectedPreviousSiblingId")));
     }
 
-    const FUnifiedScriptAuthoringFunction& ApiFunction = Document.Assets[0].Functions[2];
+    const FUnifiedScriptAuthoringFunction& ApiFunction =
+        *Document.Assets[0].Functions.FindByPredicate([](
+            const FUnifiedScriptAuthoringFunction& Candidate)
+        {
+            return Candidate.Name == TEXT("UEApiPreview");
+        });
     const FUnifiedScriptAuthoringRegion* ApiBlock = ApiFunction.Regions.FindByPredicate(
         [](const FUnifiedScriptAuthoringRegion& Region)
         {
@@ -337,6 +402,11 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
             TEXT("  http://127.0.0.1:4173///  ")),
         FString(TEXT("http://127.0.0.1:4173/api/authoring/semantic-patch")));
     TestEqual(
+        TEXT("Workbench declaration endpoint is normalized"),
+        FUnifiedScriptAuthoringWorkbench::BuildDeclarationPatchUrl(
+            TEXT("http://127.0.0.1:4173/")),
+        FString(TEXT("http://127.0.0.1:4173/api/authoring/declaration-patch")));
+    TestEqual(
         TEXT("Workbench patch-plan endpoint is normalized"),
         FUnifiedScriptAuthoringWorkbench::BuildSemanticPatchPlanUrl(TEXT("http://127.0.0.1:4173/")),
         FString(TEXT("http://127.0.0.1:4173/api/authoring/semantic-patch-plan")));
@@ -357,7 +427,7 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
     TestEqual(
         TEXT("Failed parse leaves the previous document unchanged"),
         FailedOutput.GetActionCount(),
-        38);
+        45);
 
     const FString WorkspaceJson = FString::Printf(
         TEXT("{\"schemaVersion\":\"unifiedscript.authoring-workspace/v0.2\","
@@ -376,7 +446,7 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("Workbench response revision is retained"), Workspace.Revision, int64(2));
     TestEqual(TEXT("Workbench response generation is retained"), Workspace.Generation, int64(3));
     TestEqual(TEXT("Workbench response replaces the Surface transactionally"),
-        Workspace.Surface.GetActionCount(), 38);
+        Workspace.Surface.GetActionCount(), 45);
     TestTrue(
         TEXT("Workbench error responses retain protocol diagnostics"),
         FUnifiedScriptAuthoringWorkbench::ParseErrorResponse(
@@ -390,18 +460,22 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         SNew(SUnifiedScriptAuthoringSurface).InitialSurfacePath(SurfacePath);
     TestTrue(TEXT("Native Slate workspace loads the checked-in Surface"),
         Widget->LoadSurface(SurfacePath));
+    TestTrue(
+        TEXT("Slate context palette exposes the reflected multicast Event Entry action"),
+        Widget->HasNodePaletteAction(
+            TEXT("ue.event|UnifiedScriptComponent|OnManagedSignal")));
     TestEqual(
         TEXT("Blueprint-style graph uses the compact presentation projection"),
         Widget->GetVisibleGraphNodeCount(),
-        FUnifiedScriptGraphPresentation::CountVisibleActions(Function));
+        FUnifiedScriptGraphPresentation::CountVisibleActions(*EventFunction));
     TestEqual(
         TEXT("Blueprint-style graph materializes every visible compiler-owned wire"),
         Widget->GetVisibleGraphEdgeCount(),
-        FUnifiedScriptGraphPresentation::CountVisibleEdges(Function));
+        FUnifiedScriptGraphPresentation::CountVisibleEdges(*EventFunction));
     TestEqual(
-        TEXT("My Script navigation activates the Demo visual function"),
+        TEXT("My Script navigation activates the UE Event Entry function"),
         Widget->GetActiveFunctionId(),
-        Function.Id);
+        EventFunction->Id);
     return true;
 }
 

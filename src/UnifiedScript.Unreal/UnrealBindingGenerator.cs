@@ -126,6 +126,87 @@ public sealed class UnrealBindingGenerator
             source.AppendLine("    }");
         }
 
+        foreach (UnrealReflectedDelegate reflectedDelegate in type.Delegates)
+        {
+            if (!reflectedDelegate.Traits.BlueprintAssignable)
+            {
+                diagnostics.Add(new UnrealBindingDiagnostic(
+                    "USUE2006",
+                    "The reflected delegate is not BlueprintAssignable and cannot be subscribed through the event bridge.",
+                    reflectedDelegate.Path));
+                continue;
+            }
+
+            string? returnType = GetManagedType(reflectedDelegate.ReturnType);
+            string? unsupportedParameter = reflectedDelegate.Parameters
+                .FirstOrDefault(parameter => GetManagedType(parameter.Type) is null)
+                ?.Name;
+            string? outputParameter = reflectedDelegate.Parameters
+                .FirstOrDefault(parameter =>
+                    parameter.Direction != UnrealParameterDirection.Input)
+                ?.Name;
+            if (returnType is null || unsupportedParameter is not null || outputParameter is not null)
+            {
+                diagnostics.Add(new UnrealBindingDiagnostic(
+                    "USUE2007",
+                    outputParameter is not null
+                        ? $"Delegate parameter '{outputParameter}' is not input-only; reverse output propagation is not supported by event ABI v4."
+                        : unsupportedParameter is null
+                        ? $"Delegate return type '{reflectedDelegate.ReturnType.NativeName}' is not supported by binding v0.2."
+                        : $"Delegate parameter '{unsupportedParameter}' has a type not supported by binding v0.2.",
+                    reflectedDelegate.Path));
+                continue;
+            }
+
+            string handlerName = MakeUniqueMemberName(
+                ToIdentifier(reflectedDelegate.Name + "Handler"),
+                reflectedDelegate.Path + ":handler",
+                memberNames);
+            string descriptorName = MakeUniqueMemberName(
+                ToIdentifier(reflectedDelegate.Name + "Event"),
+                reflectedDelegate.Path + ":descriptor",
+                memberNames);
+            string subscribeName = MakeUniqueMemberName(
+                ToIdentifier("Subscribe" + reflectedDelegate.Name),
+                reflectedDelegate.Path + ":subscribe",
+                memberNames);
+            string[] parameterNames = CreateParameterNames(reflectedDelegate.Parameters);
+
+            source.AppendLine();
+            source.Append("    public delegate ").Append(returnType).Append(' ')
+                .Append(handlerName).Append('(');
+            EmitParameterList(source, reflectedDelegate.Parameters, parameterNames);
+            source.AppendLine(");");
+
+            source.AppendLine();
+            source.Append("    public static global::UnifiedScript.Unreal.UnrealEventDescriptor ")
+                .Append(descriptorName).AppendLine(" { get; } = new(");
+            source.Append("        ").Append(MemberIdLiteral(reflectedDelegate.Path)).AppendLine(",");
+            source.Append("        ").Append(Literal(reflectedDelegate.Path)).AppendLine(",");
+            source.Append("        ").Append(Literal(reflectedDelegate.SignaturePath)).AppendLine(",");
+            source.Append("        typeof(").Append(returnType).AppendLine("),");
+            source.Append("        global::UnifiedScript.Unreal.UnrealDelegateKind.")
+                .Append(reflectedDelegate.Traits.Kind).AppendLine(",");
+            source.AppendLine("        [");
+            for (int index = 0; index < reflectedDelegate.Parameters.Count; index++)
+            {
+                UnrealReflectedParameter parameter = reflectedDelegate.Parameters[index];
+                source.Append("            new(").Append(Literal(parameter.Name)).Append(", typeof(")
+                    .Append(GetManagedType(parameter.Type)).Append("), ")
+                    .Append("global::UnifiedScript.Unreal.UnrealParameterDirection.")
+                    .Append(parameter.Direction).AppendLine("),");
+            }
+            source.AppendLine("        ]);");
+
+            source.AppendLine();
+            source.Append("    [global::UnifiedScript.Unreal.UnrealEventEndpointAttribute(")
+                .Append(Literal(reflectedDelegate.Path)).AppendLine(")]");
+            source.Append("    public global::UnifiedScript.Unreal.IUnrealEventSubscription ").Append(subscribeName)
+                .Append('(').Append(handlerName).AppendLine(" handler)");
+            source.Append("        => SubscribeEvent(").Append(descriptorName)
+                .AppendLine(", handler);");
+        }
+
         foreach (UnrealReflectedFunction function in type.Functions)
         {
             if (function.Traits.Static)
@@ -156,17 +237,7 @@ public sealed class UnrealBindingGenerator
             string[] parameterNames = CreateParameterNames(function.Parameters);
             source.AppendLine();
             source.Append("    public ").Append(returnType).Append(' ').Append(memberName).Append('(');
-            for (int index = 0; index < function.Parameters.Count; index++)
-            {
-                if (index > 0)
-                {
-                    source.Append(", ");
-                }
-
-                source.Append(DirectionModifier(function.Parameters[index].Direction))
-                    .Append(GetManagedType(function.Parameters[index].Type))
-                    .Append(' ').Append(parameterNames[index]);
-            }
+            EmitParameterList(source, function.Parameters, parameterNames);
 
             source.AppendLine(")");
             if (function.Parameters.Any(static parameter =>
@@ -222,6 +293,24 @@ public sealed class UnrealBindingGenerator
 
         source.AppendLine("}");
         source.AppendLine();
+    }
+
+    private static void EmitParameterList(
+        StringBuilder source,
+        IReadOnlyList<UnrealReflectedParameter> parameters,
+        IReadOnlyList<string> parameterNames)
+    {
+        for (int index = 0; index < parameters.Count; index++)
+        {
+            if (index > 0)
+            {
+                source.Append(", ");
+            }
+
+            source.Append(DirectionModifier(parameters[index].Direction))
+                .Append(GetManagedType(parameters[index].Type))
+                .Append(' ').Append(parameterNames[index]);
+        }
     }
 
     private static void EmitOutputInvocation(

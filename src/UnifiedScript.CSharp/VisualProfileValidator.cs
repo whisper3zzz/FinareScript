@@ -141,6 +141,13 @@ public sealed class VisualProfileValidator
                 return;
             }
 
+            // Method attributes describe declaration/entry semantics; they are
+            // compiled by Roslyn but are not executable nodes in the visual body.
+            if (node is AttributeListSyntax)
+            {
+                return;
+            }
+
             if (TryReportExplicitlyForbidden(node))
             {
                 return;

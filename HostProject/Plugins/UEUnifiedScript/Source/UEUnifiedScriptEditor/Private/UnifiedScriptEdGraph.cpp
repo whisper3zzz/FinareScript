@@ -3,7 +3,7 @@
  * @Author: whispersong
  * @Date: 2026-08-24 19:06:51
  * @LastEditors: whispersong
- * @LastEditTime: 2026-08-25 10:33:15
+ * @LastEditTime: 2026-08-25 14:22:40
  * @FilePath: \Plugins\UEUnifiedScript\Source\UEUnifiedScriptEditor\Private\UnifiedScriptEdGraph.cpp
  * @Description:
  */
@@ -70,6 +70,10 @@ FLinearColor UUnifiedScriptEdGraphNode::GetNodeTitleColor() const
     if (Category == TEXT("state") || NodeKind == TEXT("variable"))
     {
         return FLinearColor(0.38f, 0.23f, 0.70f);
+    }
+    if (NodeKind == TEXT("unrealEventEntry"))
+    {
+        return FLinearColor(0.78f, 0.12f, 0.18f);
     }
     if (NodeKind == TEXT("entry"))
     {

@@ -139,22 +139,33 @@ public sealed class AuthoringSurfaceProjector
                 region.ChildRegionIds))
             .ToArray();
 
-        AuthoringParameterSurface[] parameters = declaration.Parameters.Select(parameter =>
+        GraphNode? eventEntry = function.Nodes.FirstOrDefault(
+            static node => node.Kind == "unrealEventEntry");
+        AuthoringParameterSurface[] parameters = declaration.Parameters.Select((parameter, index) =>
         {
             GraphNode? reference = function.Nodes.FirstOrDefault(node =>
                 node.Properties.TryGetValue("referencedSymbolId", out string? declarationId) &&
                 declarationId == parameter.Id.Value &&
                 node.Properties.ContainsKey("typeId"));
-            SemanticId? typeId = reference is not null &&
+            SemanticId? typeId = eventEntry is not null &&
+                eventEntry.Properties.TryGetValue(
+                    $"eventParameter{index}TypeId",
+                    out string? eventTypeId) &&
+                SemanticId.TryParse(eventTypeId, out SemanticId parsedEventTypeId)
+                    ? parsedEventTypeId
+                    : reference is not null &&
                 SemanticId.TryParse(reference.Properties["typeId"], out SemanticId parsedTypeId)
                     ? parsedTypeId
                     : null;
+            string? typeDisplayName = eventEntry?.Properties.GetValueOrDefault(
+                $"eventParameter{index}ResolvedType") ??
+                reference?.Properties.GetValueOrDefault("resolvedType");
             return new AuthoringParameterSurface(
                 parameter.Id,
                 parameter.Name,
                 parameter.TypeMetadataName,
                 typeId,
-                reference?.Properties.GetValueOrDefault("resolvedType"));
+                typeDisplayName);
         }).ToArray();
 
         return new AuthoringFunctionSurface(
@@ -192,6 +203,24 @@ public sealed class AuthoringSurfaceProjector
             }
 
             GraphNode typeSource = node;
+            if (node.Kind == "unrealEventEntry" &&
+                port.Name.StartsWith("eventArg", StringComparison.Ordinal) &&
+                int.TryParse(port.Name.AsSpan("eventArg".Length), out int eventParameterIndex))
+            {
+                SemanticId? eventTypeId = node.Properties.TryGetValue(
+                        $"eventParameter{eventParameterIndex}TypeId",
+                        out string? eventTypeValue) &&
+                    SemanticId.TryParse(eventTypeValue, out SemanticId parsedEventTypeId)
+                        ? parsedEventTypeId
+                        : null;
+                return new AuthoringPortSurface(
+                    port.Name,
+                    port.Direction,
+                    port.Kind,
+                    eventTypeId,
+                    node.Properties.GetValueOrDefault(
+                        $"eventParameter{eventParameterIndex}ResolvedType"));
+            }
             if (port.Direction == GraphPortDirection.Input &&
                 incomingData.TryGetValue((node.Id, port.Name), out GraphEdge? incoming) &&
                 nodes.TryGetValue(incoming.FromNode, out GraphNode? source))
@@ -214,7 +243,7 @@ public sealed class AuthoringSurfaceProjector
 
     private static AuthoringActionCategory Classify(GraphNode node) => node.Kind switch
     {
-        "entry" => AuthoringActionCategory.Entry,
+        "entry" or "unrealEventEntry" => AuthoringActionCategory.Entry,
         "variable" or "assignment" => AuthoringActionCategory.State,
         "branch" or "loop" or "loopEntry" or "break" or "continue" =>
             AuthoringActionCategory.Flow,
@@ -230,6 +259,7 @@ public sealed class AuthoringSurfaceProjector
         ExpressionFormatter formatter) => node.Kind switch
     {
         "entry" => declaration.Name,
+        "unrealEventEntry" => $"Event {declaration.Name}",
         "assignment" when formatter.TryInput(node.Id, "target", out string target) =>
             $"Set {target}",
         "identifier" => $"Get {Property(node, "name", node.Label)}",
@@ -242,6 +272,8 @@ public sealed class AuthoringSurfaceProjector
         ExpressionFormatter formatter) => node.Kind switch
     {
         "entry" => FormatSignature(declaration),
+        "unrealEventEntry" => $"UE {Property(node, "unrealEventPath", "delegate")}\n" +
+            FormatSignature(declaration),
         "variable" => FormatVariable(node, formatter),
         "assignment" => $"{formatter.Input(node.Id, "target")} " +
             $"{Property(node, "operator", node.Label)} {formatter.Input(node.Id, "assignedValue")}",

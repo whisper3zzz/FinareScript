@@ -48,6 +48,12 @@ public enum UnrealNativeAccess
     Private,
 }
 
+public enum UnrealDelegateKind
+{
+    SingleCast,
+    Multicast,
+}
+
 public sealed record UnrealEngineIdentity(
     int Major,
     int Minor,
@@ -96,6 +102,21 @@ public sealed record UnrealReflectedFunction(
     IReadOnlyList<UnrealReflectedParameter> Parameters,
     UnrealFunctionTraits Traits);
 
+public sealed record UnrealDelegateTraits(
+    UnrealDelegateKind Kind,
+    bool BlueprintAssignable,
+    bool BlueprintCallable,
+    bool BlueprintAuthorityOnly,
+    UnrealNativeAccess NativeAccess = UnrealNativeAccess.Public);
+
+public sealed record UnrealReflectedDelegate(
+    string Path,
+    string Name,
+    string SignaturePath,
+    UnrealTypeReference ReturnType,
+    IReadOnlyList<UnrealReflectedParameter> Parameters,
+    UnrealDelegateTraits Traits);
+
 public sealed record UnrealReflectedType(
     string Path,
     string Name,
@@ -106,7 +127,10 @@ public sealed record UnrealReflectedType(
     UnrealTypeTraits Traits,
     IReadOnlyList<UnrealReflectedProperty> Properties,
     IReadOnlyList<UnrealReflectedFunction> Functions,
-    string? HeaderPath = null);
+    string? HeaderPath = null)
+{
+    public IReadOnlyList<UnrealReflectedDelegate> Delegates { get; init; } = [];
+}
 
 public sealed record UnrealReflectionManifest(
     string SchemaVersion,
@@ -114,7 +138,9 @@ public sealed record UnrealReflectionManifest(
     IReadOnlyList<string> Modules,
     IReadOnlyList<UnrealReflectedType> Types)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.unreal-reflection/v0.1";
+    public const string CurrentSchemaVersion = "unifiedscript.unreal-reflection/v0.2";
+
+    public const string LegacySchemaVersion = "unifiedscript.unreal-reflection/v0.1";
 
     public static UnrealReflectionManifest Create(
         UnrealEngineIdentity engine,

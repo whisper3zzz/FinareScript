@@ -450,7 +450,7 @@ function renderStateInspector(item) {
     <section class="inspector-section source-contract"><div class="section-title-row"><h3>CANONICAL TEXT</h3><span>AI READABLE</span></div><pre id="canonicalDeclaration">${escapeHtml(canonicalDeclaration(item))}</pre></section>
     <section class="inspector-section identity-section"><h3>SEMANTIC IDENTITY</h3><button id="semanticId" class="identity-value" type="button">${semanticShort(item.semanticId)}</button><div class="identity-facts"><span>TEXT <b>✓</b></span><span>SURFACE <b>✓</b></span><span>AI <b>✓</b></span></div></section>
     <button id="removeStateButton" class="inspector-danger" type="button">REMOVE STATE</button>
-    <div class="prototype-warning"><strong>DECLARATION IR + PATCH v0.1</strong><p>变量只声明一次；文本、可视化、AI 与未来 UE 反射层共享同一个语义身份。</p></div>`;
+    <div class="prototype-warning"><strong>DECLARATION IR + PATCH v0.2</strong><p>变量只声明一次；文本、可视化、AI 与未来 UE 反射层共享同一个语义身份。</p></div>`;
   bindStateInspector(item);
 }
 
@@ -658,7 +658,7 @@ function buildDeclarationPatch(includeAiSuggestion = false) {
     operation: 'removeState', targetStateId: item.semanticId, expected: item.original,
   })));
   return {
-    schemaVersion: 'unifiedscript.declaration-patch/v0.1',
+    schemaVersion: 'unifiedscript.declaration-patch/v0.2',
     sourceCompilationId: state.sourceCompilationId,
     semanticConfigurationId: state.semanticConfigurationId,
     operations,

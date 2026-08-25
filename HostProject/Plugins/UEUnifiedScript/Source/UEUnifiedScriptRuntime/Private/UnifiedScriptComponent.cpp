@@ -536,6 +536,11 @@ int32 UUnifiedScriptComponent::Add(int32 Left, int32 Right) const
     return Left + Right;
 }
 
+void UUnifiedScriptComponent::BroadcastManagedSignal(int32 Value, UObject* Context)
+{
+    OnManagedSignal.Broadcast(Value, Context);
+}
+
 bool UUnifiedScriptComponent::ConsumeReloadRequest()
 {
     const bool bWasRequested = bReloadRequested;

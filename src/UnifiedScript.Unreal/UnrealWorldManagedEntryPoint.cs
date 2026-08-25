@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Loader;
+using System.Text;
 
 namespace UnifiedScript.Unreal;
 
@@ -41,10 +42,12 @@ public interface IUnrealManagedScript
 public static class UnrealWorldManagedEntryPoint
 {
     private static readonly ConcurrentDictionary<ulong, WorldEntry> Worlds = new();
+    private static readonly ConcurrentDictionary<ulong, string> BoundaryErrors = new();
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int CreateWorld(ulong worldId, nint context, nint transportTable)
     {
+        ClearBoundaryFailure(worldId);
         if (worldId == 0 || context == nint.Zero || transportTable == nint.Zero)
         {
             return (int)UnrealWorldManagedEntryStatus.InvalidArgument;
@@ -59,8 +62,9 @@ public static class UnrealWorldManagedEntryPoint
         {
             return (int)UnrealWorldManagedEntryStatus.NativeContextUnavailable;
         }
-        catch
+        catch (Exception exception)
         {
+            ReportBoundaryFailure(worldId, nameof(CreateWorld), exception);
             return (int)UnrealWorldManagedEntryStatus.InternalFailure;
         }
 
@@ -76,6 +80,7 @@ public static class UnrealWorldManagedEntryPoint
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int DestroyWorld(ulong worldId)
     {
+        ClearBoundaryFailure(worldId);
         if (!Worlds.TryRemove(worldId, out WorldEntry? entry))
         {
             return (int)UnrealWorldManagedEntryStatus.WorldNotFound;
@@ -86,8 +91,9 @@ public static class UnrealWorldManagedEntryPoint
             entry.Dispose();
             return (int)UnrealWorldManagedEntryStatus.Success;
         }
-        catch
+        catch (Exception exception)
         {
+            ReportBoundaryFailure(worldId, nameof(DestroyWorld), exception);
             return (int)UnrealWorldManagedEntryStatus.InternalFailure;
         }
     }
@@ -106,6 +112,7 @@ public static class UnrealWorldManagedEntryPoint
         nint typeNameData,
         int typeNameLength)
     {
+        ClearBoundaryFailure(worldId);
         if (instanceId == 0 || host == 0 || target == 0)
         {
             return (int)UnrealWorldManagedEntryStatus.InvalidArgument;
@@ -124,8 +131,9 @@ public static class UnrealWorldManagedEntryPoint
                 ReadUtf8(assemblyPathData, assemblyPathLength),
                 ReadUtf8(typeNameData, typeNameLength));
         }
-        catch
+        catch (Exception exception)
         {
+            ReportBoundaryFailure(worldId, nameof(CreateScript), exception);
             return (int)UnrealWorldManagedEntryStatus.InternalFailure;
         }
     }
@@ -133,6 +141,7 @@ public static class UnrealWorldManagedEntryPoint
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int TickScript(ulong worldId, ulong instanceId, float deltaSeconds)
     {
+        ClearBoundaryFailure(worldId);
         if (!Worlds.TryGetValue(worldId, out WorldEntry? entry))
         {
             return (int)UnrealWorldManagedEntryStatus.WorldNotFound;
@@ -141,8 +150,9 @@ public static class UnrealWorldManagedEntryPoint
         {
             return (int)entry.TickScript(instanceId, deltaSeconds);
         }
-        catch
+        catch (Exception exception)
         {
+            ReportBoundaryFailure(worldId, nameof(TickScript), exception);
             return (int)UnrealWorldManagedEntryStatus.InternalFailure;
         }
     }
@@ -155,6 +165,7 @@ public static class UnrealWorldManagedEntryPoint
         ulong source,
         ulong argument)
     {
+        ClearBoundaryFailure(worldId);
         if (instanceId == 0 || source == 0 ||
             !Enum.IsDefined((UnrealScriptEventKind)eventKind))
         {
@@ -173,8 +184,9 @@ public static class UnrealWorldManagedEntryPoint
                     new UnrealObjectHandle(source),
                     new UnrealObjectHandle(argument)));
         }
-        catch
+        catch (Exception exception)
         {
+            ReportBoundaryFailure(worldId, nameof(DispatchEvent), exception);
             return (int)UnrealWorldManagedEntryStatus.InternalFailure;
         }
     }
@@ -188,6 +200,7 @@ public static class UnrealWorldManagedEntryPoint
         nint typeNameData,
         int typeNameLength)
     {
+        ClearBoundaryFailure(worldId);
         if (!Worlds.TryGetValue(worldId, out WorldEntry? entry))
         {
             return -(int)UnrealWorldManagedEntryStatus.WorldNotFound;
@@ -202,8 +215,9 @@ public static class UnrealWorldManagedEntryPoint
                 ? generation
                 : -(int)UnrealWorldManagedEntryStatus.ScriptNotFound;
         }
-        catch
+        catch (Exception exception)
         {
+            ReportBoundaryFailure(worldId, nameof(ReloadScript), exception);
             return -(int)UnrealWorldManagedEntryStatus.InternalFailure;
         }
     }
@@ -211,6 +225,7 @@ public static class UnrealWorldManagedEntryPoint
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int DestroyScript(ulong worldId, ulong instanceId)
     {
+        ClearBoundaryFailure(worldId);
         if (!Worlds.TryGetValue(worldId, out WorldEntry? entry))
         {
             return (int)UnrealWorldManagedEntryStatus.WorldNotFound;
@@ -219,8 +234,9 @@ public static class UnrealWorldManagedEntryPoint
         {
             return (int)entry.DestroyScript(instanceId);
         }
-        catch
+        catch (Exception exception)
         {
+            ReportBoundaryFailure(worldId, nameof(DestroyScript), exception);
             return (int)UnrealWorldManagedEntryStatus.InternalFailure;
         }
     }
@@ -237,6 +253,7 @@ public static class UnrealWorldManagedEntryPoint
         nint callFrameInvocationCount,
         nint legacyInvocationCount)
     {
+        ClearBoundaryFailure(worldId);
         if (callFrameInvocationCount == nint.Zero || legacyInvocationCount == nint.Zero)
         {
             return (int)UnrealWorldManagedEntryStatus.InvalidArgument;
@@ -252,10 +269,36 @@ public static class UnrealWorldManagedEntryPoint
             Marshal.WriteInt64(legacyInvocationCount, legacy);
             return (int)UnrealWorldManagedEntryStatus.Success;
         }
-        catch
+        catch (Exception exception)
         {
+            ReportBoundaryFailure(worldId, nameof(GetInvocationMetrics), exception);
             return (int)UnrealWorldManagedEntryStatus.InternalFailure;
         }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static unsafe int GetLastError(
+        ulong worldId,
+        nint buffer,
+        int bufferCapacity)
+    {
+        if (worldId == 0 || bufferCapacity < 0 ||
+            !BoundaryErrors.TryGetValue(worldId, out string? message))
+        {
+            return 0;
+        }
+
+        int requiredBytes = Encoding.UTF8.GetByteCount(message);
+        if (buffer == nint.Zero || bufferCapacity <= requiredBytes)
+        {
+            return requiredBytes;
+        }
+
+        var destination = new Span<byte>((void*)buffer, bufferCapacity);
+        int written = Encoding.UTF8.GetBytes(message, destination);
+        destination[written] = 0;
+        BoundaryErrors.TryRemove(worldId, out _);
+        return written;
     }
 
     private static string ReadUtf8(nint data, int length)
@@ -266,6 +309,42 @@ public static class UnrealWorldManagedEntryPoint
         }
         return Marshal.PtrToStringUTF8(data, length) ??
             throw new InvalidOperationException("The UTF-8 slice could not be decoded.");
+    }
+
+    private static void ClearBoundaryFailure(ulong worldId)
+    {
+        if (worldId != 0)
+        {
+            BoundaryErrors.TryRemove(worldId, out _);
+        }
+    }
+
+    private static void ReportBoundaryFailure(
+        ulong worldId,
+        string operation,
+        Exception exception)
+    {
+        string detail = $"{operation}: {exception}";
+        if (worldId != 0)
+        {
+            BoundaryErrors[worldId] = detail;
+        }
+        string message = $"[{DateTimeOffset.UtcNow:O}] {detail}{Environment.NewLine}";
+        Console.Error.WriteLine(message);
+        string? diagnosticPath = Environment.GetEnvironmentVariable(
+            "UNIFIEDSCRIPT_MANAGED_DIAGNOSTIC_PATH");
+        if (string.IsNullOrWhiteSpace(diagnosticPath))
+        {
+            return;
+        }
+        try
+        {
+            File.AppendAllText(Path.GetFullPath(diagnosticPath), message);
+        }
+        catch
+        {
+            // Boundary reporting must never replace the original host status.
+        }
     }
 
     private sealed class WorldEntry : IDisposable
@@ -481,7 +560,7 @@ public static class UnrealWorldManagedEntryPoint
 
         public void Start()
         {
-            _current.Script.OnStart(CreateContext(_current.Generation));
+            StartGeneration(_current);
             _started = true;
         }
 
@@ -517,18 +596,19 @@ public static class UnrealWorldManagedEntryPoint
             if (_started)
             {
                 previous.Script.OnStop();
+                previous.Bridge.ClearSubscriptions();
                 _started = false;
             }
 
             try
             {
-                next.Script.OnStart(CreateContext(next.Generation));
+                StartGeneration(next);
                 _started = true;
             }
             catch
             {
                 next.Dispose();
-                previous.Script.OnStart(CreateContext(previous.Generation));
+                StartGeneration(previous);
                 _started = true;
                 throw;
             }
@@ -556,8 +636,15 @@ public static class UnrealWorldManagedEntryPoint
             }
         }
 
-        private UnrealScriptContext CreateContext(int generation)
-            => new(_bridge, _host, _target, _instanceId, generation);
+        private UnrealScriptContext CreateContext(ScriptGeneration generation)
+            => new(generation.Bridge, _host, _target, _instanceId, generation.Generation);
+
+        private void StartGeneration(ScriptGeneration generation)
+        {
+            UnrealScriptContext context = CreateContext(generation);
+            generation.Script.OnStart(context);
+            _ = UnrealEventBinder.BindAttributedEvents(generation.Script, context);
+        }
 
         private ScriptGeneration LoadGeneration(
             int generation,
@@ -578,7 +665,11 @@ public static class UnrealWorldManagedEntryPoint
                     throw new InvalidOperationException(
                         $"Managed script type '{typeName}' does not implement {nameof(IUnrealManagedScript)}.");
                 }
-                return new ScriptGeneration(generation, loadContext, script);
+                return new ScriptGeneration(
+                    generation,
+                    loadContext,
+                    script,
+                    new UnrealGenerationInvocationBridge(_bridge));
             }
             catch
             {
@@ -591,9 +682,14 @@ public static class UnrealWorldManagedEntryPoint
     private sealed record ScriptGeneration(
         int Generation,
         ScriptAssemblyLoadContext LoadContext,
-        IUnrealManagedScript Script) : IDisposable
+        IUnrealManagedScript Script,
+        UnrealGenerationInvocationBridge Bridge) : IDisposable
     {
-        public void Dispose() => LoadContext.Unload();
+        public void Dispose()
+        {
+            Bridge.Dispose();
+            LoadContext.Unload();
+        }
     }
 
     private sealed class ScriptAssemblyLoadContext(
@@ -612,10 +708,16 @@ public static class UnrealWorldManagedEntryPoint
 
         protected override Assembly? Load(AssemblyName assemblyName)
         {
-            Assembly sharedContract = typeof(IUnrealManagedScript).Assembly;
-            if (AssemblyName.ReferenceMatchesDefinition(
-                    sharedContract.GetName(),
-                    assemblyName))
+            Assembly? sharedContract = new[]
+                {
+                    typeof(IUnrealManagedScript).Assembly,
+                    typeof(global::UnifiedScript.VisualAttribute).Assembly,
+                }
+                .Distinct()
+                .FirstOrDefault(candidate => AssemblyName.ReferenceMatchesDefinition(
+                    candidate.GetName(),
+                    assemblyName));
+            if (sharedContract is not null)
             {
                 return sharedContract;
             }

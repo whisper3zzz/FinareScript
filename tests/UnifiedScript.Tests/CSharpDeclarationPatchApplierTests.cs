@@ -1,6 +1,8 @@
 using System.Text.Json;
 using UnifiedScript.Core;
 using UnifiedScript.CSharp;
+using UnifiedScript.Graph;
+using UnifiedScript.Unreal;
 
 namespace UnifiedScript.Tests;
 
@@ -222,6 +224,85 @@ public sealed class CSharpDeclarationPatchApplierTests
         Assert.Null(result.PatchedRequest);
         Assert.Contains(result.Diagnostics, static diagnostic =>
             diagnostic.Code == DeclarationPatchDiagnosticCodes.InvalidReplacement);
+    }
+
+    [Fact]
+    public void ApplyAddsRoundTrippableUnrealEventEntryMethod()
+    {
+        const string eventSource = """
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+
+            namespace Game;
+
+            public sealed class FixtureComponent : UnrealObject
+            {
+                public FixtureComponent(UnrealObjectHandle handle, IUnrealInvocationBridge bridge)
+                    : base(handle, bridge) { }
+
+                public delegate void ChangedHandler(int value, UnrealObjectHandle context);
+
+                [UnrealEventEndpoint("/Script/Fixture.FixtureComponent:OnChanged")]
+                public IUnrealEventSubscription SubscribeChanged(ChangedHandler handler) =>
+                    throw new System.NotImplementedException();
+            }
+
+            [ScriptAsset("Combat/EventPolicy")]
+            public sealed class EventPolicy
+            {
+                [Visual]
+                public int Preview(int value)
+                {
+                    return value;
+                }
+            }
+            """;
+        var request = new CSharpCompilationRequest(
+            "UnrealEventDeclarationPatchTests",
+            [new CSharpSourceDocument("Game/EventPolicy.cs", eventSource)],
+            [typeof(UnrealObject).Assembly.Location]);
+        CSharpAnalysisResult original = Analyze(request);
+        ScriptAssetDeclaration asset = Assert.Single(original.ScriptAssets!.Assets);
+        DeclarationPatchDocument patch = Patch(
+            original,
+            new AddUnrealEventHandlerPatchOperation(
+                asset.Id,
+                new UnrealEventHandlerPatchSpec(
+                    "OnChanged",
+                    "global::Game.FixtureComponent",
+                    "/Script/Fixture.FixtureComponent:OnChanged",
+                    "target",
+                    null,
+                    [
+                        new("value", "int"),
+                        new("context", "global::UnifiedScript.Unreal.UnrealObjectHandle"),
+                    ])));
+
+        CSharpPatchResult result = new CSharpDeclarationPatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string source = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains("[global::UnifiedScript.Visual]", source, StringComparison.Ordinal);
+        Assert.Contains(
+            "[global::UnifiedScript.Unreal.UnrealEvent(typeof(global::Game.FixtureComponent), \"/Script/Fixture.FixtureComponent:OnChanged\")]",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "private void OnChanged(int value, global::UnifiedScript.Unreal.UnrealObjectHandle context)",
+            source,
+            StringComparison.Ordinal);
+        GraphDocument graph = new HirGraphProjector().Project(
+            result.Analysis!.Hir!,
+            result.Analysis.Semantics!,
+            result.Analysis.DeclarationReferences);
+        GraphNode eventEntry = Assert.Single(
+            graph.Functions
+                .Single(function => function.QualifiedName.EndsWith(".OnChanged", StringComparison.Ordinal))
+                .Nodes,
+            static node => node.Kind == "unrealEventEntry");
+        Assert.Equal(
+            "/Script/Fixture.FixtureComponent:OnChanged",
+            eventEntry.Properties["unrealEventPath"]);
     }
 
     private static (CSharpCompilationRequest Request, CSharpAnalysisResult Analysis) CreatePersistentRequest()

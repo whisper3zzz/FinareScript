@@ -1,5 +1,6 @@
 #include "UnifiedScriptCoreClrHost.h"
 
+#include "Containers/StringConv.h"
 #include "HAL/FileManager.h"
 #include "Interfaces/IPluginManager.h"
 #include "Misc/Paths.h"
@@ -75,8 +76,58 @@ using FGetInvocationMetricsEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
     uint64 WorldHostId,
     uint64* OutCallFrameInvocationCount,
     uint64* OutLegacyInvocationCount);
+using FGetLastErrorEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
+    uint64 WorldHostId,
+    uint8* Buffer,
+    int32 BufferCapacity);
 
 constexpr int32 LoadAssemblyAndGetFunctionPointerDelegateType = 5;
+constexpr int32 MaximumManagedBoundaryErrorBytes = 1024 * 1024;
+
+FString ReadManagedBoundaryError(
+    FGetLastErrorEntryPoint EntryPoint,
+    uint64 WorldHostId)
+{
+    if (EntryPoint == nullptr)
+    {
+        return {};
+    }
+
+    const int32 RequiredBytes = EntryPoint(WorldHostId, nullptr, 0);
+    if (RequiredBytes <= 0 || RequiredBytes > MaximumManagedBoundaryErrorBytes)
+    {
+        return {};
+    }
+
+    TArray<uint8> Buffer;
+    Buffer.SetNumZeroed(RequiredBytes + 1);
+    const int32 WrittenBytes = EntryPoint(
+        WorldHostId,
+        Buffer.GetData(),
+        Buffer.Num());
+    if (WrittenBytes <= 0 || WrittenBytes > RequiredBytes)
+    {
+        return {};
+    }
+    return FString(UTF8_TO_TCHAR(reinterpret_cast<const char*>(Buffer.GetData())));
+}
+
+FString DescribeManagedFailure(
+    const TCHAR* Operation,
+    int32 Status,
+    FGetLastErrorEntryPoint ErrorEntryPoint,
+    uint64 WorldHostId)
+{
+    const FString Detail = ReadManagedBoundaryError(ErrorEntryPoint, WorldHostId);
+    return Detail.IsEmpty()
+        ? FString::Printf(TEXT("%s failed with status %d."), Operation, Status)
+        : FString::Printf(
+              TEXT("%s failed with status %d.%s%s"),
+              Operation,
+              Status,
+              LINE_TERMINATOR,
+              *Detail);
+}
 
 FString GetHostFxrFileName()
 {
@@ -237,6 +288,7 @@ void FUnifiedScriptCoreClrHost::Shutdown()
     DestroyScriptEntryPoint = nullptr;
     GetScriptCountEntryPoint = nullptr;
     GetInvocationMetricsEntryPoint = nullptr;
+    GetLastManagedErrorEntryPoint = nullptr;
     LoadAssemblyAndGetFunctionPointer = nullptr;
     if (HostFxrLibrary != nullptr)
     {
@@ -283,9 +335,11 @@ bool FUnifiedScriptCoreClrHost::CreateManagedWorld(
         CreateWorldEntryPoint)(WorldHostId, Context, Transport);
     if (Result != 0)
     {
-        OutError = FString::Printf(
-            TEXT("Managed World creation failed with status %d."),
-            Result);
+        OutError = DescribeManagedFailure(
+            TEXT("Managed World creation"),
+            Result,
+            reinterpret_cast<FGetLastErrorEntryPoint>(GetLastManagedErrorEntryPoint),
+            WorldHostId);
         return false;
     }
     OutError.Reset();
@@ -308,9 +362,11 @@ bool FUnifiedScriptCoreClrHost::DestroyManagedWorld(
         DestroyWorldEntryPoint)(WorldHostId);
     if (Result != 0)
     {
-        OutError = FString::Printf(
-            TEXT("Managed World destruction failed with status %d."),
-            Result);
+        OutError = DescribeManagedFailure(
+            TEXT("Managed World destruction"),
+            Result,
+            reinterpret_cast<FGetLastErrorEntryPoint>(GetLastManagedErrorEntryPoint),
+            WorldHostId);
         return false;
     }
     OutError.Reset();
@@ -329,6 +385,7 @@ bool FUnifiedScriptCoreClrHost::CreateManagedScript(
     using namespace UE::UnifiedScript::CoreClr::Private;
     check(IsInGameThread());
     FCreateScriptEntryPoint EntryPoint = nullptr;
+    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
     {
         FScopeLock Lock(&StateLock);
         if (State != EUnifiedScriptCoreClrHostState::Ready ||
@@ -338,6 +395,7 @@ bool FUnifiedScriptCoreClrHost::CreateManagedScript(
             return false;
         }
         EntryPoint = reinterpret_cast<FCreateScriptEntryPoint>(CreateScriptEntryPoint);
+        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(GetLastManagedErrorEntryPoint);
     }
     if (AssemblyPath.IsEmpty() || !IFileManager::Get().FileExists(*AssemblyPath))
     {
@@ -365,9 +423,11 @@ bool FUnifiedScriptCoreClrHost::CreateManagedScript(
         TypeNameUtf8.Length());
     if (Result != 0)
     {
-        OutError = FString::Printf(
-            TEXT("Managed script creation failed with status %d."),
-            Result);
+        OutError = DescribeManagedFailure(
+            TEXT("Managed script creation"),
+            Result,
+            ErrorEntryPoint,
+            WorldHostId);
         return false;
     }
     OutError.Reset();
@@ -383,6 +443,7 @@ bool FUnifiedScriptCoreClrHost::TickManagedScript(
     using namespace UE::UnifiedScript::CoreClr::Private;
     check(IsInGameThread());
     FTickScriptEntryPoint EntryPoint = nullptr;
+    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
     {
         FScopeLock Lock(&StateLock);
         if (State != EUnifiedScriptCoreClrHostState::Ready ||
@@ -392,13 +453,16 @@ bool FUnifiedScriptCoreClrHost::TickManagedScript(
             return false;
         }
         EntryPoint = reinterpret_cast<FTickScriptEntryPoint>(TickScriptEntryPoint);
+        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(GetLastManagedErrorEntryPoint);
     }
     const int32 Result = EntryPoint(WorldHostId, InstanceId, DeltaSeconds);
     if (Result != 0)
     {
-        OutError = FString::Printf(
-            TEXT("Managed script tick failed with status %d."),
-            Result);
+        OutError = DescribeManagedFailure(
+            TEXT("Managed script tick"),
+            Result,
+            ErrorEntryPoint,
+            WorldHostId);
         return false;
     }
     OutError.Reset();
@@ -416,6 +480,7 @@ bool FUnifiedScriptCoreClrHost::DispatchManagedEvent(
     using namespace UE::UnifiedScript::CoreClr::Private;
     check(IsInGameThread());
     FDispatchEventEntryPoint EntryPoint = nullptr;
+    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
     {
         FScopeLock Lock(&StateLock);
         if (State != EUnifiedScriptCoreClrHostState::Ready ||
@@ -425,6 +490,7 @@ bool FUnifiedScriptCoreClrHost::DispatchManagedEvent(
             return false;
         }
         EntryPoint = reinterpret_cast<FDispatchEventEntryPoint>(DispatchEventEntryPoint);
+        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(GetLastManagedErrorEntryPoint);
     }
     const int32 Result = EntryPoint(
         WorldHostId,
@@ -434,9 +500,11 @@ bool FUnifiedScriptCoreClrHost::DispatchManagedEvent(
         Argument);
     if (Result != 0)
     {
-        OutError = FString::Printf(
-            TEXT("Managed script event dispatch failed with status %d."),
-            Result);
+        OutError = DescribeManagedFailure(
+            TEXT("Managed script event dispatch"),
+            Result,
+            ErrorEntryPoint,
+            WorldHostId);
         return false;
     }
     OutError.Reset();
@@ -455,6 +523,7 @@ bool FUnifiedScriptCoreClrHost::ReloadManagedScript(
     check(IsInGameThread());
     OutGeneration = 0;
     FReloadScriptEntryPoint EntryPoint = nullptr;
+    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
     {
         FScopeLock Lock(&StateLock);
         if (State != EUnifiedScriptCoreClrHostState::Ready ||
@@ -464,6 +533,7 @@ bool FUnifiedScriptCoreClrHost::ReloadManagedScript(
             return false;
         }
         EntryPoint = reinterpret_cast<FReloadScriptEntryPoint>(ReloadScriptEntryPoint);
+        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(GetLastManagedErrorEntryPoint);
     }
     if (AssemblyPath.IsEmpty() || !IFileManager::Get().FileExists(*AssemblyPath))
     {
@@ -489,9 +559,11 @@ bool FUnifiedScriptCoreClrHost::ReloadManagedScript(
         TypeNameUtf8.Length());
     if (Result <= 0)
     {
-        OutError = FString::Printf(
-            TEXT("Managed script reload failed with status %d."),
-            Result);
+        OutError = DescribeManagedFailure(
+            TEXT("Managed script reload"),
+            Result,
+            ErrorEntryPoint,
+            WorldHostId);
         return false;
     }
     OutGeneration = Result;
@@ -507,6 +579,7 @@ bool FUnifiedScriptCoreClrHost::DestroyManagedScript(
     using namespace UE::UnifiedScript::CoreClr::Private;
     check(IsInGameThread());
     FDestroyScriptEntryPoint EntryPoint = nullptr;
+    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
     {
         FScopeLock Lock(&StateLock);
         if (State != EUnifiedScriptCoreClrHostState::Ready ||
@@ -516,13 +589,16 @@ bool FUnifiedScriptCoreClrHost::DestroyManagedScript(
             return false;
         }
         EntryPoint = reinterpret_cast<FDestroyScriptEntryPoint>(DestroyScriptEntryPoint);
+        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(GetLastManagedErrorEntryPoint);
     }
     const int32 Result = EntryPoint(WorldHostId, InstanceId);
     if (Result != 0)
     {
-        OutError = FString::Printf(
-            TEXT("Managed script destruction failed with status %d."),
-            Result);
+        OutError = DescribeManagedFailure(
+            TEXT("Managed script destruction"),
+            Result,
+            ErrorEntryPoint,
+            WorldHostId);
         return false;
     }
     OutError.Reset();
@@ -722,6 +798,7 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
     const int32 DestroyScriptResult = LoadEntryPoint(TEXT("DestroyScript"), &DestroyScriptEntryPoint);
     const int32 ScriptCountResult = LoadEntryPoint(TEXT("GetScriptCount"), &GetScriptCountEntryPoint);
     const int32 MetricsResult = LoadEntryPoint(TEXT("GetInvocationMetrics"), &GetInvocationMetricsEntryPoint);
+    const int32 LastErrorResult = LoadEntryPoint(TEXT("GetLastError"), &GetLastManagedErrorEntryPoint);
 #else
     const int32 CreateResult = LoadEntryPoint("CreateWorld", &CreateWorldEntryPoint);
     const int32 DestroyResult = LoadEntryPoint("DestroyWorld", &DestroyWorldEntryPoint);
@@ -733,11 +810,13 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
     const int32 DestroyScriptResult = LoadEntryPoint("DestroyScript", &DestroyScriptEntryPoint);
     const int32 ScriptCountResult = LoadEntryPoint("GetScriptCount", &GetScriptCountEntryPoint);
     const int32 MetricsResult = LoadEntryPoint("GetInvocationMetrics", &GetInvocationMetricsEntryPoint);
+    const int32 LastErrorResult = LoadEntryPoint("GetLastError", &GetLastManagedErrorEntryPoint);
 #endif
     if (CreateResult != 0 || DestroyResult != 0 || CountResult != 0 ||
         CreateScriptResult != 0 || TickScriptResult != 0 || DispatchEventResult != 0 ||
         ReloadScriptResult != 0 ||
         DestroyScriptResult != 0 || ScriptCountResult != 0 || MetricsResult != 0 ||
+        LastErrorResult != 0 ||
         CreateWorldEntryPoint == nullptr ||
         DestroyWorldEntryPoint == nullptr ||
         GetWorldCountEntryPoint == nullptr ||
@@ -747,10 +826,11 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
         ReloadScriptEntryPoint == nullptr ||
         DestroyScriptEntryPoint == nullptr ||
         GetScriptCountEntryPoint == nullptr ||
-        GetInvocationMetricsEntryPoint == nullptr)
+        GetInvocationMetricsEntryPoint == nullptr ||
+        GetLastManagedErrorEntryPoint == nullptr)
     {
         return FailLocked(FString::Printf(
-            TEXT("Managed entry-point loading failed: world=(0x%08X,0x%08X,0x%08X) script=(0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X) metrics=0x%08X."),
+            TEXT("Managed entry-point loading failed: world=(0x%08X,0x%08X,0x%08X) script=(0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X) diagnostics=(0x%08X,0x%08X)."),
             static_cast<uint32>(CreateResult),
             static_cast<uint32>(DestroyResult),
             static_cast<uint32>(CountResult),
@@ -760,7 +840,8 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
             static_cast<uint32>(ReloadScriptResult),
             static_cast<uint32>(DestroyScriptResult),
             static_cast<uint32>(ScriptCountResult),
-            static_cast<uint32>(MetricsResult)));
+            static_cast<uint32>(MetricsResult),
+            static_cast<uint32>(LastErrorResult)));
     }
 
     LastError.Reset();
@@ -791,6 +872,7 @@ bool FUnifiedScriptCoreClrHost::FailLocked(FString Message)
     DestroyScriptEntryPoint = nullptr;
     GetScriptCountEntryPoint = nullptr;
     GetInvocationMetricsEntryPoint = nullptr;
+    GetLastManagedErrorEntryPoint = nullptr;
     LastError = MoveTemp(Message);
     State = EUnifiedScriptCoreClrHostState::Failed;
     UE_LOG(LogTemp, Error, TEXT("%s"), *LastError);

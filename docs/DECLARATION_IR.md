@@ -68,12 +68,13 @@ blank categories, and defaults whose JSON kind conflicts with the declared
 state kind. Serialization normalizes asset, state, and function order before
 writing, so editor and CI artifacts do not depend on source-document order.
 
-## Declaration patch v0.1
+## Declaration patch v0.2
 
-`unifiedscript.declaration-patch/v0.1` is the typed edit contract for state
-declarations. Every document carries the exact source-compilation and semantic-
+`unifiedscript.declaration-patch/v0.2` is the typed edit contract for state and
+UE Event Entry declarations. The reader migrates legacy v0.1 state-only patches
+to v0.2. Every document carries the exact source-compilation and semantic-
 configuration IDs from the Declaration IR artifact on which the edit was
-authored. It supports three bounded operations:
+authored. It supports four bounded operations:
 
 - `addState` targets one Script Asset ID and supplies name, C# type spelling,
   state kind, typed default, and exposure policy;
@@ -81,6 +82,9 @@ authored. It supports three bounded operations:
   a precondition, and supplies a complete replacement contract;
 - `removeState` targets one state ID and supplies the same complete old-value
   precondition.
+- `addUnrealEventHandler` targets one Script Asset ID and supplies the handler
+  name, generated source-wrapper type, canonical UE delegate path, Host/Target
+  source selection, optional source member, and ordered typed parameters.
 
 The JSON reader rejects unknown fields, empty targets, duplicate update/remove
 targets, no-op updates, blank categories, and defaults incompatible with their
@@ -93,6 +97,10 @@ references when necessary, applies every addition/update/removal in memory, and
 then runs the complete declaration/HIR/semantic analysis again. Source is
 returned only if compilation and every postcondition succeed. A late failure
 therefore rolls back the entire patch.
+
+For Event Entries, the postcondition reprojects the generated method and proves
+its `[UnrealEvent]` canonical path, source type, source selection, and parameter
+types. Generated endpoint member names are not persisted as identity.
 
 State renames require an input `.usids` sidecar. The applier installs an exact
 identity pin on the rewritten property before reanalysis, so references receive

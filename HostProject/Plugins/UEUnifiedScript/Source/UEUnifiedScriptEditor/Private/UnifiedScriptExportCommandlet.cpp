@@ -43,10 +43,12 @@ int32 UUnifiedScriptExportCommandlet::Main(const FString& Params)
     UE_LOG(
         LogTemp,
         Display,
-        TEXT("UnifiedScript reflection export wrote %d types, %d properties, and %d functions to %s"),
+        TEXT("UnifiedScript reflection export wrote %d types, %d properties, %d functions, and %d delegates to %s (%d internal types excluded)"),
         Result.TypeCount,
         Result.PropertyCount,
         Result.FunctionCount,
-        *Options.OutputPath);
+        Result.DelegateCount,
+        *Options.OutputPath,
+        Result.ExcludedTypeCount);
     return 0;
 }

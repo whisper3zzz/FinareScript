@@ -3,7 +3,7 @@
  * @Author: whispersong
  * @Date: 2026-08-25 10:42:29
  * @LastEditors: whispersong
- * @LastEditTime: 2026-08-25 10:47:07
+ * @LastEditTime: 2026-08-25 14:22:40
  * @FilePath: \Plugins\UEUnifiedScript\Source\UEUnifiedScriptRuntime\Private\UnifiedScriptInteropFixture.cpp
  * @Description:
  */
@@ -100,4 +100,9 @@ bool UUnifiedScriptInteropFixture::MutateValues(
 int64 UUnifiedScriptInteropFixture::AddInt64(int64 Left, int64 Right) const
 {
     return Left + Right;
+}
+
+void UUnifiedScriptInteropFixture::BroadcastInteropChanged(int32 NewValue, UObject* Context)
+{
+    OnInteropChanged.Broadcast(NewValue, Context);
 }

@@ -1,5 +1,6 @@
 #include "UnifiedScriptInvocationBridge.h"
 
+#include "Containers/StringConv.h"
 #include "UnifiedScriptGeneratedThunks.h"
 #include "UObject/Class.h"
 #include "UObject/StructOnScope.h"
@@ -602,6 +603,12 @@ FUnifiedScriptValue FUnifiedScriptValue::FromEnum(int64 Value, FName InTypePath)
     Result.Kind = EUnifiedScriptValueKind::Enum;
     Result.Int64Value = Value;
     Result.TypePath = InTypePath;
+    if (!InTypePath.IsNone())
+    {
+        const FString TypePathString = InTypePath.ToString();
+        const FTCHARToUTF8 TypePathUtf8(*TypePathString);
+        Result.TypeIdValue = UnifiedScriptMemberId(TypePathUtf8.Get());
+    }
     return Result;
 }
 
@@ -1091,4 +1098,122 @@ bool FUnifiedScriptInvocationBridge::InvokeById(
 uint64 FUnifiedScriptInvocationBridge::GetFastInvocationCount() const
 {
     return FastInvocationCount.load(std::memory_order_relaxed);
+}
+
+bool FUnifiedScriptInvocationBridge::ResolveMulticastDelegate(
+    FUnifiedScriptObjectHandle Target,
+    const FString& EventPath,
+    UObject*& OutSource,
+    const FMulticastDelegateProperty*& OutProperty,
+    FUnifiedScriptInvocationResult& OutResult)
+{
+    using namespace UE::UnifiedScript::Invocation::Private;
+    check(IsInGameThread());
+    OutSource = nullptr;
+    OutProperty = nullptr;
+
+    UObject* Source = ResolveTarget(Registry, Target, OutResult);
+    UClass* TargetClass = nullptr;
+    FName MemberName;
+    if (Source == nullptr ||
+        !ResolveMemberIdentity(Source, EventPath, TargetClass, MemberName, OutResult))
+    {
+        return false;
+    }
+
+    const FMulticastDelegateProperty* Property =
+        FindFProperty<FMulticastDelegateProperty>(TargetClass, MemberName);
+    if (Property == nullptr || Property->SignatureFunction == nullptr)
+    {
+        Fail(
+            OutResult,
+            EUnifiedScriptInvocationError::PropertyNotFound,
+            FString::Printf(
+                TEXT("UnifiedScript event '%s' is not a multicast delegate property."),
+                *EventPath));
+        return false;
+    }
+    if (!Property->HasAnyPropertyFlags(CPF_BlueprintAssignable))
+    {
+        Fail(
+            OutResult,
+            EUnifiedScriptInvocationError::PropertyNotWritable,
+            FString::Printf(
+                TEXT("UnifiedScript event '%s' is not BlueprintAssignable."),
+                *EventPath));
+        return false;
+    }
+
+    OutSource = Source;
+    OutProperty = Property;
+    Succeed(OutResult);
+    return true;
+}
+
+bool FUnifiedScriptInvocationBridge::ReadDelegateArguments(
+    const UFunction* Signature,
+    const void* ParameterMemory,
+    TArray<FUnifiedScriptValue>& OutArguments,
+    FUnifiedScriptInvocationResult& OutResult)
+{
+    using namespace UE::UnifiedScript::Invocation::Private;
+    check(IsInGameThread());
+    OutArguments.Reset();
+    if (Signature == nullptr || ParameterMemory == nullptr)
+    {
+        Fail(
+            OutResult,
+            EUnifiedScriptInvocationError::InvalidMemberPath,
+            TEXT("A delegate dispatch requires a signature and parameter memory."));
+        return false;
+    }
+
+    for (TFieldIterator<FProperty> It(Signature, EFieldIteratorFlags::ExcludeSuper); It; ++It)
+    {
+        const FProperty* Parameter = *It;
+        if (!Parameter->HasAnyPropertyFlags(CPF_Parm) ||
+            Parameter->HasAnyPropertyFlags(CPF_ReturnParm))
+        {
+            continue;
+        }
+
+        FUnifiedScriptValue Value;
+        if (!ReadValue(Registry, Parameter, ParameterMemory, Value, OutResult))
+        {
+            ReleaseEventArguments(OutArguments);
+            OutArguments.Reset();
+            return false;
+        }
+        OutArguments.Add(MoveTemp(Value));
+    }
+
+    Succeed(OutResult);
+    return true;
+}
+
+void FUnifiedScriptInvocationBridge::ReleaseEventArguments(
+    TConstArrayView<FUnifiedScriptValue> Arguments)
+{
+    check(IsInGameThread());
+    TFunction<void(const FUnifiedScriptValue&)> ReleaseValue =
+        [this, &ReleaseValue](const FUnifiedScriptValue& Value)
+    {
+        if ((Value.Kind == EUnifiedScriptValueKind::Object ||
+             Value.Kind == EUnifiedScriptValueKind::Class) &&
+            !Value.ObjectHandleValue.IsNull())
+        {
+            FUnifiedScriptObjectHandleResult Result;
+            Registry.ReleaseObject(Value.ObjectHandleValue, Result);
+            ensureMsgf(Result.IsSuccess(), TEXT("%s"), *Result.Message);
+        }
+        for (const FUnifiedScriptValue& Child : Value.ContainerValues)
+        {
+            ReleaseValue(Child);
+        }
+    };
+
+    for (const FUnifiedScriptValue& Value : Arguments)
+    {
+        ReleaseValue(Value);
+    }
 }

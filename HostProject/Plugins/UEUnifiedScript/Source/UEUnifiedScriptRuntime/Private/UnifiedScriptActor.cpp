@@ -1,3 +1,12 @@
+/**
+ * @Copyright: 2026 Tencent Inc. All rights reserved. reserved.
+ * @Author: whispersong
+ * @Date: 2026-08-25 12:41:41
+ * @LastEditors: whispersong
+ * @LastEditTime: 2026-08-25 14:22:40
+ * @FilePath: \Plugins\UEUnifiedScript\Source\UEUnifiedScriptRuntime\Private\UnifiedScriptActor.cpp
+ * @Description:
+ */
 #include "UnifiedScriptActor.h"
 
 #include "UnifiedScriptComponent.h"

@@ -281,7 +281,7 @@ def main() -> int:
     declaration_operation = declaration_patch["operations"][0]
     require(
         declaration_patch["schemaVersion"]
-        == "unifiedscript.declaration-patch/v0.1"
+        == "unifiedscript.declaration-patch/v0.2"
         and declaration_patch["sourceCompilationId"]
         == declaration_document["sourceCompilationId"]
         and declaration_patch["semanticConfigurationId"]
@@ -359,7 +359,7 @@ def main() -> int:
         'args[0] == "apply-declaration-patch"' in cli_source
         and "new CSharpDeclarationPatchApplier().Apply" in cli_source
         and "ScriptAssetJson.Serialize(outputAnalysis.ScriptAssets)" in cli_source
-        and "unifiedscript.declaration-patch/v0.1" in prototype_source
+        and "unifiedscript.declaration-patch/v0.2" in prototype_source
         and "buildDeclarationPatch" in prototype_source,
         "Declaration patch CLI or prototype integration is missing",
     )
@@ -468,6 +468,16 @@ def main() -> int:
         / "UEUnifiedScriptRuntime"
         / "Public"
         / "UnifiedScriptComponent.h"
+    )
+    unreal_delegate_proxy_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Public"
+        / "UnifiedScriptDelegateProxy.h"
     )
     unreal_actor_path = (
         ROOT
@@ -753,6 +763,30 @@ def main() -> int:
     unreal_native_abi_v3_path = (
         ROOT / "src" / "UnifiedScript.Unreal" / "UnrealNativeAbiV3.cs"
     )
+    unreal_native_event_abi_v4_path = (
+        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealNativeEventAbiV4.cs"
+    )
+    unreal_generation_invocation_bridge_path = (
+        ROOT
+        / "src"
+        / "UnifiedScript.Unreal"
+        / "UnrealGenerationInvocationBridge.cs"
+    )
+    unreal_event_binder_path = (
+        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealEventBinder.cs"
+    )
+    unreal_event_binder_test_path = (
+        ROOT
+        / "tests"
+        / "UnifiedScript.Tests"
+        / "UnrealEventBinderTests.cs"
+    )
+    unreal_native_event_abi_v4_test_path = (
+        ROOT
+        / "tests"
+        / "UnifiedScript.Tests"
+        / "UnrealNativeEventAbiV4Tests.cs"
+    )
     unreal_native_call_frame_v3_path = (
         ROOT / "src" / "UnifiedScript.Unreal" / "UnrealNativeCallFrameV3.cs"
     )
@@ -785,6 +819,18 @@ def main() -> int:
         / "UnifiedScript.Unreal.Demo"
         / "DemoScript.cs"
     )
+    unreal_benchmark_demo_source_path = (
+        ROOT
+        / "samples"
+        / "Unreal"
+        / "UnifiedScript.Unreal.Demo"
+        / "ManagedInteropBenchmarkScript.cs"
+    )
+    unreal_benchmark_helper_path = ROOT / "tools" / "run-unreal-benchmark.ps1"
+    unreal_benchmark_thresholds_path = (
+        ROOT / "benchmarks" / "unreal" / "performance-thresholds.json"
+    )
+    unreal_performance_doc_path = ROOT / "docs" / "UNREAL_PERFORMANCE.md"
     unreal_actor_demo_source_path = (
         ROOT
         / "samples"
@@ -921,6 +967,7 @@ def main() -> int:
         and unreal_native_thunk_test_path.is_file()
         and unreal_plugin_path.is_file()
         and unreal_component_path.is_file()
+        and unreal_delegate_proxy_path.is_file()
         and unreal_actor_path.is_file()
         and unreal_script_asset_header_path.is_file()
         and unreal_script_asset_source_path.is_file()
@@ -953,12 +1000,21 @@ def main() -> int:
         and unreal_binding_coverage_test_path.is_file()
         and unreal_in_process_transport_path.is_file()
         and unreal_native_abi_v3_path.is_file()
+        and unreal_native_event_abi_v4_path.is_file()
+        and unreal_generation_invocation_bridge_path.is_file()
+        and unreal_event_binder_path.is_file()
+        and unreal_event_binder_test_path.is_file()
+        and unreal_native_event_abi_v4_test_path.is_file()
         and unreal_native_call_frame_v3_path.is_file()
         and unreal_in_process_transport_test_path.is_file()
         and unreal_world_managed_entry_path.is_file()
         and unreal_script_object_model_path.is_file()
         and unreal_demo_project_path.is_file()
         and unreal_demo_source_path.is_file()
+        and unreal_benchmark_demo_source_path.is_file()
+        and unreal_benchmark_helper_path.is_file()
+        and unreal_benchmark_thresholds_path.is_file()
+        and unreal_performance_doc_path.is_file()
         and unreal_actor_demo_source_path.is_file()
         and unreal_demo_declaration_path.is_file()
         and unreal_demo_surface_path.is_file()
@@ -987,6 +1043,7 @@ def main() -> int:
     with unreal_plugin_path.open("r", encoding="utf-8") as handle:
         unreal_plugin = json.load(handle)
     unreal_component = unreal_component_path.read_text(encoding="utf-8")
+    unreal_delegate_proxy = unreal_delegate_proxy_path.read_text(encoding="utf-8")
     unreal_actor = unreal_actor_path.read_text(encoding="utf-8")
     unreal_script_asset_header = unreal_script_asset_header_path.read_text(
         encoding="utf-8"
@@ -1050,6 +1107,19 @@ def main() -> int:
         encoding="utf-8"
     )
     unreal_native_abi_v3 = unreal_native_abi_v3_path.read_text(encoding="utf-8")
+    unreal_native_event_abi_v4 = unreal_native_event_abi_v4_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_generation_invocation_bridge = (
+        unreal_generation_invocation_bridge_path.read_text(encoding="utf-8")
+    )
+    unreal_event_binder = unreal_event_binder_path.read_text(encoding="utf-8")
+    unreal_event_binder_test = unreal_event_binder_test_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_native_event_abi_v4_test = (
+        unreal_native_event_abi_v4_test_path.read_text(encoding="utf-8")
+    )
     unreal_native_call_frame_v3 = unreal_native_call_frame_v3_path.read_text(
         encoding="utf-8"
     )
@@ -1064,6 +1134,15 @@ def main() -> int:
     )
     unreal_demo_project = unreal_demo_project_path.read_text(encoding="utf-8")
     unreal_demo_source = unreal_demo_source_path.read_text(encoding="utf-8")
+    unreal_benchmark_demo_source = unreal_benchmark_demo_source_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_benchmark_helper = unreal_benchmark_helper_path.read_text(
+        encoding="utf-8"
+    )
+    with unreal_benchmark_thresholds_path.open("r", encoding="utf-8") as handle:
+        unreal_benchmark_thresholds = json.load(handle)
+    unreal_performance_doc = unreal_performance_doc_path.read_text(encoding="utf-8")
     unreal_actor_demo_source = unreal_actor_demo_source_path.read_text(encoding="utf-8")
     with unreal_demo_declaration_path.open("r", encoding="utf-8") as handle:
         unreal_demo_declaration = json.load(handle)
@@ -1116,7 +1195,7 @@ def main() -> int:
     )
     require(
         unreal_manifest["schemaVersion"]
-        == "unifiedscript.unreal-reflection/v0.1"
+        == "unifiedscript.unreal-reflection/v0.2"
         and unreal_manifest["modules"] == ["UEUnifiedScriptRuntime"]
         and len(unreal_manifest["types"]) == 5
         and unreal_component_manifest["headerPath"] == "UnifiedScriptComponent.h"
@@ -1146,6 +1225,7 @@ def main() -> int:
         and {item["name"] for item in unreal_component_manifest["functions"]}
         == {
             "Add",
+            "BroadcastManagedSignal",
             "GetScriptStateInt32",
             "GetScriptTarget",
             "RefreshScriptState",
@@ -1193,6 +1273,7 @@ def main() -> int:
         == {
             "AddInt64",
             "AddVector",
+            "BroadcastInteropChanged",
             "CountSet",
             "EchoArray",
             "EchoClass",
@@ -1216,12 +1297,38 @@ def main() -> int:
             == "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldSubsystem"
             for item in unreal_manifest["types"]
         )
+        and not any(
+            item["path"]
+            == "/Script/UEUnifiedScriptRuntime.UnifiedScriptDelegateProxy"
+            for item in unreal_manifest["types"]
+        )
+        and {
+            item["path"]
+            for reflected_type in unreal_manifest["types"]
+            for item in reflected_type["delegates"]
+        }
+        == {
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:OnManagedSignal",
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:OnInteropChanged",
+        }
+        and all(
+            item["traits"]["kind"] == "multicast"
+            and item["traits"]["blueprintAssignable"] is True
+            and [parameter["type"]["kind"] for parameter in item["parameters"]]
+            == ["int32", "object"]
+            for reflected_type in unreal_manifest["types"]
+            for item in reflected_type["delegates"]
+        )
         and {module["Name"] for module in unreal_plugin["Modules"]}
         == {"UEUnifiedScriptRuntime", "UEUnifiedScriptEditor"}
         and "UUnifiedScriptComponent : public UActorComponent" in unreal_component
-        and "unifiedscript.unreal-reflection/v0.1" in unreal_exporter
+        and "unifiedscript.unreal-reflection/v0.2" in unreal_exporter
+        and "UnifiedScriptBindingInternal" in unreal_exporter
+        and "UnifiedScriptBindingInternal" in unreal_delegate_proxy
         and "TObjectIterator<UClass>" in unreal_exporter
         and "IUnrealInvocationBridge" in unreal_bindings
+        and "UnrealEventEndpointAttribute" in unreal_bindings
+        and "SubscribeOnManagedSignal" in unreal_bindings
         and "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:Add"
         in unreal_bindings
         and 'args[0] == "ue-bindings"' in cli_source,
@@ -1355,6 +1462,61 @@ def main() -> int:
         "Unreal ABI v3 call-frame activation or World metrics are missing",
     )
     checks.append("ABI v3 fixed calls use the live World call frame with observable v2 fallback")
+    require(
+        "FUnifiedScriptNativeEventFrameV4" in unreal_native_transport_header
+        and "FUnifiedScriptNativeEventTransportV4" in unreal_native_transport_header
+        and "UEUnifiedScript_GetNativeEventTransportV4" in unreal_native_transport_source
+        and "sizeof(FUnifiedScriptNativeEventFrameV4) == 64"
+        in unreal_native_transport_header
+        and "UnrealNativeEventFrameV4" in unreal_native_event_abi_v4
+        and "FrameSize = 64" in unreal_native_event_abi_v4
+        and "TransportTableSize = 48" in unreal_native_event_abi_v4
+        and "Marshal.SizeOf<UnrealNativeEventFrameV4>" in unreal_native_event_abi_v4_test
+        and "Arbitrary reflected event subscription succeeds"
+        in unreal_native_transport_test
+        and "UnrealGenerationInvocationBridge" in unreal_generation_invocation_bridge
+        and "BindAttributedEvents" in unreal_event_binder
+        and "BinderResolvesCanonicalGeneratedEndpointAndStrongHandler"
+        in unreal_event_binder_test
+        and "UnrealEventEndpointAttribute" in unreal_bindings
+        and "Attributed Event Entry receives a reflected UE multicast delegate"
+        in unreal_world_host_test
+        and "Reload rebinds one Event Entry and preserves compatible state"
+        in unreal_world_host_test
+        and "UNIFIEDSCRIPT_MANAGED_DIAGNOSTIC_PATH" in unreal_world_managed_entry
+        and "BoundaryErrors" in unreal_world_managed_entry
+        and "public static unsafe int GetLastError" in unreal_world_managed_entry
+        and "DescribeManagedFailure" in unreal_coreclr_host_source
+        and "GetLastManagedErrorEntryPoint" in unreal_coreclr_host_source
+        and "Failed Script Asset reload exposes the managed boundary and type"
+        in unreal_world_host_test,
+        "Unreal ABI v4 event transport, attributed binding, or diagnostics are missing",
+    )
+    checks.append("ABI v4 reverse events are generated, World-scoped, reload-safe, and diagnosable")
+    require(
+        unreal_benchmark_thresholds["schemaVersion"]
+        == "unifiedscript.unreal-benchmark-thresholds/v0.2"
+        and unreal_benchmark_thresholds["scenario"] == "generated-int32-add"
+        and unreal_benchmark_thresholds["minimumWarmupIterations"] >= 4096
+        and unreal_benchmark_thresholds["minimumIterations"] >= 100000
+        and unreal_benchmark_thresholds["minimumSampleCount"] >= 5
+        and unreal_benchmark_thresholds["maxUnifiedScriptAllocatedBytes"] == 0
+        and unreal_benchmark_thresholds["maxUnifiedScriptToPuertsRatio"] <= 0.95
+        and "SampleCount = 5" in unreal_benchmark_demo_source
+        and "Benchmark:v2" in unreal_benchmark_demo_source
+        and "Array.Sort(samples)" in unreal_benchmark_demo_source
+        and "unifiedscript.unreal-benchmark/v0.2" in unreal_world_host_test
+        and "NativeSamples.Sort()" in unreal_world_host_test
+        and "machineFingerprint" in unreal_benchmark_helper
+        and "$puerts.configuration -ne $nativeResult.configuration"
+        in unreal_benchmark_helper
+        and "$puerts.engineMinor -ne" in unreal_benchmark_helper
+        and "$puerts.sampleCount -ne" in unreal_benchmark_helper
+        and "-RequirePuerts" in unreal_performance_doc
+        and "no performance claim" in unreal_performance_doc,
+        "Reproducible Unreal/Puerts performance comparison gate is incomplete",
+    )
+    checks.append("UE performance gate uses median samples and matched Puerts environments")
     require(
         "unifiedscript.unreal-binding-coverage/v0.1" in unreal_binding_coverage
         and "ReflectionFallback" in unreal_binding_coverage
@@ -1570,7 +1732,16 @@ def main() -> int:
     )
     checks.append("UE component materializes Declaration IR state with stable-ID migration")
     unreal_demo_surface_asset = unreal_demo_surface["assets"][0]
-    unreal_demo_surface_function = unreal_demo_surface_asset["functions"][0]
+    unreal_demo_surface_functions = {
+        function["name"]: function
+        for function in unreal_demo_surface_asset["functions"]
+    }
+    unreal_demo_event_actions = [
+        action
+        for function in unreal_demo_surface_asset["functions"]
+        for action in function["actions"]
+        if action["graphKind"] == "unrealEventEntry"
+    ]
     unreal_demo_edit_capabilities = [
         edit
         for function in unreal_demo_surface_asset["functions"]
@@ -1582,18 +1753,28 @@ def main() -> int:
         == "unifiedscript.authoring-surface/v0.3"
         and len(unreal_demo_surface["assets"]) == 1
         and len(unreal_demo_surface_asset["states"]) == 1
-        and len(unreal_demo_surface_asset["functions"]) == 3
+        and len(unreal_demo_surface_asset["functions"]) == 4
         and sum(
             len(function["actions"])
             for function in unreal_demo_surface_asset["functions"]
-        ) == 38
+        ) == 45
         and sum(
             len(function["edges"])
             for function in unreal_demo_surface_asset["functions"]
-        ) == 37
-        and unreal_demo_surface_asset["functions"][1]["name"] == "RewirePreview"
-        and unreal_demo_surface_asset["functions"][2]["name"] == "UEApiPreview"
-        and len({edit["targetNodeId"] for edit in unreal_demo_edit_capabilities}) == 8
+        ) == 43
+        and set(unreal_demo_surface_functions)
+        == {"OnManagedSignal", "ResolveInitialValue", "RewirePreview", "UEApiPreview"}
+        and len(unreal_demo_event_actions) == 1
+        and unreal_demo_event_actions[0]["title"] == "Event OnManagedSignal"
+        and "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:OnManagedSignal"
+        in unreal_demo_event_actions[0]["summary"]
+        and [
+            port["typeDisplayName"]
+            for port in unreal_demo_event_actions[0]["ports"]
+            if port["kind"] == "data"
+        ]
+        == ["int", "UnrealObjectHandle"]
+        and len({edit["targetNodeId"] for edit in unreal_demo_edit_capabilities}) == 10
         and "FUnifiedScriptAuthoringSurfaceReader" in unreal_authoring_surface_header
         and "ParseJson" in unreal_authoring_surface_source
         and "BuildSemanticPatch" in unreal_authoring_surface_source
@@ -1602,6 +1783,7 @@ def main() -> int:
         and "BuildSharedDataEdgePatchPlan" in unreal_authoring_surface_source
         and "BuildBasicNodeInsertionPatch" in unreal_authoring_surface_source
         and "BuildMemberInvocationInsertionPatch" in unreal_authoring_surface_source
+        and "BuildUnrealEventHandlerInsertionPatch" in unreal_authoring_surface_source
         and "BuildStatementDeletionPatch" in unreal_authoring_surface_source
         and "reconnectDataEdge" in unreal_authoring_surface_source
         and "unifiedscript.patch/v0.21" in unreal_authoring_surface_source
@@ -1610,6 +1792,8 @@ def main() -> int:
         and "SubmitSemanticPatch" in unreal_authoring_widget
         and "BuildSemanticPatchPlanUrl" in unreal_authoring_widget
         and "RebuildNodePalette" in unreal_authoring_widget
+        and "EventAction.bEvent = true" in unreal_authoring_widget
+        and "/api/authoring/declaration-patch" in unreal_authoring_workbench_source
         and "PersistCurrentLayout" in unreal_authoring_widget
         and "FUnifiedScriptGraphPresentation::ShouldInlineAction"
         in unreal_graph_presentation

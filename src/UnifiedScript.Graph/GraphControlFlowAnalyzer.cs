@@ -40,7 +40,7 @@ public sealed class GraphControlFlowAnalyzer
             .OrderBy(static node => node.Id.Value, StringComparer.Ordinal)
             .ToArray();
         GraphNode[] entries = controlNodes
-            .Where(static node => node.Kind == "entry")
+            .Where(static node => IsEntryNode(node))
             .ToArray();
         if (entries.Length != 1)
         {
@@ -258,8 +258,11 @@ public sealed class GraphControlFlowAnalyzer
     }
 
     private static bool IsControlNode(GraphNode node) =>
-        node.Kind == "entry" ||
+        IsEntryNode(node) ||
         node.Ports.Any(static port => port.Kind == GraphPortKind.Control);
+
+    private static bool IsEntryNode(GraphNode node) =>
+        node.Kind is "entry" or "unrealEventEntry";
 
     private static void RequireControlPort(
         GraphNode node,

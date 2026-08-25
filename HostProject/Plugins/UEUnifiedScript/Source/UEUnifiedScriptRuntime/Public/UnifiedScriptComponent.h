@@ -8,6 +8,13 @@
 class UUnifiedScriptAsset;
 class AActor;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
+    FUnifiedScriptManagedSignal,
+    int32,
+    Value,
+    UObject*,
+    Context);
+
 UCLASS(BlueprintType, Blueprintable, ClassGroup=(UnifiedScript), meta=(BlueprintSpawnableComponent))
 class UEUNIFIEDSCRIPTRUNTIME_API UUnifiedScriptComponent : public UActorComponent
 {
@@ -15,6 +22,10 @@ class UEUNIFIEDSCRIPTRUNTIME_API UUnifiedScriptComponent : public UActorComponen
 
 public:
     UUnifiedScriptComponent();
+
+    /** General reflected event used by the end-to-end managed subscription demo. */
+    UPROPERTY(BlueprintAssignable, Category="UnifiedScript|Events")
+    FUnifiedScriptManagedSignal OnManagedSignal;
 
     /** Preferred project asset selected from the Content Browser. */
     UPROPERTY(EditAnywhere, Category="UnifiedScript", meta=(DisplayName="Script Asset"))
@@ -91,6 +102,9 @@ public:
 
     UFUNCTION(BlueprintPure, Category="UnifiedScript|Verification")
     int32 Add(int32 Left, int32 Right) const;
+
+    UFUNCTION(BlueprintCallable, Category="UnifiedScript|Verification")
+    void BroadcastManagedSignal(int32 Value, UObject* Context);
 
     bool ConsumeReloadRequest();
 

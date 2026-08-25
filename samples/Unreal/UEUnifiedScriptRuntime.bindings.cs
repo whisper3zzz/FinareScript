@@ -135,8 +135,28 @@ public sealed partial class UnifiedScriptComponent : global::UnifiedScript.Unrea
         set => WriteProperty(0x23071804223C4DFFUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:bTickAutomatically", value);
     }
 
+    public delegate void OnManagedSignalHandler(int value, global::UnifiedScript.Unreal.UnrealObjectHandle context);
+
+    public static global::UnifiedScript.Unreal.UnrealEventDescriptor OnManagedSignalEvent { get; } = new(
+        0xB6A5058629A5C55BUL,
+        "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:OnManagedSignal",
+        "/Script/UEUnifiedScriptRuntime.UnifiedScriptManagedSignal__DelegateSignature",
+        typeof(void),
+        global::UnifiedScript.Unreal.UnrealDelegateKind.Multicast,
+        [
+            new("Value", typeof(int), global::UnifiedScript.Unreal.UnrealParameterDirection.Input),
+            new("Context", typeof(global::UnifiedScript.Unreal.UnrealObjectHandle), global::UnifiedScript.Unreal.UnrealParameterDirection.Input),
+        ]);
+
+    [global::UnifiedScript.Unreal.UnrealEventEndpointAttribute("/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:OnManagedSignal")]
+    public global::UnifiedScript.Unreal.IUnrealEventSubscription SubscribeOnManagedSignal(OnManagedSignalHandler handler)
+        => SubscribeEvent(OnManagedSignalEvent, handler);
+
     public int Add(int left, int right)
         => Invoke<int, int, int>(0xB324FB910D9CED26UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:Add", left, right);
+
+    public void BroadcastManagedSignal(int value, global::UnifiedScript.Unreal.UnrealObjectHandle context)
+        => Invoke<int, global::UnifiedScript.Unreal.UnrealObjectHandle>(0x5792FF1D76148D17UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:BroadcastManagedSignal", value, context);
 
     public int GetScriptStateInt32(string name, int fallback)
         => Invoke<int, string, int>(0x5B7CEF7BDAF29749UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:GetScriptStateInt32", name, fallback);
@@ -275,11 +295,31 @@ public sealed partial class UnifiedScriptInteropFixture : global::UnifiedScript.
         set => WriteProperty(0x51CDC304CE471430UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:VectorValue", value);
     }
 
+    public delegate void OnInteropChangedHandler(int newValue, global::UnifiedScript.Unreal.UnrealObjectHandle context);
+
+    public static global::UnifiedScript.Unreal.UnrealEventDescriptor OnInteropChangedEvent { get; } = new(
+        0xB6F362AA875CA72AUL,
+        "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:OnInteropChanged",
+        "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropChanged__DelegateSignature",
+        typeof(void),
+        global::UnifiedScript.Unreal.UnrealDelegateKind.Multicast,
+        [
+            new("NewValue", typeof(int), global::UnifiedScript.Unreal.UnrealParameterDirection.Input),
+            new("Context", typeof(global::UnifiedScript.Unreal.UnrealObjectHandle), global::UnifiedScript.Unreal.UnrealParameterDirection.Input),
+        ]);
+
+    [global::UnifiedScript.Unreal.UnrealEventEndpointAttribute("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:OnInteropChanged")]
+    public global::UnifiedScript.Unreal.IUnrealEventSubscription SubscribeOnInteropChanged(OnInteropChangedHandler handler)
+        => SubscribeEvent(OnInteropChangedEvent, handler);
+
     public long AddInt64(long left, long right)
         => Invoke<long, long, long>(0x5005CC3042360722UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:AddInt64", left, right);
 
     public global::UnifiedScript.Unreal.UnrealVector AddVector(global::UnifiedScript.Unreal.UnrealVector left, global::UnifiedScript.Unreal.UnrealVector right)
         => Invoke<global::UnifiedScript.Unreal.UnrealVector, global::UnifiedScript.Unreal.UnrealVector, global::UnifiedScript.Unreal.UnrealVector>(0x72F00766D165C3ACUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:AddVector", left, right);
+
+    public void BroadcastInteropChanged(int newValue, global::UnifiedScript.Unreal.UnrealObjectHandle context)
+        => Invoke<int, global::UnifiedScript.Unreal.UnrealObjectHandle>(0xB122BDB717D2DBECUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:BroadcastInteropChanged", newValue, context);
 
     public int CountSet(global::System.Collections.Generic.IReadOnlySet<int> values)
         => Invoke<int, global::System.Collections.Generic.IReadOnlySet<int>>(0x3CDA489A528A7F59UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:CountSet", values);

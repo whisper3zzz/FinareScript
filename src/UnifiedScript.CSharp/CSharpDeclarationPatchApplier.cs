@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 using UnifiedScript.Core;
+using UnifiedScript.Core.Hir;
 
 namespace UnifiedScript.CSharp;
 
@@ -51,6 +52,7 @@ public sealed class CSharpDeclarationPatchApplier
             .SelectMany(asset => asset.States.Select(state => new StateLocation(asset, state)))
             .ToDictionary(static location => location.State.Id);
         var adds = new List<AddPlan>();
+        var eventAdds = new List<EventAddPlan>();
         var updates = new List<UpdatePlan>();
         var removes = new List<RemovePlan>();
         foreach (DeclarationPatchOperation operation in patch.Operations)
@@ -121,6 +123,22 @@ public sealed class CSharpDeclarationPatchApplier
 
                     removes.Add(new RemovePlan(removeLocation.Asset, removeLocation.State));
                     break;
+                case AddUnrealEventHandlerPatchOperation addEvent:
+                    if (!assets.TryGetValue(
+                            addEvent.TargetAssetId,
+                            out ScriptAssetDeclaration? eventAsset))
+                    {
+                        return TargetNotFound(addEvent.TargetAssetId, "script asset");
+                    }
+                    if (!TryValidateEventHandler(
+                            addEvent.Handler,
+                            eventAsset.Span,
+                            out UnifiedDiagnostic? eventFailure))
+                    {
+                        return Failure(eventFailure!);
+                    }
+                    eventAdds.Add(new EventAddPlan(eventAsset, addEvent.Handler));
+                    break;
                 default:
                     throw new InvalidOperationException(
                         $"Validated declaration operation '{operation.GetType().Name}' was not handled.");
@@ -130,6 +148,7 @@ public sealed class CSharpDeclarationPatchApplier
         UnifiedDiagnostic? finalContractFailure = ValidateFinalContracts(
             original.ScriptAssets,
             adds,
+            eventAdds,
             updates,
             removes);
         if (finalContractFailure is not null)
@@ -152,7 +171,13 @@ public sealed class CSharpDeclarationPatchApplier
                 compilation.GetSemanticModel(tree, ignoreAccessibility: false)),
             StringComparer.Ordinal);
 
-        if (!TryAnnotateTargets(contexts, adds, updates, removes, out UnifiedDiagnostic? annotationFailure))
+        if (!TryAnnotateTargets(
+                contexts,
+                adds,
+                eventAdds,
+                updates,
+                removes,
+                out UnifiedDiagnostic? annotationFailure))
         {
             return Failure(annotationFailure!);
         }
@@ -160,6 +185,7 @@ public sealed class CSharpDeclarationPatchApplier
         RenameReferences(contexts, updates);
         ApplyPropertyChanges(contexts, updates, removes);
         ApplyAdditions(contexts, adds);
+        ApplyEventAdditions(contexts, eventAdds);
 
         IReadOnlyDictionary<string, IdentitySidecarDocument> effectiveSidecars = original.IdentitySidecars
             .ToDictionary(static sidecar => sidecar.SourcePath, StringComparer.Ordinal);
@@ -187,7 +213,8 @@ public sealed class CSharpDeclarationPatchApplier
         UnifiedDiagnostic? postconditionFailure = ValidatePostconditions(
             patch,
             original.ScriptAssets,
-            patchedAnalysis.ScriptAssets);
+            patchedAnalysis.ScriptAssets,
+            patchedAnalysis.Hir!);
         if (postconditionFailure is not null)
         {
             return Failure(postconditionFailure);
@@ -199,31 +226,34 @@ public sealed class CSharpDeclarationPatchApplier
     private static bool TryAnnotateTargets(
         IReadOnlyDictionary<string, RewriteContext> contexts,
         IReadOnlyList<AddPlan> adds,
+        IReadOnlyList<EventAddPlan> eventAdds,
         IReadOnlyList<UpdatePlan> updates,
         IReadOnlyList<RemovePlan> removes,
         out UnifiedDiagnostic? failure)
     {
         failure = null;
-        foreach (IGrouping<string, AddPlan> sourceAdds in adds.GroupBy(
-                     static add => add.Asset.Span.FilePath,
-                     StringComparer.Ordinal))
+        foreach (IGrouping<string, ScriptAssetDeclaration> sourceAssets in adds
+                     .Select(static add => add.Asset)
+                     .Concat(eventAdds.Select(static add => add.Asset))
+                     .DistinctBy(static asset => asset.Id)
+                     .GroupBy(static asset => asset.Span.FilePath, StringComparer.Ordinal))
         {
-            RewriteContext context = contexts[sourceAdds.Key];
-            foreach (AddPlan add in sourceAdds)
+            RewriteContext context = contexts[sourceAssets.Key];
+            foreach (ScriptAssetDeclaration asset in sourceAssets)
             {
                 TypeDeclarationSyntax[] matches = context.Root.DescendantNodes()
                     .OfType<TypeDeclarationSyntax>()
-                    .Where(type => RoslynSourceSpan.FromNode(type, sourceAdds.Key) == add.Asset.Span)
+                    .Where(type => RoslynSourceSpan.FromNode(type, sourceAssets.Key) == asset.Span)
                     .ToArray();
                 if (matches.Length != 1)
                 {
-                    failure = MissingSyntax(add.Asset.Id, add.Asset.Span, "script asset type");
+                    failure = MissingSyntax(asset.Id, asset.Span, "script asset type");
                     return false;
                 }
 
                 context.Root = context.Root.ReplaceNode(
                     matches[0],
-                    matches[0].WithAdditionalAnnotations(AssetAnnotation(add.Asset.Id)));
+                    matches[0].WithAdditionalAnnotations(AssetAnnotation(asset.Id)));
             }
         }
 
@@ -366,6 +396,88 @@ public sealed class CSharpDeclarationPatchApplier
                 .WithAdditionalAnnotations(AssetAnnotation(first.Asset.Id));
             context.Root = context.Root.ReplaceNode(type, replacement);
         }
+    }
+
+    private static void ApplyEventAdditions(
+        IReadOnlyDictionary<string, RewriteContext> contexts,
+        IReadOnlyList<EventAddPlan> eventAdds)
+    {
+        foreach (IGrouping<SemanticId, EventAddPlan> assetAdds in
+                 eventAdds.GroupBy(static add => add.Asset.Id))
+        {
+            EventAddPlan first = assetAdds.First();
+            RewriteContext context = contexts[first.Asset.Span.FilePath];
+            TypeDeclarationSyntax type = GetAnnotatedNode<TypeDeclarationSyntax>(
+                context.Root,
+                AssetAnnotationKind,
+                first.Asset.Id);
+            SyntaxList<MemberDeclarationSyntax> members = type.Members;
+            foreach (EventAddPlan add in assetAdds)
+            {
+                members = members.Add(CreateEventHandler(add.Handler, type));
+            }
+            TypeDeclarationSyntax replacement = type.WithMembers(members)
+                .WithAdditionalAnnotations(AssetAnnotation(first.Asset.Id));
+            context.Root = context.Root.ReplaceNode(type, replacement);
+        }
+    }
+
+    private static MethodDeclarationSyntax CreateEventHandler(
+        UnrealEventHandlerPatchSpec spec,
+        TypeDeclarationSyntax containingType)
+    {
+        string source = RenderEventHandler(spec);
+        MethodDeclarationSyntax method = SyntaxFactory.ParseMemberDeclaration(source)
+            as MethodDeclarationSyntax ??
+            throw new InvalidOperationException(
+                "A validated Unreal Event Entry did not parse as a method.");
+        string newline = containingType.SyntaxTree?.GetText().ToString()
+            .Contains("\r\n", StringComparison.Ordinal) == true
+                ? "\r\n"
+                : "\n";
+        int indentationWidth = containingType.GetLocation()
+            .GetLineSpan().StartLinePosition.Character + 4;
+        string indentation = new(' ', indentationWidth);
+        string normalized = method
+            .WithoutLeadingTrivia()
+            .WithoutTrailingTrivia()
+            .NormalizeWhitespace(indentation: "    ", eol: newline)
+            .ToFullString()
+            .Replace(newline, newline + indentation, StringComparison.Ordinal);
+        method = SyntaxFactory.ParseMemberDeclaration(normalized) as MethodDeclarationSyntax ??
+            throw new InvalidOperationException(
+                "A normalized Unreal Event Entry did not parse as a method.");
+        return method
+            .WithLeadingTrivia(
+                SyntaxFactory.EndOfLine(newline),
+                SyntaxFactory.Whitespace(indentation))
+            .WithTrailingTrivia(SyntaxFactory.EndOfLine(newline));
+    }
+
+    private static string RenderEventHandler(UnrealEventHandlerPatchSpec spec)
+    {
+        string eventPath = SymbolDisplay.FormatLiteral(spec.EventPath, quote: true);
+        var bindingArguments = new List<string>
+        {
+            $"typeof({spec.SourceTypeName})",
+            eventPath,
+        };
+        if (spec.Source == "host")
+        {
+            bindingArguments.Add(
+                "Source = global::UnifiedScript.Unreal.UnrealEventSource.Host");
+        }
+        if (spec.SourceMember is not null)
+        {
+            bindingArguments.Add(
+                "SourceMember = " + SymbolDisplay.FormatLiteral(spec.SourceMember, quote: true));
+        }
+        string parameters = string.Join(
+            ", ",
+            spec.Parameters.Select(static parameter => $"{parameter.TypeName} {parameter.Name}"));
+        return "[global::UnifiedScript.Visual]\n" +
+            $"[global::UnifiedScript.Unreal.UnrealEvent({string.Join(", ", bindingArguments)})]\n" +
+            $"private void {spec.Name}({parameters})\n{{\n}}";
     }
 
     private static PropertyDeclarationSyntax RewriteProperty(
@@ -579,7 +691,8 @@ public sealed class CSharpDeclarationPatchApplier
     private static UnifiedDiagnostic? ValidatePostconditions(
         DeclarationPatchDocument patch,
         ScriptAssetDocument before,
-        ScriptAssetDocument after)
+        ScriptAssetDocument after,
+        HirCompilationUnit afterHir)
     {
         var beforeAssets = before.Assets.ToDictionary(static asset => asset.Id);
         var afterAssets = after.Assets.ToDictionary(static asset => asset.Id);
@@ -613,6 +726,26 @@ public sealed class CSharpDeclarationPatchApplier
                         return PostconditionFailed(remove.TargetStateId, "state removal");
                     }
 
+                    break;
+                case AddUnrealEventHandlerPatchOperation addEvent:
+                    HirMethodDeclaration[] matchingHandlers = afterHir.Types
+                        .SelectMany(static type => type.Methods)
+                        .Where(method => method.Name == addEvent.Handler.Name &&
+                            method.Parameters.Select(static parameter => parameter.TypeName)
+                                .SequenceEqual(addEvent.Handler.Parameters.Select(
+                                    static parameter => parameter.TypeName)) &&
+                            method.Attributes?.Any(attribute =>
+                                attribute.Name == "UnrealEvent" &&
+                                attribute.Arguments.Count >= 2 &&
+                                attribute.Arguments[0] == addEvent.Handler.SourceTypeName &&
+                                attribute.Arguments[1] == addEvent.Handler.EventPath) == true)
+                        .ToArray();
+                    if (matchingHandlers.Length != 1)
+                    {
+                        return PostconditionFailed(
+                            addEvent.TargetAssetId,
+                            "visual Unreal Event Entry contract");
+                    }
                     break;
             }
         }
@@ -691,9 +824,63 @@ public sealed class CSharpDeclarationPatchApplier
         return true;
     }
 
+    private static bool TryValidateEventHandler(
+        UnrealEventHandlerPatchSpec spec,
+        SourceSpan span,
+        out UnifiedDiagnostic? failure)
+    {
+        if (!SyntaxFacts.IsValidIdentifier(spec.Name) ||
+            SyntaxFacts.GetKeywordKind(spec.Name) != SyntaxKind.None)
+        {
+            failure = InvalidReplacement(
+                $"'{spec.Name}' is not a valid C# event-handler identifier.",
+                span);
+            return false;
+        }
+        if (SyntaxFactory.ParseTypeName(spec.SourceTypeName).ContainsDiagnostics)
+        {
+            failure = InvalidReplacement(
+                $"'{spec.SourceTypeName}' is not valid C# wrapper type syntax.",
+                span);
+            return false;
+        }
+        if (!spec.EventPath.StartsWith("/Script/", StringComparison.Ordinal) ||
+            !spec.EventPath.Contains(':', StringComparison.Ordinal))
+        {
+            failure = InvalidReplacement(
+                $"'{spec.EventPath}' is not a canonical reflected UE event path.",
+                span);
+            return false;
+        }
+        if (spec.SourceMember is not null &&
+            (!SyntaxFacts.IsValidIdentifier(spec.SourceMember) ||
+                SyntaxFacts.GetKeywordKind(spec.SourceMember) != SyntaxKind.None))
+        {
+            failure = InvalidReplacement(
+                $"'{spec.SourceMember}' is not a valid C# event-source member name.",
+                span);
+            return false;
+        }
+        foreach (UnrealEventHandlerParameterPatchSpec parameter in spec.Parameters)
+        {
+            if (!SyntaxFacts.IsValidIdentifier(parameter.Name) ||
+                SyntaxFacts.GetKeywordKind(parameter.Name) != SyntaxKind.None ||
+                SyntaxFactory.ParseTypeName(parameter.TypeName).ContainsDiagnostics)
+            {
+                failure = InvalidReplacement(
+                    $"Event parameter '{parameter.TypeName} {parameter.Name}' is not valid C# syntax.",
+                    span);
+                return false;
+            }
+        }
+        failure = null;
+        return true;
+    }
+
     private static UnifiedDiagnostic? ValidateFinalContracts(
         ScriptAssetDocument document,
         IReadOnlyList<AddPlan> adds,
+        IReadOnlyList<EventAddPlan> eventAdds,
         IReadOnlyList<UpdatePlan> updates,
         IReadOnlyList<RemovePlan> removes)
     {
@@ -720,6 +907,20 @@ public sealed class CSharpDeclarationPatchApplier
                 return InvalidReplacement(
                     $"Script asset '{asset.QualifiedName}' would contain duplicate state " +
                     $"name '{duplicateName}'.",
+                    asset.Span);
+            }
+            string? duplicateFunction = asset.Functions.Select(static function => function.Name)
+                .Concat(eventAdds
+                    .Where(add => add.Asset.Id == asset.Id)
+                    .Select(static add => add.Handler.Name))
+                .GroupBy(static name => name, StringComparer.Ordinal)
+                .FirstOrDefault(static group => group.Count() > 1)
+                ?.Key;
+            if (duplicateFunction is not null)
+            {
+                return InvalidReplacement(
+                    $"Script asset '{asset.QualifiedName}' would contain duplicate visual " +
+                    $"function name '{duplicateFunction}'.",
                     asset.Span);
             }
         }
@@ -799,6 +1000,10 @@ public sealed class CSharpDeclarationPatchApplier
     private sealed record AddPlan(
         ScriptAssetDeclaration Asset,
         ScriptStatePatchSpec State);
+
+    private sealed record EventAddPlan(
+        ScriptAssetDeclaration Asset,
+        UnrealEventHandlerPatchSpec Handler);
 
     private sealed record UpdatePlan(
         ScriptAssetDeclaration Asset,

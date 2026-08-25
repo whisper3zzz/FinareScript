@@ -15,7 +15,8 @@
 
 namespace UE::UnifiedScript::Private
 {
-constexpr const TCHAR* ReflectionSchema = TEXT("unifiedscript.unreal-reflection/v0.1");
+constexpr const TCHAR* ReflectionSchema = TEXT("unifiedscript.unreal-reflection/v0.2");
+constexpr const TCHAR* InternalBindingMetadata = TEXT("UnifiedScriptBindingInternal");
 
 TSharedRef<FJsonObject> TypeReference(
     const FString& Kind,
@@ -257,6 +258,79 @@ TSharedRef<FJsonObject> ExportFunction(const UClass* Class, const UFunction* Fun
     return Json;
 }
 
+const UFunction* DelegateSignature(const FProperty* Property)
+{
+    if (const FDelegateProperty* Delegate = CastField<FDelegateProperty>(Property))
+    {
+        return Delegate->SignatureFunction;
+    }
+    if (const FMulticastDelegateProperty* Delegate = CastField<FMulticastDelegateProperty>(Property))
+    {
+        return Delegate->SignatureFunction;
+    }
+    return nullptr;
+}
+
+TSharedRef<FJsonObject> ExportDelegate(
+    const UClass* Class,
+    const FProperty* Property,
+    const UFunction* Signature)
+{
+    TSharedRef<FJsonObject> Json = MakeShared<FJsonObject>();
+    const FString ClassPath = Class->GetPathName();
+    Json->SetStringField(TEXT("path"), ClassPath + TEXT(":") + Property->GetName());
+    Json->SetStringField(TEXT("name"), Property->GetName());
+    Json->SetStringField(TEXT("signaturePath"), Signature->GetPathName());
+
+    const FProperty* ReturnProperty = Signature->GetReturnProperty();
+    Json->SetObjectField(
+        TEXT("returnType"),
+        ReturnProperty
+            ? PropertyTypeReference(ReturnProperty)
+            : TypeReference(TEXT("void"), TEXT("void")));
+
+    TArray<TSharedPtr<FJsonValue>> Parameters;
+    for (TFieldIterator<FProperty> It(Signature, EFieldIteratorFlags::ExcludeSuper); It; ++It)
+    {
+        const FProperty* Parameter = *It;
+        if (!Parameter->HasAnyPropertyFlags(CPF_Parm) ||
+            Parameter->HasAnyPropertyFlags(CPF_ReturnParm))
+        {
+            continue;
+        }
+
+        TSharedRef<FJsonObject> ParameterJson = MakeShared<FJsonObject>();
+        ParameterJson->SetStringField(TEXT("name"), Parameter->GetName());
+        ParameterJson->SetObjectField(TEXT("type"), PropertyTypeReference(Parameter));
+        const bool bOutput =
+            Parameter->HasAnyPropertyFlags(CPF_OutParm) &&
+            !Parameter->HasAnyPropertyFlags(CPF_ConstParm);
+        const bool bReference = Parameter->HasAnyPropertyFlags(CPF_ReferenceParm);
+        ParameterJson->SetStringField(
+            TEXT("direction"),
+            bOutput && bReference ? TEXT("inputOutput") : bOutput ? TEXT("output") : TEXT("input"));
+        Parameters.Add(MakeShared<FJsonValueObject>(ParameterJson));
+    }
+    Json->SetArrayField(TEXT("parameters"), Parameters);
+
+    TSharedRef<FJsonObject> Traits = MakeShared<FJsonObject>();
+    Traits->SetStringField(
+        TEXT("kind"),
+        CastField<FMulticastDelegateProperty>(Property) ? TEXT("multicast") : TEXT("singleCast"));
+    Traits->SetBoolField(
+        TEXT("blueprintAssignable"),
+        Property->HasAnyPropertyFlags(CPF_BlueprintAssignable));
+    Traits->SetBoolField(
+        TEXT("blueprintCallable"),
+        Property->HasAnyPropertyFlags(CPF_BlueprintCallable));
+    Traits->SetBoolField(
+        TEXT("blueprintAuthorityOnly"),
+        Property->HasAnyPropertyFlags(CPF_BlueprintAuthorityOnly));
+    Traits->SetStringField(TEXT("nativeAccess"), PropertyNativeAccess(Property));
+    Json->SetObjectField(TEXT("traits"), Traits);
+    return Json;
+}
+
 TSharedRef<FJsonObject> ExportClass(
     const UClass* Class,
     FUnifiedScriptReflectionExportResult& Result)
@@ -288,9 +362,18 @@ TSharedRef<FJsonObject> ExportClass(
     Json->SetObjectField(TEXT("traits"), Traits);
 
     TArray<const FProperty*> Properties;
+    TArray<const FProperty*> Delegates;
     for (TFieldIterator<FProperty> It(Class, EFieldIteratorFlags::ExcludeSuper); It; ++It)
     {
         const FProperty* Property = *It;
+        if (const UFunction* Signature = DelegateSignature(Property))
+        {
+            if (Property->HasAnyPropertyFlags(CPF_BlueprintAssignable | CPF_BlueprintCallable))
+            {
+                Delegates.Add(Property);
+            }
+            continue;
+        }
         if (!Property->HasAnyPropertyFlags(CPF_Parm) &&
             Property->HasAnyPropertyFlags(CPF_BlueprintVisible))
         {
@@ -308,6 +391,20 @@ TSharedRef<FJsonObject> ExportClass(
         ++Result.PropertyCount;
     }
     Json->SetArrayField(TEXT("properties"), PropertyValues);
+
+    Delegates.Sort([](const FProperty& Left, const FProperty& Right)
+    {
+        return Left.GetName() < Right.GetName();
+    });
+    TArray<TSharedPtr<FJsonValue>> DelegateValues;
+    for (const FProperty* Property : Delegates)
+    {
+        const UFunction* Signature = DelegateSignature(Property);
+        check(Signature != nullptr);
+        DelegateValues.Add(MakeShared<FJsonValueObject>(ExportDelegate(Class, Property, Signature)));
+        ++Result.DelegateCount;
+    }
+    Json->SetArrayField(TEXT("delegates"), DelegateValues);
 
     TArray<const UFunction*> Functions;
     for (TFieldIterator<UFunction> It(Class, EFieldIteratorFlags::ExcludeSuper); It; ++It)
@@ -381,6 +478,11 @@ bool FUnifiedScriptReflectionExporter::Export(
         }
         if (ModuleSet.Contains(ModuleName(Class)))
         {
+            if (Class->HasMetaData(InternalBindingMetadata))
+            {
+                ++OutResult.ExcludedTypeCount;
+                continue;
+            }
             Classes.Add(Class);
         }
     }

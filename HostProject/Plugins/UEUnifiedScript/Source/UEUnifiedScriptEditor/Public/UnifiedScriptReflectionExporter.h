@@ -13,6 +13,8 @@ struct FUnifiedScriptReflectionExportResult
     int32 TypeCount = 0;
     int32 PropertyCount = 0;
     int32 FunctionCount = 0;
+    int32 DelegateCount = 0;
+    int32 ExcludedTypeCount = 0;
 };
 
 class UEUNIFIEDSCRIPTEDITOR_API FUnifiedScriptReflectionExporter

@@ -22,6 +22,15 @@ public sealed class DeclarationPatchJsonTests
                 new RemoveScriptStatePatchOperation(
                     SemanticId.FromKey("removed"),
                     Expected("Removed", 3)),
+                new AddUnrealEventHandlerPatchOperation(
+                    SemanticId.FromKey("asset"),
+                    new UnrealEventHandlerPatchSpec(
+                        "OnChanged",
+                        "global::Game.FixtureComponent",
+                        "/Script/Fixture.FixtureComponent:OnChanged",
+                        "target",
+                        null,
+                        [new("value", "int")])),
             ]);
 
         string json = DeclarationPatchJson.Serialize(document);
@@ -34,6 +43,26 @@ public sealed class DeclarationPatchJsonTests
         Assert.Contains("\"operation\": \"addState\"", json);
         Assert.Contains("\"operation\": \"updateState\"", json);
         Assert.Contains("\"operation\": \"removeState\"", json);
+        Assert.Contains("\"operation\": \"addUnrealEventHandler\"", json);
+    }
+
+    [Fact]
+    public void DeserializeMigratesLegacyDeclarationPatchToV02()
+    {
+        DeclarationPatchDocument current = DeclarationPatchDocument.Create(
+            SemanticId.FromKey("source"),
+            SemanticId.FromKey("configuration"),
+            [new RemoveScriptStatePatchOperation(
+                SemanticId.FromKey("state"),
+                Expected("Count", 1))]);
+        string legacy = DeclarationPatchJson.Serialize(current).Replace(
+            DeclarationPatchDocument.CurrentSchemaVersion,
+            DeclarationPatchDocument.LegacySchemaVersion,
+            StringComparison.Ordinal);
+
+        DeclarationPatchDocument migrated = DeclarationPatchJson.Deserialize(legacy);
+
+        Assert.Equal(DeclarationPatchDocument.CurrentSchemaVersion, migrated.SchemaVersion);
     }
 
     [Fact]

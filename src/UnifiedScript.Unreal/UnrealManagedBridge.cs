@@ -1,5 +1,9 @@
 namespace UnifiedScript.Unreal;
 
+[AttributeUsage(AttributeTargets.Struct, AllowMultiple = false, Inherited = false)]
+public sealed class UnrealValueAttribute : Attribute;
+
+[UnrealValue]
 public readonly record struct UnrealObjectHandle(ulong Value)
 {
     public bool IsNull => Value == 0;
@@ -35,6 +39,7 @@ public readonly record struct UnrealObjectHandle(ulong Value)
 }
 
 /// <summary>Generation-safe handle whose native value is required to be a UClass.</summary>
+[UnrealValue]
 public readonly record struct UnrealClassHandle(ulong Value)
 {
     public UnrealObjectHandle ObjectHandle => new(Value);
@@ -207,6 +212,90 @@ public interface IUnrealOutputInvocationBridge
         string memberPath,
         Type returnType,
         IReadOnlyList<UnrealOutputArgument> arguments);
+}
+
+public sealed record UnrealEventParameterDescriptor(
+    string Name,
+    Type Type,
+    UnrealParameterDirection Direction);
+
+/// <summary>
+/// Generated, engine-version-specific contract for one reflected UE delegate property.
+/// The stable event ID is derived from the canonical owner/member path.
+/// </summary>
+public sealed record UnrealEventDescriptor(
+    ulong EventId,
+    string EventPath,
+    string SignaturePath,
+    Type ReturnType,
+    UnrealDelegateKind Kind,
+    IReadOnlyList<UnrealEventParameterDescriptor> Parameters);
+
+/// <summary>
+/// Optional bridge capability used by generated wrappers to bind reflected UE events.
+/// Implementations own native proxy creation and must make disposal idempotent.
+/// </summary>
+public interface IUnrealEventBridge
+{
+    IUnrealEventSubscription Subscribe(
+        UnrealObjectHandle source,
+        UnrealEventDescriptor descriptor,
+        Delegate handler);
+}
+
+public interface IUnrealEventSubscription : IDisposable
+{
+    ulong SubscriptionId { get; }
+
+    bool IsActive { get; }
+
+    Exception? LastDispatchException { get; }
+}
+
+public enum UnrealEventSource
+{
+    Target,
+    Host,
+}
+
+/// <summary>
+/// Marks a generated wrapper subscription method as the managed endpoint for one
+/// canonical reflected UE delegate property. Event authoring resolves endpoints
+/// by path, so generated C# member-name collision suffixes do not affect assets.
+/// </summary>
+[AttributeUsage(AttributeTargets.Method, AllowMultiple = false, Inherited = false)]
+public sealed class UnrealEventEndpointAttribute(string eventPath) : Attribute
+{
+    public string EventPath { get; } = string.IsNullOrWhiteSpace(eventPath)
+        ? throw new ArgumentException("A canonical Unreal event path is required.", nameof(eventPath))
+        : eventPath;
+}
+
+/// <summary>
+/// Declares a visual method as a handler for a reflected UE delegate. The World
+/// host binds the method after OnStart, once script state has been initialized.
+/// </summary>
+[AttributeUsage(AttributeTargets.Method, AllowMultiple = true, Inherited = false)]
+public sealed class UnrealEventAttribute(Type sourceType, string eventPath) : Attribute
+{
+    public Type SourceType { get; } = sourceType is not null &&
+        typeof(UnrealObject).IsAssignableFrom(sourceType)
+            ? sourceType
+            : throw new ArgumentException(
+                $"An {nameof(UnrealObject)} wrapper type is required.",
+                nameof(sourceType));
+
+    public string EventPath { get; } = string.IsNullOrWhiteSpace(eventPath)
+        ? throw new ArgumentException("A canonical Unreal event path is required.", nameof(eventPath))
+        : eventPath;
+
+    public UnrealEventSource Source { get; init; } = UnrealEventSource.Target;
+
+    /// <summary>
+    /// Optional field or property on the script that contains a wrapper instance.
+    /// When omitted, SourceType is constructed for the script Host or Target handle.
+    /// </summary>
+    public string? SourceMember { get; init; }
 }
 
 public static class UnrealMemberId
@@ -486,6 +575,21 @@ public abstract class UnrealObject
             functionPath,
             returnType,
             arguments);
+    }
+
+    protected IUnrealEventSubscription SubscribeEvent(
+        UnrealEventDescriptor descriptor,
+        Delegate handler)
+    {
+        ArgumentNullException.ThrowIfNull(descriptor);
+        ArgumentNullException.ThrowIfNull(handler);
+        if (Bridge is not IUnrealEventBridge eventBridge)
+        {
+            throw new NotSupportedException(
+                "The Unreal invocation bridge does not support reflected delegate subscriptions.");
+        }
+
+        return eventBridge.Subscribe(Handle, descriptor, handler);
     }
 
     private void InvokeLegacy(

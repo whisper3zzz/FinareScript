@@ -147,6 +147,81 @@ public sealed class UnrealBindingGeneratorTests
     }
 
     [Fact]
+    public void GenerateEmitsStrongReflectedEventProxyAndSubscription()
+    {
+        UnrealReflectionManifest manifest = CreateManifest();
+        UnrealReflectedType type = manifest.Types[0];
+        const string eventPath =
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:OnInteropChanged";
+        manifest = manifest with
+        {
+            Types =
+            [
+                type with
+                {
+                    Delegates =
+                    [
+                        new UnrealReflectedDelegate(
+                            eventPath,
+                            "OnInteropChanged",
+                            "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:OnInteropChanged__DelegateSignature",
+                            new UnrealTypeReference(UnrealValueKind.Void, "void"),
+                            [
+                                new UnrealReflectedParameter(
+                                    "NewValue",
+                                    new UnrealTypeReference(UnrealValueKind.Int32, "int32"),
+                                    UnrealParameterDirection.Input),
+                                new UnrealReflectedParameter(
+                                    "Context",
+                                    new UnrealTypeReference(
+                                        UnrealValueKind.Object,
+                                        "UObject*",
+                                        "/Script/CoreUObject.Object"),
+                                    UnrealParameterDirection.Input),
+                            ],
+                            new UnrealDelegateTraits(
+                                UnrealDelegateKind.Multicast,
+                                BlueprintAssignable: true,
+                                BlueprintCallable: true,
+                                BlueprintAuthorityOnly: false)),
+                    ],
+                },
+            ],
+        };
+
+        UnrealBindingGenerationResult result = new UnrealBindingGenerator().Generate(manifest);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Contains(
+            "public delegate void OnInteropChangedHandler(int newValue, global::UnifiedScript.Unreal.UnrealObjectHandle context);",
+            result.Source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "public static global::UnifiedScript.Unreal.UnrealEventDescriptor OnInteropChangedEvent",
+            result.Source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            $"0x{UnrealMemberId.FromPath(eventPath):X16}UL",
+            result.Source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            $"[global::UnifiedScript.Unreal.UnrealEventEndpointAttribute(\"{eventPath}\")]",
+            result.Source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "public global::UnifiedScript.Unreal.IUnrealEventSubscription SubscribeOnInteropChanged(OnInteropChangedHandler handler)",
+            result.Source,
+            StringComparison.Ordinal);
+
+        SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(result.Source);
+        CSharpCompilation compilation = new CSharpCompilationHost().Create(
+            syntaxTree,
+            [MetadataReference.CreateFromFile(typeof(UnrealObject).Assembly.Location)]);
+        Assert.Empty(compilation.GetDiagnostics()
+            .Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+    }
+
+    [Fact]
     public void ManagedWrapperRequiresLiveHandleAndBridge()
     {
         Assert.Throws<ArgumentException>(() => new FixtureWrapper(

@@ -3,7 +3,7 @@
  * @Author: whispersong
  * @Date: 2026-08-24 18:41:46
  * @LastEditors: whispersong
- * @LastEditTime: 2026-08-25 10:33:15
+ * @LastEditTime: 2026-08-25 14:22:40
  * @FilePath: \Plugins\UEUnifiedScript\Source\UEUnifiedScriptEditor\Public\UnifiedScriptAuthoringWorkbench.h
  * @Description:
  */
@@ -26,6 +26,8 @@ public:
     static FString NormalizeServerUrl(const FString& ServerUrl);
 
     static FString BuildSemanticPatchUrl(const FString& ServerUrl);
+
+    static FString BuildDeclarationPatchUrl(const FString& ServerUrl);
 
     static FString BuildSemanticPatchPlanUrl(const FString& ServerUrl);
 

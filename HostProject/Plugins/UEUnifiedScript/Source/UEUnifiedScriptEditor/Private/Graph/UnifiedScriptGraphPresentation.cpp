@@ -3,7 +3,7 @@
  * @Author: whispersong
  * @Date: 2026-08-24 19:48:12
  * @LastEditors: whispersong
- * @LastEditTime: 2026-08-25 10:17:32
+ * @LastEditTime: 2026-08-25 14:22:40
  * @FilePath: \Plugins\UEUnifiedScript\Source\UEUnifiedScriptEditor\Private\Graph\UnifiedScriptGraphPresentation.cpp
  * @Description:
  */
@@ -137,7 +137,8 @@ FString FUnifiedScriptGraphPresentation::GetNodeTitle(
 bool FUnifiedScriptGraphPresentation::ShouldShowSummary(
     const FUnifiedScriptAuthoringAction& Action)
 {
-    return Action.GraphKind == TEXT("entry") || Action.GraphKind == TEXT("loop") ||
+    return Action.GraphKind == TEXT("entry") || Action.GraphKind == TEXT("unrealEventEntry") ||
+        Action.GraphKind == TEXT("loop") ||
         Action.GraphKind == TEXT("invocation") || Action.GraphKind == TEXT("await") ||
         Action.GraphKind == TEXT("memberAccess");
 }
@@ -155,6 +156,16 @@ FString FUnifiedScriptGraphPresentation::GetPinLabel(
     const FUnifiedScriptAuthoringFunction& Function)
 {
     using namespace UE::UnifiedScript::Editor::Presentation::Private;
+    if (Action.GraphKind == TEXT("unrealEventEntry") &&
+        Port.Name.StartsWith(TEXT("eventArg")))
+    {
+        int32 ParameterIndex = INDEX_NONE;
+        if (LexTryParseString(ParameterIndex, *Port.Name.Mid(8)) &&
+            Function.Parameters.IsValidIndex(ParameterIndex))
+        {
+            return Function.Parameters[ParameterIndex].Name;
+        }
+    }
     FString Label = BasePinLabel(Action, Port);
     if (const FUnifiedScriptAuthoringAction* Source = FindInlineSource(Action, Port, Function))
     {
@@ -198,6 +209,10 @@ bool FUnifiedScriptGraphPresentation::ShouldHidePin(
     const FUnifiedScriptAuthoringFunction& Function)
 {
     if (Port.IsControl() || Port.IsInput())
+    {
+        return false;
+    }
+    if (Action.GraphKind == TEXT("unrealEventEntry"))
     {
         return false;
     }

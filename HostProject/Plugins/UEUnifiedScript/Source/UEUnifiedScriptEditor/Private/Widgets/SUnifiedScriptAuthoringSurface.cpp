@@ -763,12 +763,9 @@ void SUnifiedScriptAuthoringSurface::HandleNodeCreateRequested(
         return;
     }
     const FUnifiedScriptAuthoringFunction* Function = FindFunction(ActiveFunctionId);
-    const FUnifiedScriptAuthoringRegion* Block = Function != nullptr
-        ? ResolveActiveBlockRegion(*Function)
-        : nullptr;
-    if (Function == nullptr || Block == nullptr)
+    if (Function == nullptr)
     {
-        SetStatus(TEXT("Select a function or a statement inside an editable block first."), true);
+        SetStatus(TEXT("Select a function before creating a graph node."), true);
         return;
     }
 
@@ -778,6 +775,50 @@ void SUnifiedScriptAuthoringSurface::HandleNodeCreateRequested(
     if (const FUnifiedScriptReflectedPaletteAction* Reflected =
             ReflectedPaletteActions.Find(ActionId))
     {
+        if (Reflected->bEvent)
+        {
+            const FUnifiedScriptAuthoringAsset* Asset = Document.Assets.FindByPredicate(
+                [Function](const FUnifiedScriptAuthoringAsset& Candidate)
+                {
+                    return Candidate.Functions.ContainsByPredicate(
+                        [Function](const FUnifiedScriptAuthoringFunction& CandidateFunction)
+                        {
+                            return CandidateFunction.Id == Function->Id;
+                        });
+                });
+            if (Asset == nullptr)
+            {
+                SetStatus(TEXT("The active function has no owning Script Asset."), true);
+                return;
+            }
+            bBuilt = FUnifiedScriptAuthoringSurfaceReader::BuildUnrealEventHandlerInsertionPatch(
+                Document,
+                *Asset,
+                Reflected->HandlerName,
+                Reflected->SourceTypeName,
+                Reflected->EventPath,
+                Reflected->EventParameters,
+                Patch,
+                Error);
+            if (!bBuilt)
+            {
+                SetStatus(MoveTemp(Error), true);
+                return;
+            }
+            SubmitAuthoringTransaction(
+                MoveTemp(Patch),
+                FUnifiedScriptAuthoringWorkbench::BuildDeclarationPatchUrl(
+                    ServerUrlTextBox.IsValid() ? ServerUrlTextBox->GetText().ToString() : FString()),
+                FString::Printf(TEXT("Creating UE Event Entry '%s'"), *Reflected->HandlerName));
+            return;
+        }
+
+        const FUnifiedScriptAuthoringRegion* Block = ResolveActiveBlockRegion(*Function);
+        if (Block == nullptr)
+        {
+            SetStatus(TEXT("Select a statement inside an editable block first."), true);
+            return;
+        }
         if (Reflected->bInvocation)
         {
             bBuilt = FUnifiedScriptAuthoringSurfaceReader::BuildMemberInvocationInsertionPatch(
@@ -808,6 +849,12 @@ void SUnifiedScriptAuthoringSurface::HandleNodeCreateRequested(
     }
     else
     {
+        const FUnifiedScriptAuthoringRegion* Block = ResolveActiveBlockRegion(*Function);
+        if (Block == nullptr)
+        {
+            SetStatus(TEXT("Select a statement inside an editable block first."), true);
+            return;
+        }
         bBuilt = FUnifiedScriptAuthoringSurfaceReader::BuildBasicNodeInsertionPatch(
             Document, *Function, *Block, ActionId, Patch, Error);
     }
@@ -1713,6 +1760,89 @@ void SUnifiedScriptAuthoringSurface::RebuildNodePalette(
         }
         return FString();
     };
+    TFunction<FString(const TSharedPtr<FJsonObject>&)> ManagedEventTypeName;
+    ManagedEventTypeName = [&ManagedEventTypeName](
+        const TSharedPtr<FJsonObject>& Type) -> FString
+    {
+        FString Kind;
+        if (!Type.IsValid() || !Type->TryGetStringField(TEXT("kind"), Kind))
+        {
+            return FString();
+        }
+        if (Kind == TEXT("boolean")) return TEXT("bool");
+        if (Kind == TEXT("int8")) return TEXT("sbyte");
+        if (Kind == TEXT("uint8")) return TEXT("byte");
+        if (Kind == TEXT("int16")) return TEXT("short");
+        if (Kind == TEXT("uint16")) return TEXT("ushort");
+        if (Kind == TEXT("int32")) return TEXT("int");
+        if (Kind == TEXT("uint32")) return TEXT("uint");
+        if (Kind == TEXT("int64")) return TEXT("long");
+        if (Kind == TEXT("uint64")) return TEXT("ulong");
+        if (Kind == TEXT("float32")) return TEXT("float");
+        if (Kind == TEXT("float64")) return TEXT("double");
+        if (Kind == TEXT("string")) return TEXT("string");
+        if (Kind == TEXT("name")) return TEXT("global::UnifiedScript.Unreal.UnrealName");
+        if (Kind == TEXT("text")) return TEXT("global::UnifiedScript.Unreal.UnrealText");
+        if (Kind == TEXT("object"))
+        {
+            return TEXT("global::UnifiedScript.Unreal.UnrealObjectHandle");
+        }
+        if (Kind == TEXT("class"))
+        {
+            return TEXT("global::UnifiedScript.Unreal.UnrealClassHandle");
+        }
+        if (Kind == TEXT("enum"))
+        {
+            return TEXT("global::UnifiedScript.Unreal.UnrealEnumValue");
+        }
+        FString TypePath;
+        if (Kind == TEXT("struct") && Type->TryGetStringField(TEXT("typePath"), TypePath))
+        {
+            if (TypePath == TEXT("/Script/CoreUObject.Vector"))
+            {
+                return TEXT("global::UnifiedScript.Unreal.UnrealVector");
+            }
+            if (TypePath == TEXT("/Script/CoreUObject.Rotator"))
+            {
+                return TEXT("global::UnifiedScript.Unreal.UnrealRotator");
+            }
+            if (TypePath == TEXT("/Script/CoreUObject.Transform"))
+            {
+                return TEXT("global::UnifiedScript.Unreal.UnrealTransform");
+            }
+            return FString();
+        }
+        const TSharedPtr<FJsonObject>* Element = nullptr;
+        if ((Kind == TEXT("array") || Kind == TEXT("set")) &&
+            Type->TryGetObjectField(TEXT("elementType"), Element) && Element != nullptr)
+        {
+            const FString ManagedElement = ManagedEventTypeName(*Element);
+            if (ManagedElement.IsEmpty()) return FString();
+            return Kind == TEXT("array")
+                ? FString::Printf(
+                    TEXT("global::System.Collections.Generic.IReadOnlyList<%s>"),
+                    *ManagedElement)
+                : FString::Printf(
+                    TEXT("global::System.Collections.Generic.IReadOnlySet<%s>"),
+                    *ManagedElement);
+        }
+        const TSharedPtr<FJsonObject>* Key = nullptr;
+        const TSharedPtr<FJsonObject>* Value = nullptr;
+        if (Kind == TEXT("map") && Type->TryGetObjectField(TEXT("keyType"), Key) &&
+            Key != nullptr && Type->TryGetObjectField(TEXT("valueType"), Value) &&
+            Value != nullptr)
+        {
+            const FString ManagedKey = ManagedEventTypeName(*Key);
+            const FString ManagedValue = ManagedEventTypeName(*Value);
+            return ManagedKey.IsEmpty() || ManagedValue.IsEmpty()
+                ? FString()
+                : FString::Printf(
+                    TEXT("global::System.Collections.Generic.IReadOnlyDictionary<%s, %s>"),
+                    *ManagedKey,
+                    *ManagedValue);
+        }
+        return FString();
+    };
     const auto FindBoundTypeId = [&Function](const FString& DisplayName) -> FString
     {
         for (const FUnifiedScriptAuthoringParameter& Parameter : Function.Parameters)
@@ -1740,6 +1870,15 @@ void SUnifiedScriptAuthoringSurface::RebuildNodePalette(
     {
         return;
     }
+    const FUnifiedScriptAuthoringAsset* ActiveAsset = Document.Assets.FindByPredicate(
+        [&Function](const FUnifiedScriptAuthoringAsset& Asset)
+        {
+            return Asset.Functions.ContainsByPredicate(
+                [&Function](const FUnifiedScriptAuthoringFunction& Candidate)
+                {
+                    return Candidate.Id == Function.Id;
+                });
+        });
     for (const TSharedPtr<FJsonValue>& TypeValue : *Types)
     {
         const TSharedPtr<FJsonObject> Type = TypeValue.IsValid() ? TypeValue->AsObject() : nullptr;
@@ -1748,6 +1887,101 @@ void SUnifiedScriptAuthoringSurface::RebuildNodePalette(
         if (!Type.IsValid() || !Type->TryGetStringField(TEXT("name"), TypeName))
         {
             continue;
+        }
+        const TArray<TSharedPtr<FJsonValue>>* Delegates = nullptr;
+        if (Type->TryGetArrayField(TEXT("delegates"), Delegates) && Delegates != nullptr)
+        {
+            for (const TSharedPtr<FJsonValue>& DelegateValue : *Delegates)
+            {
+                const TSharedPtr<FJsonObject> Delegate =
+                    DelegateValue.IsValid() ? DelegateValue->AsObject() : nullptr;
+                FString MemberName;
+                FString EventPath;
+                const TSharedPtr<FJsonObject>* Traits = nullptr;
+                const TArray<TSharedPtr<FJsonValue>>* Parameters = nullptr;
+                bool bBlueprintAssignable = false;
+                if (!Delegate.IsValid() ||
+                    !Delegate->TryGetStringField(TEXT("name"), MemberName) ||
+                    !Delegate->TryGetStringField(TEXT("path"), EventPath) ||
+                    !Delegate->TryGetObjectField(TEXT("traits"), Traits) || Traits == nullptr ||
+                    !(*Traits)->TryGetBoolField(
+                        TEXT("blueprintAssignable"),
+                        bBlueprintAssignable) || !bBlueprintAssignable ||
+                    !Delegate->TryGetArrayField(TEXT("parameters"), Parameters) ||
+                    Parameters == nullptr)
+                {
+                    continue;
+                }
+                FString HandlerName = MemberName;
+                for (int32 Suffix = 2; ActiveAsset != nullptr &&
+                     ActiveAsset->Functions.ContainsByPredicate(
+                         [&HandlerName](const FUnifiedScriptAuthoringFunction& Candidate)
+                         {
+                             return Candidate.Name == HandlerName;
+                         }); ++Suffix)
+                {
+                    HandlerName = FString::Printf(TEXT("%s%d"), *MemberName, Suffix);
+                }
+
+                TArray<FUnifiedScriptAuthoringParameter> EventParameters;
+                TArray<FString> SignatureParts;
+                bool bSupported = true;
+                for (const TSharedPtr<FJsonValue>& ParameterValue : *Parameters)
+                {
+                    const TSharedPtr<FJsonObject> Parameter =
+                        ParameterValue.IsValid() ? ParameterValue->AsObject() : nullptr;
+                    FString Name;
+                    FString Direction;
+                    const TSharedPtr<FJsonObject>* ParameterType = nullptr;
+                    if (!Parameter.IsValid() ||
+                        !Parameter->TryGetStringField(TEXT("name"), Name) ||
+                        !Parameter->TryGetStringField(TEXT("direction"), Direction) ||
+                        Direction != TEXT("input") ||
+                        !Parameter->TryGetObjectField(TEXT("type"), ParameterType) ||
+                        ParameterType == nullptr)
+                    {
+                        bSupported = false;
+                        break;
+                    }
+                    const FString ManagedType = ManagedEventTypeName(*ParameterType);
+                    if (ManagedType.IsEmpty())
+                    {
+                        bSupported = false;
+                        break;
+                    }
+                    FUnifiedScriptAuthoringParameter EventParameter;
+                    EventParameter.Name = Name;
+                    EventParameter.TypeMetadataName = ManagedType;
+                    EventParameter.TypeDisplayName = TypeDisplayName(*ParameterType);
+                    EventParameters.Add(MoveTemp(EventParameter));
+                    SignatureParts.Add(ManagedType + TEXT(" ") + Name);
+                }
+                if (!bSupported)
+                {
+                    continue;
+                }
+
+                const FString ActionId = FString::Printf(
+                    TEXT("ue.event|%s|%s"),
+                    *TypeName,
+                    *MemberName);
+                FUnifiedScriptReflectedPaletteAction EventAction;
+                EventAction.bEvent = true;
+                EventAction.EventPath = EventPath;
+                EventAction.SourceTypeName =
+                    TEXT("global::UnifiedScript.Unreal.Generated.") + TypeName;
+                EventAction.HandlerName = HandlerName;
+                EventAction.EventParameters = MoveTemp(EventParameters);
+                ReflectedPaletteActions.Add(ActionId, MoveTemp(EventAction));
+                AuthoringGraph->PaletteActions.Add(
+                    {ActionId,
+                        TEXT("Unreal Events|") + TypeName,
+                        TEXT("Event ") + MemberName,
+                        FString::Printf(
+                            TEXT("Create a target-bound visual Event Entry.\n%s(%s)"),
+                            *MemberName,
+                            *FString::Join(SignatureParts, TEXT(", ")))});
+            }
         }
         const FUnifiedScriptAuthoringParameter* Receiver = Function.Parameters.FindByPredicate(
             [&TypeName](const FUnifiedScriptAuthoringParameter& Parameter)
@@ -1958,6 +2192,15 @@ int32 SUnifiedScriptAuthoringSurface::GetVisibleGraphEdgeCount() const
 FString SUnifiedScriptAuthoringSurface::GetActiveFunctionId() const
 {
     return ActiveFunctionId;
+}
+
+bool SUnifiedScriptAuthoringSurface::HasNodePaletteAction(const FString& ActionId) const
+{
+    return AuthoringGraph.IsValid() && AuthoringGraph->PaletteActions.ContainsByPredicate(
+        [&ActionId](const FUnifiedScriptGraphPaletteAction& Action)
+        {
+            return Action.ActionId == ActionId;
+        });
 }
 
 void SUnifiedScriptAuthoringSurface::RebuildInspector(

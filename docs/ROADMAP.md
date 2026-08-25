@@ -266,7 +266,8 @@ measured call path and survive packaged Win64 builds.
 - [x] placeable Actor host and managed UObject/Actor lifecycle object model
 - [x] World-safe Actor overlap delegates/events and latent generation cancellation
 - [x] deterministic UE binding coverage gate and safe reflected-path fallback
-- [ ] arbitrary reflected delegate signatures and event proxy generation
+- [x] arbitrary reflected delegate signatures, ABI v4 event proxies, attributed
+  lifecycle binding, and Graph/C# Event Entry round-trip
 - [x] reproducible C++/UnifiedScript benchmark, Puerts comparison gate, and regression thresholds
 - [x] Win64 Development/Shipping cook, dependency closure, and packaged smoke test
 - [ ] Graph Authoring Beta plus native debug traps, deeper locals, and evaluation
