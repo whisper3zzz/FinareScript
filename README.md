@@ -348,6 +348,14 @@ v2 bootstrap suffix and retains v1/v2 only for old hosts and unsupported
 reflected shapes. The live UE 5.8 lifecycle Demo reports `FastCalls=16`, all
 through `CallFrameCalls=16` with `LegacyCalls=0`.
 
+`ue-bindings --report` now emits deterministic per-member coverage as native
+thunk, reflected-path fallback, rejected, or deferred type. `--fail-on-rejected`
+makes that report a CI gate. If a generated member ID is absent at runtime, the
+managed bridge retries the exact reflected member path only for the legacy
+scalar/object/core-struct contract; `out`/`ref` and container shapes are
+reported as rejected when no direct thunk exists instead of claiming an unsafe
+or lossy fallback.
+
 Graph Presentation v1 keeps `ResolveInitialValue`'s complete 14-node/14-edge
 Surface intact while projecting a compact 7-node/7-wire authoring canvas. Connected identifier
 and literal leaves become readable pin values such as `A = InitialValue` and
@@ -563,7 +571,10 @@ wrapper directly with:
 ```bash
 dotnet run --project src/UnifiedScript.Cli -- \
   ue-bindings samples/Unreal/UEUnifiedScriptRuntime.reflection.json \
-  --out artifacts/UEUnifiedScriptRuntime.bindings.cs
+  --out artifacts/UEUnifiedScriptRuntime.bindings.cs \
+  --native-out artifacts/UEUnifiedScriptRuntime.thunks.cpp \
+  --report artifacts/ue/binding-coverage.json \
+  --fail-on-rejected
 ```
 
 See [UNREAL_ADAPTER.md](docs/UNREAL_ADAPTER.md) for the contract, module

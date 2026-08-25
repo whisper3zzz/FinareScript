@@ -265,6 +265,7 @@ measured call path and survive packaged Win64 builds.
 - [x] arrays, sets, maps, variable-size returns, and return plus `out`/`ref`
 - [x] placeable Actor host and managed UObject/Actor lifecycle object model
 - [x] World-safe Actor overlap delegates/events and latent generation cancellation
+- [x] deterministic UE binding coverage gate and safe reflected-path fallback
 - [ ] arbitrary reflected delegate signatures and event proxy generation
 - [x] reproducible C++/UnifiedScript benchmark, Puerts comparison gate, and regression thresholds
 - [x] Win64 Development/Shipping cook, dependency closure, and packaged smoke test

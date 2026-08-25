@@ -405,12 +405,16 @@ public sealed class NativeUnrealInvocationBridge
             return callFrameResult;
         }
         Interlocked.Increment(ref _legacyInvocationCount);
-        IUnrealNativeFastInvocationTransport transport = RequireFastTransport(
-            target,
-            memberId,
-            propertyPath);
-        UnrealInvocationValue value = RequireSuccess(
-            transport.ReadPropertyById(target, memberId));
+        if (!TryGetFastTransport(out IUnrealNativeFastInvocationTransport? transport))
+        {
+            return ReadProperty<T>(target, propertyPath);
+        }
+        UnrealInvocationResponse response = transport!.ReadPropertyById(target, memberId);
+        if (IsMissingGeneratedMember(response))
+        {
+            return ReadProperty<T>(target, propertyPath);
+        }
+        UnrealInvocationValue value = RequireSuccess(response);
         return ConvertFromNative<T>(value, propertyPath);
     }
 
@@ -441,13 +445,22 @@ public sealed class NativeUnrealInvocationBridge
             return;
         }
         Interlocked.Increment(ref _legacyInvocationCount);
-        IUnrealNativeFastInvocationTransport transport = RequireFastTransport(
+        UnrealInvocationValue nativeValue = ConvertToNative(value, propertyPath);
+        if (!TryGetFastTransport(out IUnrealNativeFastInvocationTransport? transport))
+        {
+            WriteProperty(target, propertyPath, value);
+            return;
+        }
+        UnrealInvocationResponse response = transport!.WritePropertyById(
             target,
             memberId,
-            propertyPath);
-        UnrealInvocationValue nativeValue = ConvertToNative(value, propertyPath);
-        UnrealInvocationValue result = RequireSuccess(
-            transport.WritePropertyById(target, memberId, nativeValue));
+            nativeValue);
+        if (IsMissingGeneratedMember(response))
+        {
+            WriteProperty(target, propertyPath, value);
+            return;
+        }
+        UnrealInvocationValue result = RequireSuccess(response);
         RequireVoid(result, propertyPath);
     }
 
@@ -457,15 +470,23 @@ public sealed class NativeUnrealInvocationBridge
         string functionPath,
         IReadOnlyList<object?> arguments)
     {
-        IUnrealNativeFastInvocationTransport transport = RequireFastTransport(
-            target,
-            memberId,
-            functionPath);
+        ValidateFastRequest(target, memberId, functionPath);
+        if (!TryGetFastTransport(out IUnrealNativeFastInvocationTransport? transport))
+        {
+            return Invoke<T>(target, functionPath, arguments);
+        }
         IReadOnlyList<UnrealInvocationValue> nativeArguments = ConvertArguments(
             arguments,
             functionPath);
-        UnrealInvocationValue result = RequireSuccess(
-            transport.InvokeById(target, memberId, nativeArguments));
+        UnrealInvocationResponse response = transport!.InvokeById(
+            target,
+            memberId,
+            nativeArguments);
+        if (IsMissingGeneratedMember(response))
+        {
+            return Invoke<T>(target, functionPath, arguments);
+        }
+        UnrealInvocationValue result = RequireSuccess(response);
         return ConvertFromNative<T>(result, functionPath);
     }
 
@@ -475,15 +496,25 @@ public sealed class NativeUnrealInvocationBridge
         string functionPath,
         IReadOnlyList<object?> arguments)
     {
-        IUnrealNativeFastInvocationTransport transport = RequireFastTransport(
-            target,
-            memberId,
-            functionPath);
+        ValidateFastRequest(target, memberId, functionPath);
+        if (!TryGetFastTransport(out IUnrealNativeFastInvocationTransport? transport))
+        {
+            Invoke(target, functionPath, arguments);
+            return;
+        }
         IReadOnlyList<UnrealInvocationValue> nativeArguments = ConvertArguments(
             arguments,
             functionPath);
-        UnrealInvocationValue result = RequireSuccess(
-            transport.InvokeById(target, memberId, nativeArguments));
+        UnrealInvocationResponse response = transport!.InvokeById(
+            target,
+            memberId,
+            nativeArguments);
+        if (IsMissingGeneratedMember(response))
+        {
+            Invoke(target, functionPath, arguments);
+            return;
+        }
+        UnrealInvocationValue result = RequireSuccess(response);
         RequireVoid(result, functionPath);
     }
 
@@ -507,7 +538,11 @@ public sealed class NativeUnrealInvocationBridge
             return result;
         }
         Interlocked.Increment(ref _legacyInvocationCount);
-        return Invoke<TResult>(target, memberId, memberPath, Array.Empty<object?>());
+        return Invoke<TResult>(
+            target,
+            memberId,
+            memberPath,
+            (IReadOnlyList<object?>)Array.Empty<object?>());
     }
 
     public TResult Invoke<TResult, T0>(
@@ -539,7 +574,11 @@ public sealed class NativeUnrealInvocationBridge
             return result;
         }
         Interlocked.Increment(ref _legacyInvocationCount);
-        return Invoke<TResult>(target, memberId, memberPath, [argument0]);
+        return Invoke<TResult>(
+            target,
+            memberId,
+            memberPath,
+            (IReadOnlyList<object?>)new object?[] { argument0 });
     }
 
     public TResult Invoke<TResult, T0, T1>(
@@ -578,7 +617,11 @@ public sealed class NativeUnrealInvocationBridge
             return result;
         }
         Interlocked.Increment(ref _legacyInvocationCount);
-        return Invoke<TResult>(target, memberId, memberPath, [argument0, argument1]);
+        return Invoke<TResult>(
+            target,
+            memberId,
+            memberPath,
+            (IReadOnlyList<object?>)new object?[] { argument0, argument1 });
     }
 
     public TResult Invoke<TResult, T0, T1, T2>(
@@ -614,7 +657,11 @@ public sealed class NativeUnrealInvocationBridge
             return result;
         }
         Interlocked.Increment(ref _legacyInvocationCount);
-        return Invoke<TResult>(target, memberId, memberPath, [argument0, argument1, argument2]);
+        return Invoke<TResult>(
+            target,
+            memberId,
+            memberPath,
+            (IReadOnlyList<object?>)new object?[] { argument0, argument1, argument2 });
     }
 
     public TResult Invoke<TResult, T0, T1, T2, T3>(
@@ -656,7 +703,13 @@ public sealed class NativeUnrealInvocationBridge
             target,
             memberId,
             memberPath,
-            [argument0, argument1, argument2, argument3]);
+            (IReadOnlyList<object?>)new object?[]
+            {
+                argument0,
+                argument1,
+                argument2,
+                argument3,
+            });
     }
 
     public void Invoke(
@@ -677,7 +730,11 @@ public sealed class NativeUnrealInvocationBridge
             return;
         }
         Interlocked.Increment(ref _legacyInvocationCount);
-        Invoke(target, memberId, memberPath, Array.Empty<object?>());
+        Invoke(
+            target,
+            memberId,
+            memberPath,
+            (IReadOnlyList<object?>)Array.Empty<object?>());
     }
 
     public void Invoke<T0>(
@@ -708,7 +765,11 @@ public sealed class NativeUnrealInvocationBridge
             return;
         }
         Interlocked.Increment(ref _legacyInvocationCount);
-        Invoke(target, memberId, memberPath, [argument0]);
+        Invoke(
+            target,
+            memberId,
+            memberPath,
+            (IReadOnlyList<object?>)new object?[] { argument0 });
     }
 
     public void Invoke<T0, T1>(
@@ -746,7 +807,11 @@ public sealed class NativeUnrealInvocationBridge
             return;
         }
         Interlocked.Increment(ref _legacyInvocationCount);
-        Invoke(target, memberId, memberPath, [argument0, argument1]);
+        Invoke(
+            target,
+            memberId,
+            memberPath,
+            (IReadOnlyList<object?>)new object?[] { argument0, argument1 });
     }
 
     public void Invoke<T0, T1, T2>(
@@ -781,7 +846,11 @@ public sealed class NativeUnrealInvocationBridge
             return;
         }
         Interlocked.Increment(ref _legacyInvocationCount);
-        Invoke(target, memberId, memberPath, [argument0, argument1, argument2]);
+        Invoke(
+            target,
+            memberId,
+            memberPath,
+            (IReadOnlyList<object?>)new object?[] { argument0, argument1, argument2 });
     }
 
     public void Invoke<T0, T1, T2, T3>(
@@ -818,7 +887,17 @@ public sealed class NativeUnrealInvocationBridge
             return;
         }
         Interlocked.Increment(ref _legacyInvocationCount);
-        Invoke(target, memberId, memberPath, [argument0, argument1, argument2, argument3]);
+        Invoke(
+            target,
+            memberId,
+            memberPath,
+            (IReadOnlyList<object?>)new object?[]
+            {
+                argument0,
+                argument1,
+                argument2,
+                argument3,
+            });
     }
 
     public UnrealOutputInvocationResult InvokeWithOutputs(
@@ -1035,6 +1114,10 @@ public sealed class NativeUnrealInvocationBridge
                 retryArena,
                 inputByteCount);
         }
+        if (IsMissingGeneratedMember(outcome))
+        {
+            return false;
+        }
         RequireCallFrameSuccess(outcome, expectedResultCount: 1);
         ReadOnlySpan<byte> resultArena = retryArena is null ? arena : retryArena;
         if (!UnrealNativeValueCodecV3.TryDecode(
@@ -1073,6 +1156,10 @@ public sealed class NativeUnrealInvocationBridge
             Span<UnrealNativeValueV3>.Empty,
             arena,
             inputByteCount);
+        if (IsMissingGeneratedMember(outcome))
+        {
+            return false;
+        }
         RequireCallFrameSuccess(outcome, expectedResultCount: 0);
         Interlocked.Increment(ref _callFrameInvocationCount);
         return true;
@@ -1087,6 +1174,20 @@ public sealed class NativeUnrealInvocationBridge
             transport.Capabilities != UnrealNativeCapabilitiesV3.None &&
             (transport.Capabilities & requiredCapabilities) == requiredCapabilities;
     }
+
+    private bool TryGetFastTransport(
+        out IUnrealNativeFastInvocationTransport? transport)
+    {
+        transport = _transport as IUnrealNativeFastInvocationTransport;
+        return transport is not null && transport.SupportsFastInvocation;
+    }
+
+    private static bool IsMissingGeneratedMember(UnrealInvocationResponse response) =>
+        !response.IsSuccess && response.Error == UnrealInvocationError.InvalidMemberPath;
+
+    private static bool IsMissingGeneratedMember(UnrealNativeCallOutcomeV3 outcome) =>
+        outcome.Status == UnrealNativeCallStatusV3.InvocationFailure &&
+        outcome.InvocationError == UnrealInvocationError.InvalidMemberPath;
 
     private static void RequireCallFrameSuccess(
         UnrealNativeCallOutcomeV3 outcome,

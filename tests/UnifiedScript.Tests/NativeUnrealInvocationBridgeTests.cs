@@ -68,6 +68,48 @@ public sealed class NativeUnrealInvocationBridgeTests
     }
 
     [Fact]
+    public void MissingGeneratedMembersFallBackToReflectedPaths()
+    {
+        var transport = new MissingGeneratedMemberTransport();
+        var bridge = new NativeUnrealInvocationBridge(transport);
+        var wrapper = new GeneratedComponent(Handle, bridge);
+
+        wrapper.ScriptAssetPath = "/Game/Scripts/Fallback";
+        Assert.Equal("/Game/Scripts/Fallback", wrapper.ScriptAssetPath);
+        Assert.Equal(42, wrapper.Add(20, 22));
+        wrapper.RequestReload();
+
+        Assert.Equal(4, transport.GeneratedCallCount);
+        Assert.Equal(
+            [
+                FixtureTransport.ScriptAssetPath,
+                FixtureTransport.ScriptAssetPath,
+                FixtureTransport.AddPath,
+                FixtureTransport.ReloadPath,
+            ],
+            transport.LegacyMemberPaths);
+        Assert.Equal(4, bridge.LegacyInvocationCount);
+        Assert.True(transport.ReloadRequested);
+    }
+
+    [Fact]
+    public void FastErrorsOtherThanMissingMemberDoNotFallBack()
+    {
+        var transport = new FastFixtureTransport();
+        var bridge = new NativeUnrealInvocationBridge(transport);
+
+        UnrealInvocationException exception = Assert.Throws<UnrealInvocationException>(() =>
+            bridge.Invoke<int>(
+                Handle,
+                UnrealMemberId.FromPath(FixtureTransport.AddPath),
+                FixtureTransport.AddPath,
+                []));
+
+        Assert.Equal(UnrealInvocationError.ArgumentCountMismatch, exception.Error);
+        Assert.Empty(transport.LegacyMemberPaths);
+    }
+
+    [Fact]
     public void NativeFailurePreservesInvocationAndHandleCategories()
     {
         var transport = new FixtureTransport
@@ -768,5 +810,60 @@ public sealed class NativeUnrealInvocationBridgeTests
                 UnrealInvocationError.ArgumentCountMismatch,
                 "Fast function arguments did not match.");
         }
+    }
+
+    private sealed class MissingGeneratedMemberTransport
+        : IUnrealNativeInvocationTransport, IUnrealNativeCallFrameTransportV3
+    {
+        private readonly FixtureTransport _legacy = new();
+
+        public UnrealNativeCapabilitiesV3 Capabilities =>
+            UnrealNativeCapabilitiesV3.FixedScalars |
+            UnrealNativeCapabilitiesV3.Utf8Text |
+            UnrealNativeCapabilitiesV3.Utf8Results;
+
+        public int GeneratedCallCount { get; private set; }
+
+        public IReadOnlyList<string> LegacyMemberPaths => _legacy.MemberPaths;
+
+        public bool ReloadRequested => _legacy.ReloadRequested;
+
+        public UnrealNativeCallOutcomeV3 ExecuteById(
+            UnrealNativeOperationV3 operation,
+            UnrealObjectHandle target,
+            ulong memberId,
+            ReadOnlySpan<UnrealNativeValueV3> arguments,
+            Span<UnrealNativeValueV3> results,
+            Span<byte> byteBuffer,
+            int inputByteCount)
+        {
+            GeneratedCallCount++;
+            return new UnrealNativeCallOutcomeV3(
+                UnrealNativeCallStatusV3.InvocationFailure,
+                UnrealInvocationError.InvalidMemberPath,
+                UnrealObjectHandleError.None,
+                0,
+                inputByteCount,
+                0,
+                0,
+                "Generated member ID was not registered.");
+        }
+
+        public UnrealInvocationResponse ReadProperty(
+            UnrealObjectHandle target,
+            string propertyPath) =>
+            _legacy.ReadProperty(target, propertyPath);
+
+        public UnrealInvocationResponse WriteProperty(
+            UnrealObjectHandle target,
+            string propertyPath,
+            UnrealInvocationValue value) =>
+            _legacy.WriteProperty(target, propertyPath, value);
+
+        public UnrealInvocationResponse Invoke(
+            UnrealObjectHandle target,
+            string functionPath,
+            IReadOnlyList<UnrealInvocationValue> arguments) =>
+            _legacy.Invoke(target, functionPath, arguments);
     }
 }

@@ -706,6 +706,15 @@ def main() -> int:
         / "UnifiedScript.Tests"
         / "NativeUnrealInvocationBridgeTests.cs"
     )
+    unreal_binding_coverage_path = (
+        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealBindingCoverage.cs"
+    )
+    unreal_binding_coverage_test_path = (
+        ROOT
+        / "tests"
+        / "UnifiedScript.Tests"
+        / "UnrealBindingCoverageTests.cs"
+    )
     unreal_in_process_transport_path = (
         ROOT
         / "src"
@@ -911,6 +920,8 @@ def main() -> int:
         and unreal_managed_bridge_path.is_file()
         and unreal_native_adapter_path.is_file()
         and unreal_native_adapter_test_path.is_file()
+        and unreal_binding_coverage_path.is_file()
+        and unreal_binding_coverage_test_path.is_file()
         and unreal_in_process_transport_path.is_file()
         and unreal_native_abi_v3_path.is_file()
         and unreal_native_call_frame_v3_path.is_file()
@@ -1002,6 +1013,10 @@ def main() -> int:
     unreal_managed_bridge = unreal_managed_bridge_path.read_text(encoding="utf-8")
     unreal_native_adapter = unreal_native_adapter_path.read_text(encoding="utf-8")
     unreal_native_adapter_test = unreal_native_adapter_test_path.read_text(encoding="utf-8")
+    unreal_binding_coverage = unreal_binding_coverage_path.read_text(encoding="utf-8")
+    unreal_binding_coverage_test = unreal_binding_coverage_test_path.read_text(
+        encoding="utf-8"
+    )
     unreal_in_process_transport = unreal_in_process_transport_path.read_text(
         encoding="utf-8"
     )
@@ -1311,6 +1326,22 @@ def main() -> int:
         "Unreal ABI v3 call-frame activation or World metrics are missing",
     )
     checks.append("ABI v3 fixed calls use the live World call frame with observable v2 fallback")
+    require(
+        "unifiedscript.unreal-binding-coverage/v0.1" in unreal_binding_coverage
+        and "ReflectionFallback" in unreal_binding_coverage
+        and "USUE4001" in unreal_binding_coverage
+        and "IsMissingGeneratedMember" in unreal_native_adapter
+        and "MissingGeneratedMembersFallBackToReflectedPaths"
+        in unreal_native_adapter_test
+        and "FastErrorsOtherThanMissingMemberDoNotFallBack"
+        in unreal_native_adapter_test
+        and "CoverageSeparatesNativeFallbackAndRejectedMembers"
+        in unreal_binding_coverage_test
+        and "--report" in cli_source
+        and "--fail-on-rejected" in cli_source,
+        "Unreal binding coverage gate or safe reflected-path fallback is missing",
+    )
+    checks.append("UE binding coverage distinguishes direct, safe fallback, and rejected members")
     require(
         "UUnifiedScriptWorldSubsystem final" in unreal_world_host_header
         and "public UWorldSubsystem" in unreal_world_host_header

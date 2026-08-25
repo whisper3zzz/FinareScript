@@ -125,6 +125,27 @@ internal static class Program
                 fullNativeOutputPath,
                 "Managed bindings and native thunks require different output paths.");
         }
+        string? fullReportPath = options.ReportPath is null
+            ? null
+            : Path.GetFullPath(options.ReportPath);
+        if (fullReportPath is not null)
+        {
+            EnsureDifferentPath(
+                fullManifestPath,
+                fullReportPath,
+                "Binding coverage cannot overwrite the Unreal reflection manifest.");
+            EnsureDifferentPath(
+                fullOutputPath,
+                fullReportPath,
+                "Managed bindings and binding coverage require different output paths.");
+            if (fullNativeOutputPath is not null)
+            {
+                EnsureDifferentPath(
+                    fullNativeOutputPath,
+                    fullReportPath,
+                    "Native thunks and binding coverage require different output paths.");
+            }
+        }
         UnrealReflectionManifest manifest = UnrealReflectionJson.Deserialize(
             File.ReadAllText(fullManifestPath));
         UnrealBindingGenerationResult result = new UnrealBindingGenerator().Generate(
@@ -138,17 +159,40 @@ internal static class Program
 
         WriteAtomically(fullOutputPath, result.Source);
         Console.WriteLine(fullOutputPath);
-        if (fullNativeOutputPath is not null)
+        UnrealNativeThunkGenerationResult? nativeResult = null;
+        if (fullNativeOutputPath is not null || fullReportPath is not null || options.FailOnRejected)
         {
-            UnrealNativeThunkGenerationResult nativeResult =
-                new UnrealNativeThunkGenerator().Generate(manifest);
+            nativeResult = new UnrealNativeThunkGenerator().Generate(manifest);
             foreach (UnrealNativeThunkDiagnostic diagnostic in nativeResult.Diagnostics)
             {
                 Console.Error.WriteLine(
                     $"warning {diagnostic.Code}: {diagnostic.Message} [{diagnostic.MemberPath}]");
             }
-            WriteAtomically(fullNativeOutputPath, nativeResult.Source);
-            Console.WriteLine(fullNativeOutputPath);
+            if (fullNativeOutputPath is not null)
+            {
+                WriteAtomically(fullNativeOutputPath, nativeResult.Source);
+                Console.WriteLine(fullNativeOutputPath);
+            }
+        }
+        UnrealBindingCoverageReport? coverage = null;
+        if (fullReportPath is not null || options.FailOnRejected)
+        {
+            coverage = UnrealBindingCoverageReport.Create(
+                manifest,
+                result,
+                nativeResult!);
+        }
+        if (fullReportPath is not null)
+        {
+            WriteAtomically(fullReportPath, UnrealBindingCoverageJson.Serialize(coverage!));
+            Console.WriteLine(fullReportPath);
+        }
+        if (options.FailOnRejected && coverage!.Summary.RejectedCount > 0)
+        {
+            Console.Error.WriteLine(
+                $"Unreal binding generation rejected {coverage.Summary.RejectedCount} member(s). " +
+                "See diagnostics or the coverage report for details.");
+            return 65;
         }
         return 0;
     }
@@ -956,11 +1000,18 @@ internal static class Program
         string manifestPath = args[1];
         string? outputPath = null;
         string? nativeOutputPath = null;
+        string? reportPath = null;
         string? bindingNamespace = null;
+        bool failOnRejected = false;
         int index = 2;
         while (index < args.Count)
         {
             string option = args[index++];
+            if (option == "--fail-on-rejected" && !failOnRejected)
+            {
+                failOnRejected = true;
+                continue;
+            }
             if (index >= args.Count)
             {
                 return false;
@@ -978,6 +1029,9 @@ internal static class Program
                 case "--native-out" when nativeOutputPath is null:
                     nativeOutputPath = value;
                     break;
+                case "--report" when reportPath is null:
+                    reportPath = value;
+                    break;
                 default:
                     return false;
             }
@@ -992,7 +1046,9 @@ internal static class Program
             manifestPath,
             outputPath,
             bindingNamespace ?? "UnifiedScript.Unreal.Generated",
-            nativeOutputPath);
+            nativeOutputPath,
+            reportPath,
+            failOnRejected);
         return true;
     }
 
@@ -1612,7 +1668,7 @@ internal static class Program
         "--out <output.cs> --out-asset <asset.json> [options]\n" +
         "  unifiedscript execute <input.cs> (--method <name> | --method-id <us_...>) [options]\n" +
         "  unifiedscript debug-serve <input.cs> --root <visual-editor-directory> [--port <number>] [options]\n" +
-        "  unifiedscript ue-bindings <reflection.json> --out <bindings.cs> [--native-out <thunks.cpp>] [--namespace <name>]\n" +
+        "  unifiedscript ue-bindings <reflection.json> --out <bindings.cs> [--native-out <thunks.cpp>] [--report <coverage.json>] [--fail-on-rejected] [--namespace <name>]\n" +
         "Options:\n" +
         "  --out <path>            Artifact directory, initialized sidecar, or patched source output.\n" +
         "  --patch <patch.json>    Semantic patch document required by apply-patch.\n" +
@@ -1634,6 +1690,8 @@ internal static class Program
         "  --pdb-out <path>        Transactional portable PDB output for debug-serve.\n" +
         "  --namespace <name>      Namespace for generated Unreal managed bindings.\n" +
         "  --native-out <path>     Also emit ABI v2 direct native thunk C++.\n" +
+        "  --report <path>         Emit native/fallback/rejected UE API coverage JSON.\n" +
+        "  --fail-on-rejected      Return data-error status when any UE member is rejected.\n" +
         "  --assembly <name>        Set the analysis assembly name.\n" +
         "  --effects <catalog.json> Apply effect catalog overrides.\n" +
         "  --reference <assembly>   Add a metadata reference; may be repeated.\n" +
@@ -1675,7 +1733,9 @@ internal static class Program
         string ManifestPath,
         string OutputPath,
         string Namespace,
-        string? NativeOutputPath);
+        string? NativeOutputPath,
+        string? ReportPath,
+        bool FailOnRejected);
 
     private sealed record IdentityOptions(
         string InputPath,

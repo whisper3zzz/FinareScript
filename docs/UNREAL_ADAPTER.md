@@ -284,6 +284,16 @@ value-kind mismatches retain the existing stable bridge failures. Unsupported
 or non-public native shapes produce deterministic `USUE300x` diagnostics
 rather than silently falling back to unsafe direct access.
 
+`ue-bindings --report <path>` combines managed and native generator diagnostics
+into deterministic `unifiedscript.unreal-binding-coverage/v0.1` JSON. Every
+member is classified as `nativeThunk`, `reflectionFallback`, or `rejected`;
+non-class types remain `deferredType`. `--fail-on-rejected` exits with code 65,
+so projects can make incomplete API coverage a build gate. Runtime member-ID
+misses retry the exact ABI v1 reflected path for scalar, object/class, enum,
+FVector, FRotator, and FTransform members. The report rejects missing direct
+thunks for containers or `out`/`ref` functions because the legacy value contract
+cannot preserve those shapes.
+
 The checked-in runtime thunk file is generated from the checked-in live UE 5.8
 manifest, including `UUnifiedScriptInteropFixture`, and a golden test prevents
 it from drifting. UE Automation executes generated int64, enum, FVector, and
@@ -507,7 +517,9 @@ Direct CLI generation of both managed and native sides:
 ```bash
 unifiedscript ue-bindings reflection.json \
   --out bindings.cs \
-  --native-out native-thunks.generated.cpp
+  --native-out native-thunks.generated.cpp \
+  --report binding-coverage.json \
+  --fail-on-rejected
 ```
 
 Set an explicit engine when discovery is ambiguous:
@@ -551,6 +563,7 @@ typed C# edits through the Workbench. Win64 Development and Shipping builds
 stage a plugin-local .NET runtime plus managed dependency closure and pass a
 packaged managed Start/Tick/Stop smoke. See `UNREAL_RELEASE.md`.
 
-The remaining production work is World-safe delegates/events, broader native
-debug traps and evaluation, arbitrary control-wire authoring outside structured
-operations, and platform-specific CoreCLR packaging beyond Win64.
+The remaining production work is arbitrary reflected delegate proxy generation,
+broader native debug traps and evaluation, arbitrary control-wire authoring
+outside structured operations, and platform-specific CoreCLR packaging beyond
+Win64.
