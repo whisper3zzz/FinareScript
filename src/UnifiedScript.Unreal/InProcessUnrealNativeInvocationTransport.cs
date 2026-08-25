@@ -115,6 +115,7 @@ public sealed class InProcessUnrealNativeInvocationTransport
     : IUnrealNativeInvocationTransport,
       IUnrealNativeFastInvocationTransport,
       IUnrealNativeCallFrameTransportV3,
+      IUnrealNativeScalarInvocationTransportV3,
       IUnrealNativeEventTransport,
       IDisposable
 {
@@ -134,6 +135,7 @@ public sealed class InProcessUnrealNativeInvocationTransport
     private readonly nint _readPropertyByIdV3;
     private readonly nint _writePropertyByIdV3;
     private readonly nint _invokeByIdV3;
+    private readonly nint _invokeInt32x2ByIdV3;
     private readonly UnrealNativeCapabilitiesV3 _capabilitiesV3;
     private readonly UnrealNativeSubscribeEventV4? _subscribeEvent;
     private readonly UnrealNativeUnsubscribeEventV4? _unsubscribeEvent;
@@ -253,6 +255,13 @@ public sealed class InProcessUnrealNativeInvocationTransport
                     _readPropertyByIdV3 = tableV3.ReadPropertyById;
                     _writePropertyByIdV3 = tableV3.WritePropertyById;
                     _invokeByIdV3 = tableV3.InvokeById;
+                    if (tableV3.TableSize >= UnrealNativeAbiV3.ScalarTransportTableSize)
+                    {
+                        UnrealNativeScalarTransportTableV3 scalarTable =
+                            Marshal.PtrToStructure<UnrealNativeScalarTransportTableV3>(
+                                extended.CallFrameTransport);
+                        _invokeInt32x2ByIdV3 = scalarTable.InvokeInt32x2ById;
+                    }
                 }
             }
 
@@ -585,6 +594,60 @@ public sealed class InProcessUnrealNativeInvocationTransport
                     checked((int)frame.RequiredByteCapacity),
                     message);
             }
+        }
+    }
+
+    bool IUnrealNativeScalarInvocationTransportV3.SupportsInt32x2Invocation =>
+        _invokeInt32x2ByIdV3 != nint.Zero;
+
+    unsafe UnrealNativeCallOutcomeV3
+        IUnrealNativeScalarInvocationTransportV3.ExecuteInt32x2ById(
+            UnrealObjectHandle target,
+            ulong memberId,
+            int argument0,
+            int argument1,
+            out int result)
+    {
+        if (_invokeInt32x2ByIdV3 == nint.Zero)
+        {
+            throw new NotSupportedException(
+                "The native Unreal transport does not expose the int32x2 scalar lane.");
+        }
+        var execute =
+            (delegate* unmanaged[Cdecl]<
+                nint, ulong, ulong, int, int, int*, byte*, byte*, byte>)
+            _invokeInt32x2ByIdV3;
+
+        lock (_lifetimeGate)
+        {
+            ThrowIfDisposed();
+            int returnValue = 0;
+            byte invocationError = 0;
+            byte handleError = 0;
+            UnrealNativeCallStatusV3 status = (UnrealNativeCallStatusV3)execute(
+                _context,
+                target.Value,
+                memberId,
+                argument0,
+                argument1,
+                &returnValue,
+                &invocationError,
+                &handleError);
+            if (!Enum.IsDefined(status))
+            {
+                throw new InvalidOperationException(
+                    "The native Unreal scalar transport returned an invalid status.");
+            }
+            result = returnValue;
+            return new UnrealNativeCallOutcomeV3(
+                status,
+                (UnrealInvocationError)invocationError,
+                (UnrealObjectHandleError)handleError,
+                status == UnrealNativeCallStatusV3.Success ? 1 : 0,
+                0,
+                0,
+                0,
+                string.Empty);
         }
     }
 

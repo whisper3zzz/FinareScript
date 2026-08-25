@@ -227,6 +227,14 @@ public:
         TArray<FUnifiedScriptValue>& OutOutputValues,
         FUnifiedScriptInvocationResult& OutResult);
 
+    bool InvokeInt32x2ById(
+        FUnifiedScriptObjectHandle Target,
+        uint64 MemberId,
+        int32 Argument0,
+        int32 Argument1,
+        int32& OutReturnValue,
+        FUnifiedScriptInvocationResult& OutResult);
+
     uint64 GetFastInvocationCount() const;
 
     bool ResolveMulticastDelegate(

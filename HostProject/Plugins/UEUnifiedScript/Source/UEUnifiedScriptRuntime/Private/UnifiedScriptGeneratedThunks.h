@@ -50,4 +50,12 @@ bool Invoke(
     FUnifiedScriptValue& OutReturnValue,
     TArray<FUnifiedScriptValue>& OutOutputValues,
     FUnifiedScriptInvocationResult& OutResult);
+
+bool InvokeInt32x2(
+    UObject* Target,
+    uint64 MemberId,
+    int32 Argument0,
+    int32 Argument1,
+    int32& OutReturnValue,
+    FUnifiedScriptInvocationResult& OutResult);
 }

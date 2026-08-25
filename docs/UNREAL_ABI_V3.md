@@ -122,12 +122,16 @@ pending staged result. The managed bridge performs this expansion retry
 automatically; property reads can be measured directly because they do not
 dispatch a side-effecting UFunction.
 
-## Transport table: 64 bytes
+## Transport table: 64-byte prefix, 72-byte current export
 
 The independent table header contains `AbiVersion = 3`, table/value/frame
 sizes, a 64-bit capability mask, retained context operations, and three stable-ID entry points:
 `ReadPropertyById`, `WritePropertyById`, and `InvokeById`. Each entry point has
-the same signature `(Context, TargetHandle, MemberId, CallFrame*)`.
+the same signature `(Context, TargetHandle, MemberId, CallFrame*)`. The current
+72-byte export appends an optional `InvokeInt32x2ById` pointer at offset 64 for
+generated `int32(int32, int32)` members. Clients first validate the 64-byte
+prefix and only read this scalar lane when `TableSize >= 72`; older clients
+therefore ignore it safely.
 
 Capabilities independently advertise fixed scalars, enums, object handles,
 vector/rotator, transform, UTF-8 inputs, UTF-8 results, container inputs,
@@ -153,9 +157,10 @@ expected generated type ID before conversion.
 ABI v1/v2 behavior is not changed. The managed host validates the v2 prefix,
 then probes the optional v3 pointer, capability mask, context functions, and all
 three sizes. It falls back to v2/v1 when v3 or a required capability is absent.
-Within v3, enum values may only be appended and reserved fields may only be
-assigned by a new documented ABI revision. Any structural layout change
-requires v4.
+Within v3, enum values and optional transport-table suffixes may only be
+appended, while reserved frame/value fields may only be assigned by a new
+documented ABI revision. Any change to the frozen 64-byte table prefix or the
+frame/value layouts requires v4.
 
 ## Activation state
 
@@ -168,4 +173,6 @@ only once; and managed tests cover automatic arena expansion. The 10,000-call
 fixed-scalar test still reports zero steady-state managed allocations. ABI v1/v2
 remain available for old hosts and unsupported reflected shapes, while the live
 UE 5.8 lifecycle Demo now reports `CallFrameCalls=20` and
-`LegacyCalls=0`.
+`LegacyCalls=0`. Matching two-input/one-result `int32` generated functions use
+the scalar suffix and bypass generic frame construction while retaining the
+same World context, stable member ID, handle validation, and failure status.

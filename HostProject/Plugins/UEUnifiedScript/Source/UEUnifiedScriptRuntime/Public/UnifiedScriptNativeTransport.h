@@ -170,6 +170,8 @@ public:
     void Release();
     void Detach();
     bool Execute(TFunctionRef<void(FUnifiedScriptInvocationBridge&)> Operation);
+    bool ExecuteGameThreadFast(
+        TFunctionRef<void(FUnifiedScriptInvocationBridge&)> Operation);
     bool ExecuteCallFrame(
         TFunctionRef<void(
             FUnifiedScriptInvocationBridge&,
@@ -189,6 +191,7 @@ private:
     std::atomic<uint32> ReferenceCount{1};
     FCriticalSection BridgeLock;
     FUnifiedScriptInvocationBridge* Bridge = nullptr;
+    std::atomic<FUnifiedScriptInvocationBridge*> FastBridge{nullptr};
     FPendingCallFrameResult PendingCallFrameResult;
     uint64 NextEventSubscriptionId = 1;
     TMap<uint64, TStrongObjectPtr<UObject>> EventSubscriptions;
@@ -361,6 +364,17 @@ using FUnifiedScriptNativeExecuteByIdV3 = void (*)(
     uint64 MemberId,
     FUnifiedScriptNativeCallFrameV3* Frame);
 
+/** Allocation-free scalar lane for generated int32(int32, int32) members. */
+using FUnifiedScriptNativeInvokeInt32x2ByIdV3 = uint8 (*)(
+    void* Context,
+    uint64 Target,
+    uint64 MemberId,
+    int32 Argument0,
+    int32 Argument1,
+    int32* OutReturnValue,
+    uint8* OutInvocationError,
+    uint8* OutHandleError);
+
 /**
  * ABI v3 is intentionally independent from v1/v2 because its caller-owned
  * call-frame semantics are not prefix-compatible with the callback contract.
@@ -378,6 +392,8 @@ struct alignas(8) FUnifiedScriptNativeTransportV3
     FUnifiedScriptNativeExecuteByIdV3 ReadPropertyById = nullptr;
     FUnifiedScriptNativeExecuteByIdV3 WritePropertyById = nullptr;
     FUnifiedScriptNativeExecuteByIdV3 InvokeById = nullptr;
+    /** Optional append-only scalar fast lane; older ABI v3 clients ignore it. */
+    FUnifiedScriptNativeInvokeInt32x2ByIdV3 InvokeInt32x2ById = nullptr;
 };
 
 static_assert(std::is_standard_layout_v<FUnifiedScriptNativeValueV1>);
@@ -399,11 +415,12 @@ static_assert(STRUCT_OFFSET(FUnifiedScriptNativeCallFrameV3, Status) == 58);
 static_assert(STRUCT_OFFSET(FUnifiedScriptNativeCallFrameV3, ErrorMessageOffset) == 60);
 static_assert(std::is_standard_layout_v<FUnifiedScriptNativeTransportV3>);
 static_assert(std::is_trivially_copyable_v<FUnifiedScriptNativeTransportV3>);
-static_assert(sizeof(FUnifiedScriptNativeTransportV3) == 64);
+static_assert(sizeof(FUnifiedScriptNativeTransportV3) == 72);
 static_assert(alignof(FUnifiedScriptNativeTransportV3) == 8);
 static_assert(STRUCT_OFFSET(FUnifiedScriptNativeTransportV3, Capabilities) == 16);
 static_assert(STRUCT_OFFSET(FUnifiedScriptNativeTransportV3, RetainContext) == 24);
 static_assert(STRUCT_OFFSET(FUnifiedScriptNativeTransportV3, InvokeById) == 56);
+static_assert(STRUCT_OFFSET(FUnifiedScriptNativeTransportV3, InvokeInt32x2ById) == 64);
 static_assert(std::is_standard_layout_v<FUnifiedScriptNativeEventFrameV4>);
 static_assert(std::is_trivially_copyable_v<FUnifiedScriptNativeEventFrameV4>);
 static_assert(sizeof(FUnifiedScriptNativeEventFrameV4) == 64);

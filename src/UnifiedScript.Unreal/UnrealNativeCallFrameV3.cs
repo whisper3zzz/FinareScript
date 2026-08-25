@@ -53,6 +53,18 @@ public interface IUnrealNativeCallFrameTransportV3
         int inputByteCount);
 }
 
+internal interface IUnrealNativeScalarInvocationTransportV3
+{
+    bool SupportsInt32x2Invocation { get; }
+
+    UnrealNativeCallOutcomeV3 ExecuteInt32x2ById(
+        UnrealObjectHandle target,
+        ulong memberId,
+        int argument0,
+        int argument1,
+        out int result);
+}
+
 internal static class UnrealNativeValueCodecV3
 {
     internal const int TransformByteSize = 10 * sizeof(double);

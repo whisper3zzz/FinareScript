@@ -269,5 +269,6 @@ measured call path and survive packaged Win64 builds.
 - [x] arbitrary reflected delegate signatures, ABI v4 event proxies, attributed
   lifecycle binding, and Graph/C# Event Entry round-trip
 - [x] reproducible C++/UnifiedScript benchmark, Puerts comparison gate, and regression thresholds
+- [x] append-compatible generated scalar ABI lane that passes the matched Puerts latency gate
 - [x] Win64 Development/Shipping cook, dependency closure, and packaged smoke test
 - [ ] Graph Authoring Beta plus native debug traps, deeper locals, and evaluation

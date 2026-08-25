@@ -304,12 +304,21 @@ UObject* FUnifiedScriptObjectRegistry::ResolveObject(
 {
     using namespace UE::UnifiedScript::Private;
 
-    if (!Impl->ValidateThread(OutResult) || Impl->GetWorld(OutResult) == nullptr)
+    if (!Impl->ValidateThread(OutResult))
     {
         return nullptr;
     }
 
     FScopeLock Lock(&Impl->CriticalSection);
+    UWorld* RegistryWorld = Impl->World.Get();
+    if (RegistryWorld == nullptr)
+    {
+        Fail(
+            OutResult,
+            EUnifiedScriptObjectHandleError::RegistryWorldUnavailable,
+            TEXT("The UnifiedScript UObject registry world is no longer available."));
+        return nullptr;
+    }
     uint32 SlotIndex;
     if (!Impl->DecodeHandleLocked(Handle, SlotIndex, OutResult))
     {
@@ -327,7 +336,7 @@ UObject* FUnifiedScriptObjectRegistry::ResolveObject(
         return nullptr;
     }
     if (UWorld* ObjectWorld = Object->GetWorld();
-        ObjectWorld != nullptr && ObjectWorld != Impl->World.Get())
+        ObjectWorld != nullptr && ObjectWorld != RegistryWorld)
     {
         Impl->RetireSlotLocked(SlotIndex, Object);
         Fail(

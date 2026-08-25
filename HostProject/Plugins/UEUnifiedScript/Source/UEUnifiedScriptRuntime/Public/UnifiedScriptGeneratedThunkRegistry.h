@@ -36,6 +36,13 @@ struct UEUNIFIEDSCRIPTRUNTIME_API FUnifiedScriptGeneratedThunkTable
         FUnifiedScriptValue&,
         TArray<FUnifiedScriptValue>&,
         FUnifiedScriptInvocationResult&);
+    using FInvokeInt32x2 = bool (*)(
+        UObject*,
+        uint64,
+        int32,
+        int32,
+        int32&,
+        FUnifiedScriptInvocationResult&);
 
     FDescribeReadResult DescribeReadResult = nullptr;
     FDescribeInvokeResultCount DescribeInvokeResultCount = nullptr;
@@ -43,6 +50,7 @@ struct UEUNIFIEDSCRIPTRUNTIME_API FUnifiedScriptGeneratedThunkTable
     FReadProperty ReadProperty = nullptr;
     FWriteProperty WriteProperty = nullptr;
     FInvoke Invoke = nullptr;
+    FInvokeInt32x2 InvokeInt32x2 = nullptr;
 
     bool IsValid() const
     {
@@ -99,5 +107,12 @@ public:
         TConstArrayView<FUnifiedScriptValue> Arguments,
         FUnifiedScriptValue& OutReturnValue,
         TArray<FUnifiedScriptValue>& OutOutputValues,
+        FUnifiedScriptInvocationResult& OutResult);
+    static bool InvokeInt32x2(
+        UObject* Target,
+        uint64 MemberId,
+        int32 Argument0,
+        int32 Argument1,
+        int32& OutReturnValue,
         FUnifiedScriptInvocationResult& OutResult);
 };

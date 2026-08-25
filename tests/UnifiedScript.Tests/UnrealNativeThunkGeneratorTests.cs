@@ -28,6 +28,14 @@ public sealed class UnrealNativeThunkGeneratorTests
             "TypedTarget->Add(Argument0, Argument1)",
             first.Source,
             StringComparison.Ordinal);
+        Assert.Contains(
+            "bool UE::UnifiedScript::Generated::InvokeInt32x2(",
+            first.Source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "OutReturnValue = TypedTarget->Add(Argument0, Argument1);",
+            first.Source,
+            StringComparison.Ordinal);
         Assert.DoesNotContain("ProcessEvent", first.Source, StringComparison.Ordinal);
         Assert.DoesNotContain("FindFProperty", first.Source, StringComparison.Ordinal);
     }

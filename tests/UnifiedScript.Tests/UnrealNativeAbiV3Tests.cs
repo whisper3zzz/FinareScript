@@ -38,6 +38,13 @@ public sealed class UnrealNativeAbiV3Tests
         Assert.Equal(16, OffsetOf<UnrealNativeTransportTableV3>(nameof(UnrealNativeTransportTableV3.Capabilities)));
         Assert.Equal(24, OffsetOf<UnrealNativeTransportTableV3>(nameof(UnrealNativeTransportTableV3.RetainContext)));
         Assert.Equal(56, OffsetOf<UnrealNativeTransportTableV3>(nameof(UnrealNativeTransportTableV3.InvokeById)));
+        Assert.Equal(
+            UnrealNativeAbiV3.ScalarTransportTableSize,
+            Marshal.SizeOf<UnrealNativeScalarTransportTableV3>());
+        Assert.Equal(
+            64,
+            OffsetOf<UnrealNativeScalarTransportTableV3>(
+                nameof(UnrealNativeScalarTransportTableV3.InvokeInt32x2ById)));
     }
 
     [Fact]

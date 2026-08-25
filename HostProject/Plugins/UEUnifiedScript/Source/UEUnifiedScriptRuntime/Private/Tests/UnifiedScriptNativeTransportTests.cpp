@@ -164,7 +164,7 @@ bool FUnifiedScriptNativeTransportAbiTest::RunTest(const FString& Parameters)
     TestEqual(
         TEXT("ABI v3 transport-table layout is fixed"),
         static_cast<uint32>(sizeof(FUnifiedScriptNativeTransportV3)),
-        64u);
+        72u);
     TestEqual(
         TEXT("ABI v3 status byte offset is fixed"),
         static_cast<uint32>(STRUCT_OFFSET(FUnifiedScriptNativeCallFrameV3, Status)),
@@ -197,6 +197,9 @@ bool FUnifiedScriptNativeTransportAbiTest::RunTest(const FString& Parameters)
         TEXT("Call-frame transport advertises fixed scalars"),
         (CallFrameTransport->Capabilities &
             static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::FixedScalars)) != 0);
+    TestNotNull(
+        TEXT("Call-frame transport exposes the int32x2 scalar lane"),
+        CallFrameTransport->InvokeInt32x2ById);
     TestTrue(
         TEXT("Call-frame transport advertises generation-safe object handles"),
         (CallFrameTransport->Capabilities &

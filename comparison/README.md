@@ -18,6 +18,17 @@ The current gate proves engine compatibility, map loading, script startup,
 managed lifecycle, 300 ticks, the UnifiedScript shot/hit path, and generated
 ABI v3 dispatch with nonzero fast calls and zero legacy calls. Its coverage
 report also requires every exported BlockBreaker member to have a native thunk.
-It is not a performance verdict. Fair performance work must add identical
-in-map workloads, warmup, repeated samples, allocation/GC counters, and
-statistical output before making a faster-than-Puerts claim.
+
+Run the matched generated `int32(int32, int32)` performance gate with:
+
+```powershell
+.\comparison\run-performance-comparison.ps1
+```
+
+Both sides use UE 5.8.1 Development Editor, 4,096 warmup calls, five samples of
+100,000 calls, and the median. UnifiedScript managed code is built in Release;
+the report requires zero managed allocation and a UnifiedScript/Puerts latency
+ratio no greater than 0.95. Results are written to the ignored
+`artifacts/comparison/performance/comparison.json`. The generated scalar ABI v3
+lane handles this fixed signature without constructing a generic call frame;
+other signatures continue to use the complete ABI v3 marshaller.

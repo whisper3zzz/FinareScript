@@ -12,6 +12,7 @@
 FUnifiedScriptNativeBridgeContext::FUnifiedScriptNativeBridgeContext(
     FUnifiedScriptInvocationBridge& InBridge)
     : Bridge(&InBridge)
+    , FastBridge(&InBridge)
 {
 }
 
@@ -38,9 +39,11 @@ void FUnifiedScriptNativeBridgeContext::Release()
 
 void FUnifiedScriptNativeBridgeContext::Detach()
 {
+    check(IsInGameThread());
     TArray<TStrongObjectPtr<UObject>> Subscriptions;
     {
         FScopeLock Lock(&BridgeLock);
+        FastBridge.store(nullptr, std::memory_order_release);
         Bridge = nullptr;
         PendingCallFrameResult.Reset();
         EventSubscriptions.GenerateValueArray(Subscriptions);
@@ -66,6 +69,23 @@ bool FUnifiedScriptNativeBridgeContext::Execute(
         return false;
     }
     Operation(*Bridge);
+    return true;
+}
+
+bool FUnifiedScriptNativeBridgeContext::ExecuteGameThreadFast(
+    TFunctionRef<void(FUnifiedScriptInvocationBridge&)> Operation)
+{
+    if (!IsInGameThread())
+    {
+        return false;
+    }
+    FUnifiedScriptInvocationBridge* Current =
+        FastBridge.load(std::memory_order_acquire);
+    if (Current == nullptr)
+    {
+        return false;
+    }
+    Operation(*Current);
     return true;
 }
 
@@ -1508,6 +1528,7 @@ void InvokeByIdV3(
         return;
     }
     uint32 RequiredByteCapacity = EntryByteCount;
+    bool bRequiresRequestHash = false;
     for (uint32 ResultIndex = 0; ResultIndex < ExpectedResultCount; ++ResultIndex)
     {
         EUnifiedScriptValueKind ExpectedKind;
@@ -1539,6 +1560,16 @@ void InvokeByIdV3(
             }
             RequiredByteCapacity += V3TransformByteSize;
         }
+        else if (
+            ExpectedKind == EUnifiedScriptValueKind::Name ||
+            ExpectedKind == EUnifiedScriptValueKind::String ||
+            ExpectedKind == EUnifiedScriptValueKind::Text ||
+            ExpectedKind == EUnifiedScriptValueKind::Array ||
+            ExpectedKind == EUnifiedScriptValueKind::Set ||
+            ExpectedKind == EUnifiedScriptValueKind::Map)
+        {
+            bRequiresRequestHash = true;
+        }
     }
     if (RequiredByteCapacity > Frame->ByteCapacity)
     {
@@ -1560,7 +1591,9 @@ void InvokeByIdV3(
         }
         Arguments.Add(MoveTemp(Value));
     }
-    const uint64 RequestHash = HashRequestV3(*Frame, EntryByteCount);
+    const uint64 RequestHash = bRequiresRequestHash
+        ? HashRequestV3(*Frame, EntryByteCount)
+        : 0;
     const bool bExecuted = Context != nullptr &&
         static_cast<FUnifiedScriptNativeBridgeContext*>(Context)->ExecuteCallFrame(
             [&](FUnifiedScriptInvocationBridge& Bridge,
@@ -1666,6 +1699,51 @@ void InvokeByIdV3(
         ResetV3Output(*Frame, EntryByteCount);
         Frame->Status = EUnifiedScriptNativeCallStatusV3::TransportUnavailable;
     }
+}
+
+uint8 InvokeInt32x2ByIdV3(
+    void* Context,
+    uint64 Target,
+    uint64 MemberId,
+    int32 Argument0,
+    int32 Argument1,
+    int32* OutReturnValue,
+    uint8* OutInvocationError,
+    uint8* OutHandleError)
+{
+    if (OutReturnValue == nullptr || OutInvocationError == nullptr ||
+        OutHandleError == nullptr)
+    {
+        return static_cast<uint8>(EUnifiedScriptNativeCallStatusV3::InvalidFrame);
+    }
+
+    *OutReturnValue = 0;
+    *OutInvocationError = 0;
+    *OutHandleError = 0;
+    EUnifiedScriptNativeCallStatusV3 Status =
+        EUnifiedScriptNativeCallStatusV3::TransportUnavailable;
+    const bool bExecuted = Context != nullptr &&
+        static_cast<FUnifiedScriptNativeBridgeContext*>(Context)->ExecuteGameThreadFast(
+            [&](FUnifiedScriptInvocationBridge& Bridge)
+            {
+                FUnifiedScriptInvocationResult Result;
+                if (!Bridge.InvokeInt32x2ById(
+                        {Target},
+                        MemberId,
+                        Argument0,
+                        Argument1,
+                        *OutReturnValue,
+                        Result))
+                {
+                    *OutInvocationError = static_cast<uint8>(Result.Error);
+                    *OutHandleError = static_cast<uint8>(Result.HandleError);
+                    Status = EUnifiedScriptNativeCallStatusV3::InvocationFailure;
+                    return;
+                }
+                Status = EUnifiedScriptNativeCallStatusV3::Success;
+            });
+    return static_cast<uint8>(
+        bExecuted ? Status : EUnifiedScriptNativeCallStatusV3::TransportUnavailable);
 }
 
 uint8 RetainContext(void* Context)
@@ -2108,6 +2186,7 @@ UEUnifiedScript_GetNativeTransportV3()
         &ReadPropertyByIdV3,
         &WritePropertyByIdV3,
         &InvokeByIdV3,
+        &InvokeInt32x2ByIdV3,
     };
     return &Transport;
 }

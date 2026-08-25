@@ -135,10 +135,18 @@ public struct UnrealNativeTransportTableV3
     public nint InvokeById;
 }
 
+[StructLayout(LayoutKind.Sequential, Pack = 8)]
+public struct UnrealNativeScalarTransportTableV3
+{
+    public UnrealNativeTransportTableV3 Base;
+    public nint InvokeInt32x2ById;
+}
+
 public static class UnrealNativeAbiV3
 {
     public const uint Version = 3;
     public const int ValueSize = 48;
     public const int CallFrameSize = 72;
     public const int TransportTableSize = 64;
+    public const int ScalarTransportTableSize = 72;
 }

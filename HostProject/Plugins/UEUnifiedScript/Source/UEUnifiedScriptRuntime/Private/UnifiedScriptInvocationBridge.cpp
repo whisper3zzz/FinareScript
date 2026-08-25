@@ -1095,6 +1095,31 @@ bool FUnifiedScriptInvocationBridge::InvokeById(
     return true;
 }
 
+bool FUnifiedScriptInvocationBridge::InvokeInt32x2ById(
+    FUnifiedScriptObjectHandle Target,
+    uint64 MemberIdValue,
+    int32 Argument0,
+    int32 Argument1,
+    int32& OutReturnValue,
+    FUnifiedScriptInvocationResult& OutResult)
+{
+    using namespace UE::UnifiedScript::Invocation::Private;
+    UObject* Object = ResolveTarget(Registry, Target, OutResult);
+    if (Object == nullptr ||
+        !FUnifiedScriptGeneratedThunkRegistry::InvokeInt32x2(
+            Object,
+            MemberIdValue,
+            Argument0,
+            Argument1,
+            OutReturnValue,
+            OutResult))
+    {
+        return false;
+    }
+    FastInvocationCount.fetch_add(1, std::memory_order_relaxed);
+    return true;
+}
+
 uint64 FUnifiedScriptInvocationBridge::GetFastInvocationCount() const
 {
     return FastInvocationCount.load(std::memory_order_relaxed);

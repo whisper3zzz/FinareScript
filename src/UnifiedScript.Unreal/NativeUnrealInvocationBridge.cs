@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Runtime.CompilerServices;
 
 namespace UnifiedScript.Unreal;
 
@@ -604,6 +605,28 @@ public sealed class NativeUnrealInvocationBridge
         T1 argument1)
     {
         ValidateFastRequest(target, memberId, memberPath);
+        if (typeof(TResult) == typeof(int) &&
+            typeof(T0) == typeof(int) &&
+            typeof(T1) == typeof(int) &&
+            _transport is IUnrealNativeScalarInvocationTransportV3 scalarTransport &&
+            scalarTransport.SupportsInt32x2Invocation)
+        {
+            int nativeArgument0 = Unsafe.As<T0, int>(ref argument0);
+            int nativeArgument1 = Unsafe.As<T1, int>(ref argument1);
+            UnrealNativeCallOutcomeV3 scalarOutcome =
+                scalarTransport.ExecuteInt32x2ById(
+                    target,
+                    memberId,
+                    nativeArgument0,
+                    nativeArgument1,
+                    out int scalarResult);
+            if (!IsMissingGeneratedMember(scalarOutcome))
+            {
+                RequireCallFrameSuccess(scalarOutcome, expectedResultCount: 1);
+                Interlocked.Increment(ref _callFrameInvocationCount);
+                return Unsafe.As<int, TResult>(ref scalarResult);
+            }
+        }
         Span<UnrealNativeValueV3> arguments = stackalloc UnrealNativeValueV3[2];
         Span<byte> arena = stackalloc byte[CallFrameArenaByteCapacity];
         int byteCount = 0;

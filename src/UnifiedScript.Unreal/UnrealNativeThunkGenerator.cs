@@ -119,6 +119,7 @@ public sealed class UnrealNativeThunkGenerator
         EmitReadDispatcher(source, properties, options.CppNamespace);
         EmitWriteDispatcher(source, properties, options.CppNamespace);
         EmitInvokeDispatcher(source, functions, options.CppNamespace);
+        EmitInvokeInt32x2Dispatcher(source, functions, options.CppNamespace);
 
         return new UnrealNativeThunkGenerationResult(
             source.ToString().TrimEnd().ReplaceLineEndings("\n") + "\n",
@@ -577,6 +578,48 @@ public sealed class UnrealNativeThunkGenerator
         source.AppendLine("    }");
         source.AppendLine("}");
     }
+
+    private static void EmitInvokeInt32x2Dispatcher(
+        StringBuilder source,
+        IReadOnlyList<(UnrealReflectedType Type, UnrealReflectedFunction Function)> functions,
+        string cppNamespace)
+    {
+        source.AppendLine();
+        source.Append("bool ").Append(cppNamespace).AppendLine("::InvokeInt32x2(");
+        source.AppendLine("    UObject* Target,");
+        source.AppendLine("    uint64 MemberId,");
+        source.AppendLine("    int32 Argument0,");
+        source.AppendLine("    int32 Argument1,");
+        source.AppendLine("    int32& OutReturnValue,");
+        source.AppendLine("    FUnifiedScriptInvocationResult& OutResult)");
+        source.AppendLine("{");
+        source.Append("    using namespace ").Append(cppNamespace).AppendLine("::Private;");
+        source.AppendLine("    switch (MemberId)");
+        source.AppendLine("    {");
+        foreach ((UnrealReflectedType type, UnrealReflectedFunction function) in
+                 functions.Where(static item => IsInt32x2Signature(item.Function)))
+        {
+            source.Append("    case ").Append(MemberIdLiteral(function.Path)).AppendLine(":");
+            source.AppendLine("    {");
+            EmitResolveTarget(source, type, 8);
+            source.Append("        OutReturnValue = TypedTarget->")
+                .Append(function.Name).AppendLine("(Argument0, Argument1);");
+            source.AppendLine("        Succeed(OutResult);");
+            source.AppendLine("        return true;");
+            source.AppendLine("    }");
+        }
+        source.AppendLine("    default:");
+        source.AppendLine("        return FailUnknownMember(OutResult, MemberId);");
+        source.AppendLine("    }");
+        source.AppendLine("}");
+    }
+
+    private static bool IsInt32x2Signature(UnrealReflectedFunction function) =>
+        function.ReturnType.Kind == UnrealValueKind.Int32 &&
+        function.Parameters.Count == 2 &&
+        function.Parameters.All(static parameter =>
+            parameter.Direction == UnrealParameterDirection.Input &&
+            parameter.Type.Kind == UnrealValueKind.Int32);
 
     private static void EmitResolveTarget(StringBuilder source, UnrealReflectedType type, int indent)
     {

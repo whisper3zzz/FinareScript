@@ -26,6 +26,7 @@ FUnifiedScriptGeneratedThunkTable BuiltInTable()
         &UE::UnifiedScript::Generated::ReadProperty,
         &UE::UnifiedScript::Generated::WriteProperty,
         &UE::UnifiedScript::Generated::Invoke,
+        &UE::UnifiedScript::Generated::InvokeInt32x2,
     };
 }
 
@@ -35,6 +36,13 @@ bool ResolvePropertyTable(
     EUnifiedScriptValueKind& OutKind,
     uint64& OutTypeId)
 {
+    const FUnifiedScriptGeneratedThunkTable BuiltIn = BuiltInTable();
+    if (BuiltIn.DescribeReadResult(MemberId, OutKind, OutTypeId))
+    {
+        OutTable = BuiltIn;
+        return true;
+    }
+
     bool bFound = false;
     bool bAmbiguous = false;
     const auto Consider = [&](const FUnifiedScriptGeneratedThunkTable& Table)
@@ -56,7 +64,6 @@ bool ResolvePropertyTable(
         OutTypeId = TypeId;
     };
 
-    Consider(BuiltInTable());
     FReadScopeLock Lock(TableLock());
     for (const TPair<FName, FUnifiedScriptGeneratedThunkTable>& Entry : ExternalTables())
     {
@@ -70,6 +77,13 @@ bool ResolveInvocationTable(
     FUnifiedScriptGeneratedThunkTable& OutTable,
     uint32& OutResultCount)
 {
+    const FUnifiedScriptGeneratedThunkTable BuiltIn = BuiltInTable();
+    if (BuiltIn.DescribeInvokeResultCount(MemberId, OutResultCount))
+    {
+        OutTable = BuiltIn;
+        return true;
+    }
+
     bool bFound = false;
     bool bAmbiguous = false;
     const auto Consider = [&](const FUnifiedScriptGeneratedThunkTable& Table)
@@ -89,7 +103,6 @@ bool ResolveInvocationTable(
         OutResultCount = ResultCount;
     };
 
-    Consider(BuiltInTable());
     FReadScopeLock Lock(TableLock());
     for (const TPair<FName, FUnifiedScriptGeneratedThunkTable>& Entry : ExternalTables())
     {
@@ -219,6 +232,29 @@ bool FUnifiedScriptGeneratedThunkRegistry::Invoke(
             Arguments,
             OutReturnValue,
             OutOutputValues,
+            OutResult)
+        : FailMissing(MemberId, OutResult);
+}
+
+bool FUnifiedScriptGeneratedThunkRegistry::InvokeInt32x2(
+    UObject* Target,
+    uint64 MemberId,
+    int32 Argument0,
+    int32 Argument1,
+    int32& OutReturnValue,
+    FUnifiedScriptInvocationResult& OutResult)
+{
+    using namespace UE::UnifiedScript::Generated::Registry::Private;
+    FUnifiedScriptGeneratedThunkTable Table;
+    uint32 ResultCount = 0;
+    return ResolveInvocationTable(MemberId, Table, ResultCount) &&
+            Table.InvokeInt32x2 != nullptr
+        ? Table.InvokeInt32x2(
+            Target,
+            MemberId,
+            Argument0,
+            Argument1,
+            OutReturnValue,
             OutResult)
         : FailMissing(MemberId, OutResult);
 }

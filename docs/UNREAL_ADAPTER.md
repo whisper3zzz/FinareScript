@@ -245,9 +245,10 @@ Start/Tick/Reload/Stop; the later ABI v3 activation splits that same counter by
 call-frame and legacy route.
 
 This established an executable component host with a measured route counter.
-Later phases close automatic thunk generation and add a reproducible Puerts
-comparison gate; a faster-than-Puerts verdict still requires a matched external
-Puerts result and is never inferred from the C++ lower bound.
+Automatic thunk generation and a reproducible matched Puerts comparison gate
+now build on that boundary; the faster-than-Puerts verdict is taken only from
+the same machine, engine, configuration, warmup, and sampled workload, never
+from the C++ lower bound.
 
 ## Phase B.11 Script Asset resolution and transactional reload
 
@@ -305,7 +306,8 @@ the new values across CoreCLR.
 
 ABI v3 is frozen as an independent caller-owned synchronous call-frame contract
 in `UNREAL_ABI_V3.md`. Managed and native layouts are locked at 48-byte values,
-72-byte frames, and a 64-byte capability-bearing table. The live export now
+72-byte frames, a frozen 64-byte table prefix, and a current 72-byte export
+whose optional suffix carries the generated `int32(int32, int32)` scalar lane. The live export now
 advertises fixed scalars, enums, object/class handles, vector/rotator, transform,
 UTF-8 text, recursive arrays/sets/maps, and return plus `out`/`ref`; generated
 calls use a strongly typed span/stack frame whose fixed path has zero
@@ -533,11 +535,15 @@ the operation and managed stack instead of only a status code. The live UE 5.8
 gate proves a failed `MissingScript` reload reports `ReloadScript` plus the
 `TypeLoadException` while preserving the prior generation.
 
-The performance gate measures five 100,000-call samples and uses the median.
-The current local run is allocation-free and passes the checked 2,500 ns/call
-ceiling. A competitive Puerts result must match machine fingerprint, engine,
-platform, configuration, warm-up, iteration count, and sample count; without it
-the faster-than-Puerts verdict remains empty.
+The performance gate builds managed code in Release, warms both runtimes with
+4,096 calls, measures five 100,000-call samples, and uses the median. A
+competitive Puerts result must match machine fingerprint, engine, platform,
+configuration, warm-up, iteration count, and sample count. The checked gate
+requires zero managed allocation and a UnifiedScript/Puerts ratio no greater
+than 0.95; without a matched Puerts result the competitive verdict remains
+empty. The generated scalar ABI v3 lane avoids generic call-frame construction
+for the measured fixed signature while preserving the complete marshaller for
+other shapes.
 
 ## Commands
 
@@ -607,5 +613,6 @@ stage a plugin-local .NET runtime plus managed dependency closure and pass a
 packaged managed Start/Tick/Stop smoke. See `UNREAL_RELEASE.md`.
 
 The remaining production work is broader native debug traps and evaluation,
-arbitrary control-wire authoring outside structured operations, direct matched
-Puerts benchmark capture, and platform-specific CoreCLR packaging beyond Win64.
+arbitrary control-wire authoring outside structured operations, additional
+generated scalar signature families, and platform-specific CoreCLR packaging
+beyond Win64.

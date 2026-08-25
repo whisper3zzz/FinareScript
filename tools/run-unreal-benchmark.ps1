@@ -45,7 +45,7 @@ $defaultInputBytes = if (Test-Path -LiteralPath $defaultInputPath) {
 
 try {
     if (!$SkipBuild) {
-        & $dotnetExe build $managedProject -c Debug --nologo
+        & $dotnetExe build $managedProject -c Release --nologo
         if ($LASTEXITCODE -ne 0) {
             throw "Managed benchmark build failed with exit code $LASTEXITCODE."
         }
@@ -97,9 +97,8 @@ if ($thresholds.schemaVersion -ne 'unifiedscript.unreal-benchmark-thresholds/v0.
     throw 'The benchmark result does not match the checked-in schema/scenario.'
 }
 
-$cpuName = (Get-ItemProperty `
-    -LiteralPath 'HKLM:\HARDWARE\DESCRIPTION\System\CentralProcessor\0' `
-    -ErrorAction SilentlyContinue).ProcessorNameString
+$cpuName = (Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue |
+    Select-Object -First 1 -ExpandProperty Name)
 $machineDescriptor = [string]::Join('|', @(
     [Environment]::MachineName,
     [Environment]::OSVersion.VersionString,

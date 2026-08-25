@@ -2555,3 +2555,30 @@ bool UE::UnifiedScript::Generated::Invoke(
         return FailUnknownMember(OutResult, MemberId);
     }
 }
+
+bool UE::UnifiedScript::Generated::InvokeInt32x2(
+    UObject* Target,
+    uint64 MemberId,
+    int32 Argument0,
+    int32 Argument1,
+    int32& OutReturnValue,
+    FUnifiedScriptInvocationResult& OutResult)
+{
+    using namespace UE::UnifiedScript::Generated::Private;
+    switch (MemberId)
+    {
+    case 0xB324FB910D9CED26ull:
+    {
+        UUnifiedScriptComponent* TypedTarget = ResolveTarget<UUnifiedScriptComponent>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutReturnValue = TypedTarget->Add(Argument0, Argument1);
+        Succeed(OutResult);
+        return true;
+    }
+    default:
+        return FailUnknownMember(OutResult, MemberId);
+    }
+}
