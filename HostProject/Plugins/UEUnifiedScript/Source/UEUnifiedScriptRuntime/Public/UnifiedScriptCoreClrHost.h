@@ -43,6 +43,13 @@ public:
         uint64 InstanceId,
         float DeltaSeconds,
         FString& OutError);
+    bool DispatchManagedEvent(
+        uint64 WorldHostId,
+        uint64 InstanceId,
+        int32 EventKind,
+        uint64 Source,
+        uint64 Argument,
+        FString& OutError);
     bool ReloadManagedScript(
         uint64 WorldHostId,
         uint64 InstanceId,
@@ -79,6 +86,7 @@ private:
     void* GetWorldCountEntryPoint = nullptr;
     void* CreateScriptEntryPoint = nullptr;
     void* TickScriptEntryPoint = nullptr;
+    void* DispatchEventEntryPoint = nullptr;
     void* ReloadScriptEntryPoint = nullptr;
     void* DestroyScriptEntryPoint = nullptr;
     void* GetScriptCountEntryPoint = nullptr;

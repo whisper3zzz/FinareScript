@@ -47,6 +47,7 @@ struct FUnifiedScriptObjectRegistry::FImpl final : FUObjectArray::FUObjectDelete
     {
         TWeakObjectPtr<UObject> Object;
         uint32 Generation = 0;
+        uint32 ReferenceCount = 0;
         bool bActive = false;
     };
 
@@ -189,6 +190,7 @@ struct FUnifiedScriptObjectRegistry::FImpl final : FUObjectArray::FUObjectDelete
         }
 
         Entry.Object.Reset();
+        Entry.ReferenceCount = 0;
         Entry.bActive = false;
         FreeSlots.Add(SlotIndex);
         --ActiveCount;
@@ -205,6 +207,7 @@ struct FUnifiedScriptObjectRegistry::FImpl final : FUObjectArray::FUObjectDelete
             if (Entry.bActive)
             {
                 Entry.Object.Reset();
+                Entry.ReferenceCount = 0;
                 Entry.bActive = false;
             }
             FreeSlots.Add(static_cast<uint32>(SlotIndex));
@@ -264,9 +267,10 @@ FUnifiedScriptObjectHandle FUnifiedScriptObjectRegistry::RegisterObject(
     FScopeLock Lock(&Impl->CriticalSection);
     if (uint32* ExistingSlot = Impl->SlotsByObject.Find(Object))
     {
-        const FImpl::FEntry& Entry = Impl->Entries[static_cast<int32>(*ExistingSlot)];
+        FImpl::FEntry& Entry = Impl->Entries[static_cast<int32>(*ExistingSlot)];
         if (Entry.bActive && Entry.Object.Get() == Object)
         {
+            ++Entry.ReferenceCount;
             Succeed(OutResult);
             return FUnifiedScriptObjectHandle::Make(*ExistingSlot, Entry.Generation);
         }
@@ -286,6 +290,7 @@ FUnifiedScriptObjectHandle FUnifiedScriptObjectRegistry::RegisterObject(
     FImpl::FEntry& Entry = Impl->Entries[static_cast<int32>(SlotIndex)];
     Entry.Object = Object;
     Entry.Generation = AllocateGeneration();
+    Entry.ReferenceCount = 1;
     Entry.bActive = true;
     Impl->SlotsByObject.Add(Object, SlotIndex);
     ++Impl->ActiveCount;
@@ -354,6 +359,13 @@ bool FUnifiedScriptObjectRegistry::ReleaseObject(
         return false;
     }
 
+    FImpl::FEntry& Entry = Impl->Entries[static_cast<int32>(SlotIndex)];
+    check(Entry.ReferenceCount > 0);
+    if (--Entry.ReferenceCount > 0)
+    {
+        Succeed(OutResult);
+        return true;
+    }
     Impl->RetireSlotLocked(SlotIndex);
     Succeed(OutResult);
     return true;

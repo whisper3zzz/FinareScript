@@ -6,6 +6,7 @@
 #include "UnifiedScriptComponent.generated.h"
 
 class UUnifiedScriptAsset;
+class AActor;
 
 UCLASS(BlueprintType, Blueprintable, ClassGroup=(UnifiedScript), meta=(BlueprintSpawnableComponent))
 class UEUNIFIEDSCRIPTRUNTIME_API UUnifiedScriptComponent : public UActorComponent
@@ -101,6 +102,16 @@ public:
         FActorComponentTickFunction* ThisTickFunction) override;
 
 private:
+    UFUNCTION()
+    void HandleActorBeginOverlap(AActor* OverlappedActor, AActor* OtherActor);
+
+    UFUNCTION()
+    void HandleActorEndOverlap(AActor* OverlappedActor, AActor* OtherActor);
+
+    void BindManagedActorEvents();
+    void UnbindManagedActorEvents();
+    void DispatchManagedActorEvent(int32 EventKind, AActor* OtherActor);
+
     bool ResolveScriptConfiguration(
         FString& OutAssemblyPath,
         FString& OutTypeName,
@@ -121,6 +132,7 @@ private:
     FString ActiveResolvedAssemblyPath;
     FString ActiveResolvedTypeName;
     bool bReloadRequested = false;
+    bool bActorEventsBound = false;
     uint64 ManagedScriptInstanceId = 0;
     uint64 ManagedHostHandle = 0;
     uint64 ManagedTargetHandle = 0;

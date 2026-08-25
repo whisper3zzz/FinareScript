@@ -55,6 +55,11 @@ bool FUnifiedScriptObjectRegistryLifecycleTest::RunTest(const FString& Parameter
 
         TestTrue(TEXT("Explicit release succeeds"), Registry.ReleaseObject(FirstHandle, Result));
         TestTrue(TEXT("Release reports success"), Result.IsSuccess());
+        TestEqual(TEXT("First release preserves the duplicate owner"), Registry.Num(), 1);
+        TestTrue(
+            TEXT("Reference-counted handle still resolves"),
+            Registry.ResolveObject(FirstHandle, Result) == First);
+        TestTrue(TEXT("Final explicit release succeeds"), Registry.ReleaseObject(FirstHandle, Result));
         TestEqual(TEXT("Release removes the active entry"), Registry.Num(), 0);
         TestNull(TEXT("Released handle no longer resolves"), Registry.ResolveObject(FirstHandle, Result));
         TestTrue(

@@ -468,6 +468,28 @@ The live UE 5.8 Automation gate spawns `AUnifiedScriptActor`, starts
 generated native thunk, reloads into generation two, and verifies managed
 EndPlay executes before both handles are retired.
 
+## Phase B.21 World-safe events and latent generation lifetime
+
+The Actor host binds native `OnActorBeginOverlap` and `OnActorEndOverlap`
+dynamic multicast delegates only while its managed instance is running. A
+dedicated native-to-managed entry point dispatches a typed event to the active
+collectible generation on the game thread. Event source and argument values use
+the same World-bound object registry; registry entries are reference-counted so
+temporary callback arguments cannot retire a handle still owned by another
+script. Stop unbinds both delegates before managed EndPlay and handle release.
+
+`UnrealObjectScript.DelayAsync` is a game-thread latent primitive advanced by
+the component Tick rather than a thread-pool timer. Its continuation therefore
+resumes inside the managed World call. Reload, EndPlay, failed BeginPlay, and
+World teardown synchronously cancel every pending delay before the generation
+is unloaded. `ActorDemoScript` proves latent resumption plus Begin/End overlap,
+temporary argument release, reload cancellation, and post-EndPlay unbinding in
+the live Automation gate.
+
+This phase intentionally covers the common Actor overlap signature. Arbitrary
+reflected delegate signatures still require generated native proxy functions
+and remain a separate roadmap item.
+
 ## Commands
 
 The helper keeps machine-local paths and all generated output outside Git:

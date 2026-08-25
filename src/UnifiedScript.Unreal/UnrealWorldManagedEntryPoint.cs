@@ -148,6 +148,38 @@ public static class UnrealWorldManagedEntryPoint
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static int DispatchEvent(
+        ulong worldId,
+        ulong instanceId,
+        int eventKind,
+        ulong source,
+        ulong argument)
+    {
+        if (instanceId == 0 || source == 0 ||
+            !Enum.IsDefined((UnrealScriptEventKind)eventKind))
+        {
+            return (int)UnrealWorldManagedEntryStatus.InvalidArgument;
+        }
+        if (!Worlds.TryGetValue(worldId, out WorldEntry? entry))
+        {
+            return (int)UnrealWorldManagedEntryStatus.WorldNotFound;
+        }
+        try
+        {
+            return (int)entry.DispatchEvent(
+                instanceId,
+                new UnrealScriptEvent(
+                    (UnrealScriptEventKind)eventKind,
+                    new UnrealObjectHandle(source),
+                    new UnrealObjectHandle(argument)));
+        }
+        catch
+        {
+            return (int)UnrealWorldManagedEntryStatus.InternalFailure;
+        }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int ReloadScript(
         ulong worldId,
         ulong instanceId,
@@ -330,6 +362,22 @@ public static class UnrealWorldManagedEntryPoint
             }
         }
 
+        public UnrealWorldManagedEntryStatus DispatchEvent(
+            ulong instanceId,
+            UnrealScriptEvent scriptEvent)
+        {
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                if (!_scripts.TryGetValue(instanceId, out ManagedScriptInstance? script))
+                {
+                    return UnrealWorldManagedEntryStatus.ScriptNotFound;
+                }
+                script.DispatchEvent(scriptEvent);
+                return UnrealWorldManagedEntryStatus.Success;
+            }
+        }
+
         public int ReloadScript(
             ulong instanceId,
             string assemblyPath,
@@ -444,6 +492,18 @@ public static class UnrealWorldManagedEntryPoint
                 throw new InvalidOperationException("The managed script is not started.");
             }
             _current.Script.OnTick(deltaSeconds);
+        }
+
+        public void DispatchEvent(UnrealScriptEvent scriptEvent)
+        {
+            if (!_started)
+            {
+                throw new InvalidOperationException("The managed script is not started.");
+            }
+            if (_current.Script is IUnrealManagedEventSink sink)
+            {
+                sink.OnUnrealEvent(scriptEvent);
+            }
         }
 
         public int Reload(string assemblyPath, string typeName)

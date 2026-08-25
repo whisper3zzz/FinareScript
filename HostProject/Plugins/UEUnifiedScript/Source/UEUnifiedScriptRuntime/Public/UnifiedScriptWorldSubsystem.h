@@ -58,6 +58,13 @@ public:
         float DeltaSeconds,
         FString& OutError);
 
+    bool DispatchManagedEvent(
+        uint64 InstanceId,
+        int32 EventKind,
+        FUnifiedScriptObjectHandle Source,
+        FUnifiedScriptObjectHandle Argument,
+        FString& OutError);
+
     bool ReloadManagedScript(
         uint64 InstanceId,
         const FString& AssemblyPath,

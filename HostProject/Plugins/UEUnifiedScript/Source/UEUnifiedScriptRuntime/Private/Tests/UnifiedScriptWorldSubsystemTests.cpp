@@ -335,6 +335,31 @@ bool FUnifiedScriptWorldSubsystemLifecycleTest::RunTest(const FString& Parameter
             TEXT("Managed Actor Tick updates Blueprint-visible state"),
             ScriptActor->ManagedActorState,
             FString(TEXT("ActorTick")));
+        TestEqual(
+            TEXT("Managed latent delay resumes on the game-thread Tick"),
+            ActorComponent->ManagedState,
+            FString(TEXT("ActorLatent")));
+
+        AActor* OtherActor = FirstWorld->SpawnActor<AActor>();
+        TestNotNull(TEXT("Overlap event argument Actor can be spawned"), OtherActor);
+        if (OtherActor != nullptr)
+        {
+            ScriptActor->OnActorBeginOverlap.Broadcast(ScriptActor, OtherActor);
+            TestEqual(
+                TEXT("World-safe BeginOverlap reaches managed Actor behavior"),
+                ScriptActor->ManagedActorState,
+                FString(TEXT("ActorBeginOverlap")));
+            ScriptActor->OnActorEndOverlap.Broadcast(ScriptActor, OtherActor);
+            TestEqual(
+                TEXT("World-safe EndOverlap reaches managed Actor behavior"),
+                ScriptActor->ManagedActorState,
+                FString(TEXT("ActorEndOverlap")));
+            TestEqual(
+                TEXT("Temporary event argument handle is released after dispatch"),
+                FirstHost->NumRegisteredObjects(),
+                2);
+            OtherActor->Destroy();
+        }
 
         TestTrue(
             TEXT("Actor behavior reloads as a new generation"),
@@ -347,6 +372,11 @@ bool FUnifiedScriptWorldSubsystemLifecycleTest::RunTest(const FString& Parameter
         ActorComponent->EndPlay(EEndPlayReason::Destroyed);
         TestEqual(
             TEXT("Managed Actor EndPlay runs before target handle release"),
+            ScriptActor->ManagedActorState,
+            FString(TEXT("ActorEnd")));
+        ScriptActor->OnActorBeginOverlap.Broadcast(ScriptActor, ScriptActor);
+        TestEqual(
+            TEXT("Actor delegates are unbound after managed EndPlay"),
             ScriptActor->ManagedActorState,
             FString(TEXT("ActorEnd")));
         TestEqual(

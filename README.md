@@ -133,6 +133,8 @@ The repository currently implements:
 - a placeable, Blueprintable `AUnifiedScriptActor` and managed
   `UnrealObjectScript`/`UnrealActorScript` object model with distinct
   generation-safe host and gameplay-target handles;
+- World-safe Actor overlap events plus game-thread latent `DelayAsync`, both
+  canceled and unbound before reload, EndPlay, or World teardown;
 - machine-local UE discovery, host build, reflection export, and managed
   binding generation through one repository script;
 - xUnit coverage for validation, lowering, identity, graph projection, and

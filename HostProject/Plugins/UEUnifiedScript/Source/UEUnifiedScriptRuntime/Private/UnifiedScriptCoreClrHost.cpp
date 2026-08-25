@@ -53,6 +53,12 @@ using FTickScriptEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
     uint64 WorldHostId,
     uint64 InstanceId,
     float DeltaSeconds);
+using FDispatchEventEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
+    uint64 WorldHostId,
+    uint64 InstanceId,
+    int32 EventKind,
+    uint64 Source,
+    uint64 Argument);
 using FReloadScriptEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
     uint64 WorldHostId,
     uint64 InstanceId,
@@ -226,6 +232,7 @@ void FUnifiedScriptCoreClrHost::Shutdown()
     GetWorldCountEntryPoint = nullptr;
     CreateScriptEntryPoint = nullptr;
     TickScriptEntryPoint = nullptr;
+    DispatchEventEntryPoint = nullptr;
     ReloadScriptEntryPoint = nullptr;
     DestroyScriptEntryPoint = nullptr;
     GetScriptCountEntryPoint = nullptr;
@@ -391,6 +398,44 @@ bool FUnifiedScriptCoreClrHost::TickManagedScript(
     {
         OutError = FString::Printf(
             TEXT("Managed script tick failed with status %d."),
+            Result);
+        return false;
+    }
+    OutError.Reset();
+    return true;
+}
+
+bool FUnifiedScriptCoreClrHost::DispatchManagedEvent(
+    uint64 WorldHostId,
+    uint64 InstanceId,
+    int32 EventKind,
+    uint64 Source,
+    uint64 Argument,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::CoreClr::Private;
+    check(IsInGameThread());
+    FDispatchEventEntryPoint EntryPoint = nullptr;
+    {
+        FScopeLock Lock(&StateLock);
+        if (State != EUnifiedScriptCoreClrHostState::Ready ||
+            DispatchEventEntryPoint == nullptr)
+        {
+            OutError = TEXT("The UnifiedScript managed event entry point is unavailable.");
+            return false;
+        }
+        EntryPoint = reinterpret_cast<FDispatchEventEntryPoint>(DispatchEventEntryPoint);
+    }
+    const int32 Result = EntryPoint(
+        WorldHostId,
+        InstanceId,
+        EventKind,
+        Source,
+        Argument);
+    if (Result != 0)
+    {
+        OutError = FString::Printf(
+            TEXT("Managed script event dispatch failed with status %d."),
             Result);
         return false;
     }
@@ -672,6 +717,7 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
     const int32 CountResult = LoadEntryPoint(TEXT("GetWorldCount"), &GetWorldCountEntryPoint);
     const int32 CreateScriptResult = LoadEntryPoint(TEXT("CreateScript"), &CreateScriptEntryPoint);
     const int32 TickScriptResult = LoadEntryPoint(TEXT("TickScript"), &TickScriptEntryPoint);
+    const int32 DispatchEventResult = LoadEntryPoint(TEXT("DispatchEvent"), &DispatchEventEntryPoint);
     const int32 ReloadScriptResult = LoadEntryPoint(TEXT("ReloadScript"), &ReloadScriptEntryPoint);
     const int32 DestroyScriptResult = LoadEntryPoint(TEXT("DestroyScript"), &DestroyScriptEntryPoint);
     const int32 ScriptCountResult = LoadEntryPoint(TEXT("GetScriptCount"), &GetScriptCountEntryPoint);
@@ -682,31 +728,35 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
     const int32 CountResult = LoadEntryPoint("GetWorldCount", &GetWorldCountEntryPoint);
     const int32 CreateScriptResult = LoadEntryPoint("CreateScript", &CreateScriptEntryPoint);
     const int32 TickScriptResult = LoadEntryPoint("TickScript", &TickScriptEntryPoint);
+    const int32 DispatchEventResult = LoadEntryPoint("DispatchEvent", &DispatchEventEntryPoint);
     const int32 ReloadScriptResult = LoadEntryPoint("ReloadScript", &ReloadScriptEntryPoint);
     const int32 DestroyScriptResult = LoadEntryPoint("DestroyScript", &DestroyScriptEntryPoint);
     const int32 ScriptCountResult = LoadEntryPoint("GetScriptCount", &GetScriptCountEntryPoint);
     const int32 MetricsResult = LoadEntryPoint("GetInvocationMetrics", &GetInvocationMetricsEntryPoint);
 #endif
     if (CreateResult != 0 || DestroyResult != 0 || CountResult != 0 ||
-        CreateScriptResult != 0 || TickScriptResult != 0 || ReloadScriptResult != 0 ||
+        CreateScriptResult != 0 || TickScriptResult != 0 || DispatchEventResult != 0 ||
+        ReloadScriptResult != 0 ||
         DestroyScriptResult != 0 || ScriptCountResult != 0 || MetricsResult != 0 ||
         CreateWorldEntryPoint == nullptr ||
         DestroyWorldEntryPoint == nullptr ||
         GetWorldCountEntryPoint == nullptr ||
         CreateScriptEntryPoint == nullptr ||
         TickScriptEntryPoint == nullptr ||
+        DispatchEventEntryPoint == nullptr ||
         ReloadScriptEntryPoint == nullptr ||
         DestroyScriptEntryPoint == nullptr ||
         GetScriptCountEntryPoint == nullptr ||
         GetInvocationMetricsEntryPoint == nullptr)
     {
         return FailLocked(FString::Printf(
-            TEXT("Managed entry-point loading failed: world=(0x%08X,0x%08X,0x%08X) script=(0x%08X,0x%08X,0x%08X,0x%08X,0x%08X) metrics=0x%08X."),
+            TEXT("Managed entry-point loading failed: world=(0x%08X,0x%08X,0x%08X) script=(0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X) metrics=0x%08X."),
             static_cast<uint32>(CreateResult),
             static_cast<uint32>(DestroyResult),
             static_cast<uint32>(CountResult),
             static_cast<uint32>(CreateScriptResult),
             static_cast<uint32>(TickScriptResult),
+            static_cast<uint32>(DispatchEventResult),
             static_cast<uint32>(ReloadScriptResult),
             static_cast<uint32>(DestroyScriptResult),
             static_cast<uint32>(ScriptCountResult),
@@ -736,6 +786,7 @@ bool FUnifiedScriptCoreClrHost::FailLocked(FString Message)
     GetWorldCountEntryPoint = nullptr;
     CreateScriptEntryPoint = nullptr;
     TickScriptEntryPoint = nullptr;
+    DispatchEventEntryPoint = nullptr;
     ReloadScriptEntryPoint = nullptr;
     DestroyScriptEntryPoint = nullptr;
     GetScriptCountEntryPoint = nullptr;

@@ -14,6 +14,9 @@
 
 namespace UE::UnifiedScript::Component::Private
 {
+constexpr int32 ActorBeginOverlapEvent = 1;
+constexpr int32 ActorEndOverlapEvent = 2;
+
 uint64 AllocateScriptInstanceId()
 {
     static std::atomic<uint64> NextInstanceId{1};
@@ -201,6 +204,7 @@ bool UUnifiedScriptComponent::StartScript()
     ActiveResolvedAssemblyPath = ResolvedAssemblyPath;
     ActiveResolvedTypeName = ResolvedTypeName;
     LastScriptError.Reset();
+    BindManagedActorEvents();
     SetComponentTickEnabled(bTickAutomatically || bReloadRequested);
     UE_LOG(
         LogTemp,
@@ -226,6 +230,7 @@ void UUnifiedScriptComponent::StopScript()
         GetWorld() != nullptr
         ? GetWorld()->GetSubsystem<UUnifiedScriptWorldSubsystem>()
         : nullptr;
+    UnbindManagedActorEvents();
     FString StopError;
     if (Host != nullptr && Host->IsManagedWorldReady() && ManagedScriptInstanceId != 0)
     {
@@ -418,6 +423,112 @@ UObject* UUnifiedScriptComponent::GetScriptTarget()
         return Owner;
     }
     return this;
+}
+
+void UUnifiedScriptComponent::BindManagedActorEvents()
+{
+    AActor* Owner = GetOwner();
+    if (bActorEventsBound || Owner == nullptr)
+    {
+        return;
+    }
+    Owner->OnActorBeginOverlap.AddUniqueDynamic(
+        this,
+        &UUnifiedScriptComponent::HandleActorBeginOverlap);
+    Owner->OnActorEndOverlap.AddUniqueDynamic(
+        this,
+        &UUnifiedScriptComponent::HandleActorEndOverlap);
+    bActorEventsBound = true;
+}
+
+void UUnifiedScriptComponent::UnbindManagedActorEvents()
+{
+    AActor* Owner = GetOwner();
+    if (!bActorEventsBound)
+    {
+        return;
+    }
+    if (Owner != nullptr)
+    {
+        Owner->OnActorBeginOverlap.RemoveDynamic(
+            this,
+            &UUnifiedScriptComponent::HandleActorBeginOverlap);
+        Owner->OnActorEndOverlap.RemoveDynamic(
+            this,
+            &UUnifiedScriptComponent::HandleActorEndOverlap);
+    }
+    bActorEventsBound = false;
+}
+
+void UUnifiedScriptComponent::HandleActorBeginOverlap(
+    AActor* OverlappedActor,
+    AActor* OtherActor)
+{
+    if (OverlappedActor == GetOwner())
+    {
+        DispatchManagedActorEvent(
+            UE::UnifiedScript::Component::Private::ActorBeginOverlapEvent,
+            OtherActor);
+    }
+}
+
+void UUnifiedScriptComponent::HandleActorEndOverlap(
+    AActor* OverlappedActor,
+    AActor* OtherActor)
+{
+    if (OverlappedActor == GetOwner())
+    {
+        DispatchManagedActorEvent(
+            UE::UnifiedScript::Component::Private::ActorEndOverlapEvent,
+            OtherActor);
+    }
+}
+
+void UUnifiedScriptComponent::DispatchManagedActorEvent(
+    int32 EventKind,
+    AActor* OtherActor)
+{
+    if (!bScriptRunning || ManagedScriptInstanceId == 0 ||
+        ManagedTargetHandle == 0 || OtherActor == nullptr)
+    {
+        return;
+    }
+    UUnifiedScriptWorldSubsystem* Host =
+        GetWorld() != nullptr
+        ? GetWorld()->GetSubsystem<UUnifiedScriptWorldSubsystem>()
+        : nullptr;
+    if (Host == nullptr || !Host->IsManagedWorldReady())
+    {
+        SetScriptFailure(TEXT("The UnifiedScript World host is unavailable during event dispatch."));
+        return;
+    }
+
+    FUnifiedScriptObjectHandleResult HandleResult;
+    const FUnifiedScriptObjectHandle Argument =
+        Host->RegisterObject(OtherActor, HandleResult);
+    if (!HandleResult.IsSuccess())
+    {
+        SetScriptFailure(HandleResult.Message);
+        return;
+    }
+
+    FString Error;
+    Host->DispatchManagedEvent(
+        ManagedScriptInstanceId,
+        EventKind,
+        {ManagedTargetHandle},
+        Argument,
+        Error);
+    FUnifiedScriptObjectHandleResult ReleaseResult;
+    Host->ReleaseObject(Argument, ReleaseResult);
+    if (!Error.IsEmpty())
+    {
+        SetScriptFailure(MoveTemp(Error));
+    }
+    else if (!ReleaseResult.IsSuccess())
+    {
+        SetScriptFailure(MoveTemp(ReleaseResult.Message));
+    }
 }
 
 int32 UUnifiedScriptComponent::Add(int32 Left, int32 Right) const

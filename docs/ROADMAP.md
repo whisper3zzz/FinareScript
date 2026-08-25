@@ -264,7 +264,8 @@ measured call path and survive packaged Win64 builds.
 - [x] activate ABI v3 with a strongly typed zero-allocation steady-state path
 - [x] arrays, sets, maps, variable-size returns, and return plus `out`/`ref`
 - [x] placeable Actor host and managed UObject/Actor lifecycle object model
-- [ ] World-safe delegates/events
+- [x] World-safe Actor overlap delegates/events and latent generation cancellation
+- [ ] arbitrary reflected delegate signatures and event proxy generation
 - [x] reproducible C++/UnifiedScript benchmark, Puerts comparison gate, and regression thresholds
 - [x] Win64 Development/Shipping cook, dependency closure, and packaged smoke test
 - [ ] Graph Authoring Beta plus native debug traps, deeper locals, and evaluation

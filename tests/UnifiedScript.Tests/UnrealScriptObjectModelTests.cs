@@ -14,6 +14,7 @@ public sealed class UnrealScriptObjectModelTests
         var bridge = new RejectingBridge();
 
         lifecycle.OnStart(new UnrealScriptContext(bridge, host, target, 27, 5));
+        Task latent = script.StartDelay(0.5f);
         lifecycle.OnTick(0.25f);
 
         Assert.True(script.IsRunning);
@@ -23,13 +24,26 @@ public sealed class UnrealScriptObjectModelTests
         Assert.Equal(5, script.ObservedGeneration);
         Assert.Equal(0.25f, script.LastDeltaSeconds);
         Assert.False(script.Lifetime.IsCancellationRequested);
+        Assert.False(latent.IsCompleted);
+
+        ((IUnrealManagedEventSink)script).OnUnrealEvent(new UnrealScriptEvent(
+            UnrealScriptEventKind.ActorBeginOverlap,
+            target,
+            UnrealObjectHandle.Create(5, 13)));
+        Assert.Equal(1, script.BeginOverlapCount);
+        Assert.True(script.LastOtherActor.IsWellFormed);
+
+        lifecycle.OnTick(0.25f);
+        Assert.True(latent.IsCompletedSuccessfully);
+        Task canceledByStop = script.StartDelay(10.0f);
 
         lifecycle.OnStop();
 
         Assert.False(script.IsRunning);
         Assert.True(script.WasCanceledDuringEndPlay);
+        Assert.True(canceledByStop.IsCanceled);
         Assert.Equal(1, script.BeginPlayCount);
-        Assert.Equal(1, script.TickCount);
+        Assert.Equal(2, script.TickCount);
         Assert.Equal(1, script.EndPlayCount);
         Assert.Throws<InvalidOperationException>(() => _ = script.TargetHandle);
     }
@@ -72,6 +86,12 @@ public sealed class UnrealScriptObjectModelTests
 
         public bool WasCanceledDuringEndPlay { get; private set; }
 
+        public int BeginOverlapCount { get; private set; }
+
+        public UnrealObjectHandle LastOtherActor { get; private set; }
+
+        public Task StartDelay(float seconds) => DelayAsync(seconds);
+
         protected override void OnBeginPlay()
         {
             ++BeginPlayCount;
@@ -91,6 +111,12 @@ public sealed class UnrealScriptObjectModelTests
         {
             ++EndPlayCount;
             WasCanceledDuringEndPlay = Lifetime.IsCancellationRequested;
+        }
+
+        protected override void OnActorBeginOverlap(UnrealObjectHandle otherActor)
+        {
+            ++BeginOverlapCount;
+            LastOtherActor = otherActor;
         }
     }
 

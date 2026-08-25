@@ -1192,6 +1192,8 @@ def main() -> int:
         and "IsInGameThread()" in unreal_registry_source
         and "AllocateGeneration" in unreal_registry_source
         and "std::atomic<uint32>" in unreal_registry_source
+        and "ReferenceCount" in unreal_registry_source
+        and "First release preserves the duplicate owner" in unreal_registry_test
         and "ObjectRegistry.Lifecycle" in unreal_registry_test
         and "CollectGarbage" in unreal_registry_test
         and "record struct UnrealObjectHandle(ulong Value)" in unreal_managed_bridge
@@ -1439,6 +1441,15 @@ def main() -> int:
         and "UnrealObjectHandle Target" in unreal_world_managed_entry
         and "ActorDemoScript : UnrealActorScript" in unreal_actor_demo_source
         and "Context.HasDistinctTarget" in unreal_actor_demo_source
+        and "IUnrealManagedEventSink" in unreal_script_object_model
+        and "DelayAsync" in unreal_script_object_model
+        and "CancelLatentDelays" in unreal_script_object_model
+        and "DispatchEventEntryPoint" in unreal_coreclr_host_source
+        and "HandleActorBeginOverlap" in unreal_component
+        and "World-safe BeginOverlap reaches managed Actor behavior"
+        in unreal_world_host_test
+        and "Managed latent delay resumes on the game-thread Tick"
+        in unreal_world_host_test
         and "Managed Actor EndPlay runs before target handle release"
         in unreal_world_host_test,
         "Managed UObject/Actor object model or live Actor lifecycle gate is missing",

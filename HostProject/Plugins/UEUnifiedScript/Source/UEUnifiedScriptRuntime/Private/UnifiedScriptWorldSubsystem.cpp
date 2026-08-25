@@ -170,6 +170,32 @@ bool UUnifiedScriptWorldSubsystem::TickManagedScript(
         OutError);
 }
 
+bool UUnifiedScriptWorldSubsystem::DispatchManagedEvent(
+    uint64 InstanceId,
+    int32 EventKind,
+    FUnifiedScriptObjectHandle Source,
+    FUnifiedScriptObjectHandle Argument,
+    FString& OutError)
+{
+    if (!IsManagedWorldReady())
+    {
+        OutError = TEXT("The UnifiedScript managed World is not ready.");
+        return false;
+    }
+    if (InstanceId == 0 || EventKind <= 0 || Source.IsNull())
+    {
+        OutError = TEXT("A managed event requires an instance, kind, and source handle.");
+        return false;
+    }
+    return FUnifiedScriptCoreClrHost::Get().DispatchManagedEvent(
+        WorldHostId,
+        InstanceId,
+        EventKind,
+        Source.Value,
+        Argument.Value,
+        OutError);
+}
+
 bool UUnifiedScriptWorldSubsystem::ReloadManagedScript(
     uint64 InstanceId,
     const FString& AssemblyPath,
