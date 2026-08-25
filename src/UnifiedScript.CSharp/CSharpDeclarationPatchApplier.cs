@@ -138,9 +138,9 @@ public sealed class CSharpDeclarationPatchApplier
         }
 
         SyntaxTree[] syntaxTrees = request.Sources
-            .Select(static source => CSharpSyntaxTree.ParseText(
+            .Select(source => CSharpSyntaxTree.ParseText(
                 source.Source,
-                CSharpToHirLowerer.ParseOptions,
+                request.Settings.ParseOptions,
                 source.LogicalPath))
             .ToArray();
         CSharpCompilation compilation = compilationHost.Create(request, syntaxTrees);
@@ -174,7 +174,10 @@ public sealed class CSharpDeclarationPatchApplier
             request.AssemblyName,
             patchedSources,
             request.ReferencePaths,
-            request.EffectCatalog);
+            request.EffectCatalog,
+            request.Settings,
+            request.RuntimeReferencePaths,
+            request.IncludeDefaultReferences);
         CSharpAnalysisResult patchedAnalysis = pipeline.Analyze(patchedRequest);
         if (!patchedAnalysis.Succeeded || patchedAnalysis.ScriptAssets is null)
         {

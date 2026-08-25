@@ -76,7 +76,7 @@ public sealed class CoreClrReloadDomain : IDisposable
             ProgramImageCacheResult cached = imageCache.GetOrAdd(request);
             CoreClrExecutionSession nextSession = executionHost.Load(
                 cached.Image,
-                request.ReferencePaths);
+                request.RuntimeReferencePaths);
             try
             {
                 long nextNumber = checked(generationNumber + 1);

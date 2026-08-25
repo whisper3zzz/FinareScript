@@ -32,9 +32,9 @@ internal sealed class CSharpDebugInstrumenter
         CSharpCompilationHost compilationHost)
     {
         SyntaxTree[] syntaxTrees = request.Sources
-            .Select(static source => CSharpSyntaxTree.ParseText(
+            .Select(source => CSharpSyntaxTree.ParseText(
                 SourceText.From(source.Source, System.Text.Encoding.UTF8),
-                CSharpToHirLowerer.ParseOptions,
+                request.Settings.ParseOptions,
                 source.LogicalPath))
             .ToArray();
         CSharpCompilation compilation = compilationHost.Create(request, syntaxTrees);
@@ -69,7 +69,7 @@ internal sealed class CSharpDebugInstrumenter
             SyntaxNode instrumented = rewriter.Visit(root) ?? root;
             rewritten[index] = CSharpSyntaxTree.Create(
                 (CSharpSyntaxNode)instrumented,
-                CSharpToHirLowerer.ParseOptions,
+                request.Settings.ParseOptions,
                 tree.FilePath,
                 System.Text.Encoding.UTF8);
         }

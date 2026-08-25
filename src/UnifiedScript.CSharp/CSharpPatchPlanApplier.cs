@@ -1917,7 +1917,10 @@ public sealed class CSharpPatchPlanApplier
             patchedRequest.AssemblyName,
             sources,
             patchedRequest.ReferencePaths,
-            patchedRequest.EffectCatalog);
+            patchedRequest.EffectCatalog,
+            patchedRequest.Settings,
+            patchedRequest.RuntimeReferencePaths,
+            patchedRequest.IncludeDefaultReferences);
     }
 
     private static bool SiblingsMatch(

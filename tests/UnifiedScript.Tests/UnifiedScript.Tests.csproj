@@ -21,6 +21,8 @@
     <ProjectReference Include="../../src/UnifiedScript.Unreal/UnifiedScript.Unreal.csproj" />
     <ProjectReference Include="../../samples/Unreal/UnifiedScript.Unreal.Demo/UnifiedScript.Unreal.Demo.csproj"
                       ReferenceOutputAssembly="false" />
+    <ProjectReference Include="../../samples/ProjectLoading/ProjectLoadingDemo.csproj"
+                      ReferenceOutputAssembly="false" />
   </ItemGroup>
   <ItemGroup>
     <Compile Remove="Fixtures/**/*.cs" />

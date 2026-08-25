@@ -722,9 +722,11 @@ None of these concerns may redefine HIR semantics implicitly.
 
 ## Current semantic-host boundary
 
-The M2 host compiles one or more source documents against runtime trusted
-platform assemblies, `UnifiedScript.Core`, and optional explicit metadata
-references. It does not yet load a `.csproj`, resolve NuGet assets, run source
-generators, or import UE symbol assemblies. MSBuild/project loading remains a
-CLI adapter concern; downstream Semantics and Graph modules continue to consume
-the same compilation-neutral contracts.
+The M2 host compiles one or more source documents directly or loads an
+SDK-style `.csproj` through the selected .NET SDK's MSBuild. The project adapter
+consumes evaluated Compile, ReferencePath, and ReferenceCopyLocalPaths items;
+language version, target-framework constants, nullable/unsafe/overflow options,
+NuGet assets, and built project-reference outputs enter the same deterministic
+compilation request. Downstream Semantics and Graph modules continue to consume
+the compilation-neutral contracts. Source-generator/analyzer replay and UE
+symbol-assembly import remain outside this boundary.

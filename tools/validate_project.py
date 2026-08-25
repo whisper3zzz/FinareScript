@@ -26,6 +26,7 @@ PROJECTS = [
     / "Unreal"
     / "UnifiedScript.Unreal.Demo"
     / "UnifiedScript.Unreal.Demo.csproj",
+    ROOT / "samples" / "ProjectLoading" / "ProjectLoadingDemo.csproj",
     ROOT / "tests" / "UnifiedScript.Tests" / "UnifiedScript.Tests.csproj",
 ]
 
@@ -57,6 +58,7 @@ DOCUMENTS = [
     ROOT / "docs" / "EXECUTION_RUNTIME.md",
     ROOT / "docs" / "SOURCE_MAP.md",
     ROOT / "docs" / "BREAKPOINT_RELOAD.md",
+    ROOT / "docs" / "PROJECT_LOADING.md",
     ROOT / "docs" / "DECLARATION_IR.md",
     ROOT / "docs" / "VISUAL_AUTHORING_MODEL.md",
     ROOT / "docs" / "AUTHORING_SURFACE.md",
@@ -314,6 +316,33 @@ def main() -> int:
         and "ScriptAssetJson.Serialize(result.Image.ScriptAssets)" in cli_source,
         "CLI analysis/emission does not publish Declaration IR",
     )
+    project_loader_source = (
+        ROOT / "src" / "UnifiedScript.CSharp" / "CSharpProjectLoader.cs"
+    ).read_text(encoding="utf-8")
+    compilation_request_source = (
+        ROOT / "src" / "UnifiedScript.CSharp" / "CSharpCompilationRequest.cs"
+    ).read_text(encoding="utf-8")
+    project_loader_test = (
+        ROOT / "tests" / "UnifiedScript.Tests" / "CSharpProjectLoaderTests.cs"
+    ).read_text(encoding="utf-8")
+    project_loading_sample = (
+        ROOT / "samples" / "ProjectLoading" / "ProjectLoadingDemo.cs"
+    ).read_text(encoding="utf-8")
+    require(
+        "-target:ResolveReferences" in project_loader_source
+        and '"Compile"' in project_loader_source
+        and '"ReferencePath"' in project_loader_source
+        and '"ReferenceCopyLocalPaths"' in project_loader_source
+        and "CSharpProjectReferenceKind.Package" in project_loader_source
+        and "RuntimeReferencePaths" in compilation_request_source
+        and "LoadAnalysisRequest" in cli_source
+        and "--no-restore" in cli_source
+        and "LoaderUsesMsBuildSourcesConstantsNuGetAndProjectReferences"
+        in project_loader_test
+        and "UNIFIEDSCRIPT_PROJECT_DEMO" in project_loading_sample,
+        "MSBuild project, NuGet, project-reference, or CLI loading coverage is missing",
+    )
+    checks.append("MSBuild project loading carries sources, settings, NuGet, and runtime references")
     prototype_source = (
         ROOT / "prototype" / "visual-editor" / "app.js"
     ).read_text(encoding="utf-8")

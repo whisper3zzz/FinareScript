@@ -21,7 +21,11 @@ public sealed class CSharpCompilationHost
             references.AddRange(additionalReferences);
         }
 
-        return CreateCore("UnifiedScript.Analysis", [syntaxTree], references);
+        return CreateCore(
+            "UnifiedScript.Analysis",
+            [syntaxTree],
+            references,
+            CSharpCompilationSettings.Default);
     }
 
     public CSharpCompilation Create(
@@ -38,7 +42,9 @@ public sealed class CSharpCompilationHost
                 nameof(syntaxTrees));
         }
 
-        var references = new List<MetadataReference>(PlatformReferences.Value);
+        var references = request.IncludeDefaultReferences
+            ? new List<MetadataReference>(PlatformReferences.Value)
+            : [];
         references.AddRange(request.ReferencePaths.Select(
             static path => MetadataReference.CreateFromFile(path)));
         if (additionalReferences is not null)
@@ -46,16 +52,16 @@ public sealed class CSharpCompilationHost
             references.AddRange(additionalReferences);
         }
 
-        return CreateCore(request.AssemblyName, syntaxTrees, references);
+        return CreateCore(request.AssemblyName, syntaxTrees, references, request.Settings);
     }
 
     public CSharpCompilation Create(CSharpCompilationRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
         SyntaxTree[] syntaxTrees = request.Sources
-            .Select(static source => CSharpSyntaxTree.ParseText(
+            .Select(source => CSharpSyntaxTree.ParseText(
                 SourceText.From(source.Source, System.Text.Encoding.UTF8),
-                CSharpToHirLowerer.ParseOptions,
+                request.Settings.ParseOptions,
                 source.LogicalPath))
             .ToArray();
         return Create(request, syntaxTrees);
@@ -64,16 +70,22 @@ public sealed class CSharpCompilationHost
     private static CSharpCompilation CreateCore(
         string assemblyName,
         IEnumerable<SyntaxTree> syntaxTrees,
-        IEnumerable<MetadataReference> references) => CSharpCompilation.Create(
+        IEnumerable<MetadataReference> references,
+        CSharpCompilationSettings settings) => CSharpCompilation.Create(
             assemblyName,
             syntaxTrees,
-            references,
+            references
+                .GroupBy(
+                    static reference => reference.Display ?? string.Empty,
+                    StringComparer.OrdinalIgnoreCase)
+                .Select(static group => group.First()),
             new CSharpCompilationOptions(
                 OutputKind.DynamicallyLinkedLibrary,
-                optimizationLevel: OptimizationLevel.Debug,
-                allowUnsafe: false,
+                optimizationLevel: settings.OptimizationLevel,
+                checkOverflow: settings.CheckOverflow,
+                allowUnsafe: settings.AllowUnsafe,
                 deterministic: true,
-                nullableContextOptions: NullableContextOptions.Enable));
+                nullableContextOptions: settings.NullableContext));
 
     private static IReadOnlyList<MetadataReference> CreatePlatformReferences()
     {

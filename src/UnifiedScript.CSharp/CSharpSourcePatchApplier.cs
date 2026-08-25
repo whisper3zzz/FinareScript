@@ -156,11 +156,11 @@ public sealed class CSharpSourcePatchApplier
             original.DeclarationReferences);
         var documents = request.Sources.ToDictionary(
             static source => source.LogicalPath,
-            static source => new ParsedDocument(
+            source => new ParsedDocument(
                 source,
                 CSharpSyntaxTree.ParseText(
                     source.Source,
-                    CSharpToHirLowerer.ParseOptions,
+                    request.Settings.ParseOptions,
                     source.LogicalPath)));
         var replacements = new Dictionary<string, List<PendingReplacement>>(StringComparer.Ordinal);
 
@@ -383,7 +383,10 @@ public sealed class CSharpSourcePatchApplier
             request.AssemblyName,
             patchedSources,
             request.ReferencePaths,
-            request.EffectCatalog);
+            request.EffectCatalog,
+            request.Settings,
+            request.RuntimeReferencePaths,
+            request.IncludeDefaultReferences);
         CSharpAnalysisResult patchedAnalysis = pipeline.Analyze(patchedRequest);
         if (!patchedAnalysis.Succeeded)
         {
@@ -419,9 +422,9 @@ public sealed class CSharpSourcePatchApplier
         IReadOnlyDictionary<SemanticId, TypeDescriptor> types = semantics.Types
             .ToDictionary(static type => type.Id);
         SyntaxTree[] syntaxTrees = request.Sources
-            .Select(static source => CSharpSyntaxTree.ParseText(
+            .Select(source => CSharpSyntaxTree.ParseText(
                 source.Source,
-                CSharpToHirLowerer.ParseOptions,
+                request.Settings.ParseOptions,
                 source.LogicalPath))
             .ToArray();
         CSharpCompilation compilation = new CSharpCompilationHost().Create(request, syntaxTrees);

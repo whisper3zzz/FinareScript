@@ -215,12 +215,16 @@ internal static class Program
             }
         }
 
-        CSharpSourceDocument[] sources = LoadSources(options.InputPaths, options.IdentityPaths);
-        var request = new CSharpCompilationRequest(
-            options.AssemblyName,
-            sources,
-            options.ReferencePaths,
-            LoadEffectCatalog(options.EffectCatalogPath));
+        CSharpCompilationRequest request;
+        try
+        {
+            request = LoadAnalysisRequest(options);
+        }
+        catch (CSharpProjectLoadException exception)
+        {
+            Console.Error.WriteLine($"error USCS3001: {exception.Message}");
+            return 2;
+        }
         CSharpProgramEmitResult result = new CSharpProgramEmitter().Emit(request);
         foreach (UnifiedDiagnostic diagnostic in result.Diagnostics)
         {
@@ -501,13 +505,16 @@ internal static class Program
             }
         }
 
-        MethodEffectCatalog effectCatalog = LoadEffectCatalog(options.EffectCatalogPath);
-        CSharpSourceDocument[] sources = LoadSources(options.InputPaths, options.IdentityPaths);
-        var request = new CSharpCompilationRequest(
-            options.AssemblyName,
-            sources,
-            options.ReferencePaths,
-            effectCatalog);
+        CSharpCompilationRequest request;
+        try
+        {
+            request = LoadAnalysisRequest(options);
+        }
+        catch (CSharpProjectLoadException exception)
+        {
+            Console.Error.WriteLine($"error USCS3001: {exception.Message}");
+            return 2;
+        }
         CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(request);
         foreach (UnifiedDiagnostic diagnostic in result.Diagnostics)
         {
@@ -888,6 +895,101 @@ internal static class Program
         return sources;
     }
 
+    private static CSharpCompilationRequest LoadAnalysisRequest(AnalyzeOptions options)
+    {
+        MethodEffectCatalog effectCatalog = LoadEffectCatalog(options.EffectCatalogPath);
+        bool projectInput = options.InputPaths.Count == 1 &&
+            string.Equals(
+                Path.GetExtension(options.InputPaths[0]),
+                ".csproj",
+                StringComparison.OrdinalIgnoreCase);
+        if (!projectInput && options.InputPaths.Any(path =>
+                string.Equals(
+                    Path.GetExtension(path),
+                    ".csproj",
+                    StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new CSharpProjectLoadException(
+                "A .csproj must be the command's only input; MSBuild owns its complete Compile item set.");
+        }
+        if (!projectInput)
+        {
+            if (options.Configuration != "Debug" || options.TargetFramework is not null ||
+                !options.Restore || !options.Build)
+            {
+                throw new CSharpProjectLoadException(
+                    "--configuration, --framework, --no-restore, and --no-build require a .csproj input.");
+            }
+            CSharpSourceDocument[] sources = LoadSources(options.InputPaths, options.IdentityPaths);
+            return new CSharpCompilationRequest(
+                options.AssemblyName ?? "UnifiedScript.Analysis",
+                sources,
+                options.ReferencePaths,
+                effectCatalog);
+        }
+
+        CSharpProjectLoadResult loaded = new CSharpProjectLoader().Load(
+            options.InputPaths[0],
+            effectCatalog,
+            new CSharpProjectLoadOptions(
+                options.Configuration,
+                options.TargetFramework,
+                options.Restore,
+                options.Build));
+        CSharpSourceDocument[] projectSources = AttachIdentitySidecars(
+            loaded.Request.Sources,
+            options.IdentityPaths);
+        string[] compileReferences = loaded.Request.ReferencePaths
+            .Concat(options.ReferencePaths.Select(Path.GetFullPath))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        string[] runtimeReferences = loaded.Request.RuntimeReferencePaths
+            .Concat(options.ReferencePaths.Select(Path.GetFullPath))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return new CSharpCompilationRequest(
+            options.AssemblyName ?? loaded.Request.AssemblyName,
+            projectSources,
+            compileReferences,
+            effectCatalog,
+            loaded.Request.Settings,
+            runtimeReferences,
+            loaded.Request.IncludeDefaultReferences);
+    }
+
+    private static CSharpSourceDocument[] AttachIdentitySidecars(
+        IReadOnlyList<CSharpSourceDocument> sources,
+        IReadOnlyList<string> identityPaths)
+    {
+        var identities = new Dictionary<string, IdentitySidecarDocument>(StringComparer.Ordinal);
+        foreach (string identityPath in identityPaths)
+        {
+            IdentitySidecarDocument sidecar = LoadIdentitySidecar(identityPath);
+            if (!identities.TryAdd(sidecar.SourcePath, sidecar))
+            {
+                throw new ArgumentException(
+                    $"More than one identity sidecar was supplied for '{sidecar.SourcePath}'.");
+            }
+        }
+        CSharpSourceDocument[] attached = sources
+            .Select(source =>
+            {
+                identities.Remove(source.LogicalPath, out IdentitySidecarDocument? sidecar);
+                return new CSharpSourceDocument(
+                    source.LogicalPath,
+                    source.Source,
+                    sidecar,
+                    source.IdentityPins);
+            })
+            .ToArray();
+        if (identities.Count > 0)
+        {
+            throw new ArgumentException(
+                $"Identity sidecar '{identities.Values.First().SourcePath}' does not match any project source.");
+        }
+        return attached;
+    }
+
     private static IdentitySidecarDocument LoadIdentitySidecar(string path)
     {
         if (!File.Exists(path))
@@ -943,11 +1045,25 @@ internal static class Program
         string? outputDirectory = null;
         string? effectCatalogPath = null;
         string? assemblyName = null;
+        string configuration = "Debug";
+        string? targetFramework = null;
+        bool restore = true;
+        bool build = true;
         var referencePaths = new List<string>();
         var identityPaths = new List<string>();
         while (index < args.Count)
         {
             string option = args[index++];
+            if (option == "--no-restore" && restore)
+            {
+                restore = false;
+                continue;
+            }
+            if (option == "--no-build" && build)
+            {
+                build = false;
+                continue;
+            }
             if (index >= args.Count)
             {
                 return false;
@@ -965,6 +1081,12 @@ internal static class Program
                 case "--assembly" when assemblyName is null:
                     assemblyName = value;
                     break;
+                case "--configuration" when configuration == "Debug":
+                    configuration = value;
+                    break;
+                case "--framework" when targetFramework is null:
+                    targetFramework = value;
+                    break;
                 case "--reference":
                     referencePaths.Add(value);
                     break;
@@ -980,9 +1102,13 @@ internal static class Program
             inputPaths,
             outputDirectory,
             effectCatalogPath,
-            assemblyName ?? "UnifiedScript.Analysis",
+            assemblyName,
             referencePaths,
-            identityPaths);
+            identityPaths,
+            configuration,
+            targetFramework,
+            restore,
+            build);
         return true;
     }
 
@@ -1522,7 +1648,7 @@ internal static class Program
         }
 
         char[] invalidCharacters = Path.GetInvalidFileNameChars();
-        return new string(options.AssemblyName
+        return new string((options.AssemblyName ?? "UnifiedScript.Analysis")
             .Select(character => invalidCharacters.Contains(character) ? '_' : character)
             .ToArray());
     }
@@ -1655,9 +1781,9 @@ internal static class Program
 
     private static void PrintUsage() => Console.Error.WriteLine(
         "Usage:\n" +
-        "  unifiedscript analyze <input.cs> [options]\n" +
+        "  unifiedscript analyze <input.cs|project.csproj> [options]\n" +
         "  unifiedscript analyze-files <input.cs> <additional.cs>... [options]\n" +
-        "  unifiedscript emit <input.cs> --out <directory> [options]\n" +
+        "  unifiedscript emit <input.cs|project.csproj> --out <directory> [options]\n" +
         "  unifiedscript emit-files <input.cs> <additional.cs>... --out <directory> [options]\n" +
         "  unifiedscript identity-init <input.cs> --out <identity.usids> [options]\n" +
         "  unifiedscript layout-init <graph.json> --out <layout.usgraph>\n" +
@@ -1695,15 +1821,23 @@ internal static class Program
         "  --assembly <name>        Set the analysis assembly name.\n" +
         "  --effects <catalog.json> Apply effect catalog overrides.\n" +
         "  --reference <assembly>   Add a metadata reference; may be repeated.\n" +
+        "  --configuration <name>   Select the MSBuild configuration; defaults to Debug.\n" +
+        "  --framework <tfm>        Select one framework from a multi-target .csproj.\n" +
+        "  --no-restore             Do not restore the .csproj before loading.\n" +
+        "  --no-build               Do not build the .csproj before loading.\n" +
         "Analyze writes graph JSON to stdout when --out is omitted; emit and apply commands require --out.");
 
     private sealed record AnalyzeOptions(
         IReadOnlyList<string> InputPaths,
         string? OutputDirectory,
         string? EffectCatalogPath,
-        string AssemblyName,
+        string? AssemblyName,
         IReadOnlyList<string> ReferencePaths,
-        IReadOnlyList<string> IdentityPaths);
+        IReadOnlyList<string> IdentityPaths,
+        string Configuration,
+        string? TargetFramework,
+        bool Restore,
+        bool Build);
 
     private sealed record ExecuteOptions(
         string InputPath,

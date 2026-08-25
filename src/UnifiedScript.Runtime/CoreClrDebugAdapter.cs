@@ -79,7 +79,9 @@ public sealed class CoreClrDebugAdapter : IDisposable
             }
 
             CSharpProgramImage image = emitted.Image;
-            CoreClrExecutionSession nextSession = executionHost.Load(image, request.ReferencePaths);
+            CoreClrExecutionSession nextSession = executionHost.Load(
+                image,
+                request.RuntimeReferencePaths);
             try
             {
                 ProgramImageKey imageKey = ProgramImageKey.FromImage(image);

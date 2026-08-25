@@ -15,4 +15,7 @@
   <Folder Name="/samples/Unreal/">
     <Project Path="samples/Unreal/UnifiedScript.Unreal.Demo/UnifiedScript.Unreal.Demo.csproj" />
   </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/ProjectLoading/ProjectLoadingDemo.csproj" />
+  </Folder>
 </Solution>

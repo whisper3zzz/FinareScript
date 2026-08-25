@@ -138,6 +138,9 @@ public sealed class CSharpAuthoringWorkspace
             request.AssemblyName,
             sources,
             request.ReferencePaths,
-            request.EffectCatalog);
+            request.EffectCatalog,
+            request.Settings,
+            request.RuntimeReferencePaths,
+            request.IncludeDefaultReferences);
     }
 }

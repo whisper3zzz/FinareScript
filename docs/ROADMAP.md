@@ -41,7 +41,7 @@ Outcome: Roslyn symbols bind into a language-independent type/effect model.
 - [x] versioned method-effect catalog overrides
 - [x] semantic configuration identity for references and effect rules
 - [ ] flow-sensitive nullability state
-- [ ] `.csproj`/MSBuild and NuGet reference loading
+- [x] `.csproj`/MSBuild and NuGet reference loading
 - [ ] configurable API allow/deny catalog
 - [ ] semantic diagnostics for unsupported APIs
 

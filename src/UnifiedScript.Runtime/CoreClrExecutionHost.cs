@@ -18,7 +18,7 @@ public sealed class CoreClrExecutionHost
             throw new ExecutionCompilationException(emitted.Diagnostics);
         }
 
-        return Load(emitted.Image, request.ReferencePaths);
+        return Load(emitted.Image, request.RuntimeReferencePaths);
     }
 
     public CoreClrExecutionSession Load(

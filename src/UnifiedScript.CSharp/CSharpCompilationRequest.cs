@@ -71,7 +71,10 @@ public sealed class CSharpCompilationRequest
         string assemblyName,
         IEnumerable<CSharpSourceDocument> sources,
         IEnumerable<string>? referencePaths = null,
-        MethodEffectCatalog? effectCatalog = null)
+        MethodEffectCatalog? effectCatalog = null,
+        CSharpCompilationSettings? settings = null,
+        IEnumerable<string>? runtimeReferencePaths = null,
+        bool includeDefaultReferences = true)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(assemblyName);
         ArgumentNullException.ThrowIfNull(sources);
@@ -108,7 +111,23 @@ public sealed class CSharpCompilationRequest
         }
 
         ReferencePaths = orderedReferences;
+        string[] orderedRuntimeReferences = (runtimeReferencePaths ?? orderedReferences)
+            .Select(Path.GetFullPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        foreach (string referencePath in orderedRuntimeReferences)
+        {
+            if (!File.Exists(referencePath))
+            {
+                throw new FileNotFoundException("Runtime reference does not exist.", referencePath);
+            }
+        }
+
+        RuntimeReferencePaths = orderedRuntimeReferences;
         EffectCatalog = effectCatalog ?? MethodEffectCatalog.CreateDefault();
+        Settings = settings ?? CSharpCompilationSettings.Default;
+        IncludeDefaultReferences = includeDefaultReferences;
         ConfigurationId = CreateConfigurationId();
     }
 
@@ -118,7 +137,13 @@ public sealed class CSharpCompilationRequest
 
     public IReadOnlyList<string> ReferencePaths { get; }
 
+    public IReadOnlyList<string> RuntimeReferencePaths { get; }
+
     public MethodEffectCatalog EffectCatalog { get; }
+
+    public CSharpCompilationSettings Settings { get; }
+
+    public bool IncludeDefaultReferences { get; }
 
     public SemanticId ConfigurationId { get; }
 
@@ -134,23 +159,43 @@ public sealed class CSharpCompilationRequest
 
     private SemanticId CreateConfigurationId()
     {
-        var referenceFingerprints = new List<string>();
-        foreach (string referencePath in ReferencePaths)
-        {
-            using FileStream stream = File.OpenRead(referencePath);
-            string digest = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
-            referenceFingerprints.Add($"{Path.GetFileName(referencePath)}:{digest}");
-        }
+        string[] referenceFingerprints = CreateReferenceFingerprints(ReferencePaths);
+        string[] runtimeReferenceFingerprints = CreateReferenceFingerprints(RuntimeReferencePaths);
 
-        referenceFingerprints.Sort(StringComparer.Ordinal);
+        bool legacyConfiguration =
+            Settings.ConfigurationKey == CSharpCompilationSettings.Default.ConfigurationKey &&
+            IncludeDefaultReferences &&
+            ReferencePaths.SequenceEqual(RuntimeReferencePaths, StringComparer.OrdinalIgnoreCase);
+        if (legacyConfiguration)
+        {
+            return SemanticId.FromKey(string.Join(
+                '|',
+                "csharp-configuration/v0.1",
+                AssemblyName,
+                "net10.0",
+                EffectCatalog.Id.Value,
+                string.Join(',', referenceFingerprints)));
+        }
 
         string key = string.Join(
             '|',
-            "csharp-configuration/v0.1",
+            "csharp-configuration/v0.2",
             AssemblyName,
-            "net10.0",
+            Settings.ConfigurationKey,
+            IncludeDefaultReferences,
             EffectCatalog.Id.Value,
-            string.Join(',', referenceFingerprints));
+            string.Join(',', referenceFingerprints),
+            string.Join(',', runtimeReferenceFingerprints));
         return SemanticId.FromKey(key);
     }
+
+    private static string[] CreateReferenceFingerprints(IEnumerable<string> paths) => paths
+        .Select(static path =>
+        {
+            using FileStream stream = File.OpenRead(path);
+            string digest = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+            return $"{Path.GetFileName(path)}:{digest}";
+        })
+        .Order(StringComparer.Ordinal)
+        .ToArray();
 }

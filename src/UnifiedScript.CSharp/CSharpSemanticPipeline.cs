@@ -22,9 +22,9 @@ public sealed class CSharpSemanticPipeline
     {
         ArgumentNullException.ThrowIfNull(request);
         SyntaxTree[] syntaxTrees = request.Sources
-            .Select(static document => CSharpSyntaxTree.ParseText(
+            .Select(document => CSharpSyntaxTree.ParseText(
                 document.Source,
-                CSharpToHirLowerer.ParseOptions,
+                request.Settings.ParseOptions,
                 document.LogicalPath))
             .ToArray();
         CSharpLoweringResult[] lowerings = syntaxTrees.Select(lowerer.Lower).ToArray();

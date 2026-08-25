@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>UnifiedScript.ProjectLoadingDemo</AssemblyName>
+    <DefineConstants>$(DefineConstants);UNIFIEDSCRIPT_PROJECT_DEMO</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/UnifiedScript.Core/UnifiedScript.Core.csproj" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+  </ItemGroup>
+</Project>

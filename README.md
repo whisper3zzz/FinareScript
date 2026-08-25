@@ -114,6 +114,9 @@ The repository currently implements:
   sizes, collapsed state, comment regions, routing hints, and orphan recovery;
 - explicit patch identity pins and tombstones for deleted semantic nodes;
 - versioned HIR, semantics, and graph JSON emission through a small CLI;
+- direct SDK-style `.csproj` loading through MSBuild, including evaluated
+  Compile items, conditional symbols, NuGet assets, project references, and
+  copy-local runtime dependencies;
 - deterministic PE/portable-PDB emission plus a collectible CoreCLR execution
   host, semantic-ID invocation, strict typed return/fault JSON, and a public
   `execute` command;
@@ -600,6 +603,18 @@ dotnet run --project src/UnifiedScript.Cli -- \
   analyze samples/DoorController.cs \
   --out artifacts/sample
 ```
+
+Analyze or emit a complete SDK project with the same command shape:
+
+```bash
+dotnet run --project src/UnifiedScript.Cli -- \
+  analyze samples/ProjectLoading/ProjectLoadingDemo.csproj \
+  --out artifacts/project-loading
+```
+
+Project restore/build run by default. See [PROJECT_LOADING.md](docs/PROJECT_LOADING.md)
+for configuration, target-framework, no-restore/no-build, and source-generator
+boundaries.
 
 This emits:
 

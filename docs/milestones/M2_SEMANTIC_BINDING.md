@@ -10,6 +10,10 @@ control flow reflects call effects.
 ## Implemented vertical slice
 
 - deterministic multi-document `CSharpCompilation` host
+- SDK-style `.csproj` loading through evaluated MSBuild Compile,
+  ReferencePath, and ReferenceCopyLocalPaths items
+- target-framework constants, Nullable/LangVersion/compiler settings, NuGet
+  assets, and built project-reference outputs
 - runtime and `UnifiedScript.Core` metadata references
 - Roslyn `SemanticModel` binding after Visual Profile validation
 - language-neutral type, method, parameter, nullability, and effect descriptors
@@ -46,7 +50,6 @@ The semantic test fixture proves that:
 
 ## Remaining M2 work
 
-- `.csproj`/MSBuild loading at the CLI boundary
 - deterministic external reference manifests
 - flow-sensitive nullable state per expression
 - namespace/API allow and deny policies
@@ -55,6 +58,7 @@ The semantic test fixture proves that:
 - semantic diagnostics for banned namespaces and APIs
 - generic type substitution in the language-neutral descriptor model
 - richer evaluation regions before structured loops are introduced
+- source-generator and analyzer replay inside the UnifiedScript compilation
 
 ## Deliberate exclusions
 
