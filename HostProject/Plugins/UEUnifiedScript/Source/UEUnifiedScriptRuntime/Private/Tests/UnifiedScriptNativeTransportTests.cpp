@@ -164,7 +164,7 @@ bool FUnifiedScriptNativeTransportAbiTest::RunTest(const FString& Parameters)
     TestEqual(
         TEXT("ABI v3 transport-table layout is fixed"),
         static_cast<uint32>(sizeof(FUnifiedScriptNativeTransportV3)),
-        72u);
+        80u);
     TestEqual(
         TEXT("ABI v3 status byte offset is fixed"),
         static_cast<uint32>(STRUCT_OFFSET(FUnifiedScriptNativeCallFrameV3, Status)),
@@ -200,6 +200,9 @@ bool FUnifiedScriptNativeTransportAbiTest::RunTest(const FString& Parameters)
     TestNotNull(
         TEXT("Call-frame transport exposes the int32x2 scalar lane"),
         CallFrameTransport->InvokeInt32x2ById);
+    TestNotNull(
+        TEXT("Call-frame transport exposes the mixed fixed-value lane"),
+        CallFrameTransport->InvokeFixedById);
     TestTrue(
         TEXT("Call-frame transport advertises generation-safe object handles"),
         (CallFrameTransport->Capabilities &
@@ -386,6 +389,27 @@ bool FUnifiedScriptNativeTransportAbiTest::RunTest(const FString& Parameters)
                 V3Result.Kind == EUnifiedScriptNativeValueKindV3::Int32 &&
                 static_cast<int32>(V3Result.Payload0) == 42);
 
+        V3Result = {};
+        V3Result.Kind = EUnifiedScriptNativeValueKindV3::Int32;
+        uint8 FixedInvocationError = 0;
+        uint8 FixedHandleError = 0;
+        const uint8 FixedStatus = CallFrameTransport->InvokeFixedById(
+            Context,
+            Handle.Value,
+            AddId,
+            V3Arguments,
+            2,
+            &V3Result,
+            &FixedInvocationError,
+            &FixedHandleError);
+        TestTrue(
+            TEXT("ABI v3 mixed fixed-value Add succeeds"),
+            FixedStatus == static_cast<uint8>(EUnifiedScriptNativeCallStatusV3::Success) &&
+                FixedInvocationError == 0 &&
+                FixedHandleError == 0 &&
+                V3Result.Kind == EUnifiedScriptNativeValueKindV3::Int32 &&
+                static_cast<int32>(V3Result.Payload0) == 42);
+
         constexpr uint64 ReloadId = UnifiedScriptMemberId(
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:RequestReload");
         V3Result = {};
@@ -405,6 +429,143 @@ bool FUnifiedScriptNativeTransportAbiTest::RunTest(const FString& Parameters)
         UUnifiedScriptInteropFixture* Interop = NewObject<UUnifiedScriptInteropFixture>(World);
         const FUnifiedScriptObjectHandle InteropHandle =
             Registry.RegisterObject(Interop, HandleResult);
+        const auto EncodeFloat = [](float Value)
+        {
+            FUnifiedScriptNativeValueV3 Cell;
+            Cell.Kind = EUnifiedScriptNativeValueKindV3::Float32;
+            uint32 Bits = 0;
+            FMemory::Memcpy(&Bits, &Value, sizeof(float));
+            Cell.Payload0 = Bits;
+            return Cell;
+        };
+        const auto EncodeVector = [](const FVector& Value)
+        {
+            FUnifiedScriptNativeValueV3 Cell;
+            Cell.Kind = EUnifiedScriptNativeValueKindV3::Vector3;
+            const double Components[] = {Value.X, Value.Y, Value.Z};
+            FMemory::Memcpy(&Cell.Payload0, &Components[0], sizeof(double));
+            FMemory::Memcpy(&Cell.Payload1, &Components[1], sizeof(double));
+            FMemory::Memcpy(&Cell.Payload2, &Components[2], sizeof(double));
+            return Cell;
+        };
+        const auto DecodeFloat = [](const FUnifiedScriptNativeValueV3& Cell)
+        {
+            float Value = 0.0f;
+            const uint32 Bits = static_cast<uint32>(Cell.Payload0);
+            FMemory::Memcpy(&Value, &Bits, sizeof(float));
+            return Value;
+        };
+        const auto DecodeVector = [](const FUnifiedScriptNativeValueV3& Cell)
+        {
+            double Components[3] = {};
+            FMemory::Memcpy(&Components[0], &Cell.Payload0, sizeof(double));
+            FMemory::Memcpy(&Components[1], &Cell.Payload1, sizeof(double));
+            FMemory::Memcpy(&Components[2], &Cell.Payload2, sizeof(double));
+            return FVector(Components[0], Components[1], Components[2]);
+        };
+        const auto InvokeFixed = [&](
+            uint64 MemberId,
+            const FUnifiedScriptNativeValueV3* Arguments,
+            uint32 ArgumentCount,
+            FUnifiedScriptNativeValueV3& Result)
+        {
+            FixedInvocationError = 0;
+            FixedHandleError = 0;
+            return CallFrameTransport->InvokeFixedById(
+                Context,
+                InteropHandle.Value,
+                MemberId,
+                Arguments,
+                ArgumentCount,
+                &Result,
+                &FixedInvocationError,
+                &FixedHandleError) ==
+                static_cast<uint8>(EUnifiedScriptNativeCallStatusV3::Success);
+        };
+
+        FUnifiedScriptNativeValueV3 FixedResult;
+        FixedResult.Kind = EUnifiedScriptNativeValueKindV3::Int32;
+        TestTrue(
+            TEXT("Fixed arity 0 int32 signature executes"),
+            InvokeFixed(
+                UnifiedScriptMemberId(
+                    "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FixedArity0"),
+                nullptr,
+                0,
+                FixedResult) &&
+                static_cast<int32>(FixedResult.Payload0) == 17);
+
+        FUnifiedScriptNativeValueV3 FixedArguments[4];
+        FixedArguments[0] = EncodeFloat(2.5f);
+        FixedResult = {};
+        FixedResult.Kind = EUnifiedScriptNativeValueKindV3::Float32;
+        TestTrue(
+            TEXT("Fixed arity 1 float signature executes"),
+            InvokeFixed(
+                UnifiedScriptMemberId(
+                    "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FixedArity1"),
+                FixedArguments,
+                1,
+                FixedResult) &&
+                FMath::IsNearlyEqual(DecodeFloat(FixedResult), 4.0f));
+
+        FixedArguments[0] = {};
+        FixedArguments[0].Kind = EUnifiedScriptNativeValueKindV3::Boolean;
+        FixedArguments[0].Payload0 = 1;
+        FixedArguments[1] = {};
+        FixedArguments[1].Kind = EUnifiedScriptNativeValueKindV3::Int32;
+        FixedArguments[1].Payload0 = 7;
+        FixedResult = {};
+        FixedResult.Kind = EUnifiedScriptNativeValueKindV3::Boolean;
+        TestTrue(
+            TEXT("Fixed arity 2 bool/int32 signature executes"),
+            InvokeFixed(
+                UnifiedScriptMemberId(
+                    "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FixedArity2"),
+                FixedArguments,
+                2,
+                FixedResult) &&
+                FixedResult.Payload0 == 1);
+
+        FixedArguments[0] = {};
+        FixedArguments[0].Kind = EUnifiedScriptNativeValueKindV3::Object;
+        FixedArguments[0].Payload0 = InteropHandle.Value;
+        FixedArguments[1] = {};
+        FixedArguments[1].Kind = EUnifiedScriptNativeValueKindV3::Boolean;
+        FixedArguments[1].Payload0 = 1;
+        FixedArguments[2] = EncodeFloat(1.0f);
+        FixedResult = {};
+        FixedResult.Kind = EUnifiedScriptNativeValueKindV3::Object;
+        TestTrue(
+            TEXT("Fixed arity 3 object-handle signature executes"),
+            InvokeFixed(
+                UnifiedScriptMemberId(
+                    "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FixedArity3"),
+                FixedArguments,
+                3,
+                FixedResult) &&
+                FixedResult.Payload0 == InteropHandle.Value);
+
+        FixedArguments[0] = EncodeVector(FVector(1.0, 2.0, 3.0));
+        FixedArguments[1] = {};
+        FixedArguments[1].Kind = EUnifiedScriptNativeValueKindV3::Int32;
+        FixedArguments[1].Payload0 = 2;
+        FixedArguments[2] = EncodeFloat(3.0f);
+        FixedArguments[3] = {};
+        FixedArguments[3].Kind = EUnifiedScriptNativeValueKindV3::Boolean;
+        FixedArguments[3].Payload0 = 1;
+        FixedResult = {};
+        FixedResult.Kind = EUnifiedScriptNativeValueKindV3::Vector3;
+        TestTrue(
+            TEXT("Fixed arity 4 FVector mixed signature executes"),
+            InvokeFixed(
+                UnifiedScriptMemberId(
+                    "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FixedArity4"),
+                FixedArguments,
+                4,
+                FixedResult) &&
+                DecodeVector(FixedResult).Equals(FVector(7.0, 8.0, 9.0)));
+
         constexpr uint64 InteropChangedId = UnifiedScriptMemberId(
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:OnInteropChanged");
         const FTCHARToUTF8 InteropChangedPath(

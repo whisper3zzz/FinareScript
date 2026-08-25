@@ -11,6 +11,7 @@
 
 #include "CoreMinimal.h"
 #include "UnifiedScriptInvocationBridge.h"
+#include "UnifiedScriptNativeTransport.h"
 
 namespace UE::UnifiedScript::Generated
 {
@@ -57,5 +58,13 @@ bool InvokeInt32x2(
     int32 Argument0,
     int32 Argument1,
     int32& OutReturnValue,
+    FUnifiedScriptInvocationResult& OutResult);
+
+bool InvokeFixed(
+    UObject* Target,
+    FUnifiedScriptObjectRegistry& Registry,
+    uint64 MemberId,
+    TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    FUnifiedScriptNativeValueV3* OutReturnValue,
     FUnifiedScriptInvocationResult& OutResult);
 }

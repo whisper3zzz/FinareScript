@@ -3,6 +3,8 @@
 #include "CoreMinimal.h"
 #include "UnifiedScriptInvocationBridge.h"
 
+struct FUnifiedScriptNativeValueV3;
+
 /** One generated member-ID dispatch table owned by an Unreal module. */
 struct UEUNIFIEDSCRIPTRUNTIME_API FUnifiedScriptGeneratedThunkTable
 {
@@ -43,6 +45,13 @@ struct UEUNIFIEDSCRIPTRUNTIME_API FUnifiedScriptGeneratedThunkTable
         int32,
         int32&,
         FUnifiedScriptInvocationResult&);
+    using FInvokeFixed = bool (*)(
+        UObject*,
+        FUnifiedScriptObjectRegistry&,
+        uint64,
+        TConstArrayView<FUnifiedScriptNativeValueV3>,
+        FUnifiedScriptNativeValueV3*,
+        FUnifiedScriptInvocationResult&);
 
     FDescribeReadResult DescribeReadResult = nullptr;
     FDescribeInvokeResultCount DescribeInvokeResultCount = nullptr;
@@ -51,6 +60,7 @@ struct UEUNIFIEDSCRIPTRUNTIME_API FUnifiedScriptGeneratedThunkTable
     FWriteProperty WriteProperty = nullptr;
     FInvoke Invoke = nullptr;
     FInvokeInt32x2 InvokeInt32x2 = nullptr;
+    FInvokeFixed InvokeFixed = nullptr;
 
     bool IsValid() const
     {
@@ -114,5 +124,12 @@ public:
         int32 Argument0,
         int32 Argument1,
         int32& OutReturnValue,
+        FUnifiedScriptInvocationResult& OutResult);
+    static bool InvokeFixed(
+        UObject* Target,
+        FUnifiedScriptObjectRegistry& Registry,
+        uint64 MemberId,
+        TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+        FUnifiedScriptNativeValueV3* OutReturnValue,
         FUnifiedScriptInvocationResult& OutResult);
 };

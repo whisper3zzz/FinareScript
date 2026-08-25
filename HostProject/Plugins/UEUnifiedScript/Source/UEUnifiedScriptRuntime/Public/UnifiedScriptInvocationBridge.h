@@ -7,6 +7,7 @@
 #include <atomic>
 
 class FMulticastDelegateProperty;
+struct FUnifiedScriptNativeValueV3;
 
 /** Stable 64-bit FNV-1a identity shared with generated managed wrappers. */
 constexpr uint64 UnifiedScriptMemberId(const ANSICHAR* Path)
@@ -233,6 +234,13 @@ public:
         int32 Argument0,
         int32 Argument1,
         int32& OutReturnValue,
+        FUnifiedScriptInvocationResult& OutResult);
+
+    bool InvokeFixedById(
+        FUnifiedScriptObjectHandle Target,
+        uint64 MemberId,
+        TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+        FUnifiedScriptNativeValueV3* OutReturnValue,
         FUnifiedScriptInvocationResult& OutResult);
 
     uint64 GetFastInvocationCount() const;

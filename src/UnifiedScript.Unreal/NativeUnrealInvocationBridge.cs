@@ -540,6 +540,14 @@ public sealed class NativeUnrealInvocationBridge
         string memberPath)
     {
         ValidateFastRequest(target, memberId, memberPath);
+        if (TryExecuteFixedResult(
+                target,
+                memberId,
+                ReadOnlySpan<UnrealNativeValueV3>.Empty,
+                out TResult fixedResult))
+        {
+            return fixedResult;
+        }
         Span<byte> arena = stackalloc byte[CallFrameArenaByteCapacity];
         if (TryExecuteCallFrameResult(
                 UnrealNativeOperationV3.Invoke,
@@ -569,6 +577,11 @@ public sealed class NativeUnrealInvocationBridge
     {
         ValidateFastRequest(target, memberId, memberPath);
         Span<UnrealNativeValueV3> arguments = stackalloc UnrealNativeValueV3[1];
+        if (UnrealNativeFixedValueCodecV3.TryEncode(argument0, out arguments[0]) &&
+            TryExecuteFixedResult(target, memberId, arguments, out TResult fixedResult))
+        {
+            return fixedResult;
+        }
         Span<byte> arena = stackalloc byte[CallFrameArenaByteCapacity];
         int byteCount = 0;
         if (UnrealNativeValueCodecV3.TryEncode(
@@ -628,6 +641,12 @@ public sealed class NativeUnrealInvocationBridge
             }
         }
         Span<UnrealNativeValueV3> arguments = stackalloc UnrealNativeValueV3[2];
+        if (UnrealNativeFixedValueCodecV3.TryEncode(argument0, out arguments[0]) &&
+            UnrealNativeFixedValueCodecV3.TryEncode(argument1, out arguments[1]) &&
+            TryExecuteFixedResult(target, memberId, arguments, out TResult fixedResult))
+        {
+            return fixedResult;
+        }
         Span<byte> arena = stackalloc byte[CallFrameArenaByteCapacity];
         int byteCount = 0;
         if (UnrealNativeValueCodecV3.TryEncode(
@@ -672,6 +691,13 @@ public sealed class NativeUnrealInvocationBridge
     {
         ValidateFastRequest(target, memberId, memberPath);
         Span<UnrealNativeValueV3> arguments = stackalloc UnrealNativeValueV3[3];
+        if (UnrealNativeFixedValueCodecV3.TryEncode(argument0, out arguments[0]) &&
+            UnrealNativeFixedValueCodecV3.TryEncode(argument1, out arguments[1]) &&
+            UnrealNativeFixedValueCodecV3.TryEncode(argument2, out arguments[2]) &&
+            TryExecuteFixedResult(target, memberId, arguments, out TResult fixedResult))
+        {
+            return fixedResult;
+        }
         Span<byte> arena = stackalloc byte[CallFrameArenaByteCapacity];
         int byteCount = 0;
         if (TryEncodeThree(
@@ -713,6 +739,14 @@ public sealed class NativeUnrealInvocationBridge
     {
         ValidateFastRequest(target, memberId, memberPath);
         Span<UnrealNativeValueV3> arguments = stackalloc UnrealNativeValueV3[4];
+        if (UnrealNativeFixedValueCodecV3.TryEncode(argument0, out arguments[0]) &&
+            UnrealNativeFixedValueCodecV3.TryEncode(argument1, out arguments[1]) &&
+            UnrealNativeFixedValueCodecV3.TryEncode(argument2, out arguments[2]) &&
+            UnrealNativeFixedValueCodecV3.TryEncode(argument3, out arguments[3]) &&
+            TryExecuteFixedResult(target, memberId, arguments, out TResult fixedResult))
+        {
+            return fixedResult;
+        }
         Span<byte> arena = stackalloc byte[CallFrameArenaByteCapacity];
         int byteCount = 0;
         if (TryEncodeFour(
@@ -756,6 +790,13 @@ public sealed class NativeUnrealInvocationBridge
         string memberPath)
     {
         ValidateFastRequest(target, memberId, memberPath);
+        if (TryExecuteFixedVoid(
+                target,
+                memberId,
+                ReadOnlySpan<UnrealNativeValueV3>.Empty))
+        {
+            return;
+        }
         if (TryExecuteCallFrameVoid(
                 UnrealNativeOperationV3.Invoke,
                 target,
@@ -783,6 +824,11 @@ public sealed class NativeUnrealInvocationBridge
     {
         ValidateFastRequest(target, memberId, memberPath);
         Span<UnrealNativeValueV3> arguments = stackalloc UnrealNativeValueV3[1];
+        if (UnrealNativeFixedValueCodecV3.TryEncode(argument0, out arguments[0]) &&
+            TryExecuteFixedVoid(target, memberId, arguments))
+        {
+            return;
+        }
         Span<byte> arena = stackalloc byte[CallFrameArenaByteCapacity];
         int byteCount = 0;
         if (UnrealNativeValueCodecV3.TryEncode(
@@ -819,6 +865,12 @@ public sealed class NativeUnrealInvocationBridge
     {
         ValidateFastRequest(target, memberId, memberPath);
         Span<UnrealNativeValueV3> arguments = stackalloc UnrealNativeValueV3[2];
+        if (UnrealNativeFixedValueCodecV3.TryEncode(argument0, out arguments[0]) &&
+            UnrealNativeFixedValueCodecV3.TryEncode(argument1, out arguments[1]) &&
+            TryExecuteFixedVoid(target, memberId, arguments))
+        {
+            return;
+        }
         Span<byte> arena = stackalloc byte[CallFrameArenaByteCapacity];
         int byteCount = 0;
         if (UnrealNativeValueCodecV3.TryEncode(
@@ -862,6 +914,13 @@ public sealed class NativeUnrealInvocationBridge
     {
         ValidateFastRequest(target, memberId, memberPath);
         Span<UnrealNativeValueV3> arguments = stackalloc UnrealNativeValueV3[3];
+        if (UnrealNativeFixedValueCodecV3.TryEncode(argument0, out arguments[0]) &&
+            UnrealNativeFixedValueCodecV3.TryEncode(argument1, out arguments[1]) &&
+            UnrealNativeFixedValueCodecV3.TryEncode(argument2, out arguments[2]) &&
+            TryExecuteFixedVoid(target, memberId, arguments))
+        {
+            return;
+        }
         Span<byte> arena = stackalloc byte[CallFrameArenaByteCapacity];
         int byteCount = 0;
         if (TryEncodeThree(
@@ -902,6 +961,14 @@ public sealed class NativeUnrealInvocationBridge
     {
         ValidateFastRequest(target, memberId, memberPath);
         Span<UnrealNativeValueV3> arguments = stackalloc UnrealNativeValueV3[4];
+        if (UnrealNativeFixedValueCodecV3.TryEncode(argument0, out arguments[0]) &&
+            UnrealNativeFixedValueCodecV3.TryEncode(argument1, out arguments[1]) &&
+            UnrealNativeFixedValueCodecV3.TryEncode(argument2, out arguments[2]) &&
+            UnrealNativeFixedValueCodecV3.TryEncode(argument3, out arguments[3]) &&
+            TryExecuteFixedVoid(target, memberId, arguments))
+        {
+            return;
+        }
         Span<byte> arena = stackalloc byte[CallFrameArenaByteCapacity];
         int byteCount = 0;
         if (TryEncodeFour(
@@ -1102,6 +1169,66 @@ public sealed class NativeUnrealInvocationBridge
         }
         Interlocked.Increment(ref _callFrameInvocationCount);
         return new UnrealOutputInvocationResult(returnValue, outputs);
+    }
+
+    private bool TryExecuteFixedResult<TResult>(
+        UnrealObjectHandle target,
+        ulong memberId,
+        ReadOnlySpan<UnrealNativeValueV3> arguments,
+        out TResult result)
+    {
+        result = default!;
+        if (_transport is not IUnrealNativeFixedInvocationTransportV3 transport ||
+            !transport.SupportsFixedInvocation ||
+            !UnrealNativeFixedValueCodecV3.TryCreateResultDescriptor<TResult>(
+                out UnrealNativeValueV3 descriptor))
+        {
+            return false;
+        }
+
+        Span<UnrealNativeValueV3> results = stackalloc UnrealNativeValueV3[1];
+        results[0] = descriptor;
+        UnrealNativeCallOutcomeV3 outcome = transport.ExecuteFixedById(
+            target,
+            memberId,
+            arguments,
+            results);
+        if (IsMissingGeneratedMember(outcome))
+        {
+            return false;
+        }
+        RequireCallFrameSuccess(outcome, expectedResultCount: 1);
+        if (!UnrealNativeFixedValueCodecV3.TryDecode(in results[0], out result))
+        {
+            throw new InvalidOperationException(
+                "The ABI v3 fixed-value transport returned an incompatible result.");
+        }
+        Interlocked.Increment(ref _callFrameInvocationCount);
+        return true;
+    }
+
+    private bool TryExecuteFixedVoid(
+        UnrealObjectHandle target,
+        ulong memberId,
+        ReadOnlySpan<UnrealNativeValueV3> arguments)
+    {
+        if (_transport is not IUnrealNativeFixedInvocationTransportV3 transport ||
+            !transport.SupportsFixedInvocation)
+        {
+            return false;
+        }
+        UnrealNativeCallOutcomeV3 outcome = transport.ExecuteFixedById(
+            target,
+            memberId,
+            arguments,
+            Span<UnrealNativeValueV3>.Empty);
+        if (IsMissingGeneratedMember(outcome))
+        {
+            return false;
+        }
+        RequireCallFrameSuccess(outcome, expectedResultCount: 0);
+        Interlocked.Increment(ref _callFrameInvocationCount);
+        return true;
     }
 
     private bool TryExecuteCallFrameResult<TResult>(

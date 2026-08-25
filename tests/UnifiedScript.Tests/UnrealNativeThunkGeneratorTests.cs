@@ -36,6 +36,14 @@ public sealed class UnrealNativeThunkGeneratorTests
             "OutReturnValue = TypedTarget->Add(Argument0, Argument1);",
             first.Source,
             StringComparison.Ordinal);
+        Assert.Contains(
+            "bool UE::UnifiedScript::Generated::InvokeFixed(",
+            first.Source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "FUnifiedScriptNativeValueV3* OutReturnValue",
+            first.Source,
+            StringComparison.Ordinal);
         Assert.DoesNotContain("ProcessEvent", first.Source, StringComparison.Ordinal);
         Assert.DoesNotContain("FindFProperty", first.Source, StringComparison.Ordinal);
     }
@@ -62,6 +70,88 @@ public sealed class UnrealNativeThunkGeneratorTests
             "bool UE::UnifiedScript::Generated::Invoke(",
             result.Source,
             StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void GenerateCoversFixedValueFamiliesAcrossZeroToFourArguments()
+    {
+        UnrealReflectionManifest manifest = CreateManifest();
+        UnrealReflectedType owner = manifest.Types[0];
+        var int32Type = new UnrealTypeReference(UnrealValueKind.Int32, "int32");
+        var floatType = new UnrealTypeReference(UnrealValueKind.Float32, "float");
+        var boolType = new UnrealTypeReference(UnrealValueKind.Boolean, "bool");
+        var objectType = new UnrealTypeReference(
+            UnrealValueKind.Object,
+            "UObject*",
+            "/Script/CoreUObject.Object");
+        var vectorType = new UnrealTypeReference(
+            UnrealValueKind.Struct,
+            "FVector",
+            "/Script/CoreUObject.Vector");
+        UnrealReflectedParameter Input(string name, UnrealTypeReference type) =>
+            new(name, type, UnrealParameterDirection.Input);
+        UnrealReflectedFunction Function(
+            string name,
+            UnrealTypeReference result,
+            params UnrealReflectedParameter[] parameters) =>
+            new(
+                $"{owner.Path}:{name}",
+                name,
+                result,
+                parameters,
+                new UnrealFunctionTraits(false, true, true));
+
+        manifest = manifest with
+        {
+            Types =
+            [
+                owner with
+                {
+                    Functions =
+                    [
+                        Function("Fixed0", int32Type),
+                        Function("Fixed1", floatType, Input("Value", floatType)),
+                        Function(
+                            "Fixed2",
+                            boolType,
+                            Input("Enabled", boolType),
+                            Input("Count", int32Type)),
+                        Function(
+                            "Fixed3",
+                            objectType,
+                            Input("Context", objectType),
+                            Input("Enabled", boolType),
+                            Input("Weight", floatType)),
+                        Function(
+                            "Fixed4",
+                            vectorType,
+                            Input("Location", vectorType),
+                            Input("Count", int32Type),
+                            Input("Weight", floatType),
+                            Input("Enabled", boolType)),
+                    ],
+                },
+            ],
+        };
+
+        string source = new UnrealNativeThunkGenerator().Generate(manifest).Source;
+
+        foreach (string invocation in new[]
+                 {
+                     "TypedTarget->Fixed0()",
+                     "TypedTarget->Fixed1(Argument0)",
+                     "TypedTarget->Fixed2(Argument0, Argument1)",
+                     "TypedTarget->Fixed3(Argument0, Argument1, Argument2)",
+                     "TypedTarget->Fixed4(Argument0, Argument1, Argument2, Argument3)",
+                 })
+        {
+            Assert.Contains(invocation, source, StringComparison.Ordinal);
+        }
+        Assert.Contains("EUnifiedScriptNativeValueKindV3::Int32", source, StringComparison.Ordinal);
+        Assert.Contains("EUnifiedScriptNativeValueKindV3::Float32", source, StringComparison.Ordinal);
+        Assert.Contains("EUnifiedScriptNativeValueKindV3::Boolean", source, StringComparison.Ordinal);
+        Assert.Contains("EUnifiedScriptNativeValueKindV3::Object", source, StringComparison.Ordinal);
+        Assert.Contains("EUnifiedScriptNativeValueKindV3::Vector3", source, StringComparison.Ordinal);
     }
 
     [Theory]

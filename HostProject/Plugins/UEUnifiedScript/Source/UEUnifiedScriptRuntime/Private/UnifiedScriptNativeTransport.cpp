@@ -1746,6 +1746,51 @@ uint8 InvokeInt32x2ByIdV3(
         bExecuted ? Status : EUnifiedScriptNativeCallStatusV3::TransportUnavailable);
 }
 
+uint8 InvokeFixedByIdV3(
+    void* Context,
+    uint64 Target,
+    uint64 MemberId,
+    const FUnifiedScriptNativeValueV3* Arguments,
+    uint32 ArgumentCount,
+    FUnifiedScriptNativeValueV3* OutReturnValue,
+    uint8* OutInvocationError,
+    uint8* OutHandleError)
+{
+    constexpr uint32 MaximumArgumentCount = 4;
+    if (OutInvocationError == nullptr || OutHandleError == nullptr ||
+        ArgumentCount > MaximumArgumentCount ||
+        (ArgumentCount > 0 && Arguments == nullptr))
+    {
+        return static_cast<uint8>(EUnifiedScriptNativeCallStatusV3::InvalidFrame);
+    }
+
+    *OutInvocationError = 0;
+    *OutHandleError = 0;
+    EUnifiedScriptNativeCallStatusV3 Status =
+        EUnifiedScriptNativeCallStatusV3::TransportUnavailable;
+    const bool bExecuted = Context != nullptr &&
+        static_cast<FUnifiedScriptNativeBridgeContext*>(Context)->ExecuteGameThreadFast(
+            [&](FUnifiedScriptInvocationBridge& Bridge)
+            {
+                FUnifiedScriptInvocationResult Result;
+                if (!Bridge.InvokeFixedById(
+                        {Target},
+                        MemberId,
+                        MakeArrayView(Arguments, static_cast<int32>(ArgumentCount)),
+                        OutReturnValue,
+                        Result))
+                {
+                    *OutInvocationError = static_cast<uint8>(Result.Error);
+                    *OutHandleError = static_cast<uint8>(Result.HandleError);
+                    Status = EUnifiedScriptNativeCallStatusV3::InvocationFailure;
+                    return;
+                }
+                Status = EUnifiedScriptNativeCallStatusV3::Success;
+            });
+    return static_cast<uint8>(
+        bExecuted ? Status : EUnifiedScriptNativeCallStatusV3::TransportUnavailable);
+}
+
 uint8 RetainContext(void* Context)
 {
     return Context != nullptr &&
@@ -2187,6 +2232,7 @@ UEUnifiedScript_GetNativeTransportV3()
         &WritePropertyByIdV3,
         &InvokeByIdV3,
         &InvokeInt32x2ByIdV3,
+        &InvokeFixedByIdV3,
     };
     return &Transport;
 }

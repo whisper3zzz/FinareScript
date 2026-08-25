@@ -2,6 +2,7 @@
 
 #include "Containers/StringConv.h"
 #include "UnifiedScriptGeneratedThunkRegistry.h"
+#include "UnifiedScriptNativeTransport.h"
 #include "UObject/Class.h"
 #include "UObject/StructOnScope.h"
 #include "UObject/UObjectGlobals.h"
@@ -1111,6 +1112,30 @@ bool FUnifiedScriptInvocationBridge::InvokeInt32x2ById(
             MemberIdValue,
             Argument0,
             Argument1,
+            OutReturnValue,
+            OutResult))
+    {
+        return false;
+    }
+    FastInvocationCount.fetch_add(1, std::memory_order_relaxed);
+    return true;
+}
+
+bool FUnifiedScriptInvocationBridge::InvokeFixedById(
+    FUnifiedScriptObjectHandle Target,
+    uint64 MemberIdValue,
+    TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    FUnifiedScriptNativeValueV3* OutReturnValue,
+    FUnifiedScriptInvocationResult& OutResult)
+{
+    using namespace UE::UnifiedScript::Invocation::Private;
+    UObject* Object = ResolveTarget(Registry, Target, OutResult);
+    if (Object == nullptr ||
+        !FUnifiedScriptGeneratedThunkRegistry::InvokeFixed(
+            Object,
+            Registry,
+            MemberIdValue,
+            Arguments,
             OutReturnValue,
             OutResult))
     {

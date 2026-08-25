@@ -14,6 +14,38 @@ FVector UUnifiedScriptInteropFixture::AddVector(FVector Left, FVector Right) con
     return Left + Right;
 }
 
+int32 UUnifiedScriptInteropFixture::FixedArity0() const
+{
+    return 17;
+}
+
+float UUnifiedScriptInteropFixture::FixedArity1(float Value) const
+{
+    return Value + 1.5f;
+}
+
+bool UUnifiedScriptInteropFixture::FixedArity2(bool bEnabled, int32 Count) const
+{
+    return bEnabled && Count == 7;
+}
+
+UObject* UUnifiedScriptInteropFixture::FixedArity3(
+    UObject* Context,
+    bool bEnabled,
+    float Weight) const
+{
+    return bEnabled && Weight > 0.0f ? Context : nullptr;
+}
+
+FVector UUnifiedScriptInteropFixture::FixedArity4(
+    FVector Location,
+    int32 Count,
+    float Scale,
+    bool bEnabled) const
+{
+    return bEnabled ? Location + FVector(static_cast<double>(Count) * Scale) : Location;
+}
+
 FTransform UUnifiedScriptInteropFixture::EchoTransform(FTransform Value) const
 {
     return Value;

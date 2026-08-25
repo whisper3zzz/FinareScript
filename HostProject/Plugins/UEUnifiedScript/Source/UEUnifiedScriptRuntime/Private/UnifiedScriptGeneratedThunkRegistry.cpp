@@ -27,6 +27,7 @@ FUnifiedScriptGeneratedThunkTable BuiltInTable()
         &UE::UnifiedScript::Generated::WriteProperty,
         &UE::UnifiedScript::Generated::Invoke,
         &UE::UnifiedScript::Generated::InvokeInt32x2,
+        &UE::UnifiedScript::Generated::InvokeFixed,
     };
 }
 
@@ -254,6 +255,29 @@ bool FUnifiedScriptGeneratedThunkRegistry::InvokeInt32x2(
             MemberId,
             Argument0,
             Argument1,
+            OutReturnValue,
+            OutResult)
+        : FailMissing(MemberId, OutResult);
+}
+
+bool FUnifiedScriptGeneratedThunkRegistry::InvokeFixed(
+    UObject* Target,
+    FUnifiedScriptObjectRegistry& Registry,
+    uint64 MemberId,
+    TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,
+    FUnifiedScriptNativeValueV3* OutReturnValue,
+    FUnifiedScriptInvocationResult& OutResult)
+{
+    using namespace UE::UnifiedScript::Generated::Registry::Private;
+    FUnifiedScriptGeneratedThunkTable Table;
+    uint32 ResultCount = 0;
+    return ResolveInvocationTable(MemberId, Table, ResultCount) &&
+            Table.InvokeFixed != nullptr
+        ? Table.InvokeFixed(
+            Target,
+            Registry,
+            MemberId,
+            Arguments,
             OutReturnValue,
             OutResult)
         : FailMissing(MemberId, OutResult);

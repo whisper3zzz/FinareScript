@@ -342,6 +342,21 @@ public sealed partial class UnifiedScriptInteropFixture : global::UnifiedScript.
     public global::UnifiedScript.Unreal.UnrealTransform EchoTransform(global::UnifiedScript.Unreal.UnrealTransform value)
         => Invoke<global::UnifiedScript.Unreal.UnrealTransform, global::UnifiedScript.Unreal.UnrealTransform>(0xAF29371D42BA1F6BUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoTransform", value);
 
+    public int FixedArity0()
+        => Invoke<int>(0x23F65F8588FC5259UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FixedArity0");
+
+    public float FixedArity1(float value)
+        => Invoke<float, float>(0x23F65E8588FC50A6UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FixedArity1", value);
+
+    public bool FixedArity2(bool bEnabled, int count)
+        => Invoke<bool, bool, int>(0x23F65D8588FC4EF3UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FixedArity2", bEnabled, count);
+
+    public global::UnifiedScript.Unreal.UnrealObjectHandle FixedArity3(global::UnifiedScript.Unreal.UnrealObjectHandle context, bool bEnabled, float weight)
+        => Invoke<global::UnifiedScript.Unreal.UnrealObjectHandle, global::UnifiedScript.Unreal.UnrealObjectHandle, bool, float>(0x23F65C8588FC4D40UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FixedArity3", context, bEnabled, weight);
+
+    public global::UnifiedScript.Unreal.UnrealVector FixedArity4(global::UnifiedScript.Unreal.UnrealVector location, int count, float scale, bool bEnabled)
+        => Invoke<global::UnifiedScript.Unreal.UnrealVector, global::UnifiedScript.Unreal.UnrealVector, int, float, bool>(0x23F6638588FC5925UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FixedArity4", location, count, scale, bEnabled);
+
     public global::System.Collections.Generic.IReadOnlyList<int> MakeArray(int count)
         => Invoke<global::System.Collections.Generic.IReadOnlyList<int>, int>(0x8A8BAE19690D9AB7UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MakeArray", count);
 

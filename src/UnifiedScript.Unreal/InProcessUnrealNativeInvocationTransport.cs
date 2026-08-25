@@ -116,6 +116,7 @@ public sealed class InProcessUnrealNativeInvocationTransport
       IUnrealNativeFastInvocationTransport,
       IUnrealNativeCallFrameTransportV3,
       IUnrealNativeScalarInvocationTransportV3,
+      IUnrealNativeFixedInvocationTransportV3,
       IUnrealNativeEventTransport,
       IDisposable
 {
@@ -136,6 +137,7 @@ public sealed class InProcessUnrealNativeInvocationTransport
     private readonly nint _writePropertyByIdV3;
     private readonly nint _invokeByIdV3;
     private readonly nint _invokeInt32x2ByIdV3;
+    private readonly nint _invokeFixedByIdV3;
     private readonly UnrealNativeCapabilitiesV3 _capabilitiesV3;
     private readonly UnrealNativeSubscribeEventV4? _subscribeEvent;
     private readonly UnrealNativeUnsubscribeEventV4? _unsubscribeEvent;
@@ -261,6 +263,13 @@ public sealed class InProcessUnrealNativeInvocationTransport
                             Marshal.PtrToStructure<UnrealNativeScalarTransportTableV3>(
                                 extended.CallFrameTransport);
                         _invokeInt32x2ByIdV3 = scalarTable.InvokeInt32x2ById;
+                    }
+                    if (tableV3.TableSize >= UnrealNativeAbiV3.FixedTransportTableSize)
+                    {
+                        UnrealNativeFixedTransportTableV3 fixedTable =
+                            Marshal.PtrToStructure<UnrealNativeFixedTransportTableV3>(
+                                extended.CallFrameTransport);
+                        _invokeFixedByIdV3 = fixedTable.InvokeFixedById;
                     }
                 }
             }
@@ -648,6 +657,69 @@ public sealed class InProcessUnrealNativeInvocationTransport
                 0,
                 0,
                 string.Empty);
+        }
+    }
+
+    bool IUnrealNativeFixedInvocationTransportV3.SupportsFixedInvocation =>
+        _invokeFixedByIdV3 != nint.Zero;
+
+    unsafe UnrealNativeCallOutcomeV3
+        IUnrealNativeFixedInvocationTransportV3.ExecuteFixedById(
+            UnrealObjectHandle target,
+            ulong memberId,
+            ReadOnlySpan<UnrealNativeValueV3> arguments,
+            Span<UnrealNativeValueV3> results)
+    {
+        if (_invokeFixedByIdV3 == nint.Zero)
+        {
+            throw new NotSupportedException(
+                "The native Unreal transport does not expose the fixed-value lane.");
+        }
+        if (arguments.Length > UnrealNativeAbiV3.MaximumFixedArgumentCount ||
+            results.Length > 1)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(arguments),
+                "Fixed invocation accepts at most four arguments and one result.");
+        }
+        var execute =
+            (delegate* unmanaged[Cdecl]<
+                nint, ulong, ulong, UnrealNativeValueV3*, uint,
+                UnrealNativeValueV3*, byte*, byte*, byte>)
+            _invokeFixedByIdV3;
+
+        lock (_lifetimeGate)
+        {
+            ThrowIfDisposed();
+            byte invocationError = 0;
+            byte handleError = 0;
+            fixed (UnrealNativeValueV3* argumentPointer = arguments)
+            fixed (UnrealNativeValueV3* resultPointer = results)
+            {
+                UnrealNativeCallStatusV3 status = (UnrealNativeCallStatusV3)execute(
+                    _context,
+                    target.Value,
+                    memberId,
+                    argumentPointer,
+                    checked((uint)arguments.Length),
+                    resultPointer,
+                    &invocationError,
+                    &handleError);
+                if (!Enum.IsDefined(status))
+                {
+                    throw new InvalidOperationException(
+                        "The native Unreal fixed-value transport returned an invalid status.");
+                }
+                return new UnrealNativeCallOutcomeV3(
+                    status,
+                    (UnrealInvocationError)invocationError,
+                    (UnrealObjectHandleError)handleError,
+                    status == UnrealNativeCallStatusV3.Success ? results.Length : 0,
+                    0,
+                    0,
+                    0,
+                    string.Empty);
+            }
         }
     }
 

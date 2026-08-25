@@ -65,6 +65,62 @@ internal interface IUnrealNativeScalarInvocationTransportV3
         out int result);
 }
 
+internal interface IUnrealNativeFixedInvocationTransportV3
+{
+    bool SupportsFixedInvocation { get; }
+
+    UnrealNativeCallOutcomeV3 ExecuteFixedById(
+        UnrealObjectHandle target,
+        ulong memberId,
+        ReadOnlySpan<UnrealNativeValueV3> arguments,
+        Span<UnrealNativeValueV3> results);
+}
+
+internal static class UnrealNativeFixedValueCodecV3
+{
+    public static bool TryEncode<T>(T value, out UnrealNativeValueV3 encoded)
+    {
+        encoded = default;
+        if (!IsSupported(typeof(T)))
+        {
+            return false;
+        }
+        int byteCount = 0;
+        return UnrealNativeValueCodecV3.TryEncode(
+            value,
+            Span<byte>.Empty,
+            ref byteCount,
+            out encoded,
+            out _) &&
+            byteCount == 0;
+    }
+
+    public static bool TryCreateResultDescriptor<T>(out UnrealNativeValueV3 descriptor)
+    {
+        descriptor = default;
+        return IsSupported(typeof(T)) &&
+            UnrealNativeValueCodecV3.TryCreateResultDescriptor<T>(out descriptor, out _);
+    }
+
+    public static bool TryDecode<T>(in UnrealNativeValueV3 value, out T decoded)
+    {
+        decoded = default!;
+        return IsSupported(typeof(T)) &&
+            UnrealNativeValueCodecV3.TryDecode(
+                in value,
+                ReadOnlySpan<byte>.Empty,
+                0,
+                out decoded);
+    }
+
+    private static bool IsSupported(Type type) =>
+        type == typeof(int) ||
+        type == typeof(float) ||
+        type == typeof(bool) ||
+        type == typeof(UnrealObjectHandle) ||
+        type == typeof(UnrealVector);
+}
+
 internal static class UnrealNativeValueCodecV3
 {
     internal const int TransformByteSize = 10 * sizeof(double);

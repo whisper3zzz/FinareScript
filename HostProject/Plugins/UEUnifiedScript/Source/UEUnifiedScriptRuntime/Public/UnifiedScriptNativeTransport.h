@@ -375,6 +375,17 @@ using FUnifiedScriptNativeInvokeInt32x2ByIdV3 = uint8 (*)(
     uint8* OutInvocationError,
     uint8* OutHandleError);
 
+/** Allocation-free lane for 0-4 fixed int/float/bool/object/vector values. */
+using FUnifiedScriptNativeInvokeFixedByIdV3 = uint8 (*)(
+    void* Context,
+    uint64 Target,
+    uint64 MemberId,
+    const FUnifiedScriptNativeValueV3* Arguments,
+    uint32 ArgumentCount,
+    FUnifiedScriptNativeValueV3* OutReturnValue,
+    uint8* OutInvocationError,
+    uint8* OutHandleError);
+
 /**
  * ABI v3 is intentionally independent from v1/v2 because its caller-owned
  * call-frame semantics are not prefix-compatible with the callback contract.
@@ -394,6 +405,8 @@ struct alignas(8) FUnifiedScriptNativeTransportV3
     FUnifiedScriptNativeExecuteByIdV3 InvokeById = nullptr;
     /** Optional append-only scalar fast lane; older ABI v3 clients ignore it. */
     FUnifiedScriptNativeInvokeInt32x2ByIdV3 InvokeInt32x2ById = nullptr;
+    /** Optional append-only mixed fixed-value lane; nullptr result denotes void. */
+    FUnifiedScriptNativeInvokeFixedByIdV3 InvokeFixedById = nullptr;
 };
 
 static_assert(std::is_standard_layout_v<FUnifiedScriptNativeValueV1>);
@@ -415,12 +428,13 @@ static_assert(STRUCT_OFFSET(FUnifiedScriptNativeCallFrameV3, Status) == 58);
 static_assert(STRUCT_OFFSET(FUnifiedScriptNativeCallFrameV3, ErrorMessageOffset) == 60);
 static_assert(std::is_standard_layout_v<FUnifiedScriptNativeTransportV3>);
 static_assert(std::is_trivially_copyable_v<FUnifiedScriptNativeTransportV3>);
-static_assert(sizeof(FUnifiedScriptNativeTransportV3) == 72);
+static_assert(sizeof(FUnifiedScriptNativeTransportV3) == 80);
 static_assert(alignof(FUnifiedScriptNativeTransportV3) == 8);
 static_assert(STRUCT_OFFSET(FUnifiedScriptNativeTransportV3, Capabilities) == 16);
 static_assert(STRUCT_OFFSET(FUnifiedScriptNativeTransportV3, RetainContext) == 24);
 static_assert(STRUCT_OFFSET(FUnifiedScriptNativeTransportV3, InvokeById) == 56);
 static_assert(STRUCT_OFFSET(FUnifiedScriptNativeTransportV3, InvokeInt32x2ById) == 64);
+static_assert(STRUCT_OFFSET(FUnifiedScriptNativeTransportV3, InvokeFixedById) == 72);
 static_assert(std::is_standard_layout_v<FUnifiedScriptNativeEventFrameV4>);
 static_assert(std::is_trivially_copyable_v<FUnifiedScriptNativeEventFrameV4>);
 static_assert(sizeof(FUnifiedScriptNativeEventFrameV4) == 64);

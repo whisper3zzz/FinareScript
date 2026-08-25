@@ -92,6 +92,25 @@ public:
     UFUNCTION(BlueprintPure, Category="UnifiedScript|Interop")
     FVector AddVector(FVector Left, FVector Right) const;
 
+    UFUNCTION(BlueprintPure, Category="UnifiedScript|Interop|Fixed")
+    int32 FixedArity0() const;
+
+    UFUNCTION(BlueprintPure, Category="UnifiedScript|Interop|Fixed")
+    float FixedArity1(float Value) const;
+
+    UFUNCTION(BlueprintPure, Category="UnifiedScript|Interop|Fixed")
+    bool FixedArity2(bool bEnabled, int32 Count) const;
+
+    UFUNCTION(BlueprintPure, Category="UnifiedScript|Interop|Fixed")
+    UObject* FixedArity3(UObject* Context, bool bEnabled, float Weight) const;
+
+    UFUNCTION(BlueprintPure, Category="UnifiedScript|Interop|Fixed")
+    FVector FixedArity4(
+        FVector Location,
+        int32 Count,
+        float Scale,
+        bool bEnabled) const;
+
     UFUNCTION(BlueprintPure, Category="UnifiedScript|Interop")
     FTransform EchoTransform(FTransform Value) const;
 

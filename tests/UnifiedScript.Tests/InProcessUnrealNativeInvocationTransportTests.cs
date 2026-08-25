@@ -29,6 +29,7 @@ public sealed class InProcessUnrealNativeInvocationTransportTests : IDisposable
     private int _retainedContexts;
     private int _fastCalls;
     private int _callFrameCalls;
+    private int _fixedCalls;
 
     public InProcessUnrealNativeInvocationTransportTests()
     {
@@ -179,6 +180,80 @@ public sealed class InProcessUnrealNativeInvocationTransportTests : IDisposable
             Assert.Equal(2, _fastCalls);
             Assert.Equal(1, bridge.CallFrameInvocationCount);
             Assert.Equal(2, bridge.LegacyInvocationCount);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(tablePointer);
+            Marshal.FreeHGlobal(tableV3Pointer);
+            _activeV3Fixture = null;
+        }
+        Assert.Equal(0, _retainedContexts);
+    }
+
+    [Fact]
+    public unsafe void AbiV2BootstrapUsesAppendedMixedFixedValueLane()
+    {
+        _activeV3Fixture = this;
+        nint callFrame = (nint)(delegate* unmanaged[Cdecl]<
+            nint, ulong, ulong, UnrealNativeCallFrameV3*, void>)&ExecuteByIdV3Unmanaged;
+        nint fixedInvoke = (nint)(delegate* unmanaged[Cdecl]<
+            nint, ulong, ulong, UnrealNativeValueV3*, uint,
+            UnrealNativeValueV3*, byte*, byte*, byte>)&ExecuteFixedByIdV3Unmanaged;
+        var tableV3 = new UnrealNativeFixedTransportTableV3
+        {
+            Base = new UnrealNativeScalarTransportTableV3
+            {
+                Base = new UnrealNativeTransportTableV3
+                {
+                    AbiVersion = UnrealNativeAbiV3.Version,
+                    TableSize = UnrealNativeAbiV3.FixedTransportTableSize,
+                    ValueSize = UnrealNativeAbiV3.ValueSize,
+                    CallFrameSize = UnrealNativeAbiV3.CallFrameSize,
+                    Capabilities = UnrealNativeCapabilitiesV3.FixedScalars,
+                    RetainContext = Marshal.GetFunctionPointerForDelegate(_retain),
+                    ReleaseContext = Marshal.GetFunctionPointerForDelegate(_release),
+                    ReadPropertyById = callFrame,
+                    WritePropertyById = callFrame,
+                    InvokeById = callFrame,
+                },
+            },
+            InvokeFixedById = fixedInvoke,
+        };
+        nint tableV3Pointer = Marshal.AllocHGlobal(
+            Marshal.SizeOf<UnrealNativeFixedTransportTableV3>());
+        nint tablePointer = Marshal.AllocHGlobal(Marshal.SizeOf<TestTableV2Extended>());
+        try
+        {
+            Marshal.StructureToPtr(tableV3, tableV3Pointer, false);
+            var table = new TestTableV2Extended
+            {
+                AbiVersion = 2,
+                TableSize = checked((uint)Marshal.SizeOf<TestTableV2Extended>()),
+                ValueSize = checked((uint)Marshal.SizeOf<TestValue>()),
+                ReadProperty = Marshal.GetFunctionPointerForDelegate(_read),
+                WriteProperty = Marshal.GetFunctionPointerForDelegate(_write),
+                Invoke = Marshal.GetFunctionPointerForDelegate(_invoke),
+                RetainContext = Marshal.GetFunctionPointerForDelegate(_retain),
+                ReleaseContext = Marshal.GetFunctionPointerForDelegate(_release),
+                ReadPropertyById = Marshal.GetFunctionPointerForDelegate(_fastRead),
+                WritePropertyById = Marshal.GetFunctionPointerForDelegate(_fastWrite),
+                InvokeById = Marshal.GetFunctionPointerForDelegate(_fastInvoke),
+                CallFrameTransport = tableV3Pointer,
+            };
+            Marshal.StructureToPtr(table, tablePointer, false);
+
+            using var transport = new InProcessUnrealNativeInvocationTransport(
+                context: new nint(0x1234),
+                tablePointer);
+            var bridge = new NativeUnrealInvocationBridge(transport);
+            var wrapper = new GeneratedComponent(
+                UnrealObjectHandle.Create(slotIndex: 4, generation: 9),
+                bridge);
+
+            Assert.Equal(42, wrapper.Add(19, 23));
+            Assert.Equal(1, _fixedCalls);
+            Assert.Equal(1, bridge.CallFrameInvocationCount);
+            Assert.Equal(0, bridge.LegacyInvocationCount);
         }
         finally
         {
@@ -504,6 +579,36 @@ public sealed class InProcessUnrealNativeInvocationTransportTests : IDisposable
         {
             _activeV3Fixture?.ExecuteByIdV3(context, target, memberId, ref *frame);
         }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static unsafe byte ExecuteFixedByIdV3Unmanaged(
+        nint context,
+        ulong target,
+        ulong memberId,
+        UnrealNativeValueV3* arguments,
+        uint argumentCount,
+        UnrealNativeValueV3* result,
+        byte* invocationError,
+        byte* handleError)
+    {
+        InProcessUnrealNativeInvocationTransportTests? fixture = _activeV3Fixture;
+        if (fixture is null || context != new nint(0x1234) ||
+            memberId != UnrealMemberId.FromPath(AddPath) || argumentCount != 2 ||
+            arguments == null || result == null || invocationError == null || handleError == null ||
+            arguments[0].Kind != UnrealNativeValueKindV3.Int32 ||
+            arguments[1].Kind != UnrealNativeValueKindV3.Int32 ||
+            result->Kind != UnrealNativeValueKindV3.Int32)
+        {
+            return (byte)UnrealNativeCallStatusV3.InvalidFrame;
+        }
+        fixture._fixedCalls++;
+        *invocationError = 0;
+        *handleError = 0;
+        result->Payload0 = unchecked((ulong)(
+            unchecked((int)arguments[0].Payload0) +
+            unchecked((int)arguments[1].Payload0)));
+        return (byte)UnrealNativeCallStatusV3.Success;
     }
 
     private static void InvokeCallback(

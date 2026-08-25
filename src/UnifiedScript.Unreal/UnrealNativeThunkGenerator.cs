@@ -120,6 +120,7 @@ public sealed class UnrealNativeThunkGenerator
         EmitWriteDispatcher(source, properties, options.CppNamespace);
         EmitInvokeDispatcher(source, functions, options.CppNamespace);
         EmitInvokeInt32x2Dispatcher(source, functions, options.CppNamespace);
+        EmitInvokeFixedDispatcher(source, functions, options.CppNamespace);
 
         return new UnrealNativeThunkGenerationResult(
             source.ToString().TrimEnd().ReplaceLineEndings("\n") + "\n",
@@ -275,6 +276,64 @@ public sealed class UnrealNativeThunkGenerator
         source.AppendLine("        OutResult,");
         source.AppendLine("        EUnifiedScriptInvocationError::ValueTypeMismatch,");
         source.AppendLine("        TEXT(\"Generated native object argument has an incompatible object type.\"));");
+        source.AppendLine("}");
+        source.AppendLine();
+        source.AppendLine("template <typename TObjectType>");
+        source.AppendLine("bool DecodeFixedObject(");
+        source.AppendLine("    FUnifiedScriptObjectRegistry& Registry,");
+        source.AppendLine("    const FUnifiedScriptNativeValueV3& Value,");
+        source.AppendLine("    TObjectType*& OutObject,");
+        source.AppendLine("    FUnifiedScriptInvocationResult& OutResult)");
+        source.AppendLine("{");
+        source.AppendLine("    if (Value.Kind != EUnifiedScriptNativeValueKindV3::Object)");
+        source.AppendLine("    {");
+        source.AppendLine("        return Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,");
+        source.AppendLine("            TEXT(\"Generated fixed object argument has an incompatible value kind.\"));");
+        source.AppendLine("    }");
+        source.AppendLine("    const FUnifiedScriptObjectHandle Handle{Value.Payload0};");
+        source.AppendLine("    if (Handle.IsNull())");
+        source.AppendLine("    {");
+        source.AppendLine("        OutObject = nullptr;");
+        source.AppendLine("        return true;");
+        source.AppendLine("    }");
+        source.AppendLine("    FUnifiedScriptObjectHandleResult HandleResult;");
+        source.AppendLine("    UObject* Object = Registry.ResolveObject(Handle, HandleResult);");
+        source.AppendLine("    if (!HandleResult.IsSuccess())");
+        source.AppendLine("    {");
+        source.AppendLine("        OutResult.Error = EUnifiedScriptInvocationError::ObjectHandleFailure;");
+        source.AppendLine("        OutResult.HandleError = HandleResult.Error;");
+        source.AppendLine("        OutResult.Message = MoveTemp(HandleResult.Message);");
+        source.AppendLine("        return false;");
+        source.AppendLine("    }");
+        source.AppendLine("    OutObject = Cast<TObjectType>(Object);");
+        source.AppendLine("    return OutObject != nullptr || Fail(OutResult,");
+        source.AppendLine("        EUnifiedScriptInvocationError::ValueTypeMismatch,");
+        source.AppendLine("        TEXT(\"Generated fixed object argument has an incompatible object type.\"));");
+        source.AppendLine("}");
+        source.AppendLine();
+        source.AppendLine("bool EncodeFixedObject(");
+        source.AppendLine("    FUnifiedScriptObjectRegistry& Registry,");
+        source.AppendLine("    UObject* Object,");
+        source.AppendLine("    FUnifiedScriptNativeValueV3& OutValue,");
+        source.AppendLine("    FUnifiedScriptInvocationResult& OutResult)");
+        source.AppendLine("{");
+        source.AppendLine("    OutValue = {};");
+        source.AppendLine("    OutValue.Kind = EUnifiedScriptNativeValueKindV3::Object;");
+        source.AppendLine("    if (Object == nullptr)");
+        source.AppendLine("    {");
+        source.AppendLine("        return true;");
+        source.AppendLine("    }");
+        source.AppendLine("    FUnifiedScriptObjectHandleResult HandleResult;");
+        source.AppendLine("    const FUnifiedScriptObjectHandle Handle = Registry.RegisterObject(Object, HandleResult);");
+        source.AppendLine("    if (!HandleResult.IsSuccess())");
+        source.AppendLine("    {");
+        source.AppendLine("        OutResult.Error = EUnifiedScriptInvocationError::ObjectHandleFailure;");
+        source.AppendLine("        OutResult.HandleError = HandleResult.Error;");
+        source.AppendLine("        OutResult.Message = MoveTemp(HandleResult.Message);");
+        source.AppendLine("        return false;");
+        source.AppendLine("    }");
+        source.AppendLine("    OutValue.Payload0 = Handle.Value;");
+        source.AppendLine("    return true;");
         source.AppendLine("}");
         source.AppendLine("}");
         source.AppendLine();
@@ -594,10 +653,19 @@ public sealed class UnrealNativeThunkGenerator
         source.AppendLine("    FUnifiedScriptInvocationResult& OutResult)");
         source.AppendLine("{");
         source.Append("    using namespace ").Append(cppNamespace).AppendLine("::Private;");
+        var scalarFunctions = functions
+            .Where(static item => IsInt32x2Signature(item.Function))
+            .ToArray();
+        if (scalarFunctions.Length == 0)
+        {
+            source.AppendLine("    return FailUnknownMember(OutResult, MemberId);");
+            source.AppendLine("}");
+            return;
+        }
         source.AppendLine("    switch (MemberId)");
         source.AppendLine("    {");
         foreach ((UnrealReflectedType type, UnrealReflectedFunction function) in
-                 functions.Where(static item => IsInt32x2Signature(item.Function)))
+                 scalarFunctions)
         {
             source.Append("    case ").Append(MemberIdLiteral(function.Path)).AppendLine(":");
             source.AppendLine("    {");
@@ -620,6 +688,234 @@ public sealed class UnrealNativeThunkGenerator
         function.Parameters.All(static parameter =>
             parameter.Direction == UnrealParameterDirection.Input &&
             parameter.Type.Kind == UnrealValueKind.Int32);
+
+    private static void EmitInvokeFixedDispatcher(
+        StringBuilder source,
+        IReadOnlyList<(UnrealReflectedType Type, UnrealReflectedFunction Function)> functions,
+        string cppNamespace)
+    {
+        source.AppendLine();
+        source.Append("bool ").Append(cppNamespace).AppendLine("::InvokeFixed(");
+        source.AppendLine("    UObject* Target,");
+        source.AppendLine("    FUnifiedScriptObjectRegistry& Registry,");
+        source.AppendLine("    uint64 MemberId,");
+        source.AppendLine("    TConstArrayView<FUnifiedScriptNativeValueV3> Arguments,");
+        source.AppendLine("    FUnifiedScriptNativeValueV3* OutReturnValue,");
+        source.AppendLine("    FUnifiedScriptInvocationResult& OutResult)");
+        source.AppendLine("{");
+        source.Append("    using namespace ").Append(cppNamespace).AppendLine("::Private;");
+        var fixedFunctions = functions
+            .Where(static item => IsFixedSignature(item.Function))
+            .ToArray();
+        if (fixedFunctions.Length == 0)
+        {
+            source.AppendLine("    return FailUnknownMember(OutResult, MemberId);");
+            source.AppendLine("}");
+            return;
+        }
+        source.AppendLine("    switch (MemberId)");
+        source.AppendLine("    {");
+        foreach ((UnrealReflectedType type, UnrealReflectedFunction function) in
+                 fixedFunctions)
+        {
+            source.Append("    case ").Append(MemberIdLiteral(function.Path)).AppendLine(":");
+            source.AppendLine("    {");
+            source.Append("        if (Arguments.Num() != ").Append(function.Parameters.Count)
+                .AppendLine(")");
+            source.AppendLine("        {");
+            source.AppendLine("            return Fail(OutResult, EUnifiedScriptInvocationError::ArgumentCountMismatch,");
+            source.Append("                TEXT(\"Generated fixed thunk requires ")
+                .Append(function.Parameters.Count).AppendLine(" arguments.\"));");
+            source.AppendLine("        }");
+            EmitResolveTarget(source, type, 8);
+            EmitFixedResultValidation(source, function.ReturnType);
+            for (int index = 0; index < function.Parameters.Count; index++)
+            {
+                EmitFixedValueRead(
+                    source,
+                    function.Parameters[index].Type,
+                    $"Arguments[{index}]",
+                    $"Argument{index}",
+                    8);
+            }
+            string arguments = string.Join(", ", Enumerable.Range(0, function.Parameters.Count)
+                .Select(static index => $"Argument{index}"));
+            string invocation = $"TypedTarget->{function.Name}({arguments})";
+            if (function.ReturnType.Kind == UnrealValueKind.Void)
+            {
+                source.Append("        ").Append(invocation).AppendLine(";");
+            }
+            else
+            {
+                source.Append("        ").Append(CppType(function.ReturnType))
+                    .Append(" ReturnValue = ").Append(invocation).AppendLine(";");
+                EmitFixedValueWrite(
+                    source,
+                    function.ReturnType,
+                    "ReturnValue",
+                    "(*OutReturnValue)",
+                    8);
+            }
+            source.AppendLine("        Succeed(OutResult);");
+            source.AppendLine("        return true;");
+            source.AppendLine("    }");
+        }
+        source.AppendLine("    default:");
+        source.AppendLine("        return FailUnknownMember(OutResult, MemberId);");
+        source.AppendLine("    }");
+        source.AppendLine("}");
+    }
+
+    private static bool IsFixedSignature(UnrealReflectedFunction function) =>
+        function.Parameters.Count <= 4 &&
+        IsFixedValueType(function.ReturnType, allowVoid: true) &&
+        function.Parameters.All(static parameter =>
+            parameter.Direction == UnrealParameterDirection.Input &&
+            IsFixedValueType(parameter.Type, allowVoid: false));
+
+    private static bool IsFixedValueType(UnrealTypeReference type, bool allowVoid) =>
+        (allowVoid && type.Kind == UnrealValueKind.Void) ||
+        type.Kind is UnrealValueKind.Boolean or UnrealValueKind.Int32 or
+            UnrealValueKind.Float32 or UnrealValueKind.Object ||
+        type.Kind == UnrealValueKind.Struct &&
+            type.TypePath == "/Script/CoreUObject.Vector";
+
+    private static void EmitFixedResultValidation(
+        StringBuilder source,
+        UnrealTypeReference type)
+    {
+        if (type.Kind == UnrealValueKind.Void)
+        {
+            source.AppendLine("        if (OutReturnValue != nullptr)");
+        }
+        else
+        {
+            source.Append("        if (OutReturnValue == nullptr || OutReturnValue->Kind != ")
+                .Append(FixedNativeKind(type)).AppendLine(")");
+        }
+        source.AppendLine("        {");
+        source.AppendLine("            return Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,");
+        source.AppendLine("                TEXT(\"Generated fixed thunk result descriptor is incompatible.\"));");
+        source.AppendLine("        }");
+    }
+
+    private static void EmitFixedValueRead(
+        StringBuilder source,
+        UnrealTypeReference type,
+        string expression,
+        string variable,
+        int indent)
+    {
+        string padding = new(' ', indent);
+        source.Append(padding).Append("if (").Append(expression).Append(".Kind != ")
+            .Append(FixedNativeKind(type)).AppendLine(")");
+        source.Append(padding).AppendLine("{");
+        source.Append(padding).AppendLine("    return Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,");
+        source.Append(padding).AppendLine("        TEXT(\"Generated fixed argument has an incompatible value kind.\"));");
+        source.Append(padding).AppendLine("}");
+        switch (type.Kind)
+        {
+            case UnrealValueKind.Boolean:
+                source.Append(padding).Append("bool ").Append(variable).Append(" = ")
+                    .Append(expression).AppendLine(".Payload0 != 0;");
+                break;
+            case UnrealValueKind.Int32:
+                source.Append(padding).Append("int32 ").Append(variable)
+                    .Append(" = static_cast<int32>(").Append(expression).AppendLine(".Payload0);");
+                break;
+            case UnrealValueKind.Float32:
+                source.Append(padding).Append("const uint32 ").Append(variable).Append("Bits = static_cast<uint32>(")
+                    .Append(expression).AppendLine(".Payload0);");
+                source.Append(padding).Append("float ").Append(variable).AppendLine(" = 0.0f;");
+                source.Append(padding).Append("FMemory::Memcpy(&").Append(variable).Append(", &")
+                    .Append(variable).AppendLine("Bits, sizeof(float));");
+                break;
+            case UnrealValueKind.Object:
+                source.Append(padding).Append(CppType(type)).Append(' ').Append(variable)
+                    .AppendLine(" = nullptr;");
+                source.Append(padding).Append("if (!DecodeFixedObject(Registry, ").Append(expression)
+                    .Append(", ").Append(variable).AppendLine(", OutResult))");
+                source.Append(padding).AppendLine("{");
+                source.Append(padding).AppendLine("    return false;");
+                source.Append(padding).AppendLine("}");
+                break;
+            default:
+                for (int component = 0; component < 3; component++)
+                {
+                    source.Append(padding).Append("double ").Append(variable).Append("Component")
+                        .Append(component).AppendLine(" = 0.0;");
+                    source.Append(padding).Append("FMemory::Memcpy(&").Append(variable).Append("Component")
+                        .Append(component).Append(", &").Append(expression).Append(".Payload")
+                        .Append(component).AppendLine(", sizeof(double));");
+                }
+                source.Append(padding).Append("FVector ").Append(variable).Append("(")
+                    .Append(variable).Append("Component0, ").Append(variable).Append("Component1, ")
+                    .Append(variable).AppendLine("Component2);");
+                break;
+        }
+    }
+
+    private static void EmitFixedValueWrite(
+        StringBuilder source,
+        UnrealTypeReference type,
+        string expression,
+        string destination,
+        int indent)
+    {
+        string padding = new(' ', indent);
+        if (type.Kind == UnrealValueKind.Object)
+        {
+            source.Append(padding).Append("if (!EncodeFixedObject(Registry, GetObjectPointer(")
+                .Append(expression).Append("), ").Append(destination).AppendLine(", OutResult))");
+            source.Append(padding).AppendLine("{");
+            source.Append(padding).AppendLine("    return false;");
+            source.Append(padding).AppendLine("}");
+            return;
+        }
+        source.Append(padding).Append(destination).AppendLine(" = {};");
+        source.Append(padding).Append(destination).Append(".Kind = ")
+            .Append(FixedNativeKind(type)).AppendLine(";");
+        if (type.Kind == UnrealValueKind.Boolean)
+        {
+            source.Append(padding).Append(destination).Append(".Payload0 = ")
+                .Append(expression).AppendLine(" ? 1 : 0;");
+        }
+        else if (type.Kind == UnrealValueKind.Int32)
+        {
+            source.Append(padding).Append(destination).Append(".Payload0 = static_cast<uint64>(")
+                .Append(expression).AppendLine(");");
+        }
+        else if (type.Kind == UnrealValueKind.Float32)
+        {
+            source.Append(padding).Append("uint32 ReturnBits = 0;").AppendLine();
+            source.Append(padding).Append("FMemory::Memcpy(&ReturnBits, &").Append(expression)
+                .AppendLine(", sizeof(float));");
+            source.Append(padding).Append(destination).AppendLine(".Payload0 = ReturnBits;");
+        }
+        else
+        {
+            string[] components = ["X", "Y", "Z"];
+            for (int component = 0; component < components.Length; component++)
+            {
+                source.Append(padding).Append("const double ReturnComponent").Append(component)
+                    .Append(" = ").Append(expression).Append('.').Append(components[component]).AppendLine(";");
+                source.Append(padding).Append("FMemory::Memcpy(&").Append(destination).Append(".Payload")
+                    .Append(component).Append(", &ReturnComponent").Append(component)
+                    .AppendLine(", sizeof(double));");
+            }
+        }
+    }
+
+    private static string FixedNativeKind(UnrealTypeReference type) => type.Kind switch
+    {
+        UnrealValueKind.Boolean => "EUnifiedScriptNativeValueKindV3::Boolean",
+        UnrealValueKind.Int32 => "EUnifiedScriptNativeValueKindV3::Int32",
+        UnrealValueKind.Float32 => "EUnifiedScriptNativeValueKindV3::Float32",
+        UnrealValueKind.Object => "EUnifiedScriptNativeValueKindV3::Object",
+        UnrealValueKind.Struct when type.TypePath == "/Script/CoreUObject.Vector" =>
+            "EUnifiedScriptNativeValueKindV3::Vector3",
+        _ => throw new ArgumentOutOfRangeException(nameof(type)),
+    };
 
     private static void EmitResolveTarget(StringBuilder source, UnrealReflectedType type, int indent)
     {
