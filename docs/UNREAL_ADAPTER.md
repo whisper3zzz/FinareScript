@@ -561,8 +561,10 @@ Direct CLI generation of both managed and native sides:
 
 ```bash
 unifiedscript ue-bindings reflection.json \
+  --contract game.unreal-api-contract.json \
   --out bindings.cs \
   --native-out native-thunks.generated.cpp \
+  --nodes-out api-nodes.json \
   --report binding-coverage.json \
   --fail-on-rejected
 ```

@@ -34,6 +34,7 @@ bool FUnifiedScriptAssetConfigurationTest::RunTest(const FString& Parameters)
     Asset->DeclarationPath = TEXT("  {PluginDir}/Binaries/Managed/Demo/Demo.asset.json  ");
     Asset->DeclarationAssetPath = TEXT("  Unreal/Demo  ");
     Asset->AuthoringSurfacePath = TEXT("  {PluginDir}/Binaries/Managed/Demo/Demo.surface.json  ");
+    Asset->ApiNodeCatalogPath = TEXT("  {PluginDir}/Binaries/Managed/Demo/Demo.api-nodes.json  ");
     Asset->AuthoringServerUrl = TEXT("  http://127.0.0.1:4173///  ");
     TestTrue(
         TEXT("Configured Script Asset resolves"),
@@ -62,6 +63,10 @@ bool FUnifiedScriptAssetConfigurationTest::RunTest(const FString& Parameters)
         TEXT("Authoring Surface path is normalized"),
         Asset->ResolveAuthoringSurfacePath(),
         FString(TEXT("{PluginDir}/Binaries/Managed/Demo/Demo.surface.json")));
+    TestEqual(
+        TEXT("API node catalog path is normalized"),
+        Asset->ResolveApiNodeCatalogPath(),
+        FString(TEXT("{PluginDir}/Binaries/Managed/Demo/Demo.api-nodes.json")));
     TestEqual(
         TEXT("Authoring server URL is normalized"),
         Asset->ResolveAuthoringServerUrl(),

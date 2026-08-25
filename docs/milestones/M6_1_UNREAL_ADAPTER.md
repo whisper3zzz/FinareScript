@@ -30,6 +30,9 @@ regenerates UE authoring/runtime artifacts, and reloads matching components.
 Productization P1 adds versioned Unreal deployment manifests, an idempotent
 asset-sync commandlet with full preflight/validate-only modes, and required
 target-class checks before a Script Asset can start managed behavior.
+Productization P2 adds strict project API allowlists, exact-class reflection
+export, atomic C#/C++/coverage/node-catalog generation, Script Asset-selected
+Slate palettes, and the first direct Engine API BlockBreaker host reduction.
 Full UE 5.7 native compilation and packaging remain open.
 
 ## Completed Phase A contract

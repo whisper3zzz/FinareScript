@@ -87,6 +87,13 @@ FString UUnifiedScriptAsset::ResolveAuthoringSurfacePath() const
     return Result;
 }
 
+FString UUnifiedScriptAsset::ResolveApiNodeCatalogPath() const
+{
+    FString Result = ApiNodeCatalogPath;
+    Result.TrimStartAndEndInline();
+    return Result;
+}
+
 FString UUnifiedScriptAsset::ResolveAuthoringServerUrl() const
 {
     FString Result = AuthoringServerUrl;

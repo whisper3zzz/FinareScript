@@ -240,7 +240,8 @@ public sealed class UnrealBindingGenerator
             EmitParameterList(source, function.Parameters, parameterNames);
 
             source.AppendLine(")");
-            if (function.Parameters.Any(static parameter =>
+            if (function.Parameters.Count > 4 ||
+                function.Parameters.Any(static parameter =>
                     parameter.Direction != UnrealParameterDirection.Input))
             {
                 EmitOutputInvocation(

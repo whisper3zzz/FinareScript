@@ -64,6 +64,7 @@ DOCUMENTS = [
     ROOT / "docs" / "AUTHORING_SURFACE.md",
     ROOT / "docs" / "UNREAL_ADAPTER.md",
     ROOT / "docs" / "UNREAL_DEPLOYMENT.md",
+    ROOT / "docs" / "UNREAL_API_CONTRACT.md",
     ROOT / "docs" / "ROADMAP.md",
     ROOT / "docs" / "milestones" / "M1_ROSLYN_GRAPH_FOUNDATION.md",
     ROOT / "docs" / "milestones" / "M2_SEMANTIC_BINDING.md",
@@ -153,14 +154,82 @@ def main() -> int:
         and len(deployment_scripts) == 1
         and deployment_scripts[0]["assetPath"].startswith("/Game/")
         and deployment_scripts[0]["requiredTargetClass"].startswith("/Script/")
+        and deployment_scripts[0]["apiNodeCatalogPath"].endswith(".api-nodes.json")
         and "ValidateOnly" in deployment_commandlet
         and "ValidateKnownFields" in deployment_commandlet
         and "UPackage::SavePackage" in deployment_commandlet
         and "RequiredTargetClass" in runtime_asset_header
+        and "ApiNodeCatalogPath" in runtime_asset_header
         and "ValidateTarget" in runtime_component_source,
         "Unreal deployment manifest, asset sync, or target compatibility gate is missing",
     )
     checks.append("UE deployment manifests materialize target-safe Script Assets")
+
+    api_contract_path = (
+        ROOT / "samples" / "Unreal" / "UEUnifiedScriptRuntime.api-contract.json"
+    )
+    api_nodes_path = (
+        ROOT / "samples" / "Unreal" / "UEUnifiedScriptRuntime.api-nodes.json"
+    )
+    with api_contract_path.open("r", encoding="utf-8") as handle:
+        api_contract = json.load(handle)
+    with api_nodes_path.open("r", encoding="utf-8") as handle:
+        api_nodes = json.load(handle)
+    contract_generator = (
+        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealApiContract.cs"
+    ).read_text(encoding="utf-8")
+    cli_source = (ROOT / "src" / "UnifiedScript.Cli" / "Program.cs").read_text(
+        encoding="utf-8"
+    )
+    reflection_exporter = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptEditor"
+        / "Private"
+        / "UnifiedScriptReflectionExporter.cpp"
+    ).read_text(encoding="utf-8")
+    authoring_widget = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptEditor"
+        / "Private"
+        / "Widgets"
+        / "SUnifiedScriptAuthoringSurface.cpp"
+    ).read_text(encoding="utf-8")
+    contract_member_names = {
+        member
+        for type_selector in api_contract["types"]
+        for member in type_selector["members"]
+    }
+    node_member_names = {
+        node["memberPath"].rsplit(":", 1)[1]
+        for node_type in api_nodes["types"]
+        for node in node_type["nodes"]
+    }
+    require(
+        api_contract["schemaVersion"]
+        == "unifiedscript.unreal-api-contract/v0.1"
+        and api_nodes["schemaVersion"]
+        == "unifiedscript.unreal-api-node-catalog/v0.1"
+        and api_nodes["contractName"] == api_contract["contractName"]
+        and api_nodes["managedNamespace"] == api_contract["managedNamespace"]
+        and contract_member_names == node_member_names
+        and "UnrealApiContractProjector" in contract_generator
+        and "UnrealApiNodeCatalogGenerator" in contract_generator
+        and "--contract" in cli_source
+        and "--nodes-out" in cli_source
+        and "WriteTransactionally(outputs)" in cli_source
+        and "ClassPathSet" in reflection_exporter
+        and "ResolveApiNodeCatalogPath" in authoring_widget,
+        "Project API Contract generation or Script Asset-selected visual catalog is missing",
+    )
+    checks.append("one Unreal API Contract drives C++, C#, coverage, and visual nodes")
 
     authoring_source = ROOT / "samples" / "Authoring" / "DamagePolicy.cs"
     authoring_artifact = (

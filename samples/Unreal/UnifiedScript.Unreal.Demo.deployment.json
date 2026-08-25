@@ -10,6 +10,7 @@
       "declarationPath": "{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.asset.json",
       "declarationAssetPath": "Unreal/Demo",
       "authoringSurfacePath": "{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.surface.json",
+      "apiNodeCatalogPath": "{ProjectDir}/../samples/Unreal/UEUnifiedScriptRuntime.api-nodes.json",
       "authoringServerUrl": "http://127.0.0.1:4173"
     }
   ]

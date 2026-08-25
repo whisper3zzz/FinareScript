@@ -147,6 +147,41 @@ public sealed class UnrealBindingGeneratorTests
     }
 
     [Fact]
+    public void GenerateRoutesArbitraryArityThroughTypedCallFrame()
+    {
+        UnrealReflectionManifest manifest = CreateManifest();
+        UnrealReflectedType type = manifest.Types[0];
+        UnrealReflectedFunction attach = new(
+            $"{type.Path}:Attach",
+            "Attach",
+            new UnrealTypeReference(UnrealValueKind.Boolean, "bool"),
+            Enumerable.Range(0, 6)
+                .Select(index => new UnrealReflectedParameter(
+                    $"Argument{index}",
+                    new UnrealTypeReference(UnrealValueKind.Int32, "int32"),
+                    UnrealParameterDirection.Input))
+                .ToArray(),
+            new UnrealFunctionTraits(Static: false, Pure: false, Callable: true));
+        manifest = manifest with
+        {
+            Types = [type with { Functions = [attach] }],
+        };
+
+        UnrealBindingGenerationResult result = new UnrealBindingGenerator().Generate(manifest);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Contains("InvokeWithOutputs(", result.Source, StringComparison.Ordinal);
+        Assert.Contains("UnrealParameterDirection.Input", result.Source, StringComparison.Ordinal);
+        Assert.DoesNotContain("=> Invoke<bool>", result.Source, StringComparison.Ordinal);
+        SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(result.Source);
+        CSharpCompilation compilation = new CSharpCompilationHost().Create(
+            syntaxTree,
+            [MetadataReference.CreateFromFile(typeof(UnrealObject).Assembly.Location)]);
+        Assert.Empty(compilation.GetDiagnostics()
+            .Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+    }
+
+    [Fact]
     public void GenerateEmitsStrongReflectedEventProxyAndSubscription()
     {
         UnrealReflectionManifest manifest = CreateManifest();

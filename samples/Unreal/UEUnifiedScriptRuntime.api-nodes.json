@@ -1,0 +1,543 @@
+{
+  "schemaVersion": "unifiedscript.unreal-api-node-catalog/v0.1",
+  "contractName": "UnifiedScript.Runtime.Demo",
+  "managedNamespace": "UnifiedScript.Unreal.Generated",
+  "engine": {
+    "major": 5,
+    "minor": 8,
+    "patch": 1,
+    "branch": "//UE5/Release-5.8"
+  },
+  "types": [
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+      "name": "UnifiedScriptComponent",
+      "managedTypeName": "UnifiedScriptComponent",
+      "category": "Unreal API|UnifiedScriptComponent",
+      "properties": [
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ActiveGeneration",
+          "name": "ActiveGeneration",
+          "type": {
+            "kind": "string",
+            "nativeName": "FString",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null
+          },
+          "access": {
+            "readable": true,
+            "writable": false,
+            "editorVisible": true,
+            "nativeAccess": "public"
+          }
+        }
+      ],
+      "functions": [
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:Add",
+          "name": "Add",
+          "returnType": {
+            "kind": "int32",
+            "nativeName": "int32",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null
+          },
+          "parameters": [
+            {
+              "name": "Left",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null
+              },
+              "direction": "input"
+            },
+            {
+              "name": "Right",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null
+              },
+              "direction": "input"
+            }
+          ],
+          "traits": {
+            "static": false,
+            "pure": true,
+            "callable": true,
+            "nativeAccess": "public"
+          }
+        },
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:GetScriptStateInt32",
+          "name": "GetScriptStateInt32",
+          "returnType": {
+            "kind": "int32",
+            "nativeName": "int32",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null
+          },
+          "parameters": [
+            {
+              "name": "Name",
+              "type": {
+                "kind": "string",
+                "nativeName": "FString",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null
+              },
+              "direction": "input"
+            },
+            {
+              "name": "Fallback",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null
+              },
+              "direction": "input"
+            }
+          ],
+          "traits": {
+            "static": false,
+            "pure": true,
+            "callable": true,
+            "nativeAccess": "public"
+          }
+        },
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:SetScriptStateInt32",
+          "name": "SetScriptStateInt32",
+          "returnType": {
+            "kind": "boolean",
+            "nativeName": "bool",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null
+          },
+          "parameters": [
+            {
+              "name": "Name",
+              "type": {
+                "kind": "string",
+                "nativeName": "FString",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null
+              },
+              "direction": "input"
+            },
+            {
+              "name": "Value",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null
+              },
+              "direction": "input"
+            }
+          ],
+          "traits": {
+            "static": false,
+            "pure": false,
+            "callable": true,
+            "nativeAccess": "public"
+          }
+        },
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:StartScript",
+          "name": "StartScript",
+          "returnType": {
+            "kind": "boolean",
+            "nativeName": "bool",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null
+          },
+          "parameters": [],
+          "traits": {
+            "static": false,
+            "pure": false,
+            "callable": true,
+            "nativeAccess": "public"
+          }
+        },
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:StopScript",
+          "name": "StopScript",
+          "returnType": {
+            "kind": "void",
+            "nativeName": "void",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null
+          },
+          "parameters": [],
+          "traits": {
+            "static": false,
+            "pure": false,
+            "callable": true,
+            "nativeAccess": "public"
+          }
+        }
+      ],
+      "delegates": [],
+      "nodes": [
+        {
+          "id": "ue.call|UnifiedScriptComponent|Add",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:Add",
+          "memberId": "0xB324FB910D9CED26",
+          "kind": "function",
+          "title": "Add",
+          "category": "Unreal API|UnifiedScriptComponent",
+          "tooltip": "Call UnifiedScriptComponent.Add(...).",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptComponent*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null
+              }
+            },
+            {
+              "name": "Left",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null
+              }
+            },
+            {
+              "name": "Right",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null
+              }
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null
+              }
+            }
+          ]
+        },
+        {
+          "id": "ue.call|UnifiedScriptComponent|GetScriptStateInt32",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:GetScriptStateInt32",
+          "memberId": "0x5B7CEF7BDAF29749",
+          "kind": "function",
+          "title": "GetScriptStateInt32",
+          "category": "Unreal API|UnifiedScriptComponent",
+          "tooltip": "Call UnifiedScriptComponent.GetScriptStateInt32(...).",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptComponent*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null
+              }
+            },
+            {
+              "name": "Name",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "string",
+                "nativeName": "FString",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null
+              }
+            },
+            {
+              "name": "Fallback",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null
+              }
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null
+              }
+            }
+          ]
+        },
+        {
+          "id": "ue.call|UnifiedScriptComponent|SetScriptStateInt32",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:SetScriptStateInt32",
+          "memberId": "0xF83092B1E5E45D7D",
+          "kind": "function",
+          "title": "SetScriptStateInt32",
+          "category": "Unreal API|UnifiedScriptComponent",
+          "tooltip": "Call UnifiedScriptComponent.SetScriptStateInt32(...).",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptComponent*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null
+              }
+            },
+            {
+              "name": "Name",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "string",
+                "nativeName": "FString",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null
+              }
+            },
+            {
+              "name": "Value",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null
+              }
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "bool",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null
+              }
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null
+            }
+          ]
+        },
+        {
+          "id": "ue.call|UnifiedScriptComponent|StartScript",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:StartScript",
+          "memberId": "0x335CA93AEB62A23E",
+          "kind": "function",
+          "title": "StartScript",
+          "category": "Unreal API|UnifiedScriptComponent",
+          "tooltip": "Call UnifiedScriptComponent.StartScript(...).",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptComponent*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null
+              }
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "bool",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null
+              }
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null
+            }
+          ]
+        },
+        {
+          "id": "ue.call|UnifiedScriptComponent|StopScript",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:StopScript",
+          "memberId": "0xC2B2365ACCA0171C",
+          "kind": "function",
+          "title": "StopScript",
+          "category": "Unreal API|UnifiedScriptComponent",
+          "tooltip": "Call UnifiedScriptComponent.StopScript(...).",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptComponent*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null
+              }
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null
+            }
+          ]
+        },
+        {
+          "id": "ue.get|UnifiedScriptComponent|ActiveGeneration",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ActiveGeneration",
+          "memberId": "0x6DF75D872D39AE9F",
+          "kind": "propertyRead",
+          "title": "ActiveGeneration",
+          "category": "Unreal API|UnifiedScriptComponent|Properties",
+          "tooltip": "Read UnifiedScriptComponent.ActiveGeneration.",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptComponent*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null
+              }
+            },
+            {
+              "name": "Value",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "string",
+                "nativeName": "FString",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

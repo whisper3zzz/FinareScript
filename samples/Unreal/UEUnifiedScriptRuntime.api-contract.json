@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "unifiedscript.unreal-api-contract/v0.1",
+  "contractName": "UnifiedScript.Runtime.Demo",
+  "managedNamespace": "UnifiedScript.Unreal.Generated",
+  "nativeHeader": "UnifiedScriptGeneratedThunks.h",
+  "nativeNamespace": "UE::UnifiedScript::Generated",
+  "types": [
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+      "members": [
+        "ActiveGeneration",
+        "Add",
+        "GetScriptStateInt32",
+        "SetScriptStateInt32",
+        "StartScript",
+        "StopScript"
+      ]
+    }
+  ]
+}

@@ -17,8 +17,8 @@ array. Every entry requires:
 - `requiredTargetClass`: the native or Blueprint-generated UObject class that
   the component target must derive from.
 
-Source, Declaration IR, Authoring Surface, declaration asset key, and Workbench
-URL are optional authoring fields. Unknown JSON fields, duplicate asset paths,
+Source, Declaration IR, Authoring Surface, API node catalog, declaration asset
+key, and Workbench URL are optional authoring fields. Unknown JSON fields, duplicate asset paths,
 invalid package names, unloaded target classes, and non-UnifiedScript assets at
 the destination are rejected during preflight.
 
@@ -53,10 +53,11 @@ legacy advanced fallback.
 ## Product boundary
 
 The deployment layer owns script identity, target compatibility, and authoring
-artifact locations. It deliberately does not generate native gameplay classes
-or infer missing UE API bindings. Those remain separate host-generation and
-binding-coverage stages, so migration failures stay explicit and auditable.
+artifact locations. API exposure is owned separately by the strict project
+contract described in [UNREAL_API_CONTRACT.md](UNREAL_API_CONTRACT.md), so
+migration failures stay explicit and auditable.
 
 BlockBreaker is the first real consumer: Player and Rifle are synchronized from
 one manifest, start exclusively through their generated Script Assets, retain
-44/44 native-thunk coverage, and run without the Puerts plugin.
+34/34 product-contract native-thunk coverage, including selected Engine APIs,
+and run without the Puerts plugin.

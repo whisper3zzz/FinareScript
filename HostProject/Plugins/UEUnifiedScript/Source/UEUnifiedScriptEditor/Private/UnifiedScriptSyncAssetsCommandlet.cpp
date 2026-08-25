@@ -1,3 +1,12 @@
+/**
+ * @Copyright: 2026 Tencent Inc. All rights reserved. reserved.
+ * @Author: whispersong
+ * @Date: 2026-08-25 17:05:16
+ * @LastEditors: whispersong
+ * @LastEditTime: 2026-08-25 17:17:49
+ * @FilePath: \Plugins\UEUnifiedScript\Source\UEUnifiedScriptEditor\Private\UnifiedScriptSyncAssetsCommandlet.cpp
+ * @Description:
+ */
 #include "UnifiedScriptSyncAssetsCommandlet.h"
 
 #include "AssetRegistry/AssetRegistryModule.h"
@@ -28,6 +37,7 @@ struct FDeploymentEntry
     FString DeclarationPath;
     FString DeclarationAssetPath;
     FString AuthoringSurfacePath;
+    FString ApiNodeCatalogPath;
     FString AuthoringServerUrl;
     UClass* RequiredTargetClass = nullptr;
 };
@@ -159,6 +169,7 @@ bool ParseManifest(
             TEXT("declarationPath"),
             TEXT("declarationAssetPath"),
             TEXT("authoringSurfacePath"),
+            TEXT("apiNodeCatalogPath"),
             TEXT("authoringServerUrl"),
         };
         if (!ValidateKnownFields(Object, EntryFields, TEXT("Deployment entry"), OutError))
@@ -186,6 +197,11 @@ bool ParseManifest(
                 Object,
                 TEXT("authoringSurfacePath"),
                 Entry.AuthoringSurfacePath,
+                OutError) ||
+            !ReadOptionalString(
+                Object,
+                TEXT("apiNodeCatalogPath"),
+                Entry.ApiNodeCatalogPath,
                 OutError) ||
             !ReadOptionalString(
                 Object,
@@ -282,6 +298,7 @@ bool SyncEntry(const FDeploymentEntry& Entry, bool& bOutCreated, FString& OutErr
     Asset->DeclarationPath = Entry.DeclarationPath;
     Asset->DeclarationAssetPath = Entry.DeclarationAssetPath;
     Asset->AuthoringSurfacePath = Entry.AuthoringSurfacePath;
+    Asset->ApiNodeCatalogPath = Entry.ApiNodeCatalogPath;
     Asset->AuthoringServerUrl = Entry.AuthoringServerUrl.IsEmpty()
         ? TEXT("http://127.0.0.1:4173")
         : Entry.AuthoringServerUrl;

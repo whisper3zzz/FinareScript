@@ -32,6 +32,12 @@ int32 UUnifiedScriptExportCommandlet::Main(const FString& Params)
         Options.Modules.Add(TEXT("UEUnifiedScriptRuntime"));
     }
 
+    FString ClassList;
+    if (FParse::Value(*Params, TEXT("Classes="), ClassList))
+    {
+        ClassList.ParseIntoArray(Options.ClassPaths, TEXT(","), true);
+    }
+
     FUnifiedScriptReflectionExportResult Result;
     FText Error;
     if (!FUnifiedScriptReflectionExporter::Export(Options, Result, Error))

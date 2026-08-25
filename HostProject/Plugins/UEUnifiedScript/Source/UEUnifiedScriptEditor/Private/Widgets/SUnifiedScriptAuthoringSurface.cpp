@@ -1723,8 +1723,18 @@ void SUnifiedScriptAuthoringSurface::RebuildNodePalette(
     }
     ReflectedPaletteActions.Reset();
 
+    FString ConfiguredCatalogPath;
+    if (const UUnifiedScriptAsset* ScriptAsset = LoadedScriptAsset.Get())
+    {
+        ConfiguredCatalogPath = ScriptAsset->ResolveApiNodeCatalogPath();
+    }
+    if (ConfiguredCatalogPath.IsEmpty())
+    {
+        ConfiguredCatalogPath =
+            TEXT("{ProjectDir}/../samples/Unreal/UEUnifiedScriptRuntime.reflection.json");
+    }
     const FString ManifestPath = FUnifiedScriptAuthoringSurfaceReader::ResolveConfiguredPath(
-        TEXT("{ProjectDir}/../samples/Unreal/UEUnifiedScriptRuntime.reflection.json"));
+        ConfiguredCatalogPath);
     FString ManifestJson;
     TSharedPtr<FJsonObject> Manifest;
     if (!FFileHelper::LoadFileToString(ManifestJson, *ManifestPath) ||
@@ -1870,6 +1880,8 @@ void SUnifiedScriptAuthoringSurface::RebuildNodePalette(
     {
         return;
     }
+    FString ManagedNamespace = TEXT("UnifiedScript.Unreal.Generated");
+    Manifest->TryGetStringField(TEXT("managedNamespace"), ManagedNamespace);
     const FUnifiedScriptAuthoringAsset* ActiveAsset = Document.Assets.FindByPredicate(
         [&Function](const FUnifiedScriptAuthoringAsset& Asset)
         {
@@ -1883,10 +1895,15 @@ void SUnifiedScriptAuthoringSurface::RebuildNodePalette(
     {
         const TSharedPtr<FJsonObject> Type = TypeValue.IsValid() ? TypeValue->AsObject() : nullptr;
         FString TypeName;
+        FString ManagedTypeName;
         const TArray<TSharedPtr<FJsonValue>>* Functions = nullptr;
         if (!Type.IsValid() || !Type->TryGetStringField(TEXT("name"), TypeName))
         {
             continue;
+        }
+        if (!Type->TryGetStringField(TEXT("managedTypeName"), ManagedTypeName))
+        {
+            ManagedTypeName = TypeName;
         }
         const TArray<TSharedPtr<FJsonValue>>* Delegates = nullptr;
         if (Type->TryGetArrayField(TEXT("delegates"), Delegates) && Delegates != nullptr)
@@ -1963,13 +1980,13 @@ void SUnifiedScriptAuthoringSurface::RebuildNodePalette(
 
                 const FString ActionId = FString::Printf(
                     TEXT("ue.event|%s|%s"),
-                    *TypeName,
+                    *ManagedTypeName,
                     *MemberName);
                 FUnifiedScriptReflectedPaletteAction EventAction;
                 EventAction.bEvent = true;
                 EventAction.EventPath = EventPath;
                 EventAction.SourceTypeName =
-                    TEXT("global::UnifiedScript.Unreal.Generated.") + TypeName;
+                    TEXT("global::") + ManagedNamespace + TEXT(".") + ManagedTypeName;
                 EventAction.HandlerName = HandlerName;
                 EventAction.EventParameters = MoveTemp(EventParameters);
                 ReflectedPaletteActions.Add(ActionId, MoveTemp(EventAction));
@@ -1984,11 +2001,11 @@ void SUnifiedScriptAuthoringSurface::RebuildNodePalette(
             }
         }
         const FUnifiedScriptAuthoringParameter* Receiver = Function.Parameters.FindByPredicate(
-            [&TypeName](const FUnifiedScriptAuthoringParameter& Parameter)
+            [&ManagedTypeName](const FUnifiedScriptAuthoringParameter& Parameter)
             {
                 return !Parameter.TypeId.IsEmpty() &&
-                    (Parameter.TypeMetadataName == TypeName ||
-                        Parameter.TypeMetadataName.EndsWith(TEXT(".") + TypeName));
+                    (Parameter.TypeMetadataName == ManagedTypeName ||
+                        Parameter.TypeMetadataName.EndsWith(TEXT(".") + ManagedTypeName));
             });
         if (Receiver == nullptr)
         {
@@ -2020,7 +2037,7 @@ void SUnifiedScriptAuthoringSurface::RebuildNodePalette(
                     continue;
                 }
                 const FString ActionId = FString::Printf(
-                    TEXT("ue.get|%s|%s"), *TypeName, *MemberName);
+                    TEXT("ue.get|%s|%s"), *ManagedTypeName, *MemberName);
                 ReflectedPaletteActions.Add(ActionId,
                     {false, *Receiver, MemberName, ResultTypeName, ResultTypeId, {}});
                 AuthoringGraph->PaletteActions.Add(
@@ -2099,7 +2116,7 @@ void SUnifiedScriptAuthoringSurface::RebuildNodePalette(
             }
 
             const FString ActionId = FString::Printf(
-                TEXT("ue.call|%s|%s"), *TypeName, *MemberName);
+                TEXT("ue.call|%s|%s"), *ManagedTypeName, *MemberName);
             ReflectedPaletteActions.Add(ActionId,
                 {true, *Receiver, MemberName, ResultTypeName, ResultTypeId, MoveTemp(Arguments)});
             AuthoringGraph->PaletteActions.Add(

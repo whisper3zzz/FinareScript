@@ -44,6 +44,10 @@ public:
     UPROPERTY(EditAnywhere, Category="UnifiedScript|Authoring")
     FString AuthoringSurfacePath;
 
+    /** Contract-generated Unreal API node catalog consumed by the Slate node palette. */
+    UPROPERTY(EditAnywhere, Category="UnifiedScript|Authoring")
+    FString ApiNodeCatalogPath;
+
     /** Loopback Workbench endpoint used by the Slate Apply flow. */
     UPROPERTY(EditAnywhere, Category="UnifiedScript|Authoring")
     FString AuthoringServerUrl = TEXT("http://127.0.0.1:4173");
@@ -63,6 +67,8 @@ public:
         FString& OutDeclarationAssetPath) const;
 
     FString ResolveAuthoringSurfacePath() const;
+
+    FString ResolveApiNodeCatalogPath() const;
 
     FString ResolveAuthoringServerUrl() const;
 };

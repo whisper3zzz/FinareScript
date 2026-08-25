@@ -127,8 +127,9 @@ keeps compiler-owned nodes and wires unchanged until the server commits;
 success regenerates C#, Declaration IR, Graph, Surface, DLL, and PDB, then
 reloads matching components. Rejection leaves the canvas unchanged.
 
-The node menu also reads the checked-in Unreal reflection manifest. Readable
-properties and callable instance methods appear when the active Visual function
+The node menu reads the loaded Script Asset's contract-generated API node
+catalog, falling back to the checked-in reflection fixture for the repository
+demo. Readable properties and callable instance methods appear when the active Visual function
 exposes a matching typed receiver and parameters. Selecting one emits a
 structured `memberAccess` or `memberInvocation` initializer, so normal
 compilation and semantic validation remain the final authority. The built-in

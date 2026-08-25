@@ -6,6 +6,9 @@ struct FUnifiedScriptReflectionExportOptions
 {
     FString OutputPath;
     TArray<FString> Modules;
+
+    /** Optional exact /Script/Module.Type allowlist. Empty exports every native class in Modules. */
+    TArray<FString> ClassPaths;
 };
 
 struct FUnifiedScriptReflectionExportResult

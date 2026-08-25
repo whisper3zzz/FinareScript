@@ -140,6 +140,9 @@ The repository currently implements:
 - versioned Unreal deployment manifests that preflight and synchronize real
   `UUnifiedScriptAsset` packages, with required target-class validation before
   CoreCLR startup and no per-host assembly/type literals;
+- strict project-owned Unreal API contracts that atomically generate one
+  allowlisted C# surface, Native Thunk table, coverage report, and typed visual
+  node catalog, with Script Assets selecting that catalog for Slate;
 - World-safe Actor overlap events, arbitrary reflected multicast Event Entries,
   and game-thread latent `DelayAsync`, all canceled or unbound before reload,
   EndPlay, or World teardown;
@@ -580,8 +583,10 @@ wrapper directly with:
 ```bash
 dotnet run --project src/UnifiedScript.Cli -- \
   ue-bindings samples/Unreal/UEUnifiedScriptRuntime.reflection.json \
+  --contract samples/Unreal/UEUnifiedScriptRuntime.api-contract.json \
   --out artifacts/UEUnifiedScriptRuntime.bindings.cs \
   --native-out artifacts/UEUnifiedScriptRuntime.thunks.cpp \
+  --nodes-out artifacts/UEUnifiedScriptRuntime.api-nodes.json \
   --report artifacts/ue/binding-coverage.json \
   --fail-on-rejected
 ```
@@ -591,7 +596,8 @@ Game modules can own their generated ABI v3 table by also setting
 function table with `FUnifiedScriptGeneratedThunkRegistry` during module
 startup. The BlockBreaker comparison project is the executable example.
 
-See [UNREAL_ADAPTER.md](docs/UNREAL_ADAPTER.md) for the contract, module
+See [UNREAL_API_CONTRACT.md](docs/UNREAL_API_CONTRACT.md) and
+[UNREAL_ADAPTER.md](docs/UNREAL_ADAPTER.md) for the contract, module
 boundaries, exFAT considerations, and remaining runtime phases.
 
 ## Requirements

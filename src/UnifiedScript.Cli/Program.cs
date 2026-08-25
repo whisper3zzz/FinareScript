@@ -105,77 +105,94 @@ internal static class Program
             return 66;
         }
 
+        if (options.ContractPath is not null && !File.Exists(options.ContractPath))
+        {
+            Console.Error.WriteLine($"Unreal API contract does not exist: {options.ContractPath}");
+            return 66;
+        }
+        if (options.NodeCatalogOutputPath is not null && options.ContractPath is null)
+        {
+            Console.Error.WriteLine("--nodes-out requires --contract so visual nodes share the shipped API allowlist.");
+            return 64;
+        }
+
         string fullManifestPath = Path.GetFullPath(options.ManifestPath);
         string fullOutputPath = Path.GetFullPath(options.OutputPath);
-        EnsureDifferentPath(
-            fullManifestPath,
-            fullOutputPath,
-            "Generated bindings cannot overwrite the Unreal reflection manifest.");
         string? fullNativeOutputPath = options.NativeOutputPath is null
             ? null
             : Path.GetFullPath(options.NativeOutputPath);
-        if (fullNativeOutputPath is not null)
-        {
-            EnsureDifferentPath(
-                fullManifestPath,
-                fullNativeOutputPath,
-                "Generated native thunks cannot overwrite the Unreal reflection manifest.");
-            EnsureDifferentPath(
-                fullOutputPath,
-                fullNativeOutputPath,
-                "Managed bindings and native thunks require different output paths.");
-        }
         string? fullReportPath = options.ReportPath is null
             ? null
             : Path.GetFullPath(options.ReportPath);
-        if (fullReportPath is not null)
+        string? fullContractPath = options.ContractPath is null
+            ? null
+            : Path.GetFullPath(options.ContractPath);
+        string? fullNodeCatalogOutputPath = options.NodeCatalogOutputPath is null
+            ? null
+            : Path.GetFullPath(options.NodeCatalogOutputPath);
+        string[] inputPaths = fullContractPath is null
+            ? [fullManifestPath]
+            : [fullManifestPath, fullContractPath];
+        string[] outputPaths = new[]
         {
-            EnsureDifferentPath(
-                fullManifestPath,
-                fullReportPath,
-                "Binding coverage cannot overwrite the Unreal reflection manifest.");
-            EnsureDifferentPath(
-                fullOutputPath,
-                fullReportPath,
-                "Managed bindings and binding coverage require different output paths.");
-            if (fullNativeOutputPath is not null)
+            fullOutputPath,
+            fullNativeOutputPath,
+            fullReportPath,
+            fullNodeCatalogOutputPath,
+        }.Where(static path => path is not null).Cast<string>().ToArray();
+        if (outputPaths.Distinct(StringComparer.OrdinalIgnoreCase).Count() != outputPaths.Length)
+        {
+            throw new ArgumentException("Unreal contract generation output paths must be distinct.");
+        }
+        foreach (string inputPath in inputPaths)
+        {
+            foreach (string outputPath in outputPaths)
             {
                 EnsureDifferentPath(
-                    fullNativeOutputPath,
-                    fullReportPath,
-                    "Native thunks and binding coverage require different output paths.");
+                    inputPath,
+                    outputPath,
+                    "Unreal contract generation cannot overwrite its reflection or contract input.");
             }
         }
+
         UnrealReflectionManifest manifest = UnrealReflectionJson.Deserialize(
             File.ReadAllText(fullManifestPath));
+        UnrealApiContractProjection? projection = null;
+        string managedNamespace = options.Namespace;
+        string nativeHeader = options.NativeHeader;
+        string nativeNamespace = options.NativeNamespace;
+        if (fullContractPath is not null)
+        {
+            UnrealApiContract contract = UnrealApiContractJson.Deserialize(
+                File.ReadAllText(fullContractPath));
+            projection = UnrealApiContractProjector.Project(manifest, contract);
+            manifest = projection.Reflection;
+            managedNamespace = projection.Contract.ManagedNamespace;
+            nativeHeader = projection.Contract.NativeHeader;
+            nativeNamespace = projection.Contract.NativeNamespace;
+        }
+
         UnrealBindingGenerationResult result = new UnrealBindingGenerator().Generate(
             manifest,
-            new UnrealBindingGeneratorOptions(options.Namespace));
+            new UnrealBindingGeneratorOptions(managedNamespace));
         foreach (UnrealBindingDiagnostic diagnostic in result.Diagnostics)
         {
             Console.Error.WriteLine(
                 $"warning {diagnostic.Code}: {diagnostic.Message} [{diagnostic.MemberPath}]");
         }
 
-        WriteAtomically(fullOutputPath, result.Source);
-        Console.WriteLine(fullOutputPath);
         UnrealNativeThunkGenerationResult? nativeResult = null;
         if (fullNativeOutputPath is not null || fullReportPath is not null || options.FailOnRejected)
         {
             nativeResult = new UnrealNativeThunkGenerator().Generate(
                 manifest,
                 new UnrealNativeThunkGeneratorOptions(
-                    options.NativeHeader,
-                    options.NativeNamespace));
+                    nativeHeader,
+                    nativeNamespace));
             foreach (UnrealNativeThunkDiagnostic diagnostic in nativeResult.Diagnostics)
             {
                 Console.Error.WriteLine(
                     $"warning {diagnostic.Code}: {diagnostic.Message} [{diagnostic.MemberPath}]");
-            }
-            if (fullNativeOutputPath is not null)
-            {
-                WriteAtomically(fullNativeOutputPath, nativeResult.Source);
-                Console.WriteLine(fullNativeOutputPath);
             }
         }
         UnrealBindingCoverageReport? coverage = null;
@@ -186,17 +203,37 @@ internal static class Program
                 result,
                 nativeResult!);
         }
-        if (fullReportPath is not null)
-        {
-            WriteAtomically(fullReportPath, UnrealBindingCoverageJson.Serialize(coverage!));
-            Console.WriteLine(fullReportPath);
-        }
         if (options.FailOnRejected && coverage!.Summary.RejectedCount > 0)
         {
             Console.Error.WriteLine(
                 $"Unreal binding generation rejected {coverage.Summary.RejectedCount} member(s). " +
                 "See diagnostics or the coverage report for details.");
             return 65;
+        }
+
+        var outputs = new List<OutputFile>
+        {
+            new(fullOutputPath, result.Source),
+        };
+        if (fullNativeOutputPath is not null)
+        {
+            outputs.Add(new OutputFile(fullNativeOutputPath, nativeResult!.Source));
+        }
+        if (fullReportPath is not null)
+        {
+            outputs.Add(new OutputFile(fullReportPath, UnrealBindingCoverageJson.Serialize(coverage!)));
+        }
+        if (fullNodeCatalogOutputPath is not null)
+        {
+            UnrealApiNodeCatalog catalog = UnrealApiNodeCatalogGenerator.Generate(projection!);
+            outputs.Add(new OutputFile(
+                fullNodeCatalogOutputPath,
+                UnrealApiNodeCatalogGenerator.Serialize(catalog)));
+        }
+        WriteTransactionally(outputs);
+        foreach (OutputFile output in outputs)
+        {
+            Console.WriteLine(Path.GetFullPath(output.Path));
         }
         return 0;
     }
@@ -1134,6 +1171,8 @@ internal static class Program
         string? bindingNamespace = null;
         string? nativeHeader = null;
         string? nativeNamespace = null;
+        string? contractPath = null;
+        string? nodeCatalogOutputPath = null;
         bool failOnRejected = false;
         int index = 2;
         while (index < args.Count)
@@ -1170,6 +1209,12 @@ internal static class Program
                 case "--report" when reportPath is null:
                     reportPath = value;
                     break;
+                case "--contract" when contractPath is null:
+                    contractPath = value;
+                    break;
+                case "--nodes-out" when nodeCatalogOutputPath is null:
+                    nodeCatalogOutputPath = value;
+                    break;
                 default:
                     return false;
             }
@@ -1188,6 +1233,8 @@ internal static class Program
             nativeHeader ?? "UnifiedScriptGeneratedThunks.h",
             nativeNamespace ?? "UE::UnifiedScript::Generated",
             reportPath,
+            contractPath,
+            nodeCatalogOutputPath,
             failOnRejected);
         return true;
     }
@@ -1808,7 +1855,7 @@ internal static class Program
         "--out <output.cs> --out-asset <asset.json> [options]\n" +
         "  unifiedscript execute <input.cs> (--method <name> | --method-id <us_...>) [options]\n" +
         "  unifiedscript debug-serve <input.cs> --root <visual-editor-directory> [--port <number>] [options]\n" +
-        "  unifiedscript ue-bindings <reflection.json> --out <bindings.cs> [--native-out <thunks.cpp>] [--native-header <header.h>] [--native-namespace <name>] [--report <coverage.json>] [--fail-on-rejected] [--namespace <name>]\n" +
+        "  unifiedscript ue-bindings <reflection.json> --out <bindings.cs> [--contract <api-contract.json>] [--native-out <thunks.cpp>] [--nodes-out <nodes.json>] [--report <coverage.json>] [--fail-on-rejected] [--namespace <name>]\n" +
         "Options:\n" +
         "  --out <path>            Artifact directory, initialized sidecar, or patched source output.\n" +
         "  --patch <patch.json>    Semantic patch document required by apply-patch.\n" +
@@ -1832,6 +1879,8 @@ internal static class Program
         "  --native-out <path>     Also emit ABI v3 generated fast-binding C++.\n" +
         "  --native-header <path>  Header included by generated native fast bindings.\n" +
         "  --native-namespace <name> C++ namespace for generated native fast bindings.\n" +
+        "  --contract <path>       Select one product API surface for every generated artifact.\n" +
+        "  --nodes-out <path>      Emit the visual API node catalog selected by --contract.\n" +
         "  --report <path>         Emit native/fallback/rejected UE API coverage JSON.\n" +
         "  --fail-on-rejected      Return data-error status when any UE member is rejected.\n" +
         "  --assembly <name>        Set the analysis assembly name.\n" +
@@ -1887,6 +1936,8 @@ internal static class Program
         string NativeHeader,
         string NativeNamespace,
         string? ReportPath,
+        string? ContractPath,
+        string? NodeCatalogOutputPath,
         bool FailOnRejected);
 
     private sealed record IdentityOptions(

@@ -468,6 +468,28 @@ bool FUnifiedScriptReflectionExporter::Export(
         ModuleSet.Add(Module);
     }
 
+    TArray<FString> ClassPaths = Options.ClassPaths;
+    TSet<FString> ClassPathSet;
+    for (FString& ClassPath : ClassPaths)
+    {
+        ClassPath.TrimStartAndEndInline();
+        FString ScriptModule;
+        FString TypeName;
+        const bool bHasModule = ClassPath.RemoveFromStart(TEXT("/Script/")) &&
+            ClassPath.Split(TEXT("."), &ScriptModule, &TypeName) &&
+            !ScriptModule.IsEmpty() && !TypeName.IsEmpty();
+        if (!bHasModule || !ModuleSet.Contains(ScriptModule) ||
+            ClassPathSet.Contains(TEXT("/Script/") + ScriptModule + TEXT(".") + TypeName))
+        {
+            OutError = FText::FromString(
+                TEXT("Reflected class paths must be unique /Script/Module.Type values whose module is selected."));
+            return false;
+        }
+        ClassPath = TEXT("/Script/") + ScriptModule + TEXT(".") + TypeName;
+        ClassPathSet.Add(ClassPath);
+    }
+    ClassPaths.Sort();
+
     TArray<const UClass*> Classes;
     for (TObjectIterator<UClass> It; It; ++It)
     {
@@ -476,7 +498,8 @@ bool FUnifiedScriptReflectionExporter::Export(
         {
             continue;
         }
-        if (ModuleSet.Contains(ModuleName(Class)))
+        if (ModuleSet.Contains(ModuleName(Class)) &&
+            (ClassPathSet.IsEmpty() || ClassPathSet.Contains(Class->GetPathName())))
         {
             if (Class->HasMetaData(InternalBindingMetadata))
             {
@@ -490,6 +513,20 @@ bool FUnifiedScriptReflectionExporter::Export(
     {
         return Left.GetPathName() < Right.GetPathName();
     });
+    if (!ClassPathSet.IsEmpty() && Classes.Num() != ClassPathSet.Num())
+    {
+        TSet<FString> Missing = ClassPathSet;
+        for (const UClass* Class : Classes)
+        {
+            Missing.Remove(Class->GetPathName());
+        }
+        TArray<FString> MissingPaths = Missing.Array();
+        MissingPaths.Sort();
+        OutError = FText::FromString(FString::Printf(
+            TEXT("Requested reflected classes could not be loaded: %s"),
+            *FString::Join(MissingPaths, TEXT(", "))));
+        return false;
+    }
 
     TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
     Root->SetStringField(TEXT("schemaVersion"), ReflectionSchema);
