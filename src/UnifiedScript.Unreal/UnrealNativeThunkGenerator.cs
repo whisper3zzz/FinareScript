@@ -3,7 +3,8 @@ using System.Text;
 namespace UnifiedScript.Unreal;
 
 public sealed record UnrealNativeThunkGeneratorOptions(
-    string RuntimeHeader = "UnifiedScriptGeneratedThunks.h");
+    string RuntimeHeader = "UnifiedScriptGeneratedThunks.h",
+    string CppNamespace = "UE::UnifiedScript::Generated");
 
 public sealed record UnrealNativeThunkDiagnostic(string Code, string Message, string MemberPath);
 
@@ -12,7 +13,7 @@ public sealed record UnrealNativeThunkGenerationResult(
     IReadOnlyList<UnrealNativeThunkDiagnostic> Diagnostics);
 
 /// <summary>
-/// Emits the native half of ABI v2. Supported public reflected members are
+/// Emits the generated fast-binding half of ABI v3. Supported public reflected members are
 /// dispatched by their stable ID and call native fields/functions directly.
 /// </summary>
 public sealed class UnrealNativeThunkGenerator
@@ -27,6 +28,12 @@ public sealed class UnrealNativeThunkGenerator
         {
             throw new ArgumentException(
                 $"'{options.RuntimeHeader}' is not a valid generated thunk runtime header.",
+                nameof(options));
+        }
+        if (!IsCppNamespace(options.CppNamespace))
+        {
+            throw new ArgumentException(
+                $"'{options.CppNamespace}' is not a valid C++ namespace.",
                 nameof(options));
         }
 
@@ -59,7 +66,7 @@ public sealed class UnrealNativeThunkGenerator
                 {
                     diagnostics.Add(new UnrealNativeThunkDiagnostic(
                         "USUE3003",
-                        $"Property type '{property.Type.NativeName}' is not supported by native thunk v0.1.",
+                        $"Property type '{property.Type.NativeName}' is not supported by generated fast bindings.",
                         property.Path));
                     continue;
                 }
@@ -83,7 +90,7 @@ public sealed class UnrealNativeThunkGenerator
                 {
                     diagnostics.Add(new UnrealNativeThunkDiagnostic(
                         "USUE3006",
-                        "The native function signature contains a value type not supported by thunk v0.1.",
+                        "The native function signature contains a value type not supported by generated fast bindings.",
                         function.Path));
                     continue;
                 }
@@ -107,11 +114,11 @@ public sealed class UnrealNativeThunkGenerator
             source.Append("#include \"").Append(header).AppendLine("\"");
         }
         source.AppendLine();
-        EmitHelpers(source);
-        EmitResultDescriptors(source, properties, functions);
-        EmitReadDispatcher(source, properties);
-        EmitWriteDispatcher(source, properties);
-        EmitInvokeDispatcher(source, functions);
+        EmitHelpers(source, options.CppNamespace);
+        EmitResultDescriptors(source, properties, functions, options.CppNamespace);
+        EmitReadDispatcher(source, properties, options.CppNamespace);
+        EmitWriteDispatcher(source, properties, options.CppNamespace);
+        EmitInvokeDispatcher(source, functions, options.CppNamespace);
 
         return new UnrealNativeThunkGenerationResult(
             source.ToString().TrimEnd().ReplaceLineEndings("\n") + "\n",
@@ -121,9 +128,9 @@ public sealed class UnrealNativeThunkGenerator
                 .ToArray());
     }
 
-    private static void EmitHelpers(StringBuilder source)
+    private static void EmitHelpers(StringBuilder source, string cppNamespace)
     {
-        source.AppendLine("namespace UE::UnifiedScript::Generated::Private");
+        source.Append("namespace ").Append(cppNamespace).AppendLine("::Private");
         source.AppendLine("{");
         source.AppendLine("void Succeed(FUnifiedScriptInvocationResult& OutResult)");
         source.AppendLine("{");
@@ -187,6 +194,24 @@ public sealed class UnrealNativeThunkGenerator
         source.AppendLine("        FString::Printf(");
         source.AppendLine("            TEXT(\"Generated native member ID 0x%016llX is not registered.\"),");
         source.AppendLine("            static_cast<unsigned long long>(MemberId)));");
+        source.AppendLine("}");
+        source.AppendLine();
+        source.AppendLine("template <typename TObjectType>");
+        source.AppendLine("UObject* GetObjectPointer(TObjectType* Object)");
+        source.AppendLine("{");
+        source.AppendLine("    return reinterpret_cast<UObject*>(Object);");
+        source.AppendLine("}");
+        source.AppendLine();
+        source.AppendLine("template <typename TObjectType>");
+        source.AppendLine("UObject* GetObjectPointer(const TObjectPtr<TObjectType>& Object)");
+        source.AppendLine("{");
+        source.AppendLine("    return reinterpret_cast<UObject*>(Object.Get());");
+        source.AppendLine("}");
+        source.AppendLine();
+        source.AppendLine("template <typename TObjectType>");
+        source.AppendLine("UObject* GetObjectPointer(const TSubclassOf<TObjectType>& Object)");
+        source.AppendLine("{");
+        source.AppendLine("    return Object.Get();");
         source.AppendLine("}");
         source.AppendLine();
         source.AppendLine("bool EncodeObject(");
@@ -257,9 +282,10 @@ public sealed class UnrealNativeThunkGenerator
     private static void EmitResultDescriptors(
         StringBuilder source,
         IReadOnlyList<(UnrealReflectedType Type, UnrealReflectedProperty Property)> properties,
-        IReadOnlyList<(UnrealReflectedType Type, UnrealReflectedFunction Function)> functions)
+        IReadOnlyList<(UnrealReflectedType Type, UnrealReflectedFunction Function)> functions,
+        string cppNamespace)
     {
-        source.AppendLine("bool UE::UnifiedScript::Generated::DescribeReadResult(");
+        source.Append("bool ").Append(cppNamespace).AppendLine("::DescribeReadResult(");
         source.AppendLine("    uint64 MemberId,");
         source.AppendLine("    EUnifiedScriptValueKind& OutKind,");
         source.AppendLine("    uint64& OutTypeId)");
@@ -277,7 +303,7 @@ public sealed class UnrealNativeThunkGenerator
         source.AppendLine("}");
         source.AppendLine();
 
-        source.AppendLine("bool UE::UnifiedScript::Generated::DescribeInvokeResultCount(");
+        source.Append("bool ").Append(cppNamespace).AppendLine("::DescribeInvokeResultCount(");
         source.AppendLine("    uint64 MemberId,");
         source.AppendLine("    uint32& OutResultCount)");
         source.AppendLine("{");
@@ -298,7 +324,7 @@ public sealed class UnrealNativeThunkGenerator
         source.AppendLine("}");
         source.AppendLine();
 
-        source.AppendLine("bool UE::UnifiedScript::Generated::DescribeInvokeResult(");
+        source.Append("bool ").Append(cppNamespace).AppendLine("::DescribeInvokeResult(");
         source.AppendLine("    uint64 MemberId,");
         source.AppendLine("    uint32 ResultIndex,");
         source.AppendLine("    EUnifiedScriptValueKind& OutKind,");
@@ -360,16 +386,17 @@ public sealed class UnrealNativeThunkGenerator
 
     private static void EmitReadDispatcher(
         StringBuilder source,
-        IReadOnlyList<(UnrealReflectedType Type, UnrealReflectedProperty Property)> properties)
+        IReadOnlyList<(UnrealReflectedType Type, UnrealReflectedProperty Property)> properties,
+        string cppNamespace)
     {
-        source.AppendLine("bool UE::UnifiedScript::Generated::ReadProperty(");
+        source.Append("bool ").Append(cppNamespace).AppendLine("::ReadProperty(");
         source.AppendLine("    UObject* Target,");
         source.AppendLine("    FUnifiedScriptObjectRegistry& Registry,");
         source.AppendLine("    uint64 MemberId,");
         source.AppendLine("    FUnifiedScriptValue& OutValue,");
         source.AppendLine("    FUnifiedScriptInvocationResult& OutResult)");
         source.AppendLine("{");
-        source.AppendLine("    using namespace UE::UnifiedScript::Generated::Private;");
+        source.Append("    using namespace ").Append(cppNamespace).AppendLine("::Private;");
         source.AppendLine("    switch (MemberId)");
         source.AppendLine("    {");
         foreach ((UnrealReflectedType type, UnrealReflectedProperty property) in properties)
@@ -402,16 +429,17 @@ public sealed class UnrealNativeThunkGenerator
 
     private static void EmitWriteDispatcher(
         StringBuilder source,
-        IReadOnlyList<(UnrealReflectedType Type, UnrealReflectedProperty Property)> properties)
+        IReadOnlyList<(UnrealReflectedType Type, UnrealReflectedProperty Property)> properties,
+        string cppNamespace)
     {
-        source.AppendLine("bool UE::UnifiedScript::Generated::WriteProperty(");
+        source.Append("bool ").Append(cppNamespace).AppendLine("::WriteProperty(");
         source.AppendLine("    UObject* Target,");
         source.AppendLine("    FUnifiedScriptObjectRegistry& Registry,");
         source.AppendLine("    uint64 MemberId,");
         source.AppendLine("    const FUnifiedScriptValue& Value,");
         source.AppendLine("    FUnifiedScriptInvocationResult& OutResult)");
         source.AppendLine("{");
-        source.AppendLine("    using namespace UE::UnifiedScript::Generated::Private;");
+        source.Append("    using namespace ").Append(cppNamespace).AppendLine("::Private;");
         source.AppendLine("    switch (MemberId)");
         source.AppendLine("    {");
         foreach ((UnrealReflectedType type, UnrealReflectedProperty property) in properties)
@@ -450,9 +478,10 @@ public sealed class UnrealNativeThunkGenerator
 
     private static void EmitInvokeDispatcher(
         StringBuilder source,
-        IReadOnlyList<(UnrealReflectedType Type, UnrealReflectedFunction Function)> functions)
+        IReadOnlyList<(UnrealReflectedType Type, UnrealReflectedFunction Function)> functions,
+        string cppNamespace)
     {
-        source.AppendLine("bool UE::UnifiedScript::Generated::Invoke(");
+        source.Append("bool ").Append(cppNamespace).AppendLine("::Invoke(");
         source.AppendLine("    UObject* Target,");
         source.AppendLine("    FUnifiedScriptObjectRegistry& Registry,");
         source.AppendLine("    uint64 MemberId,");
@@ -461,7 +490,7 @@ public sealed class UnrealNativeThunkGenerator
         source.AppendLine("    TArray<FUnifiedScriptValue>& OutOutputValues,");
         source.AppendLine("    FUnifiedScriptInvocationResult& OutResult)");
         source.AppendLine("{");
-        source.AppendLine("    using namespace UE::UnifiedScript::Generated::Private;");
+        source.Append("    using namespace ").Append(cppNamespace).AppendLine("::Private;");
         source.AppendLine("    switch (MemberId)");
         source.AppendLine("    {");
         foreach ((UnrealReflectedType type, UnrealReflectedFunction function) in functions)
@@ -725,7 +754,8 @@ public sealed class UnrealNativeThunkGenerator
         }
         if (IsObject(type))
         {
-            source.Append(padding).Append("if (!EncodeObject(Registry, ").Append(expression)
+            source.Append(padding).Append("if (!EncodeObject(Registry, GetObjectPointer(")
+                .Append(expression).Append(')')
                 .Append(", ").Append(type.Kind == UnrealValueKind.Class ? "true" : "false")
                 .Append(", ").Append(output).AppendLine(", OutResult))");
             source.Append(padding).AppendLine("{");
@@ -901,6 +931,14 @@ public sealed class UnrealNativeThunkGenerator
         value.EndsWith(".h", StringComparison.OrdinalIgnoreCase) &&
         !Path.IsPathRooted(value) &&
         !value.Replace('\\', '/').Split('/').Any(static item => item is "" or "." or "..");
+
+    private static bool IsCppNamespace(string value) =>
+        !string.IsNullOrWhiteSpace(value) &&
+        value.Split("::", StringSplitOptions.None).All(static component =>
+            component.Length > 0 &&
+            (char.IsAsciiLetter(component[0]) || component[0] == '_') &&
+            component.Skip(1).All(static character =>
+                char.IsAsciiLetterOrDigit(character) || character == '_'));
 
     private static string FromNative(UnrealTypeReference type, string expression) => type.Kind switch
     {

@@ -15,7 +15,9 @@ functional gates and produce an ignored JSON report with:
 ```
 
 The current gate proves engine compatibility, map loading, script startup,
-managed lifecycle, 300 ticks, and the UnifiedScript shot/hit path. It is not a
-performance verdict. Fair performance work must add identical in-map workloads,
-warmup, repeated samples, allocation/GC counters, and statistical output before
-making a faster-than-Puerts claim.
+managed lifecycle, 300 ticks, the UnifiedScript shot/hit path, and generated
+ABI v3 dispatch with nonzero fast calls and zero legacy calls. Its coverage
+report also requires every exported BlockBreaker member to have a native thunk.
+It is not a performance verdict. Fair performance work must add identical
+in-map workloads, warmup, repeated samples, allocation/GC counters, and
+statistical output before making a faster-than-Puerts claim.

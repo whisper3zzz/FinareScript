@@ -162,7 +162,11 @@ internal static class Program
         UnrealNativeThunkGenerationResult? nativeResult = null;
         if (fullNativeOutputPath is not null || fullReportPath is not null || options.FailOnRejected)
         {
-            nativeResult = new UnrealNativeThunkGenerator().Generate(manifest);
+            nativeResult = new UnrealNativeThunkGenerator().Generate(
+                manifest,
+                new UnrealNativeThunkGeneratorOptions(
+                    options.NativeHeader,
+                    options.NativeNamespace));
             foreach (UnrealNativeThunkDiagnostic diagnostic in nativeResult.Diagnostics)
             {
                 Console.Error.WriteLine(
@@ -1128,6 +1132,8 @@ internal static class Program
         string? nativeOutputPath = null;
         string? reportPath = null;
         string? bindingNamespace = null;
+        string? nativeHeader = null;
+        string? nativeNamespace = null;
         bool failOnRejected = false;
         int index = 2;
         while (index < args.Count)
@@ -1155,6 +1161,12 @@ internal static class Program
                 case "--native-out" when nativeOutputPath is null:
                     nativeOutputPath = value;
                     break;
+                case "--native-header" when nativeHeader is null:
+                    nativeHeader = value;
+                    break;
+                case "--native-namespace" when nativeNamespace is null:
+                    nativeNamespace = value;
+                    break;
                 case "--report" when reportPath is null:
                     reportPath = value;
                     break;
@@ -1173,6 +1185,8 @@ internal static class Program
             outputPath,
             bindingNamespace ?? "UnifiedScript.Unreal.Generated",
             nativeOutputPath,
+            nativeHeader ?? "UnifiedScriptGeneratedThunks.h",
+            nativeNamespace ?? "UE::UnifiedScript::Generated",
             reportPath,
             failOnRejected);
         return true;
@@ -1794,7 +1808,7 @@ internal static class Program
         "--out <output.cs> --out-asset <asset.json> [options]\n" +
         "  unifiedscript execute <input.cs> (--method <name> | --method-id <us_...>) [options]\n" +
         "  unifiedscript debug-serve <input.cs> --root <visual-editor-directory> [--port <number>] [options]\n" +
-        "  unifiedscript ue-bindings <reflection.json> --out <bindings.cs> [--native-out <thunks.cpp>] [--report <coverage.json>] [--fail-on-rejected] [--namespace <name>]\n" +
+        "  unifiedscript ue-bindings <reflection.json> --out <bindings.cs> [--native-out <thunks.cpp>] [--native-header <header.h>] [--native-namespace <name>] [--report <coverage.json>] [--fail-on-rejected] [--namespace <name>]\n" +
         "Options:\n" +
         "  --out <path>            Artifact directory, initialized sidecar, or patched source output.\n" +
         "  --patch <patch.json>    Semantic patch document required by apply-patch.\n" +
@@ -1815,7 +1829,9 @@ internal static class Program
         "  --managed-out <path>    Transactional managed assembly output for debug-serve.\n" +
         "  --pdb-out <path>        Transactional portable PDB output for debug-serve.\n" +
         "  --namespace <name>      Namespace for generated Unreal managed bindings.\n" +
-        "  --native-out <path>     Also emit ABI v2 direct native thunk C++.\n" +
+        "  --native-out <path>     Also emit ABI v3 generated fast-binding C++.\n" +
+        "  --native-header <path>  Header included by generated native fast bindings.\n" +
+        "  --native-namespace <name> C++ namespace for generated native fast bindings.\n" +
         "  --report <path>         Emit native/fallback/rejected UE API coverage JSON.\n" +
         "  --fail-on-rejected      Return data-error status when any UE member is rejected.\n" +
         "  --assembly <name>        Set the analysis assembly name.\n" +
@@ -1868,6 +1884,8 @@ internal static class Program
         string OutputPath,
         string Namespace,
         string? NativeOutputPath,
+        string NativeHeader,
+        string NativeNamespace,
         string? ReportPath,
         bool FailOnRejected);
 

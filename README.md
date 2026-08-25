@@ -497,7 +497,7 @@ Current Unreal adapter path:
   -> collectible per-script reload generation
   -> UE Script Asset resolution + transactional entry-type reload
   -> Declaration IR -> fixed-layout Details state + stable-ID migration
-  -> stable generated Member ID -> ABI v2 native thunk -> live UObject
+  -> stable generated Member ID -> ABI v3 call frame -> module-owned native thunk -> live UObject
   -> Authoring Surface v0.3 -> native Slate GraphEditor pins/wires + inspector
   -> typed edit capability -> semantic-patch v0.21 Workbench transaction
   -> atomic C#/identity/Declaration/Surface/DLL/PDB publication
@@ -582,6 +582,11 @@ dotnet run --project src/UnifiedScript.Cli -- \
   --report artifacts/ue/binding-coverage.json \
   --fail-on-rejected
 ```
+
+Game modules can own their generated ABI v3 table by also setting
+`--native-header` and `--native-namespace`, then registering the resulting
+function table with `FUnifiedScriptGeneratedThunkRegistry` during module
+startup. The BlockBreaker comparison project is the executable example.
 
 See [UNREAL_ADAPTER.md](docs/UNREAL_ADAPTER.md) for the contract, module
 boundaries, exFAT considerations, and remaining runtime phases.

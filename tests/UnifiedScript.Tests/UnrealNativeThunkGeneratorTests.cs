@@ -33,6 +33,42 @@ public sealed class UnrealNativeThunkGeneratorTests
     }
 
     [Fact]
+    public void GenerateSupportsProjectOwnedHeaderAndNamespace()
+    {
+        UnrealNativeThunkGenerationResult result = new UnrealNativeThunkGenerator().Generate(
+            CreateManifest(),
+            new UnrealNativeThunkGeneratorOptions(
+                "BlockBreakerGeneratedThunks.h",
+                "UE::UnifiedScript::Generated::BlockBreaker"));
+
+        Assert.Contains("#include \"BlockBreakerGeneratedThunks.h\"", result.Source, StringComparison.Ordinal);
+        Assert.Contains(
+            "namespace UE::UnifiedScript::Generated::BlockBreaker::Private",
+            result.Source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "bool UE::UnifiedScript::Generated::BlockBreaker::Invoke(",
+            result.Source,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "bool UE::UnifiedScript::Generated::Invoke(",
+            result.Source,
+            StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("UE::Generated::")]
+    [InlineData("UE::Generated;Injected")]
+    [InlineData("9Generated")]
+    public void GenerateRejectsUnsafeCppNamespace(string cppNamespace)
+    {
+        Assert.Throws<ArgumentException>(() => new UnrealNativeThunkGenerator().Generate(
+            CreateManifest(),
+            new UnrealNativeThunkGeneratorOptions(CppNamespace: cppNamespace)));
+    }
+
+    [Fact]
     public void GenerateRejectsNonPublicAndUnsupportedMembersWithStableDiagnostics()
     {
         UnrealReflectionManifest manifest = CreateManifest();

@@ -4,7 +4,7 @@
 #include "Misc/ScopeLock.h"
 #include "Misc/ScopeExit.h"
 #include "UnifiedScriptDelegateProxy.h"
-#include "UnifiedScriptGeneratedThunks.h"
+#include "UnifiedScriptGeneratedThunkRegistry.h"
 #include "UObject/Field.h"
 
 #include <bit>
@@ -1379,7 +1379,7 @@ void ReadPropertyByIdV3(
     }
     EUnifiedScriptValueKind ExpectedKind;
     uint64 ExpectedTypeId = 0;
-    if (!UE::UnifiedScript::Generated::DescribeReadResult(
+    if (!FUnifiedScriptGeneratedThunkRegistry::DescribeReadResult(
             MemberId, ExpectedKind, ExpectedTypeId))
     {
         FUnifiedScriptInvocationResult Result;
@@ -1490,7 +1490,7 @@ void InvokeByIdV3(
         return;
     }
     uint32 ExpectedResultCount = 0;
-    if (!UE::UnifiedScript::Generated::DescribeInvokeResultCount(
+    if (!FUnifiedScriptGeneratedThunkRegistry::DescribeInvokeResultCount(
             MemberId, ExpectedResultCount) ||
         ExpectedResultCount > 64)
     {
@@ -1512,7 +1512,7 @@ void InvokeByIdV3(
     {
         EUnifiedScriptValueKind ExpectedKind;
         uint64 ExpectedTypeId = 0;
-        if (!UE::UnifiedScript::Generated::DescribeInvokeResult(
+        if (!FUnifiedScriptGeneratedThunkRegistry::DescribeInvokeResult(
                 MemberId, ResultIndex, ExpectedKind, ExpectedTypeId))
         {
             InvalidFrameV3(Frame, EntryByteCount);

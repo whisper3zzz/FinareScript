@@ -70,6 +70,24 @@ bool FailUnknownMember(
             static_cast<unsigned long long>(MemberId)));
 }
 
+template <typename TObjectType>
+UObject* GetObjectPointer(TObjectType* Object)
+{
+    return reinterpret_cast<UObject*>(Object);
+}
+
+template <typename TObjectType>
+UObject* GetObjectPointer(const TObjectPtr<TObjectType>& Object)
+{
+    return reinterpret_cast<UObject*>(Object.Get());
+}
+
+template <typename TObjectType>
+UObject* GetObjectPointer(const TSubclassOf<TObjectType>& Object)
+{
+    return Object.Get();
+}
+
 bool EncodeObject(
     FUnifiedScriptObjectRegistry& Registry,
     UObject* Object,
@@ -691,7 +709,7 @@ bool UE::UnifiedScript::Generated::ReadProperty(
         {
             return false;
         }
-        if (!EncodeObject(Registry, TypedTarget->ScriptComponent, false, OutValue, OutResult))
+        if (!EncodeObject(Registry, GetObjectPointer(TypedTarget->ScriptComponent), false, OutValue, OutResult))
         {
             return false;
         }
@@ -848,7 +866,7 @@ bool UE::UnifiedScript::Generated::ReadProperty(
         {
             return false;
         }
-        if (!EncodeObject(Registry, TypedTarget->ClassValue, true, OutValue, OutResult))
+        if (!EncodeObject(Registry, GetObjectPointer(TypedTarget->ClassValue), true, OutValue, OutResult))
         {
             return false;
         }
@@ -988,7 +1006,7 @@ bool UE::UnifiedScript::Generated::ReadProperty(
         {
             return false;
         }
-        if (!EncodeObject(Registry, TypedTarget->ObjectValue, false, OutValue, OutResult))
+        if (!EncodeObject(Registry, GetObjectPointer(TypedTarget->ObjectValue), false, OutValue, OutResult))
         {
             return false;
         }
@@ -1652,7 +1670,7 @@ bool UE::UnifiedScript::Generated::Invoke(
         }
         OutOutputValues.Reset();
         UUnifiedScriptComponent* ReturnValue = TypedTarget->GetUnifiedScriptComponent();
-        if (!EncodeObject(Registry, ReturnValue, false, OutReturnValue, OutResult))
+        if (!EncodeObject(Registry, GetObjectPointer(ReturnValue), false, OutReturnValue, OutResult))
         {
             return false;
         }
@@ -1861,7 +1879,7 @@ bool UE::UnifiedScript::Generated::Invoke(
         }
         OutOutputValues.Reset();
         UObject* ReturnValue = TypedTarget->GetScriptTarget();
-        if (!EncodeObject(Registry, ReturnValue, false, OutReturnValue, OutResult))
+        if (!EncodeObject(Registry, GetObjectPointer(ReturnValue), false, OutReturnValue, OutResult))
         {
             return false;
         }
@@ -2186,7 +2204,7 @@ bool UE::UnifiedScript::Generated::Invoke(
             return false;
         }
         UClass* ReturnValue = TypedTarget->EchoClass(Argument0);
-        if (!EncodeObject(Registry, ReturnValue, true, OutReturnValue, OutResult))
+        if (!EncodeObject(Registry, GetObjectPointer(ReturnValue), true, OutReturnValue, OutResult))
         {
             return false;
         }
@@ -2269,7 +2287,7 @@ bool UE::UnifiedScript::Generated::Invoke(
             return false;
         }
         UObject* ReturnValue = TypedTarget->EchoObject(Argument0);
-        if (!EncodeObject(Registry, ReturnValue, false, OutReturnValue, OutResult))
+        if (!EncodeObject(Registry, GetObjectPointer(ReturnValue), false, OutReturnValue, OutResult))
         {
             return false;
         }

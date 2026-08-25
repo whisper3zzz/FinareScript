@@ -55,7 +55,7 @@ $puertsRuntimeText = if (Test-Path -LiteralPath $puertsRuntimeLog) {
 $unifiedText = Get-Content -LiteralPath $unifiedLog -Raw
 $unifiedMatch = [regex]::Match(
     $unifiedText,
-    'ManagedTicks=(\d+), Shots=(\d+), Hits=(\d+), Status=([^\r\n]+)')
+    'ManagedTicks=(\d+), Shots=(\d+), Hits=(\d+), Status=([^,\r\n]+), FastCalls=(\d+), CallFrameCalls=(\d+), LegacyCalls=(\d+)')
 
 $summary = [ordered]@{
     schema = 'unifiedscript.puerts-smoke-comparison/v0.1'
@@ -82,6 +82,9 @@ $summary = [ordered]@{
         shots = if ($unifiedMatch.Success) { [int]$unifiedMatch.Groups[2].Value } else { 0 }
         hits = if ($unifiedMatch.Success) { [int]$unifiedMatch.Groups[3].Value } else { 0 }
         finalStatus = if ($unifiedMatch.Success) { $unifiedMatch.Groups[4].Value.Trim() } else { '' }
+        fastCalls = if ($unifiedMatch.Success) { [uint64]$unifiedMatch.Groups[5].Value } else { 0 }
+        callFrameCalls = if ($unifiedMatch.Success) { [uint64]$unifiedMatch.Groups[6].Value } else { 0 }
+        legacyCalls = if ($unifiedMatch.Success) { [uint64]$unifiedMatch.Groups[7].Value } else { 0 }
     }
 }
 
@@ -104,7 +107,10 @@ $unifiedPassed =
     $summary.unifiedScript.managedTicks -eq 300 -and
     $summary.unifiedScript.shots -eq 1 -and
     $summary.unifiedScript.hits -eq 1 -and
-    $summary.unifiedScript.finalStatus -eq 'Stopped'
+    $summary.unifiedScript.finalStatus -eq 'Stopped' -and
+    $summary.unifiedScript.fastCalls -gt 0 -and
+    $summary.unifiedScript.callFrameCalls -gt 0 -and
+    $summary.unifiedScript.legacyCalls -eq 0
 
 Write-Output "Puerts smoke: $puertsPassed"
 Write-Output "UnifiedScript smoke: $unifiedPassed"

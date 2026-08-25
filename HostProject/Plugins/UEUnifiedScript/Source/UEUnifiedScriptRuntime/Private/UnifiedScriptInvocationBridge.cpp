@@ -1,7 +1,7 @@
 #include "UnifiedScriptInvocationBridge.h"
 
 #include "Containers/StringConv.h"
-#include "UnifiedScriptGeneratedThunks.h"
+#include "UnifiedScriptGeneratedThunkRegistry.h"
 #include "UObject/Class.h"
 #include "UObject/StructOnScope.h"
 #include "UObject/UObjectGlobals.h"
@@ -1017,7 +1017,7 @@ bool FUnifiedScriptInvocationBridge::ReadPropertyById(
     using namespace UE::UnifiedScript::Invocation::Private;
     UObject* Object = ResolveTarget(Registry, Target, OutResult);
     if (Object == nullptr ||
-        !UE::UnifiedScript::Generated::ReadProperty(
+        !FUnifiedScriptGeneratedThunkRegistry::ReadProperty(
             Object,
             Registry,
             MemberIdValue,
@@ -1039,7 +1039,7 @@ bool FUnifiedScriptInvocationBridge::WritePropertyById(
     using namespace UE::UnifiedScript::Invocation::Private;
     UObject* Object = ResolveTarget(Registry, Target, OutResult);
     if (Object == nullptr ||
-        !UE::UnifiedScript::Generated::WriteProperty(
+        !FUnifiedScriptGeneratedThunkRegistry::WriteProperty(
             Object,
             Registry,
             MemberIdValue,
@@ -1080,7 +1080,7 @@ bool FUnifiedScriptInvocationBridge::InvokeById(
     using namespace UE::UnifiedScript::Invocation::Private;
     UObject* Object = ResolveTarget(Registry, Target, OutResult);
     if (Object == nullptr ||
-        !UE::UnifiedScript::Generated::Invoke(
+        !FUnifiedScriptGeneratedThunkRegistry::Invoke(
             Object,
             Registry,
             MemberIdValue,

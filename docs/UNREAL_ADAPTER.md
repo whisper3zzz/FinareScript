@@ -561,6 +561,10 @@ unifiedscript ue-bindings reflection.json \
   --fail-on-rejected
 ```
 
+For project-owned ABI v3 fast bindings, pass `--native-header` and a globally
+unique `--native-namespace`, compile the emitted C++ in that game module, and
+register its `FUnifiedScriptGeneratedThunkTable` for the module lifetime.
+
 Set an explicit engine when discovery is ambiguous:
 
 ```bash
