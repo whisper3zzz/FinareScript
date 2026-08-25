@@ -4,6 +4,8 @@ param(
     [string]$ComparisonRoot = 'D:\Project\UEUnifiedScriptComparison',
     [ValidateRange(1, 1000000)]
     [int]$Frames = 10000,
+    [ValidateRange(1, 9)]
+    [int]$Trials = 3,
     [switch]$SkipBuild
 )
 
@@ -26,6 +28,101 @@ foreach ($required in @($buildBat, $editorCmd, $puertsRoot, $unifiedRoot)) {
     }
 }
 New-Item -ItemType Directory -Force -Path $artifactRoot | Out-Null
+
+function Get-Median([double[]]$Values) {
+    $sorted = @($Values | Sort-Object)
+    $middle = [int][Math]::Floor($sorted.Count / 2)
+    if (($sorted.Count % 2) -eq 1) {
+        return [double]$sorted[$middle]
+    }
+    return ([double]$sorted[$middle - 1] + [double]$sorted[$middle]) / 2.0
+}
+
+if ($Trials -gt 1) {
+    $trialResults = @()
+    for ($trial = 1; $trial -le $Trials; ++$trial) {
+        $innerArguments = @{
+            EngineRoot = $EngineRoot
+            ComparisonRoot = $ComparisonRoot
+            Frames = $Frames
+            Trials = 1
+        }
+        if ($SkipBuild -or $trial -gt 1) {
+            $innerArguments.SkipBuild = $true
+        }
+        Write-Output "Running BlockBreaker gameplay trial $trial/$Trials..."
+        & $PSCommandPath @innerArguments
+        if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+        }
+        $trialResults += Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
+        Copy-Item -LiteralPath $puertsLog `
+            -Destination (Join-Path $artifactRoot "puerts-blockbreaker-trial-$trial.log") -Force
+        Copy-Item -LiteralPath $unifiedLog `
+            -Destination (Join-Path $artifactRoot "unifiedscript-blockbreaker-trial-$trial.log") -Force
+    }
+
+    $first = $trialResults[0]
+    $puertsElapsed = Get-Median @($trialResults | ForEach-Object {
+        [double]$_.puerts.elapsedMilliseconds })
+    $puertsScriptElapsed = Get-Median @($trialResults | ForEach-Object {
+        [double]$_.puerts.scriptMovementElapsedMilliseconds })
+    $unifiedElapsed = Get-Median @($trialResults | ForEach-Object {
+        [double]$_.unifiedScript.elapsedMilliseconds })
+    $result = [ordered]@{
+        schemaVersion = 'unifiedscript.blockbreaker-gameplay-comparison/v0.3'
+        generatedAtUtc = [DateTime]::UtcNow.ToString('O')
+        scenario = $first.scenario
+        frames = $Frames
+        trialCount = $Trials
+        aggregation = 'median'
+        engineRoot = $EngineRoot
+        workload = $first.workload
+        puerts = [ordered]@{
+            commit = $first.puerts.commit
+            elapsedMilliseconds = $puertsElapsed
+            framesPerSecond = $Frames * 1000.0 / $puertsElapsed
+            scriptMovementFrames = $Frames
+            scriptMovementElapsedMilliseconds = $puertsScriptElapsed
+            shots = 1
+            hits = 1
+        }
+        unifiedScript = [ordered]@{
+            commit = $first.unifiedScript.commit
+            elapsedMilliseconds = $unifiedElapsed
+            framesPerSecond = $Frames * 1000.0 / $unifiedElapsed
+            shots = 1
+            hits = 1
+            fastCalls = [uint64]$first.unifiedScript.fastCalls
+            callFrameCalls = [uint64]$first.unifiedScript.callFrameCalls
+            legacyCalls = 0
+        }
+        ratio = [ordered]@{
+            unifiedScriptToPuertsElapsed = $unifiedElapsed / $puertsElapsed
+            lowerIsBetter = $true
+        }
+        trials = @($trialResults | ForEach-Object -Begin { $index = 0 } -Process {
+            ++$index
+            [ordered]@{
+                trial = $index
+                puertsElapsedMilliseconds = [double]$_.puerts.elapsedMilliseconds
+                puertsScriptElapsedMilliseconds =
+                    [double]$_.puerts.scriptMovementElapsedMilliseconds
+                unifiedScriptElapsedMilliseconds =
+                    [double]$_.unifiedScript.elapsedMilliseconds
+                unifiedScriptToPuertsElapsed =
+                    [double]$_.unifiedScript.elapsedMilliseconds /
+                    [double]$_.puerts.elapsedMilliseconds
+            }
+        })
+    }
+    $result | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $resultPath -Encoding utf8
+    Write-Output "Puerts median:        $puertsElapsed ms ($($result.puerts.framesPerSecond) FPS)"
+    Write-Output "UnifiedScript median: $unifiedElapsed ms ($($result.unifiedScript.framesPerSecond) FPS)"
+    Write-Output "Median elapsed ratio (UnifiedScript/Puerts): $($result.ratio.unifiedScriptToPuertsElapsed)"
+    Write-Output "Result: $resultPath"
+    exit 0
+}
 
 $puertsMapHash = (Get-FileHash -LiteralPath (Join-Path $puertsRoot $mapRelativePath) `
     -Algorithm SHA256).Hash
@@ -114,10 +211,12 @@ if ($unifiedExitCode -ne 0 -or -not $unifiedMatch.Success -or
 $puertsElapsed = [double]$puertsMatch.Groups[2].Value
 $unifiedElapsed = [double]$unifiedMatch.Groups[2].Value
 $result = [ordered]@{
-    schemaVersion = 'unifiedscript.blockbreaker-gameplay-comparison/v0.2'
+    schemaVersion = 'unifiedscript.blockbreaker-gameplay-comparison/v0.3'
     generatedAtUtc = [DateTime]::UtcNow.ToString('O')
     scenario = 'BlockBreaker-TutorialMap'
     frames = $Frames
+    trialCount = 1
+    aggregation = 'single'
     engineRoot = $EngineRoot
     workload = [ordered]@{
         fixedTimestepFps = 60
