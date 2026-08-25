@@ -655,6 +655,7 @@ bool MeasureValueV3(
     }
     case EUnifiedScriptValueKind::Transform:
         return AddArenaBytesV3(ByteCursor, V3TransformByteSize);
+    case EUnifiedScriptValueKind::Struct:
     case EUnifiedScriptValueKind::Array:
     case EUnifiedScriptValueKind::Set:
     case EUnifiedScriptValueKind::Map:
@@ -870,6 +871,9 @@ bool ToNativeKindV3(
     case EUnifiedScriptValueKind::Transform:
         OutKind = EUnifiedScriptNativeValueKindV3::Transform;
         return true;
+    case EUnifiedScriptValueKind::Struct:
+        OutKind = EUnifiedScriptNativeValueKindV3::Struct;
+        return true;
     case EUnifiedScriptValueKind::Array:
         OutKind = EUnifiedScriptNativeValueKindV3::Array;
         return true;
@@ -913,7 +917,8 @@ bool ValidateResultDescriptorV3(
         return Descriptor.TypeId == 0 &&
             Descriptor.Flags == EUnifiedScriptNativeValueFlagsV3::ArenaBacked;
     }
-    if (ExpectedKind == EUnifiedScriptValueKind::Array ||
+    if (ExpectedKind == EUnifiedScriptValueKind::Struct ||
+        ExpectedKind == EUnifiedScriptValueKind::Array ||
         ExpectedKind == EUnifiedScriptValueKind::Set ||
         ExpectedKind == EUnifiedScriptValueKind::Map)
     {
@@ -1087,6 +1092,7 @@ bool DecodeValueV3(
                 ReadDoubleV3(Frame.ByteBuffer, Offset + 9 * sizeof(double)))));
         return true;
     }
+    case EUnifiedScriptNativeValueKindV3::Struct:
     case EUnifiedScriptNativeValueKindV3::Array:
     case EUnifiedScriptNativeValueKindV3::Set:
     case EUnifiedScriptNativeValueKindV3::Map:
@@ -1129,7 +1135,11 @@ bool DecodeValueV3(
             }
             Values.Add(MoveTemp(Decoded));
         }
-        if (Native.Kind == EUnifiedScriptNativeValueKindV3::Array)
+        if (Native.Kind == EUnifiedScriptNativeValueKindV3::Struct)
+        {
+            OutValue = FUnifiedScriptValue::FromStruct(MoveTemp(Values), Native.TypeId);
+        }
+        else if (Native.Kind == EUnifiedScriptNativeValueKindV3::Array)
         {
             OutValue = FUnifiedScriptValue::FromArray(MoveTemp(Values), Native.TypeId);
         }
@@ -1290,6 +1300,7 @@ bool EncodeValueV3(
         ByteCursor += V3TransformByteSize;
         break;
     }
+    case EUnifiedScriptValueKind::Struct:
     case EUnifiedScriptValueKind::Array:
     case EUnifiedScriptValueKind::Set:
     case EUnifiedScriptValueKind::Map:
@@ -1328,11 +1339,13 @@ bool EncodeValueV3(
                 &Element,
                 sizeof(Element));
         }
-        Native.Kind = Value.Kind == EUnifiedScriptValueKind::Array
-            ? EUnifiedScriptNativeValueKindV3::Array
-            : Value.Kind == EUnifiedScriptValueKind::Set
-                ? EUnifiedScriptNativeValueKindV3::Set
-                : EUnifiedScriptNativeValueKindV3::Map;
+        Native.Kind = Value.Kind == EUnifiedScriptValueKind::Struct
+            ? EUnifiedScriptNativeValueKindV3::Struct
+            : Value.Kind == EUnifiedScriptValueKind::Array
+                ? EUnifiedScriptNativeValueKindV3::Array
+                : Value.Kind == EUnifiedScriptValueKind::Set
+                    ? EUnifiedScriptNativeValueKindV3::Set
+                    : EUnifiedScriptNativeValueKindV3::Map;
         Native.Flags = EUnifiedScriptNativeValueFlagsV3::ArenaBacked;
         Native.TypeId = Value.TypeIdValue;
         Native.Payload0 = DescriptorOffset;
@@ -1564,6 +1577,7 @@ void InvokeByIdV3(
             ExpectedKind == EUnifiedScriptValueKind::Name ||
             ExpectedKind == EUnifiedScriptValueKind::String ||
             ExpectedKind == EUnifiedScriptValueKind::Text ||
+            ExpectedKind == EUnifiedScriptValueKind::Struct ||
             ExpectedKind == EUnifiedScriptValueKind::Array ||
             ExpectedKind == EUnifiedScriptValueKind::Set ||
             ExpectedKind == EUnifiedScriptValueKind::Map)
@@ -2218,7 +2232,8 @@ UEUnifiedScript_GetNativeTransportV3()
         static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::Containers) |
         static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::OutputAndReference) |
         static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::Utf8Results) |
-        static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::ContainerResults);
+        static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::ContainerResults) |
+        static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::Structs);
 
     static const FUnifiedScriptNativeTransportV3 Transport = {
         3,

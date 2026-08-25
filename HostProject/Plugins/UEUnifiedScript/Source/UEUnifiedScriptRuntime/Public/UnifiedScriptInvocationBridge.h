@@ -45,6 +45,7 @@ enum class EUnifiedScriptValueKind : uint8
     Vector = 18,
     Rotator = 19,
     Transform = 20,
+    Struct = 21,
     Array = 22,
     Set = 23,
     Map = 24,
@@ -99,6 +100,9 @@ struct UEUNIFIEDSCRIPTRUNTIME_API FUnifiedScriptValue
     static FUnifiedScriptValue FromVector(FVector Value);
     static FUnifiedScriptValue FromRotator(FRotator Value);
     static FUnifiedScriptValue FromTransform(FTransform Value);
+    static FUnifiedScriptValue FromStruct(
+        TArray<FUnifiedScriptValue> Fields,
+        uint64 TypeId);
     static FUnifiedScriptValue FromArray(
         TArray<FUnifiedScriptValue> Values,
         uint64 TypeId);
@@ -129,6 +133,9 @@ struct UEUNIFIEDSCRIPTRUNTIME_API FUnifiedScriptValue
     bool TryGetVector(FVector& OutValue) const;
     bool TryGetRotator(FRotator& OutValue) const;
     bool TryGetTransform(FTransform& OutValue) const;
+    bool TryGetStruct(
+        uint64 ExpectedTypeId,
+        TConstArrayView<FUnifiedScriptValue>& OutFields) const;
     bool TryGetArray(uint64 ExpectedTypeId, TConstArrayView<FUnifiedScriptValue>& OutValues) const;
     bool TryGetSet(uint64 ExpectedTypeId, TConstArrayView<FUnifiedScriptValue>& OutValues) const;
     bool TryGetMap(

@@ -68,9 +68,9 @@ public sealed class UnrealBindingCoverageTests
         UnrealBindingCoverageReport report = UnrealBindingCoverageReport.Create(manifest, managed, native);
 
         Assert.Equal(5, report.Summary.MemberCount);
-        Assert.Equal(1, report.Summary.NativeThunkCount);
+        Assert.Equal(2, report.Summary.NativeThunkCount);
         Assert.Equal(1, report.Summary.ReflectionFallbackCount);
-        Assert.Equal(3, report.Summary.RejectedCount);
+        Assert.Equal(2, report.Summary.RejectedCount);
         Assert.Equal(
             UnrealBindingDisposition.ReflectionFallback,
             Assert.Single(report.Entries, static item => item.Path.EndsWith(":FallbackValue")).Disposition);

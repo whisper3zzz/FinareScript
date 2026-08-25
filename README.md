@@ -143,6 +143,9 @@ The repository currently implements:
 - strict project-owned Unreal API contracts that atomically generate one
   allowlisted C# surface, Native Thunk table, coverage report, and typed visual
   node catalog, with Script Assets selecting that catalog for Slate;
+- generated static-service calls, World-scoped synchronous resource retention,
+  Actor spawning, and field-addressable reflected UStruct values whose same
+  contract emits C# records, native codecs, and visual Make/Break nodes;
 - World-safe Actor overlap events, arbitrary reflected multicast Event Entries,
   and game-thread latent `DelayAsync`, all canceled or unbound before reload,
   EndPlay, or World teardown;
@@ -350,7 +353,7 @@ contract; control flow and structural construction remain compiler-owned.
 
 The current runtime performance tranche activates ABI v3 for fixed scalars,
 enums, generation-safe object/class handles, vector/rotator, transform, UTF-8
-text, recursive arrays/sets/maps, and return plus `out`/`ref`. Generated wrappers
+  text, reflected structs, recursive arrays/sets/maps, and return plus `out`/`ref`. Generated wrappers
 use a synchronous caller-owned frame with zero steady-state allocation for the
 fixed call path. Variable-size overflow is staged in the retained World context;
 the managed retry expands the arena and copies the staged result without

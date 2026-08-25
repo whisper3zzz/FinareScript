@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Collections;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -306,6 +307,16 @@ internal static class UnrealNativeValueCodecV3
             encoded.Payload1 = TransformByteSize;
             return true;
         }
+        if (TryGetStructShape(typeof(T), out UnrealStructShape structShape))
+        {
+            return TryEncodeStruct(
+                value,
+                structShape,
+                arena,
+                ref byteCount,
+                out encoded,
+                out requiredCapability);
+        }
         if (TryGetContainerShape(
                 typeof(T),
                 out UnrealNativeValueKindV3 containerKind,
@@ -416,6 +427,15 @@ internal static class UnrealNativeValueCodecV3
             descriptor.Payload1 = TransformByteSize;
             requiredCapability = UnrealNativeCapabilitiesV3.Transform;
         }
+        else if (TryGetStructShape(type, out UnrealStructShape structShape))
+        {
+            descriptor.Kind = UnrealNativeValueKindV3.Struct;
+            descriptor.Flags = UnrealNativeValueFlagsV3.ArenaBacked;
+            descriptor.TypeId = UnrealTypeIdV3.FromPath(structShape.Attribute.Path);
+            descriptor.Payload2 = (ulong)structShape.Fields.Length;
+            descriptor.Payload3 = UnrealNativeAbiV3.ValueSize;
+            requiredCapability = UnrealNativeCapabilitiesV3.Structs;
+        }
         else if (TryGetContainerShape(
                      type,
                      out UnrealNativeValueKindV3 containerKind,
@@ -518,6 +538,11 @@ internal static class UnrealNativeValueCodecV3
                     ReadDouble(arena, offset + 8 * sizeof(double)),
                     ReadDouble(arena, offset + 9 * sizeof(double)))), out decoded);
         }
+        if (TryDecodeStruct(typeof(T), value, arena, byteCount, 0, out object? structValue))
+        {
+            decoded = (T)structValue!;
+            return true;
+        }
         if (TryDecodeContainer(
                 typeof(T),
                 value,
@@ -617,6 +642,10 @@ internal static class UnrealNativeValueCodecV3
                     ReadDouble(arena, offset + 8 * sizeof(double)),
                     ReadDouble(arena, offset + 9 * sizeof(double))));
         }
+        else if (TryDecodeStruct(type, value, arena, byteCount, 0, out object? structValue))
+        {
+            decoded = structValue;
+        }
         else if (TryDecodeContainer(type, value, arena, byteCount, 0, out object? container))
         {
             decoded = container;
@@ -648,6 +677,147 @@ internal static class UnrealNativeValueCodecV3
         encoded.Flags = UnrealNativeValueFlagsV3.ArenaBacked;
         encoded.Payload0 = (ulong)offset;
         encoded.Payload1 = (ulong)written;
+        return true;
+    }
+
+    private sealed record UnrealStructShape(
+        UnrealStructAttribute Attribute,
+        PropertyInfo[] Fields,
+        ConstructorInfo Constructor);
+
+    private static bool TryGetStructShape(Type type, out UnrealStructShape shape)
+    {
+        shape = null!;
+        UnrealStructAttribute? attribute = type.GetCustomAttribute<UnrealStructAttribute>();
+        if (attribute is null || !type.IsValueType)
+        {
+            return false;
+        }
+        var indexedFields = type.GetProperties(BindingFlags.Instance | BindingFlags.Public)
+            .Select(static property => (
+                Property: property,
+                Field: property.GetCustomAttribute<UnrealStructFieldAttribute>()))
+            .Where(static item => item.Field is not null)
+            .OrderBy(static item => item.Field!.Index)
+            .ToArray();
+        if (indexedFields.Length == 0 || indexedFields
+                .Select(static item => item.Field!.Index)
+                .Where((index, position) => index != position)
+                .Any())
+        {
+            return false;
+        }
+        PropertyInfo[] fields = indexedFields.Select(static item => item.Property).ToArray();
+        ConstructorInfo? constructor = type.GetConstructor(
+            fields.Select(static field => field.PropertyType).ToArray());
+        if (constructor is null || fields.Any(static field => !field.CanRead))
+        {
+            return false;
+        }
+        shape = new UnrealStructShape(attribute, fields, constructor);
+        return true;
+    }
+
+    private static bool TryEncodeStruct(
+        object? value,
+        UnrealStructShape shape,
+        Span<byte> arena,
+        ref int byteCount,
+        out UnrealNativeValueV3 encoded,
+        out UnrealNativeCapabilitiesV3 requiredCapability)
+    {
+        encoded = default;
+        requiredCapability = UnrealNativeCapabilitiesV3.Structs;
+        if (value is null)
+        {
+            return false;
+        }
+        int descriptorBytes;
+        try
+        {
+            descriptorBytes = checked(shape.Fields.Length * UnrealNativeAbiV3.ValueSize);
+        }
+        catch (OverflowException)
+        {
+            return false;
+        }
+        if (byteCount < 0 || descriptorBytes > arena.Length - byteCount)
+        {
+            return false;
+        }
+        int descriptorOffset = byteCount;
+        byteCount += descriptorBytes;
+        for (int index = 0; index < shape.Fields.Length; index++)
+        {
+            PropertyInfo field = shape.Fields[index];
+            if (!TryEncodeDynamic(
+                    field.GetValue(value),
+                    field.PropertyType,
+                    arena,
+                    ref byteCount,
+                    out UnrealNativeValueV3 cell,
+                    out UnrealNativeCapabilitiesV3 fieldCapability))
+            {
+                return false;
+            }
+            requiredCapability |= fieldCapability;
+            WriteCell(arena, descriptorOffset, index, cell);
+        }
+        encoded.Kind = UnrealNativeValueKindV3.Struct;
+        encoded.Flags = UnrealNativeValueFlagsV3.ArenaBacked;
+        encoded.TypeId = UnrealTypeIdV3.FromPath(shape.Attribute.Path);
+        encoded.Payload0 = (ulong)descriptorOffset;
+        encoded.Payload1 = (ulong)descriptorBytes;
+        encoded.Payload2 = (ulong)shape.Fields.Length;
+        encoded.Payload3 = UnrealNativeAbiV3.ValueSize;
+        return encoded.TypeId != 0;
+    }
+
+    private static bool TryDecodeStruct(
+        Type type,
+        in UnrealNativeValueV3 value,
+        ReadOnlySpan<byte> arena,
+        int byteCount,
+        int depth,
+        out object? decoded)
+    {
+        const int maxDepth = 16;
+        decoded = null;
+        if (depth > maxDepth ||
+            !TryGetStructShape(type, out UnrealStructShape shape) ||
+            value.Kind != UnrealNativeValueKindV3.Struct ||
+            value.Flags != UnrealNativeValueFlagsV3.ArenaBacked ||
+            value.TypeId != UnrealTypeIdV3.FromPath(shape.Attribute.Path) ||
+            value.Payload2 != (ulong)shape.Fields.Length ||
+            value.Payload3 != UnrealNativeAbiV3.ValueSize ||
+            byteCount < 0 || byteCount > arena.Length)
+        {
+            return false;
+        }
+        int descriptorBytes = checked(shape.Fields.Length * UnrealNativeAbiV3.ValueSize);
+        if (value.Payload0 > (ulong)byteCount ||
+            value.Payload1 != (ulong)descriptorBytes ||
+            value.Payload1 > (ulong)byteCount - value.Payload0)
+        {
+            return false;
+        }
+        int descriptorOffset = checked((int)value.Payload0);
+        object?[] arguments = new object?[shape.Fields.Length];
+        for (int index = 0; index < shape.Fields.Length; index++)
+        {
+            UnrealNativeValueV3 cell = ReadCell(arena, descriptorOffset, index);
+            if (!TryDecodeNested(
+                    shape.Fields[index].PropertyType,
+                    cell,
+                    arena,
+                    byteCount,
+                    depth + 1,
+                    out arguments[index]))
+            {
+                return false;
+            }
+        }
+        decoded = shape.Constructor.Invoke(arguments);
         return true;
     }
 
@@ -924,6 +1094,16 @@ internal static class UnrealNativeValueCodecV3
             encoded.Payload1 = TransformByteSize;
             return true;
         }
+        if (TryGetStructShape(type, out UnrealStructShape structShape))
+        {
+            return TryEncodeStruct(
+                value,
+                structShape,
+                arena,
+                ref byteCount,
+                out encoded,
+                out requiredCapability);
+        }
         if (TryGetContainerShape(
                 type,
                 out UnrealNativeValueKindV3 containerKind,
@@ -1015,7 +1195,10 @@ internal static class UnrealNativeValueCodecV3
             type == typeof(UnrealClassHandle) ? "UClass*" :
             type == typeof(UnrealVector) ? "FVector" :
             type == typeof(UnrealRotator) ? "FRotator" :
-            type == typeof(UnrealTransform) ? "FTransform" : string.Empty;
+            type == typeof(UnrealTransform) ? "FTransform" :
+            TryGetStructShape(type, out UnrealStructShape structShape)
+                ? structShape.Attribute.NativeName
+                : string.Empty;
         if (name.Length != 0)
         {
             return true;
@@ -1168,6 +1351,10 @@ internal static class UnrealNativeValueCodecV3
         int depth,
         out object? decoded)
     {
+        if (TryGetStructShape(type, out _))
+        {
+            return TryDecodeStruct(type, value, arena, byteCount, depth, out decoded);
+        }
         if (TryGetContainerShape(type, out _, out _, out _, out _, out _))
         {
             return TryDecodeContainer(type, value, arena, byteCount, depth, out decoded);

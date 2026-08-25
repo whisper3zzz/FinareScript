@@ -113,6 +113,15 @@ FUnifiedScriptObjectHandle UUnifiedScriptWorldSubsystem::RegisterObject(
     return ObjectRegistry->RegisterObject(Object, OutResult);
 }
 
+void UUnifiedScriptWorldSubsystem::RetainLoadedResource(UObject* Resource)
+{
+    check(IsInGameThread());
+    if (IsNativeRuntimeReady() && IsValid(Resource))
+    {
+        LoadedResources.AddUnique(Resource);
+    }
+}
+
 bool UUnifiedScriptWorldSubsystem::ReleaseObject(
     FUnifiedScriptObjectHandle Handle,
     FUnifiedScriptObjectHandleResult& OutResult)
@@ -317,5 +326,6 @@ void UUnifiedScriptWorldSubsystem::ShutdownNativeRuntime()
         NativeContext = nullptr;
     }
     WorldHostId = 0;
+    LoadedResources.Reset();
     HostState = EUnifiedScriptWorldHostState::Stopped;
 }

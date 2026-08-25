@@ -50,8 +50,24 @@ public sealed class UnrealBindingGenerator
         source.AppendLine();
 
         var emittedNames = new HashSet<string>(StringComparer.Ordinal);
+        var managedTypeNames = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (UnrealReflectedType type in normalized.Types)
         {
+            string candidate = type.Kind == UnrealReflectedTypeKind.Struct
+                ? ToIdentifier(TrimNativeStructPrefix(type.NativeName))
+                : ToIdentifier(type.Name);
+            managedTypeNames.Add(
+                type.Path,
+                MakeUniqueTypeName(candidate, type.Path, emittedNames));
+        }
+
+        foreach (UnrealReflectedType type in normalized.Types)
+        {
+            if (type.Kind == UnrealReflectedTypeKind.Struct)
+            {
+                EmitStruct(source, type, managedTypeNames[type.Path], managedTypeNames, diagnostics);
+                continue;
+            }
             if (type.Kind != UnrealReflectedTypeKind.Class)
             {
                 diagnostics.Add(new UnrealBindingDiagnostic(
@@ -61,8 +77,7 @@ public sealed class UnrealBindingGenerator
                 continue;
             }
 
-            string className = MakeUniqueTypeName(ToIdentifier(type.Name), type.Path, emittedNames);
-            EmitClass(source, type, className, diagnostics);
+            EmitClass(source, type, managedTypeNames[type.Path], managedTypeNames, diagnostics);
         }
 
         return new UnrealBindingGenerationResult(
@@ -77,12 +92,18 @@ public sealed class UnrealBindingGenerator
         StringBuilder source,
         UnrealReflectedType type,
         string className,
+        IReadOnlyDictionary<string, string> managedTypeNames,
         ICollection<UnrealBindingDiagnostic> diagnostics)
     {
         source.Append("[global::UnifiedScript.Unreal.UnrealTypeAttribute(")
             .Append(Literal(type.Path)).AppendLine(")]");
+        bool staticService = type.Properties.Count == 0 && type.Delegates.Count == 0 &&
+            type.Functions.Count > 0 && type.Functions.All(static function => function.Traits.Static);
         source.Append("public sealed partial class ").Append(className)
-            .AppendLine(" : global::UnifiedScript.Unreal.UnrealObject");
+            .Append(staticService
+                ? " : global::UnifiedScript.Unreal.UnrealStaticService"
+                : " : global::UnifiedScript.Unreal.UnrealObject")
+            .AppendLine();
         source.AppendLine("{");
         source.Append("    public ").Append(className)
             .AppendLine("(");
@@ -95,7 +116,7 @@ public sealed class UnrealBindingGenerator
         var memberNames = new HashSet<string>(StringComparer.Ordinal);
         foreach (UnrealReflectedProperty property in type.Properties)
         {
-            string? managedType = GetManagedType(property.Type);
+            string? managedType = GetManagedType(property.Type, managedTypeNames);
             if (managedType is null)
             {
                 diagnostics.Add(new UnrealBindingDiagnostic(
@@ -137,9 +158,9 @@ public sealed class UnrealBindingGenerator
                 continue;
             }
 
-            string? returnType = GetManagedType(reflectedDelegate.ReturnType);
+            string? returnType = GetManagedType(reflectedDelegate.ReturnType, managedTypeNames);
             string? unsupportedParameter = reflectedDelegate.Parameters
-                .FirstOrDefault(parameter => GetManagedType(parameter.Type) is null)
+                .FirstOrDefault(parameter => GetManagedType(parameter.Type, managedTypeNames) is null)
                 ?.Name;
             string? outputParameter = reflectedDelegate.Parameters
                 .FirstOrDefault(parameter =>
@@ -175,7 +196,7 @@ public sealed class UnrealBindingGenerator
             source.AppendLine();
             source.Append("    public delegate ").Append(returnType).Append(' ')
                 .Append(handlerName).Append('(');
-            EmitParameterList(source, reflectedDelegate.Parameters, parameterNames);
+            EmitParameterList(source, reflectedDelegate.Parameters, parameterNames, managedTypeNames);
             source.AppendLine(");");
 
             source.AppendLine();
@@ -192,7 +213,7 @@ public sealed class UnrealBindingGenerator
             {
                 UnrealReflectedParameter parameter = reflectedDelegate.Parameters[index];
                 source.Append("            new(").Append(Literal(parameter.Name)).Append(", typeof(")
-                    .Append(GetManagedType(parameter.Type)).Append("), ")
+                    .Append(GetManagedType(parameter.Type, managedTypeNames)).Append("), ")
                     .Append("global::UnifiedScript.Unreal.UnrealParameterDirection.")
                     .Append(parameter.Direction).AppendLine("),");
             }
@@ -209,18 +230,9 @@ public sealed class UnrealBindingGenerator
 
         foreach (UnrealReflectedFunction function in type.Functions)
         {
-            if (function.Traits.Static)
-            {
-                diagnostics.Add(new UnrealBindingDiagnostic(
-                    "USUE2003",
-                    "Static UFunction invocation is deferred until the class-default-object bridge exists.",
-                    function.Path));
-                continue;
-            }
-
-            string? returnType = GetManagedType(function.ReturnType);
+            string? returnType = GetManagedType(function.ReturnType, managedTypeNames);
             string? unsupportedParameter = function.Parameters
-                .FirstOrDefault(parameter => GetManagedType(parameter.Type) is null)
+                .FirstOrDefault(parameter => GetManagedType(parameter.Type, managedTypeNames) is null)
                 ?.Name;
             if (returnType is null || unsupportedParameter is not null)
             {
@@ -237,7 +249,7 @@ public sealed class UnrealBindingGenerator
             string[] parameterNames = CreateParameterNames(function.Parameters);
             source.AppendLine();
             source.Append("    public ").Append(returnType).Append(' ').Append(memberName).Append('(');
-            EmitParameterList(source, function.Parameters, parameterNames);
+            EmitParameterList(source, function.Parameters, parameterNames, managedTypeNames);
 
             source.AppendLine(")");
             if (function.Parameters.Count > 4 ||
@@ -248,7 +260,8 @@ public sealed class UnrealBindingGenerator
                     source,
                     function,
                     returnType,
-                    parameterNames);
+                    parameterNames,
+                    managedTypeNames);
                 continue;
             }
             source.Append("        => ");
@@ -259,7 +272,7 @@ public sealed class UnrealBindingGenerator
                 {
                     foreach (UnrealReflectedParameter parameter in function.Parameters)
                     {
-                        source.Append(", ").Append(GetManagedType(parameter.Type));
+                        source.Append(", ").Append(GetManagedType(parameter.Type, managedTypeNames));
                     }
                 }
                 source.Append('>');
@@ -276,7 +289,7 @@ public sealed class UnrealBindingGenerator
                         {
                             source.Append(", ");
                         }
-                        source.Append(GetManagedType(function.Parameters[index].Type));
+                        source.Append(GetManagedType(function.Parameters[index].Type, managedTypeNames));
                     }
                     source.Append('>');
                 }
@@ -296,10 +309,56 @@ public sealed class UnrealBindingGenerator
         source.AppendLine();
     }
 
+    private static void EmitStruct(
+        StringBuilder source,
+        UnrealReflectedType type,
+        string structName,
+        IReadOnlyDictionary<string, string> managedTypeNames,
+        ICollection<UnrealBindingDiagnostic> diagnostics)
+    {
+        var fields = new List<(UnrealReflectedProperty Property, string ManagedType, string Name)>();
+        var memberNames = new HashSet<string>(StringComparer.Ordinal);
+        foreach (UnrealReflectedProperty property in type.Properties)
+        {
+            string? managedType = GetManagedType(property.Type, managedTypeNames);
+            if (managedType is null)
+            {
+                diagnostics.Add(new UnrealBindingDiagnostic(
+                    "USUE2002",
+                    $"Struct field type '{property.Type.NativeName}' is not supported by binding v0.2.",
+                    property.Path));
+                continue;
+            }
+            fields.Add((
+                property,
+                managedType,
+                MakeUniqueMemberName(ToIdentifier(property.Name), property.Path, memberNames)));
+        }
+
+        source.Append("[global::UnifiedScript.Unreal.UnrealStructAttribute(")
+            .Append(Literal(type.Path)).Append(", ").Append(Literal(type.NativeName)).AppendLine(")]");
+        source.AppendLine("[global::UnifiedScript.Unreal.UnrealValueAttribute]");
+        source.Append("public readonly record struct ").Append(structName).AppendLine("(");
+        for (int index = 0; index < fields.Count; index++)
+        {
+            var field = fields[index];
+            source.Append("    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(")
+                .Append(index).Append(")] ")
+                .Append(field.ManagedType).Append(' ').Append(field.Name)
+                .AppendLine(index + 1 == fields.Count ? ");" : ",");
+        }
+        if (fields.Count == 0)
+        {
+            source.AppendLine(");");
+        }
+        source.AppendLine();
+    }
+
     private static void EmitParameterList(
         StringBuilder source,
         IReadOnlyList<UnrealReflectedParameter> parameters,
-        IReadOnlyList<string> parameterNames)
+        IReadOnlyList<string> parameterNames,
+        IReadOnlyDictionary<string, string> managedTypeNames)
     {
         for (int index = 0; index < parameters.Count; index++)
         {
@@ -309,7 +368,7 @@ public sealed class UnrealBindingGenerator
             }
 
             source.Append(DirectionModifier(parameters[index].Direction))
-                .Append(GetManagedType(parameters[index].Type))
+                .Append(GetManagedType(parameters[index].Type, managedTypeNames))
                 .Append(' ').Append(parameterNames[index]);
         }
     }
@@ -318,7 +377,8 @@ public sealed class UnrealBindingGenerator
         StringBuilder source,
         UnrealReflectedFunction function,
         string returnType,
-        IReadOnlyList<string> parameterNames)
+        IReadOnlyList<string> parameterNames,
+        IReadOnlyDictionary<string, string> managedTypeNames)
     {
         string resultName = "__unifiedScriptResult";
         while (parameterNames.Contains(resultName, StringComparer.Ordinal))
@@ -335,7 +395,7 @@ public sealed class UnrealBindingGenerator
         for (int index = 0; index < function.Parameters.Count; index++)
         {
             UnrealReflectedParameter parameter = function.Parameters[index];
-            string managedType = GetManagedType(parameter.Type)!;
+            string managedType = GetManagedType(parameter.Type, managedTypeNames)!;
             source.Append("                new(typeof(").Append(managedType).Append("), ")
                 .Append("global::UnifiedScript.Unreal.UnrealParameterDirection.")
                 .Append(parameter.Direction).Append(", ")
@@ -355,7 +415,7 @@ public sealed class UnrealBindingGenerator
                 continue;
             }
             source.Append("        ").Append(parameterNames[index]).Append(" = (")
-                .Append(GetManagedType(parameter.Type)).Append(')')
+                .Append(GetManagedType(parameter.Type, managedTypeNames)).Append(')')
                 .Append(resultName).Append(".Outputs[").Append(outputIndex++)
                 .AppendLine("]!;");
         }
@@ -387,7 +447,9 @@ public sealed class UnrealBindingGenerator
             .ToArray();
     }
 
-    private static string? GetManagedType(UnrealTypeReference type) => type.Kind switch
+    private static string? GetManagedType(
+        UnrealTypeReference type,
+        IReadOnlyDictionary<string, string> managedTypeNames) => type.Kind switch
     {
         UnrealValueKind.Void => "void",
         UnrealValueKind.Boolean => "bool",
@@ -415,16 +477,21 @@ public sealed class UnrealBindingGenerator
             "global::UnifiedScript.Unreal.UnrealRotator",
         UnrealValueKind.Struct when type.TypePath == "/Script/CoreUObject.Transform" =>
             "global::UnifiedScript.Unreal.UnrealTransform",
-        UnrealValueKind.Array when GetManagedType(type.ElementType!) is string element =>
+        UnrealValueKind.Struct when type.TypePath is not null &&
+            managedTypeNames.TryGetValue(type.TypePath, out string? structName) => structName,
+        UnrealValueKind.Array when GetManagedType(type.ElementType!, managedTypeNames) is string element =>
             $"global::System.Collections.Generic.IReadOnlyList<{element}>",
-        UnrealValueKind.Set when GetManagedType(type.ElementType!) is string element =>
+        UnrealValueKind.Set when GetManagedType(type.ElementType!, managedTypeNames) is string element =>
             $"global::System.Collections.Generic.IReadOnlySet<{element}>",
         UnrealValueKind.Map
-            when GetManagedType(type.KeyType!) is string key &&
-                 GetManagedType(type.ValueType!) is string value =>
+            when GetManagedType(type.KeyType!, managedTypeNames) is string key &&
+                 GetManagedType(type.ValueType!, managedTypeNames) is string value =>
             $"global::System.Collections.Generic.IReadOnlyDictionary<{key}, {value}>",
         _ => null,
     };
+
+    private static string TrimNativeStructPrefix(string nativeName) =>
+        nativeName.Length > 1 && nativeName[0] == 'F' ? nativeName[1..] : nativeName;
 
     private static string MakeUniqueTypeName(string candidate, string path, ISet<string> used) =>
         used.Add(candidate) ? candidate : AddStableSuffix(candidate, path, used);

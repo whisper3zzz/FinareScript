@@ -644,6 +644,13 @@ FUnifiedScriptValue FUnifiedScriptValue::FromArray(
     return FromContainer(EUnifiedScriptValueKind::Array, MoveTemp(Values), TypeId);
 }
 
+FUnifiedScriptValue FUnifiedScriptValue::FromStruct(
+    TArray<FUnifiedScriptValue> Fields,
+    uint64 TypeId)
+{
+    return FromContainer(EUnifiedScriptValueKind::Struct, MoveTemp(Fields), TypeId);
+}
+
 FUnifiedScriptValue FUnifiedScriptValue::FromSet(
     TArray<FUnifiedScriptValue> Values,
     uint64 TypeId)
@@ -778,6 +785,13 @@ bool FUnifiedScriptValue::TryGetArray(
     TConstArrayView<FUnifiedScriptValue>& OutValues) const
 {
     return TryGetContainer(*this, EUnifiedScriptValueKind::Array, ExpectedTypeId, false, OutValues);
+}
+
+bool FUnifiedScriptValue::TryGetStruct(
+    uint64 ExpectedTypeId,
+    TConstArrayView<FUnifiedScriptValue>& OutFields) const
+{
+    return TryGetContainer(*this, EUnifiedScriptValueKind::Struct, ExpectedTypeId, false, OutFields);
 }
 
 bool FUnifiedScriptValue::TryGetSet(

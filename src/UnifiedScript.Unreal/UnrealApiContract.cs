@@ -271,8 +271,51 @@ public static class UnrealApiNodeCatalogGenerator
                 UnrealValueKind.Object,
                 type.NativeName + "*",
                 type.Path);
+            if (type.Kind == UnrealReflectedTypeKind.Struct)
+            {
+                UnrealTypeReference structType = new(
+                    UnrealValueKind.Struct,
+                    type.NativeName,
+                    type.Path);
+                nodes.Add(CreateNode(
+                    $"ue.struct.make|{managedName}",
+                    type.Path + ":__Make",
+                    "structMake",
+                    $"Make {type.Name}",
+                    category + "|Structs",
+                    $"Construct {type.Name} from reflected fields.",
+                    pure: true,
+                    [
+                        .. type.Properties.Select(property => new UnrealApiNodePin(
+                            property.Name,
+                            "input",
+                            "data",
+                            property.Type)),
+                        new("Value", "output", "data", structType),
+                    ]));
+                nodes.Add(CreateNode(
+                    $"ue.struct.break|{managedName}",
+                    type.Path + ":__Break",
+                    "structBreak",
+                    $"Break {type.Name}",
+                    category + "|Structs",
+                    $"Expose the reflected fields of {type.Name}.",
+                    pure: true,
+                    [
+                        new("Value", "input", "data", structType),
+                        .. type.Properties.Select(property => new UnrealApiNodePin(
+                            property.Name,
+                            "output",
+                            "data",
+                            property.Type)),
+                    ]));
+            }
             foreach (UnrealReflectedProperty property in type.Properties)
             {
+                if (type.Kind == UnrealReflectedTypeKind.Struct)
+                {
+                    continue;
+                }
                 if (property.Access.Readable)
                 {
                     nodes.Add(CreateNode(
@@ -313,7 +356,16 @@ public static class UnrealApiNodeCatalogGenerator
                 {
                     pins.Add(new("In", "input", "control", null));
                 }
-                pins.Add(new("Target", "input", "data", receiverType));
+                pins.Add(new(
+                    function.Traits.Static ? "Context" : "Target",
+                    "input",
+                    "data",
+                    function.Traits.Static
+                        ? new UnrealTypeReference(
+                            UnrealValueKind.Object,
+                            "UObject*",
+                            "/Script/CoreUObject.Object")
+                        : receiverType));
                 foreach (UnrealReflectedParameter parameter in function.Parameters)
                 {
                     if (parameter.Direction != UnrealParameterDirection.Output)

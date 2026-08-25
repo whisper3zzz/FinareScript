@@ -66,7 +66,8 @@ public sealed record UnrealTypeReference(
     string? TypePath = null,
     UnrealTypeReference? ElementType = null,
     UnrealTypeReference? KeyType = null,
-    UnrealTypeReference? ValueType = null);
+    UnrealTypeReference? ValueType = null,
+    string? HeaderPath = null);
 
 public sealed record UnrealTypeTraits(
     bool Abstract,

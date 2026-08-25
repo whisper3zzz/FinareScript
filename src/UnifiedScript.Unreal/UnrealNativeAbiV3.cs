@@ -67,6 +67,7 @@ public enum UnrealNativeCapabilitiesV3 : ulong
     OutputAndReference = 1UL << 7,
     Utf8Results = 1UL << 8,
     ContainerResults = 1UL << 9,
+    Structs = 1UL << 10,
 }
 
 /// <summary>

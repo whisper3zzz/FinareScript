@@ -85,11 +85,18 @@ retain the specialized fast path.
 
 ## BlockBreaker slice
 
-BlockBreaker selects six native types and 34 members. Its C# player now calls
-generated `Actor`, `Pawn`, `SceneComponent`, and `CameraComponent` wrappers for
-movement, look, camera queries, attachment, and camera policy. Eleven hand-authored
-Character facade members and four compatibility fields were removed. Actor
-spawning, resource loading, traces, effects, and damage remain in the thin
-native host because they still require static/world operations or unsupported
-complex structs. Those are the next API-coverage targets, not hidden migration
-successes.
+BlockBreaker selects ten native types and 43 members. Its C# gameplay uses
+generated `Actor`, `Pawn`, `SceneComponent`, `CameraComponent`,
+`StaticMeshComponent`, `GameplayStatics`, and `UnifiedScriptWorldLibrary`
+wrappers. The World service loads assets/classes, retains loaded resources for
+the World-host lifetime, spawns Actors, and executes a visibility trace. The
+selected `FHitResult` fields generate one typed C# record plus native field
+codecs and visual Make/Break Struct nodes; net-quantized vector fields normalize
+to the existing FVector ABI.
+
+The migrated rifle therefore performs mesh loading/assignment, class loading,
+spawn, trace, hit-result access, emitter spawn, and damage without gameplay
+facade methods. Seven Gun facade functions and their transient cached hit/effect
+state were deleted. The exact 10,000-frame comparison executes one complete
+midpoint shot/hit and reports 120,030 generated ABI v3 calls with zero legacy
+calls.

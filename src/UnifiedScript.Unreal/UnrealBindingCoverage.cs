@@ -60,6 +60,22 @@ public sealed record UnrealBindingCoverageReport(
         var entries = new List<UnrealBindingCoverageEntry>();
         foreach (UnrealReflectedType type in normalized.Types)
         {
+            if (type.Kind == UnrealReflectedTypeKind.Struct)
+            {
+                foreach (UnrealReflectedProperty field in type.Properties)
+                {
+                    AddMember(
+                        entries,
+                        type.Path,
+                        "structField",
+                        field.Path,
+                        supportsReflectionFallback: false,
+                        "Legacy reflection fallback cannot marshal generated complex structs.",
+                        managedDiagnostics,
+                        nativeDiagnostics);
+                }
+                continue;
+            }
             if (type.Kind != UnrealReflectedTypeKind.Class)
             {
                 AddEntry(

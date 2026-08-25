@@ -1,5 +1,27 @@
 namespace UnifiedScript.Unreal;
 
+/// <summary>Identifies a generated, field-addressable UScriptStruct value.</summary>
+[AttributeUsage(AttributeTargets.Struct, AllowMultiple = false, Inherited = false)]
+public sealed class UnrealStructAttribute(string path, string nativeName) : Attribute
+{
+    public string Path { get; } = string.IsNullOrWhiteSpace(path)
+        ? throw new ArgumentException("A canonical Unreal struct path is required.", nameof(path))
+        : path;
+
+    public string NativeName { get; } = string.IsNullOrWhiteSpace(nativeName)
+        ? throw new ArgumentException("A native Unreal struct name is required.", nameof(nativeName))
+        : nativeName;
+}
+
+/// <summary>Preserves the canonical reflected field order used by ABI v3.</summary>
+[AttributeUsage(AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
+public sealed class UnrealStructFieldAttribute(int index) : Attribute
+{
+    public int Index { get; } = index >= 0
+        ? index
+        : throw new ArgumentOutOfRangeException(nameof(index));
+}
+
 /// <summary>Strongly typed FName value used by generated Unreal bindings.</summary>
 [UnrealValue]
 public readonly record struct UnrealName

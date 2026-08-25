@@ -277,6 +277,11 @@ public/protected/private access of exported properties and functions. The same
 `ue-bindings` command accepts `--native-out` and deterministically emits a C++
 translation unit keyed by the exact Member IDs used in managed wrappers.
 
+Type references also carry the defining Unreal header. Generated static
+services can therefore decode concrete object/class parameters such as
+`UParticleSystem*` and `TSubclassOf<UDamageType>` without a hand-maintained
+include list or an unsafe generic UObject cast.
+
 The generated dispatcher now covers all scalar widths plus `FString`, `FName`,
 `FText`, reflected enums, `FVector`, `FRotator`, and `FTransform`. It casts the
 already handle-validated UObject once and then accesses the native field or
@@ -309,7 +314,7 @@ in `UNREAL_ABI_V3.md`. Managed and native layouts are locked at 48-byte values,
 72-byte frames, a frozen 64-byte table prefix, and a current 72-byte export
 whose optional suffix carries the generated `int32(int32, int32)` scalar lane. The live export now
 advertises fixed scalars, enums, object/class handles, vector/rotator, transform,
-UTF-8 text, recursive arrays/sets/maps, and return plus `out`/`ref`; generated
+UTF-8 text, reflected structs, recursive arrays/sets/maps, and return plus `out`/`ref`; generated
 calls use a strongly typed span/stack frame whose fixed path has zero
 steady-state managed allocation. Variable-size overflow is retained by the
 World context and copied on an automatic expanded-arena retry without a second
@@ -534,6 +539,30 @@ stored per World and returned to native as UTF-8, so `LastScriptError` contains
 the operation and managed stack instead of only a status code. The live UE 5.8
 gate proves a failed `MissingScript` reload reports `ReloadScript` plus the
 `TypeLoadException` while preserving the prior generation.
+
+## Phase B.23 static services, World resources, and reflected structs
+
+Blueprint function libraries now generate as `UnrealStaticService` wrappers.
+Their managed instance retains the ordinary World context handle, while the
+native thunk invokes the static C++ function directly and never casts that
+context to the library class. `UUnifiedScriptWorldLibrary` supplies typed
+object/class loading, Actor spawn, and visibility tracing. Synchronously loaded
+objects are retained by the World subsystem until teardown, so a managed handle
+cannot become stale during Unreal GC while gameplay still owns the resource.
+
+ABI v3 `Struct` cells carry an arena-backed ordered field-cell block keyed by
+the canonical struct TypeId. The contract generator emits a readonly C# record
+with stable field indices, matching native encode/decode functions, and visual
+Make/Break Struct nodes. The exporter includes public native struct fields,
+recursively discovers referenced structs, and normalizes FVector-derived
+network serialization types to the FVector ABI.
+
+The BlockBreaker product slice exercises the whole path with generated
+`LoadObjectByPath`, `LoadClassByPath`, `SpawnActor`, `LineTraceSingle`,
+`FHitResult`, `StaticMeshComponent.SetStaticMesh`,
+`GameplayStatics.SpawnEmitterAtLocation`, and `GameplayStatics.ApplyDamage`.
+Its Gun host no longer contains resource, trace, cached-hit, effect, or damage
+facade functions.
 
 The performance gate builds managed code in Release, warms both runtimes with
 4,096 calls, measures five 100,000-call samples, and uses the median. A

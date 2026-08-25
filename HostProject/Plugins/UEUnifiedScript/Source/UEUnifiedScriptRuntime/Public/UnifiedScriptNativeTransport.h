@@ -304,6 +304,7 @@ enum class EUnifiedScriptNativeCapabilitiesV3 : uint64
     OutputAndReference = 1ull << 7,
     Utf8Results = 1ull << 8, // Preflight-safe UTF-8 reads and return values.
     ContainerResults = 1ull << 9, // Preflight-safe container reads and returns.
+    Structs = 1ull << 10, // Generated field-addressable UScriptStruct values.
 };
 
 /**

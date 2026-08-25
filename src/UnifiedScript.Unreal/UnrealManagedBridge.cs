@@ -606,3 +606,16 @@ public abstract class UnrealObject
         Bridge.Invoke(Handle, functionPath, arguments);
     }
 }
+
+/// <summary>
+/// Context-bound access to static Unreal functions. The handle supplies World
+/// identity and lifetime but is not required to be an instance of the static
+/// function's declaring UClass.
+/// </summary>
+public abstract class UnrealStaticService : UnrealObject
+{
+    protected UnrealStaticService(UnrealObjectHandle context, IUnrealInvocationBridge bridge)
+        : base(context, bridge)
+    {
+    }
+}

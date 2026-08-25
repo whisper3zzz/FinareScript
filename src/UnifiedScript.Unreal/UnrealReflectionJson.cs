@@ -198,7 +198,8 @@ public static class UnrealReflectionJson
         int depth = 0)
     {
         if (type is null || !Enum.IsDefined(type.Kind) ||
-            string.IsNullOrWhiteSpace(type.NativeName) || depth > 16)
+            string.IsNullOrWhiteSpace(type.NativeName) ||
+            !IsValidHeaderPath(type.HeaderPath) || depth > 16)
         {
             throw new JsonException($"Unreal {context} has an invalid type reference.");
         }
@@ -244,21 +245,43 @@ public static class UnrealReflectionJson
         HeaderPath = type.HeaderPath?.Trim().Replace('\\', '/'),
         Properties = type.Properties
             .OrderBy(static property => property.Path, StringComparer.Ordinal)
+            .Select(static property => property with
+            {
+                Type = NormalizeTypeReference(property.Type),
+            })
             .ToArray(),
         Functions = type.Functions
             .OrderBy(static function => function.Path, StringComparer.Ordinal)
             .Select(static function => function with
             {
-                Parameters = function.Parameters.ToArray(),
+                ReturnType = NormalizeTypeReference(function.ReturnType),
+                Parameters = function.Parameters.Select(static parameter => parameter with
+                {
+                    Type = NormalizeTypeReference(parameter.Type),
+                }).ToArray(),
             })
             .ToArray(),
         Delegates = type.Delegates
             .OrderBy(static reflectedDelegate => reflectedDelegate.Path, StringComparer.Ordinal)
             .Select(static reflectedDelegate => reflectedDelegate with
             {
-                Parameters = reflectedDelegate.Parameters.ToArray(),
+                ReturnType = NormalizeTypeReference(reflectedDelegate.ReturnType),
+                Parameters = reflectedDelegate.Parameters.Select(static parameter => parameter with
+                {
+                    Type = NormalizeTypeReference(parameter.Type),
+                }).ToArray(),
             })
             .ToArray(),
+    };
+
+    private static UnrealTypeReference NormalizeTypeReference(UnrealTypeReference type) => type with
+    {
+        NativeName = type.NativeName.Trim(),
+        TypePath = type.TypePath?.Trim(),
+        HeaderPath = type.HeaderPath?.Trim().Replace('\\', '/'),
+        ElementType = type.ElementType is null ? null : NormalizeTypeReference(type.ElementType),
+        KeyType = type.KeyType is null ? null : NormalizeTypeReference(type.KeyType),
+        ValueType = type.ValueType is null ? null : NormalizeTypeReference(type.ValueType),
     };
 
     private static bool IsIdentifier(string? value) =>

@@ -40,9 +40,28 @@ public sealed class UnrealNativeThunkGenerator
         var diagnostics = new List<UnrealNativeThunkDiagnostic>();
         var properties = new List<(UnrealReflectedType Type, UnrealReflectedProperty Property)>();
         var functions = new List<(UnrealReflectedType Type, UnrealReflectedFunction Function)>();
+        UnrealReflectedType[] structTypes = normalized.Types
+            .Where(static type => type.Kind == UnrealReflectedTypeKind.Struct)
+            .ToArray();
+        HashSet<string> supportedStructPaths = GetSupportedStructPaths(structTypes);
 
         foreach (UnrealReflectedType type in normalized.Types)
         {
+            if (type.Kind == UnrealReflectedTypeKind.Struct)
+            {
+                foreach (UnrealReflectedProperty field in type.Properties)
+                {
+                    if (field.Access.NativeAccess != UnrealNativeAccess.Public ||
+                        !IsNativeValueType(field.Type, allowVoid: false, supportedStructPaths))
+                    {
+                        diagnostics.Add(new UnrealNativeThunkDiagnostic(
+                            "USUE3007",
+                            "Only public fields with ABI v3 value types can participate in a generated struct codec.",
+                            field.Path));
+                    }
+                }
+                continue;
+            }
             if (type.Kind != UnrealReflectedTypeKind.Class)
             {
                 diagnostics.Add(new UnrealNativeThunkDiagnostic(
@@ -62,7 +81,7 @@ public sealed class UnrealNativeThunkGenerator
                         property.Path));
                     continue;
                 }
-                if (!IsNativeValueType(property.Type, allowVoid: false))
+                if (!IsNativeValueType(property.Type, allowVoid: false, supportedStructPaths))
                 {
                     diagnostics.Add(new UnrealNativeThunkDiagnostic(
                         "USUE3003",
@@ -75,18 +94,17 @@ public sealed class UnrealNativeThunkGenerator
 
             foreach (UnrealReflectedFunction function in type.Functions)
             {
-                if (function.Traits.Static ||
-                    function.Traits.NativeAccess != UnrealNativeAccess.Public)
+                if (function.Traits.NativeAccess != UnrealNativeAccess.Public)
                 {
                     diagnostics.Add(new UnrealNativeThunkDiagnostic(
                         "USUE3004",
-                        "Only public non-static native functions can use direct generated thunks.",
+                        "Only public native functions can use direct generated thunks.",
                         function.Path));
                     continue;
                 }
-                if (!IsNativeValueType(function.ReturnType, allowVoid: true) ||
-                    function.Parameters.Any(static parameter =>
-                        !IsNativeValueType(parameter.Type, allowVoid: false)))
+                if (!IsNativeValueType(function.ReturnType, allowVoid: true, supportedStructPaths) ||
+                    function.Parameters.Any(parameter =>
+                        !IsNativeValueType(parameter.Type, allowVoid: false, supportedStructPaths)))
                 {
                     diagnostics.Add(new UnrealNativeThunkDiagnostic(
                         "USUE3006",
@@ -100,8 +118,25 @@ public sealed class UnrealNativeThunkGenerator
 
         EnsureUniqueMemberIds(properties, functions);
 
+        IEnumerable<string> referencedHeaders = properties
+            .SelectMany(static item => EnumerateTypeReferences(item.Property.Type))
+            .Concat(functions.SelectMany(static item =>
+                EnumerateTypeReferences(item.Function.ReturnType)
+                    .Concat(item.Function.Parameters.SelectMany(parameter =>
+                        EnumerateTypeReferences(parameter.Type)))))
+            .Concat(structTypes
+                .Where(type => supportedStructPaths.Contains(type.Path))
+                .SelectMany(static type => type.Properties.SelectMany(field =>
+                    EnumerateTypeReferences(field.Type))))
+            .Select(static reference => reference.HeaderPath)
+            .Where(static header => !string.IsNullOrWhiteSpace(header))
+            .Select(static header => header!);
         string[] headers = properties.Select(static item => HeaderFor(item.Type))
             .Concat(functions.Select(static item => HeaderFor(item.Type)))
+            .Concat(structTypes
+                .Where(type => supportedStructPaths.Contains(type.Path))
+                .Select(HeaderFor))
+            .Concat(referencedHeaders)
             .Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal)
             .ToArray();
@@ -115,6 +150,10 @@ public sealed class UnrealNativeThunkGenerator
         }
         source.AppendLine();
         EmitHelpers(source, options.CppNamespace);
+        EmitStructCodecs(
+            source,
+            structTypes.Where(type => supportedStructPaths.Contains(type.Path)).ToArray(),
+            options.CppNamespace);
         EmitResultDescriptors(source, properties, functions, options.CppNamespace);
         EmitReadDispatcher(source, properties, options.CppNamespace);
         EmitWriteDispatcher(source, properties, options.CppNamespace);
@@ -339,6 +378,101 @@ public sealed class UnrealNativeThunkGenerator
         source.AppendLine();
     }
 
+    private static void EmitStructCodecs(
+        StringBuilder source,
+        IReadOnlyList<UnrealReflectedType> structTypes,
+        string cppNamespace)
+    {
+        if (structTypes.Count == 0)
+        {
+            return;
+        }
+        source.Append("namespace ").Append(cppNamespace).AppendLine("::Private");
+        source.AppendLine("{");
+        foreach (UnrealReflectedType type in structTypes)
+        {
+            string suffix = StructCodecSuffix(type.Path);
+            source.Append("bool EncodeStruct_").Append(suffix).Append("(const ")
+                .Append(type.NativeName).AppendLine("& Value,");
+            source.AppendLine("    FUnifiedScriptObjectRegistry& Registry,");
+            source.AppendLine("    FUnifiedScriptValue& OutValue,");
+            source.AppendLine("    FUnifiedScriptInvocationResult& OutResult);");
+            source.Append("bool DecodeStruct_").Append(suffix).AppendLine("(");
+            source.AppendLine("    const FUnifiedScriptValue& Value,");
+            source.AppendLine("    FUnifiedScriptObjectRegistry& Registry,");
+            source.Append("    ").Append(type.NativeName).AppendLine("& OutValue,");
+            source.AppendLine("    FUnifiedScriptInvocationResult& OutResult);");
+        }
+        source.AppendLine();
+        foreach (UnrealReflectedType type in structTypes)
+        {
+            string suffix = StructCodecSuffix(type.Path);
+            source.Append("bool EncodeStruct_").Append(suffix).Append("(const ")
+                .Append(type.NativeName).AppendLine("& Value,");
+            source.AppendLine("    FUnifiedScriptObjectRegistry& Registry,");
+            source.AppendLine("    FUnifiedScriptValue& OutValue,");
+            source.AppendLine("    FUnifiedScriptInvocationResult& OutResult)");
+            source.AppendLine("{");
+            source.AppendLine("    TArray<FUnifiedScriptValue> Fields;");
+            source.Append("    Fields.Reserve(").Append(type.Properties.Count).AppendLine(");");
+            for (int index = 0; index < type.Properties.Count; index++)
+            {
+                UnrealReflectedProperty field = type.Properties[index];
+                source.Append("    FUnifiedScriptValue Field").Append(index).AppendLine(";");
+                EmitValueWrite(source, field.Type, $"Value.{field.Name}", $"Field{index}", 4);
+                source.Append("    Fields.Add(MoveTemp(Field").Append(index).AppendLine("));");
+            }
+            source.Append("    OutValue = FUnifiedScriptValue::FromStruct(MoveTemp(Fields), ")
+                .Append(TypeIdLiteral(type.Path)).AppendLine(");");
+            source.AppendLine("    return true;");
+            source.AppendLine("}");
+            source.AppendLine();
+
+            source.Append("bool DecodeStruct_").Append(suffix).AppendLine("(");
+            source.AppendLine("    const FUnifiedScriptValue& Value,");
+            source.AppendLine("    FUnifiedScriptObjectRegistry& Registry,");
+            source.Append("    ").Append(type.NativeName).AppendLine("& OutValue,");
+            source.AppendLine("    FUnifiedScriptInvocationResult& OutResult)");
+            source.AppendLine("{");
+            source.AppendLine("    TConstArrayView<FUnifiedScriptValue> Fields;");
+            source.Append("    if (!Value.TryGetStruct(").Append(TypeIdLiteral(type.Path))
+                .Append(", Fields) || Fields.Num() != ").Append(type.Properties.Count).AppendLine(")");
+            source.AppendLine("    {");
+            source.AppendLine("        return Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,");
+            source.Append("            TEXT(").Append(CppStringLiteral(
+                    $"Generated struct '{type.Path}' received an incompatible field layout."))
+                .AppendLine("));");
+            source.AppendLine("    }");
+            for (int index = 0; index < type.Properties.Count; index++)
+            {
+                UnrealReflectedProperty field = type.Properties[index];
+                EmitValueRead(
+                    source,
+                    field.Type,
+                    $"Fields[{index}]",
+                    $"DecodedField{index}",
+                    4,
+                    field.Path);
+                source.Append("    OutValue.").Append(field.Name).Append(" = ");
+                if (field.Type.Kind is UnrealValueKind.String or UnrealValueKind.Struct or
+                    UnrealValueKind.Array or UnrealValueKind.Set or UnrealValueKind.Map)
+                {
+                    source.Append("MoveTemp(DecodedField").Append(index).Append(')');
+                }
+                else
+                {
+                    source.Append("DecodedField").Append(index);
+                }
+                source.AppendLine(";");
+            }
+            source.AppendLine("    return true;");
+            source.AppendLine("}");
+            source.AppendLine();
+        }
+        source.AppendLine("}");
+        source.AppendLine();
+    }
+
     private static void EmitResultDescriptors(
         StringBuilder source,
         IReadOnlyList<(UnrealReflectedType Type, UnrealReflectedProperty Property)> properties,
@@ -437,6 +571,7 @@ public sealed class UnrealNativeThunkGenerator
         source.Append(padding).Append("OutTypeId = ").Append(type.Kind switch
         {
             UnrealValueKind.Enum => TypeIdLiteral(type.TypePath!),
+            UnrealValueKind.Struct when !IsCoreStruct(type.TypePath) => TypeIdLiteral(type.TypePath!),
             UnrealValueKind.Array or UnrealValueKind.Set or UnrealValueKind.Map =>
                 TypeIdLiteral(type.NativeName),
             _ => "0ull",
@@ -566,7 +701,10 @@ public sealed class UnrealNativeThunkGenerator
             source.AppendLine("        {");
             source.AppendLine("            return false;");
             source.AppendLine("        }");
-            EmitResolveTarget(source, type, 8);
+            if (!function.Traits.Static)
+            {
+                EmitResolveTarget(source, type, 8);
+            }
             source.AppendLine("        OutOutputValues.Reset();");
             if (outputCount > 0)
             {
@@ -596,7 +734,9 @@ public sealed class UnrealNativeThunkGenerator
 
             string arguments = string.Join(", ", Enumerable.Range(0, function.Parameters.Count)
                 .Select(static index => $"Argument{index}"));
-            string invocation = $"TypedTarget->{function.Name}({arguments})";
+            string invocation = function.Traits.Static
+                ? $"{type.NativeName}::{function.Name}({arguments})"
+                : $"TypedTarget->{function.Name}({arguments})";
             if (function.ReturnType.Kind == UnrealValueKind.Void)
             {
                 source.Append("        ").Append(invocation).AppendLine(";");
@@ -669,8 +809,12 @@ public sealed class UnrealNativeThunkGenerator
         {
             source.Append("    case ").Append(MemberIdLiteral(function.Path)).AppendLine(":");
             source.AppendLine("    {");
-            EmitResolveTarget(source, type, 8);
-            source.Append("        OutReturnValue = TypedTarget->")
+            if (!function.Traits.Static)
+            {
+                EmitResolveTarget(source, type, 8);
+            }
+            source.Append("        OutReturnValue = ")
+                .Append(function.Traits.Static ? type.NativeName + "::" : "TypedTarget->")
                 .Append(function.Name).AppendLine("(Argument0, Argument1);");
             source.AppendLine("        Succeed(OutResult);");
             source.AppendLine("        return true;");
@@ -727,7 +871,10 @@ public sealed class UnrealNativeThunkGenerator
             source.Append("                TEXT(\"Generated fixed thunk requires ")
                 .Append(function.Parameters.Count).AppendLine(" arguments.\"));");
             source.AppendLine("        }");
-            EmitResolveTarget(source, type, 8);
+            if (!function.Traits.Static)
+            {
+                EmitResolveTarget(source, type, 8);
+            }
             EmitFixedResultValidation(source, function.ReturnType);
             for (int index = 0; index < function.Parameters.Count; index++)
             {
@@ -740,7 +887,9 @@ public sealed class UnrealNativeThunkGenerator
             }
             string arguments = string.Join(", ", Enumerable.Range(0, function.Parameters.Count)
                 .Select(static index => $"Argument{index}"));
-            string invocation = $"TypedTarget->{function.Name}({arguments})";
+            string invocation = function.Traits.Static
+                ? $"{type.NativeName}::{function.Name}({arguments})"
+                : $"TypedTarget->{function.Name}({arguments})";
             if (function.ReturnType.Kind == UnrealValueKind.Void)
             {
                 source.Append("        ").Append(invocation).AppendLine(";");
@@ -943,6 +1092,19 @@ public sealed class UnrealNativeThunkGenerator
             EmitContainerRead(source, type, expression, variable, indent, memberPath);
             return;
         }
+        if (type.Kind == UnrealValueKind.Struct && !IsCoreStruct(type.TypePath))
+        {
+            source.Append(padding).Append(CppType(type)).Append(' ').Append(variable)
+                .Append(" = ").Append(CppDefault(type)).AppendLine(";");
+            source.Append(padding).Append("if (!DecodeStruct_")
+                .Append(StructCodecSuffix(type.TypePath!)).Append('(')
+                .Append(expression).Append(", Registry, ").Append(variable)
+                .AppendLine(", OutResult))");
+            source.Append(padding).AppendLine("{");
+            source.Append(padding).AppendLine("    return false;");
+            source.Append(padding).AppendLine("}");
+            return;
+        }
         if (type.Kind == UnrealValueKind.Enum)
         {
             source.Append(padding).Append("int64 ").Append(variable).AppendLine("Raw = 0;");
@@ -1091,6 +1253,17 @@ public sealed class UnrealNativeThunkGenerator
             EmitContainerWrite(source, type, expression, output, indent);
             return;
         }
+        if (type.Kind == UnrealValueKind.Struct && !IsCoreStruct(type.TypePath))
+        {
+            source.Append(padding).Append("if (!EncodeStruct_")
+                .Append(StructCodecSuffix(type.TypePath!)).Append('(')
+                .Append(expression).Append(", Registry, ").Append(output)
+                .AppendLine(", OutResult))");
+            source.Append(padding).AppendLine("{");
+            source.Append(padding).AppendLine("    return false;");
+            source.Append(padding).AppendLine("}");
+            return;
+        }
         if (IsObject(type))
         {
             source.Append(padding).Append("if (!EncodeObject(Registry, GetObjectPointer(")
@@ -1190,7 +1363,36 @@ public sealed class UnrealNativeThunkGenerator
         }
     }
 
-    private static bool IsNativeValueType(UnrealTypeReference type, bool allowVoid) =>
+    private static HashSet<string> GetSupportedStructPaths(
+        IReadOnlyList<UnrealReflectedType> structTypes)
+    {
+        var supported = new HashSet<string>(StringComparer.Ordinal);
+        bool changed;
+        do
+        {
+            changed = false;
+            foreach (UnrealReflectedType type in structTypes)
+            {
+                if (supported.Contains(type.Path) ||
+                    type.Properties.Count == 0 ||
+                    type.Properties.Any(field =>
+                        field.Access.NativeAccess != UnrealNativeAccess.Public ||
+                        !IsNativeValueType(field.Type, allowVoid: false, supported)))
+                {
+                    continue;
+                }
+                supported.Add(type.Path);
+                changed = true;
+            }
+        }
+        while (changed);
+        return supported;
+    }
+
+    private static bool IsNativeValueType(
+        UnrealTypeReference type,
+        bool allowVoid,
+        IReadOnlySet<string> supportedStructPaths) =>
         type.Kind is
             UnrealValueKind.Boolean or
             UnrealValueKind.Int8 or UnrealValueKind.UInt8 or
@@ -1200,13 +1402,16 @@ public sealed class UnrealNativeThunkGenerator
             UnrealValueKind.Float32 or UnrealValueKind.Float64 or
             UnrealValueKind.String or UnrealValueKind.Name or UnrealValueKind.Text or
             UnrealValueKind.Enum or UnrealValueKind.Object or UnrealValueKind.Class ||
-        type.Kind == UnrealValueKind.Struct && IsCoreStruct(type.TypePath) ||
+        type.Kind == UnrealValueKind.Struct &&
+            (IsCoreStruct(type.TypePath) ||
+             type.TypePath is not null && supportedStructPaths.Contains(type.TypePath)) ||
         type.Kind is UnrealValueKind.Array or UnrealValueKind.Set &&
-            type.ElementType is not null && IsNativeValueType(type.ElementType, allowVoid: false) ||
+            type.ElementType is not null &&
+            IsNativeValueType(type.ElementType, allowVoid: false, supportedStructPaths) ||
         type.Kind == UnrealValueKind.Map &&
             type.KeyType is not null && type.ValueType is not null &&
-            IsNativeValueType(type.KeyType, allowVoid: false) &&
-            IsNativeValueType(type.ValueType, allowVoid: false) ||
+            IsNativeValueType(type.KeyType, allowVoid: false, supportedStructPaths) &&
+            IsNativeValueType(type.ValueType, allowVoid: false, supportedStructPaths) ||
         allowVoid && type.Kind == UnrealValueKind.Void;
 
     private static bool IsCoreStruct(string? typePath) =>
@@ -1244,6 +1449,7 @@ public sealed class UnrealNativeThunkGenerator
         UnrealValueKind.Struct when type.TypePath == "/Script/CoreUObject.Vector" => "Vector",
         UnrealValueKind.Struct when type.TypePath == "/Script/CoreUObject.Rotator" => "Rotator",
         UnrealValueKind.Struct when type.TypePath == "/Script/CoreUObject.Transform" => "Transform",
+        UnrealValueKind.Struct => "Struct",
         UnrealValueKind.Array => "Array",
         UnrealValueKind.Set => "Set",
         UnrealValueKind.Map => "Map",
@@ -1263,6 +1469,33 @@ public sealed class UnrealNativeThunkGenerator
             name = name[1..];
         }
         return $"{name}.h";
+    }
+
+    private static IEnumerable<UnrealTypeReference> EnumerateTypeReferences(
+        UnrealTypeReference type)
+    {
+        yield return type;
+        if (type.ElementType is not null)
+        {
+            foreach (UnrealTypeReference nested in EnumerateTypeReferences(type.ElementType))
+            {
+                yield return nested;
+            }
+        }
+        if (type.KeyType is not null)
+        {
+            foreach (UnrealTypeReference nested in EnumerateTypeReferences(type.KeyType))
+            {
+                yield return nested;
+            }
+        }
+        if (type.ValueType is not null)
+        {
+            foreach (UnrealTypeReference nested in EnumerateTypeReferences(type.ValueType))
+            {
+                yield return nested;
+            }
+        }
     }
 
     private static bool IsHeaderPath(string value) =>
@@ -1345,6 +1578,11 @@ public sealed class UnrealNativeThunkGenerator
 
     private static string CppObjectType(string nativeName)
     {
+        if (nativeName.StartsWith("TSubclassOf<", StringComparison.Ordinal) &&
+            nativeName.EndsWith('>'))
+        {
+            return "UClass*";
+        }
         const string objectPtrPrefix = "TObjectPtr<";
         if (nativeName.StartsWith(objectPtrPrefix, StringComparison.Ordinal) &&
             nativeName.EndsWith('>'))
@@ -1381,6 +1619,9 @@ public sealed class UnrealNativeThunkGenerator
 
     private static string TypeIdLiteral(string typePath) =>
         $"0x{UnrealTypeIdV3.FromPath(typePath):X16}ull";
+
+    private static string StructCodecSuffix(string typePath) =>
+        $"{UnrealTypeIdV3.FromPath(typePath):X16}";
 
     private static string CppStringLiteral(string value) =>
         $"\"{value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal)}\"";

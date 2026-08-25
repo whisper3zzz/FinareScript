@@ -21,7 +21,8 @@ constexpr const TCHAR* InternalBindingMetadata = TEXT("UnifiedScriptBindingInter
 TSharedRef<FJsonObject> TypeReference(
     const FString& Kind,
     const FString& NativeName,
-    const FString& TypePath = FString())
+    const FString& TypePath = FString(),
+    const FString& HeaderPath = FString())
 {
     TSharedRef<FJsonObject> Json = MakeShared<FJsonObject>();
     Json->SetStringField(TEXT("kind"), Kind);
@@ -30,7 +31,38 @@ TSharedRef<FJsonObject> TypeReference(
     {
         Json->SetStringField(TEXT("typePath"), TypePath);
     }
+    if (!HeaderPath.IsEmpty())
+    {
+        Json->SetStringField(TEXT("headerPath"), HeaderPath);
+    }
     return Json;
+}
+
+FString ReflectedHeaderPath(const UField* Type)
+{
+    FString HeaderPath = Type->GetMetaData(TEXT("ModuleRelativePath"));
+    HeaderPath.ReplaceInline(TEXT("\\"), TEXT("/"));
+    HeaderPath.RemoveFromStart(TEXT("Public/"));
+    HeaderPath.RemoveFromStart(TEXT("Private/"));
+    HeaderPath.RemoveFromStart(TEXT("Classes/"));
+    return HeaderPath;
+}
+
+FString CanonicalStructTypePath(const UScriptStruct* Struct)
+{
+    if (Struct->IsChildOf(TBaseStructure<FVector>::Get()))
+    {
+        return TEXT("/Script/CoreUObject.Vector");
+    }
+    if (Struct->IsChildOf(TBaseStructure<FRotator>::Get()))
+    {
+        return TEXT("/Script/CoreUObject.Rotator");
+    }
+    if (Struct->IsChildOf(TBaseStructure<FTransform>::Get()))
+    {
+        return TEXT("/Script/CoreUObject.Transform");
+    }
+    return Struct->GetPathName();
 }
 
 FString CanonicalNativeName(const FProperty* Property)
@@ -116,11 +148,19 @@ TSharedRef<FJsonObject> PropertyTypeReference(const FProperty* Property)
     }
     if (const FEnumProperty* Enum = CastField<FEnumProperty>(Property))
     {
-        return TypeReference(TEXT("enum"), NativeName, Enum->GetEnum()->GetPathName());
+        return TypeReference(
+            TEXT("enum"),
+            NativeName,
+            Enum->GetEnum()->GetPathName(),
+            ReflectedHeaderPath(Enum->GetEnum()));
     }
     if (const FStructProperty* Struct = CastField<FStructProperty>(Property))
     {
-        return TypeReference(TEXT("struct"), NativeName, Struct->Struct->GetPathName());
+        return TypeReference(
+            TEXT("struct"),
+            NativeName,
+            CanonicalStructTypePath(Struct->Struct),
+            ReflectedHeaderPath(Struct->Struct));
     }
     if (const FArrayProperty* Array = CastField<FArrayProperty>(Property))
     {
@@ -149,18 +189,26 @@ TSharedRef<FJsonObject> PropertyTypeReference(const FProperty* Property)
     }
     if (const FClassProperty* Class = CastField<FClassProperty>(Property))
     {
-        return TypeReference(TEXT("class"), NativeName, Class->MetaClass->GetPathName());
+        return TypeReference(
+            TEXT("class"),
+            NativeName,
+            Class->MetaClass->GetPathName(),
+            ReflectedHeaderPath(Class->MetaClass));
     }
     if (const FObjectPropertyBase* Object = CastField<FObjectPropertyBase>(Property))
     {
-        return TypeReference(TEXT("object"), NativeName, Object->PropertyClass->GetPathName());
+        return TypeReference(
+            TEXT("object"),
+            NativeName,
+            Object->PropertyClass->GetPathName(),
+            ReflectedHeaderPath(Object->PropertyClass));
     }
     return TypeReference(TEXT("unsupported"), NativeName);
 }
 
-FString ModuleName(const UClass* Class)
+FString ModuleName(const UObject* Type)
 {
-    FString Name = Class->GetOutermost()->GetName();
+    FString Name = Type->GetOutermost()->GetName();
     return Name.RemoveFromStart(TEXT("/Script/")) ? Name : FString();
 }
 
@@ -190,11 +238,11 @@ const TCHAR* FunctionNativeAccess(const UFunction* Function)
     return TEXT("public");
 }
 
-TSharedRef<FJsonObject> ExportProperty(const UClass* Class, const FProperty* Property)
+TSharedRef<FJsonObject> ExportProperty(const UStruct* Owner, const FProperty* Property)
 {
     TSharedRef<FJsonObject> Json = MakeShared<FJsonObject>();
-    const FString ClassPath = Class->GetPathName();
-    Json->SetStringField(TEXT("path"), ClassPath + TEXT(":") + Property->GetName());
+    const FString OwnerPath = Owner->GetPathName();
+    Json->SetStringField(TEXT("path"), OwnerPath + TEXT(":") + Property->GetName());
     Json->SetStringField(TEXT("name"), Property->GetName());
     Json->SetObjectField(TEXT("type"), PropertyTypeReference(Property));
 
@@ -429,6 +477,98 @@ TSharedRef<FJsonObject> ExportClass(
     ++Result.TypeCount;
     return Json;
 }
+
+bool IsBuiltInStruct(const UScriptStruct* Struct)
+{
+    return Struct->IsChildOf(TBaseStructure<FVector>::Get()) ||
+        Struct->IsChildOf(TBaseStructure<FRotator>::Get()) ||
+        Struct->IsChildOf(TBaseStructure<FTransform>::Get());
+}
+
+void CollectReferencedStructs(
+    const FProperty* Property,
+    TSet<const UScriptStruct*>& Structs)
+{
+    if (const FStructProperty* StructProperty = CastField<FStructProperty>(Property))
+    {
+        if (!IsBuiltInStruct(StructProperty->Struct))
+        {
+            Structs.Add(StructProperty->Struct);
+        }
+        return;
+    }
+    if (const FArrayProperty* Array = CastField<FArrayProperty>(Property))
+    {
+        CollectReferencedStructs(Array->Inner, Structs);
+    }
+    else if (const FSetProperty* Set = CastField<FSetProperty>(Property))
+    {
+        CollectReferencedStructs(Set->ElementProp, Structs);
+    }
+    else if (const FMapProperty* Map = CastField<FMapProperty>(Property))
+    {
+        CollectReferencedStructs(Map->KeyProp, Structs);
+        CollectReferencedStructs(Map->ValueProp, Structs);
+    }
+}
+
+TSharedRef<FJsonObject> ExportStruct(
+    const UScriptStruct* Struct,
+    FUnifiedScriptReflectionExportResult& Result)
+{
+    TSharedRef<FJsonObject> Json = MakeShared<FJsonObject>();
+    Json->SetStringField(TEXT("path"), Struct->GetPathName());
+    Json->SetStringField(TEXT("name"), Struct->GetName());
+    Json->SetStringField(
+        TEXT("nativeName"),
+        FString(Struct->GetPrefixCPP()) + Struct->GetName());
+    Json->SetStringField(TEXT("module"), ModuleName(Struct));
+    FString HeaderPath = Struct->GetMetaData(TEXT("ModuleRelativePath"));
+    HeaderPath.ReplaceInline(TEXT("\\"), TEXT("/"));
+    HeaderPath.RemoveFromStart(TEXT("Public/"));
+    HeaderPath.RemoveFromStart(TEXT("Private/"));
+    HeaderPath.RemoveFromStart(TEXT("Classes/"));
+    if (!HeaderPath.IsEmpty())
+    {
+        Json->SetStringField(TEXT("headerPath"), HeaderPath);
+    }
+    Json->SetStringField(TEXT("kind"), TEXT("struct"));
+    if (const UStruct* Super = Struct->GetSuperStruct())
+    {
+        Json->SetStringField(TEXT("baseTypePath"), Super->GetPathName());
+    }
+
+    TSharedRef<FJsonObject> Traits = MakeShared<FJsonObject>();
+    Traits->SetBoolField(TEXT("abstract"), false);
+    Traits->SetBoolField(TEXT("blueprintType"), Struct->GetBoolMetaData(TEXT("BlueprintType")));
+    Json->SetObjectField(TEXT("traits"), Traits);
+
+    TArray<const FProperty*> Properties;
+    for (TFieldIterator<FProperty> It(Struct, EFieldIteratorFlags::ExcludeSuper); It; ++It)
+    {
+        const FProperty* Property = *It;
+        if (!Property->HasAnyPropertyFlags(
+                CPF_Parm | CPF_NativeAccessSpecifierPrivate | CPF_NativeAccessSpecifierProtected))
+        {
+            Properties.Add(Property);
+        }
+    }
+    Properties.Sort([](const FProperty& Left, const FProperty& Right)
+    {
+        return Left.GetName() < Right.GetName();
+    });
+    TArray<TSharedPtr<FJsonValue>> PropertyValues;
+    for (const FProperty* Property : Properties)
+    {
+        PropertyValues.Add(MakeShared<FJsonValueObject>(ExportProperty(Struct, Property)));
+        ++Result.PropertyCount;
+    }
+    Json->SetArrayField(TEXT("properties"), PropertyValues);
+    Json->SetArrayField(TEXT("functions"), {});
+    Json->SetArrayField(TEXT("delegates"), {});
+    ++Result.TypeCount;
+    return Json;
+}
 }
 
 bool FUnifiedScriptReflectionExporter::Export(
@@ -528,6 +668,62 @@ bool FUnifiedScriptReflectionExporter::Export(
         return false;
     }
 
+    TSet<const UScriptStruct*> ReferencedStructSet;
+    for (const UClass* Class : Classes)
+    {
+        for (TFieldIterator<FProperty> It(Class, EFieldIteratorFlags::ExcludeSuper); It; ++It)
+        {
+            if (!It->HasAnyPropertyFlags(CPF_Parm) &&
+                It->HasAnyPropertyFlags(CPF_BlueprintVisible))
+            {
+                CollectReferencedStructs(*It, ReferencedStructSet);
+            }
+        }
+        for (TFieldIterator<UFunction> It(Class, EFieldIteratorFlags::ExcludeSuper); It; ++It)
+        {
+            if (!It->HasAnyFunctionFlags(FUNC_BlueprintCallable | FUNC_BlueprintPure))
+            {
+                continue;
+            }
+            for (TFieldIterator<FProperty> ParameterIt(*It, EFieldIteratorFlags::ExcludeSuper);
+                 ParameterIt;
+                 ++ParameterIt)
+            {
+                if (ParameterIt->HasAnyPropertyFlags(CPF_Parm))
+                {
+                    CollectReferencedStructs(*ParameterIt, ReferencedStructSet);
+                }
+            }
+        }
+    }
+    int32 PreviousStructCount = INDEX_NONE;
+    while (PreviousStructCount != ReferencedStructSet.Num())
+    {
+        PreviousStructCount = ReferencedStructSet.Num();
+        const TArray<const UScriptStruct*> Snapshot = ReferencedStructSet.Array();
+        for (const UScriptStruct* Struct : Snapshot)
+        {
+            for (TFieldIterator<FProperty> It(Struct, EFieldIteratorFlags::ExcludeSuper); It; ++It)
+            {
+                if (!It->HasAnyPropertyFlags(
+                        CPF_NativeAccessSpecifierPrivate | CPF_NativeAccessSpecifierProtected))
+                {
+                    CollectReferencedStructs(*It, ReferencedStructSet);
+                }
+            }
+        }
+    }
+    TArray<const UScriptStruct*> ReferencedStructs = ReferencedStructSet.Array();
+    ReferencedStructs.Sort([](const UScriptStruct& Left, const UScriptStruct& Right)
+    {
+        return Left.GetPathName() < Right.GetPathName();
+    });
+    for (const UScriptStruct* Struct : ReferencedStructs)
+    {
+        Modules.AddUnique(ModuleName(Struct));
+    }
+    Modules.Sort();
+
     TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
     Root->SetStringField(TEXT("schemaVersion"), ReflectionSchema);
     const FEngineVersion& Version = FEngineVersion::Current();
@@ -549,6 +745,10 @@ bool FUnifiedScriptReflectionExporter::Export(
     for (const UClass* Class : Classes)
     {
         TypeValues.Add(MakeShared<FJsonValueObject>(ExportClass(Class, OutResult)));
+    }
+    for (const UScriptStruct* Struct : ReferencedStructs)
+    {
+        TypeValues.Add(MakeShared<FJsonValueObject>(ExportStruct(Struct, OutResult)));
     }
     Root->SetArrayField(TEXT("types"), TypeValues);
 

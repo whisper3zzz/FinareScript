@@ -41,6 +41,9 @@ public:
         UObject* Object,
         FUnifiedScriptObjectHandleResult& OutResult);
 
+    /** Keeps a synchronously loaded asset alive for the lifetime of this World host. */
+    void RetainLoadedResource(UObject* Resource);
+
     bool ReleaseObject(
         FUnifiedScriptObjectHandle Handle,
         FUnifiedScriptObjectHandleResult& OutResult);
@@ -97,4 +100,7 @@ private:
     TUniquePtr<FUnifiedScriptInvocationBridge> InvocationBridge;
     FUnifiedScriptNativeBridgeContext* NativeContext = nullptr;
     uint64 WorldHostId = 0;
+
+    UPROPERTY(Transient)
+    TArray<TObjectPtr<UObject>> LoadedResources;
 };

@@ -134,8 +134,8 @@ prefix and only read this scalar lane when `TableSize >= 72`; older clients
 therefore ignore it safely.
 
 Capabilities independently advertise fixed scalars, enums, object handles,
-vector/rotator, transform, UTF-8 inputs, UTF-8 results, container inputs,
-container results, and output/reference support. Splitting variable-size input
+vector/rotator, transform, arbitrary reflected structs, UTF-8 inputs, UTF-8
+results, container inputs, container results, and output/reference support. Splitting variable-size input
 from result capabilities lets older runtimes decline shapes that lack the
 staging protocol.
 Every advertised capability must work through all three relevant entry points;
@@ -165,7 +165,8 @@ frame/value layouts requires v4.
 ## Activation state
 
 The active subset includes scalars, enums, core structs, generation-safe
-object/class handles, UTF-8 input/results, recursive array/set/map
+object/class handles, UTF-8 input/results, generated field-addressable structs,
+recursive array/set/map
 input/results, and declaration-order return plus `out`/`ref`. Generated thunks
 use the frame; invalid descriptors fail before dispatch; variable-size overflow
 Automation proves a retry increments the generated bridge invocation counter

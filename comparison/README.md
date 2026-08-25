@@ -33,6 +33,10 @@ byte-identical, the midpoint shot must hit exactly once, and UnifiedScript must
 report zero legacy calls. Per-trial logs and the aggregate report are written
 under `artifacts/comparison/gameplay`.
 
+The migrated shot is no longer a native Gun-facade shortcut. It exercises the
+generated World/static-service and complex-struct path: retained resource/class
+loading, Actor spawn, `FHitResult` trace output, emitter spawn, and damage.
+
 Run the matched generated `int32(int32, int32)` performance gate with:
 
 ```powershell
