@@ -137,16 +137,6 @@ public sealed class UnrealBindingGenerator
                 continue;
             }
 
-            if (function.Parameters.Any(static parameter =>
-                    parameter.Direction != UnrealParameterDirection.Input))
-            {
-                diagnostics.Add(new UnrealBindingDiagnostic(
-                    "USUE2004",
-                    "Output and input/output UFunction parameters are deferred by binding v0.1.",
-                    function.Path));
-                continue;
-            }
-
             string? returnType = GetManagedType(function.ReturnType);
             string? unsupportedParameter = function.Parameters
                 .FirstOrDefault(parameter => GetManagedType(parameter.Type) is null)
@@ -173,19 +163,51 @@ public sealed class UnrealBindingGenerator
                     source.Append(", ");
                 }
 
-                source.Append(GetManagedType(function.Parameters[index].Type))
+                source.Append(DirectionModifier(function.Parameters[index].Direction))
+                    .Append(GetManagedType(function.Parameters[index].Type))
                     .Append(' ').Append(parameterNames[index]);
             }
 
             source.AppendLine(")");
+            if (function.Parameters.Any(static parameter =>
+                    parameter.Direction != UnrealParameterDirection.Input))
+            {
+                EmitOutputInvocation(
+                    source,
+                    function,
+                    returnType,
+                    parameterNames);
+                continue;
+            }
             source.Append("        => ");
             if (function.ReturnType.Kind != UnrealValueKind.Void)
             {
-                source.Append("Invoke<").Append(returnType).Append('>');
+                source.Append("Invoke<").Append(returnType);
+                if (function.Parameters.Count <= 4)
+                {
+                    foreach (UnrealReflectedParameter parameter in function.Parameters)
+                    {
+                        source.Append(", ").Append(GetManagedType(parameter.Type));
+                    }
+                }
+                source.Append('>');
             }
             else
             {
                 source.Append("Invoke");
+                if (function.Parameters.Count is > 0 and <= 4)
+                {
+                    source.Append('<');
+                    for (int index = 0; index < function.Parameters.Count; index++)
+                    {
+                        if (index > 0)
+                        {
+                            source.Append(", ");
+                        }
+                        source.Append(GetManagedType(function.Parameters[index].Type));
+                    }
+                    source.Append('>');
+                }
             }
 
             source.Append('(').Append(MemberIdLiteral(function.Path)).Append(", ")
@@ -201,6 +223,67 @@ public sealed class UnrealBindingGenerator
         source.AppendLine("}");
         source.AppendLine();
     }
+
+    private static void EmitOutputInvocation(
+        StringBuilder source,
+        UnrealReflectedFunction function,
+        string returnType,
+        IReadOnlyList<string> parameterNames)
+    {
+        string resultName = "__unifiedScriptResult";
+        while (parameterNames.Contains(resultName, StringComparer.Ordinal))
+        {
+            resultName += "_";
+        }
+        source.AppendLine("    {");
+        source.Append("        global::UnifiedScript.Unreal.UnrealOutputInvocationResult ")
+            .Append(resultName).AppendLine(" = InvokeWithOutputs(");
+        source.Append("            ").Append(MemberIdLiteral(function.Path)).AppendLine(",");
+        source.Append("            ").Append(Literal(function.Path)).AppendLine(",");
+        source.Append("            typeof(").Append(returnType).AppendLine("),");
+        source.AppendLine("            [");
+        for (int index = 0; index < function.Parameters.Count; index++)
+        {
+            UnrealReflectedParameter parameter = function.Parameters[index];
+            string managedType = GetManagedType(parameter.Type)!;
+            source.Append("                new(typeof(").Append(managedType).Append("), ")
+                .Append("global::UnifiedScript.Unreal.UnrealParameterDirection.")
+                .Append(parameter.Direction).Append(", ")
+                .Append(parameter.Direction == UnrealParameterDirection.Output
+                    ? "null"
+                    : parameterNames[index])
+                .AppendLine("),");
+        }
+        source.AppendLine("            ]);");
+
+        int outputIndex = 0;
+        for (int index = 0; index < function.Parameters.Count; index++)
+        {
+            UnrealReflectedParameter parameter = function.Parameters[index];
+            if (parameter.Direction == UnrealParameterDirection.Input)
+            {
+                continue;
+            }
+            source.Append("        ").Append(parameterNames[index]).Append(" = (")
+                .Append(GetManagedType(parameter.Type)).Append(')')
+                .Append(resultName).Append(".Outputs[").Append(outputIndex++)
+                .AppendLine("]!;");
+        }
+        if (function.ReturnType.Kind != UnrealValueKind.Void)
+        {
+            source.Append("        return (").Append(returnType).Append(')')
+                .Append(resultName).AppendLine(".ReturnValue!;");
+        }
+        source.AppendLine("    }");
+    }
+
+    private static string DirectionModifier(UnrealParameterDirection direction) => direction switch
+    {
+        UnrealParameterDirection.Input => string.Empty,
+        UnrealParameterDirection.Output => "out ",
+        UnrealParameterDirection.InputOutput => "ref ",
+        _ => throw new ArgumentOutOfRangeException(nameof(direction)),
+    };
 
     private static string[] CreateParameterNames(
         IReadOnlyList<UnrealReflectedParameter> parameters)
@@ -228,9 +311,20 @@ public sealed class UnrealBindingGenerator
         UnrealValueKind.UInt64 => "ulong",
         UnrealValueKind.Float32 => "float",
         UnrealValueKind.Float64 => "double",
-        UnrealValueKind.String or UnrealValueKind.Name or UnrealValueKind.Text => "string",
-        UnrealValueKind.Object or UnrealValueKind.Class =>
+        UnrealValueKind.String => "string",
+        UnrealValueKind.Name => "global::UnifiedScript.Unreal.UnrealName",
+        UnrealValueKind.Text => "global::UnifiedScript.Unreal.UnrealText",
+        UnrealValueKind.Object =>
             "global::UnifiedScript.Unreal.UnrealObjectHandle",
+        UnrealValueKind.Class =>
+            "global::UnifiedScript.Unreal.UnrealClassHandle",
+        UnrealValueKind.Enum => "global::UnifiedScript.Unreal.UnrealEnumValue",
+        UnrealValueKind.Struct when type.TypePath == "/Script/CoreUObject.Vector" =>
+            "global::UnifiedScript.Unreal.UnrealVector",
+        UnrealValueKind.Struct when type.TypePath == "/Script/CoreUObject.Rotator" =>
+            "global::UnifiedScript.Unreal.UnrealRotator",
+        UnrealValueKind.Struct when type.TypePath == "/Script/CoreUObject.Transform" =>
+            "global::UnifiedScript.Unreal.UnrealTransform",
         UnrealValueKind.Array when GetManagedType(type.ElementType!) is string element =>
             $"global::System.Collections.Generic.IReadOnlyList<{element}>",
         UnrealValueKind.Set when GetManagedType(type.ElementType!) is string element =>

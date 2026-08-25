@@ -665,6 +665,25 @@ def main() -> int:
         / "Managed"
         / "UnifiedScript.Unreal.runtimeconfig.json"
     )
+    unreal_runtime_build_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "UEUnifiedScriptRuntime.Build.cs"
+    )
+    unreal_runtime_module_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Private"
+        / "UEUnifiedScriptRuntimeModule.cpp"
+    )
     unreal_managed_bridge_path = (
         ROOT / "src" / "UnifiedScript.Unreal" / "UnrealManagedBridge.cs"
     )
@@ -682,6 +701,12 @@ def main() -> int:
         / "src"
         / "UnifiedScript.Unreal"
         / "InProcessUnrealNativeInvocationTransport.cs"
+    )
+    unreal_native_abi_v3_path = (
+        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealNativeAbiV3.cs"
+    )
+    unreal_native_call_frame_v3_path = (
+        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealNativeCallFrameV3.cs"
     )
     unreal_in_process_transport_test_path = (
         ROOT
@@ -825,6 +850,8 @@ def main() -> int:
     unreal_helper_path = ROOT / "tools" / "ue-adapter.sh"
     unreal_demo_helper_path = ROOT / "tools" / "run-unreal-demo.ps1"
     unreal_authoring_helper_path = ROOT / "tools" / "run-unreal-authoring.ps1"
+    unreal_release_helper_path = ROOT / "tools" / "package-unreal-release.ps1"
+    unreal_release_doc_path = ROOT / "docs" / "UNREAL_RELEASE.md"
     helper_is_executable = sys.platform == "win32" or (
         unreal_helper_path.stat().st_mode & 0o111
     ) != 0
@@ -858,10 +885,14 @@ def main() -> int:
         and unreal_coreclr_host_header_path.is_file()
         and unreal_coreclr_host_source_path.is_file()
         and unreal_coreclr_runtime_config_path.is_file()
+        and unreal_runtime_build_path.is_file()
+        and unreal_runtime_module_path.is_file()
         and unreal_managed_bridge_path.is_file()
         and unreal_native_adapter_path.is_file()
         and unreal_native_adapter_test_path.is_file()
         and unreal_in_process_transport_path.is_file()
+        and unreal_native_abi_v3_path.is_file()
+        and unreal_native_call_frame_v3_path.is_file()
         and unreal_in_process_transport_test_path.is_file()
         and unreal_world_managed_entry_path.is_file()
         and unreal_demo_project_path.is_file()
@@ -883,6 +914,8 @@ def main() -> int:
         and unreal_helper_path.is_file()
         and unreal_demo_helper_path.is_file()
         and unreal_authoring_helper_path.is_file()
+        and unreal_release_helper_path.is_file()
+        and unreal_release_doc_path.is_file()
         and helper_is_executable,
         "Missing Unreal adapter contract, plugin, fixture, or executable helper",
     )
@@ -938,12 +971,18 @@ def main() -> int:
     unreal_coreclr_host_source = unreal_coreclr_host_source_path.read_text(
         encoding="utf-8"
     )
+    unreal_runtime_build = unreal_runtime_build_path.read_text(encoding="utf-8")
+    unreal_runtime_module = unreal_runtime_module_path.read_text(encoding="utf-8")
     with unreal_coreclr_runtime_config_path.open("r", encoding="utf-8") as handle:
         unreal_coreclr_runtime_config = json.load(handle)
     unreal_managed_bridge = unreal_managed_bridge_path.read_text(encoding="utf-8")
     unreal_native_adapter = unreal_native_adapter_path.read_text(encoding="utf-8")
     unreal_native_adapter_test = unreal_native_adapter_test_path.read_text(encoding="utf-8")
     unreal_in_process_transport = unreal_in_process_transport_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_native_abi_v3 = unreal_native_abi_v3_path.read_text(encoding="utf-8")
+    unreal_native_call_frame_v3 = unreal_native_call_frame_v3_path.read_text(
         encoding="utf-8"
     )
     unreal_in_process_transport_test = unreal_in_process_transport_test_path.read_text(
@@ -981,6 +1020,8 @@ def main() -> int:
     )
     unreal_demo_helper = unreal_demo_helper_path.read_text(encoding="utf-8")
     unreal_authoring_helper = unreal_authoring_helper_path.read_text(encoding="utf-8")
+    unreal_release_helper = unreal_release_helper_path.read_text(encoding="utf-8")
+    unreal_release_doc = unreal_release_doc_path.read_text(encoding="utf-8")
     unreal_test_project = unreal_test_project_path.read_text(encoding="utf-8")
     unreal_game_target = unreal_game_target_path.read_text(encoding="utf-8")
     unreal_editor_target = unreal_editor_target_path.read_text(encoding="utf-8")
@@ -990,11 +1031,17 @@ def main() -> int:
         if item["path"]
         == "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent"
     )
+    unreal_interop_manifest = next(
+        item
+        for item in unreal_manifest["types"]
+        if item["path"]
+        == "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"
+    )
     require(
         unreal_manifest["schemaVersion"]
         == "unifiedscript.unreal-reflection/v0.1"
         and unreal_manifest["modules"] == ["UEUnifiedScriptRuntime"]
-        and len(unreal_manifest["types"]) == 3
+        and len(unreal_manifest["types"]) == 4
         and unreal_component_manifest["headerPath"] == "UnifiedScriptComponent.h"
         and all(
             item["access"]["nativeAccess"] == "public"
@@ -1029,6 +1076,45 @@ def main() -> int:
             "SetScriptStateInt32",
             "StartScript",
             "StopScript",
+        }
+        and unreal_interop_manifest["headerPath"]
+        == "UnifiedScriptInteropFixture.h"
+        and {item["name"] for item in unreal_interop_manifest["properties"]}
+        == {
+            "ByteValue",
+            "DoubleValue",
+            "FloatValue",
+            "Int32Value",
+            "Int64Value",
+            "IntArrayValue",
+            "IntMapValue",
+            "IntSetValue",
+            "Mode",
+            "NameValue",
+            "ObjectValue",
+            "ClassValue",
+            "RotatorValue",
+            "StringValue",
+            "TextValue",
+            "TransformValue",
+            "VectorValue",
+        }
+        and {item["name"] for item in unreal_interop_manifest["functions"]}
+        == {
+            "AddInt64",
+            "AddVector",
+            "CountSet",
+            "EchoArray",
+            "EchoClass",
+            "EchoMap",
+            "EchoObject",
+            "EchoSet",
+            "EchoTransform",
+            "MakeArray",
+            "MutateValues",
+            "StringLength",
+            "SumArray",
+            "SumMap",
         }
         and any(
             item["path"]
@@ -1145,7 +1231,7 @@ def main() -> int:
         in unreal_in_process_transport_test
         and "Generated Add invocation bypasses ProcessEvent"
         in unreal_native_transport_test
-        and "Generated managed wrapper selects ABI v2 native thunks"
+        and "Generated managed wrapper selects native member-ID thunks"
         in unreal_world_host_test
         and "class UnrealNativeThunkGenerator" in unreal_native_thunk_generator
         and "--native-out" in cli_source
@@ -1157,6 +1243,26 @@ def main() -> int:
         "Generated Unreal Member IDs or ABI v2 native fast-thunk path is missing",
     )
     checks.append("generated UE members use automatic ABI v2 direct native thunks with ABI v1 fallback")
+    require(
+        "FUnifiedScriptNativeTransportV3" in unreal_native_transport_header
+        and "FUnifiedScriptNativeCallFrameV3" in unreal_native_transport_header
+        and "CallFrameTransport" in unreal_native_transport_header
+        and "UEUnifiedScript_GetNativeTransportV3" in unreal_native_transport_source
+        and "UnrealNativeTransportTableV3" in unreal_native_abi_v3
+        and "TransportTableSize = 64" in unreal_native_abi_v3
+        and "IUnrealNativeCallFrameTransportV3" in unreal_native_call_frame_v3
+        and "IUnrealNativeCallFrameTransportV3" in unreal_in_process_transport
+        and "AbiV2BootstrapDiscoversV3CallFrameAndKeepsLegacyFallback"
+        in unreal_in_process_transport_test
+        and "CallFrameInvocationCount" in unreal_native_adapter
+        and "LegacyInvocationCount" in unreal_native_adapter
+        and "Fixed generated calls cross the live ABI v3 call frame"
+        in unreal_world_host_test
+        and "GetInvocationMetrics" in unreal_world_managed_entry
+        and "GetManagedInvocationMetrics" in unreal_coreclr_host_source,
+        "Unreal ABI v3 call-frame activation or World metrics are missing",
+    )
+    checks.append("ABI v3 fixed calls use the live World call frame with observable v2 fallback")
     require(
         "UUnifiedScriptWorldSubsystem final" in unreal_world_host_header
         and "public UWorldSubsystem" in unreal_world_host_header
@@ -1193,6 +1299,28 @@ def main() -> int:
         "Process-wide hostfxr/CoreCLR bootstrap contract is missing",
     )
     checks.append("UE loads CoreCLR through hostfxr before managed World entry points")
+    require(
+        'RuntimeDependencies.Add("$(PluginDir)/Binaries/Managed/..."'
+        in unreal_runtime_build
+        and 'RuntimeDependencies.Add("$(PluginDir)/Resources/Managed/..."'
+        in unreal_runtime_build
+        and 'StageBundledDotNetDirectory("host/fxr")' in unreal_runtime_build
+        and 'StageBundledDotNetDirectory("shared/Microsoft.NETCore.App")'
+        in unreal_runtime_build
+        and "Binaries/ThirdParty/DotNet/10.0" in unreal_coreclr_host_source
+        and "UnifiedScriptSmoke" in unreal_runtime_module
+        and "UnifiedScriptSmokeResult=" in unreal_runtime_module
+        and "Managed Start/Tick/Stop succeeded" in unreal_runtime_module
+        and "BuildCookRun" in unreal_release_helper
+        and "Development', 'Shipping" in unreal_release_helper
+        and "-SkipZenStore" in unreal_release_helper
+        and "hostfxr.dll" in unreal_release_helper
+        and "coreclr.dll" in unreal_release_helper
+        and "unifiedscript.unreal-release-gate/v0.1" in unreal_release_helper
+        and "self-contained" in unreal_release_doc,
+        "Win64 self-contained staging, packaged smoke, or release gate is missing",
+    )
+    checks.append("Win64 packages stage CoreCLR and run managed lifecycle smoke in Development/Shipping")
     require(
         "UnrealWorldManagedEntryPoint" in unreal_world_managed_entry
         and "UnmanagedCallersOnly" in unreal_world_managed_entry

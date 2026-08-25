@@ -332,6 +332,17 @@ Graph node, real typed pins, and compiler-owned control/data wires. Manual
 occupied-data-input rewiring now uses that same transactional source-patch
 contract; control flow and structural construction remain compiler-owned.
 
+The current runtime performance tranche activates ABI v3 for fixed scalars,
+enums, generation-safe object/class handles, vector/rotator, transform, UTF-8
+text, recursive arrays/sets/maps, and return plus `out`/`ref`. Generated wrappers
+use a synchronous caller-owned frame with zero steady-state allocation for the
+fixed call path. Variable-size overflow is staged in the retained World context;
+the managed retry expands the arena and copies the staged result without
+executing a UFunction twice. The World host discovers v3 through an append-only
+v2 bootstrap suffix and retains v1/v2 only for old hosts and unsupported
+reflected shapes. The live UE 5.8 lifecycle Demo reports `FastCalls=16`, all
+through `CallFrameCalls=16` with `LegacyCalls=0`.
+
 Graph Presentation v1 keeps `ResolveInitialValue`'s complete 14-node/14-edge
 Surface intact while projecting a compact 7-node/7-wire authoring canvas. Connected identifier
 and literal leaves become readable pin values such as `A = InitialValue` and
@@ -344,6 +355,39 @@ Run the verified UE 5.8 demo on Windows:
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools/run-unreal-demo.ps1 -EngineRoot D:\UE_5.8
 ```
+
+Open the interactive Blueprint-style authoring demo in one command:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/launch-unreal-authoring-demo.ps1 `
+  -EngineRoot D:\UE_5.8
+```
+
+It builds and stages the demo, starts the transactional host in the background,
+opens the editor directly on the UnifiedScript Authoring tab, and stops the
+host when the editor closes. See `docs/UNREAL_DEMO.md` for the short walkthrough.
+
+Run the live CoreCLR-to-UObject performance gate (the Puerts verdict remains
+empty unless a same-machine result is supplied):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/run-unreal-benchmark.ps1 `
+  -EngineRoot D:\UE_5.8
+```
+
+See `docs/UNREAL_PERFORMANCE.md` for the fixed scenario and competitive gate.
+
+Build, archive, and smoke-test the self-contained Win64 Development and
+Shipping packages:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/package-unreal-release.ps1 `
+  -EngineRoot D:\UE_5.8
+```
+
+The gate verifies packaged hostfxr/CoreCLR and managed dependency closure, then
+runs managed Start/Tick/Stop from each packaged executable. See
+`docs/UNREAL_RELEASE.md` for the artifact and platform contract.
 
 Start the transactional authoring host in a second terminal while the Editor is
 open:

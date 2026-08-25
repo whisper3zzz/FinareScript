@@ -34,6 +34,23 @@ public readonly record struct UnrealObjectHandle(ulong Value)
     private uint EncodedSlot => (uint)Value;
 }
 
+/// <summary>Generation-safe handle whose native value is required to be a UClass.</summary>
+public readonly record struct UnrealClassHandle(ulong Value)
+{
+    public UnrealObjectHandle ObjectHandle => new(Value);
+
+    public bool IsNull => ObjectHandle.IsNull;
+
+    public bool IsWellFormed => ObjectHandle.IsWellFormed;
+
+    public uint SlotIndex => ObjectHandle.SlotIndex;
+
+    public uint Generation => ObjectHandle.Generation;
+
+    public static UnrealClassHandle Create(uint slotIndex, uint generation) =>
+        new(UnrealObjectHandle.Create(slotIndex, generation).Value);
+}
+
 public interface IUnrealInvocationBridge
 {
     T ReadProperty<T>(UnrealObjectHandle target, string propertyPath);
@@ -81,6 +98,115 @@ public interface IUnrealFastInvocationBridge
         ulong memberId,
         string memberPath,
         IReadOnlyList<object?> arguments);
+}
+
+/// <summary>
+/// Optional allocation-free generated invocation path. Generic argument
+/// overloads avoid the params object[] boundary for supported ABI v3 values.
+/// </summary>
+public interface IUnrealTypedInvocationBridge
+{
+    bool SupportsTypedInvocation { get; }
+
+    TResult Invoke<TResult>(
+        UnrealObjectHandle target,
+        ulong memberId,
+        string memberPath);
+
+    TResult Invoke<TResult, T0>(
+        UnrealObjectHandle target,
+        ulong memberId,
+        string memberPath,
+        T0 argument0);
+
+    TResult Invoke<TResult, T0, T1>(
+        UnrealObjectHandle target,
+        ulong memberId,
+        string memberPath,
+        T0 argument0,
+        T1 argument1);
+
+    TResult Invoke<TResult, T0, T1, T2>(
+        UnrealObjectHandle target,
+        ulong memberId,
+        string memberPath,
+        T0 argument0,
+        T1 argument1,
+        T2 argument2);
+
+    TResult Invoke<TResult, T0, T1, T2, T3>(
+        UnrealObjectHandle target,
+        ulong memberId,
+        string memberPath,
+        T0 argument0,
+        T1 argument1,
+        T2 argument2,
+        T3 argument3);
+
+    void Invoke(
+        UnrealObjectHandle target,
+        ulong memberId,
+        string memberPath);
+
+    void Invoke<T0>(
+        UnrealObjectHandle target,
+        ulong memberId,
+        string memberPath,
+        T0 argument0);
+
+    void Invoke<T0, T1>(
+        UnrealObjectHandle target,
+        ulong memberId,
+        string memberPath,
+        T0 argument0,
+        T1 argument1);
+
+    void Invoke<T0, T1, T2>(
+        UnrealObjectHandle target,
+        ulong memberId,
+        string memberPath,
+        T0 argument0,
+        T1 argument1,
+        T2 argument2);
+
+    void Invoke<T0, T1, T2, T3>(
+        UnrealObjectHandle target,
+        ulong memberId,
+        string memberPath,
+        T0 argument0,
+        T1 argument1,
+        T2 argument2,
+        T3 argument3);
+}
+
+public interface IUnrealInvocationMetrics
+{
+    long CallFrameInvocationCount { get; }
+
+    long LegacyInvocationCount { get; }
+}
+
+public readonly record struct UnrealOutputArgument(
+    Type Type,
+    UnrealParameterDirection Direction,
+    object? Value);
+
+public sealed record UnrealOutputInvocationResult(
+    object? ReturnValue,
+    IReadOnlyList<object?> Outputs);
+
+/// <summary>
+/// ABI v3-only multi-result path used by generated wrappers for output and
+/// input/output UFunction parameters.
+/// </summary>
+public interface IUnrealOutputInvocationBridge
+{
+    UnrealOutputInvocationResult InvokeWithOutputs(
+        UnrealObjectHandle target,
+        ulong memberId,
+        string memberPath,
+        Type returnType,
+        IReadOnlyList<UnrealOutputArgument> arguments);
 }
 
 public static class UnrealMemberId
@@ -168,8 +294,85 @@ public abstract class UnrealObject
 
     protected T Invoke<T>(
         ulong memberId,
+        string functionPath) =>
+        Bridge is IUnrealTypedInvocationBridge typedBridge &&
+        typedBridge.SupportsTypedInvocation
+            ? typedBridge.Invoke<T>(Handle, memberId, functionPath)
+            : Bridge is IUnrealFastInvocationBridge fastBridge &&
+              fastBridge.SupportsFastInvocation
+                ? fastBridge.Invoke<T>(Handle, memberId, functionPath, [])
+                : Bridge.Invoke<T>(Handle, functionPath, []);
+
+    protected TResult Invoke<TResult, T0>(
+        ulong memberId,
+        string functionPath,
+        T0 argument0) =>
+        Bridge is IUnrealTypedInvocationBridge typedBridge &&
+        typedBridge.SupportsTypedInvocation
+            ? typedBridge.Invoke<TResult, T0>(Handle, memberId, functionPath, argument0)
+            : InvokeLegacyResult<TResult>(memberId, functionPath, [argument0]);
+
+    protected TResult Invoke<TResult, T0, T1>(
+        ulong memberId,
+        string functionPath,
+        T0 argument0,
+        T1 argument1) =>
+        Bridge is IUnrealTypedInvocationBridge typedBridge &&
+        typedBridge.SupportsTypedInvocation
+            ? typedBridge.Invoke<TResult, T0, T1>(
+                Handle,
+                memberId,
+                functionPath,
+                argument0,
+                argument1)
+            : InvokeLegacyResult<TResult>(memberId, functionPath, [argument0, argument1]);
+
+    protected TResult Invoke<TResult, T0, T1, T2>(
+        ulong memberId,
+        string functionPath,
+        T0 argument0,
+        T1 argument1,
+        T2 argument2) =>
+        Bridge is IUnrealTypedInvocationBridge typedBridge &&
+        typedBridge.SupportsTypedInvocation
+            ? typedBridge.Invoke<TResult, T0, T1, T2>(
+                Handle,
+                memberId,
+                functionPath,
+                argument0,
+                argument1,
+                argument2)
+            : InvokeLegacyResult<TResult>(memberId, functionPath, [argument0, argument1, argument2]);
+
+    protected TResult Invoke<TResult, T0, T1, T2, T3>(
+        ulong memberId,
+        string functionPath,
+        T0 argument0,
+        T1 argument1,
+        T2 argument2,
+        T3 argument3) =>
+        Bridge is IUnrealTypedInvocationBridge typedBridge &&
+        typedBridge.SupportsTypedInvocation
+            ? typedBridge.Invoke<TResult, T0, T1, T2, T3>(
+                Handle,
+                memberId,
+                functionPath,
+                argument0,
+                argument1,
+                argument2,
+                argument3)
+            : InvokeLegacyResult<TResult>(memberId, functionPath, [argument0, argument1, argument2, argument3]);
+
+    protected T Invoke<T>(
+        ulong memberId,
         string functionPath,
         params object?[] arguments) =>
+        InvokeLegacyResult<T>(memberId, functionPath, arguments);
+
+    private T InvokeLegacyResult<T>(
+        ulong memberId,
+        string functionPath,
+        IReadOnlyList<object?> arguments) =>
         Bridge is IUnrealFastInvocationBridge fastBridge &&
         fastBridge.SupportsFastInvocation
             ? fastBridge.Invoke<T>(Handle, memberId, functionPath, arguments)
@@ -180,8 +383,115 @@ public abstract class UnrealObject
 
     protected void Invoke(
         ulong memberId,
+        string functionPath)
+    {
+        if (Bridge is IUnrealTypedInvocationBridge typedBridge &&
+            typedBridge.SupportsTypedInvocation)
+        {
+            typedBridge.Invoke(Handle, memberId, functionPath);
+            return;
+        }
+        InvokeLegacy(memberId, functionPath, []);
+    }
+
+    protected void Invoke(
+        ulong memberId,
         string functionPath,
-        params object?[] arguments)
+        params object?[] arguments) =>
+        InvokeLegacy(memberId, functionPath, arguments);
+
+    protected void Invoke<T0>(
+        ulong memberId,
+        string functionPath,
+        T0 argument0)
+    {
+        if (Bridge is IUnrealTypedInvocationBridge typedBridge &&
+            typedBridge.SupportsTypedInvocation)
+        {
+            typedBridge.Invoke(Handle, memberId, functionPath, argument0);
+            return;
+        }
+        InvokeLegacy(memberId, functionPath, [argument0]);
+    }
+
+    protected void Invoke<T0, T1>(
+        ulong memberId,
+        string functionPath,
+        T0 argument0,
+        T1 argument1)
+    {
+        if (Bridge is IUnrealTypedInvocationBridge typedBridge &&
+            typedBridge.SupportsTypedInvocation)
+        {
+            typedBridge.Invoke(Handle, memberId, functionPath, argument0, argument1);
+            return;
+        }
+        InvokeLegacy(memberId, functionPath, [argument0, argument1]);
+    }
+
+    protected void Invoke<T0, T1, T2>(
+        ulong memberId,
+        string functionPath,
+        T0 argument0,
+        T1 argument1,
+        T2 argument2)
+    {
+        if (Bridge is IUnrealTypedInvocationBridge typedBridge &&
+            typedBridge.SupportsTypedInvocation)
+        {
+            typedBridge.Invoke(Handle, memberId, functionPath, argument0, argument1, argument2);
+            return;
+        }
+        InvokeLegacy(memberId, functionPath, [argument0, argument1, argument2]);
+    }
+
+    protected void Invoke<T0, T1, T2, T3>(
+        ulong memberId,
+        string functionPath,
+        T0 argument0,
+        T1 argument1,
+        T2 argument2,
+        T3 argument3)
+    {
+        if (Bridge is IUnrealTypedInvocationBridge typedBridge &&
+            typedBridge.SupportsTypedInvocation)
+        {
+            typedBridge.Invoke(
+                Handle,
+                memberId,
+                functionPath,
+                argument0,
+                argument1,
+                argument2,
+                argument3);
+            return;
+        }
+        InvokeLegacy(memberId, functionPath, [argument0, argument1, argument2, argument3]);
+    }
+
+    protected UnrealOutputInvocationResult InvokeWithOutputs(
+        ulong memberId,
+        string functionPath,
+        Type returnType,
+        IReadOnlyList<UnrealOutputArgument> arguments)
+    {
+        if (Bridge is not IUnrealOutputInvocationBridge outputBridge)
+        {
+            throw new NotSupportedException(
+                "The Unreal invocation bridge does not support output or reference parameters.");
+        }
+        return outputBridge.InvokeWithOutputs(
+            Handle,
+            memberId,
+            functionPath,
+            returnType,
+            arguments);
+    }
+
+    private void InvokeLegacy(
+        ulong memberId,
+        string functionPath,
+        IReadOnlyList<object?> arguments)
     {
         if (Bridge is IUnrealFastInvocationBridge fastBridge &&
             fastBridge.SupportsFastInvocation)

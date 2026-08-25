@@ -193,6 +193,33 @@ public static class UnrealWorldManagedEntryPoint
             ? entry.ScriptCount
             : -(int)UnrealWorldManagedEntryStatus.WorldNotFound;
 
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static int GetInvocationMetrics(
+        ulong worldId,
+        nint callFrameInvocationCount,
+        nint legacyInvocationCount)
+    {
+        if (callFrameInvocationCount == nint.Zero || legacyInvocationCount == nint.Zero)
+        {
+            return (int)UnrealWorldManagedEntryStatus.InvalidArgument;
+        }
+        if (!Worlds.TryGetValue(worldId, out WorldEntry? entry))
+        {
+            return (int)UnrealWorldManagedEntryStatus.WorldNotFound;
+        }
+        try
+        {
+            entry.GetInvocationMetrics(out long callFrame, out long legacy);
+            Marshal.WriteInt64(callFrameInvocationCount, callFrame);
+            Marshal.WriteInt64(legacyInvocationCount, legacy);
+            return (int)UnrealWorldManagedEntryStatus.Success;
+        }
+        catch
+        {
+            return (int)UnrealWorldManagedEntryStatus.InternalFailure;
+        }
+    }
+
     private static string ReadUtf8(nint data, int length)
     {
         if (length <= 0 || data == nint.Zero)
@@ -220,7 +247,7 @@ public static class UnrealWorldManagedEntryPoint
             Bridge = new NativeUnrealInvocationBridge(_transport);
         }
 
-        public IUnrealInvocationBridge Bridge { get; }
+        public NativeUnrealInvocationBridge Bridge { get; }
 
         public int ScriptCount
         {
@@ -230,6 +257,17 @@ public static class UnrealWorldManagedEntryPoint
                 {
                     return _scripts.Count;
                 }
+            }
+        }
+
+        public void GetInvocationMetrics(out long callFrame, out long legacy)
+        {
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                IUnrealInvocationMetrics metrics = Bridge;
+                callFrame = metrics.CallFrameInvocationCount;
+                legacy = metrics.LegacyInvocationCount;
             }
         }
 

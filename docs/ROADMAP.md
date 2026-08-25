@@ -248,4 +248,22 @@ Outcome: the proven language pipeline becomes usable from UE.
   with structured C# output
 - [x] per-function `.usgraph` position persistence and atomic sidecar save
 - [ ] arbitrary control-wire authoring beyond structured block operations
-- [ ] cook and packaging strategy
+- [x] self-contained Win64 cook and packaging strategy
+
+## M6.2 — Production Unreal interop and release gates
+
+Outcome: generated gameplay bindings cover practical UE values through a
+measured call path and survive packaged Win64 builds.
+
+- [x] restore and freeze the UE 5.8 editor, World demo, .NET, and validator baseline
+- [x] freeze independent ABI v3 value/call-frame/table layouts and ownership rules
+- [x] generated managed shapes for all scalar widths, FName/FText, enum and
+  generation-safe object/class handles
+- [x] generated and live-tested native scalar, enum, FVector, FRotator, and
+  FTransform direct thunks
+- [x] activate ABI v3 with a strongly typed zero-allocation steady-state path
+- [x] arrays, sets, maps, variable-size returns, and return plus `out`/`ref`
+- [ ] World-safe delegates/events
+- [x] reproducible C++/UnifiedScript benchmark, Puerts comparison gate, and regression thresholds
+- [x] Win64 Development/Shipping cook, dependency closure, and packaged smoke test
+- [ ] Graph Authoring Beta plus native debug traps, deeper locals, and evaluation

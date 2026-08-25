@@ -96,12 +96,38 @@ using FUnifiedScriptNativeReleaseContextV1 = void (*)(void* Context);
 class UEUNIFIEDSCRIPTRUNTIME_API FUnifiedScriptNativeBridgeContext final
 {
 public:
+    struct FPendingCallFrameResult
+    {
+        bool bValid = false;
+        uint8 Operation = 0;
+        uint64 Target = 0;
+        uint64 MemberId = 0;
+        uint64 RequestHash = 0;
+        FUnifiedScriptValue ReturnValue;
+        TArray<FUnifiedScriptValue> OutputValues;
+
+        void Reset()
+        {
+            bValid = false;
+            Operation = 0;
+            Target = 0;
+            MemberId = 0;
+            RequestHash = 0;
+            ReturnValue = {};
+            OutputValues.Reset();
+        }
+    };
+
     explicit FUnifiedScriptNativeBridgeContext(FUnifiedScriptInvocationBridge& InBridge);
 
     bool TryRetain();
     void Release();
     void Detach();
     bool Execute(TFunctionRef<void(FUnifiedScriptInvocationBridge&)> Operation);
+    bool ExecuteCallFrame(
+        TFunctionRef<void(
+            FUnifiedScriptInvocationBridge&,
+            FPendingCallFrameResult&)> Operation);
 
 private:
     ~FUnifiedScriptNativeBridgeContext() = default;
@@ -109,6 +135,7 @@ private:
     std::atomic<uint32> ReferenceCount{1};
     FCriticalSection BridgeLock;
     FUnifiedScriptInvocationBridge* Bridge = nullptr;
+    FPendingCallFrameResult PendingCallFrameResult;
 };
 
 /**
@@ -131,6 +158,8 @@ struct FUnifiedScriptNativeTransportV1
     FUnifiedScriptNativeReleaseContextV1 ReleaseContext = nullptr;
 };
 
+struct FUnifiedScriptNativeTransportV3;
+
 /** ABI v2 preserves the complete v1 prefix and appends stable-ID fast thunks. */
 struct FUnifiedScriptNativeTransportV2
 {
@@ -146,11 +175,177 @@ struct FUnifiedScriptNativeTransportV2
     FUnifiedScriptNativeReadPropertyByIdV2 ReadPropertyById = nullptr;
     FUnifiedScriptNativeWritePropertyByIdV2 WritePropertyById = nullptr;
     FUnifiedScriptNativeInvokeByIdV2 InvokeById = nullptr;
+    /** Optional independent ABI v3 table; older v2 clients ignore this suffix. */
+    const FUnifiedScriptNativeTransportV3* CallFrameTransport = nullptr;
+};
+
+/**
+ * ABI v3 value kinds. The numeric values are part of the native/managed wire
+ * contract and must only be extended by appending new entries.
+ */
+enum class EUnifiedScriptNativeValueKindV3 : uint8
+{
+    Void = 0,
+    Boolean = 1,
+    Int8 = 2,
+    UInt8 = 3,
+    Int16 = 4,
+    UInt16 = 5,
+    Int32 = 6,
+    UInt32 = 7,
+    Int64 = 8,
+    UInt64 = 9,
+    Float32 = 10,
+    Float64 = 11,
+    Enum = 12,
+    Name = 13,
+    String = 14,
+    Text = 15,
+    Object = 16,
+    Class = 17,
+    Vector3 = 18,
+    Rotator3 = 19,
+    Transform = 20,
+    Struct = 21,
+    Array = 22,
+    Set = 23,
+    Map = 24,
+};
+
+enum class EUnifiedScriptNativeValueFlagsV3 : uint8
+{
+    None = 0,
+    Null = 1 << 0,
+    ArenaBacked = 1 << 1,
+};
+
+/** Overall disposition of one synchronous ABI v3 call frame. */
+enum class EUnifiedScriptNativeCallStatusV3 : uint8
+{
+    Uninitialized = 0,
+    Success = 1,
+    InvocationFailure = 2,
+    BufferTooSmall = 3,
+    InvalidFrame = 4,
+    TransportUnavailable = 5,
+};
+
+enum class EUnifiedScriptNativeCapabilitiesV3 : uint64
+{
+    None = 0,
+    FixedScalars = 1ull << 0,
+    Enums = 1ull << 1,
+    ObjectHandles = 1ull << 2,
+    VectorAndRotator = 1ull << 3,
+    Transform = 1ull << 4,
+    Utf8Text = 1ull << 5, // Arena-backed UTF-8 arguments and property writes.
+    Containers = 1ull << 6, // Arena-backed container inputs.
+    OutputAndReference = 1ull << 7,
+    Utf8Results = 1ull << 8, // Preflight-safe UTF-8 reads and return values.
+    ContainerResults = 1ull << 9, // Preflight-safe container reads and returns.
+};
+
+/**
+ * Fixed-size ABI v3 value cell.
+ *
+ * Scalars, object handles, FVector, and FRotator fit inline. Variable-size
+ * values reference the caller-owned byte arena by offset and length; no
+ * allocator ownership crosses the ABI boundary.
+ */
+struct alignas(8) FUnifiedScriptNativeValueV3
+{
+    EUnifiedScriptNativeValueKindV3 Kind = EUnifiedScriptNativeValueKindV3::Void;
+    EUnifiedScriptNativeValueFlagsV3 Flags = EUnifiedScriptNativeValueFlagsV3::None;
+    uint16 Reserved16 = 0;
+    uint32 Auxiliary = 0;
+    uint64 TypeId = 0;
+    uint64 Payload0 = 0;
+    uint64 Payload1 = 0;
+    uint64 Payload2 = 0;
+    uint64 Payload3 = 0;
+};
+
+/**
+ * Caller-owned synchronous ABI v3 request/response frame.
+ *
+ * Arguments, results, and the byte arena remain borrowed for the duration of
+ * a call. BufferTooSmall reports required capacities and produces no partial
+ * result. Flags and every reserved field must be zero for ABI v3.
+ */
+struct alignas(8) FUnifiedScriptNativeCallFrameV3
+{
+    const FUnifiedScriptNativeValueV3* Arguments = nullptr;
+    uint32 ArgumentCount = 0;
+    uint32 Flags = 0;
+    FUnifiedScriptNativeValueV3* Results = nullptr;
+    uint32 ResultCapacity = 0;
+    // In/out: expected result descriptors on entry, produced cells on success.
+    uint32 ResultCount = 0;
+    uint8* ByteBuffer = nullptr;
+    uint32 ByteCapacity = 0;
+    // In/out arena cursor: input bytes occupied on entry, total bytes used on success.
+    uint32 ByteCount = 0;
+    uint32 RequiredResultCapacity = 0;
+    uint32 RequiredByteCapacity = 0;
+    uint8 InvocationError = 0;
+    uint8 HandleError = 0;
+    EUnifiedScriptNativeCallStatusV3 Status =
+        EUnifiedScriptNativeCallStatusV3::Uninitialized;
+    uint8 Reserved8 = 0;
+    uint32 ErrorMessageOffset = 0;
+    uint32 ErrorMessageLength = 0;
+    uint32 Reserved32 = 0;
+};
+
+using FUnifiedScriptNativeExecuteByIdV3 = void (*)(
+    void* Context,
+    uint64 Target,
+    uint64 MemberId,
+    FUnifiedScriptNativeCallFrameV3* Frame);
+
+/**
+ * ABI v3 is intentionally independent from v1/v2 because its caller-owned
+ * call-frame semantics are not prefix-compatible with the callback contract.
+ * The exported table is activated only after its marshaller is implemented.
+ */
+struct alignas(8) FUnifiedScriptNativeTransportV3
+{
+    uint32 AbiVersion = 3;
+    uint32 TableSize = 0;
+    uint32 ValueSize = 0;
+    uint32 CallFrameSize = 0;
+    uint64 Capabilities = 0;
+    FUnifiedScriptNativeRetainContextV1 RetainContext = nullptr;
+    FUnifiedScriptNativeReleaseContextV1 ReleaseContext = nullptr;
+    FUnifiedScriptNativeExecuteByIdV3 ReadPropertyById = nullptr;
+    FUnifiedScriptNativeExecuteByIdV3 WritePropertyById = nullptr;
+    FUnifiedScriptNativeExecuteByIdV3 InvokeById = nullptr;
 };
 
 static_assert(std::is_standard_layout_v<FUnifiedScriptNativeValueV1>);
 static_assert(std::is_standard_layout_v<FUnifiedScriptNativeTransportV1>);
 static_assert(std::is_standard_layout_v<FUnifiedScriptNativeTransportV2>);
+static_assert(std::is_standard_layout_v<FUnifiedScriptNativeValueV3>);
+static_assert(std::is_trivially_copyable_v<FUnifiedScriptNativeValueV3>);
+static_assert(sizeof(FUnifiedScriptNativeValueV3) == 48);
+static_assert(alignof(FUnifiedScriptNativeValueV3) == 8);
+static_assert(STRUCT_OFFSET(FUnifiedScriptNativeValueV3, TypeId) == 8);
+static_assert(STRUCT_OFFSET(FUnifiedScriptNativeValueV3, Payload0) == 16);
+static_assert(std::is_standard_layout_v<FUnifiedScriptNativeCallFrameV3>);
+static_assert(std::is_trivially_copyable_v<FUnifiedScriptNativeCallFrameV3>);
+static_assert(sizeof(FUnifiedScriptNativeCallFrameV3) == 72);
+static_assert(alignof(FUnifiedScriptNativeCallFrameV3) == 8);
+static_assert(STRUCT_OFFSET(FUnifiedScriptNativeCallFrameV3, Results) == 16);
+static_assert(STRUCT_OFFSET(FUnifiedScriptNativeCallFrameV3, ByteBuffer) == 32);
+static_assert(STRUCT_OFFSET(FUnifiedScriptNativeCallFrameV3, Status) == 58);
+static_assert(STRUCT_OFFSET(FUnifiedScriptNativeCallFrameV3, ErrorMessageOffset) == 60);
+static_assert(std::is_standard_layout_v<FUnifiedScriptNativeTransportV3>);
+static_assert(std::is_trivially_copyable_v<FUnifiedScriptNativeTransportV3>);
+static_assert(sizeof(FUnifiedScriptNativeTransportV3) == 64);
+static_assert(alignof(FUnifiedScriptNativeTransportV3) == 8);
+static_assert(STRUCT_OFFSET(FUnifiedScriptNativeTransportV3, Capabilities) == 16);
+static_assert(STRUCT_OFFSET(FUnifiedScriptNativeTransportV3, RetainContext) == 24);
+static_assert(STRUCT_OFFSET(FUnifiedScriptNativeTransportV3, InvokeById) == 56);
 static_assert(
     STRUCT_OFFSET(FUnifiedScriptNativeTransportV2, ReadPropertyById) ==
     sizeof(FUnifiedScriptNativeTransportV1));
@@ -163,3 +358,6 @@ UEUnifiedScript_GetNativeTransportV1();
 
 extern "C" UEUNIFIEDSCRIPTRUNTIME_API const FUnifiedScriptNativeTransportV2*
 UEUnifiedScript_GetNativeTransportV2();
+
+extern "C" UEUNIFIEDSCRIPTRUNTIME_API const FUnifiedScriptNativeTransportV3*
+UEUnifiedScript_GetNativeTransportV3();

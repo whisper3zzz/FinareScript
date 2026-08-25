@@ -251,7 +251,8 @@ FUnifiedScriptObjectHandle FUnifiedScriptObjectRegistry::RegisterObject(
             TEXT("A live UObject is required to create a UnifiedScript handle."));
         return {};
     }
-    if (Object->GetWorld() != RegistryWorld)
+    if (UWorld* ObjectWorld = Object->GetWorld();
+        ObjectWorld != nullptr && ObjectWorld != RegistryWorld)
     {
         Fail(
             OutResult,
@@ -320,7 +321,8 @@ UObject* FUnifiedScriptObjectRegistry::ResolveObject(
             TEXT("The UObject referenced by the UnifiedScript handle has been destroyed."));
         return nullptr;
     }
-    if (Object->GetWorld() != Impl->World.Get())
+    if (UWorld* ObjectWorld = Object->GetWorld();
+        ObjectWorld != nullptr && ObjectWorld != Impl->World.Get())
     {
         Impl->RetireSlotLocked(SlotIndex, Object);
         Fail(

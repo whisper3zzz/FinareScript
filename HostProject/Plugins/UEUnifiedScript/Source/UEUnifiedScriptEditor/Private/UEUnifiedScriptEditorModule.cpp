@@ -2,6 +2,7 @@
 
 #include "EdGraphUtilities.h"
 #include "Graph/SUnifiedScriptGraphNode.h"
+#include "HAL/IConsoleManager.h"
 #include "KismetPins/SGraphPinExec.h"
 #include "Styling/AppStyle.h"
 #include "ToolMenus.h"
@@ -64,6 +65,14 @@ public:
             .SetGroup(WorkspaceMenu::GetMenuStructure().GetToolsCategory())
             .SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("Icons.Code")));
 
+        OpenAuthoringConsoleCommand = IConsoleManager::Get().RegisterConsoleCommand(
+            TEXT("UnifiedScript.OpenAuthoring"),
+            TEXT("Open the UnifiedScript Authoring Surface."),
+            FConsoleCommandDelegate::CreateRaw(
+                this,
+                &FUEUnifiedScriptEditorModule::OpenAuthoringSurface),
+            ECVF_Default);
+
         UToolMenus::RegisterStartupCallback(
             FSimpleMulticastDelegate::FDelegate::CreateRaw(
                 this,
@@ -84,6 +93,11 @@ public:
         }
         UToolMenus::UnRegisterStartupCallback(this);
         UToolMenus::UnregisterOwner(this);
+        if (OpenAuthoringConsoleCommand != nullptr)
+        {
+            IConsoleManager::Get().UnregisterConsoleObject(OpenAuthoringConsoleCommand);
+            OpenAuthoringConsoleCommand = nullptr;
+        }
         FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(
             UE::UnifiedScript::Editor::Private::AuthoringSurfaceTabName);
     }
@@ -91,6 +105,7 @@ public:
 private:
     TSharedPtr<FGraphPanelNodeFactory> GraphNodeFactory;
     TSharedPtr<FGraphPanelPinFactory> GraphPinFactory;
+    IConsoleObject* OpenAuthoringConsoleCommand = nullptr;
 
     TSharedRef<SDockTab> SpawnAuthoringSurfaceTab(const FSpawnTabArgs& Args)
     {

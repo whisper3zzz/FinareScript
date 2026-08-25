@@ -54,6 +54,10 @@ public:
         uint64 InstanceId,
         FString& OutError);
     int32 GetManagedScriptCount(uint64 WorldHostId) const;
+    bool GetManagedInvocationMetrics(
+        uint64 WorldHostId,
+        uint64& OutCallFrameInvocationCount,
+        uint64& OutLegacyInvocationCount) const;
     int32 GetManagedWorldCount() const;
     FString GetHostFxrPath() const;
     FString GetLastError() const;
@@ -77,6 +81,7 @@ private:
     void* ReloadScriptEntryPoint = nullptr;
     void* DestroyScriptEntryPoint = nullptr;
     void* GetScriptCountEntryPoint = nullptr;
+    void* GetInvocationMetricsEntryPoint = nullptr;
     FString LoadedHostFxrPath;
     FString LastError;
 };

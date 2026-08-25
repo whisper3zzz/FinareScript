@@ -21,6 +21,7 @@ coverage/
 
 # Unreal host build output and machine-local project state
 HostProject/Binaries/
+HostProject/Build/
 HostProject/DerivedDataCache/
 HostProject/Intermediate/
 HostProject/Saved/

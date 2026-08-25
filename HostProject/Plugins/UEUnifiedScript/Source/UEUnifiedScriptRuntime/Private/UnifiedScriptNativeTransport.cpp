@@ -2,6 +2,9 @@
 
 #include "Containers/StringConv.h"
 #include "Misc/ScopeLock.h"
+#include "UnifiedScriptGeneratedThunks.h"
+
+#include <bit>
 
 FUnifiedScriptNativeBridgeContext::FUnifiedScriptNativeBridgeContext(
     FUnifiedScriptInvocationBridge& InBridge)
@@ -34,6 +37,7 @@ void FUnifiedScriptNativeBridgeContext::Detach()
 {
     FScopeLock Lock(&BridgeLock);
     Bridge = nullptr;
+    PendingCallFrameResult.Reset();
 }
 
 bool FUnifiedScriptNativeBridgeContext::Execute(
@@ -45,6 +49,20 @@ bool FUnifiedScriptNativeBridgeContext::Execute(
         return false;
     }
     Operation(*Bridge);
+    return true;
+}
+
+bool FUnifiedScriptNativeBridgeContext::ExecuteCallFrame(
+    TFunctionRef<void(
+        FUnifiedScriptInvocationBridge&,
+        FPendingCallFrameResult&)> Operation)
+{
+    FScopeLock Lock(&BridgeLock);
+    if (Bridge == nullptr)
+    {
+        return false;
+    }
+    Operation(*Bridge, PendingCallFrameResult);
     return true;
 }
 
@@ -78,9 +96,26 @@ void Complete(
         return;
     }
 
-    const FTCHARToUTF8 StringUtf8(*Value.StringValue);
+    FString StringValue;
+    switch (Value.Kind)
+    {
+    case EUnifiedScriptValueKind::String:
+        StringValue = Value.StringValue;
+        break;
+    case EUnifiedScriptValueKind::Name:
+        StringValue = Value.NameValue.ToString();
+        break;
+    case EUnifiedScriptValueKind::Text:
+        StringValue = Value.TextValue.ToString();
+        break;
+    default:
+        break;
+    }
+    const FTCHARToUTF8 StringUtf8(*StringValue);
     const FTCHARToUTF8 MessageUtf8(*Result.Message);
-    const bool bHasString = Value.Kind == EUnifiedScriptValueKind::String;
+    const bool bHasString = Value.Kind == EUnifiedScriptValueKind::String ||
+        Value.Kind == EUnifiedScriptValueKind::Name ||
+        Value.Kind == EUnifiedScriptValueKind::Text;
     Callback(
         UserData,
         Result.IsSuccess() ? 1 : 0,
@@ -194,6 +229,28 @@ bool DecodeValue(
             return false;
         }
         OutValue = FUnifiedScriptValue::FromString(MoveTemp(StringValue));
+        return true;
+    }
+    case EUnifiedScriptValueKind::Name:
+    case EUnifiedScriptValueKind::Text:
+    {
+        FString StringValue;
+        if (!TryDecodeUtf8(
+                NativeValue.StringData,
+                NativeValue.StringLength,
+                StringValue))
+        {
+            CompleteFailure(
+                Callback,
+                UserData,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("The UnifiedScript native text value is invalid UTF-8."));
+            return false;
+        }
+        OutValue = static_cast<EUnifiedScriptValueKind>(NativeValue.Kind) ==
+                EUnifiedScriptValueKind::Name
+            ? FUnifiedScriptValue::FromName(FName(*StringValue))
+            : FUnifiedScriptValue::FromText(FText::FromString(StringValue));
         return true;
     }
     default:
@@ -518,6 +575,1077 @@ void InvokeById(
     }
 }
 
+constexpr uint32 V3TransformByteSize = 10u * sizeof(double);
+constexpr uint32 V3MaxContainerDepth = 16;
+
+bool AddArenaBytesV3(uint32& ByteCursor, uint64 ByteCount)
+{
+    if (ByteCount > MAX_uint32 || ByteCursor > MAX_uint32 - ByteCount)
+    {
+        return false;
+    }
+    ByteCursor += static_cast<uint32>(ByteCount);
+    return true;
+}
+
+bool MeasureValueV3(
+    const FUnifiedScriptValue& Value,
+    uint32& ByteCursor,
+    uint32 Depth = 0)
+{
+    if (Depth > V3MaxContainerDepth)
+    {
+        return false;
+    }
+    switch (Value.Kind)
+    {
+    case EUnifiedScriptValueKind::String:
+    {
+        const FTCHARToUTF8 Utf8(*Value.StringValue);
+        return AddArenaBytesV3(ByteCursor, Utf8.Length());
+    }
+    case EUnifiedScriptValueKind::Name:
+    {
+        const FString Text = Value.NameValue.ToString();
+        const FTCHARToUTF8 Utf8(*Text);
+        return AddArenaBytesV3(ByteCursor, Utf8.Length());
+    }
+    case EUnifiedScriptValueKind::Text:
+    {
+        const FString Text = Value.TextValue.ToString();
+        const FTCHARToUTF8 Utf8(*Text);
+        return AddArenaBytesV3(ByteCursor, Utf8.Length());
+    }
+    case EUnifiedScriptValueKind::Transform:
+        return AddArenaBytesV3(ByteCursor, V3TransformByteSize);
+    case EUnifiedScriptValueKind::Array:
+    case EUnifiedScriptValueKind::Set:
+    case EUnifiedScriptValueKind::Map:
+    {
+        if (Value.TypeIdValue == 0 ||
+            (Value.Kind == EUnifiedScriptValueKind::Map &&
+                Value.ContainerValues.Num() % 2 != 0) ||
+            !AddArenaBytesV3(
+                ByteCursor,
+                static_cast<uint64>(Value.ContainerValues.Num()) *
+                    sizeof(FUnifiedScriptNativeValueV3)))
+        {
+            return false;
+        }
+        for (const FUnifiedScriptValue& Element : Value.ContainerValues)
+        {
+            if (!MeasureValueV3(Element, ByteCursor, Depth + 1))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+    default:
+        return true;
+    }
+}
+
+void HashBytesV3(uint64& Hash, const void* Data, uint64 ByteCount)
+{
+    const uint8* Bytes = static_cast<const uint8*>(Data);
+    for (uint64 Index = 0; Index < ByteCount; ++Index)
+    {
+        Hash ^= Bytes[Index];
+        Hash *= 1099511628211ull;
+    }
+}
+
+uint64 HashRequestV3(
+    const FUnifiedScriptNativeCallFrameV3& Frame,
+    uint32 EntryByteCount)
+{
+    uint64 Hash = 14695981039346656037ull;
+    HashBytesV3(Hash, &Frame.ArgumentCount, sizeof(Frame.ArgumentCount));
+    HashBytesV3(Hash, &Frame.ResultCount, sizeof(Frame.ResultCount));
+    if (Frame.ArgumentCount > 0)
+    {
+        HashBytesV3(
+            Hash,
+            Frame.Arguments,
+            static_cast<uint64>(Frame.ArgumentCount) *
+                sizeof(FUnifiedScriptNativeValueV3));
+    }
+    if (Frame.ResultCount > 0)
+    {
+        HashBytesV3(
+            Hash,
+            Frame.Results,
+            static_cast<uint64>(Frame.ResultCount) *
+                sizeof(FUnifiedScriptNativeValueV3));
+    }
+    if (EntryByteCount > 0)
+    {
+        HashBytesV3(Hash, Frame.ByteBuffer, EntryByteCount);
+    }
+    return Hash;
+}
+
+void ResetV3Output(FUnifiedScriptNativeCallFrameV3& Frame, uint32 EntryByteCount)
+{
+    Frame.ResultCount = 0;
+    Frame.ByteCount = EntryByteCount;
+    Frame.RequiredResultCapacity = 0;
+    Frame.RequiredByteCapacity = 0;
+    Frame.InvocationError = 0;
+    Frame.HandleError = 0;
+    Frame.Status = EUnifiedScriptNativeCallStatusV3::Uninitialized;
+    Frame.ErrorMessageOffset = 0;
+    Frame.ErrorMessageLength = 0;
+}
+
+void InvalidFrameV3(FUnifiedScriptNativeCallFrameV3* Frame, uint32 EntryByteCount = 0)
+{
+    if (Frame == nullptr)
+    {
+        return;
+    }
+    ResetV3Output(*Frame, EntryByteCount);
+    Frame->Status = EUnifiedScriptNativeCallStatusV3::InvalidFrame;
+}
+
+void InvocationFailureV3(
+    FUnifiedScriptNativeCallFrameV3& Frame,
+    uint32 EntryByteCount,
+    const FUnifiedScriptInvocationResult& Result)
+{
+    ResetV3Output(Frame, EntryByteCount);
+    Frame.InvocationError = static_cast<uint8>(Result.Error);
+    Frame.HandleError = static_cast<uint8>(Result.HandleError);
+    Frame.Status = EUnifiedScriptNativeCallStatusV3::InvocationFailure;
+}
+
+void UnsupportedValueV3(FUnifiedScriptNativeCallFrameV3& Frame, uint32 EntryByteCount)
+{
+    FUnifiedScriptInvocationResult Result;
+    Result.Error = EUnifiedScriptInvocationError::UnsupportedValueType;
+    InvocationFailureV3(Frame, EntryByteCount, Result);
+}
+
+bool ValidateFrameV3(
+    FUnifiedScriptNativeCallFrameV3* Frame,
+    uint32 ExpectedArgumentCount,
+    uint32 ExpectedResultCount,
+    uint32& OutEntryByteCount)
+{
+    if (Frame == nullptr)
+    {
+        return false;
+    }
+    OutEntryByteCount = Frame->ByteCount;
+    const bool bValid =
+        Frame->Flags == 0 &&
+        Frame->Reserved8 == 0 &&
+        Frame->Reserved32 == 0 &&
+        Frame->Status == EUnifiedScriptNativeCallStatusV3::Uninitialized &&
+        Frame->InvocationError == 0 &&
+        Frame->HandleError == 0 &&
+        Frame->RequiredResultCapacity == 0 &&
+        Frame->RequiredByteCapacity == 0 &&
+        Frame->ErrorMessageOffset == 0 &&
+        Frame->ErrorMessageLength == 0 &&
+        Frame->ArgumentCount == ExpectedArgumentCount &&
+        (ExpectedArgumentCount == 0 || Frame->Arguments != nullptr) &&
+        Frame->ResultCount == ExpectedResultCount &&
+        Frame->ResultCapacity >= ExpectedResultCount &&
+        (ExpectedResultCount == 0 || Frame->Results != nullptr) &&
+        Frame->ByteCount <= Frame->ByteCapacity &&
+        (Frame->ByteCapacity == 0 || Frame->ByteBuffer != nullptr);
+    if (!bValid)
+    {
+        InvalidFrameV3(Frame, OutEntryByteCount);
+        return false;
+    }
+    return true;
+}
+
+bool ToNativeKindV3(
+    EUnifiedScriptValueKind Kind,
+    EUnifiedScriptNativeValueKindV3& OutKind)
+{
+    switch (Kind)
+    {
+    case EUnifiedScriptValueKind::Void:
+        OutKind = EUnifiedScriptNativeValueKindV3::Void;
+        return true;
+    case EUnifiedScriptValueKind::Boolean:
+        OutKind = EUnifiedScriptNativeValueKindV3::Boolean;
+        return true;
+    case EUnifiedScriptValueKind::Int8:
+        OutKind = EUnifiedScriptNativeValueKindV3::Int8;
+        return true;
+    case EUnifiedScriptValueKind::UInt8:
+        OutKind = EUnifiedScriptNativeValueKindV3::UInt8;
+        return true;
+    case EUnifiedScriptValueKind::Int16:
+        OutKind = EUnifiedScriptNativeValueKindV3::Int16;
+        return true;
+    case EUnifiedScriptValueKind::UInt16:
+        OutKind = EUnifiedScriptNativeValueKindV3::UInt16;
+        return true;
+    case EUnifiedScriptValueKind::Int32:
+        OutKind = EUnifiedScriptNativeValueKindV3::Int32;
+        return true;
+    case EUnifiedScriptValueKind::UInt32:
+        OutKind = EUnifiedScriptNativeValueKindV3::UInt32;
+        return true;
+    case EUnifiedScriptValueKind::Int64:
+        OutKind = EUnifiedScriptNativeValueKindV3::Int64;
+        return true;
+    case EUnifiedScriptValueKind::UInt64:
+        OutKind = EUnifiedScriptNativeValueKindV3::UInt64;
+        return true;
+    case EUnifiedScriptValueKind::Float32:
+        OutKind = EUnifiedScriptNativeValueKindV3::Float32;
+        return true;
+    case EUnifiedScriptValueKind::Float64:
+        OutKind = EUnifiedScriptNativeValueKindV3::Float64;
+        return true;
+    case EUnifiedScriptValueKind::Enum:
+        OutKind = EUnifiedScriptNativeValueKindV3::Enum;
+        return true;
+    case EUnifiedScriptValueKind::String:
+        OutKind = EUnifiedScriptNativeValueKindV3::String;
+        return true;
+    case EUnifiedScriptValueKind::Name:
+        OutKind = EUnifiedScriptNativeValueKindV3::Name;
+        return true;
+    case EUnifiedScriptValueKind::Text:
+        OutKind = EUnifiedScriptNativeValueKindV3::Text;
+        return true;
+    case EUnifiedScriptValueKind::Object:
+        OutKind = EUnifiedScriptNativeValueKindV3::Object;
+        return true;
+    case EUnifiedScriptValueKind::Class:
+        OutKind = EUnifiedScriptNativeValueKindV3::Class;
+        return true;
+    case EUnifiedScriptValueKind::Vector:
+        OutKind = EUnifiedScriptNativeValueKindV3::Vector3;
+        return true;
+    case EUnifiedScriptValueKind::Rotator:
+        OutKind = EUnifiedScriptNativeValueKindV3::Rotator3;
+        return true;
+    case EUnifiedScriptValueKind::Transform:
+        OutKind = EUnifiedScriptNativeValueKindV3::Transform;
+        return true;
+    case EUnifiedScriptValueKind::Array:
+        OutKind = EUnifiedScriptNativeValueKindV3::Array;
+        return true;
+    case EUnifiedScriptValueKind::Set:
+        OutKind = EUnifiedScriptNativeValueKindV3::Set;
+        return true;
+    case EUnifiedScriptValueKind::Map:
+        OutKind = EUnifiedScriptNativeValueKindV3::Map;
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool ValidateResultDescriptorV3(
+    const FUnifiedScriptNativeValueV3& Descriptor,
+    EUnifiedScriptValueKind ExpectedKind,
+    uint64 ExpectedTypeId)
+{
+    EUnifiedScriptNativeValueKindV3 NativeKind;
+    if (!ToNativeKindV3(ExpectedKind, NativeKind) || Descriptor.Kind != NativeKind ||
+        Descriptor.Reserved16 != 0 || Descriptor.Auxiliary != 0)
+    {
+        return false;
+    }
+    if (ExpectedKind == EUnifiedScriptValueKind::Enum)
+    {
+        return ExpectedTypeId != 0 && Descriptor.TypeId == ExpectedTypeId &&
+            Descriptor.Flags == EUnifiedScriptNativeValueFlagsV3::None;
+    }
+    if (ExpectedKind == EUnifiedScriptValueKind::Transform)
+    {
+        return Descriptor.TypeId == 0 &&
+            Descriptor.Flags == EUnifiedScriptNativeValueFlagsV3::ArenaBacked &&
+            (Descriptor.Payload1 == 0 || Descriptor.Payload1 == V3TransformByteSize);
+    }
+    if (ExpectedKind == EUnifiedScriptValueKind::String ||
+        ExpectedKind == EUnifiedScriptValueKind::Name ||
+        ExpectedKind == EUnifiedScriptValueKind::Text)
+    {
+        return Descriptor.TypeId == 0 &&
+            Descriptor.Flags == EUnifiedScriptNativeValueFlagsV3::ArenaBacked;
+    }
+    if (ExpectedKind == EUnifiedScriptValueKind::Array ||
+        ExpectedKind == EUnifiedScriptValueKind::Set ||
+        ExpectedKind == EUnifiedScriptValueKind::Map)
+    {
+        return ExpectedTypeId != 0 && Descriptor.TypeId == ExpectedTypeId &&
+            Descriptor.Flags == EUnifiedScriptNativeValueFlagsV3::ArenaBacked &&
+            (Descriptor.Payload3 == 0 ||
+                Descriptor.Payload3 == sizeof(FUnifiedScriptNativeValueV3));
+    }
+    return Descriptor.TypeId == 0 &&
+        Descriptor.Flags == EUnifiedScriptNativeValueFlagsV3::None;
+}
+
+double ReadDoubleV3(const uint8* Buffer, uint64 Offset)
+{
+    uint64 Bits = 0;
+    FMemory::Memcpy(&Bits, Buffer + Offset, sizeof(Bits));
+    return std::bit_cast<double>(Bits);
+}
+
+void WriteDoubleV3(uint8* Buffer, uint32 Offset, double Value)
+{
+    const uint64 Bits = std::bit_cast<uint64>(Value);
+    FMemory::Memcpy(Buffer + Offset, &Bits, sizeof(Bits));
+}
+
+bool DecodeValueV3(
+    const FUnifiedScriptNativeValueV3& Native,
+    const FUnifiedScriptNativeCallFrameV3& Frame,
+    uint32 EntryByteCount,
+    FUnifiedScriptValue& OutValue,
+    uint32 Depth = 0)
+{
+    constexpr uint32 MaxContainerDepth = 16;
+    if (Native.Reserved16 != 0 || Native.Auxiliary != 0 || Depth > MaxContainerDepth)
+    {
+        return false;
+    }
+    switch (Native.Kind)
+    {
+    case EUnifiedScriptNativeValueKindV3::Boolean:
+        if (Native.Flags != EUnifiedScriptNativeValueFlagsV3::None ||
+            Native.TypeId != 0 || Native.Payload0 > 1)
+        {
+            return false;
+        }
+        OutValue = FUnifiedScriptValue::FromBoolean(Native.Payload0 != 0);
+        return true;
+    case EUnifiedScriptNativeValueKindV3::Int8:
+        OutValue = FUnifiedScriptValue::FromInt8(static_cast<int8>(Native.Payload0));
+        break;
+    case EUnifiedScriptNativeValueKindV3::UInt8:
+        OutValue = FUnifiedScriptValue::FromUInt8(static_cast<uint8>(Native.Payload0));
+        break;
+    case EUnifiedScriptNativeValueKindV3::Int16:
+        OutValue = FUnifiedScriptValue::FromInt16(static_cast<int16>(Native.Payload0));
+        break;
+    case EUnifiedScriptNativeValueKindV3::UInt16:
+        OutValue = FUnifiedScriptValue::FromUInt16(static_cast<uint16>(Native.Payload0));
+        break;
+    case EUnifiedScriptNativeValueKindV3::Int32:
+        OutValue = FUnifiedScriptValue::FromInt32(static_cast<int32>(Native.Payload0));
+        break;
+    case EUnifiedScriptNativeValueKindV3::UInt32:
+        OutValue = FUnifiedScriptValue::FromUInt32(static_cast<uint32>(Native.Payload0));
+        break;
+    case EUnifiedScriptNativeValueKindV3::Int64:
+        OutValue = FUnifiedScriptValue::FromInt64(static_cast<int64>(Native.Payload0));
+        break;
+    case EUnifiedScriptNativeValueKindV3::UInt64:
+        OutValue = FUnifiedScriptValue::FromUInt64(Native.Payload0);
+        break;
+    case EUnifiedScriptNativeValueKindV3::Float32:
+        OutValue = FUnifiedScriptValue::FromFloat32(
+            std::bit_cast<float>(static_cast<uint32>(Native.Payload0)));
+        break;
+    case EUnifiedScriptNativeValueKindV3::Float64:
+        OutValue = FUnifiedScriptValue::FromFloat64(std::bit_cast<double>(Native.Payload0));
+        break;
+    case EUnifiedScriptNativeValueKindV3::Enum:
+        if (Native.TypeId == 0)
+        {
+            return false;
+        }
+        OutValue = FUnifiedScriptValue::FromEnumTypeId(
+            static_cast<int64>(Native.Payload0),
+            Native.TypeId);
+        return Native.Flags == EUnifiedScriptNativeValueFlagsV3::None;
+    case EUnifiedScriptNativeValueKindV3::Object:
+    case EUnifiedScriptNativeValueKindV3::Class:
+        if (Native.Flags != EUnifiedScriptNativeValueFlagsV3::None ||
+            Native.TypeId != 0 || Native.Payload1 != 0 ||
+            Native.Payload2 != 0 || Native.Payload3 != 0)
+        {
+            return false;
+        }
+        OutValue = FUnifiedScriptValue::FromObjectHandle(
+            {Native.Payload0},
+            Native.Kind == EUnifiedScriptNativeValueKindV3::Class);
+        return true;
+    case EUnifiedScriptNativeValueKindV3::String:
+    case EUnifiedScriptNativeValueKindV3::Name:
+    case EUnifiedScriptNativeValueKindV3::Text:
+    {
+        if (Native.Flags != EUnifiedScriptNativeValueFlagsV3::ArenaBacked ||
+            Native.TypeId != 0 || Native.Payload0 > EntryByteCount ||
+            Native.Payload1 > EntryByteCount - Native.Payload0 ||
+            Native.Payload1 > MAX_int32)
+        {
+            return false;
+        }
+        FString Decoded;
+        const uint8* Utf8Data = Native.Payload1 == 0
+            ? nullptr
+            : Frame.ByteBuffer + static_cast<uint32>(Native.Payload0);
+        if (!TryDecodeUtf8(
+                Utf8Data,
+                static_cast<int32>(Native.Payload1),
+                Decoded))
+        {
+            return false;
+        }
+        if (Native.Kind == EUnifiedScriptNativeValueKindV3::String)
+        {
+            OutValue = FUnifiedScriptValue::FromString(MoveTemp(Decoded));
+        }
+        else if (Native.Kind == EUnifiedScriptNativeValueKindV3::Name)
+        {
+            OutValue = FUnifiedScriptValue::FromName(FName(*Decoded));
+        }
+        else
+        {
+            OutValue = FUnifiedScriptValue::FromText(FText::FromString(Decoded));
+        }
+        return true;
+    }
+    case EUnifiedScriptNativeValueKindV3::Vector3:
+        OutValue = FUnifiedScriptValue::FromVector(FVector(
+            std::bit_cast<double>(Native.Payload0),
+            std::bit_cast<double>(Native.Payload1),
+            std::bit_cast<double>(Native.Payload2)));
+        break;
+    case EUnifiedScriptNativeValueKindV3::Rotator3:
+        OutValue = FUnifiedScriptValue::FromRotator(FRotator(
+            std::bit_cast<double>(Native.Payload0),
+            std::bit_cast<double>(Native.Payload1),
+            std::bit_cast<double>(Native.Payload2)));
+        break;
+    case EUnifiedScriptNativeValueKindV3::Transform:
+    {
+        if (Native.Flags != EUnifiedScriptNativeValueFlagsV3::ArenaBacked ||
+            Native.TypeId != 0 || Native.Payload1 != V3TransformByteSize ||
+            Native.Payload0 > EntryByteCount ||
+            EntryByteCount - static_cast<uint32>(Native.Payload0) < V3TransformByteSize)
+        {
+            return false;
+        }
+        const uint64 Offset = Native.Payload0;
+        OutValue = FUnifiedScriptValue::FromTransform(FTransform(
+            FQuat(
+                ReadDoubleV3(Frame.ByteBuffer, Offset + 0 * sizeof(double)),
+                ReadDoubleV3(Frame.ByteBuffer, Offset + 1 * sizeof(double)),
+                ReadDoubleV3(Frame.ByteBuffer, Offset + 2 * sizeof(double)),
+                ReadDoubleV3(Frame.ByteBuffer, Offset + 3 * sizeof(double))),
+            FVector(
+                ReadDoubleV3(Frame.ByteBuffer, Offset + 4 * sizeof(double)),
+                ReadDoubleV3(Frame.ByteBuffer, Offset + 5 * sizeof(double)),
+                ReadDoubleV3(Frame.ByteBuffer, Offset + 6 * sizeof(double))),
+            FVector(
+                ReadDoubleV3(Frame.ByteBuffer, Offset + 7 * sizeof(double)),
+                ReadDoubleV3(Frame.ByteBuffer, Offset + 8 * sizeof(double)),
+                ReadDoubleV3(Frame.ByteBuffer, Offset + 9 * sizeof(double)))));
+        return true;
+    }
+    case EUnifiedScriptNativeValueKindV3::Array:
+    case EUnifiedScriptNativeValueKindV3::Set:
+    case EUnifiedScriptNativeValueKindV3::Map:
+    {
+        const uint64 CellsPerEntry =
+            Native.Kind == EUnifiedScriptNativeValueKindV3::Map ? 2ull : 1ull;
+        if (Native.Flags != EUnifiedScriptNativeValueFlagsV3::ArenaBacked ||
+            Native.TypeId == 0 || Native.Payload3 != sizeof(FUnifiedScriptNativeValueV3) ||
+            Native.Payload2 > MAX_int32 ||
+            Native.Payload2 > MAX_uint64 / CellsPerEntry)
+        {
+            return false;
+        }
+        const uint64 CellCount = Native.Payload2 * CellsPerEntry;
+        if (CellCount > MAX_uint32 / sizeof(FUnifiedScriptNativeValueV3))
+        {
+            return false;
+        }
+        const uint64 DescriptorBytes = CellCount * sizeof(FUnifiedScriptNativeValueV3);
+        if (Native.Payload1 != DescriptorBytes ||
+            Native.Payload0 > EntryByteCount ||
+            DescriptorBytes > EntryByteCount - Native.Payload0)
+        {
+            return false;
+        }
+        TArray<FUnifiedScriptValue> Values;
+        Values.Reserve(static_cast<int32>(CellCount));
+        for (uint64 Index = 0; Index < CellCount; ++Index)
+        {
+            FUnifiedScriptNativeValueV3 Cell;
+            FMemory::Memcpy(
+                &Cell,
+                Frame.ByteBuffer + Native.Payload0 +
+                    Index * sizeof(FUnifiedScriptNativeValueV3),
+                sizeof(Cell));
+            FUnifiedScriptValue Decoded;
+            if (!DecodeValueV3(Cell, Frame, EntryByteCount, Decoded, Depth + 1))
+            {
+                return false;
+            }
+            Values.Add(MoveTemp(Decoded));
+        }
+        if (Native.Kind == EUnifiedScriptNativeValueKindV3::Array)
+        {
+            OutValue = FUnifiedScriptValue::FromArray(MoveTemp(Values), Native.TypeId);
+        }
+        else if (Native.Kind == EUnifiedScriptNativeValueKindV3::Set)
+        {
+            OutValue = FUnifiedScriptValue::FromSet(MoveTemp(Values), Native.TypeId);
+        }
+        else
+        {
+            OutValue = FUnifiedScriptValue::FromMap(MoveTemp(Values), Native.TypeId);
+        }
+        return true;
+    }
+    default:
+        return false;
+    }
+    return Native.Flags == EUnifiedScriptNativeValueFlagsV3::None && Native.TypeId == 0;
+}
+
+bool EncodeValueV3(
+    const FUnifiedScriptValue& Value,
+    FUnifiedScriptNativeCallFrameV3& Frame,
+    FUnifiedScriptNativeValueV3& Native,
+    uint32& ByteCursor,
+    uint32 Depth = 0)
+{
+    if (Depth > V3MaxContainerDepth)
+    {
+        return false;
+    }
+    Native = {};
+    switch (Value.Kind)
+    {
+    case EUnifiedScriptValueKind::Boolean:
+        Native.Kind = EUnifiedScriptNativeValueKindV3::Boolean;
+        Native.Payload0 = Value.BooleanValue ? 1 : 0;
+        break;
+    case EUnifiedScriptValueKind::Int8:
+        Native.Kind = EUnifiedScriptNativeValueKindV3::Int8;
+        Native.Payload0 = static_cast<uint64>(Value.Int8Value);
+        break;
+    case EUnifiedScriptValueKind::UInt8:
+        Native.Kind = EUnifiedScriptNativeValueKindV3::UInt8;
+        Native.Payload0 = Value.UInt8Value;
+        break;
+    case EUnifiedScriptValueKind::Int16:
+        Native.Kind = EUnifiedScriptNativeValueKindV3::Int16;
+        Native.Payload0 = static_cast<uint64>(Value.Int16Value);
+        break;
+    case EUnifiedScriptValueKind::UInt16:
+        Native.Kind = EUnifiedScriptNativeValueKindV3::UInt16;
+        Native.Payload0 = Value.UInt16Value;
+        break;
+    case EUnifiedScriptValueKind::Int32:
+        Native.Kind = EUnifiedScriptNativeValueKindV3::Int32;
+        Native.Payload0 = static_cast<uint64>(Value.Int32Value);
+        break;
+    case EUnifiedScriptValueKind::UInt32:
+        Native.Kind = EUnifiedScriptNativeValueKindV3::UInt32;
+        Native.Payload0 = Value.UInt32Value;
+        break;
+    case EUnifiedScriptValueKind::Int64:
+        Native.Kind = EUnifiedScriptNativeValueKindV3::Int64;
+        Native.Payload0 = static_cast<uint64>(Value.Int64Value);
+        break;
+    case EUnifiedScriptValueKind::UInt64:
+        Native.Kind = EUnifiedScriptNativeValueKindV3::UInt64;
+        Native.Payload0 = Value.UInt64Value;
+        break;
+    case EUnifiedScriptValueKind::Float32:
+        Native.Kind = EUnifiedScriptNativeValueKindV3::Float32;
+        Native.Payload0 = std::bit_cast<uint32>(Value.Float32Value);
+        break;
+    case EUnifiedScriptValueKind::Float64:
+        Native.Kind = EUnifiedScriptNativeValueKindV3::Float64;
+        Native.Payload0 = std::bit_cast<uint64>(Value.Float64Value);
+        break;
+    case EUnifiedScriptValueKind::Enum:
+        Native.Kind = EUnifiedScriptNativeValueKindV3::Enum;
+        Native.TypeId = Value.TypeIdValue;
+        Native.Payload0 = static_cast<uint64>(Value.Int64Value);
+        break;
+    case EUnifiedScriptValueKind::String:
+    case EUnifiedScriptValueKind::Name:
+    case EUnifiedScriptValueKind::Text:
+    {
+        const FString Text = Value.Kind == EUnifiedScriptValueKind::String
+            ? Value.StringValue
+            : Value.Kind == EUnifiedScriptValueKind::Name
+                ? Value.NameValue.ToString()
+                : Value.TextValue.ToString();
+        const FTCHARToUTF8 Utf8(*Text);
+        const uint32 Utf8Length = static_cast<uint32>(Utf8.Length());
+        if (ByteCursor > Frame.ByteCapacity ||
+            Utf8Length > Frame.ByteCapacity - ByteCursor)
+        {
+            return false;
+        }
+        Native.Kind = Value.Kind == EUnifiedScriptValueKind::String
+            ? EUnifiedScriptNativeValueKindV3::String
+            : Value.Kind == EUnifiedScriptValueKind::Name
+                ? EUnifiedScriptNativeValueKindV3::Name
+                : EUnifiedScriptNativeValueKindV3::Text;
+        Native.Flags = EUnifiedScriptNativeValueFlagsV3::ArenaBacked;
+        Native.Payload0 = ByteCursor;
+        Native.Payload1 = Utf8Length;
+        if (Utf8Length > 0)
+        {
+            FMemory::Memcpy(Frame.ByteBuffer + ByteCursor, Utf8.Get(), Utf8Length);
+        }
+        ByteCursor += Utf8Length;
+        break;
+    }
+    case EUnifiedScriptValueKind::Object:
+        Native.Kind = EUnifiedScriptNativeValueKindV3::Object;
+        Native.Payload0 = Value.ObjectHandleValue.Value;
+        break;
+    case EUnifiedScriptValueKind::Class:
+        Native.Kind = EUnifiedScriptNativeValueKindV3::Class;
+        Native.Payload0 = Value.ObjectHandleValue.Value;
+        break;
+    case EUnifiedScriptValueKind::Vector:
+        Native.Kind = EUnifiedScriptNativeValueKindV3::Vector3;
+        Native.Payload0 = std::bit_cast<uint64>(Value.VectorValue.X);
+        Native.Payload1 = std::bit_cast<uint64>(Value.VectorValue.Y);
+        Native.Payload2 = std::bit_cast<uint64>(Value.VectorValue.Z);
+        break;
+    case EUnifiedScriptValueKind::Rotator:
+        Native.Kind = EUnifiedScriptNativeValueKindV3::Rotator3;
+        Native.Payload0 = std::bit_cast<uint64>(Value.RotatorValue.Pitch);
+        Native.Payload1 = std::bit_cast<uint64>(Value.RotatorValue.Yaw);
+        Native.Payload2 = std::bit_cast<uint64>(Value.RotatorValue.Roll);
+        break;
+    case EUnifiedScriptValueKind::Transform:
+    {
+        Native.Kind = EUnifiedScriptNativeValueKindV3::Transform;
+        Native.Flags = EUnifiedScriptNativeValueFlagsV3::ArenaBacked;
+        Native.Payload0 = ByteCursor;
+        Native.Payload1 = V3TransformByteSize;
+        const FQuat Rotation = Value.TransformValue.GetRotation();
+        const FVector Translation = Value.TransformValue.GetTranslation();
+        const FVector Scale = Value.TransformValue.GetScale3D();
+        WriteDoubleV3(Frame.ByteBuffer, ByteCursor + 0 * sizeof(double), Rotation.X);
+        WriteDoubleV3(Frame.ByteBuffer, ByteCursor + 1 * sizeof(double), Rotation.Y);
+        WriteDoubleV3(Frame.ByteBuffer, ByteCursor + 2 * sizeof(double), Rotation.Z);
+        WriteDoubleV3(Frame.ByteBuffer, ByteCursor + 3 * sizeof(double), Rotation.W);
+        WriteDoubleV3(Frame.ByteBuffer, ByteCursor + 4 * sizeof(double), Translation.X);
+        WriteDoubleV3(Frame.ByteBuffer, ByteCursor + 5 * sizeof(double), Translation.Y);
+        WriteDoubleV3(Frame.ByteBuffer, ByteCursor + 6 * sizeof(double), Translation.Z);
+        WriteDoubleV3(Frame.ByteBuffer, ByteCursor + 7 * sizeof(double), Scale.X);
+        WriteDoubleV3(Frame.ByteBuffer, ByteCursor + 8 * sizeof(double), Scale.Y);
+        WriteDoubleV3(Frame.ByteBuffer, ByteCursor + 9 * sizeof(double), Scale.Z);
+        ByteCursor += V3TransformByteSize;
+        break;
+    }
+    case EUnifiedScriptValueKind::Array:
+    case EUnifiedScriptValueKind::Set:
+    case EUnifiedScriptValueKind::Map:
+    {
+        if (Value.TypeIdValue == 0 ||
+            (Value.Kind == EUnifiedScriptValueKind::Map &&
+                Value.ContainerValues.Num() % 2 != 0))
+        {
+            return false;
+        }
+        const uint64 DescriptorByteCount =
+            static_cast<uint64>(Value.ContainerValues.Num()) *
+            sizeof(FUnifiedScriptNativeValueV3);
+        if (ByteCursor > Frame.ByteCapacity ||
+            DescriptorByteCount > Frame.ByteCapacity - ByteCursor)
+        {
+            return false;
+        }
+        const uint32 DescriptorOffset = ByteCursor;
+        ByteCursor += static_cast<uint32>(DescriptorByteCount);
+        for (int32 Index = 0; Index < Value.ContainerValues.Num(); ++Index)
+        {
+            FUnifiedScriptNativeValueV3 Element;
+            if (!EncodeValueV3(
+                    Value.ContainerValues[Index],
+                    Frame,
+                    Element,
+                    ByteCursor,
+                    Depth + 1))
+            {
+                return false;
+            }
+            FMemory::Memcpy(
+                Frame.ByteBuffer + DescriptorOffset +
+                    Index * sizeof(FUnifiedScriptNativeValueV3),
+                &Element,
+                sizeof(Element));
+        }
+        Native.Kind = Value.Kind == EUnifiedScriptValueKind::Array
+            ? EUnifiedScriptNativeValueKindV3::Array
+            : Value.Kind == EUnifiedScriptValueKind::Set
+                ? EUnifiedScriptNativeValueKindV3::Set
+                : EUnifiedScriptNativeValueKindV3::Map;
+        Native.Flags = EUnifiedScriptNativeValueFlagsV3::ArenaBacked;
+        Native.TypeId = Value.TypeIdValue;
+        Native.Payload0 = DescriptorOffset;
+        Native.Payload1 = DescriptorByteCount;
+        Native.Payload2 = Value.Kind == EUnifiedScriptValueKind::Map
+            ? Value.ContainerValues.Num() / 2
+            : Value.ContainerValues.Num();
+        Native.Payload3 = sizeof(FUnifiedScriptNativeValueV3);
+        break;
+    }
+    default:
+        return false;
+    }
+    return true;
+}
+
+bool PreflightResultV3(
+    FUnifiedScriptNativeCallFrameV3& Frame,
+    uint32 EntryByteCount,
+    EUnifiedScriptValueKind ExpectedKind,
+    uint64 ExpectedTypeId)
+{
+    const uint32 ExpectedResultCount =
+        ExpectedKind == EUnifiedScriptValueKind::Void ? 0u : 1u;
+    if (Frame.ResultCount != ExpectedResultCount ||
+        Frame.ResultCapacity < ExpectedResultCount ||
+        (ExpectedResultCount > 0 && Frame.Results == nullptr))
+    {
+        InvalidFrameV3(&Frame, EntryByteCount);
+        return false;
+    }
+    if (ExpectedResultCount == 0)
+    {
+        return true;
+    }
+    if (!ValidateResultDescriptorV3(Frame.Results[0], ExpectedKind, ExpectedTypeId))
+    {
+        InvalidFrameV3(&Frame, EntryByteCount);
+        return false;
+    }
+    const uint32 RequiredBytes = EntryByteCount +
+        (ExpectedKind == EUnifiedScriptValueKind::Transform ? V3TransformByteSize : 0u);
+    if (RequiredBytes > Frame.ByteCapacity)
+    {
+        ResetV3Output(Frame, EntryByteCount);
+        Frame.RequiredResultCapacity = ExpectedResultCount;
+        Frame.RequiredByteCapacity = RequiredBytes;
+        Frame.Status = EUnifiedScriptNativeCallStatusV3::BufferTooSmall;
+        return false;
+    }
+    return true;
+}
+
+void ReadPropertyByIdV3(
+    void* Context,
+    uint64 Target,
+    uint64 MemberId,
+    FUnifiedScriptNativeCallFrameV3* Frame)
+{
+    uint32 EntryByteCount = Frame != nullptr ? Frame->ByteCount : 0;
+    if (!ValidateFrameV3(Frame, 0, 1, EntryByteCount))
+    {
+        return;
+    }
+    EUnifiedScriptValueKind ExpectedKind;
+    uint64 ExpectedTypeId = 0;
+    if (!UE::UnifiedScript::Generated::DescribeReadResult(
+            MemberId, ExpectedKind, ExpectedTypeId))
+    {
+        FUnifiedScriptInvocationResult Result;
+        Result.Error = EUnifiedScriptInvocationError::InvalidMemberPath;
+        InvocationFailureV3(*Frame, EntryByteCount, Result);
+        return;
+    }
+    EUnifiedScriptNativeValueKindV3 SupportedKind;
+    if (!ToNativeKindV3(ExpectedKind, SupportedKind))
+    {
+        UnsupportedValueV3(*Frame, EntryByteCount);
+        return;
+    }
+    if (!PreflightResultV3(*Frame, EntryByteCount, ExpectedKind, ExpectedTypeId))
+    {
+        return;
+    }
+    const bool bExecuted = Context != nullptr &&
+        static_cast<FUnifiedScriptNativeBridgeContext*>(Context)->Execute(
+            [&](FUnifiedScriptInvocationBridge& Bridge)
+            {
+                FUnifiedScriptValue Value;
+                FUnifiedScriptInvocationResult Result;
+                if (!Bridge.ReadPropertyById({Target}, MemberId, Value, Result))
+                {
+                    InvocationFailureV3(*Frame, EntryByteCount, Result);
+                    return;
+                }
+                uint32 RequiredByteCapacity = EntryByteCount;
+                if (!MeasureValueV3(Value, RequiredByteCapacity))
+                {
+                    UnsupportedValueV3(*Frame, EntryByteCount);
+                    return;
+                }
+                if (RequiredByteCapacity > Frame->ByteCapacity)
+                {
+                    ResetV3Output(*Frame, EntryByteCount);
+                    Frame->RequiredResultCapacity = 1;
+                    Frame->RequiredByteCapacity = RequiredByteCapacity;
+                    Frame->Status = EUnifiedScriptNativeCallStatusV3::BufferTooSmall;
+                    return;
+                }
+                ResetV3Output(*Frame, EntryByteCount);
+                uint32 ByteCursor = EntryByteCount;
+                if (!EncodeValueV3(Value, *Frame, Frame->Results[0], ByteCursor))
+                {
+                    UnsupportedValueV3(*Frame, EntryByteCount);
+                    return;
+                }
+                Frame->ResultCount = 1;
+                Frame->ByteCount = ByteCursor;
+                Frame->Status = EUnifiedScriptNativeCallStatusV3::Success;
+            });
+    if (!bExecuted)
+    {
+        ResetV3Output(*Frame, EntryByteCount);
+        Frame->Status = EUnifiedScriptNativeCallStatusV3::TransportUnavailable;
+    }
+}
+
+void WritePropertyByIdV3(
+    void* Context,
+    uint64 Target,
+    uint64 MemberId,
+    FUnifiedScriptNativeCallFrameV3* Frame)
+{
+    uint32 EntryByteCount = Frame != nullptr ? Frame->ByteCount : 0;
+    if (!ValidateFrameV3(Frame, 1, 0, EntryByteCount))
+    {
+        return;
+    }
+    FUnifiedScriptValue Value;
+    if (!DecodeValueV3(Frame->Arguments[0], *Frame, EntryByteCount, Value))
+    {
+        InvalidFrameV3(Frame, EntryByteCount);
+        return;
+    }
+    const bool bExecuted = Context != nullptr &&
+        static_cast<FUnifiedScriptNativeBridgeContext*>(Context)->Execute(
+            [&](FUnifiedScriptInvocationBridge& Bridge)
+            {
+                FUnifiedScriptInvocationResult Result;
+                if (!Bridge.WritePropertyById({Target}, MemberId, Value, Result))
+                {
+                    InvocationFailureV3(*Frame, EntryByteCount, Result);
+                    return;
+                }
+                ResetV3Output(*Frame, EntryByteCount);
+                Frame->Status = EUnifiedScriptNativeCallStatusV3::Success;
+            });
+    if (!bExecuted)
+    {
+        ResetV3Output(*Frame, EntryByteCount);
+        Frame->Status = EUnifiedScriptNativeCallStatusV3::TransportUnavailable;
+    }
+}
+
+void InvokeByIdV3(
+    void* Context,
+    uint64 Target,
+    uint64 MemberId,
+    FUnifiedScriptNativeCallFrameV3* Frame)
+{
+    uint32 EntryByteCount = Frame != nullptr ? Frame->ByteCount : 0;
+    if (Frame == nullptr || Frame->ArgumentCount > 64)
+    {
+        InvalidFrameV3(Frame, EntryByteCount);
+        return;
+    }
+    uint32 ExpectedResultCount = 0;
+    if (!UE::UnifiedScript::Generated::DescribeInvokeResultCount(
+            MemberId, ExpectedResultCount) ||
+        ExpectedResultCount > 64)
+    {
+        FUnifiedScriptInvocationResult Result;
+        Result.Error = EUnifiedScriptInvocationError::InvalidMemberPath;
+        InvocationFailureV3(*Frame, EntryByteCount, Result);
+        return;
+    }
+    if (!ValidateFrameV3(
+            Frame,
+            Frame->ArgumentCount,
+            ExpectedResultCount,
+            EntryByteCount))
+    {
+        return;
+    }
+    uint32 RequiredByteCapacity = EntryByteCount;
+    for (uint32 ResultIndex = 0; ResultIndex < ExpectedResultCount; ++ResultIndex)
+    {
+        EUnifiedScriptValueKind ExpectedKind;
+        uint64 ExpectedTypeId = 0;
+        if (!UE::UnifiedScript::Generated::DescribeInvokeResult(
+                MemberId, ResultIndex, ExpectedKind, ExpectedTypeId))
+        {
+            InvalidFrameV3(Frame, EntryByteCount);
+            return;
+        }
+        EUnifiedScriptNativeValueKindV3 SupportedKind;
+        if (!ToNativeKindV3(ExpectedKind, SupportedKind))
+        {
+            UnsupportedValueV3(*Frame, EntryByteCount);
+            return;
+        }
+        if (!ValidateResultDescriptorV3(
+                Frame->Results[ResultIndex], ExpectedKind, ExpectedTypeId))
+        {
+            InvalidFrameV3(Frame, EntryByteCount);
+            return;
+        }
+        if (ExpectedKind == EUnifiedScriptValueKind::Transform)
+        {
+            if (RequiredByteCapacity > MAX_uint32 - V3TransformByteSize)
+            {
+                InvalidFrameV3(Frame, EntryByteCount);
+                return;
+            }
+            RequiredByteCapacity += V3TransformByteSize;
+        }
+    }
+    if (RequiredByteCapacity > Frame->ByteCapacity)
+    {
+        ResetV3Output(*Frame, EntryByteCount);
+        Frame->RequiredResultCapacity = ExpectedResultCount;
+        Frame->RequiredByteCapacity = RequiredByteCapacity;
+        Frame->Status = EUnifiedScriptNativeCallStatusV3::BufferTooSmall;
+        return;
+    }
+    TArray<FUnifiedScriptValue, TInlineAllocator<8>> Arguments;
+    Arguments.Reserve(Frame->ArgumentCount);
+    for (uint32 Index = 0; Index < Frame->ArgumentCount; ++Index)
+    {
+        FUnifiedScriptValue Value;
+        if (!DecodeValueV3(Frame->Arguments[Index], *Frame, EntryByteCount, Value))
+        {
+            InvalidFrameV3(Frame, EntryByteCount);
+            return;
+        }
+        Arguments.Add(MoveTemp(Value));
+    }
+    const uint64 RequestHash = HashRequestV3(*Frame, EntryByteCount);
+    const bool bExecuted = Context != nullptr &&
+        static_cast<FUnifiedScriptNativeBridgeContext*>(Context)->ExecuteCallFrame(
+            [&](FUnifiedScriptInvocationBridge& Bridge,
+                FUnifiedScriptNativeBridgeContext::FPendingCallFrameResult& Pending)
+            {
+                FUnifiedScriptValue ReturnValue;
+                TArray<FUnifiedScriptValue> OutputValues;
+                FUnifiedScriptInvocationResult Result;
+                const bool bUsePending = Pending.bValid && Pending.Operation == 2 &&
+                    Pending.Target == Target && Pending.MemberId == MemberId &&
+                    Pending.RequestHash == RequestHash;
+                if (bUsePending)
+                {
+                    ReturnValue = Pending.ReturnValue;
+                    OutputValues = Pending.OutputValues;
+                }
+                else
+                {
+                    Pending.Reset();
+                    if (!Bridge.InvokeById(
+                            {Target},
+                            MemberId,
+                            Arguments,
+                            ReturnValue,
+                            OutputValues,
+                            Result))
+                    {
+                        InvocationFailureV3(*Frame, EntryByteCount, Result);
+                        return;
+                    }
+                }
+                const uint32 ProducedResultCount =
+                    (ReturnValue.Kind == EUnifiedScriptValueKind::Void ? 0u : 1u) +
+                    static_cast<uint32>(OutputValues.Num());
+                if (ProducedResultCount != ExpectedResultCount)
+                {
+                    Pending.Reset();
+                    Result.Error = EUnifiedScriptInvocationError::UnsupportedParameter;
+                    InvocationFailureV3(*Frame, EntryByteCount, Result);
+                    return;
+                }
+                uint32 MeasuredByteCapacity = EntryByteCount;
+                bool bMeasured = ReturnValue.Kind == EUnifiedScriptValueKind::Void ||
+                    MeasureValueV3(ReturnValue, MeasuredByteCapacity);
+                for (const FUnifiedScriptValue& OutputValue : OutputValues)
+                {
+                    bMeasured = bMeasured &&
+                        MeasureValueV3(OutputValue, MeasuredByteCapacity);
+                }
+                if (!bMeasured)
+                {
+                    Pending.Reset();
+                    UnsupportedValueV3(*Frame, EntryByteCount);
+                    return;
+                }
+                if (MeasuredByteCapacity > Frame->ByteCapacity)
+                {
+                    Pending.bValid = true;
+                    Pending.Operation = 2;
+                    Pending.Target = Target;
+                    Pending.MemberId = MemberId;
+                    Pending.RequestHash = RequestHash;
+                    Pending.ReturnValue = ReturnValue;
+                    Pending.OutputValues = OutputValues;
+                    ResetV3Output(*Frame, EntryByteCount);
+                    Frame->RequiredResultCapacity = ExpectedResultCount;
+                    Frame->RequiredByteCapacity = MeasuredByteCapacity;
+                    Frame->Status = EUnifiedScriptNativeCallStatusV3::BufferTooSmall;
+                    return;
+                }
+                Pending.Reset();
+                ResetV3Output(*Frame, EntryByteCount);
+                uint32 ResultIndex = 0;
+                uint32 ByteCursor = EntryByteCount;
+                if (ReturnValue.Kind != EUnifiedScriptValueKind::Void &&
+                    !EncodeValueV3(
+                        ReturnValue,
+                        *Frame,
+                        Frame->Results[ResultIndex++],
+                        ByteCursor))
+                {
+                    UnsupportedValueV3(*Frame, EntryByteCount);
+                    return;
+                }
+                for (const FUnifiedScriptValue& OutputValue : OutputValues)
+                {
+                    if (!EncodeValueV3(
+                            OutputValue,
+                            *Frame,
+                            Frame->Results[ResultIndex++],
+                            ByteCursor))
+                    {
+                        UnsupportedValueV3(*Frame, EntryByteCount);
+                        return;
+                    }
+                }
+                Frame->ResultCount = ResultIndex;
+                Frame->ByteCount = ByteCursor;
+                Frame->Status = EUnifiedScriptNativeCallStatusV3::Success;
+            });
+    if (!bExecuted)
+    {
+        ResetV3Output(*Frame, EntryByteCount);
+        Frame->Status = EUnifiedScriptNativeCallStatusV3::TransportUnavailable;
+    }
+}
+
 uint8 RetainContext(void* Context)
 {
     return Context != nullptr &&
@@ -570,6 +1698,38 @@ UEUnifiedScript_GetNativeTransportV2()
         &ReadPropertyById,
         &WritePropertyById,
         &InvokeById,
+        UEUnifiedScript_GetNativeTransportV3(),
+    };
+    return &Transport;
+}
+
+extern "C" const FUnifiedScriptNativeTransportV3*
+UEUnifiedScript_GetNativeTransportV3()
+{
+    using namespace UE::UnifiedScript::NativeTransport::Private;
+    constexpr uint64 Capabilities =
+        static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::FixedScalars) |
+        static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::Enums) |
+        static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::ObjectHandles) |
+        static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::VectorAndRotator) |
+        static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::Transform) |
+        static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::Utf8Text) |
+        static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::Containers) |
+        static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::OutputAndReference) |
+        static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::Utf8Results) |
+        static_cast<uint64>(EUnifiedScriptNativeCapabilitiesV3::ContainerResults);
+
+    static const FUnifiedScriptNativeTransportV3 Transport = {
+        3,
+        sizeof(FUnifiedScriptNativeTransportV3),
+        sizeof(FUnifiedScriptNativeValueV3),
+        sizeof(FUnifiedScriptNativeCallFrameV3),
+        Capabilities,
+        &RetainContext,
+        &ReleaseContext,
+        &ReadPropertyByIdV3,
+        &WritePropertyByIdV3,
+        &InvokeByIdV3,
     };
     return &Transport;
 }

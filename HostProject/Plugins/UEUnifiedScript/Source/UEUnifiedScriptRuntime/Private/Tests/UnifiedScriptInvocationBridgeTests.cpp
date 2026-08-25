@@ -6,6 +6,7 @@
 #include "Engine/World.h"
 #include "Misc/AutomationTest.h"
 #include "UnifiedScriptComponent.h"
+#include "UnifiedScriptInteropFixture.h"
 #include "UObject/UObjectGlobals.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -108,6 +109,92 @@ bool FUnifiedScriptInvocationBridgePrimitivesTest::RunTest(const FString& Parame
                 Result));
         TestTrue(TEXT("Void call executes native behavior"), Component->ConsumeReloadRequest());
         TestTrue(TEXT("Void call returns a void value"), Value.Kind == EUnifiedScriptValueKind::Void);
+
+        UUnifiedScriptInteropFixture* Interop = NewObject<UUnifiedScriptInteropFixture>(World);
+        const FUnifiedScriptObjectHandle InteropHandle =
+            Registry.RegisterObject(Interop, HandleResult);
+        TestTrue(TEXT("Common-type fixture registration succeeds"), HandleResult.IsSuccess());
+
+        constexpr uint64 VectorValueId = UnifiedScriptMemberId(
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:VectorValue");
+        constexpr uint64 ModeId = UnifiedScriptMemberId(
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:Mode");
+        constexpr uint64 AddInt64Id = UnifiedScriptMemberId(
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:AddInt64");
+        constexpr uint64 AddVectorId = UnifiedScriptMemberId(
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:AddVector");
+        constexpr uint64 EchoTransformId = UnifiedScriptMemberId(
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoTransform");
+
+        TestTrue(
+            TEXT("Generated FVector read succeeds"),
+            Bridge.ReadPropertyById(InteropHandle, VectorValueId, Value, Result));
+        FVector VectorValue;
+        TestTrue(TEXT("Generated FVector result has the expected kind"), Value.TryGetVector(VectorValue));
+        TestTrue(TEXT("Generated FVector read preserves components"), VectorValue.Equals(FVector(1.0, 2.0, 3.0)));
+
+        const FVector WrittenVector(4.0, 5.0, 6.0);
+        TestTrue(
+            TEXT("Generated FVector write succeeds"),
+            Bridge.WritePropertyById(
+                InteropHandle,
+                VectorValueId,
+                FUnifiedScriptValue::FromVector(WrittenVector),
+                Result));
+        TestTrue(TEXT("Generated FVector write reaches native state"), Interop->VectorValue.Equals(WrittenVector));
+
+        TestTrue(
+            TEXT("Generated enum write succeeds"),
+            Bridge.WritePropertyById(
+                InteropHandle,
+                ModeId,
+                FUnifiedScriptValue::FromEnum(
+                    static_cast<int64>(EUnifiedScriptInteropMode::Active),
+                    FName(TEXT("/Script/UEUnifiedScriptRuntime.EUnifiedScriptInteropMode"))),
+                Result));
+        TestTrue(
+            TEXT("Generated enum write retains its declared type"),
+            Interop->Mode == EUnifiedScriptInteropMode::Active);
+
+        const TArray<FUnifiedScriptValue> Int64Arguments = {
+            FUnifiedScriptValue::FromInt64(40),
+            FUnifiedScriptValue::FromInt64(2),
+        };
+        TestTrue(
+            TEXT("Generated int64 invocation succeeds"),
+            Bridge.InvokeById(InteropHandle, AddInt64Id, Int64Arguments, Value, Result));
+        int64 Int64Result = 0;
+        TestTrue(TEXT("Generated int64 result has the expected kind"), Value.TryGetInt64(Int64Result));
+        TestEqual(TEXT("Generated int64 invocation returns its value"), Int64Result, static_cast<int64>(42));
+
+        const TArray<FUnifiedScriptValue> VectorArguments = {
+            FUnifiedScriptValue::FromVector(FVector(10.0, 20.0, 30.0)),
+            FUnifiedScriptValue::FromVector(FVector(1.0, 2.0, 3.0)),
+        };
+        TestTrue(
+            TEXT("Generated FVector invocation succeeds"),
+            Bridge.InvokeById(InteropHandle, AddVectorId, VectorArguments, Value, Result));
+        TestTrue(TEXT("Generated FVector return decodes"), Value.TryGetVector(VectorValue));
+        TestTrue(TEXT("Generated FVector invocation returns its value"), VectorValue.Equals(FVector(11.0, 22.0, 33.0)));
+
+        const FTransform ExpectedTransform(
+            FRotator(5.0, 10.0, 15.0),
+            FVector(7.0, 8.0, 9.0),
+            FVector(2.0));
+        const TArray<FUnifiedScriptValue> TransformArguments = {
+            FUnifiedScriptValue::FromTransform(ExpectedTransform),
+        };
+        TestTrue(
+            TEXT("Generated FTransform invocation succeeds"),
+            Bridge.InvokeById(
+                InteropHandle,
+                EchoTransformId,
+                TransformArguments,
+                Value,
+                Result));
+        FTransform ActualTransform;
+        TestTrue(TEXT("Generated FTransform return decodes"), Value.TryGetTransform(ActualTransform));
+        TestTrue(TEXT("Generated FTransform invocation returns its value"), ActualTransform.Equals(ExpectedTransform));
 
         TestFalse(
             TEXT("Incorrect argument count is rejected"),

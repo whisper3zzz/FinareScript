@@ -1,3 +1,12 @@
+/**
+ * @Copyright: 2026 Tencent Inc. All rights reserved. reserved.
+ * @Author: whispersong
+ * @Date: 2026-08-24 19:48:12
+ * @LastEditors: whispersong
+ * @LastEditTime: 2026-08-25 10:17:32
+ * @FilePath: \Plugins\UEUnifiedScript\Source\UEUnifiedScriptEditor\Private\Graph\UnifiedScriptGraphPresentation.h
+ * @Description:
+ */
 #pragma once
 
 #include "CoreMinimal.h"

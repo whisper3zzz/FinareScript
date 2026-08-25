@@ -1,0 +1,55 @@
+using System.Runtime.InteropServices;
+using UnifiedScript.Unreal;
+
+namespace UnifiedScript.Tests;
+
+public sealed class UnrealNativeAbiV3Tests
+{
+    [Fact]
+    public void ValueLayoutMatchesNativeContract()
+    {
+        Assert.Equal(UnrealNativeAbiV3.ValueSize, Marshal.SizeOf<UnrealNativeValueV3>());
+        Assert.Equal(0, OffsetOf<UnrealNativeValueV3>(nameof(UnrealNativeValueV3.Kind)));
+        Assert.Equal(1, OffsetOf<UnrealNativeValueV3>(nameof(UnrealNativeValueV3.Flags)));
+        Assert.Equal(4, OffsetOf<UnrealNativeValueV3>(nameof(UnrealNativeValueV3.Auxiliary)));
+        Assert.Equal(8, OffsetOf<UnrealNativeValueV3>(nameof(UnrealNativeValueV3.TypeId)));
+        Assert.Equal(16, OffsetOf<UnrealNativeValueV3>(nameof(UnrealNativeValueV3.Payload0)));
+        Assert.Equal(40, OffsetOf<UnrealNativeValueV3>(nameof(UnrealNativeValueV3.Payload3)));
+    }
+
+    [Fact]
+    public void CallFrameLayoutMatchesNativeContract()
+    {
+        Assert.Equal(UnrealNativeAbiV3.CallFrameSize, Marshal.SizeOf<UnrealNativeCallFrameV3>());
+        Assert.Equal(0, OffsetOf<UnrealNativeCallFrameV3>(nameof(UnrealNativeCallFrameV3.Arguments)));
+        Assert.Equal(16, OffsetOf<UnrealNativeCallFrameV3>(nameof(UnrealNativeCallFrameV3.Results)));
+        Assert.Equal(32, OffsetOf<UnrealNativeCallFrameV3>(nameof(UnrealNativeCallFrameV3.ByteBuffer)));
+        Assert.Equal(48, OffsetOf<UnrealNativeCallFrameV3>(nameof(UnrealNativeCallFrameV3.RequiredResultCapacity)));
+        Assert.Equal(58, OffsetOf<UnrealNativeCallFrameV3>(nameof(UnrealNativeCallFrameV3.Status)));
+        Assert.Equal(60, OffsetOf<UnrealNativeCallFrameV3>(nameof(UnrealNativeCallFrameV3.ErrorMessageOffset)));
+        Assert.Equal(68, OffsetOf<UnrealNativeCallFrameV3>(nameof(UnrealNativeCallFrameV3.Reserved32)));
+    }
+
+    [Fact]
+    public void TransportTableLayoutMatchesNativeContract()
+    {
+        Assert.Equal(UnrealNativeAbiV3.TransportTableSize, Marshal.SizeOf<UnrealNativeTransportTableV3>());
+        Assert.Equal(0, OffsetOf<UnrealNativeTransportTableV3>(nameof(UnrealNativeTransportTableV3.AbiVersion)));
+        Assert.Equal(16, OffsetOf<UnrealNativeTransportTableV3>(nameof(UnrealNativeTransportTableV3.Capabilities)));
+        Assert.Equal(24, OffsetOf<UnrealNativeTransportTableV3>(nameof(UnrealNativeTransportTableV3.RetainContext)));
+        Assert.Equal(56, OffsetOf<UnrealNativeTransportTableV3>(nameof(UnrealNativeTransportTableV3.InvokeById)));
+    }
+
+    [Fact]
+    public void StableEnumValuesAreAppendOnly()
+    {
+        Assert.Equal(0, (byte)UnrealNativeValueKindV3.Void);
+        Assert.Equal(12, (byte)UnrealNativeValueKindV3.Enum);
+        Assert.Equal(18, (byte)UnrealNativeValueKindV3.Vector3);
+        Assert.Equal(24, (byte)UnrealNativeValueKindV3.Map);
+        Assert.Equal(5, (byte)UnrealNativeCallStatusV3.TransportUnavailable);
+    }
+
+    private static int OffsetOf<T>(string fieldName)
+        where T : struct => Marshal.OffsetOf<T>(fieldName).ToInt32();
+}

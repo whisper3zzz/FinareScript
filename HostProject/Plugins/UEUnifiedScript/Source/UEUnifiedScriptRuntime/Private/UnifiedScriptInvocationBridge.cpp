@@ -91,6 +91,7 @@ bool ResolveMemberIdentity(
 }
 
 bool ReadValue(
+    FUnifiedScriptObjectRegistry& Registry,
     const FProperty* Property,
     const void* Container,
     FUnifiedScriptValue& OutValue,
@@ -108,10 +109,147 @@ bool ReadValue(
             IntProperty->GetPropertyValue_InContainer(Container));
         return true;
     }
+    if (const FInt8Property* TypedProperty = CastField<FInt8Property>(Property))
+    {
+        OutValue = FUnifiedScriptValue::FromInt8(
+            TypedProperty->GetPropertyValue_InContainer(Container));
+        return true;
+    }
+    if (const FByteProperty* TypedProperty = CastField<FByteProperty>(Property))
+    {
+        const uint8 Value = TypedProperty->GetPropertyValue_InContainer(Container);
+        OutValue = TypedProperty->Enum != nullptr
+            ? FUnifiedScriptValue::FromEnum(Value, FName(*TypedProperty->Enum->GetPathName()))
+            : FUnifiedScriptValue::FromUInt8(Value);
+        return true;
+    }
+    if (const FInt16Property* TypedProperty = CastField<FInt16Property>(Property))
+    {
+        OutValue = FUnifiedScriptValue::FromInt16(
+            TypedProperty->GetPropertyValue_InContainer(Container));
+        return true;
+    }
+    if (const FUInt16Property* TypedProperty = CastField<FUInt16Property>(Property))
+    {
+        OutValue = FUnifiedScriptValue::FromUInt16(
+            TypedProperty->GetPropertyValue_InContainer(Container));
+        return true;
+    }
+    if (const FUInt32Property* TypedProperty = CastField<FUInt32Property>(Property))
+    {
+        OutValue = FUnifiedScriptValue::FromUInt32(
+            TypedProperty->GetPropertyValue_InContainer(Container));
+        return true;
+    }
+    if (const FInt64Property* TypedProperty = CastField<FInt64Property>(Property))
+    {
+        OutValue = FUnifiedScriptValue::FromInt64(
+            TypedProperty->GetPropertyValue_InContainer(Container));
+        return true;
+    }
+    if (const FUInt64Property* TypedProperty = CastField<FUInt64Property>(Property))
+    {
+        OutValue = FUnifiedScriptValue::FromUInt64(
+            TypedProperty->GetPropertyValue_InContainer(Container));
+        return true;
+    }
+    if (const FFloatProperty* TypedProperty = CastField<FFloatProperty>(Property))
+    {
+        OutValue = FUnifiedScriptValue::FromFloat32(
+            TypedProperty->GetPropertyValue_InContainer(Container));
+        return true;
+    }
+    if (const FDoubleProperty* TypedProperty = CastField<FDoubleProperty>(Property))
+    {
+        OutValue = FUnifiedScriptValue::FromFloat64(
+            TypedProperty->GetPropertyValue_InContainer(Container));
+        return true;
+    }
     if (const FStrProperty* StringProperty = CastField<FStrProperty>(Property))
     {
         OutValue = FUnifiedScriptValue::FromString(
             StringProperty->GetPropertyValue_InContainer(Container));
+        return true;
+    }
+    if (const FNameProperty* TypedProperty = CastField<FNameProperty>(Property))
+    {
+        OutValue = FUnifiedScriptValue::FromName(
+            TypedProperty->GetPropertyValue_InContainer(Container));
+        return true;
+    }
+    if (const FTextProperty* TypedProperty = CastField<FTextProperty>(Property))
+    {
+        OutValue = FUnifiedScriptValue::FromText(
+            TypedProperty->GetPropertyValue_InContainer(Container));
+        return true;
+    }
+    if (const FEnumProperty* TypedProperty = CastField<FEnumProperty>(Property))
+    {
+        const void* ValueAddress = TypedProperty->ContainerPtrToValuePtr<void>(Container);
+        OutValue = FUnifiedScriptValue::FromEnum(
+            TypedProperty->GetUnderlyingProperty()->GetSignedIntPropertyValue(ValueAddress),
+            FName(*TypedProperty->GetEnum()->GetPathName()));
+        return true;
+    }
+    if (const FStructProperty* TypedProperty = CastField<FStructProperty>(Property))
+    {
+        if (TypedProperty->Struct == TBaseStructure<FVector>::Get())
+        {
+            OutValue = FUnifiedScriptValue::FromVector(
+                *TypedProperty->ContainerPtrToValuePtr<FVector>(Container));
+            return true;
+        }
+        if (TypedProperty->Struct == TBaseStructure<FRotator>::Get())
+        {
+            OutValue = FUnifiedScriptValue::FromRotator(
+                *TypedProperty->ContainerPtrToValuePtr<FRotator>(Container));
+            return true;
+        }
+        if (TypedProperty->Struct == TBaseStructure<FTransform>::Get())
+        {
+            OutValue = FUnifiedScriptValue::FromTransform(
+                *TypedProperty->ContainerPtrToValuePtr<FTransform>(Container));
+            return true;
+        }
+    }
+    if (const FClassProperty* TypedProperty = CastField<FClassProperty>(Property))
+    {
+        UClass* Object = Cast<UClass>(TypedProperty->GetObjectPropertyValue_InContainer(Container));
+        if (Object == nullptr)
+        {
+            OutValue = FUnifiedScriptValue::FromObjectHandle({}, true);
+            return true;
+        }
+        FUnifiedScriptObjectHandleResult HandleResult;
+        const FUnifiedScriptObjectHandle Handle = Registry.RegisterObject(Object, HandleResult);
+        if (!HandleResult.IsSuccess())
+        {
+            OutResult.Error = EUnifiedScriptInvocationError::ObjectHandleFailure;
+            OutResult.HandleError = HandleResult.Error;
+            OutResult.Message = MoveTemp(HandleResult.Message);
+            return false;
+        }
+        OutValue = FUnifiedScriptValue::FromObjectHandle(Handle, true);
+        return true;
+    }
+    if (const FObjectPropertyBase* TypedProperty = CastField<FObjectPropertyBase>(Property))
+    {
+        UObject* Object = TypedProperty->GetObjectPropertyValue_InContainer(Container);
+        if (Object == nullptr)
+        {
+            OutValue = FUnifiedScriptValue::FromObjectHandle({});
+            return true;
+        }
+        FUnifiedScriptObjectHandleResult HandleResult;
+        const FUnifiedScriptObjectHandle Handle = Registry.RegisterObject(Object, HandleResult);
+        if (!HandleResult.IsSuccess())
+        {
+            OutResult.Error = EUnifiedScriptInvocationError::ObjectHandleFailure;
+            OutResult.HandleError = HandleResult.Error;
+            OutResult.Message = MoveTemp(HandleResult.Message);
+            return false;
+        }
+        OutValue = FUnifiedScriptValue::FromObjectHandle(Handle);
         return true;
     }
 
@@ -126,6 +264,7 @@ bool ReadValue(
 }
 
 bool WriteValue(
+    FUnifiedScriptObjectRegistry& Registry,
     FProperty* Property,
     void* Container,
     const FUnifiedScriptValue& Value,
@@ -159,6 +298,100 @@ bool WriteValue(
         IntProperty->SetPropertyValue_InContainer(Container, NativeValue);
         return true;
     }
+    if (FInt8Property* TypedProperty = CastField<FInt8Property>(Property))
+    {
+        int8 NativeValue = 0;
+        if (Value.TryGetInt8(NativeValue))
+        {
+            TypedProperty->SetPropertyValue_InContainer(Container, NativeValue);
+            return true;
+        }
+    }
+    if (FByteProperty* TypedProperty = CastField<FByteProperty>(Property))
+    {
+        uint8 NativeValue = 0;
+        const bool bValid = TypedProperty->Enum != nullptr
+            ? [&]
+            {
+                int64 EnumValue = 0;
+                if (!Value.TryGetEnum(EnumValue, FName(*TypedProperty->Enum->GetPathName())) ||
+                    EnumValue < 0 || EnumValue > MAX_uint8)
+                {
+                    return false;
+                }
+                NativeValue = static_cast<uint8>(EnumValue);
+                return true;
+            }()
+            : Value.TryGetUInt8(NativeValue);
+        if (bValid)
+        {
+            TypedProperty->SetPropertyValue_InContainer(Container, NativeValue);
+            return true;
+        }
+    }
+    if (FInt16Property* TypedProperty = CastField<FInt16Property>(Property))
+    {
+        int16 NativeValue = 0;
+        if (Value.TryGetInt16(NativeValue))
+        {
+            TypedProperty->SetPropertyValue_InContainer(Container, NativeValue);
+            return true;
+        }
+    }
+    if (FUInt16Property* TypedProperty = CastField<FUInt16Property>(Property))
+    {
+        uint16 NativeValue = 0;
+        if (Value.TryGetUInt16(NativeValue))
+        {
+            TypedProperty->SetPropertyValue_InContainer(Container, NativeValue);
+            return true;
+        }
+    }
+    if (FUInt32Property* TypedProperty = CastField<FUInt32Property>(Property))
+    {
+        uint32 NativeValue = 0;
+        if (Value.TryGetUInt32(NativeValue))
+        {
+            TypedProperty->SetPropertyValue_InContainer(Container, NativeValue);
+            return true;
+        }
+    }
+    if (FInt64Property* TypedProperty = CastField<FInt64Property>(Property))
+    {
+        int64 NativeValue = 0;
+        if (Value.TryGetInt64(NativeValue))
+        {
+            TypedProperty->SetPropertyValue_InContainer(Container, NativeValue);
+            return true;
+        }
+    }
+    if (FUInt64Property* TypedProperty = CastField<FUInt64Property>(Property))
+    {
+        uint64 NativeValue = 0;
+        if (Value.TryGetUInt64(NativeValue))
+        {
+            TypedProperty->SetPropertyValue_InContainer(Container, NativeValue);
+            return true;
+        }
+    }
+    if (FFloatProperty* TypedProperty = CastField<FFloatProperty>(Property))
+    {
+        float NativeValue = 0.0f;
+        if (Value.TryGetFloat32(NativeValue))
+        {
+            TypedProperty->SetPropertyValue_InContainer(Container, NativeValue);
+            return true;
+        }
+    }
+    if (FDoubleProperty* TypedProperty = CastField<FDoubleProperty>(Property))
+    {
+        double NativeValue = 0.0;
+        if (Value.TryGetFloat64(NativeValue))
+        {
+            TypedProperty->SetPropertyValue_InContainer(Container, NativeValue);
+            return true;
+        }
+    }
     if (FStrProperty* StringProperty = CastField<FStrProperty>(Property))
     {
         FString NativeValue;
@@ -172,6 +405,124 @@ bool WriteValue(
         }
         StringProperty->SetPropertyValue_InContainer(Container, NativeValue);
         return true;
+    }
+    if (FNameProperty* TypedProperty = CastField<FNameProperty>(Property))
+    {
+        FName NativeValue;
+        if (Value.TryGetName(NativeValue))
+        {
+            TypedProperty->SetPropertyValue_InContainer(Container, NativeValue);
+            return true;
+        }
+    }
+    if (FTextProperty* TypedProperty = CastField<FTextProperty>(Property))
+    {
+        FText NativeValue;
+        if (Value.TryGetText(NativeValue))
+        {
+            TypedProperty->SetPropertyValue_InContainer(Container, NativeValue);
+            return true;
+        }
+    }
+    if (FEnumProperty* TypedProperty = CastField<FEnumProperty>(Property))
+    {
+        int64 NativeValue = 0;
+        if (Value.TryGetEnum(NativeValue, FName(*TypedProperty->GetEnum()->GetPathName())))
+        {
+            void* ValueAddress = TypedProperty->ContainerPtrToValuePtr<void>(Container);
+            TypedProperty->GetUnderlyingProperty()->SetIntPropertyValue(ValueAddress, NativeValue);
+            return true;
+        }
+    }
+    if (FStructProperty* TypedProperty = CastField<FStructProperty>(Property))
+    {
+        if (TypedProperty->Struct == TBaseStructure<FVector>::Get())
+        {
+            FVector NativeValue;
+            if (Value.TryGetVector(NativeValue))
+            {
+                *TypedProperty->ContainerPtrToValuePtr<FVector>(Container) = NativeValue;
+                return true;
+            }
+        }
+        else if (TypedProperty->Struct == TBaseStructure<FRotator>::Get())
+        {
+            FRotator NativeValue;
+            if (Value.TryGetRotator(NativeValue))
+            {
+                *TypedProperty->ContainerPtrToValuePtr<FRotator>(Container) = NativeValue;
+                return true;
+            }
+        }
+        else if (TypedProperty->Struct == TBaseStructure<FTransform>::Get())
+        {
+            FTransform NativeValue;
+            if (Value.TryGetTransform(NativeValue))
+            {
+                *TypedProperty->ContainerPtrToValuePtr<FTransform>(Container) = NativeValue;
+                return true;
+            }
+        }
+    }
+    if (FObjectPropertyBase* TypedProperty = CastField<FObjectPropertyBase>(Property))
+    {
+        const bool bClass = CastField<FClassProperty>(TypedProperty) != nullptr;
+        FUnifiedScriptObjectHandle Handle;
+        if (Value.TryGetObjectHandle(Handle, bClass))
+        {
+            UObject* Object = nullptr;
+            if (!Handle.IsNull())
+            {
+                FUnifiedScriptObjectHandleResult HandleResult;
+                Object = Registry.ResolveObject(Handle, HandleResult);
+                if (!HandleResult.IsSuccess())
+                {
+                    OutResult.Error = EUnifiedScriptInvocationError::ObjectHandleFailure;
+                    OutResult.HandleError = HandleResult.Error;
+                    OutResult.Message = MoveTemp(HandleResult.Message);
+                    return false;
+                }
+            }
+            if (const FClassProperty* ClassProperty = CastField<FClassProperty>(TypedProperty))
+            {
+                const UClass* Class = Cast<UClass>(Object);
+                if (Object != nullptr &&
+                    (Class == nullptr || !Class->IsChildOf(ClassProperty->MetaClass)))
+                {
+                    Object = nullptr;
+                }
+            }
+            else if (Object != nullptr && !Object->IsA(TypedProperty->PropertyClass))
+            {
+                Object = nullptr;
+            }
+            if (Object != nullptr || Handle.IsNull())
+            {
+                TypedProperty->SetObjectPropertyValue_InContainer(Container, Object);
+                return true;
+            }
+        }
+    }
+
+    const FStructProperty* StructProperty = CastField<FStructProperty>(Property);
+    const bool bSupportedStruct = StructProperty != nullptr &&
+        (StructProperty->Struct == TBaseStructure<FVector>::Get() ||
+         StructProperty->Struct == TBaseStructure<FRotator>::Get() ||
+         StructProperty->Struct == TBaseStructure<FTransform>::Get());
+    if (CastField<FNumericProperty>(Property) != nullptr ||
+        CastField<FEnumProperty>(Property) != nullptr ||
+        CastField<FNameProperty>(Property) != nullptr ||
+        CastField<FTextProperty>(Property) != nullptr ||
+        CastField<FObjectPropertyBase>(Property) != nullptr ||
+        bSupportedStruct)
+    {
+        Fail(
+            OutResult,
+            EUnifiedScriptInvocationError::ValueTypeMismatch,
+            FString::Printf(
+                TEXT("Property '%s' received an incompatible UnifiedScript value."),
+                *Property->GetName()));
+        return false;
     }
 
     Fail(
@@ -209,6 +560,96 @@ FUnifiedScriptValue FUnifiedScriptValue::FromString(FString Value)
     return Result;
 }
 
+#define UE_UNIFIEDSCRIPT_DEFINE_VALUE_FACTORY(Name, KindName, Type, Field) \
+    FUnifiedScriptValue FUnifiedScriptValue::From##Name(Type Value)         \
+    {                                                                      \
+        FUnifiedScriptValue Result;                                        \
+        Result.Kind = EUnifiedScriptValueKind::KindName;                   \
+        Result.Field = Value;                                              \
+        return Result;                                                     \
+    }
+
+UE_UNIFIEDSCRIPT_DEFINE_VALUE_FACTORY(Int8, Int8, int8, Int8Value)
+UE_UNIFIEDSCRIPT_DEFINE_VALUE_FACTORY(UInt8, UInt8, uint8, UInt8Value)
+UE_UNIFIEDSCRIPT_DEFINE_VALUE_FACTORY(Int16, Int16, int16, Int16Value)
+UE_UNIFIEDSCRIPT_DEFINE_VALUE_FACTORY(UInt16, UInt16, uint16, UInt16Value)
+UE_UNIFIEDSCRIPT_DEFINE_VALUE_FACTORY(UInt32, UInt32, uint32, UInt32Value)
+UE_UNIFIEDSCRIPT_DEFINE_VALUE_FACTORY(Int64, Int64, int64, Int64Value)
+UE_UNIFIEDSCRIPT_DEFINE_VALUE_FACTORY(UInt64, UInt64, uint64, UInt64Value)
+UE_UNIFIEDSCRIPT_DEFINE_VALUE_FACTORY(Float32, Float32, float, Float32Value)
+UE_UNIFIEDSCRIPT_DEFINE_VALUE_FACTORY(Float64, Float64, double, Float64Value)
+UE_UNIFIEDSCRIPT_DEFINE_VALUE_FACTORY(Name, Name, FName, NameValue)
+UE_UNIFIEDSCRIPT_DEFINE_VALUE_FACTORY(Text, Text, FText, TextValue)
+UE_UNIFIEDSCRIPT_DEFINE_VALUE_FACTORY(Vector, Vector, FVector, VectorValue)
+UE_UNIFIEDSCRIPT_DEFINE_VALUE_FACTORY(Rotator, Rotator, FRotator, RotatorValue)
+UE_UNIFIEDSCRIPT_DEFINE_VALUE_FACTORY(Transform, Transform, FTransform, TransformValue)
+
+#undef UE_UNIFIEDSCRIPT_DEFINE_VALUE_FACTORY
+
+FUnifiedScriptValue FUnifiedScriptValue::FromObjectHandle(
+    FUnifiedScriptObjectHandle Value,
+    bool bClass)
+{
+    FUnifiedScriptValue Result;
+    Result.Kind = bClass ? EUnifiedScriptValueKind::Class : EUnifiedScriptValueKind::Object;
+    Result.ObjectHandleValue = Value;
+    return Result;
+}
+
+FUnifiedScriptValue FUnifiedScriptValue::FromEnum(int64 Value, FName InTypePath)
+{
+    FUnifiedScriptValue Result;
+    Result.Kind = EUnifiedScriptValueKind::Enum;
+    Result.Int64Value = Value;
+    Result.TypePath = InTypePath;
+    return Result;
+}
+
+FUnifiedScriptValue FUnifiedScriptValue::FromEnumTypeId(int64 Value, uint64 TypeId)
+{
+    FUnifiedScriptValue Result;
+    Result.Kind = EUnifiedScriptValueKind::Enum;
+    Result.Int64Value = Value;
+    Result.TypeIdValue = TypeId;
+    return Result;
+}
+
+namespace
+{
+FUnifiedScriptValue FromContainer(
+    EUnifiedScriptValueKind Kind,
+    TArray<FUnifiedScriptValue> Values,
+    uint64 TypeId)
+{
+    FUnifiedScriptValue Result;
+    Result.Kind = Kind;
+    Result.TypeIdValue = TypeId;
+    Result.ContainerValues = MoveTemp(Values);
+    return Result;
+}
+}
+
+FUnifiedScriptValue FUnifiedScriptValue::FromArray(
+    TArray<FUnifiedScriptValue> Values,
+    uint64 TypeId)
+{
+    return FromContainer(EUnifiedScriptValueKind::Array, MoveTemp(Values), TypeId);
+}
+
+FUnifiedScriptValue FUnifiedScriptValue::FromSet(
+    TArray<FUnifiedScriptValue> Values,
+    uint64 TypeId)
+{
+    return FromContainer(EUnifiedScriptValueKind::Set, MoveTemp(Values), TypeId);
+}
+
+FUnifiedScriptValue FUnifiedScriptValue::FromMap(
+    TArray<FUnifiedScriptValue> FlattenedEntries,
+    uint64 TypeId)
+{
+    return FromContainer(EUnifiedScriptValueKind::Map, MoveTemp(FlattenedEntries), TypeId);
+}
+
 bool FUnifiedScriptValue::TryGetBoolean(bool& OutValue) const
 {
     if (Kind != EUnifiedScriptValueKind::Boolean)
@@ -237,6 +678,117 @@ bool FUnifiedScriptValue::TryGetString(FString& OutValue) const
     }
     OutValue = StringValue;
     return true;
+}
+
+#define UE_UNIFIEDSCRIPT_DEFINE_VALUE_READER(Name, KindName, Type, Field) \
+    bool FUnifiedScriptValue::TryGet##Name(Type& OutValue) const           \
+    {                                                                     \
+        if (Kind != EUnifiedScriptValueKind::KindName)                    \
+        {                                                                 \
+            return false;                                                 \
+        }                                                                 \
+        OutValue = Field;                                                 \
+        return true;                                                      \
+    }
+
+UE_UNIFIEDSCRIPT_DEFINE_VALUE_READER(Int8, Int8, int8, Int8Value)
+UE_UNIFIEDSCRIPT_DEFINE_VALUE_READER(UInt8, UInt8, uint8, UInt8Value)
+UE_UNIFIEDSCRIPT_DEFINE_VALUE_READER(Int16, Int16, int16, Int16Value)
+UE_UNIFIEDSCRIPT_DEFINE_VALUE_READER(UInt16, UInt16, uint16, UInt16Value)
+UE_UNIFIEDSCRIPT_DEFINE_VALUE_READER(UInt32, UInt32, uint32, UInt32Value)
+UE_UNIFIEDSCRIPT_DEFINE_VALUE_READER(Int64, Int64, int64, Int64Value)
+UE_UNIFIEDSCRIPT_DEFINE_VALUE_READER(UInt64, UInt64, uint64, UInt64Value)
+UE_UNIFIEDSCRIPT_DEFINE_VALUE_READER(Float32, Float32, float, Float32Value)
+UE_UNIFIEDSCRIPT_DEFINE_VALUE_READER(Float64, Float64, double, Float64Value)
+UE_UNIFIEDSCRIPT_DEFINE_VALUE_READER(Name, Name, FName, NameValue)
+UE_UNIFIEDSCRIPT_DEFINE_VALUE_READER(Text, Text, FText, TextValue)
+UE_UNIFIEDSCRIPT_DEFINE_VALUE_READER(Vector, Vector, FVector, VectorValue)
+UE_UNIFIEDSCRIPT_DEFINE_VALUE_READER(Rotator, Rotator, FRotator, RotatorValue)
+UE_UNIFIEDSCRIPT_DEFINE_VALUE_READER(Transform, Transform, FTransform, TransformValue)
+
+#undef UE_UNIFIEDSCRIPT_DEFINE_VALUE_READER
+
+bool FUnifiedScriptValue::TryGetObjectHandle(
+    FUnifiedScriptObjectHandle& OutValue,
+    bool bClass) const
+{
+    const EUnifiedScriptValueKind ExpectedKind =
+        bClass ? EUnifiedScriptValueKind::Class : EUnifiedScriptValueKind::Object;
+    if (Kind != ExpectedKind)
+    {
+        return false;
+    }
+    OutValue = ObjectHandleValue;
+    return true;
+}
+
+bool FUnifiedScriptValue::TryGetEnum(int64& OutValue, FName ExpectedTypePath) const
+{
+    if (Kind != EUnifiedScriptValueKind::Enum || TypePath != ExpectedTypePath)
+    {
+        return false;
+    }
+    OutValue = Int64Value;
+    return true;
+}
+
+bool FUnifiedScriptValue::TryGetEnumById(int64& OutValue, uint64 ExpectedTypeId) const
+{
+    if (Kind != EUnifiedScriptValueKind::Enum ||
+        TypeIdValue == 0 ||
+        TypeIdValue != ExpectedTypeId)
+    {
+        return false;
+    }
+    OutValue = Int64Value;
+    return true;
+}
+
+namespace
+{
+bool TryGetContainer(
+    const FUnifiedScriptValue& Value,
+    EUnifiedScriptValueKind ExpectedKind,
+    uint64 ExpectedTypeId,
+    bool bRequireEvenCount,
+    TConstArrayView<FUnifiedScriptValue>& OutValues)
+{
+    if (Value.Kind != ExpectedKind ||
+        ExpectedTypeId == 0 ||
+        Value.TypeIdValue != ExpectedTypeId ||
+        (bRequireEvenCount && Value.ContainerValues.Num() % 2 != 0))
+    {
+        return false;
+    }
+    OutValues = Value.ContainerValues;
+    return true;
+}
+}
+
+bool FUnifiedScriptValue::TryGetArray(
+    uint64 ExpectedTypeId,
+    TConstArrayView<FUnifiedScriptValue>& OutValues) const
+{
+    return TryGetContainer(*this, EUnifiedScriptValueKind::Array, ExpectedTypeId, false, OutValues);
+}
+
+bool FUnifiedScriptValue::TryGetSet(
+    uint64 ExpectedTypeId,
+    TConstArrayView<FUnifiedScriptValue>& OutValues) const
+{
+    return TryGetContainer(*this, EUnifiedScriptValueKind::Set, ExpectedTypeId, false, OutValues);
+}
+
+bool FUnifiedScriptValue::TryGetMap(
+    uint64 ExpectedTypeId,
+    TConstArrayView<FUnifiedScriptValue>& OutFlattenedEntries) const
+{
+    return TryGetContainer(
+        *this,
+        EUnifiedScriptValueKind::Map,
+        ExpectedTypeId,
+        true,
+        OutFlattenedEntries);
 }
 
 FUnifiedScriptInvocationBridge::FUnifiedScriptInvocationBridge(
@@ -283,7 +835,7 @@ bool FUnifiedScriptInvocationBridge::ReadProperty(
             FString::Printf(TEXT("Property '%s' is not Blueprint-readable."), *PropertyPath));
         return false;
     }
-    if (!ReadValue(Property, Object, OutValue, OutResult))
+    if (!ReadValue(Registry, Property, Object, OutValue, OutResult))
     {
         return false;
     }
@@ -331,7 +883,7 @@ bool FUnifiedScriptInvocationBridge::WriteProperty(
             FString::Printf(TEXT("Property '%s' is not Blueprint-writable."), *PropertyPath));
         return false;
     }
-    if (!WriteValue(Property, Object, Value, OutResult))
+    if (!WriteValue(Registry, Property, Object, Value, OutResult))
     {
         return false;
     }
@@ -426,7 +978,7 @@ bool FUnifiedScriptInvocationBridge::Invoke(
     void* ParameterMemory = ParameterStorage.GetStructMemory();
     for (int32 Index = 0; Index < InputProperties.Num(); ++Index)
     {
-        if (!WriteValue(InputProperties[Index], ParameterMemory, Arguments[Index], OutResult))
+        if (!WriteValue(Registry, InputProperties[Index], ParameterMemory, Arguments[Index], OutResult))
         {
             return false;
         }
@@ -435,7 +987,7 @@ bool FUnifiedScriptInvocationBridge::Invoke(
     Object->ProcessEvent(Function, ParameterMemory);
     if (ReturnProperty != nullptr)
     {
-        if (!ReadValue(ReturnProperty, ParameterMemory, OutReturnValue, OutResult))
+        if (!ReadValue(Registry, ReturnProperty, ParameterMemory, OutReturnValue, OutResult))
         {
             return false;
         }
@@ -460,6 +1012,7 @@ bool FUnifiedScriptInvocationBridge::ReadPropertyById(
     if (Object == nullptr ||
         !UE::UnifiedScript::Generated::ReadProperty(
             Object,
+            Registry,
             MemberIdValue,
             OutValue,
             OutResult))
@@ -481,6 +1034,7 @@ bool FUnifiedScriptInvocationBridge::WritePropertyById(
     if (Object == nullptr ||
         !UE::UnifiedScript::Generated::WriteProperty(
             Object,
+            Registry,
             MemberIdValue,
             Value,
             OutResult))
@@ -498,14 +1052,34 @@ bool FUnifiedScriptInvocationBridge::InvokeById(
     FUnifiedScriptValue& OutReturnValue,
     FUnifiedScriptInvocationResult& OutResult)
 {
+    TArray<FUnifiedScriptValue> IgnoredOutputValues;
+    return InvokeById(
+        Target,
+        MemberIdValue,
+        Arguments,
+        OutReturnValue,
+        IgnoredOutputValues,
+        OutResult);
+}
+
+bool FUnifiedScriptInvocationBridge::InvokeById(
+    FUnifiedScriptObjectHandle Target,
+    uint64 MemberIdValue,
+    TConstArrayView<FUnifiedScriptValue> Arguments,
+    FUnifiedScriptValue& OutReturnValue,
+    TArray<FUnifiedScriptValue>& OutOutputValues,
+    FUnifiedScriptInvocationResult& OutResult)
+{
     using namespace UE::UnifiedScript::Invocation::Private;
     UObject* Object = ResolveTarget(Registry, Target, OutResult);
     if (Object == nullptr ||
         !UE::UnifiedScript::Generated::Invoke(
             Object,
+            Registry,
             MemberIdValue,
             Arguments,
             OutReturnValue,
+            OutOutputValues,
             OutResult))
     {
         return false;

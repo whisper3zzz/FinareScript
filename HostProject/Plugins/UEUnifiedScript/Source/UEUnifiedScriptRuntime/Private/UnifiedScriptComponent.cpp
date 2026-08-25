@@ -497,9 +497,11 @@ FString UUnifiedScriptComponent::ResolveConfiguredPath(
         IPluginManager::Get().FindPlugin(TEXT("UEUnifiedScript"));
     if (Plugin.IsValid())
     {
+        const FString PluginBaseDir =
+            FPaths::ConvertRelativePathToFull(Plugin->GetBaseDir());
         Result.ReplaceInline(
             TEXT("{PluginDir}"),
-            *Plugin->GetBaseDir(),
+            *PluginBaseDir,
             ESearchCase::IgnoreCase);
     }
     Result.ReplaceInline(

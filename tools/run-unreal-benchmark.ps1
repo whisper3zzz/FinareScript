@@ -1,0 +1,148 @@
+[CmdletBinding()]
+param(
+    [string]$EngineRoot = $env:UNIFIEDSCRIPT_UE_ROOT,
+    [string]$PuertsResult,
+    [switch]$RequirePuerts,
+    [switch]$SkipBuild
+)
+
+$ErrorActionPreference = 'Stop'
+$repoRoot = Split-Path -Parent $PSScriptRoot
+$projectPath = Join-Path $repoRoot 'HostProject\UEUnifiedScriptHost.uproject'
+$managedProject = Join-Path $repoRoot 'samples\Unreal\UnifiedScript.Unreal.Demo\UnifiedScript.Unreal.Demo.csproj'
+$thresholdPath = Join-Path $repoRoot 'benchmarks\unreal\performance-thresholds.json'
+$artifactDirectory = Join-Path $repoRoot 'artifacts\ue'
+$logPath = Join-Path $artifactDirectory 'managed-interop-benchmark.log'
+$reportPath = Join-Path $artifactDirectory 'interop-benchmark.json'
+
+if ([string]::IsNullOrWhiteSpace($EngineRoot)) {
+    $EngineRoot = @('D:\UE_5.8', 'D:\UE\_5.8') |
+        Where-Object { Test-Path (Join-Path $_ 'Engine\Build\BatchFiles\Build.bat') } |
+        Select-Object -First 1
+}
+if ([string]::IsNullOrWhiteSpace($EngineRoot)) {
+    throw 'Pass -EngineRoot or set UNIFIEDSCRIPT_UE_ROOT.'
+}
+
+$buildBat = Join-Path $EngineRoot 'Engine\Build\BatchFiles\Build.bat'
+$editorCmd = Join-Path $EngineRoot 'Engine\Binaries\Win64\UnrealEditor-Cmd.exe'
+$dotnetExe = Join-Path $EngineRoot 'Engine\Binaries\ThirdParty\DotNet\10.0\win-x64\dotnet.exe'
+foreach ($requiredPath in @($buildBat, $editorCmd, $dotnetExe, $thresholdPath)) {
+    if (!(Test-Path -LiteralPath $requiredPath)) {
+        throw "Required benchmark dependency is missing: $requiredPath"
+    }
+}
+
+New-Item -ItemType Directory -Force -Path $artifactDirectory | Out-Null
+$defaultEnginePath = Join-Path $repoRoot 'HostProject\Config\DefaultEngine.ini'
+$defaultInputPath = Join-Path $repoRoot 'HostProject\Config\DefaultInput.ini'
+$defaultEngineBytes = if (Test-Path -LiteralPath $defaultEnginePath) {
+    [IO.File]::ReadAllBytes($defaultEnginePath)
+} else { $null }
+$defaultInputBytes = if (Test-Path -LiteralPath $defaultInputPath) {
+    [IO.File]::ReadAllBytes($defaultInputPath)
+} else { $null }
+
+try {
+    if (!$SkipBuild) {
+        & $dotnetExe build $managedProject -c Debug --nologo
+        if ($LASTEXITCODE -ne 0) {
+            throw "Managed benchmark build failed with exit code $LASTEXITCODE."
+        }
+        & $buildBat UEUnifiedScriptHostEditor Win64 Development $projectPath `
+            -WaitMutex -NoHotReloadFromIDE -NoUBA -MaxParallelActions=4
+        if ($LASTEXITCODE -ne 0) {
+            throw "Unreal benchmark build failed with exit code $LASTEXITCODE."
+        }
+    }
+
+    & $editorCmd $projectPath `
+        -unattended -nop4 -NullRHI -nosplash `
+        '-ExecCmds=Automation RunTests UnifiedScript.Unreal.Performance.ManagedInterop' `
+        '-TestExit=Automation Test Queue Empty' `
+        "-abslog=$logPath" -log
+    $editorExitCode = $LASTEXITCODE
+} finally {
+    if ($null -ne $defaultEngineBytes) {
+        [IO.File]::WriteAllBytes($defaultEnginePath, $defaultEngineBytes)
+    }
+    if ($null -ne $defaultInputBytes) {
+        [IO.File]::WriteAllBytes($defaultInputPath, $defaultInputBytes)
+    }
+}
+
+if ($editorExitCode -ne 0) {
+    throw "Unreal benchmark process failed with exit code $editorExitCode."
+}
+$successPattern =
+    'Test Completed. Result={Success} Name={ManagedInterop} Path={UnifiedScript.Unreal.Performance.ManagedInterop}'
+if (!(Select-String -LiteralPath $logPath -SimpleMatch $successPattern -Quiet)) {
+    throw "Managed interop benchmark Automation did not succeed. Log: $logPath"
+}
+$marker = 'UNIFIEDSCRIPT_BENCHMARK_JSON '
+$line = Select-String -LiteralPath $logPath -SimpleMatch $marker |
+    Select-Object -Last 1
+if ($null -eq $line) {
+    throw "Benchmark JSON marker is missing. Log: $logPath"
+}
+$nativeResult = ($line.Line.Substring($line.Line.IndexOf($marker) + $marker.Length) |
+    ConvertFrom-Json)
+$thresholds = Get-Content -Raw -LiteralPath $thresholdPath | ConvertFrom-Json
+if ($nativeResult.schemaVersion -ne 'unifiedscript.unreal-benchmark/v0.1' -or
+    $nativeResult.scenario -ne $thresholds.scenario) {
+    throw 'The benchmark result does not match the checked-in schema/scenario.'
+}
+
+$puertsNsPerCall = $null
+if (![string]::IsNullOrWhiteSpace($PuertsResult)) {
+    $puerts = Get-Content -Raw -LiteralPath $PuertsResult | ConvertFrom-Json
+    if ($puerts.schemaVersion -ne 'unifiedscript.unreal-benchmark/v0.1' -or
+        $puerts.scenario -ne $nativeResult.scenario -or
+        $null -eq $puerts.puertsNsPerCall -or
+        [double]$puerts.puertsNsPerCall -le 0) {
+        throw 'The Puerts result must use the same v0.1 scenario and contain puertsNsPerCall.'
+    }
+    $puertsNsPerCall = [double]$puerts.puertsNsPerCall
+}
+
+$absolutePass =
+    [double]$nativeResult.unifiedScriptNsPerCall -le [double]$thresholds.maxUnifiedScriptNsPerCall
+$allocationPass =
+    [long]$nativeResult.unifiedScriptAllocatedBytes -le [long]$thresholds.maxUnifiedScriptAllocatedBytes
+$competitiveRatio = if ($null -ne $puertsNsPerCall) {
+    [double]$nativeResult.unifiedScriptNsPerCall / $puertsNsPerCall
+} else { $null }
+$competitivePass = if ($null -ne $competitiveRatio) {
+    $competitiveRatio -le [double]$thresholds.maxUnifiedScriptToPuertsRatio
+} else { !$RequirePuerts }
+
+$report = [ordered]@{
+    schemaVersion = 'unifiedscript.unreal-benchmark-report/v0.1'
+    scenario = $nativeResult.scenario
+    configuration = $nativeResult.configuration
+    iterations = [int]$nativeResult.iterations
+    cppDirectNsPerCall = [double]$nativeResult.cppDirectNsPerCall
+    unifiedScriptNsPerCall = [double]$nativeResult.unifiedScriptNsPerCall
+    unifiedScriptAllocatedBytes = [long]$nativeResult.unifiedScriptAllocatedBytes
+    puertsNsPerCall = $puertsNsPerCall
+    unifiedScriptToPuertsRatio = $competitiveRatio
+    gates = [ordered]@{
+        absoluteLatency = $absolutePass
+        zeroManagedAllocation = $allocationPass
+        fasterThanPuerts = if ($null -ne $puertsNsPerCall) { $competitivePass } else { $null }
+    }
+}
+$report | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $reportPath -Encoding utf8
+
+Write-Host "UnifiedScript: $($nativeResult.unifiedScriptNsPerCall) ns/call, $($nativeResult.unifiedScriptAllocatedBytes) B"
+Write-Host "C++ direct lower bound: $($nativeResult.cppDirectNsPerCall) ns/call"
+if ($null -ne $puertsNsPerCall) {
+    Write-Host "Puerts: $puertsNsPerCall ns/call; ratio: $competitiveRatio"
+} else {
+    Write-Host 'Puerts competitive gate: not run (pass -PuertsResult, and optionally -RequirePuerts).'
+}
+Write-Host "Report: $reportPath"
+
+if (!$absolutePass -or !$allocationPass -or !$competitivePass) {
+    throw 'One or more Unreal interop performance gates failed.'
+}

@@ -14,23 +14,40 @@
 
 namespace UE::UnifiedScript::Generated
 {
+bool DescribeReadResult(
+    uint64 MemberId,
+    EUnifiedScriptValueKind& OutKind,
+    uint64& OutTypeId);
+
+bool DescribeInvokeResult(
+    uint64 MemberId,
+    uint32 ResultIndex,
+    EUnifiedScriptValueKind& OutKind,
+    uint64& OutTypeId);
+
+bool DescribeInvokeResultCount(uint64 MemberId, uint32& OutResultCount);
+
 /** Generated, member-ID keyed dispatch with direct native field/function access. */
 bool ReadProperty(
     UObject* Target,
+    FUnifiedScriptObjectRegistry& Registry,
     uint64 MemberId,
     FUnifiedScriptValue& OutValue,
     FUnifiedScriptInvocationResult& OutResult);
 
 bool WriteProperty(
     UObject* Target,
+    FUnifiedScriptObjectRegistry& Registry,
     uint64 MemberId,
     const FUnifiedScriptValue& Value,
     FUnifiedScriptInvocationResult& OutResult);
 
 bool Invoke(
     UObject* Target,
+    FUnifiedScriptObjectRegistry& Registry,
     uint64 MemberId,
     TConstArrayView<FUnifiedScriptValue> Arguments,
     FUnifiedScriptValue& OutReturnValue,
+    TArray<FUnifiedScriptValue>& OutOutputValues,
     FUnifiedScriptInvocationResult& OutResult);
 }

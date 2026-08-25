@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+
 namespace UnifiedScript.Unreal;
 
 public enum UnrealInvocationValueKind : byte
@@ -6,6 +8,23 @@ public enum UnrealInvocationValueKind : byte
     Boolean = 1,
     Int32 = 2,
     String = 3,
+    Int8 = 4,
+    UInt8 = 5,
+    Int16 = 6,
+    UInt16 = 7,
+    UInt32 = 8,
+    Int64 = 9,
+    UInt64 = 10,
+    Float32 = 11,
+    Float64 = 12,
+    Name = 13,
+    Text = 14,
+    Object = 15,
+    Class = 16,
+    Enum = 17,
+    Vector = 18,
+    Rotator = 19,
+    Transform = 20,
 }
 
 public enum UnrealObjectHandleError : byte
@@ -42,14 +61,28 @@ public readonly record struct UnrealInvocationValue
 {
     private UnrealInvocationValue(
         UnrealInvocationValueKind kind,
-        bool booleanValue,
-        int int32Value,
-        string? stringValue)
+        bool booleanValue = default,
+        int int32Value = default,
+        long signedIntegerValue = default,
+        ulong unsignedIntegerValue = default,
+        double floatingPointValue = default,
+        string? stringValue = default,
+        UnrealObjectHandle objectHandle = default,
+        UnrealVector vectorValue = default,
+        UnrealRotator rotatorValue = default,
+        UnrealTransform transformValue = default)
     {
         Kind = kind;
         BooleanValue = booleanValue;
         Int32Value = int32Value;
+        SignedIntegerValue = signedIntegerValue;
+        UnsignedIntegerValue = unsignedIntegerValue;
+        FloatingPointValue = floatingPointValue;
         StringValue = stringValue;
+        ObjectHandle = objectHandle;
+        VectorValue = vectorValue;
+        RotatorValue = rotatorValue;
+        TransformValue = transformValue;
     }
 
     public UnrealInvocationValueKind Kind { get; }
@@ -58,22 +91,91 @@ public readonly record struct UnrealInvocationValue
 
     public int Int32Value { get; }
 
+    public long SignedIntegerValue { get; }
+
+    public ulong UnsignedIntegerValue { get; }
+
+    public double FloatingPointValue { get; }
+
     public string? StringValue { get; }
+
+    public UnrealObjectHandle ObjectHandle { get; }
+
+    public UnrealVector VectorValue { get; }
+
+    public UnrealRotator RotatorValue { get; }
+
+    public UnrealTransform TransformValue { get; }
 
     public static UnrealInvocationValue Void => default;
 
     public static UnrealInvocationValue FromBoolean(bool value) =>
-        new(UnrealInvocationValueKind.Boolean, value, default, default);
+        new(UnrealInvocationValueKind.Boolean, booleanValue: value);
 
     public static UnrealInvocationValue FromInt32(int value) =>
-        new(UnrealInvocationValueKind.Int32, default, value, default);
+        new(UnrealInvocationValueKind.Int32, int32Value: value);
 
     public static UnrealInvocationValue FromString(string value) =>
         new(
             UnrealInvocationValueKind.String,
-            default,
-            default,
-            value ?? throw new ArgumentNullException(nameof(value)));
+            stringValue: value ?? throw new ArgumentNullException(nameof(value)));
+
+    public static UnrealInvocationValue FromInt8(sbyte value) =>
+        new(UnrealInvocationValueKind.Int8, signedIntegerValue: value);
+
+    public static UnrealInvocationValue FromUInt8(byte value) =>
+        new(UnrealInvocationValueKind.UInt8, unsignedIntegerValue: value);
+
+    public static UnrealInvocationValue FromInt16(short value) =>
+        new(UnrealInvocationValueKind.Int16, signedIntegerValue: value);
+
+    public static UnrealInvocationValue FromUInt16(ushort value) =>
+        new(UnrealInvocationValueKind.UInt16, unsignedIntegerValue: value);
+
+    public static UnrealInvocationValue FromUInt32(uint value) =>
+        new(UnrealInvocationValueKind.UInt32, unsignedIntegerValue: value);
+
+    public static UnrealInvocationValue FromInt64(long value) =>
+        new(UnrealInvocationValueKind.Int64, signedIntegerValue: value);
+
+    public static UnrealInvocationValue FromUInt64(ulong value) =>
+        new(UnrealInvocationValueKind.UInt64, unsignedIntegerValue: value);
+
+    public static UnrealInvocationValue FromFloat32(float value) =>
+        new(UnrealInvocationValueKind.Float32, floatingPointValue: value);
+
+    public static UnrealInvocationValue FromFloat64(double value) =>
+        new(UnrealInvocationValueKind.Float64, floatingPointValue: value);
+
+    public static UnrealInvocationValue FromName(UnrealName value) =>
+        new(UnrealInvocationValueKind.Name, stringValue: value.Value);
+
+    public static UnrealInvocationValue FromText(UnrealText value) =>
+        new(UnrealInvocationValueKind.Text, stringValue: value.Value);
+
+    public static UnrealInvocationValue FromObjectHandle(
+        UnrealObjectHandle value,
+        bool isClass = false) =>
+        new(
+            isClass ? UnrealInvocationValueKind.Class : UnrealInvocationValueKind.Object,
+            objectHandle: value);
+
+    public static UnrealInvocationValue FromEnum(UnrealEnumValue value) =>
+        string.IsNullOrWhiteSpace(value.TypePath)
+            ? throw new ArgumentException("A typed Unreal enum value is required.", nameof(value))
+            : new(
+                UnrealInvocationValueKind.Enum,
+                signedIntegerValue: value.Value,
+                stringValue: value.TypePath);
+
+    public static UnrealInvocationValue FromVector(UnrealVector value) =>
+        new(UnrealInvocationValueKind.Vector, vectorValue: value);
+
+    public static UnrealInvocationValue FromRotator(UnrealRotator value) =>
+        new(UnrealInvocationValueKind.Rotator, rotatorValue: value);
+
+    public static UnrealInvocationValue FromTransform(UnrealTransform value) =>
+        new(UnrealInvocationValueKind.Transform, transformValue: value);
 }
 
 public readonly record struct UnrealInvocationResponse
@@ -205,9 +307,16 @@ public sealed class UnrealInvocationException : Exception
 /// contract. A world/runtime host supplies the concrete process transport.
 /// </summary>
 public sealed class NativeUnrealInvocationBridge
-    : IUnrealInvocationBridge, IUnrealFastInvocationBridge
+    : IUnrealInvocationBridge,
+      IUnrealFastInvocationBridge,
+      IUnrealTypedInvocationBridge,
+      IUnrealOutputInvocationBridge,
+      IUnrealInvocationMetrics
 {
+    private const int CallFrameArenaByteCapacity = 4096;
     private readonly IUnrealNativeInvocationTransport _transport;
+    private long _callFrameInvocationCount;
+    private long _legacyInvocationCount;
 
     public NativeUnrealInvocationBridge(IUnrealNativeInvocationTransport transport)
     {
@@ -215,8 +324,18 @@ public sealed class NativeUnrealInvocationBridge
     }
 
     public bool SupportsFastInvocation =>
+        _transport is IUnrealNativeCallFrameTransportV3 callFrameTransport &&
+        callFrameTransport.Capabilities != UnrealNativeCapabilitiesV3.None ||
         _transport is IUnrealNativeFastInvocationTransport fastTransport &&
         fastTransport.SupportsFastInvocation;
+
+    public bool SupportsTypedInvocation =>
+        _transport is IUnrealNativeCallFrameTransportV3 callFrameTransport &&
+        callFrameTransport.Capabilities != UnrealNativeCapabilitiesV3.None;
+
+    public long CallFrameInvocationCount => Interlocked.Read(ref _callFrameInvocationCount);
+
+    public long LegacyInvocationCount => Interlocked.Read(ref _legacyInvocationCount);
 
     public T ReadProperty<T>(UnrealObjectHandle target, string propertyPath)
     {
@@ -271,6 +390,21 @@ public sealed class NativeUnrealInvocationBridge
         ulong memberId,
         string propertyPath)
     {
+        ValidateFastRequest(target, memberId, propertyPath);
+        Span<byte> arena = stackalloc byte[CallFrameArenaByteCapacity];
+        if (TryExecuteCallFrameResult<T>(
+                UnrealNativeOperationV3.ReadProperty,
+                target,
+                memberId,
+                ReadOnlySpan<UnrealNativeValueV3>.Empty,
+                arena,
+                0,
+                UnrealNativeCapabilitiesV3.None,
+                out T callFrameResult))
+        {
+            return callFrameResult;
+        }
+        Interlocked.Increment(ref _legacyInvocationCount);
         IUnrealNativeFastInvocationTransport transport = RequireFastTransport(
             target,
             memberId,
@@ -286,6 +420,27 @@ public sealed class NativeUnrealInvocationBridge
         string propertyPath,
         T value)
     {
+        ValidateFastRequest(target, memberId, propertyPath);
+        Span<byte> arena = stackalloc byte[CallFrameArenaByteCapacity];
+        int byteCount = 0;
+        if (UnrealNativeValueCodecV3.TryEncode(
+                value,
+                arena,
+                ref byteCount,
+                out UnrealNativeValueV3 argument,
+                out UnrealNativeCapabilitiesV3 requiredCapability) &&
+            TryExecuteCallFrameVoid(
+                UnrealNativeOperationV3.WriteProperty,
+                target,
+                memberId,
+                MemoryMarshal.CreateReadOnlySpan(ref argument, 1),
+                arena,
+                byteCount,
+                requiredCapability))
+        {
+            return;
+        }
+        Interlocked.Increment(ref _legacyInvocationCount);
         IUnrealNativeFastInvocationTransport transport = RequireFastTransport(
             target,
             memberId,
@@ -332,7 +487,713 @@ public sealed class NativeUnrealInvocationBridge
         RequireVoid(result, functionPath);
     }
 
-    private IUnrealNativeFastInvocationTransport RequireFastTransport(
+    public TResult Invoke<TResult>(
+        UnrealObjectHandle target,
+        ulong memberId,
+        string memberPath)
+    {
+        ValidateFastRequest(target, memberId, memberPath);
+        Span<byte> arena = stackalloc byte[CallFrameArenaByteCapacity];
+        if (TryExecuteCallFrameResult(
+                UnrealNativeOperationV3.Invoke,
+                target,
+                memberId,
+                ReadOnlySpan<UnrealNativeValueV3>.Empty,
+                arena,
+                0,
+                UnrealNativeCapabilitiesV3.None,
+                out TResult result))
+        {
+            return result;
+        }
+        Interlocked.Increment(ref _legacyInvocationCount);
+        return Invoke<TResult>(target, memberId, memberPath, Array.Empty<object?>());
+    }
+
+    public TResult Invoke<TResult, T0>(
+        UnrealObjectHandle target,
+        ulong memberId,
+        string memberPath,
+        T0 argument0)
+    {
+        ValidateFastRequest(target, memberId, memberPath);
+        Span<UnrealNativeValueV3> arguments = stackalloc UnrealNativeValueV3[1];
+        Span<byte> arena = stackalloc byte[CallFrameArenaByteCapacity];
+        int byteCount = 0;
+        if (UnrealNativeValueCodecV3.TryEncode(
+                argument0,
+                arena,
+                ref byteCount,
+                out arguments[0],
+                out UnrealNativeCapabilitiesV3 capabilities) &&
+            TryExecuteCallFrameResult(
+                UnrealNativeOperationV3.Invoke,
+                target,
+                memberId,
+                arguments,
+                arena,
+                byteCount,
+                capabilities,
+                out TResult result))
+        {
+            return result;
+        }
+        Interlocked.Increment(ref _legacyInvocationCount);
+        return Invoke<TResult>(target, memberId, memberPath, [argument0]);
+    }
+
+    public TResult Invoke<TResult, T0, T1>(
+        UnrealObjectHandle target,
+        ulong memberId,
+        string memberPath,
+        T0 argument0,
+        T1 argument1)
+    {
+        ValidateFastRequest(target, memberId, memberPath);
+        Span<UnrealNativeValueV3> arguments = stackalloc UnrealNativeValueV3[2];
+        Span<byte> arena = stackalloc byte[CallFrameArenaByteCapacity];
+        int byteCount = 0;
+        if (UnrealNativeValueCodecV3.TryEncode(
+                argument0,
+                arena,
+                ref byteCount,
+                out arguments[0],
+                out UnrealNativeCapabilitiesV3 capability0) &&
+            UnrealNativeValueCodecV3.TryEncode(
+                argument1,
+                arena,
+                ref byteCount,
+                out arguments[1],
+                out UnrealNativeCapabilitiesV3 capability1) &&
+            TryExecuteCallFrameResult(
+                UnrealNativeOperationV3.Invoke,
+                target,
+                memberId,
+                arguments,
+                arena,
+                byteCount,
+                capability0 | capability1,
+                out TResult result))
+        {
+            return result;
+        }
+        Interlocked.Increment(ref _legacyInvocationCount);
+        return Invoke<TResult>(target, memberId, memberPath, [argument0, argument1]);
+    }
+
+    public TResult Invoke<TResult, T0, T1, T2>(
+        UnrealObjectHandle target,
+        ulong memberId,
+        string memberPath,
+        T0 argument0,
+        T1 argument1,
+        T2 argument2)
+    {
+        ValidateFastRequest(target, memberId, memberPath);
+        Span<UnrealNativeValueV3> arguments = stackalloc UnrealNativeValueV3[3];
+        Span<byte> arena = stackalloc byte[CallFrameArenaByteCapacity];
+        int byteCount = 0;
+        if (TryEncodeThree(
+                argument0,
+                argument1,
+                argument2,
+                arguments,
+                arena,
+                ref byteCount,
+                out UnrealNativeCapabilitiesV3 capabilities) &&
+            TryExecuteCallFrameResult(
+                UnrealNativeOperationV3.Invoke,
+                target,
+                memberId,
+                arguments,
+                arena,
+                byteCount,
+                capabilities,
+                out TResult result))
+        {
+            return result;
+        }
+        Interlocked.Increment(ref _legacyInvocationCount);
+        return Invoke<TResult>(target, memberId, memberPath, [argument0, argument1, argument2]);
+    }
+
+    public TResult Invoke<TResult, T0, T1, T2, T3>(
+        UnrealObjectHandle target,
+        ulong memberId,
+        string memberPath,
+        T0 argument0,
+        T1 argument1,
+        T2 argument2,
+        T3 argument3)
+    {
+        ValidateFastRequest(target, memberId, memberPath);
+        Span<UnrealNativeValueV3> arguments = stackalloc UnrealNativeValueV3[4];
+        Span<byte> arena = stackalloc byte[CallFrameArenaByteCapacity];
+        int byteCount = 0;
+        if (TryEncodeFour(
+                argument0,
+                argument1,
+                argument2,
+                argument3,
+                arguments,
+                arena,
+                ref byteCount,
+                out UnrealNativeCapabilitiesV3 capabilities) &&
+            TryExecuteCallFrameResult(
+                UnrealNativeOperationV3.Invoke,
+                target,
+                memberId,
+                arguments,
+                arena,
+                byteCount,
+                capabilities,
+                out TResult result))
+        {
+            return result;
+        }
+        Interlocked.Increment(ref _legacyInvocationCount);
+        return Invoke<TResult>(
+            target,
+            memberId,
+            memberPath,
+            [argument0, argument1, argument2, argument3]);
+    }
+
+    public void Invoke(
+        UnrealObjectHandle target,
+        ulong memberId,
+        string memberPath)
+    {
+        ValidateFastRequest(target, memberId, memberPath);
+        if (TryExecuteCallFrameVoid(
+                UnrealNativeOperationV3.Invoke,
+                target,
+                memberId,
+                ReadOnlySpan<UnrealNativeValueV3>.Empty,
+                Span<byte>.Empty,
+                0,
+                UnrealNativeCapabilitiesV3.None))
+        {
+            return;
+        }
+        Interlocked.Increment(ref _legacyInvocationCount);
+        Invoke(target, memberId, memberPath, Array.Empty<object?>());
+    }
+
+    public void Invoke<T0>(
+        UnrealObjectHandle target,
+        ulong memberId,
+        string memberPath,
+        T0 argument0)
+    {
+        ValidateFastRequest(target, memberId, memberPath);
+        Span<UnrealNativeValueV3> arguments = stackalloc UnrealNativeValueV3[1];
+        Span<byte> arena = stackalloc byte[CallFrameArenaByteCapacity];
+        int byteCount = 0;
+        if (UnrealNativeValueCodecV3.TryEncode(
+                argument0,
+                arena,
+                ref byteCount,
+                out arguments[0],
+                out UnrealNativeCapabilitiesV3 capabilities) &&
+            TryExecuteCallFrameVoid(
+                UnrealNativeOperationV3.Invoke,
+                target,
+                memberId,
+                arguments,
+                arena,
+                byteCount,
+                capabilities))
+        {
+            return;
+        }
+        Interlocked.Increment(ref _legacyInvocationCount);
+        Invoke(target, memberId, memberPath, [argument0]);
+    }
+
+    public void Invoke<T0, T1>(
+        UnrealObjectHandle target,
+        ulong memberId,
+        string memberPath,
+        T0 argument0,
+        T1 argument1)
+    {
+        ValidateFastRequest(target, memberId, memberPath);
+        Span<UnrealNativeValueV3> arguments = stackalloc UnrealNativeValueV3[2];
+        Span<byte> arena = stackalloc byte[CallFrameArenaByteCapacity];
+        int byteCount = 0;
+        if (UnrealNativeValueCodecV3.TryEncode(
+                argument0,
+                arena,
+                ref byteCount,
+                out arguments[0],
+                out UnrealNativeCapabilitiesV3 capability0) &&
+            UnrealNativeValueCodecV3.TryEncode(
+                argument1,
+                arena,
+                ref byteCount,
+                out arguments[1],
+                out UnrealNativeCapabilitiesV3 capability1) &&
+            TryExecuteCallFrameVoid(
+                UnrealNativeOperationV3.Invoke,
+                target,
+                memberId,
+                arguments,
+                arena,
+                byteCount,
+                capability0 | capability1))
+        {
+            return;
+        }
+        Interlocked.Increment(ref _legacyInvocationCount);
+        Invoke(target, memberId, memberPath, [argument0, argument1]);
+    }
+
+    public void Invoke<T0, T1, T2>(
+        UnrealObjectHandle target,
+        ulong memberId,
+        string memberPath,
+        T0 argument0,
+        T1 argument1,
+        T2 argument2)
+    {
+        ValidateFastRequest(target, memberId, memberPath);
+        Span<UnrealNativeValueV3> arguments = stackalloc UnrealNativeValueV3[3];
+        Span<byte> arena = stackalloc byte[CallFrameArenaByteCapacity];
+        int byteCount = 0;
+        if (TryEncodeThree(
+                argument0,
+                argument1,
+                argument2,
+                arguments,
+                arena,
+                ref byteCount,
+                out UnrealNativeCapabilitiesV3 capabilities) &&
+            TryExecuteCallFrameVoid(
+                UnrealNativeOperationV3.Invoke,
+                target,
+                memberId,
+                arguments,
+                arena,
+                byteCount,
+                capabilities))
+        {
+            return;
+        }
+        Interlocked.Increment(ref _legacyInvocationCount);
+        Invoke(target, memberId, memberPath, [argument0, argument1, argument2]);
+    }
+
+    public void Invoke<T0, T1, T2, T3>(
+        UnrealObjectHandle target,
+        ulong memberId,
+        string memberPath,
+        T0 argument0,
+        T1 argument1,
+        T2 argument2,
+        T3 argument3)
+    {
+        ValidateFastRequest(target, memberId, memberPath);
+        Span<UnrealNativeValueV3> arguments = stackalloc UnrealNativeValueV3[4];
+        Span<byte> arena = stackalloc byte[CallFrameArenaByteCapacity];
+        int byteCount = 0;
+        if (TryEncodeFour(
+                argument0,
+                argument1,
+                argument2,
+                argument3,
+                arguments,
+                arena,
+                ref byteCount,
+                out UnrealNativeCapabilitiesV3 capabilities) &&
+            TryExecuteCallFrameVoid(
+                UnrealNativeOperationV3.Invoke,
+                target,
+                memberId,
+                arguments,
+                arena,
+                byteCount,
+                capabilities))
+        {
+            return;
+        }
+        Interlocked.Increment(ref _legacyInvocationCount);
+        Invoke(target, memberId, memberPath, [argument0, argument1, argument2, argument3]);
+    }
+
+    public UnrealOutputInvocationResult InvokeWithOutputs(
+        UnrealObjectHandle target,
+        ulong memberId,
+        string memberPath,
+        Type returnType,
+        IReadOnlyList<UnrealOutputArgument> arguments)
+    {
+        ValidateFastRequest(target, memberId, memberPath);
+        ArgumentNullException.ThrowIfNull(returnType);
+        ArgumentNullException.ThrowIfNull(arguments);
+
+        int inputCount = 0;
+        int outputCount = 0;
+        foreach (UnrealOutputArgument argument in arguments)
+        {
+            ArgumentNullException.ThrowIfNull(argument.Type);
+            switch (argument.Direction)
+            {
+                case UnrealParameterDirection.Input:
+                    inputCount++;
+                    break;
+                case UnrealParameterDirection.Output:
+                    outputCount++;
+                    break;
+                case UnrealParameterDirection.InputOutput:
+                    inputCount++;
+                    outputCount++;
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(
+                        nameof(arguments),
+                        "An output invocation contains an invalid parameter direction.");
+            }
+        }
+        int resultCount = checked(outputCount + (returnType == typeof(void) ? 0 : 1));
+        if (inputCount > 64 || resultCount > 64)
+        {
+            throw new NotSupportedException(
+                "ABI v3 supports at most 64 input and 64 result cells per invocation.");
+        }
+
+        Span<UnrealNativeValueV3> encodedArguments =
+            inputCount == 0 ? Span<UnrealNativeValueV3>.Empty : stackalloc UnrealNativeValueV3[inputCount];
+        Span<UnrealNativeValueV3> results =
+            resultCount == 0 ? Span<UnrealNativeValueV3>.Empty : stackalloc UnrealNativeValueV3[resultCount];
+        Span<byte> arena = stackalloc byte[CallFrameArenaByteCapacity];
+        int inputByteCount = 0;
+        int inputIndex = 0;
+        int resultIndex = 0;
+        UnrealNativeCapabilitiesV3 requiredCapabilities =
+            UnrealNativeCapabilitiesV3.OutputAndReference;
+
+        if (returnType != typeof(void))
+        {
+            if (!UnrealNativeValueCodecV3.TryCreateResultDescriptor(
+                    returnType,
+                    out results[resultIndex++],
+                    out UnrealNativeCapabilitiesV3 returnCapability))
+            {
+                throw new NotSupportedException(
+                    $"Generated output invocation '{memberPath}' has an unsupported return type.");
+            }
+            requiredCapabilities |= returnCapability;
+        }
+
+        foreach (UnrealOutputArgument argument in arguments)
+        {
+            if (argument.Direction != UnrealParameterDirection.Output)
+            {
+                if (!UnrealNativeValueCodecV3.TryEncodeObject(
+                        argument.Value,
+                        argument.Type,
+                        arena,
+                        ref inputByteCount,
+                        out encodedArguments[inputIndex++],
+                        out UnrealNativeCapabilitiesV3 inputCapability))
+                {
+                    throw new NotSupportedException(
+                        $"Generated output invocation '{memberPath}' has an unsupported input value.");
+                }
+                requiredCapabilities |= inputCapability;
+            }
+            if (argument.Direction != UnrealParameterDirection.Input)
+            {
+                if (!UnrealNativeValueCodecV3.TryCreateResultDescriptor(
+                        argument.Type,
+                        out results[resultIndex++],
+                        out UnrealNativeCapabilitiesV3 outputCapability))
+                {
+                    throw new NotSupportedException(
+                        $"Generated output invocation '{memberPath}' has an unsupported output type.");
+                }
+                requiredCapabilities |= outputCapability;
+            }
+        }
+
+        if (!TryGetCallFrameTransport(
+                requiredCapabilities,
+                out IUnrealNativeCallFrameTransportV3? transport))
+        {
+            throw new NotSupportedException(
+                "The native Unreal transport does not advertise ABI v3 output/reference support.");
+        }
+        UnrealNativeCallOutcomeV3 outcome = transport!.ExecuteById(
+            UnrealNativeOperationV3.Invoke,
+            target,
+            memberId,
+            encodedArguments,
+            results,
+            arena,
+            inputByteCount);
+        byte[]? retryArena = null;
+        if (outcome.Status == UnrealNativeCallStatusV3.BufferTooSmall &&
+            outcome.RequiredByteCapacity > arena.Length)
+        {
+            retryArena = GC.AllocateUninitializedArray<byte>(
+                outcome.RequiredByteCapacity);
+            arena[..inputByteCount].CopyTo(retryArena);
+            outcome = transport.ExecuteById(
+                UnrealNativeOperationV3.Invoke,
+                target,
+                memberId,
+                encodedArguments,
+                results,
+                retryArena,
+                inputByteCount);
+        }
+        RequireCallFrameSuccess(outcome, resultCount);
+        ReadOnlySpan<byte> resultArena = retryArena is null ? arena : retryArena;
+
+        resultIndex = 0;
+        object? returnValue = null;
+        if (returnType != typeof(void) &&
+            !UnrealNativeValueCodecV3.TryDecodeObject(
+                returnType,
+                in results[resultIndex++],
+                resultArena,
+                outcome.ByteCount,
+                out returnValue))
+        {
+            throw new InvalidOperationException(
+                "The ABI v3 transport returned an incompatible generated return value.");
+        }
+        var outputs = new object?[outputCount];
+        int outputIndex = 0;
+        foreach (UnrealOutputArgument argument in arguments)
+        {
+            if (argument.Direction == UnrealParameterDirection.Input)
+            {
+                continue;
+            }
+            if (!UnrealNativeValueCodecV3.TryDecodeObject(
+                    argument.Type,
+                    in results[resultIndex++],
+                    resultArena,
+                    outcome.ByteCount,
+                    out outputs[outputIndex++]))
+            {
+                throw new InvalidOperationException(
+                    "The ABI v3 transport returned an incompatible generated output value.");
+            }
+        }
+        Interlocked.Increment(ref _callFrameInvocationCount);
+        return new UnrealOutputInvocationResult(returnValue, outputs);
+    }
+
+    private bool TryExecuteCallFrameResult<TResult>(
+        UnrealNativeOperationV3 operation,
+        UnrealObjectHandle target,
+        ulong memberId,
+        ReadOnlySpan<UnrealNativeValueV3> arguments,
+        Span<byte> arena,
+        int inputByteCount,
+        UnrealNativeCapabilitiesV3 argumentCapabilities,
+        out TResult result)
+    {
+        result = default!;
+        if (!UnrealNativeValueCodecV3.TryCreateResultDescriptor<TResult>(
+                out UnrealNativeValueV3 descriptor,
+                out UnrealNativeCapabilitiesV3 resultCapability) ||
+            !TryGetCallFrameTransport(
+                argumentCapabilities | resultCapability,
+                out IUnrealNativeCallFrameTransportV3? transport))
+        {
+            return false;
+        }
+
+        Span<UnrealNativeValueV3> results = stackalloc UnrealNativeValueV3[1];
+        results[0] = descriptor;
+        UnrealNativeCallOutcomeV3 outcome = transport!.ExecuteById(
+            operation,
+            target,
+            memberId,
+            arguments,
+            results,
+            arena,
+            inputByteCount);
+        byte[]? retryArena = null;
+        if (outcome.Status == UnrealNativeCallStatusV3.BufferTooSmall &&
+            outcome.RequiredByteCapacity > arena.Length)
+        {
+            retryArena = GC.AllocateUninitializedArray<byte>(
+                outcome.RequiredByteCapacity);
+            arena[..inputByteCount].CopyTo(retryArena);
+            results[0] = descriptor;
+            outcome = transport.ExecuteById(
+                operation,
+                target,
+                memberId,
+                arguments,
+                results,
+                retryArena,
+                inputByteCount);
+        }
+        RequireCallFrameSuccess(outcome, expectedResultCount: 1);
+        ReadOnlySpan<byte> resultArena = retryArena is null ? arena : retryArena;
+        if (!UnrealNativeValueCodecV3.TryDecode(
+                in results[0],
+                resultArena,
+                outcome.ByteCount,
+                out result))
+        {
+            throw new InvalidOperationException(
+                "The ABI v3 transport returned an incompatible fixed-size result.");
+        }
+        Interlocked.Increment(ref _callFrameInvocationCount);
+        return true;
+    }
+
+    private bool TryExecuteCallFrameVoid(
+        UnrealNativeOperationV3 operation,
+        UnrealObjectHandle target,
+        ulong memberId,
+        ReadOnlySpan<UnrealNativeValueV3> arguments,
+        Span<byte> arena,
+        int inputByteCount,
+        UnrealNativeCapabilitiesV3 argumentCapabilities)
+    {
+        if (!TryGetCallFrameTransport(
+                argumentCapabilities,
+                out IUnrealNativeCallFrameTransportV3? transport))
+        {
+            return false;
+        }
+        UnrealNativeCallOutcomeV3 outcome = transport!.ExecuteById(
+            operation,
+            target,
+            memberId,
+            arguments,
+            Span<UnrealNativeValueV3>.Empty,
+            arena,
+            inputByteCount);
+        RequireCallFrameSuccess(outcome, expectedResultCount: 0);
+        Interlocked.Increment(ref _callFrameInvocationCount);
+        return true;
+    }
+
+    private bool TryGetCallFrameTransport(
+        UnrealNativeCapabilitiesV3 requiredCapabilities,
+        out IUnrealNativeCallFrameTransportV3? transport)
+    {
+        transport = _transport as IUnrealNativeCallFrameTransportV3;
+        return transport is not null &&
+            transport.Capabilities != UnrealNativeCapabilitiesV3.None &&
+            (transport.Capabilities & requiredCapabilities) == requiredCapabilities;
+    }
+
+    private static void RequireCallFrameSuccess(
+        UnrealNativeCallOutcomeV3 outcome,
+        int expectedResultCount)
+    {
+        if (outcome.Status == UnrealNativeCallStatusV3.Success)
+        {
+            if (outcome.InvocationError != UnrealInvocationError.None ||
+                outcome.HandleError != UnrealObjectHandleError.None ||
+                outcome.ResultCount != expectedResultCount)
+            {
+                throw new InvalidOperationException(
+                    "The ABI v3 transport returned an inconsistent success outcome.");
+            }
+            return;
+        }
+        if (outcome.Status == UnrealNativeCallStatusV3.InvocationFailure)
+        {
+            throw new UnrealInvocationException(
+                outcome.InvocationError,
+                outcome.HandleError,
+                string.IsNullOrWhiteSpace(outcome.Message)
+                    ? "The ABI v3 Unreal invocation failed."
+                    : outcome.Message);
+        }
+        if (outcome.Status == UnrealNativeCallStatusV3.TransportUnavailable)
+        {
+            throw new UnrealInvocationException(
+                UnrealInvocationError.TransportUnavailable,
+                UnrealObjectHandleError.None,
+                string.IsNullOrWhiteSpace(outcome.Message)
+                    ? "The ABI v3 Unreal transport is unavailable."
+                    : outcome.Message);
+        }
+        throw new InvalidOperationException(
+            $"The ABI v3 transport rejected the call with status {outcome.Status}; " +
+            $"required results={outcome.RequiredResultCapacity}, bytes={outcome.RequiredByteCapacity}.");
+    }
+
+    private static bool TryEncodeThree<T0, T1, T2>(
+        T0 argument0,
+        T1 argument1,
+        T2 argument2,
+        Span<UnrealNativeValueV3> arguments,
+        Span<byte> arena,
+        ref int byteCount,
+        out UnrealNativeCapabilitiesV3 capabilities)
+    {
+        capabilities = UnrealNativeCapabilitiesV3.None;
+        if (!UnrealNativeValueCodecV3.TryEncode(
+                argument0,
+                arena,
+                ref byteCount,
+                out arguments[0],
+                out UnrealNativeCapabilitiesV3 capability0) ||
+            !UnrealNativeValueCodecV3.TryEncode(
+                argument1,
+                arena,
+                ref byteCount,
+                out arguments[1],
+                out UnrealNativeCapabilitiesV3 capability1) ||
+            !UnrealNativeValueCodecV3.TryEncode(
+                argument2,
+                arena,
+                ref byteCount,
+                out arguments[2],
+                out UnrealNativeCapabilitiesV3 capability2))
+        {
+            return false;
+        }
+        capabilities = capability0 | capability1 | capability2;
+        return true;
+    }
+
+    private static bool TryEncodeFour<T0, T1, T2, T3>(
+        T0 argument0,
+        T1 argument1,
+        T2 argument2,
+        T3 argument3,
+        Span<UnrealNativeValueV3> arguments,
+        Span<byte> arena,
+        ref int byteCount,
+        out UnrealNativeCapabilitiesV3 capabilities)
+    {
+        capabilities = UnrealNativeCapabilitiesV3.None;
+        if (!TryEncodeThree(
+                argument0,
+                argument1,
+                argument2,
+                arguments,
+                arena,
+                ref byteCount,
+                out capabilities) ||
+            !UnrealNativeValueCodecV3.TryEncode(
+                argument3,
+                arena,
+                ref byteCount,
+                out arguments[3],
+                out UnrealNativeCapabilitiesV3 capability3))
+        {
+            return false;
+        }
+        capabilities |= capability3;
+        return true;
+    }
+
+    private static void ValidateFastRequest(
         UnrealObjectHandle target,
         ulong memberId,
         string memberPath)
@@ -344,6 +1205,14 @@ public sealed class NativeUnrealInvocationBridge
                 nameof(memberId),
                 "A generated Unreal member ID must be non-zero.");
         }
+    }
+
+    private IUnrealNativeFastInvocationTransport RequireFastTransport(
+        UnrealObjectHandle target,
+        ulong memberId,
+        string memberPath)
+    {
+        ValidateFastRequest(target, memberId, memberPath);
         if (_transport is IUnrealNativeFastInvocationTransport fastTransport &&
             fastTransport.SupportsFastInvocation)
         {
@@ -387,8 +1256,27 @@ public sealed class NativeUnrealInvocationBridge
         value switch
         {
             bool booleanValue => UnrealInvocationValue.FromBoolean(booleanValue),
+            sbyte int8Value => UnrealInvocationValue.FromInt8(int8Value),
+            byte uint8Value => UnrealInvocationValue.FromUInt8(uint8Value),
+            short int16Value => UnrealInvocationValue.FromInt16(int16Value),
+            ushort uint16Value => UnrealInvocationValue.FromUInt16(uint16Value),
             int int32Value => UnrealInvocationValue.FromInt32(int32Value),
+            uint uint32Value => UnrealInvocationValue.FromUInt32(uint32Value),
+            long int64Value => UnrealInvocationValue.FromInt64(int64Value),
+            ulong uint64Value => UnrealInvocationValue.FromUInt64(uint64Value),
+            float float32Value => UnrealInvocationValue.FromFloat32(float32Value),
+            double float64Value => UnrealInvocationValue.FromFloat64(float64Value),
             string stringValue => UnrealInvocationValue.FromString(stringValue),
+            UnrealName nameValue => UnrealInvocationValue.FromName(nameValue),
+            UnrealText textValue => UnrealInvocationValue.FromText(textValue),
+            UnrealObjectHandle objectHandle => UnrealInvocationValue.FromObjectHandle(objectHandle),
+            UnrealClassHandle classHandle =>
+                UnrealInvocationValue.FromObjectHandle(classHandle.ObjectHandle, isClass: true),
+            UnrealEnumValue enumValue when !string.IsNullOrWhiteSpace(enumValue.TypePath) =>
+                UnrealInvocationValue.FromEnum(enumValue),
+            UnrealVector vectorValue => UnrealInvocationValue.FromVector(vectorValue),
+            UnrealRotator rotatorValue => UnrealInvocationValue.FromRotator(rotatorValue),
+            UnrealTransform transformValue => UnrealInvocationValue.FromTransform(transformValue),
             _ => throw UnsupportedValue(memberPath, typeof(T)),
         };
 
@@ -402,8 +1290,45 @@ public sealed class NativeUnrealInvocationBridge
                 value.BooleanValue,
             UnrealInvocationValueKind.Int32 when typeof(T) == typeof(int) =>
                 value.Int32Value,
+            UnrealInvocationValueKind.Int8 when typeof(T) == typeof(sbyte) =>
+                (sbyte)value.SignedIntegerValue,
+            UnrealInvocationValueKind.UInt8 when typeof(T) == typeof(byte) =>
+                (byte)value.UnsignedIntegerValue,
+            UnrealInvocationValueKind.Int16 when typeof(T) == typeof(short) =>
+                (short)value.SignedIntegerValue,
+            UnrealInvocationValueKind.UInt16 when typeof(T) == typeof(ushort) =>
+                (ushort)value.UnsignedIntegerValue,
+            UnrealInvocationValueKind.UInt32 when typeof(T) == typeof(uint) =>
+                (uint)value.UnsignedIntegerValue,
+            UnrealInvocationValueKind.Int64 when typeof(T) == typeof(long) =>
+                value.SignedIntegerValue,
+            UnrealInvocationValueKind.UInt64 when typeof(T) == typeof(ulong) =>
+                value.UnsignedIntegerValue,
+            UnrealInvocationValueKind.Float32 when typeof(T) == typeof(float) =>
+                (float)value.FloatingPointValue,
+            UnrealInvocationValueKind.Float64 when typeof(T) == typeof(double) =>
+                value.FloatingPointValue,
             UnrealInvocationValueKind.String when typeof(T) == typeof(string) =>
                 value.StringValue,
+            UnrealInvocationValueKind.Name when typeof(T) == typeof(UnrealName) =>
+                new UnrealName(value.StringValue ?? string.Empty),
+            UnrealInvocationValueKind.Text when typeof(T) == typeof(UnrealText) =>
+                new UnrealText(value.StringValue ?? string.Empty),
+            UnrealInvocationValueKind.Object or UnrealInvocationValueKind.Class
+                when typeof(T) == typeof(UnrealObjectHandle) => value.ObjectHandle,
+            UnrealInvocationValueKind.Class
+                when typeof(T) == typeof(UnrealClassHandle) =>
+                new UnrealClassHandle(value.ObjectHandle.Value),
+            UnrealInvocationValueKind.Enum
+                when typeof(T) == typeof(UnrealEnumValue) &&
+                     !string.IsNullOrWhiteSpace(value.StringValue) =>
+                new UnrealEnumValue(value.StringValue ?? string.Empty, value.SignedIntegerValue),
+            UnrealInvocationValueKind.Vector when typeof(T) == typeof(UnrealVector) =>
+                value.VectorValue,
+            UnrealInvocationValueKind.Rotator when typeof(T) == typeof(UnrealRotator) =>
+                value.RotatorValue,
+            UnrealInvocationValueKind.Transform when typeof(T) == typeof(UnrealTransform) =>
+                value.TransformValue,
             _ => null,
         };
         if (converted is null)

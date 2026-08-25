@@ -32,9 +32,29 @@ TSharedRef<FJsonObject> TypeReference(
     return Json;
 }
 
+FString CanonicalNativeName(const FProperty* Property)
+{
+    if (const FArrayProperty* Array = CastField<FArrayProperty>(Property))
+    {
+        return FString::Printf(TEXT("TArray<%s>"), *CanonicalNativeName(Array->Inner));
+    }
+    if (const FSetProperty* Set = CastField<FSetProperty>(Property))
+    {
+        return FString::Printf(TEXT("TSet<%s>"), *CanonicalNativeName(Set->ElementProp));
+    }
+    if (const FMapProperty* Map = CastField<FMapProperty>(Property))
+    {
+        return FString::Printf(
+            TEXT("TMap<%s,%s>"),
+            *CanonicalNativeName(Map->KeyProp),
+            *CanonicalNativeName(Map->ValueProp));
+    }
+    return Property->GetCPPType();
+}
+
 TSharedRef<FJsonObject> PropertyTypeReference(const FProperty* Property)
 {
-    const FString NativeName = Property->GetCPPType();
+    const FString NativeName = CanonicalNativeName(Property);
     if (CastField<FBoolProperty>(Property))
     {
         return TypeReference(TEXT("boolean"), NativeName);
@@ -215,7 +235,9 @@ TSharedRef<FJsonObject> ExportFunction(const UClass* Class, const UFunction* Fun
         TSharedRef<FJsonObject> ParameterJson = MakeShared<FJsonObject>();
         ParameterJson->SetStringField(TEXT("name"), Parameter->GetName());
         ParameterJson->SetObjectField(TEXT("type"), PropertyTypeReference(Parameter));
-        const bool bOutput = Parameter->HasAnyPropertyFlags(CPF_OutParm);
+        const bool bOutput =
+            Parameter->HasAnyPropertyFlags(CPF_OutParm) &&
+            !Parameter->HasAnyPropertyFlags(CPF_ConstParm);
         const bool bReference = Parameter->HasAnyPropertyFlags(CPF_ReferenceParm);
         ParameterJson->SetStringField(
             TEXT("direction"),

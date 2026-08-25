@@ -29,7 +29,7 @@ public sealed class UnrealBindingGeneratorTests
             StringComparison.Ordinal);
         Assert.Contains("public int Add(int left, int right)", first.Source, StringComparison.Ordinal);
         Assert.Contains(
-            "Invoke<int>(0xB324FB910D9CED26UL, \"/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:Add\", left, right);",
+            "Invoke<int, int, int>(0xB324FB910D9CED26UL, \"/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:Add\", left, right);",
             first.Source,
             StringComparison.Ordinal);
 
@@ -58,7 +58,7 @@ public sealed class UnrealBindingGeneratorTests
     }
 
     [Fact]
-    public void GenerateSkipsDeferredSignaturesWithStableDiagnostics()
+    public void GenerateEmitsOutputSignaturesAndDiagnosesUnsupportedTypes()
     {
         UnrealReflectionManifest manifest = CreateManifest();
         UnrealReflectedType type = manifest.Types[0];
@@ -68,7 +68,7 @@ public sealed class UnrealBindingGeneratorTests
             new UnrealTypeReference(
                 UnrealValueKind.Struct,
                 "FTransform",
-                "/Script/CoreUObject.Transform"),
+                "/Script/FixtureRuntime.UnsupportedStruct"),
             new UnrealPropertyAccess(Readable: true, Writable: true, EditorVisible: true));
         UnrealReflectedFunction outFunction = new(
             $"{type.Path}:TryRead",
@@ -93,9 +93,57 @@ public sealed class UnrealBindingGeneratorTests
 
         UnrealBindingGenerationResult result = new UnrealBindingGenerator().Generate(manifest);
 
-        Assert.Equal(["USUE2002", "USUE2004"], result.Diagnostics.Select(static item => item.Code));
+        Assert.Equal(["USUE2002"], result.Diagnostics.Select(static item => item.Code));
         Assert.DoesNotContain(" Transform", result.Source, StringComparison.Ordinal);
-        Assert.DoesNotContain(" TryRead", result.Source, StringComparison.Ordinal);
+        Assert.Contains("public bool TryRead(out int value)", result.Source, StringComparison.Ordinal);
+        Assert.Contains("UnrealParameterDirection.Output", result.Source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void GenerateUsesStrongManagedTypesForCoreUnrealValues()
+    {
+        UnrealReflectionManifest manifest = CreateManifest();
+        UnrealReflectedType type = manifest.Types[0];
+        manifest = manifest with
+        {
+            Types =
+            [
+                type with
+                {
+                    Properties =
+                    [
+                        .. type.Properties,
+                        Property(type, "Location", UnrealValueKind.Struct, "FVector", "/Script/CoreUObject.Vector"),
+                        Property(type, "Rotation", UnrealValueKind.Struct, "FRotator", "/Script/CoreUObject.Rotator"),
+                        Property(type, "Transform", UnrealValueKind.Struct, "FTransform", "/Script/CoreUObject.Transform"),
+                        Property(type, "Mode", UnrealValueKind.Enum, "EFixtureMode", "/Script/FixtureRuntime.EFixtureMode"),
+                        Property(type, "Owner", UnrealValueKind.Object, "UObject*", "/Script/CoreUObject.Object"),
+                        Property(type, "RowName", UnrealValueKind.Name, "FName"),
+                        Property(type, "Label", UnrealValueKind.Text, "FText"),
+                        Property(type, "PreciseCount", UnrealValueKind.UInt64, "uint64"),
+                    ],
+                },
+            ],
+        };
+
+        UnrealBindingGenerationResult result = new UnrealBindingGenerator().Generate(manifest);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Contains("public global::UnifiedScript.Unreal.UnrealVector Location", result.Source, StringComparison.Ordinal);
+        Assert.Contains("public global::UnifiedScript.Unreal.UnrealRotator Rotation", result.Source, StringComparison.Ordinal);
+        Assert.Contains("public global::UnifiedScript.Unreal.UnrealTransform Transform", result.Source, StringComparison.Ordinal);
+        Assert.Contains("public global::UnifiedScript.Unreal.UnrealEnumValue Mode", result.Source, StringComparison.Ordinal);
+        Assert.Contains("public global::UnifiedScript.Unreal.UnrealObjectHandle Owner", result.Source, StringComparison.Ordinal);
+        Assert.Contains("public global::UnifiedScript.Unreal.UnrealName RowName", result.Source, StringComparison.Ordinal);
+        Assert.Contains("public global::UnifiedScript.Unreal.UnrealText Label", result.Source, StringComparison.Ordinal);
+        Assert.Contains("public ulong PreciseCount", result.Source, StringComparison.Ordinal);
+
+        SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(result.Source);
+        CSharpCompilation compilation = new CSharpCompilationHost().Create(
+            syntaxTree,
+            [MetadataReference.CreateFromFile(typeof(UnrealObject).Assembly.Location)]);
+        Assert.Empty(compilation.GetDiagnostics()
+            .Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
     }
 
     [Fact]
@@ -185,6 +233,18 @@ public sealed class UnrealBindingGeneratorTests
                     ],
                     new UnrealFunctionTraits(Static: false, Pure: true, Callable: true))])]);
     }
+
+    private static UnrealReflectedProperty Property(
+        UnrealReflectedType owner,
+        string name,
+        UnrealValueKind kind,
+        string nativeName,
+        string? typePath = null) =>
+        new(
+            $"{owner.Path}:{name}",
+            name,
+            new UnrealTypeReference(kind, nativeName, typePath),
+            new UnrealPropertyAccess(true, true, true));
 
     private sealed class FixtureWrapper : UnrealObject
     {

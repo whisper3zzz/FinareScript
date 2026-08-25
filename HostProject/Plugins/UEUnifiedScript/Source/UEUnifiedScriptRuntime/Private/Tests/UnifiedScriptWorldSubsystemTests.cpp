@@ -4,6 +4,7 @@
 
 #include "Containers/StringConv.h"
 #include "Engine/World.h"
+#include "HAL/PlatformTime.h"
 #include "Misc/AutomationTest.h"
 #include "UnifiedScriptComponent.h"
 #include "UnifiedScriptCoreClrHost.h"
@@ -176,8 +177,25 @@ bool FUnifiedScriptWorldSubsystemLifecycleTest::RunTest(const FString& Parameter
         FirstComponent->ActiveGeneration,
         FString(TEXT("1")));
     TestTrue(
-        TEXT("Generated managed wrapper selects ABI v2 native thunks"),
+        TEXT("Generated managed wrapper selects native member-ID thunks"),
         FirstHost->GetFastInvocationCount() >= FastCallsBeforeDemo + 3);
+    uint64 ManagedCallFrameCalls = 0;
+    uint64 ManagedLegacyCalls = 0;
+    TestTrue(
+        TEXT("Managed World exposes invocation-path metrics"),
+        FirstHost->GetManagedInvocationMetrics(
+            ManagedCallFrameCalls,
+            ManagedLegacyCalls));
+    TestTrue(
+        TEXT("Fixed generated calls cross the live ABI v3 call frame"),
+        ManagedCallFrameCalls >= 2);
+    TestTrue(
+        TEXT("Generated UTF-8 inputs stay on the live ABI v3 call frame"),
+        ManagedCallFrameCalls >= 4);
+    TestEqual(
+        TEXT("The current World lifecycle demo no longer needs ABI v2 fallback"),
+        ManagedLegacyCalls,
+        uint64{0});
 
     FirstComponent->TickComponent(0.016f, LEVELTICK_All, nullptr);
     TestEqual(
@@ -265,11 +283,18 @@ bool FUnifiedScriptWorldSubsystemLifecycleTest::RunTest(const FString& Parameter
         FirstHost->GetManagedScriptCount(),
         0);
     FirstComponent->UnregisterComponent();
+    TestTrue(
+        TEXT("Final managed invocation metrics remain available after script stop"),
+        FirstHost->GetManagedInvocationMetrics(
+            ManagedCallFrameCalls,
+            ManagedLegacyCalls));
     UE_LOG(
         LogTemp,
         Display,
-        TEXT("UnifiedScript demo completed: DeclarationState=37, ScriptAsset Start/Tick/Reload/Stop, Generation=3, Add(20, 22)=42, FastCalls=%llu"),
-        static_cast<unsigned long long>(FirstHost->GetFastInvocationCount()));
+        TEXT("UnifiedScript demo completed: DeclarationState=37, ScriptAsset Start/Tick/Reload/Stop, Generation=3, Add(20, 22)=42, FastCalls=%llu, CallFrameCalls=%llu, LegacyCalls=%llu"),
+        static_cast<unsigned long long>(FirstHost->GetFastInvocationCount()),
+        static_cast<unsigned long long>(ManagedCallFrameCalls),
+        static_cast<unsigned long long>(ManagedLegacyCalls));
 
     const FUnifiedScriptObjectHandle FirstHandle =
         FirstHost->RegisterObject(FirstComponent, HandleResult);
@@ -360,6 +385,125 @@ bool FUnifiedScriptWorldSubsystemLifecycleTest::RunTest(const FString& Parameter
         TEXT("Second World teardown restores the managed entry count"),
         FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount(),
         InitialManagedWorldCount);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FUnifiedScriptManagedInteropPerformanceTest,
+    "UnifiedScript.Unreal.Performance.ManagedInterop",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUnifiedScriptManagedInteropPerformanceTest::RunTest(const FString& Parameters)
+{
+    constexpr int32 Iterations = 100000;
+    constexpr int32 WarmupIterations = 4096;
+
+    UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+    TestNotNull(TEXT("Benchmark world exists"), World);
+    if (World == nullptr)
+    {
+        return false;
+    }
+    World->AddToRoot();
+    UUnifiedScriptWorldSubsystem* Host =
+        World->GetSubsystem<UUnifiedScriptWorldSubsystem>();
+    TestNotNull(TEXT("Benchmark World host exists"), Host);
+    UUnifiedScriptComponent* Component =
+        NewObject<UUnifiedScriptComponent>(World);
+    UUnifiedScriptAsset* Asset = NewObject<UUnifiedScriptAsset>(World);
+    Asset->ScriptAssemblyPath =
+        TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.dll");
+    Asset->ScriptTypeName =
+        TEXT("UnifiedScript.Unreal.Demo.ManagedInteropBenchmarkScript");
+    Component->ScriptAsset = Asset;
+    Component->RegisterComponentWithWorld(World);
+    Component->BeginPlay();
+    TestTrue(
+        *FString::Printf(
+            TEXT("Managed benchmark starts: %s"),
+            *Component->LastScriptError),
+        Component->bScriptRunning);
+
+    auto ReadField = [](const FString& State, const TCHAR* Name, FString& OutValue)
+    {
+        TArray<FString> Fields;
+        State.ParseIntoArray(Fields, TEXT(";"), true);
+        const FString Prefix = FString(Name) + TEXT("=");
+        for (const FString& Field : Fields)
+        {
+            if (Field.StartsWith(Prefix))
+            {
+                OutValue = Field.Mid(Prefix.Len());
+                return true;
+            }
+        }
+        return false;
+    };
+
+    FString ManagedNanosecondsText;
+    FString AllocatedBytesText;
+    FString ManagedIterationsText;
+    double ManagedNanosecondsPerCall = 0.0;
+    int64 AllocatedBytes = -1;
+    int32 ManagedIterations = 0;
+    const bool bParsed = Component->ManagedState.StartsWith(TEXT("Benchmark:v1;")) &&
+        ReadField(
+            Component->ManagedState,
+            TEXT("NanosecondsPerCall"),
+            ManagedNanosecondsText) &&
+        ReadField(
+            Component->ManagedState,
+            TEXT("AllocatedBytes"),
+            AllocatedBytesText) &&
+        ReadField(
+            Component->ManagedState,
+            TEXT("Iterations"),
+            ManagedIterationsText) &&
+        LexTryParseString(ManagedNanosecondsPerCall, *ManagedNanosecondsText) &&
+        LexTryParseString(AllocatedBytes, *AllocatedBytesText) &&
+        LexTryParseString(ManagedIterations, *ManagedIterationsText);
+    TestTrue(
+        *FString::Printf(
+            TEXT("Managed benchmark result is parseable: %s"),
+            *Component->ManagedState),
+        bParsed);
+
+    int64 NativeChecksum = 0;
+    for (int32 Index = 0; Index < WarmupIterations; ++Index)
+    {
+        NativeChecksum += Component->Add(Index, 1);
+    }
+    const double NativeStarted = FPlatformTime::Seconds();
+    for (int32 Index = 0; Index < Iterations; ++Index)
+    {
+        NativeChecksum += Component->Add(Index, 1);
+    }
+    const double NativeElapsedSeconds = FPlatformTime::Seconds() - NativeStarted;
+    const double NativeNanosecondsPerCall =
+        NativeElapsedSeconds * 1000000000.0 / Iterations;
+
+    TestEqual(TEXT("Managed benchmark iteration count is stable"), ManagedIterations, Iterations);
+    TestEqual(TEXT("Managed fixed-call loop allocates no managed bytes"), AllocatedBytes, int64{0});
+    TestTrue(
+        TEXT("Managed result remains inside the initial regression ceiling"),
+        ManagedNanosecondsPerCall > 0.0 && ManagedNanosecondsPerCall <= 20000.0);
+    TestTrue(
+        TEXT("Native benchmark is measurable"),
+        NativeNanosecondsPerCall > 0.0 && NativeChecksum != 0);
+
+    UE_LOG(
+        LogTemp,
+        Display,
+        TEXT("UNIFIEDSCRIPT_BENCHMARK_JSON {\"schemaVersion\":\"unifiedscript.unreal-benchmark/v0.1\",\"scenario\":\"generated-int32-add\",\"configuration\":\"Development Editor\",\"iterations\":%d,\"cppDirectNsPerCall\":%.3f,\"unifiedScriptNsPerCall\":%.3f,\"unifiedScriptAllocatedBytes\":%lld,\"puertsNsPerCall\":null}"),
+        Iterations,
+        NativeNanosecondsPerCall,
+        ManagedNanosecondsPerCall,
+        static_cast<long long>(AllocatedBytes));
+
+    Component->EndPlay(EEndPlayReason::Destroyed);
+    Component->UnregisterComponent();
+    World->RemoveFromRoot();
+    World->DestroyWorld(false);
     return true;
 }
 

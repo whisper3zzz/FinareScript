@@ -237,8 +237,10 @@ native thunk table covers the full reflected `UUnifiedScriptComponent` surface.
 It still resolves the world-scoped weak handle first, then accesses fields or
 calls C++ methods directly without path decoding, `FProperty` lookup,
 `FStructOnScope`, or `ProcessEvent`. Native and managed tests cover both ABI
-versions. The live UE demo reports `FastCalls=16`, proving the hosted generated
-wrapper selected v2 during Start/Tick/Reload/Stop.
+versions. At this milestone the live UE demo reported `FastCalls=16`, proving
+the hosted generated wrapper selected stable-ID v2 thunks during
+Start/Tick/Reload/Stop; the later ABI v3 activation splits that same counter by
+call-frame and legacy route.
 
 This is now an executable component host with a measured route counter, not yet
 a cross-runtime performance claim. Dependency packaging, automatic thunk
@@ -272,19 +274,36 @@ public/protected/private access of exported properties and functions. The same
 `ue-bindings` command accepts `--native-out` and deterministically emits a C++
 translation unit keyed by the exact Member IDs used in managed wrappers.
 
-For public `bool`, `int32`, `FString`, and void signatures in the current ABI,
-the generated dispatcher casts the already handle-validated UObject once and
-then accesses the native field or invokes the C++ method directly. It performs
-no member-path parsing, `FProperty` lookup, parameter-buffer allocation, or
-`ProcessEvent`. Read-only properties, bad target types, argument-count errors,
-and value-kind mismatches retain the existing stable bridge failures. Unsupported
-or non-public native shapes produce deterministic `USUE300x` diagnostics rather
-than silently falling back to unsafe direct access.
+The generated dispatcher now covers all scalar widths plus `FString`, `FName`,
+`FText`, reflected enums, `FVector`, `FRotator`, and `FTransform`. It casts the
+already handle-validated UObject once and then accesses the native field or
+invokes the C++ method directly. It performs no member-path parsing,
+`FProperty` lookup, parameter-buffer allocation, or `ProcessEvent`. Read-only
+properties, bad target types, enum type mismatches, argument-count errors, and
+value-kind mismatches retain the existing stable bridge failures. Unsupported
+or non-public native shapes produce deterministic `USUE300x` diagnostics
+rather than silently falling back to unsafe direct access.
 
 The checked-in runtime thunk file is generated from the checked-in live UE 5.8
-manifest, and a golden test prevents it from drifting. ABI v1 remains available
-for older hosts and injected bridges; the next marshalling expansion will widen
-the generated fast path beyond the initial primitive set.
+manifest, including `UUnifiedScriptInteropFixture`, and a golden test prevents
+it from drifting. UE Automation executes generated int64, enum, FVector, and
+FTransform property/function thunks against that fixture. ABI v1/v2 remain
+available for existing hosts; their narrow wire layout does not claim to carry
+the new values across CoreCLR.
+
+ABI v3 is frozen as an independent caller-owned synchronous call-frame contract
+in `UNREAL_ABI_V3.md`. Managed and native layouts are locked at 48-byte values,
+72-byte frames, and a 64-byte capability-bearing table. The live export now
+advertises fixed scalars, enums, object/class handles, vector/rotator, transform,
+UTF-8 text, recursive arrays/sets/maps, and return plus `out`/`ref`; generated
+calls use a strongly typed span/stack frame whose fixed path has zero
+steady-state managed allocation. Variable-size overflow is retained by the
+World context and copied on an automatic expanded-arena retry without a second
+UFunction dispatch. The append-only v2 bootstrap exposes the optional v3 table
+to existing World entry points; v2 remains for old hosts and unsupported
+reflection shapes.
+Object/class values continue to be generation handles only; no raw `UObject*`
+crosses the managed boundary.
 
 ## Phase B.13 Declaration IR state materialization
 
@@ -304,7 +323,8 @@ state access to gameplay C# without reflection lookup.
 
 The checked-in UE 5.8 demo stages its emitted declaration beside the managed
 assembly, overrides `InitialValue` from 10 to 37, reads 37 in `OnStart`, retains
-it across Reload, and reports `DeclarationState=37` with `FastCalls=16`.
+it across Reload, and reports `DeclarationState=37`, `FastCalls=16`,
+`CallFrameCalls=16`, and `LegacyCalls=0`.
 
 ## Phase B.14 native Slate Authoring Surface
 
@@ -352,7 +372,8 @@ Asset or loaded Surface. Running instances call their existing transactional
 `ReloadScript`; inactive instances refresh Declaration state. The real UE 5.8
 Demo was exercised through a `100 -> 101 -> 100` Workbench round trip, retained
 its stable IDs, emitted a loadable DLL, and then passed the live World-host Demo
-with `DeclarationState=37` and `FastCalls=16`.
+with `DeclarationState=37`, `FastCalls=16`, `CallFrameCalls=16`, and
+`LegacyCalls=0`.
 
 ## Phase B.16 Blueprint-style GraphEditor workspace
 
@@ -478,27 +499,15 @@ current 16 GiB machine, UE's default of ten concurrent unity compilations
 causes heavy compression and swap and is slower overall. This is a local build
 policy, not a runtime limitation.
 
-## Remaining M6.1 phases
+## Current production boundary
 
-Phase A proves schema and toolchain connectivity. It does not claim that UE can
-yet execute gameplay C#.
+M6.1 now executes gameplay C# through a World-owned CoreCLR host, generated
+member thunks, and ABI v3. Script Assets materialize declaration state, managed
+generations reload transactionally, and the Slate authoring surface commits
+typed C# edits through the Workbench. Win64 Development and Shipping builds
+stage a plugin-local .NET runtime plus managed dependency closure and pass a
+packaged managed Start/Tick/Stop smoke. See `UNREAL_RELEASE.md`.
 
-Phase B adds native invocation and lifetime safety:
-
-- extend primitive marshalling beyond `bool`, `int32`, and `FString`;
-- add Script Asset cook/package dependency discovery;
-- widen generated typed thunks beyond the current primitive ABI.
-
-Phase C completes the shared runtime domain:
-
-- resolve generated gameplay assemblies from a script asset;
-- group compatible script instances into optimized runtime generations;
-- preserve component-driven hot reload and lifecycle ordering;
-- no duplicate Blueprint variable declarations.
-
-Phase D adds the editor and distribution surface:
-
-- semantic selection/debug identities retained across UE reloads;
-- optional graph-canvas layout and undo/redo presentation;
-- cook staging, managed dependency closure, platform runtime selection, and
-  packaging verification.
+The remaining production work is World-safe delegates/events, broader native
+debug traps and evaluation, arbitrary control-wire authoring outside structured
+operations, and platform-specific CoreCLR packaging beyond Win64.

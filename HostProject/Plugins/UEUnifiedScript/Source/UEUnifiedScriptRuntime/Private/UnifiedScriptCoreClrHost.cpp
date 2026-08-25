@@ -64,6 +64,10 @@ using FDestroyScriptEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
     uint64 InstanceId);
 using FGetScriptCountEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
     uint64 WorldHostId);
+using FGetInvocationMetricsEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
+    uint64 WorldHostId,
+    uint64* OutCallFrameInvocationCount,
+    uint64* OutLegacyInvocationCount);
 
 constexpr int32 LoadAssemblyAndGetFunctionPointerDelegateType = 5;
 
@@ -105,6 +109,17 @@ void AddCandidate(TArray<FString>& Candidates, FString Candidate)
 FString FindDotNetRoot()
 {
     TArray<FString> Candidates;
+    if (const TSharedPtr<IPlugin> Plugin =
+            IPluginManager::Get().FindPlugin(TEXT("UEUnifiedScript"));
+        Plugin.IsValid())
+    {
+        AddCandidate(
+            Candidates,
+            FPaths::Combine(
+                Plugin->GetBaseDir(),
+                TEXT("Binaries/ThirdParty/DotNet/10.0"),
+                GetPlatformDotNetDirectory()));
+    }
     AddCandidate(
         Candidates,
         FPlatformMisc::GetEnvironmentVariable(TEXT("UNIFIEDSCRIPT_DOTNET_ROOT")));
@@ -213,6 +228,7 @@ void FUnifiedScriptCoreClrHost::Shutdown()
     ReloadScriptEntryPoint = nullptr;
     DestroyScriptEntryPoint = nullptr;
     GetScriptCountEntryPoint = nullptr;
+    GetInvocationMetricsEntryPoint = nullptr;
     LoadAssemblyAndGetFunctionPointer = nullptr;
     if (HostFxrLibrary != nullptr)
     {
@@ -479,6 +495,28 @@ int32 FUnifiedScriptCoreClrHost::GetManagedScriptCount(uint64 WorldHostId) const
     return FMath::Max(Result, 0);
 }
 
+bool FUnifiedScriptCoreClrHost::GetManagedInvocationMetrics(
+    uint64 WorldHostId,
+    uint64& OutCallFrameInvocationCount,
+    uint64& OutLegacyInvocationCount) const
+{
+    using namespace UE::UnifiedScript::CoreClr::Private;
+    FScopeLock Lock(&StateLock);
+    OutCallFrameInvocationCount = 0;
+    OutLegacyInvocationCount = 0;
+    if (State != EUnifiedScriptCoreClrHostState::Ready ||
+        GetInvocationMetricsEntryPoint == nullptr)
+    {
+        return false;
+    }
+    const int32 Result = reinterpret_cast<FGetInvocationMetricsEntryPoint>(
+        GetInvocationMetricsEntryPoint)(
+        WorldHostId,
+        &OutCallFrameInvocationCount,
+        &OutLegacyInvocationCount);
+    return Result == 0;
+}
+
 int32 FUnifiedScriptCoreClrHost::GetManagedWorldCount() const
 {
     using namespace UE::UnifiedScript::CoreClr::Private;
@@ -634,6 +672,7 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
     const int32 ReloadScriptResult = LoadEntryPoint(TEXT("ReloadScript"), &ReloadScriptEntryPoint);
     const int32 DestroyScriptResult = LoadEntryPoint(TEXT("DestroyScript"), &DestroyScriptEntryPoint);
     const int32 ScriptCountResult = LoadEntryPoint(TEXT("GetScriptCount"), &GetScriptCountEntryPoint);
+    const int32 MetricsResult = LoadEntryPoint(TEXT("GetInvocationMetrics"), &GetInvocationMetricsEntryPoint);
 #else
     const int32 CreateResult = LoadEntryPoint("CreateWorld", &CreateWorldEntryPoint);
     const int32 DestroyResult = LoadEntryPoint("DestroyWorld", &DestroyWorldEntryPoint);
@@ -643,10 +682,11 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
     const int32 ReloadScriptResult = LoadEntryPoint("ReloadScript", &ReloadScriptEntryPoint);
     const int32 DestroyScriptResult = LoadEntryPoint("DestroyScript", &DestroyScriptEntryPoint);
     const int32 ScriptCountResult = LoadEntryPoint("GetScriptCount", &GetScriptCountEntryPoint);
+    const int32 MetricsResult = LoadEntryPoint("GetInvocationMetrics", &GetInvocationMetricsEntryPoint);
 #endif
     if (CreateResult != 0 || DestroyResult != 0 || CountResult != 0 ||
         CreateScriptResult != 0 || TickScriptResult != 0 || ReloadScriptResult != 0 ||
-        DestroyScriptResult != 0 || ScriptCountResult != 0 ||
+        DestroyScriptResult != 0 || ScriptCountResult != 0 || MetricsResult != 0 ||
         CreateWorldEntryPoint == nullptr ||
         DestroyWorldEntryPoint == nullptr ||
         GetWorldCountEntryPoint == nullptr ||
@@ -654,10 +694,11 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
         TickScriptEntryPoint == nullptr ||
         ReloadScriptEntryPoint == nullptr ||
         DestroyScriptEntryPoint == nullptr ||
-        GetScriptCountEntryPoint == nullptr)
+        GetScriptCountEntryPoint == nullptr ||
+        GetInvocationMetricsEntryPoint == nullptr)
     {
         return FailLocked(FString::Printf(
-            TEXT("Managed entry-point loading failed: world=(0x%08X,0x%08X,0x%08X) script=(0x%08X,0x%08X,0x%08X,0x%08X,0x%08X)."),
+            TEXT("Managed entry-point loading failed: world=(0x%08X,0x%08X,0x%08X) script=(0x%08X,0x%08X,0x%08X,0x%08X,0x%08X) metrics=0x%08X."),
             static_cast<uint32>(CreateResult),
             static_cast<uint32>(DestroyResult),
             static_cast<uint32>(CountResult),
@@ -665,7 +706,8 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
             static_cast<uint32>(TickScriptResult),
             static_cast<uint32>(ReloadScriptResult),
             static_cast<uint32>(DestroyScriptResult),
-            static_cast<uint32>(ScriptCountResult)));
+            static_cast<uint32>(ScriptCountResult),
+            static_cast<uint32>(MetricsResult)));
     }
 
     LastError.Reset();
@@ -694,6 +736,7 @@ bool FUnifiedScriptCoreClrHost::FailLocked(FString Message)
     ReloadScriptEntryPoint = nullptr;
     DestroyScriptEntryPoint = nullptr;
     GetScriptCountEntryPoint = nullptr;
+    GetInvocationMetricsEntryPoint = nullptr;
     LastError = MoveTemp(Message);
     State = EUnifiedScriptCoreClrHostState::Failed;
     UE_LOG(LogTemp, Error, TEXT("%s"), *LastError);

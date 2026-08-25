@@ -68,6 +68,10 @@ public:
 
     int32 GetManagedScriptCount() const;
 
+    bool GetManagedInvocationMetrics(
+        uint64& OutCallFrameInvocationCount,
+        uint64& OutLegacyInvocationCount) const;
+
     int32 NumRegisteredObjects() const;
 
     uint64 GetFastInvocationCount() const;

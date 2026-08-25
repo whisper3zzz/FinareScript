@@ -1,3 +1,12 @@
+/**
+ * @Copyright: 2026 Tencent Inc. All rights reserved. reserved.
+ * @Author: whispersong
+ * @Date: 2026-08-24 20:45:17
+ * @LastEditors: whispersong
+ * @LastEditTime: 2026-08-25 10:33:15
+ * @FilePath: \Plugins\UEUnifiedScript\Source\UEUnifiedScriptEditor\Private\Graph\UnifiedScriptGraphLayoutStore.cpp
+ * @Description:
+ */
 #include "Graph/UnifiedScriptGraphLayoutStore.h"
 
 #include "Dom/JsonObject.h"

@@ -58,7 +58,7 @@ public sealed class UnrealNativeThunkGeneratorTests
                             new UnrealTypeReference(
                                 UnrealValueKind.Struct,
                                 "FTransform",
-                                "/Script/CoreUObject.Transform"),
+                                "/Script/FixtureRuntime.UnsupportedStruct"),
                             new UnrealPropertyAccess(true, true, true)),
                     ],
                 },
@@ -72,6 +72,47 @@ public sealed class UnrealNativeThunkGeneratorTests
             result.Diagnostics.Select(static diagnostic => diagnostic.Code));
         Assert.DoesNotContain("TypedTarget->Counter", result.Source, StringComparison.Ordinal);
         Assert.DoesNotContain("TypedTarget->Transform", result.Source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void GenerateEmitsScalarEnumAndCoreStructConversions()
+    {
+        UnrealReflectionManifest manifest = CreateManifest();
+        UnrealReflectedType type = manifest.Types[0];
+        manifest = manifest with
+        {
+            Types =
+            [
+                type with
+                {
+                    Properties =
+                    [
+                        .. type.Properties,
+                        Property(type, "PreciseCount", UnrealValueKind.UInt64, "uint64"),
+                        Property(type, "Weight", UnrealValueKind.Float64, "double"),
+                        Property(type, "RowName", UnrealValueKind.Name, "FName"),
+                        Property(type, "Label", UnrealValueKind.Text, "FText"),
+                        Property(type, "Location", UnrealValueKind.Struct, "FVector", "/Script/CoreUObject.Vector"),
+                        Property(type, "Rotation", UnrealValueKind.Struct, "FRotator", "/Script/CoreUObject.Rotator"),
+                        Property(type, "Transform", UnrealValueKind.Struct, "FTransform", "/Script/CoreUObject.Transform"),
+                        Property(type, "Mode", UnrealValueKind.Enum, "EFixtureMode", "/Script/FixtureRuntime.EFixtureMode"),
+                    ],
+                },
+            ],
+        };
+
+        UnrealNativeThunkGenerationResult result = new UnrealNativeThunkGenerator().Generate(manifest);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Contains("FUnifiedScriptValue::FromUInt64(TypedTarget->PreciseCount)", result.Source, StringComparison.Ordinal);
+        Assert.Contains("FUnifiedScriptValue::FromFloat64(TypedTarget->Weight)", result.Source, StringComparison.Ordinal);
+        Assert.Contains("FUnifiedScriptValue::FromName(TypedTarget->RowName)", result.Source, StringComparison.Ordinal);
+        Assert.Contains("FUnifiedScriptValue::FromText(TypedTarget->Label)", result.Source, StringComparison.Ordinal);
+        Assert.Contains("FUnifiedScriptValue::FromVector(TypedTarget->Location)", result.Source, StringComparison.Ordinal);
+        Assert.Contains("FUnifiedScriptValue::FromRotator(TypedTarget->Rotation)", result.Source, StringComparison.Ordinal);
+        Assert.Contains("FUnifiedScriptValue::FromTransform(TypedTarget->Transform)", result.Source, StringComparison.Ordinal);
+        Assert.Contains(".TryGetEnumById(NativeValueRaw, 0x", result.Source, StringComparison.Ordinal);
+        Assert.Contains("EFixtureMode NativeValue = static_cast<EFixtureMode>(NativeValueRaw);", result.Source, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -89,6 +130,9 @@ public sealed class UnrealNativeThunkGeneratorTests
         Assert.Equal(expected.ReplaceLineEndings("\n"), result.Source);
         Assert.Contains("TypedTarget->ManagedState", result.Source, StringComparison.Ordinal);
         Assert.Contains("TypedTarget->Add(Argument0, Argument1)", result.Source, StringComparison.Ordinal);
+        Assert.Contains("DecodeObject(Registry, Arguments[0]", result.Source, StringComparison.Ordinal);
+        Assert.Contains("TypedTarget->EchoObject(Argument0)", result.Source, StringComparison.Ordinal);
+        Assert.Contains("TypedTarget->EchoClass(Argument0)", result.Source, StringComparison.Ordinal);
     }
 
     private static UnrealReflectionManifest CreateManifest()
@@ -127,4 +171,16 @@ public sealed class UnrealNativeThunkGeneratorTests
                     new UnrealFunctionTraits(false, true, true))],
                 "FixtureObject.h")]);
     }
+
+    private static UnrealReflectedProperty Property(
+        UnrealReflectedType owner,
+        string name,
+        UnrealValueKind kind,
+        string nativeName,
+        string? typePath = null) =>
+        new(
+            $"{owner.Path}:{name}",
+            name,
+            new UnrealTypeReference(kind, nativeName, typePath),
+            new UnrealPropertyAccess(true, true, true));
 }

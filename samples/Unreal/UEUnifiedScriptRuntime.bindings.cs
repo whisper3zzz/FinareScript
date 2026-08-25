@@ -91,10 +91,10 @@ public sealed partial class UnifiedScriptComponent : global::UnifiedScript.Unrea
     }
 
     public int Add(int left, int right)
-        => Invoke<int>(0xB324FB910D9CED26UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:Add", left, right);
+        => Invoke<int, int, int>(0xB324FB910D9CED26UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:Add", left, right);
 
     public int GetScriptStateInt32(string name, int fallback)
-        => Invoke<int>(0x5B7CEF7BDAF29749UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:GetScriptStateInt32", name, fallback);
+        => Invoke<int, string, int>(0x5B7CEF7BDAF29749UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:GetScriptStateInt32", name, fallback);
 
     public bool RefreshScriptState()
         => Invoke<bool>(0xBF8089C66CEB80D6UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:RefreshScriptState");
@@ -106,13 +106,181 @@ public sealed partial class UnifiedScriptComponent : global::UnifiedScript.Unrea
         => Invoke(0x9FD30761744D70A1UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:RequestReload");
 
     public bool SetScriptStateInt32(string name, int value)
-        => Invoke<bool>(0xF83092B1E5E45D7DUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:SetScriptStateInt32", name, value);
+        => Invoke<bool, string, int>(0xF83092B1E5E45D7DUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:SetScriptStateInt32", name, value);
 
     public bool StartScript()
         => Invoke<bool>(0x335CA93AEB62A23EUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:StartScript");
 
     public void StopScript()
         => Invoke(0xC2B2365ACCA0171CUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:StopScript");
+}
+
+[global::UnifiedScript.Unreal.UnrealTypeAttribute("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture")]
+public sealed partial class UnifiedScriptInteropFixture : global::UnifiedScript.Unreal.UnrealObject
+{
+    public UnifiedScriptInteropFixture(
+        global::UnifiedScript.Unreal.UnrealObjectHandle handle,
+        global::UnifiedScript.Unreal.IUnrealInvocationBridge bridge)
+        : base(handle, bridge)
+    {
+    }
+
+    public byte ByteValue
+    {
+        get => ReadProperty<byte>(0xB9AF036F8D9D7B1FUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ByteValue");
+        set => WriteProperty(0xB9AF036F8D9D7B1FUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ByteValue", value);
+    }
+
+    public global::UnifiedScript.Unreal.UnrealClassHandle ClassValue
+    {
+        get => ReadProperty<global::UnifiedScript.Unreal.UnrealClassHandle>(0x0C28A4137B791315UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ClassValue");
+        set => WriteProperty(0x0C28A4137B791315UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ClassValue", value);
+    }
+
+    public double DoubleValue
+    {
+        get => ReadProperty<double>(0x0AE5CB76273EFDB6UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:DoubleValue");
+        set => WriteProperty(0x0AE5CB76273EFDB6UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:DoubleValue", value);
+    }
+
+    public float FloatValue
+    {
+        get => ReadProperty<float>(0x60A9B3373A0EA8E7UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FloatValue");
+        set => WriteProperty(0x60A9B3373A0EA8E7UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FloatValue", value);
+    }
+
+    public int Int32Value
+    {
+        get => ReadProperty<int>(0x813BE501DBB937C9UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:Int32Value");
+        set => WriteProperty(0x813BE501DBB937C9UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:Int32Value", value);
+    }
+
+    public long Int64Value
+    {
+        get => ReadProperty<long>(0x34075871872CC6C4UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:Int64Value");
+        set => WriteProperty(0x34075871872CC6C4UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:Int64Value", value);
+    }
+
+    public global::System.Collections.Generic.IReadOnlyList<int> IntArrayValue
+    {
+        get => ReadProperty<global::System.Collections.Generic.IReadOnlyList<int>>(0x58F081410EEA1B8FUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:IntArrayValue");
+        set => WriteProperty(0x58F081410EEA1B8FUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:IntArrayValue", value);
+    }
+
+    public global::System.Collections.Generic.IReadOnlyDictionary<int, int> IntMapValue
+    {
+        get => ReadProperty<global::System.Collections.Generic.IReadOnlyDictionary<int, int>>(0x9F95909F1D588926UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:IntMapValue");
+        set => WriteProperty(0x9F95909F1D588926UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:IntMapValue", value);
+    }
+
+    public global::System.Collections.Generic.IReadOnlySet<int> IntSetValue
+    {
+        get => ReadProperty<global::System.Collections.Generic.IReadOnlySet<int>>(0x5D8F4F14AD4EBB78UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:IntSetValue");
+        set => WriteProperty(0x5D8F4F14AD4EBB78UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:IntSetValue", value);
+    }
+
+    public global::UnifiedScript.Unreal.UnrealEnumValue Mode
+    {
+        get => ReadProperty<global::UnifiedScript.Unreal.UnrealEnumValue>(0x8B89BE30CF9161D7UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:Mode");
+        set => WriteProperty(0x8B89BE30CF9161D7UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:Mode", value);
+    }
+
+    public global::UnifiedScript.Unreal.UnrealName NameValue
+    {
+        get => ReadProperty<global::UnifiedScript.Unreal.UnrealName>(0x0EDD5EC02B7BF7C4UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:NameValue");
+        set => WriteProperty(0x0EDD5EC02B7BF7C4UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:NameValue", value);
+    }
+
+    public global::UnifiedScript.Unreal.UnrealObjectHandle ObjectValue
+    {
+        get => ReadProperty<global::UnifiedScript.Unreal.UnrealObjectHandle>(0xF85C960C1094B360UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ObjectValue");
+        set => WriteProperty(0xF85C960C1094B360UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ObjectValue", value);
+    }
+
+    public global::UnifiedScript.Unreal.UnrealRotator RotatorValue
+    {
+        get => ReadProperty<global::UnifiedScript.Unreal.UnrealRotator>(0xE9FD870223025846UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:RotatorValue");
+        set => WriteProperty(0xE9FD870223025846UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:RotatorValue", value);
+    }
+
+    public string StringValue
+    {
+        get => ReadProperty<string>(0x6B3CC333752E62FAUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:StringValue");
+        set => WriteProperty(0x6B3CC333752E62FAUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:StringValue", value);
+    }
+
+    public global::UnifiedScript.Unreal.UnrealText TextValue
+    {
+        get => ReadProperty<global::UnifiedScript.Unreal.UnrealText>(0x136048C026D91640UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:TextValue");
+        set => WriteProperty(0x136048C026D91640UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:TextValue", value);
+    }
+
+    public global::UnifiedScript.Unreal.UnrealTransform TransformValue
+    {
+        get => ReadProperty<global::UnifiedScript.Unreal.UnrealTransform>(0x3ECB1DF061194271UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:TransformValue");
+        set => WriteProperty(0x3ECB1DF061194271UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:TransformValue", value);
+    }
+
+    public global::UnifiedScript.Unreal.UnrealVector VectorValue
+    {
+        get => ReadProperty<global::UnifiedScript.Unreal.UnrealVector>(0x51CDC304CE471430UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:VectorValue");
+        set => WriteProperty(0x51CDC304CE471430UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:VectorValue", value);
+    }
+
+    public long AddInt64(long left, long right)
+        => Invoke<long, long, long>(0x5005CC3042360722UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:AddInt64", left, right);
+
+    public global::UnifiedScript.Unreal.UnrealVector AddVector(global::UnifiedScript.Unreal.UnrealVector left, global::UnifiedScript.Unreal.UnrealVector right)
+        => Invoke<global::UnifiedScript.Unreal.UnrealVector, global::UnifiedScript.Unreal.UnrealVector, global::UnifiedScript.Unreal.UnrealVector>(0x72F00766D165C3ACUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:AddVector", left, right);
+
+    public int CountSet(global::System.Collections.Generic.IReadOnlySet<int> values)
+        => Invoke<int, global::System.Collections.Generic.IReadOnlySet<int>>(0x3CDA489A528A7F59UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:CountSet", values);
+
+    public global::System.Collections.Generic.IReadOnlyList<int> EchoArray(global::System.Collections.Generic.IReadOnlyList<int> values)
+        => Invoke<global::System.Collections.Generic.IReadOnlyList<int>, global::System.Collections.Generic.IReadOnlyList<int>>(0x6DB8F58355D32AD6UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoArray", values);
+
+    public global::UnifiedScript.Unreal.UnrealClassHandle EchoClass(global::UnifiedScript.Unreal.UnrealClassHandle value)
+        => Invoke<global::UnifiedScript.Unreal.UnrealClassHandle, global::UnifiedScript.Unreal.UnrealClassHandle>(0x56941DB0D2A9DCEFUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoClass", value);
+
+    public global::System.Collections.Generic.IReadOnlyDictionary<int, int> EchoMap(global::System.Collections.Generic.IReadOnlyDictionary<int, int> values)
+        => Invoke<global::System.Collections.Generic.IReadOnlyDictionary<int, int>, global::System.Collections.Generic.IReadOnlyDictionary<int, int>>(0xA01428000F098AC1UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoMap", values);
+
+    public global::UnifiedScript.Unreal.UnrealObjectHandle EchoObject(global::UnifiedScript.Unreal.UnrealObjectHandle value)
+        => Invoke<global::UnifiedScript.Unreal.UnrealObjectHandle, global::UnifiedScript.Unreal.UnrealObjectHandle>(0x7C6C1C1123A6E08AUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoObject", value);
+
+    public global::System.Collections.Generic.IReadOnlySet<int> EchoSet(global::System.Collections.Generic.IReadOnlySet<int> values)
+        => Invoke<global::System.Collections.Generic.IReadOnlySet<int>, global::System.Collections.Generic.IReadOnlySet<int>>(0x051035FFB77D4FB3UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoSet", values);
+
+    public global::UnifiedScript.Unreal.UnrealTransform EchoTransform(global::UnifiedScript.Unreal.UnrealTransform value)
+        => Invoke<global::UnifiedScript.Unreal.UnrealTransform, global::UnifiedScript.Unreal.UnrealTransform>(0xAF29371D42BA1F6BUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoTransform", value);
+
+    public global::System.Collections.Generic.IReadOnlyList<int> MakeArray(int count)
+        => Invoke<global::System.Collections.Generic.IReadOnlyList<int>, int>(0x8A8BAE19690D9AB7UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MakeArray", count);
+
+    public bool MutateValues(int input, out int outDoubled, ref int accumulator)
+    {
+        global::UnifiedScript.Unreal.UnrealOutputInvocationResult __unifiedScriptResult = InvokeWithOutputs(
+            0x077EBB77D39DD224UL,
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateValues",
+            typeof(bool),
+            [
+                new(typeof(int), global::UnifiedScript.Unreal.UnrealParameterDirection.Input, input),
+                new(typeof(int), global::UnifiedScript.Unreal.UnrealParameterDirection.Output, null),
+                new(typeof(int), global::UnifiedScript.Unreal.UnrealParameterDirection.InputOutput, accumulator),
+            ]);
+        outDoubled = (int)__unifiedScriptResult.Outputs[0]!;
+        accumulator = (int)__unifiedScriptResult.Outputs[1]!;
+        return (bool)__unifiedScriptResult.ReturnValue!;
+    }
+
+    public int StringLength(string value)
+        => Invoke<int, string>(0x82ABEA0C98F04445UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:StringLength", value);
+
+    public int SumArray(global::System.Collections.Generic.IReadOnlyList<int> values)
+        => Invoke<int, global::System.Collections.Generic.IReadOnlyList<int>>(0x3A7F8150DE68CBE4UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SumArray", values);
+
+    public int SumMap(global::System.Collections.Generic.IReadOnlyDictionary<int, int> values)
+        => Invoke<int, global::System.Collections.Generic.IReadOnlyDictionary<int, int>>(0xB9016520F3956867UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SumMap", values);
 }
 
 [global::UnifiedScript.Unreal.UnrealTypeAttribute("/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldSubsystem")]

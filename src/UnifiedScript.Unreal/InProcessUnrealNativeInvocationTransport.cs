@@ -75,6 +75,13 @@ public delegate void UnrealNativeInvokeByIdV2(
     nint userData);
 
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+public delegate void UnrealNativeExecuteByIdV3(
+    nint context,
+    ulong target,
+    ulong memberId,
+    ref UnrealNativeCallFrameV3 frame);
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 public delegate byte UnrealNativeRetainContextV1(nint context);
 
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
@@ -87,7 +94,10 @@ public delegate void UnrealNativeReleaseContextV1(nint context);
 /// ABI v1 uses canonical member paths; ABI v2 appends generated member-ID thunks.
 /// </summary>
 public sealed class InProcessUnrealNativeInvocationTransport
-    : IUnrealNativeInvocationTransport, IUnrealNativeFastInvocationTransport, IDisposable
+    : IUnrealNativeInvocationTransport,
+      IUnrealNativeFastInvocationTransport,
+      IUnrealNativeCallFrameTransportV3,
+      IDisposable
 {
     private const uint MinimumAbiVersion = 1;
     private const uint MaximumAbiVersion = 2;
@@ -101,6 +111,10 @@ public sealed class InProcessUnrealNativeInvocationTransport
     private readonly UnrealNativeReadPropertyByIdV2? _readPropertyById;
     private readonly UnrealNativeWritePropertyByIdV2? _writePropertyById;
     private readonly UnrealNativeInvokeByIdV2? _invokeById;
+    private readonly nint _readPropertyByIdV3;
+    private readonly nint _writePropertyByIdV3;
+    private readonly nint _invokeByIdV3;
+    private readonly UnrealNativeCapabilitiesV3 _capabilitiesV3;
     private readonly UnrealNativeReleaseContextV1 _releaseContext;
     private readonly object _lifetimeGate = new();
     private bool _disposed;
@@ -184,6 +198,40 @@ public sealed class InProcessUnrealNativeInvocationTransport
                 UnrealNativeWritePropertyByIdV2>(tableV2.WritePropertyById);
             _invokeById = Marshal.GetDelegateForFunctionPointer<
                 UnrealNativeInvokeByIdV2>(tableV2.InvokeById);
+
+            uint extendedV2Size = checked((uint)Marshal.SizeOf<NativeTransportTableV2Extended>());
+            if (table.TableSize >= extendedV2Size)
+            {
+                NativeTransportTableV2Extended extended =
+                    Marshal.PtrToStructure<NativeTransportTableV2Extended>(tablePointer);
+                if (extended.CallFrameTransport != nint.Zero)
+                {
+                    UnrealNativeTransportTableV3 tableV3 =
+                        Marshal.PtrToStructure<UnrealNativeTransportTableV3>(
+                            extended.CallFrameTransport);
+                    if (tableV3.AbiVersion != UnrealNativeAbiV3.Version ||
+                        tableV3.TableSize < UnrealNativeAbiV3.TransportTableSize ||
+                        tableV3.ValueSize != UnrealNativeAbiV3.ValueSize ||
+                        tableV3.CallFrameSize != UnrealNativeAbiV3.CallFrameSize)
+                    {
+                        throw new InvalidOperationException(
+                            "The optional native Unreal ABI v3 table has an incompatible layout.");
+                    }
+                    if (tableV3.RetainContext != table.RetainContext ||
+                        tableV3.ReleaseContext != table.ReleaseContext ||
+                        tableV3.ReadPropertyById == nint.Zero ||
+                        tableV3.WritePropertyById == nint.Zero ||
+                        tableV3.InvokeById == nint.Zero)
+                    {
+                        throw new InvalidOperationException(
+                            "The optional native Unreal ABI v3 table has an incompatible context or entry points.");
+                    }
+                    _capabilitiesV3 = tableV3.Capabilities;
+                    _readPropertyByIdV3 = tableV3.ReadPropertyById;
+                    _writePropertyByIdV3 = tableV3.WritePropertyById;
+                    _invokeByIdV3 = tableV3.InvokeById;
+                }
+            }
         }
 
         UnrealNativeRetainContextV1 retainContext =
@@ -202,6 +250,8 @@ public sealed class InProcessUnrealNativeInvocationTransport
         _readPropertyById is not null &&
         _writePropertyById is not null &&
         _invokeById is not null;
+
+    public UnrealNativeCapabilitiesV3 Capabilities => _capabilitiesV3;
 
     public UnrealInvocationResponse ReadProperty(
         UnrealObjectHandle target,
@@ -330,6 +380,90 @@ public sealed class InProcessUnrealNativeInvocationTransport
         }
     }
 
+    public unsafe UnrealNativeCallOutcomeV3 ExecuteById(
+        UnrealNativeOperationV3 operation,
+        UnrealObjectHandle target,
+        ulong memberId,
+        ReadOnlySpan<UnrealNativeValueV3> arguments,
+        Span<UnrealNativeValueV3> results,
+        Span<byte> byteBuffer,
+        int inputByteCount)
+    {
+        if (inputByteCount < 0 || inputByteCount > byteBuffer.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(inputByteCount));
+        }
+        nint executePointer = operation switch
+        {
+            UnrealNativeOperationV3.ReadProperty => _readPropertyByIdV3,
+            UnrealNativeOperationV3.WriteProperty => _writePropertyByIdV3,
+            UnrealNativeOperationV3.Invoke => _invokeByIdV3,
+            _ => nint.Zero,
+        };
+        if (executePointer == nint.Zero)
+        {
+            throw new NotSupportedException(
+                "The native Unreal transport does not expose the requested ABI v3 operation.");
+        }
+        var execute =
+            (delegate* unmanaged[Cdecl]<nint, ulong, ulong, UnrealNativeCallFrameV3*, void>)
+            executePointer;
+
+        lock (_lifetimeGate)
+        {
+            ThrowIfDisposed();
+            fixed (UnrealNativeValueV3* argumentPointer = arguments)
+            fixed (UnrealNativeValueV3* resultPointer = results)
+            fixed (byte* bytePointer = byteBuffer)
+            {
+                var frame = new UnrealNativeCallFrameV3
+                {
+                    Arguments = (nint)argumentPointer,
+                    ArgumentCount = checked((uint)arguments.Length),
+                    Results = (nint)resultPointer,
+                    ResultCapacity = checked((uint)results.Length),
+                    ResultCount = checked((uint)results.Length),
+                    ByteBuffer = (nint)bytePointer,
+                    ByteCapacity = checked((uint)byteBuffer.Length),
+                    ByteCount = checked((uint)inputByteCount),
+                    Status = UnrealNativeCallStatusV3.Uninitialized,
+                };
+                execute(_context, target.Value, memberId, &frame);
+                if (!Enum.IsDefined(frame.Status) ||
+                    frame.ResultCount > results.Length ||
+                    frame.ByteCount > byteBuffer.Length ||
+                    frame.RequiredResultCapacity > int.MaxValue ||
+                    frame.RequiredByteCapacity > int.MaxValue)
+                {
+                    throw new InvalidOperationException(
+                        "The native Unreal ABI v3 transport returned an invalid frame.");
+                }
+                string message = string.Empty;
+                if (frame.ErrorMessageLength > 0)
+                {
+                    ulong end = (ulong)frame.ErrorMessageOffset + frame.ErrorMessageLength;
+                    if (end > frame.ByteCount || end > (ulong)byteBuffer.Length)
+                    {
+                        throw new InvalidOperationException(
+                            "The native Unreal ABI v3 transport returned an invalid error slice.");
+                    }
+                    message = Encoding.UTF8.GetString(byteBuffer.Slice(
+                        checked((int)frame.ErrorMessageOffset),
+                        checked((int)frame.ErrorMessageLength)));
+                }
+                return new UnrealNativeCallOutcomeV3(
+                    frame.Status,
+                    (UnrealInvocationError)frame.InvocationError,
+                    (UnrealObjectHandleError)frame.HandleError,
+                    checked((int)frame.ResultCount),
+                    checked((int)frame.ByteCount),
+                    checked((int)frame.RequiredResultCapacity),
+                    checked((int)frame.RequiredByteCapacity),
+                    message);
+            }
+        }
+    }
+
     public void Dispose()
     {
         lock (_lifetimeGate)
@@ -453,6 +587,10 @@ public sealed class InProcessUnrealNativeInvocationTransport
                 UnrealInvocationValue.FromInt32(int32Value),
             UnrealInvocationValueKind.String =>
                 UnrealInvocationValue.FromString(ReadUtf8(stringData, stringLength)),
+            UnrealInvocationValueKind.Name =>
+                UnrealInvocationValue.FromName(new UnrealName(ReadUtf8(stringData, stringLength))),
+            UnrealInvocationValueKind.Text =>
+                UnrealInvocationValue.FromText(new UnrealText(ReadUtf8(stringData, stringLength))),
             _ => throw new InvalidOperationException(
                 $"The native Unreal transport returned unknown value kind {kind}."),
         };
@@ -498,6 +636,24 @@ public sealed class InProcessUnrealNativeInvocationTransport
         public nint ReadPropertyById;
         public nint WritePropertyById;
         public nint InvokeById;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeTransportTableV2Extended
+    {
+        public uint AbiVersion;
+        public uint TableSize;
+        public uint ValueSize;
+        public uint Reserved;
+        public nint ReadProperty;
+        public nint WriteProperty;
+        public nint Invoke;
+        public nint RetainContext;
+        public nint ReleaseContext;
+        public nint ReadPropertyById;
+        public nint WritePropertyById;
+        public nint InvokeById;
+        public nint CallFrameTransport;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -558,7 +714,8 @@ public sealed class InProcessUnrealNativeInvocationTransport
                 BooleanValue = value.BooleanValue ? (byte)1 : (byte)0,
                 Int32Value = value.Int32Value,
             };
-            if (value.Kind == UnrealInvocationValueKind.String)
+            if (value.Kind is UnrealInvocationValueKind.String or
+                UnrealInvocationValueKind.Name or UnrealInvocationValueKind.Text)
             {
                 _string = new Utf8Buffer(value.StringValue ?? string.Empty);
                 nativeValue.StringData = _string.Pointer;

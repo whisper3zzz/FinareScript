@@ -212,6 +212,19 @@ int32 UUnifiedScriptWorldSubsystem::GetManagedScriptCount() const
         : 0;
 }
 
+bool UUnifiedScriptWorldSubsystem::GetManagedInvocationMetrics(
+    uint64& OutCallFrameInvocationCount,
+    uint64& OutLegacyInvocationCount) const
+{
+    OutCallFrameInvocationCount = 0;
+    OutLegacyInvocationCount = 0;
+    return IsManagedWorldReady() &&
+        FUnifiedScriptCoreClrHost::Get().GetManagedInvocationMetrics(
+            WorldHostId,
+            OutCallFrameInvocationCount,
+            OutLegacyInvocationCount);
+}
+
 int32 UUnifiedScriptWorldSubsystem::NumRegisteredObjects() const
 {
     return IsNativeRuntimeReady() ? ObjectRegistry->Num() : 0;

@@ -2,6 +2,7 @@
   <PropertyGroup>
     <Description>Versioned Unreal reflection contracts and deterministic managed binding generation.</Description>
     <GenerateDependencyFile>true</GenerateDependencyFile>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <UnifiedScriptManagedStageDir>$(MSBuildProjectDirectory)/../../HostProject/Plugins/UEUnifiedScript/Binaries/Managed</UnifiedScriptManagedStageDir>
   </PropertyGroup>
   <ItemGroup>
