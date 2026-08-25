@@ -1,0 +1,21 @@
+{
+  "schema": "unifiedscript.comparison-baselines/v0.1",
+  "engine": {
+    "version": "5.8.1",
+    "root": "D:\\UE_5.8"
+  },
+  "blockBreaker": {
+    "repository": "https://github.com/chexiongsheng/BlockBreakerStarter",
+    "commit": "f0cf5b0623f1a3efb726916451310dcb7adce67e"
+  },
+  "puerts": {
+    "repository": "https://github.com/Tencent/puerts",
+    "commit": "5fc9daeb5fa1abc21ed870170cdbb7fb6d21ff47",
+    "backend": "V8 11.8.172",
+    "comparisonCommit": "e7aaab02b361cf3aad1316c49d80ad0048b2d75f"
+  },
+  "unifiedScript": {
+    "sourceCommit": "fc9bbcb020388885df06a0457e3bd6b0aa25ca63",
+    "comparisonCommit": "568947e9553afad2cd4a00dac6abcb5a93c0d594"
+  }
+}
