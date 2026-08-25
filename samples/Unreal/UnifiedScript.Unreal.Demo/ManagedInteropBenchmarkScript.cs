@@ -13,7 +13,7 @@ public sealed class ManagedInteropBenchmarkScript : IUnrealManagedScript
 
     public void OnStart(UnrealScriptContext context)
     {
-        var component = new UnifiedScriptComponent(context.Target, context.Bridge);
+        var component = new UnifiedScriptComponent(context.Host, context.Bridge);
         long checksum = 0;
         for (int index = 0; index < WarmupIterations; index++)
         {

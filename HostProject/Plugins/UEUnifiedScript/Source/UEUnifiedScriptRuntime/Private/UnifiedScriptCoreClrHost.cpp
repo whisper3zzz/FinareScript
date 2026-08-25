@@ -43,6 +43,7 @@ using FGetWorldCountEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)();
 using FCreateScriptEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
     uint64 WorldHostId,
     uint64 InstanceId,
+    uint64 Host,
     uint64 Target,
     const uint8* AssemblyPathData,
     int32 AssemblyPathLength,
@@ -312,6 +313,7 @@ bool FUnifiedScriptCoreClrHost::DestroyManagedWorld(
 bool FUnifiedScriptCoreClrHost::CreateManagedScript(
     uint64 WorldHostId,
     uint64 InstanceId,
+    uint64 Host,
     uint64 Target,
     const FString& AssemblyPath,
     const FString& TypeName,
@@ -348,6 +350,7 @@ bool FUnifiedScriptCoreClrHost::CreateManagedScript(
     const int32 Result = EntryPoint(
         WorldHostId,
         InstanceId,
+        Host,
         Target,
         reinterpret_cast<const uint8*>(AssemblyPathUtf8.Get()),
         AssemblyPathUtf8.Length(),

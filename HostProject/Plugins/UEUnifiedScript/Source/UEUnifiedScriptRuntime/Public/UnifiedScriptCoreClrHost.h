@@ -33,6 +33,7 @@ public:
     bool CreateManagedScript(
         uint64 WorldHostId,
         uint64 InstanceId,
+        uint64 Host,
         uint64 Target,
         const FString& AssemblyPath,
         const FString& TypeName,

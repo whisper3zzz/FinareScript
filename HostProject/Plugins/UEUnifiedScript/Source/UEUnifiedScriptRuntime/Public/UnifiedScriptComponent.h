@@ -84,6 +84,10 @@ public:
     UFUNCTION(BlueprintCallable, Category="UnifiedScript|State")
     bool SetScriptStateInt32(const FString& Name, int32 Value);
 
+    /** UObject whose behavior is implemented by the managed script. */
+    UFUNCTION(BlueprintPure, Category="UnifiedScript")
+    UObject* GetScriptTarget();
+
     UFUNCTION(BlueprintPure, Category="UnifiedScript|Verification")
     int32 Add(int32 Left, int32 Right) const;
 
@@ -118,5 +122,6 @@ private:
     FString ActiveResolvedTypeName;
     bool bReloadRequested = false;
     uint64 ManagedScriptInstanceId = 0;
-    uint64 ManagedObjectHandle = 0;
+    uint64 ManagedHostHandle = 0;
+    uint64 ManagedTargetHandle = 0;
 };

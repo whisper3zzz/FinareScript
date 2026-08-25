@@ -130,6 +130,9 @@ The repository currently implements:
 - an opaque 64-bit slot/generation handle shared by managed wrappers and a
   game-thread-only, world-bound native weak UObject registry with deletion
   invalidation and stale-generation rejection;
+- a placeable, Blueprintable `AUnifiedScriptActor` and managed
+  `UnrealObjectScript`/`UnrealActorScript` object model with distinct
+  generation-safe host and gameplay-target handles;
 - machine-local UE discovery, host build, reflection export, and managed
   binding generation through one repository script;
 - xUnit coverage for validation, lowering, identity, graph projection, and

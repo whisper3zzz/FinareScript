@@ -47,6 +47,7 @@ public:
 
     bool CreateManagedScript(
         uint64 InstanceId,
+        FUnifiedScriptObjectHandle Host,
         FUnifiedScriptObjectHandle Target,
         const FString& AssemblyPath,
         const FString& TypeName,

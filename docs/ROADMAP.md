@@ -263,6 +263,7 @@ measured call path and survive packaged Win64 builds.
   FTransform direct thunks
 - [x] activate ABI v3 with a strongly typed zero-allocation steady-state path
 - [x] arrays, sets, maps, variable-size returns, and return plus `out`/`ref`
+- [x] placeable Actor host and managed UObject/Actor lifecycle object model
 - [ ] World-safe delegates/events
 - [x] reproducible C++/UnifiedScript benchmark, Puerts comparison gate, and regression thresholds
 - [x] Win64 Development/Shipping cook, dependency closure, and packaged smoke test

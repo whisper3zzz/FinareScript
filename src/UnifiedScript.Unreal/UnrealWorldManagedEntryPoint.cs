@@ -21,9 +21,13 @@ public enum UnrealWorldManagedEntryStatus
 
 public readonly record struct UnrealScriptContext(
     IUnrealInvocationBridge Bridge,
+    UnrealObjectHandle Host,
     UnrealObjectHandle Target,
     ulong InstanceId,
-    int Generation);
+    int Generation)
+{
+    public bool HasDistinctTarget => Host != Target;
+}
 
 public interface IUnrealManagedScript
 {
@@ -95,13 +99,14 @@ public static class UnrealWorldManagedEntryPoint
     public static int CreateScript(
         ulong worldId,
         ulong instanceId,
+        ulong host,
         ulong target,
         nint assemblyPathData,
         int assemblyPathLength,
         nint typeNameData,
         int typeNameLength)
     {
-        if (instanceId == 0 || target == 0)
+        if (instanceId == 0 || host == 0 || target == 0)
         {
             return (int)UnrealWorldManagedEntryStatus.InvalidArgument;
         }
@@ -114,6 +119,7 @@ public static class UnrealWorldManagedEntryPoint
         {
             return (int)entry.CreateScript(
                 instanceId,
+                new UnrealObjectHandle(host),
                 new UnrealObjectHandle(target),
                 ReadUtf8(assemblyPathData, assemblyPathLength),
                 ReadUtf8(typeNameData, typeNameLength));
@@ -273,6 +279,7 @@ public static class UnrealWorldManagedEntryPoint
 
         public UnrealWorldManagedEntryStatus CreateScript(
             ulong instanceId,
+            UnrealObjectHandle host,
             UnrealObjectHandle target,
             string assemblyPath,
             string typeName)
@@ -289,6 +296,7 @@ public static class UnrealWorldManagedEntryPoint
                     _worldId,
                     instanceId,
                     Bridge,
+                    host,
                     target,
                     assemblyPath,
                     typeName);
@@ -387,6 +395,7 @@ public static class UnrealWorldManagedEntryPoint
         private readonly ulong _worldId;
         private readonly ulong _instanceId;
         private readonly IUnrealInvocationBridge _bridge;
+        private readonly UnrealObjectHandle _host;
         private readonly UnrealObjectHandle _target;
         private string _assemblyPath;
         private string _typeName;
@@ -397,6 +406,7 @@ public static class UnrealWorldManagedEntryPoint
             ulong worldId,
             ulong instanceId,
             IUnrealInvocationBridge bridge,
+            UnrealObjectHandle host,
             UnrealObjectHandle target,
             string assemblyPath,
             string typeName)
@@ -404,6 +414,7 @@ public static class UnrealWorldManagedEntryPoint
             _worldId = worldId;
             _instanceId = instanceId;
             _bridge = bridge;
+            _host = host;
             _target = target;
             _assemblyPath = Path.GetFullPath(assemblyPath);
             _typeName = typeName;
@@ -414,10 +425,11 @@ public static class UnrealWorldManagedEntryPoint
             ulong worldId,
             ulong instanceId,
             IUnrealInvocationBridge bridge,
+            UnrealObjectHandle host,
             UnrealObjectHandle target,
             string assemblyPath,
             string typeName)
-            => new(worldId, instanceId, bridge, target, assemblyPath, typeName);
+            => new(worldId, instanceId, bridge, host, target, assemblyPath, typeName);
 
         public void Start()
         {
@@ -485,7 +497,7 @@ public static class UnrealWorldManagedEntryPoint
         }
 
         private UnrealScriptContext CreateContext(int generation)
-            => new(_bridge, _target, _instanceId, generation);
+            => new(_bridge, _host, _target, _instanceId, generation);
 
         private ScriptGeneration LoadGeneration(
             int generation,

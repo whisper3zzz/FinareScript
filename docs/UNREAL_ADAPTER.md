@@ -447,6 +447,27 @@ round-trip path. Select it in `My Script`, then drag the `*` data output onto
 `value * 2`, rebuilds the managed artifacts, and refreshes the graph from the
 new compiler-owned Surface.
 
+## Phase B.20 managed UObject and Actor object model
+
+`AUnifiedScriptActor` is now a placeable, Blueprintable native identity with a
+default `UUnifiedScriptComponent` and Blueprint-visible managed state. Managed
+gameplay code can derive from `UnrealObjectScript` or `UnrealActorScript`; the
+latter maps the component lifecycle onto `OnBeginPlay`, `OnTick`, and
+`OnEndPlay` overrides.
+
+The runtime passes two independent generation-safe handles into each managed
+context: `Host` identifies the component that owns the collectible generation,
+while `Target` identifies the UObject whose behavior is implemented. Actor
+components therefore target their owning Actor. Both handles remain World-bound,
+are released after managed EndPlay, and are recreated without aliasing during a
+new instance. Reload cancels and tears down the old managed lifetime before the
+next generation receives BeginPlay.
+
+The live UE 5.8 Automation gate spawns `AUnifiedScriptActor`, starts
+`ActorDemoScript`, writes a Blueprint-visible Actor property, ticks through a
+generated native thunk, reloads into generation two, and verifies managed
+EndPlay executes before both handles are retired.
+
 ## Commands
 
 The helper keeps machine-local paths and all generated output outside Git:

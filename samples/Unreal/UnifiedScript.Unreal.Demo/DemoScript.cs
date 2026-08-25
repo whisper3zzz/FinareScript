@@ -46,7 +46,7 @@ public sealed class DemoScript : IUnrealManagedScript
 
     public void OnStart(UnrealScriptContext context)
     {
-        _component = new UnifiedScriptComponent(context.Target, context.Bridge);
+        _component = new UnifiedScriptComponent(context.Host, context.Bridge);
         if (_component.Add(20, 22) != 42)
         {
             throw new InvalidOperationException("Generated wrapper invocation failed.");

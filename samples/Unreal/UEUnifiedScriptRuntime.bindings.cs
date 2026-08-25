@@ -3,6 +3,51 @@
 
 namespace UnifiedScript.Unreal.Generated;
 
+[global::UnifiedScript.Unreal.UnrealTypeAttribute("/Script/UEUnifiedScriptRuntime.UnifiedScriptActor")]
+public sealed partial class UnifiedScriptActor : global::UnifiedScript.Unreal.UnrealObject
+{
+    public UnifiedScriptActor(
+        global::UnifiedScript.Unreal.UnrealObjectHandle handle,
+        global::UnifiedScript.Unreal.IUnrealInvocationBridge bridge)
+        : base(handle, bridge)
+    {
+    }
+
+    public string ManagedActorState
+    {
+        get => ReadProperty<string>(0x4B644A56B628F618UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:ManagedActorState");
+        set => WriteProperty(0x4B644A56B628F618UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:ManagedActorState", value);
+    }
+
+    public int ManagedTickCount
+    {
+        get => ReadProperty<int>(0x56A202B89420E08AUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:ManagedTickCount");
+    }
+
+    public global::UnifiedScript.Unreal.UnrealObjectHandle ScriptComponent
+    {
+        get => ReadProperty<global::UnifiedScript.Unreal.UnrealObjectHandle>(0x0FA1C25360266D21UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:ScriptComponent");
+    }
+
+    public global::UnifiedScript.Unreal.UnrealObjectHandle GetUnifiedScriptComponent()
+        => Invoke<global::UnifiedScript.Unreal.UnrealObjectHandle>(0x7AF8502717707C7BUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:GetUnifiedScriptComponent");
+
+    public void IncrementManagedTickCount()
+        => Invoke(0x842E8572585D6EA1UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:IncrementManagedTickCount");
+
+    public bool ReloadManagedBehavior()
+        => Invoke<bool>(0xA2BC358C2C65DB1FUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:ReloadManagedBehavior");
+
+    public void SetManagedActorState(string value)
+        => Invoke<string>(0xCB7C74B0CC69588AUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:SetManagedActorState", value);
+
+    public bool StartManagedBehavior()
+        => Invoke<bool>(0x2FF1D5EB8FED6456UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:StartManagedBehavior");
+
+    public void StopManagedBehavior()
+        => Invoke(0xFD7407AAD8E613E8UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:StopManagedBehavior");
+}
+
 [global::UnifiedScript.Unreal.UnrealTypeAttribute("/Script/UEUnifiedScriptRuntime.UnifiedScriptAsset")]
 public sealed partial class UnifiedScriptAsset : global::UnifiedScript.Unreal.UnrealObject
 {
@@ -95,6 +140,9 @@ public sealed partial class UnifiedScriptComponent : global::UnifiedScript.Unrea
 
     public int GetScriptStateInt32(string name, int fallback)
         => Invoke<int, string, int>(0x5B7CEF7BDAF29749UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:GetScriptStateInt32", name, fallback);
+
+    public global::UnifiedScript.Unreal.UnrealObjectHandle GetScriptTarget()
+        => Invoke<global::UnifiedScript.Unreal.UnrealObjectHandle>(0x4F4C123F422ED5A3UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:GetScriptTarget");
 
     public bool RefreshScriptState()
         => Invoke<bool>(0xBF8089C66CEB80D6UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:RefreshScriptState");

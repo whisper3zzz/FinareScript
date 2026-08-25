@@ -9,6 +9,7 @@
 #include "UnifiedScriptComponent.h"
 #include "UnifiedScriptCoreClrHost.h"
 #include "UnifiedScriptAsset.h"
+#include "UnifiedScriptActor.h"
 #include "UObject/UObjectGlobals.h"
 
 namespace UE::UnifiedScript::WorldHost::Tests
@@ -295,6 +296,65 @@ bool FUnifiedScriptWorldSubsystemLifecycleTest::RunTest(const FString& Parameter
         static_cast<unsigned long long>(FirstHost->GetFastInvocationCount()),
         static_cast<unsigned long long>(ManagedCallFrameCalls),
         static_cast<unsigned long long>(ManagedLegacyCalls));
+
+    AUnifiedScriptActor* ScriptActor =
+        FirstWorld->SpawnActor<AUnifiedScriptActor>();
+    TestNotNull(TEXT("Placeable UnifiedScript Actor can be spawned"), ScriptActor);
+    if (ScriptActor != nullptr)
+    {
+        UUnifiedScriptComponent* ActorComponent = ScriptActor->ScriptComponent;
+        TestNotNull(TEXT("UnifiedScript Actor owns its script component"), ActorComponent);
+        UUnifiedScriptAsset* ActorAsset = NewObject<UUnifiedScriptAsset>(FirstWorld);
+        ActorAsset->ScriptAssemblyPath = InitialScriptAsset->ScriptAssemblyPath;
+        ActorAsset->ScriptTypeName =
+            TEXT("UnifiedScript.Unreal.Demo.ActorDemoScript");
+        ActorComponent->ScriptAsset = ActorAsset;
+        TestTrue(
+            TEXT("Actor component resolves its owner as the managed target"),
+            ActorComponent->GetScriptTarget() == ScriptActor);
+        ActorComponent->BeginPlay();
+        TestTrue(
+            *FString::Printf(
+                TEXT("Actor behavior begins: %s"),
+                *ActorComponent->LastScriptError),
+            ActorComponent->bScriptRunning);
+        TestEqual(
+            TEXT("Managed Actor BeginPlay reaches a Blueprint-visible property"),
+            ScriptActor->ManagedActorState,
+            FString(TEXT("ActorBegin:1")));
+        TestTrue(
+            TEXT("Managed context exposes distinct host and Actor identities"),
+            ActorComponent->ManagedState.StartsWith(TEXT("ActorHost:")));
+
+        ActorComponent->TickComponent(0.016f, LEVELTICK_All, nullptr);
+        TestEqual(
+            TEXT("Managed Actor Tick invokes native Actor behavior"),
+            ScriptActor->ManagedTickCount,
+            1);
+        TestEqual(
+            TEXT("Managed Actor Tick updates Blueprint-visible state"),
+            ScriptActor->ManagedActorState,
+            FString(TEXT("ActorTick")));
+
+        TestTrue(
+            TEXT("Actor behavior reloads as a new generation"),
+            ActorComponent->ReloadScript());
+        TestEqual(
+            TEXT("Reloaded Actor behavior receives generation two"),
+            ScriptActor->ManagedActorState,
+            FString(TEXT("ActorBegin:2")));
+
+        ActorComponent->EndPlay(EEndPlayReason::Destroyed);
+        TestEqual(
+            TEXT("Managed Actor EndPlay runs before target handle release"),
+            ScriptActor->ManagedActorState,
+            FString(TEXT("ActorEnd")));
+        TestEqual(
+            TEXT("Actor behavior teardown releases both managed handles"),
+            FirstHost->NumRegisteredObjects(),
+            0);
+        ScriptActor->Destroy();
+    }
 
     const FUnifiedScriptObjectHandle FirstHandle =
         FirstHost->RegisterObject(FirstComponent, HandleResult);

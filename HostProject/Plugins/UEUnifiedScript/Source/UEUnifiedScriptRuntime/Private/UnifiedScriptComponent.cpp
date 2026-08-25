@@ -1,6 +1,7 @@
 #include "UnifiedScriptComponent.h"
 
 #include "HAL/FileManager.h"
+#include "GameFramework/Actor.h"
 #include "Interfaces/IPluginManager.h"
 #include "Misc/Paths.h"
 #include "UnifiedScriptAsset.h"
@@ -141,11 +142,25 @@ bool UUnifiedScriptComponent::StartScript()
     }
 
     FUnifiedScriptObjectHandleResult HandleResult;
-    const FUnifiedScriptObjectHandle Handle = Host->RegisterObject(this, HandleResult);
+    const FUnifiedScriptObjectHandle HostHandle = Host->RegisterObject(this, HandleResult);
     if (!HandleResult.IsSuccess())
     {
         SetScriptFailure(HandleResult.Message);
         return false;
+    }
+
+    UObject* ScriptTarget = GetScriptTarget();
+    FUnifiedScriptObjectHandle TargetHandle = HostHandle;
+    if (ScriptTarget != this)
+    {
+        TargetHandle = Host->RegisterObject(ScriptTarget, HandleResult);
+        if (!HandleResult.IsSuccess())
+        {
+            FUnifiedScriptObjectHandleResult ReleaseResult;
+            Host->ReleaseObject(HostHandle, ReleaseResult);
+            SetScriptFailure(HandleResult.Message);
+            return false;
+        }
     }
 
     const uint64 InstanceId =
@@ -155,20 +170,26 @@ bool UUnifiedScriptComponent::StartScript()
     FString Error;
     if (!Host->CreateManagedScript(
             InstanceId,
-            Handle,
+            HostHandle,
+            TargetHandle,
             ResolvedAssemblyPath,
             ResolvedTypeName,
             Error))
     {
         ScriptState = MoveTemp(PreviousScriptState);
         FUnifiedScriptObjectHandleResult ReleaseResult;
-        Host->ReleaseObject(Handle, ReleaseResult);
+        if (TargetHandle != HostHandle)
+        {
+            Host->ReleaseObject(TargetHandle, ReleaseResult);
+        }
+        Host->ReleaseObject(HostHandle, ReleaseResult);
         SetScriptFailure(MoveTemp(Error));
         return false;
     }
 
     ManagedScriptInstanceId = InstanceId;
-    ManagedObjectHandle = Handle.Value;
+    ManagedHostHandle = HostHandle.Value;
+    ManagedTargetHandle = TargetHandle.Value;
     bScriptRunning = true;
     ActiveGeneration = TEXT("1");
     ActiveScriptAsset = ResolvedAsset;
@@ -194,7 +215,8 @@ bool UUnifiedScriptComponent::StartScript()
 void UUnifiedScriptComponent::StopScript()
 {
     check(IsInGameThread());
-    if (!bScriptRunning && ManagedScriptInstanceId == 0 && ManagedObjectHandle == 0)
+    if (!bScriptRunning && ManagedScriptInstanceId == 0 &&
+        ManagedHostHandle == 0 && ManagedTargetHandle == 0)
     {
         SetComponentTickEnabled(false);
         return;
@@ -210,18 +232,30 @@ void UUnifiedScriptComponent::StopScript()
         Host->DestroyManagedScript(ManagedScriptInstanceId, StopError);
     }
 
-    if (Host != nullptr && Host->IsNativeRuntimeReady() && ManagedObjectHandle != 0)
+    if (Host != nullptr && Host->IsNativeRuntimeReady())
     {
         FUnifiedScriptObjectHandleResult ReleaseResult;
-        Host->ReleaseObject({ManagedObjectHandle}, ReleaseResult);
-        if (!ReleaseResult.IsSuccess() && StopError.IsEmpty())
+        if (ManagedTargetHandle != 0 && ManagedTargetHandle != ManagedHostHandle)
         {
-            StopError = MoveTemp(ReleaseResult.Message);
+            Host->ReleaseObject({ManagedTargetHandle}, ReleaseResult);
+            if (!ReleaseResult.IsSuccess() && StopError.IsEmpty())
+            {
+                StopError = ReleaseResult.Message;
+            }
+        }
+        if (ManagedHostHandle != 0)
+        {
+            Host->ReleaseObject({ManagedHostHandle}, ReleaseResult);
+            if (!ReleaseResult.IsSuccess() && StopError.IsEmpty())
+            {
+                StopError = ReleaseResult.Message;
+            }
         }
     }
 
     ManagedScriptInstanceId = 0;
-    ManagedObjectHandle = 0;
+    ManagedHostHandle = 0;
+    ManagedTargetHandle = 0;
     bScriptRunning = false;
     bReloadRequested = false;
     ActiveScriptAsset = nullptr;
@@ -375,6 +409,15 @@ bool UUnifiedScriptComponent::SetScriptStateInt32(
 {
     return !Name.IsEmpty() &&
         ScriptState.SetValueInt32(FName(Name), Value) == EPropertyBagResult::Success;
+}
+
+UObject* UUnifiedScriptComponent::GetScriptTarget()
+{
+    if (AActor* Owner = GetOwner())
+    {
+        return Owner;
+    }
+    return this;
 }
 
 int32 UUnifiedScriptComponent::Add(int32 Left, int32 Right) const

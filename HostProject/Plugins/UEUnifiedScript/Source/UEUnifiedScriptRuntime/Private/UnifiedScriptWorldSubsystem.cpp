@@ -127,6 +127,7 @@ bool UUnifiedScriptWorldSubsystem::ReleaseObject(
 
 bool UUnifiedScriptWorldSubsystem::CreateManagedScript(
     uint64 InstanceId,
+    FUnifiedScriptObjectHandle Host,
     FUnifiedScriptObjectHandle Target,
     const FString& AssemblyPath,
     const FString& TypeName,
@@ -137,14 +138,15 @@ bool UUnifiedScriptWorldSubsystem::CreateManagedScript(
         OutError = TEXT("The UnifiedScript managed World is not ready.");
         return false;
     }
-    if (InstanceId == 0 || Target.IsNull())
+    if (InstanceId == 0 || Host.IsNull() || Target.IsNull())
     {
-        OutError = TEXT("A managed script requires non-null instance and target handles.");
+        OutError = TEXT("A managed script requires non-null instance, host, and target handles.");
         return false;
     }
     return FUnifiedScriptCoreClrHost::Get().CreateManagedScript(
         WorldHostId,
         InstanceId,
+        Host.Value,
         Target.Value,
         AssemblyPath,
         TypeName,

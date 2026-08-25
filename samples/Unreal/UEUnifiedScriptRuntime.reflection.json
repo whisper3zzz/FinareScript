@@ -12,6 +12,186 @@
 	],
 	"types": [
 		{
+			"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor",
+			"name": "UnifiedScriptActor",
+			"nativeName": "AUnifiedScriptActor",
+			"module": "UEUnifiedScriptRuntime",
+			"headerPath": "UnifiedScriptActor.h",
+			"kind": "class",
+			"baseTypePath": "/Script/Engine.Actor",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": true
+			},
+			"properties": [
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:ManagedActorState",
+					"name": "ManagedActorState",
+					"type":
+					{
+						"kind": "string",
+						"nativeName": "FString"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:ManagedTickCount",
+					"name": "ManagedTickCount",
+					"type":
+					{
+						"kind": "int32",
+						"nativeName": "int32"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": false,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:ScriptComponent",
+					"name": "ScriptComponent",
+					"type":
+					{
+						"kind": "object",
+						"nativeName": "TObjectPtr<UUnifiedScriptComponent>",
+						"typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": false,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					}
+				}
+			],
+			"functions": [
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:GetUnifiedScriptComponent",
+					"name": "GetUnifiedScriptComponent",
+					"returnType":
+					{
+						"kind": "object",
+						"nativeName": "UUnifiedScriptComponent*",
+						"typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:IncrementManagedTickCount",
+					"name": "IncrementManagedTickCount",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:ReloadManagedBehavior",
+					"name": "ReloadManagedBehavior",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:SetManagedActorState",
+					"name": "SetManagedActorState",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [
+						{
+							"name": "Value",
+							"type":
+							{
+								"kind": "string",
+								"nativeName": "FString"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:StartManagedBehavior",
+					"name": "StartManagedBehavior",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:StopManagedBehavior",
+					"name": "StopManagedBehavior",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					}
+				}
+			]
+		},
+		{
 			"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptAsset",
 			"name": "UnifiedScriptAsset",
 			"nativeName": "UUnifiedScriptAsset",
@@ -299,6 +479,24 @@
 							"direction": "input"
 						}
 					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:GetScriptTarget",
+					"name": "GetScriptTarget",
+					"returnType":
+					{
+						"kind": "object",
+						"nativeName": "UObject*",
+						"typePath": "/Script/CoreUObject.Object"
+					},
+					"parameters": [],
 					"traits":
 					{
 						"static": false,

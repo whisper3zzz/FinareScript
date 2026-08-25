@@ -440,6 +440,16 @@ def main() -> int:
         / "Public"
         / "UnifiedScriptComponent.h"
     )
+    unreal_actor_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Public"
+        / "UnifiedScriptActor.h"
+    )
     unreal_script_asset_header_path = (
         ROOT
         / "HostProject"
@@ -720,6 +730,9 @@ def main() -> int:
         / "UnifiedScript.Unreal"
         / "UnrealWorldManagedEntryPoint.cs"
     )
+    unreal_script_object_model_path = (
+        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealScriptObjectModel.cs"
+    )
     unreal_demo_project_path = (
         ROOT
         / "samples"
@@ -733,6 +746,13 @@ def main() -> int:
         / "Unreal"
         / "UnifiedScript.Unreal.Demo"
         / "DemoScript.cs"
+    )
+    unreal_actor_demo_source_path = (
+        ROOT
+        / "samples"
+        / "Unreal"
+        / "UnifiedScript.Unreal.Demo"
+        / "ActorDemoScript.cs"
     )
     unreal_demo_declaration_path = (
         ROOT
@@ -863,6 +883,7 @@ def main() -> int:
         and unreal_native_thunk_test_path.is_file()
         and unreal_plugin_path.is_file()
         and unreal_component_path.is_file()
+        and unreal_actor_path.is_file()
         and unreal_script_asset_header_path.is_file()
         and unreal_script_asset_source_path.is_file()
         and unreal_script_asset_test_path.is_file()
@@ -895,8 +916,10 @@ def main() -> int:
         and unreal_native_call_frame_v3_path.is_file()
         and unreal_in_process_transport_test_path.is_file()
         and unreal_world_managed_entry_path.is_file()
+        and unreal_script_object_model_path.is_file()
         and unreal_demo_project_path.is_file()
         and unreal_demo_source_path.is_file()
+        and unreal_actor_demo_source_path.is_file()
         and unreal_demo_declaration_path.is_file()
         and unreal_demo_surface_path.is_file()
         and unreal_authoring_surface_header_path.is_file()
@@ -924,6 +947,7 @@ def main() -> int:
     with unreal_plugin_path.open("r", encoding="utf-8") as handle:
         unreal_plugin = json.load(handle)
     unreal_component = unreal_component_path.read_text(encoding="utf-8")
+    unreal_actor = unreal_actor_path.read_text(encoding="utf-8")
     unreal_script_asset_header = unreal_script_asset_header_path.read_text(
         encoding="utf-8"
     )
@@ -991,8 +1015,12 @@ def main() -> int:
     unreal_world_managed_entry = unreal_world_managed_entry_path.read_text(
         encoding="utf-8"
     )
+    unreal_script_object_model = unreal_script_object_model_path.read_text(
+        encoding="utf-8"
+    )
     unreal_demo_project = unreal_demo_project_path.read_text(encoding="utf-8")
     unreal_demo_source = unreal_demo_source_path.read_text(encoding="utf-8")
+    unreal_actor_demo_source = unreal_actor_demo_source_path.read_text(encoding="utf-8")
     with unreal_demo_declaration_path.open("r", encoding="utf-8") as handle:
         unreal_demo_declaration = json.load(handle)
     with unreal_demo_surface_path.open("r", encoding="utf-8") as handle:
@@ -1037,11 +1065,16 @@ def main() -> int:
         if item["path"]
         == "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"
     )
+    unreal_actor_manifest = next(
+        item
+        for item in unreal_manifest["types"]
+        if item["path"] == "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor"
+    )
     require(
         unreal_manifest["schemaVersion"]
         == "unifiedscript.unreal-reflection/v0.1"
         and unreal_manifest["modules"] == ["UEUnifiedScriptRuntime"]
-        and len(unreal_manifest["types"]) == 4
+        and len(unreal_manifest["types"]) == 5
         and unreal_component_manifest["headerPath"] == "UnifiedScriptComponent.h"
         and all(
             item["access"]["nativeAccess"] == "public"
@@ -1070,12 +1103,25 @@ def main() -> int:
         == {
             "Add",
             "GetScriptStateInt32",
+            "GetScriptTarget",
             "RefreshScriptState",
             "ReloadScript",
             "RequestReload",
             "SetScriptStateInt32",
             "StartScript",
             "StopScript",
+        }
+        and unreal_actor_manifest["headerPath"] == "UnifiedScriptActor.h"
+        and {item["name"] for item in unreal_actor_manifest["properties"]}
+        == {"ManagedActorState", "ManagedTickCount", "ScriptComponent"}
+        and {item["name"] for item in unreal_actor_manifest["functions"]}
+        == {
+            "GetUnifiedScriptComponent",
+            "IncrementManagedTickCount",
+            "ReloadManagedBehavior",
+            "SetManagedActorState",
+            "StartManagedBehavior",
+            "StopManagedBehavior",
         }
         and unreal_interop_manifest["headerPath"]
         == "UnifiedScriptInteropFixture.h"
@@ -1359,7 +1405,7 @@ def main() -> int:
         and "ScriptAssemblyLoadContext" in unreal_world_managed_entry
         and "ManagedScriptInstance" in unreal_world_managed_entry
         and "ReloadScript" in unreal_world_managed_entry
-        and "UnifiedScriptComponent(context.Target, context.Bridge)"
+        and "UnifiedScriptComponent(context.Host, context.Bridge)"
         in unreal_demo_source
         and '_component.Add(20, 22)' in unreal_demo_source
         and "StageUnrealManagedDemo" in unreal_demo_project
@@ -1381,6 +1427,23 @@ def main() -> int:
         "Component-driven managed lifecycle or collectible reload is missing",
     )
     checks.append("UE component drives managed Start, Tick, reload, and Stop on a live UObject")
+    require(
+        "AUnifiedScriptActor : public AActor" in unreal_actor
+        and "UUnifiedScriptComponent" in unreal_actor
+        and "class UnrealObjectScript : IUnrealManagedScript"
+        in unreal_script_object_model
+        and "class UnrealActorScript : UnrealObjectScript"
+        in unreal_script_object_model
+        and "CancellationToken Lifetime" in unreal_script_object_model
+        and "UnrealObjectHandle Host" in unreal_world_managed_entry
+        and "UnrealObjectHandle Target" in unreal_world_managed_entry
+        and "ActorDemoScript : UnrealActorScript" in unreal_actor_demo_source
+        and "Context.HasDistinctTarget" in unreal_actor_demo_source
+        and "Managed Actor EndPlay runs before target handle release"
+        in unreal_world_host_test,
+        "Managed UObject/Actor object model or live Actor lifecycle gate is missing",
+    )
+    checks.append("UE Actor host maps Blueprint identity to managed object lifecycle")
     require(
         "UUnifiedScriptAsset : public UDataAsset" in unreal_script_asset_header
         and "SchemaVersion = 1" in unreal_script_asset_header
