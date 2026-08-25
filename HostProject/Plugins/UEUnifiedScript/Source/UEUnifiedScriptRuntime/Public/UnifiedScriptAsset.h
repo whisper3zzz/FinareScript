@@ -25,6 +25,10 @@ public:
     UPROPERTY(EditAnywhere, Category="UnifiedScript|Runtime")
     FString ScriptTypeName;
 
+    /** Optional UObject base class that every host target must satisfy before managed code starts. */
+    UPROPERTY(EditAnywhere, Category="UnifiedScript|Runtime", meta=(AllowAbstract="true"))
+    TSoftClassPtr<UObject> RequiredTargetClass;
+
     UPROPERTY(EditAnywhere, Category="UnifiedScript|Authoring")
     FString SourcePath;
 
@@ -48,6 +52,11 @@ public:
         FString& OutAssemblyPath,
         FString& OutTypeName,
         FString& OutError) const;
+
+    /** Validates the concrete component target against RequiredTargetClass without starting CoreCLR. */
+    bool ValidateTarget(const UObject* Target, FString& OutError) const;
+
+    FString ResolveRequiredTargetClassPath() const;
 
     void ResolveDeclarationConfiguration(
         FString& OutDeclarationPath,

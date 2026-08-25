@@ -30,6 +30,46 @@ bool UUnifiedScriptAsset::ResolveConfiguration(
     return true;
 }
 
+bool UUnifiedScriptAsset::ValidateTarget(
+    const UObject* Target,
+    FString& OutError) const
+{
+    if (RequiredTargetClass.IsNull())
+    {
+        OutError.Reset();
+        return true;
+    }
+
+    UClass* RequiredClass = RequiredTargetClass.LoadSynchronous();
+    if (RequiredClass == nullptr)
+    {
+        OutError = FString::Printf(
+            TEXT("UnifiedScript Asset '%s' cannot load required target class '%s'."),
+            *GetPathName(),
+            *RequiredTargetClass.ToSoftObjectPath().ToString());
+        return false;
+    }
+    if (Target == nullptr || !Target->IsA(RequiredClass))
+    {
+        OutError = FString::Printf(
+            TEXT("UnifiedScript Asset '%s' requires target class '%s', but received '%s'."),
+            *GetPathName(),
+            *RequiredClass->GetPathName(),
+            Target != nullptr ? *Target->GetClass()->GetPathName() : TEXT("<null>"));
+        return false;
+    }
+
+    OutError.Reset();
+    return true;
+}
+
+FString UUnifiedScriptAsset::ResolveRequiredTargetClassPath() const
+{
+    return RequiredTargetClass.IsNull()
+        ? FString()
+        : RequiredTargetClass.ToSoftObjectPath().ToString();
+}
+
 void UUnifiedScriptAsset::ResolveDeclarationConfiguration(
     FString& OutDeclarationPath,
     FString& OutDeclarationAssetPath) const

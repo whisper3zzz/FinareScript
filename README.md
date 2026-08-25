@@ -137,6 +137,9 @@ The repository currently implements:
 - a placeable, Blueprintable `AUnifiedScriptActor` and managed
   `UnrealObjectScript`/`UnrealActorScript` object model with distinct
   generation-safe host and gameplay-target handles;
+- versioned Unreal deployment manifests that preflight and synchronize real
+  `UUnifiedScriptAsset` packages, with required target-class validation before
+  CoreCLR startup and no per-host assembly/type literals;
 - World-safe Actor overlap events, arbitrary reflected multicast Event Entries,
   and game-thread latent `DelayAsync`, all canceled or unbound before reload,
   EndPlay, or World teardown;

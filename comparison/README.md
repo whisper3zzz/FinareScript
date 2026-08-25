@@ -19,6 +19,20 @@ managed lifecycle, 300 ticks, the UnifiedScript shot/hit path, and generated
 ABI v3 dispatch with nonzero fast calls and zero legacy calls. Its coverage
 report also requires every exported BlockBreaker member to have a native thunk.
 
+Run the complete migrated gameplay flow with three exact 10,000-frame trials
+and median aggregation:
+
+```powershell
+.\comparison\run-gameplay-comparison.ps1
+```
+
+The gameplay runner first synchronizes the BlockBreaker deployment manifest
+into target-class-checked Player and Rifle `UUnifiedScriptAsset` packages. Both
+scripts must start through those assets, all 19 non-map business assets must be
+byte-identical, the midpoint shot must hit exactly once, and UnifiedScript must
+report zero legacy calls. Per-trial logs and the aggregate report are written
+under `artifacts/comparison/gameplay`.
+
 Run the matched generated `int32(int32, int32)` performance gate with:
 
 ```powershell

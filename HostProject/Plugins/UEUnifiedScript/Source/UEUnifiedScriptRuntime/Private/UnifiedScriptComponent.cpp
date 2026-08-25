@@ -591,6 +591,13 @@ bool UUnifiedScriptComponent::ResolveScriptConfiguration(
         {
             return false;
         }
+        const UObject* Target = GetOwner() != nullptr
+            ? static_cast<const UObject*>(GetOwner())
+            : static_cast<const UObject*>(this);
+        if (!OutAsset->ValidateTarget(Target, OutError))
+        {
+            return false;
+        }
     }
     else
     {

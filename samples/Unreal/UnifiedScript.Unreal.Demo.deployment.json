@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "unifiedscript.unreal-script-deployment/v0.1",
+  "scripts": [
+    {
+      "assetPath": "/Game/UnifiedScript/Demo/SA_UnifiedScriptDemo",
+      "assemblyPath": "{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.dll",
+      "typeName": "UnifiedScript.Unreal.Demo.DemoScript",
+      "requiredTargetClass": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor",
+      "sourcePath": "{PluginDir}/Source/Managed/DemoScript.cs",
+      "declarationPath": "{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.asset.json",
+      "declarationAssetPath": "Unreal/Demo",
+      "authoringSurfacePath": "{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.surface.json",
+      "authoringServerUrl": "http://127.0.0.1:4173"
+    }
+  ]
+}

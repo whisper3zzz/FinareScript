@@ -2,6 +2,7 @@
 
 #include "UnifiedScriptAsset.h"
 
+#include "GameFramework/Actor.h"
 #include "Misc/AutomationTest.h"
 #include "UObject/UObjectGlobals.h"
 
@@ -65,6 +66,22 @@ bool FUnifiedScriptAssetConfigurationTest::RunTest(const FString& Parameters)
         TEXT("Authoring server URL is normalized"),
         Asset->ResolveAuthoringServerUrl(),
         FString(TEXT("http://127.0.0.1:4173")));
+
+    Asset->RequiredTargetClass = AActor::StaticClass();
+    AActor* CompatibleTarget = NewObject<AActor>();
+    TestTrue(
+        TEXT("Compatible host target is accepted"),
+        Asset->ValidateTarget(CompatibleTarget, Error));
+    TestFalse(
+        TEXT("Incompatible host target is rejected before managed startup"),
+        Asset->ValidateTarget(Asset, Error));
+    TestTrue(
+        TEXT("Target mismatch identifies the required class"),
+        Error.Contains(TEXT("Actor")));
+    TestEqual(
+        TEXT("Required target path is stable"),
+        Asset->ResolveRequiredTargetClassPath(),
+        AActor::StaticClass()->GetPathName());
 
     Asset->SchemaVersion = 2;
     TestFalse(

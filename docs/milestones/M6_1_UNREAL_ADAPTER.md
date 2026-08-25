@@ -27,6 +27,9 @@ thunk generation, Phase B.13 materializes Declaration IR state, and Phase B.14
 adds the first native Slate workspace over Authoring Surface v0.1 with semantic
 patch export. Phase B.15 submits those patches through the Workbench, atomically
 regenerates UE authoring/runtime artifacts, and reloads matching components.
+Productization P1 adds versioned Unreal deployment manifests, an idempotent
+asset-sync commandlet with full preflight/validate-only modes, and required
+target-class checks before a Script Asset can start managed behavior.
 Full UE 5.7 native compilation and packaging remain open.
 
 ## Completed Phase A contract
@@ -245,6 +248,21 @@ Full UE 5.7 native compilation and packaging remain open.
 - no CoreCLR host is embedded in the editor process;
 - no Blueprint variable is generated as a second declaration source;
 - no editor UI parses C# or Graph independently of Authoring Surface.
+
+## Completed Productization P1 contract
+
+1. A strict `unifiedscript.unreal-script-deployment/v0.1` document owns the
+   Unreal asset path, managed identity, required host class, and optional
+   authoring artifact paths for every deployed script.
+2. `UnifiedScriptSyncAssets` preflights the entire manifest before its first
+   write, rejects unknown fields and path/class conflicts, supports
+   `-ValidateOnly`, and creates or updates deterministic Data Assets.
+3. `UUnifiedScriptAsset.RequiredTargetClass` is resolved before CoreCLR startup;
+   an incompatible target fails without creating a managed script instance.
+4. Runtime components consume synchronized Script Assets while direct
+   assembly/type fields remain an advanced compatibility fallback.
+5. The BlockBreaker Player and Rifle use two real synchronized Script Assets
+   and prove both asset identities in the headless gameplay gate.
 
 ## Phase B acceptance gate
 

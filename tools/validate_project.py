@@ -63,6 +63,7 @@ DOCUMENTS = [
     ROOT / "docs" / "VISUAL_AUTHORING_MODEL.md",
     ROOT / "docs" / "AUTHORING_SURFACE.md",
     ROOT / "docs" / "UNREAL_ADAPTER.md",
+    ROOT / "docs" / "UNREAL_DEPLOYMENT.md",
     ROOT / "docs" / "ROADMAP.md",
     ROOT / "docs" / "milestones" / "M1_ROSLYN_GRAPH_FOUNDATION.md",
     ROOT / "docs" / "milestones" / "M2_SEMANTIC_BINDING.md",
@@ -109,6 +110,57 @@ def main() -> int:
     for document in DOCUMENTS:
         require(document.is_file(), f"Missing document: {document}")
     checks.append("architecture and milestone documents exist")
+
+    deployment_sample_path = (
+        ROOT / "samples" / "Unreal" / "UnifiedScript.Unreal.Demo.deployment.json"
+    )
+    deployment_commandlet = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptEditor"
+        / "Private"
+        / "UnifiedScriptSyncAssetsCommandlet.cpp"
+    ).read_text(encoding="utf-8")
+    runtime_asset_header = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Public"
+        / "UnifiedScriptAsset.h"
+    ).read_text(encoding="utf-8")
+    runtime_component_source = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Private"
+        / "UnifiedScriptComponent.cpp"
+    ).read_text(encoding="utf-8")
+    with deployment_sample_path.open("r", encoding="utf-8") as handle:
+        deployment_sample = json.load(handle)
+    deployment_scripts = deployment_sample["scripts"]
+    require(
+        deployment_sample["schemaVersion"]
+        == "unifiedscript.unreal-script-deployment/v0.1"
+        and len(deployment_scripts) == 1
+        and deployment_scripts[0]["assetPath"].startswith("/Game/")
+        and deployment_scripts[0]["requiredTargetClass"].startswith("/Script/")
+        and "ValidateOnly" in deployment_commandlet
+        and "ValidateKnownFields" in deployment_commandlet
+        and "UPackage::SavePackage" in deployment_commandlet
+        and "RequiredTargetClass" in runtime_asset_header
+        and "ValidateTarget" in runtime_component_source,
+        "Unreal deployment manifest, asset sync, or target compatibility gate is missing",
+    )
+    checks.append("UE deployment manifests materialize target-safe Script Assets")
 
     authoring_source = ROOT / "samples" / "Authoring" / "DamagePolicy.cs"
     authoring_artifact = (
