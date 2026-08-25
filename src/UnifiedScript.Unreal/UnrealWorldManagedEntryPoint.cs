@@ -28,6 +28,11 @@ public readonly record struct UnrealScriptContext(
     int Generation)
 {
     public bool HasDistinctTarget => Host != Target;
+
+    public UnrealWorldDataPlane DataPlane =>
+        Bridge is IUnrealWorldDataPlaneProvider provider
+            ? provider.DataPlane
+            : UnrealWorldDataPlane.Unavailable;
 }
 
 public interface IUnrealManagedScript
@@ -361,7 +366,7 @@ public static class UnrealWorldManagedEntryPoint
             _transport = new InProcessUnrealNativeInvocationTransport(
                 context,
                 transportTable);
-            Bridge = new NativeUnrealInvocationBridge(_transport);
+            Bridge = new NativeUnrealInvocationBridge(_transport, worldId);
         }
 
         public NativeUnrealInvocationBridge Bridge { get; }

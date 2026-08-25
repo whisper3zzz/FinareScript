@@ -313,17 +313,25 @@ public sealed class NativeUnrealInvocationBridge
       IUnrealTypedInvocationBridge,
       IUnrealOutputInvocationBridge,
       IUnrealEventBridge,
-      IUnrealInvocationMetrics
+      IUnrealInvocationMetrics,
+      IUnrealWorldDataPlaneProvider
 {
     private const int CallFrameArenaByteCapacity = 4096;
     private readonly IUnrealNativeInvocationTransport _transport;
     private long _callFrameInvocationCount;
     private long _legacyInvocationCount;
 
-    public NativeUnrealInvocationBridge(IUnrealNativeInvocationTransport transport)
+    public NativeUnrealInvocationBridge(
+        IUnrealNativeInvocationTransport transport,
+        ulong worldHostId = 0)
     {
         _transport = transport ?? throw new ArgumentNullException(nameof(transport));
+        DataPlane = new UnrealWorldDataPlane(
+            transport as IUnrealSharedSnapshotTransport,
+            worldHostId);
     }
+
+    public UnrealWorldDataPlane DataPlane { get; }
 
     public bool SupportsFastInvocation =>
         _transport is IUnrealNativeCallFrameTransportV3 callFrameTransport &&

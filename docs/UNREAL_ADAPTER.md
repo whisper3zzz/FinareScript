@@ -324,6 +324,13 @@ reflection shapes.
 Object/class values continue to be generation handles only; no raw `UObject*`
 crosses the managed boundary.
 
+The first shared-data plane is specified separately in
+`UNREAL_SHARED_DATA_ABI_V4.md`. It publishes a double-buffered per-World Actor
+Transform snapshot and exposes it to managed code as a borrowed
+`ReadOnlySpan<UnrealTransformSnapshotEntryV4>`. This is a high-volume data path,
+not a replacement for ABI v3 calls: UObject side effects, resource operations,
+and reflected functions remain on the type-safe Binding control plane.
+
 ## Phase B.13 Declaration IR state materialization
 
 `UUnifiedScriptAsset` now carries an optional declaration JSON path and exact

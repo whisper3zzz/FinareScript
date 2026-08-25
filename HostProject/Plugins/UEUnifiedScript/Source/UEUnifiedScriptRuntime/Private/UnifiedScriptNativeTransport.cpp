@@ -16,6 +16,15 @@ FUnifiedScriptNativeBridgeContext::FUnifiedScriptNativeBridgeContext(
 {
 }
 
+void FUnifiedScriptNativeBridgeContext::AttachSharedDataPlane(
+    FUnifiedScriptSharedDataPlane* InSharedDataPlane)
+{
+    check(IsInGameThread());
+    FScopeLock Lock(&BridgeLock);
+    check(Bridge != nullptr);
+    SharedDataPlane = InSharedDataPlane;
+}
+
 bool FUnifiedScriptNativeBridgeContext::TryRetain()
 {
     FScopeLock Lock(&BridgeLock);
@@ -45,6 +54,7 @@ void FUnifiedScriptNativeBridgeContext::Detach()
         FScopeLock Lock(&BridgeLock);
         FastBridge.store(nullptr, std::memory_order_release);
         Bridge = nullptr;
+        SharedDataPlane = nullptr;
         PendingCallFrameResult.Reset();
         EventSubscriptions.GenerateValueArray(Subscriptions);
         EventSubscriptions.Reset();
@@ -101,6 +111,19 @@ bool FUnifiedScriptNativeBridgeContext::ExecuteCallFrame(
     }
     Operation(*Bridge, PendingCallFrameResult);
     return true;
+}
+
+bool FUnifiedScriptNativeBridgeContext::AcquireTransformSnapshot(
+    FUnifiedScriptSharedSnapshotViewV4& OutView)
+{
+    if (!IsInGameThread())
+    {
+        OutView = {};
+        return false;
+    }
+    FScopeLock Lock(&BridgeLock);
+    return Bridge != nullptr && SharedDataPlane != nullptr &&
+        SharedDataPlane->AcquireTransformSnapshot(OutView);
 }
 
 namespace UE::UnifiedScript::NativeTransport::Private
@@ -1820,6 +1843,20 @@ void ReleaseContext(void* Context)
         static_cast<FUnifiedScriptNativeBridgeContext*>(Context)->Release();
     }
 }
+
+uint8 AcquireTransformSnapshot(
+    void* Context,
+    FUnifiedScriptSharedSnapshotViewV4* OutView)
+{
+    if (Context == nullptr || OutView == nullptr)
+    {
+        return 0;
+    }
+    return static_cast<FUnifiedScriptNativeBridgeContext*>(Context)
+        ->AcquireTransformSnapshot(*OutView)
+        ? 1
+        : 0;
+}
 }
 
 UFunction* UUnifiedScriptDelegateProxy::FindOrCreateDispatchFunction(
@@ -2197,6 +2234,29 @@ UEUnifiedScript_GetNativeTransportV2()
         &InvokeById,
         UEUnifiedScript_GetNativeTransportV3(),
         UEUnifiedScript_GetNativeEventTransportV4(),
+        UEUnifiedScript_GetSharedDataTransportV4(),
+    };
+    return &Transport;
+}
+
+extern "C" const FUnifiedScriptSharedDataTransportV4*
+UEUnifiedScript_GetSharedDataTransportV4()
+{
+    using namespace UE::UnifiedScript::NativeTransport::Private;
+    constexpr uint64 Capabilities =
+        static_cast<uint64>(EUnifiedScriptSharedDataCapabilitiesV4::TransformSnapshot) |
+        static_cast<uint64>(EUnifiedScriptSharedDataCapabilitiesV4::DoubleBuffered) |
+        static_cast<uint64>(EUnifiedScriptSharedDataCapabilitiesV4::WorldScopedHandles);
+    static const FUnifiedScriptSharedDataTransportV4 Transport = {
+        UE::UnifiedScript::SharedData::AbiVersion,
+        sizeof(FUnifiedScriptSharedDataTransportV4),
+        sizeof(FUnifiedScriptSharedSnapshotViewV4),
+        sizeof(FUnifiedScriptTransformSnapshotEntryV4),
+        UE::UnifiedScript::SharedData::TransformSnapshotSchemaId,
+        Capabilities,
+        &RetainContext,
+        &ReleaseContext,
+        &AcquireTransformSnapshot,
     };
     return &Transport;
 }

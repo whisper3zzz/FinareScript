@@ -36,6 +36,7 @@ void UUnifiedScriptWorldSubsystem::Initialize(FSubsystemCollectionBase& Collecti
     check(HostState == EUnifiedScriptWorldHostState::Stopped);
     check(ObjectRegistry == nullptr);
     check(InvocationBridge == nullptr);
+    check(SharedDataPlane == nullptr);
     check(NativeContext == nullptr);
 
     UWorld* World = GetWorld();
@@ -45,6 +46,12 @@ void UUnifiedScriptWorldSubsystem::Initialize(FSubsystemCollectionBase& Collecti
     InvocationBridge = MakeUnique<FUnifiedScriptInvocationBridge>(*ObjectRegistry);
     NativeContext = new FUnifiedScriptNativeBridgeContext(*InvocationBridge);
     WorldHostId = UE::UnifiedScript::WorldHost::Private::AllocateWorldHostId();
+    SharedDataPlane = MakeUnique<FUnifiedScriptSharedDataPlane>(
+        *World,
+        *ObjectRegistry,
+        WorldHostId);
+    NativeContext->AttachSharedDataPlane(SharedDataPlane.Get());
+    SharedDataPlane->PublishTransformSnapshot();
     HostState = EUnifiedScriptWorldHostState::NativeReady;
     FUnifiedScriptCoreClrHost& CoreClrHost = FUnifiedScriptCoreClrHost::Get();
     if (CoreClrHost.Initialize())
@@ -70,6 +77,27 @@ void UUnifiedScriptWorldSubsystem::Deinitialize()
     check(IsInGameThread());
     ShutdownNativeRuntime();
     Super::Deinitialize();
+}
+
+void UUnifiedScriptWorldSubsystem::Tick(float DeltaTime)
+{
+    (void)DeltaTime;
+    if (SharedDataPlane != nullptr && IsNativeRuntimeReady())
+    {
+        SharedDataPlane->PublishTransformSnapshot();
+    }
+}
+
+bool UUnifiedScriptWorldSubsystem::IsTickable() const
+{
+    return SharedDataPlane != nullptr && IsNativeRuntimeReady();
+}
+
+TStatId UUnifiedScriptWorldSubsystem::GetStatId() const
+{
+    RETURN_QUICK_DECLARE_CYCLE_STAT(
+        UUnifiedScriptWorldSubsystem,
+        STATGROUP_Tickables);
 }
 
 EUnifiedScriptWorldHostState UUnifiedScriptWorldSubsystem::GetHostState() const
@@ -306,6 +334,12 @@ void UUnifiedScriptWorldSubsystem::ShutdownNativeRuntime()
     if (NativeContext != nullptr)
     {
         NativeContext->Detach();
+    }
+
+    if (SharedDataPlane != nullptr)
+    {
+        SharedDataPlane->Shutdown();
+        SharedDataPlane.Reset();
     }
 
     if (ObjectRegistry != nullptr)

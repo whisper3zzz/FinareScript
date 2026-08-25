@@ -46,6 +46,16 @@ public sealed class DemoScript : IUnrealManagedScript
 
     public void OnStart(UnrealScriptContext context)
     {
+        if (!context.DataPlane.IsAvailable)
+        {
+            throw new InvalidOperationException("Shared Data ABI v4 is unavailable.");
+        }
+        UnrealTransformSnapshot snapshot =
+            context.DataPlane.AcquireTransformSnapshot();
+        if (snapshot.WorldHostId == 0 || snapshot.Generation == 0)
+        {
+            throw new InvalidOperationException("The World Transform snapshot is invalid.");
+        }
         _component = new UnifiedScriptComponent(context.Host, context.Bridge);
         if (_component.Add(20, 22) != 42)
         {

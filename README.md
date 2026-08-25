@@ -363,6 +363,14 @@ reflected shapes. The current UE 5.8 lifecycle Demo reports `FastCalls=20`, all
 through `CallFrameCalls=20` with `LegacyCalls=0`, and receives the reflected
 `OnManagedSignal(73, Context)` delegate through ABI v4 exactly once after reload.
 
+The first shared-data iteration adds a separate World-level data plane beside
+that Binding control plane. Native code publishes a double-buffered 96-byte
+Actor Transform row keyed by `WorldHostId + ObjectHandle`; managed scripts read
+the current buffer through `Context.DataPlane.AcquireTransformSnapshot()` as a
+borrowed, allocation-free `ReadOnlySpan`. No UObject address or Unreal container
+layout is exposed, and World teardown detaches the view before freeing its
+buffers. See `docs/UNREAL_SHARED_DATA_ABI_V4.md` for the frozen first schema.
+
 `ue-bindings --report` now emits deterministic per-member coverage as native
 thunk, reflected-path fallback, rejected, or deferred type. `--fail-on-rejected`
 makes that report a CI gate. If a generated member ID is absent at runtime, the

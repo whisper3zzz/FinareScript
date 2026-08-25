@@ -5,6 +5,7 @@
 #include "Templates/Function.h"
 #include "UObject/StrongObjectPtr.h"
 #include "UnifiedScriptInvocationBridge.h"
+#include "UnifiedScriptSharedDataPlane.h"
 
 #include <atomic>
 #include <type_traits>
@@ -166,6 +167,7 @@ public:
 
     explicit FUnifiedScriptNativeBridgeContext(FUnifiedScriptInvocationBridge& InBridge);
 
+    void AttachSharedDataPlane(FUnifiedScriptSharedDataPlane* InSharedDataPlane);
     bool TryRetain();
     void Release();
     void Detach();
@@ -184,6 +186,7 @@ public:
         void* UserData,
         uint64& OutSubscriptionId);
     bool UnsubscribeEvent(uint64 SubscriptionId);
+    bool AcquireTransformSnapshot(FUnifiedScriptSharedSnapshotViewV4& OutView);
 
 private:
     ~FUnifiedScriptNativeBridgeContext() = default;
@@ -192,6 +195,7 @@ private:
     FCriticalSection BridgeLock;
     FUnifiedScriptInvocationBridge* Bridge = nullptr;
     std::atomic<FUnifiedScriptInvocationBridge*> FastBridge{nullptr};
+    FUnifiedScriptSharedDataPlane* SharedDataPlane = nullptr;
     FPendingCallFrameResult PendingCallFrameResult;
     uint64 NextEventSubscriptionId = 1;
     TMap<uint64, TStrongObjectPtr<UObject>> EventSubscriptions;
@@ -238,6 +242,8 @@ struct FUnifiedScriptNativeTransportV2
     const FUnifiedScriptNativeTransportV3* CallFrameTransport = nullptr;
     /** Optional reverse event ABI; older v2 clients ignore this suffix. */
     const FUnifiedScriptNativeEventTransportV4* EventTransport = nullptr;
+    /** Optional zero-copy World snapshot ABI; older v2 clients ignore this suffix. */
+    const FUnifiedScriptSharedDataTransportV4* SharedDataTransport = nullptr;
 };
 
 /**
@@ -451,6 +457,9 @@ static_assert(
 static_assert(
     STRUCT_OFFSET(FUnifiedScriptNativeTransportV1, ReleaseContext) ==
     STRUCT_OFFSET(FUnifiedScriptNativeTransportV2, ReleaseContext));
+static_assert(
+    STRUCT_OFFSET(FUnifiedScriptNativeTransportV2, SharedDataTransport) ==
+    STRUCT_OFFSET(FUnifiedScriptNativeTransportV2, EventTransport) + sizeof(void*));
 
 extern "C" UEUNIFIEDSCRIPTRUNTIME_API const FUnifiedScriptNativeTransportV1*
 UEUnifiedScript_GetNativeTransportV1();

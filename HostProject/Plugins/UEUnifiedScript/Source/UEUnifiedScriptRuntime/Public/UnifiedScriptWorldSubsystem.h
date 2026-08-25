@@ -23,13 +23,16 @@ enum class EUnifiedScriptWorldHostState : uint8
  */
 UCLASS()
 class UEUNIFIEDSCRIPTRUNTIME_API UUnifiedScriptWorldSubsystem final
-    : public UWorldSubsystem
+    : public UTickableWorldSubsystem
 {
     GENERATED_BODY()
 
 public:
     virtual void Initialize(FSubsystemCollectionBase& Collection) override;
     virtual void Deinitialize() override;
+    virtual void Tick(float DeltaTime) override;
+    virtual bool IsTickable() const override;
+    virtual TStatId GetStatId() const override;
 
     EUnifiedScriptWorldHostState GetHostState() const;
     bool IsNativeRuntimeReady() const;
@@ -98,6 +101,7 @@ private:
     EUnifiedScriptWorldHostState HostState = EUnifiedScriptWorldHostState::Stopped;
     TUniquePtr<FUnifiedScriptObjectRegistry> ObjectRegistry;
     TUniquePtr<FUnifiedScriptInvocationBridge> InvocationBridge;
+    TUniquePtr<FUnifiedScriptSharedDataPlane> SharedDataPlane;
     FUnifiedScriptNativeBridgeContext* NativeContext = nullptr;
     uint64 WorldHostId = 0;
 

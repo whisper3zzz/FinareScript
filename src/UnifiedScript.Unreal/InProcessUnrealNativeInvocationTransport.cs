@@ -105,6 +105,11 @@ public delegate byte UnrealNativeUnsubscribeEventV4(
     nint context,
     ulong subscriptionId);
 
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+internal delegate byte UnrealNativeAcquireTransformSnapshotV4(
+    nint context,
+    out UnrealSharedSnapshotViewV4 view);
+
 /// <summary>
 /// Calls the versioned synchronous function table exported by the UE plugin.
 /// The function table is borrowed from the plugin. The context is retained until
@@ -118,6 +123,7 @@ public sealed class InProcessUnrealNativeInvocationTransport
       IUnrealNativeScalarInvocationTransportV3,
       IUnrealNativeFixedInvocationTransportV3,
       IUnrealNativeEventTransport,
+      IUnrealSharedSnapshotTransport,
       IDisposable
 {
     private const uint MinimumAbiVersion = 1;
@@ -141,6 +147,7 @@ public sealed class InProcessUnrealNativeInvocationTransport
     private readonly UnrealNativeCapabilitiesV3 _capabilitiesV3;
     private readonly UnrealNativeSubscribeEventV4? _subscribeEvent;
     private readonly UnrealNativeUnsubscribeEventV4? _unsubscribeEvent;
+    private readonly UnrealNativeAcquireTransformSnapshotV4? _acquireTransformSnapshot;
     private readonly UnrealNativeReleaseContextV1 _releaseContext;
     private readonly object _lifetimeGate = new();
     private readonly HashSet<NativeEventSubscription> _eventSubscriptions = [];
@@ -303,6 +310,40 @@ public sealed class InProcessUnrealNativeInvocationTransport
                         UnrealNativeUnsubscribeEventV4>(eventTable.Unsubscribe);
                 }
             }
+
+            uint sharedDataV2Size = checked(
+                (uint)Marshal.SizeOf<NativeTransportTableV2SharedData>());
+            if (table.TableSize >= sharedDataV2Size)
+            {
+                NativeTransportTableV2SharedData sharedExtension =
+                    Marshal.PtrToStructure<NativeTransportTableV2SharedData>(tablePointer);
+                if (sharedExtension.SharedDataTransport != nint.Zero)
+                {
+                    UnrealSharedDataTransportTableV4 sharedTable =
+                        Marshal.PtrToStructure<UnrealSharedDataTransportTableV4>(
+                            sharedExtension.SharedDataTransport);
+                    const UnrealSharedDataCapabilitiesV4 requiredCapabilities =
+                        UnrealSharedDataCapabilitiesV4.TransformSnapshot |
+                        UnrealSharedDataCapabilitiesV4.DoubleBuffered |
+                        UnrealSharedDataCapabilitiesV4.WorldScopedHandles;
+                    if (sharedTable.AbiVersion != UnrealSharedDataAbiV4.Version ||
+                        sharedTable.TableSize < UnrealSharedDataAbiV4.TransportTableSize ||
+                        sharedTable.SnapshotViewSize != UnrealSharedDataAbiV4.SnapshotViewSize ||
+                        sharedTable.TransformEntrySize != UnrealSharedDataAbiV4.TransformEntrySize ||
+                        sharedTable.TransformSchemaId != UnrealSharedDataAbiV4.TransformSnapshotSchemaId ||
+                        (sharedTable.Capabilities & requiredCapabilities) != requiredCapabilities ||
+                        sharedTable.RetainContext != table.RetainContext ||
+                        sharedTable.ReleaseContext != table.ReleaseContext ||
+                        sharedTable.AcquireTransformSnapshot == nint.Zero)
+                    {
+                        throw new InvalidOperationException(
+                            "The optional native Shared Data ABI v4 table has an incompatible layout.");
+                    }
+                    _acquireTransformSnapshot = Marshal.GetDelegateForFunctionPointer<
+                        UnrealNativeAcquireTransformSnapshotV4>(
+                            sharedTable.AcquireTransformSnapshot);
+                }
+            }
         }
 
         UnrealNativeRetainContextV1 retainContext =
@@ -325,6 +366,23 @@ public sealed class InProcessUnrealNativeInvocationTransport
     public UnrealNativeCapabilitiesV3 Capabilities => _capabilitiesV3;
 
     public bool SupportsEvents => _subscribeEvent is not null && _unsubscribeEvent is not null;
+
+    public bool SupportsSharedData => _acquireTransformSnapshot is not null;
+
+    bool IUnrealSharedSnapshotTransport.TryAcquireTransformSnapshot(
+        out UnrealSharedSnapshotViewV4 view)
+    {
+        lock (_lifetimeGate)
+        {
+            ThrowIfDisposed();
+            if (_acquireTransformSnapshot is null)
+            {
+                view = default;
+                return false;
+            }
+            return _acquireTransformSnapshot(_context, out view) != 0;
+        }
+    }
 
     public IUnrealEventSubscription Subscribe(
         UnrealObjectHandle source,
@@ -1054,6 +1112,26 @@ public sealed class InProcessUnrealNativeInvocationTransport
         public nint InvokeById;
         public nint CallFrameTransport;
         public nint EventTransport;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeTransportTableV2SharedData
+    {
+        public uint AbiVersion;
+        public uint TableSize;
+        public uint ValueSize;
+        public uint Reserved;
+        public nint ReadProperty;
+        public nint WriteProperty;
+        public nint Invoke;
+        public nint RetainContext;
+        public nint ReleaseContext;
+        public nint ReadPropertyById;
+        public nint WritePropertyById;
+        public nint InvokeById;
+        public nint CallFrameTransport;
+        public nint EventTransport;
+        public nint SharedDataTransport;
     }
 
     [StructLayout(LayoutKind.Sequential)]

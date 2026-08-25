@@ -11,6 +11,7 @@ internal sealed class UnrealGenerationInvocationBridge :
     IUnrealTypedInvocationBridge,
     IUnrealOutputInvocationBridge,
     IUnrealEventBridge,
+    IUnrealWorldDataPlaneProvider,
     IDisposable
 {
     private readonly IUnrealInvocationBridge _inner;
@@ -27,6 +28,11 @@ internal sealed class UnrealGenerationInvocationBridge :
     public bool SupportsTypedInvocation =>
         !_disposed && _inner is IUnrealTypedInvocationBridge bridge &&
         bridge.SupportsTypedInvocation;
+
+    public UnrealWorldDataPlane DataPlane =>
+        !_disposed && _inner is IUnrealWorldDataPlaneProvider provider
+            ? provider.DataPlane
+            : UnrealWorldDataPlane.Unavailable;
 
     public T ReadProperty<T>(UnrealObjectHandle target, string propertyPath) =>
         LiveInner.ReadProperty<T>(target, propertyPath);

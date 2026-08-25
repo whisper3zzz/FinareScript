@@ -4,9 +4,11 @@
 
 #include "Containers/StringConv.h"
 #include "Engine/World.h"
+#include "Engine/StaticMeshActor.h"
 #include "Misc/AutomationTest.h"
 #include "UnifiedScriptComponent.h"
 #include "UnifiedScriptInteropFixture.h"
+#include "UnifiedScriptWorldSubsystem.h"
 #include "UObject/UObjectGlobals.h"
 
 namespace UE::UnifiedScript::NativeTransport::Tests
@@ -133,6 +135,30 @@ bool FUnifiedScriptNativeTransportAbiTest::RunTest(const FString& Parameters)
     TestNotNull(TEXT("Fast write function exists"), FastTransport->WritePropertyById);
     TestNotNull(TEXT("Fast invoke function exists"), FastTransport->InvokeById);
     TestNotNull(TEXT("Fast transport publishes reverse event ABI"), FastTransport->EventTransport);
+    TestNotNull(TEXT("Fast transport publishes Shared Data ABI"), FastTransport->SharedDataTransport);
+
+    const FUnifiedScriptSharedDataTransportV4* SharedDataTransport =
+        UEUnifiedScript_GetSharedDataTransportV4();
+    TestNotNull(TEXT("Version-four Shared Data transport exists"), SharedDataTransport);
+    if (SharedDataTransport == nullptr)
+    {
+        return false;
+    }
+    TestEqual(
+        TEXT("Shared Data ABI is version four"),
+        SharedDataTransport->AbiVersion,
+        UE::UnifiedScript::SharedData::AbiVersion);
+    TestEqual(
+        TEXT("Shared Transform row layout is fixed"),
+        SharedDataTransport->TransformEntrySize,
+        static_cast<uint32>(sizeof(FUnifiedScriptTransformSnapshotEntryV4)));
+    TestEqual(
+        TEXT("Shared Transform schema is stable"),
+        SharedDataTransport->TransformSchemaId,
+        UE::UnifiedScript::SharedData::TransformSnapshotSchemaId);
+    TestNotNull(
+        TEXT("Shared Data transport acquires Transform snapshots"),
+        SharedDataTransport->AcquireTransformSnapshot);
 
     const FUnifiedScriptNativeEventTransportV4* EventTransport =
         UEUnifiedScript_GetNativeEventTransportV4();
@@ -1055,6 +1081,122 @@ bool FUnifiedScriptNativeTransportAbiTest::RunTest(const FString& Parameters)
 
     World->RemoveFromRoot();
     World->DestroyWorld(false);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FUnifiedScriptSharedTransformSnapshotTest,
+    "UnifiedScript.Unreal.SharedData.TransformSnapshot",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUnifiedScriptSharedTransformSnapshotTest::RunTest(const FString& Parameters)
+{
+    UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+    TestNotNull(TEXT("Shared snapshot World exists"), World);
+    if (World == nullptr)
+    {
+        return false;
+    }
+    World->AddToRoot();
+
+    UUnifiedScriptWorldSubsystem* Host =
+        World->GetSubsystem<UUnifiedScriptWorldSubsystem>();
+    AStaticMeshActor* Actor = World->SpawnActor<AStaticMeshActor>();
+    TestNotNull(TEXT("Shared snapshot World host exists"), Host);
+    TestNotNull(TEXT("Shared snapshot Actor exists"), Actor);
+    if (Host == nullptr || Actor == nullptr)
+    {
+        World->RemoveFromRoot();
+        World->DestroyWorld(false);
+        return false;
+    }
+
+    Actor->SetActorLocation(FVector(10.0, 20.0, 30.0));
+    Host->Tick(0.016f);
+
+    FUnifiedScriptNativeBridgeContext* Context = Host->GetNativeInvocationContext();
+    const FUnifiedScriptSharedDataTransportV4* Transport =
+        Host->GetNativeTransport()->SharedDataTransport;
+    TestNotNull(TEXT("Shared snapshot context exists"), Context);
+    TestNotNull(TEXT("Shared snapshot transport is discoverable"), Transport);
+    if (Context == nullptr || Transport == nullptr)
+    {
+        World->RemoveFromRoot();
+        World->DestroyWorld(false);
+        return false;
+    }
+
+    FUnifiedScriptSharedSnapshotViewV4 FirstView;
+    TestTrue(
+        TEXT("First Transform snapshot is acquired"),
+        Transport->AcquireTransformSnapshot(Context, &FirstView) != 0);
+    TestEqual(
+        TEXT("Snapshot is scoped to the owning World"),
+        FirstView.WorldHostId,
+        Host->GetWorldHostId());
+    TestEqual(
+        TEXT("Snapshot publishes the fixed Transform row"),
+        FirstView.EntrySize,
+        static_cast<uint32>(sizeof(FUnifiedScriptTransformSnapshotEntryV4)));
+
+    const FUnifiedScriptTransformSnapshotEntryV4* FirstActorEntry = nullptr;
+    for (uint32 Index = 0; Index < FirstView.EntryCount; ++Index)
+    {
+        const FUnifiedScriptTransformSnapshotEntryV4& Entry = FirstView.Entries[Index];
+        if (Entry.TranslationX == 10.0 && Entry.TranslationY == 20.0 &&
+            Entry.TranslationZ == 30.0)
+        {
+            FirstActorEntry = &Entry;
+            break;
+        }
+    }
+    TestNotNull(TEXT("Actor Transform is present in shared memory"), FirstActorEntry);
+    const uint64 ActorHandle = FirstActorEntry != nullptr
+        ? FirstActorEntry->Actor.ObjectHandle
+        : 0;
+    TestTrue(
+        TEXT("Snapshot actor handle is generation-safe and World-scoped"),
+        ActorHandle != 0 &&
+            FirstActorEntry->Actor.WorldHostId == Host->GetWorldHostId());
+
+    Actor->SetActorLocation(FVector(40.0, 50.0, 60.0));
+    Host->Tick(0.016f);
+    FUnifiedScriptSharedSnapshotViewV4 SecondView;
+    TestTrue(
+        TEXT("Second Transform snapshot is acquired"),
+        Transport->AcquireTransformSnapshot(Context, &SecondView) != 0);
+    TestTrue(
+        TEXT("Publishing advances the snapshot generation"),
+        SecondView.Generation > FirstView.Generation);
+    TestTrue(
+        TEXT("Publishing flips to the other native buffer"),
+        SecondView.Entries != FirstView.Entries);
+
+    bool bFoundUpdatedActor = false;
+    for (uint32 Index = 0; Index < SecondView.EntryCount; ++Index)
+    {
+        const FUnifiedScriptTransformSnapshotEntryV4& Entry = SecondView.Entries[Index];
+        if (Entry.Actor.ObjectHandle == ActorHandle)
+        {
+            bFoundUpdatedActor = Entry.TranslationX == 40.0 &&
+                Entry.TranslationY == 50.0 && Entry.TranslationZ == 60.0;
+            break;
+        }
+    }
+    TestTrue(
+        TEXT("Stable Actor handle points at the updated Transform row"),
+        bFoundUpdatedActor);
+
+    TestTrue(
+        TEXT("Managed ownership can retain the shared context"),
+        Transport->RetainContext(Context) != 0);
+    World->RemoveFromRoot();
+    World->DestroyWorld(false);
+    FUnifiedScriptSharedSnapshotViewV4 DetachedView;
+    TestFalse(
+        TEXT("World teardown invalidates the shared-memory view"),
+        Transport->AcquireTransformSnapshot(Context, &DetachedView) != 0);
+    Transport->ReleaseContext(Context);
     return true;
 }
 
