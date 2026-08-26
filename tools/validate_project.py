@@ -64,6 +64,10 @@ DOCUMENTS = [
     ROOT / "docs" / "AUTHORING_SURFACE.md",
     ROOT / "docs" / "UNREAL_ADAPTER.md",
     ROOT / "docs" / "UNREAL_DEPLOYMENT.md",
+    ROOT / "docs" / "UNREAL_ONBOARDING.md",
+    ROOT / "docs" / "UNREAL_SDK.md",
+    ROOT / "docs" / "UNREAL_FIRST_SCRIPT.md",
+    ROOT / "docs" / "ALPHA_ACCEPTANCE.md",
     ROOT / "docs" / "UNREAL_API_CONTRACT.md",
     ROOT / "docs" / "ROADMAP.md",
     ROOT / "docs" / "milestones" / "M1_ROSLYN_GRAPH_FOUNDATION.md",
@@ -230,6 +234,197 @@ def main() -> int:
         "Project API Contract generation or Script Asset-selected visual catalog is missing",
     )
     checks.append("one Unreal API Contract drives C++, C#, coverage, and visual nodes")
+
+    onboarding_script_path = ROOT / "tools" / "setup-unreal-project.ps1"
+    onboarding_config_path = (
+        ROOT / "HostProject" / "Config" / "UnifiedScript.onboarding.json"
+    )
+    onboarding_coverage_path = (
+        ROOT / "samples" / "Unreal" / "UEUnifiedScriptRuntime.binding-coverage.json"
+    )
+    onboarding_script = onboarding_script_path.read_text(encoding="utf-8")
+    with onboarding_config_path.open("r", encoding="utf-8") as handle:
+        onboarding_config = json.load(handle)
+    with onboarding_coverage_path.open("r", encoding="utf-8") as handle:
+        onboarding_coverage = json.load(handle)
+    onboarding_paths = [
+        onboarding_config["pluginPath"],
+        onboarding_config["reflection"]["output"],
+        onboarding_config["bindings"]["contract"],
+        onboarding_config["bindings"]["managedOutput"],
+        onboarding_config["bindings"]["nativeOutput"],
+        onboarding_config["bindings"]["nodeCatalogOutput"],
+        onboarding_config["bindings"]["coverageOutput"],
+        onboarding_config["deployment"]["manifest"],
+        onboarding_config["managed"]["stageDirectory"],
+        *onboarding_config["managed"]["projects"],
+    ]
+    coverage_summary = onboarding_coverage["summary"]
+    require(
+        onboarding_script_path.is_file()
+        and onboarding_config["schemaVersion"]
+        == "unifiedscript.unreal-project-onboarding/v0.1"
+        and onboarding_config["editorTarget"] == "UEUnifiedScriptHostEditor"
+        and onboarding_config["bindings"]["requireCompleteNativeCoverage"] is True
+        and all(not Path(path).is_absolute() and ":" not in path for path in onboarding_paths)
+        and coverage_summary["memberCount"] == coverage_summary["nativeThunkCount"]
+        and coverage_summary["memberCount"]
+        == len(onboarding_coverage["entries"])
+        and coverage_summary["reflectionFallbackCount"] == 0
+        and coverage_summary["rejectedCount"] == 0
+        and coverage_summary["deferredTypeCount"] == 0
+        and "EngineAssociation" in onboarding_script
+        and "ValidateOnly" in onboarding_script
+        and "unifiedscript.unreal-project-onboarding-report/v0.1" in onboarding_script
+        and "Assert-GeneratedFileMatches" in onboarding_script
+        and "UnifiedScriptSyncAssets" in onboarding_script
+        and "Automation RunTests" in onboarding_script,
+        "One-command Unreal onboarding, determinism, or native coverage gate is missing",
+    )
+    checks.append("one command onboards and deterministically validates an Unreal project")
+
+    sdk_package_path = ROOT / "tools" / "package-unifiedscript-sdk.ps1"
+    sdk_install_path = ROOT / "tools" / "install-unifiedscript-sdk.ps1"
+    sdk_distribution_path = ROOT / "docs" / "UNREAL_SDK.md"
+    sdk_package = sdk_package_path.read_text(encoding="utf-8")
+    sdk_install = sdk_install_path.read_text(encoding="utf-8")
+    sdk_distribution = sdk_distribution_path.read_text(encoding="utf-8")
+    require(
+        sdk_package_path.is_file()
+        and sdk_install_path.is_file()
+        and "unifiedscript.sdk-manifest/v0.1" in sdk_package
+        and "Write-DeterministicArchive" in sdk_package
+        and "LastWriteTime" in sdk_package
+        and "Managed\\Runtime" in sdk_package
+        and "Tools\\UnifiedScript.Cli" in sdk_package
+        and "Engine-version-specific plugin Binaries leaked" in sdk_package
+        and "Assert-NoMachinePathLeak" in sdk_package
+        and "unifiedscript.sdk-manifest/v0.1" in sdk_install
+        and "Get-FileHash" in sdk_install
+        and "Unmanifested SDK payload file" in sdk_install
+        and "UEUnifiedScript.backup-" in sdk_install
+        and "sdkLayout = 'packaged'" in onboarding_script
+        and "packagedSdkManifest" in onboarding_script
+        and "sdkLayout: packaged" in sdk_distribution,
+        "Deterministic SDK packaging, compatibility, or verified installation is missing",
+    )
+    checks.append("SDK archive is deterministic, hashed, compatible, and installable")
+
+    scaffold_path = ROOT / "tools" / "new-unifiedscript-project.ps1"
+    authoring_start_path = ROOT / "tools" / "start-unifiedscript-authoring.ps1"
+    first_script_guide_path = ROOT / "docs" / "UNREAL_FIRST_SCRIPT.md"
+    template_root = ROOT / "templates" / "UnrealProject"
+    required_templates = [
+        template_root / "Config" / "UnifiedScript.onboarding.json.template",
+        template_root / "Contracts" / "Project.unreal-api-contract.json.template",
+        template_root
+        / "Deployment"
+        / "Project.unifiedscript-deployment.json.template",
+        template_root / "Managed" / "Project.UnifiedScript.csproj.template",
+        template_root / "Managed" / "FirstScript.cs.template",
+        template_root / "Source" / "Project.Build.cs.template",
+        template_root / "Source" / "Project.Target.cs.template",
+        template_root / "Source" / "ProjectEditor.Target.cs.template",
+        template_root / "Project.plugin-fragment.json.template",
+    ]
+    scaffold = scaffold_path.read_text(encoding="utf-8")
+    authoring_start = authoring_start_path.read_text(encoding="utf-8")
+    first_script_guide = first_script_guide_path.read_text(encoding="utf-8")
+    first_script_template = required_templates[4].read_text(encoding="utf-8")
+    plugin_source_root = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+    )
+    plugin_implementation_files = [
+        path
+        for path in plugin_source_root.rglob("*")
+        if path.suffix in {".cpp", ".h", ".cs"}
+        and "Tests" not in path.parts
+    ]
+    plugin_implementation = "\n".join(
+        path.read_text(encoding="utf-8") for path in plugin_implementation_files
+    )
+    runtime_module = (
+        plugin_source_root
+        / "UEUnifiedScriptRuntime"
+        / "Private"
+        / "UEUnifiedScriptRuntimeModule.cpp"
+    ).read_text(encoding="utf-8")
+    host_module = (
+        ROOT
+        / "HostProject"
+        / "Source"
+        / "UEUnifiedScriptHost"
+        / "Private"
+        / "UEUnifiedScriptHostModule.cpp"
+    ).read_text(encoding="utf-8")
+    editor_module = (
+        plugin_source_root
+        / "UEUnifiedScriptEditor"
+        / "Private"
+        / "UEUnifiedScriptEditorModule.cpp"
+    ).read_text(encoding="utf-8")
+    require(
+        scaffold_path.is_file()
+        and authoring_start_path.is_file()
+        and all(path.is_file() for path in required_templates)
+        and "unifiedscript.project-scaffold-report/v0.1" in scaffold
+        and "setup-unreal-project.ps1" in scaffold
+        and "identity-init" in authoring_start
+        and "debug-serve" in authoring_start
+        and "Authoring\\Workbench" in authoring_start
+        and "using System;" in first_script_template
+        and '[ScriptAsset("__PROJECT_NAME__/__SCRIPT_NAME__")]'
+        in first_script_template
+        and "[Visual]" in first_script_template
+        and "editor play" in first_script_guide.lower()
+        and "packaged play" in first_script_guide.lower()
+        and not any(
+            fixture_name in plugin_implementation
+            for fixture_name in (
+                "BlockBreaker",
+                "UnifiedScript.Unreal.Demo",
+                "DamagePolicy",
+                "DemoSurfacePath",
+                "HandleLoadDemo",
+            )
+        )
+        and "UnifiedScriptSmoke" not in runtime_module
+        and "UnifiedScriptSmoke" in host_module
+        and ".InitialSurfacePath(" not in editor_module,
+        "Project-agnostic first-script templates or fixture isolation is missing",
+    )
+    checks.append("generic first-script scaffold isolates fixtures from the plugin")
+
+    alpha_acceptance_path = (
+        ROOT / "tools" / "run-unifiedscript-alpha-acceptance.ps1"
+    )
+    alpha_acceptance_doc_path = ROOT / "docs" / "ALPHA_ACCEPTANCE.md"
+    release_gate_path = ROOT / "tools" / "package-unreal-release.ps1"
+    alpha_acceptance = alpha_acceptance_path.read_text(encoding="utf-8")
+    alpha_acceptance_doc = alpha_acceptance_doc_path.read_text(encoding="utf-8")
+    release_gate = release_gate_path.read_text(encoding="utf-8")
+    require(
+        alpha_acceptance_path.is_file()
+        and alpha_acceptance_doc_path.is_file()
+        and "unifiedscript.alpha-acceptance/v0.1" in alpha_acceptance
+        and "managed-tests" in alpha_acceptance
+        and "repository-validator" in alpha_acceptance
+        and "unreal-onboarding" in alpha_acceptance
+        and "package-smoke" in alpha_acceptance
+        and "managed-tests.trx" in alpha_acceptance
+        and "onboarding-report.json" in alpha_acceptance
+        and "release-gate.json" in alpha_acceptance
+        and "USACC2001" in alpha_acceptance
+        and "retry =" in alpha_acceptance
+        and "alpha-acceptance.md" in alpha_acceptance
+        and "SkipPackageSmoke" in alpha_acceptance
+        and "OutputDirectory" in release_gate
+        and "automation = [ordered]@{" in onboarding_script
+        and "Failure still produces both top-level reports"
+        in alpha_acceptance_doc,
+        "Single-command alpha acceptance reporting or failure UX is missing",
+    )
+    checks.append("one alpha gate reports generation, tests, UE, Automation, and package smoke")
 
     authoring_source = ROOT / "samples" / "Authoring" / "DamagePolicy.cs"
     authoring_artifact = (
@@ -1369,8 +1564,18 @@ def main() -> int:
     require(
         unreal_manifest["schemaVersion"]
         == "unifiedscript.unreal-reflection/v0.2"
-        and unreal_manifest["modules"] == ["UEUnifiedScriptRuntime"]
-        and len(unreal_manifest["types"]) == 5
+        and unreal_manifest["modules"] == ["Engine", "UEUnifiedScriptRuntime"]
+        and {item["path"] for item in unreal_manifest["types"]}
+        == {
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor",
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptAsset",
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary",
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldSubsystem",
+            "/Script/Engine.ActorInstanceHandle",
+            "/Script/Engine.HitResult",
+        }
         and unreal_component_manifest["headerPath"] == "UnifiedScriptComponent.h"
         and all(
             item["access"]["nativeAccess"] == "public"
@@ -1779,9 +1984,9 @@ def main() -> int:
         and 'StageBundledDotNetDirectory("shared/Microsoft.NETCore.App")'
         in unreal_runtime_build
         and "Binaries/ThirdParty/DotNet/10.0" in unreal_coreclr_host_source
-        and "UnifiedScriptSmoke" in unreal_runtime_module
-        and "UnifiedScriptSmokeResult=" in unreal_runtime_module
-        and "Managed Start/Tick/Stop succeeded" in unreal_runtime_module
+        and "UnifiedScriptSmoke" in host_module
+        and "UnifiedScriptSmokeResult=" in host_module
+        and "Managed Start/Tick/Stop succeeded" in host_module
         and "BuildCookRun" in unreal_release_helper
         and "Development', 'Shipping" in unreal_release_helper
         and "-SkipZenStore" in unreal_release_helper

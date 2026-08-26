@@ -1,0 +1,16 @@
+using UnrealBuildTool;
+
+public class __PROJECT_MODULE__ : ModuleRules
+{
+    public __PROJECT_MODULE__(ReadOnlyTargetRules Target) : base(Target)
+    {
+        PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
+        PublicDependencyModuleNames.AddRange(new[]
+        {
+            "Core",
+            "CoreUObject",
+            "Engine",
+            "UEUnifiedScriptRuntime"
+        });
+    }
+}

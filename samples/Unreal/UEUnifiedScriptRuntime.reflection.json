@@ -8,6 +8,7 @@
 		"branch": "//UE5/Release-5.8"
 	},
 	"modules": [
+		"Engine",
 		"UEUnifiedScriptRuntime"
 	],
 	"types": [
@@ -64,7 +65,8 @@
 					{
 						"kind": "object",
 						"nativeName": "TObjectPtr<UUnifiedScriptComponent>",
-						"typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent"
+						"typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+						"headerPath": "UnifiedScriptComponent.h"
 					},
 					"access":
 					{
@@ -84,7 +86,8 @@
 					{
 						"kind": "object",
 						"nativeName": "UUnifiedScriptComponent*",
-						"typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent"
+						"typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+						"headerPath": "UnifiedScriptComponent.h"
 					},
 					"parameters": [],
 					"traits":
@@ -442,7 +445,8 @@
 							{
 								"kind": "object",
 								"nativeName": "UObject*",
-								"typePath": "/Script/CoreUObject.Object"
+								"typePath": "/Script/CoreUObject.Object",
+								"headerPath": "UObject/Object.h"
 							},
 							"direction": "input"
 						}
@@ -518,7 +522,8 @@
 							{
 								"kind": "object",
 								"nativeName": "UObject*",
-								"typePath": "/Script/CoreUObject.Object"
+								"typePath": "/Script/CoreUObject.Object",
+								"headerPath": "UObject/Object.h"
 							},
 							"direction": "input"
 						}
@@ -574,7 +579,8 @@
 					{
 						"kind": "object",
 						"nativeName": "UObject*",
-						"typePath": "/Script/CoreUObject.Object"
+						"typePath": "/Script/CoreUObject.Object",
+						"headerPath": "UObject/Object.h"
 					},
 					"parameters": [],
 					"traits":
@@ -745,7 +751,8 @@
 					{
 						"kind": "class",
 						"nativeName": "TObjectPtr<UClass>",
-						"typePath": "/Script/CoreUObject.Object"
+						"typePath": "/Script/CoreUObject.Object",
+						"headerPath": "UObject/Object.h"
 					},
 					"access":
 					{
@@ -894,7 +901,8 @@
 					{
 						"kind": "enum",
 						"nativeName": "EUnifiedScriptInteropMode",
-						"typePath": "/Script/UEUnifiedScriptRuntime.EUnifiedScriptInteropMode"
+						"typePath": "/Script/UEUnifiedScriptRuntime.EUnifiedScriptInteropMode",
+						"headerPath": "UnifiedScriptInteropFixture.h"
 					},
 					"access":
 					{
@@ -927,7 +935,8 @@
 					{
 						"kind": "object",
 						"nativeName": "TObjectPtr<UObject>",
-						"typePath": "/Script/CoreUObject.Object"
+						"typePath": "/Script/CoreUObject.Object",
+						"headerPath": "UObject/Object.h"
 					},
 					"access":
 					{
@@ -944,7 +953,8 @@
 					{
 						"kind": "struct",
 						"nativeName": "FRotator",
-						"typePath": "/Script/CoreUObject.Rotator"
+						"typePath": "/Script/CoreUObject.Rotator",
+						"headerPath": "UObject/NoExportTypes.h"
 					},
 					"access":
 					{
@@ -993,7 +1003,8 @@
 					{
 						"kind": "struct",
 						"nativeName": "FTransform",
-						"typePath": "/Script/CoreUObject.Transform"
+						"typePath": "/Script/CoreUObject.Transform",
+						"headerPath": "UObject/NoExportTypes.h"
 					},
 					"access":
 					{
@@ -1010,7 +1021,8 @@
 					{
 						"kind": "struct",
 						"nativeName": "FVector",
-						"typePath": "/Script/CoreUObject.Vector"
+						"typePath": "/Script/CoreUObject.Vector",
+						"headerPath": "UObject/NoExportTypes.h"
 					},
 					"access":
 					{
@@ -1047,7 +1059,8 @@
 							{
 								"kind": "object",
 								"nativeName": "UObject*",
-								"typePath": "/Script/CoreUObject.Object"
+								"typePath": "/Script/CoreUObject.Object",
+								"headerPath": "UObject/Object.h"
 							},
 							"direction": "input"
 						}
@@ -1106,7 +1119,8 @@
 					{
 						"kind": "struct",
 						"nativeName": "FVector",
-						"typePath": "/Script/CoreUObject.Vector"
+						"typePath": "/Script/CoreUObject.Vector",
+						"headerPath": "UObject/NoExportTypes.h"
 					},
 					"parameters": [
 						{
@@ -1115,7 +1129,8 @@
 							{
 								"kind": "struct",
 								"nativeName": "FVector",
-								"typePath": "/Script/CoreUObject.Vector"
+								"typePath": "/Script/CoreUObject.Vector",
+								"headerPath": "UObject/NoExportTypes.h"
 							},
 							"direction": "input"
 						},
@@ -1125,7 +1140,8 @@
 							{
 								"kind": "struct",
 								"nativeName": "FVector",
-								"typePath": "/Script/CoreUObject.Vector"
+								"typePath": "/Script/CoreUObject.Vector",
+								"headerPath": "UObject/NoExportTypes.h"
 							},
 							"direction": "input"
 						}
@@ -1162,7 +1178,8 @@
 							{
 								"kind": "object",
 								"nativeName": "UObject*",
-								"typePath": "/Script/CoreUObject.Object"
+								"typePath": "/Script/CoreUObject.Object",
+								"headerPath": "UObject/Object.h"
 							},
 							"direction": "input"
 						}
@@ -1251,7 +1268,8 @@
 					{
 						"kind": "class",
 						"nativeName": "UClass*",
-						"typePath": "/Script/CoreUObject.Object"
+						"typePath": "/Script/CoreUObject.Object",
+						"headerPath": "UObject/Object.h"
 					},
 					"parameters": [
 						{
@@ -1260,7 +1278,8 @@
 							{
 								"kind": "class",
 								"nativeName": "UClass*",
-								"typePath": "/Script/CoreUObject.Object"
+								"typePath": "/Script/CoreUObject.Object",
+								"headerPath": "UObject/Object.h"
 							},
 							"direction": "input"
 						}
@@ -1327,7 +1346,8 @@
 					{
 						"kind": "object",
 						"nativeName": "UObject*",
-						"typePath": "/Script/CoreUObject.Object"
+						"typePath": "/Script/CoreUObject.Object",
+						"headerPath": "UObject/Object.h"
 					},
 					"parameters": [
 						{
@@ -1336,7 +1356,8 @@
 							{
 								"kind": "object",
 								"nativeName": "UObject*",
-								"typePath": "/Script/CoreUObject.Object"
+								"typePath": "/Script/CoreUObject.Object",
+								"headerPath": "UObject/Object.h"
 							},
 							"direction": "input"
 						}
@@ -1393,7 +1414,8 @@
 					{
 						"kind": "struct",
 						"nativeName": "FTransform",
-						"typePath": "/Script/CoreUObject.Transform"
+						"typePath": "/Script/CoreUObject.Transform",
+						"headerPath": "UObject/NoExportTypes.h"
 					},
 					"parameters": [
 						{
@@ -1402,7 +1424,8 @@
 							{
 								"kind": "struct",
 								"nativeName": "FTransform",
-								"typePath": "/Script/CoreUObject.Transform"
+								"typePath": "/Script/CoreUObject.Transform",
+								"headerPath": "UObject/NoExportTypes.h"
 							},
 							"direction": "input"
 						}
@@ -1502,7 +1525,8 @@
 					{
 						"kind": "object",
 						"nativeName": "UObject*",
-						"typePath": "/Script/CoreUObject.Object"
+						"typePath": "/Script/CoreUObject.Object",
+						"headerPath": "UObject/Object.h"
 					},
 					"parameters": [
 						{
@@ -1511,7 +1535,8 @@
 							{
 								"kind": "object",
 								"nativeName": "UObject*",
-								"typePath": "/Script/CoreUObject.Object"
+								"typePath": "/Script/CoreUObject.Object",
+								"headerPath": "UObject/Object.h"
 							},
 							"direction": "input"
 						},
@@ -1549,7 +1574,8 @@
 					{
 						"kind": "struct",
 						"nativeName": "FVector",
-						"typePath": "/Script/CoreUObject.Vector"
+						"typePath": "/Script/CoreUObject.Vector",
+						"headerPath": "UObject/NoExportTypes.h"
 					},
 					"parameters": [
 						{
@@ -1558,7 +1584,8 @@
 							{
 								"kind": "struct",
 								"nativeName": "FVector",
-								"typePath": "/Script/CoreUObject.Vector"
+								"typePath": "/Script/CoreUObject.Vector",
+								"headerPath": "UObject/NoExportTypes.h"
 							},
 							"direction": "input"
 						},
@@ -1774,6 +1801,241 @@
 			]
 		},
 		{
+			"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary",
+			"name": "UnifiedScriptWorldLibrary",
+			"nativeName": "UUnifiedScriptWorldLibrary",
+			"module": "UEUnifiedScriptRuntime",
+			"headerPath": "UnifiedScriptWorldLibrary.h",
+			"kind": "class",
+			"baseTypePath": "/Script/Engine.BlueprintFunctionLibrary",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": false
+			},
+			"properties": [],
+			"delegates": [],
+			"functions": [
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:LineTraceSingle",
+					"name": "LineTraceSingle",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [
+						{
+							"name": "WorldContextObject",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UObject*",
+								"typePath": "/Script/CoreUObject.Object",
+								"headerPath": "UObject/Object.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Start",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FVector",
+								"typePath": "/Script/CoreUObject.Vector",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "End",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FVector",
+								"typePath": "/Script/CoreUObject.Vector",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "IgnoreActor",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "OutHit",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FHitResult",
+								"typePath": "/Script/Engine.HitResult",
+								"headerPath": "Engine/HitResult.h"
+							},
+							"direction": "output"
+						},
+						{
+							"name": "OutHitActor",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "output"
+						}
+					],
+					"traits":
+					{
+						"static": true,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:LoadClassByPath",
+					"name": "LoadClassByPath",
+					"returnType":
+					{
+						"kind": "class",
+						"nativeName": "UClass*",
+						"typePath": "/Script/CoreUObject.Object",
+						"headerPath": "UObject/Object.h"
+					},
+					"parameters": [
+						{
+							"name": "WorldContextObject",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UObject*",
+								"typePath": "/Script/CoreUObject.Object",
+								"headerPath": "UObject/Object.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "ClassPath",
+							"type":
+							{
+								"kind": "string",
+								"nativeName": "FString"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": true,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:LoadObjectByPath",
+					"name": "LoadObjectByPath",
+					"returnType":
+					{
+						"kind": "object",
+						"nativeName": "UObject*",
+						"typePath": "/Script/CoreUObject.Object",
+						"headerPath": "UObject/Object.h"
+					},
+					"parameters": [
+						{
+							"name": "WorldContextObject",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UObject*",
+								"typePath": "/Script/CoreUObject.Object",
+								"headerPath": "UObject/Object.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "ObjectPath",
+							"type":
+							{
+								"kind": "string",
+								"nativeName": "FString"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": true,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:SpawnActor",
+					"name": "SpawnActor",
+					"returnType":
+					{
+						"kind": "object",
+						"nativeName": "AActor*",
+						"typePath": "/Script/Engine.Actor",
+						"headerPath": "GameFramework/Actor.h"
+					},
+					"parameters": [
+						{
+							"name": "WorldContextObject",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UObject*",
+								"typePath": "/Script/CoreUObject.Object",
+								"headerPath": "UObject/Object.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "ActorClass",
+							"type":
+							{
+								"kind": "class",
+								"nativeName": "UClass*",
+								"typePath": "/Script/CoreUObject.Object",
+								"headerPath": "UObject/Object.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Transform",
+							"type":
+							{
+								"kind": "struct",
+								"nativeName": "FTransform",
+								"typePath": "/Script/CoreUObject.Transform",
+								"headerPath": "UObject/NoExportTypes.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": true,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					}
+				}
+			]
+		},
+		{
 			"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldSubsystem",
 			"name": "UnifiedScriptWorldSubsystem",
 			"nativeName": "UUnifiedScriptWorldSubsystem",
@@ -1789,6 +2051,373 @@
 			"properties": [],
 			"delegates": [],
 			"functions": []
+		},
+		{
+			"path": "/Script/Engine.ActorInstanceHandle",
+			"name": "ActorInstanceHandle",
+			"nativeName": "FActorInstanceHandle",
+			"module": "Engine",
+			"headerPath": "Engine/ActorInstanceHandle.h",
+			"kind": "struct",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": true
+			},
+			"properties": [],
+			"functions": [],
+			"delegates": []
+		},
+		{
+			"path": "/Script/Engine.HitResult",
+			"name": "HitResult",
+			"nativeName": "FHitResult",
+			"module": "Engine",
+			"headerPath": "Engine/HitResult.h",
+			"kind": "struct",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": true
+			},
+			"properties": [
+				{
+					"path": "/Script/Engine.HitResult:bBlockingHit",
+					"name": "bBlockingHit",
+					"type":
+					{
+						"kind": "boolean",
+						"nativeName": "uint8"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": false,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/Engine.HitResult:BoneName",
+					"name": "BoneName",
+					"type":
+					{
+						"kind": "name",
+						"nativeName": "FName"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": false,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/Engine.HitResult:bStartPenetrating",
+					"name": "bStartPenetrating",
+					"type":
+					{
+						"kind": "boolean",
+						"nativeName": "uint8"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": false,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/Engine.HitResult:Component",
+					"name": "Component",
+					"type":
+					{
+						"kind": "unsupported",
+						"nativeName": "TWeakObjectPtr<UPrimitiveComponent>"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": false,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/Engine.HitResult:Distance",
+					"name": "Distance",
+					"type":
+					{
+						"kind": "float32",
+						"nativeName": "float"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": false,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/Engine.HitResult:ElementIndex",
+					"name": "ElementIndex",
+					"type":
+					{
+						"kind": "uint8",
+						"nativeName": "uint8"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": false,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/Engine.HitResult:FaceIndex",
+					"name": "FaceIndex",
+					"type":
+					{
+						"kind": "int32",
+						"nativeName": "int32"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": false,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/Engine.HitResult:HitObjectHandle",
+					"name": "HitObjectHandle",
+					"type":
+					{
+						"kind": "struct",
+						"nativeName": "FActorInstanceHandle",
+						"typePath": "/Script/Engine.ActorInstanceHandle",
+						"headerPath": "Engine/ActorInstanceHandle.h"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": false,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/Engine.HitResult:ImpactNormal",
+					"name": "ImpactNormal",
+					"type":
+					{
+						"kind": "struct",
+						"nativeName": "FVector_NetQuantizeNormal",
+						"typePath": "/Script/CoreUObject.Vector",
+						"headerPath": "Engine/NetSerialization.h"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": false,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/Engine.HitResult:ImpactPoint",
+					"name": "ImpactPoint",
+					"type":
+					{
+						"kind": "struct",
+						"nativeName": "FVector_NetQuantize",
+						"typePath": "/Script/CoreUObject.Vector",
+						"headerPath": "Engine/NetSerialization.h"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": false,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/Engine.HitResult:Item",
+					"name": "Item",
+					"type":
+					{
+						"kind": "int32",
+						"nativeName": "int32"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": false,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/Engine.HitResult:Location",
+					"name": "Location",
+					"type":
+					{
+						"kind": "struct",
+						"nativeName": "FVector_NetQuantize",
+						"typePath": "/Script/CoreUObject.Vector",
+						"headerPath": "Engine/NetSerialization.h"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": false,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/Engine.HitResult:MyBoneName",
+					"name": "MyBoneName",
+					"type":
+					{
+						"kind": "name",
+						"nativeName": "FName"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": false,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/Engine.HitResult:MyItem",
+					"name": "MyItem",
+					"type":
+					{
+						"kind": "int32",
+						"nativeName": "int32"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": false,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/Engine.HitResult:Normal",
+					"name": "Normal",
+					"type":
+					{
+						"kind": "struct",
+						"nativeName": "FVector_NetQuantizeNormal",
+						"typePath": "/Script/CoreUObject.Vector",
+						"headerPath": "Engine/NetSerialization.h"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": false,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/Engine.HitResult:PenetrationDepth",
+					"name": "PenetrationDepth",
+					"type":
+					{
+						"kind": "float32",
+						"nativeName": "float"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": false,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/Engine.HitResult:PhysMaterial",
+					"name": "PhysMaterial",
+					"type":
+					{
+						"kind": "unsupported",
+						"nativeName": "TWeakObjectPtr<UPhysicalMaterial>"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": false,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/Engine.HitResult:Time",
+					"name": "Time",
+					"type":
+					{
+						"kind": "float32",
+						"nativeName": "float"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": false,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/Engine.HitResult:TraceEnd",
+					"name": "TraceEnd",
+					"type":
+					{
+						"kind": "struct",
+						"nativeName": "FVector_NetQuantize",
+						"typePath": "/Script/CoreUObject.Vector",
+						"headerPath": "Engine/NetSerialization.h"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": false,
+						"nativeAccess": "public"
+					}
+				},
+				{
+					"path": "/Script/Engine.HitResult:TraceStart",
+					"name": "TraceStart",
+					"type":
+					{
+						"kind": "struct",
+						"nativeName": "FVector_NetQuantize",
+						"typePath": "/Script/CoreUObject.Vector",
+						"headerPath": "Engine/NetSerialization.h"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": false,
+						"nativeAccess": "public"
+					}
+				}
+			],
+			"functions": [],
+			"delegates": []
 		}
 	]
 }

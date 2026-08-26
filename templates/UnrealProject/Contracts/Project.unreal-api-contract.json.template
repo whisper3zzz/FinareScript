@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "unifiedscript.unreal-api-contract/v0.1",
+  "contractName": "__PROJECT_NAME__.Gameplay",
+  "managedNamespace": "__MANAGED_NAMESPACE__.Generated",
+  "nativeHeader": "UnifiedScriptGeneratedThunks.h",
+  "nativeNamespace": "UE::UnifiedScript::Generated",
+  "types": [
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor",
+      "members": [
+        "GetUnifiedScriptComponent",
+        "IncrementManagedTickCount",
+        "ManagedActorState",
+        "ManagedTickCount",
+        "ReloadManagedBehavior",
+        "StartManagedBehavior",
+        "StopManagedBehavior"
+      ]
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+      "members": [
+        "Add",
+        "GetScriptStateInt32",
+        "LastScriptError",
+        "ManagedState",
+        "ReloadScript",
+        "SetScriptStateInt32",
+        "bScriptRunning",
+        "bStartAutomatically",
+        "bTickAutomatically"
+      ]
+    }
+  ]
+}

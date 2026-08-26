@@ -4,8 +4,56 @@ UnifiedScript is an experimental dual-modal gameplay authoring system. A
 restricted C# profile and a structured visual graph are intended to be two
 lossless projections of one program model. Roslyn and CoreCLR are the active
 execution backend. The language and projection model are proven independently,
-and the versioned Unreal adapter has advanced through M6.1 into M6.2
-productization without adding UE dependencies to the compiler core.
+and the versioned Unreal adapter has completed its M6.2 packaged-demo baseline
+and entered M6.3 adoptable-project productization without adding UE dependencies
+to the compiler core.
+
+## Product roadmap
+
+[docs/ROADMAP.md](docs/ROADMAP.md) is the canonical execution queue from the
+current packaged BlockBreaker demo to an adoptable, production-ready Puerts
+alternative. It records the verified baseline, active milestone, next vertical
+slice, acceptance gates, and the longer path through runtime coverage,
+visual/C# authoring, debugging, performance, release hardening, and migration.
+An unqualified request to continue iteration follows its current cursor.
+
+The M6.3 project entry point now applies the complete generated-contract path:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/setup-unreal-project.ps1 `
+  -Project HostProject/UEUnifiedScriptHost.uproject -EngineRoot D:\UE_5.8
+```
+
+Re-run with `-ValidateOnly` to preflight Script Assets, compare deterministic
+generated outputs, enforce binding coverage, and execute the configured managed
+startup gate without rewriting project source. See
+[Unreal project onboarding](docs/UNREAL_ONBOARDING.md).
+
+Create a repository-independent alpha SDK with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/package-unifiedscript-sdk.ps1 `
+  -Version 0.1.0-m6.3-alpha.1 -EngineRoot D:\UE_5.8
+```
+
+The deterministic ZIP contains a hash-verified installer, source plugin,
+managed runtime, CLI, schemas, templates, and documentation while excluding
+engine-specific native outputs. See [Unreal SDK distribution](docs/UNREAL_SDK.md).
+To take a newly installed C++ project from no scripts to editor play, visual
+editing, hot reload, and packaged play, follow
+[First UnifiedScript in an Unreal project](docs/UNREAL_FIRST_SCRIPT.md).
+
+Run the complete repository alpha gate with:
+
+```powershell
+powershell -ExecutionPolicy Bypass `
+  -File tools/run-unifiedscript-alpha-acceptance.ps1 `
+  -EngineRoot D:\UE_5.8
+```
+
+It emits one machine-readable report and one concise summary covering managed
+tests, repository validation, UE generation/build/Automation, and packaged
+CoreCLR smoke. See [Alpha acceptance](docs/ALPHA_ACCEPTANCE.md).
 
 ## Current vertical slice
 
@@ -274,8 +322,9 @@ Declaration IR and Graph, while `debug-serve` returns it in authoring workspace
 v0.2 after every committed reload. The UI adapter contains no sample asset,
 function, state, or API-call names; `MultiAssetControlFlow.cs` and automated
 tests cover two assets, three functions, branches, while loops, and for loops.
-UE binding began in M6.1 against this proven contract and now provides the
-active M6.2 runtime, authoring, data-plane, and release path.
+UE binding began in M6.1 against this proven contract. M6.2 established the
+runtime, authoring, data-plane, performance, and packaged-demo baseline; M6.3
+now turns that baseline into a project-installable alpha.
 
 M6.1 Phase A establishes the first real UE toolchain slice. The
 `UnifiedScript.Unreal` boundary validates and normalizes engine reflection

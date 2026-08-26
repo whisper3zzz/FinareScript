@@ -40,6 +40,9 @@
     <None Include="../../samples/Unreal/UEUnifiedScriptRuntime.reflection.json"
           Link="UnrealFixtures/UEUnifiedScriptRuntime.reflection.json"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../samples/Unreal/UEUnifiedScriptRuntime.api-contract.json"
+          Link="UnrealFixtures/UEUnifiedScriptRuntime.api-contract.json"
+          CopyToOutputDirectory="PreserveNewest" />
     <Compile Include="../../samples/Unreal/UEUnifiedScriptRuntime.bindings.cs"
              Link="UnrealFixtures/UEUnifiedScriptRuntime.bindings.cs"
              CopyToOutputDirectory="PreserveNewest" />

@@ -48,17 +48,6 @@ public sealed partial class UnifiedScriptActor : global::UnifiedScript.Unreal.Un
         => Invoke(0xFD7407AAD8E613E8UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:StopManagedBehavior");
 }
 
-[global::UnifiedScript.Unreal.UnrealTypeAttribute("/Script/UEUnifiedScriptRuntime.UnifiedScriptAsset")]
-public sealed partial class UnifiedScriptAsset : global::UnifiedScript.Unreal.UnrealObject
-{
-    public UnifiedScriptAsset(
-        global::UnifiedScript.Unreal.UnrealObjectHandle handle,
-        global::UnifiedScript.Unreal.IUnrealInvocationBridge bridge)
-        : base(handle, bridge)
-    {
-    }
-}
-
 [global::UnifiedScript.Unreal.UnrealTypeAttribute("/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent")]
 public sealed partial class UnifiedScriptComponent : global::UnifiedScript.Unreal.UnrealObject
 {
@@ -384,15 +373,4 @@ public sealed partial class UnifiedScriptInteropFixture : global::UnifiedScript.
 
     public int SumMap(global::System.Collections.Generic.IReadOnlyDictionary<int, int> values)
         => Invoke<int, global::System.Collections.Generic.IReadOnlyDictionary<int, int>>(0xB9016520F3956867UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SumMap", values);
-}
-
-[global::UnifiedScript.Unreal.UnrealTypeAttribute("/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldSubsystem")]
-public sealed partial class UnifiedScriptWorldSubsystem : global::UnifiedScript.Unreal.UnrealObject
-{
-    public UnifiedScriptWorldSubsystem(
-        global::UnifiedScript.Unreal.UnrealObjectHandle handle,
-        global::UnifiedScript.Unreal.IUnrealInvocationBridge bridge)
-        : base(handle, bridge)
-    {
-    }
 }

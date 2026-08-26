@@ -76,7 +76,7 @@ private:
     FReply HandleLoad();
     FReply HandleBrowse();
     FReply HandleLoadSelectedAsset();
-    FReply HandleLoadDemo();
+    FReply HandleLoadInitialSurface();
     FReply HandleOpenSource(FUnifiedScriptAuthoringSpan Span);
     FReply HandleCopyId(FString SemanticId);
     FReply HandleCopyPatch(
@@ -144,7 +144,7 @@ private:
     static FString GetKindLabel(EUnifiedScriptSurfaceTreeItemKind Kind);
     static FSlateColor GetKindColor(EUnifiedScriptSurfaceTreeItemKind Kind);
 
-    FString DemoSurfacePath;
+    FString InitialSurfacePath;
     FString LoadedSurfacePath;
     FString LoadedLayoutPath;
     FDateTime LoadedSurfaceTimestamp;

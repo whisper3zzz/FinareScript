@@ -255,10 +255,19 @@ public sealed class UnrealNativeThunkGeneratorTests
         string fixtureDirectory = Path.Combine(AppContext.BaseDirectory, "UnrealFixtures");
         UnrealReflectionManifest manifest = UnrealReflectionJson.Deserialize(File.ReadAllText(
             Path.Combine(fixtureDirectory, "UEUnifiedScriptRuntime.reflection.json")));
+        UnrealApiContract contract = UnrealApiContractJson.Deserialize(File.ReadAllText(
+            Path.Combine(fixtureDirectory, "UEUnifiedScriptRuntime.api-contract.json")));
+        UnrealApiContractProjection projection = UnrealApiContractProjector.Project(
+            manifest,
+            contract);
         string expected = File.ReadAllText(
             Path.Combine(fixtureDirectory, "UEUnifiedScriptRuntime.native-thunks.generated.cpp"));
 
-        UnrealNativeThunkGenerationResult result = new UnrealNativeThunkGenerator().Generate(manifest);
+        UnrealNativeThunkGenerationResult result = new UnrealNativeThunkGenerator().Generate(
+            projection.Reflection,
+            new UnrealNativeThunkGeneratorOptions(
+                projection.Contract.NativeHeader,
+                projection.Contract.NativeNamespace));
 
         Assert.Empty(result.Diagnostics);
         Assert.Equal(expected.ReplaceLineEndings("\n"), result.Source);

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "unifiedscript.unreal-script-deployment/v0.1",
+  "scripts": [
+    {
+      "assetPath": "/Game/UnifiedScript/__SCRIPT_NAME__/SA___SCRIPT_NAME__",
+      "assemblyPath": "{PluginDir}/Binaries/Managed/Scripts/__ASSEMBLY_NAME__.dll",
+      "typeName": "__MANAGED_NAMESPACE__.__SCRIPT_NAME__",
+      "requiredTargetClass": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor",
+      "sourcePath": "{ProjectDir}/Managed/__ASSEMBLY_NAME__/__SCRIPT_NAME__.cs",
+      "declarationPath": "{PluginDir}/Binaries/Managed/Scripts/__ASSEMBLY_NAME__.asset.json",
+      "declarationAssetPath": "__PROJECT_NAME__/__SCRIPT_NAME__",
+      "authoringSurfacePath": "{PluginDir}/Binaries/Managed/Scripts/__ASSEMBLY_NAME__.surface.json",
+      "apiNodeCatalogPath": "{ProjectDir}/Generated/__PROJECT_NAME__.api-nodes.json",
+      "authoringServerUrl": "http://127.0.0.1:4173"
+    }
+  ]
+}

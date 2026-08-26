@@ -4,7 +4,8 @@ param(
     [ValidateSet('Development', 'Shipping')]
     [string[]]$Configurations = @('Development', 'Shipping'),
     [ValidateRange(10, 300)]
-    [int]$SmokeTimeoutSeconds = 60
+    [int]$SmokeTimeoutSeconds = 60,
+    [string]$OutputDirectory
 )
 
 $ErrorActionPreference = 'Stop'
@@ -30,7 +31,13 @@ foreach ($requiredPath in @($runUat, $dotnetExe, $projectPath, $managedProject))
 }
 
 $runId = Get-Date -Format 'yyyyMMdd-HHmmss'
-$runDirectory = Join-Path $repoRoot "artifacts\ue\release\$runId"
+$runDirectory = if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
+    Join-Path $repoRoot "artifacts\ue\release\$runId"
+} elseif ([IO.Path]::IsPathRooted($OutputDirectory)) {
+    [IO.Path]::GetFullPath($OutputDirectory)
+} else {
+    [IO.Path]::GetFullPath((Join-Path (Get-Location).Path $OutputDirectory))
+}
 New-Item -ItemType Directory -Force -Path $runDirectory | Out-Null
 
 $defaultEnginePath = Join-Path $repoRoot 'HostProject\Config\DefaultEngine.ini'

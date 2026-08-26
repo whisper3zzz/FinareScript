@@ -73,9 +73,7 @@ TSharedRef<SWidget> MakeInspectorValue(const FString& Label, const FString& Valu
 
 void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
 {
-    DemoSurfacePath = InArgs._InitialSurfacePath.IsEmpty()
-        ? TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.surface.json")
-        : InArgs._InitialSurfacePath;
+    InitialSurfacePath = InArgs._InitialSurfacePath;
 
     AuthoringGraph.Reset(NewObject<UUnifiedScriptEdGraph>(
         GetTransientPackage(),
@@ -166,8 +164,19 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
                 .Padding(4.0f, 0.0f)
                 [
                     SNew(SButton)
-                    .Text(LOCTEXT("Demo", "Demo"))
-                    .OnClicked(this, &SUnifiedScriptAuthoringSurface::HandleLoadDemo)
+                    .Text(LOCTEXT("InitialSurface", "Initial Surface"))
+                    .ToolTipText(LOCTEXT(
+                        "InitialSurfaceTip",
+                        "Reload the surface path supplied by the project integration."))
+                    .Visibility_Lambda([this]()
+                    {
+                        return InitialSurfacePath.IsEmpty()
+                            ? EVisibility::Collapsed
+                            : EVisibility::Visible;
+                    })
+                    .OnClicked(
+                        this,
+                        &SUnifiedScriptAuthoringSurface::HandleLoadInitialSurface)
                 ]
             ]
             + SVerticalBox::Slot()
@@ -430,8 +439,15 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
         FWidgetActiveTimerDelegate::CreateSP(
             this,
             &SUnifiedScriptAuthoringSurface::HandleAutoReload));
-    PathTextBox->SetText(FText::FromString(DemoSurfacePath));
-    if (!LoadSurface(DemoSurfacePath))
+    PathTextBox->SetText(FText::FromString(InitialSurfacePath));
+    if (InitialSurfacePath.IsEmpty())
+    {
+        SetStatus(
+            TEXT("Select a UnifiedScript Data Asset or browse to an Authoring Surface."),
+            false);
+        RebuildInspector(nullptr);
+    }
+    else if (!LoadSurface(InitialSurfacePath))
     {
         RebuildInspector(nullptr);
     }
@@ -539,11 +555,10 @@ FReply SUnifiedScriptAuthoringSurface::HandleLoadSelectedAsset()
     return FReply::Handled();
 }
 
-FReply SUnifiedScriptAuthoringSurface::HandleLoadDemo()
+FReply SUnifiedScriptAuthoringSurface::HandleLoadInitialSurface()
 {
     LoadedScriptAsset.Reset();
-    ServerUrlTextBox->SetText(FText::FromString(TEXT("http://127.0.0.1:4173")));
-    LoadSurface(DemoSurfacePath);
+    LoadSurface(InitialSurfacePath);
     return FReply::Handled();
 }
 

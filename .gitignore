@@ -25,6 +25,7 @@ HostProject/Build/
 HostProject/DerivedDataCache/
 HostProject/Intermediate/
 HostProject/Saved/
+HostProject/Content/UnifiedScript/
 HostProject/Plugins/*/Binaries/
 HostProject/Plugins/*/Intermediate/
 HostProject/*.sln

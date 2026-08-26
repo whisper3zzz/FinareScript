@@ -1,0 +1,41 @@
+using System;
+using UnifiedScript;
+using UnifiedScript.Unreal;
+
+namespace __MANAGED_NAMESPACE__;
+
+[ScriptAsset("__PROJECT_NAME__/__SCRIPT_NAME__")]
+public sealed class __SCRIPT_NAME__ : IUnrealManagedScript
+{
+    [Expose(InstanceEditable = true, SaveGame = true, Category = "UnifiedScript")]
+    public int StartValue { get; set; } = 1;
+
+    [Visual]
+    public int AddClamped(int value, int delta)
+    {
+        int result = value + delta;
+        if (result > 100)
+        {
+            result = 100;
+        }
+
+        return result;
+    }
+
+    public void OnStart(UnrealScriptContext context)
+    {
+        StartValue = AddClamped(StartValue, 1);
+    }
+
+    public void OnTick(float deltaSeconds)
+    {
+        if (deltaSeconds < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(deltaSeconds));
+        }
+    }
+
+    public void OnStop()
+    {
+    }
+}

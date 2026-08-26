@@ -113,8 +113,6 @@ private:
             .TabRole(ETabRole::NomadTab)
             [
                 SNew(SUnifiedScriptAuthoringSurface)
-                .InitialSurfacePath(
-                    TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.surface.json"))
             ];
     }
 

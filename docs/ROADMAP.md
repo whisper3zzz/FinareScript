@@ -1,4 +1,93 @@
-# Roadmap
+# UnifiedScript product roadmap
+
+This document is the canonical execution queue for UnifiedScript. It records
+both the evidence-backed foundation and the ordered path from the current
+BlockBreaker package to a production alternative to Puerts. Milestone documents
+explain individual contracts; this file decides what is worked on next.
+
+## Product north star
+
+UnifiedScript should provide a practical Unreal gameplay scripting product with:
+
+- one semantic program that can be edited as restricted C# or as a Blueprint-like
+  visual graph without maintaining two implementations;
+- generated, type-safe Unreal bindings instead of project-specific handwritten
+  facades;
+- World-safe lifetime, reload, event, async, and packaged-build behavior;
+- fast scalar calls plus shared snapshots and batched command/query paths for
+  frame-critical gameplay;
+- reproducible evidence that compares complete workloads with Puerts rather than
+  relying on one favorable API microbenchmark.
+
+The goal is not source-level JavaScript compatibility. The product wins by
+combining stronger authoring, safer contracts, and lower end-to-end gameplay
+cost.
+
+## How this roadmap is executed
+
+1. **Follow the cursor.** Work starts from the first unchecked slice in the
+   active milestone below. An older unchecked research item does not preempt the
+   cursor unless it blocks that slice.
+2. **Finish vertical slices.** A slice includes implementation, generated
+   artifacts, proportional tests, user-facing documentation, and reproducible
+   evidence. A compile alone is not completion.
+3. **Keep the baseline green.** Every product slice must preserve deterministic
+   .NET tests, repository validation, the relevant UE build/Automation gates,
+   and any affected packaged or performance gate.
+4. **Update this file with the code.** Check off only verified work, record a
+   short evidence reference, and advance the cursor to one next slice.
+5. **Control scope changes.** Crash, data-loss, ABI, and active-engine
+   compatibility failures may interrupt the queue. Other ideas go into the
+   later milestone that owns them.
+
+When the user asks to "continue" or "continue iterating" without choosing a
+different target, it means: implement the first unchecked slice under the
+current cursor, validate it, and advance this document.
+
+## Current execution cursor
+
+Last refreshed: **2026-08-26**
+
+- Active milestone: **M7 — General gameplay API and runtime completeness**
+- Next slice: **M7.1 — Binding coverage matrix**
+- Primary engine gate: **Unreal Engine 5.8.1 release build at `D:\UE_5.8`**
+- Product proof: **self-contained Win64 BlockBreaker demo**
+
+## Verified baseline
+
+The forward plan starts from this locally reproduced baseline. Results remain
+machine-local unless an artifact explicitly says otherwise.
+
+| Gate | Verified result |
+| --- | --- |
+| Main source | `9b5b6ec` (`feat: package deliverable BlockBreaker demo`) |
+| Comparison source | `a6bee1b` (`feat: complete UnifiedScript gameplay demo`) |
+| Managed tests | 441 / 441 passed |
+| Repository validator | 42 / 42 passed |
+| UE 5.8.1 native build | passed |
+| `UnifiedScript.Unreal` Automation | 10 / 10 passed |
+| BlockBreaker workload | 10,000 frames, three trials, one shot, one hit, two command completions per trial |
+| Gameplay boundary | 120,027 ABI v3 calls, zero legacy calls |
+| Matched local median | UnifiedScript 3,497.508 ms; Puerts 3,901.037 ms; ratio 0.896559 |
+| Deliverable smoke | 300 frames, one shot, one hit, two command completions, zero legacy calls |
+| Deliverable report | `artifacts/demo/blockbreaker-20260826-120227/demo-delivery.json` |
+
+## Release ladder
+
+| Level | Meaning | State |
+| --- | --- | --- |
+| R0 foundation | Deterministic language, graph, patch, CoreCLR, and UE adapter contracts | Complete |
+| R1 demonstrable alpha | A packaged sample runs meaningful gameplay without Puerts | Complete |
+| R2 adoptable alpha | A second UE project can install, generate, run, and package without repository-specific glue | Active — M6.3 |
+| R3 product beta | Practical gameplay API coverage, complete visual/code loop, debugging, and migration workflow | Queued — M7 to M9 |
+| R4 release candidate | Broad performance, soak, packaging, upgrade, and CI evidence | Queued — M10 to M11 |
+| R5 1.0 | Versioned SDK and plugin distribution with supported compatibility and migration policy | Queued — M12 |
+
+## Evidence-backed foundation
+
+The completed milestones below are retained as the historical acceptance
+record. Their remaining language-completeness items are routed into the forward
+product milestones instead of silently competing with the active cursor.
 
 ## M0 — Repository foundation
 
@@ -40,10 +129,10 @@ Outcome: Roslyn symbols bind into a language-independent type/effect model.
 - [x] cross-file type and overload binding
 - [x] versioned method-effect catalog overrides
 - [x] semantic configuration identity for references and effect rules
-- [ ] flow-sensitive nullability state
+- [ ] flow-sensitive nullability state (scheduled in M8.5)
 - [x] `.csproj`/MSBuild and NuGet reference loading
-- [ ] configurable API allow/deny catalog
-- [ ] semantic diagnostics for unsupported APIs
+- [ ] configurable API allow/deny catalog (scheduled in M7.1)
+- [ ] semantic diagnostics for unsupported APIs (scheduled in M7.1)
 
 ## M3 — Bidirectional source projection
 
@@ -146,9 +235,11 @@ Outcome: practical gameplay methods are fully visualizable.
 - [x] automatic temporary extraction for shared computed values
 - [x] structured local/branch/loop/return creation and statement deletion from UE
 - [ ] arbitrary control-wire rewiring beyond structured region operations
+  (scheduled in M8.1)
 - [ ] pattern-only/conditional-disposal, ref, and async `foreach` variants
-- [ ] `switch` and supported patterns
-- [ ] deterministic temporary naming
+  (scheduled in M8.5)
+- [ ] `switch` and supported patterns (scheduled in M8.1)
+- [ ] deterministic temporary naming (scheduled in M8.1)
 
 ## M5 — CoreCLR execution backend
 
@@ -167,9 +258,9 @@ Outcome: text and graph versions compile to and execute the same IL.
 - [x] cooperative CoreCLR statement traps with real pause/resume
 - [x] live CLR stack, bounded graph-safe top-frame locals, and step-over
 - [x] generation-safe in-process loopback debug transport
-- native managed-debug traps, deeper-frame locals, expression evaluation, and
-  remote transport framing
-- async invocation and cancellation/time-budget contract
+- [ ] native managed-debug traps, deeper-frame locals, expression evaluation,
+  and remote transport framing (scheduled in M9.1-M9.3)
+- [ ] async invocation and cancellation/time-budget contract (scheduled in M7.2)
 
 ## M5.5 — Script asset and authoring experience
 
@@ -248,6 +339,7 @@ Outcome: the proven language pipeline becomes usable from UE.
   with structured C# output
 - [x] per-function `.usgraph` position persistence and atomic sidecar save
 - [ ] arbitrary control-wire authoring beyond structured block operations
+  (scheduled in M8.1)
 - [x] self-contained Win64 cook and packaging strategy
 
 ## M6.2 — Production Unreal interop and release gates
@@ -255,8 +347,8 @@ Outcome: the proven language pipeline becomes usable from UE.
 Outcome: generated gameplay bindings cover practical UE values through a
 measured call path and survive packaged Win64 builds.
 
-Status: active. Runtime, interop, data-plane, comparison, and Win64 packaging
-gates are implemented; Graph Authoring Beta and native debugging remain open.
+Status: complete for the production interop and packaged-demo baseline. Graph
+Authoring Beta and native debugging are deliberately owned by M8 and M9.
 
 - [x] restore and freeze the UE 5.8 editor, World demo, .NET, and validator baseline
 - [x] freeze independent ABI v3 value/call-frame/table layouts and ownership rules
@@ -278,4 +370,387 @@ gates are implemented; Graph Authoring Beta and native debugging remain open.
 - [x] single-boundary line, sphere, and box Batch Trace with World-scoped handles
 - [x] BlockBreaker shot migration from trace/damage/emitter facade calls to the gameplay data plane
 - [x] Win64 Development/Shipping cook, dependency closure, and packaged smoke test
-- [ ] Graph Authoring Beta plus native debug traps, deeper locals, and evaluation
+- [x] self-contained 300-frame deliverable BlockBreaker smoke and hashed delivery report
+
+## M6.3 — Adoptable project alpha
+
+Outcome: a developer can add UnifiedScript to another UE 5.8 project, generate
+its contracts, run scripts, and package the project without knowing this
+repository's internal build sequence.
+
+Status: **complete**.
+
+### M6.3.1 — One-command project onboarding
+
+- [x] accept an engine root or resolved `EngineAssociation`, a `.uproject`,
+  selected modules/types, and an output policy as explicit inputs
+- [x] discover and validate the plugin, .NET SDK/runtime, Unreal build tools,
+  project modules, and writable generated locations before changing files
+- [x] run reflection export, contract-driven managed wrapper and
+  native thunk generation, deployment-manifest sync, managed build, and native
+  validation through one orchestrated command
+- [x] support idempotent `-ValidateOnly` and ordinary apply modes with stable,
+  actionable failure categories
+- [x] prove the same command against both `HostProject` and BlockBreaker with no
+  machine-specific absolute path committed to source
+
+Acceptance: start from a clean copy of either consumer, invoke one documented
+command, then pass contract validation, native build, managed startup, and a
+second no-diff validation run.
+
+Evidence (2026-08-26): `tools/setup-unreal-project.ps1` passed Apply for both
+UE 5.8.1 consumers and a following ValidateOnly run. HostProject passed two UE
+builds, 68/68 native contract members, one Script Asset, deterministic C#/C++/
+node/coverage outputs, and 10/10 Automation tests. BlockBreaker passed two UE
+builds, 43/43 native members, two Script Assets, and deterministic outputs.
+
+### M6.3.2 — Distributable SDK and plugin bundle
+
+- [x] assemble the source plugin, managed runtime, CLI/tooling, schemas,
+  templates, and version metadata into one deterministic SDK archive
+- [x] separate engine-independent managed payloads from engine-version-specific
+  native build output
+- [x] verify hashes, required files, ABI/schema compatibility, and accidental
+  absolute paths before publishing an archive
+- [x] install the archive into a clean project copy and remove any dependency
+  on the UnifiedScript repository checkout
+
+Acceptance: the installed SDK passes M6.3.1 and packages a runnable Win64 build
+from an isolated directory.
+
+Evidence (2026-08-26): `tools/package-unifiedscript-sdk.ps1` produced the same
+SHA-256 on two consecutive `0.1.0-m6.3-alpha.1` builds. Its manifest covers all
+payload files plus UE 5.8/.NET 10, ABI v2/v3/v4, and schema compatibility while
+the plugin payload contains no native `Binaries` or `Intermediate` output. A
+Git-exported BlockBreaker copy with its plugin excluded installed solely from
+the SDK archive, passed packaged-layout onboarding (38 reflected types, 43/43
+native members, two Script Assets, deterministic outputs), built/cooked/staged/
+paked, and passed the runnable 300-frame gate with one shot, one hit, two
+gameplay commands, 3,627 fast/call-frame calls, and zero legacy calls.
+
+### M6.3.3 — Project-agnostic sample and templates
+
+- [x] convert `HostProject` into the minimal onboarding fixture while keeping
+  BlockBreaker as the realistic gameplay fixture
+- [x] provide Script Asset, C# type, project-contract, deployment-manifest, and
+  build-target templates with placeholders instead of sample-specific names
+- [x] ensure generated code contains no BlockBreaker or fixture behavior in the
+  runtime/plugin implementation
+- [x] add a first-script walkthrough that ends in editor play and packaged play
+
+Acceptance: a new script type can be created, visually opened, hot reloaded,
+and packaged without copying files from either sample by hand.
+
+Evidence (2026-08-26): the SDK-installed `new-unifiedscript-project.ps1`
+created a clean `HostScaffold.UnifiedScript.FirstScript` project, project-owned
+contract/deployment/onboarding files, one Script Asset, and all Graph/HIR/
+semantics/Declaration IR/Surface outputs in an isolated Git export. Packaged-
+layout onboarding reflected two project types and generated 16/16 native
+members with zero fallback or rejected members. The project-agnostic authoring
+launcher initialized stable identities and served a ready workspace containing
+that script, while the native Slate surface retained its tested Apply & Reload
+path. A clean UE 5.8.1 `BuildCookRun` then built, cooked, paked, staged, and
+archived the generated managed assembly and authoring artifacts. The plugin
+implementation contains no BlockBreaker, Demo, or DamagePolicy fixture behavior;
+the packaged-smoke harness now belongs to the HostProject fixture. The final SDK
+archive contains 148 hashed files and reproduced SHA-256
+`a2f28a31baa2954e5d27e7fc55771a00cdea5e0443bd4787606bbcfe0ba6dd03`
+on two consecutive builds. Main-source regression passed 441/441 managed tests,
+41/41 repository invariants, two UE editor builds, deterministic regeneration,
+asset deployment, and 10/10 Automation tests.
+
+### M6.3.4 — Alpha acceptance and failure UX
+
+- [x] add a single alpha acceptance runner that aggregates clean generation,
+  managed tests, validator, UE build, Automation, package smoke, and reports
+- [x] print the failed phase, relevant log, generated artifact, and safe retry
+  command instead of requiring manual log archaeology
+- [x] publish a versioned machine-readable acceptance report and a concise
+  human summary
+
+Acceptance: one report proves or rejects the complete R2 claim. Completing this
+slice advances the cursor to M7.
+
+Evidence (2026-08-26): `tools/run-unifiedscript-alpha-acceptance.ps1` first
+proved its failure contract with `USACC1001`, a persisted failed JSON/Markdown
+pair, the owning phase, and a non-destructive retry. Its final complete UE
+5.8.1 run then passed in 135,150 ms and wrote
+`artifacts/acceptance/20260826-161229/alpha-acceptance.json` using schema
+`unifiedscript.alpha-acceptance/v0.1`. The single report records 441/441 managed
+tests, 42/42 repository invariants, 68/68 native contract members, 10/10 Automation tests,
+two successful editor builds and deterministic regeneration, followed by a
+Development Build/Cook/Stage/Pak/Archive containing 251 files and a packaged
+CoreCLR Start/Tick/Stop smoke with exit code zero. Every phase owns a separate
+log, output list, duration, exit code, and directly executable safe retry.
+
+## M7 — General gameplay API and runtime completeness
+
+Outcome: generated contracts cover ordinary Unreal gameplay code broadly
+enough that BlockBreaker and a second gameplay slice need no handwritten
+project facade for supported engine operations.
+
+### M7.1 — Binding coverage matrix
+
+- [ ] cover inheritance, interfaces, overloads, default parameters, static
+  members, Blueprint metadata, nested structs, enums, object/class/soft handles,
+  containers, return values, and `out`/`ref` combinations with golden generation
+- [ ] generate explicit allow/deny policy and stable diagnostics for unsafe or
+  unsupported APIs
+- [ ] classify every selected reflected member as direct thunk, CallFrame,
+  data-plane operation, safe reflection fallback, or rejected-with-reason
+- [ ] fail CI when selected project coverage regresses or handwritten generated
+  dispatch reappears
+
+### M7.2 — Services, async, and lifecycle
+
+- [ ] add generated World/static services for timers, input, component lookup,
+  spawn/destroy, resource and async asset loading, collision queries, and common
+  gameplay events
+- [ ] define task/latent completion, cancellation, timeout, World teardown, and
+  hot-reload ownership as one versioned contract
+- [ ] stress object deletion, level travel, PIE restart, multiple Worlds, and
+  generation rollover without stale callbacks or leaked managed contexts
+
+### M7.3 — Schema-generated gameplay data plane
+
+- [ ] generate borrowed snapshot, fixed command, completion event, and batched
+  query layouts from versioned schemas instead of handwritten row definitions
+- [ ] add bounded capacity, overflow telemetry, ordering, borrow lifetime, and
+  forward-compatible schema checks
+- [ ] extend the current Transform/Trace/impact/damage slice to representative
+  movement, overlap, attribute, spawn, and query workloads only where profiling
+  proves per-call binding is the wrong boundary
+
+### M7.4 — Full BlockBreaker runtime migration
+
+- [ ] inventory all Puerts scripts, Unreal APIs, delegates, resources, globals,
+  lifecycle hooks, and remaining facade behavior
+- [ ] migrate the complete playable logic through generated contracts or the
+  generic data plane; keep sample-only gameplay outside the plugin
+- [ ] remove the Puerts plugin from the UnifiedScript project and prove editor,
+  packaged, functional, and asset-parity gates
+
+Acceptance: BlockBreaker is a whole-project migration proof rather than a
+single API or shot-path benchmark, and the coverage report contains no
+unexplained manual bridge.
+
+## M8 — Visual/C# Authoring Beta
+
+Outcome: developers can implement and maintain practical gameplay from either
+C# or the UE graph editor, with each view remaining a lossless projection of
+the same semantic program.
+
+### M8.1 — Structured graph editing completeness
+
+- [ ] add `switch` and supported patterns, deterministic temporary naming, and
+  the remaining high-value structured control operations
+- [ ] support safe control-flow reconnection through region-aware transforms;
+  reject irreducible or semantically ambiguous wiring with actionable feedback
+- [ ] make create, delete, reconnect, extract, collapse, copy/paste, undo/redo,
+  and multi-step edits transactional and identity-stable
+
+### M8.2 — Blueprint-grade Unreal experience
+
+- [ ] deliver context-sensitive palette search, favorites/recent nodes, pin
+  promotion and defaults, comments, reroute nodes, zoom/minimap, selection, and
+  keyboard workflows consistent with UE expectations
+- [ ] show concise author-facing node content by default while retaining exact
+  type, effect, source, semantic ID, and generated API information on demand
+- [ ] provide compiler/contract diagnostics, quick fixes, source navigation,
+  diff preview, and failed-transaction rollback in the editor
+
+### M8.3 — Asset, state, event, and API authoring
+
+- [ ] create and edit Script Assets, exposed state, functions, lifecycle hooks,
+  reflected events, and API nodes without editing generated JSON
+- [ ] drive palette categories, tooltips, defaults, latent markers, thread/World
+  restrictions, and deprecation from generated reflection metadata
+- [ ] preserve instance overrides and compatible semantic identities across
+  rename, reload, source edits, and graph edits
+
+### M8.4 — Whole-game round-trip proof
+
+- [ ] author representative BlockBreaker behavior visually, inspect the emitted
+  C#, edit the same logic as C#, and reopen an equivalent graph
+- [ ] run semantic, IL, gameplay-result, asset, and packaged-build equivalence
+  gates after both directions
+- [ ] add conflict and merge tests for external edits, stale surfaces, and
+  simultaneous declaration/body changes
+
+### M8.5 — Language-profile closure
+
+- [ ] implement flow-sensitive nullability and the scheduled `foreach` variants
+  needed by real gameplay scripts
+- [ ] publish the supported Visual C# profile, opaque-code escape boundary, and
+  diagnostics for code that cannot be represented visually
+
+Acceptance: Player and Rifle logic can be changed from either surface and hot
+reloaded into the same running scene without a second Blueprint behavior source.
+
+## M9 — Debugging, reload, and observability Beta
+
+Outcome: UnifiedScript failures can be diagnosed inside Unreal at the source,
+graph, World, generation, and bridge boundaries.
+
+### M9.1 — Native editor debug integration
+
+- [ ] bind semantic breakpoints to current managed generations from the Slate
+  graph and C# source
+- [ ] implement pause/resume, step in/over/out, call stacks, deeper-frame locals,
+  watches, bounded expression evaluation, and breakpoint migration on reload
+- [ ] map exceptions and native bridge failures to source span, graph node,
+  UObject handle, World, and script generation
+
+### M9.2 — Hot-reload reliability
+
+- [ ] make compile, artifact publication, instance state migration, event
+  rebinding, generation swap, rollback, and old-context collection observable
+  phases of one transaction
+- [ ] soak repeated success/failure reload cycles and detect retained AssemblyLoadContexts,
+  UObject handles, delegates, latent work, and stale debug sessions
+
+### M9.3 — Gameplay and bridge profiler
+
+- [ ] attribute time and count to scripts, semantic nodes, World phases, direct
+  thunks, CallFrame calls, reflection fallback, batch queries, commands, events,
+  allocations, and buffer pressure
+- [ ] expose frame timeline and aggregate views in Unreal and emit a portable
+  machine-readable trace for regression comparison
+
+Acceptance: a scripted gameplay defect and a performance regression can both be
+located to a source/graph node and runtime boundary without custom logging.
+
+## M10 — Performance architecture and honest Puerts comparison
+
+Outcome: UnifiedScript is faster on representative end-to-end gameplay, not
+only on a selected scalar call.
+
+### M10.1 — Workload suite
+
+- [ ] version workloads for scalar/property calls, struct/container transfer,
+  delegate storms, per-frame Actor logic, mass entities, batch queries,
+  resource/spawn flows, hot reload, and the complete BlockBreaker project
+- [ ] capture median, p95/p99 frame time, bridge time, calls, bytes copied,
+  allocations, GC, memory high-water mark, startup, reload, and package size
+- [ ] alternate engines and trials, freeze inputs/assets/build configuration,
+  record machine fingerprints, and reject unmatched comparisons
+
+### M10.2 — Shared data and batching optimization
+
+- [ ] use profiler evidence to promote only high-volume stable data into
+  versioned shared snapshots, command/event buffers, or batch APIs
+- [ ] preserve World ownership, generation checks, bounds, deterministic phase
+  visibility, and fallback semantics; managed code never retains raw UE pointers
+- [ ] make schemas generated, extensible, measurable, and debuggable rather than
+  accumulating one-off shared-memory structs
+
+### M10.3 — Performance budgets
+
+- [ ] keep zero steady-state managed allocation on generated fixed-value fast
+  paths and published data-plane loops
+- [ ] prevent regressions in the existing ABI and BlockBreaker gates, with
+  explicit reviewed threshold changes rather than silently moving targets
+- [ ] require the weighted matched gameplay suite to beat Puerts by at least 5%
+  before making the broad product claim; publish neutral or losing results too
+
+Acceptance: the performance report explains where UnifiedScript wins or loses,
+and the broad claim is derived from the versioned suite rather than one API.
+
+## M11 — Production hardening and release candidate
+
+Outcome: the same versioned product survives real project scale, upgrades,
+long sessions, and supported build configurations.
+
+### M11.1 — Reliability and scale
+
+- [ ] run long PIE, travel, multi-World, dedicated-server, reload, GC, object
+  churn, delegate, command-buffer saturation, and fault-injection soaks
+- [ ] enforce bounded memory/queues, deterministic shutdown, failure containment,
+  and useful crash breadcrumbs
+- [ ] test large contracts and script sets for generation time, editor startup,
+  incremental rebuild, and asset churn
+
+### M11.2 — Compatibility and packaging matrix
+
+- [ ] keep UE 5.8.1 as the primary gate and validate each additionally supported
+  engine/platform/configuration explicitly
+- [ ] gate Editor, Development, Shipping, cook, stage, pak, archive, installed
+  SDK, and clean-machine runtime dependency closure
+- [ ] add Linux dedicated server and other platforms only when their CoreCLR,
+  ABI, cook, and lifecycle gates are real; do not imply support from compilation
+
+### M11.3 — Versioning, upgrades, and CI
+
+- [ ] publish compatibility policy and migrations for schemas, artifacts,
+  bindings, Script Assets, ABI tables, saved graph layout, and generated code
+- [ ] add clean CI lanes for managed tests, deterministic generation, UE build,
+  Automation, package smoke, workload performance, and SDK installation
+- [ ] support diagnostics bundles and reproducible reports without collecting
+  project source or sensitive content by default
+
+Acceptance: an RC archive installs and upgrades in clean project copies, passes
+the declared matrix, and survives the soak budget with no unresolved blocker.
+
+## M12 — Migration ecosystem and UnifiedScript 1.0
+
+Outcome: teams can evaluate, migrate, ship, and maintain UnifiedScript without
+requiring repository authors to operate their project.
+
+### M12.1 — Puerts migration workflow
+
+- [ ] scan a Puerts project into an inventory of modules, APIs, lifecycle hooks,
+  assets, delegates, async patterns, and unsupported dynamic behavior
+- [ ] generate a migration plan, API coverage report, stubs/contracts, and
+  side-by-side verification harness; do not promise blind one-click conversion
+- [ ] support incremental coexistence during migration while preventing both
+  runtimes from owning the same gameplay lifecycle accidentally
+
+### M12.2 — SDK, documentation, and samples
+
+- [ ] publish versioned plugin/SDK archives, release notes, upgrade guides,
+  onboarding, authoring, API, debugging, performance, packaging, and migration docs
+- [ ] ship minimal, gameplay, networking/server, data-plane, and visual/code
+  round-trip samples with automated acceptance reports
+- [ ] provide project templates and an API/diagnostic browser generated from the
+  same contracts consumed by the compiler and editor
+
+### M12.3 — Beyond-Puerts differentiators
+
+- [ ] make semantic graph/C# diffs reviewable and mergeable without serialized
+  Blueprint graph noise
+- [ ] let AI tools propose typed semantic patch plans that pass the same compiler
+  and transaction gates as human graph edits
+- [ ] integrate graph/source debugging and profiling so authoring, runtime cost,
+  and Unreal API boundaries are visible in one place
+- [ ] keep the generated data-plane architecture open to new workloads without
+  weakening safety or ABI compatibility
+
+Acceptance: the 1.0 release has an installable SDK, supported compatibility
+matrix, end-to-end migration guide, complete samples, published workload report,
+and no critical acceptance failure.
+
+## Global release gates
+
+Every active milestone inherits these gates when relevant:
+
+- deterministic artifacts: a no-change rerun produces no generated diff;
+- semantic safety: graph and C# edits compile to the same intended program and
+  stale edits fail atomically;
+- runtime safety: no raw UObject pointer crosses as durable managed identity;
+- lifecycle safety: World teardown, reload, delegates, async work, and buffers
+  cannot target a retired generation;
+- packaging: supported builds contain every managed/native dependency and do
+  not depend on a source checkout;
+- performance honesty: only matched, reproducible artifacts support comparative
+  claims;
+- documentation: commands and reported guarantees match the validated product.
+
+## Explicit non-goals
+
+- reproducing JavaScript semantics or every Puerts dynamic pattern;
+- treating Blueprint assets as a second authoritative implementation;
+- exposing UE memory or pointers to managed code for benchmark convenience;
+- allowing arbitrary visual control flow that cannot round-trip safely;
+- claiming engine or platform compatibility that has not passed its build,
+  lifecycle, cook/package, and smoke gates;
+- optimizing every reflected API into shared memory without workload evidence.

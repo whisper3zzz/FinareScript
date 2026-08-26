@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "unifiedscript.unreal-project-onboarding/v0.1",
+  "editorTarget": "UEUnifiedScriptHostEditor",
+  "platform": "Win64",
+  "configuration": "Development",
+  "pluginPath": "../Plugins/UEUnifiedScript",
+  "reflection": {
+    "modules": [
+      "UEUnifiedScriptRuntime"
+    ],
+    "classes": [],
+    "output": "../../samples/Unreal/UEUnifiedScriptRuntime.reflection.json"
+  },
+  "bindings": {
+    "contract": "../../samples/Unreal/UEUnifiedScriptRuntime.api-contract.json",
+    "managedOutput": "../../samples/Unreal/UEUnifiedScriptRuntime.bindings.cs",
+    "nativeOutput": "../Plugins/UEUnifiedScript/Source/UEUnifiedScriptRuntime/Private/Generated/UEUnifiedScriptRuntime.native-thunks.generated.cpp",
+    "nodeCatalogOutput": "../../samples/Unreal/UEUnifiedScriptRuntime.api-nodes.json",
+    "coverageOutput": "../../samples/Unreal/UEUnifiedScriptRuntime.binding-coverage.json",
+    "failOnRejected": true,
+    "requireCompleteNativeCoverage": true
+  },
+  "deployment": {
+    "manifest": "../../samples/Unreal/UnifiedScript.Unreal.Demo.deployment.json",
+    "enabled": true
+  },
+  "managed": {
+    "configuration": "Release",
+    "stageDirectory": "../Plugins/UEUnifiedScript/Binaries/Managed",
+    "projects": [
+      "../../samples/Unreal/UnifiedScript.Unreal.Demo/UnifiedScript.Unreal.Demo.csproj"
+    ]
+  },
+  "validation": {
+    "automationFilter": "UnifiedScript.Unreal",
+    "minimumAutomationTests": 10
+  }
+}

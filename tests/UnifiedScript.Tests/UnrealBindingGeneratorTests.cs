@@ -293,10 +293,17 @@ public sealed class UnrealBindingGeneratorTests
         string fixtureDirectory = Path.Combine(AppContext.BaseDirectory, "UnrealFixtures");
         UnrealReflectionManifest manifest = UnrealReflectionJson.Deserialize(File.ReadAllText(
             Path.Combine(fixtureDirectory, "UEUnifiedScriptRuntime.reflection.json")));
+        UnrealApiContract contract = UnrealApiContractJson.Deserialize(File.ReadAllText(
+            Path.Combine(fixtureDirectory, "UEUnifiedScriptRuntime.api-contract.json")));
+        UnrealApiContractProjection projection = UnrealApiContractProjector.Project(
+            manifest,
+            contract);
         string expected = File.ReadAllText(
             Path.Combine(fixtureDirectory, "UEUnifiedScriptRuntime.bindings.cs"));
 
-        UnrealBindingGenerationResult generated = new UnrealBindingGenerator().Generate(manifest);
+        UnrealBindingGenerationResult generated = new UnrealBindingGenerator().Generate(
+            projection.Reflection,
+            new UnrealBindingGeneratorOptions(projection.Contract.ManagedNamespace));
 
         Assert.Empty(generated.Diagnostics);
         Assert.Equal(expected.ReplaceLineEndings("\n"), generated.Source);

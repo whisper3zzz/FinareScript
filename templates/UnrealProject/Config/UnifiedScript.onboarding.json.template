@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "unifiedscript.unreal-project-onboarding/v0.1",
+  "editorTarget": "__EDITOR_TARGET__",
+  "platform": "Win64",
+  "configuration": "Development",
+  "pluginPath": "../Plugins/UEUnifiedScript",
+  "reflection": {
+    "modules": ["UEUnifiedScriptRuntime"],
+    "classes": [
+      "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor",
+      "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent"
+    ],
+    "output": "../Generated/__PROJECT_NAME__.reflection.json"
+  },
+  "bindings": {
+    "contract": "../Contracts/__PROJECT_NAME__.unreal-api-contract.json",
+    "managedOutput": "../Managed/__ASSEMBLY_NAME__/Generated/Unreal.bindings.generated.cs",
+    "nativeOutput": "../Plugins/UEUnifiedScript/Source/UEUnifiedScriptRuntime/Private/Generated/UEUnifiedScriptRuntime.native-thunks.generated.cpp",
+    "nodeCatalogOutput": "../Generated/__PROJECT_NAME__.api-nodes.json",
+    "coverageOutput": "../Generated/__PROJECT_NAME__.binding-coverage.json",
+    "failOnRejected": true,
+    "requireCompleteNativeCoverage": true
+  },
+  "deployment": {
+    "manifest": "../Deployment/__PROJECT_NAME__.unifiedscript-deployment.json",
+    "enabled": true
+  },
+  "managed": {
+    "configuration": "Release",
+    "stageDirectory": "../Plugins/UEUnifiedScript/Binaries/Managed",
+    "projects": [
+      "../Managed/__ASSEMBLY_NAME__/__ASSEMBLY_NAME__.csproj"
+    ]
+  }
+}
