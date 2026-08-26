@@ -1,6 +1,8 @@
 #include "UnifiedScriptComponent.h"
 
 #include "HAL/FileManager.h"
+#include "HAL/PlatformProcess.h"
+#include "HAL/PlatformProperties.h"
 #include "GameFramework/Actor.h"
 #include "Interfaces/IPluginManager.h"
 #include "Misc/Paths.h"
@@ -16,6 +18,16 @@ namespace UE::UnifiedScript::Component::Private
 {
 constexpr int32 ActorBeginOverlapEvent = 1;
 constexpr int32 ActorEndOverlapEvent = 2;
+
+FString GetAbsoluteProjectDir()
+{
+    FString ProjectDir = FPlatformProperties::RequiresCookedData()
+        ? FPaths::Combine(FPlatformProcess::BaseDir(), TEXT("../.."))
+        : FPaths::ProjectDir();
+    ProjectDir = FPaths::ConvertRelativePathToFull(ProjectDir);
+    FPaths::NormalizeDirectoryName(ProjectDir);
+    return ProjectDir;
+}
 
 uint64 AllocateScriptInstanceId()
 {
@@ -659,6 +671,8 @@ FString UUnifiedScriptComponent::ResolveConfiguredPath(
     const FString& ConfiguredPath) const
 {
     FString Result = ConfiguredPath;
+    const FString ProjectDir =
+        UE::UnifiedScript::Component::Private::GetAbsoluteProjectDir();
     const TSharedPtr<IPlugin> Plugin =
         IPluginManager::Get().FindPlugin(TEXT("UEUnifiedScript"));
     if (Plugin.IsValid())
@@ -672,11 +686,11 @@ FString UUnifiedScriptComponent::ResolveConfiguredPath(
     }
     Result.ReplaceInline(
         TEXT("{ProjectDir}"),
-        *FPaths::ProjectDir(),
+        *ProjectDir,
         ESearchCase::IgnoreCase);
     if (FPaths::IsRelative(Result))
     {
-        Result = FPaths::Combine(FPaths::ProjectDir(), Result);
+        Result = FPaths::Combine(ProjectDir, Result);
     }
     Result = FPaths::ConvertRelativePathToFull(Result);
     FPaths::NormalizeFilename(Result);

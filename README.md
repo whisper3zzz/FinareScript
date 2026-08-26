@@ -382,6 +382,13 @@ borrowed `FHitResult`-compatible rows. BlockBreaker now uses this path for its
 shot trace, impact effect, and damage, and passes the exact-frame headless gate.
 See `docs/UNREAL_GAMEPLAY_DATA_ABI_V4.md` for phase, ownership, and schema rules.
 
+The BlockBreaker slice can also be emitted as a directly runnable Win64 demo.
+`comparison/package-blockbreaker-demo.ps1` regenerates its API contract and
+Script Assets, cooks and archives the project, verifies the packaged CoreCLR and
+managed gameplay assembly, runs a 300-frame gameplay smoke, and writes a
+double-click launcher plus delivery report. See
+`docs/UNREAL_BLOCKBREAKER_DEMO.md`.
+
 `ue-bindings --report` now emits deterministic per-member coverage as native
 thunk, reflected-path fallback, rejected, or deferred type. `--fail-on-rejected`
 makes that report a CI gate. If a generated member ID is absent at runtime, the
