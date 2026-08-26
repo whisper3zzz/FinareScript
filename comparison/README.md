@@ -26,20 +26,23 @@ and median aggregation:
 .\comparison\run-gameplay-comparison.ps1
 ```
 
-The gameplay runner first synchronizes the BlockBreaker deployment manifest
-into target-class-checked Player and Rifle `UUnifiedScriptAsset` packages. Both
+The gameplay runner first builds both runtimes and synchronizes the BlockBreaker
+deployment manifest into target-class-checked Player and Rifle
+`UUnifiedScriptAsset` packages. Both
 scripts must start through those assets, all 19 non-map business assets must be
 byte-identical, the midpoint shot must hit exactly once, and UnifiedScript must
 report zero legacy calls. Per-trial logs and the aggregate report are written
-under `artifacts/comparison/gameplay`.
+under `artifacts/comparison/gameplay`. Compilation and generation are outside
+the measured trials, and even-numbered trials run UnifiedScript first to reduce
+thermal and fixed-order bias.
 
 The migrated shot is no longer a native Gun-facade shortcut. Resource/class
 loading and Actor spawn remain on the generated Binding control plane. The hot
 shot path uses one Gameplay Data Batch Trace, commits emitter and damage rows in
 one command reservation, and consumes their completion events on the next
-managed frame. The current paired gameplay artifact predates this data-plane
-migration and must be regenerated before it is used for a new performance
-claim.
+managed frame. The latest local three-trial median is 3,497.508 ms for
+UnifiedScript and 3,901.037 ms for Puerts, a ratio of 0.896559. Each result also
+requires exactly one shot/hit, both command events, and zero legacy calls.
 
 Run the matched generated `int32(int32, int32)` performance gate with:
 

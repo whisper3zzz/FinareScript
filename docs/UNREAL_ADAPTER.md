@@ -581,6 +581,9 @@ impact emission and damage are committed together through the command buffer;
 the next-frame event view confirms both completions. `FHitResult`-compatible
 trace rows cross no reflected struct boundary on this hot path. The Gun host no
 longer contains resource, trace, cached-hit, effect, or damage facade functions.
+The matched three-trial 10,000-frame gate prepares both runtimes once, alternates
+execution order, and currently reports a local median of 3,497.508 ms for
+UnifiedScript versus 3,901.037 ms for Puerts.
 
 The performance gate builds managed code in Release, warms both runtimes with
 4,096 calls, measures five 100,000-call samples, and uses the median. A

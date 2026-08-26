@@ -25,6 +25,15 @@ void FUnifiedScriptNativeBridgeContext::AttachSharedDataPlane(
     SharedDataPlane = InSharedDataPlane;
 }
 
+void FUnifiedScriptNativeBridgeContext::AttachGameplayDataPlane(
+    FUnifiedScriptGameplayDataPlane* InGameplayDataPlane)
+{
+    check(IsInGameThread());
+    FScopeLock Lock(&BridgeLock);
+    check(Bridge != nullptr);
+    GameplayDataPlane = InGameplayDataPlane;
+}
+
 bool FUnifiedScriptNativeBridgeContext::TryRetain()
 {
     FScopeLock Lock(&BridgeLock);
@@ -55,6 +64,7 @@ void FUnifiedScriptNativeBridgeContext::Detach()
         FastBridge.store(nullptr, std::memory_order_release);
         Bridge = nullptr;
         SharedDataPlane = nullptr;
+        GameplayDataPlane = nullptr;
         PendingCallFrameResult.Reset();
         EventSubscriptions.GenerateValueArray(Subscriptions);
         EventSubscriptions.Reset();
@@ -124,6 +134,18 @@ bool FUnifiedScriptNativeBridgeContext::AcquireTransformSnapshot(
     FScopeLock Lock(&BridgeLock);
     return Bridge != nullptr && SharedDataPlane != nullptr &&
         SharedDataPlane->AcquireTransformSnapshot(OutView);
+}
+
+bool FUnifiedScriptNativeBridgeContext::ExecuteGameplayData(
+    TFunctionRef<bool(FUnifiedScriptGameplayDataPlane&)> Operation)
+{
+    if (!IsInGameThread())
+    {
+        return false;
+    }
+    FScopeLock Lock(&BridgeLock);
+    return Bridge != nullptr && GameplayDataPlane != nullptr &&
+        Operation(*GameplayDataPlane);
 }
 
 namespace UE::UnifiedScript::NativeTransport::Private
@@ -1857,6 +1879,112 @@ uint8 AcquireTransformSnapshot(
         ? 1
         : 0;
 }
+
+uint8 BeginCommandBatch(
+    void* Context,
+    uint32 Capacity,
+    FUnifiedScriptCommandBatchViewV4* OutView)
+{
+    if (Context == nullptr || OutView == nullptr)
+    {
+        return 0;
+    }
+    return static_cast<FUnifiedScriptNativeBridgeContext*>(Context)
+        ->ExecuteGameplayData([&](FUnifiedScriptGameplayDataPlane& DataPlane)
+        {
+            return DataPlane.BeginCommandBatch(Capacity, *OutView);
+        }) ? 1 : 0;
+}
+
+uint8 CommitCommandBatch(void* Context, uint64 BatchToken, uint32 CommandCount)
+{
+    if (Context == nullptr)
+    {
+        return 0;
+    }
+    return static_cast<FUnifiedScriptNativeBridgeContext*>(Context)
+        ->ExecuteGameplayData([&](FUnifiedScriptGameplayDataPlane& DataPlane)
+        {
+            return DataPlane.CommitCommandBatch(BatchToken, CommandCount);
+        }) ? 1 : 0;
+}
+
+uint8 AcquireGameplayEvents(
+    void* Context,
+    FUnifiedScriptGameplayEventViewV4* OutView)
+{
+    if (Context == nullptr || OutView == nullptr)
+    {
+        return 0;
+    }
+    return static_cast<FUnifiedScriptNativeBridgeContext*>(Context)
+        ->ExecuteGameplayData([&](FUnifiedScriptGameplayDataPlane& DataPlane)
+        {
+            return DataPlane.AcquireEvents(*OutView);
+        }) ? 1 : 0;
+}
+
+uint8 BeginTraceBatch(
+    void* Context,
+    uint32 Capacity,
+    FUnifiedScriptTraceRequestViewV4* OutView)
+{
+    if (Context == nullptr || OutView == nullptr)
+    {
+        return 0;
+    }
+    return static_cast<FUnifiedScriptNativeBridgeContext*>(Context)
+        ->ExecuteGameplayData([&](FUnifiedScriptGameplayDataPlane& DataPlane)
+        {
+            return DataPlane.BeginTraceBatch(Capacity, *OutView);
+        }) ? 1 : 0;
+}
+
+uint8 ExecuteTraceBatch(
+    void* Context,
+    uint64 BatchToken,
+    uint32 RequestCount,
+    FUnifiedScriptTraceResultViewV4* OutView)
+{
+    if (Context == nullptr || OutView == nullptr)
+    {
+        return 0;
+    }
+    return static_cast<FUnifiedScriptNativeBridgeContext*>(Context)
+        ->ExecuteGameplayData([&](FUnifiedScriptGameplayDataPlane& DataPlane)
+        {
+            return DataPlane.ExecuteTraceBatch(BatchToken, RequestCount, *OutView);
+        }) ? 1 : 0;
+}
+
+void CancelTraceBatch(void* Context, uint64 BatchToken)
+{
+    if (Context == nullptr)
+    {
+        return;
+    }
+    static_cast<FUnifiedScriptNativeBridgeContext*>(Context)
+        ->ExecuteGameplayData([&](FUnifiedScriptGameplayDataPlane& DataPlane)
+        {
+            DataPlane.CancelTraceBatch(BatchToken);
+            return true;
+        });
+}
+
+uint8 GetGameplayPhase(void* Context, uint8* OutPhase, uint64* OutFrameNumber)
+{
+    if (Context == nullptr || OutPhase == nullptr || OutFrameNumber == nullptr)
+    {
+        return 0;
+    }
+    return static_cast<FUnifiedScriptNativeBridgeContext*>(Context)
+        ->ExecuteGameplayData([&](FUnifiedScriptGameplayDataPlane& DataPlane)
+        {
+            *OutPhase = static_cast<uint8>(DataPlane.GetPhase());
+            *OutFrameNumber = DataPlane.GetFrameNumber();
+            return true;
+        }) ? 1 : 0;
+}
 }
 
 UFunction* UUnifiedScriptDelegateProxy::FindOrCreateDispatchFunction(
@@ -2235,6 +2363,39 @@ UEUnifiedScript_GetNativeTransportV2()
         UEUnifiedScript_GetNativeTransportV3(),
         UEUnifiedScript_GetNativeEventTransportV4(),
         UEUnifiedScript_GetSharedDataTransportV4(),
+        UEUnifiedScript_GetGameplayDataTransportV4(),
+    };
+    return &Transport;
+}
+
+extern "C" const FUnifiedScriptGameplayDataTransportV4*
+UEUnifiedScript_GetGameplayDataTransportV4()
+{
+    using namespace UE::UnifiedScript::NativeTransport::Private;
+    constexpr uint64 Capabilities =
+        static_cast<uint64>(EUnifiedScriptGameplayDataCapabilitiesV4::WorldPhaseScheduler) |
+        static_cast<uint64>(EUnifiedScriptGameplayDataCapabilitiesV4::CommandBuffer) |
+        static_cast<uint64>(EUnifiedScriptGameplayDataCapabilitiesV4::EventBuffer) |
+        static_cast<uint64>(EUnifiedScriptGameplayDataCapabilitiesV4::BatchLineTrace) |
+        static_cast<uint64>(EUnifiedScriptGameplayDataCapabilitiesV4::BatchSphereTrace) |
+        static_cast<uint64>(EUnifiedScriptGameplayDataCapabilitiesV4::BatchBoxTrace);
+    static const FUnifiedScriptGameplayDataTransportV4 Transport = {
+        UE::UnifiedScript::GameplayData::AbiVersion,
+        sizeof(FUnifiedScriptGameplayDataTransportV4),
+        sizeof(FUnifiedScriptCommandV4),
+        sizeof(FUnifiedScriptGameplayEventV4),
+        sizeof(FUnifiedScriptTraceRequestV4),
+        sizeof(FUnifiedScriptTraceResultV4),
+        Capabilities,
+        &RetainContext,
+        &ReleaseContext,
+        &BeginCommandBatch,
+        &CommitCommandBatch,
+        &AcquireGameplayEvents,
+        &BeginTraceBatch,
+        &ExecuteTraceBatch,
+        &CancelTraceBatch,
+        &GetGameplayPhase,
     };
     return &Transport;
 }

@@ -56,6 +56,28 @@ public sealed class DemoScript : IUnrealManagedScript
         {
             throw new InvalidOperationException("The World Transform snapshot is invalid.");
         }
+        if (!context.DataPlane.SupportsGameplayData ||
+            context.DataPlane.GameplayPhase != UnrealGameplayDataPhaseV4.ManagedTick)
+        {
+            throw new InvalidOperationException("Gameplay Data ABI v4 is unavailable.");
+        }
+        _ = context.DataPlane.AcquireEvents().Events.Length;
+        using (UnrealCommandBatch commands = context.DataPlane.BeginCommands(1))
+        {
+            commands.Commit(0);
+        }
+        using (UnrealTraceBatch traces = context.DataPlane.BeginTraceBatch(1))
+        {
+            traces.Requests[0] = UnrealTraceRequestV4.Line(
+                UnrealVector.Zero,
+                UnrealVector.Zero,
+                collisionChannel: 3);
+            ReadOnlySpan<UnrealTraceResultV4> results = traces.Execute();
+            if (results.Length != 1 || !results[0].IsSuccess)
+            {
+                throw new InvalidOperationException("Gameplay batch trace failed.");
+            }
+        }
         _component = new UnifiedScriptComponent(context.Host, context.Bridge);
         if (_component.Add(20, 22) != 42)
         {

@@ -99,5 +99,7 @@ observes the two completion events on the following managed frame. Seven Gun
 facade functions and their transient cached hit/effect state remain deleted.
 The current standalone 10,000-frame data-plane run executes one complete
 midpoint shot/hit and reports 120,027 generated ABI v3 calls with zero legacy
-calls. The checked matched Puerts gameplay artifact predates this migration and
-must be regenerated before drawing a new full-workload performance conclusion.
+calls. The current matched three-trial gameplay gate prepares both runtimes
+before measurement, alternates execution order, and reports a median of
+3,497.508 ms for UnifiedScript versus 3,901.037 ms for Puerts on the local UE
+5.8.1 machine (`UnifiedScript/Puerts = 0.896559`).

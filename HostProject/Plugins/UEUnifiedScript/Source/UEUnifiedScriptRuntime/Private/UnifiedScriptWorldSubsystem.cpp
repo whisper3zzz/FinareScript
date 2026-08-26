@@ -37,6 +37,7 @@ void UUnifiedScriptWorldSubsystem::Initialize(FSubsystemCollectionBase& Collecti
     check(ObjectRegistry == nullptr);
     check(InvocationBridge == nullptr);
     check(SharedDataPlane == nullptr);
+    check(GameplayDataPlane == nullptr);
     check(NativeContext == nullptr);
 
     UWorld* World = GetWorld();
@@ -52,6 +53,18 @@ void UUnifiedScriptWorldSubsystem::Initialize(FSubsystemCollectionBase& Collecti
         WorldHostId);
     NativeContext->AttachSharedDataPlane(SharedDataPlane.Get());
     SharedDataPlane->PublishTransformSnapshot();
+    GameplayDataPlane = MakeUnique<FUnifiedScriptGameplayDataPlane>(
+        *World,
+        *ObjectRegistry,
+        WorldHostId);
+    NativeContext->AttachGameplayDataPlane(GameplayDataPlane.Get());
+    GameplayDataPlane->BeginFrame();
+    PreActorTickHandle = FWorldDelegates::OnWorldPreActorTick.AddUObject(
+        this,
+        &UUnifiedScriptWorldSubsystem::HandleWorldPreActorTick);
+    PostActorTickHandle = FWorldDelegates::OnWorldPostActorTick.AddUObject(
+        this,
+        &UUnifiedScriptWorldSubsystem::HandleWorldPostActorTick);
     HostState = EUnifiedScriptWorldHostState::NativeReady;
     FUnifiedScriptCoreClrHost& CoreClrHost = FUnifiedScriptCoreClrHost::Get();
     if (CoreClrHost.Initialize())
@@ -75,29 +88,91 @@ void UUnifiedScriptWorldSubsystem::Initialize(FSubsystemCollectionBase& Collecti
 void UUnifiedScriptWorldSubsystem::Deinitialize()
 {
     check(IsInGameThread());
+    if (PreActorTickHandle.IsValid())
+    {
+        FWorldDelegates::OnWorldPreActorTick.Remove(PreActorTickHandle);
+        PreActorTickHandle.Reset();
+    }
+    if (PostActorTickHandle.IsValid())
+    {
+        FWorldDelegates::OnWorldPostActorTick.Remove(PostActorTickHandle);
+        PostActorTickHandle.Reset();
+    }
     ShutdownNativeRuntime();
     Super::Deinitialize();
 }
 
-void UUnifiedScriptWorldSubsystem::Tick(float DeltaTime)
+void UUnifiedScriptWorldSubsystem::BeginManagedFrame()
 {
-    (void)DeltaTime;
-    if (SharedDataPlane != nullptr && IsNativeRuntimeReady())
+    check(IsInGameThread());
+    if (!IsNativeRuntimeReady())
+    {
+        return;
+    }
+    if (GameplayDataPlane != nullptr &&
+        GameplayDataPlane->GetPhase() ==
+            EUnifiedScriptGameplayDataPhaseV4::ManagedTick)
+    {
+        GameplayDataPlane->EndFrame();
+    }
+    if (SharedDataPlane != nullptr)
     {
         SharedDataPlane->PublishTransformSnapshot();
     }
+    if (GameplayDataPlane != nullptr)
+    {
+        GameplayDataPlane->BeginFrame();
+    }
 }
 
-bool UUnifiedScriptWorldSubsystem::IsTickable() const
+void UUnifiedScriptWorldSubsystem::EndManagedFrame()
 {
-    return SharedDataPlane != nullptr && IsNativeRuntimeReady();
+    check(IsInGameThread());
+    if (GameplayDataPlane != nullptr && IsNativeRuntimeReady())
+    {
+        GameplayDataPlane->EndFrame();
+    }
 }
 
-TStatId UUnifiedScriptWorldSubsystem::GetStatId() const
+EUnifiedScriptGameplayDataPhaseV4
+UUnifiedScriptWorldSubsystem::GetGameplayDataPhase() const
 {
-    RETURN_QUICK_DECLARE_CYCLE_STAT(
-        UUnifiedScriptWorldSubsystem,
-        STATGROUP_Tickables);
+    return GameplayDataPlane != nullptr
+        ? GameplayDataPlane->GetPhase()
+        : EUnifiedScriptGameplayDataPhaseV4::Idle;
+}
+
+uint64 UUnifiedScriptWorldSubsystem::GetGameplayFrameNumber() const
+{
+    return GameplayDataPlane != nullptr
+        ? GameplayDataPlane->GetFrameNumber()
+        : 0;
+}
+
+void UUnifiedScriptWorldSubsystem::HandleWorldPreActorTick(
+    UWorld* World,
+    ELevelTick TickType,
+    float DeltaSeconds)
+{
+    (void)TickType;
+    (void)DeltaSeconds;
+    if (World == GetWorld())
+    {
+        BeginManagedFrame();
+    }
+}
+
+void UUnifiedScriptWorldSubsystem::HandleWorldPostActorTick(
+    UWorld* World,
+    ELevelTick TickType,
+    float DeltaSeconds)
+{
+    (void)TickType;
+    (void)DeltaSeconds;
+    if (World == GetWorld())
+    {
+        EndManagedFrame();
+    }
 }
 
 EUnifiedScriptWorldHostState UUnifiedScriptWorldSubsystem::GetHostState() const
@@ -340,6 +415,11 @@ void UUnifiedScriptWorldSubsystem::ShutdownNativeRuntime()
     {
         SharedDataPlane->Shutdown();
         SharedDataPlane.Reset();
+    }
+    if (GameplayDataPlane != nullptr)
+    {
+        GameplayDataPlane->Shutdown();
+        GameplayDataPlane.Reset();
     }
 
     if (ObjectRegistry != nullptr)

@@ -775,6 +775,26 @@ def main() -> int:
         / "Tests"
         / "UnifiedScriptNativeTransportTests.cpp"
     )
+    unreal_gameplay_data_header_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Public"
+        / "UnifiedScriptGameplayDataPlane.h"
+    )
+    unreal_gameplay_data_source_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Private"
+        / "UnifiedScriptGameplayDataPlane.cpp"
+    )
     unreal_world_host_header_path = (
         ROOT
         / "HostProject"
@@ -886,6 +906,18 @@ def main() -> int:
     )
     unreal_native_event_abi_v4_path = (
         ROOT / "src" / "UnifiedScript.Unreal" / "UnrealNativeEventAbiV4.cs"
+    )
+    unreal_gameplay_data_abi_v4_path = (
+        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealGameplayDataAbiV4.cs"
+    )
+    unreal_gameplay_data_abi_v4_test_path = (
+        ROOT
+        / "tests"
+        / "UnifiedScript.Tests"
+        / "UnrealGameplayDataAbiV4Tests.cs"
+    )
+    unreal_gameplay_data_doc_path = (
+        ROOT / "docs" / "UNREAL_GAMEPLAY_DATA_ABI_V4.md"
     )
     unreal_generation_invocation_bridge_path = (
         ROOT
@@ -1106,6 +1138,8 @@ def main() -> int:
         and unreal_native_transport_header_path.is_file()
         and unreal_native_transport_source_path.is_file()
         and unreal_native_transport_test_path.is_file()
+        and unreal_gameplay_data_header_path.is_file()
+        and unreal_gameplay_data_source_path.is_file()
         and unreal_world_host_header_path.is_file()
         and unreal_world_host_source_path.is_file()
         and unreal_world_host_test_path.is_file()
@@ -1122,6 +1156,9 @@ def main() -> int:
         and unreal_in_process_transport_path.is_file()
         and unreal_native_abi_v3_path.is_file()
         and unreal_native_event_abi_v4_path.is_file()
+        and unreal_gameplay_data_abi_v4_path.is_file()
+        and unreal_gameplay_data_abi_v4_test_path.is_file()
+        and unreal_gameplay_data_doc_path.is_file()
         and unreal_generation_invocation_bridge_path.is_file()
         and unreal_event_binder_path.is_file()
         and unreal_event_binder_test_path.is_file()
@@ -1204,6 +1241,12 @@ def main() -> int:
     unreal_native_transport_test = unreal_native_transport_test_path.read_text(
         encoding="utf-8"
     )
+    unreal_gameplay_data_header = unreal_gameplay_data_header_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_gameplay_data_source = unreal_gameplay_data_source_path.read_text(
+        encoding="utf-8"
+    )
     unreal_world_host_header = unreal_world_host_header_path.read_text(encoding="utf-8")
     unreal_world_host_source = unreal_world_host_source_path.read_text(encoding="utf-8")
     unreal_world_host_test = unreal_world_host_test_path.read_text(encoding="utf-8")
@@ -1229,6 +1272,15 @@ def main() -> int:
     )
     unreal_native_abi_v3 = unreal_native_abi_v3_path.read_text(encoding="utf-8")
     unreal_native_event_abi_v4 = unreal_native_event_abi_v4_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_gameplay_data_abi_v4 = unreal_gameplay_data_abi_v4_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_gameplay_data_abi_v4_test = (
+        unreal_gameplay_data_abi_v4_test_path.read_text(encoding="utf-8")
+    )
+    unreal_gameplay_data_doc = unreal_gameplay_data_doc_path.read_text(
         encoding="utf-8"
     )
     unreal_generation_invocation_bridge = (
@@ -1619,6 +1671,29 @@ def main() -> int:
         "Unreal ABI v4 event transport, attributed binding, or diagnostics are missing",
     )
     checks.append("ABI v4 reverse events are generated, World-scoped, reload-safe, and diagnosable")
+    require(
+        "FUnifiedScriptGameplayDataTransportV4" in unreal_gameplay_data_header
+        and "sizeof(FUnifiedScriptCommandV4) == 224" in unreal_gameplay_data_header
+        and "sizeof(FUnifiedScriptTraceResultV4) == 168" in unreal_gameplay_data_header
+        and "ExecuteCommittedCommands" in unreal_gameplay_data_source
+        and "LineTraceSingleByChannel" in unreal_gameplay_data_source
+        and "SweepSingleByChannel" in unreal_gameplay_data_source
+        and "GameplayDataTransport" in unreal_native_transport_header
+        and "UEUnifiedScript_GetGameplayDataTransportV4"
+        in unreal_native_transport_source
+        and "OnWorldPreActorTick" in unreal_world_host_source
+        and "OnWorldPostActorTick" in unreal_world_host_source
+        and "UnrealCommandBatch" in unreal_gameplay_data_abi_v4
+        and "UnrealGameplayEventSnapshot" in unreal_gameplay_data_abi_v4
+        and "UnrealTraceBatch" in unreal_gameplay_data_abi_v4
+        and "LayoutMatchesNativeGameplayDataContract"
+        in unreal_gameplay_data_abi_v4_test
+        and "CommandEventAndBatchTrace" in unreal_native_transport_test
+        and "Gameplay Data ABI v4" in unreal_demo_source
+        and "World phase scheduler" in unreal_gameplay_data_doc,
+        "World phase, command/event buffer, or Batch Trace contract is missing",
+    )
+    checks.append("UE gameplay data plane batches World commands, events, and traces")
     require(
         unreal_benchmark_thresholds["schemaVersion"]
         == "unifiedscript.unreal-benchmark-thresholds/v0.2"

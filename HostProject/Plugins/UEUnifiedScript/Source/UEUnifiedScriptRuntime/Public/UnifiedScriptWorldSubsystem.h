@@ -23,16 +23,22 @@ enum class EUnifiedScriptWorldHostState : uint8
  */
 UCLASS()
 class UEUNIFIEDSCRIPTRUNTIME_API UUnifiedScriptWorldSubsystem final
-    : public UTickableWorldSubsystem
+    : public UWorldSubsystem
 {
     GENERATED_BODY()
 
 public:
     virtual void Initialize(FSubsystemCollectionBase& Collection) override;
     virtual void Deinitialize() override;
-    virtual void Tick(float DeltaTime) override;
-    virtual bool IsTickable() const override;
-    virtual TStatId GetStatId() const override;
+
+    /** Publishes snapshots/events and opens the managed command/trace phase. */
+    void BeginManagedFrame();
+
+    /** Closes the managed phase and executes committed commands on the Game Thread. */
+    void EndManagedFrame();
+
+    EUnifiedScriptGameplayDataPhaseV4 GetGameplayDataPhase() const;
+    uint64 GetGameplayFrameNumber() const;
 
     EUnifiedScriptWorldHostState GetHostState() const;
     bool IsNativeRuntimeReady() const;
@@ -96,14 +102,19 @@ public:
     const FUnifiedScriptNativeTransportV2* GetNativeTransport() const;
 
 private:
+    void HandleWorldPreActorTick(UWorld* World, ELevelTick TickType, float DeltaSeconds);
+    void HandleWorldPostActorTick(UWorld* World, ELevelTick TickType, float DeltaSeconds);
     void ShutdownNativeRuntime();
 
     EUnifiedScriptWorldHostState HostState = EUnifiedScriptWorldHostState::Stopped;
     TUniquePtr<FUnifiedScriptObjectRegistry> ObjectRegistry;
     TUniquePtr<FUnifiedScriptInvocationBridge> InvocationBridge;
     TUniquePtr<FUnifiedScriptSharedDataPlane> SharedDataPlane;
+    TUniquePtr<FUnifiedScriptGameplayDataPlane> GameplayDataPlane;
     FUnifiedScriptNativeBridgeContext* NativeContext = nullptr;
     uint64 WorldHostId = 0;
+    FDelegateHandle PreActorTickHandle;
+    FDelegateHandle PostActorTickHandle;
 
     UPROPERTY(Transient)
     TArray<TObjectPtr<UObject>> LoadedResources;

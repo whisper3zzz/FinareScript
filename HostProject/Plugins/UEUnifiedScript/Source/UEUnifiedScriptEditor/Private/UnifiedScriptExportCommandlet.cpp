@@ -23,7 +23,7 @@ int32 UUnifiedScriptExportCommandlet::Main(const FString& Params)
     }
 
     FString ModuleList;
-    if (FParse::Value(*Params, TEXT("Modules="), ModuleList))
+    if (FParse::Value(*Params, TEXT("Modules="), ModuleList, false))
     {
         ModuleList.ParseIntoArray(Options.Modules, TEXT(","), true);
     }
@@ -33,7 +33,7 @@ int32 UUnifiedScriptExportCommandlet::Main(const FString& Params)
     }
 
     FString ClassList;
-    if (FParse::Value(*Params, TEXT("Classes="), ClassList))
+    if (FParse::Value(*Params, TEXT("Classes="), ClassList, false))
     {
         ClassList.ParseIntoArray(Options.ClassPaths, TEXT(","), true);
     }

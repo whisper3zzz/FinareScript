@@ -4,6 +4,7 @@
 #include "HAL/CriticalSection.h"
 #include "Templates/Function.h"
 #include "UObject/StrongObjectPtr.h"
+#include "UnifiedScriptGameplayDataPlane.h"
 #include "UnifiedScriptInvocationBridge.h"
 #include "UnifiedScriptSharedDataPlane.h"
 
@@ -168,6 +169,7 @@ public:
     explicit FUnifiedScriptNativeBridgeContext(FUnifiedScriptInvocationBridge& InBridge);
 
     void AttachSharedDataPlane(FUnifiedScriptSharedDataPlane* InSharedDataPlane);
+    void AttachGameplayDataPlane(FUnifiedScriptGameplayDataPlane* InGameplayDataPlane);
     bool TryRetain();
     void Release();
     void Detach();
@@ -187,6 +189,8 @@ public:
         uint64& OutSubscriptionId);
     bool UnsubscribeEvent(uint64 SubscriptionId);
     bool AcquireTransformSnapshot(FUnifiedScriptSharedSnapshotViewV4& OutView);
+    bool ExecuteGameplayData(
+        TFunctionRef<bool(FUnifiedScriptGameplayDataPlane&)> Operation);
 
 private:
     ~FUnifiedScriptNativeBridgeContext() = default;
@@ -196,6 +200,7 @@ private:
     FUnifiedScriptInvocationBridge* Bridge = nullptr;
     std::atomic<FUnifiedScriptInvocationBridge*> FastBridge{nullptr};
     FUnifiedScriptSharedDataPlane* SharedDataPlane = nullptr;
+    FUnifiedScriptGameplayDataPlane* GameplayDataPlane = nullptr;
     FPendingCallFrameResult PendingCallFrameResult;
     uint64 NextEventSubscriptionId = 1;
     TMap<uint64, TStrongObjectPtr<UObject>> EventSubscriptions;
@@ -244,6 +249,8 @@ struct FUnifiedScriptNativeTransportV2
     const FUnifiedScriptNativeEventTransportV4* EventTransport = nullptr;
     /** Optional zero-copy World snapshot ABI; older v2 clients ignore this suffix. */
     const FUnifiedScriptSharedDataTransportV4* SharedDataTransport = nullptr;
+    /** Optional command/event/trace ABI; older v2 clients ignore this suffix. */
+    const FUnifiedScriptGameplayDataTransportV4* GameplayDataTransport = nullptr;
 };
 
 /**
@@ -458,8 +465,8 @@ static_assert(
     STRUCT_OFFSET(FUnifiedScriptNativeTransportV1, ReleaseContext) ==
     STRUCT_OFFSET(FUnifiedScriptNativeTransportV2, ReleaseContext));
 static_assert(
-    STRUCT_OFFSET(FUnifiedScriptNativeTransportV2, SharedDataTransport) ==
-    STRUCT_OFFSET(FUnifiedScriptNativeTransportV2, EventTransport) + sizeof(void*));
+    STRUCT_OFFSET(FUnifiedScriptNativeTransportV2, GameplayDataTransport) ==
+    STRUCT_OFFSET(FUnifiedScriptNativeTransportV2, SharedDataTransport) + sizeof(void*));
 
 extern "C" UEUNIFIEDSCRIPTRUNTIME_API const FUnifiedScriptNativeTransportV1*
 UEUnifiedScript_GetNativeTransportV1();
@@ -472,3 +479,6 @@ UEUnifiedScript_GetNativeTransportV3();
 
 extern "C" UEUNIFIEDSCRIPTRUNTIME_API const FUnifiedScriptNativeEventTransportV4*
 UEUnifiedScript_GetNativeEventTransportV4();
+
+extern "C" UEUNIFIEDSCRIPTRUNTIME_API const FUnifiedScriptGameplayDataTransportV4*
+UEUnifiedScript_GetGameplayDataTransportV4();

@@ -3,6 +3,7 @@
 #include "UnifiedScriptNativeTransport.h"
 
 #include "Containers/StringConv.h"
+#include "Components/BoxComponent.h"
 #include "Engine/World.h"
 #include "Engine/StaticMeshActor.h"
 #include "Misc/AutomationTest.h"
@@ -136,6 +137,7 @@ bool FUnifiedScriptNativeTransportAbiTest::RunTest(const FString& Parameters)
     TestNotNull(TEXT("Fast invoke function exists"), FastTransport->InvokeById);
     TestNotNull(TEXT("Fast transport publishes reverse event ABI"), FastTransport->EventTransport);
     TestNotNull(TEXT("Fast transport publishes Shared Data ABI"), FastTransport->SharedDataTransport);
+    TestNotNull(TEXT("Fast transport publishes Gameplay Data ABI"), FastTransport->GameplayDataTransport);
 
     const FUnifiedScriptSharedDataTransportV4* SharedDataTransport =
         UEUnifiedScript_GetSharedDataTransportV4();
@@ -159,6 +161,29 @@ bool FUnifiedScriptNativeTransportAbiTest::RunTest(const FString& Parameters)
     TestNotNull(
         TEXT("Shared Data transport acquires Transform snapshots"),
         SharedDataTransport->AcquireTransformSnapshot);
+
+    const FUnifiedScriptGameplayDataTransportV4* GameplayDataTransport =
+        UEUnifiedScript_GetGameplayDataTransportV4();
+    TestNotNull(TEXT("Version-four Gameplay Data transport exists"), GameplayDataTransport);
+    if (GameplayDataTransport == nullptr)
+    {
+        return false;
+    }
+    TestEqual(
+        TEXT("Gameplay command row layout is fixed"),
+        GameplayDataTransport->CommandEntrySize,
+        static_cast<uint32>(sizeof(FUnifiedScriptCommandV4)));
+    TestEqual(
+        TEXT("Gameplay event row layout is fixed"),
+        GameplayDataTransport->EventEntrySize,
+        static_cast<uint32>(sizeof(FUnifiedScriptGameplayEventV4)));
+    TestEqual(
+        TEXT("Batch trace request layout is fixed"),
+        GameplayDataTransport->TraceRequestEntrySize,
+        static_cast<uint32>(sizeof(FUnifiedScriptTraceRequestV4)));
+    TestNotNull(TEXT("Gameplay command begin exists"), GameplayDataTransport->BeginCommandBatch);
+    TestNotNull(TEXT("Gameplay event acquisition exists"), GameplayDataTransport->AcquireEvents);
+    TestNotNull(TEXT("Gameplay batch trace exists"), GameplayDataTransport->ExecuteTraceBatch);
 
     const FUnifiedScriptNativeEventTransportV4* EventTransport =
         UEUnifiedScript_GetNativeEventTransportV4();
@@ -1112,7 +1137,7 @@ bool FUnifiedScriptSharedTransformSnapshotTest::RunTest(const FString& Parameter
     }
 
     Actor->SetActorLocation(FVector(10.0, 20.0, 30.0));
-    Host->Tick(0.016f);
+    Host->BeginManagedFrame();
 
     FUnifiedScriptNativeBridgeContext* Context = Host->GetNativeInvocationContext();
     const FUnifiedScriptSharedDataTransportV4* Transport =
@@ -1160,7 +1185,7 @@ bool FUnifiedScriptSharedTransformSnapshotTest::RunTest(const FString& Parameter
             FirstActorEntry->Actor.WorldHostId == Host->GetWorldHostId());
 
     Actor->SetActorLocation(FVector(40.0, 50.0, 60.0));
-    Host->Tick(0.016f);
+    Host->BeginManagedFrame();
     FUnifiedScriptSharedSnapshotViewV4 SecondView;
     TestTrue(
         TEXT("Second Transform snapshot is acquired"),
@@ -1197,6 +1222,160 @@ bool FUnifiedScriptSharedTransformSnapshotTest::RunTest(const FString& Parameter
         TEXT("World teardown invalidates the shared-memory view"),
         Transport->AcquireTransformSnapshot(Context, &DetachedView) != 0);
     Transport->ReleaseContext(Context);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FUnifiedScriptGameplayDataPlaneTest,
+    "UnifiedScript.Unreal.GameplayData.CommandEventAndBatchTrace",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUnifiedScriptGameplayDataPlaneTest::RunTest(const FString& Parameters)
+{
+    UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+    TestNotNull(TEXT("Gameplay data World exists"), World);
+    if (World == nullptr)
+    {
+        return false;
+    }
+    World->AddToRoot();
+    UUnifiedScriptWorldSubsystem* Host =
+        World->GetSubsystem<UUnifiedScriptWorldSubsystem>();
+    AStaticMeshActor* Target = World->SpawnActor<AStaticMeshActor>();
+    AActor* TraceTarget = World->SpawnActor<AActor>();
+    TestNotNull(TEXT("Gameplay data World host exists"), Host);
+    TestNotNull(TEXT("Command target exists"), Target);
+    TestNotNull(TEXT("Trace target exists"), TraceTarget);
+    if (Host == nullptr || Target == nullptr || TraceTarget == nullptr)
+    {
+        World->RemoveFromRoot();
+        World->DestroyWorld(false);
+        return false;
+    }
+
+    UBoxComponent* Box = NewObject<UBoxComponent>(TraceTarget);
+    TraceTarget->SetRootComponent(Box);
+    TraceTarget->AddInstanceComponent(Box);
+    Box->InitBoxExtent(FVector(20.0, 20.0, 20.0));
+    Box->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+    Box->SetCollisionResponseToAllChannels(ECR_Block);
+    Box->RegisterComponentWithWorld(World);
+
+    FUnifiedScriptObjectHandleResult HandleResult;
+    const FUnifiedScriptObjectHandle TargetHandle =
+        Host->RegisterObject(Target, HandleResult);
+    TestTrue(TEXT("Command target handle is registered"), HandleResult.IsSuccess());
+    const FUnifiedScriptObjectHandle ClassHandle =
+        Host->RegisterObject(AStaticMeshActor::StaticClass(), HandleResult);
+    TestTrue(TEXT("Spawn class handle is registered"), HandleResult.IsSuccess());
+
+    const FUnifiedScriptNativeTransportV2* Bootstrap = Host->GetNativeTransport();
+    FUnifiedScriptNativeBridgeContext* Context = Host->GetNativeInvocationContext();
+    const FUnifiedScriptGameplayDataTransportV4* Transport =
+        Bootstrap != nullptr ? Bootstrap->GameplayDataTransport : nullptr;
+    TestNotNull(TEXT("Gameplay transport is discoverable"), Transport);
+    TestNotNull(TEXT("Gameplay context exists"), Context);
+    if (Transport == nullptr || Context == nullptr)
+    {
+        World->RemoveFromRoot();
+        World->DestroyWorld(false);
+        return false;
+    }
+
+    uint8 Phase = 0;
+    uint64 FrameNumber = 0;
+    TestTrue(
+        TEXT("World phase is queryable"),
+        Transport->GetPhase(Context, &Phase, &FrameNumber) != 0);
+    TestEqual(
+        TEXT("Managed scripts start inside the managed phase"),
+        Phase,
+        static_cast<uint8>(EUnifiedScriptGameplayDataPhaseV4::ManagedTick));
+
+    FUnifiedScriptCommandBatchViewV4 CommandView;
+    TestTrue(
+        TEXT("Managed phase reserves a command batch"),
+        Transport->BeginCommandBatch(Context, 2, &CommandView) != 0);
+    CommandView.Commands[0].Type = EUnifiedScriptCommandTypeV4::SetActorTransform;
+    CommandView.Commands[0].Target = {Host->GetWorldHostId(), TargetHandle.Value};
+    CommandView.Commands[0].Vector0X = 100.0;
+    CommandView.Commands[0].Vector0Y = 200.0;
+    CommandView.Commands[0].Vector0Z = 300.0;
+    CommandView.Commands[0].RotationW = 1.0;
+    CommandView.Commands[0].Vector2X = 1.0;
+    CommandView.Commands[0].Vector2Y = 1.0;
+    CommandView.Commands[0].Vector2Z = 1.0;
+    CommandView.Commands[1].Type = EUnifiedScriptCommandTypeV4::SpawnActor;
+    CommandView.Commands[1].Argument0 = {Host->GetWorldHostId(), ClassHandle.Value};
+    CommandView.Commands[1].RotationW = 1.0;
+    CommandView.Commands[1].Vector2X = 1.0;
+    CommandView.Commands[1].Vector2Y = 1.0;
+    CommandView.Commands[1].Vector2Z = 1.0;
+    TestTrue(
+        TEXT("Command batch commit succeeds"),
+        Transport->CommitCommandBatch(Context, CommandView.BatchToken, 2) != 0);
+    Host->EndManagedFrame();
+    TestEqual(
+        TEXT("PostActorTick command updates the Actor"),
+        Target->GetActorLocation(),
+        FVector(100.0, 200.0, 300.0));
+
+    Host->BeginManagedFrame();
+    FUnifiedScriptGameplayEventViewV4 EventView;
+    TestTrue(
+        TEXT("Next frame publishes command completion events"),
+        Transport->AcquireEvents(Context, &EventView) != 0);
+    TestEqual(TEXT("Two committed commands publish two events"), EventView.EventCount, 2u);
+    TestTrue(
+        TEXT("SetTransform completion succeeds"),
+        EventView.Events[0].Status == EUnifiedScriptCommandStatusV4::Success &&
+            EventView.Events[0].CommandType ==
+                EUnifiedScriptCommandTypeV4::SetActorTransform);
+    TestTrue(
+        TEXT("SpawnActor completion returns a World-scoped handle"),
+        EventView.Events[1].Status == EUnifiedScriptCommandStatusV4::Success &&
+            EventView.Events[1].Kind == EUnifiedScriptGameplayEventKindV4::ActorSpawned &&
+            EventView.Events[1].Argument.WorldHostId == Host->GetWorldHostId() &&
+            EventView.Events[1].Argument.ObjectHandle != 0);
+
+    FUnifiedScriptTraceRequestViewV4 TraceView;
+    TestTrue(
+        TEXT("Managed phase reserves a three-shape trace batch"),
+        Transport->BeginTraceBatch(Context, 3, &TraceView) != 0);
+    for (uint32 Index = 0; Index < 3; ++Index)
+    {
+        TraceView.Requests[Index].Shape =
+            static_cast<EUnifiedScriptTraceShapeV4>(Index);
+        TraceView.Requests[Index].CollisionChannel = ECC_Visibility;
+        TraceView.Requests[Index].StartX = -100.0;
+        TraceView.Requests[Index].EndX = 100.0;
+        TraceView.Requests[Index].ExtentX = 5.0;
+        TraceView.Requests[Index].ExtentY = 5.0;
+        TraceView.Requests[Index].ExtentZ = 5.0;
+        TraceView.Requests[Index].RotationW = 1.0;
+    }
+    FUnifiedScriptTraceResultViewV4 TraceResults;
+    TestTrue(
+        TEXT("Line/sphere/box traces execute through one boundary call"),
+        Transport->ExecuteTraceBatch(
+            Context,
+            TraceView.BatchToken,
+            3,
+            &TraceResults) != 0);
+    TestEqual(TEXT("Batch trace returns one row per request"), TraceResults.ResultCount, 3u);
+    TestTrue(
+        TEXT("All three trace shapes execute successfully"),
+        TraceResults.Results[0].Status == EUnifiedScriptTraceStatusV4::Success &&
+            TraceResults.Results[1].Status == EUnifiedScriptTraceStatusV4::Success &&
+            TraceResults.Results[2].Status == EUnifiedScriptTraceStatusV4::Success);
+    TestTrue(
+        TEXT("Line trace returns the reflected FHitResult data"),
+        static_cast<uint8>(TraceResults.Results[0].Flags) &
+            static_cast<uint8>(EUnifiedScriptTraceResultFlagsV4::BlockingHit));
+
+    Host->EndManagedFrame();
+    World->RemoveFromRoot();
+    World->DestroyWorld(false);
     return true;
 }
 

@@ -110,6 +110,45 @@ internal delegate byte UnrealNativeAcquireTransformSnapshotV4(
     nint context,
     out UnrealSharedSnapshotViewV4 view);
 
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+internal delegate byte UnrealNativeBeginCommandBatchV4(
+    nint context,
+    uint capacity,
+    out UnrealCommandBatchViewV4 view);
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+internal delegate byte UnrealNativeCommitCommandBatchV4(
+    nint context,
+    ulong token,
+    uint count);
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+internal delegate byte UnrealNativeAcquireGameplayEventsV4(
+    nint context,
+    out UnrealGameplayEventViewV4 view);
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+internal delegate byte UnrealNativeBeginTraceBatchV4(
+    nint context,
+    uint capacity,
+    out UnrealTraceRequestViewV4 view);
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+internal delegate byte UnrealNativeExecuteTraceBatchV4(
+    nint context,
+    ulong token,
+    uint count,
+    out UnrealTraceResultViewV4 view);
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+internal delegate void UnrealNativeCancelTraceBatchV4(nint context, ulong token);
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+internal delegate byte UnrealNativeGetGameplayPhaseV4(
+    nint context,
+    out UnrealGameplayDataPhaseV4 phase,
+    out ulong frameNumber);
+
 /// <summary>
 /// Calls the versioned synchronous function table exported by the UE plugin.
 /// The function table is borrowed from the plugin. The context is retained until
@@ -124,6 +163,7 @@ public sealed class InProcessUnrealNativeInvocationTransport
       IUnrealNativeFixedInvocationTransportV3,
       IUnrealNativeEventTransport,
       IUnrealSharedSnapshotTransport,
+      IUnrealGameplayDataTransport,
       IDisposable
 {
     private const uint MinimumAbiVersion = 1;
@@ -148,6 +188,13 @@ public sealed class InProcessUnrealNativeInvocationTransport
     private readonly UnrealNativeSubscribeEventV4? _subscribeEvent;
     private readonly UnrealNativeUnsubscribeEventV4? _unsubscribeEvent;
     private readonly UnrealNativeAcquireTransformSnapshotV4? _acquireTransformSnapshot;
+    private readonly UnrealNativeBeginCommandBatchV4? _beginCommandBatch;
+    private readonly UnrealNativeCommitCommandBatchV4? _commitCommandBatch;
+    private readonly UnrealNativeAcquireGameplayEventsV4? _acquireGameplayEvents;
+    private readonly UnrealNativeBeginTraceBatchV4? _beginTraceBatch;
+    private readonly UnrealNativeExecuteTraceBatchV4? _executeTraceBatch;
+    private readonly UnrealNativeCancelTraceBatchV4? _cancelTraceBatch;
+    private readonly UnrealNativeGetGameplayPhaseV4? _getGameplayPhase;
     private readonly UnrealNativeReleaseContextV1 _releaseContext;
     private readonly object _lifetimeGate = new();
     private readonly HashSet<NativeEventSubscription> _eventSubscriptions = [];
@@ -344,6 +391,62 @@ public sealed class InProcessUnrealNativeInvocationTransport
                             sharedTable.AcquireTransformSnapshot);
                 }
             }
+
+            uint gameplayDataV2Size = checked(
+                (uint)Marshal.SizeOf<NativeTransportTableV2GameplayData>());
+            if (table.TableSize >= gameplayDataV2Size)
+            {
+                NativeTransportTableV2GameplayData gameplayExtension =
+                    Marshal.PtrToStructure<NativeTransportTableV2GameplayData>(
+                        tablePointer);
+                if (gameplayExtension.GameplayDataTransport != nint.Zero)
+                {
+                    UnrealGameplayDataTransportTableV4 gameplayTable =
+                        Marshal.PtrToStructure<UnrealGameplayDataTransportTableV4>(
+                            gameplayExtension.GameplayDataTransport);
+                    const UnrealGameplayDataCapabilitiesV4 requiredCapabilities =
+                        UnrealGameplayDataCapabilitiesV4.WorldPhaseScheduler |
+                        UnrealGameplayDataCapabilitiesV4.CommandBuffer |
+                        UnrealGameplayDataCapabilitiesV4.EventBuffer |
+                        UnrealGameplayDataCapabilitiesV4.BatchLineTrace |
+                        UnrealGameplayDataCapabilitiesV4.BatchSphereTrace |
+                        UnrealGameplayDataCapabilitiesV4.BatchBoxTrace;
+                    if (gameplayTable.AbiVersion != UnrealGameplayDataAbiV4.Version ||
+                        gameplayTable.TableSize < UnrealGameplayDataAbiV4.TransportTableSize ||
+                        gameplayTable.CommandEntrySize != UnrealGameplayDataAbiV4.CommandEntrySize ||
+                        gameplayTable.EventEntrySize != UnrealGameplayDataAbiV4.EventEntrySize ||
+                        gameplayTable.TraceRequestEntrySize != UnrealGameplayDataAbiV4.TraceRequestEntrySize ||
+                        gameplayTable.TraceResultEntrySize != UnrealGameplayDataAbiV4.TraceResultEntrySize ||
+                        (gameplayTable.Capabilities & requiredCapabilities) != requiredCapabilities ||
+                        gameplayTable.RetainContext != table.RetainContext ||
+                        gameplayTable.ReleaseContext != table.ReleaseContext ||
+                        gameplayTable.BeginCommandBatch == nint.Zero ||
+                        gameplayTable.CommitCommandBatch == nint.Zero ||
+                        gameplayTable.AcquireEvents == nint.Zero ||
+                        gameplayTable.BeginTraceBatch == nint.Zero ||
+                        gameplayTable.ExecuteTraceBatch == nint.Zero ||
+                        gameplayTable.CancelTraceBatch == nint.Zero ||
+                        gameplayTable.GetPhase == nint.Zero)
+                    {
+                        throw new InvalidOperationException(
+                            "The optional native Gameplay Data ABI v4 table has an incompatible layout.");
+                    }
+                    _beginCommandBatch = Marshal.GetDelegateForFunctionPointer<
+                        UnrealNativeBeginCommandBatchV4>(gameplayTable.BeginCommandBatch);
+                    _commitCommandBatch = Marshal.GetDelegateForFunctionPointer<
+                        UnrealNativeCommitCommandBatchV4>(gameplayTable.CommitCommandBatch);
+                    _acquireGameplayEvents = Marshal.GetDelegateForFunctionPointer<
+                        UnrealNativeAcquireGameplayEventsV4>(gameplayTable.AcquireEvents);
+                    _beginTraceBatch = Marshal.GetDelegateForFunctionPointer<
+                        UnrealNativeBeginTraceBatchV4>(gameplayTable.BeginTraceBatch);
+                    _executeTraceBatch = Marshal.GetDelegateForFunctionPointer<
+                        UnrealNativeExecuteTraceBatchV4>(gameplayTable.ExecuteTraceBatch);
+                    _cancelTraceBatch = Marshal.GetDelegateForFunctionPointer<
+                        UnrealNativeCancelTraceBatchV4>(gameplayTable.CancelTraceBatch);
+                    _getGameplayPhase = Marshal.GetDelegateForFunctionPointer<
+                        UnrealNativeGetGameplayPhaseV4>(gameplayTable.GetPhase);
+                }
+            }
         }
 
         UnrealNativeRetainContextV1 retainContext =
@@ -369,6 +472,15 @@ public sealed class InProcessUnrealNativeInvocationTransport
 
     public bool SupportsSharedData => _acquireTransformSnapshot is not null;
 
+    public bool SupportsGameplayData =>
+        _beginCommandBatch is not null &&
+        _commitCommandBatch is not null &&
+        _acquireGameplayEvents is not null &&
+        _beginTraceBatch is not null &&
+        _executeTraceBatch is not null &&
+        _cancelTraceBatch is not null &&
+        _getGameplayPhase is not null;
+
     bool IUnrealSharedSnapshotTransport.TryAcquireTransformSnapshot(
         out UnrealSharedSnapshotViewV4 view)
     {
@@ -381,6 +493,90 @@ public sealed class InProcessUnrealNativeInvocationTransport
                 return false;
             }
             return _acquireTransformSnapshot(_context, out view) != 0;
+        }
+    }
+
+    bool IUnrealGameplayDataTransport.BeginCommandBatch(
+        uint capacity,
+        out UnrealCommandBatchViewV4 view)
+    {
+        lock (_lifetimeGate)
+        {
+            ThrowIfDisposed();
+            view = default;
+            return _beginCommandBatch is not null &&
+                _beginCommandBatch(_context, capacity, out view) != 0;
+        }
+    }
+
+    bool IUnrealGameplayDataTransport.CommitCommandBatch(ulong token, uint count)
+    {
+        lock (_lifetimeGate)
+        {
+            ThrowIfDisposed();
+            return _commitCommandBatch is not null &&
+                _commitCommandBatch(_context, token, count) != 0;
+        }
+    }
+
+    bool IUnrealGameplayDataTransport.AcquireEvents(out UnrealGameplayEventViewV4 view)
+    {
+        lock (_lifetimeGate)
+        {
+            ThrowIfDisposed();
+            view = default;
+            return _acquireGameplayEvents is not null &&
+                _acquireGameplayEvents(_context, out view) != 0;
+        }
+    }
+
+    bool IUnrealGameplayDataTransport.BeginTraceBatch(
+        uint capacity,
+        out UnrealTraceRequestViewV4 view)
+    {
+        lock (_lifetimeGate)
+        {
+            ThrowIfDisposed();
+            view = default;
+            return _beginTraceBatch is not null &&
+                _beginTraceBatch(_context, capacity, out view) != 0;
+        }
+    }
+
+    bool IUnrealGameplayDataTransport.ExecuteTraceBatch(
+        ulong token,
+        uint count,
+        out UnrealTraceResultViewV4 view)
+    {
+        lock (_lifetimeGate)
+        {
+            ThrowIfDisposed();
+            view = default;
+            return _executeTraceBatch is not null &&
+                _executeTraceBatch(_context, token, count, out view) != 0;
+        }
+    }
+
+    void IUnrealGameplayDataTransport.CancelTraceBatch(ulong token)
+    {
+        lock (_lifetimeGate)
+        {
+            ThrowIfDisposed();
+            _cancelTraceBatch?.Invoke(_context, token);
+        }
+    }
+
+    bool IUnrealGameplayDataTransport.GetPhase(
+        out UnrealGameplayDataPhaseV4 phase,
+        out ulong frameNumber)
+    {
+        lock (_lifetimeGate)
+        {
+            ThrowIfDisposed();
+            phase = default;
+            frameNumber = 0;
+            return _getGameplayPhase is not null &&
+                _getGameplayPhase(_context, out phase, out frameNumber) != 0;
         }
     }
 
@@ -1132,6 +1328,27 @@ public sealed class InProcessUnrealNativeInvocationTransport
         public nint CallFrameTransport;
         public nint EventTransport;
         public nint SharedDataTransport;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeTransportTableV2GameplayData
+    {
+        public uint AbiVersion;
+        public uint TableSize;
+        public uint ValueSize;
+        public uint Reserved;
+        public nint ReadProperty;
+        public nint WriteProperty;
+        public nint Invoke;
+        public nint RetainContext;
+        public nint ReleaseContext;
+        public nint ReadPropertyById;
+        public nint WritePropertyById;
+        public nint InvokeById;
+        public nint CallFrameTransport;
+        public nint EventTransport;
+        public nint SharedDataTransport;
+        public nint GameplayDataTransport;
     }
 
     [StructLayout(LayoutKind.Sequential)]

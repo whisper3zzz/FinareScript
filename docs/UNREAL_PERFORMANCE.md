@@ -59,10 +59,11 @@ powershell -ExecutionPolicy Bypass -File comparison/run-gameplay-comparison.ps1 
 
 The current working-tree UnifiedScript player routes that shot through one
 Batch Trace plus an emitter/damage command reservation and consumes both
-completion events on the next managed frame. Its latest standalone 10,000-frame
-smoke reports 120,027 generated ABI v3 calls and zero legacy calls. However,
-`artifacts/comparison/gameplay/comparison.json` was generated before this
-data-plane migration and still records 120,030 calls. It remains a valid record
-of the earlier facade-free binding baseline, but it is not evidence for the
-current data-plane workload. Regenerate the paired artifact before publishing a
-new UnifiedScript-versus-Puerts full-gameplay result.
+completion events on the next managed frame. The runner prepares both runtimes
+once, performs only runtime work inside measured trials, and alternates which
+runtime executes first to reduce build heat and ordering bias. The latest local
+three-trial result reports 120,027 generated ABI v3 calls, zero legacy calls,
+and a median of 3,497.508 ms for UnifiedScript versus 3,901.037 ms for Puerts
+(`UnifiedScript/Puerts = 0.896559`). Every trial completed exactly one shot and
+one hit, and UnifiedScript observed both command events. This remains a
+machine-local UE 5.8.1 result rather than portable cross-machine evidence.

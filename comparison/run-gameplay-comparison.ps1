@@ -6,7 +6,8 @@ param(
     [int]$Frames = 10000,
     [ValidateRange(1, 9)]
     [int]$Trials = 3,
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+    [switch]$UnifiedFirst
 )
 
 $ErrorActionPreference = 'Stop'
@@ -21,8 +22,14 @@ $artifactRoot = Join-Path $repoRoot 'artifacts\comparison\gameplay'
 $puertsLog = Join-Path $artifactRoot 'puerts-blockbreaker.log'
 $unifiedLog = Join-Path $artifactRoot 'unifiedscript-blockbreaker.log'
 $resultPath = Join-Path $artifactRoot 'comparison.json'
+$puertsProject = Join-Path $puertsRoot 'BlockBreaker.uproject'
+$unifiedProject = Join-Path $unifiedRoot 'BlockBreaker.uproject'
+$unifiedRunner = Join-Path $unifiedRoot 'Tools\run_unifiedscript_demo.ps1'
+$unifiedMap = '/Game/BlockBreaker/Maps/TutorialMap?game=/Script/BlockBreaker.UnifiedScriptBlockBreakerGameMode'
 
-foreach ($required in @($buildBat, $editorCmd, $puertsRoot, $unifiedRoot)) {
+foreach ($required in @(
+    $buildBat, $editorCmd, $puertsRoot, $unifiedRoot, $puertsProject,
+    $unifiedProject, $unifiedRunner)) {
     if (-not (Test-Path -LiteralPath $required)) {
         throw "Required gameplay comparison path does not exist: $required"
     }
@@ -39,6 +46,26 @@ function Get-Median([double[]]$Values) {
 }
 
 if ($Trials -gt 1) {
+    if (-not $SkipBuild) {
+        Write-Output 'Preparing both BlockBreaker runtimes before measured trials...'
+        & $buildBat BlockBreakerEditor Win64 Development "-Project=$puertsProject" `
+            -WaitMutex -NoHotReloadFromIDE -NoUBA -MaxParallelActions=4
+        if ($LASTEXITCODE -ne 0) {
+            throw "Puerts gameplay build failed with exit code $LASTEXITCODE."
+        }
+        $prepareOutput = @(& $unifiedRunner `
+            -EngineRoot $EngineRoot `
+            -UnifiedScriptRoot $repoRoot `
+            -Headless 2>&1)
+        $prepareExitCode = $LASTEXITCODE
+        $prepareText = $prepareOutput -join [Environment]::NewLine
+        if ($prepareExitCode -ne 0 -or
+            -not $prepareText.Contains('UnifiedScript gameplay data + ABI v3 gate: PASS')) {
+            $prepareOutput | Write-Output
+            throw 'UnifiedScript gameplay preparation/smoke failed.'
+        }
+    }
+
     $trialResults = @()
     for ($trial = 1; $trial -le $Trials; ++$trial) {
         $innerArguments = @{
@@ -46,9 +73,10 @@ if ($Trials -gt 1) {
             ComparisonRoot = $ComparisonRoot
             Frames = $Frames
             Trials = 1
+            SkipBuild = $true
         }
-        if ($SkipBuild -or $trial -gt 1) {
-            $innerArguments.SkipBuild = $true
+        if (($trial % 2) -eq 0) {
+            $innerArguments.UnifiedFirst = $true
         }
         Write-Output "Running BlockBreaker gameplay trial $trial/$Trials..."
         & $PSCommandPath @innerArguments
@@ -152,7 +180,6 @@ foreach ($relativeAssetPath in $sharedAssetPaths) {
     }
 }
 
-$puertsProject = Join-Path $puertsRoot 'BlockBreaker.uproject'
 if (-not $SkipBuild) {
     & $buildBat BlockBreakerEditor Win64 Development "-Project=$puertsProject" `
         -WaitMutex -NoHotReloadFromIDE -NoUBA -MaxParallelActions=4
@@ -161,20 +188,41 @@ if (-not $SkipBuild) {
     }
 }
 
-$puertsOutput = @(& $editorCmd $puertsProject $map -game -nullrhi -unattended `
-    -nosound -nosplash -stdout -FullStdOutLogOutput -benchmark -fps=60 `
-    "-BlockBreakerBenchmarkFrames=$Frames" 2>&1)
-$puertsExitCode = $LASTEXITCODE
+function Invoke-PuertsWorkload {
+    $output = @(& $editorCmd $puertsProject $map -game -nullrhi -unattended `
+        -nosound -nosplash -stdout -FullStdOutLogOutput -benchmark -fps=60 `
+        "-BlockBreakerBenchmarkFrames=$Frames" 2>&1)
+    [pscustomobject]@{ Output = $output; ExitCode = $LASTEXITCODE }
+}
+
+function Invoke-UnifiedScriptWorkload {
+    if ($SkipBuild) {
+        $output = @(& $editorCmd $unifiedProject $unifiedMap -game -nullrhi `
+            -unattended -nosound -nosplash -stdout -FullStdOutLogOutput `
+            -benchmark -fps=60 "-BlockBreakerBenchmarkFrames=$Frames" 2>&1)
+    } else {
+        $output = @(& $unifiedRunner `
+            -EngineRoot $EngineRoot `
+            -UnifiedScriptRoot $repoRoot `
+            -Headless `
+            -GameplayBenchmarkFrames $Frames 2>&1)
+    }
+    [pscustomobject]@{ Output = $output; ExitCode = $LASTEXITCODE }
+}
+
+if ($UnifiedFirst) {
+    $unifiedRun = Invoke-UnifiedScriptWorkload
+    $puertsRun = Invoke-PuertsWorkload
+} else {
+    $puertsRun = Invoke-PuertsWorkload
+    $unifiedRun = Invoke-UnifiedScriptWorkload
+}
+$puertsOutput = @($puertsRun.Output)
+$puertsExitCode = $puertsRun.ExitCode
 $puertsOutput | Set-Content -LiteralPath $puertsLog -Encoding utf8
 $puertsText = $puertsOutput -join [Environment]::NewLine
-
-$unifiedRunner = Join-Path $unifiedRoot 'Tools\run_unifiedscript_demo.ps1'
-$unifiedOutput = @(& $unifiedRunner `
-    -EngineRoot $EngineRoot `
-    -UnifiedScriptRoot $repoRoot `
-    -Headless `
-    -GameplayBenchmarkFrames $Frames 2>&1)
-$unifiedExitCode = $LASTEXITCODE
+$unifiedOutput = @($unifiedRun.Output)
+$unifiedExitCode = $unifiedRun.ExitCode
 $unifiedOutput | Set-Content -LiteralPath $unifiedLog -Encoding utf8
 $unifiedText = $unifiedOutput -join [Environment]::NewLine
 
