@@ -255,6 +255,9 @@ Outcome: the proven language pipeline becomes usable from UE.
 Outcome: generated gameplay bindings cover practical UE values through a
 measured call path and survive packaged Win64 builds.
 
+Status: active. Runtime, interop, data-plane, comparison, and Win64 packaging
+gates are implemented; Graph Authoring Beta and native debugging remain open.
+
 - [x] restore and freeze the UE 5.8 editor, World demo, .NET, and validator baseline
 - [x] freeze independent ABI v3 value/call-frame/table layouts and ownership rules
 - [x] generated managed shapes for all scalar widths, FName/FText, enum and
@@ -270,5 +273,9 @@ measured call path and survive packaged Win64 builds.
   lifecycle binding, and Graph/C# Event Entry round-trip
 - [x] reproducible C++/UnifiedScript benchmark, Puerts comparison gate, and regression thresholds
 - [x] append-compatible generated scalar ABI lane that passes the matched Puerts latency gate
+- [x] per-World pre/managed/post phase scheduler on UE tick delegates
+- [x] fixed-row command buffer with next-frame double-buffered completion events
+- [x] single-boundary line, sphere, and box Batch Trace with World-scoped handles
+- [x] BlockBreaker shot migration from trace/damage/emitter facade calls to the gameplay data plane
 - [x] Win64 Development/Shipping cook, dependency closure, and packaged smoke test
 - [ ] Graph Authoring Beta plus native debug traps, deeper locals, and evaluation

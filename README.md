@@ -2,10 +2,10 @@
 
 UnifiedScript is an experimental dual-modal gameplay authoring system. A
 restricted C# profile and a structured visual graph are intended to be two
-lossless projections of one program model. The first execution backend will use
-Roslyn and CoreCLR. The language and projection model are now proven
-independently, and M6.1 has begun through a versioned Unreal adapter instead of
-adding UE dependencies to the compiler core.
+lossless projections of one program model. Roslyn and CoreCLR are the active
+execution backend. The language and projection model are proven independently,
+and the versioned Unreal adapter has advanced through M6.1 into M6.2
+productization without adding UE dependencies to the compiler core.
 
 ## Current vertical slice
 
@@ -274,7 +274,8 @@ Declaration IR and Graph, while `debug-serve` returns it in authoring workspace
 v0.2 after every committed reload. The UI adapter contains no sample asset,
 function, state, or API-call names; `MultiAssetControlFlow.cs` and automated
 tests cover two assets, three functions, branches, while loops, and for loops.
-UE binding begins in M6.1 against this proven contract.
+UE binding began in M6.1 against this proven contract and now provides the
+active M6.2 runtime, authoring, data-plane, and release path.
 
 M6.1 Phase A establishes the first real UE toolchain slice. The
 `UnifiedScript.Unreal` boundary validates and normalizes engine reflection
@@ -370,6 +371,16 @@ the current buffer through `Context.DataPlane.AcquireTransformSnapshot()` as a
 borrowed, allocation-free `ReadOnlySpan`. No UObject address or Unreal container
 layout is exposed, and World teardown detaches the view before freeing its
 buffers. See `docs/UNREAL_SHARED_DATA_ABI_V4.md` for the frozen first schema.
+
+Gameplay Data ABI v4 adds a Game-Thread `World Phase Scheduler` around
+Actor ticking. Managed scripts reserve caller-written fixed command rows during
+`ManagedTick`; native executes committed `SetTransform`, velocity, damage,
+spawn, destroy, and emitter commands in `NativePostActorTick`, then publishes
+their completion events at the next `NativePreActorTick`. Line, sphere, and box
+queries execute through one synchronous Batch Trace boundary and return
+borrowed `FHitResult`-compatible rows. BlockBreaker now uses this path for its
+shot trace, impact effect, and damage, and passes the exact-frame headless gate.
+See `docs/UNREAL_GAMEPLAY_DATA_ABI_V4.md` for phase, ownership, and schema rules.
 
 `ue-bindings --report` now emits deterministic per-member coverage as native
 thunk, reflected-path fallback, rejected, or deferred type. `--fail-on-rejected`
@@ -519,6 +530,8 @@ Current Unreal adapter path:
   -> typed edit capability -> semantic-patch v0.21 Workbench transaction
   -> atomic C#/identity/Declaration/Surface/DLL/PDB publication
   -> matching component transactional reload
+  -> World Phase Scheduler -> caller-written Command Buffer -> next-frame Event Buffer
+  -> synchronous line/sphere/box Batch Trace through one managed/native boundary
 
 Later:
   -> native managed-debug trap backend, remote framing, and async stepping

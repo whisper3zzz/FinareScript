@@ -211,11 +211,15 @@ IDs. ABI v2 routes the component fixture through direct native fields and C++
 methods without member-path parsing, reflected property lookup, parameter-buffer
 construction, or `ProcessEvent`; ABI v1 remains a compatible reflection fallback.
 Reflection now exports header and native-access metadata. The managed binding
-command can emit a deterministic companion C++ translation unit whose Member-ID
+command emits a deterministic companion C++ translation unit whose Member-ID
 switches perform direct typed access for supported public members across any
 selected reflected class. The checked-in runtime dispatcher is generated from
-the same manifest as its managed wrapper. Wider value marshalling and cook-time
-asset dependency discovery remain open.
+the same manifest as its managed wrapper. ABI v3 covers fixed scalars, text,
+enums, handles, structs, containers, variable-size results, and return plus
+`out`/`ref`; ABI v4 event proxies bind arbitrary reflected delegates. A separate
+Transform Shared Data ABI publishes borrowed World snapshots, while Gameplay
+Data ABI v4 schedules managed/native phases and carries fixed command, event,
+and Batch Trace rows without exposing Unreal allocator or UObject layouts.
 
 `UUnifiedScriptAsset` now owns the managed assembly/type identity as a native
 UE Data Asset. A component can hold a Content Browser reference, load a soft
@@ -694,29 +698,36 @@ receivers until a richer graph-safe object-handle policy is defined.
 
 ## Current UE boundary
 
-M6.1 now provides the reflection contract, generated managed wrappers, native
-property/function dispatch, generation-checked weak UObject handles, a versioned
-process transport, and a native runtime host scoped to each supported World. The
-component runtime also proves generated gameplay assembly loading, live wrapper
-execution, lifecycle dispatch, collectible reload, and Declaration IR state
-materialization into a fixed-layout Details Property Bag with stable-ID
-migration. The editor now consumes Authoring Surface v0.3 in a native Slate
-GraphEditor. A read-only presentation policy folds connected identifier/literal
-leaves into author-facing pins while the complete Surface remains addressable;
-the editor materializes the remaining real pins/wires and submits
-compiler-owned semantic patches without reparsing C#.
-The Workbench atomically republishes source, identity, Declaration, Surface,
-DLL, and PDB before matching component instances enter their transactional
-reload path.
-The remaining boundary
-will provide:
+M6.1 and M6.2 now provide the reflection/API contract, generated C# wrappers and
+C++ thunks, generation-checked weak UObject handles, versioned ABI v3/v4
+transports, and one native CoreCLR host scoped to each supported World. The
+component and Actor hosts cover generated gameplay assembly loading,
+Start/Tick/Stop, reflected events, latent generation cancellation, collectible
+reload, and Declaration IR state materialization with stable-ID migration.
 
-- a UE reflection symbol catalog consumed by semantic binding;
-- graph-safe type mappings;
-- Script Asset cook/package dependency discovery;
-- broader native property and function marshalling;
-- editor-facing undo/redo presentation and persisted graph-canvas layout;
-- transactional graph-rewire patches for user-created connections.
+The control plane handles resources, uncommon signatures, properties,
+functions, delegates, and complex values. The data plane publishes borrowed
+Transform snapshots and runs a per-World pre/managed/post scheduler: managed
+scripts reserve fixed command rows, native executes them after Actor tick,
+completion events publish on the next frame, and line/sphere/box traces execute
+through one synchronous batch boundary. World-scoped handles and explicit
+borrow lifetimes prevent CoreCLR from owning Unreal memory.
+
+The editor consumes the compiler-owned Authoring Surface in a native Slate
+GraphEditor. It supports Blueprint-style presentation, API/event node palettes,
+typed creation and deletion, structured insertion, occupied-input data rewiring,
+undo/redo transactions, and persisted per-function graph layout. The Workbench
+atomically republishes source, identity, Declaration, Surface, DLL, and PDB
+before matching component instances enter transactional reload. Win64
+Development and Shipping cook/package gates stage the managed dependency
+closure and pass packaged lifecycle smoke.
+
+The remaining boundary work is:
+
+- arbitrary control-wire authoring beyond structured block operations;
+- native debug traps, deeper locals, expression evaluation, and remote framing;
+- additional shared-memory gameplay snapshot and batch schemas;
+- platform-specific CoreCLR packaging beyond Win64.
 
 None of these concerns may redefine HIR semantics implicitly.
 

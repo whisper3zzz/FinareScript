@@ -331,6 +331,16 @@ Transform snapshot and exposes it to managed code as a borrowed
 not a replacement for ABI v3 calls: UObject side effects, resource operations,
 and reflected functions remain on the type-safe Binding control plane.
 
+`UNREAL_GAMEPLAY_DATA_ABI_V4.md` adds the first side-effect and query layer to
+that World data plane. `OnWorldPreActorTick` publishes snapshots/events and
+opens `ManagedTick`; `OnWorldPostActorTick` closes it and executes committed
+commands in deterministic reservation order. Managed code writes fixed command
+or trace rows directly into native-owned storage. Line/sphere/box trace results
+are returned by one synchronous call, while command completions are published
+through a double-buffered event view on the next frame. The append-only v2
+bootstrap advertises this independent table only when every size, capability,
+and entry point is compatible.
+
 ## Phase B.13 Declaration IR state materialization
 
 `UUnifiedScriptAsset` now carries an optional declaration JSON path and exact
@@ -564,12 +574,13 @@ Make/Break Struct nodes. The exporter includes public native struct fields,
 recursively discovers referenced structs, and normalizes FVector-derived
 network serialization types to the FVector ABI.
 
-The BlockBreaker product slice exercises the whole path with generated
-`LoadObjectByPath`, `LoadClassByPath`, `SpawnActor`, `LineTraceSingle`,
-`FHitResult`, `StaticMeshComponent.SetStaticMesh`,
-`GameplayStatics.SpawnEmitterAtLocation`, and `GameplayStatics.ApplyDamage`.
-Its Gun host no longer contains resource, trace, cached-hit, effect, or damage
-facade functions.
+The BlockBreaker product slice keeps resource/class loading, Actor spawn, and
+`StaticMeshComponent.SetStaticMesh` on the generated Binding control plane.
+Its per-shot collision query now uses one Gameplay Data Batch Trace, while
+impact emission and damage are committed together through the command buffer;
+the next-frame event view confirms both completions. `FHitResult`-compatible
+trace rows cross no reflected struct boundary on this hot path. The Gun host no
+longer contains resource, trace, cached-hit, effect, or damage facade functions.
 
 The performance gate builds managed code in Release, warms both runtimes with
 4,096 calls, measures five 100,000-call samples, and uses the median. A
@@ -650,7 +661,9 @@ typed C# edits through the Workbench. Win64 Development and Shipping builds
 stage a plugin-local .NET runtime plus managed dependency closure and pass a
 packaged managed Start/Tick/Stop smoke. See `UNREAL_RELEASE.md`.
 
-The remaining production work is broader native debug traps and evaluation,
-arbitrary control-wire authoring outside structured operations, additional
-generated scalar signature families, and platform-specific CoreCLR packaging
-beyond Win64.
+The generated allocation-free scalar lane now covers zero to four arguments
+for the supported int, float, bool, object-handle, and FVector families, with
+ABI v3 CallFrame fallback for broader shapes. The remaining production work is
+native debug traps and deeper evaluation, arbitrary control-wire authoring
+outside structured operations, additional shared/gameplay data schemas, and
+platform-specific CoreCLR packaging beyond Win64.

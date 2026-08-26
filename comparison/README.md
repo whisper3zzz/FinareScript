@@ -33,9 +33,13 @@ byte-identical, the midpoint shot must hit exactly once, and UnifiedScript must
 report zero legacy calls. Per-trial logs and the aggregate report are written
 under `artifacts/comparison/gameplay`.
 
-The migrated shot is no longer a native Gun-facade shortcut. It exercises the
-generated World/static-service and complex-struct path: retained resource/class
-loading, Actor spawn, `FHitResult` trace output, emitter spawn, and damage.
+The migrated shot is no longer a native Gun-facade shortcut. Resource/class
+loading and Actor spawn remain on the generated Binding control plane. The hot
+shot path uses one Gameplay Data Batch Trace, commits emitter and damage rows in
+one command reservation, and consumes their completion events on the next
+managed frame. The current paired gameplay artifact predates this data-plane
+migration and must be regenerated before it is used for a new performance
+claim.
 
 Run the matched generated `int32(int32, int32)` performance gate with:
 
@@ -48,5 +52,7 @@ Both sides use UE 5.8.1 Development Editor, 4,096 warmup calls, five samples of
 the report requires zero managed allocation and a UnifiedScript/Puerts latency
 ratio no greater than 0.95. Results are written to the ignored
 `artifacts/comparison/performance/comparison.json`. The generated scalar ABI v3
-lane handles this fixed signature without constructing a generic call frame;
-other signatures continue to use the complete ABI v3 marshaller.
+lane handles this fixed signature without constructing a generic call frame.
+The allocation-free fixed lane also covers supported zero-to-four-argument
+int, float, bool, object-handle, and FVector families; broader signatures use
+the complete ABI v3 CallFrame marshaller.

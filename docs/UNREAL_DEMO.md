@@ -43,7 +43,11 @@ The checked-in headless smoke test remains available through
 `tools/run-unreal-demo.ps1`. A successful run proves component
 Start/Tick/Reload/Stop, declaration state migration, generated wrapper calls,
 the reflected `OnManagedSignal` Event Entry exactly once after reload, and
-`LegacyCalls=0` on UE 5.8.
+`LegacyCalls=0` on UE 5.8. The managed Demo also validates that Gameplay Data
+ABI v4 is available in `ManagedTick`, acquires the current event view, commits a
+zero-row command reservation, and executes a zero-distance line Batch Trace.
+These are lifecycle/discovery probes; the full command/event gameplay workload
+is exercised by the BlockBreaker comparison.
 
 ## Diagnostics
 

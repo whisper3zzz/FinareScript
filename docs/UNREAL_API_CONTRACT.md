@@ -85,18 +85,19 @@ retain the specialized fast path.
 
 ## BlockBreaker slice
 
-BlockBreaker selects ten native types and 43 members. Its C# gameplay uses
+BlockBreaker selects ten native types and 43 members. Its bootstrap path uses
 generated `Actor`, `Pawn`, `SceneComponent`, `CameraComponent`,
-`StaticMeshComponent`, `GameplayStatics`, and `UnifiedScriptWorldLibrary`
-wrappers. The World service loads assets/classes, retains loaded resources for
-the World-host lifetime, spawns Actors, and executes a visibility trace. The
-selected `FHitResult` fields generate one typed C# record plus native field
-codecs and visual Make/Break Struct nodes; net-quantized vector fields normalize
-to the existing FVector ABI.
+`StaticMeshComponent`, and `UnifiedScriptWorldLibrary` wrappers. The World
+service loads assets/classes, retains loaded resources for the World-host
+lifetime, and spawns Actors. `GameplayStatics` and the selected `FHitResult`
+shape remain in the product contract for compatibility and cold-path use, but
+the current player shot no longer invokes them across ABI v3.
 
-The migrated rifle therefore performs mesh loading/assignment, class loading,
-spawn, trace, hit-result access, emitter spawn, and damage without gameplay
-facade methods. Seven Gun facade functions and their transient cached hit/effect
-state were deleted. The exact 10,000-frame comparison executes one complete
-midpoint shot/hit and reports 120,030 generated ABI v3 calls with zero legacy
-calls.
+The migrated rifle performs its visibility query through one Gameplay Data
+Batch Trace and writes emitter/damage work into one command reservation. It
+observes the two completion events on the following managed frame. Seven Gun
+facade functions and their transient cached hit/effect state remain deleted.
+The current standalone 10,000-frame data-plane run executes one complete
+midpoint shot/hit and reports 120,027 generated ABI v3 calls with zero legacy
+calls. The checked matched Puerts gameplay artifact predates this migration and
+must be regenerated before drawing a new full-workload performance conclusion.

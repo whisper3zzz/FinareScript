@@ -2,38 +2,27 @@
 
 ## Status
 
-Phase A reflection/binding code is implemented. Phase B.1 adds the native
-UObject lifetime foundation without claiming invocation is complete. The .NET
-suite and repository invariants pass, UE 5.7.4 UHT accepts the plugin headers,
-and both plugin modules compile and link against UE 5.8.1. An installed UE 5.8.1
-Release build passes the lifecycle Automation Test and a live commandlet export;
-the exported fixture manifest also passes managed binding generation. Phase B.2
-adds tested native primitive property access and `ProcessEvent` dispatch without
-claiming that the process bridge exists. Phase B.3 adds the managed invocation
-adapter and executes the checked-in generated wrapper against its injected
-transport. Phase B.4 adds the versioned native function table and concrete
-managed in-process transport. Phase B.5 adds the native World subsystem and
-retained bridge-context lifecycle.
-Phase B.6 loads CoreCLR through hostfxr and acquires the process load-assembly
-delegate. Phase B.7 invokes managed create/destroy entry points and owns one
-managed registry per World. Phase B.8 loads a staged gameplay demo and executes
-its generated wrapper against a live UObject. Phase B.9 adds component-driven
-Start/Tick/Stop and collectible per-script reload generations. Phase B.10 adds
-stable generated Member IDs, an ABI v2 transport, and direct native thunks for
-the component fixture while preserving ABI v1 reflection fallback. Phase B.11
-adds native Script Assets, Content Browser/soft-path resolution, and
-configuration-aware transactional type reload. Phase B.12 generalizes native
-thunk generation, Phase B.13 materializes Declaration IR state, and Phase B.14
-adds the first native Slate workspace over Authoring Surface v0.1 with semantic
-patch export. Phase B.15 submits those patches through the Workbench, atomically
-regenerates UE authoring/runtime artifacts, and reloads matching components.
-Productization P1 adds versioned Unreal deployment manifests, an idempotent
-asset-sync commandlet with full preflight/validate-only modes, and required
-target-class checks before a Script Asset can start managed behavior.
-Productization P2 adds strict project API allowlists, exact-class reflection
-export, atomic C#/C++/coverage/node-catalog generation, Script Asset-selected
-Slate palettes, and the first direct Engine API BlockBreaker host reduction.
-Full UE 5.7 native compilation and packaging remain open.
+M6.1 is complete. Its Phase A and B.1-B.15 contracts established strict Unreal
+reflection, generation-safe UObject handles, versioned native transports, a
+World-owned CoreCLR host, component lifecycle and collectible reload, Script
+Assets, generated C#/C++ bindings, Declaration state, and transactional Slate
+authoring. UE 5.8.1 Release builds pass the native lifecycle/export gates.
+
+Subsequent M6.2 productization now extends that foundation with:
+
+- strict project API contracts, binding coverage, and visual API/event catalogs;
+- ABI v3 values/call frames plus ABI v4 reflected event proxies;
+- generated zero-to-four-argument scalar fast lanes with CallFrame fallback;
+- Actor hosting, containers, structs, output/reference values, resources, and
+  static World services;
+- Transform Shared Data and the World Phase Scheduler, Command/Event Buffer,
+  and line/sphere/box Batch Trace Gameplay Data plane;
+- a BlockBreaker product slice whose shot hot path no longer uses Gun facade
+  trace, cached-hit, emitter, or damage methods;
+- self-contained Win64 Development and Shipping cook/package smoke gates.
+
+`ROADMAP.md` is the authoritative live checklist; this milestone document keeps
+the completed M6.1 contracts and their acceptance boundary.
 
 ## Completed Phase A contract
 
@@ -267,11 +256,10 @@ Full UE 5.7 native compilation and packaging remain open.
 5. The BlockBreaker Player and Rifle use two real synchronized Script Assets
    and prove both asset identities in the headless gameplay gate.
 
-## Phase B acceptance gate
+## Completed Phase B acceptance gate
 
-The full phase is complete only when the compiled lifecycle test executes, a
-live fixture UObject is reached through the generated managed wrapper, a
-primitive property can be read/written, a fixture UFunction can be invoked
-through `ProcessEvent`, destroyed objects fail with a stable error, and all
-access is rejected off the owning game thread. A one-off test API does not
-satisfy the gate.
+The compiled lifecycle test executes, a live fixture UObject is reached through
+the generated managed wrapper, primitive properties are read and written, a
+fixture UFunction is invoked, destroyed objects fail with a stable error, and
+off-thread access is rejected. The gate uses the production bridge contract
+rather than a one-off test API.

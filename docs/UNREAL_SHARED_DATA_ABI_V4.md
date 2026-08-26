@@ -10,9 +10,10 @@ high-volume gameplay state. Native code owns two preallocated buffers per
 `UWorld`; managed code acquires the published buffer as a borrowed
 `ReadOnlySpan<T>` without copying it.
 
-The first schema publishes Actor transforms. Resource loading, `SpawnActor`,
-UFunction calls, and other side effects remain on the existing Binding control
-plane.
+The first schema publishes Actor transforms. Resource loading and arbitrary
+UFunction calls remain on the existing Binding control plane. Common gameplay
+side effects and collision queries now also have an independent fixed-row
+contract described by `UNREAL_GAMEPLAY_DATA_ABI_V4.md`.
 
 ## Lifetime and threading
 
@@ -79,8 +80,9 @@ foreach (ref readonly UnrealTransformSnapshotEntryV4 actor in snapshot.Entries)
 This API performs no row copy and no steady-state allocation. Callers must not
 retain the borrowed view past the current managed tick.
 
-## Next compatible extensions
+## Compatible extensions
 
-Later schemas may append velocity, gameplay attributes, tags, batched trace
-inputs/results, command buffers, and event rings. They should use new schema
-IDs or independent tables rather than changing the frozen Transform row.
+The Gameplay Data ABI follows this rule by using independent command, event,
+trace-request, and trace-result schema IDs rather than changing the frozen
+Transform row. Future velocity, gameplay-attribute, or tag snapshots should do
+the same.
