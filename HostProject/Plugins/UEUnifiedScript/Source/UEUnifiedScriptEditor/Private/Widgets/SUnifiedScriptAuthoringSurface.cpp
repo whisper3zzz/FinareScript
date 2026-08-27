@@ -1193,7 +1193,8 @@ void SUnifiedScriptAuthoringSurface::HandleGraphSelectionChanged(
                     if (Region.DirectStatementIds.Contains(Node->SemanticId) ||
                         (Action != nullptr && Region.Id == Action->RegionId &&
                             (Region.Kind == TEXT("block") || Region.Kind == TEXT("then") ||
-                                Region.Kind == TEXT("else") || Region.Kind == TEXT("loopBody"))))
+                                Region.Kind == TEXT("else") || Region.Kind == TEXT("loopBody") ||
+                                Region.Kind == TEXT("switchSection"))))
                     {
                         ActiveBlockRegionId = Region.Id;
                         if (AuthoringGraph.IsValid())
@@ -1721,7 +1722,22 @@ void SUnifiedScriptAuthoringSurface::RebuildNodePalette(
         AuthoringGraph->PaletteActions.Add(
             {TEXT("flow.while"), TEXT("Flow Control"), TEXT("While Loop"),
                 TEXT("Insert a structured C# while block with a true condition.")});
+        AuthoringGraph->PaletteActions.Add(
+            {TEXT("flow.doWhile"), TEXT("Flow Control"), TEXT("Do While Loop"),
+                TEXT("Insert a structured C# do/while block with a true condition.")});
     }
+    if (HasBoundType(TEXT("int")) && HasBoundType(TEXT("bool")))
+    {
+        AuthoringGraph->PaletteActions.Add(
+            {TEXT("flow.for"), TEXT("Flow Control"), TEXT("For Loop"),
+                TEXT("Insert a bounded C# for loop with an editable int index.")});
+    }
+    AuthoringGraph->PaletteActions.Add(
+        {TEXT("flow.break"), TEXT("Flow Control"), TEXT("Break"),
+            TEXT("Exit the nearest selected loop or switch region.")});
+    AuthoringGraph->PaletteActions.Add(
+        {TEXT("flow.continue"), TEXT("Flow Control"), TEXT("Continue"),
+            TEXT("Continue the nearest selected loop region.")});
     if (Function.Actions.ContainsByPredicate(
             [](const FUnifiedScriptAuthoringAction& Action)
             {

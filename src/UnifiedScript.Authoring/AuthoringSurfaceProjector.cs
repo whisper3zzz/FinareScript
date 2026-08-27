@@ -188,8 +188,9 @@ public sealed class AuthoringSurfaceProjector
                 edge.ToPort)).ToArray());
     }
 
-    private static bool IsStatementNode(GraphNode node) => node.Ports.Any(static port =>
-        port.Kind == GraphPortKind.Control);
+    private static bool IsStatementNode(GraphNode node) =>
+        node.Kind != "switchCase" &&
+        node.Ports.Any(static port => port.Kind == GraphPortKind.Control);
 
     private static IReadOnlyList<AuthoringPortSurface> ProjectPorts(
         GraphNode node,

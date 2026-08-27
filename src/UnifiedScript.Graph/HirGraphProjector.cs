@@ -300,7 +300,7 @@ public sealed class HirGraphProjector
                     sectionRegionId,
                     GraphRegionKind.SwitchSection,
                     switchRegionId,
-                    section.Id,
+                    section.Body.Id,
                     section.Span,
                     false));
             }
@@ -415,7 +415,7 @@ public sealed class HirGraphProjector
                         {
                             ["displayText"] = label.DisplayText,
                             ["isDefault"] = label is HirDefaultSwitchLabel ? "true" : "false",
-                            ["sectionId"] = section.Id.Value,
+                            ["sectionId"] = section.Body.Id.Value,
                         };
                         if (patternLabel is not null)
                         {

@@ -122,6 +122,62 @@ internal sealed class HirPatchIndex
         }
     }
 
+    public bool TryGetNearestEnclosingBreakable(
+        SemanticId blockId,
+        out HirStatement? breakable)
+    {
+        if (!blocks.TryGetValue(blockId, out BlockLocation? current))
+        {
+            breakable = null;
+            return false;
+        }
+
+        while (true)
+        {
+            if (current.EntryStatement is HirWhileStatement whileLoop &&
+                whileLoop.Body.Id == current.Block.Id)
+            {
+                breakable = whileLoop;
+                return true;
+            }
+
+            if (current.EntryStatement is HirDoWhileStatement doWhileLoop &&
+                doWhileLoop.Body.Id == current.Block.Id)
+            {
+                breakable = doWhileLoop;
+                return true;
+            }
+
+            if (current.EntryStatement is HirForStatement forLoop &&
+                forLoop.Body.Id == current.Block.Id)
+            {
+                breakable = forLoop;
+                return true;
+            }
+
+            if (current.EntryStatement is HirForEachStatement forEachLoop &&
+                forEachLoop.Body.Id == current.Block.Id)
+            {
+                breakable = forEachLoop;
+                return true;
+            }
+
+            if (current.EntryStatement is HirSwitchStatement switchStatement &&
+                switchStatement.Sections.Any(section => section.Body.Id == current.Block.Id))
+            {
+                breakable = switchStatement;
+                return true;
+            }
+
+            if (current.ParentBlock is null ||
+                !blocks.TryGetValue(current.ParentBlock.Id, out current))
+            {
+                breakable = null;
+                return false;
+            }
+        }
+    }
+
     public bool IsForVariableInScopeAtBlock(
         SemanticId variableId,
         SemanticId blockId)

@@ -167,6 +167,9 @@ The repository currently implements:
   and Graph v0.12, with bound enumerator protocol IDs, explicit acquisition,
   normal/return/exception cleanup, CFG ownership facts, and the same visual
   construction/editing protocol;
+- lossless `switch` and bounded C# patterns across HIR v0.8 and Graph v0.13,
+  with evaluate-once governing values, typed pattern variables, guarded case
+  routing, editable section-body ownership, and nearest-switch `break` facts;
 - opt-in `.usids` sidecars that preserve node identity across formatting and edits;
 - backend-neutral Script Asset / Declaration IR v0.1 with scalar and enum
   state, canonical defaults, engine exposure metadata, Visual signatures, and
@@ -179,12 +182,14 @@ The repository currently implements:
   edge/type preconditions, bounded pure-expression C# write-back, full
   reanalysis, Surface refresh, and old-wire retention on failure;
 - Graph Authoring v2 Alpha in the UE GraphEditor: a Blueprint-style right-click
-  palette, structured local/binary-expression/branch/loop/return insertion, transaction-first
+  palette, structured local/binary-expression/branch/while/do/for/break/continue/
+  return insertion, transaction-first
   Delete and Alt-click disconnection, and automatic source/Surface/runtime
   refresh after each accepted edit;
 - automatic shared-value extraction through an atomic
   `introduceTemporary` + `reconnectValue` patch plan, preserving one evaluation
-  instead of copying a computed subtree into a second consumer;
+  instead of copying a computed subtree into a second consumer, with a stable
+  collision-resistant name derived from the complete producer semantic ID;
 - reflection-driven UE API palette entries for readable properties and callable
   functions whose typed receiver and arguments are available in the active
   Visual function, emitted as structured member-access/invocation expressions
@@ -1859,7 +1864,8 @@ This milestone does not include:
 - automatic graph placement, layout merge drivers, and editor viewport/session
   state;
 - pattern-only or ambiguous enumerators, conditional-disposal enumerators,
-  `ref`, or async `foreach`; switch, lambdas, full exception CFG, or
+  `ref`, or async `foreach`; recursive/list/positional switch patterns, lambdas,
+  full exception CFG, or
   general-purpose C# visualization; indexed and exact synchronous
   `IEnumerable<T>` loops are represented losslessly and supported by bounded
   whole-loop visual construction;
@@ -1875,6 +1881,7 @@ See [ARCHITECTURE.md](docs/ARCHITECTURE.md),
 [LOOP_FOUNDATION.md](docs/LOOP_FOUNDATION.md),
 [FOR_LOOPS.md](docs/FOR_LOOPS.md),
 [FOREACH_LOOPS.md](docs/FOREACH_LOOPS.md),
+[SWITCH_PATTERNS.md](docs/SWITCH_PATTERNS.md),
 [LOOP_PATCHING.md](docs/LOOP_PATCHING.md),
 [CONDITIONAL_EXPRESSIONS.md](docs/CONDITIONAL_EXPRESSIONS.md),
 [PATCH_PLAN.md](docs/PATCH_PLAN.md),

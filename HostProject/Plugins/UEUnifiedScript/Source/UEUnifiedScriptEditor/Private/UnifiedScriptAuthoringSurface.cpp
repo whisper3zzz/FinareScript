@@ -1155,6 +1155,27 @@ const FUnifiedScriptAuthoringPort* FindTypePort(
     return nullptr;
 }
 
+const FUnifiedScriptAuthoringRegion* FindNearestEnclosingRegion(
+    const FUnifiedScriptAuthoringFunction& Function,
+    const FUnifiedScriptAuthoringRegion& Start,
+    const TArray<FString>& Kinds)
+{
+    const FUnifiedScriptAuthoringRegion* Current = &Start;
+    TSet<FString> Visited;
+    while (Current != nullptr && !Visited.Contains(Current->Id))
+    {
+        Visited.Add(Current->Id);
+        if (Kinds.Contains(Current->Kind))
+        {
+            return Current;
+        }
+        Current = Current->ParentRegionId.IsEmpty()
+            ? nullptr
+            : Function.FindRegion(Current->ParentRegionId);
+    }
+    return nullptr;
+}
+
 TSharedRef<FJsonObject> LocalReference(const FUnifiedScriptAuthoringParameter& Parameter)
 {
     const TSharedRef<FJsonObject> Expression = MakeShared<FJsonObject>();
@@ -1247,7 +1268,9 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildSharedDataEdgePatchPlan(
     FString TargetNext;
     GetSiblingPreconditions(*SourceBlock, SourceStatement->Id, SourcePrevious, SourceNext);
     GetSiblingPreconditions(*TargetBlock, TargetStatement->Id, TargetPrevious, TargetNext);
-    const FString TemporaryName = TEXT("sharedValue_") + NewSourceNodeId.Mid(3, 6);
+    // The complete semantic-id payload keeps automatic names stable and prevents two
+    // distinct expression nodes from sharing the old six-hex-character prefix.
+    const FString TemporaryName = TEXT("sharedValue_") + NewSourceNodeId.Mid(3).ToLower();
     const FString IntroduceStepId = TEXT("introduceSharedValue");
 
     const TSharedRef<FJsonObject> Introduction = MakeShared<FJsonObject>();
@@ -1295,7 +1318,7 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildBasicNodeInsertionPatch(
     FString Next;
     if (!GetInsertionGap(Function, BlockRegion, Previous, Next))
     {
-        OutError = TEXT("Choose an explicit function, branch, or loop block before adding a node.");
+        OutError = TEXT("Choose an explicit function, branch, loop, or switch-section block before adding a node.");
         return false;
     }
 
@@ -1345,7 +1368,8 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildBasicNodeInsertionPatch(
         Statement->SetObjectField(TEXT("initializer"), Expression);
         Statement->SetStringField(TEXT("expectedTypeId"), Operands[0]->TypeId);
     }
-    else if (TemplateId == TEXT("flow.branch") || TemplateId == TEXT("flow.while"))
+    else if (TemplateId == TEXT("flow.branch") || TemplateId == TEXT("flow.while") ||
+        TemplateId == TEXT("flow.doWhile"))
     {
         const FUnifiedScriptAuthoringPort* Type = FindTypePort(Function, TEXT("bool"));
         if (Type == nullptr)
@@ -1353,14 +1377,95 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildBasicNodeInsertionPatch(
             OutError = TEXT("This function has no bound bool type for structured control flow.");
             return false;
         }
-        Statement->SetStringField(
-            TEXT("statement"),
-            TemplateId == TEXT("flow.branch") ? TEXT("if") : TEXT("while"));
+        const FString StatementKind = TemplateId == TEXT("flow.branch")
+            ? TEXT("if")
+            : TemplateId == TEXT("flow.doWhile")
+                ? TEXT("doWhile")
+                : TEXT("while");
+        Statement->SetStringField(TEXT("statement"), StatementKind);
         const TSharedRef<FJsonObject> Condition = MakeShared<FJsonObject>();
         Condition->SetStringField(TEXT("expression"), TEXT("literal"));
         Condition->SetStringField(TEXT("valueText"), TEXT("true"));
         Condition->SetStringField(TEXT("expectedTypeId"), Type->TypeId);
         Statement->SetObjectField(TEXT("condition"), Condition);
+    }
+    else if (TemplateId == TEXT("flow.break") || TemplateId == TEXT("flow.continue"))
+    {
+        const bool bContinue = TemplateId == TEXT("flow.continue");
+        const TArray<FString> AllowedKinds = bContinue
+            ? TArray<FString>{TEXT("loop")}
+            : TArray<FString>{TEXT("loop"), TEXT("switch")};
+        if (FindNearestEnclosingRegion(Function, BlockRegion, AllowedKinds) == nullptr)
+        {
+            OutError = bContinue
+                ? TEXT("Continue requires a selected block inside a loop region.")
+                : TEXT("Break requires a selected block inside a loop or switch region.");
+            return false;
+        }
+        Statement->SetStringField(
+            TEXT("statement"),
+            bContinue ? TEXT("continue") : TEXT("break"));
+    }
+    else if (TemplateId == TEXT("flow.for"))
+    {
+        const FUnifiedScriptAuthoringPort* IntType = FindTypePort(Function, TEXT("int"));
+        const FUnifiedScriptAuthoringPort* BoolType = FindTypePort(Function, TEXT("bool"));
+        if (IntType == nullptr || BoolType == nullptr)
+        {
+            OutError = TEXT("For Loop requires bound int and bool types in the active function.");
+            return false;
+        }
+
+        const FString VariableName =
+            FString::Printf(TEXT("graphIndex%d"), BlockRegion.DirectStatementIds.Num() + 1);
+        const auto MakeForLocal = [&VariableName, IntType]()
+        {
+            const TSharedRef<FJsonObject> Reference = MakeShared<FJsonObject>();
+            Reference->SetStringField(TEXT("expression"), TEXT("forLocalReference"));
+            Reference->SetNumberField(TEXT("variableIndex"), 0);
+            Reference->SetStringField(TEXT("expectedName"), VariableName);
+            Reference->SetStringField(TEXT("expectedTypeId"), IntType->TypeId);
+            return Reference;
+        };
+        const auto MakeIntLiteral = [IntType](const FString& Value)
+        {
+            const TSharedRef<FJsonObject> Literal = MakeShared<FJsonObject>();
+            Literal->SetStringField(TEXT("expression"), TEXT("literal"));
+            Literal->SetStringField(TEXT("valueText"), Value);
+            Literal->SetStringField(TEXT("expectedTypeId"), IntType->TypeId);
+            return Literal;
+        };
+
+        const TSharedRef<FJsonObject> Variable = MakeShared<FJsonObject>();
+        Variable->SetStringField(TEXT("name"), VariableName);
+        Variable->SetObjectField(TEXT("initializer"), MakeIntLiteral(TEXT("0")));
+        Variable->SetStringField(TEXT("expectedTypeId"), IntType->TypeId);
+        const TSharedRef<FJsonObject> Declaration = MakeShared<FJsonObject>();
+        Declaration->SetStringField(TEXT("typeName"), TEXT("int"));
+        Declaration->SetArrayField(
+            TEXT("variables"),
+            {MakeShared<FJsonValueObject>(Variable)});
+
+        const TSharedRef<FJsonObject> Condition = MakeShared<FJsonObject>();
+        Condition->SetStringField(TEXT("expression"), TEXT("binary"));
+        Condition->SetStringField(TEXT("operator"), TEXT("<"));
+        Condition->SetObjectField(TEXT("left"), MakeForLocal());
+        Condition->SetObjectField(TEXT("right"), MakeIntLiteral(TEXT("1")));
+        Condition->SetStringField(TEXT("expectedTypeId"), BoolType->TypeId);
+
+        const TSharedRef<FJsonObject> Incrementor = MakeShared<FJsonObject>();
+        Incrementor->SetObjectField(TEXT("operand"), MakeForLocal());
+        Incrementor->SetStringField(TEXT("operator"), TEXT("++"));
+        Incrementor->SetBoolField(TEXT("isPostfix"), true);
+        Incrementor->SetStringField(TEXT("expectedTypeId"), IntType->TypeId);
+
+        Statement->SetStringField(TEXT("statement"), TEXT("for"));
+        Statement->SetObjectField(TEXT("declaration"), Declaration);
+        Statement->SetArrayField(TEXT("initializers"), {});
+        Statement->SetObjectField(TEXT("condition"), Condition);
+        Statement->SetArrayField(
+            TEXT("incrementors"),
+            {MakeShared<FJsonValueObject>(Incrementor)});
     }
     else if (TemplateId == TEXT("flow.return"))
     {

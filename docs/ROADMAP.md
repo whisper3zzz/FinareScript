@@ -239,8 +239,10 @@ Outcome: practical gameplay methods are fully visualizable.
   (scheduled in M8.1)
 - [ ] pattern-only/conditional-disposal, ref, and async `foreach` variants
   (scheduled in M8.5)
-- [ ] `switch` and supported patterns (scheduled in M8.1)
-- [ ] deterministic temporary naming (scheduled in M8.1)
+- [x] lossless text-authored `switch` and supported-pattern HIR/Graph/CFG
+  projection with editable section-body ownership
+- [x] deterministic shared-value temporary naming from the complete producer
+  semantic identity
 
 ## M5 — CoreCLR execution backend
 
@@ -634,6 +636,19 @@ the same semantic program.
   reject irreducible or semantically ambiguous wiring with actionable feedback
 - [ ] make create, delete, reconnect, extract, collapse, copy/paste, undo/redo,
   and multi-step edits transactional and identity-stable
+
+Progress (2026-08-27): HIR v0.8 and Graph v0.13 now preserve classic labels,
+declaration/type/var/discard/relational/logical patterns, guards, typed pattern
+variables, switch sections, nearest-breakable CFG facts, and actionable
+unsupported-pattern diagnostics. Section regions target their exact editable
+HIR body block and exclude case labels from statement order. The UE palette now
+authors `do/while`, bounded `for`, `break`, and `continue`; switch-section
+`break` is accepted while an unscoped `continue` is rejected. Automatic shared
+values use the complete producer semantic ID instead of a six-character prefix.
+The 459/459 managed suite, UE 5.8 editor build, and focused native Authoring
+Surface Automation pass. Visual switch-section construction/relabel/reorder,
+region-aware control reconnection, and the full edit transaction/undo contract
+remain open, so M8.1 is not yet complete.
 
 ### M8.2 — Blueprint-grade Unreal experience
 

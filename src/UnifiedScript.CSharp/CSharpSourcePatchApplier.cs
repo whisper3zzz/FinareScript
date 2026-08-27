@@ -2091,13 +2091,13 @@ public sealed class CSharpSourcePatchApplier
                 graphSafetyIndex,
                 boundNodes,
                 types),
-            BreakPatchStatement => BuildLoopTransferStatement(
+            BreakPatchStatement => BuildControlTransferStatement(
                 isContinue: false,
                 blockLocation!,
                 insertionIndex,
                 patchIndex,
                 graphSafetyIndex),
-            ContinuePatchStatement => BuildLoopTransferStatement(
+            ContinuePatchStatement => BuildControlTransferStatement(
                 isContinue: true,
                 blockLocation!,
                 insertionIndex,
@@ -4828,19 +4828,28 @@ public sealed class CSharpSourcePatchApplier
         return ExpressionBuildResult.Success(syntax, mutationType);
     }
 
-    private static StatementBuildResult BuildLoopTransferStatement(
+    private static StatementBuildResult BuildControlTransferStatement(
         bool isContinue,
         HirPatchIndex.BlockLocation blockLocation,
         int insertionIndex,
         HirPatchIndex patchIndex,
         GraphPatchSafetyIndex graphSafetyIndex)
     {
-        if (!patchIndex.TryGetNearestEnclosingLoop(blockLocation.Block.Id, out HirStatement? loop))
+        bool hasTarget = isContinue
+            ? patchIndex.TryGetNearestEnclosingLoop(
+                blockLocation.Block.Id,
+                out HirStatement? target)
+            : patchIndex.TryGetNearestEnclosingBreakable(
+                blockLocation.Block.Id,
+                out target);
+        if (!hasTarget)
         {
             return StatementBuildResult.Failure(
                 SemanticPatchDiagnosticCodes.InvalidStatement,
                 $"A graph-authored {(isContinue ? "continue" : "break")} requires an enclosing " +
-                "while, do, or for loop in the current HIR.");
+                (isContinue
+                    ? "while, do, for, or foreach loop in the current HIR."
+                    : "loop or switch in the current HIR."));
         }
 
         if (!graphSafetyIndex.IsInsertionReachable(blockLocation, insertionIndex))
@@ -4848,7 +4857,7 @@ public sealed class CSharpSourcePatchApplier
             return StatementBuildResult.Failure(
                 SemanticPatchDiagnosticCodes.UnreachableInsertion,
                 $"A graph-authored {(isContinue ? "continue" : "break")} requires a reachable " +
-                $"insertion gap inside loop '{loop!.Id}'.");
+                $"insertion gap inside '{target!.Id}'.");
         }
 
         return StatementBuildResult.Success(isContinue

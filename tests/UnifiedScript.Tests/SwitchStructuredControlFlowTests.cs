@@ -1,4 +1,5 @@
 using Microsoft.CodeAnalysis.CSharp;
+using UnifiedScript.Authoring;
 using UnifiedScript.CSharp;
 using UnifiedScript.Core;
 using UnifiedScript.Core.Hir;
@@ -116,6 +117,21 @@ public sealed class SwitchStructuredControlFlowTests
             node => node.Id == declaration.Variable.Id && node.Kind == "patternVariable");
         Assert.Equal(4, function.Regions.Count(static region =>
             region.Kind == GraphRegionKind.SwitchSection));
+
+        AuthoringFunctionSurface surfaceFunction = Assert.Single(
+            Assert.Single(new AuthoringSurfaceProjector().Project(
+                analysis.ScriptAssets!,
+                graph).Assets).Functions);
+        AuthoringRegionSurface[] surfaceSections = surfaceFunction.Regions
+            .Where(static region => region.Kind == GraphRegionKind.SwitchSection)
+            .OrderBy(static region => region.Span.Start.Line)
+            .ToArray();
+        Assert.Equal(@switch.Sections.Select(static section => section.Body.Id),
+            surfaceSections.Select(static region => region.SourceNodeId));
+        Assert.All(surfaceSections, section => Assert.DoesNotContain(
+            section.DirectStatementIds,
+            id => surfaceFunction.Actions.Single(action => action.Id == id).GraphKind ==
+                "switchCase"));
 
         GraphControlFlowFunction flow = Assert.Single(
             new GraphControlFlowAnalyzer().AnalyzeAndValidate(graph).Functions);

@@ -93,11 +93,16 @@ declared type instead of leaving invalid C# behind.
 
 Surface v0.3 publishes enough structural preconditions for a client to author
 whole statements without treating screen coordinates as semantics. The UE
-client inserts locals, `if`, `while`, and typed `return` statements against a
-real source block and exact sibling gap; Delete carries the same parent/sibling
-preconditions. Reusing a computed output emits one atomic patch-plan that first
-introduces a local temporary and then reconnects the other expression to the
-produced local. The host exposes that transaction at
+client inserts locals, `if`, `while`, `do/while`, bounded `for`, nearest-region
+`break`/`continue`, and typed `return` statements against a real source block
+and exact sibling gap; Delete carries the same parent/sibling preconditions.
+Switch-section regions expose their HIR body block as `sourceNodeId`, while case
+labels remain visible actions outside the editable statement order. Reusing a
+computed output emits one atomic patch-plan that first introduces a local
+temporary and then reconnects the other expression to the produced local. The
+temporary name includes the complete producer semantic-ID payload, so repeated
+planning is byte-stable and distinct producers do not collide through a short
+prefix. The host exposes that transaction at
 `POST /api/authoring/semantic-patch-plan`.
 
 ## HTTP and CLI delivery

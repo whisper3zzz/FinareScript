@@ -245,6 +245,23 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         TestTrue(TEXT("Shared plan introduces and reconnects one produced local"),
             SharedPlanJson.Contains(TEXT("\"step\": \"introduceTemporary\"")) &&
                 SharedPlanJson.Contains(TEXT("\"step\": \"reconnectValue\"")));
+        const FString ExpectedTemporaryName =
+            TEXT("sharedValue_") + RewireSource->Id.Mid(3).ToLower();
+        TestTrue(TEXT("Automatic temporary names retain the complete semantic identity"),
+            SharedPlanJson.Contains(ExpectedTemporaryName));
+        FString RepeatedSharedPlanJson;
+        TestTrue(
+            TEXT("The same shared-value gesture can be rebuilt deterministically"),
+            FUnifiedScriptAuthoringSurfaceReader::BuildSharedDataEdgePatchPlan(
+                Document,
+                RewireFunction,
+                *RewireEdge,
+                RewireSource->Id,
+                RewireSourcePort->Name,
+                RepeatedSharedPlanJson,
+                Error));
+        TestEqual(TEXT("Automatic temporary patch plans are byte-stable"),
+            RepeatedSharedPlanJson, SharedPlanJson);
     }
 
     const FUnifiedScriptAuthoringRegion* RewireBlock = RewireFunction.Regions.FindByPredicate(
@@ -253,7 +270,7 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
             return Region.Kind == TEXT("block");
         });
     TestNotNull(TEXT("Surface v0.3 exposes the real root block"), RewireBlock);
-    if (RewireBlock != nullptr && RewireTarget != nullptr)
+    if (RewireBlock != nullptr && RewireTarget != nullptr && RewireSource != nullptr)
     {
         FString InsertJson;
         TestTrue(TEXT("Context menu can build a structured branch insertion"),
@@ -263,6 +280,32 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
             InsertJson.Contains(RewireBlock->SourceNodeId) &&
                 InsertJson.Contains(TEXT("\"statement\": \"if\"")));
 
+        FString DoWhileJson;
+        TestTrue(TEXT("Context menu can build a structured do/while insertion"),
+            FUnifiedScriptAuthoringSurfaceReader::BuildBasicNodeInsertionPatch(
+                Document,
+                RewireFunction,
+                *RewireBlock,
+                TEXT("flow.doWhile"),
+                DoWhileJson,
+                Error));
+        TestTrue(TEXT("Do/while insertion uses the typed structured payload"),
+            DoWhileJson.Contains(TEXT("\"statement\": \"doWhile\"")));
+
+        FString ForJson;
+        TestTrue(TEXT("Context menu can build a bounded structured for insertion"),
+            FUnifiedScriptAuthoringSurfaceReader::BuildBasicNodeInsertionPatch(
+                Document,
+                RewireFunction,
+                *RewireBlock,
+                TEXT("flow.for"),
+                ForJson,
+                Error));
+        TestTrue(TEXT("For insertion keeps declaration, condition, and incrementor"),
+            ForJson.Contains(TEXT("\"statement\": \"for\"")) &&
+                ForJson.Contains(TEXT("\"expression\": \"forLocalReference\"")) &&
+                ForJson.Contains(TEXT("\"isPostfix\": true")));
+
         FString DeleteJson;
         TestTrue(TEXT("Delete key can build an exact statement deletion"),
             FUnifiedScriptAuthoringSurfaceReader::BuildStatementDeletionPatch(
@@ -270,6 +313,54 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         TestTrue(TEXT("Deletion retains parent-block and sibling preconditions"),
             DeleteJson.Contains(RewireBlock->SourceNodeId) &&
                 DeleteJson.Contains(TEXT("expectedPreviousSiblingId")));
+
+        FUnifiedScriptAuthoringFunction TransferFunction = RewireFunction;
+        FUnifiedScriptAuthoringRegion SwitchRegion;
+        SwitchRegion.Id = RewireSource->Id;
+        SwitchRegion.Kind = TEXT("switch");
+        SwitchRegion.SourceNodeId = RewireSource->Id;
+        FUnifiedScriptAuthoringRegion SwitchSection;
+        SwitchSection.Id = RewireTarget->Id;
+        SwitchSection.Kind = TEXT("switchSection");
+        SwitchSection.ParentRegionId = SwitchRegion.Id;
+        SwitchSection.SourceNodeId = RewireBlock->SourceNodeId;
+        SwitchRegion.ChildRegionIds = {SwitchSection.Id};
+        TransferFunction.Regions = {SwitchRegion, SwitchSection};
+
+        FString BreakJson;
+        TestTrue(TEXT("A switch-section block can author a nearest-switch break"),
+            FUnifiedScriptAuthoringSurfaceReader::BuildBasicNodeInsertionPatch(
+                Document,
+                TransferFunction,
+                SwitchSection,
+                TEXT("flow.break"),
+                BreakJson,
+                Error));
+        TestTrue(TEXT("Switch break emits the bounded terminal statement"),
+            BreakJson.Contains(TEXT("\"statement\": \"break\"")));
+
+        FString InvalidContinueJson;
+        TestFalse(TEXT("A switch without a loop rejects continue"),
+            FUnifiedScriptAuthoringSurfaceReader::BuildBasicNodeInsertionPatch(
+                Document,
+                TransferFunction,
+                SwitchSection,
+                TEXT("flow.continue"),
+                InvalidContinueJson,
+                Error));
+
+        TransferFunction.Regions[0].Kind = TEXT("loop");
+        FString ContinueJson;
+        TestTrue(TEXT("A loop body can author continue"),
+            FUnifiedScriptAuthoringSurfaceReader::BuildBasicNodeInsertionPatch(
+                Document,
+                TransferFunction,
+                TransferFunction.Regions[1],
+                TEXT("flow.continue"),
+                ContinueJson,
+                Error));
+        TestTrue(TEXT("Loop continue emits the bounded terminal statement"),
+            ContinueJson.Contains(TEXT("\"statement\": \"continue\"")));
     }
 
     const FUnifiedScriptAuthoringFunction& ApiFunction =

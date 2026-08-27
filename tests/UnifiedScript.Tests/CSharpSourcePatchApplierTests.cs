@@ -2680,6 +2680,78 @@ public sealed class CSharpSourcePatchApplierTests
     }
 
     [Fact]
+    public void Apply_InsertsBreakIntoNestedSwitchBlockButRejectsContinue()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int value, bool stop)
+                {
+                    switch (value)
+                    {
+                        case 0:
+                            if (stop)
+                            {
+                            }
+                            break;
+                        default:
+                            break;
+                    }
+
+                    return value;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/SwitchTransfer.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirSwitchStatement @switch = Assert.IsType<HirSwitchStatement>(method.Body.Statements[0]);
+        HirIfStatement nestedIf = Assert.IsType<HirIfStatement>(
+            @switch.Sections[0].Body.Statements[0]);
+
+        SemanticPatchDocument breakPatch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new InsertStatementPatchOperation(
+                nestedIf.Then.Id,
+                null,
+                null,
+                new BreakPatchStatement())]);
+        CSharpPatchResult breakResult = new CSharpSourcePatchApplier().Apply(request, breakPatch);
+
+        Assert.True(
+            breakResult.Succeeded,
+            string.Join(Environment.NewLine, breakResult.Diagnostics));
+        GraphControlFlowSwitch flow = Assert.Single(Assert.Single(
+            new GraphControlFlowAnalyzer().AnalyzeAndValidate(
+                new HirGraphProjector().Project(
+                    breakResult.Analysis!.Hir!,
+                    breakResult.Analysis.Semantics!)).Functions).Switches);
+        Assert.Equal(3, flow.BreakNodeIds.Count);
+
+        SemanticPatchDocument continuePatch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics.ConfigurationId,
+            [new InsertStatementPatchOperation(
+                nestedIf.Then.Id,
+                null,
+                null,
+                new ContinuePatchStatement())]);
+        CSharpPatchResult continueResult = new CSharpSourcePatchApplier().Apply(
+            request,
+            continuePatch);
+
+        Assert.False(continueResult.Succeeded);
+        Assert.Contains(
+            continueResult.Diagnostics,
+            static diagnostic => diagnostic.Code == SemanticPatchDiagnosticCodes.InvalidStatement);
+    }
+
+    [Fact]
     public void Apply_RejectsWhileInsertionAfterAnAllPathsReturnBranch()
     {
         const string source = """
