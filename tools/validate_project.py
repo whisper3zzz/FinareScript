@@ -63,6 +63,7 @@ DOCUMENTS = [
     ROOT / "docs" / "DECLARATION_IR.md",
     ROOT / "docs" / "VISUAL_AUTHORING_MODEL.md",
     ROOT / "docs" / "AUTHORING_SURFACE.md",
+    ROOT / "docs" / "NODE_PALETTE.md",
     ROOT / "docs" / "UNREAL_ADAPTER.md",
     ROOT / "docs" / "UNREAL_DEPLOYMENT.md",
     ROOT / "docs" / "UNREAL_ONBOARDING.md",
@@ -1429,6 +1430,18 @@ def main() -> int:
         / "Graph"
         / "UnifiedScriptGraphPresentation.cpp"
     )
+    unreal_node_palette_header_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptEditor"
+        / "Private"
+        / "Graph"
+        / "UnifiedScriptNodePalette.h"
+    )
+    unreal_node_palette_source_path = unreal_node_palette_header_path.with_suffix(".cpp")
     unreal_authoring_test_path = (
         ROOT
         / "HostProject"
@@ -1564,6 +1577,8 @@ def main() -> int:
         and unreal_authoring_workbench_source_path.is_file()
         and unreal_authoring_widget_path.is_file()
         and unreal_graph_presentation_path.is_file()
+        and unreal_node_palette_header_path.is_file()
+        and unreal_node_palette_source_path.is_file()
         and unreal_authoring_test_path.is_file()
         and unreal_editor_module_path.is_file()
         and unreal_alternate_demo_source_path.is_file()
@@ -1808,6 +1823,12 @@ def main() -> int:
     )
     unreal_authoring_widget = unreal_authoring_widget_path.read_text(encoding="utf-8")
     unreal_graph_presentation = unreal_graph_presentation_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_node_palette_header = unreal_node_palette_header_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_node_palette_source = unreal_node_palette_source_path.read_text(
         encoding="utf-8"
     )
     unreal_authoring_test = unreal_authoring_test_path.read_text(encoding="utf-8")
@@ -2473,7 +2494,7 @@ def main() -> int:
         and "puertsOrTypeScriptPackageFiles" in blockbreaker_package_runner
         and "### M7.4 — Full BlockBreaker runtime migration" in roadmap
         and "- [x] inventory all Puerts scripts" in roadmap
-        and "Next slice: **M8.2 — Blueprint-grade Unreal experience**" in roadmap,
+        and "Next slice: **M8.2 — pin defaults and canvas authoring**" in roadmap,
         "M7.4 whole-project Puerts inventory, coverage, or migration gates are incomplete",
     )
     checks.append("M7.4 BlockBreaker migration has exact coverage and zero legacy payload gates")
@@ -2803,6 +2824,22 @@ def main() -> int:
     )
     checks.append(
         "UE Slate losslessly compacts Surface v0.4 into author-facing nodes and pins"
+    )
+    require(
+        "FUnifiedScriptNodePaletteModel" in unreal_node_palette_header
+        and "ScoreMatch" in unreal_node_palette_source
+        and "MaxRecentActions" in unreal_node_palette_source
+        and "SSearchBox" in unreal_authoring_widget
+        and "Ctrl+Space" in unreal_authoring_widget
+        and "HandleToggleNodePaletteFavorite" in unreal_authoring_widget
+        and "RecordNodePaletteUsage" in unreal_authoring_widget
+        and "GEditorPerProjectIni" in unreal_authoring_widget
+        and "No active block hides statement actions but retains function events"
+        in unreal_authoring_test,
+        "Blueprint-style context Palette search, favorites, or recents are incomplete",
+    )
+    checks.append(
+        "UE Slate Palette is searchable, context-filtered, keyboard-driven, and preference-aware"
     )
     identity_reconciler_source = (
         ROOT / "src" / "UnifiedScript.CSharp" / "CSharpIdentityReconciler.cs"

@@ -219,6 +219,16 @@ math entry can likewise create a typed binary-expression local from compatible
 function parameters. Screen positions load from and save to the adjacent
 `.usgraph` sidecar independently of program semantics.
 
+M8.2 adds a docked native Palette over the same generated action set. Search
+matches title, category, tooltip, stable action ID, and contract keywords;
+Favorites and the eight most recently accepted actions rank ahead of ordinary
+alphabetical results. The action set is rebuilt for the active Visual function,
+available semantic types, reflected receiver/arguments, and selected editable
+block. Function-level Event Entries remain discoverable without a block, while
+statement actions do not. `Ctrl+Space` focuses search and Enter submits the top
+match. Favorites/Recents are per-user editor preferences and are deliberately
+absent from Surface and `.usgraph` schemas. See [NODE_PALETTE.md](NODE_PALETTE.md).
+
 Reflection v0.2 delegates appear under `Unreal Events`. Selecting one is a
 declaration-level operation rather than a statement insertion: the client posts
 `addUnrealEventHandler` through declaration-patch v0.2, and Roslyn adds a

@@ -4,6 +4,7 @@
 #include "UnifiedScriptAuthoringWorkbench.h"
 
 #include "Framework/Docking/TabManager.h"
+#include "Graph/UnifiedScriptNodePalette.h"
 #include "Graph/UnifiedScriptGraphPresentation.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/FileHelper.h"
@@ -894,6 +895,79 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
             PropertyPatchJson.Contains(TEXT("\"expression\": \"memberAccess\"")) &&
                 PropertyPatchJson.Contains(TEXT("\"memberName\": \"MaterializedStateCount\"")));
     }
+
+    const TArray<FUnifiedScriptGraphPaletteAction> PaletteActions = {
+        {TEXT("flow.branch"), TEXT("Flow Control"), TEXT("Branch"),
+            TEXT("Insert an if block."), TEXT("if condition bool")},
+        {TEXT("value.add"), TEXT("Math|Integer"), TEXT("Add Expression"),
+            TEXT("Add two integers."), TEXT("integer plus sum")},
+        {TEXT("local.int"), TEXT("Variables"), TEXT("Integer Local"),
+            TEXT("Create an integer local."), TEXT("int variable number")},
+        {TEXT("ue.event|Test|Signal"), TEXT("Unreal Events|Test"), TEXT("Event Signal"),
+            TEXT("Create an event entry."), TEXT("ue delegate signal"), false},
+    };
+    TArray<FString> FavoriteActions = {TEXT("flow.branch")};
+    TArray<FString> RecentActions = {TEXT("value.add"), TEXT("local.int")};
+    TArray<FUnifiedScriptNodePaletteItem> RankedPalette =
+        FUnifiedScriptNodePaletteModel::Build(
+            PaletteActions,
+            FString(),
+            FavoriteActions,
+            RecentActions,
+            true);
+    TestEqual(TEXT("Palette retains every action valid in an active block"), RankedPalette.Num(), 4);
+    TestEqual(TEXT("Favorite node ranks before recent and alphabetical nodes"),
+        RankedPalette[0].Action.ActionId, FString(TEXT("flow.branch")));
+    TestEqual(TEXT("Most-recent node ranks immediately after favorites"),
+        RankedPalette[1].Action.ActionId, FString(TEXT("value.add")));
+    const TArray<FUnifiedScriptNodePaletteItem> SearchPalette =
+        FUnifiedScriptNodePaletteModel::Build(
+            PaletteActions,
+            TEXT("integer plus"),
+            FavoriteActions,
+            RecentActions,
+            true);
+    TestEqual(TEXT("Palette token search matches title, tooltip, and keywords together"),
+        SearchPalette.Num(), 1);
+    if (!SearchPalette.IsEmpty())
+    {
+        TestEqual(TEXT("Keyword search resolves the typed Add action"),
+            SearchPalette[0].Action.ActionId, FString(TEXT("value.add")));
+    }
+    const TArray<FUnifiedScriptNodePaletteItem> FunctionPalette =
+        FUnifiedScriptNodePaletteModel::Build(
+            PaletteActions,
+            FString(),
+            FavoriteActions,
+            RecentActions,
+            false);
+    TestEqual(TEXT("No active block hides statement actions but retains function events"),
+        FunctionPalette.Num(), 1);
+    if (!FunctionPalette.IsEmpty())
+    {
+        TestEqual(TEXT("Function-level context retains the Event Entry action"),
+            FunctionPalette[0].Action.ActionId, FString(TEXT("ue.event|Test|Signal")));
+    }
+    TestFalse(TEXT("Toggling an existing favorite removes it"),
+        FUnifiedScriptNodePaletteModel::ToggleFavorite(FavoriteActions, TEXT("flow.branch")));
+    TestTrue(TEXT("Toggling a new favorite adds it"),
+        FUnifiedScriptNodePaletteModel::ToggleFavorite(FavoriteActions, TEXT("value.add")));
+    for (int32 Index = 0; Index < 12; ++Index)
+    {
+        FUnifiedScriptNodePaletteModel::RecordRecent(
+            RecentActions,
+            FString::Printf(TEXT("action-%d"), Index));
+    }
+    FUnifiedScriptNodePaletteModel::RecordRecent(RecentActions, TEXT("action-4"));
+    TestEqual(TEXT("Recent-node history stays bounded"),
+        RecentActions.Num(), FUnifiedScriptNodePaletteModel::MaxRecentActions);
+    TestEqual(TEXT("Repeated recent usage moves one action to the front without duplication"),
+        RecentActions[0], FString(TEXT("action-4")));
+    TestEqual(TEXT("Recent-node history keeps unique actions"),
+        RecentActions.FilterByPredicate([](const FString& Id)
+        {
+            return Id == TEXT("action-4");
+        }).Num(), 1);
 
     UUnifiedScriptEdGraph* TransactionGraph = NewObject<UUnifiedScriptEdGraph>(
         GetTransientPackage(),

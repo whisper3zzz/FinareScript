@@ -21,7 +21,8 @@ public:
             FText::FromString(Action.Category),
             FText::FromString(Action.Title),
             FText::FromString(Action.Tooltip),
-            0),
+            0,
+            FText::FromString(Action.Keywords)),
           ActionId(Action.ActionId)
     {
     }
@@ -118,12 +119,16 @@ void UUnifiedScriptEdGraphSchema::GetGraphContextActions(
     FGraphContextMenuBuilder& ContextMenuBuilder) const
 {
     const UUnifiedScriptEdGraph* Graph = Cast<UUnifiedScriptEdGraph>(ContextMenuBuilder.CurrentGraph);
-    if (Graph == nullptr || Graph->ActiveBlockRegionId.IsEmpty())
+    if (Graph == nullptr)
     {
         return;
     }
     for (const FUnifiedScriptGraphPaletteAction& Action : Graph->PaletteActions)
     {
+        if (Action.bRequiresBlock && Graph->ActiveBlockRegionId.IsEmpty())
+        {
+            continue;
+        }
         ContextMenuBuilder.AddAction(
             MakeShared<UE::UnifiedScript::Editor::Graph::Private::FCreateNodeAction>(Action));
     }

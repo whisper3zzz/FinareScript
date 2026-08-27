@@ -41,6 +41,8 @@ struct FUnifiedScriptGraphPaletteAction
     FString Category;
     FString Title;
     FString Tooltip;
+    FString Keywords;
+    bool bRequiresBlock = true;
 };
 
 /** Transient graph that forwards authored data-wire changes to the Workbench transaction. */

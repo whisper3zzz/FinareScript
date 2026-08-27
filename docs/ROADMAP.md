@@ -49,7 +49,7 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-27**
 
 - Active milestone: **M8 — Visual/C# Authoring Beta**
-- Next slice: **M8.2 — Blueprint-grade Unreal experience**
+- Next slice: **M8.2 — pin defaults and canvas authoring**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -60,10 +60,10 @@ machine-local unless an artifact explicitly says otherwise.
 
 | Gate | Verified result |
 | --- | --- |
-| Main source | `c526f7c` (`feat: add transactional callable extraction`), plus this Workspace v0.4 change set |
+| Main source | `54cf2a1` (`feat: add atomic grouped authoring transactions`), plus this M8.2 node-Palette change set |
 | Comparison source | `489ce9b` (`feat: complete full UnifiedScript migration`) |
 | Managed tests | 497 / 497 passed |
-| Repository validator | 49 / 49 passed |
+| Repository validator | 50 / 50 passed |
 | UE 5.8.1 native build | passed |
 | `UnifiedScript.Unreal` Automation | 13 / 13 passed at the M7.3 onboarding baseline; the migrated BlockBreaker Editor gate and focused M8.1 Authoring Surface gate also passed |
 | BlockBreaker workload | 10,000 frames, three trials, one shot, one hit, two command completions per trial |
@@ -746,10 +746,27 @@ pass.
 - [ ] deliver context-sensitive palette search, favorites/recent nodes, pin
   promotion and defaults, comments, reroute nodes, zoom/minimap, selection, and
   keyboard workflows consistent with UE expectations
+  - [x] context-derived token search, persistent Favorites, accepted Recent
+    actions, and `Ctrl+Space` / Enter / double-click placement
+  - [ ] pin promotion/default editors, comment/reroute authoring, minimap, and
+    remaining Blueprint keyboard parity
 - [ ] show concise author-facing node content by default while retaining exact
   type, effect, source, semantic ID, and generated API information on demand
 - [ ] provide compiler/contract diagnostics, quick fixes, source navigation,
   diff preview, and failed-transaction rollback in the editor
+
+The first M8.2 tranche replaces the right-click-only discovery path with a
+docked native Palette below **My Script**. Its action set is rebuilt from the
+active function, bound semantic types, selected source block, loop/switch
+ancestry, and generated UE reflection catalog. Search covers titles,
+categories, tooltips, stable action IDs, and explicit contract keywords.
+Favorites and the bounded eight-entry Recent list are stored in per-project user
+config; Recent changes only after an accepted Workbench response. Function-level
+Event Entries remain visible without an editable block, while statement actions
+do not. The focused UE 5.8 Authoring Surface Automation and 50/50 repository
+invariants pass. M8.2 remains open for pin defaults/promotion, comment and
+reroute editing, minimap/viewport persistence, advanced node details, and
+diagnostics/diff/rollback UX.
 
 ### M8.3 — Asset, state, event, and API authoring
 

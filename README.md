@@ -9,7 +9,8 @@ M7.2 gameplay services/lifecycle productization, and M7.3 schema-generated
 gameplay data plane without adding UE dependencies to the compiler core. M7.4
 then completed the full BlockBreaker migration with exact inventory coverage
 and no Puerts/TypeScript payload in the target project or package. The active
-RoadMap cursor is M8.2 Blueprint-grade Unreal authoring experience.
+RoadMap cursor is M8.2 pin defaults and canvas authoring after the native
+context-Palette tranche.
 
 ## Product roadmap
 
@@ -190,6 +191,10 @@ The repository currently implements:
   break/continue/return insertion, transaction-first
   Delete and Alt-click disconnection, and automatic source/Surface/runtime
   refresh after each accepted edit;
+- a docked native node Palette with token search, contract keywords,
+  active-function/block/type filtering, persistent per-user Favorites, an
+  accepted-action Recent list, `Ctrl+Space` focus, and Enter-to-place through
+  the same Workbench transaction path;
 - switch-section authoring from the Slate inspector, including typed
   constant/declaration/type/var/discard/relational/logical/not/parenthesized
   pattern text, bounded guards, ordered case/default insertion, relabeling,
@@ -458,6 +463,13 @@ Details/source/edit controls on the right. Surface v0.4 now materializes every
 Graph node, real typed pins, and compiler-owned control/data wires. Manual
 occupied-data-input rewiring now uses that same transactional source-patch
 contract; control flow and structural construction remain compiler-owned.
+The first M8.2 experience tranche adds a searchable Palette below `My Script`.
+It ranks Favorites and accepted Recent actions, filters statement nodes out
+when no editable block is active, retains function-level Event Entries, and
+derives API/event availability from the active function plus the generated
+reflection catalog. Preferences live in per-project editor user config; they
+never enter C#, `.usids`, `.usgraph`, or the Authoring Surface. See
+[`docs/NODE_PALETTE.md`](docs/NODE_PALETTE.md).
 
 The current runtime performance tranche activates ABI v3 for fixed scalars,
 enums, generation-safe object/class handles, vector/rotator, transform, UTF-8

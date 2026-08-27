@@ -655,6 +655,25 @@ publishes the final draft through one source/identity/artifact/history/runtime
 transaction and creates one named Undo entry. Cancel restores the committed
 Surface without touching the runtime generation.
 
+## Phase B.27 context Palette and node discovery
+
+The Blueprint workspace now docks a searchable Palette below **My Script**.
+Its deterministic model tokenizes title, category, tooltip, action ID, and
+generated contract keywords, then ranks exact/relevant matches before
+Favorites, recently accepted placements, category, and title. `Ctrl+Space`
+focuses search, Enter places the first result, double-click and the row `+`
+button use the same action path as the native graph context menu.
+
+The Palette is context-derived rather than a static catalog. Built-in actions
+appear only when their required semantic types exist in the active function;
+Break/Continue are limited to the selected loop/switch ancestry; reflected
+properties/functions require a compatible receiver and parameters; Event Entry
+actions remain legal at function scope while statement actions require a real
+source block. Favorites and the bounded eight-entry Recent list persist in
+`GEditorPerProjectIni`. A placement reaches Recent only after the Workbench
+accepts its transaction, and preferences never alter source, identities,
+Surface, Graph, or `.usgraph`. See [NODE_PALETTE.md](NODE_PALETTE.md).
+
 The bounded native pattern parser emits the shared JSON algebra for constant,
 declaration, type, var, discard, relational, logical, negated, and
 parenthesized patterns, plus literal or bool-parameter guards. It consumes

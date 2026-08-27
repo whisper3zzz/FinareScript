@@ -2,12 +2,14 @@
 
 #include "CoreMinimal.h"
 #include "GraphEditor.h"
+#include "Graph/UnifiedScriptNodePalette.h"
 #include "UnifiedScriptAuthoringSurface.h"
 #include "UObject/StrongObjectPtr.h"
 #include "Widgets/SCompoundWidget.h"
 
 class SEditableTextBox;
 class SGraphEditor;
+class SSearchBox;
 class STextBlock;
 class SVerticalBox;
 class FUICommandList;
@@ -16,6 +18,7 @@ class UUnifiedScriptAsset;
 class UUnifiedScriptEdGraph;
 class UUnifiedScriptEdGraphNode;
 template <typename ItemType> class STreeView;
+template <typename ItemType> class SListView;
 
 enum class EUnifiedScriptSurfaceTreeItemKind : uint8
 {
@@ -56,6 +59,7 @@ struct FUnifiedScriptReflectedPaletteAction
 };
 
 using FUnifiedScriptSurfaceTreeItemPtr = TSharedPtr<FUnifiedScriptSurfaceTreeItem>;
+using FUnifiedScriptNodePaletteItemPtr = TSharedPtr<FUnifiedScriptNodePaletteItem>;
 
 class SUnifiedScriptAuthoringSurface : public SCompoundWidget
 {
@@ -66,6 +70,10 @@ public:
 
     void Construct(const FArguments& InArgs);
     virtual ~SUnifiedScriptAuthoringSurface() override;
+    virtual bool SupportsKeyboardFocus() const override { return true; }
+    virtual FReply OnPreviewKeyDown(
+        const FGeometry& MyGeometry,
+        const FKeyEvent& InKeyEvent) override;
 
     bool LoadSurface(const FString& ConfiguredPath);
     int32 GetVisibleGraphNodeCount() const;
@@ -150,6 +158,14 @@ private:
     void HandleTreeDoubleClick(FUnifiedScriptSurfaceTreeItemPtr Item);
     void HandleGraphSelectionChanged(const FGraphPanelSelectionSet& Selection);
     void HandleGraphNodeDoubleClicked(UEdGraphNode* Node);
+    TSharedRef<ITableRow> GenerateNodePaletteRow(
+        FUnifiedScriptNodePaletteItemPtr Item,
+        const TSharedRef<STableViewBase>& OwnerTable);
+    void HandleNodePaletteSearchChanged(const FText& Text);
+    void HandleNodePaletteSearchCommitted(const FText& Text, ETextCommit::Type CommitType);
+    void HandleNodePaletteDoubleClick(FUnifiedScriptNodePaletteItemPtr Item);
+    FReply HandleInsertNodePaletteItem(FUnifiedScriptNodePaletteItemPtr Item);
+    FReply HandleToggleNodePaletteFavorite(FUnifiedScriptNodePaletteItemPtr Item);
 
     void RebuildTree();
     void AddRegionTree(
@@ -172,6 +188,11 @@ private:
     const FUnifiedScriptAuthoringAction* GetSingleSelectedStatementAction() const;
     TArray<FString> GetSelectedStatementActionIds() const;
     void RebuildNodePalette(const FUnifiedScriptAuthoringFunction& Function);
+    void RefreshNodePaletteItems();
+    void LoadNodePalettePreferences();
+    void SaveNodePalettePreferences() const;
+    void RecordNodePaletteUsage(const FString& ActionId);
+    FText GetNodePaletteContextText() const;
     void PersistCurrentLayout(bool bOnlyIfChanged);
     FUnifiedScriptSurfaceTreeItemPtr FindSurfaceItem(const FString& SemanticId) const;
     FReply HandleFocusGraph();
@@ -212,6 +233,11 @@ private:
     TMap<FString, TWeakObjectPtr<UUnifiedScriptEdGraphNode>> GraphNodesBySemanticId;
     TMap<FString, FVector2D> PersistedNodePositions;
     TMap<FString, FUnifiedScriptReflectedPaletteAction> ReflectedPaletteActions;
+    TArray<FString> FavoriteNodePaletteActionIds;
+    TArray<FString> RecentNodePaletteActionIds;
+    TArray<FUnifiedScriptNodePaletteItemPtr> FilteredNodePaletteItems;
+    FString NodePaletteSearchText;
+    FString PendingNodePaletteActionId;
     FString ActiveFunctionId;
     FString ActiveBlockRegionId;
     FString ActiveFunctionSignature;
@@ -223,7 +249,9 @@ private:
     TSharedPtr<SEditableTextBox> ServerUrlTextBox;
     TSharedPtr<SEditableTextBox> AuthoringGroupLabelTextBox;
     TSharedPtr<SEditableTextBox> ExtractionNameTextBox;
+    TSharedPtr<SSearchBox> NodePaletteSearchBox;
     TSharedPtr<STreeView<FUnifiedScriptSurfaceTreeItemPtr>> TreeView;
+    TSharedPtr<SListView<FUnifiedScriptNodePaletteItemPtr>> NodePaletteListView;
     TSharedPtr<SGraphEditor> GraphEditor;
     TSharedPtr<FUICommandList> GraphCommands;
     TSharedPtr<SVerticalBox> InspectorBox;

@@ -16,8 +16,10 @@
 #include "HttpModule.h"
 #include "IDesktopPlatform.h"
 #include "IContentBrowserSingleton.h"
+#include "InputCoreTypes.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
+#include "Misc/ConfigCacheIni.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Modules/ModuleManager.h"
@@ -34,18 +36,22 @@
 #include "Widgets/Input/SCheckBox.h"
 #include "Widgets/Input/SEditableTextBox.h"
 #include "Widgets/Input/SMultiLineEditableTextBox.h"
+#include "Widgets/Input/SSearchBox.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SSplitter.h"
 #include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/Layout/SSeparator.h"
 #include "Widgets/Views/STreeView.h"
+#include "Widgets/Views/SListView.h"
 #include "Widgets/Text/STextBlock.h"
 
 #define LOCTEXT_NAMESPACE "UnifiedScriptAuthoringSurface"
 
 namespace UE::UnifiedScript::AuthoringSurface::Slate::Private
 {
+const TCHAR* NodePaletteConfigSection = TEXT("UnifiedScript.AuthoringSurface.NodePalette");
+
 TSharedRef<STextBlock> MakeInspectorLabel(const FString& Text)
 {
     return SNew(STextBlock)
@@ -177,6 +183,7 @@ TMap<FString, FString> SuggestCopiedLocalNames(
 void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
 {
     InitialSurfacePath = InArgs._InitialSurfacePath;
+    LoadNodePalettePreferences();
 
     AuthoringGraph.Reset(NewObject<UUnifiedScriptEdGraph>(
         GetTransientPackage(),
@@ -543,7 +550,7 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
                             SNew(SSeparator)
                         ]
                         + SVerticalBox::Slot()
-                        .FillHeight(1.0f)
+                        .FillHeight(0.58f)
                         .Padding(3.0f, 4.0f)
                         [
                             SAssignNew(TreeView, STreeView<FUnifiedScriptSurfaceTreeItemPtr>)
@@ -552,6 +559,68 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
                             .OnGetChildren(this, &SUnifiedScriptAuthoringSurface::GetTreeChildren)
                             .OnSelectionChanged(this, &SUnifiedScriptAuthoringSurface::HandleSelectionChanged)
                             .OnMouseButtonDoubleClick(this, &SUnifiedScriptAuthoringSurface::HandleTreeDoubleClick)
+                            .SelectionMode(ESelectionMode::Single)
+                        ]
+                        + SVerticalBox::Slot()
+                        .AutoHeight()
+                        [
+                            SNew(SSeparator)
+                        ]
+                        + SVerticalBox::Slot()
+                        .AutoHeight()
+                        .Padding(10.0f, 8.0f, 10.0f, 3.0f)
+                        [
+                            SNew(SHorizontalBox)
+                            + SHorizontalBox::Slot()
+                            .FillWidth(1.0f)
+                            [
+                                SNew(SVerticalBox)
+                                + SVerticalBox::Slot()
+                                .AutoHeight()
+                                [
+                                    SNew(STextBlock)
+                                    .Text(LOCTEXT("NodePalette", "PALETTE"))
+                                    .Font(FAppStyle::GetFontStyle(TEXT("SmallFontBold")))
+                                    .ColorAndOpacity(FLinearColor(0.62f, 0.66f, 0.72f))
+                                ]
+                                + SVerticalBox::Slot()
+                                .AutoHeight()
+                                .Padding(0.0f, 2.0f, 0.0f, 0.0f)
+                                [
+                                    SNew(STextBlock)
+                                    .Text(this, &SUnifiedScriptAuthoringSurface::GetNodePaletteContextText)
+                                    .Font(FAppStyle::GetFontStyle(TEXT("SmallFont")))
+                                    .ColorAndOpacity(FLinearColor(0.45f, 0.49f, 0.54f))
+                                    .Clipping(EWidgetClipping::ClipToBounds)
+                                ]
+                            ]
+                            + SHorizontalBox::Slot()
+                            .AutoWidth()
+                            .VAlign(VAlign_Top)
+                            [
+                                SNew(STextBlock)
+                                .Text(LOCTEXT("NodePaletteShortcut", "Ctrl+Space"))
+                                .Font(FAppStyle::GetFontStyle(TEXT("SmallFont")))
+                                .ColorAndOpacity(FLinearColor(0.42f, 0.46f, 0.51f))
+                            ]
+                        ]
+                        + SVerticalBox::Slot()
+                        .AutoHeight()
+                        .Padding(6.0f, 2.0f, 6.0f, 4.0f)
+                        [
+                            SAssignNew(NodePaletteSearchBox, SSearchBox)
+                            .HintText(LOCTEXT("NodePaletteSearchHint", "Search nodes, APIs, events..."))
+                            .OnTextChanged(this, &SUnifiedScriptAuthoringSurface::HandleNodePaletteSearchChanged)
+                            .OnTextCommitted(this, &SUnifiedScriptAuthoringSurface::HandleNodePaletteSearchCommitted)
+                        ]
+                        + SVerticalBox::Slot()
+                        .FillHeight(0.42f)
+                        .Padding(3.0f, 0.0f, 3.0f, 4.0f)
+                        [
+                            SAssignNew(NodePaletteListView, SListView<FUnifiedScriptNodePaletteItemPtr>)
+                            .ListItemsSource(&FilteredNodePaletteItems)
+                            .OnGenerateRow(this, &SUnifiedScriptAuthoringSurface::GenerateNodePaletteRow)
+                            .OnMouseButtonDoubleClick(this, &SUnifiedScriptAuthoringSurface::HandleNodePaletteDoubleClick)
                             .SelectionMode(ESelectionMode::Single)
                         ]
                     ]
@@ -749,6 +818,28 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
 SUnifiedScriptAuthoringSurface::~SUnifiedScriptAuthoringSurface()
 {
     PersistCurrentLayout(true);
+}
+
+FReply SUnifiedScriptAuthoringSurface::OnPreviewKeyDown(
+    const FGeometry& MyGeometry,
+    const FKeyEvent& InKeyEvent)
+{
+    if (InKeyEvent.IsControlDown() && InKeyEvent.GetKey() == EKeys::SpaceBar &&
+        NodePaletteSearchBox.IsValid())
+    {
+        FSlateApplication::Get().SetKeyboardFocus(
+            NodePaletteSearchBox,
+            EFocusCause::SetDirectly);
+        NodePaletteSearchBox->SelectAllText();
+        return FReply::Handled();
+    }
+    if (InKeyEvent.GetKey() == EKeys::Escape && NodePaletteSearchBox.IsValid() &&
+        NodePaletteSearchBox->HasKeyboardFocus() && !NodePaletteSearchText.IsEmpty())
+    {
+        NodePaletteSearchBox->SetText(FText::GetEmpty());
+        return FReply::Handled();
+    }
+    return SCompoundWidget::OnPreviewKeyDown(MyGeometry, InKeyEvent);
 }
 
 bool SUnifiedScriptAuthoringSurface::LoadSurface(const FString& ConfiguredPath)
@@ -1165,11 +1256,16 @@ void SUnifiedScriptAuthoringSurface::HandleNodeCreateRequested(
                 SetStatus(MoveTemp(Error), true);
                 return;
             }
+            PendingNodePaletteActionId = ActionId;
             SubmitAuthoringTransaction(
                 MoveTemp(Patch),
                 FUnifiedScriptAuthoringWorkbench::BuildDeclarationPatchUrl(
                     ServerUrlTextBox.IsValid() ? ServerUrlTextBox->GetText().ToString() : FString()),
                 FString::Printf(TEXT("Creating UE Event Entry '%s'"), *Reflected->HandlerName));
+            if (!bPatchRequestPending)
+            {
+                PendingNodePaletteActionId.Reset();
+            }
             return;
         }
 
@@ -1223,9 +1319,14 @@ void SUnifiedScriptAuthoringSurface::HandleNodeCreateRequested(
         SetStatus(MoveTemp(Error), true);
         return;
     }
+    PendingNodePaletteActionId = ActionId;
     SubmitSemanticPatch(
         MoveTemp(Patch),
         FString::Printf(TEXT("Creating graph node '%s'"), *ActionId));
+    if (!bPatchRequestPending)
+    {
+        PendingNodePaletteActionId.Reset();
+    }
 }
 
 void SUnifiedScriptAuthoringSurface::HandleStatementDeleteRequested(const UEdGraphNode* Node)
@@ -1936,6 +2037,8 @@ void SUnifiedScriptAuthoringSurface::HandlePatchResponse(
     FString ResponseJson)
 {
     const bool bPublishedRuntime = bPendingRequestPublishesRuntime;
+    const FString CompletedNodePaletteActionId = MoveTemp(PendingNodePaletteActionId);
+    PendingNodePaletteActionId.Reset();
     bPatchRequestPending = false;
     bPendingRequestPublishesRuntime = true;
     if (!bRequestSucceeded || StatusCode < 200 || StatusCode >= 300)
@@ -1976,6 +2079,10 @@ void SUnifiedScriptAuthoringSurface::HandlePatchResponse(
     ActiveAuthoringGroupStagedCount = Workspace.Group.bActive
         ? Workspace.Group.StagedOperationCount
         : 0;
+    if (!CompletedNodePaletteActionId.IsEmpty())
+    {
+        RecordNodePaletteUsage(CompletedNodePaletteActionId);
+    }
     if (!LoadedSurfacePath.IsEmpty())
     {
         LoadedSurfaceTimestamp = IFileManager::Get().GetTimeStamp(*LoadedSurfacePath);
@@ -2166,6 +2273,7 @@ void SUnifiedScriptAuthoringSurface::HandleSelectionChanged(
         const FUnifiedScriptAuthoringFunction* Function = FindFunction(ActiveFunctionId);
         if (Function != nullptr)
         {
+            const FString PreviousBlockRegionId = ActiveBlockRegionId;
             for (const FUnifiedScriptAuthoringRegion& Region : Function->Regions)
             {
                 if (Region.Id == Item->SemanticId ||
@@ -2178,6 +2286,10 @@ void SUnifiedScriptAuthoringSurface::HandleSelectionChanged(
                     }
                     break;
                 }
+            }
+            if (PreviousBlockRegionId != ActiveBlockRegionId)
+            {
+                RebuildNodePalette(*Function);
             }
         }
     }
@@ -2202,6 +2314,7 @@ void SUnifiedScriptAuthoringSurface::HandleGraphSelectionChanged(
         {
             if (const FUnifiedScriptAuthoringFunction* Function = FindFunction(ActiveFunctionId))
             {
+                const FString PreviousBlockRegionId = ActiveBlockRegionId;
                 const FUnifiedScriptAuthoringAction* Action = Function->FindAction(Node->SemanticId);
                 for (const FUnifiedScriptAuthoringRegion& Region : Function->Regions)
                 {
@@ -2218,6 +2331,10 @@ void SUnifiedScriptAuthoringSurface::HandleGraphSelectionChanged(
                         }
                         break;
                     }
+                }
+                if (PreviousBlockRegionId != ActiveBlockRegionId)
+                {
+                    RebuildNodePalette(*Function);
                 }
             }
             RebuildInspector(FindSurfaceItem(Node->SemanticId));
@@ -2236,6 +2353,154 @@ void SUnifiedScriptAuthoringSurface::HandleGraphNodeDoubleClicked(UEdGraphNode* 
             HandleOpenSource(Item->Span);
         }
     }
+}
+
+TSharedRef<ITableRow> SUnifiedScriptAuthoringSurface::GenerateNodePaletteRow(
+    FUnifiedScriptNodePaletteItemPtr Item,
+    const TSharedRef<STableViewBase>& OwnerTable)
+{
+    check(Item.IsValid());
+    return SNew(STableRow<FUnifiedScriptNodePaletteItemPtr>, OwnerTable)
+        .Padding(FMargin(2.0f, 1.0f))
+        .ToolTipText(FText::FromString(Item->Action.Tooltip))
+        [
+            SNew(SHorizontalBox)
+            + SHorizontalBox::Slot()
+            .AutoWidth()
+            .VAlign(VAlign_Center)
+            .Padding(0.0f, 0.0f, 3.0f, 0.0f)
+            [
+                SNew(SButton)
+                .Text_Lambda([Item]()
+                {
+                    return FText::FromString(Item->bFavorite ? TEXT("\u2605") : TEXT("\u2606"));
+                })
+                .ToolTipText_Lambda([Item]()
+                {
+                    return Item->bFavorite
+                        ? LOCTEXT("RemovePaletteFavorite", "Remove from Favorites")
+                        : LOCTEXT("AddPaletteFavorite", "Add to Favorites");
+                })
+                .ContentPadding(FMargin(3.0f, 0.0f))
+                .OnClicked(this, &SUnifiedScriptAuthoringSurface::HandleToggleNodePaletteFavorite, Item)
+            ]
+            + SHorizontalBox::Slot()
+            .FillWidth(1.0f)
+            .VAlign(VAlign_Center)
+            [
+                SNew(SVerticalBox)
+                + SVerticalBox::Slot()
+                .AutoHeight()
+                [
+                    SNew(STextBlock)
+                    .Text(FText::FromString(Item->Action.Title))
+                    .Font(FAppStyle::GetFontStyle(TEXT("SmallFontBold")))
+                    .HighlightText_Lambda([this]()
+                    {
+                        return FText::FromString(NodePaletteSearchText);
+                    })
+                ]
+                + SVerticalBox::Slot()
+                .AutoHeight()
+                [
+                    SNew(STextBlock)
+                    .Text(FText::FromString(Item->Action.Category))
+                    .Font(FAppStyle::GetFontStyle(TEXT("SmallFont")))
+                    .ColorAndOpacity(FLinearColor(0.46f, 0.50f, 0.55f))
+                ]
+            ]
+            + SHorizontalBox::Slot()
+            .AutoWidth()
+            .VAlign(VAlign_Center)
+            .Padding(3.0f, 0.0f)
+            [
+                SNew(STextBlock)
+                .Text(LOCTEXT("RecentPaletteAction", "RECENT"))
+                .Font(FAppStyle::GetFontStyle(TEXT("SmallFont")))
+                .ColorAndOpacity(FLinearColor(0.34f, 0.62f, 0.86f))
+                .Visibility(Item->RecentRank == INDEX_NONE
+                    ? EVisibility::Collapsed
+                    : EVisibility::Visible)
+            ]
+            + SHorizontalBox::Slot()
+            .AutoWidth()
+            .VAlign(VAlign_Center)
+            [
+                SNew(SButton)
+                .Text(LOCTEXT("InsertPaletteAction", "+"))
+                .ToolTipText(LOCTEXT(
+                    "InsertPaletteActionTip",
+                    "Submit this node through the active Workbench transaction."))
+                .IsEnabled_Lambda([this]()
+                {
+                    return !bPatchRequestPending;
+                })
+                .ContentPadding(FMargin(5.0f, 0.0f))
+                .OnClicked(this, &SUnifiedScriptAuthoringSurface::HandleInsertNodePaletteItem, Item)
+            ]
+        ];
+}
+
+void SUnifiedScriptAuthoringSurface::HandleNodePaletteSearchChanged(const FText& Text)
+{
+    NodePaletteSearchText = Text.ToString();
+    RefreshNodePaletteItems();
+}
+
+void SUnifiedScriptAuthoringSurface::HandleNodePaletteSearchCommitted(
+    const FText& Text,
+    ETextCommit::Type CommitType)
+{
+    NodePaletteSearchText = Text.ToString();
+    if (CommitType == ETextCommit::OnEnter && !FilteredNodePaletteItems.IsEmpty())
+    {
+        HandleInsertNodePaletteItem(FilteredNodePaletteItems[0]);
+    }
+}
+
+void SUnifiedScriptAuthoringSurface::HandleNodePaletteDoubleClick(
+    FUnifiedScriptNodePaletteItemPtr Item)
+{
+    HandleInsertNodePaletteItem(MoveTemp(Item));
+}
+
+FReply SUnifiedScriptAuthoringSurface::HandleInsertNodePaletteItem(
+    FUnifiedScriptNodePaletteItemPtr Item)
+{
+    if (!Item.IsValid())
+    {
+        return FReply::Handled();
+    }
+    if (bPatchRequestPending)
+    {
+        SetStatus(TEXT("Wait for the active authoring transaction before placing another node."), true);
+        return FReply::Handled();
+    }
+    HandleNodeCreateRequested(Item->Action.ActionId, FVector2D::ZeroVector);
+    return FReply::Handled();
+}
+
+FReply SUnifiedScriptAuthoringSurface::HandleToggleNodePaletteFavorite(
+    FUnifiedScriptNodePaletteItemPtr Item)
+{
+    if (Item.IsValid())
+    {
+        const bool bFavorite = FUnifiedScriptNodePaletteModel::ToggleFavorite(
+            FavoriteNodePaletteActionIds,
+            Item->Action.ActionId);
+        SaveNodePalettePreferences();
+        RefreshNodePaletteItems();
+        SetStatus(
+            bFavorite
+                ? FString::Printf(
+                    TEXT("Added '%s' to the node Palette favorites."),
+                    *Item->Action.Title)
+                : FString::Printf(
+                    TEXT("Removed '%s' from the node Palette favorites."),
+                    *Item->Action.Title),
+            false);
+    }
+    return FReply::Handled();
 }
 
 void SUnifiedScriptAuthoringSurface::RebuildTree()
@@ -2445,6 +2710,9 @@ void SUnifiedScriptAuthoringSurface::RebuildGraph(
     ActiveBlockRegionId.Reset();
     ActiveFunctionSignature = FunctionItem->Detail;
     ActiveGraphActionCount = 0;
+    AuthoringGraph->PaletteActions.Reset();
+    ReflectedPaletteActions.Reset();
+    RefreshNodePaletteItems();
 
     const FUnifiedScriptAuthoringFunction* Function = FindFunction(ActiveFunctionId);
     if (Function != nullptr)
@@ -2684,6 +2952,113 @@ const FUnifiedScriptAuthoringRegion* SUnifiedScriptAuthoringSurface::ResolveActi
     return nullptr;
 }
 
+void SUnifiedScriptAuthoringSurface::LoadNodePalettePreferences()
+{
+    FavoriteNodePaletteActionIds.Reset();
+    RecentNodePaletteActionIds.Reset();
+    if (GConfig != nullptr)
+    {
+        GConfig->GetArray(
+            UE::UnifiedScript::AuthoringSurface::Slate::Private::NodePaletteConfigSection,
+            TEXT("Favorites"),
+            FavoriteNodePaletteActionIds,
+            GEditorPerProjectIni);
+        GConfig->GetArray(
+            UE::UnifiedScript::AuthoringSurface::Slate::Private::NodePaletteConfigSection,
+            TEXT("Recents"),
+            RecentNodePaletteActionIds,
+            GEditorPerProjectIni);
+    }
+
+    const auto NormalizeIds = [](TArray<FString>& Ids, int32 MaxCount)
+    {
+        TSet<FString> Seen;
+        Ids.RemoveAll([&Seen](FString& Id)
+        {
+            Id.TrimStartAndEndInline();
+            if (Id.IsEmpty() || Seen.Contains(Id))
+            {
+                return true;
+            }
+            Seen.Add(Id);
+            return false;
+        });
+        if (Ids.Num() > MaxCount)
+        {
+            Ids.SetNum(MaxCount);
+        }
+    };
+    NormalizeIds(FavoriteNodePaletteActionIds, 128);
+    NormalizeIds(
+        RecentNodePaletteActionIds,
+        FUnifiedScriptNodePaletteModel::MaxRecentActions);
+}
+
+void SUnifiedScriptAuthoringSurface::SaveNodePalettePreferences() const
+{
+    if (GConfig == nullptr)
+    {
+        return;
+    }
+    GConfig->SetArray(
+        UE::UnifiedScript::AuthoringSurface::Slate::Private::NodePaletteConfigSection,
+        TEXT("Favorites"),
+        FavoriteNodePaletteActionIds,
+        GEditorPerProjectIni);
+    GConfig->SetArray(
+        UE::UnifiedScript::AuthoringSurface::Slate::Private::NodePaletteConfigSection,
+        TEXT("Recents"),
+        RecentNodePaletteActionIds,
+        GEditorPerProjectIni);
+    GConfig->Flush(false, GEditorPerProjectIni);
+}
+
+void SUnifiedScriptAuthoringSurface::RefreshNodePaletteItems()
+{
+    FilteredNodePaletteItems.Reset();
+    if (AuthoringGraph.IsValid())
+    {
+        TArray<FUnifiedScriptNodePaletteItem> Items = FUnifiedScriptNodePaletteModel::Build(
+            AuthoringGraph->PaletteActions,
+            NodePaletteSearchText,
+            FavoriteNodePaletteActionIds,
+            RecentNodePaletteActionIds,
+            !ActiveBlockRegionId.IsEmpty());
+        FilteredNodePaletteItems.Reserve(Items.Num());
+        for (FUnifiedScriptNodePaletteItem& Item : Items)
+        {
+            FilteredNodePaletteItems.Add(
+                MakeShared<FUnifiedScriptNodePaletteItem>(MoveTemp(Item)));
+        }
+    }
+    if (NodePaletteListView.IsValid())
+    {
+        NodePaletteListView->RequestListRefresh();
+    }
+}
+
+void SUnifiedScriptAuthoringSurface::RecordNodePaletteUsage(const FString& ActionId)
+{
+    FUnifiedScriptNodePaletteModel::RecordRecent(RecentNodePaletteActionIds, ActionId);
+    SaveNodePalettePreferences();
+    RefreshNodePaletteItems();
+}
+
+FText SUnifiedScriptAuthoringSurface::GetNodePaletteContextText() const
+{
+    if (ActiveFunctionId.IsEmpty())
+    {
+        return LOCTEXT("NodePaletteNoFunction", "Select a function to discover valid nodes");
+    }
+    if (ActiveBlockRegionId.IsEmpty())
+    {
+        return LOCTEXT("NodePaletteFunctionContext", "Function context · events only");
+    }
+    return FText::Format(
+        LOCTEXT("NodePaletteBlockContext", "{0} · active block"),
+        FText::FromString(ActiveFunctionSignature));
+}
+
 void SUnifiedScriptAuthoringSurface::RebuildNodePalette(
     const FUnifiedScriptAuthoringFunction& Function)
 {
@@ -2714,7 +3089,8 @@ void SUnifiedScriptAuthoringSurface::RebuildNodePalette(
     {
         AuthoringGraph->PaletteActions.Add(
             {TEXT("local.int"), TEXT("Variables"), TEXT("Integer Local"),
-                TEXT("Insert a typed int local initialized to 0.")});
+                TEXT("Insert a typed int local initialized to 0."),
+                TEXT("variable local integer int number")});
     }
     int32 IntParameterCount = 0;
     for (const FUnifiedScriptAuthoringParameter& Parameter : Function.Parameters)
@@ -2728,38 +3104,63 @@ void SUnifiedScriptAuthoringSurface::RebuildNodePalette(
     {
         AuthoringGraph->PaletteActions.Add(
             {TEXT("flow.switch"), TEXT("Flow Control"), TEXT("Switch on Integer"),
-                TEXT("Insert a typed switch with case 0 and default sections.")});
+                TEXT("Insert a typed switch with case 0 and default sections."),
+                TEXT("switch case select integer branch")});
     }
     if (IntParameterCount >= 2)
     {
         AuthoringGraph->PaletteActions.Add(
             {TEXT("value.add"), TEXT("Math|Integer"), TEXT("Add Expression"),
-                TEXT("Insert a typed local containing the sum of two int parameters.")});
+                TEXT("Insert a typed local containing the sum of two int parameters."),
+                TEXT("add plus sum arithmetic math integer")});
     }
     if (HasBoundType(TEXT("bool")))
     {
         AuthoringGraph->PaletteActions.Add(
             {TEXT("flow.branch"), TEXT("Flow Control"), TEXT("Branch"),
-                TEXT("Insert a structured C# if block with a true condition.")});
+                TEXT("Insert a structured C# if block with a true condition."),
+                TEXT("if condition boolean bool branch")});
         AuthoringGraph->PaletteActions.Add(
             {TEXT("flow.while"), TEXT("Flow Control"), TEXT("While Loop"),
-                TEXT("Insert a structured C# while block with a true condition.")});
+                TEXT("Insert a structured C# while block with a true condition."),
+                TEXT("while loop repeat condition")});
         AuthoringGraph->PaletteActions.Add(
             {TEXT("flow.doWhile"), TEXT("Flow Control"), TEXT("Do While Loop"),
-                TEXT("Insert a structured C# do/while block with a true condition.")});
+                TEXT("Insert a structured C# do/while block with a true condition."),
+                TEXT("do while loop repeat condition")});
     }
     if (HasBoundType(TEXT("int")) && HasBoundType(TEXT("bool")))
     {
         AuthoringGraph->PaletteActions.Add(
             {TEXT("flow.for"), TEXT("Flow Control"), TEXT("For Loop"),
-                TEXT("Insert a bounded C# for loop with an editable int index.")});
+                TEXT("Insert a bounded C# for loop with an editable int index."),
+                TEXT("for loop iterate index integer")});
     }
-    AuthoringGraph->PaletteActions.Add(
-        {TEXT("flow.break"), TEXT("Flow Control"), TEXT("Break"),
-            TEXT("Exit the nearest selected loop or switch region.")});
-    AuthoringGraph->PaletteActions.Add(
-        {TEXT("flow.continue"), TEXT("Flow Control"), TEXT("Continue"),
-            TEXT("Continue the nearest selected loop region.")});
+    bool bInsideLoop = false;
+    bool bInsideSwitch = false;
+    for (const FUnifiedScriptAuthoringRegion* Context = ResolveActiveBlockRegion(Function);
+         Context != nullptr;
+         Context = Context->ParentRegionId.IsEmpty()
+             ? nullptr
+             : Function.FindRegion(Context->ParentRegionId))
+    {
+        bInsideLoop |= Context->Kind == TEXT("loop");
+        bInsideSwitch |= Context->Kind == TEXT("switch");
+    }
+    if (bInsideLoop || bInsideSwitch)
+    {
+        AuthoringGraph->PaletteActions.Add(
+            {TEXT("flow.break"), TEXT("Flow Control"), TEXT("Break"),
+                TEXT("Exit the nearest selected loop or switch region."),
+                TEXT("break exit loop switch")});
+    }
+    if (bInsideLoop)
+    {
+        AuthoringGraph->PaletteActions.Add(
+            {TEXT("flow.continue"), TEXT("Flow Control"), TEXT("Continue"),
+                TEXT("Continue the nearest selected loop region."),
+                TEXT("continue next iteration loop")});
+    }
     if (Function.Actions.ContainsByPredicate(
             [](const FUnifiedScriptAuthoringAction& Action)
             {
@@ -2772,7 +3173,8 @@ void SUnifiedScriptAuthoringSurface::RebuildNodePalette(
     {
         AuthoringGraph->PaletteActions.Add(
             {TEXT("flow.return"), TEXT("Flow Control"), TEXT("Return"),
-                TEXT("Insert a typed return default(T) at the end of the selected block.")});
+                TEXT("Insert a typed return default(T) at the end of the selected block."),
+                TEXT("return result exit function default")});
     }
     ReflectedPaletteActions.Reset();
 
@@ -2794,6 +3196,7 @@ void SUnifiedScriptAuthoringSurface::RebuildNodePalette(
         !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(ManifestJson), Manifest) ||
         !Manifest.IsValid())
     {
+        RefreshNodePaletteItems();
         return;
     }
 
@@ -2931,6 +3334,7 @@ void SUnifiedScriptAuthoringSurface::RebuildNodePalette(
     const TArray<TSharedPtr<FJsonValue>>* Types = nullptr;
     if (!Manifest->TryGetArrayField(TEXT("types"), Types) || Types == nullptr)
     {
+        RefreshNodePaletteItems();
         return;
     }
     FString ManagedNamespace = TEXT("UnifiedScript.Unreal.Generated");
@@ -3050,7 +3454,9 @@ void SUnifiedScriptAuthoringSurface::RebuildNodePalette(
                         FString::Printf(
                             TEXT("Create a target-bound visual Event Entry.\n%s(%s)"),
                             *MemberName,
-                            *FString::Join(SignatureParts, TEXT(", ")))});
+                            *FString::Join(SignatureParts, TEXT(", "))),
+                        FString::Printf(TEXT("unreal ue event delegate %s %s"), *TypeName, *MemberName),
+                        false});
             }
         }
         const FUnifiedScriptAuthoringParameter* Receiver = Function.Parameters.FindByPredicate(
@@ -3095,7 +3501,8 @@ void SUnifiedScriptAuthoringSurface::RebuildNodePalette(
                     {false, *Receiver, MemberName, ResultTypeName, ResultTypeId, {}});
                 AuthoringGraph->PaletteActions.Add(
                     {ActionId, TEXT("Unreal API|") + TypeName + TEXT("|Properties"), MemberName,
-                        FString::Printf(TEXT("Read reflected property %s.%s."), *TypeName, *MemberName)});
+                        FString::Printf(TEXT("Read reflected property %s.%s."), *TypeName, *MemberName),
+                        FString::Printf(TEXT("unreal ue api property get read %s %s"), *TypeName, *MemberName)});
             }
         }
         if (!Type->TryGetArrayField(TEXT("functions"), Functions) || Functions == nullptr)
@@ -3174,9 +3581,11 @@ void SUnifiedScriptAuthoringSurface::RebuildNodePalette(
                 {true, *Receiver, MemberName, ResultTypeName, ResultTypeId, MoveTemp(Arguments)});
             AuthoringGraph->PaletteActions.Add(
                 {ActionId, TEXT("Unreal API|") + TypeName, MemberName,
-                    FString::Printf(TEXT("Insert reflected call %s.%s(...)."), *TypeName, *MemberName)});
+                    FString::Printf(TEXT("Insert reflected call %s.%s(...)."), *TypeName, *MemberName),
+                    FString::Printf(TEXT("unreal ue api function call invoke %s %s"), *TypeName, *MemberName)});
         }
     }
+    RefreshNodePaletteItems();
 }
 
 void SUnifiedScriptAuthoringSurface::PersistCurrentLayout(bool bOnlyIfChanged)
