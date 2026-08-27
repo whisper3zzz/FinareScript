@@ -84,6 +84,6 @@ Atomic semantic patch plans already group dependent source operations. Semantic
 Patch v0.24 statement duplication is also one server-owned transaction, so its
 source, identity, generated artifacts, runtime reload, Undo, and Redo cannot
 split. Patch v0.25 applies lexical Collapse Scope / Expand Scope through the
-same boundary. User-defined transaction grouping, true function/macro
-extraction, and broader multi-selection/cross-region clipboard transactions
-remain later M8.1 work.
+same boundary. Patch v0.26 applies multi-statement, cross-region copy/paste with
+exact source/destination gaps and binding checks. User-defined transaction
+grouping and true function/macro extraction remain later M8.1 work.

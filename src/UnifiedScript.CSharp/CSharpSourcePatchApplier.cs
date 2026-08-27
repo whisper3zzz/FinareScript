@@ -323,6 +323,14 @@ public sealed class CSharpSourcePatchApplier
                     hirNodes,
                     patchIndex,
                     documents),
+                DuplicateStatementRangePatchOperation duplicateStatements =>
+                    PlanStatementRangeDuplication(
+                        duplicateStatements,
+                        hirNodes,
+                        patchIndex,
+                        useDefinitionIndex,
+                        graphSafetyIndex,
+                        documents),
                 CollapseStatementRangePatchOperation collapseStatements =>
                     PlanStatementCollapse(
                         collapseStatements,
@@ -444,7 +452,7 @@ public sealed class CSharpSourcePatchApplier
 
         SemanticPatchOperation? controlFlowOperation = patch.Operations.FirstOrDefault(
             static operation => operation is MoveStatementPatchOperation or
-                DuplicateStatementPatchOperation or
+                DuplicateStatementPatchOperation or DuplicateStatementRangePatchOperation or
                 CollapseStatementRangePatchOperation or ExpandBlockPatchOperation or
                 InsertSwitchSectionPatchOperation or ReplaceSwitchSectionPatchOperation or
                 MoveSwitchSectionPatchOperation or DeleteSwitchSectionPatchOperation ||
@@ -471,6 +479,8 @@ public sealed class CSharpSourcePatchApplier
                         MoveStatementPatchOperation =>
                             SemanticPatchDiagnosticCodes.InvalidControlFlowReconnection,
                         DuplicateStatementPatchOperation =>
+                            SemanticPatchDiagnosticCodes.InvalidStatementDuplication,
+                        DuplicateStatementRangePatchOperation =>
                             SemanticPatchDiagnosticCodes.InvalidStatementDuplication,
                         CollapseStatementRangePatchOperation =>
                             SemanticPatchDiagnosticCodes.InvalidRegionCollapse,
@@ -4016,6 +4026,293 @@ public sealed class CSharpSourcePatchApplier
             SyntaxFactory.List(statements));
         SyntaxNode replacementMethod = annotatedMethod.ReplaceNode(
             annotatedContainer.Syntax,
+            replacementContainer);
+        return SuccessPlan(document!, new PendingReplacement(
+            document!.Source.LogicalPath,
+            originalMethod!,
+            replacementMethod,
+            FilterPinsForSyntax(replacementMethod, methodPins!)));
+    }
+
+    private static OperationPlan PlanStatementRangeDuplication(
+        DuplicateStatementRangePatchOperation operation,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        HirUseDefinitionIndex useDefinitionIndex,
+        GraphPatchSafetyIndex graphSafetyIndex,
+        IReadOnlyDictionary<string, ParsedDocument> documents)
+    {
+        if (!hirNodes.TryGetValue(operation.TargetNodeId, out HirNode? target))
+        {
+            return MissingTarget(operation.TargetNodeId);
+        }
+        if (target is not HirStatement firstStatement ||
+            !patchIndex.TryGetStatement(
+                firstStatement.Id,
+                out HirPatchIndex.StatementLocation? firstLocation))
+        {
+            return KindMismatch(target, operation.TargetNodeId, "the first statement of a copied range");
+        }
+
+        HirBlockStatement sourceBlock = firstLocation!.ParentBlock;
+        int firstIndex = firstLocation.Index;
+        int rangeCount = operation.ExpectedStatementIds.Count;
+        if (sourceBlock.Id != operation.ExpectedSourceParentBlockId ||
+            firstIndex + rangeCount > sourceBlock.Statements.Count)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.SiblingPreconditionFailed,
+                "The copied statement range no longer belongs to its expected source block.",
+                firstStatement);
+        }
+        HirStatement[] sourceStatements = sourceBlock.Statements
+            .Skip(firstIndex)
+            .Take(rangeCount)
+            .ToArray();
+        SemanticId? actualSourcePrevious = firstIndex == 0
+            ? null
+            : sourceBlock.Statements[firstIndex - 1].Id;
+        int sourceNextIndex = firstIndex + rangeCount;
+        SemanticId? actualSourceNext = sourceNextIndex == sourceBlock.Statements.Count
+            ? null
+            : sourceBlock.Statements[sourceNextIndex].Id;
+        if (!sourceStatements.Select(static statement => statement.Id)
+                .SequenceEqual(operation.ExpectedStatementIds) ||
+            actualSourcePrevious != operation.ExpectedSourcePreviousSiblingId ||
+            actualSourceNext != operation.ExpectedSourceNextSiblingId)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.SiblingPreconditionFailed,
+                "The copied statement range or its outer source gaps changed after the Surface was generated.",
+                firstStatement);
+        }
+        if (sourceStatements.Any(static statement => statement is
+                HirReturnStatement or HirBreakStatement or HirContinueStatement))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidStatementDuplication,
+                "A copied range cannot directly contain return, break, or continue statements.",
+                firstStatement);
+        }
+
+        if (!patchIndex.TryGetBlock(
+                operation.DestinationParentBlockId,
+                out HirPatchIndex.BlockLocation? destinationLocation) ||
+            destinationLocation!.Method.Id != firstLocation.Method.Id ||
+            !TryGetInsertionIndex(
+                destinationLocation.Block,
+                operation.ExpectedDestinationPreviousSiblingId,
+                operation.ExpectedDestinationNextSiblingId,
+                out int insertionIndex))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.SiblingPreconditionFailed,
+                "The statement-copy destination method, block, or exact gap changed. Refresh before pasting.",
+                firstStatement);
+        }
+        HirBlockStatement destinationBlock = destinationLocation.Block;
+        if (!graphSafetyIndex.IsInsertionReachable(destinationLocation, insertionIndex))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.UnreachableInsertion,
+                "The selected statement range cannot be pasted into an unreachable destination gap.",
+                firstStatement);
+        }
+        if (destinationBlock.Statements.Take(insertionIndex).Any(static candidate => candidate is
+                HirReturnStatement or HirBreakStatement or HirContinueStatement))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidStatementDuplication,
+                "A copied range cannot be inserted after return, break, or continue in a structured block.",
+                firstStatement);
+        }
+
+        Dictionary<SemanticId, StatementCopyLocalRename> renames = operation.LocalRenames
+            .ToDictionary(static rename => rename.SourceStatementId);
+        HirVariableDeclarationStatement[] copiedLocals = sourceStatements
+            .OfType<HirVariableDeclarationStatement>()
+            .ToArray();
+        if (renames.Count != copiedLocals.Length)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidStatementDuplication,
+                "Every direct local declaration in a copied range requires exactly one fresh-name mapping.",
+                firstStatement);
+        }
+        foreach (HirVariableDeclarationStatement local in copiedLocals)
+        {
+            if (!renames.TryGetValue(local.Id, out StatementCopyLocalRename? rename) ||
+                !string.Equals(rename.ExpectedName, local.Name, StringComparison.Ordinal) ||
+                !SyntaxFacts.IsValidIdentifier(rename.NewName) ||
+                SyntaxFacts.GetKeywordKind(rename.NewName) != SyntaxKind.None ||
+                HasNameConflict(firstLocation.Method, rename.NewName))
+            {
+                return DiagnosticPlan(
+                    SemanticPatchDiagnosticCodes.NameConflict,
+                    $"Copied local '{local.Name}' has a stale or conflicting destination name.",
+                    local);
+            }
+        }
+
+        HashSet<SemanticId> copiedDefinitionIds = sourceStatements
+            .SelectMany(static statement => statement.DescendantsAndSelf())
+            .Where(static node => node is HirVariableDeclarationStatement or
+                HirForVariableDeclarator or HirForEachVariable or HirPatternVariable)
+            .Select(static node => node.Id)
+            .ToHashSet();
+        foreach (HirExpression expression in sourceStatements
+                     .SelectMany(static statement => statement.DescendantsAndSelf())
+                     .OfType<HirExpression>())
+        {
+            if (!useDefinitionIndex.TryGetReferencedDefinition(expression, out HirNode? definition) ||
+                definition is HirParameter || copiedDefinitionIds.Contains(definition!.Id))
+            {
+                continue;
+            }
+            if (!graphSafetyIndex.DoesDefinitionDominateInsertion(
+                    definition.Id,
+                    destinationLocation,
+                    insertionIndex))
+            {
+                return DiagnosticPlan(
+                    SemanticPatchDiagnosticCodes.ValueSourceNotAvailable,
+                    $"Copied value reference '{expression.Id}' would no longer bind to definition " +
+                    $"'{definition.Id}' at the destination gap.",
+                    expression);
+            }
+        }
+
+        if (!TryFindEditableStatementContainer(
+                documents,
+                sourceBlock,
+                out ParsedDocument? sourceDocument,
+                out EditableStatementContainer? sourceContainer) ||
+            sourceContainer!.Statements.Count != sourceBlock.Statements.Count ||
+            !TryFindEditableStatementContainer(
+                documents,
+                destinationBlock,
+                out ParsedDocument? destinationDocument,
+                out EditableStatementContainer? destinationContainer) ||
+            destinationContainer!.Statements.Count != destinationBlock.Statements.Count ||
+            sourceDocument != destinationDocument)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidStatementDuplication,
+                "Statement-range duplication requires explicit source and destination containers in one method document.",
+                firstStatement);
+        }
+        if (sourceDocument!.Source.IdentitySidecar is null)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.PlanRequiresPersistentIdentity,
+                "Statement-range duplication requires a .usids sidecar so only copied subtrees receive fresh IDs.",
+                firstStatement);
+        }
+
+        var sourceSyntax = new List<StatementSyntax>(sourceStatements.Length);
+        foreach (HirStatement sourceStatement in sourceStatements)
+        {
+            if (!TryFindIdentitySyntax(
+                    sourceDocument,
+                    sourceStatement,
+                    out SyntaxNode? sourceSyntaxNode) ||
+                sourceSyntaxNode is not StatementSyntax statementSyntax ||
+                statementSyntax.ContainsDirectives)
+            {
+                return DiagnosticPlan(
+                    SemanticPatchDiagnosticCodes.InvalidStatementDuplication,
+                    "Every copied member must map to one directive-free C# statement.",
+                    sourceStatement);
+            }
+            sourceSyntax.Add(statementSyntax);
+        }
+
+        var declarationRenames = new Dictionary<int, string>();
+        var referenceRenames = new Dictionary<int, string>();
+        foreach (HirVariableDeclarationStatement local in copiedLocals)
+        {
+            StatementCopyLocalRename rename = renames[local.Id];
+            if (!TryFindIdentitySyntax(sourceDocument, local, out SyntaxNode? localSyntaxNode) ||
+                localSyntaxNode is not LocalDeclarationStatementSyntax
+                {
+                    Declaration.Variables.Count: 1,
+                } localSyntax)
+            {
+                return DiagnosticPlan(
+                    SemanticPatchDiagnosticCodes.InvalidStatementDuplication,
+                    "A copied local declaration no longer maps to one C# variable declarator.",
+                    local);
+            }
+            declarationRenames.Add(
+                localSyntax.Declaration.Variables[0].SpanStart,
+                rename.NewName);
+            foreach (HirExpression reference in sourceStatements
+                         .SelectMany(static statement => statement.DescendantsAndSelf())
+                         .OfType<HirExpression>()
+                         .Where(expression => useDefinitionIndex.References(expression, local.Id)))
+            {
+                if (!TryFindIdentitySyntax(sourceDocument, reference, out SyntaxNode? referenceSyntax) ||
+                    referenceSyntax is not IdentifierNameSyntax identifier)
+                {
+                    return DiagnosticPlan(
+                        SemanticPatchDiagnosticCodes.InvalidStatementDuplication,
+                        "A copied local reference could not be correlated with its C# identifier.",
+                        reference);
+                }
+                referenceRenames.Add(identifier.SpanStart, rename.NewName);
+            }
+        }
+
+        if (!TryPrepareMethodMutation(
+                documents,
+                firstLocation.Method,
+                out ParsedDocument? document,
+                out MethodDeclarationSyntax? originalMethod,
+                out MethodDeclarationSyntax? annotatedMethod,
+                out IReadOnlyDictionary<SemanticId, SyntaxAnnotation>? identityAnnotations,
+                out List<PendingPin>? methodPins,
+                out string? identityFailure) ||
+            !identityAnnotations!.TryGetValue(
+                destinationBlock.Id,
+                out SyntaxAnnotation? destinationAnnotation))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.PlanRequiresPersistentIdentity,
+                identityFailure ??
+                    "Statement-range duplication could not pin the containing method and destination block.",
+                firstStatement);
+        }
+
+        SyntaxNode annotatedDestinationSyntax = annotatedMethod!
+            .GetAnnotatedNodes(destinationAnnotation)
+            .Single();
+        if (!TryCreateEditableStatementContainer(
+                annotatedDestinationSyntax,
+                out EditableStatementContainer? annotatedDestination))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidStatementDuplication,
+                "The statement-copy destination is no longer an explicit block or switch-section body.",
+                firstStatement);
+        }
+
+        var renameRewriter = new StatementCopyRenameRewriter(
+            declarationRenames,
+            referenceRenames);
+        InsertionFormatting formatting = GetInsertionFormatting(
+            document!,
+            destinationContainer,
+            insertionIndex);
+        StatementSyntax[] copiedStatements = sourceSyntax
+            .Select(statement => (StatementSyntax)renameRewriter.Visit(statement)!)
+            .Select(statement => ReindentMovedStatement(statement, formatting.Indentation))
+            .ToArray();
+        var destinationStatements = annotatedDestination!.Statements.ToList();
+        destinationStatements.InsertRange(insertionIndex, copiedStatements);
+        SyntaxNode replacementContainer = annotatedDestination.WithStatements(
+            SyntaxFactory.List(destinationStatements));
+        SyntaxNode replacementMethod = annotatedMethod.ReplaceNode(
+            annotatedDestination.Syntax,
             replacementContainer);
         return SuccessPlan(document!, new PendingReplacement(
             document!.Source.LogicalPath,
@@ -8301,6 +8598,30 @@ public sealed class CSharpSourcePatchApplier
     private sealed record ParsedDocument(CSharpSourceDocument Source, SyntaxTree SyntaxTree)
     {
         public SyntaxNode Root { get; } = SyntaxTree.GetRoot();
+    }
+
+    private sealed class StatementCopyRenameRewriter(
+        IReadOnlyDictionary<int, string> declarationRenames,
+        IReadOnlyDictionary<int, string> referenceRenames) : CSharpSyntaxRewriter
+    {
+        public override SyntaxNode? VisitVariableDeclarator(VariableDeclaratorSyntax node)
+        {
+            VariableDeclaratorSyntax rewritten =
+                (VariableDeclaratorSyntax)base.VisitVariableDeclarator(node)!;
+            return declarationRenames.TryGetValue(node.SpanStart, out string? newName)
+                ? rewritten.WithIdentifier(
+                    SyntaxFactory.Identifier(newName).WithTriviaFrom(rewritten.Identifier))
+                : rewritten;
+        }
+
+        public override SyntaxNode? VisitIdentifierName(IdentifierNameSyntax node)
+        {
+            IdentifierNameSyntax rewritten = (IdentifierNameSyntax)base.VisitIdentifierName(node)!;
+            return referenceRenames.TryGetValue(node.SpanStart, out string? newName)
+                ? rewritten.WithIdentifier(
+                    SyntaxFactory.Identifier(newName).WithTriviaFrom(rewritten.Identifier))
+                : rewritten;
+        }
     }
 
     private sealed record OperationPlan(

@@ -161,8 +161,8 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
             TEXT("120"),
             PatchJson,
             Error));
-    TestTrue(TEXT("Patch uses semantic-patch v0.25"),
-        PatchJson.Contains(TEXT("\"unifiedscript.patch/v0.25\"")));
+    TestTrue(TEXT("Patch uses semantic-patch v0.26"),
+        PatchJson.Contains(TEXT("\"unifiedscript.patch/v0.26\"")));
     TestTrue(TEXT("Patch retains the exact target node"),
         PatchJson.Contains(LiteralEdit->TargetNodeId));
     TestTrue(TEXT("Patch carries the requested replacement"),
@@ -493,6 +493,58 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
                 DuplicateJson.Contains(TEXT("\"expectedSourcePreviousSiblingId\"")) &&
                 DuplicateJson.Contains(TEXT("\"expectedDestinationPreviousSiblingId\"")) &&
                 DuplicateJson.Contains(TEXT("\"newLocalName\": \"incrementedCopy\"")));
+
+        if (FirstStatement != nullptr && SecondStatement != nullptr)
+        {
+            FUnifiedScriptAuthoringFunction RangeCopyFunction = RewireFunction;
+            FUnifiedScriptAuthoringAction DestinationAction = *FirstStatement;
+            DestinationAction.Id = TEXT("us_c1111111111111111111111111111111");
+            DestinationAction.DebugTargetId = DestinationAction.Id;
+            DestinationAction.RegionId = TEXT("us_c2222222222222222222222222222222");
+            RangeCopyFunction.Actions.Add(DestinationAction);
+
+            FUnifiedScriptAuthoringRegion DestinationBlock;
+            DestinationBlock.Id = DestinationAction.RegionId;
+            DestinationBlock.Kind = TEXT("then");
+            DestinationBlock.SourceNodeId = TEXT("us_c3333333333333333333333333333333");
+            DestinationBlock.Span = DestinationAction.Span;
+            DestinationBlock.DirectStatementIds = {DestinationAction.Id};
+            DestinationBlock.DirectActionIds = DestinationBlock.DirectStatementIds;
+            RangeCopyFunction.Regions.Add(DestinationBlock);
+
+            TMap<FString, FString> LocalRenames;
+            for (const FUnifiedScriptAuthoringAction* Source : {FirstStatement, SecondStatement})
+            {
+                if (Source->GraphKind == TEXT("variable"))
+                {
+                    LocalRenames.Add(
+                        Source->Id,
+                        Source == FirstStatement
+                            ? TEXT("doubledRangeCopy")
+                            : TEXT("incrementedRangeCopy"));
+                }
+            }
+
+            FString RangeCopyJson;
+            TestTrue(TEXT("Multi-selection can build a cross-region copy transaction"),
+                FUnifiedScriptAuthoringSurfaceReader::BuildStatementRangeDuplicationPatch(
+                    Document,
+                    RangeCopyFunction,
+                    {FirstStatement->Id, SecondStatement->Id},
+                    RangeCopyFunction.Actions.Last(),
+                    LocalRenames,
+                    RangeCopyJson,
+                    Error));
+            TestTrue(TEXT("Range copy preserves ordered source and distinct destination facts"),
+                RangeCopyJson.Contains(TEXT("\"operation\": \"duplicateStatements\"")) &&
+                    RangeCopyJson.Contains(TEXT("\"expectedStatementIds\"")) &&
+                    RangeCopyJson.Contains(TEXT("\"expectedSourceParentBlockId\"")) &&
+                    RangeCopyJson.Contains(TEXT("\"destinationParentBlockId\"")) &&
+                    RangeCopyJson.Contains(RewireBlock->SourceNodeId) &&
+                    RangeCopyJson.Contains(DestinationBlock.SourceNodeId) &&
+                    RangeCopyJson.Contains(TEXT("doubledRangeCopy")) &&
+                    RangeCopyJson.Contains(TEXT("incrementedRangeCopy")));
+        }
 
         if (FirstStatement != nullptr && SecondStatement != nullptr)
         {

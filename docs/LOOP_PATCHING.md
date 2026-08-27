@@ -18,7 +18,7 @@ targets.
 
 ## Protocol
 
-Current patch schema `unifiedscript.patch/v0.25` carries six loop statement payloads:
+Current patch schema `unifiedscript.patch/v0.26` carries six loop statement payloads:
 
 - `while`, carrying one closed, typed `PatchExpression` condition;
 - `doWhile`, carrying one closed, typed post-body condition;

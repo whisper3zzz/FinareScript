@@ -421,7 +421,7 @@ public sealed class SemanticPatchJsonTests
         SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
 
         Assert.Equal(
-            "unifiedscript.patch/v0.25",
+            "unifiedscript.patch/v0.26",
             roundTrip.SchemaVersion);
         Assert.Equal(
             move,
@@ -451,12 +451,47 @@ public sealed class SemanticPatchJsonTests
         string json = SemanticPatchJson.Serialize(patch);
         SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
 
-        Assert.Equal("unifiedscript.patch/v0.25", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch/v0.26", roundTrip.SchemaVersion);
         Assert.Equal(
             duplicate,
             Assert.IsType<DuplicateStatementPatchOperation>(Assert.Single(roundTrip.Operations)));
         Assert.Contains("\"operation\": \"duplicateStatement\"", json, StringComparison.Ordinal);
         Assert.Contains("\"newLocalName\": \"valueCopy\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SerializeAndDeserialize_PreserveCrossRegionStatementRangeDuplication()
+    {
+        SemanticId first = SemanticId.FromKey("range-copy-first");
+        SemanticId second = SemanticId.FromKey("range-copy-second");
+        var duplicate = new DuplicateStatementRangePatchOperation(
+            first,
+            SemanticId.FromKey("range-copy-source-block"),
+            [first, second],
+            SemanticId.FromKey("range-copy-source-previous"),
+            SemanticId.FromKey("range-copy-source-next"),
+            SemanticId.FromKey("range-copy-destination-block"),
+            SemanticId.FromKey("range-copy-destination-previous"),
+            SemanticId.FromKey("range-copy-destination-next"),
+            [new StatementCopyLocalRename(first, "value", "valueCopy")]);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            SemanticId.FromKey("range-copy-compilation"),
+            SemanticId.FromKey("range-copy-configuration"),
+            [duplicate]);
+
+        string json = SemanticPatchJson.Serialize(patch);
+        DuplicateStatementRangePatchOperation roundTrip =
+            Assert.IsType<DuplicateStatementRangePatchOperation>(
+                Assert.Single(SemanticPatchJson.Deserialize(json).Operations));
+
+        Assert.Equal(duplicate.TargetNodeId, roundTrip.TargetNodeId);
+        Assert.Equal(duplicate.ExpectedSourceParentBlockId, roundTrip.ExpectedSourceParentBlockId);
+        Assert.Equal(duplicate.ExpectedStatementIds, roundTrip.ExpectedStatementIds);
+        Assert.Equal(duplicate.DestinationParentBlockId, roundTrip.DestinationParentBlockId);
+        StatementCopyLocalRename rename = Assert.Single(roundTrip.LocalRenames);
+        Assert.Equal("value", rename.ExpectedName);
+        Assert.Equal("valueCopy", rename.NewName);
+        Assert.Contains("\"operation\": \"duplicateStatements\"", json, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -488,7 +523,7 @@ public sealed class SemanticPatchJsonTests
         string json = SemanticPatchJson.Serialize(patch);
         SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
 
-        Assert.Equal("unifiedscript.patch/v0.25", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch/v0.26", roundTrip.SchemaVersion);
         CollapseStatementRangePatchOperation collapsedRoundTrip =
             Assert.IsType<CollapseStatementRangePatchOperation>(roundTrip.Operations[0]);
         ExpandBlockPatchOperation expandedRoundTrip =
@@ -1342,6 +1377,6 @@ public sealed class SemanticPatchJsonTests
         Assert.Contains("\"statement\": \"switch\"", json, StringComparison.Ordinal);
         Assert.Contains("\"pattern\": \"logical\"", json, StringComparison.Ordinal);
         Assert.Contains("\"operation\": \"moveSwitchSection\"", json, StringComparison.Ordinal);
-        Assert.Equal("unifiedscript.patch/v0.25", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch/v0.26", roundTrip.SchemaVersion);
     }
 }

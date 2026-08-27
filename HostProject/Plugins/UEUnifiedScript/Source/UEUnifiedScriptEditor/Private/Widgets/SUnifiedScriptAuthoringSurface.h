@@ -200,7 +200,7 @@ private:
     FString ActiveFunctionId;
     FString ActiveBlockRegionId;
     FString ActiveFunctionSignature;
-    FString CopiedStatementId;
+    TArray<FString> CopiedStatementIds;
     FString CopiedStatementFunctionId;
     int32 ActiveGraphActionCount = 0;
 

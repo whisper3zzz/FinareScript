@@ -49,7 +49,7 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-27**
 
 - Active milestone: **M8 — Visual/C# Authoring Beta**
-- Next slice: **M8.1 — Structured graph editing completeness**
+- Next slice: **M8.1 — callable extraction and user-grouped transactions**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -60,10 +60,10 @@ machine-local unless an artifact explicitly says otherwise.
 
 | Gate | Verified result |
 | --- | --- |
-| Main source | `e7f9a99` (`feat: add authoring transaction history`), plus this M8.1 Workbench integration change set |
+| Main source | `efc9f84` (`feat: persist transactional authoring history`), plus this Semantic Patch v0.26 change set |
 | Comparison source | `489ce9b` (`feat: complete full UnifiedScript migration`) |
-| Managed tests | 474 / 474 passed |
-| Repository validator | 48 / 48 passed |
+| Managed tests | 489 / 489 passed |
+| Repository validator | 49 / 49 passed |
 | UE 5.8.1 native build | passed |
 | `UnifiedScript.Unreal` Automation | 13 / 13 passed at the M7.3 onboarding baseline; the migrated BlockBreaker Editor gate and focused M8.1 Authoring Surface gate also passed |
 | BlockBreaker workload | 10,000 frames, three trials, one shot, one hit, two command completions per trial |
@@ -702,6 +702,18 @@ history; user-defined grouping, callable extraction, and wider clipboard
 semantics still keep M8.1 open. The 486/486 managed suite, UE 5.8 editor build,
 focused native Authoring Surface Automation, and 49/49 repository invariants
 pass.
+
+Semantic Patch v0.26 now closes same-method range clipboard semantics. Slate
+copies one consecutive multi-selection and can paste it after an ordinary
+statement in another explicit structured region. The transaction carries exact
+source outer gaps and a distinct destination gap; originals keep their IDs,
+copies receive fresh IDs, direct copied locals and their bound references are
+renamed together, and external local/loop/pattern references must dominate the
+destination. Cross-function transport remains owned by callable extraction,
+where parameter, result, visibility, and effect contracts can be explicit.
+User-defined grouping and callable extraction are now the remaining M8.1 slice.
+The 489/489 managed suite, UE 5.8 editor build, focused native Authoring Surface
+Automation, and 49/49 repository invariants pass.
 
 ### M8.2 — Blueprint-grade Unreal experience
 

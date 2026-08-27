@@ -179,7 +179,7 @@ public:
         FUnifiedScriptAuthoringSurfaceDocument& OutDocument,
         FString& OutError);
 
-    /** Builds the same semantic-patch v0.25 payload consumed by the shared authoring host. */
+    /** Builds the same semantic-patch v0.26 payload consumed by the shared authoring host. */
     static bool BuildSemanticPatch(
         const FUnifiedScriptAuthoringSurfaceDocument& Document,
         const FUnifiedScriptAuthoringEdit& Edit,
@@ -187,7 +187,7 @@ public:
         FString& OutPatchJson,
         FString& OutError);
 
-    /** Builds a preconditioned semantic-patch v0.25 data-edge rewire transaction. */
+    /** Builds a preconditioned semantic-patch v0.26 data-edge rewire transaction. */
     static bool BuildDataEdgeReconnectionPatch(
         const FUnifiedScriptAuthoringSurfaceDocument& Document,
         const FUnifiedScriptAuthoringFunction& Function,
@@ -320,6 +320,16 @@ public:
         const FUnifiedScriptAuthoringAction& SourceStatement,
         const FUnifiedScriptAuthoringAction& DestinationStatement,
         const FString& NewLocalName,
+        FString& OutPatchJson,
+        FString& OutError);
+
+    /** Duplicates one consecutive statement range into an exact same-method region gap. */
+    static bool BuildStatementRangeDuplicationPatch(
+        const FUnifiedScriptAuthoringSurfaceDocument& Document,
+        const FUnifiedScriptAuthoringFunction& Function,
+        const TArray<FString>& SourceStatementActionIds,
+        const FUnifiedScriptAuthoringAction& DestinationStatement,
+        const TMap<FString, FString>& NewLocalNamesByActionId,
         FString& OutPatchJson,
         FString& OutError);
 

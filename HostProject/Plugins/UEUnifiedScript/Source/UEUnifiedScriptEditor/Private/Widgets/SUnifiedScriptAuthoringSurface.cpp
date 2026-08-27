@@ -156,6 +156,22 @@ FString SuggestCopiedLocalName(
     }
     return Candidate;
 }
+
+TMap<FString, FString> SuggestCopiedLocalNames(
+    const FUnifiedScriptAuthoringFunction& Function,
+    const TArray<FString>& StatementActionIds)
+{
+    TMap<FString, FString> Result;
+    for (const FString& ActionId : StatementActionIds)
+    {
+        const FUnifiedScriptAuthoringAction* Action = Function.FindAction(ActionId);
+        if (Action != nullptr && Action->GraphKind == TEXT("variable"))
+        {
+            Result.Add(Action->Id, SuggestCopiedLocalName(Function, *Action));
+        }
+    }
+    return Result;
+}
 }
 
 void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
@@ -774,7 +790,7 @@ FReply SUnifiedScriptAuthoringSurface::HandleCopyPatch(
         return FReply::Handled();
     }
     FPlatformApplicationMisc::ClipboardCopy(*Patch);
-    SetStatus(FString::Printf(TEXT("Copied semantic-patch v0.25 for %s"), *Edit.TargetNodeId), false);
+    SetStatus(FString::Printf(TEXT("Copied semantic-patch v0.26 for %s"), *Edit.TargetNodeId), false);
     return FReply::Handled();
 }
 
@@ -1171,40 +1187,108 @@ SUnifiedScriptAuthoringSurface::GetSingleSelectedStatementAction() const
 
 bool SUnifiedScriptAuthoringSurface::CanCopySelectedStatement() const
 {
-    return !bPatchRequestPending && GetSingleSelectedStatementAction() != nullptr;
+    if (bPatchRequestPending)
+    {
+        return false;
+    }
+    const FUnifiedScriptAuthoringFunction* Function = FindFunction(ActiveFunctionId);
+    const TArray<FString> StatementIds = GetSelectedStatementActionIds();
+    const FUnifiedScriptAuthoringAction* Destination =
+        Function != nullptr && !StatementIds.IsEmpty()
+        ? Function->FindAction(StatementIds[0])
+        : nullptr;
+    FString IgnoredPatch;
+    FString IgnoredError;
+    return Function != nullptr && Destination != nullptr &&
+        FUnifiedScriptAuthoringSurfaceReader::BuildStatementRangeDuplicationPatch(
+            Document,
+            *Function,
+            StatementIds,
+            *Destination,
+            UE::UnifiedScript::AuthoringSurface::Slate::Private::SuggestCopiedLocalNames(
+                *Function,
+                StatementIds),
+            IgnoredPatch,
+            IgnoredError);
 }
 
 void SUnifiedScriptAuthoringSurface::HandleCopySelectedStatement()
 {
-    const FUnifiedScriptAuthoringAction* Statement = GetSingleSelectedStatementAction();
-    if (Statement == nullptr)
+    const FUnifiedScriptAuthoringFunction* Function = FindFunction(ActiveFunctionId);
+    TArray<FString> StatementIds = GetSelectedStatementActionIds();
+    const FUnifiedScriptAuthoringAction* Destination =
+        Function != nullptr && !StatementIds.IsEmpty()
+        ? Function->FindAction(StatementIds[0])
+        : nullptr;
+    FString IgnoredPatch;
+    FString Error;
+    if (Function == nullptr || Destination == nullptr ||
+        !FUnifiedScriptAuthoringSurfaceReader::BuildStatementRangeDuplicationPatch(
+            Document,
+            *Function,
+            StatementIds,
+            *Destination,
+            UE::UnifiedScript::AuthoringSurface::Slate::Private::SuggestCopiedLocalNames(
+                *Function,
+                StatementIds),
+            IgnoredPatch,
+            Error))
     {
-        SetStatus(TEXT("Select exactly one non-terminal statement to copy."), true);
+        SetStatus(
+            Error.IsEmpty()
+                ? TEXT("Select one consecutive range of non-terminal statements to copy.")
+                : MoveTemp(Error),
+            true);
         return;
     }
-    CopiedStatementId = Statement->Id;
+    StatementIds.Sort([Function](const FString& Left, const FString& Right)
+    {
+        const FUnifiedScriptAuthoringAction* LeftAction = Function->FindAction(Left);
+        const FUnifiedScriptAuthoringAction* RightAction = Function->FindAction(Right);
+        if (LeftAction == nullptr || RightAction == nullptr)
+        {
+            return Left < Right;
+        }
+        if (LeftAction->Span.StartLine != RightAction->Span.StartLine)
+        {
+            return LeftAction->Span.StartLine < RightAction->Span.StartLine;
+        }
+        if (LeftAction->Span.StartColumn != RightAction->Span.StartColumn)
+        {
+            return LeftAction->Span.StartColumn < RightAction->Span.StartColumn;
+        }
+        return Left < Right;
+    });
+    CopiedStatementIds = MoveTemp(StatementIds);
     CopiedStatementFunctionId = ActiveFunctionId;
     SetStatus(
-        FString::Printf(TEXT("Copied %s; select a statement and paste to insert after it."), *Statement->Title),
+        FString::Printf(
+            TEXT("Copied %d semantic statement%s; select any ordinary statement in this function and paste after it."),
+            CopiedStatementIds.Num(),
+            CopiedStatementIds.Num() == 1 ? TEXT("") : TEXT("s")),
         false);
 }
 
 bool SUnifiedScriptAuthoringSurface::CanPasteStatement() const
 {
-    if (bPatchRequestPending || CopiedStatementId.IsEmpty() ||
+    if (bPatchRequestPending || CopiedStatementIds.IsEmpty() ||
         CopiedStatementFunctionId != ActiveFunctionId)
     {
         return false;
     }
     const FUnifiedScriptAuthoringFunction* Function = FindFunction(ActiveFunctionId);
-    const FUnifiedScriptAuthoringAction* Source = Function != nullptr
-        ? Function->FindAction(CopiedStatementId)
-        : nullptr;
-    if (Source == nullptr ||
-        !UE::UnifiedScript::AuthoringSurface::Slate::Private::IsStatementCopyCandidate(*Source) ||
-        !GraphEditor.IsValid())
+    if (Function == nullptr || !GraphEditor.IsValid())
     {
         return false;
+    }
+    for (const FString& ActionId : CopiedStatementIds)
+    {
+        const FUnifiedScriptAuthoringAction* Source = Function->FindAction(ActionId);
+        if (Source == nullptr ||
+            !UE::UnifiedScript::AuthoringSurface::Slate::Private::IsStatementCopyCandidate(*Source))
+        {
+            return false;
+        }
     }
     const int32 SelectionCount = GraphEditor->GetSelectedNodes().Num();
     return SelectionCount == 0 ||
@@ -1216,37 +1300,36 @@ void SUnifiedScriptAuthoringSurface::HandlePasteStatement()
     if (!CanPasteStatement())
     {
         SetStatus(
-            TEXT("Copy a statement first, then select zero or one non-terminal destination statement in the same function."),
+            TEXT("Copy a consecutive statement range first, then select zero or one non-terminal destination statement in the same function."),
             true);
         return;
     }
     const FUnifiedScriptAuthoringFunction* Function = FindFunction(ActiveFunctionId);
-    const FUnifiedScriptAuthoringAction* Source = Function != nullptr
-        ? Function->FindAction(CopiedStatementId)
+    const FUnifiedScriptAuthoringAction* FallbackDestination = Function != nullptr &&
+        !CopiedStatementIds.IsEmpty()
+        ? Function->FindAction(CopiedStatementIds.Last())
         : nullptr;
     const FUnifiedScriptAuthoringAction* SelectedDestination =
         GetSingleSelectedStatementAction();
     const FUnifiedScriptAuthoringAction* Destination = SelectedDestination != nullptr
         ? SelectedDestination
-        : Source;
-    if (Function == nullptr || Source == nullptr || Destination == nullptr)
+        : FallbackDestination;
+    if (Function == nullptr || Destination == nullptr)
     {
-        SetStatus(TEXT("The copied statement no longer exists in the active Surface."), true);
+        SetStatus(TEXT("The copied statement range no longer exists in the active Surface."), true);
         return;
     }
 
     FString Patch;
     FString Error;
-    const FString NewLocalName =
-        UE::UnifiedScript::AuthoringSurface::Slate::Private::SuggestCopiedLocalName(
-            *Function,
-            *Source);
-    if (!FUnifiedScriptAuthoringSurfaceReader::BuildStatementDuplicationPatch(
+    if (!FUnifiedScriptAuthoringSurfaceReader::BuildStatementRangeDuplicationPatch(
             Document,
             *Function,
-            *Source,
+            CopiedStatementIds,
             *Destination,
-            NewLocalName,
+            UE::UnifiedScript::AuthoringSurface::Slate::Private::SuggestCopiedLocalNames(
+                *Function,
+                CopiedStatementIds),
             Patch,
             Error))
     {
@@ -1255,7 +1338,10 @@ void SUnifiedScriptAuthoringSurface::HandlePasteStatement()
     }
     SubmitSemanticPatch(
         MoveTemp(Patch),
-        FString::Printf(TEXT("Pasting a semantic copy of %s"), *Source->Title));
+        FString::Printf(
+            TEXT("Pasting a semantic copy of %d statement%s"),
+            CopiedStatementIds.Num(),
+            CopiedStatementIds.Num() == 1 ? TEXT("") : TEXT("s")));
 }
 
 void SUnifiedScriptAuthoringSurface::HandleUndoAuthoringCommand()
@@ -3238,7 +3324,7 @@ void SUnifiedScriptAuthoringSurface::RebuildInspector(
                         [
                             SNew(SButton)
                             .Text(LOCTEXT("CopyPatch", "Copy Patch"))
-                            .ToolTipText(LOCTEXT("CopyPatchTip", "Copy a typed semantic-patch v0.25 payload using this value."))
+                            .ToolTipText(LOCTEXT("CopyPatchTip", "Copy a typed semantic-patch v0.26 payload using this value."))
                             .OnClicked(this, &SUnifiedScriptAuthoringSurface::HandleCopyPatch, Edit, ValueEditor)
                         ]
                         + SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f, 0.0f, 0.0f)

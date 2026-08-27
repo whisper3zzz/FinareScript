@@ -916,7 +916,7 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildSemanticPatch(
     }
 
     const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
-    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.25"));
+    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.26"));
     Root->SetStringField(TEXT("sourceCompilationId"), Document.SourceCompilationId);
     Root->SetStringField(TEXT("semanticConfigurationId"), Document.SemanticConfigurationId);
     Root->SetArrayField(TEXT("operations"), {MakeShared<FJsonValueObject>(Operation)});
@@ -990,7 +990,7 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildDataEdgeReconnectionPatch(
     Operation->SetStringField(TEXT("expectedTypeId"), TargetInput->TypeId);
 
     const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
-    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.25"));
+    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.26"));
     Root->SetStringField(TEXT("sourceCompilationId"), Document.SourceCompilationId);
     Root->SetStringField(TEXT("semanticConfigurationId"), Document.SemanticConfigurationId);
     Root->SetArrayField(TEXT("operations"), {MakeShared<FJsonValueObject>(Operation)});
@@ -1032,7 +1032,7 @@ TSharedRef<FJsonObject> MakePatchRoot(
     const TSharedRef<FJsonObject>& Operation)
 {
     const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
-    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.25"));
+    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.26"));
     Root->SetStringField(TEXT("sourceCompilationId"), Document.SourceCompilationId);
     Root->SetStringField(TEXT("semanticConfigurationId"), Document.SemanticConfigurationId);
     Root->SetArrayField(TEXT("operations"), {MakeShared<FJsonValueObject>(Operation)});
@@ -2889,6 +2889,188 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildStatementDuplicationPatch(
         OutPatchJson,
         OutError,
         TEXT("the statement duplication patch"));
+}
+
+bool FUnifiedScriptAuthoringSurfaceReader::BuildStatementRangeDuplicationPatch(
+    const FUnifiedScriptAuthoringSurfaceDocument& Document,
+    const FUnifiedScriptAuthoringFunction& Function,
+    const TArray<FString>& SourceStatementActionIds,
+    const FUnifiedScriptAuthoringAction& DestinationStatement,
+    const TMap<FString, FString>& NewLocalNamesByActionId,
+    FString& OutPatchJson,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::AuthoringSurface::Editing::Private;
+    if (SourceStatementActionIds.IsEmpty())
+    {
+        OutError = TEXT("Copy requires at least one selected statement node.");
+        return false;
+    }
+
+    const auto IsTerminalOrSynthetic = [](const FUnifiedScriptAuthoringAction& Action)
+    {
+        return Action.GraphKind == TEXT("entry") ||
+            Action.GraphKind == TEXT("unrealEventEntry") ||
+            Action.GraphKind == TEXT("switchCase") ||
+            Action.GraphKind == TEXT("return") ||
+            Action.GraphKind == TEXT("break") ||
+            Action.GraphKind == TEXT("continue");
+    };
+    if (IsTerminalOrSynthetic(DestinationStatement))
+    {
+        OutError = TEXT("The paste after-node must be one ordinary non-terminal statement.");
+        return false;
+    }
+
+    const FUnifiedScriptAuthoringRegion* SourceBlock = nullptr;
+    TArray<const FUnifiedScriptAuthoringAction*> SourceActions;
+    TArray<FString> SourceStatementIds;
+    for (const FString& ActionId : SourceStatementActionIds)
+    {
+        const FUnifiedScriptAuthoringAction* Action = Function.FindAction(ActionId);
+        const FUnifiedScriptAuthoringRegion* Block = Action != nullptr
+            ? FindOwningBlock(Function, Action->Id)
+            : nullptr;
+        if (Action == nullptr || Block == nullptr || IsTerminalOrSynthetic(*Action) ||
+            (SourceBlock != nullptr && SourceBlock->SourceNodeId != Block->SourceNodeId))
+        {
+            OutError = TEXT("Copy requires ordinary statement nodes from one explicit source block.");
+            return false;
+        }
+        SourceBlock = Block;
+        SourceActions.Add(Action);
+        SourceStatementIds.AddUnique(ResolveStatementId(*Action));
+    }
+    if (SourceBlock == nullptr || SourceStatementIds.Num() != SourceStatementActionIds.Num())
+    {
+        OutError = TEXT("A statement copy range cannot contain the same semantic statement twice.");
+        return false;
+    }
+
+    const TArray<FString> SourceStructuralIds = GetStructuralStatementIds(Function, *SourceBlock);
+    SourceActions.Sort([&SourceStructuralIds](
+        const FUnifiedScriptAuthoringAction& Left,
+        const FUnifiedScriptAuthoringAction& Right)
+    {
+        return SourceStructuralIds.IndexOfByKey(ResolveStatementId(Left)) <
+            SourceStructuralIds.IndexOfByKey(ResolveStatementId(Right));
+    });
+    SourceStatementIds.Reset(SourceActions.Num());
+    for (const FUnifiedScriptAuthoringAction* Action : SourceActions)
+    {
+        SourceStatementIds.Add(ResolveStatementId(*Action));
+    }
+    const int32 FirstIndex = SourceStructuralIds.IndexOfByKey(SourceStatementIds[0]);
+    if (FirstIndex == INDEX_NONE ||
+        FirstIndex + SourceStatementIds.Num() > SourceStructuralIds.Num())
+    {
+        OutError = TEXT("The copied statements no longer exist in compiler-owned source order.");
+        return false;
+    }
+    for (int32 Offset = 0; Offset < SourceStatementIds.Num(); ++Offset)
+    {
+        if (SourceStructuralIds[FirstIndex + Offset] != SourceStatementIds[Offset])
+        {
+            OutError = TEXT("Copy requires one consecutive range without hidden regions between selections.");
+            return false;
+        }
+    }
+
+    const FUnifiedScriptAuthoringRegion* DestinationBlock =
+        FindOwningBlock(Function, DestinationStatement.Id);
+    if (DestinationBlock == nullptr)
+    {
+        OutError = TEXT("The paste destination is not owned by an explicit structured block.");
+        return false;
+    }
+    const FString DestinationStatementId = ResolveStatementId(DestinationStatement);
+    const TArray<FString> DestinationStructuralIds =
+        GetStructuralStatementIds(Function, *DestinationBlock);
+    const int32 DestinationIndex =
+        DestinationStructuralIds.IndexOfByKey(DestinationStatementId);
+    if (DestinationIndex == INDEX_NONE)
+    {
+        OutError = TEXT("The paste destination no longer exists in compiler-owned block order.");
+        return false;
+    }
+
+    TArray<TSharedPtr<FJsonValue>> JsonStatementIds;
+    JsonStatementIds.Reserve(SourceStatementIds.Num());
+    for (const FString& StatementId : SourceStatementIds)
+    {
+        JsonStatementIds.Add(MakeShared<FJsonValueString>(StatementId));
+    }
+    TArray<TSharedPtr<FJsonValue>> JsonLocalRenames;
+    int32 CopiedLocalCount = 0;
+    for (const FUnifiedScriptAuthoringAction* Action : SourceActions)
+    {
+        if (Action->GraphKind != TEXT("variable"))
+        {
+            if (NewLocalNamesByActionId.Contains(Action->Id))
+            {
+                OutError = TEXT("Only copied direct local declarations may carry rename mappings.");
+                return false;
+            }
+            continue;
+        }
+
+        ++CopiedLocalCount;
+        const FString ExpectedName = Action->Properties.FindRef(TEXT("name"));
+        const FString* NewName = NewLocalNamesByActionId.Find(Action->Id);
+        if (ExpectedName.IsEmpty() || NewName == nullptr || NewName->IsEmpty() ||
+            *NewName == ExpectedName)
+        {
+            OutError = TEXT("Every copied direct local declaration requires one distinct fresh name.");
+            return false;
+        }
+        const TSharedRef<FJsonObject> Rename = MakeShared<FJsonObject>();
+        Rename->SetStringField(TEXT("sourceStatementId"), ResolveStatementId(*Action));
+        Rename->SetStringField(TEXT("expectedName"), ExpectedName);
+        Rename->SetStringField(TEXT("newName"), *NewName);
+        JsonLocalRenames.Add(MakeShared<FJsonValueObject>(Rename));
+    }
+    if (CopiedLocalCount != NewLocalNamesByActionId.Num())
+    {
+        OutError = TEXT("The copied local rename set no longer matches the selected source range.");
+        return false;
+    }
+
+    const FString SourcePrevious = FirstIndex > 0
+        ? SourceStructuralIds[FirstIndex - 1]
+        : FString();
+    const int32 SourceNextIndex = FirstIndex + SourceStatementIds.Num();
+    const FString SourceNext = SourceNextIndex < SourceStructuralIds.Num()
+        ? SourceStructuralIds[SourceNextIndex]
+        : FString();
+    const FString DestinationPrevious = DestinationStatementId;
+    const FString DestinationNext = DestinationIndex + 1 < DestinationStructuralIds.Num()
+        ? DestinationStructuralIds[DestinationIndex + 1]
+        : FString();
+
+    const TSharedRef<FJsonObject> Operation = MakeShared<FJsonObject>();
+    Operation->SetStringField(TEXT("operation"), TEXT("duplicateStatements"));
+    Operation->SetStringField(TEXT("targetNodeId"), SourceStatementIds[0]);
+    Operation->SetStringField(
+        TEXT("expectedSourceParentBlockId"), SourceBlock->SourceNodeId);
+    Operation->SetArrayField(TEXT("expectedStatementIds"), MoveTemp(JsonStatementIds));
+    SetOptionalId(Operation, TEXT("expectedSourcePreviousSiblingId"), SourcePrevious);
+    SetOptionalId(Operation, TEXT("expectedSourceNextSiblingId"), SourceNext);
+    Operation->SetStringField(
+        TEXT("destinationParentBlockId"), DestinationBlock->SourceNodeId);
+    SetOptionalId(
+        Operation,
+        TEXT("expectedDestinationPreviousSiblingId"),
+        DestinationPrevious);
+    SetOptionalId(
+        Operation,
+        TEXT("expectedDestinationNextSiblingId"),
+        DestinationNext);
+    Operation->SetArrayField(TEXT("localRenames"), MoveTemp(JsonLocalRenames));
+    return SerializeRoot(
+        MakePatchRoot(Document, Operation),
+        OutPatchJson,
+        OutError,
+        TEXT("the statement-range duplication patch"));
 }
 
 bool FUnifiedScriptAuthoringSurfaceReader::BuildStatementCollapsePatch(

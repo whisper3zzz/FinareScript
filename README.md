@@ -618,7 +618,7 @@ Declaration edit
   -> updated C# + asset JSON + optional .usids (only as one commit)
 
 Workbench authoring commit
-  -> declaration-patch v0.2 or semantic-patch v0.25
+  -> declaration-patch v0.2 or semantic-patch v0.26
   -> workspace v0.3 baseline revision + unique operation identity
   -> immutable candidate analysis + regenerated Graph
   -> same CoreCLR transport reload
@@ -647,8 +647,8 @@ Current Unreal adapter path:
   -> Declaration IR -> fixed-layout Details state + stable-ID migration
   -> stable generated Member ID -> ABI v3 call frame -> module-owned native thunk -> live UObject
   -> Authoring Surface v0.4 -> native Slate GraphEditor pins/wires + inspector
-  -> typed edit capability -> semantic-patch v0.25 Workbench transaction
-  -> identity-safe same-block statement copy/paste -> fresh copied subtree IDs
+  -> typed edit capability -> semantic-patch v0.26 Workbench transaction
+  -> identity-safe same-method range copy/paste -> fresh copied subtree IDs
   -> reversible lexical-scope collapse/expand -> stable member IDs + fresh/retired region ID
   -> atomic C#/identity/Declaration/Surface/DLL/PDB publication
   -> matching component transactional reload
@@ -948,7 +948,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
   --out-identity artifacts/patched/DamageRules.cs.usids
 ```
 
-`unifiedscript.patch/v0.25` binds every patch to both the source compilation ID
+`unifiedscript.patch/v0.26` binds every patch to both the source compilation ID
 and semantic configuration ID emitted in current Graph schema v0.13. A `replaceLiteral`
 operation also carries the expected old literal text. A stale source, changed
 reference/effect configuration, missing target, changed old value, non-literal

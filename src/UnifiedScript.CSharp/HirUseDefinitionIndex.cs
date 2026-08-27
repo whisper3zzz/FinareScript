@@ -39,6 +39,20 @@ internal sealed class HirUseDefinitionIndex
             definitions.Add(variable.Id, variable);
         }
 
+        foreach (HirForVariableDeclarator variable in compilation
+                     .DescendantsAndSelf()
+                     .OfType<HirForVariableDeclarator>())
+        {
+            definitions.Add(variable.Id, variable);
+        }
+
+        foreach (HirPatternVariable variable in compilation
+                     .DescendantsAndSelf()
+                     .OfType<HirPatternVariable>())
+        {
+            definitions.Add(variable.Id, variable);
+        }
+
         foreach (HirExpression expression in compilation
                      .DescendantsAndSelf()
                      .OfType<HirExpression>())
@@ -73,4 +87,17 @@ internal sealed class HirUseDefinitionIndex
         definitions.ContainsKey(definitionId) &&
         boundNodes.TryGetValue(expression.Id, out BoundNodeInfo? binding) &&
         binding.ReferencedSymbolId == definitionId;
+
+    public bool TryGetReferencedDefinition(
+        HirExpression expression,
+        out HirNode? definition)
+    {
+        definition = null;
+        if (!boundNodes.TryGetValue(expression.Id, out BoundNodeInfo? binding) ||
+            binding.ReferencedSymbolId is not SemanticId definitionId)
+        {
+            return false;
+        }
+        return definitions.TryGetValue(definitionId, out definition);
+    }
 }

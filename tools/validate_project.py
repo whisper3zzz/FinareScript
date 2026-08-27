@@ -747,7 +747,7 @@ def main() -> int:
         and "X-UnifiedScript-Transaction-Id" in prototype_source
         and "unifiedscript.authoring-workspace/v0.3" in prototype_source
         and "AuthoringSurfaceProjector" in debug_server_source
-        and "unifiedscript.patch/v0.25" in prototype_source,
+        and "unifiedscript.patch/v0.26" in prototype_source,
         "Visual authoring changes do not commit through the transactional host",
     )
     checks.append("declaration and behavior patches write source and reload one CoreCLR generation")
@@ -2466,7 +2466,7 @@ def main() -> int:
         and "puertsOrTypeScriptPackageFiles" in blockbreaker_package_runner
         and "### M7.4 — Full BlockBreaker runtime migration" in roadmap
         and "- [x] inventory all Puerts scripts" in roadmap
-        and "Next slice: **M8.1 — Structured graph editing completeness**" in roadmap,
+        and "Next slice: **M8.1 — callable extraction and user-grouped transactions**" in roadmap,
         "M7.4 whole-project Puerts inventory, coverage, or migration gates are incomplete",
     )
     checks.append("M7.4 BlockBreaker migration has exact coverage and zero legacy payload gates")
@@ -2735,6 +2735,8 @@ def main() -> int:
         and "BuildStatementDeletionPatch" in unreal_authoring_surface_source
         and "BuildStatementDuplicationPatch" in unreal_authoring_surface_source
         and 'TEXT("duplicateStatement")' in unreal_authoring_surface_source
+        and "BuildStatementRangeDuplicationPatch" in unreal_authoring_surface_source
+        and 'TEXT("duplicateStatements")' in unreal_authoring_surface_source
         and "BuildStatementCollapsePatch" in unreal_authoring_surface_source
         and "BuildBlockExpansionPatch" in unreal_authoring_surface_source
         and 'TEXT("collapseStatements")' in unreal_authoring_surface_source
@@ -2756,7 +2758,7 @@ def main() -> int:
         and "HandleCollapseSelectedStatements" in unreal_authoring_widget
         and "HandleExpandBlockRegion" in unreal_authoring_widget
         and 'TEXT("flow.switch")' in unreal_authoring_widget
-        and "unifiedscript.patch/v0.25" in unreal_authoring_surface_source
+        and "unifiedscript.patch/v0.26" in unreal_authoring_surface_source
         and "SUnifiedScriptAuthoringSurface" in unreal_authoring_widget
         and "HandleDataRewireRequested" in unreal_authoring_widget
         and "SubmitSemanticPatch" in unreal_authoring_widget
@@ -2777,6 +2779,8 @@ def main() -> int:
         and "Old compiler-owned wire remains until the server commits"
         in unreal_authoring_test
         and "Statement duplication preserves both source and destination gaps"
+        in unreal_authoring_test
+        and "Range copy preserves ordered source and distinct destination facts"
         in unreal_authoring_test
         and "Scope collapse carries ordered members and outer sibling gaps"
         in unreal_authoring_test
@@ -3279,10 +3283,10 @@ def main() -> int:
     ).hexdigest()
     loop_source_digest = hashlib.sha256(loop_source.encode("utf-8")).hexdigest()
     require(
-        patch_document["schemaVersion"] == "unifiedscript.patch/v0.25"
-        and operator_patch["schemaVersion"] == "unifiedscript.patch/v0.25"
-        and insert_patch["schemaVersion"] == "unifiedscript.patch/v0.25"
-        and temporary_patch["schemaVersion"] == "unifiedscript.patch/v0.25"
+        patch_document["schemaVersion"] == "unifiedscript.patch/v0.26"
+        and operator_patch["schemaVersion"] == "unifiedscript.patch/v0.26"
+        and insert_patch["schemaVersion"] == "unifiedscript.patch/v0.26"
+        and temporary_patch["schemaVersion"] == "unifiedscript.patch/v0.26"
         and operator_patch["sourceCompilationId"]
         == patch_document["sourceCompilationId"]
         and insert_patch["sourceCompilationId"]
@@ -3330,7 +3334,7 @@ def main() -> int:
         "Temporary-introduction sample does not contain the expected typed payload",
     )
     require(
-        reconnect_patch["schemaVersion"] == "unifiedscript.patch/v0.25"
+        reconnect_patch["schemaVersion"] == "unifiedscript.patch/v0.26"
         and reconnect_identity["sourcePath"]
         == "samples/Patching/SharedValueRules.cs"
         and reconnect_identity["sourceDigest"]
@@ -3355,7 +3359,7 @@ def main() -> int:
     assignment_statement = assignment_operation["newStatement"]
     assignment_value = assignment_statement["value"]
     require(
-        assignment_patch["schemaVersion"] == "unifiedscript.patch/v0.25"
+        assignment_patch["schemaVersion"] == "unifiedscript.patch/v0.26"
         and assignment_identity["sourcePath"]
         == "samples/Patching/AssignmentRules.cs"
         and assignment_identity["sourceDigest"]
@@ -3451,7 +3455,7 @@ def main() -> int:
     guard_comparison = guard_condition["left"]
     guard_negation = guard_condition["right"]
     require(
-        guard_document["schemaVersion"] == "unifiedscript.patch/v0.25"
+        guard_document["schemaVersion"] == "unifiedscript.patch/v0.26"
         and guard_identity["sourcePath"] == "samples/Patching/GuardRules.cs"
         and guard_identity["sourceDigest"] == f"sha256:{guard_source_digest}"
         and guard_operation["operation"] == "insertStatement"

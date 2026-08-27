@@ -26,6 +26,7 @@ namespace UnifiedScript.Core;
 [JsonDerivedType(typeof(DeleteStatementPatchOperation), "deleteStatement")]
 [JsonDerivedType(typeof(MoveStatementPatchOperation), "moveStatement")]
 [JsonDerivedType(typeof(DuplicateStatementPatchOperation), "duplicateStatement")]
+[JsonDerivedType(typeof(DuplicateStatementRangePatchOperation), "duplicateStatements")]
 [JsonDerivedType(typeof(CollapseStatementRangePatchOperation), "collapseStatements")]
 [JsonDerivedType(typeof(ExpandBlockPatchOperation), "expandBlock")]
 [JsonDerivedType(typeof(InsertSwitchSectionPatchOperation), "insertSwitchSection")]
@@ -406,6 +407,22 @@ public sealed record DuplicateStatementPatchOperation(
     SemanticId? ExpectedDestinationNextSiblingId,
     string? NewLocalName) : SemanticPatchOperation(TargetNodeId);
 
+public sealed record StatementCopyLocalRename(
+    SemanticId SourceStatementId,
+    string ExpectedName,
+    string NewName);
+
+public sealed record DuplicateStatementRangePatchOperation(
+    SemanticId TargetNodeId,
+    SemanticId ExpectedSourceParentBlockId,
+    IReadOnlyList<SemanticId> ExpectedStatementIds,
+    SemanticId? ExpectedSourcePreviousSiblingId,
+    SemanticId? ExpectedSourceNextSiblingId,
+    SemanticId DestinationParentBlockId,
+    SemanticId? ExpectedDestinationPreviousSiblingId,
+    SemanticId? ExpectedDestinationNextSiblingId,
+    IReadOnlyList<StatementCopyLocalRename> LocalRenames) : SemanticPatchOperation(TargetNodeId);
+
 public sealed record CollapseStatementRangePatchOperation(
     SemanticId TargetNodeId,
     SemanticId ExpectedParentBlockId,
@@ -491,7 +508,7 @@ public sealed record SemanticPatchDocument(
     SemanticId SemanticConfigurationId,
     IReadOnlyList<SemanticPatchOperation> Operations)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.25";
+    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.26";
 
     public static SemanticPatchDocument Create(
         SemanticId sourceCompilationId,

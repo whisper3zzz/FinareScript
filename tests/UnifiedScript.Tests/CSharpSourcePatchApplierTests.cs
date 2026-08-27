@@ -5939,6 +5939,154 @@ public sealed class CSharpSourcePatchApplierTests
     }
 
     [Fact]
+    public void Apply_DuplicatesConsecutiveRangeAcrossRegionsAndRenamesInternalUses()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(bool first, int input)
+                {
+                    if (first)
+                    {
+                        // copy this complete range
+                        int scaled = input * 2;
+                        scaled += 1;
+                    }
+                    else
+                    {
+                        input += 10;
+                    }
+
+                    return input;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/DuplicateRangeAcrossRegions.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirIfStatement branch = Assert.IsType<HirIfStatement>(method.Body.Statements[0]);
+        HirVariableDeclarationStatement local =
+            Assert.IsType<HirVariableDeclarationStatement>(branch.Then.Statements[0]);
+        HirExpressionStatement increment =
+            Assert.IsType<HirExpressionStatement>(branch.Then.Statements[1]);
+        HirExpressionStatement destination =
+            Assert.IsType<HirExpressionStatement>(branch.Else!.Statements[0]);
+        HashSet<SemanticId> originalRangeIds = branch.Then.Statements
+            .SelectMany(static statement => statement.DescendantsAndSelf())
+            .Select(static node => node.Id)
+            .ToHashSet();
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new DuplicateStatementRangePatchOperation(
+                local.Id,
+                branch.Then.Id,
+                [local.Id, increment.Id],
+                null,
+                null,
+                branch.Else.Id,
+                destination.Id,
+                null,
+                [new StatementCopyLocalRename(local.Id, "scaled", "scaledCopy")])]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Equal(
+            2,
+            patchedSource.Split("// copy this complete range", StringSplitOptions.None).Length - 1);
+        Assert.Contains("int scaledCopy = input * 2;", patchedSource, StringComparison.Ordinal);
+        Assert.Contains("scaledCopy += 1;", patchedSource, StringComparison.Ordinal);
+        HirMethodDeclaration changed = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirIfStatement changedBranch = Assert.IsType<HirIfStatement>(changed.Body.Statements[0]);
+        Assert.Equal([local.Id, increment.Id],
+            changedBranch.Then.Statements.Select(static statement => statement.Id).ToArray());
+        HirVariableDeclarationStatement copiedLocal =
+            Assert.IsType<HirVariableDeclarationStatement>(changedBranch.Else!.Statements[1]);
+        HirExpressionStatement copiedIncrement =
+            Assert.IsType<HirExpressionStatement>(changedBranch.Else.Statements[2]);
+        Assert.Equal("scaledCopy", copiedLocal.Name);
+        Assert.Empty(originalRangeIds.Intersect(
+            changedBranch.Else.Statements.Skip(1)
+                .SelectMany(static statement => statement.DescendantsAndSelf())
+                .Select(static node => node.Id)));
+        HirIdentifierExpression copiedReference = copiedIncrement
+            .DescendantsAndSelf()
+            .OfType<HirIdentifierExpression>()
+            .Single(static identifier => identifier.Name == "scaledCopy");
+        Assert.Equal(
+            copiedLocal.Id,
+            Assert.Single(
+                result.Analysis.Semantics!.Nodes,
+                binding => binding.NodeId == copiedReference.Id).ReferencedSymbolId);
+    }
+
+    [Fact]
+    public void Apply_RejectsCrossRegionCopyThatWouldRebindExternalLocal()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(bool first)
+                {
+                    int result = 0;
+                    if (first)
+                    {
+                        int value = 1;
+                        result += value;
+                    }
+                    else
+                    {
+                        int value = 2;
+                        result += value;
+                    }
+
+                    return result;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/RejectCrossRegionRebinding.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirIfStatement branch = Assert.IsType<HirIfStatement>(method.Body.Statements[1]);
+        HirVariableDeclarationStatement sourceValue =
+            Assert.IsType<HirVariableDeclarationStatement>(branch.Then.Statements[0]);
+        HirExpressionStatement copied =
+            Assert.IsType<HirExpressionStatement>(branch.Then.Statements[1]);
+        HirExpressionStatement destination =
+            Assert.IsType<HirExpressionStatement>(branch.Else!.Statements[1]);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new DuplicateStatementRangePatchOperation(
+                copied.Id,
+                branch.Then.Id,
+                [copied.Id],
+                sourceValue.Id,
+                null,
+                branch.Else.Id,
+                destination.Id,
+                null,
+                [])]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(
+            SemanticPatchDiagnosticCodes.ValueSourceNotAvailable,
+            Assert.Single(result.Diagnostics).Code);
+    }
+
+    [Fact]
     public void Apply_CollapsesAndExpandsLexicalScopeWithStableChildIdentities()
     {
         const string source = """

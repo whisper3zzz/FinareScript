@@ -128,6 +128,9 @@ public static class SemanticPatchJson
                 case DuplicateStatementPatchOperation duplicateStatement:
                     ValidateDuplicateStatement(duplicateStatement);
                     break;
+                case DuplicateStatementRangePatchOperation duplicateStatements:
+                    ValidateDuplicateStatements(duplicateStatements);
+                    break;
                 case CollapseStatementRangePatchOperation collapseStatements:
                     ValidateCollapseStatements(collapseStatements);
                     break;
@@ -1024,6 +1027,66 @@ public static class SemanticPatchJson
         {
             throw new JsonException(
                 "A duplicated local name must be non-empty and at most 128 characters.");
+        }
+    }
+
+    private static void ValidateDuplicateStatements(
+        DuplicateStatementRangePatchOperation operation)
+    {
+        if (operation.ExpectedSourceParentBlockId.IsEmpty ||
+            operation.DestinationParentBlockId.IsEmpty)
+        {
+            throw new JsonException(
+                "Statement-range duplication requires non-empty source and destination block IDs.");
+        }
+        ValidateIdentitySequence(operation.ExpectedStatementIds, "Statement copy range");
+        if (operation.ExpectedStatementIds[0] != operation.TargetNodeId)
+        {
+            throw new JsonException(
+                "Statement-range duplication target must be its first expected statement ID.");
+        }
+        ValidateSiblingIds(
+            operation.ExpectedSourcePreviousSiblingId,
+            operation.ExpectedSourceNextSiblingId);
+        if ((operation.ExpectedSourcePreviousSiblingId is SemanticId sourcePrevious &&
+                operation.ExpectedStatementIds.Contains(sourcePrevious)) ||
+            (operation.ExpectedSourceNextSiblingId is SemanticId sourceNext &&
+                operation.ExpectedStatementIds.Contains(sourceNext)))
+        {
+            throw new JsonException(
+                "Statement copy outer siblings cannot be part of the copied range.");
+        }
+        ValidateSiblingIds(
+            operation.ExpectedDestinationPreviousSiblingId,
+            operation.ExpectedDestinationNextSiblingId);
+        if (operation.ExpectedDestinationPreviousSiblingId is null &&
+            operation.ExpectedDestinationNextSiblingId is null)
+        {
+            throw new JsonException(
+                "Statement-range duplication requires an exact non-empty destination gap.");
+        }
+        if (operation.LocalRenames is null ||
+            operation.LocalRenames.Count > operation.ExpectedStatementIds.Count)
+        {
+            throw new JsonException(
+                "Statement-range duplication has an invalid local rename collection.");
+        }
+        HashSet<SemanticId> renamedStatements = [];
+        HashSet<string> newNames = new(StringComparer.Ordinal);
+        foreach (StatementCopyLocalRename rename in operation.LocalRenames)
+        {
+            if (rename.SourceStatementId.IsEmpty ||
+                !operation.ExpectedStatementIds.Contains(rename.SourceStatementId) ||
+                !renamedStatements.Add(rename.SourceStatementId) ||
+                string.IsNullOrWhiteSpace(rename.ExpectedName) ||
+                string.IsNullOrWhiteSpace(rename.NewName) ||
+                rename.ExpectedName.Length > 128 || rename.NewName.Length > 128 ||
+                string.Equals(rename.ExpectedName, rename.NewName, StringComparison.Ordinal) ||
+                !newNames.Add(rename.NewName))
+            {
+                throw new JsonException(
+                    "Statement copy local renames require unique selected definitions and distinct valid names.");
+            }
         }
     }
 

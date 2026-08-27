@@ -77,7 +77,7 @@ v0.4 retains two inline editor capabilities:
   compatible options, result type ID, left/operand type ID, and optional right
   operand type ID.
 
-The Workbench serializes those fields as Semantic Patch v0.25. The ordinary
+The Workbench serializes those fields as Semantic Patch v0.26. The ordinary
 Roslyn patch path still enforces operator families, type preconditions, source
 identity, semantic configuration, localized syntax replacement, complete
 reanalysis, and transactional CoreCLR reload. The Surface does not weaken or
@@ -150,6 +150,14 @@ My Script exposes Expand Scope, which removes only the wrapper and returns the
 members to the exact parent position. Scope/dataflow errors, stale ranges,
 directives, and brace-owned comments fail before commit. See
 [LEXICAL_SCOPE_TRANSFORMS.md](LEXICAL_SCOPE_TRANSFORMS.md).
+
+Semantic Patch v0.26 extends clipboard authoring to a consecutive statement
+range that can cross structured regions within the same method. The Surface
+publishes the ordered source block and exact destination gap; the applier keeps
+all original identities, assigns fresh identities to every copy, renames direct
+copied locals and their bound references, and rejects external value references
+that do not dominate the target gap. See
+[SEMANTIC_COPY_PASTE.md](SEMANTIC_COPY_PASTE.md).
 
 ## HTTP and CLI delivery
 
