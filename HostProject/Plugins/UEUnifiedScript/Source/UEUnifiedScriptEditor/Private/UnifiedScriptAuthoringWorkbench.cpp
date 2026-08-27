@@ -16,7 +16,7 @@
 
 namespace UE::UnifiedScript::AuthoringWorkbench::Private
 {
-constexpr TCHAR WorkspaceSchema[] = TEXT("unifiedscript.authoring-workspace/v0.2");
+constexpr TCHAR WorkspaceSchema[] = TEXT("unifiedscript.authoring-workspace/v0.3");
 
 bool ReadPositiveInteger(
     const TSharedPtr<FJsonObject>& Object,
@@ -29,6 +29,23 @@ bool ReadPositiveInteger(
         Number < 1.0 || Number != FMath::FloorToDouble(Number))
     {
         OutError = FString::Printf(TEXT("Authoring workspace field '%s' must be a positive integer."), Field);
+        return false;
+    }
+    OutValue = static_cast<int64>(Number);
+    return true;
+}
+
+bool ReadNonNegativeInteger(
+    const TSharedPtr<FJsonObject>& Object,
+    const TCHAR* Field,
+    int64& OutValue,
+    FString& OutError)
+{
+    double Number = 0.0;
+    if (!Object.IsValid() || !Object->TryGetNumberField(Field, Number) ||
+        Number < 0.0 || Number != FMath::FloorToDouble(Number))
+    {
+        OutError = FString::Printf(TEXT("Authoring workspace field '%s' must be a non-negative integer."), Field);
         return false;
     }
     OutValue = static_cast<int64>(Number);
@@ -71,6 +88,22 @@ FString FUnifiedScriptAuthoringWorkbench::BuildSemanticPatchPlanUrl(const FStrin
         : Normalized + TEXT("/api/authoring/semantic-patch-plan");
 }
 
+FString FUnifiedScriptAuthoringWorkbench::BuildUndoUrl(const FString& ServerUrl)
+{
+    const FString Normalized = NormalizeServerUrl(ServerUrl);
+    return Normalized.IsEmpty()
+        ? FString()
+        : Normalized + TEXT("/api/authoring/undo");
+}
+
+FString FUnifiedScriptAuthoringWorkbench::BuildRedoUrl(const FString& ServerUrl)
+{
+    const FString Normalized = NormalizeServerUrl(ServerUrl);
+    return Normalized.IsEmpty()
+        ? FString()
+        : Normalized + TEXT("/api/authoring/redo");
+}
+
 bool FUnifiedScriptAuthoringWorkbench::ParseWorkspaceResponse(
     const FString& Json,
     FUnifiedScriptAuthoringWorkspaceResult& OutWorkspace,
@@ -99,6 +132,27 @@ bool FUnifiedScriptAuthoringWorkbench::ParseWorkspaceResponse(
         return false;
     }
     Root->TryGetStringField(TEXT("sourcePath"), Candidate.SourcePath);
+
+    const TSharedPtr<FJsonObject>* History = nullptr;
+    if (!Root->TryGetObjectField(TEXT("history"), History) || !History->IsValid() ||
+        !(*History)->TryGetBoolField(TEXT("canUndo"), Candidate.History.bCanUndo) ||
+        !(*History)->TryGetBoolField(TEXT("canRedo"), Candidate.History.bCanRedo) ||
+        !UE::UnifiedScript::AuthoringWorkbench::Private::ReadNonNegativeInteger(
+            *History, TEXT("undoDepth"), Candidate.History.UndoDepth, OutError) ||
+        !UE::UnifiedScript::AuthoringWorkbench::Private::ReadNonNegativeInteger(
+            *History, TEXT("redoDepth"), Candidate.History.RedoDepth, OutError))
+    {
+        if (OutError.IsEmpty())
+        {
+            OutError = TEXT("The Workbench response has no valid transaction history.");
+        }
+        return false;
+    }
+    (*History)->TryGetStringField(TEXT("undoTransactionId"), Candidate.History.UndoTransactionId);
+    (*History)->TryGetStringField(TEXT("undoDescription"), Candidate.History.UndoDescription);
+    (*History)->TryGetStringField(TEXT("redoTransactionId"), Candidate.History.RedoTransactionId);
+    (*History)->TryGetStringField(TEXT("redoDescription"), Candidate.History.RedoDescription);
+    (*History)->TryGetStringField(TEXT("lastOperationId"), Candidate.History.LastOperationId);
 
     const TSharedPtr<FJsonObject>* Generation = nullptr;
     if (!Root->TryGetObjectField(TEXT("generation"), Generation) ||

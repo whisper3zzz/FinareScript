@@ -732,13 +732,20 @@ def main() -> int:
         '"/api/authoring/workspace"' in debug_server_source
         and '"/api/authoring/declaration-patch"' in debug_server_source
         and '"/api/authoring/semantic-patch"' in debug_server_source
+        and '"/api/authoring/undo"' in debug_server_source
+        and '"/api/authoring/redo"' in debug_server_source
         and "WriteTransactionally" in debug_server_source
         and "EnsureFilesUnchanged" in debug_server_source
         and "CSharpAuthoringMutation" in authoring_workspace_source
+        and "CSharpAuthoringHistoryMutation" in authoring_workspace_source
+        and "NavigateHistoryAsync" in debug_server_source
         and "AttachReconciledSidecars" in authoring_workspace_source
         and "saveDeclarationChanges" in prototype_source
         and "saveSemanticPatch" in prototype_source
-        and "unifiedscript.authoring-workspace/v0.2" in prototype_source
+        and "navigateAuthoringHistory" in prototype_source
+        and "X-UnifiedScript-Baseline-Revision" in prototype_source
+        and "X-UnifiedScript-Transaction-Id" in prototype_source
+        and "unifiedscript.authoring-workspace/v0.3" in prototype_source
         and "AuthoringSurfaceProjector" in debug_server_source
         and "unifiedscript.patch/v0.23" in prototype_source,
         "Visual authoring changes do not commit through the transactional host",
@@ -2751,10 +2758,16 @@ def main() -> int:
     ).read_text(encoding="utf-8")
     require(
         "FUnifiedScriptAuthoringWorkbench" in unreal_authoring_workbench_header
-        and "unifiedscript.authoring-workspace/v0.2"
+        and "unifiedscript.authoring-workspace/v0.3"
         in unreal_authoring_workbench_source
         and "/api/authoring/semantic-patch" in unreal_authoring_workbench_source
+        and "/api/authoring/undo" in unreal_authoring_workbench_source
+        and "/api/authoring/redo" in unreal_authoring_workbench_source
         and "FHttpModule::Get().CreateRequest" in unreal_authoring_widget
+        and "X-UnifiedScript-Baseline-Revision" in unreal_authoring_widget
+        and "X-UnifiedScript-Transaction-Id" in unreal_authoring_widget
+        and "HandleUndoAuthoringTransaction" in unreal_authoring_widget
+        and "HandleRedoAuthoringTransaction" in unreal_authoring_widget
         and "Apply & Reload" in unreal_authoring_widget
         and "ReloadMatchingComponents" in unreal_authoring_widget
         and "Component->ReloadScript()" in unreal_authoring_widget

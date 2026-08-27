@@ -855,6 +855,14 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         TEXT("Workbench patch-plan endpoint is normalized"),
         FUnifiedScriptAuthoringWorkbench::BuildSemanticPatchPlanUrl(TEXT("http://127.0.0.1:4173/")),
         FString(TEXT("http://127.0.0.1:4173/api/authoring/semantic-patch-plan")));
+    TestEqual(
+        TEXT("Workbench undo endpoint is normalized"),
+        FUnifiedScriptAuthoringWorkbench::BuildUndoUrl(TEXT("http://127.0.0.1:4173/")),
+        FString(TEXT("http://127.0.0.1:4173/api/authoring/undo")));
+    TestEqual(
+        TEXT("Workbench redo endpoint is normalized"),
+        FUnifiedScriptAuthoringWorkbench::BuildRedoUrl(TEXT("http://127.0.0.1:4173/")),
+        FString(TEXT("http://127.0.0.1:4173/api/authoring/redo")));
 
     FString SurfaceJson;
     TestTrue(TEXT("Demo Surface source is readable"),
@@ -875,8 +883,12 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         45);
 
     const FString WorkspaceJson = FString::Printf(
-        TEXT("{\"schemaVersion\":\"unifiedscript.authoring-workspace/v0.2\","
+        TEXT("{\"schemaVersion\":\"unifiedscript.authoring-workspace/v0.3\","
              "\"revision\":2,\"sourcePath\":\"DemoScript.cs\","
+             "\"history\":{\"canUndo\":true,\"canRedo\":false,"
+             "\"undoDepth\":2,\"redoDepth\":0,"
+             "\"undoTransactionId\":\"txn-2\",\"undoDescription\":\"Reconnect flow\","
+             "\"lastOperationId\":\"op-2\"},"
              "\"surface\":%s,\"generation\":{\"number\":3}}"),
         *SurfaceJson.Replace(
             TEXT("unifiedscript.authoring-surface/v9.9"),
@@ -890,6 +902,11 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
             Error));
     TestEqual(TEXT("Workbench response revision is retained"), Workspace.Revision, int64(2));
     TestEqual(TEXT("Workbench response generation is retained"), Workspace.Generation, int64(3));
+    TestTrue(TEXT("Workbench response exposes undo availability"), Workspace.History.bCanUndo);
+    TestFalse(TEXT("Workbench response exposes redo availability"), Workspace.History.bCanRedo);
+    TestEqual(TEXT("Workbench response retains undo depth"), Workspace.History.UndoDepth, int64(2));
+    TestEqual(TEXT("Workbench response retains undo label"), Workspace.History.UndoDescription, FString(TEXT("Reconnect flow")));
+    TestEqual(TEXT("Workbench response retains operation identity"), Workspace.History.LastOperationId, FString(TEXT("op-2")));
     TestEqual(TEXT("Workbench response replaces the Surface transactionally"),
         Workspace.Surface.GetActionCount(), 45);
     TestTrue(

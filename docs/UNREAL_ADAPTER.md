@@ -394,9 +394,15 @@ persisted visual layout.
 Each promoted literal/operator editor now exposes `Apply & Reload`. The Slate
 client posts the exact `unifiedscript.patch/v0.23` payload to the configured
 loopback Workbench URL and accepts only a strict
-`unifiedscript.authoring-workspace/v0.2` response. The returned Surface replaces
+`unifiedscript.authoring-workspace/v0.3` response. The returned Surface replaces
 the view without UE-side C# or Graph reconstruction; protocol diagnostics such
 as stale compilation IDs and external-file conflicts are shown in the tab.
+
+The same response now carries bounded transaction history. Slate sends an exact
+baseline revision, unique operation ID, and author-facing label for each edit,
+then enables Undo/Redo from server history rather than maintaining a second UE
+edit stack. Navigation republishes source, identities, artifacts, and a fresh
+CoreCLR generation before the canvas and matching components refresh.
 
 `debug-serve` now supports repeatable `--source` plus transactional
 `--asset-out`, `--surface-out`, `--managed-out`, and `--pdb-out` targets. A

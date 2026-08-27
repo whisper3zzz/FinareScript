@@ -7,6 +7,7 @@ const state = {
   asset: null, surfaceAsset: null, graphFunction: null, functionSurface: null,
   declarations: [], nodes: new Map(), selected: null,
   authoringConnected: false, authoringBusy: false, authoringRevision: null,
+  authoringHistory: null,
   generation: null, removedDeclarations: [], previewPatch: null,
   debugConnected: false, debugBusy: false, debugHealth: null, debugSession: null,
 };
@@ -73,7 +74,7 @@ async function loadWorkspaceArtifacts() {
     const response = await fetch('/api/authoring/workspace', { cache: 'no-store' });
     if (!response.ok) throw new Error(`Authoring workspace returned ${response.status}`);
     const workspace = await response.json();
-    assertArtifact(workspace.schemaVersion === 'unifiedscript.authoring-workspace/v0.2', 'Unsupported authoring workspace protocol');
+    assertArtifact(workspace.schemaVersion === 'unifiedscript.authoring-workspace/v0.3', 'Unsupported authoring workspace protocol');
     applyWorkspaceArtifacts(workspace.scriptAssets, workspace.graph, workspace.surface, workspace.sourceText, workspace);
     await connectDebugBridge();
     return;
@@ -140,6 +141,7 @@ function applyWorkspaceArtifacts(artifact, graph, surface, sourceText, workspace
     artifact, graph, surface,
     authoringConnected: Boolean(workspace),
     authoringRevision: workspace?.revision ?? null,
+    authoringHistory: workspace?.history ?? null,
     generation: workspace?.generation ?? null,
     artifactLoaded: true, graphDirty: false, removedDeclarations: [], previewPatch: null,
   });
@@ -154,6 +156,7 @@ function applyWorkspaceArtifacts(artifact, graph, surface, sourceText, workspace
   restoreBreakpoints(remembered.breakpoints);
   if (!remembered.breakpoints.length) enableDefaultBreakpoint();
   setAuthoringBusy(false);
+  updateHistoryControls();
   document.querySelector('.sync-status strong').textContent = workspace
     ? `SYNCED · R${workspace.revision}` : 'SURFACE · READ ONLY';
   document.querySelector('.target-label').textContent = workspace
@@ -693,6 +696,7 @@ function markGraphDirty() {
   document.querySelector('.target-label').textContent = 'DECLARATION PATCH · SURFACE BASELINE';
   document.querySelector('.dirty-dot').classList.add('visible');
   document.getElementById('saveButton').disabled = !state.authoringConnected || state.authoringBusy;
+  updateHistoryControls();
 }
 
 function setAuthoringBusy(busy) {
@@ -701,11 +705,39 @@ function setAuthoringBusy(busy) {
   saveButton.disabled = busy || !state.authoringConnected || !state.graphDirty;
   saveButton.textContent = busy ? 'COMMITTING…' : 'COMMIT PATCH';
   document.querySelector('.dirty-dot').classList.toggle('visible', state.graphDirty);
+  updateHistoryControls();
 }
 
-async function authoringRequest(path, patch) {
+function updateHistoryControls() {
+  const history = state.authoringHistory;
+  const unavailable = !state.authoringConnected || state.authoringBusy || state.graphDirty;
+  const undoButton = document.getElementById('undoButton');
+  const redoButton = document.getElementById('redoButton');
+  undoButton.disabled = unavailable || !history?.canUndo;
+  redoButton.disabled = unavailable || !history?.canRedo;
+  undoButton.title = history?.canUndo
+    ? `Undo: ${history.undoDescription} (${history.undoDepth})`
+    : 'Nothing to undo';
+  redoButton.title = history?.canRedo
+    ? `Redo: ${history.redoDescription} (${history.redoDepth})`
+    : 'Nothing to redo';
+}
+
+function newAuthoringOperationId() {
+  return crypto.randomUUID?.() || `web-${Date.now()}-${crypto.getRandomValues(new Uint32Array(2)).join('')}`;
+}
+
+async function authoringRequest(path, patch, label = 'Visual authoring edit') {
+  const headers = {
+    'Content-Type': 'application/json',
+    'X-UnifiedScript-Transaction-Id': newAuthoringOperationId(),
+    'X-UnifiedScript-Transaction-Label': label,
+  };
+  if (state.authoringRevision !== null) {
+    headers['X-UnifiedScript-Baseline-Revision'] = String(state.authoringRevision);
+  }
   const response = await fetch(path, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch),
+    method: 'POST', headers, body: JSON.stringify(patch),
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -713,7 +745,7 @@ async function authoringRequest(path, patch) {
     error.code = payload.error?.code;
     throw error;
   }
-  if (payload.schemaVersion !== 'unifiedscript.authoring-workspace/v0.2') throw new Error('Unsupported authoring response');
+  if (payload.schemaVersion !== 'unifiedscript.authoring-workspace/v0.3') throw new Error('Unsupported authoring response');
   return payload;
 }
 
@@ -723,7 +755,7 @@ async function saveDeclarationChanges(patch = null) {
     const nextPatch = patch || buildDeclarationPatch();
     if (!nextPatch.operations.length) return showToast('Nothing to save', 'Declarations are synchronized');
     setAuthoringBusy(true);
-    const workspace = await authoringRequest('/api/authoring/declaration-patch', nextPatch);
+    const workspace = await authoringRequest('/api/authoring/declaration-patch', nextPatch, 'Edit script declarations');
     applyWorkspaceArtifacts(workspace.scriptAssets, workspace.graph, workspace.surface, workspace.sourceText, workspace);
     showToast(`Saved revision ${workspace.revision}`, `CoreCLR generation ${workspace.generation.number} is live`);
   } catch (error) {
@@ -737,12 +769,31 @@ async function saveSemanticPatch(patch) {
   if (!state.authoringConnected) return showToast('Read-only artifacts', 'Start debug-serve to apply semantic edits');
   try {
     setAuthoringBusy(true);
-    const workspace = await authoringRequest('/api/authoring/semantic-patch', patch);
+    const workspace = await authoringRequest('/api/authoring/semantic-patch', patch, 'Edit behavior graph');
     applyWorkspaceArtifacts(workspace.scriptAssets, workspace.graph, workspace.surface, workspace.sourceText, workspace);
     showToast(`Behavior saved · R${workspace.revision}`, `CoreCLR generation ${workspace.generation.number} reloaded`);
   } catch (error) {
     document.querySelector('.sync-status strong').textContent = error.code === 'UAW1002' ? 'EXTERNAL CONFLICT' : 'PATCH REJECTED';
     showToast(error.code || 'Behavior patch failed', error.message);
+    setAuthoringBusy(false);
+  }
+}
+
+async function navigateAuthoringHistory(direction) {
+  if (!state.authoringConnected) return showToast('Read-only artifacts', 'Start debug-serve to navigate edit history');
+  if (state.graphDirty) return showToast('Commit pending declarations', 'Save or reload local declaration edits before history navigation');
+  try {
+    setAuthoringBusy(true);
+    const workspace = await authoringRequest(
+      `/api/authoring/${direction}`,
+      {},
+      direction === 'undo' ? 'Undo visual authoring edit' : 'Redo visual authoring edit');
+    applyWorkspaceArtifacts(workspace.scriptAssets, workspace.graph, workspace.surface, workspace.sourceText, workspace);
+    const action = direction === 'undo' ? 'Undone' : 'Redone';
+    showToast(`${action} · R${workspace.revision}`, `CoreCLR generation ${workspace.generation.number} reloaded`);
+  } catch (error) {
+    document.querySelector('.sync-status strong').textContent = error.code === 'UAW1002' ? 'EXTERNAL CONFLICT' : 'HISTORY REJECTED';
+    showToast(error.code || `${direction} failed`, error.message);
     setAuthoringBusy(false);
   }
 }
@@ -958,6 +1009,8 @@ document.getElementById('previewPatchButton').addEventListener('click', showDecl
 document.getElementById('applyPreviewPatchButton').addEventListener('click', () =>
   state.previewPatch && saveDeclarationChanges(state.previewPatch));
 document.getElementById('saveButton').addEventListener('click', () => saveDeclarationChanges());
+document.getElementById('undoButton').addEventListener('click', () => navigateAuthoringHistory('undo'));
+document.getElementById('redoButton').addEventListener('click', () => navigateAuthoringHistory('redo'));
 document.getElementById('addVariableButton').addEventListener('click', () => {
   updateNewVariablePreview();
   variableDialog.showModal();
@@ -990,6 +1043,15 @@ declarationSearch.addEventListener('input', () => {
   });
 });
 document.addEventListener('keydown', event => {
+  const editingText = event.target.matches?.('input, textarea, select, [contenteditable="true"]');
+  if (!editingText && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') {
+    event.preventDefault();
+    if (!state.authoringBusy) navigateAuthoringHistory(event.shiftKey ? 'redo' : 'undo');
+  }
+  if (!editingText && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'y') {
+    event.preventDefault();
+    if (!state.authoringBusy) navigateAuthoringHistory('redo');
+  }
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
     event.preventDefault();
     if (state.graphDirty && !state.authoringBusy) saveDeclarationChanges();

@@ -92,7 +92,11 @@ public sealed class CoreClrAuthoringHttpServerTests
             using var client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}/") };
 
             AuthoringWorkspaceResponse baseline = await GetWorkspaceAsync(client);
-            Assert.Equal("unifiedscript.authoring-workspace/v0.2", baseline.SchemaVersion);
+            Assert.Equal("unifiedscript.authoring-workspace/v0.3", baseline.SchemaVersion);
+            Assert.False(baseline.History.CanUndo);
+            Assert.False(baseline.History.CanRedo);
+            Assert.Equal(0, baseline.History.UndoDepth);
+            Assert.Equal(0, baseline.History.RedoDepth);
             Assert.Equal(AuthoringSurfaceDocument.CurrentSchemaVersion, baseline.Surface.SchemaVersion);
             ScriptAssetDeclaration asset = Assert.Single(baseline.ScriptAssets.Assets);
             AuthoringAssetSurface surfaceAsset = Assert.Single(baseline.Surface.Assets);
@@ -155,10 +159,19 @@ public sealed class CoreClrAuthoringHttpServerTests
             AuthoringWorkspaceResponse declared = await PostAsync(
                 client,
                 "api/authoring/declaration-patch",
-                DeclarationPatchJson.Serialize(declarationPatch));
+                DeclarationPatchJson.Serialize(declarationPatch),
+                baseline.Revision,
+                "txn-declaration",
+                "Update MaxDamage");
 
             Assert.Equal(2, declared.Revision);
             Assert.Equal(2, declared.Generation.Number);
+            Assert.True(declared.History.CanUndo);
+            Assert.False(declared.History.CanRedo);
+            Assert.Equal(1, declared.History.UndoDepth);
+            Assert.Equal("txn-declaration", declared.History.UndoTransactionId);
+            Assert.Equal("Update MaxDamage", declared.History.UndoDescription);
+            Assert.Equal("txn-declaration", declared.History.LastOperationId);
             Assert.Contains("= 120;", await File.ReadAllTextAsync(sourcePath), StringComparison.Ordinal);
             Assert.True(File.Exists(identityPath));
             Assert.Equal(
@@ -179,7 +192,10 @@ public sealed class CoreClrAuthoringHttpServerTests
             AuthoringWorkspaceResponse behavior = await PostAsync(
                 client,
                 "api/authoring/semantic-patch",
-                SemanticPatchJson.Serialize(semanticPatch));
+                SemanticPatchJson.Serialize(semanticPatch),
+                declared.Revision,
+                "txn-semantic",
+                "Raise clamp minimum");
 
             Assert.Equal(3, behavior.Revision);
             Assert.Equal(3, behavior.Generation.Number);
@@ -206,7 +222,10 @@ public sealed class CoreClrAuthoringHttpServerTests
             AuthoringWorkspaceResponse planned = await PostAsync(
                 client,
                 "api/authoring/semantic-patch-plan",
-                SemanticPatchPlanJson.Serialize(plan));
+                SemanticPatchPlanJson.Serialize(plan),
+                behavior.Revision,
+                "txn-plan",
+                "Apply clamp plan");
 
             Assert.Equal(4, planned.Revision);
             Assert.Equal(4, planned.Generation.Number);
@@ -248,28 +267,102 @@ public sealed class CoreClrAuthoringHttpServerTests
             AuthoringWorkspaceResponse rewired = await PostAsync(
                 client,
                 "api/authoring/semantic-patch",
-                SemanticPatchJson.Serialize(rewirePatch));
+                SemanticPatchJson.Serialize(rewirePatch),
+                planned.Revision,
+                "txn-rewire",
+                "Reconnect return value");
 
             Assert.Equal(5, rewired.Revision);
             Assert.Equal(5, rewired.Generation.Number);
+            Assert.Equal(4, rewired.History.UndoDepth);
+            Assert.Equal("txn-rewire", rewired.History.UndoTransactionId);
             Assert.Contains("return 12f;", await File.ReadAllTextAsync(sourcePath), StringComparison.Ordinal);
             Assert.Equal(
                 rewired.Surface.SourceCompilationId,
+                AuthoringSurfaceJson.Deserialize(
+                    await File.ReadAllTextAsync(surfacePath)).SourceCompilationId);
+
+            using (HttpRequestMessage staleRequest = AuthoringRequest(
+                "api/authoring/semantic-patch",
+                SemanticPatchJson.Serialize(rewirePatch),
+                planned.Revision,
+                "txn-stale",
+                "Stale edit"))
+            using (HttpResponseMessage staleResponse = await client.SendAsync(staleRequest))
+            {
+                Assert.Equal(HttpStatusCode.Conflict, staleResponse.StatusCode);
+                Assert.Contains(
+                    "UAW1005",
+                    await staleResponse.Content.ReadAsStringAsync(),
+                    StringComparison.Ordinal);
+            }
+
+            using (HttpRequestMessage duplicateRequest = AuthoringRequest(
+                "api/authoring/semantic-patch",
+                SemanticPatchJson.Serialize(rewirePatch),
+                rewired.Revision,
+                "txn-rewire",
+                "Duplicate edit"))
+            using (HttpResponseMessage duplicateResponse = await client.SendAsync(duplicateRequest))
+            {
+                Assert.Equal(HttpStatusCode.Conflict, duplicateResponse.StatusCode);
+                Assert.Contains(
+                    "UAW1006",
+                    await duplicateResponse.Content.ReadAsStringAsync(),
+                    StringComparison.Ordinal);
+            }
+
+            AuthoringWorkspaceResponse undone = await PostAsync(
+                client,
+                "api/authoring/undo",
+                "{}",
+                rewired.Revision,
+                "op-undo-rewire",
+                "Undo return reconnection");
+
+            Assert.Equal(6, undone.Revision);
+            Assert.Equal(6, undone.Generation.Number);
+            Assert.Contains("return scaled;", await File.ReadAllTextAsync(sourcePath), StringComparison.Ordinal);
+            Assert.Equal(3, undone.History.UndoDepth);
+            Assert.Equal(1, undone.History.RedoDepth);
+            Assert.Equal("txn-rewire", undone.History.RedoTransactionId);
+            Assert.Equal("op-undo-rewire", undone.History.LastOperationId);
+
+            AuthoringWorkspaceResponse redone = await PostAsync(
+                client,
+                "api/authoring/redo",
+                "{}",
+                undone.Revision,
+                "op-redo-rewire",
+                "Redo return reconnection");
+
+            Assert.Equal(7, redone.Revision);
+            Assert.Equal(7, redone.Generation.Number);
+            Assert.Contains("return 12f;", await File.ReadAllTextAsync(sourcePath), StringComparison.Ordinal);
+            Assert.Equal(4, redone.History.UndoDepth);
+            Assert.Equal(0, redone.History.RedoDepth);
+            Assert.Equal("op-redo-rewire", redone.History.LastOperationId);
+            Assert.Equal(
+                redone.Surface.SourceCompilationId,
                 AuthoringSurfaceJson.Deserialize(
                     await File.ReadAllTextAsync(surfacePath)).SourceCompilationId);
             string surfaceBeforeConflict = await File.ReadAllTextAsync(surfacePath);
             byte[] assemblyBeforeConflict = await File.ReadAllBytesAsync(managedPath);
 
             await File.AppendAllTextAsync(supportPath, "\n// external change\n");
-            GraphNode currentMinimum = rewired.Graph.Functions[0].Nodes.First(static node =>
+            GraphNode currentMinimum = redone.Graph.Functions[0].Nodes.First(static node =>
                 node.Kind == "literal" && node.Properties.GetValueOrDefault("value") == "12f");
             SemanticPatchDocument conflictingPatch = SemanticPatchDocument.Create(
-                rewired.ScriptAssets.SourceCompilationId,
-                rewired.ScriptAssets.SemanticConfigurationId,
+                redone.ScriptAssets.SourceCompilationId,
+                redone.ScriptAssets.SemanticConfigurationId,
                 [new ReplaceLiteralPatchOperation(currentMinimum.Id, "12f", "20f")]);
-            using HttpResponseMessage conflict = await client.PostAsync(
+            using HttpRequestMessage conflictRequest = AuthoringRequest(
                 "api/authoring/semantic-patch",
-                JsonContent(SemanticPatchJson.Serialize(conflictingPatch)));
+                SemanticPatchJson.Serialize(conflictingPatch),
+                redone.Revision,
+                "txn-external-conflict",
+                "Conflicting edit");
+            using HttpResponseMessage conflict = await client.SendAsync(conflictRequest);
 
             Assert.Equal(HttpStatusCode.Conflict, conflict.StatusCode);
             string errorJson = await conflict.Content.ReadAsStringAsync();
@@ -297,11 +390,37 @@ public sealed class CoreClrAuthoringHttpServerTests
     private static async Task<AuthoringWorkspaceResponse> PostAsync(
         HttpClient client,
         string path,
-        string json)
+        string json,
+        long baselineRevision,
+        string transactionId,
+        string description)
     {
-        using HttpResponseMessage response = await client.PostAsync(path, JsonContent(json));
+        using HttpRequestMessage request = AuthoringRequest(
+            path,
+            json,
+            baselineRevision,
+            transactionId,
+            description);
+        using HttpResponseMessage response = await client.SendAsync(request);
         response.EnsureSuccessStatusCode();
         return Deserialize(await response.Content.ReadAsStringAsync());
+    }
+
+    private static HttpRequestMessage AuthoringRequest(
+        string path,
+        string json,
+        long baselineRevision,
+        string transactionId,
+        string description)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, path)
+        {
+            Content = JsonContent(json),
+        };
+        request.Headers.Add("X-UnifiedScript-Baseline-Revision", baselineRevision.ToString());
+        request.Headers.Add("X-UnifiedScript-Transaction-Id", transactionId);
+        request.Headers.Add("X-UnifiedScript-Transaction-Label", description);
+        return request;
     }
 
     private static AuthoringWorkspaceResponse Deserialize(string json) =>

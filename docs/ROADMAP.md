@@ -60,9 +60,9 @@ machine-local unless an artifact explicitly says otherwise.
 
 | Gate | Verified result |
 | --- | --- |
-| Main source | `a475463` (`feat: add switch-aware authoring controls`), plus this M8.1 control-reconnection change set |
+| Main source | `e7f9a99` (`feat: add authoring transaction history`), plus this M8.1 Workbench integration change set |
 | Comparison source | `489ce9b` (`feat: complete full UnifiedScript migration`) |
-| Managed tests | 463 / 463 passed |
+| Managed tests | 474 / 474 passed |
 | Repository validator | 48 / 48 passed |
 | UE 5.8.1 native build | passed |
 | `UnifiedScript.Unreal` Automation | 13 / 13 passed at the M7.3 onboarding baseline; the migrated BlockBreaker Editor gate and focused M8.1 Authoring Surface gate also passed |
@@ -661,13 +661,19 @@ var, discard, relational, logical, negated, and parenthesized patterns. Direct
 statement insertion/deletion/reordering also accepts a switch-section body.
 Authoring Surface v0.4 carries normalized Graph properties, including the exact
 semantic switch-section identity, so Slate can consume these operations without
-parsing presentation text. The 471/471 managed suite, UE 5.8 editor build,
+parsing presentation text. The 474/474 managed suite, UE 5.8 editor build,
 focused native Authoring Surface Automation, and 48/48 repository validator
 pass. The Slate palette now creates a typed switch, and its inspector converts
 bounded pattern text into semantic labels, inserts Case/Default sections,
 relabels whole sections, moves them by exact sibling gaps, and routes both its
-button and Delete-key paths through safe section deletion. The full edit
-transaction/undo contract remains open, so M8.1 is not yet complete.
+button and Delete-key paths through safe section deletion. Workspace v0.3 now
+places accepted declaration, semantic, plan, Undo, and Redo operations behind
+one baseline-revision and idempotent-operation gate. A bounded 100-entry history
+restores exact stabilized source/identity snapshots, republishes every artifact,
+and advances both workspace revision and CoreCLR generation. Browser and Slate
+consume the same server history and never maintain a competing edit stack.
+Persisted/grouped history plus collapse and copy/paste transforms remain open,
+so M8.1 is not yet complete.
 
 ### M8.2 — Blueprint-grade Unreal experience
 

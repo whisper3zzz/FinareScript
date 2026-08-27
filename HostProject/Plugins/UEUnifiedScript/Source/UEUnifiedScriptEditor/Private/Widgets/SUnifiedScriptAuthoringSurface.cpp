@@ -244,6 +244,56 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
                 ]
                 + SHorizontalBox::Slot()
                 .AutoWidth()
+                .Padding(6.0f, 0.0f, 0.0f, 0.0f)
+                [
+                    SNew(SButton)
+                    .Text(LOCTEXT("UndoAuthoring", "Undo"))
+                    .IsEnabled_Lambda([this]()
+                    {
+                        return !bPatchRequestPending && bCanUndoAuthoring;
+                    })
+                    .ToolTipText_Lambda([this]()
+                    {
+                        return FText::FromString(
+                            bCanUndoAuthoring
+                                ? FString::Printf(
+                                    TEXT("Undo %s (%lld transaction%s available)"),
+                                    UndoAuthoringDescription.IsEmpty()
+                                        ? TEXT("the latest authoring edit")
+                                        : *UndoAuthoringDescription,
+                                    UndoAuthoringDepth,
+                                    UndoAuthoringDepth == 1 ? TEXT("") : TEXT("s"))
+                                : TEXT("No committed authoring transaction is available to undo."));
+                    })
+                    .OnClicked(this, &SUnifiedScriptAuthoringSurface::HandleUndoAuthoringTransaction)
+                ]
+                + SHorizontalBox::Slot()
+                .AutoWidth()
+                .Padding(4.0f, 0.0f, 0.0f, 0.0f)
+                [
+                    SNew(SButton)
+                    .Text(LOCTEXT("RedoAuthoring", "Redo"))
+                    .IsEnabled_Lambda([this]()
+                    {
+                        return !bPatchRequestPending && bCanRedoAuthoring;
+                    })
+                    .ToolTipText_Lambda([this]()
+                    {
+                        return FText::FromString(
+                            bCanRedoAuthoring
+                                ? FString::Printf(
+                                    TEXT("Redo %s (%lld transaction%s available)"),
+                                    RedoAuthoringDescription.IsEmpty()
+                                        ? TEXT("the next authoring edit")
+                                        : *RedoAuthoringDescription,
+                                    RedoAuthoringDepth,
+                                    RedoAuthoringDepth == 1 ? TEXT("") : TEXT("s"))
+                                : TEXT("No undone authoring transaction is available to redo."));
+                    })
+                    .OnClicked(this, &SUnifiedScriptAuthoringSurface::HandleRedoAuthoringTransaction)
+                ]
+                + SHorizontalBox::Slot()
+                .AutoWidth()
                 .Padding(10.0f, 0.0f, 0.0f, 0.0f)
                 .VAlign(VAlign_Center)
                 [
@@ -1170,6 +1220,26 @@ void SUnifiedScriptAuthoringSurface::SubmitSemanticPatch(FString Patch, FString 
     SubmitAuthoringTransaction(MoveTemp(Patch), Url, MoveTemp(Activity));
 }
 
+FReply SUnifiedScriptAuthoringSurface::HandleUndoAuthoringTransaction()
+{
+    SubmitAuthoringTransaction(
+        TEXT("{}"),
+        FUnifiedScriptAuthoringWorkbench::BuildUndoUrl(
+            ServerUrlTextBox.IsValid() ? ServerUrlTextBox->GetText().ToString() : FString()),
+        TEXT("Undoing authoring transaction"));
+    return FReply::Handled();
+}
+
+FReply SUnifiedScriptAuthoringSurface::HandleRedoAuthoringTransaction()
+{
+    SubmitAuthoringTransaction(
+        TEXT("{}"),
+        FUnifiedScriptAuthoringWorkbench::BuildRedoUrl(
+            ServerUrlTextBox.IsValid() ? ServerUrlTextBox->GetText().ToString() : FString()),
+        TEXT("Redoing authoring transaction"));
+    return FReply::Handled();
+}
+
 void SUnifiedScriptAuthoringSurface::SubmitAuthoringTransaction(
     FString Payload,
     FString Url,
@@ -1190,6 +1260,16 @@ void SUnifiedScriptAuthoringSurface::SubmitAuthoringTransaction(
     Request->SetURL(Url);
     Request->SetVerb(TEXT("POST"));
     Request->SetHeader(TEXT("Content-Type"), TEXT("application/json; charset=utf-8"));
+    Request->SetHeader(
+        TEXT("X-UnifiedScript-Transaction-Id"),
+        FGuid::NewGuid().ToString(EGuidFormats::Digits));
+    Request->SetHeader(TEXT("X-UnifiedScript-Transaction-Label"), Activity);
+    if (WorkbenchRevision > 0)
+    {
+        Request->SetHeader(
+            TEXT("X-UnifiedScript-Baseline-Revision"),
+            LexToString(WorkbenchRevision));
+    }
     Request->SetContentAsString(Payload);
     const TWeakPtr<SUnifiedScriptAuthoringSurface> WeakThis = SharedThis(this);
     Request->OnProcessRequestComplete().BindLambda(
@@ -1241,6 +1321,13 @@ void SUnifiedScriptAuthoringSurface::HandlePatchResponse(
     }
 
     Document = MoveTemp(Workspace.Surface);
+    WorkbenchRevision = Workspace.Revision;
+    bCanUndoAuthoring = Workspace.History.bCanUndo;
+    bCanRedoAuthoring = Workspace.History.bCanRedo;
+    UndoAuthoringDepth = Workspace.History.UndoDepth;
+    RedoAuthoringDepth = Workspace.History.RedoDepth;
+    UndoAuthoringDescription = MoveTemp(Workspace.History.UndoDescription);
+    RedoAuthoringDescription = MoveTemp(Workspace.History.RedoDescription);
     if (!LoadedSurfacePath.IsEmpty())
     {
         LoadedSurfaceTimestamp = IFileManager::Get().GetTimeStamp(*LoadedSurfacePath);
@@ -1256,9 +1343,11 @@ void SUnifiedScriptAuthoringSurface::HandlePatchResponse(
     }
     SetStatus(
         FString::Printf(
-            TEXT("Applied revision %lld / Workbench generation %lld; Surface refreshed; components %d matched, %d updated, %d failed."),
+            TEXT("Applied revision %lld / Workbench generation %lld; history %lld undo / %lld redo; Surface refreshed; components %d matched, %d updated, %d failed."),
             Workspace.Revision,
             Workspace.Generation,
+            UndoAuthoringDepth,
+            RedoAuthoringDepth,
             Matched,
             Reloaded,
             Failed),

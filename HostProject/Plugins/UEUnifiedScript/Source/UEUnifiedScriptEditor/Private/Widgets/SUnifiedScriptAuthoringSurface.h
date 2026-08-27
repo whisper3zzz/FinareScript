@@ -105,6 +105,8 @@ private:
         TSharedPtr<SEditableTextBox> LabelEditor);
     FReply HandleMoveSwitchSection(FString CaseActionId, int32 Direction);
     FReply HandleDeleteSwitchSection(FString CaseActionId);
+    FReply HandleUndoAuthoringTransaction();
+    FReply HandleRedoAuthoringTransaction();
     void SubmitSemanticPatch(FString Patch, FString Activity);
     void SubmitAuthoringTransaction(FString Payload, FString Url, FString Activity);
     void HandlePatchResponse(bool bRequestSucceeded, int32 StatusCode, FString ResponseJson);
@@ -163,9 +165,16 @@ private:
     bool bAutoReload = true;
     bool bReloadMatchingComponents = true;
     bool bPatchRequestPending = false;
+    bool bCanUndoAuthoring = false;
+    bool bCanRedoAuthoring = false;
     bool bPendingGraphFocus = false;
     bool bStatusError = false;
     FString StatusMessage;
+    FString UndoAuthoringDescription;
+    FString RedoAuthoringDescription;
+    int64 WorkbenchRevision = 0;
+    int64 UndoAuthoringDepth = 0;
+    int64 RedoAuthoringDepth = 0;
     FUnifiedScriptAuthoringSurfaceDocument Document;
     TArray<FUnifiedScriptSurfaceTreeItemPtr> RootItems;
     TMap<FString, FUnifiedScriptSurfaceTreeItemPtr> SurfaceItemsById;

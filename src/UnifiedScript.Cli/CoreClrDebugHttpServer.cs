@@ -12,6 +12,9 @@ namespace UnifiedScript.Cli;
 internal sealed class CoreClrDebugHttpServer : IDisposable
 {
     private const int MaximumRequestBytes = 1024 * 1024;
+    private const string BaselineRevisionHeader = "X-UnifiedScript-Baseline-Revision";
+    private const string TransactionIdHeader = "X-UnifiedScript-Transaction-Id";
+    private const string TransactionLabelHeader = "X-UnifiedScript-Transaction-Label";
     private static readonly JsonSerializerOptions JsonOptions = UnifiedJson.CreateOptions();
     private readonly HttpListener listener = new();
     private readonly string contentRoot;
@@ -162,21 +165,87 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             return;
         }
 
-        string json = await ReadJsonTextAsync(context.Request, cancellationToken);
-        AuthoringWorkspaceResponse response = path switch
+        AuthoringTransactionContext transaction = ReadAuthoringTransactionContext(
+            context.Request,
+            path switch
+            {
+                "/api/authoring/declaration-patch" => "Declaration patch",
+                "/api/authoring/semantic-patch" => "Semantic patch",
+                "/api/authoring/semantic-patch-plan" => "Semantic patch plan",
+                "/api/authoring/undo" => "Undo authoring transaction",
+                "/api/authoring/redo" => "Redo authoring transaction",
+                _ => "Authoring transaction",
+            });
+        AuthoringWorkspaceResponse response;
+        if (path == "/api/authoring/undo")
         {
-            "/api/authoring/declaration-patch" => await session.ApplyAsync(
-                DeclarationPatchJson.Deserialize(json),
-                cancellationToken),
-            "/api/authoring/semantic-patch" => await session.ApplyAsync(
-                SemanticPatchJson.Deserialize(json),
-                cancellationToken),
-            "/api/authoring/semantic-patch-plan" => await session.ApplyAsync(
-                SemanticPatchPlanJson.Deserialize(json),
-                cancellationToken),
-            _ => throw new HttpProtocolException(HttpStatusCode.NotFound, "Unknown authoring endpoint."),
-        };
+            response = await session.NavigateHistoryAsync(
+                CSharpAuthoringHistoryDirection.Undo,
+                transaction,
+                cancellationToken);
+        }
+        else if (path == "/api/authoring/redo")
+        {
+            response = await session.NavigateHistoryAsync(
+                CSharpAuthoringHistoryDirection.Redo,
+                transaction,
+                cancellationToken);
+        }
+        else
+        {
+            string json = await ReadJsonTextAsync(context.Request, cancellationToken);
+            response = path switch
+            {
+                "/api/authoring/declaration-patch" => await session.ApplyAsync(
+                    DeclarationPatchJson.Deserialize(json),
+                    transaction,
+                    cancellationToken),
+                "/api/authoring/semantic-patch" => await session.ApplyAsync(
+                    SemanticPatchJson.Deserialize(json),
+                    transaction,
+                    cancellationToken),
+                "/api/authoring/semantic-patch-plan" => await session.ApplyAsync(
+                    SemanticPatchPlanJson.Deserialize(json),
+                    transaction,
+                    cancellationToken),
+                _ => throw new HttpProtocolException(HttpStatusCode.NotFound, "Unknown authoring endpoint."),
+            };
+        }
         await WriteJsonAsync(context.Response, response, cancellationToken);
+    }
+
+    private static AuthoringTransactionContext ReadAuthoringTransactionContext(
+        HttpListenerRequest request,
+        string defaultDescription)
+    {
+        string? baselineText = request.Headers[BaselineRevisionHeader];
+        long? baselineRevision = null;
+        if (!string.IsNullOrWhiteSpace(baselineText))
+        {
+            if (!long.TryParse(baselineText, out long parsedBaseline) || parsedBaseline < 1)
+            {
+                throw new AuthoringProtocolException(
+                    HttpStatusCode.BadRequest,
+                    "UAW1008",
+                    $"Header '{BaselineRevisionHeader}' must contain a positive revision number.");
+            }
+            baselineRevision = parsedBaseline;
+        }
+
+        string transactionId = request.Headers[TransactionIdHeader] ?? $"http-{Guid.NewGuid():N}";
+        string description = request.Headers[TransactionLabelHeader] ?? defaultDescription;
+        if (string.IsNullOrWhiteSpace(transactionId) ||
+            string.IsNullOrWhiteSpace(description) ||
+            transactionId.Length > 128 ||
+            description.Length > 256)
+        {
+            throw new AuthoringProtocolException(
+                HttpStatusCode.BadRequest,
+                "UAW1008",
+                "Authoring transaction IDs and labels must be non-empty and at most 128 and 256 characters.");
+        }
+
+        return new AuthoringTransactionContext(baselineRevision, transactionId, description);
     }
 
     private async Task ServeStaticAsync(
@@ -320,6 +389,11 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         _ => "application/octet-stream",
     };
 
+    private sealed record AuthoringTransactionContext(
+        long? BaselineRevision,
+        string TransactionId,
+        string Description);
+
     private sealed class AuthoringSessionController : IDisposable
     {
         private readonly SemaphoreSlim gate = new(1, 1);
@@ -333,11 +407,13 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         private readonly AuthoringArtifactOutputs artifactOutputs;
         private readonly CSharpProgramEmitter emitter = new();
         private readonly List<SemanticId> breakpointIds = [];
+        private readonly HashSet<string> committedOperationIds = new(StringComparer.Ordinal);
         private IReadOnlyList<SemanticBreakpointBinding> bindings = [];
         private CoreClrDebugReloadResult reload;
         private CoreClrDebugExecution? execution;
         private CoreClrDebugPause? pause;
         private string? persistedIdentity;
+        private string? lastOperationId;
 
         public AuthoringSessionController(
             CSharpCompilationRequest request,
@@ -497,26 +573,68 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
 
         public Task<AuthoringWorkspaceResponse> ApplyAsync(
             DeclarationPatchDocument patch,
+            AuthoringTransactionContext transaction,
             CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(patch);
-            return ApplyAsync(() => authoring.Prepare(patch), cancellationToken);
+            return ApplyAsync(() => authoring.Prepare(patch), transaction, cancellationToken);
         }
 
         public Task<AuthoringWorkspaceResponse> ApplyAsync(
             SemanticPatchDocument patch,
+            AuthoringTransactionContext transaction,
             CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(patch);
-            return ApplyAsync(() => authoring.Prepare(patch), cancellationToken);
+            return ApplyAsync(() => authoring.Prepare(patch), transaction, cancellationToken);
         }
 
         public Task<AuthoringWorkspaceResponse> ApplyAsync(
             SemanticPatchPlanDocument plan,
+            AuthoringTransactionContext transaction,
             CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(plan);
-            return ApplyAsync(() => authoring.Prepare(plan), cancellationToken);
+            return ApplyAsync(() => authoring.Prepare(plan), transaction, cancellationToken);
+        }
+
+        public async Task<AuthoringWorkspaceResponse> NavigateHistoryAsync(
+            CSharpAuthoringHistoryDirection direction,
+            AuthoringTransactionContext transaction,
+            CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(transaction);
+            await gate.WaitAsync(cancellationToken);
+            try
+            {
+                EnsureAuthoringAvailable();
+                ValidateTransaction(transaction);
+                EnsureFilesUnchanged();
+                CSharpAuthoringHistoryState history = authoring.History;
+                if ((direction == CSharpAuthoringHistoryDirection.Undo && !history.CanUndo) ||
+                    (direction == CSharpAuthoringHistoryDirection.Redo && !history.CanRedo))
+                {
+                    throw new AuthoringProtocolException(
+                        HttpStatusCode.Conflict,
+                        "UAW1007",
+                        direction == CSharpAuthoringHistoryDirection.Undo
+                            ? "There is no committed authoring transaction to undo."
+                            : "There is no undone authoring transaction to redo.");
+                }
+
+                CSharpAuthoringHistoryMutation mutation =
+                    direction == CSharpAuthoringHistoryDirection.Undo
+                        ? authoring.PrepareUndo()
+                        : authoring.PrepareRedo();
+                return CommitPreparedSnapshot(
+                    mutation.Snapshot,
+                    () => authoring.Commit(mutation),
+                    transaction.TransactionId);
+            }
+            finally
+            {
+                gate.Release();
+            }
         }
 
         public void Dispose()
@@ -527,19 +645,15 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
 
         private async Task<AuthoringWorkspaceResponse> ApplyAsync(
             Func<CSharpAuthoringMutation> prepare,
+            AuthoringTransactionContext transaction,
             CancellationToken cancellationToken)
         {
+            ArgumentNullException.ThrowIfNull(transaction);
             await gate.WaitAsync(cancellationToken);
             try
             {
-                if (execution is not null)
-                {
-                    throw new AuthoringProtocolException(
-                        HttpStatusCode.Conflict,
-                        "UAW1001",
-                        "Finish the active debug execution before changing the authoring workspace.");
-                }
-
+                EnsureAuthoringAvailable();
+                ValidateTransaction(transaction);
                 EnsureFilesUnchanged();
                 CSharpAuthoringMutation mutation = prepare();
                 if (!mutation.Succeeded || mutation.Snapshot is null)
@@ -551,31 +665,79 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                         mutation.Diagnostics);
                 }
 
-                CSharpAuthoringSnapshot previous = authoring.Current;
-                CoreClrDebugReloadResult nextReload = transport.Reload(mutation.Snapshot.Request);
-                try
-                {
-                    Persist(mutation.Snapshot);
-                }
-                catch
-                {
-                    reload = transport.Reload(previous.Request);
-                    Health = CreateHealth(reload.Generation);
-                    Workspace = CreateWorkspace(previous, reload.Generation);
-                    throw;
-                }
-
-                authoring.Commit(mutation);
-                reload = nextReload;
-                bindings = reload.Breakpoints.Bindings;
-                Health = CreateHealth(reload.Generation);
-                Workspace = CreateWorkspace(authoring.Current, reload.Generation);
-                return Workspace;
+                return CommitPreparedSnapshot(
+                    mutation.Snapshot,
+                    () => authoring.Commit(
+                        mutation,
+                        transaction.TransactionId,
+                        transaction.Description),
+                    transaction.TransactionId);
             }
             finally
             {
                 gate.Release();
             }
+        }
+
+        private void EnsureAuthoringAvailable()
+        {
+            if (execution is not null)
+            {
+                throw new AuthoringProtocolException(
+                    HttpStatusCode.Conflict,
+                    "UAW1001",
+                    "Finish the active debug execution before changing the authoring workspace.");
+            }
+        }
+
+        private void ValidateTransaction(AuthoringTransactionContext transaction)
+        {
+            if (transaction.BaselineRevision is long baselineRevision &&
+                baselineRevision != authoring.Current.Revision)
+            {
+                throw new AuthoringProtocolException(
+                    HttpStatusCode.Conflict,
+                    "UAW1005",
+                    $"Authoring transaction revision '{baselineRevision}' is stale; " +
+                    $"the current revision is '{authoring.Current.Revision}'.");
+            }
+
+            if (committedOperationIds.Contains(transaction.TransactionId))
+            {
+                throw new AuthoringProtocolException(
+                    HttpStatusCode.Conflict,
+                    "UAW1006",
+                    $"Authoring transaction ID '{transaction.TransactionId}' was already committed.");
+            }
+        }
+
+        private AuthoringWorkspaceResponse CommitPreparedSnapshot(
+            CSharpAuthoringSnapshot snapshot,
+            Action commit,
+            string operationId)
+        {
+            CSharpAuthoringSnapshot previous = authoring.Current;
+            CoreClrDebugReloadResult nextReload = transport.Reload(snapshot.Request);
+            try
+            {
+                Persist(snapshot);
+            }
+            catch
+            {
+                reload = transport.Reload(previous.Request);
+                Health = CreateHealth(reload.Generation);
+                Workspace = CreateWorkspace(previous, reload.Generation);
+                throw;
+            }
+
+            commit();
+            _ = committedOperationIds.Add(operationId);
+            lastOperationId = operationId;
+            reload = nextReload;
+            bindings = reload.Breakpoints.Bindings;
+            Health = CreateHealth(reload.Generation);
+            Workspace = CreateWorkspace(authoring.Current, reload.Generation);
+            return Workspace;
         }
 
         private void EnsureFilesUnchanged()
@@ -691,7 +853,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 scriptAssets,
                 snapshot.Graph);
             return new AuthoringWorkspaceResponse(
-                "unifiedscript.authoring-workspace/v0.2",
+                "unifiedscript.authoring-workspace/v0.3",
                 snapshot.Revision,
                 sourceLogicalPath,
                 snapshot.Request.Sources.Single(source =>
@@ -699,7 +861,23 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 scriptAssets,
                 snapshot.Graph,
                 surface,
+                CreateHistoryResponse(),
                 generation);
+        }
+
+        private AuthoringHistoryResponse CreateHistoryResponse()
+        {
+            CSharpAuthoringHistoryState history = authoring.History;
+            return new AuthoringHistoryResponse(
+                history.CanUndo,
+                history.CanRedo,
+                history.UndoDepth,
+                history.RedoDepth,
+                history.UndoTransactionId,
+                history.UndoDescription,
+                history.RedoTransactionId,
+                history.RedoDescription,
+                lastOperationId);
         }
 
         private static void WriteTransactionally(IReadOnlyList<AuthoringOutput> outputs)
@@ -886,7 +1064,19 @@ internal sealed record AuthoringWorkspaceResponse(
     ScriptAssetDocument ScriptAssets,
     GraphDocument Graph,
     AuthoringSurfaceDocument Surface,
+    AuthoringHistoryResponse History,
     CoreClrProgramGeneration Generation);
+
+internal sealed record AuthoringHistoryResponse(
+    bool CanUndo,
+    bool CanRedo,
+    int UndoDepth,
+    int RedoDepth,
+    string? UndoTransactionId,
+    string? UndoDescription,
+    string? RedoTransactionId,
+    string? RedoDescription,
+    string? LastOperationId);
 
 internal sealed record DebugHealthResponse(
     string SchemaVersion,

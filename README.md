@@ -194,6 +194,9 @@ The repository currently implements:
   constant/declaration/type/var/discard/relational/logical/not/parenthesized
   pattern text, bounded guards, ordered case/default insertion, relabeling,
   one-slot movement, and safe break-only section deletion;
+- Workbench workspace v0.3 transaction history with baseline-revision and
+  operation-ID conflict guards, exact identity-stable Undo/Redo snapshots,
+  monotonic CoreCLR reload generations, and shared browser/Slate controls;
 - automatic shared-value extraction through an atomic
   `introduceTemporary` + `reconnectValue` patch plan, preserving one evaluation
   instead of copying a computed subtree into a second consumer, with a stable
@@ -613,10 +616,11 @@ Declaration edit
 
 Workbench authoring commit
   -> declaration-patch v0.2 or semantic-patch v0.23
+  -> workspace v0.3 baseline revision + unique operation identity
   -> immutable candidate analysis + regenerated Graph
   -> same CoreCLR transport reload
   -> rollback-capable source + .usids transaction
-  -> next revision/generation response or explicit conflict
+  -> bounded Undo/Redo history + next revision/generation response or explicit conflict
 
 Current execution path:
   -> Graph/CFG execution gate

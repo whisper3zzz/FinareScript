@@ -57,5 +57,7 @@ branch, and switch-case routing pins are not treated as reorder handles, and a
 structured or terminal target is rejected before patch submission.
 
 This completes M8.1's bounded control-reconnection slice. Structural node
-rewrites remain explicit operations, while unified multi-operation undo/redo is
-the next M8.1 transaction slice.
+rewrites remain explicit operations. Workspace v0.3 now records every accepted
+edit and restores exact stabilized snapshots through the same publication and
+CoreCLR reload boundary; persisted grouping plus collapse/copy/paste
+transactions remain the next M8.1 slice.

@@ -97,14 +97,20 @@ static workbench and a same-origin loopback JSON API from `127.0.0.1`:
 The same loopback process owns the authoring transaction boundary:
 
 - `GET /api/authoring/workspace` returns source, Declaration IR, Graph, revision,
-  and the loaded CoreCLR generation;
+  bounded transaction history, and the loaded CoreCLR generation;
 - `POST /api/authoring/declaration-patch` applies typed state operations;
-- `POST /api/authoring/semantic-patch` applies body edits by Semantic ID.
+- `POST /api/authoring/semantic-patch` applies body edits by Semantic ID;
+- `POST /api/authoring/semantic-patch-plan` applies dependent edits atomically;
+- `POST /api/authoring/undo` and `/redo` restore exact accepted snapshots and
+  publish a new revision/generation.
 
 Authoring and debug control share one gate, so source cannot reload while an
 execution is active. A successful candidate reloads the same transport and
 commits canonical source plus `.usids`; external disk changes and stale patch
 preconditions fail without replacing the current generation.
+Updated clients send baseline revision, unique operation ID, and author-facing
+label headers so stale tabs and ambiguous retries fail before publication. See
+[AUTHORING_TRANSACTIONS.md](AUTHORING_TRANSACTIONS.md) for the v0.3 contract.
 
 For Unreal authoring, `debug-serve` also accepts repeatable `--source` inputs
 and optional `--asset-out`, `--surface-out`, `--managed-out`, and `--pdb-out`

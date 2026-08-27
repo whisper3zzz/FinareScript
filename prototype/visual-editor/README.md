@@ -52,12 +52,18 @@ and receiver without any sample-specific frontend adapter.
 
 ## Data flow
 
-The live page loads `unifiedscript.authoring-workspace/v0.2`. One committed
+The live page loads `unifiedscript.authoring-workspace/v0.3`. One committed
 workspace revision contains canonical source, Declaration IR v0.1, Graph
-v0.12, Authoring Surface v0.4, and a CoreCLR generation. After a declaration or
+v0.13, Authoring Surface v0.4, transaction history, and a CoreCLR generation. After a declaration or
 behavior write, the server prepares and validates a full candidate, reloads the
 same CoreCLR transport, transactionally commits C# plus identity sidecar, and
 returns a completely regenerated workspace.
+
+Undo and Redo use the same server-owned transaction boundary and are also
+available through Ctrl/Cmd+Z, Shift+Ctrl/Cmd+Z, and Ctrl/Cmd+Y. Each request
+carries the rendered baseline revision plus a unique operation ID. History
+navigation restores the exact source and stable identities, republishes all
+artifacts, and reloads a new CoreCLR generation.
 
 The browser does not infer action promotion, reconstruct expressions from Graph
 edges, discover region ownership, guess state references, or choose patch

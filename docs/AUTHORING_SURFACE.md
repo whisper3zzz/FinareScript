@@ -137,9 +137,13 @@ edges directly.
 
 `unifiedscript analyze ... --out <directory>` now writes
 `<name>.surface.json` beside HIR, semantic, Graph, and Declaration artifacts.
-The local authoring host publishes workspace v0.2, which contains Declaration
-IR, Graph, Surface, canonical source, revision, and CoreCLR generation from one
-committed snapshot.
+The local authoring host publishes workspace v0.3, which contains Declaration
+IR, Graph, Surface, canonical source, revision, bounded transaction history, and
+CoreCLR generation from one committed snapshot. Browser and Slate clients send
+the rendered baseline revision and a unique operation ID for every edit, Undo,
+or Redo. History restores exact stabilized source/identity snapshots and
+republishes every artifact under a new revision/generation. See
+[AUTHORING_TRANSACTIONS.md](AUTHORING_TRANSACTIONS.md).
 
 The Workbench consumes the Surface for asset/function navigation, cards,
 regions, inspector editors, state-reference labels, source selection, AI
@@ -155,7 +159,8 @@ real execution/data pins and links directly from Surface v0.4. Dragging a
 compatible output onto an occupied data input submits a direct rewire or an
 automatic shared-value patch plan to the Workbench. Alt-click submits a typed
 default disconnection. A sequential control-pin drag inside one block submits a
-statement move while retaining the old wire until the Workbench commits.
+statement move, including supported cross-region moves, while retaining the old
+wire until the Workbench commits.
 Right-click creates structured statement nodes, and
 Delete removes only statement nodes with exact block/sibling preconditions. UE
 keeps compiler-owned nodes and wires unchanged until the server commits;
