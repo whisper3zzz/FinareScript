@@ -1332,6 +1332,24 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         FUnifiedScriptAuthoringWorkbench::BuildSemanticPatchPlanUrl(TEXT("http://127.0.0.1:4173/")),
         FString(TEXT("http://127.0.0.1:4173/api/authoring/semantic-patch-plan")));
     TestEqual(
+        TEXT("Workbench derives the matching semantic preview endpoint"),
+        FUnifiedScriptAuthoringWorkbench::BuildPreviewUrl(
+            TEXT("http://127.0.0.1:4173/api/authoring/semantic-patch")),
+        FString(TEXT("http://127.0.0.1:4173/api/authoring/preview/semantic-patch")));
+    TestEqual(
+        TEXT("Workbench derives the grouped commit preview endpoint"),
+        FUnifiedScriptAuthoringWorkbench::BuildPreviewUrl(
+            TEXT("http://127.0.0.1:4173/api/authoring/group/commit")),
+        FString(TEXT("http://127.0.0.1:4173/api/authoring/preview/group/commit")));
+    TestTrue(
+        TEXT("Non-publishing group operations do not invent a preview endpoint"),
+        FUnifiedScriptAuthoringWorkbench::BuildPreviewUrl(
+            TEXT("http://127.0.0.1:4173/api/authoring/group/cancel")).IsEmpty());
+    TestEqual(
+        TEXT("Workbench workspace refresh endpoint is normalized"),
+        FUnifiedScriptAuthoringWorkbench::BuildWorkspaceUrl(TEXT("http://127.0.0.1:4173/")),
+        FString(TEXT("http://127.0.0.1:4173/api/authoring/workspace")));
+    TestEqual(
         TEXT("Workbench undo endpoint is normalized"),
         FUnifiedScriptAuthoringWorkbench::BuildUndoUrl(TEXT("http://127.0.0.1:4173/")),
         FString(TEXT("http://127.0.0.1:4173/api/authoring/undo")));
@@ -1403,6 +1421,52 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("Workbench response retains staged operation count"), Workspace.Group.StagedOperationCount, int64(2));
     TestEqual(TEXT("Workbench response replaces the Surface transactionally"),
         Workspace.Surface.GetActionCount(), 45);
+
+    const FString PreviewJson =
+        TEXT("{\"schemaVersion\":\"unifiedscript.authoring-preview/v0.1\","
+             "\"baselineRevision\":2,\"candidateRevision\":3,"
+             "\"transactionId\":\"txn-preview\",\"description\":\"Change value\","
+             "\"publishesRuntime\":true,"
+             "\"previewToken\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\","
+             "\"files\":[{\"path\":\"DemoScript.cs\",\"beforeText\":\"return 1;\","
+             "\"afterText\":\"return 2;\"}],"
+             "\"diagnostics\":[{\"code\":\"CS0168\",\"severity\":\"warning\","
+             "\"message\":\"unused\",\"span\":{\"filePath\":\"DemoScript.cs\","
+             "\"start\":{\"line\":4,\"column\":9},"
+             "\"end\":{\"line\":4,\"column\":14}}}]} ");
+    FUnifiedScriptAuthoringPreviewResult Preview;
+    TestTrue(
+        *FString::Printf(TEXT("Workbench parses exact before/after preview: %s"), *Error),
+        FUnifiedScriptAuthoringWorkbench::ParsePreviewResponse(PreviewJson, Preview, Error));
+    TestEqual(TEXT("Preview retains candidate revision"), Preview.CandidateRevision, int64(3));
+    TestEqual(TEXT("Preview retains one changed file"), Preview.Files.Num(), 1);
+    TestEqual(TEXT("Preview retains exact before source"),
+        Preview.Files[0].BeforeText, FString(TEXT("return 1;")));
+    TestEqual(TEXT("Preview retains exact after source"),
+        Preview.Files[0].AfterText, FString(TEXT("return 2;")));
+    TestEqual(TEXT("Preview retains compiler warning"), Preview.Diagnostics.Num(), 1);
+
+    const FString FailureJson =
+        TEXT("{\"error\":{\"code\":\"UAW1003\",\"message\":\"rejected\"},"
+             "\"diagnostics\":[{\"code\":\"CS0029\",\"severity\":\"error\","
+             "\"message\":\"cannot convert\",\"span\":{\"filePath\":\"DemoScript.cs\","
+             "\"start\":{\"line\":8,\"column\":12},"
+             "\"end\":{\"line\":8,\"column\":16}},\"semanticId\":\"us_test\"}],"
+             "\"quickFixes\":[{\"id\":\"open-first-diagnostic\","
+             "\"label\":\"Open Source\",\"kind\":\"openFirstDiagnostic\"}],"
+             "\"rollback\":{\"state\":\"unchanged\",\"revision\":2,"
+             "\"generation\":3,\"message\":\"No writes.\"}}");
+    FUnifiedScriptAuthoringErrorResult Failure;
+    TestTrue(
+        *FString::Printf(TEXT("Workbench parses structured authoring failure: %s"), *Error),
+        FUnifiedScriptAuthoringWorkbench::ParseErrorResponse(
+            FailureJson, 409, Failure, Error));
+    TestEqual(TEXT("Failure retains protocol code"), Failure.Code, FString(TEXT("UAW1003")));
+    TestEqual(TEXT("Failure retains locatable diagnostic"), Failure.Diagnostics.Num(), 1);
+    TestEqual(TEXT("Failure retains safe quick fix"), Failure.QuickFixes.Num(), 1);
+    TestTrue(TEXT("Failure explicitly confirms unchanged rollback"),
+        Failure.Rollback.IsConfirmed());
+    TestEqual(TEXT("Failure retains rollback revision"), Failure.Rollback.Revision, int64(2));
     TestTrue(
         TEXT("Workbench error responses retain protocol diagnostics"),
         FUnifiedScriptAuthoringWorkbench::ParseErrorResponse(

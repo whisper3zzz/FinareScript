@@ -260,6 +260,17 @@ hover text plus an initially collapsed **Advanced Node Details** area, so
 Pin Authoring stays visible without discarding compiler or generated API facts.
 See [NODE_DETAILS.md](NODE_DETAILS.md).
 
+The final M8.2 safety layer preflights every source-publishing transaction (and
+each grouped draft stage) through a server-owned preview endpoint. The same
+compiler preparation path returns exact C# before/after text and a SHA-256
+candidate token. Native Slate presents a modal side-by-side Diff; Apply sends
+that token to the ordinary commit endpoint, while Cancel performs no write.
+Failures now render structured compiler/contract diagnostics with exact source
+navigation and bounded recovery actions. A separate rollback receipt says
+whether the transaction was rejected unchanged, restored after a persistence
+failure, or failed to restore. See
+[AUTHORING_DIAGNOSTICS.md](AUTHORING_DIAGNOSTICS.md).
+
 For a concrete UE round trip, the checked-in Demo's `RewirePreview` function
 contains two pure parameter expressions. Dragging the `*` output to the
 `Declare incremented` value input now produces one shared local and connects

@@ -5,6 +5,7 @@
 #include "Graph/UnifiedScriptGraphLayoutStore.h"
 #include "Graph/UnifiedScriptNodePalette.h"
 #include "UnifiedScriptAuthoringSurface.h"
+#include "UnifiedScriptAuthoringWorkbench.h"
 #include "UObject/StrongObjectPtr.h"
 #include "Widgets/SCompoundWidget.h"
 
@@ -58,6 +59,16 @@ struct FUnifiedScriptReflectedPaletteAction
     FString SourceTypeName;
     FString HandlerName;
     TArray<FUnifiedScriptAuthoringParameter> EventParameters;
+};
+
+struct FUnifiedScriptPendingAuthoringTransaction
+{
+    FString Payload;
+    FString Url;
+    FString Activity;
+    FString TransactionId;
+    FString GroupId;
+    bool bPublishesRuntime = true;
 };
 
 using FUnifiedScriptSurfaceTreeItemPtr = TSharedPtr<FUnifiedScriptSurfaceTreeItem>;
@@ -158,7 +169,29 @@ private:
         FString TransactionId = FString(),
         FString GroupId = FString(),
         bool bPublishesRuntime = true);
+    void DispatchAuthoringPreview();
+    void DispatchAuthoringRequest(const FString& PreviewToken);
+    void ConfigureAuthoringRequest(
+        const TSharedRef<class IHttpRequest, ESPMode::ThreadSafe>& Request,
+        const FString& Url,
+        const FString& PreviewToken) const;
+    void HandlePreviewResponse(bool bRequestSucceeded, int32 StatusCode, FString ResponseJson);
     void HandlePatchResponse(bool bRequestSucceeded, int32 StatusCode, FString ResponseJson);
+    bool ShowDiffPreview(const FUnifiedScriptAuthoringPreviewResult& Preview);
+    void HandleAuthoringFailure(
+        bool bRequestSucceeded,
+        int32 StatusCode,
+        const FString& ResponseJson,
+        const FString& NetworkMessage);
+    void RebuildDiagnosticsPanel();
+    FReply HandleQuickFix(FString Kind);
+    FReply HandleCopyDiagnostic(FUnifiedScriptAuthoringDiagnostic Diagnostic);
+    void RequestWorkspaceRefresh();
+    void HandleWorkspaceRefreshResponse(
+        bool bRequestSucceeded,
+        int32 StatusCode,
+        FString ResponseJson);
+    void AdoptWorkspace(FUnifiedScriptAuthoringWorkspaceResult Workspace);
     void ReloadMatchingComponents(int32& OutMatched, int32& OutReloaded, int32& OutFailed);
     EActiveTimerReturnType HandleAutoReload(
         double CurrentTime,
@@ -245,7 +278,10 @@ private:
     bool bShowCanvasMinimap = true;
     bool bPendingRequestPublishesRuntime = true;
     bool bStatusError = false;
+    bool bHasAuthoringFailure = false;
     FString StatusMessage;
+    TOptional<FUnifiedScriptPendingAuthoringTransaction> PendingAuthoringTransaction;
+    FUnifiedScriptAuthoringErrorResult LastAuthoringFailure;
     FString UndoAuthoringDescription;
     FString RedoAuthoringDescription;
     FString HistoryPersistenceState;
@@ -285,6 +321,7 @@ private:
     TSharedPtr<SGraphEditor> GraphEditor;
     TSharedPtr<FUICommandList> GraphCommands;
     TSharedPtr<SVerticalBox> InspectorBox;
+    TSharedPtr<SVerticalBox> DiagnosticsBox;
     TSharedPtr<STextBlock> StatusText;
     TStrongObjectPtr<UUnifiedScriptEdGraph> AuthoringGraph;
     TWeakObjectPtr<UUnifiedScriptAsset> LoadedScriptAsset;

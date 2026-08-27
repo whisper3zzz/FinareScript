@@ -9,8 +9,9 @@ M7.2 gameplay services/lifecycle productization, and M7.3 schema-generated
 gameplay data plane without adding UE dependencies to the compiler core. M7.4
 then completed the full BlockBreaker migration with exact inventory coverage
 and no Puerts/TypeScript payload in the target project or package. The active
-RoadMap cursor is M8.2 diagnostics, quick fixes, diff preview, and rollback UX
-after the native Palette, Pin, Canvas, and Advanced Details tranches.
+RoadMap cursor is M8.3 asset, state, event, and API authoring after completing
+the native M8.2 Palette, Pin, Canvas, Advanced Details, diagnostics, exact Diff,
+safe quick-fix, and rollback-receipt tranches.
 
 ## Product roadmap
 
@@ -487,6 +488,14 @@ The next experience tranche makes node cards compact by default and moves raw
 types, effects, source, semantic identity, ports, edit capabilities, and
 generated API metadata behind exact hover contracts and a collapsed **Advanced
 Node Details** section. See [`docs/NODE_DETAILS.md`](docs/NODE_DETAILS.md).
+
+The final M8.2 tranche adds server-owned transaction preflight. Slate displays
+the exact C# before/after candidate prepared by the real compiler path, and an
+accepted Apply carries a SHA-256 token binding that candidate to the commit.
+Rejected transactions expose locatable compiler/contract diagnostics, bounded
+Open Source/Refresh actions, and an explicit `unchanged`, `restored`, or
+`failed` rollback receipt instead of inferring safety from a red status line.
+See [`docs/AUTHORING_DIAGNOSTICS.md`](docs/AUTHORING_DIAGNOSTICS.md).
 
 The current runtime performance tranche activates ABI v3 for fixed scalars,
 enums, generation-safe object/class handles, vector/rotator, transform, UTF-8

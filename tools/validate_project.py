@@ -67,6 +67,7 @@ DOCUMENTS = [
     ROOT / "docs" / "PIN_AUTHORING.md",
     ROOT / "docs" / "CANVAS_AUTHORING.md",
     ROOT / "docs" / "NODE_DETAILS.md",
+    ROOT / "docs" / "AUTHORING_DIAGNOSTICS.md",
     ROOT / "docs" / "UNREAL_ADAPTER.md",
     ROOT / "docs" / "UNREAL_DEPLOYMENT.md",
     ROOT / "docs" / "UNREAL_ONBOARDING.md",
@@ -2536,7 +2537,7 @@ def main() -> int:
         and "puertsOrTypeScriptPackageFiles" in blockbreaker_package_runner
         and "### M7.4 — Full BlockBreaker runtime migration" in roadmap
         and "- [x] inventory all Puerts scripts" in roadmap
-        and "Next slice: **M8.2 — diagnostics, quick fixes, diff preview, and rollback UX**"
+        and "Next slice: **M8.3 — asset, state, event, and API authoring**"
         in roadmap,
         "M7.4 whole-project Puerts inventory, coverage, or migration gates are incomplete",
     )
@@ -2954,6 +2955,32 @@ def main() -> int:
     )
     checks.append(
         "UE Slate keeps author-facing cards compact and exact compiler/API facts on demand"
+    )
+    authoring_diagnostics_doc = (
+        ROOT / "docs" / "AUTHORING_DIAGNOSTICS.md"
+    ).read_text(encoding="utf-8")
+    require(
+        "unifiedscript.authoring-preview/v0.1" in debug_server_source
+        and "X-UnifiedScript-Preview-Token" in debug_server_source
+        and "TakePreparedPreview" in debug_server_source
+        and "preparedPreviews" in debug_server_source
+        and "CreateRollbackResponse" in debug_server_source
+        and "AuthoringQuickFixResponse" in debug_server_source
+        and "BuildPreviewUrl" in unreal_authoring_workbench_source
+        and "ParsePreviewResponse" in unreal_authoring_workbench_source
+        and "FUnifiedScriptAuthoringErrorResult" in unreal_authoring_workbench_header
+        and "ShowDiffPreview" in unreal_authoring_widget
+        and "ROLLBACK CONFIRMED" in unreal_authoring_widget
+        and "HandleWorkspaceRefreshResponse" in unreal_authoring_widget
+        and "Workbench parses exact before/after preview" in unreal_authoring_test
+        and "Failure explicitly confirms unchanged rollback" in unreal_authoring_test
+        and "mismatched preview token" in authoring_diagnostics_doc
+        and "- [x] provide compiler/contract diagnostics" in roadmap
+        and "Next slice: **M8.3 — asset, state, event, and API authoring**" in roadmap,
+        "Native prepared Diff, structured diagnostics, safe fixes, or rollback receipt is incomplete",
+    )
+    checks.append(
+        "UE Slate binds exact server previews to commits and exposes diagnostic rollback UX"
     )
     identity_reconciler_source = (
         ROOT / "src" / "UnifiedScript.CSharp" / "CSharpIdentityReconciler.cs"

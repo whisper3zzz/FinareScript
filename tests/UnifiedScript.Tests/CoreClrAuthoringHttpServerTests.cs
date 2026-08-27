@@ -159,13 +159,58 @@ public sealed class CoreClrAuthoringHttpServerTests
                 UnifiedJson.CreateOptions())!;
             Assert.Equal("240", completed.Result!.ReturnValue!.Json);
 
+            AuthoringPreviewResponse declarationPreview = await PreviewAsync(
+                client,
+                "api/authoring/preview/declaration-patch",
+                DeclarationPatchJson.Serialize(declarationPatch),
+                baseline.Revision,
+                "txn-declaration",
+                "Update MaxDamage");
+            Assert.Equal("unifiedscript.authoring-preview/v0.1", declarationPreview.SchemaVersion);
+            Assert.Equal(baseline.Revision, declarationPreview.BaselineRevision);
+            Assert.Equal(baseline.Revision + 1, declarationPreview.CandidateRevision);
+            Assert.True(declarationPreview.PublishesRuntime);
+            Assert.Equal(64, declarationPreview.PreviewToken.Length);
+            AuthoringPreviewFile declarationFile = Assert.Single(declarationPreview.Files);
+            Assert.Equal(logicalPath, declarationFile.Path);
+            Assert.Equal(Source, declarationFile.BeforeText);
+            Assert.Contains("= 120;", declarationFile.AfterText, StringComparison.Ordinal);
+            Assert.Equal(Source, await File.ReadAllTextAsync(sourcePath));
+            Assert.False(File.Exists(identityPath));
+            Assert.False(File.Exists(declarationPath));
+
+            using (HttpRequestMessage mismatchedPreviewRequest = AuthoringRequest(
+                "api/authoring/declaration-patch",
+                DeclarationPatchJson.Serialize(declarationPatch),
+                baseline.Revision,
+                "txn-declaration",
+                "Update MaxDamage",
+                previewToken: new string('0', 64)))
+            using (HttpResponseMessage mismatchedPreviewResponse =
+                await client.SendAsync(mismatchedPreviewRequest))
+            {
+                Assert.Equal(HttpStatusCode.Conflict, mismatchedPreviewResponse.StatusCode);
+                DebugErrorResponse mismatch = JsonSerializer.Deserialize<DebugErrorResponse>(
+                    await mismatchedPreviewResponse.Content.ReadAsStringAsync(),
+                    UnifiedJson.CreateOptions())!;
+                Assert.Equal("UAW1012", mismatch.Error.Code);
+                Assert.Equal("unchanged", mismatch.Rollback!.State);
+                Assert.Equal(baseline.Revision, mismatch.Rollback.Revision);
+                Assert.Equal(baseline.Generation.Number, mismatch.Rollback.Generation);
+                Assert.Contains(
+                    mismatch.QuickFixes!,
+                    static fix => fix.Kind == "refreshWorkspace");
+                Assert.Equal(Source, await File.ReadAllTextAsync(sourcePath));
+            }
+
             AuthoringWorkspaceResponse declared = await PostAsync(
                 client,
                 "api/authoring/declaration-patch",
                 DeclarationPatchJson.Serialize(declarationPatch),
                 baseline.Revision,
                 "txn-declaration",
-                "Update MaxDamage");
+                "Update MaxDamage",
+                previewToken: declarationPreview.PreviewToken);
 
             Assert.Equal(2, declared.Revision);
             Assert.Equal(2, declared.Generation.Number);
@@ -375,6 +420,17 @@ public sealed class CoreClrAuthoringHttpServerTests
             Assert.Equal(HttpStatusCode.Conflict, conflict.StatusCode);
             string errorJson = await conflict.Content.ReadAsStringAsync();
             Assert.Contains("UAW1002", errorJson, StringComparison.Ordinal);
+            DebugErrorResponse externalConflict = JsonSerializer.Deserialize<DebugErrorResponse>(
+                errorJson,
+                UnifiedJson.CreateOptions())!;
+            UnifiedDiagnostic externalDiagnostic = Assert.Single(externalConflict.Diagnostics!);
+            Assert.Equal("UAW1002", externalDiagnostic.Code);
+            Assert.Equal(logicalSupportPath, externalDiagnostic.Span.FilePath);
+            Assert.Equal("unchanged", externalConflict.Rollback!.State);
+            Assert.Equal(redone.Revision, externalConflict.Rollback.Revision);
+            Assert.Contains(
+                externalConflict.QuickFixes!,
+                static fix => fix.Kind == "openFirstDiagnostic");
             Assert.DoesNotContain("20f", await File.ReadAllTextAsync(sourcePath), StringComparison.Ordinal);
             Assert.Equal(surfaceBeforeConflict, await File.ReadAllTextAsync(surfacePath));
             Assert.Equal(assemblyBeforeConflict, await File.ReadAllBytesAsync(managedPath));
@@ -457,6 +513,21 @@ public sealed class CoreClrAuthoringHttpServerTests
                 Assert.Equal(Source, await File.ReadAllTextAsync(sourcePath));
             }
 
+            AuthoringPreviewResponse behaviorPreview = await PreviewAsync(
+                client,
+                "api/authoring/preview/semantic-patch",
+                SemanticPatchJson.Serialize(behaviorPatch),
+                begun.Revision,
+                "stage-minimum",
+                "Stage minimum",
+                begun.Group.Id);
+            Assert.False(behaviorPreview.PublishesRuntime);
+            Assert.Contains(
+                "Math.Clamp(scaled, 10f, MaxDamage)",
+                Assert.Single(behaviorPreview.Files).AfterText,
+                StringComparison.Ordinal);
+            Assert.Equal(Source, await File.ReadAllTextAsync(sourcePath));
+
             AuthoringWorkspaceResponse stagedBehavior = await PostAsync(
                 client,
                 "api/authoring/semantic-patch",
@@ -464,7 +535,8 @@ public sealed class CoreClrAuthoringHttpServerTests
                 begun.Revision,
                 "stage-minimum",
                 "Stage minimum",
-                begun.Group.Id);
+                begun.Group.Id,
+                behaviorPreview.PreviewToken);
             Assert.Equal(2, stagedBehavior.Revision);
             Assert.Equal(1, stagedBehavior.Generation.Number);
             Assert.Equal(1, stagedBehavior.Group!.StagedOperationCount);
@@ -503,6 +575,21 @@ public sealed class CoreClrAuthoringHttpServerTests
             Assert.Equal(2, stagedDeclaration.Group!.StagedOperationCount);
             Assert.Equal(Source, await File.ReadAllTextAsync(sourcePath));
 
+            AuthoringPreviewResponse groupPreview = await PreviewAsync(
+                client,
+                "api/authoring/preview/group/commit",
+                "{}",
+                stagedDeclaration.Revision,
+                begun.Group.Id,
+                begun.Group.Description,
+                begun.Group.Id);
+            Assert.True(groupPreview.PublishesRuntime);
+            AuthoringPreviewFile groupFile = Assert.Single(groupPreview.Files);
+            Assert.Equal(Source, groupFile.BeforeText);
+            Assert.Contains("Math.Clamp(scaled, 10f, MaxDamage)", groupFile.AfterText);
+            Assert.Contains("= 120;", groupFile.AfterText);
+            Assert.Equal(Source, await File.ReadAllTextAsync(sourcePath));
+
             AuthoringWorkspaceResponse committed = await PostAsync(
                 client,
                 "api/authoring/group/commit",
@@ -510,7 +597,8 @@ public sealed class CoreClrAuthoringHttpServerTests
                 stagedDeclaration.Revision,
                 begun.Group.Id,
                 begun.Group.Description,
-                begun.Group.Id);
+                begun.Group.Id,
+                groupPreview.PreviewToken);
             Assert.Null(committed.Group);
             Assert.Equal(2, committed.Revision);
             Assert.Equal(2, committed.Generation.Number);
@@ -564,6 +652,100 @@ public sealed class CoreClrAuthoringHttpServerTests
             Assert.Equal(undone.Revision, cancelled.Revision);
             Assert.Equal(undone.Generation.Number, cancelled.Generation.Number);
             Assert.Equal(Source, await File.ReadAllTextAsync(sourcePath));
+
+            cancellation.Cancel();
+            await serverTask.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task PreparedPreviewCommitsTheIdentityExactCandidate()
+    {
+        string directory = Path.Combine(
+            Path.GetTempPath(),
+            $"unifiedscript-authoring-prepared-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        string sourcePath = Path.Combine(directory, "DamagePolicy.cs");
+        string identityPath = sourcePath + ".usids";
+        string contentRoot = Path.Combine(directory, "workbench");
+        Directory.CreateDirectory(contentRoot);
+        await File.WriteAllTextAsync(sourcePath, Source);
+        await File.WriteAllTextAsync(
+            Path.Combine(contentRoot, "index.html"),
+            "<!doctype html><title>test</title>");
+        string logicalPath = sourcePath.Replace('\\', '/');
+        int port = ReserveLoopbackPort();
+
+        try
+        {
+            using var server = new CoreClrDebugHttpServer(
+                CSharpCompilationRequest.Single(
+                    Source,
+                    logicalPath,
+                    identitySidecar: IdentitySidecarDocument.CreateEmpty(logicalPath)),
+                sourcePath,
+                identityPath,
+                contentRoot,
+                port);
+            using var cancellation = new CancellationTokenSource();
+            Task serverTask = server.RunAsync(cancellation.Token);
+            using var client = new HttpClient
+            {
+                BaseAddress = new Uri($"http://127.0.0.1:{port}/"),
+            };
+
+            AuthoringWorkspaceResponse baseline = await GetWorkspaceAsync(client);
+            AuthoringFunctionSurface function = Assert.Single(
+                Assert.Single(baseline.Surface.Assets).Functions);
+            AuthoringRegionSurface body = Assert.Single(
+                function.Regions,
+                static region => region.Kind == GraphRegionKind.Block &&
+                    region.ParentRegionId is not null);
+            SemanticId firstStatementId = body.DirectStatementIds[0];
+            SemanticId intTypeId = function.Parameters
+                .Single(static parameter => parameter.Name == "incomingDamage")
+                .TypeId!.Value;
+            SemanticPatchDocument insertion = SemanticPatchDocument.Create(
+                baseline.ScriptAssets.SourceCompilationId,
+                baseline.ScriptAssets.SemanticConfigurationId,
+                [new InsertStatementPatchOperation(
+                    body.SourceNodeId,
+                    null,
+                    firstStatementId,
+                    new LocalDeclarationPatchStatement(
+                        "previewed",
+                        "int",
+                        new LiteralPatchExpression("7", intTypeId),
+                        intTypeId))]);
+
+            AuthoringPreviewResponse preview = await PreviewAsync(
+                client,
+                "api/authoring/preview/semantic-patch",
+                SemanticPatchJson.Serialize(insertion),
+                baseline.Revision,
+                "txn-identity-exact-preview",
+                "Insert previewed local");
+            Assert.Contains("int previewed = 7;", Assert.Single(preview.Files).AfterText);
+            Assert.Equal(Source, await File.ReadAllTextAsync(sourcePath));
+
+            AuthoringWorkspaceResponse committed = await PostAsync(
+                client,
+                "api/authoring/semantic-patch",
+                SemanticPatchJson.Serialize(insertion),
+                baseline.Revision,
+                "txn-identity-exact-preview",
+                "Insert previewed local",
+                previewToken: preview.PreviewToken);
+            Assert.Equal(baseline.Revision + 1, committed.Revision);
+            Assert.Contains("int previewed = 7;", await File.ReadAllTextAsync(sourcePath));
+            IdentitySidecarDocument sidecar = IdentitySidecarJson.Deserialize(
+                await File.ReadAllTextAsync(identityPath));
+            Assert.True(
+                sidecar.Entries.Count(static entry => entry.Kind == "variableDeclaration") >= 2);
 
             cancellation.Cancel();
             await serverTask.WaitAsync(TimeSpan.FromSeconds(5));
@@ -727,6 +909,29 @@ public sealed class CoreClrAuthoringHttpServerTests
         long baselineRevision,
         string transactionId,
         string description,
+        string? groupId = null,
+        string? previewToken = null)
+    {
+        using HttpRequestMessage request = AuthoringRequest(
+            path,
+            json,
+            baselineRevision,
+            transactionId,
+            description,
+            groupId,
+            previewToken);
+        using HttpResponseMessage response = await client.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+        return Deserialize(await response.Content.ReadAsStringAsync());
+    }
+
+    private static async Task<AuthoringPreviewResponse> PreviewAsync(
+        HttpClient client,
+        string path,
+        string json,
+        long baselineRevision,
+        string transactionId,
+        string description,
         string? groupId = null)
     {
         using HttpRequestMessage request = AuthoringRequest(
@@ -738,7 +943,10 @@ public sealed class CoreClrAuthoringHttpServerTests
             groupId);
         using HttpResponseMessage response = await client.SendAsync(request);
         response.EnsureSuccessStatusCode();
-        return Deserialize(await response.Content.ReadAsStringAsync());
+        return JsonSerializer.Deserialize<AuthoringPreviewResponse>(
+            await response.Content.ReadAsStringAsync(),
+            UnifiedJson.CreateOptions()) ??
+            throw new InvalidOperationException("The authoring preview response was empty.");
     }
 
     private static HttpRequestMessage AuthoringRequest(
@@ -747,7 +955,8 @@ public sealed class CoreClrAuthoringHttpServerTests
         long baselineRevision,
         string transactionId,
         string description,
-        string? groupId = null)
+        string? groupId = null,
+        string? previewToken = null)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, path)
         {
@@ -759,6 +968,10 @@ public sealed class CoreClrAuthoringHttpServerTests
         if (groupId is not null)
         {
             request.Headers.Add("X-UnifiedScript-Group-Id", groupId);
+        }
+        if (previewToken is not null)
+        {
+            request.Headers.Add("X-UnifiedScript-Preview-Token", previewToken);
         }
         return request;
     }

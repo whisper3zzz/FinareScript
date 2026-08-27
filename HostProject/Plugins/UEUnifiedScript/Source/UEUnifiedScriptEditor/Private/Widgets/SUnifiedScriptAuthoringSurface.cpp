@@ -43,6 +43,7 @@
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SExpandableArea.h"
 #include "Widgets/SOverlay.h"
+#include "Widgets/SWindow.h"
 #include "Widgets/Layout/SSplitter.h"
 #include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/Layout/SSeparator.h"
@@ -225,6 +226,37 @@ FString SuggestPromotedLocalName(
         Candidate = FString::Printf(TEXT("%s%d"), *BaseName, Suffix++);
     }
     return Candidate;
+}
+
+FString BuildPreviewSideText(
+    const FUnifiedScriptAuthoringPreviewResult& Preview,
+    bool bBefore)
+{
+    FString Result;
+    for (const FUnifiedScriptAuthoringPreviewFile& File : Preview.Files)
+    {
+        if (!Result.IsEmpty())
+        {
+            Result += TEXT("\n\n");
+        }
+        Result += FString::Printf(TEXT("===== %s =====\n"), *File.Path);
+        Result += bBefore ? File.BeforeText : File.AfterText;
+    }
+    return Result.IsEmpty() ? TEXT("(No C# source text changed.)") : Result;
+}
+
+FString BuildPreviewDiagnosticsText(const FUnifiedScriptAuthoringPreviewResult& Preview)
+{
+    FString Result;
+    for (const FUnifiedScriptAuthoringDiagnostic& Diagnostic : Preview.Diagnostics)
+    {
+        if (!Result.IsEmpty())
+        {
+            Result += TEXT("\n");
+        }
+        Result += Diagnostic.ToDisplayString();
+    }
+    return Result;
 }
 }
 
@@ -725,6 +757,12 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
                         this,
                         &SUnifiedScriptAuthoringSurface::HandleLoadInitialSurface)
                 ]
+            ]
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(2.0f, 8.0f, 2.0f, 0.0f)
+            [
+                SAssignNew(DiagnosticsBox, SVerticalBox)
             ]
             + SVerticalBox::Slot()
             .AutoHeight()
@@ -2772,10 +2810,6 @@ void SUnifiedScriptAuthoringSurface::SubmitAuthoringTransaction(
         return;
     }
 
-    const TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
-    Request->SetURL(Url);
-    Request->SetVerb(TEXT("POST"));
-    Request->SetHeader(TEXT("Content-Type"), TEXT("application/json; charset=utf-8"));
     if (TransactionId.IsEmpty())
     {
         TransactionId = FGuid::NewGuid().ToString(EGuidFormats::Digits);
@@ -2784,11 +2818,225 @@ void SUnifiedScriptAuthoringSurface::SubmitAuthoringTransaction(
     {
         GroupId = ActiveAuthoringGroupId;
     }
-    Request->SetHeader(TEXT("X-UnifiedScript-Transaction-Id"), TransactionId);
-    Request->SetHeader(TEXT("X-UnifiedScript-Transaction-Label"), Activity);
-    if (!GroupId.IsEmpty())
+    PendingAuthoringTransaction = FUnifiedScriptPendingAuthoringTransaction{
+        MoveTemp(Payload),
+        MoveTemp(Url),
+        MoveTemp(Activity),
+        MoveTemp(TransactionId),
+        MoveTemp(GroupId),
+        bPublishesRuntime,
+    };
+    bHasAuthoringFailure = false;
+    RebuildDiagnosticsPanel();
+    if (FUnifiedScriptAuthoringWorkbench::BuildPreviewUrl(
+            PendingAuthoringTransaction->Url).IsEmpty())
     {
-        Request->SetHeader(TEXT("X-UnifiedScript-Group-Id"), GroupId);
+        DispatchAuthoringRequest(FString());
+    }
+    else
+    {
+        DispatchAuthoringPreview();
+    }
+}
+
+void SUnifiedScriptAuthoringSurface::HandlePreviewResponse(
+    bool bRequestSucceeded,
+    int32 StatusCode,
+    FString ResponseJson)
+{
+    bPatchRequestPending = false;
+    if (!bRequestSucceeded || StatusCode < 200 || StatusCode >= 300)
+    {
+        PendingNodePaletteActionId.Reset();
+        HandleAuthoringFailure(
+            bRequestSucceeded,
+            StatusCode,
+            ResponseJson,
+            TEXT("The Workbench preview request failed; verify that the authoring host is running."));
+        return;
+    }
+
+    FUnifiedScriptAuthoringPreviewResult Preview;
+    FString Error;
+    if (!FUnifiedScriptAuthoringWorkbench::ParsePreviewResponse(
+            ResponseJson,
+            Preview,
+            Error))
+    {
+        PendingAuthoringTransaction.Reset();
+        PendingNodePaletteActionId.Reset();
+        SetStatus(MoveTemp(Error), true);
+        return;
+    }
+    if (!PendingAuthoringTransaction.IsSet() ||
+        Preview.TransactionId != PendingAuthoringTransaction->TransactionId)
+    {
+        PendingAuthoringTransaction.Reset();
+        PendingNodePaletteActionId.Reset();
+        SetStatus(TEXT("The Workbench preview does not match the pending transaction identity."), true);
+        return;
+    }
+
+    if (!ShowDiffPreview(Preview))
+    {
+        const FString Activity = PendingAuthoringTransaction->Activity;
+        PendingAuthoringTransaction.Reset();
+        PendingNodePaletteActionId.Reset();
+        SetStatus(
+            FString::Printf(
+                TEXT("Cancelled '%s' after preview; the preview performed no source, artifact, history, or runtime write."),
+                *Activity),
+            false);
+        return;
+    }
+    DispatchAuthoringRequest(Preview.PreviewToken);
+}
+
+bool SUnifiedScriptAuthoringSurface::ShowDiffPreview(
+    const FUnifiedScriptAuthoringPreviewResult& Preview)
+{
+    bool bAccepted = false;
+    const FString BeforeText =
+        UE::UnifiedScript::AuthoringSurface::Slate::Private::BuildPreviewSideText(Preview, true);
+    const FString AfterText =
+        UE::UnifiedScript::AuthoringSurface::Slate::Private::BuildPreviewSideText(Preview, false);
+    const FString DiagnosticsText =
+        UE::UnifiedScript::AuthoringSurface::Slate::Private::BuildPreviewDiagnosticsText(Preview);
+    const TSharedRef<SWindow> Window = SNew(SWindow)
+        .Title(FText::FromString(FString::Printf(
+            TEXT("UnifiedScript Diff Preview - %s"),
+            *Preview.Description)))
+        .ClientSize(FVector2D(1180.0f, 720.0f))
+        .SupportsMaximize(true)
+        .SupportsMinimize(false);
+    Window->SetContent(
+        SNew(SBorder)
+        .BorderImage(FAppStyle::GetBrush(TEXT("ToolPanel.GroupBorder")))
+        .Padding(12.0f)
+        [
+            SNew(SVerticalBox)
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(0.0f, 0.0f, 0.0f, 8.0f)
+            [
+                SNew(STextBlock)
+                .Text(FText::FromString(FString::Printf(
+                    TEXT("%s  |  revision %lld -> %lld  |  %s"),
+                    *Preview.Description,
+                    Preview.BaselineRevision,
+                    Preview.CandidateRevision,
+                    Preview.bPublishesRuntime
+                        ? TEXT("publishes source + artifacts + runtime")
+                        : TEXT("stages draft only; runtime unchanged"))))
+                .Font(FAppStyle::GetFontStyle(TEXT("SmallFontBold")))
+            ]
+            + SVerticalBox::Slot()
+            .FillHeight(1.0f)
+            [
+                SNew(SSplitter)
+                + SSplitter::Slot()
+                .Value(0.5f)
+                [
+                    SNew(SVerticalBox)
+                    + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 4.0f)
+                    [
+                        SNew(STextBlock)
+                        .Text(LOCTEXT("DiffBefore", "BEFORE"))
+                        .Font(FAppStyle::GetFontStyle(TEXT("SmallFontBold")))
+                        .ColorAndOpacity(FLinearColor(0.88f, 0.36f, 0.30f))
+                    ]
+                    + SVerticalBox::Slot().FillHeight(1.0f).Padding(0.0f, 0.0f, 4.0f, 0.0f)
+                    [
+                        SNew(SMultiLineEditableTextBox)
+                        .Text(FText::FromString(BeforeText))
+                        .IsReadOnly(true)
+                        .Font(FAppStyle::GetFontStyle(TEXT("MonoFont")))
+                    ]
+                ]
+                + SSplitter::Slot()
+                .Value(0.5f)
+                [
+                    SNew(SVerticalBox)
+                    + SVerticalBox::Slot().AutoHeight().Padding(4.0f, 0.0f, 0.0f, 4.0f)
+                    [
+                        SNew(STextBlock)
+                        .Text(LOCTEXT("DiffAfter", "AFTER"))
+                        .Font(FAppStyle::GetFontStyle(TEXT("SmallFontBold")))
+                        .ColorAndOpacity(FLinearColor(0.32f, 0.75f, 0.45f))
+                    ]
+                    + SVerticalBox::Slot().FillHeight(1.0f).Padding(4.0f, 0.0f, 0.0f, 0.0f)
+                    [
+                        SNew(SMultiLineEditableTextBox)
+                        .Text(FText::FromString(AfterText))
+                        .IsReadOnly(true)
+                        .Font(FAppStyle::GetFontStyle(TEXT("MonoFont")))
+                    ]
+                ]
+            ]
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(0.0f, 8.0f, 0.0f, 0.0f)
+            [
+                SNew(STextBlock)
+                .Visibility(Preview.Diagnostics.IsEmpty()
+                    ? EVisibility::Collapsed
+                    : EVisibility::Visible)
+                .Text(FText::FromString(DiagnosticsText))
+                .AutoWrapText(true)
+                .ColorAndOpacity(FLinearColor(0.95f, 0.68f, 0.20f))
+            ]
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .HAlign(HAlign_Right)
+            .Padding(0.0f, 10.0f, 0.0f, 0.0f)
+            [
+                SNew(SHorizontalBox)
+                + SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 8.0f, 0.0f)
+                [
+                    SNew(SButton)
+                    .Text(LOCTEXT("CancelDiff", "Cancel"))
+                    .OnClicked_Lambda([Window]()
+                    {
+                        Window->RequestDestroyWindow();
+                        return FReply::Handled();
+                    })
+                ]
+                + SHorizontalBox::Slot().AutoWidth()
+                [
+                    SNew(SButton)
+                    .Text(Preview.bPublishesRuntime
+                        ? LOCTEXT("ApplyDiff", "Apply Transaction")
+                        : LOCTEXT("StageDiff", "Stage Edit"))
+                    .ButtonStyle(FAppStyle::Get(), TEXT("PrimaryButton"))
+                    .OnClicked_Lambda([Window, &bAccepted]()
+                    {
+                        bAccepted = true;
+                        Window->RequestDestroyWindow();
+                        return FReply::Handled();
+                    })
+                ]
+            ]
+        ]);
+    FSlateApplication::Get().AddModalWindow(Window, SharedThis(this), false);
+    return bAccepted;
+}
+
+void SUnifiedScriptAuthoringSurface::ConfigureAuthoringRequest(
+    const TSharedRef<IHttpRequest, ESPMode::ThreadSafe>& Request,
+    const FString& Url,
+    const FString& PreviewToken) const
+{
+    check(PendingAuthoringTransaction.IsSet());
+    const FUnifiedScriptPendingAuthoringTransaction& Transaction =
+        PendingAuthoringTransaction.GetValue();
+    Request->SetURL(Url);
+    Request->SetVerb(TEXT("POST"));
+    Request->SetHeader(TEXT("Content-Type"), TEXT("application/json; charset=utf-8"));
+    Request->SetHeader(TEXT("X-UnifiedScript-Transaction-Id"), Transaction.TransactionId);
+    Request->SetHeader(TEXT("X-UnifiedScript-Transaction-Label"), Transaction.Activity);
+    if (!Transaction.GroupId.IsEmpty())
+    {
+        Request->SetHeader(TEXT("X-UnifiedScript-Group-Id"), Transaction.GroupId);
     }
     if (WorkbenchRevision > 0)
     {
@@ -2796,7 +3044,57 @@ void SUnifiedScriptAuthoringSurface::SubmitAuthoringTransaction(
             TEXT("X-UnifiedScript-Baseline-Revision"),
             LexToString(WorkbenchRevision));
     }
-    Request->SetContentAsString(Payload);
+    if (!PreviewToken.IsEmpty())
+    {
+        Request->SetHeader(TEXT("X-UnifiedScript-Preview-Token"), PreviewToken);
+    }
+    Request->SetContentAsString(Transaction.Payload);
+}
+
+void SUnifiedScriptAuthoringSurface::DispatchAuthoringPreview()
+{
+    check(PendingAuthoringTransaction.IsSet());
+    const FString PreviewUrl = FUnifiedScriptAuthoringWorkbench::BuildPreviewUrl(
+        PendingAuthoringTransaction->Url);
+    const TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request =
+        FHttpModule::Get().CreateRequest();
+    ConfigureAuthoringRequest(Request, PreviewUrl, FString());
+    const TWeakPtr<SUnifiedScriptAuthoringSurface> WeakThis = SharedThis(this);
+    Request->OnProcessRequestComplete().BindLambda(
+        [WeakThis](FHttpRequestPtr, FHttpResponsePtr Response, bool bSucceeded)
+        {
+            if (const TSharedPtr<SUnifiedScriptAuthoringSurface> Pinned = WeakThis.Pin())
+            {
+                Pinned->HandlePreviewResponse(
+                    bSucceeded && Response.IsValid(),
+                    Response.IsValid() ? Response->GetResponseCode() : 0,
+                    Response.IsValid() ? Response->GetContentAsString() : FString());
+            }
+        });
+
+    bPatchRequestPending = true;
+    SetStatus(
+        FString::Printf(
+            TEXT("Preparing exact C# diff for %s ..."),
+            *PendingAuthoringTransaction->Activity),
+        false);
+    if (!Request->ProcessRequest())
+    {
+        bPatchRequestPending = false;
+        HandleAuthoringFailure(
+            false,
+            0,
+            FString(),
+            TEXT("The Workbench preview request could not be started."));
+    }
+}
+
+void SUnifiedScriptAuthoringSurface::DispatchAuthoringRequest(const FString& PreviewToken)
+{
+    check(PendingAuthoringTransaction.IsSet());
+    const TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request =
+        FHttpModule::Get().CreateRequest();
+    ConfigureAuthoringRequest(Request, PendingAuthoringTransaction->Url, PreviewToken);
     const TWeakPtr<SUnifiedScriptAuthoringSurface> WeakThis = SharedThis(this);
     Request->OnProcessRequestComplete().BindLambda(
         [WeakThis](FHttpRequestPtr, FHttpResponsePtr Response, bool bSucceeded)
@@ -2811,13 +3109,23 @@ void SUnifiedScriptAuthoringSurface::SubmitAuthoringTransaction(
         });
 
     bPatchRequestPending = true;
-    bPendingRequestPublishesRuntime = bPublishesRuntime &&
-        (ActiveAuthoringGroupId.IsEmpty() || Url.EndsWith(TEXT("/api/authoring/group/commit")));
-    SetStatus(FString::Printf(TEXT("%s via %s ..."), *Activity, *Url), false);
+    bPendingRequestPublishesRuntime = PendingAuthoringTransaction->bPublishesRuntime &&
+        (ActiveAuthoringGroupId.IsEmpty() ||
+            PendingAuthoringTransaction->Url.EndsWith(TEXT("/api/authoring/group/commit")));
+    SetStatus(
+        FString::Printf(
+            TEXT("%s via %s ..."),
+            *PendingAuthoringTransaction->Activity,
+            *PendingAuthoringTransaction->Url),
+        false);
     if (!Request->ProcessRequest())
     {
         bPatchRequestPending = false;
-        SetStatus(TEXT("The Workbench HTTP request could not be started."), true);
+        HandleAuthoringFailure(
+            false,
+            0,
+            FString(),
+            TEXT("The Workbench HTTP request could not be started."));
     }
 }
 
@@ -2833,11 +3141,11 @@ void SUnifiedScriptAuthoringSurface::HandlePatchResponse(
     bPendingRequestPublishesRuntime = true;
     if (!bRequestSucceeded || StatusCode < 200 || StatusCode >= 300)
     {
-        SetStatus(
-            bRequestSucceeded
-                ? FUnifiedScriptAuthoringWorkbench::ParseErrorResponse(ResponseJson, StatusCode)
-                : TEXT("The Workbench loopback request failed; verify that the authoring host is running."),
-            true);
+        HandleAuthoringFailure(
+            bRequestSucceeded,
+            StatusCode,
+            ResponseJson,
+            TEXT("The Workbench loopback request failed; verify that the authoring host is running."));
         return;
     }
 
@@ -2848,27 +3156,17 @@ void SUnifiedScriptAuthoringSurface::HandlePatchResponse(
             Workspace,
             Error))
     {
+        PendingAuthoringTransaction.Reset();
         SetStatus(MoveTemp(Error), true);
         return;
     }
-
-    Document = MoveTemp(Workspace.Surface);
-    WorkbenchRevision = Workspace.Revision;
-    bCanUndoAuthoring = Workspace.History.bCanUndo;
-    bCanRedoAuthoring = Workspace.History.bCanRedo;
-    UndoAuthoringDepth = Workspace.History.UndoDepth;
-    RedoAuthoringDepth = Workspace.History.RedoDepth;
-    UndoAuthoringDescription = MoveTemp(Workspace.History.UndoDescription);
-    RedoAuthoringDescription = MoveTemp(Workspace.History.RedoDescription);
-    HistoryPersistenceState = MoveTemp(Workspace.History.PersistenceState);
-    HistoryPersistenceMessage = MoveTemp(Workspace.History.PersistenceMessage);
-    ActiveAuthoringGroupId = Workspace.Group.bActive ? MoveTemp(Workspace.Group.Id) : FString();
-    ActiveAuthoringGroupDescription = Workspace.Group.bActive
-        ? MoveTemp(Workspace.Group.Description)
-        : FString();
-    ActiveAuthoringGroupStagedCount = Workspace.Group.bActive
-        ? Workspace.Group.StagedOperationCount
-        : 0;
+    const bool bWorkspaceGroupActive = Workspace.Group.bActive;
+    const int64 WorkspaceRevision = Workspace.Revision;
+    const int64 WorkspaceGeneration = Workspace.Generation;
+    AdoptWorkspace(MoveTemp(Workspace));
+    PendingAuthoringTransaction.Reset();
+    bHasAuthoringFailure = false;
+    RebuildDiagnosticsPanel();
     if (!CompletedNodePaletteActionId.IsEmpty())
     {
         RecordNodePaletteUsage(CompletedNodePaletteActionId);
@@ -2889,7 +3187,7 @@ void SUnifiedScriptAuthoringSurface::HandlePatchResponse(
     const FString HistoryPersistenceDetail = HistoryPersistenceMessage.IsEmpty()
         ? FString()
         : FString::Printf(TEXT(" (%s)"), *HistoryPersistenceMessage);
-    if (Workspace.Group.bActive)
+    if (bWorkspaceGroupActive)
     {
         SetStatus(
             FString::Printf(
@@ -2897,16 +3195,16 @@ void SUnifiedScriptAuthoringSurface::HandlePatchResponse(
                 *ActiveAuthoringGroupDescription,
                 ActiveAuthoringGroupStagedCount,
                 ActiveAuthoringGroupStagedCount == 1 ? TEXT("") : TEXT("s"),
-                Workspace.Revision,
-                Workspace.Generation),
+                WorkspaceRevision,
+                WorkspaceGeneration),
             false);
         return;
     }
     const FString CompletionStatus = bPublishedRuntime
         ? FString::Printf(
             TEXT("Applied revision %lld / Workbench generation %lld; history %lld undo / %lld redo; journal %s%s; Surface refreshed; components %d matched, %d updated, %d failed."),
-            Workspace.Revision,
-            Workspace.Generation,
+            WorkspaceRevision,
+            WorkspaceGeneration,
             UndoAuthoringDepth,
             RedoAuthoringDepth,
             *HistoryPersistenceState,
@@ -2916,8 +3214,8 @@ void SUnifiedScriptAuthoringSurface::HandlePatchResponse(
             Failed)
         : FString::Printf(
             TEXT("Grouped draft discarded; committed revision %lld / Workbench generation %lld remains active; history %lld undo / %lld redo; journal %s%s; Surface restored; components %d matched, %d updated, %d failed."),
-            Workspace.Revision,
-            Workspace.Generation,
+            WorkspaceRevision,
+            WorkspaceGeneration,
             UndoAuthoringDepth,
             RedoAuthoringDepth,
             *HistoryPersistenceState,
@@ -2928,6 +3226,297 @@ void SUnifiedScriptAuthoringSurface::HandlePatchResponse(
     SetStatus(
         CompletionStatus,
         Failed > 0 || HistoryPersistenceState == TEXT("rejected"));
+}
+
+void SUnifiedScriptAuthoringSurface::AdoptWorkspace(
+    FUnifiedScriptAuthoringWorkspaceResult Workspace)
+{
+    Document = MoveTemp(Workspace.Surface);
+    WorkbenchRevision = Workspace.Revision;
+    bCanUndoAuthoring = Workspace.History.bCanUndo;
+    bCanRedoAuthoring = Workspace.History.bCanRedo;
+    UndoAuthoringDepth = Workspace.History.UndoDepth;
+    RedoAuthoringDepth = Workspace.History.RedoDepth;
+    UndoAuthoringDescription = MoveTemp(Workspace.History.UndoDescription);
+    RedoAuthoringDescription = MoveTemp(Workspace.History.RedoDescription);
+    HistoryPersistenceState = MoveTemp(Workspace.History.PersistenceState);
+    HistoryPersistenceMessage = MoveTemp(Workspace.History.PersistenceMessage);
+    ActiveAuthoringGroupId = Workspace.Group.bActive ? MoveTemp(Workspace.Group.Id) : FString();
+    ActiveAuthoringGroupDescription = Workspace.Group.bActive
+        ? MoveTemp(Workspace.Group.Description)
+        : FString();
+    ActiveAuthoringGroupStagedCount = Workspace.Group.bActive
+        ? Workspace.Group.StagedOperationCount
+        : 0;
+    RebuildTree();
+}
+
+void SUnifiedScriptAuthoringSurface::HandleAuthoringFailure(
+    bool bRequestSucceeded,
+    int32 StatusCode,
+    const FString& ResponseJson,
+    const FString& NetworkMessage)
+{
+    PendingAuthoringTransaction.Reset();
+    FUnifiedScriptAuthoringErrorResult Failure;
+    FString ParseError;
+    if (bRequestSucceeded && FUnifiedScriptAuthoringWorkbench::ParseErrorResponse(
+            ResponseJson,
+            StatusCode,
+            Failure,
+            ParseError))
+    {
+        LastAuthoringFailure = MoveTemp(Failure);
+    }
+    else
+    {
+        LastAuthoringFailure = FUnifiedScriptAuthoringErrorResult{};
+        LastAuthoringFailure.StatusCode = StatusCode;
+        LastAuthoringFailure.Code = bRequestSucceeded ? TEXT("INVALID_RESPONSE") : TEXT("NO_RESPONSE");
+        LastAuthoringFailure.Message = bRequestSucceeded && !ParseError.IsEmpty()
+            ? MoveTemp(ParseError)
+            : NetworkMessage;
+    }
+    bHasAuthoringFailure = true;
+    RebuildDiagnosticsPanel();
+    SetStatus(LastAuthoringFailure.ToDisplayString(), true);
+}
+
+void SUnifiedScriptAuthoringSurface::RebuildDiagnosticsPanel()
+{
+    if (!DiagnosticsBox.IsValid())
+    {
+        return;
+    }
+    DiagnosticsBox->ClearChildren();
+    if (!bHasAuthoringFailure)
+    {
+        return;
+    }
+
+    const bool bRollbackConfirmed = LastAuthoringFailure.Rollback.IsConfirmed();
+    const bool bRollbackFailed = LastAuthoringFailure.Rollback.State == TEXT("failed");
+    const FString RollbackTitle = bRollbackConfirmed
+        ? FString::Printf(
+            TEXT("ROLLBACK CONFIRMED  ·  %s  ·  revision %lld / generation %lld"),
+            *LastAuthoringFailure.Rollback.State.ToUpper(),
+            LastAuthoringFailure.Rollback.Revision,
+            LastAuthoringFailure.Rollback.Generation)
+        : bRollbackFailed
+            ? TEXT("ROLLBACK FAILED  ·  stop authoring and inspect the host")
+            : TEXT("ROLLBACK NOT CONFIRMED  ·  no server receipt was returned");
+    const FLinearColor RollbackColor = bRollbackConfirmed
+        ? FLinearColor(0.30f, 0.78f, 0.45f)
+        : FLinearColor(0.95f, 0.28f, 0.22f);
+
+    const TSharedRef<SVerticalBox> Body = SNew(SVerticalBox);
+    Body->AddSlot().AutoHeight()
+    [
+        SNew(STextBlock)
+        .Text(FText::FromString(LastAuthoringFailure.ToDisplayString()))
+        .Font(FAppStyle::GetFontStyle(TEXT("SmallFontBold")))
+        .AutoWrapText(true)
+        .ColorAndOpacity(FLinearColor(0.96f, 0.40f, 0.34f))
+    ];
+    Body->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 2.0f)
+    [
+        SNew(STextBlock)
+        .Text(FText::FromString(RollbackTitle))
+        .Font(FAppStyle::GetFontStyle(TEXT("SmallFontBold")))
+        .ColorAndOpacity(RollbackColor)
+    ];
+    if (!LastAuthoringFailure.Rollback.Message.IsEmpty())
+    {
+        Body->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 4.0f)
+        [
+            SNew(STextBlock)
+            .Text(FText::FromString(LastAuthoringFailure.Rollback.Message))
+            .AutoWrapText(true)
+            .ColorAndOpacity(FLinearColor(0.64f, 0.67f, 0.72f))
+        ];
+    }
+    if (!LastAuthoringFailure.QuickFixes.IsEmpty())
+    {
+        const TSharedRef<SHorizontalBox> Fixes = SNew(SHorizontalBox);
+        for (const FUnifiedScriptAuthoringQuickFix& Fix : LastAuthoringFailure.QuickFixes)
+        {
+            Fixes->AddSlot().AutoWidth().Padding(0.0f, 3.0f, 6.0f, 4.0f)
+            [
+                SNew(SButton)
+                .Text(FText::FromString(Fix.Label))
+                .OnClicked(this, &SUnifiedScriptAuthoringSurface::HandleQuickFix, Fix.Kind)
+            ];
+        }
+        Body->AddSlot().AutoHeight()[Fixes];
+    }
+
+    for (const FUnifiedScriptAuthoringDiagnostic& Diagnostic :
+        LastAuthoringFailure.Diagnostics)
+    {
+        const bool bError = Diagnostic.Severity == TEXT("error");
+        Body->AddSlot().AutoHeight().Padding(0.0f, 3.0f)
+        [
+            SNew(SBorder)
+            .BorderImage(FAppStyle::GetBrush(TEXT("Brushes.Panel")))
+            .Padding(6.0f)
+            [
+                SNew(SHorizontalBox)
+                + SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+                [
+                    SNew(STextBlock)
+                    .Text(FText::FromString(Diagnostic.ToDisplayString()))
+                    .AutoWrapText(true)
+                    .ColorAndOpacity(bError
+                        ? FLinearColor(0.96f, 0.42f, 0.35f)
+                        : FLinearColor(0.95f, 0.70f, 0.24f))
+                ]
+                + SHorizontalBox::Slot().AutoWidth().Padding(8.0f, 0.0f, 4.0f, 0.0f)
+                [
+                    SNew(SButton)
+                    .Text(LOCTEXT("OpenDiagnosticSource", "Open Source"))
+                    .IsEnabled(Diagnostic.Span.FilePath != TEXT("<unknown>"))
+                    .OnClicked(this, &SUnifiedScriptAuthoringSurface::HandleOpenSource, Diagnostic.Span)
+                ]
+                + SHorizontalBox::Slot().AutoWidth()
+                [
+                    SNew(SButton)
+                    .Text(LOCTEXT("CopyDiagnostic", "Copy"))
+                    .OnClicked(
+                        this,
+                        &SUnifiedScriptAuthoringSurface::HandleCopyDiagnostic,
+                        Diagnostic)
+                ]
+            ]
+        ];
+    }
+
+    DiagnosticsBox->AddSlot().AutoHeight()
+    [
+        SNew(SBox)
+        .MaxDesiredHeight(220.0f)
+        [
+            SNew(SBorder)
+            .BorderImage(FAppStyle::GetBrush(TEXT("ToolPanel.GroupBorder")))
+            .Padding(8.0f)
+            [
+                SNew(SScrollBox)
+                + SScrollBox::Slot()
+                [
+                    Body
+                ]
+            ]
+        ]
+    ];
+}
+
+FReply SUnifiedScriptAuthoringSurface::HandleCopyDiagnostic(
+    FUnifiedScriptAuthoringDiagnostic Diagnostic)
+{
+    const FString Text = Diagnostic.ToDisplayString();
+    FPlatformApplicationMisc::ClipboardCopy(*Text);
+    SetStatus(FString::Printf(TEXT("Copied diagnostic %s."), *Diagnostic.Code), false);
+    return FReply::Handled();
+}
+
+FReply SUnifiedScriptAuthoringSurface::HandleQuickFix(FString Kind)
+{
+    if (Kind == TEXT("openFirstDiagnostic"))
+    {
+        const FUnifiedScriptAuthoringDiagnostic* Diagnostic =
+            LastAuthoringFailure.Diagnostics.FindByPredicate([](
+                const FUnifiedScriptAuthoringDiagnostic& Candidate)
+            {
+                return Candidate.Span.IsValid();
+            });
+        return Diagnostic != nullptr
+            ? HandleOpenSource(Diagnostic->Span)
+            : FReply::Handled();
+    }
+    if (Kind == TEXT("refreshWorkspace"))
+    {
+        RequestWorkspaceRefresh();
+        return FReply::Handled();
+    }
+    SetStatus(FString::Printf(TEXT("Unsupported authoring quick fix '%s'."), *Kind), true);
+    return FReply::Handled();
+}
+
+void SUnifiedScriptAuthoringSurface::RequestWorkspaceRefresh()
+{
+    if (bPatchRequestPending)
+    {
+        SetStatus(TEXT("Wait for the active Workbench request before refreshing."), true);
+        return;
+    }
+    const FString Url = FUnifiedScriptAuthoringWorkbench::BuildWorkspaceUrl(
+        ServerUrlTextBox.IsValid() ? ServerUrlTextBox->GetText().ToString() : FString());
+    if (Url.IsEmpty())
+    {
+        SetStatus(TEXT("Enter a Workbench loopback URL before refreshing."), true);
+        return;
+    }
+
+    const TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request =
+        FHttpModule::Get().CreateRequest();
+    Request->SetURL(Url);
+    Request->SetVerb(TEXT("GET"));
+    const TWeakPtr<SUnifiedScriptAuthoringSurface> WeakThis = SharedThis(this);
+    Request->OnProcessRequestComplete().BindLambda(
+        [WeakThis](FHttpRequestPtr, FHttpResponsePtr Response, bool bSucceeded)
+        {
+            if (const TSharedPtr<SUnifiedScriptAuthoringSurface> Pinned = WeakThis.Pin())
+            {
+                Pinned->HandleWorkspaceRefreshResponse(
+                    bSucceeded && Response.IsValid(),
+                    Response.IsValid() ? Response->GetResponseCode() : 0,
+                    Response.IsValid() ? Response->GetContentAsString() : FString());
+            }
+        });
+    bPatchRequestPending = true;
+    SetStatus(TEXT("Refreshing the Authoring Surface from the Workbench ..."), false);
+    if (!Request->ProcessRequest())
+    {
+        bPatchRequestPending = false;
+        SetStatus(TEXT("The Workbench refresh request could not be started."), true);
+    }
+}
+
+void SUnifiedScriptAuthoringSurface::HandleWorkspaceRefreshResponse(
+    bool bRequestSucceeded,
+    int32 StatusCode,
+    FString ResponseJson)
+{
+    bPatchRequestPending = false;
+    if (!bRequestSucceeded || StatusCode < 200 || StatusCode >= 300)
+    {
+        HandleAuthoringFailure(
+            bRequestSucceeded,
+            StatusCode,
+            ResponseJson,
+            TEXT("The Workbench refresh request failed; verify that the authoring host is running."));
+        return;
+    }
+    FUnifiedScriptAuthoringWorkspaceResult Workspace;
+    FString Error;
+    if (!FUnifiedScriptAuthoringWorkbench::ParseWorkspaceResponse(
+            ResponseJson,
+            Workspace,
+            Error))
+    {
+        SetStatus(MoveTemp(Error), true);
+        return;
+    }
+    const int64 Revision = Workspace.Revision;
+    const int64 Generation = Workspace.Generation;
+    AdoptWorkspace(MoveTemp(Workspace));
+    bHasAuthoringFailure = false;
+    RebuildDiagnosticsPanel();
+    SetStatus(
+        FString::Printf(
+            TEXT("Refreshed Authoring Surface at revision %lld / generation %lld."),
+            Revision,
+            Generation),
+        false);
 }
 
 void SUnifiedScriptAuthoringSurface::ReloadMatchingComponents(

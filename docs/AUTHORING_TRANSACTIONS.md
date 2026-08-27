@@ -39,6 +39,26 @@ Undo and redo accept `{}`. They use the same revision and operation headers as
 ordinary edits. `UAW1007` reports an empty side of the history; `UAW1008`
 reports invalid transaction metadata.
 
+## Prepared diff and commit binding
+
+Native Slate preflights declaration, semantic, plan, Undo, Redo, and grouped
+commit requests through matching `/api/authoring/preview/...` endpoints. A
+preview runs steps 1-4 of the commit path under the same session gate, returns
+exact changed C# `beforeText`/`afterText`, and performs no persistence or runtime
+reload. Group stages preview the current draft; grouped commit previews the
+draft against the published workspace.
+
+The preview response includes a SHA-256 token over revisions, transaction/group
+metadata, complete candidate source, reconciled identity sidecars, Declaration
+IR, and Graph. The server keeps that immutable prepared snapshot in a bounded
+cache. An accepted native request sends its token as
+`X-UnifiedScript-Preview-Token` and commits that exact candidate; `UAW1012`
+rejects missing/expired tokens or transaction-context drift. Older clients may
+omit the header, but the native Unreal editor never bypasses its preview for a
+source-changing operation. Structured failures include diagnostic/quick-fix
+arrays and a rollback receipt. See
+[AUTHORING_DIAGNOSTICS.md](AUTHORING_DIAGNOSTICS.md).
+
 ## User-grouped transactions
 
 `group/begin` reserves one unique transaction ID and label at the current

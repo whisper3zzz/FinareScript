@@ -36,6 +36,68 @@ struct FUnifiedScriptAuthoringGroupResult
     int64 StagedOperationCount = 0;
 };
 
+struct FUnifiedScriptAuthoringDiagnostic
+{
+    FString Code;
+    FString Severity;
+    FString Message;
+    FUnifiedScriptAuthoringSpan Span;
+    FString SemanticId;
+
+    FString ToDisplayString() const;
+};
+
+struct FUnifiedScriptAuthoringQuickFix
+{
+    FString Id;
+    FString Label;
+    FString Kind;
+};
+
+struct FUnifiedScriptAuthoringRollbackResult
+{
+    FString State;
+    int64 Revision = 0;
+    int64 Generation = 0;
+    FString Message;
+
+    bool IsConfirmed() const
+    {
+        return State == TEXT("unchanged") || State == TEXT("restored");
+    }
+};
+
+struct FUnifiedScriptAuthoringErrorResult
+{
+    int32 StatusCode = 0;
+    FString Code;
+    FString Message;
+    TArray<FUnifiedScriptAuthoringDiagnostic> Diagnostics;
+    TArray<FUnifiedScriptAuthoringQuickFix> QuickFixes;
+    FUnifiedScriptAuthoringRollbackResult Rollback;
+
+    FString ToDisplayString() const;
+};
+
+struct FUnifiedScriptAuthoringPreviewFile
+{
+    FString Path;
+    FString BeforeText;
+    FString AfterText;
+};
+
+struct FUnifiedScriptAuthoringPreviewResult
+{
+    int64 BaselineRevision = 0;
+    int64 CandidateRevision = 0;
+    FString TransactionId;
+    FString Description;
+    bool bPublishesRuntime = false;
+    FString PreviewToken;
+    TArray<FUnifiedScriptAuthoringPreviewFile> Files;
+    TArray<FUnifiedScriptAuthoringDiagnostic> Diagnostics;
+};
+
 struct FUnifiedScriptAuthoringWorkspaceResult
 {
     int64 Revision = 0;
@@ -57,6 +119,10 @@ public:
 
     static FString BuildSemanticPatchPlanUrl(const FString& ServerUrl);
 
+    static FString BuildPreviewUrl(const FString& TransactionUrl);
+
+    static FString BuildWorkspaceUrl(const FString& ServerUrl);
+
     static FString BuildUndoUrl(const FString& ServerUrl);
 
     static FString BuildRedoUrl(const FString& ServerUrl);
@@ -71,6 +137,17 @@ public:
         const FString& Json,
         FUnifiedScriptAuthoringWorkspaceResult& OutWorkspace,
         FString& OutError);
+
+    static bool ParsePreviewResponse(
+        const FString& Json,
+        FUnifiedScriptAuthoringPreviewResult& OutPreview,
+        FString& OutError);
+
+    static bool ParseErrorResponse(
+        const FString& Json,
+        int32 StatusCode,
+        FUnifiedScriptAuthoringErrorResult& OutFailure,
+        FString& OutParseError);
 
     static FString ParseErrorResponse(const FString& Json, int32 StatusCode);
 };

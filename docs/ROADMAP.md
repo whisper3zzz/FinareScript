@@ -49,7 +49,7 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-27**
 
 - Active milestone: **M8 — Visual/C# Authoring Beta**
-- Next slice: **M8.2 — diagnostics, quick fixes, diff preview, and rollback UX**
+- Next slice: **M8.3 — asset, state, event, and API authoring**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -60,10 +60,10 @@ machine-local unless an artifact explicitly says otherwise.
 
 | Gate | Verified result |
 | --- | --- |
-| Main source | `f6de727` (`feat: complete native canvas authoring`), plus this compact-node/Advanced-Details change set |
+| Main source | `e899cc9` (`feat: add compact advanced node details`), plus this diagnostics/Diff/rollback change set |
 | Comparison source | `489ce9b` (`feat: complete full UnifiedScript migration`) |
-| Managed tests | 501 / 501 passed |
-| Repository validator | 53 / 53 passed |
+| Managed tests | 502 / 502 passed |
+| Repository validator | 54 / 54 passed |
 | UE 5.8.1 native build | passed |
 | `UnifiedScript.Unreal` Automation | 13 / 13 passed at the M7.3 onboarding baseline; the migrated BlockBreaker Editor gate and focused M8.2 Authoring Surface gate also passed |
 | BlockBreaker workload | 10,000 frames, three trials, one shot, one hit, two command completions per trial |
@@ -754,7 +754,7 @@ pass.
     Blueprint keyboard parity
 - [x] show concise author-facing node content by default while retaining exact
   type, effect, source, semantic ID, and generated API information on demand
-- [ ] provide compiler/contract diagnostics, quick fixes, source navigation,
+- [x] provide compiler/contract diagnostics, quick fixes, source navigation,
   diff preview, and failed-transaction rollback in the editor
 
 The first M8.2 tranche replaces the right-click-only discovery path with a
@@ -766,9 +766,9 @@ Favorites and the bounded eight-entry Recent list are stored in per-project user
 config; Recent changes only after an accepted Workbench response. Function-level
 Event Entries remain visible without an editable block, while statement actions
 do not. The focused UE 5.8 Authoring Surface Automation and 50/50 repository
-invariants pass. Later M8.2 tranches completed pin defaults/promotion and canvas
-organization and compact/advanced node information; M8.2 remains open for
-diagnostics/diff/rollback UX.
+invariants pass. Later M8.2 tranches completed pin defaults/promotion, canvas
+organization, compact/advanced node information, and the final
+diagnostics/Diff/rollback safety loop recorded below.
 
 The second M8.2 tranche adds source-backed Pin Authoring. Every connected data
 input in native Details can replace its exact compiler-owned edge with a typed
@@ -809,6 +809,22 @@ an initially collapsed **Advanced Node Details** area. See
 build, focused native Authoring Surface Automation, and 53/53 repository
 invariants pass. M8.2 now advances to compiler diagnostics, safe quick fixes,
 diff preview, source navigation, and explicit failed-transaction rollback UX.
+
+The fifth M8.2 tranche closes that safety loop. New preview endpoints run the
+same declaration/semantic/plan/history/group candidate preparation as commit
+without writes and return exact per-source before/after text. Slate requires an
+author confirmation and resubmits a SHA-256 preview token; the server rejects a
+candidate mismatch before publication. Structured compiler/contract
+diagnostics now retain code, severity, semantic identity, and source span in a
+native panel with bounded Open Source and read-only Refresh Surface actions.
+Every authoring-protocol failure also carries an explicit `unchanged`,
+`restored`, or `failed` receipt with the active revision/generation, so the UI
+never infers rollback from HTTP status. Group stages preview only the next
+draft, while group commit previews the accumulated published delta. See
+[`AUTHORING_DIAGNOSTICS.md`](AUTHORING_DIAGNOSTICS.md). The 502/502 managed
+suite, UE 5.8 Editor build, focused native Authoring Surface Automation, and
+54/54 repository invariants pass. M8.2 is complete and the cursor advances to
+M8.3 asset, state, event, and API authoring.
 
 ### M8.3 — Asset, state, event, and API authoring
 
