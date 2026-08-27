@@ -179,7 +179,7 @@ public:
         FUnifiedScriptAuthoringSurfaceDocument& OutDocument,
         FString& OutError);
 
-    /** Builds the same semantic-patch v0.24 payload consumed by the shared authoring host. */
+    /** Builds the same semantic-patch v0.25 payload consumed by the shared authoring host. */
     static bool BuildSemanticPatch(
         const FUnifiedScriptAuthoringSurfaceDocument& Document,
         const FUnifiedScriptAuthoringEdit& Edit,
@@ -187,7 +187,7 @@ public:
         FString& OutPatchJson,
         FString& OutError);
 
-    /** Builds a preconditioned semantic-patch v0.24 data-edge rewire transaction. */
+    /** Builds a preconditioned semantic-patch v0.25 data-edge rewire transaction. */
     static bool BuildDataEdgeReconnectionPatch(
         const FUnifiedScriptAuthoringSurfaceDocument& Document,
         const FUnifiedScriptAuthoringFunction& Function,
@@ -320,6 +320,22 @@ public:
         const FUnifiedScriptAuthoringAction& SourceStatement,
         const FUnifiedScriptAuthoringAction& DestinationStatement,
         const FString& NewLocalName,
+        FString& OutPatchJson,
+        FString& OutError);
+
+    /** Wraps two or more consecutive statements in one explicit lexical block. */
+    static bool BuildStatementCollapsePatch(
+        const FUnifiedScriptAuthoringSurfaceDocument& Document,
+        const FUnifiedScriptAuthoringFunction& Function,
+        const TArray<FString>& StatementActionIds,
+        FString& OutPatchJson,
+        FString& OutError);
+
+    /** Expands one nested lexical block back into its parent statement list. */
+    static bool BuildBlockExpansionPatch(
+        const FUnifiedScriptAuthoringSurfaceDocument& Document,
+        const FUnifiedScriptAuthoringFunction& Function,
+        const FUnifiedScriptAuthoringRegion& BlockRegion,
         FString& OutPatchJson,
         FString& OutError);
 

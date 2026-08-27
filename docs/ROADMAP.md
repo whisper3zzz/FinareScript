@@ -661,7 +661,7 @@ var, discard, relational, logical, negated, and parenthesized patterns. Direct
 statement insertion/deletion/reordering also accepts a switch-section body.
 Authoring Surface v0.4 carries normalized Graph properties, including the exact
 semantic switch-section identity, so Slate can consume these operations without
-parsing presentation text. The 479/479 managed suite, UE 5.8 editor build,
+parsing presentation text. The 483/483 managed suite, UE 5.8 editor build,
 focused native Authoring Surface Automation, and 48/48 repository validator
 pass. The Slate palette now creates a typed switch, and its inspector converts
 bounded pattern text into semantic labels, inserts Case/Default sections,
@@ -680,6 +680,16 @@ conflict-free name for copied locals, recompiles, and validates the projected
 CFG. Ctrl/Cmd+Z/Y use the same Workbench history as the toolbar. Persisted and
 user-grouped history, collapse/expand transforms, and broader multi-selection
 or cross-region clipboard semantics remain open, so M8.1 is not yet complete.
+
+Semantic Patch v0.25 now adds reversible lexical scope transforms. Collapse
+Scope consumes two or more consecutive selected statement nodes from one
+compiler-owned block and creates a real nested C# block; member/comment IDs are
+pinned while the wrapper receives a fresh region ID. The tree inspector exposes
+Expand Scope for that nested BLOCK and restores its ordered members while
+tombstoning only the wrapper. Full compilation and CFG validation reject scope
+escape or name-collision changes. This closes the bounded region
+collapse/expand slice, but extracted callable subgraphs, persisted/user-grouped
+history, and wider clipboard semantics remain before M8.1 completion.
 
 ### M8.2 — Blueprint-grade Unreal experience
 

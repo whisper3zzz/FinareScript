@@ -421,7 +421,7 @@ public sealed class SemanticPatchJsonTests
         SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
 
         Assert.Equal(
-            "unifiedscript.patch/v0.24",
+            "unifiedscript.patch/v0.25",
             roundTrip.SchemaVersion);
         Assert.Equal(
             move,
@@ -451,12 +451,56 @@ public sealed class SemanticPatchJsonTests
         string json = SemanticPatchJson.Serialize(patch);
         SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
 
-        Assert.Equal("unifiedscript.patch/v0.24", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch/v0.25", roundTrip.SchemaVersion);
         Assert.Equal(
             duplicate,
             Assert.IsType<DuplicateStatementPatchOperation>(Assert.Single(roundTrip.Operations)));
         Assert.Contains("\"operation\": \"duplicateStatement\"", json, StringComparison.Ordinal);
         Assert.Contains("\"newLocalName\": \"valueCopy\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SerializeAndDeserialize_PreserveLexicalCollapseAndExpansion()
+    {
+        SemanticId parentBlock = SemanticId.FromKey("scope-parent");
+        SemanticId first = SemanticId.FromKey("scope-first");
+        SemanticId second = SemanticId.FromKey("scope-second");
+        SemanticId nestedBlock = SemanticId.FromKey("scope-nested");
+        SemanticId previous = SemanticId.FromKey("scope-previous");
+        SemanticId next = SemanticId.FromKey("scope-next");
+        var collapse = new CollapseStatementRangePatchOperation(
+            first,
+            parentBlock,
+            [first, second],
+            previous,
+            next);
+        var expand = new ExpandBlockPatchOperation(
+            nestedBlock,
+            parentBlock,
+            [first, second],
+            previous,
+            next);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            SemanticId.FromKey("scope-compilation"),
+            SemanticId.FromKey("scope-configuration"),
+            [collapse, expand]);
+
+        string json = SemanticPatchJson.Serialize(patch);
+        SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
+
+        Assert.Equal("unifiedscript.patch/v0.25", roundTrip.SchemaVersion);
+        CollapseStatementRangePatchOperation collapsedRoundTrip =
+            Assert.IsType<CollapseStatementRangePatchOperation>(roundTrip.Operations[0]);
+        ExpandBlockPatchOperation expandedRoundTrip =
+            Assert.IsType<ExpandBlockPatchOperation>(roundTrip.Operations[1]);
+        Assert.Equal(collapse.TargetNodeId, collapsedRoundTrip.TargetNodeId);
+        Assert.Equal(collapse.ExpectedParentBlockId, collapsedRoundTrip.ExpectedParentBlockId);
+        Assert.Equal(collapse.ExpectedStatementIds, collapsedRoundTrip.ExpectedStatementIds);
+        Assert.Equal(expand.TargetNodeId, expandedRoundTrip.TargetNodeId);
+        Assert.Equal(expand.ExpectedParentBlockId, expandedRoundTrip.ExpectedParentBlockId);
+        Assert.Equal(expand.ExpectedChildStatementIds, expandedRoundTrip.ExpectedChildStatementIds);
+        Assert.Contains("\"operation\": \"collapseStatements\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"operation\": \"expandBlock\"", json, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1298,6 +1342,6 @@ public sealed class SemanticPatchJsonTests
         Assert.Contains("\"statement\": \"switch\"", json, StringComparison.Ordinal);
         Assert.Contains("\"pattern\": \"logical\"", json, StringComparison.Ordinal);
         Assert.Contains("\"operation\": \"moveSwitchSection\"", json, StringComparison.Ordinal);
-        Assert.Equal("unifiedscript.patch/v0.24", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch/v0.25", roundTrip.SchemaVersion);
     }
 }

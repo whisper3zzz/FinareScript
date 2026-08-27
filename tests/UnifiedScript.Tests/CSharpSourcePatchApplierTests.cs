@@ -5938,6 +5938,203 @@ public sealed class CSharpSourcePatchApplierTests
             Assert.Single(staleResult.Diagnostics).Code);
     }
 
+    [Fact]
+    public void Apply_CollapsesAndExpandsLexicalScopeWithStableChildIdentities()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(bool ready)
+                {
+                    int result = 0;
+                    // preserve this range comment
+                    result += 1;
+                    if (ready)
+                    {
+                        result += 2;
+                    }
+
+                    return result;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/CollapseScope.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement resultDefinition =
+            Assert.IsType<HirVariableDeclarationStatement>(method.Body.Statements[0]);
+        HirExpressionStatement increment = Assert.IsType<HirExpressionStatement>(
+            method.Body.Statements[1]);
+        HirIfStatement branch = Assert.IsType<HirIfStatement>(method.Body.Statements[2]);
+        HirReturnStatement @return = Assert.IsType<HirReturnStatement>(method.Body.Statements[3]);
+        HashSet<SemanticId> originalIds = method.DescendantsAndSelf()
+            .Select(static node => node.Id)
+            .ToHashSet();
+        SemanticPatchDocument collapse = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new CollapseStatementRangePatchOperation(
+                increment.Id,
+                method.Body.Id,
+                [increment.Id, branch.Id],
+                resultDefinition.Id,
+                @return.Id)]);
+
+        CSharpPatchResult collapsed = new CSharpSourcePatchApplier().Apply(request, collapse);
+
+        Assert.True(collapsed.Succeeded, string.Join(Environment.NewLine, collapsed.Diagnostics));
+        string collapsedSource = Assert.Single(collapsed.PatchedRequest!.Sources).Source;
+        Assert.Contains(
+            "        {\n            // preserve this range comment",
+            collapsedSource.Replace("\r\n", "\n", StringComparison.Ordinal),
+            StringComparison.Ordinal);
+        HirMethodDeclaration collapsedMethod = Assert.Single(
+            Assert.Single(collapsed.Analysis!.Hir!.Types).Methods);
+        HirBlockStatement nested = Assert.IsType<HirBlockStatement>(collapsedMethod.Body.Statements[1]);
+        Assert.Equal([increment.Id, branch.Id], nested.Statements.Select(static statement => statement.Id));
+        Assert.DoesNotContain(nested.Id, originalIds);
+        Assert.Equal(resultDefinition.Id, collapsedMethod.Body.Statements[0].Id);
+        Assert.Equal(@return.Id, collapsedMethod.Body.Statements[2].Id);
+
+        SemanticPatchDocument expand = SemanticPatchDocument.Create(
+            collapsed.Analysis.Hir.Id,
+            collapsed.Analysis.Semantics!.ConfigurationId,
+            [new ExpandBlockPatchOperation(
+                nested.Id,
+                collapsedMethod.Body.Id,
+                [increment.Id, branch.Id],
+                resultDefinition.Id,
+                @return.Id)]);
+        CSharpSourceDocument collapsedDocument = Assert.Single(collapsed.PatchedRequest.Sources);
+        var expandedRequest = new CSharpCompilationRequest(
+            collapsed.PatchedRequest.AssemblyName,
+            [new CSharpSourceDocument(
+                collapsedDocument.LogicalPath,
+                collapsedDocument.Source,
+                Assert.Single(collapsed.Analysis.IdentitySidecars))],
+            collapsed.PatchedRequest.ReferencePaths,
+            collapsed.PatchedRequest.EffectCatalog,
+            collapsed.PatchedRequest.Settings,
+            collapsed.PatchedRequest.RuntimeReferencePaths,
+            collapsed.PatchedRequest.IncludeDefaultReferences);
+        CSharpPatchResult expanded = new CSharpSourcePatchApplier().Apply(
+            expandedRequest,
+            expand);
+
+        Assert.True(expanded.Succeeded, string.Join(Environment.NewLine, expanded.Diagnostics));
+        HirMethodDeclaration expandedMethod = Assert.Single(
+            Assert.Single(expanded.Analysis!.Hir!.Types).Methods);
+        Assert.Equal(
+            [resultDefinition.Id, increment.Id, branch.Id, @return.Id],
+            expandedMethod.Body.Statements.Select(static statement => statement.Id));
+        Assert.Equal(
+            originalIds.OrderBy(static id => id.Value),
+            expandedMethod.DescendantsAndSelf()
+                .Select(static node => node.Id)
+                .OrderBy(static id => id.Value));
+        Assert.Contains(
+            Assert.Single(expanded.Analysis.IdentitySidecars).Tombstones,
+            tombstone => tombstone.Id == nested.Id);
+        Assert.True(Assert.Single(new GraphControlFlowAnalyzer().AnalyzeAndValidate(
+            new HirGraphProjector().Project(
+                expanded.Analysis.Hir,
+                expanded.Analysis.Semantics!)).Functions).IsReducible);
+    }
+
+    [Fact]
+    public void Apply_RejectsCollapseThatWouldMoveLocalOutOfScope()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run()
+                {
+                    int value = 1;
+                    value += 2;
+                    return value;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/RejectUnsafeCollapse.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement value = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirExpressionStatement assignment = Assert.IsType<HirExpressionStatement>(
+            method.Body.Statements[1]);
+        HirReturnStatement @return = Assert.IsType<HirReturnStatement>(method.Body.Statements[2]);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new CollapseStatementRangePatchOperation(
+                value.Id,
+                method.Body.Id,
+                [value.Id, assignment.Id],
+                null,
+                @return.Id)]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(
+            result.Diagnostics,
+            static diagnostic => diagnostic.Severity == UnifiedDiagnosticSeverity.Error);
+        Assert.DoesNotContain("{\r\n            int value", Assert.Single(request.Sources).Source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Apply_RejectsExpansionWithBraceOwnedComment()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run()
+                {
+                    // scope ownership
+                    {
+                        int value = 1;
+                        value += 2;
+                    }
+
+                    return 0;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/RejectCommentExpansion.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirBlockStatement block = Assert.IsType<HirBlockStatement>(method.Body.Statements[0]);
+        HirReturnStatement @return = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new ExpandBlockPatchOperation(
+                block.Id,
+                method.Body.Id,
+                block.Statements.Select(static statement => statement.Id).ToArray(),
+                null,
+                @return.Id)]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(
+            SemanticPatchDiagnosticCodes.InvalidRegionExpansion,
+            Assert.Single(result.Diagnostics).Code);
+    }
+
     private static (CSharpCompilationRequest Request, CSharpAnalysisResult Analysis) CreatePersistentRequest(
         string source,
         string path)

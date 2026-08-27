@@ -67,6 +67,7 @@ History is currently session-local and is reset when the authoring host exits.
 Atomic semantic patch plans already group dependent source operations. Semantic
 Patch v0.24 statement duplication is also one server-owned transaction, so its
 source, identity, generated artifacts, runtime reload, Undo, and Redo cannot
-split. Persisted history, user-defined transaction grouping, collapse/expand
-transforms, and broader multi-selection/cross-region clipboard transactions
-remain later M8.1 work.
+split. Patch v0.25 applies lexical Collapse Scope / Expand Scope through the
+same boundary. Persisted history, user-defined transaction grouping, true
+function/macro extraction, and broader multi-selection/cross-region clipboard
+transactions remain later M8.1 work.

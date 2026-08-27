@@ -16,7 +16,7 @@ Neither approximation is accepted alone.
 
 ## Protocol
 
-Current patch schema `unifiedscript.patch/v0.24` includes the
+Current patch schema `unifiedscript.patch/v0.25` includes the
 `localAssignment` statement discriminator:
 
 ```json

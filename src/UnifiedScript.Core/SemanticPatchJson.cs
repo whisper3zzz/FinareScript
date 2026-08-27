@@ -128,6 +128,12 @@ public static class SemanticPatchJson
                 case DuplicateStatementPatchOperation duplicateStatement:
                     ValidateDuplicateStatement(duplicateStatement);
                     break;
+                case CollapseStatementRangePatchOperation collapseStatements:
+                    ValidateCollapseStatements(collapseStatements);
+                    break;
+                case ExpandBlockPatchOperation expandBlock:
+                    ValidateExpandBlock(expandBlock);
+                    break;
                 case InsertSwitchSectionPatchOperation insertSwitchSection:
                     ValidateInsertSwitchSection(insertSwitchSection);
                     break;
@@ -1018,6 +1024,72 @@ public static class SemanticPatchJson
         {
             throw new JsonException(
                 "A duplicated local name must be non-empty and at most 128 characters.");
+        }
+    }
+
+    private static void ValidateCollapseStatements(
+        CollapseStatementRangePatchOperation operation)
+    {
+        if (operation.ExpectedParentBlockId.IsEmpty)
+        {
+            throw new JsonException(
+                "Statement collapse requires a non-empty parent block ID.");
+        }
+        ValidateIdentitySequence(
+            operation.ExpectedStatementIds,
+            "Statement collapse range");
+        if (operation.ExpectedStatementIds[0] != operation.TargetNodeId)
+        {
+            throw new JsonException(
+                "Statement collapse target must be the first expected statement ID.");
+        }
+        ValidateSiblingIds(
+            operation.ExpectedPreviousSiblingId,
+            operation.ExpectedNextSiblingId);
+        if (operation.ExpectedPreviousSiblingId is SemanticId previous &&
+            operation.ExpectedStatementIds.Contains(previous) ||
+            operation.ExpectedNextSiblingId is SemanticId next &&
+            operation.ExpectedStatementIds.Contains(next))
+        {
+            throw new JsonException(
+                "Statement collapse outer siblings cannot be part of the collapsed range.");
+        }
+    }
+
+    private static void ValidateExpandBlock(ExpandBlockPatchOperation operation)
+    {
+        if (operation.ExpectedParentBlockId.IsEmpty)
+        {
+            throw new JsonException(
+                "Block expansion requires a non-empty parent block ID.");
+        }
+        ValidateIdentitySequence(
+            operation.ExpectedChildStatementIds,
+            "Block expansion child list");
+        ValidateSiblingIds(
+            operation.ExpectedPreviousSiblingId,
+            operation.ExpectedNextSiblingId);
+        ValidateSiblingTarget(
+            operation.TargetNodeId,
+            operation.ExpectedPreviousSiblingId,
+            operation.ExpectedNextSiblingId,
+            "expanded block");
+        if (operation.ExpectedChildStatementIds.Contains(operation.TargetNodeId))
+        {
+            throw new JsonException(
+                "An expanded block cannot contain its own identity as a child statement.");
+        }
+    }
+
+    private static void ValidateIdentitySequence(
+        IReadOnlyList<SemanticId>? ids,
+        string description)
+    {
+        if (ids is null || ids.Count == 0 || ids.Count > 256 ||
+            ids.Any(static id => id.IsEmpty) || ids.Distinct().Count() != ids.Count)
+        {
+            throw new JsonException(
+                $"{description} must contain 1 to 256 distinct non-empty semantic IDs.");
         }
     }
 

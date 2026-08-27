@@ -105,6 +105,9 @@ private:
     bool CanUndoAuthoringCommand() const;
     void HandleRedoAuthoringCommand();
     bool CanRedoAuthoringCommand() const;
+    FReply HandleCollapseSelectedStatements();
+    bool CanCollapseSelectedStatements() const;
+    FReply HandleExpandBlockRegion(FString RegionId);
     FReply HandleAddSwitchSection(
         FString SwitchActionId,
         TSharedPtr<SEditableTextBox> LabelEditor,
@@ -156,6 +159,7 @@ private:
     const FUnifiedScriptAuthoringRegion* ResolveActiveBlockRegion(
         const FUnifiedScriptAuthoringFunction& Function) const;
     const FUnifiedScriptAuthoringAction* GetSingleSelectedStatementAction() const;
+    TArray<FString> GetSelectedStatementActionIds() const;
     void RebuildNodePalette(const FUnifiedScriptAuthoringFunction& Function);
     void PersistCurrentLayout(bool bOnlyIfChanged);
     FUnifiedScriptSurfaceTreeItemPtr FindSurfaceItem(const FString& SemanticId) const;

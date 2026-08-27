@@ -916,7 +916,7 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildSemanticPatch(
     }
 
     const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
-    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.24"));
+    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.25"));
     Root->SetStringField(TEXT("sourceCompilationId"), Document.SourceCompilationId);
     Root->SetStringField(TEXT("semanticConfigurationId"), Document.SemanticConfigurationId);
     Root->SetArrayField(TEXT("operations"), {MakeShared<FJsonValueObject>(Operation)});
@@ -990,7 +990,7 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildDataEdgeReconnectionPatch(
     Operation->SetStringField(TEXT("expectedTypeId"), TargetInput->TypeId);
 
     const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
-    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.24"));
+    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.25"));
     Root->SetStringField(TEXT("sourceCompilationId"), Document.SourceCompilationId);
     Root->SetStringField(TEXT("semanticConfigurationId"), Document.SemanticConfigurationId);
     Root->SetArrayField(TEXT("operations"), {MakeShared<FJsonValueObject>(Operation)});
@@ -1032,7 +1032,7 @@ TSharedRef<FJsonObject> MakePatchRoot(
     const TSharedRef<FJsonObject>& Operation)
 {
     const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
-    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.24"));
+    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.25"));
     Root->SetStringField(TEXT("sourceCompilationId"), Document.SourceCompilationId);
     Root->SetStringField(TEXT("semanticConfigurationId"), Document.SemanticConfigurationId);
     Root->SetArrayField(TEXT("operations"), {MakeShared<FJsonValueObject>(Operation)});
@@ -1062,7 +1062,13 @@ TArray<FString> GetStructuralStatementIds(
     const FUnifiedScriptAuthoringFunction& Function,
     const FUnifiedScriptAuthoringRegion& Block)
 {
-    TArray<FString> Result;
+    struct FStructuralStatement
+    {
+        FString Id;
+        int32 Line = 0;
+        int32 Column = 0;
+    };
+    TArray<FStructuralStatement> Ordered;
     for (const FString& ActionId : Block.DirectStatementIds)
     {
         const FUnifiedScriptAuthoringAction* Action = Function.FindAction(ActionId);
@@ -1071,10 +1077,40 @@ TArray<FString> GetStructuralStatementIds(
             continue;
         }
         const FString StatementId = ResolveStatementId(*Action);
-        if (!Result.Contains(StatementId))
+        if (!Ordered.ContainsByPredicate([&StatementId](const FStructuralStatement& Entry)
+            {
+                return Entry.Id == StatementId;
+            }))
         {
-            Result.Add(StatementId);
+            Ordered.Add({StatementId, Action->Span.StartLine, Action->Span.StartColumn});
         }
+    }
+    for (const FString& ChildRegionId : Block.ChildRegionIds)
+    {
+        const FUnifiedScriptAuthoringRegion* Child = Function.FindRegion(ChildRegionId);
+        if (Child != nullptr && Child->Kind == TEXT("block") &&
+            !Child->SourceNodeId.IsEmpty())
+        {
+            Ordered.Add({Child->SourceNodeId, Child->Span.StartLine, Child->Span.StartColumn});
+        }
+    }
+    Ordered.Sort([](const FStructuralStatement& Left, const FStructuralStatement& Right)
+    {
+        if (Left.Line != Right.Line)
+        {
+            return Left.Line < Right.Line;
+        }
+        if (Left.Column != Right.Column)
+        {
+            return Left.Column < Right.Column;
+        }
+        return Left.Id < Right.Id;
+    });
+    TArray<FString> Result;
+    Result.Reserve(Ordered.Num());
+    for (const FStructuralStatement& Entry : Ordered)
+    {
+        Result.Add(Entry.Id);
     }
     return Result;
 }
@@ -1134,22 +1170,21 @@ const FUnifiedScriptAuthoringAction* FindContainingStatement(
 }
 
 void GetSiblingPreconditions(
+    const FUnifiedScriptAuthoringFunction& Function,
     const FUnifiedScriptAuthoringRegion& Block,
-    const FString& StatementId,
+    const FString& StatementActionId,
     FString& OutPrevious,
     FString& OutNext)
 {
-    OutPrevious.Reset();
-    OutNext.Reset();
-    const int32 Index = Block.DirectStatementIds.IndexOfByKey(StatementId);
-    if (Index > 0)
-    {
-        OutPrevious = Block.DirectStatementIds[Index - 1];
-    }
-    if (Index != INDEX_NONE && Index + 1 < Block.DirectStatementIds.Num())
-    {
-        OutNext = Block.DirectStatementIds[Index + 1];
-    }
+    const FUnifiedScriptAuthoringAction* Action = Function.FindAction(StatementActionId);
+    const FString StatementId = Action != nullptr
+        ? ResolveStatementId(*Action)
+        : StatementActionId;
+    GetStructuralSiblingPreconditions(
+        GetStructuralStatementIds(Function, Block),
+        StatementId,
+        OutPrevious,
+        OutNext);
 }
 
 void SetOptionalId(
@@ -1998,8 +2033,10 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildSharedDataEdgePatchPlan(
     FString SourceNext;
     FString TargetPrevious;
     FString TargetNext;
-    GetSiblingPreconditions(*SourceBlock, SourceStatement->Id, SourcePrevious, SourceNext);
-    GetSiblingPreconditions(*TargetBlock, TargetStatement->Id, TargetPrevious, TargetNext);
+    GetSiblingPreconditions(
+        Function, *SourceBlock, SourceStatement->Id, SourcePrevious, SourceNext);
+    GetSiblingPreconditions(
+        Function, *TargetBlock, TargetStatement->Id, TargetPrevious, TargetNext);
     // The complete semantic-id payload keeps automatic names stable and prevents two
     // distinct expression nodes from sharing the old six-hex-character prefix.
     const FString TemporaryName = TEXT("sharedValue_") + NewSourceNodeId.Mid(3).ToLower();
@@ -2753,7 +2790,7 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildStatementDeletionPatch(
 
     FString Previous;
     FString Next;
-    GetSiblingPreconditions(*Block, Statement.Id, Previous, Next);
+    GetSiblingPreconditions(Function, *Block, Statement.Id, Previous, Next);
     const TSharedRef<FJsonObject> Operation = MakeShared<FJsonObject>();
     Operation->SetStringField(TEXT("operation"), TEXT("deleteStatement"));
     Operation->SetStringField(TEXT("targetNodeId"), Statement.Id);
@@ -2852,6 +2889,138 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildStatementDuplicationPatch(
         OutPatchJson,
         OutError,
         TEXT("the statement duplication patch"));
+}
+
+bool FUnifiedScriptAuthoringSurfaceReader::BuildStatementCollapsePatch(
+    const FUnifiedScriptAuthoringSurfaceDocument& Document,
+    const FUnifiedScriptAuthoringFunction& Function,
+    const TArray<FString>& StatementActionIds,
+    FString& OutPatchJson,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::AuthoringSurface::Editing::Private;
+    if (StatementActionIds.Num() < 2)
+    {
+        OutError = TEXT("Collapse Scope requires at least two selected statement nodes.");
+        return false;
+    }
+
+    const FUnifiedScriptAuthoringRegion* ParentBlock = nullptr;
+    TArray<FString> SelectedStatementIds;
+    for (const FString& ActionId : StatementActionIds)
+    {
+        const FUnifiedScriptAuthoringAction* Action = Function.FindAction(ActionId);
+        const FUnifiedScriptAuthoringRegion* Block = Action != nullptr
+            ? FindOwningBlock(Function, Action->Id)
+            : nullptr;
+        if (Action == nullptr || Block == nullptr ||
+            (ParentBlock != nullptr && ParentBlock->SourceNodeId != Block->SourceNodeId))
+        {
+            OutError = TEXT("Collapse Scope requires statement nodes from one explicit block.");
+            return false;
+        }
+        ParentBlock = Block;
+        SelectedStatementIds.AddUnique(ResolveStatementId(*Action));
+    }
+    if (ParentBlock == nullptr || SelectedStatementIds.Num() != StatementActionIds.Num())
+    {
+        OutError = TEXT("Collapse Scope cannot contain the same semantic statement more than once.");
+        return false;
+    }
+
+    const TArray<FString> StructuralIds = GetStructuralStatementIds(Function, *ParentBlock);
+    SelectedStatementIds.Sort([&StructuralIds](const FString& Left, const FString& Right)
+    {
+        return StructuralIds.IndexOfByKey(Left) < StructuralIds.IndexOfByKey(Right);
+    });
+    const int32 FirstIndex = StructuralIds.IndexOfByKey(SelectedStatementIds[0]);
+    if (FirstIndex == INDEX_NONE ||
+        FirstIndex + SelectedStatementIds.Num() > StructuralIds.Num())
+    {
+        OutError = TEXT("The selected statements no longer exist in the compiler-owned block order.");
+        return false;
+    }
+    for (int32 Offset = 0; Offset < SelectedStatementIds.Num(); ++Offset)
+    {
+        if (StructuralIds[FirstIndex + Offset] != SelectedStatementIds[Offset])
+        {
+            OutError = TEXT("Collapse Scope requires one consecutive statement range without hidden regions between nodes.");
+            return false;
+        }
+    }
+
+    const FString Previous = FirstIndex > 0 ? StructuralIds[FirstIndex - 1] : FString();
+    const int32 NextIndex = FirstIndex + SelectedStatementIds.Num();
+    const FString Next = NextIndex < StructuralIds.Num() ? StructuralIds[NextIndex] : FString();
+    TArray<TSharedPtr<FJsonValue>> JsonStatementIds;
+    JsonStatementIds.Reserve(SelectedStatementIds.Num());
+    for (const FString& StatementId : SelectedStatementIds)
+    {
+        JsonStatementIds.Add(MakeShared<FJsonValueString>(StatementId));
+    }
+
+    const TSharedRef<FJsonObject> Operation = MakeShared<FJsonObject>();
+    Operation->SetStringField(TEXT("operation"), TEXT("collapseStatements"));
+    Operation->SetStringField(TEXT("targetNodeId"), SelectedStatementIds[0]);
+    Operation->SetStringField(TEXT("expectedParentBlockId"), ParentBlock->SourceNodeId);
+    Operation->SetArrayField(TEXT("expectedStatementIds"), MoveTemp(JsonStatementIds));
+    SetOptionalId(Operation, TEXT("expectedPreviousSiblingId"), Previous);
+    SetOptionalId(Operation, TEXT("expectedNextSiblingId"), Next);
+    return SerializeRoot(
+        MakePatchRoot(Document, Operation),
+        OutPatchJson,
+        OutError,
+        TEXT("the statement collapse patch"));
+}
+
+bool FUnifiedScriptAuthoringSurfaceReader::BuildBlockExpansionPatch(
+    const FUnifiedScriptAuthoringSurfaceDocument& Document,
+    const FUnifiedScriptAuthoringFunction& Function,
+    const FUnifiedScriptAuthoringRegion& BlockRegion,
+    FString& OutPatchJson,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::AuthoringSurface::Editing::Private;
+    const FUnifiedScriptAuthoringRegion* Parent =
+        Function.FindRegion(BlockRegion.ParentRegionId);
+    if (BlockRegion.Kind != TEXT("block") || Parent == nullptr ||
+        Parent->Kind == TEXT("function") || BlockRegion.SourceNodeId.IsEmpty())
+    {
+        OutError = TEXT("Only a nested lexical block inside a function body or structured region can be expanded.");
+        return false;
+    }
+
+    const TArray<FString> ParentStatementIds = GetStructuralStatementIds(Function, *Parent);
+    const int32 BlockIndex = ParentStatementIds.IndexOfByKey(BlockRegion.SourceNodeId);
+    const TArray<FString> ChildStatementIds = GetStructuralStatementIds(Function, BlockRegion);
+    if (BlockIndex == INDEX_NONE || ChildStatementIds.IsEmpty())
+    {
+        OutError = TEXT("The nested block or its compiler-owned child statement list is unavailable.");
+        return false;
+    }
+    const FString Previous = BlockIndex > 0 ? ParentStatementIds[BlockIndex - 1] : FString();
+    const FString Next = BlockIndex + 1 < ParentStatementIds.Num()
+        ? ParentStatementIds[BlockIndex + 1]
+        : FString();
+    TArray<TSharedPtr<FJsonValue>> JsonChildIds;
+    JsonChildIds.Reserve(ChildStatementIds.Num());
+    for (const FString& StatementId : ChildStatementIds)
+    {
+        JsonChildIds.Add(MakeShared<FJsonValueString>(StatementId));
+    }
+
+    const TSharedRef<FJsonObject> Operation = MakeShared<FJsonObject>();
+    Operation->SetStringField(TEXT("operation"), TEXT("expandBlock"));
+    Operation->SetStringField(TEXT("targetNodeId"), BlockRegion.SourceNodeId);
+    Operation->SetStringField(TEXT("expectedParentBlockId"), Parent->SourceNodeId);
+    Operation->SetArrayField(TEXT("expectedChildStatementIds"), MoveTemp(JsonChildIds));
+    SetOptionalId(Operation, TEXT("expectedPreviousSiblingId"), Previous);
+    SetOptionalId(Operation, TEXT("expectedNextSiblingId"), Next);
+    return SerializeRoot(
+        MakePatchRoot(Document, Operation),
+        OutPatchJson,
+        OutError,
+        TEXT("the block expansion patch"));
 }
 
 FString FUnifiedScriptAuthoringSurfaceReader::ResolveConfiguredPath(

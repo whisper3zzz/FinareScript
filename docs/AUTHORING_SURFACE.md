@@ -77,7 +77,7 @@ v0.4 retains two inline editor capabilities:
   compatible options, result type ID, left/operand type ID, and optional right
   operand type ID.
 
-The Workbench serializes those fields as Semantic Patch v0.24. The ordinary
+The Workbench serializes those fields as Semantic Patch v0.25. The ordinary
 Roslyn patch path still enforces operator families, type preconditions, source
 identity, semantic configuration, localized syntax replacement, complete
 reanalysis, and transactional CoreCLR reload. The Surface does not weaken or
@@ -141,6 +141,15 @@ the copied subtree deliberately receives fresh IDs. A copied local declaration
 gets a generated conflict-free name. Terminal transfers, directive-bearing
 syntax, stale gaps, and cross-block copies are rejected. See
 [SEMANTIC_COPY_PASTE.md](SEMANTIC_COPY_PASTE.md).
+
+Semantic Patch v0.25 adds bounded Collapse Scope / Expand Scope transforms.
+Collapse accepts two or more consecutive statement actions from one explicit
+block and wraps them in a real C# lexical block. The new region receives a
+fresh ID while every member keeps its identity. Selecting that nested BLOCK in
+My Script exposes Expand Scope, which removes only the wrapper and returns the
+members to the exact parent position. Scope/dataflow errors, stale ranges,
+directives, and brace-owned comments fail before commit. See
+[LEXICAL_SCOPE_TRANSFORMS.md](LEXICAL_SCOPE_TRANSFORMS.md).
 
 ## HTTP and CLI delivery
 

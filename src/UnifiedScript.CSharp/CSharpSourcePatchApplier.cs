@@ -323,6 +323,17 @@ public sealed class CSharpSourcePatchApplier
                     hirNodes,
                     patchIndex,
                     documents),
+                CollapseStatementRangePatchOperation collapseStatements =>
+                    PlanStatementCollapse(
+                        collapseStatements,
+                        hirNodes,
+                        patchIndex,
+                        documents),
+                ExpandBlockPatchOperation expandBlock => PlanBlockExpansion(
+                    expandBlock,
+                    hirNodes,
+                    patchIndex,
+                    documents),
                 InsertSwitchSectionPatchOperation insertSwitchSection =>
                     PlanSwitchSectionInsertion(
                         insertSwitchSection,
@@ -434,6 +445,7 @@ public sealed class CSharpSourcePatchApplier
         SemanticPatchOperation? controlFlowOperation = patch.Operations.FirstOrDefault(
             static operation => operation is MoveStatementPatchOperation or
                 DuplicateStatementPatchOperation or
+                CollapseStatementRangePatchOperation or ExpandBlockPatchOperation or
                 InsertSwitchSectionPatchOperation or ReplaceSwitchSectionPatchOperation or
                 MoveSwitchSectionPatchOperation or DeleteSwitchSectionPatchOperation ||
                 operation is InsertStatementPatchOperation
@@ -460,6 +472,10 @@ public sealed class CSharpSourcePatchApplier
                             SemanticPatchDiagnosticCodes.InvalidControlFlowReconnection,
                         DuplicateStatementPatchOperation =>
                             SemanticPatchDiagnosticCodes.InvalidStatementDuplication,
+                        CollapseStatementRangePatchOperation =>
+                            SemanticPatchDiagnosticCodes.InvalidRegionCollapse,
+                        ExpandBlockPatchOperation =>
+                            SemanticPatchDiagnosticCodes.InvalidRegionExpansion,
                         _ => SemanticPatchDiagnosticCodes.InvalidSwitchSection,
                     },
                     UnifiedDiagnosticSeverity.Error,
@@ -4008,6 +4024,266 @@ public sealed class CSharpSourcePatchApplier
             FilterPinsForSyntax(replacementMethod, methodPins!)));
     }
 
+    private static OperationPlan PlanStatementCollapse(
+        CollapseStatementRangePatchOperation operation,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        IReadOnlyDictionary<string, ParsedDocument> documents)
+    {
+        if (!hirNodes.TryGetValue(operation.TargetNodeId, out HirNode? target))
+        {
+            return MissingTarget(operation.TargetNodeId);
+        }
+        if (target is not HirStatement firstStatement ||
+            !patchIndex.TryGetStatement(
+                firstStatement.Id,
+                out HirPatchIndex.StatementLocation? firstLocation))
+        {
+            return KindMismatch(target, operation.TargetNodeId, "the first statement of a collapsible range");
+        }
+
+        HirBlockStatement parentBlock = firstLocation!.ParentBlock;
+        int firstIndex = firstLocation.Index;
+        int rangeCount = operation.ExpectedStatementIds.Count;
+        SemanticId? actualPrevious = firstIndex == 0
+            ? null
+            : parentBlock.Statements[firstIndex - 1].Id;
+        int nextIndex = firstIndex + rangeCount;
+        SemanticId? actualNext = nextIndex < parentBlock.Statements.Count
+            ? parentBlock.Statements[nextIndex].Id
+            : null;
+        if (parentBlock.Id != operation.ExpectedParentBlockId ||
+            nextIndex > parentBlock.Statements.Count ||
+            !parentBlock.Statements
+                .Skip(firstIndex)
+                .Take(rangeCount)
+                .Select(static statement => statement.Id)
+                .SequenceEqual(operation.ExpectedStatementIds) ||
+            actualPrevious != operation.ExpectedPreviousSiblingId ||
+            actualNext != operation.ExpectedNextSiblingId)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.SiblingPreconditionFailed,
+                "The statement range or its outer sibling gap changed after the Surface was " +
+                "generated. Refresh the graph before collapsing the selection.",
+                firstStatement);
+        }
+
+        if (rangeCount < 2)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidRegionCollapse,
+                "Collapse requires at least two consecutive statements; use ordinary statement " +
+                "editing for a one-node selection.",
+                firstStatement);
+        }
+
+        if (!TryFindEditableStatementContainer(
+                documents,
+                parentBlock,
+                out ParsedDocument? sourceDocument,
+                out EditableStatementContainer? sourceContainer) ||
+            sourceContainer!.Statements.Count != parentBlock.Statements.Count)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidRegionCollapse,
+                "Statement collapse requires an explicit C# block or switch-section body whose " +
+                "statement order still matches the analyzed HIR.",
+                firstStatement);
+        }
+
+        if (!TryPrepareMethodMutation(
+                documents,
+                firstLocation.Method,
+                out ParsedDocument? document,
+                out MethodDeclarationSyntax? originalMethod,
+                out MethodDeclarationSyntax? annotatedMethod,
+                out IReadOnlyDictionary<SemanticId, SyntaxAnnotation>? identityAnnotations,
+                out List<PendingPin>? methodPins,
+                out string? identityFailure) ||
+            !identityAnnotations!.TryGetValue(
+                parentBlock.Id,
+                out SyntaxAnnotation? parentAnnotation))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.PlanRequiresPersistentIdentity,
+                identityFailure ??
+                    "Statement collapse could not pin the parent block and selected statement " +
+                    "subtrees in the persistent identity sidecar.",
+                firstStatement);
+        }
+
+        ParsedDocument resolvedDocument = document!;
+        SyntaxNode annotatedParentSyntax = annotatedMethod!
+            .GetAnnotatedNodes(parentAnnotation)
+            .Single();
+        if (!TryCreateEditableStatementContainer(
+                annotatedParentSyntax,
+                out EditableStatementContainer? annotatedParent))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidRegionCollapse,
+                "The collapse target is no longer an explicit statement container.",
+                firstStatement);
+        }
+
+        InsertionFormatting formatting = GetInsertionFormatting(
+            resolvedDocument,
+            sourceContainer,
+            firstIndex);
+        string nestedIndentation = formatting.Indentation + "    ";
+        List<StatementSyntax> selected = annotatedParent!.Statements
+            .Skip(firstIndex)
+            .Take(rangeCount)
+            .Select(statement => ShiftStatementIndentation(
+                statement,
+                formatting.Indentation,
+                nestedIndentation))
+            .ToList();
+        BlockSyntax collapsedBlock = SyntaxFactory.Block(
+            SyntaxFactory.Token(SyntaxKind.OpenBraceToken)
+                .WithLeadingTrivia(SyntaxFactory.Whitespace(formatting.Indentation))
+                .WithTrailingTrivia(SyntaxFactory.EndOfLine(formatting.EndOfLine)),
+            SyntaxFactory.List(selected),
+            SyntaxFactory.Token(SyntaxKind.CloseBraceToken)
+                .WithLeadingTrivia(SyntaxFactory.Whitespace(formatting.Indentation))
+                .WithTrailingTrivia(SyntaxFactory.EndOfLine(formatting.EndOfLine)));
+        var parentStatements = annotatedParent.Statements.ToList();
+        parentStatements.RemoveRange(firstIndex, rangeCount);
+        parentStatements.Insert(firstIndex, collapsedBlock);
+        SyntaxNode replacementParent = annotatedParent.WithStatements(
+            SyntaxFactory.List(parentStatements));
+        SyntaxNode replacementMethod = annotatedMethod.ReplaceNode(
+            annotatedParent.Syntax,
+            replacementParent);
+        return SuccessPlan(resolvedDocument, new PendingReplacement(
+            resolvedDocument.Source.LogicalPath,
+            originalMethod!,
+            replacementMethod,
+            FilterPinsForSyntax(replacementMethod, methodPins!)));
+    }
+
+    private static OperationPlan PlanBlockExpansion(
+        ExpandBlockPatchOperation operation,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        IReadOnlyDictionary<string, ParsedDocument> documents)
+    {
+        if (!hirNodes.TryGetValue(operation.TargetNodeId, out HirNode? target))
+        {
+            return MissingTarget(operation.TargetNodeId);
+        }
+        if (target is not HirBlockStatement block ||
+            !patchIndex.TryGetStatement(block.Id, out HirPatchIndex.StatementLocation? location))
+        {
+            return KindMismatch(target, operation.TargetNodeId, "an expandable nested lexical block");
+        }
+        if (location!.ParentBlock.Id != operation.ExpectedParentBlockId ||
+            !StatementSiblingsMatch(
+                location,
+                operation.ExpectedPreviousSiblingId,
+                operation.ExpectedNextSiblingId) ||
+            !block.Statements.Select(static statement => statement.Id)
+                .SequenceEqual(operation.ExpectedChildStatementIds))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.SiblingPreconditionFailed,
+                "The lexical block, its children, or its sibling position changed after the " +
+                "Surface was generated. Refresh the graph before expanding it.",
+                block);
+        }
+
+        if (!TryFindEditableStatementContainer(
+                documents,
+                location.ParentBlock,
+                out ParsedDocument? sourceDocument,
+                out EditableStatementContainer? sourceContainer) ||
+            sourceContainer!.Statements.Count != location.ParentBlock.Statements.Count ||
+            !TryFindIdentitySyntax(sourceDocument!, block, out SyntaxNode? blockSyntaxNode) ||
+            blockSyntaxNode is not BlockSyntax blockSyntax)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidRegionExpansion,
+                "Only an explicit nested C# lexical block can be expanded into its parent.",
+                block);
+        }
+        if (blockSyntax.ContainsDirectives || HasSignificantBraceTrivia(blockSyntax))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidRegionExpansion,
+                "A lexical block with preprocessor directives or comments attached to its braces " +
+                "cannot be expanded without losing source ownership.",
+                block);
+        }
+
+        if (!TryPrepareMethodMutation(
+                documents,
+                location.Method,
+                out ParsedDocument? document,
+                out MethodDeclarationSyntax? originalMethod,
+                out MethodDeclarationSyntax? annotatedMethod,
+                out IReadOnlyDictionary<SemanticId, SyntaxAnnotation>? identityAnnotations,
+                out List<PendingPin>? methodPins,
+                out string? identityFailure) ||
+            !identityAnnotations!.TryGetValue(
+                location.ParentBlock.Id,
+                out SyntaxAnnotation? parentAnnotation) ||
+            !identityAnnotations.TryGetValue(block.Id, out SyntaxAnnotation? blockAnnotation))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.PlanRequiresPersistentIdentity,
+                identityFailure ??
+                    "Block expansion could not pin the parent and child statement subtrees in " +
+                    "the persistent identity sidecar.",
+                block);
+        }
+
+        ParsedDocument resolvedDocument = document!;
+        SyntaxNode annotatedParentSyntax = annotatedMethod!
+            .GetAnnotatedNodes(parentAnnotation)
+            .Single();
+        BlockSyntax annotatedBlock = annotatedMethod
+            .GetAnnotatedNodes(blockAnnotation)
+            .OfType<BlockSyntax>()
+            .Single();
+        if (!TryCreateEditableStatementContainer(
+                annotatedParentSyntax,
+                out EditableStatementContainer? annotatedParent))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidRegionExpansion,
+                "The expanded block parent is no longer an explicit statement container.",
+                block);
+        }
+
+        InsertionFormatting parentFormatting = GetInsertionFormatting(
+            resolvedDocument,
+            sourceContainer,
+            location.Index);
+        string childIndentation = blockSyntax.Statements.Count > 0
+            ? GetLineIndentation(sourceDocument!, blockSyntax.Statements[0])
+            : parentFormatting.Indentation + "    ";
+        List<StatementSyntax> expandedStatements = annotatedBlock.Statements
+            .Select(statement => ShiftStatementIndentation(
+                statement,
+                childIndentation,
+                parentFormatting.Indentation))
+            .ToList();
+        var parentStatements = annotatedParent!.Statements.ToList();
+        parentStatements.RemoveAt(location.Index);
+        parentStatements.InsertRange(location.Index, expandedStatements);
+        SyntaxNode replacementParent = annotatedParent.WithStatements(
+            SyntaxFactory.List(parentStatements));
+        SyntaxNode replacementMethod = annotatedMethod.ReplaceNode(
+            annotatedParent.Syntax,
+            replacementParent);
+        return SuccessPlan(resolvedDocument, new PendingReplacement(
+            resolvedDocument.Source.LogicalPath,
+            originalMethod!,
+            replacementMethod,
+            FilterPinsForSyntax(replacementMethod, methodPins!)));
+    }
+
     private static OperationPlan PlanSwitchSectionInsertion(
         InsertSwitchSectionPatchOperation operation,
         IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
@@ -7520,6 +7796,56 @@ public sealed class CSharpSourcePatchApplier
         }
         return statement.WithLeadingTrivia(SyntaxFactory.TriviaList(rewritten));
     }
+
+    private static StatementSyntax ShiftStatementIndentation(
+        StatementSyntax statement,
+        string sourceIndentation,
+        string destinationIndentation)
+    {
+        string fullText = statement.ToFullString();
+        SyntaxTrivia[] lineIndentation = statement
+            .DescendantTrivia(descendIntoTrivia: true)
+            .Where(trivia => trivia.IsKind(SyntaxKind.WhitespaceTrivia) &&
+                IsLineIndentationTrivia(statement, trivia, fullText) &&
+                trivia.ToFullString().StartsWith(sourceIndentation, StringComparison.Ordinal))
+            .ToArray();
+        return statement.ReplaceTrivia(
+            lineIndentation,
+            (original, rewritten) => SyntaxFactory.Whitespace(
+                destinationIndentation +
+                rewritten.ToFullString()[sourceIndentation.Length..]));
+    }
+
+    private static bool IsLineIndentationTrivia(
+        StatementSyntax statement,
+        SyntaxTrivia trivia,
+        string fullText)
+    {
+        int relativeStart = trivia.FullSpan.Start - statement.FullSpan.Start;
+        if (relativeStart < 0 || relativeStart > fullText.Length)
+        {
+            return false;
+        }
+        int lineStart = relativeStart == 0
+            ? 0
+            : fullText.LastIndexOf('\n', relativeStart - 1) + 1;
+        for (int index = lineStart; index < relativeStart; index++)
+        {
+            if (fullText[index] is not (' ' or '\t' or '\r'))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static bool HasSignificantBraceTrivia(BlockSyntax block) =>
+        block.OpenBraceToken.LeadingTrivia
+            .Concat(block.OpenBraceToken.TrailingTrivia)
+            .Concat(block.CloseBraceToken.LeadingTrivia)
+            .Concat(block.CloseBraceToken.TrailingTrivia)
+            .Any(static trivia => !trivia.IsKind(SyntaxKind.WhitespaceTrivia) &&
+                !trivia.IsKind(SyntaxKind.EndOfLineTrivia));
 
     private static ExpressionSyntax FormatReplacementExpression(
         ExpressionSyntax replacement,

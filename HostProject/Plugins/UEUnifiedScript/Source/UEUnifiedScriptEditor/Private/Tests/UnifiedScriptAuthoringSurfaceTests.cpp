@@ -161,8 +161,8 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
             TEXT("120"),
             PatchJson,
             Error));
-    TestTrue(TEXT("Patch uses semantic-patch v0.24"),
-        PatchJson.Contains(TEXT("\"unifiedscript.patch/v0.24\"")));
+    TestTrue(TEXT("Patch uses semantic-patch v0.25"),
+        PatchJson.Contains(TEXT("\"unifiedscript.patch/v0.25\"")));
     TestTrue(TEXT("Patch retains the exact target node"),
         PatchJson.Contains(LiteralEdit->TargetNodeId));
     TestTrue(TEXT("Patch carries the requested replacement"),
@@ -415,6 +415,20 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
                     ControlMoveJson.Contains(TEXT("\"expectedSourceParentBlockId\"")) &&
                     ControlMoveJson.Contains(TEXT("\"destinationParentBlockId\"")) &&
                     ControlMoveJson.Contains(RewireBlock->SourceNodeId));
+
+            FString CollapseJson;
+            TestTrue(TEXT("Multi-selection can collapse one consecutive statement range"),
+                FUnifiedScriptAuthoringSurfaceReader::BuildStatementCollapsePatch(
+                    Document,
+                    RewireFunction,
+                    {FirstStatement->Id, SecondStatement->Id},
+                    CollapseJson,
+                    Error));
+            TestTrue(TEXT("Scope collapse carries ordered members and outer sibling gaps"),
+                CollapseJson.Contains(TEXT("\"operation\": \"collapseStatements\"")) &&
+                    CollapseJson.Contains(TEXT("\"expectedStatementIds\"")) &&
+                    CollapseJson.Contains(TEXT("\"expectedPreviousSiblingId\"")) &&
+                    CollapseJson.Contains(TEXT("\"expectedNextSiblingId\"")));
         }
 
         const FUnifiedScriptAuthoringRegion* RewireThenBlock =
@@ -479,6 +493,51 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
                 DuplicateJson.Contains(TEXT("\"expectedSourcePreviousSiblingId\"")) &&
                 DuplicateJson.Contains(TEXT("\"expectedDestinationPreviousSiblingId\"")) &&
                 DuplicateJson.Contains(TEXT("\"newLocalName\": \"incrementedCopy\"")));
+
+        if (FirstStatement != nullptr && SecondStatement != nullptr)
+        {
+            FUnifiedScriptAuthoringFunction ScopedFunction = RewireFunction;
+            FUnifiedScriptAuthoringRegion* ScopedParent =
+                ScopedFunction.Regions.FindByPredicate([RewireBlock](
+                    const FUnifiedScriptAuthoringRegion& Region)
+                {
+                    return Region.Id == RewireBlock->Id;
+                });
+            if (ScopedParent != nullptr)
+            {
+                ScopedParent->DirectStatementIds.Remove(FirstStatement->Id);
+                ScopedParent->DirectStatementIds.Remove(SecondStatement->Id);
+                ScopedParent->DirectActionIds.Remove(FirstStatement->Id);
+                ScopedParent->DirectActionIds.Remove(SecondStatement->Id);
+                FUnifiedScriptAuthoringRegion NestedScope;
+                NestedScope.Id = TEXT("us_11111111111111111111111111111111");
+                NestedScope.Kind = TEXT("block");
+                NestedScope.ParentRegionId = ScopedParent->Id;
+                NestedScope.SourceNodeId = TEXT("us_22222222222222222222222222222222");
+                NestedScope.Span = FirstStatement->Span;
+                NestedScope.Span.EndLine = SecondStatement->Span.EndLine;
+                NestedScope.Span.EndColumn = SecondStatement->Span.EndColumn;
+                NestedScope.DirectStatementIds = {FirstStatement->Id, SecondStatement->Id};
+                NestedScope.DirectActionIds = NestedScope.DirectStatementIds;
+                const FString ScopedParentSourceId = ScopedParent->SourceNodeId;
+                ScopedParent->ChildRegionIds.Add(NestedScope.Id);
+                ScopedFunction.Regions.Add(NestedScope);
+
+                FString ExpandJson;
+                TestTrue(TEXT("Nested lexical region can build an exact expansion patch"),
+                    FUnifiedScriptAuthoringSurfaceReader::BuildBlockExpansionPatch(
+                        Document,
+                        ScopedFunction,
+                        ScopedFunction.Regions.Last(),
+                        ExpandJson,
+                        Error));
+                TestTrue(TEXT("Scope expansion carries block, children, parent, and sibling facts"),
+                    ExpandJson.Contains(TEXT("\"operation\": \"expandBlock\"")) &&
+                        ExpandJson.Contains(NestedScope.SourceNodeId) &&
+                        ExpandJson.Contains(ScopedParentSourceId) &&
+                        ExpandJson.Contains(TEXT("\"expectedChildStatementIds\"")));
+            }
+        }
 
         FUnifiedScriptAuthoringFunction TransferFunction = RewireFunction;
         FUnifiedScriptAuthoringRegion SwitchRegion;

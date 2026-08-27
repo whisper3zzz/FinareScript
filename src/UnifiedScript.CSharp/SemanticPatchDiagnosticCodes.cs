@@ -33,4 +33,6 @@ public static class SemanticPatchDiagnosticCodes
     public const string InvalidSwitchSection = "UVS3029";
     public const string UnsafeSwitchSectionDeletion = "UVS3030";
     public const string InvalidStatementDuplication = "UVS3031";
+    public const string InvalidRegionCollapse = "UVS3032";
+    public const string InvalidRegionExpansion = "UVS3033";
 }

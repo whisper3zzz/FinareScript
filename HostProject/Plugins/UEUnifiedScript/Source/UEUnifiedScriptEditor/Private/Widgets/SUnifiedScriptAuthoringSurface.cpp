@@ -512,6 +512,19 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
                             ]
                             + SHorizontalBox::Slot()
                             .AutoWidth()
+                            .Padding(0.0f, 0.0f, 6.0f, 0.0f)
+                            .VAlign(VAlign_Center)
+                            [
+                                SNew(SButton)
+                                .Text(LOCTEXT("CollapseScope", "Collapse Scope"))
+                                .ToolTipText(LOCTEXT(
+                                    "CollapseScopeTip",
+                                    "Wrap two or more consecutive selected statements in one identity-stable C# lexical scope."))
+                                .IsEnabled(this, &SUnifiedScriptAuthoringSurface::CanCollapseSelectedStatements)
+                                .OnClicked(this, &SUnifiedScriptAuthoringSurface::HandleCollapseSelectedStatements)
+                            ]
+                            + SHorizontalBox::Slot()
+                            .AutoWidth()
                             .VAlign(VAlign_Center)
                             [
                                 SNew(SButton)
@@ -761,7 +774,7 @@ FReply SUnifiedScriptAuthoringSurface::HandleCopyPatch(
         return FReply::Handled();
     }
     FPlatformApplicationMisc::ClipboardCopy(*Patch);
-    SetStatus(FString::Printf(TEXT("Copied semantic-patch v0.24 for %s"), *Edit.TargetNodeId), false);
+    SetStatus(FString::Printf(TEXT("Copied semantic-patch v0.25 for %s"), *Edit.TargetNodeId), false);
     return FReply::Handled();
 }
 
@@ -1263,6 +1276,104 @@ void SUnifiedScriptAuthoringSurface::HandleRedoAuthoringCommand()
 bool SUnifiedScriptAuthoringSurface::CanRedoAuthoringCommand() const
 {
     return !bPatchRequestPending && bCanRedoAuthoring;
+}
+
+TArray<FString> SUnifiedScriptAuthoringSurface::GetSelectedStatementActionIds() const
+{
+    TArray<FString> Result;
+    if (!GraphEditor.IsValid())
+    {
+        return Result;
+    }
+    const FUnifiedScriptAuthoringFunction* Function = FindFunction(ActiveFunctionId);
+    if (Function == nullptr)
+    {
+        return Result;
+    }
+    for (UObject* Selected : GraphEditor->GetSelectedNodes())
+    {
+        const UUnifiedScriptEdGraphNode* Node = Cast<UUnifiedScriptEdGraphNode>(Selected);
+        const FUnifiedScriptAuthoringAction* Action =
+            Node != nullptr && Node->bCanDelete
+            ? Function->FindAction(Node->SemanticId)
+            : nullptr;
+        if (Action == nullptr || Action->GraphKind == TEXT("switchCase"))
+        {
+            Result.Reset();
+            return Result;
+        }
+        Result.Add(Action->Id);
+    }
+    return Result;
+}
+
+bool SUnifiedScriptAuthoringSurface::CanCollapseSelectedStatements() const
+{
+    if (bPatchRequestPending)
+    {
+        return false;
+    }
+    const FUnifiedScriptAuthoringFunction* Function = FindFunction(ActiveFunctionId);
+    const TArray<FString> StatementIds = GetSelectedStatementActionIds();
+    FString IgnoredPatch;
+    FString IgnoredError;
+    return Function != nullptr && StatementIds.Num() >= 2 &&
+        FUnifiedScriptAuthoringSurfaceReader::BuildStatementCollapsePatch(
+            Document,
+            *Function,
+            StatementIds,
+            IgnoredPatch,
+            IgnoredError);
+}
+
+FReply SUnifiedScriptAuthoringSurface::HandleCollapseSelectedStatements()
+{
+    const FUnifiedScriptAuthoringFunction* Function = FindFunction(ActiveFunctionId);
+    const TArray<FString> StatementIds = GetSelectedStatementActionIds();
+    FString Patch;
+    FString Error;
+    if (Function == nullptr ||
+        !FUnifiedScriptAuthoringSurfaceReader::BuildStatementCollapsePatch(
+            Document,
+            *Function,
+            StatementIds,
+            Patch,
+            Error))
+    {
+        SetStatus(
+            Error.IsEmpty()
+                ? TEXT("Select two or more consecutive statement nodes in one block.")
+                : MoveTemp(Error),
+            true);
+        return FReply::Handled();
+    }
+    SubmitSemanticPatch(MoveTemp(Patch), TEXT("Collapsing statements into a lexical scope"));
+    return FReply::Handled();
+}
+
+FReply SUnifiedScriptAuthoringSurface::HandleExpandBlockRegion(FString RegionId)
+{
+    const FUnifiedScriptAuthoringFunction* Function = FindFunction(ActiveFunctionId);
+    const FUnifiedScriptAuthoringRegion* Region = Function != nullptr
+        ? Function->FindRegion(RegionId)
+        : nullptr;
+    FString Patch;
+    FString Error;
+    if (Function == nullptr || Region == nullptr ||
+        !FUnifiedScriptAuthoringSurfaceReader::BuildBlockExpansionPatch(
+            Document,
+            *Function,
+            *Region,
+            Patch,
+            Error))
+    {
+        SetStatus(
+            Error.IsEmpty() ? TEXT("The selected lexical scope can no longer be expanded.") : MoveTemp(Error),
+            true);
+        return FReply::Handled();
+    }
+    SubmitSemanticPatch(MoveTemp(Patch), TEXT("Expanding a lexical scope"));
+    return FReply::Handled();
 }
 
 FReply SUnifiedScriptAuthoringSurface::HandleAddSwitchSection(
@@ -2890,6 +3001,31 @@ void SUnifiedScriptAuthoringSurface::RebuildInspector(
         ActiveFunction != nullptr && Item->Kind == EUnifiedScriptSurfaceTreeItemKind::Action
         ? ActiveFunction->FindAction(Item->SemanticId)
         : nullptr;
+    const FUnifiedScriptAuthoringRegion* ActiveRegion =
+        ActiveFunction != nullptr && Item->Kind == EUnifiedScriptSurfaceTreeItemKind::Region
+        ? ActiveFunction->FindRegion(Item->SemanticId)
+        : nullptr;
+    const FUnifiedScriptAuthoringRegion* ActiveRegionParent =
+        ActiveFunction != nullptr && ActiveRegion != nullptr
+        ? ActiveFunction->FindRegion(ActiveRegion->ParentRegionId)
+        : nullptr;
+    if (ActiveRegion != nullptr && ActiveRegion->Kind == TEXT("block") &&
+        ActiveRegionParent != nullptr && ActiveRegionParent->Kind != TEXT("function"))
+    {
+        InspectorBox->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 10.0f)
+        [
+            SNew(SButton)
+            .Text(LOCTEXT("ExpandLexicalScope", "Expand Scope"))
+            .ToolTipText(LOCTEXT(
+                "ExpandLexicalScopeTip",
+                "Move this lexical scope's statements back into its parent as one Workbench transaction."))
+            .IsEnabled_Lambda([this]() { return !bPatchRequestPending; })
+            .OnClicked(
+                this,
+                &SUnifiedScriptAuthoringSurface::HandleExpandBlockRegion,
+                ActiveRegion->Id)
+        ];
+    }
     if (ActiveFunction != nullptr && ActiveAction != nullptr &&
         ActiveAction->GraphKind == TEXT("switch"))
     {
@@ -3095,7 +3231,7 @@ void SUnifiedScriptAuthoringSurface::RebuildInspector(
                         [
                             SNew(SButton)
                             .Text(LOCTEXT("CopyPatch", "Copy Patch"))
-                            .ToolTipText(LOCTEXT("CopyPatchTip", "Copy a typed semantic-patch v0.24 payload using this value."))
+                            .ToolTipText(LOCTEXT("CopyPatchTip", "Copy a typed semantic-patch v0.25 payload using this value."))
                             .OnClicked(this, &SUnifiedScriptAuthoringSurface::HandleCopyPatch, Edit, ValueEditor)
                         ]
                         + SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f, 0.0f, 0.0f)
