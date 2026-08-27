@@ -312,6 +312,100 @@ public:
         FString& OutPatchJson,
         FString& OutError);
 
+    /** Creates one C#-owned Script Asset in an existing workspace source. */
+    static bool BuildScriptAssetCreationPatch(
+        const FUnifiedScriptAuthoringSurfaceDocument& Document,
+        const FString& TargetSourcePath,
+        const FString& Namespace,
+        const FString& TypeName,
+        const FString& AssetPath,
+        bool bIncludeActorLifecycle,
+        FString& OutPatchJson,
+        FString& OutError);
+
+    /** Changes the stable engine-facing path of one Script Asset. */
+    static bool BuildScriptAssetPathUpdatePatch(
+        const FUnifiedScriptAuthoringSurfaceDocument& Document,
+        const FUnifiedScriptAuthoringAsset& Asset,
+        const FString& AssetPath,
+        FString& OutPatchJson,
+        FString& OutError);
+
+    /** Removes one exact Script Asset type after preview confirmation. */
+    static bool BuildScriptAssetRemovalPatch(
+        const FUnifiedScriptAuthoringSurfaceDocument& Document,
+        const FUnifiedScriptAuthoringAsset& Asset,
+        FString& OutPatchJson,
+        FString& OutError);
+
+    /** Adds one exposed C# state declaration. DefaultValueText is strict JSON. */
+    static bool BuildStateAdditionPatch(
+        const FUnifiedScriptAuthoringSurfaceDocument& Document,
+        const FUnifiedScriptAuthoringAsset& Asset,
+        const FString& Name,
+        const FString& TypeName,
+        const FString& TypeKind,
+        const FString& DefaultValueText,
+        const FUnifiedScriptAuthoringExposure& Exposure,
+        FString& OutPatchJson,
+        FString& OutError);
+
+    /** Updates one exact state declaration and its exposure contract. */
+    static bool BuildStateUpdatePatch(
+        const FUnifiedScriptAuthoringSurfaceDocument& Document,
+        const FUnifiedScriptAuthoringState& State,
+        const FString& Name,
+        const FString& TypeName,
+        const FString& TypeKind,
+        const FString& DefaultValueText,
+        const FUnifiedScriptAuthoringExposure& Exposure,
+        FString& OutPatchJson,
+        FString& OutError);
+
+    /** Removes one exact state declaration. */
+    static bool BuildStateRemovalPatch(
+        const FUnifiedScriptAuthoringSurfaceDocument& Document,
+        const FUnifiedScriptAuthoringState& State,
+        FString& OutPatchJson,
+        FString& OutError);
+
+    /** Adds one bounded scalar Visual function with a generated safe body. */
+    static bool BuildFunctionAdditionPatch(
+        const FUnifiedScriptAuthoringSurfaceDocument& Document,
+        const FUnifiedScriptAuthoringAsset& Asset,
+        const FString& Name,
+        const FString& ReturnTypeName,
+        bool bStatic,
+        const TArray<FUnifiedScriptAuthoringParameter>& Parameters,
+        FString& OutPatchJson,
+        FString& OutError);
+
+    /** Updates one ordinary Visual function contract with exact preconditions. */
+    static bool BuildFunctionUpdatePatch(
+        const FUnifiedScriptAuthoringSurfaceDocument& Document,
+        const FUnifiedScriptAuthoringFunction& Function,
+        const FString& Name,
+        const FString& ReturnTypeName,
+        bool bStatic,
+        const TArray<FUnifiedScriptAuthoringParameter>& Parameters,
+        FString& OutPatchJson,
+        FString& OutError);
+
+    /** Removes one exact Visual function or reflected Event Entry. */
+    static bool BuildFunctionRemovalPatch(
+        const FUnifiedScriptAuthoringSurfaceDocument& Document,
+        const FUnifiedScriptAuthoringFunction& Function,
+        FString& OutPatchJson,
+        FString& OutError);
+
+    /** Adds beginPlay, tick, or endPlay to an UnrealActorScript asset. */
+    static bool BuildLifecycleHookAdditionPatch(
+        const FUnifiedScriptAuthoringSurfaceDocument& Document,
+        const FUnifiedScriptAuthoringAsset& Asset,
+        const FString& Hook,
+        FString& OutPatchJson,
+        FString& OutError);
+
     /** Adds a declaration-authored visual method bound to one canonical UE event. */
     static bool BuildUnrealEventHandlerInsertionPatch(
         const FUnifiedScriptAuthoringSurfaceDocument& Document,

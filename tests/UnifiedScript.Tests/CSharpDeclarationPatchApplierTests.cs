@@ -305,6 +305,113 @@ public sealed class CSharpDeclarationPatchApplierTests
             eventEntry.Properties["unrealEventPath"]);
     }
 
+    [Fact]
+    public void ApplyCreatesRunnableActorScriptAssetWithVisualLifecycleHooks()
+    {
+        const string source = """
+            namespace Game;
+
+            public static class ExistingSourceAnchor
+            {
+            }
+            """;
+        var request = new CSharpCompilationRequest(
+            "CreateScriptAssetTests",
+            [new CSharpSourceDocument("Game/Scripts.cs", source)],
+            [typeof(UnrealActorScript).Assembly.Location]);
+        CSharpAnalysisResult original = Analyze(request);
+        Assert.Empty(original.ScriptAssets!.Assets);
+        DeclarationPatchDocument patch = Patch(
+            original,
+            new AddScriptAssetPatchOperation(
+                "Game/Scripts.cs",
+                new ScriptAssetPatchSpec(
+                    "Game",
+                    "PlayerBehavior",
+                    "Gameplay/PlayerBehavior",
+                    "global::UnifiedScript.Unreal.UnrealActorScript",
+                    IncludeActorLifecycle: true)));
+
+        CSharpPatchResult result = new CSharpDeclarationPatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        ScriptAssetDeclaration asset = Assert.Single(result.Analysis!.ScriptAssets!.Assets);
+        Assert.Equal("Game.PlayerBehavior", asset.QualifiedName);
+        Assert.Equal("Gameplay/PlayerBehavior", asset.AssetPath);
+        Assert.Equal(
+            ["OnBeginPlay", "OnEndPlay", "OnTick"],
+            asset.Functions.Select(static function => function.Name).Order(StringComparer.Ordinal));
+        string patched = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains("public sealed class PlayerBehavior", patched, StringComparison.Ordinal);
+        Assert.Contains("protected override void OnBeginPlay()", patched, StringComparison.Ordinal);
+        Assert.Contains("protected override void OnTick(float deltaSeconds)", patched, StringComparison.Ordinal);
+        Assert.Contains("protected override void OnEndPlay()", patched, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ApplyAuthorsUpdatesAndRemovesVisualFunctionAndAssetPath()
+    {
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(Source, Path);
+        CSharpAnalysisResult original = Analyze(request);
+        ScriptAssetDeclaration asset = Assert.Single(original.ScriptAssets!.Assets);
+        DeclarationPatchDocument add = Patch(
+            original,
+            new UpdateScriptAssetPatchOperation(
+                asset.Id,
+                new ScriptAssetPatchPrecondition(asset.QualifiedName, asset.AssetPath),
+                "Combat/PlayerPolicy"),
+            new AddScriptFunctionPatchOperation(
+                asset.Id,
+                new ScriptFunctionPatchSpec(
+                    "ComputeArmor",
+                    "int",
+                    IsStatic: false,
+                    [new ScriptFunctionParameterPatchSpec("bonus", "int")])));
+
+        CSharpPatchResult added = new CSharpDeclarationPatchApplier().Apply(request, add);
+
+        Assert.True(added.Succeeded, string.Join(Environment.NewLine, added.Diagnostics));
+        ScriptAssetDeclaration changedAsset = Assert.Single(added.Analysis!.ScriptAssets!.Assets);
+        Assert.Equal("Combat/PlayerPolicy", changedAsset.AssetPath);
+        ScriptFunctionDeclaration function = changedAsset.Functions.Single(
+            static candidate => candidate.Name == "ComputeArmor");
+        Assert.Contains("return 0;", Assert.Single(added.PatchedRequest!.Sources).Source);
+
+        DeclarationPatchDocument update = Patch(
+            added.Analysis,
+            new UpdateScriptFunctionPatchOperation(
+                function.Id,
+                Expected(function),
+                new ScriptFunctionPatchSpec(
+                    "ResolveArmor",
+                    "float",
+                    IsStatic: true,
+                    [new ScriptFunctionParameterPatchSpec("amount", "float")])));
+        CSharpPatchResult updated = new CSharpDeclarationPatchApplier().Apply(
+            added.PatchedRequest,
+            update);
+
+        Assert.True(updated.Succeeded, string.Join(Environment.NewLine, updated.Diagnostics));
+        ScriptFunctionDeclaration renamed = Assert.Single(
+            Assert.Single(updated.Analysis!.ScriptAssets!.Assets).Functions,
+            static candidate => candidate.Name == "ResolveArmor");
+        Assert.True(renamed.IsStatic);
+        Assert.Equal("System.Single", renamed.ReturnTypeMetadataName);
+        Assert.Equal("amount", Assert.Single(renamed.Parameters).Name);
+
+        DeclarationPatchDocument remove = Patch(
+            updated.Analysis,
+            new RemoveScriptFunctionPatchOperation(renamed.Id, Expected(renamed)));
+        CSharpPatchResult removed = new CSharpDeclarationPatchApplier().Apply(
+            updated.PatchedRequest!,
+            remove);
+
+        Assert.True(removed.Succeeded, string.Join(Environment.NewLine, removed.Diagnostics));
+        Assert.DoesNotContain(
+            Assert.Single(removed.Analysis!.ScriptAssets!.Assets).Functions,
+            static candidate => candidate.Name == "ResolveArmor");
+    }
+
     private static (CSharpCompilationRequest Request, CSharpAnalysisResult Analysis) CreatePersistentRequest()
     {
         var initialRequest = new CSharpCompilationRequest(
@@ -341,6 +448,16 @@ public sealed class CSharpDeclarationPatchApplierTests
         state.TypeKind,
         state.DefaultValue,
         state.Exposure);
+
+    private static ScriptFunctionPatchPrecondition Expected(
+        ScriptFunctionDeclaration function) => new(
+        function.Name,
+        function.ReturnTypeMetadataName,
+        function.IsStatic,
+        function.Parameters.Select(static parameter =>
+            new ScriptFunctionParameterPatchPrecondition(
+                parameter.Name,
+                parameter.TypeMetadataName)).ToArray());
 
     private static ScriptStatePatchSpec Spec<T>(
         string name,

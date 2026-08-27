@@ -85,6 +85,269 @@ TSharedRef<SWidget> MakeInspectorValue(const FString& Label, const FString& Valu
         ];
 }
 
+struct FStateAuthoringDialogResult
+{
+    FString Name;
+    FString TypeName;
+    FString TypeKind;
+    FString DefaultValue;
+    FUnifiedScriptAuthoringExposure Exposure;
+};
+
+bool ShowStateAuthoringDialog(
+    const FUnifiedScriptAuthoringState* Existing,
+    FStateAuthoringDialogResult& OutResult)
+{
+    TSharedPtr<SEditableTextBox> NameEditor;
+    TSharedPtr<SEditableTextBox> TypeEditor;
+    TSharedPtr<SEditableTextBox> KindEditor;
+    TSharedPtr<SEditableTextBox> DefaultEditor;
+    TSharedPtr<SEditableTextBox> CategoryEditor;
+    TSharedPtr<SCheckBox> InstanceEditableCheck;
+    TSharedPtr<SCheckBox> SaveGameCheck;
+    TSharedPtr<SCheckBox> ReplicatedCheck;
+    bool bAccepted = false;
+    const TSharedRef<SWindow> Window = SNew(SWindow)
+        .Title(Existing == nullptr
+            ? LOCTEXT("AddStateDialog", "Add Script State")
+            : LOCTEXT("EditStateDialog", "Edit Script State"))
+        .ClientSize(FVector2D(560.0f, 480.0f))
+        .SupportsMaximize(false)
+        .SupportsMinimize(false);
+    Window->SetContent(
+        SNew(SBorder)
+        .BorderImage(FAppStyle::GetBrush(TEXT("ToolPanel.GroupBorder")))
+        .Padding(14.0f)
+        [
+            SNew(SVerticalBox)
+            + SVerticalBox::Slot().AutoHeight()
+            [
+                MakeInspectorLabel(TEXT("NAME"))
+            ]
+            + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 8.0f)
+            [
+                SAssignNew(NameEditor, SEditableTextBox)
+                .Text(FText::FromString(Existing != nullptr ? Existing->Name : TEXT("NewState")))
+            ]
+            + SVerticalBox::Slot().AutoHeight()
+            [
+                MakeInspectorLabel(TEXT("C# TYPE  ·  bool / int / float / string / enum type"))
+            ]
+            + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 8.0f)
+            [
+                SAssignNew(TypeEditor, SEditableTextBox)
+                .Text(FText::FromString(
+                    Existing != nullptr ? Existing->TypeDisplayName : TEXT("int")))
+            ]
+            + SVerticalBox::Slot().AutoHeight()
+            [
+                MakeInspectorLabel(TEXT("TYPE KIND  ·  boolean / integer / floatingPoint / string / enum"))
+            ]
+            + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 8.0f)
+            [
+                SAssignNew(KindEditor, SEditableTextBox)
+                .Text(FText::FromString(
+                    Existing != nullptr ? Existing->TypeKind : TEXT("integer")))
+            ]
+            + SVerticalBox::Slot().AutoHeight()
+            [
+                MakeInspectorLabel(TEXT("DEFAULT  ·  strict JSON scalar; quote strings and enum members"))
+            ]
+            + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 8.0f)
+            [
+                SAssignNew(DefaultEditor, SEditableTextBox)
+                .Text(FText::FromString(
+                    Existing != nullptr ? Existing->DefaultValue : TEXT("0")))
+            ]
+            + SVerticalBox::Slot().AutoHeight()
+            [
+                MakeInspectorLabel(TEXT("CATEGORY"))
+            ]
+            + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 10.0f)
+            [
+                SAssignNew(CategoryEditor, SEditableTextBox)
+                .Text(FText::FromString(
+                    Existing != nullptr ? Existing->Exposure.Category : TEXT("Gameplay")))
+            ]
+            + SVerticalBox::Slot().AutoHeight()
+            [
+                SNew(SHorizontalBox)
+                + SHorizontalBox::Slot().AutoWidth()
+                [
+                    SAssignNew(InstanceEditableCheck, SCheckBox)
+                    .IsChecked(Existing != nullptr && Existing->Exposure.bInstanceEditable
+                        ? ECheckBoxState::Checked
+                        : ECheckBoxState::Unchecked)
+                    [SNew(STextBlock).Text(LOCTEXT("StateInstanceEditable", "Instance Editable"))]
+                ]
+                + SHorizontalBox::Slot().AutoWidth().Padding(14.0f, 0.0f)
+                [
+                    SAssignNew(SaveGameCheck, SCheckBox)
+                    .IsChecked(Existing != nullptr && Existing->Exposure.bSaveGame
+                        ? ECheckBoxState::Checked
+                        : ECheckBoxState::Unchecked)
+                    [SNew(STextBlock).Text(LOCTEXT("StateSaveGame", "Save Game"))]
+                ]
+                + SHorizontalBox::Slot().AutoWidth()
+                [
+                    SAssignNew(ReplicatedCheck, SCheckBox)
+                    .IsChecked(Existing != nullptr && Existing->Exposure.bReplicated
+                        ? ECheckBoxState::Checked
+                        : ECheckBoxState::Unchecked)
+                    [SNew(STextBlock).Text(LOCTEXT("StateReplicated", "Replicated"))]
+                ]
+            ]
+            + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 16.0f, 0.0f, 0.0f)
+            [
+                SNew(SHorizontalBox)
+                + SHorizontalBox::Slot().AutoWidth()
+                [
+                    SNew(SButton)
+                    .Text(LOCTEXT("CancelStateDialog", "Cancel"))
+                    .OnClicked_Lambda([Window]()
+                    {
+                        Window->RequestDestroyWindow();
+                        return FReply::Handled();
+                    })
+                ]
+                + SHorizontalBox::Slot().AutoWidth().Padding(8.0f, 0.0f, 0.0f, 0.0f)
+                [
+                    SNew(SButton)
+                    .Text(LOCTEXT("PreviewStateDialog", "Preview"))
+                    .OnClicked_Lambda([Window, &bAccepted]()
+                    {
+                        bAccepted = true;
+                        Window->RequestDestroyWindow();
+                        return FReply::Handled();
+                    })
+                ]
+            ]
+        ]);
+    FSlateApplication::Get().AddModalWindow(Window, FSlateApplication::Get().GetActiveTopLevelWindow());
+    if (!bAccepted)
+    {
+        return false;
+    }
+    OutResult.Name = NameEditor->GetText().ToString().TrimStartAndEnd();
+    OutResult.TypeName = TypeEditor->GetText().ToString().TrimStartAndEnd();
+    OutResult.TypeKind = KindEditor->GetText().ToString().TrimStartAndEnd();
+    OutResult.DefaultValue = DefaultEditor->GetText().ToString().TrimStartAndEnd();
+    OutResult.Exposure.bInstanceEditable = InstanceEditableCheck->IsChecked();
+    OutResult.Exposure.bSaveGame = SaveGameCheck->IsChecked();
+    OutResult.Exposure.bReplicated = ReplicatedCheck->IsChecked();
+    OutResult.Exposure.Category = CategoryEditor->GetText().ToString().TrimStartAndEnd();
+    return true;
+}
+
+struct FFunctionAuthoringDialogResult
+{
+    FString Name;
+    FString ReturnType;
+    FString Parameters;
+    bool bStatic = false;
+};
+
+bool ShowFunctionAuthoringDialog(
+    const FUnifiedScriptAuthoringFunction* Existing,
+    FFunctionAuthoringDialogResult& OutResult)
+{
+    TSharedPtr<SEditableTextBox> NameEditor;
+    TSharedPtr<SEditableTextBox> ReturnEditor;
+    TSharedPtr<SEditableTextBox> ParametersEditor;
+    TSharedPtr<SCheckBox> StaticCheck;
+    FString ExistingParameters;
+    if (Existing != nullptr)
+    {
+        ExistingParameters = FString::JoinBy(
+            Existing->Parameters,
+            TEXT(", "),
+            [](const FUnifiedScriptAuthoringParameter& Parameter)
+            {
+                return Parameter.Name + TEXT(":") + Parameter.TypeMetadataName;
+            });
+    }
+    bool bAccepted = false;
+    const TSharedRef<SWindow> Window = SNew(SWindow)
+        .Title(Existing == nullptr
+            ? LOCTEXT("AddFunctionDialog", "Add Visual Function")
+            : LOCTEXT("EditFunctionDialog", "Edit Visual Function"))
+        .ClientSize(FVector2D(560.0f, 330.0f))
+        .SupportsMaximize(false)
+        .SupportsMinimize(false);
+    Window->SetContent(
+        SNew(SBorder)
+        .BorderImage(FAppStyle::GetBrush(TEXT("ToolPanel.GroupBorder")))
+        .Padding(14.0f)
+        [
+            SNew(SVerticalBox)
+            + SVerticalBox::Slot().AutoHeight()[MakeInspectorLabel(TEXT("NAME"))]
+            + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 8.0f)
+            [
+                SAssignNew(NameEditor, SEditableTextBox)
+                .Text(FText::FromString(Existing != nullptr ? Existing->Name : TEXT("NewFunction")))
+            ]
+            + SVerticalBox::Slot().AutoHeight()
+            [MakeInspectorLabel(TEXT("RETURN TYPE  ·  void / bool / integer / float / double / decimal / string"))]
+            + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 8.0f)
+            [
+                SAssignNew(ReturnEditor, SEditableTextBox)
+                .Text(FText::FromString(
+                    Existing != nullptr ? Existing->ReturnTypeMetadataName : TEXT("void")))
+            ]
+            + SVerticalBox::Slot().AutoHeight()
+            [MakeInspectorLabel(TEXT("PARAMETERS  ·  name:type, name:type  ·  count stays fixed when editing"))]
+            + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 10.0f)
+            [
+                SAssignNew(ParametersEditor, SEditableTextBox)
+                .Text(FText::FromString(ExistingParameters))
+                .HintText(LOCTEXT("FunctionParametersHint", "amount:int, deltaSeconds:float"))
+            ]
+            + SVerticalBox::Slot().AutoHeight()
+            [
+                SAssignNew(StaticCheck, SCheckBox)
+                .IsChecked(Existing != nullptr && Existing->bStatic
+                    ? ECheckBoxState::Checked
+                    : ECheckBoxState::Unchecked)
+                [SNew(STextBlock).Text(LOCTEXT("StaticVisualFunction", "Static function"))]
+            ]
+            + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 16.0f, 0.0f, 0.0f)
+            [
+                SNew(SHorizontalBox)
+                + SHorizontalBox::Slot().AutoWidth()
+                [
+                    SNew(SButton)
+                    .Text(LOCTEXT("CancelFunctionDialog", "Cancel"))
+                    .OnClicked_Lambda([Window]()
+                    {
+                        Window->RequestDestroyWindow();
+                        return FReply::Handled();
+                    })
+                ]
+                + SHorizontalBox::Slot().AutoWidth().Padding(8.0f, 0.0f, 0.0f, 0.0f)
+                [
+                    SNew(SButton)
+                    .Text(LOCTEXT("PreviewFunctionDialog", "Preview"))
+                    .OnClicked_Lambda([Window, &bAccepted]()
+                    {
+                        bAccepted = true;
+                        Window->RequestDestroyWindow();
+                        return FReply::Handled();
+                    })
+                ]
+            ]
+        ]);
+    FSlateApplication::Get().AddModalWindow(Window, FSlateApplication::Get().GetActiveTopLevelWindow());
+    if (!bAccepted)
+    {
+        return false;
+    }
+    OutResult.Name = NameEditor->GetText().ToString().TrimStartAndEnd();
+    OutResult.ReturnType = ReturnEditor->GetText().ToString().TrimStartAndEnd();
+    OutResult.Parameters = ParametersEditor->GetText().ToString().TrimStartAndEnd();
+    OutResult.bStatic = StaticCheck->IsChecked();
+    return true;
+}
+
 FString SuggestSwitchCaseLabel(
     const FUnifiedScriptAuthoringFunction& Function,
     const FUnifiedScriptAuthoringAction& SwitchStatement)
@@ -992,10 +1255,33 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
                         .AutoHeight()
                         .Padding(10.0f, 8.0f)
                         [
-                            SNew(STextBlock)
-                            .Text(LOCTEXT("MyScript", "MY SCRIPT"))
-                            .Font(FAppStyle::GetFontStyle(TEXT("SmallFontBold")))
-                            .ColorAndOpacity(FLinearColor(0.62f, 0.66f, 0.72f))
+                            SNew(SHorizontalBox)
+                            + SHorizontalBox::Slot()
+                            .FillWidth(1.0f)
+                            .VAlign(VAlign_Center)
+                            [
+                                SNew(STextBlock)
+                                .Text(LOCTEXT("MyScript", "MY SCRIPT"))
+                                .Font(FAppStyle::GetFontStyle(TEXT("SmallFontBold")))
+                                .ColorAndOpacity(FLinearColor(0.62f, 0.66f, 0.72f))
+                            ]
+                            + SHorizontalBox::Slot()
+                            .AutoWidth()
+                            [
+                                SNew(SButton)
+                                .Text(LOCTEXT("NewScriptAsset", "+ Asset"))
+                                .ToolTipText(LOCTEXT(
+                                    "NewScriptAssetTip",
+                                    "Create a C#-owned Script Asset with visual Actor lifecycle hooks through the Workbench transaction."))
+                                .IsEnabled_Lambda([this]()
+                                {
+                                    return !bPatchRequestPending &&
+                                        (!WorkbenchSourcePath.IsEmpty() ||
+                                            (!Document.Assets.IsEmpty() &&
+                                                !Document.Assets[0].Span.FilePath.IsEmpty()));
+                                })
+                                .OnClicked(this, &SUnifiedScriptAuthoringSurface::HandleCreateScriptAsset)
+                            ]
                         ]
                         + SVerticalBox::Slot()
                         .AutoHeight()
@@ -2711,6 +2997,434 @@ void SUnifiedScriptAuthoringSurface::SubmitSemanticPatch(FString Patch, FString 
     SubmitAuthoringTransaction(MoveTemp(Patch), Url, MoveTemp(Activity));
 }
 
+void SUnifiedScriptAuthoringSurface::SubmitDeclarationPatch(FString Patch, FString Activity)
+{
+    if (bPatchRequestPending)
+    {
+        SetStatus(TEXT("A declaration patch is already in flight; wait for it to finish."), true);
+        return;
+    }
+    const FString Url = FUnifiedScriptAuthoringWorkbench::BuildDeclarationPatchUrl(
+        ServerUrlTextBox.IsValid() ? ServerUrlTextBox->GetText().ToString() : FString());
+    SubmitAuthoringTransaction(MoveTemp(Patch), Url, MoveTemp(Activity));
+}
+
+FReply SUnifiedScriptAuthoringSurface::HandleCreateScriptAsset()
+{
+    const FString TargetSourcePath = !WorkbenchSourcePath.IsEmpty()
+        ? WorkbenchSourcePath
+        : (!Document.Assets.IsEmpty() ? Document.Assets[0].Span.FilePath : FString());
+    if (bPatchRequestPending || TargetSourcePath.IsEmpty())
+    {
+        return FReply::Handled();
+    }
+    FString SuggestedNamespace;
+    if (!Document.Assets.IsEmpty())
+    {
+        FString ExistingType;
+        Document.Assets[0].QualifiedName.Split(
+            TEXT("."),
+            &SuggestedNamespace,
+            &ExistingType,
+            ESearchCase::CaseSensitive,
+            ESearchDir::FromEnd);
+    }
+    TSharedPtr<SEditableTextBox> NamespaceEditor;
+    TSharedPtr<SEditableTextBox> TypeEditor;
+    TSharedPtr<SEditableTextBox> AssetPathEditor;
+    TSharedPtr<SCheckBox> LifecycleCheck;
+    bool bAccepted = false;
+    const TSharedRef<SWindow> Window = SNew(SWindow)
+        .Title(LOCTEXT("CreateScriptAssetTitle", "Create UnifiedScript Asset"))
+        .ClientSize(FVector2D(560.0f, 330.0f))
+        .SupportsMaximize(false)
+        .SupportsMinimize(false);
+    Window->SetContent(
+        SNew(SBorder)
+        .BorderImage(FAppStyle::GetBrush(TEXT("ToolPanel.GroupBorder")))
+        .Padding(14.0f)
+        [
+            SNew(SVerticalBox)
+            + SVerticalBox::Slot().AutoHeight()
+            [
+                SNew(STextBlock)
+                .Text(FText::FromString(FString::Printf(
+                    TEXT("C# source: %s"),
+                    *TargetSourcePath)))
+                .AutoWrapText(true)
+                .ColorAndOpacity(FLinearColor(0.60f, 0.64f, 0.70f))
+            ]
+            + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 2.0f)
+            [
+                UE::UnifiedScript::AuthoringSurface::Slate::Private::MakeInspectorLabel(
+                    TEXT("NAMESPACE"))
+            ]
+            + SVerticalBox::Slot().AutoHeight()
+            [
+                SAssignNew(NamespaceEditor, SEditableTextBox)
+                .Text(FText::FromString(SuggestedNamespace))
+                .HintText(LOCTEXT("ScriptAssetNamespaceHint", "Game.Scripts"))
+            ]
+            + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 2.0f)
+            [
+                UE::UnifiedScript::AuthoringSurface::Slate::Private::MakeInspectorLabel(
+                    TEXT("C# TYPE"))
+            ]
+            + SVerticalBox::Slot().AutoHeight()
+            [
+                SAssignNew(TypeEditor, SEditableTextBox)
+                .Text(LOCTEXT("DefaultScriptAssetType", "NewActorScript"))
+            ]
+            + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 2.0f)
+            [
+                UE::UnifiedScript::AuthoringSurface::Slate::Private::MakeInspectorLabel(
+                    TEXT("ASSET PATH"))
+            ]
+            + SVerticalBox::Slot().AutoHeight()
+            [
+                SAssignNew(AssetPathEditor, SEditableTextBox)
+                .Text(LOCTEXT("DefaultScriptAssetPath", "Gameplay/NewActorScript"))
+            ]
+            + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
+            [
+                SAssignNew(LifecycleCheck, SCheckBox)
+                .IsChecked(ECheckBoxState::Checked)
+                [
+                    SNew(STextBlock)
+                    .Text(LOCTEXT(
+                        "CreateActorLifecycle",
+                        "Actor behavior · create BeginPlay, Tick, and EndPlay graphs"))
+                ]
+            ]
+            + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 14.0f, 0.0f, 0.0f)
+            [
+                SNew(SHorizontalBox)
+                + SHorizontalBox::Slot().AutoWidth()
+                [
+                    SNew(SButton)
+                    .Text(LOCTEXT("CancelCreateScriptAsset", "Cancel"))
+                    .OnClicked_Lambda([Window]()
+                    {
+                        Window->RequestDestroyWindow();
+                        return FReply::Handled();
+                    })
+                ]
+                + SHorizontalBox::Slot().AutoWidth().Padding(8.0f, 0.0f, 0.0f, 0.0f)
+                [
+                    SNew(SButton)
+                    .Text(LOCTEXT("PreviewCreateScriptAsset", "Preview Create"))
+                    .OnClicked_Lambda([Window, &bAccepted]()
+                    {
+                        bAccepted = true;
+                        Window->RequestDestroyWindow();
+                        return FReply::Handled();
+                    })
+                ]
+            ]
+        ]);
+    FSlateApplication::Get().AddModalWindow(Window, FSlateApplication::Get().GetActiveTopLevelWindow());
+    if (!bAccepted)
+    {
+        return FReply::Handled();
+    }
+
+    FString Patch;
+    FString Error;
+    const FString TypeName = TypeEditor->GetText().ToString().TrimStartAndEnd();
+    if (!FUnifiedScriptAuthoringSurfaceReader::BuildScriptAssetCreationPatch(
+            Document,
+            TargetSourcePath,
+            NamespaceEditor->GetText().ToString().TrimStartAndEnd(),
+            TypeName,
+            AssetPathEditor->GetText().ToString().TrimStartAndEnd(),
+            LifecycleCheck->IsChecked(),
+            Patch,
+            Error))
+    {
+        SetStatus(MoveTemp(Error), true);
+        return FReply::Handled();
+    }
+    SubmitDeclarationPatch(
+        MoveTemp(Patch),
+        FString::Printf(TEXT("Creating Script Asset %s"), *TypeName));
+    return FReply::Handled();
+}
+
+FReply SUnifiedScriptAuthoringSurface::HandleUpdateScriptAssetPath(
+    FString AssetId,
+    TSharedPtr<SEditableTextBox> PathEditor)
+{
+    const FUnifiedScriptAuthoringAsset* Asset = FindAsset(AssetId);
+    if (Asset == nullptr || !PathEditor.IsValid())
+    {
+        SetStatus(TEXT("The selected Script Asset is no longer available."), true);
+        return FReply::Handled();
+    }
+    FString Patch;
+    FString Error;
+    if (!FUnifiedScriptAuthoringSurfaceReader::BuildScriptAssetPathUpdatePatch(
+            Document,
+            *Asset,
+            PathEditor->GetText().ToString().TrimStartAndEnd(),
+            Patch,
+            Error))
+    {
+        SetStatus(MoveTemp(Error), true);
+        return FReply::Handled();
+    }
+    SubmitDeclarationPatch(
+        MoveTemp(Patch),
+        FString::Printf(TEXT("Changing Script Asset path %s"), *Asset->AssetPath));
+    return FReply::Handled();
+}
+
+FReply SUnifiedScriptAuthoringSurface::HandleRemoveScriptAsset(FString AssetId)
+{
+    const FUnifiedScriptAuthoringAsset* Asset = FindAsset(AssetId);
+    if (Asset == nullptr)
+    {
+        SetStatus(TEXT("The selected Script Asset is no longer available."), true);
+        return FReply::Handled();
+    }
+    FString Patch;
+    FString Error;
+    if (!FUnifiedScriptAuthoringSurfaceReader::BuildScriptAssetRemovalPatch(
+            Document,
+            *Asset,
+            Patch,
+            Error))
+    {
+        SetStatus(MoveTemp(Error), true);
+        return FReply::Handled();
+    }
+    SubmitDeclarationPatch(
+        MoveTemp(Patch),
+        FString::Printf(TEXT("Removing Script Asset %s"), *Asset->AssetPath));
+    return FReply::Handled();
+}
+
+FReply SUnifiedScriptAuthoringSurface::HandleAddState(FString AssetId)
+{
+    const FUnifiedScriptAuthoringAsset* Asset = FindAsset(AssetId);
+    UE::UnifiedScript::AuthoringSurface::Slate::Private::FStateAuthoringDialogResult Result;
+    if (Asset == nullptr ||
+        !UE::UnifiedScript::AuthoringSurface::Slate::Private::ShowStateAuthoringDialog(
+            nullptr,
+            Result))
+    {
+        return FReply::Handled();
+    }
+    FString Patch;
+    FString Error;
+    if (!FUnifiedScriptAuthoringSurfaceReader::BuildStateAdditionPatch(
+            Document,
+            *Asset,
+            Result.Name,
+            Result.TypeName,
+            Result.TypeKind,
+            Result.DefaultValue,
+            Result.Exposure,
+            Patch,
+            Error))
+    {
+        SetStatus(MoveTemp(Error), true);
+        return FReply::Handled();
+    }
+    SubmitDeclarationPatch(
+        MoveTemp(Patch),
+        FString::Printf(TEXT("Adding state %s"), *Result.Name));
+    return FReply::Handled();
+}
+
+FReply SUnifiedScriptAuthoringSurface::HandleEditState(FString StateId)
+{
+    const FUnifiedScriptAuthoringState* State = FindState(StateId);
+    UE::UnifiedScript::AuthoringSurface::Slate::Private::FStateAuthoringDialogResult Result;
+    if (State == nullptr ||
+        !UE::UnifiedScript::AuthoringSurface::Slate::Private::ShowStateAuthoringDialog(
+            State,
+            Result))
+    {
+        return FReply::Handled();
+    }
+    FString Patch;
+    FString Error;
+    if (!FUnifiedScriptAuthoringSurfaceReader::BuildStateUpdatePatch(
+            Document,
+            *State,
+            Result.Name,
+            Result.TypeName,
+            Result.TypeKind,
+            Result.DefaultValue,
+            Result.Exposure,
+            Patch,
+            Error))
+    {
+        SetStatus(MoveTemp(Error), true);
+        return FReply::Handled();
+    }
+    SubmitDeclarationPatch(
+        MoveTemp(Patch),
+        FString::Printf(TEXT("Editing state %s"), *State->Name));
+    return FReply::Handled();
+}
+
+FReply SUnifiedScriptAuthoringSurface::HandleRemoveState(FString StateId)
+{
+    const FUnifiedScriptAuthoringState* State = FindState(StateId);
+    if (State == nullptr)
+    {
+        SetStatus(TEXT("The selected state is no longer available."), true);
+        return FReply::Handled();
+    }
+    FString Patch;
+    FString Error;
+    if (!FUnifiedScriptAuthoringSurfaceReader::BuildStateRemovalPatch(
+            Document,
+            *State,
+            Patch,
+            Error))
+    {
+        SetStatus(MoveTemp(Error), true);
+        return FReply::Handled();
+    }
+    SubmitDeclarationPatch(
+        MoveTemp(Patch),
+        FString::Printf(TEXT("Removing state %s"), *State->Name));
+    return FReply::Handled();
+}
+
+FReply SUnifiedScriptAuthoringSurface::HandleAddFunction(FString AssetId)
+{
+    const FUnifiedScriptAuthoringAsset* Asset = FindAsset(AssetId);
+    UE::UnifiedScript::AuthoringSurface::Slate::Private::FFunctionAuthoringDialogResult Result;
+    if (Asset == nullptr ||
+        !UE::UnifiedScript::AuthoringSurface::Slate::Private::ShowFunctionAuthoringDialog(
+            nullptr,
+            Result))
+    {
+        return FReply::Handled();
+    }
+    TArray<FUnifiedScriptAuthoringParameter> Parameters;
+    FString Error;
+    if (!ParseFunctionParameters(Result.Parameters, Parameters, Error))
+    {
+        SetStatus(MoveTemp(Error), true);
+        return FReply::Handled();
+    }
+    FString Patch;
+    if (!FUnifiedScriptAuthoringSurfaceReader::BuildFunctionAdditionPatch(
+            Document,
+            *Asset,
+            Result.Name,
+            Result.ReturnType,
+            Result.bStatic,
+            Parameters,
+            Patch,
+            Error))
+    {
+        SetStatus(MoveTemp(Error), true);
+        return FReply::Handled();
+    }
+    SubmitDeclarationPatch(
+        MoveTemp(Patch),
+        FString::Printf(TEXT("Adding function %s"), *Result.Name));
+    return FReply::Handled();
+}
+
+FReply SUnifiedScriptAuthoringSurface::HandleEditFunction(FString FunctionId)
+{
+    const FUnifiedScriptAuthoringFunction* Function = FindFunction(FunctionId);
+    UE::UnifiedScript::AuthoringSurface::Slate::Private::FFunctionAuthoringDialogResult Result;
+    if (Function == nullptr || IsEventFunction(*Function) || IsLifecycleFunction(*Function) ||
+        !UE::UnifiedScript::AuthoringSurface::Slate::Private::ShowFunctionAuthoringDialog(
+            Function,
+            Result))
+    {
+        return FReply::Handled();
+    }
+    TArray<FUnifiedScriptAuthoringParameter> Parameters;
+    FString Error;
+    if (!ParseFunctionParameters(Result.Parameters, Parameters, Error))
+    {
+        SetStatus(MoveTemp(Error), true);
+        return FReply::Handled();
+    }
+    FString Patch;
+    if (!FUnifiedScriptAuthoringSurfaceReader::BuildFunctionUpdatePatch(
+            Document,
+            *Function,
+            Result.Name,
+            Result.ReturnType,
+            Result.bStatic,
+            Parameters,
+            Patch,
+            Error))
+    {
+        SetStatus(MoveTemp(Error), true);
+        return FReply::Handled();
+    }
+    SubmitDeclarationPatch(
+        MoveTemp(Patch),
+        FString::Printf(TEXT("Editing function %s"), *Function->Name));
+    return FReply::Handled();
+}
+
+FReply SUnifiedScriptAuthoringSurface::HandleRemoveFunction(FString FunctionId)
+{
+    const FUnifiedScriptAuthoringFunction* Function = FindFunction(FunctionId);
+    if (Function == nullptr)
+    {
+        SetStatus(TEXT("The selected function is no longer available."), true);
+        return FReply::Handled();
+    }
+    FString Patch;
+    FString Error;
+    if (!FUnifiedScriptAuthoringSurfaceReader::BuildFunctionRemovalPatch(
+            Document,
+            *Function,
+            Patch,
+            Error))
+    {
+        SetStatus(MoveTemp(Error), true);
+        return FReply::Handled();
+    }
+    SubmitDeclarationPatch(
+        MoveTemp(Patch),
+        FString::Printf(
+            TEXT("Removing %s %s"),
+            IsEventFunction(*Function) ? TEXT("Event Entry") : TEXT("function"),
+            *Function->Name));
+    return FReply::Handled();
+}
+
+FReply SUnifiedScriptAuthoringSurface::HandleAddLifecycleHook(
+    FString AssetId,
+    FString Hook)
+{
+    const FUnifiedScriptAuthoringAsset* Asset = FindAsset(AssetId);
+    if (Asset == nullptr)
+    {
+        return FReply::Handled();
+    }
+    FString Patch;
+    FString Error;
+    if (!FUnifiedScriptAuthoringSurfaceReader::BuildLifecycleHookAdditionPatch(
+            Document,
+            *Asset,
+            Hook,
+            Patch,
+            Error))
+    {
+        SetStatus(MoveTemp(Error), true);
+        return FReply::Handled();
+    }
+    SubmitDeclarationPatch(
+        MoveTemp(Patch),
+        FString::Printf(TEXT("Adding %s lifecycle hook"), *Hook));
+    return FReply::Handled();
+}
+
 FReply SUnifiedScriptAuthoringSurface::HandleUndoAuthoringTransaction()
 {
     SubmitAuthoringTransaction(
@@ -3231,6 +3945,7 @@ void SUnifiedScriptAuthoringSurface::HandlePatchResponse(
 void SUnifiedScriptAuthoringSurface::AdoptWorkspace(
     FUnifiedScriptAuthoringWorkspaceResult Workspace)
 {
+    WorkbenchSourcePath = MoveTemp(Workspace.SourcePath);
     Document = MoveTemp(Workspace.Surface);
     WorkbenchRevision = Workspace.Revision;
     bCanUndoAuthoring = Workspace.History.bCanUndo;
@@ -4355,6 +5070,122 @@ const FUnifiedScriptAuthoringFunction* SUnifiedScriptAuthoringSurface::FindFunct
         }
     }
     return nullptr;
+}
+
+const FUnifiedScriptAuthoringAsset* SUnifiedScriptAuthoringSurface::FindAsset(
+    const FString& AssetId) const
+{
+    return Document.Assets.FindByPredicate([&AssetId](
+        const FUnifiedScriptAuthoringAsset& Asset)
+    {
+        return Asset.Id == AssetId;
+    });
+}
+
+const FUnifiedScriptAuthoringAsset* SUnifiedScriptAuthoringSurface::FindOwningAsset(
+    const FString& DeclarationId) const
+{
+    return Document.Assets.FindByPredicate([&DeclarationId](
+        const FUnifiedScriptAuthoringAsset& Asset)
+    {
+        return Asset.Id == DeclarationId ||
+            Asset.States.ContainsByPredicate([&DeclarationId](
+                const FUnifiedScriptAuthoringState& State)
+            {
+                return State.Id == DeclarationId;
+            }) ||
+            Asset.Functions.ContainsByPredicate([&DeclarationId](
+                const FUnifiedScriptAuthoringFunction& Function)
+            {
+                return Function.Id == DeclarationId;
+            });
+    });
+}
+
+const FUnifiedScriptAuthoringState* SUnifiedScriptAuthoringSurface::FindState(
+    const FString& StateId) const
+{
+    for (const FUnifiedScriptAuthoringAsset& Asset : Document.Assets)
+    {
+        if (const FUnifiedScriptAuthoringState* State = Asset.States.FindByPredicate(
+                [&StateId](const FUnifiedScriptAuthoringState& Candidate)
+                {
+                    return Candidate.Id == StateId;
+                }))
+        {
+            return State;
+        }
+    }
+    return nullptr;
+}
+
+bool SUnifiedScriptAuthoringSurface::IsLifecycleFunction(
+    const FUnifiedScriptAuthoringFunction& Function)
+{
+    return Function.Name == TEXT("OnBeginPlay") && Function.Parameters.IsEmpty() ||
+        Function.Name == TEXT("OnTick") && Function.Parameters.Num() == 1 &&
+            Function.Parameters[0].TypeMetadataName == TEXT("System.Single") ||
+        Function.Name == TEXT("OnEndPlay") && Function.Parameters.IsEmpty();
+}
+
+bool SUnifiedScriptAuthoringSurface::IsEventFunction(
+    const FUnifiedScriptAuthoringFunction& Function)
+{
+    return Function.Actions.ContainsByPredicate([](
+        const FUnifiedScriptAuthoringAction& Action)
+    {
+        return Action.GraphKind == TEXT("unrealEventEntry");
+    });
+}
+
+bool SUnifiedScriptAuthoringSurface::ParseFunctionParameters(
+    const FString& Text,
+    TArray<FUnifiedScriptAuthoringParameter>& OutParameters,
+    FString& OutError)
+{
+    OutParameters.Reset();
+    FString Trimmed = Text;
+    Trimmed.TrimStartAndEndInline();
+    if (Trimmed.IsEmpty())
+    {
+        OutError.Reset();
+        return true;
+    }
+    TArray<FString> Entries;
+    Trimmed.ParseIntoArray(Entries, TEXT(","), true);
+    TSet<FString> Names;
+    for (FString Entry : Entries)
+    {
+        FString Name;
+        FString Type;
+        Entry.TrimStartAndEndInline();
+        if (!Entry.Split(TEXT(":"), &Name, &Type) || Name.IsEmpty() || Type.IsEmpty())
+        {
+            OutError = FString::Printf(
+                TEXT("Parameter '%s' must use name:type syntax."),
+                *Entry);
+            return false;
+        }
+        Name.TrimStartAndEndInline();
+        Type.TrimStartAndEndInline();
+        if (Name.IsEmpty() || Type.IsEmpty() || Names.Contains(Name))
+        {
+            OutError = TEXT("Function parameter names and types must be non-empty and unique.");
+            return false;
+        }
+        Names.Add(Name);
+        FUnifiedScriptAuthoringParameter Parameter;
+        Parameter.Name = MoveTemp(Name);
+        Parameter.TypeMetadataName = MoveTemp(Type);
+        OutParameters.Add(MoveTemp(Parameter));
+    }
+    if (OutParameters.Num() > 16)
+    {
+        OutError = TEXT("A visually authored function supports at most 16 parameters.");
+        return false;
+    }
+    OutError.Reset();
+    return true;
 }
 
 const FUnifiedScriptAuthoringRegion* SUnifiedScriptAuthoringSurface::FindRegion(
@@ -5547,6 +6378,235 @@ void SUnifiedScriptAuthoringSurface::RebuildInspector(
                     .Text(FText::FromString(BuildSourcePreview(Item->Span)))
                     .IsReadOnly(true)
                     .Font(FAppStyle::GetFontStyle(TEXT("MonoFont")))
+                ]
+            ];
+        }
+    }
+
+    if (Item->Kind == EUnifiedScriptSurfaceTreeItemKind::Asset)
+    {
+        const FUnifiedScriptAuthoringAsset* Asset = FindAsset(Item->SemanticId);
+        if (Asset != nullptr)
+        {
+            TSharedPtr<SEditableTextBox> AssetPathEditor;
+            InspectorBox->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 8.0f)
+            [
+                SNew(STextBlock)
+                .Text(LOCTEXT("AssetDeclarationAuthoring", "SCRIPT ASSET AUTHORING"))
+                .Font(FAppStyle::GetFontStyle(TEXT("SmallFontBold")))
+            ];
+            InspectorBox->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 8.0f)
+            [
+                SNew(SBorder)
+                .BorderImage(FAppStyle::GetBrush(TEXT("ToolPanel.GroupBorder")))
+                .Padding(8.0f)
+                [
+                    SNew(SVerticalBox)
+                    + SVerticalBox::Slot().AutoHeight()
+                    [
+                        UE::UnifiedScript::AuthoringSurface::Slate::Private::MakeInspectorLabel(
+                            TEXT("ENGINE-FACING ASSET PATH"))
+                    ]
+                    + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 8.0f)
+                    [
+                        SNew(SHorizontalBox)
+                        + SHorizontalBox::Slot().FillWidth(1.0f)
+                        [
+                            SAssignNew(AssetPathEditor, SEditableTextBox)
+                            .Text(FText::FromString(Asset->AssetPath))
+                        ]
+                        + SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f, 0.0f, 0.0f)
+                        [
+                            SNew(SButton)
+                            .Text(LOCTEXT("ApplyAssetPath", "Preview Path"))
+                            .IsEnabled_Lambda([this]() { return !bPatchRequestPending; })
+                            .OnClicked(
+                                this,
+                                &SUnifiedScriptAuthoringSurface::HandleUpdateScriptAssetPath,
+                                Asset->Id,
+                                AssetPathEditor)
+                        ]
+                    ]
+                    + SVerticalBox::Slot().AutoHeight()
+                    [
+                        SNew(SHorizontalBox)
+                        + SHorizontalBox::Slot().AutoWidth()
+                        [
+                            SNew(SButton)
+                            .Text(LOCTEXT("AddAssetState", "+ State"))
+                            .IsEnabled_Lambda([this]() { return !bPatchRequestPending; })
+                            .OnClicked(
+                                this,
+                                &SUnifiedScriptAuthoringSurface::HandleAddState,
+                                Asset->Id)
+                        ]
+                        + SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
+                        [
+                            SNew(SButton)
+                            .Text(LOCTEXT("AddAssetFunction", "+ Function"))
+                            .IsEnabled_Lambda([this]() { return !bPatchRequestPending; })
+                            .OnClicked(
+                                this,
+                                &SUnifiedScriptAuthoringSurface::HandleAddFunction,
+                                Asset->Id)
+                        ]
+                        + SHorizontalBox::Slot().AutoWidth()
+                        [
+                            SNew(SButton)
+                            .Text(LOCTEXT("RemoveScriptAsset", "Remove Asset"))
+                            .ToolTipText(LOCTEXT(
+                                "RemoveScriptAssetTip",
+                                "Preview removal of the complete C# Script Asset type before any source write."))
+                            .IsEnabled_Lambda([this]() { return !bPatchRequestPending; })
+                            .OnClicked(
+                                this,
+                                &SUnifiedScriptAuthoringSurface::HandleRemoveScriptAsset,
+                                Asset->Id)
+                        ]
+                    ]
+                ]
+            ];
+
+            const auto HasFunction = [Asset](const TCHAR* Name)
+            {
+                return Asset->Functions.ContainsByPredicate([Name](
+                    const FUnifiedScriptAuthoringFunction& Function)
+                {
+                    return Function.Name == Name;
+                });
+            };
+            const bool bHasAnyActorLifecycle = HasFunction(TEXT("OnBeginPlay")) ||
+                HasFunction(TEXT("OnTick")) || HasFunction(TEXT("OnEndPlay"));
+            if (bHasAnyActorLifecycle &&
+                (!HasFunction(TEXT("OnBeginPlay")) || !HasFunction(TEXT("OnTick")) ||
+                    !HasFunction(TEXT("OnEndPlay"))))
+            {
+                InspectorBox->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 10.0f)
+                [
+                    SNew(SBorder)
+                    .BorderImage(FAppStyle::GetBrush(TEXT("ToolPanel.GroupBorder")))
+                    .Padding(8.0f)
+                    [
+                        SNew(SVerticalBox)
+                        + SVerticalBox::Slot().AutoHeight()
+                        [
+                            UE::UnifiedScript::AuthoringSurface::Slate::Private::MakeInspectorLabel(
+                                TEXT("ACTOR LIFECYCLE HOOKS"))
+                        ]
+                        + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
+                        [
+                            SNew(SHorizontalBox)
+                            + SHorizontalBox::Slot().AutoWidth()
+                            [
+                                SNew(SButton)
+                                .Text(LOCTEXT("AddBeginPlayHook", "+ BeginPlay"))
+                                .Visibility(HasFunction(TEXT("OnBeginPlay"))
+                                    ? EVisibility::Collapsed
+                                    : EVisibility::Visible)
+                                .IsEnabled_Lambda([this]() { return !bPatchRequestPending; })
+                                .OnClicked(
+                                    this,
+                                    &SUnifiedScriptAuthoringSurface::HandleAddLifecycleHook,
+                                    Asset->Id,
+                                    FString(TEXT("beginPlay")))
+                            ]
+                            + SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
+                            [
+                                SNew(SButton)
+                                .Text(LOCTEXT("AddTickHook", "+ Tick"))
+                                .Visibility(HasFunction(TEXT("OnTick"))
+                                    ? EVisibility::Collapsed
+                                    : EVisibility::Visible)
+                                .IsEnabled_Lambda([this]() { return !bPatchRequestPending; })
+                                .OnClicked(
+                                    this,
+                                    &SUnifiedScriptAuthoringSurface::HandleAddLifecycleHook,
+                                    Asset->Id,
+                                    FString(TEXT("tick")))
+                            ]
+                            + SHorizontalBox::Slot().AutoWidth()
+                            [
+                                SNew(SButton)
+                                .Text(LOCTEXT("AddEndPlayHook", "+ EndPlay"))
+                                .Visibility(HasFunction(TEXT("OnEndPlay"))
+                                    ? EVisibility::Collapsed
+                                    : EVisibility::Visible)
+                                .IsEnabled_Lambda([this]() { return !bPatchRequestPending; })
+                                .OnClicked(
+                                    this,
+                                    &SUnifiedScriptAuthoringSurface::HandleAddLifecycleHook,
+                                    Asset->Id,
+                                    FString(TEXT("endPlay")))
+                            ]
+                        ]
+                    ]
+                ];
+            }
+        }
+    }
+    else if (Item->Kind == EUnifiedScriptSurfaceTreeItemKind::State)
+    {
+        if (const FUnifiedScriptAuthoringState* State = FindState(Item->SemanticId))
+        {
+            InspectorBox->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 10.0f)
+            [
+                SNew(SHorizontalBox)
+                + SHorizontalBox::Slot().AutoWidth()
+                [
+                    SNew(SButton)
+                    .Text(LOCTEXT("EditScriptState", "Edit State..."))
+                    .IsEnabled_Lambda([this]() { return !bPatchRequestPending; })
+                    .OnClicked(
+                        this,
+                        &SUnifiedScriptAuthoringSurface::HandleEditState,
+                        State->Id)
+                ]
+                + SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
+                [
+                    SNew(SButton)
+                    .Text(LOCTEXT("RemoveScriptState", "Remove State"))
+                    .IsEnabled_Lambda([this]() { return !bPatchRequestPending; })
+                    .OnClicked(
+                        this,
+                        &SUnifiedScriptAuthoringSurface::HandleRemoveState,
+                        State->Id)
+                ]
+            ];
+        }
+    }
+    else if (Item->Kind == EUnifiedScriptSurfaceTreeItemKind::Function)
+    {
+        if (const FUnifiedScriptAuthoringFunction* Function = FindFunction(Item->SemanticId))
+        {
+            const bool bGeneratedSignature =
+                IsEventFunction(*Function) || IsLifecycleFunction(*Function);
+            InspectorBox->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 10.0f)
+            [
+                SNew(SHorizontalBox)
+                + SHorizontalBox::Slot().AutoWidth()
+                [
+                    SNew(SButton)
+                    .Text(LOCTEXT("EditVisualFunction", "Edit Function..."))
+                    .Visibility(bGeneratedSignature
+                        ? EVisibility::Collapsed
+                        : EVisibility::Visible)
+                    .IsEnabled_Lambda([this]() { return !bPatchRequestPending; })
+                    .OnClicked(
+                        this,
+                        &SUnifiedScriptAuthoringSurface::HandleEditFunction,
+                        Function->Id)
+                ]
+                + SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
+                [
+                    SNew(SButton)
+                    .Text(IsEventFunction(*Function)
+                        ? LOCTEXT("RemoveEventEntry", "Remove Event Entry")
+                        : LOCTEXT("RemoveVisualFunction", "Remove Function"))
+                    .IsEnabled_Lambda([this]() { return !bPatchRequestPending; })
+                    .OnClicked(
+                        this,
+                        &SUnifiedScriptAuthoringSurface::HandleRemoveFunction,
+                        Function->Id)
                 ]
             ];
         }

@@ -161,6 +161,19 @@ private:
     FReply HandleBeginAuthoringGroup();
     FReply HandleCommitAuthoringGroup();
     FReply HandleCancelAuthoringGroup();
+    FReply HandleCreateScriptAsset();
+    FReply HandleUpdateScriptAssetPath(
+        FString AssetId,
+        TSharedPtr<SEditableTextBox> PathEditor);
+    FReply HandleRemoveScriptAsset(FString AssetId);
+    FReply HandleAddState(FString AssetId);
+    FReply HandleEditState(FString StateId);
+    FReply HandleRemoveState(FString StateId);
+    FReply HandleAddFunction(FString AssetId);
+    FReply HandleEditFunction(FString FunctionId);
+    FReply HandleRemoveFunction(FString FunctionId);
+    FReply HandleAddLifecycleHook(FString AssetId, FString Hook);
+    void SubmitDeclarationPatch(FString Patch, FString Activity);
     void SubmitSemanticPatch(FString Patch, FString Activity);
     void SubmitAuthoringTransaction(
         FString Payload,
@@ -231,6 +244,15 @@ private:
         int32 NodePosX,
         int32 NodePosY);
     const FUnifiedScriptAuthoringFunction* FindFunction(const FString& FunctionId) const;
+    const FUnifiedScriptAuthoringAsset* FindAsset(const FString& AssetId) const;
+    const FUnifiedScriptAuthoringAsset* FindOwningAsset(const FString& DeclarationId) const;
+    const FUnifiedScriptAuthoringState* FindState(const FString& StateId) const;
+    static bool IsLifecycleFunction(const FUnifiedScriptAuthoringFunction& Function);
+    static bool IsEventFunction(const FUnifiedScriptAuthoringFunction& Function);
+    static bool ParseFunctionParameters(
+        const FString& Text,
+        TArray<FUnifiedScriptAuthoringParameter>& OutParameters,
+        FString& OutError);
     const FUnifiedScriptAuthoringRegion* FindRegion(
         const FUnifiedScriptAuthoringFunction& Function,
         const FString& RegionId) const;
@@ -268,6 +290,7 @@ private:
     FString InitialSurfacePath;
     FString LoadedSurfacePath;
     FString LoadedLayoutPath;
+    FString WorkbenchSourcePath;
     FDateTime LoadedSurfaceTimestamp;
     bool bAutoReload = true;
     bool bReloadMatchingComponents = true;

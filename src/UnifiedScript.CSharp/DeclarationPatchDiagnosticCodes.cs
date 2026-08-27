@@ -9,4 +9,5 @@ public static class DeclarationPatchDiagnosticCodes
     public const string InvalidReplacement = "UAD2005";
     public const string PersistentIdentityRequired = "UAD2006";
     public const string PostconditionFailed = "UAD2007";
+    public const string DeclarationPreconditionFailed = "UAD2008";
 }

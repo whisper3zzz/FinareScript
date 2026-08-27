@@ -163,11 +163,112 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
             EventFunction->Parameters,
             EventPatchJson,
             Error));
-    TestTrue(TEXT("Event Entry patch uses declaration v0.2 and the canonical event path"),
-        EventPatchJson.Contains(TEXT("unifiedscript.declaration-patch/v0.2")) &&
+    TestTrue(TEXT("Event Entry patch uses declaration v0.3 and the canonical event path"),
+        EventPatchJson.Contains(TEXT("unifiedscript.declaration-patch/v0.3")) &&
             EventPatchJson.Contains(TEXT("addUnrealEventHandler")) &&
             EventPatchJson.Contains(
                 TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:OnManagedSignal")));
+    FString DeclarationPatchJson;
+    TestTrue(TEXT("My Script can create a runnable Actor Script Asset"),
+        FUnifiedScriptAuthoringSurfaceReader::BuildScriptAssetCreationPatch(
+            Document,
+            Document.Assets[0].Span.FilePath,
+            TEXT("UnifiedScript.Unreal.Demo"),
+            TEXT("VisualActorScript"),
+            TEXT("Unreal/VisualActor"),
+            true,
+            DeclarationPatchJson,
+            Error) &&
+        DeclarationPatchJson.Contains(TEXT("addAsset")) &&
+        DeclarationPatchJson.Contains(TEXT("includeActorLifecycle")));
+    TestTrue(TEXT("My Script can rename the engine-facing asset path"),
+        FUnifiedScriptAuthoringSurfaceReader::BuildScriptAssetPathUpdatePatch(
+            Document,
+            Document.Assets[0],
+            TEXT("Unreal/DemoRenamed"),
+            DeclarationPatchJson,
+            Error) &&
+        DeclarationPatchJson.Contains(TEXT("updateAsset")) &&
+        DeclarationPatchJson.Contains(TEXT("replacementAssetPath")));
+    FUnifiedScriptAuthoringExposure NewExposure;
+    NewExposure.bInstanceEditable = true;
+    NewExposure.bSaveGame = true;
+    NewExposure.Category = TEXT("Gameplay");
+    TestTrue(TEXT("My Script can add exposed state without authoring JSON"),
+        FUnifiedScriptAuthoringSurfaceReader::BuildStateAdditionPatch(
+            Document,
+            Document.Assets[0],
+            TEXT("Ammo"),
+            TEXT("int"),
+            TEXT("integer"),
+            TEXT("30"),
+            NewExposure,
+            DeclarationPatchJson,
+            Error) &&
+        DeclarationPatchJson.Contains(TEXT("addState")) &&
+        DeclarationPatchJson.Contains(TEXT("instanceEditable")));
+    TestTrue(TEXT("My Script can edit an exact exposed state contract"),
+        FUnifiedScriptAuthoringSurfaceReader::BuildStateUpdatePatch(
+            Document,
+            Document.Assets[0].States[0],
+            TEXT("InitialValue"),
+            TEXT("int"),
+            TEXT("integer"),
+            TEXT("12"),
+            NewExposure,
+            DeclarationPatchJson,
+            Error) &&
+        DeclarationPatchJson.Contains(TEXT("updateState")) &&
+        DeclarationPatchJson.Contains(TEXT("expected")));
+    FUnifiedScriptAuthoringParameter FunctionParameter;
+    FunctionParameter.Name = TEXT("amount");
+    FunctionParameter.TypeMetadataName = TEXT("int");
+    TestTrue(TEXT("My Script can create a typed Visual function"),
+        FUnifiedScriptAuthoringSurfaceReader::BuildFunctionAdditionPatch(
+            Document,
+            Document.Assets[0],
+            TEXT("ResolveAmmo"),
+            TEXT("int"),
+            false,
+            {FunctionParameter},
+            DeclarationPatchJson,
+            Error) &&
+        DeclarationPatchJson.Contains(TEXT("addFunction")) &&
+        DeclarationPatchJson.Contains(TEXT("ResolveAmmo")));
+    TestTrue(TEXT("My Script can update a function contract with preconditions"),
+        FUnifiedScriptAuthoringSurfaceReader::BuildFunctionUpdatePatch(
+            Document,
+            Function,
+            TEXT("ResolveInitialValue2"),
+            TEXT("int"),
+            Function.bStatic,
+            Function.Parameters,
+            DeclarationPatchJson,
+            Error) &&
+        DeclarationPatchJson.Contains(TEXT("updateFunction")) &&
+        DeclarationPatchJson.Contains(TEXT("returnTypeMetadataName")));
+    TestTrue(TEXT("My Script can remove a reflected Event Entry as a function"),
+        FUnifiedScriptAuthoringSurfaceReader::BuildFunctionRemovalPatch(
+            Document,
+            *EventFunction,
+            DeclarationPatchJson,
+            Error) &&
+        DeclarationPatchJson.Contains(TEXT("removeFunction")));
+    TestTrue(TEXT("My Script can add a missing lifecycle hook"),
+        FUnifiedScriptAuthoringSurfaceReader::BuildLifecycleHookAdditionPatch(
+            Document,
+            Document.Assets[0],
+            TEXT("tick"),
+            DeclarationPatchJson,
+            Error) &&
+        DeclarationPatchJson.Contains(TEXT("addLifecycleHook")));
+    TestTrue(TEXT("My Script can remove an exact Script Asset through preview"),
+        FUnifiedScriptAuthoringSurfaceReader::BuildScriptAssetRemovalPatch(
+            Document,
+            Document.Assets[0],
+            DeclarationPatchJson,
+            Error) &&
+        DeclarationPatchJson.Contains(TEXT("removeAsset")));
     const FUnifiedScriptAuthoringEdit* LiteralEdit = nullptr;
     for (const FUnifiedScriptAuthoringAction& Action : Function.Actions)
     {

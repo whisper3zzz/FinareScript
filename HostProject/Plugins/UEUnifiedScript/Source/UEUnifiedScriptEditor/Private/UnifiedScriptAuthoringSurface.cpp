@@ -1039,6 +1039,153 @@ TSharedRef<FJsonObject> MakePatchRoot(
     return Root;
 }
 
+TSharedRef<FJsonObject> MakeDeclarationPatchRoot(
+    const FUnifiedScriptAuthoringSurfaceDocument& Document,
+    const TSharedRef<FJsonObject>& Operation)
+{
+    const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
+    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.declaration-patch/v0.3"));
+    Root->SetStringField(TEXT("sourceCompilationId"), Document.SourceCompilationId);
+    Root->SetStringField(TEXT("semanticConfigurationId"), Document.SemanticConfigurationId);
+    Root->SetArrayField(TEXT("operations"), {MakeShared<FJsonValueObject>(Operation)});
+    return Root;
+}
+
+bool TryParseJsonValue(
+    const FString& ValueText,
+    TSharedPtr<FJsonValue>& OutValue,
+    FString& OutError)
+{
+    TSharedPtr<FJsonObject> Wrapper;
+    if (!FJsonSerializer::Deserialize(
+            TJsonReaderFactory<>::Create(
+                FString::Printf(TEXT("{\"value\":%s}"), *ValueText)),
+            Wrapper) ||
+        !Wrapper.IsValid() || !Wrapper->HasField(TEXT("value")))
+    {
+        OutError = FString::Printf(
+            TEXT("State default '%s' is not a valid JSON scalar."),
+            *ValueText);
+        return false;
+    }
+    OutValue = Wrapper->TryGetField(TEXT("value"));
+    if (!OutValue.IsValid() || OutValue->Type == EJson::Array ||
+        OutValue->Type == EJson::Object)
+    {
+        OutError = TEXT("A state default must be a JSON boolean, number, string, or null.");
+        return false;
+    }
+    return true;
+}
+
+TSharedRef<FJsonObject> MakeExposure(const FUnifiedScriptAuthoringExposure& Exposure)
+{
+    const TSharedRef<FJsonObject> Json = MakeShared<FJsonObject>();
+    Json->SetBoolField(TEXT("instanceEditable"), Exposure.bInstanceEditable);
+    Json->SetBoolField(TEXT("saveGame"), Exposure.bSaveGame);
+    Json->SetBoolField(TEXT("replicated"), Exposure.bReplicated);
+    if (Exposure.Category.IsEmpty())
+    {
+        Json->SetField(TEXT("category"), MakeShared<FJsonValueNull>());
+    }
+    else
+    {
+        Json->SetStringField(TEXT("category"), Exposure.Category);
+    }
+    return Json;
+}
+
+bool MakeStateSpec(
+    const FString& Name,
+    const FString& TypeName,
+    const FString& TypeKind,
+    const FString& DefaultValueText,
+    const FUnifiedScriptAuthoringExposure& Exposure,
+    TSharedPtr<FJsonObject>& OutSpec,
+    FString& OutError)
+{
+    TSharedPtr<FJsonValue> DefaultValue;
+    if (Name.IsEmpty() || TypeName.IsEmpty() || TypeKind.IsEmpty() ||
+        !TryParseJsonValue(DefaultValueText, DefaultValue, OutError))
+    {
+        if (OutError.IsEmpty())
+        {
+            OutError = TEXT("A state requires a name, C# type, type kind, and JSON default.");
+        }
+        return false;
+    }
+    OutSpec = MakeShared<FJsonObject>();
+    OutSpec->SetStringField(TEXT("name"), Name);
+    OutSpec->SetStringField(TEXT("typeName"), TypeName);
+    OutSpec->SetStringField(TEXT("typeKind"), TypeKind);
+    OutSpec->SetField(TEXT("defaultValue"), DefaultValue);
+    OutSpec->SetObjectField(TEXT("exposure"), MakeExposure(Exposure));
+    return true;
+}
+
+bool MakeStateExpected(
+    const FUnifiedScriptAuthoringState& State,
+    TSharedPtr<FJsonObject>& OutExpected,
+    FString& OutError)
+{
+    TSharedPtr<FJsonValue> DefaultValue;
+    if (!TryParseJsonValue(State.DefaultValue, DefaultValue, OutError))
+    {
+        return false;
+    }
+    OutExpected = MakeShared<FJsonObject>();
+    OutExpected->SetStringField(TEXT("name"), State.Name);
+    OutExpected->SetStringField(TEXT("typeMetadataName"), State.TypeMetadataName);
+    OutExpected->SetStringField(TEXT("typeKind"), State.TypeKind);
+    OutExpected->SetField(TEXT("defaultValue"), DefaultValue);
+    OutExpected->SetObjectField(TEXT("exposure"), MakeExposure(State.Exposure));
+    return true;
+}
+
+TSharedRef<FJsonObject> MakeFunctionParameters(
+    const TArray<FUnifiedScriptAuthoringParameter>& Parameters,
+    bool bMetadataTypes)
+{
+    const TSharedRef<FJsonObject> Container = MakeShared<FJsonObject>();
+    TArray<TSharedPtr<FJsonValue>> Values;
+    for (const FUnifiedScriptAuthoringParameter& Parameter : Parameters)
+    {
+        const TSharedRef<FJsonObject> Json = MakeShared<FJsonObject>();
+        Json->SetStringField(TEXT("name"), Parameter.Name);
+        Json->SetStringField(
+            bMetadataTypes ? TEXT("typeMetadataName") : TEXT("typeName"),
+            Parameter.TypeMetadataName);
+        Values.Add(MakeShared<FJsonValueObject>(Json));
+    }
+    Container->SetArrayField(TEXT("parameters"), MoveTemp(Values));
+    return Container;
+}
+
+TSharedRef<FJsonObject> MakeFunctionSpec(
+    const FString& Name,
+    const FString& ReturnTypeName,
+    bool bStatic,
+    const TArray<FUnifiedScriptAuthoringParameter>& Parameters)
+{
+    const TSharedRef<FJsonObject> Spec = MakeFunctionParameters(Parameters, false);
+    Spec->SetStringField(TEXT("name"), Name);
+    Spec->SetStringField(TEXT("returnTypeName"), ReturnTypeName);
+    Spec->SetBoolField(TEXT("isStatic"), bStatic);
+    return Spec;
+}
+
+TSharedRef<FJsonObject> MakeFunctionExpected(
+    const FUnifiedScriptAuthoringFunction& Function)
+{
+    const TSharedRef<FJsonObject> Expected = MakeFunctionParameters(Function.Parameters, true);
+    Expected->SetStringField(TEXT("name"), Function.Name);
+    Expected->SetStringField(
+        TEXT("returnTypeMetadataName"),
+        Function.ReturnTypeMetadataName);
+    Expected->SetBoolField(TEXT("isStatic"), Function.bStatic);
+    return Expected;
+}
+
 const FUnifiedScriptAuthoringRegion* FindOwningBlock(
     const FUnifiedScriptAuthoringFunction& Function,
     const FString& StatementId)
@@ -2869,6 +3016,320 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildMemberAccessInsertionPatch(
     return SerializeRoot(MakePatchRoot(Document, Operation), OutPatchJson, OutError, TEXT("the reflected property insertion patch"));
 }
 
+bool FUnifiedScriptAuthoringSurfaceReader::BuildScriptAssetCreationPatch(
+    const FUnifiedScriptAuthoringSurfaceDocument& Document,
+    const FString& TargetSourcePath,
+    const FString& Namespace,
+    const FString& TypeName,
+    const FString& AssetPath,
+    bool bIncludeActorLifecycle,
+    FString& OutPatchJson,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::AuthoringSurface::Private;
+    using namespace UE::UnifiedScript::AuthoringSurface::Editing::Private;
+    if (!IsSemanticId(Document.SourceCompilationId) ||
+        !IsSemanticId(Document.SemanticConfigurationId) || TargetSourcePath.IsEmpty() ||
+        TypeName.IsEmpty() || AssetPath.IsEmpty())
+    {
+        OutError = TEXT("A new Script Asset requires a workspace source, type name, and asset path.");
+        return false;
+    }
+    const TSharedRef<FJsonObject> Asset = MakeShared<FJsonObject>();
+    Asset->SetStringField(TEXT("namespace"), Namespace);
+    Asset->SetStringField(TEXT("name"), TypeName);
+    Asset->SetStringField(TEXT("assetPath"), AssetPath);
+    if (bIncludeActorLifecycle)
+    {
+        Asset->SetStringField(
+            TEXT("baseTypeName"),
+            TEXT("global::UnifiedScript.Unreal.UnrealActorScript"));
+    }
+    else
+    {
+        Asset->SetField(TEXT("baseTypeName"), MakeShared<FJsonValueNull>());
+    }
+    Asset->SetBoolField(TEXT("includeActorLifecycle"), bIncludeActorLifecycle);
+    const TSharedRef<FJsonObject> Operation = MakeShared<FJsonObject>();
+    Operation->SetStringField(TEXT("operation"), TEXT("addAsset"));
+    Operation->SetStringField(TEXT("targetSourcePath"), TargetSourcePath);
+    Operation->SetObjectField(TEXT("asset"), Asset);
+    return SerializeRoot(
+        MakeDeclarationPatchRoot(Document, Operation),
+        OutPatchJson,
+        OutError,
+        TEXT("the Script Asset creation patch"));
+}
+
+bool FUnifiedScriptAuthoringSurfaceReader::BuildScriptAssetPathUpdatePatch(
+    const FUnifiedScriptAuthoringSurfaceDocument& Document,
+    const FUnifiedScriptAuthoringAsset& Asset,
+    const FString& AssetPath,
+    FString& OutPatchJson,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::AuthoringSurface::Private;
+    using namespace UE::UnifiedScript::AuthoringSurface::Editing::Private;
+    if (!IsSemanticId(Asset.Id) || Asset.QualifiedName.IsEmpty() ||
+        Asset.AssetPath.IsEmpty() || AssetPath.IsEmpty() || AssetPath == Asset.AssetPath)
+    {
+        OutError = TEXT("Changing a Script Asset requires a distinct non-empty asset path.");
+        return false;
+    }
+    const TSharedRef<FJsonObject> Expected = MakeShared<FJsonObject>();
+    Expected->SetStringField(TEXT("qualifiedName"), Asset.QualifiedName);
+    Expected->SetStringField(TEXT("assetPath"), Asset.AssetPath);
+    const TSharedRef<FJsonObject> Operation = MakeShared<FJsonObject>();
+    Operation->SetStringField(TEXT("operation"), TEXT("updateAsset"));
+    Operation->SetStringField(TEXT("targetAssetId"), Asset.Id);
+    Operation->SetObjectField(TEXT("expected"), Expected);
+    Operation->SetStringField(TEXT("replacementAssetPath"), AssetPath);
+    return SerializeRoot(
+        MakeDeclarationPatchRoot(Document, Operation),
+        OutPatchJson,
+        OutError,
+        TEXT("the Script Asset path patch"));
+}
+
+bool FUnifiedScriptAuthoringSurfaceReader::BuildScriptAssetRemovalPatch(
+    const FUnifiedScriptAuthoringSurfaceDocument& Document,
+    const FUnifiedScriptAuthoringAsset& Asset,
+    FString& OutPatchJson,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::AuthoringSurface::Private;
+    using namespace UE::UnifiedScript::AuthoringSurface::Editing::Private;
+    if (!IsSemanticId(Asset.Id) || Asset.QualifiedName.IsEmpty() || Asset.AssetPath.IsEmpty())
+    {
+        OutError = TEXT("Removing a Script Asset requires an exact current asset contract.");
+        return false;
+    }
+    const TSharedRef<FJsonObject> Expected = MakeShared<FJsonObject>();
+    Expected->SetStringField(TEXT("qualifiedName"), Asset.QualifiedName);
+    Expected->SetStringField(TEXT("assetPath"), Asset.AssetPath);
+    const TSharedRef<FJsonObject> Operation = MakeShared<FJsonObject>();
+    Operation->SetStringField(TEXT("operation"), TEXT("removeAsset"));
+    Operation->SetStringField(TEXT("targetAssetId"), Asset.Id);
+    Operation->SetObjectField(TEXT("expected"), Expected);
+    return SerializeRoot(
+        MakeDeclarationPatchRoot(Document, Operation),
+        OutPatchJson,
+        OutError,
+        TEXT("the Script Asset removal patch"));
+}
+
+bool FUnifiedScriptAuthoringSurfaceReader::BuildStateAdditionPatch(
+    const FUnifiedScriptAuthoringSurfaceDocument& Document,
+    const FUnifiedScriptAuthoringAsset& Asset,
+    const FString& Name,
+    const FString& TypeName,
+    const FString& TypeKind,
+    const FString& DefaultValueText,
+    const FUnifiedScriptAuthoringExposure& Exposure,
+    FString& OutPatchJson,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::AuthoringSurface::Private;
+    using namespace UE::UnifiedScript::AuthoringSurface::Editing::Private;
+    TSharedPtr<FJsonObject> State;
+    if (!IsSemanticId(Asset.Id) ||
+        !MakeStateSpec(Name, TypeName, TypeKind, DefaultValueText, Exposure, State, OutError))
+    {
+        if (OutError.IsEmpty()) OutError = TEXT("Adding state requires a current Script Asset.");
+        return false;
+    }
+    const TSharedRef<FJsonObject> Operation = MakeShared<FJsonObject>();
+    Operation->SetStringField(TEXT("operation"), TEXT("addState"));
+    Operation->SetStringField(TEXT("targetAssetId"), Asset.Id);
+    Operation->SetObjectField(TEXT("state"), State.ToSharedRef());
+    return SerializeRoot(
+        MakeDeclarationPatchRoot(Document, Operation),
+        OutPatchJson,
+        OutError,
+        TEXT("the state creation patch"));
+}
+
+bool FUnifiedScriptAuthoringSurfaceReader::BuildStateUpdatePatch(
+    const FUnifiedScriptAuthoringSurfaceDocument& Document,
+    const FUnifiedScriptAuthoringState& State,
+    const FString& Name,
+    const FString& TypeName,
+    const FString& TypeKind,
+    const FString& DefaultValueText,
+    const FUnifiedScriptAuthoringExposure& Exposure,
+    FString& OutPatchJson,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::AuthoringSurface::Private;
+    using namespace UE::UnifiedScript::AuthoringSurface::Editing::Private;
+    TSharedPtr<FJsonObject> Expected;
+    TSharedPtr<FJsonObject> Replacement;
+    if (!IsSemanticId(State.Id) || !MakeStateExpected(State, Expected, OutError) ||
+        !MakeStateSpec(
+            Name,
+            TypeName,
+            TypeKind,
+            DefaultValueText,
+            Exposure,
+            Replacement,
+            OutError))
+    {
+        if (OutError.IsEmpty()) OutError = TEXT("Updating state requires an exact current state.");
+        return false;
+    }
+    const TSharedRef<FJsonObject> Operation = MakeShared<FJsonObject>();
+    Operation->SetStringField(TEXT("operation"), TEXT("updateState"));
+    Operation->SetStringField(TEXT("targetStateId"), State.Id);
+    Operation->SetObjectField(TEXT("expected"), Expected.ToSharedRef());
+    Operation->SetObjectField(TEXT("replacement"), Replacement.ToSharedRef());
+    return SerializeRoot(
+        MakeDeclarationPatchRoot(Document, Operation),
+        OutPatchJson,
+        OutError,
+        TEXT("the state update patch"));
+}
+
+bool FUnifiedScriptAuthoringSurfaceReader::BuildStateRemovalPatch(
+    const FUnifiedScriptAuthoringSurfaceDocument& Document,
+    const FUnifiedScriptAuthoringState& State,
+    FString& OutPatchJson,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::AuthoringSurface::Private;
+    using namespace UE::UnifiedScript::AuthoringSurface::Editing::Private;
+    TSharedPtr<FJsonObject> Expected;
+    if (!IsSemanticId(State.Id) || !MakeStateExpected(State, Expected, OutError))
+    {
+        if (OutError.IsEmpty()) OutError = TEXT("Removing state requires an exact current state.");
+        return false;
+    }
+    const TSharedRef<FJsonObject> Operation = MakeShared<FJsonObject>();
+    Operation->SetStringField(TEXT("operation"), TEXT("removeState"));
+    Operation->SetStringField(TEXT("targetStateId"), State.Id);
+    Operation->SetObjectField(TEXT("expected"), Expected.ToSharedRef());
+    return SerializeRoot(
+        MakeDeclarationPatchRoot(Document, Operation),
+        OutPatchJson,
+        OutError,
+        TEXT("the state removal patch"));
+}
+
+bool FUnifiedScriptAuthoringSurfaceReader::BuildFunctionAdditionPatch(
+    const FUnifiedScriptAuthoringSurfaceDocument& Document,
+    const FUnifiedScriptAuthoringAsset& Asset,
+    const FString& Name,
+    const FString& ReturnTypeName,
+    bool bStatic,
+    const TArray<FUnifiedScriptAuthoringParameter>& Parameters,
+    FString& OutPatchJson,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::AuthoringSurface::Private;
+    using namespace UE::UnifiedScript::AuthoringSurface::Editing::Private;
+    if (!IsSemanticId(Asset.Id) || Name.IsEmpty() || ReturnTypeName.IsEmpty() ||
+        Parameters.ContainsByPredicate([](const FUnifiedScriptAuthoringParameter& Parameter)
+        {
+            return Parameter.Name.IsEmpty() || Parameter.TypeMetadataName.IsEmpty();
+        }))
+    {
+        OutError = TEXT("Adding a function requires an asset, name, scalar return, and typed parameters.");
+        return false;
+    }
+    const TSharedRef<FJsonObject> Operation = MakeShared<FJsonObject>();
+    Operation->SetStringField(TEXT("operation"), TEXT("addFunction"));
+    Operation->SetStringField(TEXT("targetAssetId"), Asset.Id);
+    Operation->SetObjectField(
+        TEXT("function"),
+        MakeFunctionSpec(Name, ReturnTypeName, bStatic, Parameters));
+    return SerializeRoot(
+        MakeDeclarationPatchRoot(Document, Operation),
+        OutPatchJson,
+        OutError,
+        TEXT("the function creation patch"));
+}
+
+bool FUnifiedScriptAuthoringSurfaceReader::BuildFunctionUpdatePatch(
+    const FUnifiedScriptAuthoringSurfaceDocument& Document,
+    const FUnifiedScriptAuthoringFunction& Function,
+    const FString& Name,
+    const FString& ReturnTypeName,
+    bool bStatic,
+    const TArray<FUnifiedScriptAuthoringParameter>& Parameters,
+    FString& OutPatchJson,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::AuthoringSurface::Private;
+    using namespace UE::UnifiedScript::AuthoringSurface::Editing::Private;
+    if (!IsSemanticId(Function.Id) || Name.IsEmpty() || ReturnTypeName.IsEmpty() ||
+        Parameters.Num() != Function.Parameters.Num())
+    {
+        OutError = TEXT("Updating a function requires an exact function and the same parameter count.");
+        return false;
+    }
+    const TSharedRef<FJsonObject> Operation = MakeShared<FJsonObject>();
+    Operation->SetStringField(TEXT("operation"), TEXT("updateFunction"));
+    Operation->SetStringField(TEXT("targetFunctionId"), Function.Id);
+    Operation->SetObjectField(TEXT("expected"), MakeFunctionExpected(Function));
+    Operation->SetObjectField(
+        TEXT("replacement"),
+        MakeFunctionSpec(Name, ReturnTypeName, bStatic, Parameters));
+    return SerializeRoot(
+        MakeDeclarationPatchRoot(Document, Operation),
+        OutPatchJson,
+        OutError,
+        TEXT("the function update patch"));
+}
+
+bool FUnifiedScriptAuthoringSurfaceReader::BuildFunctionRemovalPatch(
+    const FUnifiedScriptAuthoringSurfaceDocument& Document,
+    const FUnifiedScriptAuthoringFunction& Function,
+    FString& OutPatchJson,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::AuthoringSurface::Private;
+    using namespace UE::UnifiedScript::AuthoringSurface::Editing::Private;
+    if (!IsSemanticId(Function.Id))
+    {
+        OutError = TEXT("Removing a function requires an exact current function.");
+        return false;
+    }
+    const TSharedRef<FJsonObject> Operation = MakeShared<FJsonObject>();
+    Operation->SetStringField(TEXT("operation"), TEXT("removeFunction"));
+    Operation->SetStringField(TEXT("targetFunctionId"), Function.Id);
+    Operation->SetObjectField(TEXT("expected"), MakeFunctionExpected(Function));
+    return SerializeRoot(
+        MakeDeclarationPatchRoot(Document, Operation),
+        OutPatchJson,
+        OutError,
+        TEXT("the function removal patch"));
+}
+
+bool FUnifiedScriptAuthoringSurfaceReader::BuildLifecycleHookAdditionPatch(
+    const FUnifiedScriptAuthoringSurfaceDocument& Document,
+    const FUnifiedScriptAuthoringAsset& Asset,
+    const FString& Hook,
+    FString& OutPatchJson,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::AuthoringSurface::Private;
+    using namespace UE::UnifiedScript::AuthoringSurface::Editing::Private;
+    if (!IsSemanticId(Asset.Id) ||
+        (Hook != TEXT("beginPlay") && Hook != TEXT("tick") && Hook != TEXT("endPlay")))
+    {
+        OutError = TEXT("A lifecycle declaration requires beginPlay, tick, or endPlay.");
+        return false;
+    }
+    const TSharedRef<FJsonObject> Operation = MakeShared<FJsonObject>();
+    Operation->SetStringField(TEXT("operation"), TEXT("addLifecycleHook"));
+    Operation->SetStringField(TEXT("targetAssetId"), Asset.Id);
+    Operation->SetStringField(TEXT("hook"), Hook);
+    return SerializeRoot(
+        MakeDeclarationPatchRoot(Document, Operation),
+        OutPatchJson,
+        OutError,
+        TEXT("the lifecycle hook patch"));
+}
+
 bool FUnifiedScriptAuthoringSurfaceReader::BuildUnrealEventHandlerInsertionPatch(
     const FUnifiedScriptAuthoringSurfaceDocument& Document,
     const FUnifiedScriptAuthoringAsset& Asset,
@@ -2915,13 +3376,8 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildUnrealEventHandlerInsertionPatch
     Operation->SetStringField(TEXT("targetAssetId"), Asset.Id);
     Operation->SetObjectField(TEXT("handler"), Handler);
 
-    const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
-    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.declaration-patch/v0.2"));
-    Root->SetStringField(TEXT("sourceCompilationId"), Document.SourceCompilationId);
-    Root->SetStringField(TEXT("semanticConfigurationId"), Document.SemanticConfigurationId);
-    Root->SetArrayField(TEXT("operations"), {MakeShared<FJsonValueObject>(Operation)});
     return SerializeRoot(
-        Root,
+        MakeDeclarationPatchRoot(Document, Operation),
         OutPatchJson,
         OutError,
         TEXT("the Unreal Event Entry declaration patch"));
