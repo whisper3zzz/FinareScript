@@ -49,7 +49,7 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-27**
 
 - Active milestone: **M8 — Visual/C# Authoring Beta**
-- Next slice: **M8.1 — callable extraction and user-grouped transactions**
+- Next slice: **M8.1 — user-grouped transactions**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -60,9 +60,9 @@ machine-local unless an artifact explicitly says otherwise.
 
 | Gate | Verified result |
 | --- | --- |
-| Main source | `efc9f84` (`feat: persist transactional authoring history`), plus this Semantic Patch v0.26 change set |
+| Main source | `2d4c58a` (`feat: add cross-region statement range copy paste`), plus this Semantic Patch v0.27 change set |
 | Comparison source | `489ce9b` (`feat: complete full UnifiedScript migration`) |
-| Managed tests | 489 / 489 passed |
+| Managed tests | 495 / 495 passed |
 | Repository validator | 49 / 49 passed |
 | UE 5.8.1 native build | passed |
 | `UnifiedScript.Unreal` Automation | 13 / 13 passed at the M7.3 onboarding baseline; the migrated BlockBreaker Editor gate and focused M8.1 Authoring Surface gate also passed |
@@ -634,8 +634,9 @@ the same semantic program.
   the remaining high-value structured control operations
 - [x] support safe control-flow reconnection through region-aware transforms;
   reject irreducible or semantically ambiguous wiring with actionable feedback
-- [ ] make create, delete, reconnect, extract, collapse, copy/paste, undo/redo,
-  and multi-step edits transactional and identity-stable
+- [x] make create, delete, reconnect, extract, collapse, copy/paste, and
+  undo/redo transactional and identity-stable
+- [ ] group several author-selected edits into one named atomic transaction
 
 Progress (2026-08-27): HIR v0.8 and Graph v0.13 now preserve classic labels,
 declaration/type/var/discard/relational/logical patterns, guards, typed pattern
@@ -714,6 +715,19 @@ where parameter, result, visibility, and effect contracts can be explicit.
 User-defined grouping and callable extraction are now the remaining M8.1 slice.
 The 489/489 managed suite, UE 5.8 editor build, focused native Authoring Surface
 Automation, and 49/49 repository invariants pass.
+
+Semantic Patch v0.27 now closes bounded callable extraction. Slate sends an
+ordered same-block selection, exact outer gaps, containing method identity, and
+the requested name. Roslyn infers up to 16 graph-safe inputs and zero or one
+live result, creates a private static/non-static `[Visual]` method matching its
+caller, and keeps moved identities stable while assigning fresh identities to
+the new declaration, parameters, body, and call site. Caller-visible extracted
+locals retain their original identity at the call site. Async/await, escaping
+return/break/continue, directives, name conflicts, unsafe types, and multiple
+live outputs reject before any write. User-defined transaction grouping is now
+the only remaining M8.1 slice. The 495/495 managed suite, UE 5.8 editor build,
+focused native Authoring Surface Automation, and 49/49 repository invariants
+pass.
 
 ### M8.2 — Blueprint-grade Unreal experience
 

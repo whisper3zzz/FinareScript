@@ -916,7 +916,7 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildSemanticPatch(
     }
 
     const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
-    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.26"));
+    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.27"));
     Root->SetStringField(TEXT("sourceCompilationId"), Document.SourceCompilationId);
     Root->SetStringField(TEXT("semanticConfigurationId"), Document.SemanticConfigurationId);
     Root->SetArrayField(TEXT("operations"), {MakeShared<FJsonValueObject>(Operation)});
@@ -990,7 +990,7 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildDataEdgeReconnectionPatch(
     Operation->SetStringField(TEXT("expectedTypeId"), TargetInput->TypeId);
 
     const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
-    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.26"));
+    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.27"));
     Root->SetStringField(TEXT("sourceCompilationId"), Document.SourceCompilationId);
     Root->SetStringField(TEXT("semanticConfigurationId"), Document.SemanticConfigurationId);
     Root->SetArrayField(TEXT("operations"), {MakeShared<FJsonValueObject>(Operation)});
@@ -1032,7 +1032,7 @@ TSharedRef<FJsonObject> MakePatchRoot(
     const TSharedRef<FJsonObject>& Operation)
 {
     const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
-    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.26"));
+    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.27"));
     Root->SetStringField(TEXT("sourceCompilationId"), Document.SourceCompilationId);
     Root->SetStringField(TEXT("semanticConfigurationId"), Document.SemanticConfigurationId);
     Root->SetArrayField(TEXT("operations"), {MakeShared<FJsonValueObject>(Operation)});
@@ -3071,6 +3071,125 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildStatementRangeDuplicationPatch(
         OutPatchJson,
         OutError,
         TEXT("the statement-range duplication patch"));
+}
+
+bool FUnifiedScriptAuthoringSurfaceReader::BuildCallableExtractionPatch(
+    const FUnifiedScriptAuthoringSurfaceDocument& Document,
+    const FUnifiedScriptAuthoringFunction& Function,
+    const TArray<FString>& StatementActionIds,
+    const FString& MethodName,
+    FString& OutPatchJson,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::AuthoringSurface::Editing::Private;
+    if (StatementActionIds.IsEmpty())
+    {
+        OutError = TEXT("Extract Function requires at least one selected statement node.");
+        return false;
+    }
+
+    const FString TrimmedMethodName = MethodName.TrimStartAndEnd();
+    const auto IsIdentifierStart = [](const TCHAR Character)
+    {
+        return Character == TEXT('_') || FChar::IsAlpha(Character);
+    };
+    const auto IsIdentifierPart = [&IsIdentifierStart](const TCHAR Character)
+    {
+        return IsIdentifierStart(Character) || FChar::IsDigit(Character);
+    };
+    if (TrimmedMethodName.IsEmpty() || TrimmedMethodName.Len() > 128 ||
+        TrimmedMethodName != MethodName || !IsIdentifierStart(TrimmedMethodName[0]))
+    {
+        OutError = TEXT("Extract Function requires a non-empty C# method identifier of at most 128 characters.");
+        return false;
+    }
+    for (const TCHAR Character : TrimmedMethodName)
+    {
+        if (!IsIdentifierPart(Character))
+        {
+            OutError = TEXT("Extract Function method names may contain only letters, digits, and underscores.");
+            return false;
+        }
+    }
+
+    const auto IsTerminalOrSynthetic = [](const FUnifiedScriptAuthoringAction& Action)
+    {
+        return Action.GraphKind == TEXT("entry") ||
+            Action.GraphKind == TEXT("unrealEventEntry") ||
+            Action.GraphKind == TEXT("switchCase") ||
+            Action.GraphKind == TEXT("return") ||
+            Action.GraphKind == TEXT("break") ||
+            Action.GraphKind == TEXT("continue");
+    };
+    const FUnifiedScriptAuthoringRegion* ParentBlock = nullptr;
+    TArray<FString> SelectedStatementIds;
+    SelectedStatementIds.Reserve(StatementActionIds.Num());
+    for (const FString& ActionId : StatementActionIds)
+    {
+        const FUnifiedScriptAuthoringAction* Action = Function.FindAction(ActionId);
+        const FUnifiedScriptAuthoringRegion* Block = Action != nullptr
+            ? FindOwningBlock(Function, Action->Id)
+            : nullptr;
+        if (Action == nullptr || Block == nullptr || IsTerminalOrSynthetic(*Action) ||
+            (ParentBlock != nullptr && ParentBlock->SourceNodeId != Block->SourceNodeId))
+        {
+            OutError = TEXT("Extract Function requires ordinary statement nodes from one explicit block.");
+            return false;
+        }
+        ParentBlock = Block;
+        SelectedStatementIds.AddUnique(ResolveStatementId(*Action));
+    }
+    if (ParentBlock == nullptr || SelectedStatementIds.Num() != StatementActionIds.Num())
+    {
+        OutError = TEXT("An extracted statement range cannot contain the same semantic statement twice.");
+        return false;
+    }
+
+    const TArray<FString> StructuralIds = GetStructuralStatementIds(Function, *ParentBlock);
+    SelectedStatementIds.Sort([&StructuralIds](const FString& Left, const FString& Right)
+    {
+        return StructuralIds.IndexOfByKey(Left) < StructuralIds.IndexOfByKey(Right);
+    });
+    const int32 FirstIndex = StructuralIds.IndexOfByKey(SelectedStatementIds[0]);
+    if (FirstIndex == INDEX_NONE ||
+        FirstIndex + SelectedStatementIds.Num() > StructuralIds.Num())
+    {
+        OutError = TEXT("The extracted statements no longer exist in compiler-owned block order.");
+        return false;
+    }
+    for (int32 Offset = 0; Offset < SelectedStatementIds.Num(); ++Offset)
+    {
+        if (StructuralIds[FirstIndex + Offset] != SelectedStatementIds[Offset])
+        {
+            OutError = TEXT("Extract Function requires one consecutive statement range without hidden regions between nodes.");
+            return false;
+        }
+    }
+
+    TArray<TSharedPtr<FJsonValue>> JsonStatementIds;
+    JsonStatementIds.Reserve(SelectedStatementIds.Num());
+    for (const FString& StatementId : SelectedStatementIds)
+    {
+        JsonStatementIds.Add(MakeShared<FJsonValueString>(StatementId));
+    }
+    const FString Previous = FirstIndex > 0 ? StructuralIds[FirstIndex - 1] : FString();
+    const int32 NextIndex = FirstIndex + SelectedStatementIds.Num();
+    const FString Next = NextIndex < StructuralIds.Num() ? StructuralIds[NextIndex] : FString();
+
+    const TSharedRef<FJsonObject> Operation = MakeShared<FJsonObject>();
+    Operation->SetStringField(TEXT("operation"), TEXT("extractCallable"));
+    Operation->SetStringField(TEXT("targetNodeId"), SelectedStatementIds[0]);
+    Operation->SetStringField(TEXT("expectedContainingMethodId"), Function.Id);
+    Operation->SetStringField(TEXT("expectedParentBlockId"), ParentBlock->SourceNodeId);
+    Operation->SetArrayField(TEXT("expectedStatementIds"), MoveTemp(JsonStatementIds));
+    SetOptionalId(Operation, TEXT("expectedPreviousSiblingId"), Previous);
+    SetOptionalId(Operation, TEXT("expectedNextSiblingId"), Next);
+    Operation->SetStringField(TEXT("methodName"), TrimmedMethodName);
+    return SerializeRoot(
+        MakePatchRoot(Document, Operation),
+        OutPatchJson,
+        OutError,
+        TEXT("the callable extraction patch"));
 }
 
 bool FUnifiedScriptAuthoringSurfaceReader::BuildStatementCollapsePatch(

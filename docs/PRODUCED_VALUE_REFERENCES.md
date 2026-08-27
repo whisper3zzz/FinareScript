@@ -8,7 +8,7 @@ closes the first transaction-time data-flow gap between structural graph
 construction and typed expression authoring.
 
 The feature belongs to `unifiedscript.patch-plan/v0.21`. The standalone patch
-protocol is `unifiedscript.patch/v0.26`: a standalone patch has no earlier
+protocol is `unifiedscript.patch/v0.27`: a standalone patch has no earlier
 step namespace, so it explicitly rejects transaction-only produced references.
 
 No second expression interpreter is introduced. Before each stage executes,

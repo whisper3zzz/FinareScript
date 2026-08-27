@@ -85,5 +85,7 @@ Patch v0.24 statement duplication is also one server-owned transaction, so its
 source, identity, generated artifacts, runtime reload, Undo, and Redo cannot
 split. Patch v0.25 applies lexical Collapse Scope / Expand Scope through the
 same boundary. Patch v0.26 applies multi-statement, cross-region copy/paste with
-exact source/destination gaps and binding checks. User-defined transaction
-grouping and true function/macro extraction remain later M8.1 work.
+exact source/destination gaps and binding checks. Patch v0.27 extracts one
+consecutive range into a typed private Visual method, including its C# and
+identity migration, within the same transaction. User-defined transaction
+grouping remains later M8.1 work.

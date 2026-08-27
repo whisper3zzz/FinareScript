@@ -531,6 +531,35 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
                             .Padding(0.0f, 0.0f, 6.0f, 0.0f)
                             .VAlign(VAlign_Center)
                             [
+                                SNew(SBox)
+                                .WidthOverride(144.0f)
+                                [
+                                    SAssignNew(ExtractionNameTextBox, SEditableTextBox)
+                                    .Text(LOCTEXT("DefaultExtractionName", "ExtractedBlock"))
+                                    .HintText(LOCTEXT("ExtractionNameHint", "New method name"))
+                                    .ToolTipText(LOCTEXT(
+                                        "ExtractionNameTip",
+                                        "Name for the private Visual method created from the selected statements."))
+                                ]
+                            ]
+                            + SHorizontalBox::Slot()
+                            .AutoWidth()
+                            .Padding(0.0f, 0.0f, 6.0f, 0.0f)
+                            .VAlign(VAlign_Center)
+                            [
+                                SNew(SButton)
+                                .Text(LOCTEXT("ExtractFunction", "Extract Function"))
+                                .ToolTipText(LOCTEXT(
+                                    "ExtractFunctionTip",
+                                    "Extract consecutive selected statements into a typed private Visual method; inputs and one optional output are inferred."))
+                                .IsEnabled(this, &SUnifiedScriptAuthoringSurface::CanExtractSelectedStatements)
+                                .OnClicked(this, &SUnifiedScriptAuthoringSurface::HandleExtractSelectedStatements)
+                            ]
+                            + SHorizontalBox::Slot()
+                            .AutoWidth()
+                            .Padding(0.0f, 0.0f, 6.0f, 0.0f)
+                            .VAlign(VAlign_Center)
+                            [
                                 SNew(SButton)
                                 .Text(LOCTEXT("CollapseScope", "Collapse Scope"))
                                 .ToolTipText(LOCTEXT(
@@ -790,7 +819,7 @@ FReply SUnifiedScriptAuthoringSurface::HandleCopyPatch(
         return FReply::Handled();
     }
     FPlatformApplicationMisc::ClipboardCopy(*Patch);
-    SetStatus(FString::Printf(TEXT("Copied semantic-patch v0.26 for %s"), *Edit.TargetNodeId), false);
+    SetStatus(FString::Printf(TEXT("Copied semantic-patch v0.27 for %s"), *Edit.TargetNodeId), false);
     return FReply::Handled();
 }
 
@@ -1391,6 +1420,61 @@ TArray<FString> SUnifiedScriptAuthoringSurface::GetSelectedStatementActionIds() 
         Result.Add(Action->Id);
     }
     return Result;
+}
+
+bool SUnifiedScriptAuthoringSurface::CanExtractSelectedStatements() const
+{
+    if (bPatchRequestPending || !ExtractionNameTextBox.IsValid())
+    {
+        return false;
+    }
+    const FUnifiedScriptAuthoringFunction* Function = FindFunction(ActiveFunctionId);
+    const TArray<FString> StatementIds = GetSelectedStatementActionIds();
+    FString IgnoredPatch;
+    FString IgnoredError;
+    return Function != nullptr && !StatementIds.IsEmpty() &&
+        FUnifiedScriptAuthoringSurfaceReader::BuildCallableExtractionPatch(
+            Document,
+            *Function,
+            StatementIds,
+            ExtractionNameTextBox->GetText().ToString(),
+            IgnoredPatch,
+            IgnoredError);
+}
+
+FReply SUnifiedScriptAuthoringSurface::HandleExtractSelectedStatements()
+{
+    const FUnifiedScriptAuthoringFunction* Function = FindFunction(ActiveFunctionId);
+    const TArray<FString> StatementIds = GetSelectedStatementActionIds();
+    const FString MethodName = ExtractionNameTextBox.IsValid()
+        ? ExtractionNameTextBox->GetText().ToString()
+        : FString();
+    FString Patch;
+    FString Error;
+    if (Function == nullptr ||
+        !FUnifiedScriptAuthoringSurfaceReader::BuildCallableExtractionPatch(
+            Document,
+            *Function,
+            StatementIds,
+            MethodName,
+            Patch,
+            Error))
+    {
+        SetStatus(
+            Error.IsEmpty()
+                ? TEXT("Select one consecutive statement range and enter a valid new method name.")
+                : MoveTemp(Error),
+            true);
+        return FReply::Handled();
+    }
+    SubmitSemanticPatch(
+        MoveTemp(Patch),
+        FString::Printf(
+            TEXT("Extracting %d statement%s into %s"),
+            StatementIds.Num(),
+            StatementIds.Num() == 1 ? TEXT("") : TEXT("s"),
+            *MethodName));
+    return FReply::Handled();
 }
 
 bool SUnifiedScriptAuthoringSurface::CanCollapseSelectedStatements() const
@@ -3324,7 +3408,7 @@ void SUnifiedScriptAuthoringSurface::RebuildInspector(
                         [
                             SNew(SButton)
                             .Text(LOCTEXT("CopyPatch", "Copy Patch"))
-                            .ToolTipText(LOCTEXT("CopyPatchTip", "Copy a typed semantic-patch v0.26 payload using this value."))
+                            .ToolTipText(LOCTEXT("CopyPatchTip", "Copy a typed semantic-patch v0.27 payload using this value."))
                             .OnClicked(this, &SUnifiedScriptAuthoringSurface::HandleCopyPatch, Edit, ValueEditor)
                         ]
                         + SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f, 0.0f, 0.0f)

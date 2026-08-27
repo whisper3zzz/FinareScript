@@ -179,7 +179,7 @@ public:
         FUnifiedScriptAuthoringSurfaceDocument& OutDocument,
         FString& OutError);
 
-    /** Builds the same semantic-patch v0.26 payload consumed by the shared authoring host. */
+    /** Builds the same semantic-patch v0.27 payload consumed by the shared authoring host. */
     static bool BuildSemanticPatch(
         const FUnifiedScriptAuthoringSurfaceDocument& Document,
         const FUnifiedScriptAuthoringEdit& Edit,
@@ -187,7 +187,7 @@ public:
         FString& OutPatchJson,
         FString& OutError);
 
-    /** Builds a preconditioned semantic-patch v0.26 data-edge rewire transaction. */
+    /** Builds a preconditioned semantic-patch v0.27 data-edge rewire transaction. */
     static bool BuildDataEdgeReconnectionPatch(
         const FUnifiedScriptAuthoringSurfaceDocument& Document,
         const FUnifiedScriptAuthoringFunction& Function,
@@ -330,6 +330,15 @@ public:
         const TArray<FString>& SourceStatementActionIds,
         const FUnifiedScriptAuthoringAction& DestinationStatement,
         const TMap<FString, FString>& NewLocalNamesByActionId,
+        FString& OutPatchJson,
+        FString& OutError);
+
+    /** Extracts one consecutive statement range into a typed private Visual method. */
+    static bool BuildCallableExtractionPatch(
+        const FUnifiedScriptAuthoringSurfaceDocument& Document,
+        const FUnifiedScriptAuthoringFunction& Function,
+        const TArray<FString>& StatementActionIds,
+        const FString& MethodName,
         FString& OutPatchJson,
         FString& OutError);
 

@@ -77,7 +77,7 @@ v0.4 retains two inline editor capabilities:
   compatible options, result type ID, left/operand type ID, and optional right
   operand type ID.
 
-The Workbench serializes those fields as Semantic Patch v0.26. The ordinary
+The Workbench serializes those fields as Semantic Patch v0.27. The ordinary
 Roslyn patch path still enforces operator families, type preconditions, source
 identity, semantic configuration, localized syntax replacement, complete
 reanalysis, and transactional CoreCLR reload. The Surface does not weaken or
@@ -158,6 +158,14 @@ all original identities, assigns fresh identities to every copy, renames direct
 copied locals and their bound references, and rejects external value references
 that do not dominate the target gap. See
 [SEMANTIC_COPY_PASTE.md](SEMANTIC_COPY_PASTE.md).
+
+Semantic Patch v0.27 adds **Extract Function** for one consecutive selection in
+an explicit block. The Slate client supplies only the selected semantic IDs,
+exact block/sibling preconditions, containing method ID, and requested method
+name. Roslyn derives graph-safe inputs and zero or one live result, emits a
+private `[Visual]` method, migrates persistent identities, and rejects unsafe
+control transfer, async boundaries, name conflicts, or multiple outputs. See
+[CALLABLE_EXTRACTION.md](CALLABLE_EXTRACTION.md).
 
 ## HTTP and CLI delivery
 

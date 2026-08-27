@@ -6087,6 +6087,291 @@ public sealed class CSharpSourcePatchApplierTests
     }
 
     [Fact]
+    public void Apply_ExtractsRangeWithCallerVisibleLocalResultAndStableIdentities()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int input)
+                {
+                    // preserve extraction comment
+                    int scaled = input * 2;
+                    scaled += 3;
+                    return scaled;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/ExtractLocalResult.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement local =
+            Assert.IsType<HirVariableDeclarationStatement>(method.Body.Statements[0]);
+        HirExpressionStatement increment =
+            Assert.IsType<HirExpressionStatement>(method.Body.Statements[1]);
+        HirReturnStatement @return = Assert.IsType<HirReturnStatement>(method.Body.Statements[2]);
+        SemanticId initializerId = local.Initializer!.Id;
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new ExtractCallablePatchOperation(
+                local.Id,
+                method.Id,
+                method.Body.Id,
+                [local.Id, increment.Id],
+                null,
+                @return.Id,
+                "ExtractDamage")]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains("int scaled = ExtractDamage(input);", patchedSource, StringComparison.Ordinal);
+        Assert.Contains("private static int ExtractDamage(int input)", patchedSource, StringComparison.Ordinal);
+        Assert.Equal(
+            1,
+            patchedSource.Split("// preserve extraction comment", StringSplitOptions.None).Length - 1);
+
+        HirTypeDeclaration changedType = Assert.Single(result.Analysis!.Hir!.Types);
+        HirMethodDeclaration caller = changedType.Methods.Single(static candidate => candidate.Name == "Run");
+        HirMethodDeclaration helper = changedType.Methods.Single(
+            static candidate => candidate.Name == "ExtractDamage");
+        HirVariableDeclarationStatement callerLocal =
+            Assert.IsType<HirVariableDeclarationStatement>(caller.Body.Statements[0]);
+        Assert.Equal(local.Id, callerLocal.Id);
+        Assert.Equal(@return.Id, caller.Body.Statements[1].Id);
+        HirVariableDeclarationStatement helperLocal =
+            Assert.IsType<HirVariableDeclarationStatement>(helper.Body.Statements[0]);
+        Assert.NotEqual(local.Id, helperLocal.Id);
+        Assert.Equal(initializerId, helperLocal.Initializer!.Id);
+        Assert.Equal(increment.Id, helper.Body.Statements[1].Id);
+        Assert.IsType<HirReturnStatement>(helper.Body.Statements[2]);
+        Assert.DoesNotContain(helper.Parameters[0].Id, method.Parameters.Select(static parameter => parameter.Id));
+        HirInvocationExpression call = Assert.IsType<HirInvocationExpression>(callerLocal.Initializer);
+        Assert.Equal(
+            helper.Id,
+            Assert.Single(
+                result.Analysis.Semantics!.Nodes,
+                binding => binding.NodeId == call.Id).InvokedMethodId);
+    }
+
+    [Fact]
+    public void Apply_ExtractsMutationAsOneReturnedWriteBack()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int input)
+                {
+                    int result = 10;
+                    result += input;
+                    result *= 2;
+                    return result;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/ExtractWriteBack.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement resultDefinition =
+            Assert.IsType<HirVariableDeclarationStatement>(method.Body.Statements[0]);
+        HirExpressionStatement add = Assert.IsType<HirExpressionStatement>(method.Body.Statements[1]);
+        HirExpressionStatement multiply = Assert.IsType<HirExpressionStatement>(method.Body.Statements[2]);
+        HirReturnStatement @return = Assert.IsType<HirReturnStatement>(method.Body.Statements[3]);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new ExtractCallablePatchOperation(
+                add.Id,
+                method.Id,
+                method.Body.Id,
+                [add.Id, multiply.Id],
+                resultDefinition.Id,
+                @return.Id,
+                "ExtractAccumulation")]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains(
+            "result = ExtractAccumulation(input, result);",
+            patchedSource,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "private static int ExtractAccumulation(int input, int result)",
+            patchedSource,
+            StringComparison.Ordinal);
+        HirTypeDeclaration changedType = Assert.Single(result.Analysis!.Hir!.Types);
+        HirMethodDeclaration caller = changedType.Methods.Single(static candidate => candidate.Name == "Run");
+        HirMethodDeclaration helper = changedType.Methods.Single(
+            static candidate => candidate.Name == "ExtractAccumulation");
+        Assert.Equal(resultDefinition.Id, caller.Body.Statements[0].Id);
+        Assert.Equal(@return.Id, caller.Body.Statements[2].Id);
+        Assert.Equal(add.Id, helper.Body.Statements[0].Id);
+        Assert.Equal(multiply.Id, helper.Body.Statements[1].Id);
+        Assert.Equal(["input", "result"], helper.Parameters.Select(static parameter => parameter.Name));
+    }
+
+    [Fact]
+    public void Apply_RejectsCallableExtractionWithMultipleLiveOutputs()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int input)
+                {
+                    int left = 0;
+                    int right = 0;
+                    left += input;
+                    right += input;
+                    return left + right;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/RejectExtractMultipleOutputs.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement left =
+            Assert.IsType<HirVariableDeclarationStatement>(method.Body.Statements[0]);
+        HirVariableDeclarationStatement right =
+            Assert.IsType<HirVariableDeclarationStatement>(method.Body.Statements[1]);
+        HirExpressionStatement mutateLeft =
+            Assert.IsType<HirExpressionStatement>(method.Body.Statements[2]);
+        HirExpressionStatement mutateRight =
+            Assert.IsType<HirExpressionStatement>(method.Body.Statements[3]);
+        HirReturnStatement @return = Assert.IsType<HirReturnStatement>(method.Body.Statements[4]);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new ExtractCallablePatchOperation(
+                mutateLeft.Id,
+                method.Id,
+                method.Body.Id,
+                [mutateLeft.Id, mutateRight.Id],
+                right.Id,
+                @return.Id,
+                "ExtractBoth")]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(
+            SemanticPatchDiagnosticCodes.InvalidCallableExtraction,
+            Assert.Single(result.Diagnostics).Code);
+        Assert.Contains("multiple live outputs", result.Diagnostics[0].Message, StringComparison.Ordinal);
+        Assert.NotEqual(left.Id, right.Id);
+    }
+
+    [Fact]
+    public void Apply_ExtractsVoidCallableWithInferredInput()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int input)
+                {
+                    System.Math.Abs(input);
+                    System.Math.Max(input, 2);
+                    return input;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/ExtractVoidCallable.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirExpressionStatement first = Assert.IsType<HirExpressionStatement>(method.Body.Statements[0]);
+        HirExpressionStatement second = Assert.IsType<HirExpressionStatement>(method.Body.Statements[1]);
+        HirReturnStatement @return = Assert.IsType<HirReturnStatement>(method.Body.Statements[2]);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new ExtractCallablePatchOperation(
+                first.Id,
+                method.Id,
+                method.Body.Id,
+                [first.Id, second.Id],
+                null,
+                @return.Id,
+                "ExtractCalls")]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains("ExtractCalls(input);", patchedSource, StringComparison.Ordinal);
+        Assert.Contains("private static void ExtractCalls(int input)", patchedSource, StringComparison.Ordinal);
+        HirTypeDeclaration changedType = Assert.Single(result.Analysis!.Hir!.Types);
+        HirMethodDeclaration helper = changedType.Methods.Single(
+            static candidate => candidate.Name == "ExtractCalls");
+        Assert.Equal([first.Id, second.Id], helper.Body.Statements.Select(static statement => statement.Id));
+        Assert.Equal("void", helper.ReturnType);
+    }
+
+    [Fact]
+    public void Apply_RejectsCallableExtractionWithEscapingReturn()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int input)
+                {
+                    if (input > 0)
+                    {
+                        return input;
+                    }
+
+                    return 0;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/RejectExtractReturn.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirIfStatement branch = Assert.IsType<HirIfStatement>(method.Body.Statements[0]);
+        HirReturnStatement @return = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new ExtractCallablePatchOperation(
+                branch.Id,
+                method.Id,
+                method.Body.Id,
+                [branch.Id],
+                null,
+                @return.Id,
+                "ExtractBranch")]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(
+            SemanticPatchDiagnosticCodes.InvalidCallableExtraction,
+            Assert.Single(result.Diagnostics).Code);
+        Assert.Contains("return/break/continue", result.Diagnostics[0].Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Apply_CollapsesAndExpandsLexicalScopeWithStableChildIdentities()
     {
         const string source = """

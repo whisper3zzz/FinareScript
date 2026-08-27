@@ -35,4 +35,5 @@ public static class SemanticPatchDiagnosticCodes
     public const string InvalidStatementDuplication = "UVS3031";
     public const string InvalidRegionCollapse = "UVS3032";
     public const string InvalidRegionExpansion = "UVS3033";
+    public const string InvalidCallableExtraction = "UVS3034";
 }

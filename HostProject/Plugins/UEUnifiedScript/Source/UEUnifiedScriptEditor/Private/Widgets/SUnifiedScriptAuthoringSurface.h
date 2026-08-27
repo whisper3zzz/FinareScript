@@ -105,6 +105,8 @@ private:
     bool CanUndoAuthoringCommand() const;
     void HandleRedoAuthoringCommand();
     bool CanRedoAuthoringCommand() const;
+    FReply HandleExtractSelectedStatements();
+    bool CanExtractSelectedStatements() const;
     FReply HandleCollapseSelectedStatements();
     bool CanCollapseSelectedStatements() const;
     FReply HandleExpandBlockRegion(FString RegionId);
@@ -206,6 +208,7 @@ private:
 
     TSharedPtr<SEditableTextBox> PathTextBox;
     TSharedPtr<SEditableTextBox> ServerUrlTextBox;
+    TSharedPtr<SEditableTextBox> ExtractionNameTextBox;
     TSharedPtr<STreeView<FUnifiedScriptSurfaceTreeItemPtr>> TreeView;
     TSharedPtr<SGraphEditor> GraphEditor;
     TSharedPtr<FUICommandList> GraphCommands;

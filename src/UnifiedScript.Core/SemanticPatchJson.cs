@@ -131,6 +131,9 @@ public static class SemanticPatchJson
                 case DuplicateStatementRangePatchOperation duplicateStatements:
                     ValidateDuplicateStatements(duplicateStatements);
                     break;
+                case ExtractCallablePatchOperation extractCallable:
+                    ValidateExtractCallable(extractCallable);
+                    break;
                 case CollapseStatementRangePatchOperation collapseStatements:
                     ValidateCollapseStatements(collapseStatements);
                     break;
@@ -1116,6 +1119,37 @@ public static class SemanticPatchJson
         {
             throw new JsonException(
                 "Statement collapse outer siblings cannot be part of the collapsed range.");
+        }
+    }
+
+    private static void ValidateExtractCallable(ExtractCallablePatchOperation operation)
+    {
+        if (operation.ExpectedContainingMethodId.IsEmpty ||
+            operation.ExpectedParentBlockId.IsEmpty)
+        {
+            throw new JsonException(
+                "Callable extraction requires non-empty method and parent-block IDs.");
+        }
+        ValidateIdentitySequence(operation.ExpectedStatementIds, "Callable extraction range");
+        if (operation.ExpectedStatementIds[0] != operation.TargetNodeId)
+        {
+            throw new JsonException(
+                "Callable extraction target must be the first expected statement ID.");
+        }
+        ValidateSiblingIds(operation.ExpectedPreviousSiblingId, operation.ExpectedNextSiblingId);
+        if ((operation.ExpectedPreviousSiblingId is SemanticId previous &&
+                operation.ExpectedStatementIds.Contains(previous)) ||
+            (operation.ExpectedNextSiblingId is SemanticId next &&
+                operation.ExpectedStatementIds.Contains(next)))
+        {
+            throw new JsonException(
+                "Callable extraction outer siblings cannot be part of the extracted range.");
+        }
+        if (string.IsNullOrWhiteSpace(operation.MethodName) ||
+            operation.MethodName.Length > 128)
+        {
+            throw new JsonException(
+                "An extracted callable name must be non-empty and at most 128 characters.");
         }
     }
 

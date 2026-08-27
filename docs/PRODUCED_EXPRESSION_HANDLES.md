@@ -4,7 +4,7 @@ M4.11 lets a later patch-plan stage edit an expression tree authored by an
 earlier stage without predicting any of the tree's persistent `SemanticId`
 values. The feature is plan-only and belongs to
 `unifiedscript.patch-plan/v0.21`. Standalone patches use
-`unifiedscript.patch/v0.26` because they have no earlier stage namespace.
+`unifiedscript.patch/v0.27` because they have no earlier stage namespace.
 
 This closes an important text/visual round-trip gap. An AI or graph editor can
 first replace a return value, condition, initializer, assignment value, or

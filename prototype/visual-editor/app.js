@@ -569,7 +569,7 @@ function applySurfaceEdit(node, editId) {
     ...(edit.expectedRightOperandTypeId ? { expectedRightOperandTypeId: edit.expectedRightOperandTypeId } : {}),
   };
   saveSemanticPatch({
-    schemaVersion: 'unifiedscript.patch/v0.26',
+    schemaVersion: 'unifiedscript.patch/v0.27',
     sourceCompilationId: state.sourceCompilationId,
     semanticConfigurationId: state.semanticConfigurationId,
     operations: [operation],

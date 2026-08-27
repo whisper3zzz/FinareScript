@@ -11,7 +11,7 @@ The current strict-reader contracts are:
 
 - HIR `unifiedscript.hir/v0.8`;
 - Graph `unifiedscript.graph/v0.13`;
-- standalone patch `unifiedscript.patch/v0.26`;
+- standalone patch `unifiedscript.patch/v0.27`;
 - patch plan `unifiedscript.patch-plan/v0.21`.
 
 Patch v0.20 carries construction plus the four existing-header endpoint

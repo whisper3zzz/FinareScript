@@ -78,6 +78,11 @@ internal sealed class HirUseDefinitionIndex
         uses.TryGetValue(definitionId, out List<HirExpression>? definitionUses) &&
         definitionUses.Count > 0;
 
+    public IReadOnlyList<HirExpression> GetUses(SemanticId definitionId) =>
+        uses.TryGetValue(definitionId, out List<HirExpression>? definitionUses)
+            ? definitionUses
+            : [];
+
     public bool IsValueReference(HirExpression expression) =>
         boundNodes.TryGetValue(expression.Id, out BoundNodeInfo? binding) &&
         binding.ReferencedSymbolId is SemanticId definitionId &&

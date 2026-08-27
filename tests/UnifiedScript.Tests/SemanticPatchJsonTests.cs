@@ -421,7 +421,7 @@ public sealed class SemanticPatchJsonTests
         SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
 
         Assert.Equal(
-            "unifiedscript.patch/v0.26",
+            "unifiedscript.patch/v0.27",
             roundTrip.SchemaVersion);
         Assert.Equal(
             move,
@@ -451,7 +451,7 @@ public sealed class SemanticPatchJsonTests
         string json = SemanticPatchJson.Serialize(patch);
         SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
 
-        Assert.Equal("unifiedscript.patch/v0.26", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch/v0.27", roundTrip.SchemaVersion);
         Assert.Equal(
             duplicate,
             Assert.IsType<DuplicateStatementPatchOperation>(Assert.Single(roundTrip.Operations)));
@@ -495,6 +495,40 @@ public sealed class SemanticPatchJsonTests
     }
 
     [Fact]
+    public void SerializeAndDeserialize_PreserveCallableExtractionContract()
+    {
+        SemanticId first = SemanticId.FromKey("extract-first");
+        SemanticId second = SemanticId.FromKey("extract-second");
+        var extract = new ExtractCallablePatchOperation(
+            first,
+            SemanticId.FromKey("extract-method"),
+            SemanticId.FromKey("extract-block"),
+            [first, second],
+            SemanticId.FromKey("extract-previous"),
+            SemanticId.FromKey("extract-next"),
+            "ResolveDamage");
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            SemanticId.FromKey("extract-compilation"),
+            SemanticId.FromKey("extract-configuration"),
+            [extract]);
+
+        string json = SemanticPatchJson.Serialize(patch);
+        ExtractCallablePatchOperation roundTrip = Assert.IsType<ExtractCallablePatchOperation>(
+            Assert.Single(SemanticPatchJson.Deserialize(json).Operations));
+
+        Assert.Equal("unifiedscript.patch/v0.27", patch.SchemaVersion);
+        Assert.Equal(extract.TargetNodeId, roundTrip.TargetNodeId);
+        Assert.Equal(extract.ExpectedContainingMethodId, roundTrip.ExpectedContainingMethodId);
+        Assert.Equal(extract.ExpectedParentBlockId, roundTrip.ExpectedParentBlockId);
+        Assert.Equal(extract.ExpectedStatementIds, roundTrip.ExpectedStatementIds);
+        Assert.Equal(extract.ExpectedPreviousSiblingId, roundTrip.ExpectedPreviousSiblingId);
+        Assert.Equal(extract.ExpectedNextSiblingId, roundTrip.ExpectedNextSiblingId);
+        Assert.Equal(extract.MethodName, roundTrip.MethodName);
+        Assert.Contains("\"operation\": \"extractCallable\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"methodName\": \"ResolveDamage\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SerializeAndDeserialize_PreserveLexicalCollapseAndExpansion()
     {
         SemanticId parentBlock = SemanticId.FromKey("scope-parent");
@@ -523,7 +557,7 @@ public sealed class SemanticPatchJsonTests
         string json = SemanticPatchJson.Serialize(patch);
         SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
 
-        Assert.Equal("unifiedscript.patch/v0.26", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch/v0.27", roundTrip.SchemaVersion);
         CollapseStatementRangePatchOperation collapsedRoundTrip =
             Assert.IsType<CollapseStatementRangePatchOperation>(roundTrip.Operations[0]);
         ExpandBlockPatchOperation expandedRoundTrip =
@@ -1377,6 +1411,6 @@ public sealed class SemanticPatchJsonTests
         Assert.Contains("\"statement\": \"switch\"", json, StringComparison.Ordinal);
         Assert.Contains("\"pattern\": \"logical\"", json, StringComparison.Ordinal);
         Assert.Contains("\"operation\": \"moveSwitchSection\"", json, StringComparison.Ordinal);
-        Assert.Equal("unifiedscript.patch/v0.26", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch/v0.27", roundTrip.SchemaVersion);
     }
 }

@@ -438,7 +438,7 @@ compilation identity is not safe for editing.
 ## Semantic patch transaction
 
 Graph schema v0.13 carries both the source compilation ID and semantic
-configuration ID. A `unifiedscript.patch/v0.26` document repeats those IDs and
+configuration ID. A `unifiedscript.patch/v0.27` document repeats those IDs and
 contains typed operations keyed by graph/HIR `SemanticId`. Implemented
 operations are `replaceLiteral`, `changeOperator`, `reconnectArgument`,
 `replaceExpressionInput`,

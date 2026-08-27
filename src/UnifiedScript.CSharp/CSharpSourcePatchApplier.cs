@@ -331,6 +331,14 @@ public sealed class CSharpSourcePatchApplier
                         useDefinitionIndex,
                         graphSafetyIndex,
                         documents),
+                ExtractCallablePatchOperation extractCallable => PlanCallableExtraction(
+                    extractCallable,
+                    hirNodes,
+                    patchIndex,
+                    useDefinitionIndex,
+                    boundNodes,
+                    types,
+                    documents),
                 CollapseStatementRangePatchOperation collapseStatements =>
                     PlanStatementCollapse(
                         collapseStatements,
@@ -453,6 +461,7 @@ public sealed class CSharpSourcePatchApplier
         SemanticPatchOperation? controlFlowOperation = patch.Operations.FirstOrDefault(
             static operation => operation is MoveStatementPatchOperation or
                 DuplicateStatementPatchOperation or DuplicateStatementRangePatchOperation or
+                ExtractCallablePatchOperation or
                 CollapseStatementRangePatchOperation or ExpandBlockPatchOperation or
                 InsertSwitchSectionPatchOperation or ReplaceSwitchSectionPatchOperation or
                 MoveSwitchSectionPatchOperation or DeleteSwitchSectionPatchOperation ||
@@ -482,6 +491,8 @@ public sealed class CSharpSourcePatchApplier
                             SemanticPatchDiagnosticCodes.InvalidStatementDuplication,
                         DuplicateStatementRangePatchOperation =>
                             SemanticPatchDiagnosticCodes.InvalidStatementDuplication,
+                        ExtractCallablePatchOperation =>
+                            SemanticPatchDiagnosticCodes.InvalidCallableExtraction,
                         CollapseStatementRangePatchOperation =>
                             SemanticPatchDiagnosticCodes.InvalidRegionCollapse,
                         ExpandBlockPatchOperation =>
@@ -4321,6 +4332,438 @@ public sealed class CSharpSourcePatchApplier
             FilterPinsForSyntax(replacementMethod, methodPins!)));
     }
 
+    private static OperationPlan PlanCallableExtraction(
+        ExtractCallablePatchOperation operation,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        HirUseDefinitionIndex useDefinitionIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
+        IReadOnlyDictionary<string, ParsedDocument> documents)
+    {
+        if (!hirNodes.TryGetValue(operation.TargetNodeId, out HirNode? target))
+        {
+            return MissingTarget(operation.TargetNodeId);
+        }
+        if (target is not HirStatement firstStatement ||
+            !patchIndex.TryGetStatement(
+                firstStatement.Id,
+                out HirPatchIndex.StatementLocation? firstLocation))
+        {
+            return KindMismatch(target, operation.TargetNodeId, "the first statement of an extracted range");
+        }
+
+        HirMethodDeclaration containingMethod = firstLocation!.Method;
+        HirBlockStatement parentBlock = firstLocation.ParentBlock;
+        int firstIndex = firstLocation.Index;
+        int rangeCount = operation.ExpectedStatementIds.Count;
+        if (containingMethod.Id != operation.ExpectedContainingMethodId ||
+            parentBlock.Id != operation.ExpectedParentBlockId ||
+            firstIndex + rangeCount > parentBlock.Statements.Count)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.SiblingPreconditionFailed,
+                "The callable extraction range no longer belongs to its expected method and block.",
+                firstStatement);
+        }
+        HirStatement[] selectedStatements = parentBlock.Statements
+            .Skip(firstIndex)
+            .Take(rangeCount)
+            .ToArray();
+        SemanticId? actualPrevious = firstIndex == 0
+            ? null
+            : parentBlock.Statements[firstIndex - 1].Id;
+        int nextIndex = firstIndex + rangeCount;
+        SemanticId? actualNext = nextIndex == parentBlock.Statements.Count
+            ? null
+            : parentBlock.Statements[nextIndex].Id;
+        if (!selectedStatements.Select(static statement => statement.Id)
+                .SequenceEqual(operation.ExpectedStatementIds) ||
+            actualPrevious != operation.ExpectedPreviousSiblingId ||
+            actualNext != operation.ExpectedNextSiblingId)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.SiblingPreconditionFailed,
+                "The callable extraction range or its outer sibling gaps changed. Refresh before extracting.",
+                firstStatement);
+        }
+        if (containingMethod.IsAsync || selectedStatements
+                .SelectMany(static statement => statement.DescendantsAndSelf())
+                .Any(static node => node is HirAwaitExpression))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidCallableExtraction,
+                "Callable extraction does not move async/await state-machine boundaries in this protocol version.",
+                firstStatement);
+        }
+        if (!SyntaxFacts.IsValidIdentifier(operation.MethodName) ||
+            SyntaxFacts.GetKeywordKind(operation.MethodName) != SyntaxKind.None)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.NameConflict,
+                $"Extracted method name '{operation.MethodName}' is not a valid non-keyword C# identifier.",
+                firstStatement);
+        }
+
+        if (!TryFindEditableStatementContainer(
+                documents,
+                parentBlock,
+                out ParsedDocument? sourceDocument,
+                out EditableStatementContainer? sourceContainer) ||
+            sourceContainer!.Statements.Count != parentBlock.Statements.Count)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidCallableExtraction,
+                "Callable extraction requires an explicit block or switch-section statement container.",
+                firstStatement);
+        }
+        if (sourceDocument!.Source.IdentitySidecar is null)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.PlanRequiresPersistentIdentity,
+                "Callable extraction requires a .usids sidecar so moved nodes and caller definitions keep identity.",
+                firstStatement);
+        }
+
+        StatementSyntax[] sourceSyntax = sourceContainer.Statements
+            .Skip(firstIndex)
+            .Take(rangeCount)
+            .ToArray();
+        if (sourceSyntax.Length != selectedStatements.Length ||
+            sourceSyntax.Any(static statement => statement.ContainsDirectives) ||
+            HasEscapingCallableControlTransfer(sourceSyntax))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidCallableExtraction,
+                "The selected range contains directives or a return/break/continue that would escape the extracted callable.",
+                firstStatement);
+        }
+
+        HashSet<SemanticId> selectedNodeIds = selectedStatements
+            .SelectMany(static statement => statement.DescendantsAndSelf())
+            .Select(static node => node.Id)
+            .ToHashSet();
+        HashSet<SemanticId> selectedDefinitionIds = selectedStatements
+            .SelectMany(static statement => statement.DescendantsAndSelf())
+            .Where(static node => node is HirVariableDeclarationStatement or
+                HirForVariableDeclarator or HirForEachVariable or HirPatternVariable)
+            .Select(static node => node.Id)
+            .ToHashSet();
+
+        var externalDefinitions = new Dictionary<SemanticId, HirNode>();
+        foreach (HirExpression expression in selectedStatements
+                     .SelectMany(static statement => statement.DescendantsAndSelf())
+                     .OfType<HirExpression>())
+        {
+            if (useDefinitionIndex.TryGetReferencedDefinition(expression, out HirNode? definition) &&
+                definition is not null && !selectedDefinitionIds.Contains(definition.Id))
+            {
+                externalDefinitions.TryAdd(definition.Id, definition);
+            }
+        }
+        if (externalDefinitions.Count > 16)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidCallableExtraction,
+                "An extracted callable is bounded to at most 16 inferred input parameters.",
+                firstStatement);
+        }
+
+        var mutatedExternalDefinitions = new HashSet<SemanticId>();
+        foreach (HirAssignmentExpression assignment in selectedStatements
+                     .SelectMany(static statement => statement.DescendantsAndSelf())
+                     .OfType<HirAssignmentExpression>())
+        {
+            if (assignment.Target is HirIdentifierExpression identifier &&
+                useDefinitionIndex.TryGetReferencedDefinition(identifier, out HirNode? definition) &&
+                definition is not null && !selectedDefinitionIds.Contains(definition.Id))
+            {
+                mutatedExternalDefinitions.Add(definition.Id);
+            }
+        }
+        foreach (HirUnaryExpression mutation in selectedStatements
+                     .SelectMany(static statement => statement.DescendantsAndSelf())
+                     .OfType<HirUnaryExpression>()
+                     .Where(static unary => unary.Operator is "++" or "--"))
+        {
+            if (mutation.Operand is HirIdentifierExpression identifier &&
+                useDefinitionIndex.TryGetReferencedDefinition(identifier, out HirNode? definition) &&
+                definition is not null && !selectedDefinitionIds.Contains(definition.Id))
+            {
+                mutatedExternalDefinitions.Add(definition.Id);
+            }
+        }
+
+        HirVariableDeclarationStatement[] liveSelectedLocals = selectedStatements
+            .OfType<HirVariableDeclarationStatement>()
+            .Where(local => useDefinitionIndex.GetUses(local.Id)
+                .Any(use => !selectedNodeIds.Contains(use.Id)))
+            .ToArray();
+        HirNode[] liveMutatedExternals = mutatedExternalDefinitions
+            .Where(id => useDefinitionIndex.GetUses(id)
+                .Any(use => !selectedNodeIds.Contains(use.Id)))
+            .Select(id => externalDefinitions[id])
+            .ToArray();
+        HirNode[] outputCandidates = liveSelectedLocals.Cast<HirNode>()
+            .Concat(liveMutatedExternals)
+            .DistinctBy(static node => node.Id)
+            .ToArray();
+        if (outputCandidates.Length > 1)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidCallableExtraction,
+                "The selected range has multiple live outputs. Narrow the selection or introduce one aggregate result before extracting.",
+                firstStatement);
+        }
+
+        var inputs = new List<CallableValue>(externalDefinitions.Count);
+        foreach (HirNode definition in externalDefinitions.Values
+                     .OrderBy(static definition => definition.Span.Start.Line)
+                     .ThenBy(static definition => definition.Span.Start.Column)
+                     .ThenBy(static definition => definition.Id.Value, StringComparer.Ordinal))
+        {
+            if (!TryDescribeCallableValue(definition, boundNodes, types, out CallableValue? value))
+            {
+                return DiagnosticPlan(
+                    SemanticPatchDiagnosticCodes.InvalidCallableExtraction,
+                    $"External value '{definition.Id}' cannot become a graph-safe callable parameter.",
+                    definition);
+            }
+            inputs.Add(value!);
+        }
+
+        CallableValue? output = null;
+        if (outputCandidates.Length == 1 &&
+            !TryDescribeCallableValue(outputCandidates[0], boundNodes, types, out output))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidCallableExtraction,
+                $"Live output '{outputCandidates[0].Id}' cannot become a graph-safe callable result.",
+                outputCandidates[0]);
+        }
+
+        if (!TryPrepareTypeMutation(
+                documents,
+                containingMethod,
+                out ParsedDocument? document,
+                out TypeDeclarationSyntax? originalType,
+                out TypeDeclarationSyntax? annotatedType,
+                out MethodDeclarationSyntax? annotatedMethod,
+                out IReadOnlyDictionary<SemanticId, SyntaxAnnotation>? identityAnnotations,
+                out List<PendingPin>? typePins,
+                out string? identityFailure))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.PlanRequiresPersistentIdentity,
+                identityFailure ?? "Callable extraction could not pin the containing type.",
+                firstStatement);
+        }
+        if (originalType!.Members.OfType<MethodDeclarationSyntax>()
+            .Any(method => string.Equals(
+                method.Identifier.ValueText,
+                operation.MethodName,
+                StringComparison.Ordinal)))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.NameConflict,
+                $"Containing type already declares a method named '{operation.MethodName}'.",
+                firstStatement);
+        }
+        if (!identityAnnotations!.TryGetValue(
+                parentBlock.Id,
+                out SyntaxAnnotation? parentAnnotation))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.PlanRequiresPersistentIdentity,
+                "Callable extraction could not pin the source statement container.",
+                firstStatement);
+        }
+
+        ParsedDocument mutationDocument = document!;
+        TypeDeclarationSyntax mutationType = annotatedType!;
+        MethodDeclarationSyntax mutationMethod = annotatedMethod!;
+
+        SyntaxNode annotatedContainerSyntax = mutationType
+            .GetAnnotatedNodes(parentAnnotation)
+            .Single();
+        if (!TryCreateEditableStatementContainer(
+                annotatedContainerSyntax,
+                out EditableStatementContainer? annotatedContainer))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidCallableExtraction,
+                "The extraction source is no longer an explicit editable statement container.",
+                firstStatement);
+        }
+
+        List<StatementSyntax> movedStatements = annotatedContainer!.Statements
+            .Skip(firstIndex)
+            .Take(rangeCount)
+            .ToList();
+        bool outputIsSelectedLocal = output is not null && selectedDefinitionIds.Contains(output.Id);
+        SyntaxAnnotation? retainedOutputAnnotation = null;
+        if (outputIsSelectedLocal)
+        {
+            if (!identityAnnotations.TryGetValue(output!.Id, out retainedOutputAnnotation))
+            {
+                return DiagnosticPlan(
+                    SemanticPatchDiagnosticCodes.PlanRequiresPersistentIdentity,
+                    "The caller-visible extracted local could not retain its semantic identity.",
+                    outputCandidates[0]);
+            }
+            int localIndex = Array.FindIndex(
+                selectedStatements,
+                statement => statement.Id == output.Id);
+            if (localIndex < 0 || sourceSyntax[localIndex] is not LocalDeclarationStatementSyntax
+                {
+                    Modifiers.Count: 0,
+                    Declaration.Variables.Count: 1,
+                })
+            {
+                return DiagnosticPlan(
+                    SemanticPatchDiagnosticCodes.InvalidCallableExtraction,
+                    "A caller-visible extracted local must be one ordinary single-variable declaration.",
+                    outputCandidates[0]);
+            }
+            movedStatements[localIndex] = movedStatements[localIndex]
+                .WithoutAnnotations(retainedOutputAnnotation);
+        }
+
+        ExpressionSyntax[] callArguments = inputs
+            .Select(input => ParseCallableIdentifier(input.Name))
+            .ToArray();
+        InvocationExpressionSyntax invocation = SyntaxFactory.InvocationExpression(
+            SyntaxFactory.IdentifierName(operation.MethodName),
+            SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(
+                callArguments.Select(SyntaxFactory.Argument))));
+        StatementSyntax callSite;
+        if (output is null)
+        {
+            callSite = SyntaxFactory.ExpressionStatement(invocation);
+        }
+        else if (outputIsSelectedLocal)
+        {
+            int localIndex = Array.FindIndex(
+                selectedStatements,
+                statement => statement.Id == output.Id);
+            LocalDeclarationStatementSyntax originalLocal =
+                (LocalDeclarationStatementSyntax)sourceSyntax[localIndex];
+            VariableDeclaratorSyntax variable = SyntaxFactory.VariableDeclarator(
+                    ParseCallableIdentifierToken(output.Name))
+                .WithInitializer(SyntaxFactory.EqualsValueClause(invocation));
+            callSite = SyntaxFactory.LocalDeclarationStatement(
+                    SyntaxFactory.VariableDeclaration(
+                        originalLocal.Declaration.Type.WithoutTrivia(),
+                        SyntaxFactory.SingletonSeparatedList(variable)))
+                .WithAdditionalAnnotations(retainedOutputAnnotation!);
+        }
+        else
+        {
+            callSite = SyntaxFactory.ExpressionStatement(SyntaxFactory.AssignmentExpression(
+                SyntaxKind.SimpleAssignmentExpression,
+                ParseCallableIdentifier(output.Name),
+                invocation));
+        }
+        callSite = callSite.NormalizeWhitespace(
+                indentation: "    ",
+                eol: GetEndOfLine(document!))
+            .WithoutLeadingTrivia()
+            .WithoutTrailingTrivia();
+        InsertionFormatting callerFormatting = GetInsertionFormatting(
+            document!,
+            sourceContainer,
+            firstIndex);
+        callSite = FormatInsertedStatement(callSite, callerFormatting);
+
+        var callerStatements = annotatedContainer.Statements.ToList();
+        callerStatements.RemoveRange(firstIndex, rangeCount);
+        callerStatements.Insert(firstIndex, callSite);
+        SyntaxNode replacementContainer = annotatedContainer.WithStatements(
+            SyntaxFactory.List(callerStatements));
+        MethodDeclarationSyntax replacementMethod = mutationMethod.ReplaceNode(
+            annotatedContainer.Syntax,
+            replacementContainer);
+
+        string memberIndentation = GetLineIndentation(mutationDocument, originalType.Members
+            .OfType<MethodDeclarationSyntax>()
+            .Single(method => RoslynSourceSpan.FromNode(
+                method,
+                mutationDocument.Source.LogicalPath) == containingMethod.Span));
+        string bodyIndentation = memberIndentation + "    ";
+        string endOfLine = GetEndOfLine(mutationDocument);
+        for (int index = 0; index < movedStatements.Count; index++)
+        {
+            string sourceIndentation = GetLineIndentation(mutationDocument, sourceSyntax[index]);
+            movedStatements[index] = ShiftStatementIndentation(
+                movedStatements[index],
+                sourceIndentation,
+                bodyIndentation);
+        }
+        if (output is not null)
+        {
+            StatementSyntax returnStatement = FormatInsertedStatement(
+                SyntaxFactory.ReturnStatement(ParseCallableIdentifier(output.Name))
+                    .NormalizeWhitespace(
+                        indentation: "    ",
+                        eol: endOfLine)
+                    .WithoutLeadingTrivia()
+                    .WithoutTrailingTrivia(),
+                new InsertionFormatting(bodyIndentation, endOfLine));
+            movedStatements.Add(returnStatement);
+        }
+
+        string parameterText = string.Join(", ", inputs.Select(input =>
+            $"{input.TypeName} {EscapeCallableIdentifier(input.Name)}"));
+        string returnType = output?.TypeName ?? "void";
+        string staticModifier = containingMethod.IsStatic ? "static " : string.Empty;
+        string helperText = endOfLine + memberIndentation + "[Visual]" + endOfLine +
+            memberIndentation + $"private {staticModifier}{returnType} {operation.MethodName}" +
+            $"({parameterText})" + endOfLine + memberIndentation + "{" + endOfLine +
+            memberIndentation + "}" + endOfLine;
+        MemberDeclarationSyntax? parsedMember = SyntaxFactory.ParseMemberDeclaration(
+            helperText,
+            options: CSharpToHirLowerer.ParseOptions,
+            consumeFullText: true);
+        if (parsedMember is not MethodDeclarationSyntax { Body: not null } helperMethod ||
+            helperMethod.ContainsDiagnostics)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidCallableExtraction,
+                "The inferred callable signature could not be represented as valid C# source.",
+                firstStatement);
+        }
+        helperMethod = helperMethod.WithBody(helperMethod.Body.WithStatements(
+            SyntaxFactory.List(movedStatements)));
+
+        TypeDeclarationSyntax callerType = mutationType.ReplaceNode(
+            mutationMethod,
+            replacementMethod);
+        int callerMemberIndex = callerType.Members
+            .Select((member, index) => (member, index))
+            .Where(item => item.member.GetAnnotations(PatchLocatorAnnotationKind)
+                .Any(annotation => string.Equals(
+                    annotation.Data,
+                    containingMethod.Id.Value,
+                    StringComparison.Ordinal)))
+            .Select(static item => item.index)
+            .DefaultIfEmpty(-1)
+            .Single();
+        if (callerMemberIndex == -1)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidCallableExtraction,
+                "The containing method could not be replaced inside its declaring type.",
+                firstStatement);
+        }
+        TypeDeclarationSyntax replacementType = callerType.WithMembers(
+            callerType.Members.Insert(callerMemberIndex + 1, helperMethod));
+        return SuccessPlan(mutationDocument, new PendingReplacement(
+            mutationDocument.Source.LogicalPath,
+            originalType,
+            replacementType,
+            FilterPinsForSyntax(replacementType, typePins!)));
+    }
+
     private static OperationPlan PlanStatementCollapse(
         CollapseStatementRangePatchOperation operation,
         IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
@@ -5213,6 +5656,211 @@ public sealed class CSharpSourcePatchApplier
         if (annotations.TryGetValue(sourceSyntax, out List<SyntaxAnnotation>? rootAnnotations))
         {
             annotatedSyntax = annotatedSyntax.WithAdditionalAnnotations(rootAnnotations.ToArray());
+        }
+
+        identityAnnotations = annotationsById;
+        failure = null;
+        return true;
+    }
+
+    private static bool HasEscapingCallableControlTransfer(
+        IReadOnlyList<StatementSyntax> selectedStatements)
+    {
+        bool IsInsideSelection(SyntaxNode node) => selectedStatements
+            .Any(statement => statement.Span.Contains(node.Span));
+        foreach (StatementSyntax statement in selectedStatements)
+        {
+            if (statement.DescendantNodesAndSelf().OfType<ReturnStatementSyntax>().Any())
+            {
+                return true;
+            }
+            foreach (BreakStatementSyntax @break in statement
+                         .DescendantNodesAndSelf()
+                         .OfType<BreakStatementSyntax>())
+            {
+                SyntaxNode? target = @break.Ancestors().FirstOrDefault(static ancestor => ancestor is
+                    ForStatementSyntax or ForEachStatementSyntax or WhileStatementSyntax or
+                    DoStatementSyntax or SwitchStatementSyntax);
+                if (target is null || !IsInsideSelection(target))
+                {
+                    return true;
+                }
+            }
+            foreach (ContinueStatementSyntax @continue in statement
+                         .DescendantNodesAndSelf()
+                         .OfType<ContinueStatementSyntax>())
+            {
+                SyntaxNode? target = @continue.Ancestors().FirstOrDefault(static ancestor => ancestor is
+                    ForStatementSyntax or ForEachStatementSyntax or WhileStatementSyntax or
+                    DoStatementSyntax);
+                if (target is null || !IsInsideSelection(target))
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static bool TryDescribeCallableValue(
+        HirNode definition,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
+        out CallableValue? value)
+    {
+        string? name = definition switch
+        {
+            HirParameter parameter => parameter.Name,
+            HirVariableDeclarationStatement local => local.Name,
+            HirForVariableDeclarator variable => variable.Name,
+            HirForEachVariable variable => variable.Name,
+            HirPatternVariable variable => variable.Name,
+            _ => null,
+        };
+        if (name is null ||
+            !boundNodes.TryGetValue(definition.Id, out BoundNodeInfo? binding) ||
+            binding.TypeId is not SemanticId typeId ||
+            !types.TryGetValue(typeId, out TypeDescriptor? type) ||
+            !type.IsGraphSafe || type.Kind is UnifiedTypeKind.Void or UnifiedTypeKind.TaskLike ||
+            string.IsNullOrWhiteSpace(type.DisplayName))
+        {
+            value = null;
+            return false;
+        }
+
+        TypeSyntax typeSyntax = SyntaxFactory.ParseTypeName(
+            type.DisplayName,
+            options: CSharpToHirLowerer.ParseOptions,
+            consumeFullText: true);
+        if (typeSyntax.ContainsDiagnostics ||
+            typeSyntax is IdentifierNameSyntax { Identifier.ValueText: "var" })
+        {
+            value = null;
+            return false;
+        }
+        value = new CallableValue(definition.Id, name, typeSyntax.ToString());
+        return true;
+    }
+
+    private static string EscapeCallableIdentifier(string name) =>
+        SyntaxFacts.GetKeywordKind(name) != SyntaxKind.None ||
+        SyntaxFacts.GetContextualKeywordKind(name) != SyntaxKind.None
+            ? "@" + name
+            : name;
+
+    private static IdentifierNameSyntax ParseCallableIdentifier(string name)
+    {
+        ExpressionSyntax expression = SyntaxFactory.ParseExpression(
+            EscapeCallableIdentifier(name),
+            options: CSharpToHirLowerer.ParseOptions,
+            consumeFullText: true);
+        return expression as IdentifierNameSyntax ??
+            throw new InvalidOperationException($"Callable value name '{name}' is not a C# identifier.");
+    }
+
+    private static SyntaxToken ParseCallableIdentifierToken(string name) =>
+        ParseCallableIdentifier(name).Identifier;
+
+    private static bool TryPrepareTypeMutation(
+        IReadOnlyDictionary<string, ParsedDocument> documents,
+        HirMethodDeclaration method,
+        out ParsedDocument? document,
+        out TypeDeclarationSyntax? originalType,
+        out TypeDeclarationSyntax? annotatedType,
+        out MethodDeclarationSyntax? annotatedMethod,
+        out IReadOnlyDictionary<SemanticId, SyntaxAnnotation>? identityAnnotations,
+        out List<PendingPin>? pins,
+        out string? failure)
+    {
+        if (!TryFindSyntax(
+                documents,
+                method,
+                out document,
+                out MethodDeclarationSyntax? originalMethod) ||
+            originalMethod!.Parent is not TypeDeclarationSyntax sourceType)
+        {
+            originalType = null;
+            annotatedType = null;
+            annotatedMethod = null;
+            identityAnnotations = null;
+            pins = null;
+            failure = "The containing method and declaring type no longer match the analyzed HIR.";
+            return false;
+        }
+        originalType = sourceType;
+        if (document!.Source.IdentitySidecar is null)
+        {
+            annotatedType = null;
+            annotatedMethod = null;
+            identityAnnotations = null;
+            pins = null;
+            failure = "A callable extraction requires a .usids sidecar so every identity in the " +
+                "declaring type survives method insertion.";
+            return false;
+        }
+
+        var annotations = new Dictionary<SyntaxNode, List<SyntaxAnnotation>>();
+        var annotationsById = new Dictionary<SemanticId, SyntaxAnnotation>();
+        pins = [];
+        foreach (IdentityEntry entry in document.Source.IdentitySidecar.Entries.Where(entry =>
+                     entry.Anchor.Start >= sourceType.SpanStart &&
+                     entry.Anchor.Start + entry.Anchor.Length <= sourceType.Span.End))
+        {
+            SyntaxNode[] matches = sourceType.DescendantNodesAndSelf()
+                .Where(candidate => candidate.SpanStart == entry.Anchor.Start &&
+                    candidate.Span.Length == entry.Anchor.Length &&
+                    IdentitySyntaxMatches(entry.Kind, candidate))
+                .ToArray();
+            if (matches.Length != 1)
+            {
+                annotatedType = null;
+                annotatedMethod = null;
+                identityAnnotations = null;
+                pins = null;
+                failure = $"Identity '{entry.Id}' could not be pinned exactly once inside the declaring type.";
+                return false;
+            }
+
+            var annotation = new SyntaxAnnotation(IdentityAnnotationKind, entry.Id.Value);
+            if (!annotations.TryGetValue(matches[0], out List<SyntaxAnnotation>? nodeAnnotations))
+            {
+                nodeAnnotations = [];
+                annotations.Add(matches[0], nodeAnnotations);
+            }
+            nodeAnnotations.Add(annotation);
+            annotationsById.Add(entry.Id, annotation);
+            pins.Add(new PendingPin(entry.Id, entry.Kind, annotation));
+        }
+
+        var methodLocator = new SyntaxAnnotation(PatchLocatorAnnotationKind, method.Id.Value);
+        if (!annotations.TryGetValue(originalMethod, out List<SyntaxAnnotation>? methodAnnotations))
+        {
+            methodAnnotations = [];
+            annotations.Add(originalMethod, methodAnnotations);
+        }
+        methodAnnotations.Add(methodLocator);
+
+        SyntaxNode[] descendants = annotations.Keys
+            .Where(candidate => candidate != sourceType)
+            .ToArray();
+        annotatedType = (TypeDeclarationSyntax)sourceType.ReplaceNodes(
+            descendants,
+            (original, rewritten) => rewritten.WithAdditionalAnnotations(
+                annotations[original].ToArray()));
+        if (annotations.TryGetValue(sourceType, out List<SyntaxAnnotation>? rootAnnotations))
+        {
+            annotatedType = annotatedType.WithAdditionalAnnotations(rootAnnotations.ToArray());
+        }
+        annotatedMethod = annotatedType.GetAnnotatedNodes(methodLocator)
+            .OfType<MethodDeclarationSyntax>()
+            .SingleOrDefault();
+        if (annotatedMethod is null)
+        {
+            annotatedType = null;
+            identityAnnotations = null;
+            pins = null;
+            failure = "The containing method locator was lost while pinning its declaring type.";
+            return false;
         }
 
         identityAnnotations = annotationsById;
@@ -8331,6 +8979,53 @@ public sealed class CSharpSourcePatchApplier
         _ => false,
     };
 
+    private static bool IdentitySyntaxMatches(string kind, SyntaxNode syntax) => kind switch
+    {
+        "state" => syntax is PropertyDeclarationSyntax,
+        "parameter" => syntax is ParameterSyntax,
+        "block" => syntax is BlockSyntax or SwitchSectionSyntax,
+        "variableDeclaration" => syntax is LocalDeclarationStatementSyntax,
+        "expressionStatement" => syntax is ExpressionStatementSyntax,
+        "if" => syntax is IfStatementSyntax,
+        "while" => syntax is WhileStatementSyntax,
+        "doWhile" => syntax is DoStatementSyntax,
+        "for" => syntax is ForStatementSyntax,
+        "forEach" => syntax is ForEachStatementSyntax,
+        "forEachVariable" => syntax is TypeSyntax,
+        "switch" => syntax is SwitchStatementSyntax,
+        "switchSection" => syntax is SwitchSectionSyntax,
+        "switchLabel" => syntax is SwitchLabelSyntax,
+        "constantPattern" => syntax is ConstantPatternSyntax or ExpressionSyntax,
+        "declarationPattern" => syntax is DeclarationPatternSyntax,
+        "typePattern" => syntax is TypePatternSyntax,
+        "varPattern" => syntax is VarPatternSyntax,
+        "discardPattern" => syntax is DiscardPatternSyntax,
+        "relationalPattern" => syntax is RelationalPatternSyntax,
+        "logicalPattern" => syntax is BinaryPatternSyntax,
+        "notPattern" => syntax is UnaryPatternSyntax,
+        "parenthesizedPattern" => syntax is ParenthesizedPatternSyntax,
+        "patternVariable" => syntax is VariableDesignationSyntax,
+        "forVariableDeclaration" => syntax is VariableDeclarationSyntax,
+        "forVariable" => syntax is VariableDeclaratorSyntax,
+        "break" => syntax is BreakStatementSyntax,
+        "continue" => syntax is ContinueStatementSyntax,
+        "return" => syntax is ReturnStatementSyntax,
+        "literal" => syntax is LiteralExpressionSyntax,
+        "identifier" => syntax is IdentifierNameSyntax,
+        "this" => syntax is ThisExpressionSyntax,
+        "memberAccess" => syntax is MemberAccessExpressionSyntax,
+        "conditionalAccess" => syntax is ConditionalAccessExpressionSyntax,
+        "conditionalMemberBinding" => syntax is MemberBindingExpressionSyntax,
+        "invocation" => syntax is InvocationExpressionSyntax,
+        "binary" => syntax is BinaryExpressionSyntax,
+        "unary" => syntax is PrefixUnaryExpressionSyntax or PostfixUnaryExpressionSyntax,
+        "assignment" => syntax is AssignmentExpressionSyntax,
+        "await" => syntax is AwaitExpressionSyntax,
+        "cast" => syntax is CastExpressionSyntax,
+        "conditional" => syntax is ConditionalExpressionSyntax,
+        _ => false,
+    };
+
     private static OperationPlan? RequireType(
         HirNode node,
         SemanticId expectedTypeId,
@@ -8623,6 +9318,11 @@ public sealed class CSharpSourcePatchApplier
                 : rewritten;
         }
     }
+
+    private sealed record CallableValue(
+        SemanticId Id,
+        string Name,
+        string TypeName);
 
     private sealed record OperationPlan(
         PendingReplacement? Replacement,

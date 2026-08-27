@@ -161,8 +161,8 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
             TEXT("120"),
             PatchJson,
             Error));
-    TestTrue(TEXT("Patch uses semantic-patch v0.26"),
-        PatchJson.Contains(TEXT("\"unifiedscript.patch/v0.26\"")));
+    TestTrue(TEXT("Patch uses semantic-patch v0.27"),
+        PatchJson.Contains(TEXT("\"unifiedscript.patch/v0.27\"")));
     TestTrue(TEXT("Patch retains the exact target node"),
         PatchJson.Contains(LiteralEdit->TargetNodeId));
     TestTrue(TEXT("Patch carries the requested replacement"),
@@ -429,6 +429,25 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
                     CollapseJson.Contains(TEXT("\"expectedStatementIds\"")) &&
                     CollapseJson.Contains(TEXT("\"expectedPreviousSiblingId\"")) &&
                     CollapseJson.Contains(TEXT("\"expectedNextSiblingId\"")));
+
+            FString ExtractionJson;
+            TestTrue(TEXT("Multi-selection can build a bounded callable extraction"),
+                FUnifiedScriptAuthoringSurfaceReader::BuildCallableExtractionPatch(
+                    Document,
+                    RewireFunction,
+                    {FirstStatement->Id, SecondStatement->Id},
+                    TEXT("ExtractRewireRange"),
+                    ExtractionJson,
+                    Error));
+            TestTrue(TEXT("Callable extraction carries method, ordered range, gaps, and name"),
+                ExtractionJson.Contains(TEXT("\"operation\": \"extractCallable\"")) &&
+                    ExtractionJson.Contains(TEXT("\"expectedContainingMethodId\"")) &&
+                    ExtractionJson.Contains(RewireFunction.Id) &&
+                    ExtractionJson.Contains(TEXT("\"expectedParentBlockId\"")) &&
+                    ExtractionJson.Contains(TEXT("\"expectedStatementIds\"")) &&
+                    ExtractionJson.Contains(TEXT("\"expectedPreviousSiblingId\"")) &&
+                    ExtractionJson.Contains(TEXT("\"expectedNextSiblingId\"")) &&
+                    ExtractionJson.Contains(TEXT("\"methodName\": \"ExtractRewireRange\"")));
         }
 
         const FUnifiedScriptAuthoringRegion* RewireThenBlock =
