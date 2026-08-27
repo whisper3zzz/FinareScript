@@ -63,8 +63,9 @@ runtime generations.
 ## Current boundary
 
 This tranche closes context search, Favorites/Recents, and the first keyboard
-placement workflow. Drag-from-pin creation does not yet auto-connect a new
-node, and inline pin promotion/default editors, comment/reroute authoring,
-minimap/viewport persistence, and broader Blueprint shortcuts remain later
-M8.2 slices. The Palette does not claim those operations until their structured
-source contracts exist.
+placement workflow. Later M8.2 tranches now provide source-backed Pin
+Authoring plus layout-only comments/reroutes and personal viewport/minimap
+state; see [PIN_AUTHORING.md](PIN_AUTHORING.md) and
+[CANVAS_AUTHORING.md](CANVAS_AUTHORING.md). Drag-from-pin placement still does
+not auto-connect a new source-backed expression; it remains gated on an exact
+structured source contract.

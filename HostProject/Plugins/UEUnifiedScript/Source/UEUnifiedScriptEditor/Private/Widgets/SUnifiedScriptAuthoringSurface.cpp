@@ -20,11 +20,13 @@
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
 #include "Misc/ConfigCacheIni.h"
+#include "Misc/Crc.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Modules/ModuleManager.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "Rendering/DrawElements.h"
 #include "SourceCodeNavigation.h"
 #include "Styling/AppStyle.h"
 #include "UnifiedScriptAsset.h"
@@ -39,11 +41,13 @@
 #include "Widgets/Input/SSearchBox.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
+#include "Widgets/SOverlay.h"
 #include "Widgets/Layout/SSplitter.h"
 #include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/Layout/SSeparator.h"
 #include "Widgets/Views/STreeView.h"
 #include "Widgets/Views/SListView.h"
+#include "Widgets/SLeafWidget.h"
 #include "Widgets/Text/STextBlock.h"
 
 #define LOCTEXT_NAMESPACE "UnifiedScriptAuthoringSurface"
@@ -51,6 +55,7 @@
 namespace UE::UnifiedScript::AuthoringSurface::Slate::Private
 {
 const TCHAR* NodePaletteConfigSection = TEXT("UnifiedScript.AuthoringSurface.NodePalette");
+const TCHAR* CanvasConfigSection = TEXT("UnifiedScript.AuthoringSurface.Canvas");
 
 TSharedRef<STextBlock> MakeInspectorLabel(const FString& Text)
 {
@@ -222,10 +227,373 @@ FString SuggestPromotedLocalName(
 }
 }
 
+class SUnifiedScriptCanvasMinimap final : public SLeafWidget
+{
+public:
+    SLATE_BEGIN_ARGS(SUnifiedScriptCanvasMinimap) {}
+        SLATE_ARGUMENT(SUnifiedScriptAuthoringSurface*, Owner)
+    SLATE_END_ARGS()
+
+    void Construct(const FArguments& InArgs)
+    {
+        Owner = InArgs._Owner;
+        SetCanTick(true);
+    }
+
+    virtual void Tick(
+        const FGeometry& AllottedGeometry,
+        const double InCurrentTime,
+        const float InDeltaTime) override
+    {
+        Invalidate(EInvalidateWidgetReason::Paint);
+    }
+
+    virtual FVector2D ComputeDesiredSize(float LayoutScaleMultiplier) const override
+    {
+        return FVector2D(184.0, 116.0);
+    }
+
+    virtual int32 OnPaint(
+        const FPaintArgs& Args,
+        const FGeometry& AllottedGeometry,
+        const FSlateRect& MyCullingRect,
+        FSlateWindowElementList& OutDrawElements,
+        int32 LayerId,
+        const FWidgetStyle& InWidgetStyle,
+        bool bParentEnabled) const override
+    {
+        FSnapshot Snapshot;
+        FTransform Transform;
+        if (!BuildSnapshot(Snapshot) || !BuildTransform(AllottedGeometry, Snapshot, Transform))
+        {
+            return LayerId;
+        }
+
+        const FSlateBrush* WhiteBrush = FAppStyle::GetBrush(TEXT("WhiteBrush"));
+        FSlateDrawElement::MakeBox(
+            OutDrawElements,
+            LayerId,
+            AllottedGeometry.ToPaintGeometry(),
+            WhiteBrush,
+            ESlateDrawEffect::None,
+            FLinearColor(0.018f, 0.024f, 0.034f, 0.94f));
+
+        for (const TPair<FVector2f, FVector2f>& Wire : Snapshot.Wires)
+        {
+            const TArray<FVector2f> Points = {
+                Transform.GraphToLocal(Wire.Key),
+                Transform.GraphToLocal(Wire.Value)};
+            FSlateDrawElement::MakeLines(
+                OutDrawElements,
+                LayerId + 1,
+                AllottedGeometry.ToPaintGeometry(),
+                Points,
+                ESlateDrawEffect::None,
+                FLinearColor(0.24f, 0.42f, 0.66f, 0.75f),
+                true,
+                1.0f);
+        }
+
+        for (const FItem& Item : Snapshot.Items)
+        {
+            const FVector2f TopLeft = Transform.GraphToLocal(
+                FVector2f(Item.Bounds.Left, Item.Bounds.Top));
+            const FVector2f BottomRight = Transform.GraphToLocal(
+                FVector2f(Item.Bounds.Right, Item.Bounds.Bottom));
+            const FVector2f Size(
+                FMath::Max(2.0f, BottomRight.X - TopLeft.X),
+                FMath::Max(2.0f, BottomRight.Y - TopLeft.Y));
+            FSlateDrawElement::MakeBox(
+                OutDrawElements,
+                LayerId + 2,
+                AllottedGeometry.ToPaintGeometry(Size, FSlateLayoutTransform(TopLeft)),
+                WhiteBrush,
+                ESlateDrawEffect::None,
+                Item.Color);
+        }
+
+        const FVector2f ViewTopLeft = Transform.GraphToLocal(
+            FVector2f(Snapshot.Viewport.Left, Snapshot.Viewport.Top));
+        const FVector2f ViewBottomRight = Transform.GraphToLocal(
+            FVector2f(Snapshot.Viewport.Right, Snapshot.Viewport.Bottom));
+        const TArray<FVector2f> ViewOutline = {
+            ViewTopLeft,
+            FVector2f(ViewBottomRight.X, ViewTopLeft.Y),
+            ViewBottomRight,
+            FVector2f(ViewTopLeft.X, ViewBottomRight.Y),
+            ViewTopLeft};
+        FSlateDrawElement::MakeLines(
+            OutDrawElements,
+            LayerId + 3,
+            AllottedGeometry.ToPaintGeometry(),
+            ViewOutline,
+            ESlateDrawEffect::None,
+            FLinearColor(0.96f, 0.72f, 0.20f, 0.95f),
+            true,
+            1.5f);
+        return LayerId + 3;
+    }
+
+    virtual FReply OnMouseButtonDown(
+        const FGeometry& MyGeometry,
+        const FPointerEvent& MouseEvent) override
+    {
+        if (MouseEvent.GetEffectingButton() != EKeys::LeftMouseButton)
+        {
+            return FReply::Unhandled();
+        }
+        Navigate(MyGeometry, MouseEvent);
+        return FReply::Handled().CaptureMouse(AsShared());
+    }
+
+    virtual FReply OnMouseMove(
+        const FGeometry& MyGeometry,
+        const FPointerEvent& MouseEvent) override
+    {
+        if (!HasMouseCapture() || !MouseEvent.IsMouseButtonDown(EKeys::LeftMouseButton))
+        {
+            return FReply::Unhandled();
+        }
+        Navigate(MyGeometry, MouseEvent);
+        return FReply::Handled();
+    }
+
+    virtual FReply OnMouseButtonUp(
+        const FGeometry& MyGeometry,
+        const FPointerEvent& MouseEvent) override
+    {
+        if (MouseEvent.GetEffectingButton() == EKeys::LeftMouseButton && HasMouseCapture())
+        {
+            Navigate(MyGeometry, MouseEvent);
+            return FReply::Handled().ReleaseMouseCapture();
+        }
+        return FReply::Unhandled();
+    }
+
+private:
+    struct FItem
+    {
+        FSlateRect Bounds;
+        FLinearColor Color;
+    };
+
+    struct FSnapshot
+    {
+        TArray<FItem> Items;
+        TArray<TPair<FVector2f, FVector2f>> Wires;
+        FSlateRect Bounds;
+        FSlateRect Viewport;
+    };
+
+    struct FTransform
+    {
+        FVector2f GraphOrigin = FVector2f::ZeroVector;
+        FVector2f LocalOrigin = FVector2f::ZeroVector;
+        float Scale = 1.0f;
+
+        FVector2f GraphToLocal(const FVector2f& Point) const
+        {
+            return LocalOrigin + (Point - GraphOrigin) * Scale;
+        }
+
+        FVector2f LocalToGraph(const FVector2f& Point) const
+        {
+            return GraphOrigin + (Point - LocalOrigin) / Scale;
+        }
+    };
+
+    bool BuildSnapshot(FSnapshot& Out) const
+    {
+        if (Owner == nullptr || !Owner->AuthoringGraph.IsValid() ||
+            !Owner->GraphEditor.IsValid() || Owner->AuthoringGraph->Nodes.IsEmpty())
+        {
+            return false;
+        }
+
+        bool bHasBounds = false;
+        FVector2f Min = FVector2f::ZeroVector;
+        FVector2f Max = FVector2f::ZeroVector;
+        const auto AddBounds = [&bHasBounds, &Min, &Max](const FSlateRect& Bounds)
+        {
+            const FVector2f CandidateMin(Bounds.Left, Bounds.Top);
+            const FVector2f CandidateMax(Bounds.Right, Bounds.Bottom);
+            if (!bHasBounds)
+            {
+                Min = CandidateMin;
+                Max = CandidateMax;
+                bHasBounds = true;
+            }
+            else
+            {
+                Min.X = FMath::Min(Min.X, CandidateMin.X);
+                Min.Y = FMath::Min(Min.Y, CandidateMin.Y);
+                Max.X = FMath::Max(Max.X, CandidateMax.X);
+                Max.Y = FMath::Max(Max.Y, CandidateMax.Y);
+            }
+        };
+
+        TMap<const UEdGraphNode*, FSlateRect> NodeBounds;
+        for (const UEdGraphNode* Node : Owner->AuthoringGraph->Nodes)
+        {
+            if (Node == nullptr)
+            {
+                continue;
+            }
+            FSlateRect Bounds;
+            if (!Owner->GraphEditor->GetBoundsForNode(Node, Bounds, 0.0f))
+            {
+                FVector2f Size(240.0f, 120.0f);
+                if (const UUnifiedScriptEdGraphCommentNode* Comment =
+                        Cast<UUnifiedScriptEdGraphCommentNode>(Node))
+                {
+                    Size = FVector2f(Comment->NodeWidth, Comment->NodeHeight);
+                }
+                else if (Cast<UUnifiedScriptEdGraphRerouteNode>(Node) != nullptr)
+                {
+                    Size = FVector2f(20.0f, 20.0f);
+                }
+                Bounds = FSlateRect(
+                    Node->NodePosX,
+                    Node->NodePosY,
+                    Node->NodePosX + Size.X,
+                    Node->NodePosY + Size.Y);
+            }
+            NodeBounds.Add(Node, Bounds);
+            AddBounds(Bounds);
+
+            FLinearColor Color(0.16f, 0.42f, 0.72f, 0.88f);
+            if (Cast<UUnifiedScriptEdGraphCommentNode>(Node) != nullptr)
+            {
+                Color = FLinearColor(0.18f, 0.34f, 0.52f, 0.34f);
+            }
+            else if (Cast<UUnifiedScriptEdGraphRerouteNode>(Node) != nullptr)
+            {
+                Color = FLinearColor(0.72f, 0.76f, 0.82f, 0.95f);
+            }
+            Out.Items.Add({Bounds, Color});
+        }
+
+        for (const UEdGraphNode* Node : Owner->AuthoringGraph->Nodes)
+        {
+            const FSlateRect* SourceBounds = NodeBounds.Find(Node);
+            if (Node == nullptr || SourceBounds == nullptr)
+            {
+                continue;
+            }
+            const FVector2f SourceCenter(
+                (SourceBounds->Left + SourceBounds->Right) * 0.5f,
+                (SourceBounds->Top + SourceBounds->Bottom) * 0.5f);
+            for (const UEdGraphPin* Pin : Node->Pins)
+            {
+                if (Pin == nullptr || Pin->Direction != EGPD_Output)
+                {
+                    continue;
+                }
+                for (const UEdGraphPin* LinkedPin : Pin->LinkedTo)
+                {
+                    const UEdGraphNode* TargetNode = LinkedPin != nullptr
+                        ? LinkedPin->GetOwningNode()
+                        : nullptr;
+                    const FSlateRect* TargetBounds = NodeBounds.Find(TargetNode);
+                    if (TargetBounds != nullptr)
+                    {
+                        Out.Wires.Emplace(
+                            SourceCenter,
+                            FVector2f(
+                                (TargetBounds->Left + TargetBounds->Right) * 0.5f,
+                                (TargetBounds->Top + TargetBounds->Bottom) * 0.5f));
+                    }
+                }
+            }
+        }
+
+        FVector2f ViewLocation = FVector2f::ZeroVector;
+        float ViewZoom = 1.0f;
+        Owner->GraphEditor->GetViewLocation(ViewLocation, ViewZoom);
+        ViewZoom = FMath::Max(ViewZoom, 0.01f);
+        FVector2f ViewSize = Owner->GraphEditor->GetCachedGeometry().GetLocalSize() / ViewZoom;
+        if (ViewSize.X <= 1.0f || ViewSize.Y <= 1.0f)
+        {
+            ViewSize = FVector2f(1280.0f, 720.0f) / ViewZoom;
+        }
+        Out.Viewport = FSlateRect(
+            ViewLocation.X,
+            ViewLocation.Y,
+            ViewLocation.X + ViewSize.X,
+            ViewLocation.Y + ViewSize.Y);
+        AddBounds(Out.Viewport);
+        if (!bHasBounds)
+        {
+            return false;
+        }
+        constexpr float GraphPadding = 80.0f;
+        Out.Bounds = FSlateRect(
+            Min.X - GraphPadding,
+            Min.Y - GraphPadding,
+            Max.X + GraphPadding,
+            Max.Y + GraphPadding);
+        return true;
+    }
+
+    static bool BuildTransform(
+        const FGeometry& Geometry,
+        const FSnapshot& Snapshot,
+        FTransform& Out)
+    {
+        constexpr float Padding = 7.0f;
+        const FVector2f LocalSize = Geometry.GetLocalSize();
+        const FVector2f GraphSize(
+            Snapshot.Bounds.Right - Snapshot.Bounds.Left,
+            Snapshot.Bounds.Bottom - Snapshot.Bounds.Top);
+        if (LocalSize.X <= Padding * 2.0f || LocalSize.Y <= Padding * 2.0f ||
+            GraphSize.X <= 0.0f || GraphSize.Y <= 0.0f)
+        {
+            return false;
+        }
+        const FVector2f Available = LocalSize - FVector2f(Padding * 2.0f);
+        Out.Scale = FMath::Min(Available.X / GraphSize.X, Available.Y / GraphSize.Y);
+        if (!FMath::IsFinite(Out.Scale) || Out.Scale <= 0.0f)
+        {
+            return false;
+        }
+        Out.GraphOrigin = FVector2f(Snapshot.Bounds.Left, Snapshot.Bounds.Top);
+        Out.LocalOrigin = FVector2f(Padding) + (Available - GraphSize * Out.Scale) * 0.5f;
+        return true;
+    }
+
+    void Navigate(const FGeometry& Geometry, const FPointerEvent& MouseEvent)
+    {
+        FSnapshot Snapshot;
+        FTransform Transform;
+        if (Owner == nullptr || !BuildSnapshot(Snapshot) ||
+            !BuildTransform(Geometry, Snapshot, Transform))
+        {
+            return;
+        }
+        FVector2f ViewLocation = FVector2f::ZeroVector;
+        float ViewZoom = 1.0f;
+        Owner->GraphEditor->GetViewLocation(ViewLocation, ViewZoom);
+        ViewZoom = FMath::Max(ViewZoom, 0.01f);
+        FVector2f ViewSize = Owner->GraphEditor->GetCachedGeometry().GetLocalSize() / ViewZoom;
+        if (ViewSize.X <= 1.0f || ViewSize.Y <= 1.0f)
+        {
+            ViewSize = FVector2f(1280.0f, 720.0f) / ViewZoom;
+        }
+        const FVector2f LocalPoint = Geometry.AbsoluteToLocal(
+            MouseEvent.GetScreenSpacePosition());
+        const FVector2f GraphCenter = Transform.LocalToGraph(LocalPoint);
+        Owner->GraphEditor->SetViewLocation(GraphCenter - ViewSize * 0.5f, ViewZoom);
+        Owner->PersistCanvasView(false);
+    }
+
+    SUnifiedScriptAuthoringSurface* Owner = nullptr;
+};
+
 void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
 {
     InitialSurfacePath = InArgs._InitialSurfacePath;
     LoadNodePalettePreferences();
+    LoadCanvasPreferences();
 
     AuthoringGraph.Reset(NewObject<UUnifiedScriptEdGraph>(
         GetTransientPackage(),
@@ -776,11 +1144,54 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
                             ]
                             + SHorizontalBox::Slot()
                             .AutoWidth()
+                            .Padding(0.0f, 0.0f, 8.0f, 0.0f)
+                            .VAlign(VAlign_Center)
+                            [
+                                SNew(SCheckBox)
+                                .IsChecked_Lambda([this]()
+                                {
+                                    return bShowCanvasMinimap
+                                        ? ECheckBoxState::Checked
+                                        : ECheckBoxState::Unchecked;
+                                })
+                                .OnCheckStateChanged_Lambda([this](ECheckBoxState State)
+                                {
+                                    bShowCanvasMinimap = State == ECheckBoxState::Checked;
+                                    SaveCanvasPreferences();
+                                })
+                                .ToolTipText(LOCTEXT(
+                                    "MinimapTip",
+                                    "Show the interactive canvas overview. Click or drag it to navigate."))
+                                [
+                                    SNew(STextBlock).Text(LOCTEXT("Minimap", "Minimap"))
+                                ]
+                            ]
+                            + SHorizontalBox::Slot()
+                            .AutoWidth()
+                            .Padding(0.0f, 0.0f, 6.0f, 0.0f)
+                            .VAlign(VAlign_Center)
+                            [
+                                SNew(SButton)
+                                .Text(LOCTEXT("FocusSelection", "Focus Selection"))
+                                .ToolTipText(LOCTEXT(
+                                    "FocusSelectionTip",
+                                    "Frame the selected nodes (F)."))
+                                .IsEnabled_Lambda([this]()
+                                {
+                                    return GraphEditor.IsValid() &&
+                                        !GraphEditor->GetSelectedNodes().IsEmpty();
+                                })
+                                .OnClicked(this, &SUnifiedScriptAuthoringSurface::HandleFocusSelection)
+                            ]
+                            + SHorizontalBox::Slot()
+                            .AutoWidth()
                             .VAlign(VAlign_Center)
                             [
                                 SNew(SButton)
                                 .Text(LOCTEXT("FocusGraph", "Focus All"))
-                                .ToolTipText(LOCTEXT("FocusGraphTip", "Frame every semantic node in the current function."))
+                                .ToolTipText(LOCTEXT(
+                                    "FocusGraphTip",
+                                    "Frame every node in the current function (Home)."))
                                 .OnClicked(this, &SUnifiedScriptAuthoringSurface::HandleFocusGraph)
                             ]
                         ]
@@ -792,18 +1203,50 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
                         + SVerticalBox::Slot()
                         .FillHeight(1.0f)
                         [
-                            SAssignNew(GraphEditor, SGraphEditor)
-                            .AdditionalCommands(GraphCommands)
-                            .GraphToEdit(AuthoringGraph.Get())
-                            .GraphEvents(GraphEvents)
-                            .Appearance(GraphAppearance)
-                            .IsEditable(true)
-                            .IsEmpty_Lambda([this]()
-                            {
-                                return AuthoringGraph.IsValid() && AuthoringGraph->Nodes.IsEmpty();
-                            })
-                            .ShowGraphStateOverlay(false)
-                            .AllowConnectionSlicing(false)
+                            SNew(SOverlay)
+                            + SOverlay::Slot()
+                            [
+                                SAssignNew(GraphEditor, SGraphEditor)
+                                .AdditionalCommands(GraphCommands)
+                                .GraphToEdit(AuthoringGraph.Get())
+                                .GraphEvents(GraphEvents)
+                                .Appearance(GraphAppearance)
+                                .IsEditable(true)
+                                .IsEmpty_Lambda([this]()
+                                {
+                                    return AuthoringGraph.IsValid() && AuthoringGraph->Nodes.IsEmpty();
+                                })
+                                .ShowGraphStateOverlay(false)
+                                .AllowConnectionSlicing(false)
+                            ]
+                            + SOverlay::Slot()
+                            .HAlign(HAlign_Right)
+                            .VAlign(VAlign_Bottom)
+                            .Padding(0.0f, 0.0f, 12.0f, 12.0f)
+                            [
+                                SNew(SBorder)
+                                .Visibility_Lambda([this]()
+                                {
+                                    return bShowCanvasMinimap && AuthoringGraph.IsValid() &&
+                                        !AuthoringGraph->Nodes.IsEmpty()
+                                        ? EVisibility::Visible
+                                        : EVisibility::Collapsed;
+                                })
+                                .BorderImage(FAppStyle::GetBrush(TEXT("Brushes.Panel")))
+                                .Padding(1.0f)
+                                .ToolTipText(LOCTEXT(
+                                    "CanvasMinimapNavigationTip",
+                                    "Canvas Minimap - click or drag to center the graph view."))
+                                [
+                                    SNew(SBox)
+                                    .WidthOverride(184.0f)
+                                    .HeightOverride(116.0f)
+                                    [
+                                        SNew(SUnifiedScriptCanvasMinimap)
+                                        .Owner(this)
+                                    ]
+                                ]
+                            ]
                         ]
                     ]
                 ]
@@ -879,6 +1322,7 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
 
 SUnifiedScriptAuthoringSurface::~SUnifiedScriptAuthoringSurface()
 {
+    PersistCanvasView(true);
     PersistCurrentLayout(true);
 }
 
@@ -901,6 +1345,26 @@ FReply SUnifiedScriptAuthoringSurface::OnPreviewKeyDown(
         NodePaletteSearchBox->SetText(FText::GetEmpty());
         return FReply::Handled();
     }
+    const bool bGraphFocused = GraphEditor.IsValid() &&
+        (GraphEditor->HasKeyboardFocus() || GraphEditor->HasFocusedDescendants());
+    if (bGraphFocused && !InKeyEvent.IsControlDown() && !InKeyEvent.IsAltDown() &&
+        !InKeyEvent.IsShiftDown())
+    {
+        if (InKeyEvent.GetKey() == EKeys::C)
+        {
+            return HandleAddComment();
+        }
+        if (InKeyEvent.GetKey() == EKeys::F)
+        {
+            return GraphEditor->GetSelectedNodes().IsEmpty()
+                ? HandleFocusGraph()
+                : HandleFocusSelection();
+        }
+        if (InKeyEvent.GetKey() == EKeys::Home)
+        {
+            return HandleFocusGraph();
+        }
+    }
     return SCompoundWidget::OnPreviewKeyDown(MyGeometry, InKeyEvent);
 }
 
@@ -917,6 +1381,8 @@ bool SUnifiedScriptAuthoringSurface::LoadSurface(const FString& ConfiguredPath)
         return false;
     }
 
+    PersistCanvasView(true);
+    PersistCurrentLayout(true);
     Document = MoveTemp(Candidate);
     LoadedSurfacePath = FUnifiedScriptAuthoringSurfaceReader::ResolveConfiguredPath(ConfiguredPath);
     LoadedLayoutPath = FUnifiedScriptGraphLayoutStore::GetLayoutPath(LoadedSurfacePath);
@@ -2528,6 +2994,7 @@ EActiveTimerReturnType SUnifiedScriptAuthoringSurface::HandleAutoReload(
             LoadSurface(LoadedSurfacePath);
         }
     }
+    PersistCanvasView(true);
     PersistCurrentLayout(true);
     return EActiveTimerReturnType::Continue;
 }
@@ -3020,6 +3487,7 @@ void SUnifiedScriptAuthoringSurface::RebuildGraph(
         return;
     }
 
+    PersistCanvasView(true);
     PersistCurrentLayout(true);
 
     if (GraphEditor.IsValid())
@@ -3029,6 +3497,7 @@ void SUnifiedScriptAuthoringSurface::RebuildGraph(
     AuthoringGraph->Nodes.Reset();
     GraphNodesBySemanticId.Reset();
     PersistedCanvasLayoutFingerprint.Reset();
+    PersistedCanvasViewFingerprint.Reset();
     ActiveFunctionId = FunctionItem->SemanticId;
     ActiveBlockRegionId.Reset();
     ActiveFunctionSignature = FunctionItem->Detail;
@@ -3213,7 +3682,8 @@ void SUnifiedScriptAuthoringSurface::RebuildGraph(
     if (GraphEditor.IsValid())
     {
         GraphEditor->NotifyGraphChanged();
-        bPendingGraphFocus = !AuthoringGraph->Nodes.IsEmpty();
+        const bool bHasNodes = !AuthoringGraph->Nodes.IsEmpty();
+        bPendingGraphFocus = bHasNodes && !RestoreCanvasView();
     }
 }
 
@@ -3383,6 +3853,33 @@ void SUnifiedScriptAuthoringSurface::SaveNodePalettePreferences() const
         UE::UnifiedScript::AuthoringSurface::Slate::Private::NodePaletteConfigSection,
         TEXT("Recents"),
         RecentNodePaletteActionIds,
+        GEditorPerProjectIni);
+    GConfig->Flush(false, GEditorPerProjectIni);
+}
+
+void SUnifiedScriptAuthoringSurface::LoadCanvasPreferences()
+{
+    bShowCanvasMinimap = true;
+    if (GConfig != nullptr)
+    {
+        GConfig->GetBool(
+            UE::UnifiedScript::AuthoringSurface::Slate::Private::CanvasConfigSection,
+            TEXT("ShowMinimap"),
+            bShowCanvasMinimap,
+            GEditorPerProjectIni);
+    }
+}
+
+void SUnifiedScriptAuthoringSurface::SaveCanvasPreferences() const
+{
+    if (GConfig == nullptr)
+    {
+        return;
+    }
+    GConfig->SetBool(
+        UE::UnifiedScript::AuthoringSurface::Slate::Private::CanvasConfigSection,
+        TEXT("ShowMinimap"),
+        bShowCanvasMinimap,
         GEditorPerProjectIni);
     GConfig->Flush(false, GEditorPerProjectIni);
 }
@@ -4037,6 +4534,96 @@ FString SUnifiedScriptAuthoringSurface::BuildCanvasLayoutFingerprint() const
     return FString::Join(Entries, TEXT("\n"));
 }
 
+FString SUnifiedScriptAuthoringSurface::BuildCanvasViewConfigKey() const
+{
+    if (LoadedSurfacePath.IsEmpty() || ActiveFunctionId.IsEmpty())
+    {
+        return FString();
+    }
+    FString CanonicalPath = LoadedSurfacePath;
+    FPaths::NormalizeFilename(CanonicalPath);
+    CanonicalPath.ToLowerInline();
+    const uint32 Hash = FCrc::StrCrc32(*(CanonicalPath + TEXT("|") + ActiveFunctionId));
+    return FString::Printf(TEXT("Viewport_%08x"), Hash);
+}
+
+void SUnifiedScriptAuthoringSurface::PersistCanvasView(bool bOnlyIfChanged)
+{
+    if (GConfig == nullptr || !GraphEditor.IsValid())
+    {
+        return;
+    }
+    const FString Key = BuildCanvasViewConfigKey();
+    if (Key.IsEmpty())
+    {
+        return;
+    }
+
+    FVector2f Location = FVector2f::ZeroVector;
+    float Zoom = 1.0f;
+    GraphEditor->GetViewLocation(Location, Zoom);
+    if (!FMath::IsFinite(Location.X) || !FMath::IsFinite(Location.Y) ||
+        !FMath::IsFinite(Zoom) || Zoom <= 0.01f)
+    {
+        return;
+    }
+    const FString Fingerprint = FString::Printf(
+        TEXT("%.9g|%.9g|%.9g"),
+        Location.X,
+        Location.Y,
+        Zoom);
+    if (bOnlyIfChanged && Fingerprint == PersistedCanvasViewFingerprint)
+    {
+        return;
+    }
+    GConfig->SetString(
+        UE::UnifiedScript::AuthoringSurface::Slate::Private::CanvasConfigSection,
+        *Key,
+        *Fingerprint,
+        GEditorPerProjectIni);
+    GConfig->Flush(false, GEditorPerProjectIni);
+    PersistedCanvasViewFingerprint = Fingerprint;
+}
+
+bool SUnifiedScriptAuthoringSurface::RestoreCanvasView()
+{
+    PersistedCanvasViewFingerprint.Reset();
+    if (GConfig == nullptr || !GraphEditor.IsValid())
+    {
+        return false;
+    }
+    const FString Key = BuildCanvasViewConfigKey();
+    FString Serialized;
+    if (Key.IsEmpty() || !GConfig->GetString(
+            UE::UnifiedScript::AuthoringSurface::Slate::Private::CanvasConfigSection,
+            *Key,
+            Serialized,
+            GEditorPerProjectIni))
+    {
+        return false;
+    }
+    TArray<FString> Parts;
+    Serialized.ParseIntoArray(Parts, TEXT("|"), false);
+    FVector2f Location = FVector2f::ZeroVector;
+    float Zoom = 1.0f;
+    if (Parts.Num() != 3 ||
+        !LexTryParseString(Location.X, *Parts[0]) ||
+        !LexTryParseString(Location.Y, *Parts[1]) ||
+        !LexTryParseString(Zoom, *Parts[2]) ||
+        !FMath::IsFinite(Location.X) || !FMath::IsFinite(Location.Y) ||
+        !FMath::IsFinite(Zoom) || Zoom <= 0.01f || Zoom > 10.0f)
+    {
+        return false;
+    }
+    GraphEditor->SetViewLocation(Location, Zoom);
+    PersistedCanvasViewFingerprint = FString::Printf(
+        TEXT("%.9g|%.9g|%.9g"),
+        Location.X,
+        Location.Y,
+        Zoom);
+    return true;
+}
+
 FUnifiedScriptSurfaceTreeItemPtr SUnifiedScriptAuthoringSurface::FindSurfaceItem(
     const FString& SemanticId) const
 {
@@ -4052,6 +4639,17 @@ FReply SUnifiedScriptAuthoringSurface::HandleFocusGraph()
     if (GraphEditor.IsValid() && !AuthoringGraph->Nodes.IsEmpty())
     {
         GraphEditor->ZoomToFit(false);
+        bPendingGraphFocus = false;
+    }
+    return FReply::Handled();
+}
+
+FReply SUnifiedScriptAuthoringSurface::HandleFocusSelection()
+{
+    if (GraphEditor.IsValid() && !GraphEditor->GetSelectedNodes().IsEmpty())
+    {
+        GraphEditor->ZoomToFit(true);
+        bPendingGraphFocus = false;
     }
     return FReply::Handled();
 }

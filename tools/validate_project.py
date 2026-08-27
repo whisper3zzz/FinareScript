@@ -65,6 +65,7 @@ DOCUMENTS = [
     ROOT / "docs" / "AUTHORING_SURFACE.md",
     ROOT / "docs" / "NODE_PALETTE.md",
     ROOT / "docs" / "PIN_AUTHORING.md",
+    ROOT / "docs" / "CANVAS_AUTHORING.md",
     ROOT / "docs" / "UNREAL_ADAPTER.md",
     ROOT / "docs" / "UNREAL_DEPLOYMENT.md",
     ROOT / "docs" / "UNREAL_ONBOARDING.md",
@@ -1420,6 +1421,37 @@ def main() -> int:
         / "Widgets"
         / "SUnifiedScriptAuthoringSurface.cpp"
     )
+    unreal_ed_graph_header_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptEditor"
+        / "Public"
+        / "UnifiedScriptEdGraph.h"
+    )
+    unreal_ed_graph_source_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptEditor"
+        / "Private"
+        / "UnifiedScriptEdGraph.cpp"
+    )
+    unreal_graph_layout_store_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptEditor"
+        / "Private"
+        / "Graph"
+        / "UnifiedScriptGraphLayoutStore.cpp"
+    )
     unreal_graph_presentation_path = (
         ROOT
         / "HostProject"
@@ -1577,6 +1609,9 @@ def main() -> int:
         and unreal_authoring_workbench_header_path.is_file()
         and unreal_authoring_workbench_source_path.is_file()
         and unreal_authoring_widget_path.is_file()
+        and unreal_ed_graph_header_path.is_file()
+        and unreal_ed_graph_source_path.is_file()
+        and unreal_graph_layout_store_path.is_file()
         and unreal_graph_presentation_path.is_file()
         and unreal_node_palette_header_path.is_file()
         and unreal_node_palette_source_path.is_file()
@@ -1823,6 +1858,11 @@ def main() -> int:
         encoding="utf-8"
     )
     unreal_authoring_widget = unreal_authoring_widget_path.read_text(encoding="utf-8")
+    unreal_ed_graph_header = unreal_ed_graph_header_path.read_text(encoding="utf-8")
+    unreal_ed_graph_source = unreal_ed_graph_source_path.read_text(encoding="utf-8")
+    unreal_graph_layout_store = unreal_graph_layout_store_path.read_text(
+        encoding="utf-8"
+    )
     unreal_graph_presentation = unreal_graph_presentation_path.read_text(
         encoding="utf-8"
     )
@@ -2495,7 +2535,8 @@ def main() -> int:
         and "puertsOrTypeScriptPackageFiles" in blockbreaker_package_runner
         and "### M7.4 — Full BlockBreaker runtime migration" in roadmap
         and "- [x] inventory all Puerts scripts" in roadmap
-        and "Next slice: **M8.2 — pin defaults and canvas authoring**" in roadmap,
+        and "Next slice: **M8.2 — concise node content and advanced Details**"
+        in roadmap,
         "M7.4 whole-project Puerts inventory, coverage, or migration gates are incomplete",
     )
     checks.append("M7.4 BlockBreaker migration has exact coverage and zero legacy payload gates")
@@ -2868,6 +2909,30 @@ def main() -> int:
     )
     checks.append(
         "UE Slate Pin Authoring writes typed values and promoted locals through source transactions"
+    )
+    require(
+        "UUnifiedScriptEdGraphCommentNode" in unreal_ed_graph_header
+        and "UUnifiedScriptEdGraphRerouteNode" in unreal_ed_graph_header
+        and "OnPinConnectionDoubleCicked" in unreal_ed_graph_source
+        and "Following->PointIndex" in unreal_ed_graph_source
+        and 'SetArrayField(TEXT("commentRegions")' in unreal_graph_layout_store
+        and 'SetArrayField(TEXT("routingHints")' in unreal_graph_layout_store
+        and "invalid or duplicate semantic node" in unreal_graph_layout_store
+        and "SUnifiedScriptCanvasMinimap" in unreal_authoring_widget
+        and "PersistCanvasView" in unreal_authoring_widget
+        and "RestoreCanvasView" in unreal_authoring_widget
+        and "HandleFocusSelection" in unreal_authoring_widget
+        and "CanvasConfigSection" in unreal_authoring_widget
+        and "EKeys::C" in unreal_authoring_widget
+        and "Deleting the final layout-only reroute reconnects the semantic wire"
+        in unreal_authoring_test
+        and "Native canvas layout reload succeeds" in unreal_authoring_test
+        and "Double-clicking a wire forwards an exact reroute request"
+        in unreal_authoring_test,
+        "Native Comment/Reroute authoring, minimap, or viewport persistence is incomplete",
+    )
+    checks.append(
+        "UE Slate Canvas Authoring persists shared layout and personal viewport navigation"
     )
     identity_reconciler_source = (
         ROOT / "src" / "UnifiedScript.CSharp" / "CSharpIdentityReconciler.cs"

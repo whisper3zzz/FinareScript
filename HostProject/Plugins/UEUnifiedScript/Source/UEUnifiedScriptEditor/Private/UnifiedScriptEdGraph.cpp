@@ -135,6 +135,7 @@ bool UUnifiedScriptEdGraphRerouteNode::ShouldDrawNodeAsControlPointOnly(
 
 void UUnifiedScriptEdGraphRerouteNode::DestroyNode()
 {
+    UEdGraph* Graph = GetGraph();
     UEdGraphPin* Input = FindPin(TEXT("in"), EGPD_Input);
     UEdGraphPin* Output = FindPin(TEXT("out"), EGPD_Output);
     UEdGraphPin* Previous = Input != nullptr && Input->LinkedTo.Num() == 1
@@ -146,6 +147,19 @@ void UUnifiedScriptEdGraphRerouteNode::DestroyNode()
     if (Previous != nullptr && Next != nullptr)
     {
         Previous->MakeLinkTo(Next, false);
+    }
+    if (Graph != nullptr)
+    {
+        for (UEdGraphNode* Node : Graph->Nodes)
+        {
+            UUnifiedScriptEdGraphRerouteNode* Following =
+                Cast<UUnifiedScriptEdGraphRerouteNode>(Node);
+            if (Following != nullptr && Following != this &&
+                Following->EdgeId == EdgeId && Following->PointIndex > PointIndex)
+            {
+                --Following->PointIndex;
+            }
+        }
     }
     Super::DestroyNode();
 }

@@ -4,8 +4,10 @@
 #include "UnifiedScriptAuthoringWorkbench.h"
 
 #include "Framework/Docking/TabManager.h"
+#include "Graph/UnifiedScriptGraphLayoutStore.h"
 #include "Graph/UnifiedScriptNodePalette.h"
 #include "Graph/UnifiedScriptGraphPresentation.h"
+#include "HAL/FileManager.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
@@ -1026,6 +1028,41 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
             return Id == TEXT("action-4");
         }).Num(), 1);
 
+    FString CheckedInLayoutPath = FPaths::ConvertRelativePathToFull(FPaths::Combine(
+        FPaths::ProjectDir(), TEXT(".."), TEXT("samples/Layout/DamageRules.usgraph")));
+    FPaths::NormalizeFilename(CheckedInLayoutPath);
+    FUnifiedScriptGraphFunctionLayout CheckedInLayout;
+    TestTrue(
+        TEXT("Native layout store reads the checked-in Comment/Reroute example"),
+        FUnifiedScriptGraphLayoutStore::LoadFunction(
+            CheckedInLayoutPath,
+            TEXT("us_16919a6d2cc64371d8ebbfb46251b14a"),
+            CheckedInLayout,
+            Error));
+    TestEqual(TEXT("Checked-in layout retains five placed semantic nodes"),
+        CheckedInLayout.NodePositions.Num(), 5);
+    TestEqual(TEXT("Checked-in layout retains one comment region"),
+        CheckedInLayout.CommentRegions.Num(), 1);
+    TestEqual(TEXT("Checked-in layout retains one routed edge"),
+        CheckedInLayout.RoutingHints.Num(), 1);
+    if (!CheckedInLayout.CommentRegions.IsEmpty())
+    {
+        TestEqual(TEXT("Comment title survives native parsing"),
+            CheckedInLayout.CommentRegions[0].Title,
+            FString(TEXT("Damage scale expression")));
+        TestEqual(TEXT("Comment membership survives native parsing"),
+            CheckedInLayout.CommentRegions[0].NodeIds.Num(), 3);
+    }
+    if (!CheckedInLayout.RoutingHints.IsEmpty())
+    {
+        TestEqual(TEXT("Routed edge retains ordered control points"),
+            CheckedInLayout.RoutingHints[0].ControlPoints.Num(), 2);
+        TestEqual(TEXT("First route point X remains exact"),
+            CheckedInLayout.RoutingHints[0].ControlPoints[0].X, 620.0);
+        TestEqual(TEXT("Second route point Y remains exact"),
+            CheckedInLayout.RoutingHints[0].ControlPoints[1].Y, 168.0);
+    }
+
     UUnifiedScriptEdGraph* TransactionGraph = NewObject<UUnifiedScriptEdGraph>(
         GetTransientPackage(),
         NAME_None,
@@ -1076,6 +1113,132 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
     RewireSchema->BreakPinLinks(*TargetInput, true);
     TestTrue(TEXT("Delete-only pin gestures cannot mutate compiler-owned wires"),
         TargetInput->LinkedTo.Contains(OldOutput));
+
+    UUnifiedScriptEdGraphRerouteNode* RerouteNode =
+        NewObject<UUnifiedScriptEdGraphRerouteNode>(TransactionGraph);
+    RerouteNode->EdgeId = TEXT("us_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    RerouteNode->RoutedPinCategory = DataPinType.PinCategory;
+    RerouteNode->RoutedPinSubCategory = DataPinType.PinSubCategory;
+    RerouteNode->AllocateDefaultPins();
+    TransactionGraph->AddNode(RerouteNode, false, false);
+    UUnifiedScriptEdGraphRerouteNode* FollowingRerouteNode =
+        NewObject<UUnifiedScriptEdGraphRerouteNode>(TransactionGraph);
+    FollowingRerouteNode->EdgeId = RerouteNode->EdgeId;
+    FollowingRerouteNode->PointIndex = 1;
+    FollowingRerouteNode->RoutedPinCategory = DataPinType.PinCategory;
+    FollowingRerouteNode->RoutedPinSubCategory = DataPinType.PinSubCategory;
+    FollowingRerouteNode->AllocateDefaultPins();
+    TransactionGraph->AddNode(FollowingRerouteNode, false, false);
+    OldOutput->BreakLinkTo(TargetInput);
+    OldOutput->MakeLinkTo(RerouteNode->FindPinChecked(TEXT("in"), EGPD_Input), false);
+    RerouteNode->FindPinChecked(TEXT("out"), EGPD_Output)->MakeLinkTo(
+        FollowingRerouteNode->FindPinChecked(TEXT("in"), EGPD_Input), false);
+    FollowingRerouteNode->FindPinChecked(TEXT("out"), EGPD_Output)->MakeLinkTo(
+        TargetInput, false);
+    RerouteNode->DestroyNode();
+    TestTrue(TEXT("Deleting one reroute reconnects the remaining routed wire"),
+        OldOutput->LinkedTo.Contains(
+            FollowingRerouteNode->FindPinChecked(TEXT("in"), EGPD_Input)) &&
+        FollowingRerouteNode->PointIndex == 0);
+    FollowingRerouteNode->DestroyNode();
+    TestTrue(TEXT("Deleting the final layout-only reroute reconnects the semantic wire"),
+        OldOutput->LinkedTo.Contains(TargetInput) && TargetInput->LinkedTo.Contains(OldOutput));
+
+    bool bRerouteRequested = false;
+    TransactionGraph->OnRerouteRequested = FOnUnifiedScriptRerouteRequested::CreateLambda(
+        [&bRerouteRequested, OldOutput, TargetInput](
+            UEdGraphPin* SubmittedA,
+            UEdGraphPin* SubmittedB,
+            const FVector2D& Location)
+        {
+            bRerouteRequested = SubmittedA == OldOutput && SubmittedB == TargetInput &&
+                Location.Equals(FVector2D(120.0, 80.0));
+        });
+    RewireSchema->OnPinConnectionDoubleCicked(
+        OldOutput, TargetInput, FVector2f(120.0f, 80.0f));
+    TestTrue(TEXT("Double-clicking a wire forwards an exact reroute request"),
+        bRerouteRequested);
+
+    const FString RoundTripLayoutPath = FPaths::Combine(
+        FPaths::ProjectSavedDir(), TEXT("Automation/UnifiedScriptCanvasLayout.usgraph"));
+    IFileManager::Get().Delete(*RoundTripLayoutPath, false, true);
+    UUnifiedScriptEdGraphCommentNode* CommentNode =
+        NewObject<UUnifiedScriptEdGraphCommentNode>(TransactionGraph);
+    CommentNode->LayoutId = TEXT("automation-comment");
+    CommentNode->NodeComment = TEXT("Gameplay calculation");
+    CommentNode->NodePosX = -40;
+    CommentNode->NodePosY = -20;
+    CommentNode->NodeWidth = 480;
+    CommentNode->NodeHeight = 260;
+    CommentNode->AddNodeUnderComment(OldSourceNode);
+    TransactionGraph->AddNode(CommentNode, false, false);
+    OldSourceNode->SemanticId = TEXT("us_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+    OldSourceNode->NodePosX = 20;
+    OldSourceNode->NodePosY = 30;
+    TargetNode->SemanticId = TEXT("us_cccccccccccccccccccccccccccccccc");
+    TargetNode->NodePosX = 320;
+    TargetNode->NodePosY = 140;
+    UUnifiedScriptEdGraphRerouteNode* FirstRoute =
+        NewObject<UUnifiedScriptEdGraphRerouteNode>(TransactionGraph);
+    FirstRoute->EdgeId = TEXT("us_dddddddddddddddddddddddddddddddd");
+    FirstRoute->PointIndex = 0;
+    FirstRoute->NodePosX = 140;
+    FirstRoute->NodePosY = 65;
+    TransactionGraph->AddNode(FirstRoute, false, false);
+    UUnifiedScriptEdGraphRerouteNode* SecondRoute =
+        NewObject<UUnifiedScriptEdGraphRerouteNode>(TransactionGraph);
+    SecondRoute->EdgeId = FirstRoute->EdgeId;
+    SecondRoute->PointIndex = 1;
+    SecondRoute->NodePosX = 240;
+    SecondRoute->NodePosY = 115;
+    TransactionGraph->AddNode(SecondRoute, false, false);
+    const TArray<UEdGraphNode*> RoundTripNodes = {
+        OldSourceNode, TargetNode, CommentNode, FirstRoute, SecondRoute};
+    TestTrue(TEXT("Native canvas layout save succeeds"),
+        FUnifiedScriptGraphLayoutStore::SaveFunction(
+            RoundTripLayoutPath,
+            TEXT("us_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"),
+            RoundTripNodes,
+            Error));
+    FUnifiedScriptGraphFunctionLayout RoundTripLayout;
+    TestTrue(TEXT("Native canvas layout reload succeeds"),
+        FUnifiedScriptGraphLayoutStore::LoadFunction(
+            RoundTripLayoutPath,
+            TEXT("us_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"),
+            RoundTripLayout,
+            Error));
+    TestEqual(TEXT("Round trip retains semantic node positions"),
+        RoundTripLayout.NodePositions.Num(), 2);
+    TestEqual(TEXT("Round trip retains the comment"),
+        RoundTripLayout.CommentRegions.Num(), 1);
+    TestEqual(TEXT("Round trip retains both route points"),
+        RoundTripLayout.RoutingHints.Num() == 1
+            ? RoundTripLayout.RoutingHints[0].ControlPoints.Num()
+            : 0,
+        2);
+    if (!RoundTripLayout.CommentRegions.IsEmpty())
+    {
+        TestEqual(TEXT("Round trip retains comment membership"),
+            RoundTripLayout.CommentRegions[0].NodeIds.Num(), 2);
+    }
+    FString InvalidLayoutJson;
+    TestTrue(TEXT("Round-trip canvas JSON remains readable for strictness testing"),
+        FFileHelper::LoadFileToString(InvalidLayoutJson, *RoundTripLayoutPath));
+    TestEqual(TEXT("Strictness fixture removes exactly one required route field"),
+        InvalidLayoutJson.ReplaceInline(
+            TEXT("\"routingHints\":"),
+            TEXT("\"missingRoutingHints\":")),
+        1);
+    TestTrue(TEXT("Strictness fixture can be written"),
+        FFileHelper::SaveStringToFile(InvalidLayoutJson, *RoundTripLayoutPath));
+    FUnifiedScriptGraphFunctionLayout InvalidLayout;
+    TestFalse(TEXT("Matching layout functions cannot silently omit required canvas arrays"),
+        FUnifiedScriptGraphLayoutStore::LoadFunction(
+            RoundTripLayoutPath,
+            TEXT("us_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"),
+            InvalidLayout,
+            Error));
+    IFileManager::Get().Delete(*RoundTripLayoutPath, false, true);
 
     UUnifiedScriptEdGraphNode* OldControlNode =
         NewObject<UUnifiedScriptEdGraphNode>(TransactionGraph);

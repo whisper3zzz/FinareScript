@@ -79,5 +79,6 @@ main canvas.
 ## Deliberate boundary
 
 This tranche authors values and locals; it does not make transient Unreal pins
-authoritative. Comment boxes, reroute nodes, minimap/viewport persistence, and
-the remaining keyboard parity continue in the next M8.2 canvas tranche.
+authoritative. The following M8.2 canvas tranche now supplies layout-only
+Comment Boxes and typed Reroutes plus personal viewport/minimap state without
+weakening that rule. See [CANVAS_AUTHORING.md](CANVAS_AUTHORING.md).

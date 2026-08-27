@@ -23,6 +23,22 @@ namespace UE::UnifiedScript::Editor::Layout::Private
 {
 constexpr TCHAR SchemaVersion[] = TEXT("unifiedscript.graph-layout/v0.1");
 
+bool IsSemanticId(const FString& Value)
+{
+    if (!Value.StartsWith(TEXT("us_")) || Value.Len() != 35)
+    {
+        return false;
+    }
+    for (int32 Index = 3; Index < Value.Len(); ++Index)
+    {
+        if (!FChar::IsHexDigit(Value[Index]))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 TSharedRef<FJsonObject> MakeEmptyDocument()
 {
     const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
@@ -96,35 +112,81 @@ bool FUnifiedScriptGraphLayoutStore::LoadFunction(
     {
         const TSharedPtr<FJsonObject> Function = Value.IsValid() ? Value->AsObject() : nullptr;
         FString CandidateId;
-        const TArray<TSharedPtr<FJsonValue>>* Nodes = nullptr;
-        const TArray<TSharedPtr<FJsonValue>>* Comments = nullptr;
-        const TArray<TSharedPtr<FJsonValue>>* Routes = nullptr;
         if (!Function.IsValid() ||
             !Function->TryGetStringField(TEXT("functionId"), CandidateId) ||
-            CandidateId != FunctionId ||
-            !Function->TryGetArrayField(TEXT("nodes"), Nodes) || Nodes == nullptr ||
-            !Function->TryGetArrayField(TEXT("commentRegions"), Comments) || Comments == nullptr ||
-            !Function->TryGetArrayField(TEXT("routingHints"), Routes) || Routes == nullptr)
+            !IsSemanticId(CandidateId))
+        {
+            OutError = TEXT("Graph layout contains an invalid function entry.");
+            return false;
+        }
+        if (CandidateId != FunctionId)
         {
             continue;
         }
+
+        const TArray<TSharedPtr<FJsonValue>>* Nodes = nullptr;
+        const TArray<TSharedPtr<FJsonValue>>* Comments = nullptr;
+        const TArray<TSharedPtr<FJsonValue>>* Routes = nullptr;
+        if (!Function->TryGetArrayField(TEXT("nodes"), Nodes) || Nodes == nullptr ||
+            !Function->TryGetArrayField(TEXT("commentRegions"), Comments) || Comments == nullptr ||
+            !Function->TryGetArrayField(TEXT("routingHints"), Routes) || Routes == nullptr)
+        {
+            OutError = FString::Printf(
+                TEXT("Graph layout function %s requires nodes, commentRegions, and routingHints arrays."),
+                *FunctionId);
+            return false;
+        }
+        TSet<FString> NodeIds;
         for (const TSharedPtr<FJsonValue>& NodeValue : *Nodes)
         {
             const TSharedPtr<FJsonObject> Node = NodeValue.IsValid() ? NodeValue->AsObject() : nullptr;
             FString NodeId;
             FString Placement;
             const TSharedPtr<FJsonObject>* Position = nullptr;
+            const TSharedPtr<FJsonObject>* Size = nullptr;
             double X = 0.0;
             double Y = 0.0;
-            if (Node.IsValid() && Node->TryGetStringField(TEXT("nodeId"), NodeId) &&
-                Node->TryGetStringField(TEXT("placement"), Placement) &&
-                Placement == TEXT("placed") &&
-                Node->TryGetObjectField(TEXT("position"), Position) && Position != nullptr &&
-                (*Position)->TryGetNumberField(TEXT("x"), X) &&
-                (*Position)->TryGetNumberField(TEXT("y"), Y) &&
-                FMath::IsFinite(X) && FMath::IsFinite(Y))
+            double Width = 0.0;
+            double Height = 0.0;
+            bool bCollapsed = false;
+            if (!Node.IsValid() ||
+                !Node->TryGetStringField(TEXT("nodeId"), NodeId) ||
+                !IsSemanticId(NodeId) || NodeIds.Contains(NodeId) ||
+                !Node->TryGetStringField(TEXT("placement"), Placement) ||
+                (Placement != TEXT("placed") && Placement != TEXT("unplaced")) ||
+                !Node->TryGetBoolField(TEXT("collapsed"), bCollapsed))
             {
+                OutError = FString::Printf(
+                    TEXT("Graph layout has an invalid or duplicate node in function %s."),
+                    *FunctionId);
+                return false;
+            }
+            NodeIds.Add(NodeId);
+            if (Placement == TEXT("placed"))
+            {
+                if (!Node->TryGetObjectField(TEXT("position"), Position) || Position == nullptr ||
+                    !(*Position)->TryGetNumberField(TEXT("x"), X) ||
+                    !(*Position)->TryGetNumberField(TEXT("y"), Y) ||
+                    !FMath::IsFinite(X) || !FMath::IsFinite(Y) ||
+                    !Node->TryGetObjectField(TEXT("size"), Size) || Size == nullptr ||
+                    !(*Size)->TryGetNumberField(TEXT("width"), Width) ||
+                    !(*Size)->TryGetNumberField(TEXT("height"), Height) ||
+                    !FMath::IsFinite(Width) || !FMath::IsFinite(Height) ||
+                    Width <= 0.0 || Height <= 0.0)
+                {
+                    OutError = FString::Printf(
+                        TEXT("Graph layout node %s has an invalid placed position."),
+                        *NodeId);
+                    return false;
+                }
                 OutLayout.NodePositions.Add(NodeId, FVector2D(X, Y));
+            }
+            else if (Node->HasField(TEXT("position")) || Node->HasField(TEXT("size")))
+            {
+                OutError = FString::Printf(
+                    TEXT("Unplaced graph layout node %s cannot carry position or size."),
+                    *NodeId);
+                return false;
             }
         }
         TSet<FString> CommentIds;
@@ -139,9 +201,10 @@ bool FUnifiedScriptGraphLayoutStore::LoadFunction(
             double Y = 0.0;
             double Width = 0.0;
             double Height = 0.0;
-            const TArray<TSharedPtr<FJsonValue>>* NodeIds = nullptr;
+            const TArray<TSharedPtr<FJsonValue>>* CommentNodeIds = nullptr;
             if (!Comment.IsValid() ||
-                !Comment->TryGetStringField(TEXT("id"), Entry.Id) || Entry.Id.IsEmpty() ||
+                !Comment->TryGetStringField(TEXT("id"), Entry.Id) ||
+                Entry.Id.TrimStartAndEnd().IsEmpty() ||
                 !Comment->TryGetStringField(TEXT("title"), Entry.Title) ||
                 !Comment->TryGetObjectField(TEXT("bounds"), Bounds) || Bounds == nullptr ||
                 !(*Bounds)->TryGetNumberField(TEXT("x"), X) ||
@@ -151,7 +214,7 @@ bool FUnifiedScriptGraphLayoutStore::LoadFunction(
                 !FMath::IsFinite(X) || !FMath::IsFinite(Y) ||
                 !FMath::IsFinite(Width) || !FMath::IsFinite(Height) ||
                 Width <= 0.0 || Height <= 0.0 ||
-                !Comment->TryGetArrayField(TEXT("nodeIds"), NodeIds) || NodeIds == nullptr ||
+                !Comment->TryGetArrayField(TEXT("nodeIds"), CommentNodeIds) || CommentNodeIds == nullptr ||
                 !Comment->TryGetBoolField(TEXT("collapsed"), Entry.bCollapsed) ||
                 CommentIds.Contains(Entry.Id))
             {
@@ -163,11 +226,11 @@ bool FUnifiedScriptGraphLayoutStore::LoadFunction(
             CommentIds.Add(Entry.Id);
             Entry.Position = FVector2D(X, Y);
             Entry.Size = FVector2D(Width, Height);
-            for (const TSharedPtr<FJsonValue>& NodeIdValue : *NodeIds)
+            for (const TSharedPtr<FJsonValue>& NodeIdValue : *CommentNodeIds)
             {
                 FString NodeId;
                 if (!NodeIdValue.IsValid() || !NodeIdValue->TryGetString(NodeId) ||
-                    NodeId.IsEmpty() || Entry.NodeIds.Contains(NodeId))
+                    !IsSemanticId(NodeId) || Entry.NodeIds.Contains(NodeId))
                 {
                     OutError = FString::Printf(
                         TEXT("Graph layout comment '%s' has invalid node membership."),
@@ -188,7 +251,7 @@ bool FUnifiedScriptGraphLayoutStore::LoadFunction(
             const TArray<TSharedPtr<FJsonValue>>* Points = nullptr;
             if (!Route.IsValid() ||
                 !Route->TryGetStringField(TEXT("edgeId"), Entry.EdgeId) ||
-                Entry.EdgeId.IsEmpty() || RoutedEdges.Contains(Entry.EdgeId) ||
+                !IsSemanticId(Entry.EdgeId) || RoutedEdges.Contains(Entry.EdgeId) ||
                 !Route->TryGetArrayField(TEXT("controlPoints"), Points) ||
                 Points == nullptr || Points->IsEmpty())
             {
@@ -231,13 +294,25 @@ bool FUnifiedScriptGraphLayoutStore::SaveFunction(
     FString& OutError)
 {
     using namespace UE::UnifiedScript::Editor::Layout::Private;
+    if (!IsSemanticId(FunctionId))
+    {
+        OutError = TEXT("Graph layout save requires a valid semantic function ID.");
+        return false;
+    }
     TSharedPtr<FJsonObject> Root;
     if (!LoadDocument(LayoutPath, Root, OutError))
     {
         return false;
     }
 
-    TArray<TSharedPtr<FJsonValue>> Functions = Root->GetArrayField(TEXT("functions"));
+    const TArray<TSharedPtr<FJsonValue>>* ExistingFunctions = nullptr;
+    if (!Root->TryGetArrayField(TEXT("functions"), ExistingFunctions) ||
+        ExistingFunctions == nullptr)
+    {
+        OutError = TEXT("Graph layout requires a functions array.");
+        return false;
+    }
+    TArray<TSharedPtr<FJsonValue>> Functions = *ExistingFunctions;
     TSharedPtr<FJsonObject> Function;
     for (const TSharedPtr<FJsonValue>& Value : Functions)
     {
@@ -260,10 +335,18 @@ bool FUnifiedScriptGraphLayoutStore::SaveFunction(
     }
 
     TArray<const UUnifiedScriptEdGraphNode*> ScriptNodes;
+    TSet<FString> ScriptNodeIds;
     for (const UEdGraphNode* Node : Nodes)
     {
         if (const UUnifiedScriptEdGraphNode* ScriptNode = Cast<UUnifiedScriptEdGraphNode>(Node))
         {
+            if (!IsSemanticId(ScriptNode->SemanticId) ||
+                ScriptNodeIds.Contains(ScriptNode->SemanticId))
+            {
+                OutError = TEXT("Graph layout save encountered an invalid or duplicate semantic node.");
+                return false;
+            }
+            ScriptNodeIds.Add(ScriptNode->SemanticId);
             ScriptNodes.Add(ScriptNode);
         }
     }
@@ -313,12 +396,17 @@ bool FUnifiedScriptGraphLayoutStore::SaveFunction(
         return A.LayoutId < B.LayoutId;
     });
     TArray<TSharedPtr<FJsonValue>> JsonComments;
+    TSet<FString> CommentLayoutIds;
     for (const UUnifiedScriptEdGraphCommentNode* Comment : CommentNodes)
     {
-        if (Comment->LayoutId.IsEmpty() || Comment->NodeWidth <= 0 || Comment->NodeHeight <= 0)
+        if (Comment->LayoutId.TrimStartAndEnd().IsEmpty() ||
+            CommentLayoutIds.Contains(Comment->LayoutId) ||
+            Comment->NodeWidth <= 0 || Comment->NodeHeight <= 0)
         {
-            continue;
+            OutError = TEXT("Graph layout save encountered an invalid or duplicate comment region.");
+            return false;
         }
+        CommentLayoutIds.Add(Comment->LayoutId);
         const TSharedRef<FJsonObject> JsonComment = MakeShared<FJsonObject>();
         JsonComment->SetStringField(TEXT("id"), Comment->LayoutId);
         JsonComment->SetStringField(TEXT("title"), Comment->NodeComment);
@@ -388,9 +476,10 @@ bool FUnifiedScriptGraphLayoutStore::SaveFunction(
     };
     for (const UUnifiedScriptEdGraphRerouteNode* Reroute : RerouteNodes)
     {
-        if (Reroute->EdgeId.IsEmpty())
+        if (!IsSemanticId(Reroute->EdgeId) || Reroute->PointIndex < 0)
         {
-            continue;
+            OutError = TEXT("Graph layout save encountered an invalid routed edge.");
+            return false;
         }
         if (CurrentEdgeId != Reroute->EdgeId)
         {
@@ -398,6 +487,13 @@ bool FUnifiedScriptGraphLayoutStore::SaveFunction(
             CurrentEdgeId = Reroute->EdgeId;
             CurrentRoute = MakeShared<FJsonObject>();
             CurrentRoute->SetStringField(TEXT("edgeId"), CurrentEdgeId);
+        }
+        if (Reroute->PointIndex != CurrentPoints.Num())
+        {
+            OutError = FString::Printf(
+                TEXT("Graph layout route %s has duplicate or non-contiguous point indices."),
+                *Reroute->EdgeId);
+            return false;
         }
         const TSharedRef<FJsonObject> Point = MakeShared<FJsonObject>();
         Point->SetNumberField(TEXT("x"), Reroute->NodePosX);

@@ -49,7 +49,7 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-27**
 
 - Active milestone: **M8 — Visual/C# Authoring Beta**
-- Next slice: **M8.2 — pin defaults and canvas authoring**
+- Next slice: **M8.2 — concise node content and advanced Details**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -60,12 +60,12 @@ machine-local unless an artifact explicitly says otherwise.
 
 | Gate | Verified result |
 | --- | --- |
-| Main source | `54cf2a1` (`feat: add atomic grouped authoring transactions`), plus this M8.2 node-Palette change set |
+| Main source | `0773c31` (`feat: add canvas comments and wire reroutes`), plus this viewport/minimap change set |
 | Comparison source | `489ce9b` (`feat: complete full UnifiedScript migration`) |
-| Managed tests | 497 / 497 passed |
-| Repository validator | 50 / 50 passed |
+| Managed tests | 501 / 501 passed |
+| Repository validator | 52 / 52 passed |
 | UE 5.8.1 native build | passed |
-| `UnifiedScript.Unreal` Automation | 13 / 13 passed at the M7.3 onboarding baseline; the migrated BlockBreaker Editor gate and focused M8.1 Authoring Surface gate also passed |
+| `UnifiedScript.Unreal` Automation | 13 / 13 passed at the M7.3 onboarding baseline; the migrated BlockBreaker Editor gate and focused M8.2 Authoring Surface gate also passed |
 | BlockBreaker workload | 10,000 frames, three trials, one shot, one hit, two command completions per trial |
 | Gameplay boundary | 120,031 fast/CallFrame calls, zero legacy calls |
 | Matched local median | UnifiedScript 4,927.191 ms; Puerts 4,759.930 ms; ratio 1.035139; functional parity only, performance claim deferred to M10 |
@@ -743,14 +743,14 @@ pass.
 
 ### M8.2 — Blueprint-grade Unreal experience
 
-- [ ] deliver context-sensitive palette search, favorites/recent nodes, pin
+- [x] deliver context-sensitive palette search, favorites/recent nodes, pin
   promotion and defaults, comments, reroute nodes, zoom/minimap, selection, and
   keyboard workflows consistent with UE expectations
   - [x] context-derived token search, persistent Favorites, accepted Recent
     actions, and `Ctrl+Space` / Enter / double-click placement
   - [x] source-backed typed Pin Default/Reset and safe Promote to Local Details
     editors
-  - [ ] comment/reroute authoring, minimap, viewport state, and remaining
+  - [x] comment/reroute authoring, minimap, viewport state, and common
     Blueprint keyboard parity
 - [ ] show concise author-facing node content by default while retaining exact
   type, effect, source, semantic ID, and generated API information on demand
@@ -766,8 +766,8 @@ Favorites and the bounded eight-entry Recent list are stored in per-project user
 config; Recent changes only after an accepted Workbench response. Function-level
 Event Entries remain visible without an editable block, while statement actions
 do not. The focused UE 5.8 Authoring Surface Automation and 50/50 repository
-invariants pass. M8.2 remains open for pin defaults/promotion, comment and
-reroute editing, minimap/viewport persistence, advanced node details, and
+invariants pass. Later M8.2 tranches completed pin defaults/promotion and canvas
+organization; M8.2 remains open for advanced node details and
 diagnostics/diff/rollback UX.
 
 The second M8.2 tranche adds source-backed Pin Authoring. Every connected data
@@ -779,10 +779,23 @@ the Roslyn path validates literal runtime type, source freshness, effect order,
 scope, and identity before the ordinary Workbench transaction can publish.
 Promote reuses `introduceTemporary` and is deliberately limited to explicit
 local initializers and returns where evaluation order is proven unchanged. See
-[`PIN_AUTHORING.md`](PIN_AUTHORING.md). M8.2 next moves to comment/reroute
-authoring and persistent canvas viewport/minimap behavior. The 501/501 managed
-suite, UE 5.8 Editor build, focused native Authoring Surface Automation, and
-51/51 repository invariants pass.
+[`PIN_AUTHORING.md`](PIN_AUTHORING.md). The 501/501 managed suite, UE 5.8 Editor
+build, focused native Authoring Surface Automation, and 51/51 repository
+invariants pass.
+
+The third M8.2 tranche completes native Canvas Authoring without creating a
+second executable graph. Unreal Comment Boxes and typed wire Reroutes persist
+as `.usgraph` v0.1 comment regions and ordered routing hints; reroute deletion
+reconnects the semantic edge and compacts later point indices. A live
+bottom-right minimap renders nodes, comments, routed segments, and the visible
+viewport, and click/drag navigation centers the GraphEditor. View location,
+zoom, and minimap visibility are stored per project/user, keyed by Surface path
+and function ID, so personal navigation never causes sidecar conflicts. `C`,
+`F`, and `Home` provide comment, focus-selection, and focus-all parity. See
+[`CANVAS_AUTHORING.md`](CANVAS_AUTHORING.md). The 501/501 managed suite, UE 5.8
+Editor build, focused native Authoring Surface Automation, and 52/52 repository
+invariants pass. M8.2 now advances to concise default node content with exact
+type/effect/source/API data available on demand.
 
 ### M8.3 — Asset, state, event, and API authoring
 

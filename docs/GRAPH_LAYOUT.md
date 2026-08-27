@@ -139,3 +139,9 @@ The v0.1 schema deliberately excludes viewport zoom, selection, per-user
 preferences, colors, breakpoints, and automatic placement policy. Those are
 editor/session concerns or later versioned additions. It also does not define a
 three-way JSON merge driver yet.
+
+The Unreal M8.2 Authoring Surface therefore stores pan/zoom and minimap
+visibility in `GEditorPerProjectIni`, keyed by normalized Surface path and
+function semantic ID. Comment bounds/membership and ordered wire control points
+remain in this sidecar because they are intentional, shareable canvas
+organization. See [CANVAS_AUTHORING.md](CANVAS_AUTHORING.md).

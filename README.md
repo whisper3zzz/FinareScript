@@ -9,8 +9,8 @@ M7.2 gameplay services/lifecycle productization, and M7.3 schema-generated
 gameplay data plane without adding UE dependencies to the compiler core. M7.4
 then completed the full BlockBreaker migration with exact inventory coverage
 and no Puerts/TypeScript payload in the target project or package. The active
-RoadMap cursor is M8.2 pin defaults and canvas authoring after the native
-context-Palette tranche.
+RoadMap cursor is M8.2 concise node content and advanced Details after the
+native Palette, Pin Authoring, and Canvas Authoring tranches.
 
 ## Product roadmap
 
@@ -475,6 +475,13 @@ The next M8.2 tranche adds source-backed Pin Authoring in native Details:
 type-checked C# literals, bounded typed Reset, and safe Promote to Local all
 flow through exact edge preconditions and the transactional Workbench. See
 [`docs/PIN_AUTHORING.md`](docs/PIN_AUTHORING.md).
+
+The Canvas Authoring tranche then adds native Comment Boxes, typed wire
+Reroutes, per-function viewport restoration, a clickable/draggable minimap,
+Focus Selection/All, and Blueprint-style `C`, `F`, and `Home` gestures. Shared
+canvas structure is persisted in `.usgraph`; personal navigation state remains
+in per-project editor user settings. See
+[`docs/CANVAS_AUTHORING.md`](docs/CANVAS_AUTHORING.md).
 
 The current runtime performance tranche activates ABI v3 for fixed scalars,
 enums, generation-safe object/class handles, vector/rotator, transform, UTF-8

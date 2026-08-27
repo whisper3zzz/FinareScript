@@ -10,6 +10,7 @@
 
 class SEditableTextBox;
 class SGraphEditor;
+class SUnifiedScriptCanvasMinimap;
 class SSearchBox;
 class STextBlock;
 class SVerticalBox;
@@ -83,6 +84,8 @@ public:
     bool HasNodePaletteAction(const FString& ActionId) const;
 
 private:
+    friend class SUnifiedScriptCanvasMinimap;
+
     FReply HandleLoad();
     FReply HandleBrowse();
     FReply HandleLoadSelectedAsset();
@@ -206,12 +209,18 @@ private:
     void RefreshNodePaletteItems();
     void LoadNodePalettePreferences();
     void SaveNodePalettePreferences() const;
+    void LoadCanvasPreferences();
+    void SaveCanvasPreferences() const;
     void RecordNodePaletteUsage(const FString& ActionId);
     FText GetNodePaletteContextText() const;
     void PersistCurrentLayout(bool bOnlyIfChanged);
     FString BuildCanvasLayoutFingerprint() const;
+    void PersistCanvasView(bool bOnlyIfChanged);
+    bool RestoreCanvasView();
+    FString BuildCanvasViewConfigKey() const;
     FUnifiedScriptSurfaceTreeItemPtr FindSurfaceItem(const FString& SemanticId) const;
     FReply HandleFocusGraph();
+    FReply HandleFocusSelection();
     void RebuildInspector(const FUnifiedScriptSurfaceTreeItemPtr& Item);
     void SetStatus(FString Message, bool bError);
     FString ResolveSourcePath(const FString& SourcePath) const;
@@ -230,6 +239,7 @@ private:
     bool bCanUndoAuthoring = false;
     bool bCanRedoAuthoring = false;
     bool bPendingGraphFocus = false;
+    bool bShowCanvasMinimap = true;
     bool bPendingRequestPublishesRuntime = true;
     bool bStatusError = false;
     FString StatusMessage;
@@ -248,6 +258,7 @@ private:
     TMap<FString, FUnifiedScriptSurfaceTreeItemPtr> SurfaceItemsById;
     TMap<FString, TWeakObjectPtr<UUnifiedScriptEdGraphNode>> GraphNodesBySemanticId;
     FString PersistedCanvasLayoutFingerprint;
+    FString PersistedCanvasViewFingerprint;
     TMap<FString, FUnifiedScriptReflectedPaletteAction> ReflectedPaletteActions;
     TArray<FString> FavoriteNodePaletteActionIds;
     TArray<FString> RecentNodePaletteActionIds;

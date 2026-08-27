@@ -229,6 +229,16 @@ statement actions do not. `Ctrl+Space` focuses search and Enter submits the top
 match. Favorites/Recents are per-user editor preferences and are deliberately
 absent from Surface and `.usgraph` schemas. See [NODE_PALETTE.md](NODE_PALETTE.md).
 
+Source-backed Pin Authoring appears in Details for every connected data input.
+Typed Set/Reset operations replace the exact semantic edge with a validated C#
+value, while Promote to Local reuses the bounded temporary-extraction contract.
+See [PIN_AUTHORING.md](PIN_AUTHORING.md).
+
+The native canvas also materializes shareable `.usgraph` Comment Boxes and
+typed wire Reroutes. Per-function pan/zoom and the clickable minimap remain
+per-user editor state; `C`, `F`, and `Home` expose common Blueprint comment and
+framing gestures. See [CANVAS_AUTHORING.md](CANVAS_AUTHORING.md).
+
 Reflection v0.2 delegates appear under `Unreal Events`. Selecting one is a
 declaration-level operation rather than a statement insertion: the client posts
 `addUnrealEventHandler` through declaration-patch v0.2, and Roslyn adds a
