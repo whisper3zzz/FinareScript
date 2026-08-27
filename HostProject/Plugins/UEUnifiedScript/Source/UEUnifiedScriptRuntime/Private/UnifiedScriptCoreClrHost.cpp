@@ -41,6 +41,7 @@ using FCreateWorldEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
     const FUnifiedScriptNativeTransportV2* Transport);
 using FDestroyWorldEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(uint64 WorldHostId);
 using FGetWorldCountEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)();
+using FCollectRetiredLoadContextsEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)();
 using FCreateScriptEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
     uint64 WorldHostId,
     uint64 InstanceId,
@@ -281,6 +282,7 @@ void FUnifiedScriptCoreClrHost::Shutdown()
     CreateWorldEntryPoint = nullptr;
     DestroyWorldEntryPoint = nullptr;
     GetWorldCountEntryPoint = nullptr;
+    CollectRetiredLoadContextsEntryPoint = nullptr;
     CreateScriptEntryPoint = nullptr;
     TickScriptEntryPoint = nullptr;
     DispatchEventEntryPoint = nullptr;
@@ -651,6 +653,17 @@ int32 FUnifiedScriptCoreClrHost::GetManagedWorldCount() const
         : 0;
 }
 
+int32 FUnifiedScriptCoreClrHost::CollectRetiredManagedLoadContexts() const
+{
+    using namespace UE::UnifiedScript::CoreClr::Private;
+    FScopeLock Lock(&StateLock);
+    return State == EUnifiedScriptCoreClrHostState::Ready &&
+        CollectRetiredLoadContextsEntryPoint != nullptr
+        ? reinterpret_cast<FCollectRetiredLoadContextsEntryPoint>(
+            CollectRetiredLoadContextsEntryPoint)()
+        : 0;
+}
+
 FString FUnifiedScriptCoreClrHost::GetHostFxrPath() const
 {
     FScopeLock Lock(&StateLock);
@@ -791,6 +804,9 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
     const int32 CreateResult = LoadEntryPoint(TEXT("CreateWorld"), &CreateWorldEntryPoint);
     const int32 DestroyResult = LoadEntryPoint(TEXT("DestroyWorld"), &DestroyWorldEntryPoint);
     const int32 CountResult = LoadEntryPoint(TEXT("GetWorldCount"), &GetWorldCountEntryPoint);
+    const int32 CollectResult = LoadEntryPoint(
+        TEXT("CollectRetiredLoadContexts"),
+        &CollectRetiredLoadContextsEntryPoint);
     const int32 CreateScriptResult = LoadEntryPoint(TEXT("CreateScript"), &CreateScriptEntryPoint);
     const int32 TickScriptResult = LoadEntryPoint(TEXT("TickScript"), &TickScriptEntryPoint);
     const int32 DispatchEventResult = LoadEntryPoint(TEXT("DispatchEvent"), &DispatchEventEntryPoint);
@@ -803,6 +819,9 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
     const int32 CreateResult = LoadEntryPoint("CreateWorld", &CreateWorldEntryPoint);
     const int32 DestroyResult = LoadEntryPoint("DestroyWorld", &DestroyWorldEntryPoint);
     const int32 CountResult = LoadEntryPoint("GetWorldCount", &GetWorldCountEntryPoint);
+    const int32 CollectResult = LoadEntryPoint(
+        "CollectRetiredLoadContexts",
+        &CollectRetiredLoadContextsEntryPoint);
     const int32 CreateScriptResult = LoadEntryPoint("CreateScript", &CreateScriptEntryPoint);
     const int32 TickScriptResult = LoadEntryPoint("TickScript", &TickScriptEntryPoint);
     const int32 DispatchEventResult = LoadEntryPoint("DispatchEvent", &DispatchEventEntryPoint);
@@ -812,7 +831,7 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
     const int32 MetricsResult = LoadEntryPoint("GetInvocationMetrics", &GetInvocationMetricsEntryPoint);
     const int32 LastErrorResult = LoadEntryPoint("GetLastError", &GetLastManagedErrorEntryPoint);
 #endif
-    if (CreateResult != 0 || DestroyResult != 0 || CountResult != 0 ||
+    if (CreateResult != 0 || DestroyResult != 0 || CountResult != 0 || CollectResult != 0 ||
         CreateScriptResult != 0 || TickScriptResult != 0 || DispatchEventResult != 0 ||
         ReloadScriptResult != 0 ||
         DestroyScriptResult != 0 || ScriptCountResult != 0 || MetricsResult != 0 ||
@@ -820,6 +839,7 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
         CreateWorldEntryPoint == nullptr ||
         DestroyWorldEntryPoint == nullptr ||
         GetWorldCountEntryPoint == nullptr ||
+        CollectRetiredLoadContextsEntryPoint == nullptr ||
         CreateScriptEntryPoint == nullptr ||
         TickScriptEntryPoint == nullptr ||
         DispatchEventEntryPoint == nullptr ||
@@ -830,10 +850,11 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
         GetLastManagedErrorEntryPoint == nullptr)
     {
         return FailLocked(FString::Printf(
-            TEXT("Managed entry-point loading failed: world=(0x%08X,0x%08X,0x%08X) script=(0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X) diagnostics=(0x%08X,0x%08X)."),
+            TEXT("Managed entry-point loading failed: world=(0x%08X,0x%08X,0x%08X,0x%08X) script=(0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X) diagnostics=(0x%08X,0x%08X)."),
             static_cast<uint32>(CreateResult),
             static_cast<uint32>(DestroyResult),
             static_cast<uint32>(CountResult),
+            static_cast<uint32>(CollectResult),
             static_cast<uint32>(CreateScriptResult),
             static_cast<uint32>(TickScriptResult),
             static_cast<uint32>(DispatchEventResult),

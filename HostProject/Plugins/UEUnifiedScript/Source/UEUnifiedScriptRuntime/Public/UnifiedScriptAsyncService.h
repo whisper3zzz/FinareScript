@@ -152,6 +152,14 @@ public:
     uint32 CancelOwner(uint64 OwnerInstanceId, uint32 OwnerGeneration);
     void Shutdown();
     int32 NumPending() const;
+    int32 NumCompleted() const;
+    int32 NumOwnedResources() const;
+
+    /** Process-wide diagnostics used by World/PIE lifecycle soak gates. */
+    static int32 GetLiveServiceCount();
+    static int32 GetGlobalPendingRequestCount();
+    static int32 GetGlobalQueuedCompletionCount();
+    static int32 GetGlobalOwnedResourceCount();
 
 private:
     struct FImpl;

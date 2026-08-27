@@ -48,6 +48,8 @@ public static class UnrealWorldManagedEntryPoint
 {
     private static readonly ConcurrentDictionary<ulong, WorldEntry> Worlds = new();
     private static readonly ConcurrentDictionary<ulong, string> BoundaryErrors = new();
+    private static readonly object LifecycleDiagnosticsGate = new();
+    private static readonly List<WeakReference> RetiredLoadContexts = [];
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int CreateWorld(ulong worldId, nint context, nint transportTable)
@@ -105,6 +107,28 @@ public static class UnrealWorldManagedEntryPoint
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int GetWorldCount() => Worlds.Count;
+
+    /// <summary>
+    /// Forces a diagnostic collection and returns retired collectible script
+    /// contexts that remain alive. Production flow never depends on this call;
+    /// lifecycle soak tests use it to turn unload intent into observable proof.
+    /// </summary>
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static int CollectRetiredLoadContexts()
+    {
+        for (int pass = 0; pass < 3; ++pass)
+        {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+        }
+        GC.Collect();
+
+        lock (LifecycleDiagnosticsGate)
+        {
+            RetiredLoadContexts.RemoveAll(static reference => !reference.IsAlive);
+            return RetiredLoadContexts.Count;
+        }
+    }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int CreateScript(
@@ -678,7 +702,7 @@ public static class UnrealWorldManagedEntryPoint
             }
             catch
             {
-                loadContext.Unload();
+                RetireLoadContext(loadContext);
                 throw;
             }
         }
@@ -690,10 +714,17 @@ public static class UnrealWorldManagedEntryPoint
         IUnrealManagedScript Script,
         UnrealGenerationInvocationBridge Bridge) : IDisposable
     {
+        private bool _disposed;
+
         public void Dispose()
         {
+            if (_disposed)
+            {
+                return;
+            }
+            _disposed = true;
             Bridge.Dispose();
-            LoadContext.Unload();
+            RetireLoadContext(LoadContext);
         }
     }
 
@@ -750,5 +781,14 @@ public static class UnrealWorldManagedEntryPoint
                 FileMode.Open,
                 FileAccess.Read,
                 FileShare.ReadWrite | FileShare.Delete);
+    }
+
+    private static void RetireLoadContext(AssemblyLoadContext loadContext)
+    {
+        lock (LifecycleDiagnosticsGate)
+        {
+            RetiredLoadContexts.Add(new WeakReference(loadContext));
+        }
+        loadContext.Unload();
     }
 }

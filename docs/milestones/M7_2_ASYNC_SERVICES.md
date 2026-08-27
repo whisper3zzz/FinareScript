@@ -1,6 +1,6 @@
 # M7.2 Services, Async, and Lifecycle
 
-Status: **services and async contract complete; lifecycle stress remains**.
+Status: **complete**.
 
 ## Delivered slice
 
@@ -14,29 +14,44 @@ Status: **services and async contract complete; lifecycle stress remains**.
   spawn/destroy, synchronous resource loading, and visibility trace.
 - selected `FHitResult` field schema with generated C++, C#, and visual
   Make/Break nodes.
+- generation-owned async resource handles released on reload, EndPlay, failed
+  start, and World teardown.
+- process-wide native context/service/outstanding-work diagnostics plus managed
+  retired collectible-context diagnostics.
 
 ## Acceptance evidence
 
 - managed suite: 448/448 passed;
-- repository validator: 43/43 invariants passed;
+- repository validator: 44/44 invariants passed;
 - product coverage: 98 members, 96 native paths, zero rejected;
 - UE 5.8.1: bootstrap and final editor builds passed;
-- Automation: 11/11 passed, including
+- Automation: 12/12 passed, including
   `UnifiedScript.Unreal.AsyncService.DelayLoadCancelAndLifecycle`;
-- onboarding: `artifacts/onboarding/m7-2-async-20260827.json`, passed in
-  100,111 ms with deterministic regeneration and deployment.
+- onboarding: `artifacts/onboarding/m7-2-lifecycle-20260827.json`, passed in
+  110,938 ms with deterministic regeneration, deployment, CoreCLR startup, and
+  all 12 Automation tests.
 
-## Remaining M7.2 stress slice
+## Completed lifecycle stress matrix
 
-The next increment must exercise real lifecycle transitions rather than only
-single-operation correctness:
+`UnifiedScript.Unreal.WorldHost.LifecycleStress` exercises real lifecycle
+transitions rather than only single-operation correctness:
 
-1. delete request targets while loads and timers are pending;
-2. travel between levels while the old World owns active requests;
-3. repeat PIE create/stop/restart cycles;
-4. run multiple Worlds with colliding instance/request patterns;
-5. roll generations repeatedly while asserting zero stale completions, native
-   pending requests, managed script entries, retained bridge contexts, and
-   collectible load contexts.
+1. deletes a managed Actor target while a class load and long timer are owned;
+2. performs eight non-seamless travel-style old/new World handoffs with active
+   timer, completion, resource, and retained-context state;
+3. repeats eight PIE World create/stop/restart cycles;
+4. runs four Worlds concurrently with the same owner/generation and eight
+   colliding request IDs in every World;
+5. rolls a live managed Actor through sixteen collectible generations.
 
-Completion of that matrix advances the RoadMap cursor to M7.3.
+The machine-readable report at `artifacts/ue/lifecycle-stress.json` validates
+the fixed v0.1 matrix and records zero stale completions, pending-request delta,
+managed-World delta, native-context delta, owned-resource delta, and live
+retired collectible contexts. Reproduce it with:
+
+```powershell
+powershell -ExecutionPolicy Bypass `
+  -File tools/run-unreal-lifecycle-stress.ps1 -EngineRoot D:\UE_5.8
+```
+
+Completion of this matrix advances the RoadMap cursor to M7.3.

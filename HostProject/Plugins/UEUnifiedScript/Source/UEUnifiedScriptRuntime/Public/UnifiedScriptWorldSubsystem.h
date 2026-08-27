@@ -98,6 +98,10 @@ public:
 
     int32 GetPendingAsyncRequestCount() const;
 
+    int32 GetQueuedAsyncCompletionCount() const;
+
+    int32 GetOwnedAsyncResourceCount() const;
+
     /** Borrowed pointer. A consumer must retain it through the transport table. */
     FUnifiedScriptNativeBridgeContext* GetNativeInvocationContext() const;
 

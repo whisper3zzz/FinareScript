@@ -1046,6 +1046,17 @@ def main() -> int:
         / "Tests"
         / "UnifiedScriptWorldSubsystemTests.cpp"
     )
+    unreal_lifecycle_stress_test_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Private"
+        / "Tests"
+        / "UnifiedScriptLifecycleStressTests.cpp"
+    )
     unreal_coreclr_host_header_path = (
         ROOT
         / "HostProject"
@@ -1212,6 +1223,9 @@ def main() -> int:
         / "ManagedInteropBenchmarkScript.cs"
     )
     unreal_benchmark_helper_path = ROOT / "tools" / "run-unreal-benchmark.ps1"
+    unreal_lifecycle_stress_helper_path = (
+        ROOT / "tools" / "run-unreal-lifecycle-stress.ps1"
+    )
     unreal_benchmark_thresholds_path = (
         ROOT / "benchmarks" / "unreal" / "performance-thresholds.json"
     )
@@ -1222,6 +1236,13 @@ def main() -> int:
         / "Unreal"
         / "UnifiedScript.Unreal.Demo"
         / "ActorDemoScript.cs"
+    )
+    unreal_lifecycle_stress_demo_source_path = (
+        ROOT
+        / "samples"
+        / "Unreal"
+        / "UnifiedScript.Unreal.Demo"
+        / "LifecycleStressScript.cs"
     )
     unreal_demo_declaration_path = (
         ROOT
@@ -1377,6 +1398,7 @@ def main() -> int:
         and unreal_world_host_header_path.is_file()
         and unreal_world_host_source_path.is_file()
         and unreal_world_host_test_path.is_file()
+        and unreal_lifecycle_stress_test_path.is_file()
         and unreal_coreclr_host_header_path.is_file()
         and unreal_coreclr_host_source_path.is_file()
         and unreal_coreclr_runtime_config_path.is_file()
@@ -1408,9 +1430,11 @@ def main() -> int:
         and unreal_demo_source_path.is_file()
         and unreal_benchmark_demo_source_path.is_file()
         and unreal_benchmark_helper_path.is_file()
+        and unreal_lifecycle_stress_helper_path.is_file()
         and unreal_benchmark_thresholds_path.is_file()
         and unreal_performance_doc_path.is_file()
         and unreal_actor_demo_source_path.is_file()
+        and unreal_lifecycle_stress_demo_source_path.is_file()
         and unreal_demo_declaration_path.is_file()
         and unreal_demo_surface_path.is_file()
         and unreal_authoring_surface_header_path.is_file()
@@ -1487,6 +1511,9 @@ def main() -> int:
     unreal_world_host_header = unreal_world_host_header_path.read_text(encoding="utf-8")
     unreal_world_host_source = unreal_world_host_source_path.read_text(encoding="utf-8")
     unreal_world_host_test = unreal_world_host_test_path.read_text(encoding="utf-8")
+    unreal_lifecycle_stress_test = unreal_lifecycle_stress_test_path.read_text(
+        encoding="utf-8"
+    )
     unreal_coreclr_host_header = unreal_coreclr_host_header_path.read_text(
         encoding="utf-8"
     )
@@ -1597,10 +1624,16 @@ def main() -> int:
     unreal_benchmark_helper = unreal_benchmark_helper_path.read_text(
         encoding="utf-8"
     )
+    unreal_lifecycle_stress_helper = unreal_lifecycle_stress_helper_path.read_text(
+        encoding="utf-8"
+    )
     with unreal_benchmark_thresholds_path.open("r", encoding="utf-8") as handle:
         unreal_benchmark_thresholds = json.load(handle)
     unreal_performance_doc = unreal_performance_doc_path.read_text(encoding="utf-8")
     unreal_actor_demo_source = unreal_actor_demo_source_path.read_text(encoding="utf-8")
+    unreal_lifecycle_stress_demo_source = (
+        unreal_lifecycle_stress_demo_source_path.read_text(encoding="utf-8")
+    )
     with unreal_demo_declaration_path.open("r", encoding="utf-8") as handle:
         unreal_demo_declaration = json.load(handle)
     with unreal_demo_surface_path.open("r", encoding="utf-8") as handle:
@@ -2010,6 +2043,25 @@ def main() -> int:
         "ABI v5 async services, cancellation, or generation lifecycle gate is missing",
     )
     checks.append("UE async services are World-scoped, timeout-aware, and generation-owned")
+    require(
+        "WorldHost.LifecycleStress" in unreal_lifecycle_stress_test
+        and "TravelCycles = 8" in unreal_lifecycle_stress_test
+        and "PieCycles = 8" in unreal_lifecycle_stress_test
+        and "ConcurrentWorlds = 4" in unreal_lifecycle_stress_test
+        and "GenerationRollovers = 16" in unreal_lifecycle_stress_test
+        and "GetGlobalOwnedResourceCount" in unreal_async_service_header
+        and "ReleaseOwnerResources" in unreal_async_service_source
+        and "GetLiveContextCount" in unreal_native_transport_header
+        and "CollectRetiredLoadContexts" in unreal_world_managed_entry
+        and "CollectRetiredManagedLoadContexts" in unreal_coreclr_host_source
+        and "LifecycleStressScript" in unreal_lifecycle_stress_demo_source
+        and "unifiedscript.unreal-lifecycle-stress-report/v0.1"
+        in unreal_lifecycle_stress_helper
+        and "retiredLoadContextsAlive" in unreal_lifecycle_stress_helper
+        and "zeroLeak" in unreal_lifecycle_stress_helper,
+        "M7.2 lifecycle stress matrix or zero-leak diagnostics are missing",
+    )
+    checks.append("UE lifecycle stress covers deletion, travel, PIE, multi-World, and reload")
     require(
         unreal_benchmark_thresholds["schemaVersion"]
         == "unifiedscript.unreal-benchmark-thresholds/v0.2"

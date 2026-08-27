@@ -5,8 +5,9 @@ restricted C# profile and a structured visual graph are intended to be two
 lossless projections of one program model. Roslyn and CoreCLR are the active
 execution backend. The language and projection model are proven independently,
 and the versioned Unreal adapter has completed its adoptable-project alpha and
-entered M7.2 gameplay services/lifecycle productization without adding UE
-dependencies to the compiler core.
+M7.2 gameplay services/lifecycle productization without adding UE dependencies
+to the compiler core. The active RoadMap cursor is M7.3 schema-generated
+gameplay data-plane layouts.
 
 ## Product roadmap
 
@@ -32,6 +33,12 @@ startup gate without rewriting project source. See
 M7.2 adds generated World services plus the World-scoped Async Service ABI v5
 for Delay, async object/class loading, timeout, cancellation, reload ownership,
 and teardown safety. See [Async Service ABI v5](docs/UNREAL_ASYNC_SERVICE_ABI_V5.md).
+Its deletion/travel/PIE/multi-World/reload soak can be reproduced with:
+
+```powershell
+powershell -ExecutionPolicy Bypass `
+  -File tools/run-unreal-lifecycle-stress.ps1 -EngineRoot D:\UE_5.8
+```
 
 Create a repository-independent alpha SDK with:
 

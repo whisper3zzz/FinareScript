@@ -388,6 +388,16 @@ int32 UUnifiedScriptWorldSubsystem::GetPendingAsyncRequestCount() const
     return AsyncService != nullptr ? AsyncService->NumPending() : 0;
 }
 
+int32 UUnifiedScriptWorldSubsystem::GetQueuedAsyncCompletionCount() const
+{
+    return AsyncService != nullptr ? AsyncService->NumCompleted() : 0;
+}
+
+int32 UUnifiedScriptWorldSubsystem::GetOwnedAsyncResourceCount() const
+{
+    return AsyncService != nullptr ? AsyncService->NumOwnedResources() : 0;
+}
+
 FUnifiedScriptNativeBridgeContext*
 UUnifiedScriptWorldSubsystem::GetNativeInvocationContext() const
 {

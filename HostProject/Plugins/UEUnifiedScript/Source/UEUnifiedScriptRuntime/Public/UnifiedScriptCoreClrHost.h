@@ -67,6 +67,7 @@ public:
         uint64& OutCallFrameInvocationCount,
         uint64& OutLegacyInvocationCount) const;
     int32 GetManagedWorldCount() const;
+    int32 CollectRetiredManagedLoadContexts() const;
     FString GetHostFxrPath() const;
     FString GetLastError() const;
 
@@ -84,6 +85,7 @@ private:
     void* CreateWorldEntryPoint = nullptr;
     void* DestroyWorldEntryPoint = nullptr;
     void* GetWorldCountEntryPoint = nullptr;
+    void* CollectRetiredLoadContextsEntryPoint = nullptr;
     void* CreateScriptEntryPoint = nullptr;
     void* TickScriptEntryPoint = nullptr;
     void* DispatchEventEntryPoint = nullptr;

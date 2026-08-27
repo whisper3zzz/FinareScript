@@ -576,6 +576,11 @@ asynchronous object/class loading. Requests carry script instance and collectibl
 generation identity; timeout, explicit cancellation, reload, EndPlay, and World
 teardown remove native work before the managed load context is released. See
 `UNREAL_ASYNC_SERVICE_ABI_V5.md` for fixed layouts and completion semantics.
+Successful load handles are now recorded in a generation ownership ledger, so
+reload and teardown release both the object-registry reference and native strong
+reference instead of retaining every historical load. The lifecycle stress gate
+also observes live/detached bridge contexts, native pending/completion/resource
+counts, managed World entries, and retired collectible load contexts.
 
 ABI v3 `Struct` cells carry an arena-backed ordered field-cell block keyed by
 the canonical struct TypeId. The contract generator emits a readonly C# record

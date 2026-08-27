@@ -33,6 +33,6 @@
   },
   "validation": {
     "automationFilter": "UnifiedScript.Unreal",
-    "minimumAutomationTests": 10
+    "minimumAutomationTests": 12
   }
 }

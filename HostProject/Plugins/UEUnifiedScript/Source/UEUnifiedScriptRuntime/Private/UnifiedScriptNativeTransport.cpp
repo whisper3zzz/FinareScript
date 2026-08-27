@@ -7,13 +7,45 @@
 #include "UnifiedScriptGeneratedThunkRegistry.h"
 #include "UObject/Field.h"
 
+#include <atomic>
 #include <bit>
+
+namespace UE::UnifiedScript::NativeTransport::LifecycleDiagnostics
+{
+std::atomic<int32> GLiveContextCount{0};
+std::atomic<int32> GAttachedContextCount{0};
+}
 
 FUnifiedScriptNativeBridgeContext::FUnifiedScriptNativeBridgeContext(
     FUnifiedScriptInvocationBridge& InBridge)
     : Bridge(&InBridge)
     , FastBridge(&InBridge)
 {
+    UE::UnifiedScript::NativeTransport::LifecycleDiagnostics::GLiveContextCount.fetch_add(
+        1,
+        std::memory_order_relaxed);
+    UE::UnifiedScript::NativeTransport::LifecycleDiagnostics::GAttachedContextCount.fetch_add(
+        1,
+        std::memory_order_relaxed);
+}
+
+FUnifiedScriptNativeBridgeContext::~FUnifiedScriptNativeBridgeContext()
+{
+    UE::UnifiedScript::NativeTransport::LifecycleDiagnostics::GLiveContextCount.fetch_sub(
+        1,
+        std::memory_order_relaxed);
+}
+
+int32 FUnifiedScriptNativeBridgeContext::GetLiveContextCount()
+{
+    return UE::UnifiedScript::NativeTransport::LifecycleDiagnostics::GLiveContextCount.load(
+        std::memory_order_relaxed);
+}
+
+int32 FUnifiedScriptNativeBridgeContext::GetAttachedContextCount()
+{
+    return UE::UnifiedScript::NativeTransport::LifecycleDiagnostics::GAttachedContextCount.load(
+        std::memory_order_relaxed);
 }
 
 void FUnifiedScriptNativeBridgeContext::AttachSharedDataPlane(
@@ -68,8 +100,10 @@ void FUnifiedScriptNativeBridgeContext::Detach()
 {
     check(IsInGameThread());
     TArray<TStrongObjectPtr<UObject>> Subscriptions;
+    bool bWasAttached = false;
     {
         FScopeLock Lock(&BridgeLock);
+        bWasAttached = Bridge != nullptr;
         FastBridge.store(nullptr, std::memory_order_release);
         Bridge = nullptr;
         SharedDataPlane = nullptr;
@@ -78,6 +112,12 @@ void FUnifiedScriptNativeBridgeContext::Detach()
         PendingCallFrameResult.Reset();
         EventSubscriptions.GenerateValueArray(Subscriptions);
         EventSubscriptions.Reset();
+    }
+    if (bWasAttached)
+    {
+        UE::UnifiedScript::NativeTransport::LifecycleDiagnostics::GAttachedContextCount.fetch_sub(
+            1,
+            std::memory_order_relaxed);
     }
     for (TStrongObjectPtr<UObject>& Subscription : Subscriptions)
     {

@@ -169,6 +169,10 @@ public:
 
     explicit FUnifiedScriptNativeBridgeContext(FUnifiedScriptInvocationBridge& InBridge);
 
+    /** Process-wide diagnostics used by lifecycle soak gates. */
+    static int32 GetLiveContextCount();
+    static int32 GetAttachedContextCount();
+
     void AttachSharedDataPlane(FUnifiedScriptSharedDataPlane* InSharedDataPlane);
     void AttachGameplayDataPlane(FUnifiedScriptGameplayDataPlane* InGameplayDataPlane);
     void AttachAsyncService(FUnifiedScriptAsyncService* InAsyncService);
@@ -197,7 +201,7 @@ public:
         TFunctionRef<bool(FUnifiedScriptAsyncService&)> Operation);
 
 private:
-    ~FUnifiedScriptNativeBridgeContext() = default;
+    ~FUnifiedScriptNativeBridgeContext();
 
     std::atomic<uint32> ReferenceCount{1};
     FCriticalSection BridgeLock;

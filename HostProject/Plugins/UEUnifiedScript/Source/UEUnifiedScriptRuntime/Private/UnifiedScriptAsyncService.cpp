@@ -7,8 +7,15 @@
 #include "UObject/SoftObjectPath.h"
 #include "UObject/StrongObjectPtr.h"
 
+#include <atomic>
+
 namespace UE::UnifiedScript::AsyncService::Private
 {
+std::atomic<int32> GLiveServiceCount{0};
+std::atomic<int32> GPendingRequestCount{0};
+std::atomic<int32> GQueuedCompletionCount{0};
+std::atomic<int32> GOwnedResourceCount{0};
+
 bool TryDecodeUtf8(const uint8* Data, uint32 Length, FString& OutValue)
 {
     if ((Length > 0 && Data == nullptr) || Length > static_cast<uint32>(MAX_int32))
@@ -40,6 +47,26 @@ struct FUnifiedScriptAsyncService::FImpl
         float TimeoutSeconds = 0.0f;
         FString Payload;
         TSharedPtr<FStreamableHandle> StreamableHandle;
+    };
+
+    struct FOwnedResource
+    {
+        FOwnedResource(
+            uint64 InOwnerInstanceId,
+            uint32 InOwnerGeneration,
+            FUnifiedScriptObjectHandle InHandle,
+            UObject* InResource)
+            : OwnerInstanceId(InOwnerInstanceId)
+            , OwnerGeneration(InOwnerGeneration)
+            , Handle(InHandle)
+            , Resource(InResource)
+        {
+        }
+
+        uint64 OwnerInstanceId = 0;
+        uint32 OwnerGeneration = 0;
+        FUnifiedScriptObjectHandle Handle;
+        TStrongObjectPtr<UObject> Resource;
     };
 
     FImpl(
@@ -112,6 +139,9 @@ struct FUnifiedScriptAsyncService::FImpl
         Pending->TimeoutSeconds = Request.TimeoutSeconds;
         Pending->Payload = MoveTemp(Payload);
         PendingRequests.Add(Request.RequestId, MoveTemp(Pending));
+        UE::UnifiedScript::AsyncService::Private::GPendingRequestCount.fetch_add(
+            1,
+            std::memory_order_relaxed);
 
         if (Request.Operation == EUnifiedScriptAsyncOperationV5::Delay)
         {
@@ -266,6 +296,9 @@ struct FUnifiedScriptAsyncService::FImpl
             }
         }
         CompletedRequests = MoveTemp(Remaining);
+        UE::UnifiedScript::AsyncService::Private::GQueuedCompletionCount.fetch_sub(
+            PollBuffer.Num(),
+            std::memory_order_relaxed);
         OutView.AbiVersion = UE::UnifiedScript::AsyncService::AbiVersion;
         OutView.StructSize = sizeof(FUnifiedScriptAsyncCompletionViewV5);
         OutView.WorldHostId = WorldHostId;
@@ -300,13 +333,20 @@ struct FUnifiedScriptAsyncService::FImpl
             }
             PendingRequests.Remove(RequestId);
         }
-        CompletedRequests.RemoveAll(
+        UE::UnifiedScript::AsyncService::Private::GPendingRequestCount.fetch_sub(
+            OwnedRequests.Num(),
+            std::memory_order_relaxed);
+        const int32 RemovedCompletionCount = CompletedRequests.RemoveAll(
             [OwnerInstanceId, OwnerGeneration](
                 const FUnifiedScriptAsyncCompletionV5& Completion)
             {
                 return Completion.OwnerInstanceId == OwnerInstanceId &&
                     Completion.OwnerGeneration == OwnerGeneration;
             });
+        UE::UnifiedScript::AsyncService::Private::GQueuedCompletionCount.fetch_sub(
+            RemovedCompletionCount,
+            std::memory_order_relaxed);
+        ReleaseOwnerResources(OwnerInstanceId, OwnerGeneration);
         PollBuffer.Reset();
         return static_cast<uint32>(OwnedRequests.Num());
     }
@@ -326,10 +366,16 @@ struct FUnifiedScriptAsyncService::FImpl
                 Pair.Value->StreamableHandle->CancelHandle();
             }
         }
+        UE::UnifiedScript::AsyncService::Private::GPendingRequestCount.fetch_sub(
+            PendingRequests.Num(),
+            std::memory_order_relaxed);
+        UE::UnifiedScript::AsyncService::Private::GQueuedCompletionCount.fetch_sub(
+            CompletedRequests.Num(),
+            std::memory_order_relaxed);
+        ReleaseAllResources();
         PendingRequests.Reset();
         CompletedRequests.Reset();
         PollBuffer.Reset();
-        RetainedResources.Reset();
         Registry = nullptr;
         World = nullptr;
     }
@@ -378,7 +424,14 @@ struct FUnifiedScriptAsyncService::FImpl
                 static_cast<uint8>(HandleResult.Error));
             return;
         }
-        RetainedResources.Emplace(Resource);
+        OwnedResources.Emplace(
+            Pending->OwnerInstanceId,
+            Pending->OwnerGeneration,
+            Handle,
+            Resource);
+        UE::UnifiedScript::AsyncService::Private::GOwnedResourceCount.fetch_add(
+            1,
+            std::memory_order_relaxed);
         Complete(
             RequestId,
             EUnifiedScriptAsyncCompletionStatusV5::Succeeded,
@@ -402,7 +455,13 @@ struct FUnifiedScriptAsyncService::FImpl
         {
             return;
         }
+        UE::UnifiedScript::AsyncService::Private::GPendingRequestCount.fetch_sub(
+            1,
+            std::memory_order_relaxed);
         FUnifiedScriptAsyncCompletionV5& Completion = CompletedRequests.AddDefaulted_GetRef();
+        UE::UnifiedScript::AsyncService::Private::GQueuedCompletionCount.fetch_add(
+            1,
+            std::memory_order_relaxed);
         Completion.RequestId = Pending->RequestId;
         Completion.OwnerInstanceId = Pending->OwnerInstanceId;
         Completion.OwnerGeneration = Pending->OwnerGeneration;
@@ -419,13 +478,57 @@ struct FUnifiedScriptAsyncService::FImpl
         return Pending != nullptr ? Pending->Get() : nullptr;
     }
 
+    void ReleaseOwnerResources(uint64 OwnerInstanceId, uint32 OwnerGeneration)
+    {
+        for (int32 Index = OwnedResources.Num() - 1; Index >= 0; --Index)
+        {
+            const FOwnedResource& Owned = OwnedResources[Index];
+            if (Owned.OwnerInstanceId != OwnerInstanceId ||
+                Owned.OwnerGeneration != OwnerGeneration)
+            {
+                continue;
+            }
+            if (Registry != nullptr)
+            {
+                FUnifiedScriptObjectHandleResult Result;
+                ensureMsgf(
+                    Registry->ReleaseObject(Owned.Handle, Result),
+                    TEXT("UnifiedScript failed to release an async resource handle: %s"),
+                    *Result.Message);
+            }
+            OwnedResources.RemoveAtSwap(Index, 1, EAllowShrinking::No);
+            UE::UnifiedScript::AsyncService::Private::GOwnedResourceCount.fetch_sub(
+                1,
+                std::memory_order_relaxed);
+        }
+    }
+
+    void ReleaseAllResources()
+    {
+        if (Registry != nullptr)
+        {
+            for (const FOwnedResource& Owned : OwnedResources)
+            {
+                FUnifiedScriptObjectHandleResult Result;
+                ensureMsgf(
+                    Registry->ReleaseObject(Owned.Handle, Result),
+                    TEXT("UnifiedScript failed to release an async resource handle: %s"),
+                    *Result.Message);
+            }
+        }
+        UE::UnifiedScript::AsyncService::Private::GOwnedResourceCount.fetch_sub(
+            OwnedResources.Num(),
+            std::memory_order_relaxed);
+        OwnedResources.Reset();
+    }
+
     UWorld* World = nullptr;
     FUnifiedScriptObjectRegistry* Registry = nullptr;
     uint64 WorldHostId = 0;
     TMap<uint64, TUniquePtr<FPendingRequest>> PendingRequests;
     TArray<FUnifiedScriptAsyncCompletionV5> CompletedRequests;
     TArray<FUnifiedScriptAsyncCompletionV5> PollBuffer;
-    TArray<TStrongObjectPtr<UObject>> RetainedResources;
+    TArray<FOwnedResource> OwnedResources;
     uint64 PollSequence = 0;
     bool bShutdown = false;
 };
@@ -436,6 +539,9 @@ FUnifiedScriptAsyncService::FUnifiedScriptAsyncService(
     uint64 InWorldHostId)
     : Impl(MakeUnique<FImpl>(InWorld, InRegistry, InWorldHostId))
 {
+    UE::UnifiedScript::AsyncService::Private::GLiveServiceCount.fetch_add(
+        1,
+        std::memory_order_relaxed);
 }
 
 FUnifiedScriptAsyncService::~FUnifiedScriptAsyncService()
@@ -444,6 +550,9 @@ FUnifiedScriptAsyncService::~FUnifiedScriptAsyncService()
     {
         Impl->Shutdown();
     }
+    UE::UnifiedScript::AsyncService::Private::GLiveServiceCount.fetch_sub(
+        1,
+        std::memory_order_relaxed);
 }
 
 bool FUnifiedScriptAsyncService::Submit(const FUnifiedScriptAsyncRequestV5& Request)
@@ -493,4 +602,38 @@ void FUnifiedScriptAsyncService::Shutdown()
 int32 FUnifiedScriptAsyncService::NumPending() const
 {
     return Impl ? Impl->PendingRequests.Num() : 0;
+}
+
+int32 FUnifiedScriptAsyncService::NumCompleted() const
+{
+    return Impl ? Impl->CompletedRequests.Num() : 0;
+}
+
+int32 FUnifiedScriptAsyncService::NumOwnedResources() const
+{
+    return Impl ? Impl->OwnedResources.Num() : 0;
+}
+
+int32 FUnifiedScriptAsyncService::GetLiveServiceCount()
+{
+    return UE::UnifiedScript::AsyncService::Private::GLiveServiceCount.load(
+        std::memory_order_relaxed);
+}
+
+int32 FUnifiedScriptAsyncService::GetGlobalPendingRequestCount()
+{
+    return UE::UnifiedScript::AsyncService::Private::GPendingRequestCount.load(
+        std::memory_order_relaxed);
+}
+
+int32 FUnifiedScriptAsyncService::GetGlobalQueuedCompletionCount()
+{
+    return UE::UnifiedScript::AsyncService::Private::GQueuedCompletionCount.load(
+        std::memory_order_relaxed);
+}
+
+int32 FUnifiedScriptAsyncService::GetGlobalOwnedResourceCount()
+{
+    return UE::UnifiedScript::AsyncService::Private::GOwnedResourceCount.load(
+        std::memory_order_relaxed);
 }

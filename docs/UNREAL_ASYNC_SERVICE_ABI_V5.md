@@ -16,6 +16,9 @@ associated with an object handle.
 - `UnrealObjectScript` owns one `UnrealAsyncScope` per managed generation.
 - reload, EndPlay, failed start, and World teardown synchronously cancel the
   scope before its collectible AssemblyLoadContext is released.
+- successful object/class loads are retained by the native service only for
+  their owning instance/generation and release their registry references when
+  that generation ends.
 - the native bridge detaches before the World registry and service are
   destroyed, so retained managed transports reject late submissions.
 
@@ -65,3 +68,10 @@ cancellation, borrowed-row copying, and generation cleanup. UE Automation
 `UnifiedScript.Unreal.AsyncService.DelayLoadCancelAndLifecycle` exercises the
 real World service, class load, cancellation, rollover cleanup, retained native
 context, and teardown rejection.
+
+`UnifiedScript.Unreal.WorldHost.LifecycleStress` is the M7.2 soak gate. It runs
+eight travel-style World handoffs, eight PIE restart cycles, four concurrent
+Worlds with colliding request identities, and sixteen collectible reloads. The
+helper `tools/run-unreal-lifecycle-stress.ps1` parses its fixed JSON marker and
+fails unless stale completions, pending work, managed Worlds, native contexts,
+generation-owned resources, and retired live ALCs all return to zero.
