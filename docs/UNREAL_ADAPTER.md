@@ -378,7 +378,7 @@ The workspace presents Script Asset state and behavior as a semantic hierarchy:
 function regions retain structured ownership of promoted actions, while the
 inspector exposes kind/category, exact semantic ID, source span, source preview,
 and source navigation. Literal and operator edit capabilities accept a candidate
-value and export a preconditioned `unifiedscript.patch/v0.23` document to the
+value and export a preconditioned `unifiedscript.patch/v0.24` document to the
 clipboard. This preserves one compiler-owned edit contract across browser and
 Slate frontends.
 
@@ -392,7 +392,7 @@ persisted visual layout.
 ## Phase B.15 transactional Slate Apply and component reload
 
 Each promoted literal/operator editor now exposes `Apply & Reload`. The Slate
-client posts the exact `unifiedscript.patch/v0.23` payload to the configured
+client posts the exact `unifiedscript.patch/v0.24` payload to the configured
 loopback Workbench URL and accepts only a strict
 `unifiedscript.authoring-workspace/v0.3` response. The returned Surface replaces
 the view without UE-side C# or Graph reconstruction; protocol diagnostics such
@@ -622,7 +622,7 @@ other shapes.
 ## Phase B.24 structured switch authoring
 
 The native GraphEditor now exposes `Switch on Integer` beside the existing
-structured flow templates. It emits Semantic Patch v0.23 over a real typed
+structured flow templates. It emits Semantic Patch v0.24 over a real typed
 function parameter and begins with explicit `case 0` and `default` break-only
 sections. The Switch inspector inserts ordered case/default sections; the Case
 inspector relabels, moves, or safely deletes the exact semantic section. Delete

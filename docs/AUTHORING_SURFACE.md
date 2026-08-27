@@ -77,7 +77,7 @@ v0.4 retains two inline editor capabilities:
   compatible options, result type ID, left/operand type ID, and optional right
   operand type ID.
 
-The Workbench serializes those fields as Semantic Patch v0.23. The ordinary
+The Workbench serializes those fields as Semantic Patch v0.24. The ordinary
 Roslyn patch path still enforces operator families, type preconditions, source
 identity, semantic configuration, localized syntax replacement, complete
 reanalysis, and transactional CoreCLR reload. The Surface does not weaken or
@@ -132,6 +132,15 @@ negated, and parenthesized patterns. A guard may currently be `true`, `false`,
 or an existing bool function parameter. Every operation carries exact switch,
 section, label, and sibling preconditions; Slate never edits case text or graph
 edges directly.
+
+Semantic Patch v0.24 adds identity-safe same-block statement copy/paste. Slate
+copies a compiler-owned statement identity rather than serializing transient
+`UEdGraphNode` state, then pastes through the Workbench into an exact sibling
+gap. The original statement and all of its nested nodes keep their `.usids`;
+the copied subtree deliberately receives fresh IDs. A copied local declaration
+gets a generated conflict-free name. Terminal transfers, directive-bearing
+syntax, stale gaps, and cross-block copies are rejected. See
+[SEMANTIC_COPY_PASTE.md](SEMANTIC_COPY_PASTE.md).
 
 ## HTTP and CLI delivery
 

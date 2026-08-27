@@ -318,6 +318,11 @@ public sealed class CSharpSourcePatchApplier
                     patchIndex,
                     boundNodes,
                     documents),
+                DuplicateStatementPatchOperation duplicateStatement => PlanStatementDuplication(
+                    duplicateStatement,
+                    hirNodes,
+                    patchIndex,
+                    documents),
                 InsertSwitchSectionPatchOperation insertSwitchSection =>
                     PlanSwitchSectionInsertion(
                         insertSwitchSection,
@@ -428,6 +433,7 @@ public sealed class CSharpSourcePatchApplier
 
         SemanticPatchOperation? controlFlowOperation = patch.Operations.FirstOrDefault(
             static operation => operation is MoveStatementPatchOperation or
+                DuplicateStatementPatchOperation or
                 InsertSwitchSectionPatchOperation or ReplaceSwitchSectionPatchOperation or
                 MoveSwitchSectionPatchOperation or DeleteSwitchSectionPatchOperation ||
                 operation is InsertStatementPatchOperation
@@ -448,9 +454,14 @@ public sealed class CSharpSourcePatchApplier
             {
                 HirNode? target = hirNodes.GetValueOrDefault(controlFlowOperation.TargetNodeId);
                 return Failure(new UnifiedDiagnostic(
-                    controlFlowOperation is MoveStatementPatchOperation
-                        ? SemanticPatchDiagnosticCodes.InvalidControlFlowReconnection
-                        : SemanticPatchDiagnosticCodes.InvalidSwitchSection,
+                    controlFlowOperation switch
+                    {
+                        MoveStatementPatchOperation =>
+                            SemanticPatchDiagnosticCodes.InvalidControlFlowReconnection,
+                        DuplicateStatementPatchOperation =>
+                            SemanticPatchDiagnosticCodes.InvalidStatementDuplication,
+                        _ => SemanticPatchDiagnosticCodes.InvalidSwitchSection,
+                    },
                     UnifiedDiagnosticSeverity.Error,
                     "The structured control edit was rejected because its projected CFG is " +
                     $"invalid or irreducible: {exception.Message}",
@@ -3793,6 +3804,210 @@ public sealed class CSharpSourcePatchApplier
             FilterPinsForSyntax(replacementMethod, methodPins!)));
     }
 
+    private static OperationPlan PlanStatementDuplication(
+        DuplicateStatementPatchOperation operation,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        IReadOnlyDictionary<string, ParsedDocument> documents)
+    {
+        if (!hirNodes.TryGetValue(operation.TargetNodeId, out HirNode? target))
+        {
+            return MissingTarget(operation.TargetNodeId);
+        }
+
+        if (target is not HirStatement statement ||
+            !patchIndex.TryGetStatement(statement.Id, out HirPatchIndex.StatementLocation? location))
+        {
+            return KindMismatch(target, operation.TargetNodeId, "a duplicable statement");
+        }
+
+        if (location!.ParentBlock.Id != operation.ExpectedParentBlockId ||
+            !StatementSiblingsMatch(
+                location,
+                operation.ExpectedSourcePreviousSiblingId,
+                operation.ExpectedSourceNextSiblingId))
+        {
+            return SiblingFailure(
+                statement,
+                operation.ExpectedSourcePreviousSiblingId,
+                operation.ExpectedSourceNextSiblingId,
+                operation.ExpectedParentBlockId);
+        }
+
+        if (statement is HirReturnStatement or HirBreakStatement or HirContinueStatement)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidStatementDuplication,
+                "Return, break, and continue statements cannot be duplicated because the copy " +
+                "would introduce an ambiguous or unreachable control-flow terminal.",
+                statement);
+        }
+
+        HirBlockStatement block = location.ParentBlock;
+        if (!TryGetInsertionIndex(
+                block,
+                operation.ExpectedDestinationPreviousSiblingId,
+                operation.ExpectedDestinationNextSiblingId,
+                out int insertionIndex))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.SiblingPreconditionFailed,
+                "The statement-copy destination gap changed after the Surface was generated. " +
+                "Refresh the graph before pasting.",
+                statement);
+        }
+
+        if (block.Statements.Take(insertionIndex).Any(static candidate => candidate is
+                HirReturnStatement or HirBreakStatement or HirContinueStatement))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidStatementDuplication,
+                "A copied statement cannot be inserted after return, break, or continue in the " +
+                "same structured block.",
+                statement);
+        }
+
+        if (statement is HirVariableDeclarationStatement local)
+        {
+            if (operation.NewLocalName is null ||
+                string.Equals(operation.NewLocalName, local.Name, StringComparison.Ordinal) ||
+                !SyntaxFacts.IsValidIdentifier(operation.NewLocalName) ||
+                SyntaxFacts.GetKeywordKind(operation.NewLocalName) != SyntaxKind.None)
+            {
+                return DiagnosticPlan(
+                    SemanticPatchDiagnosticCodes.InvalidStatementDuplication,
+                    "Duplicating a local declaration requires a different valid C# local name.",
+                    statement);
+            }
+
+            if (HasNameConflict(location.Method, operation.NewLocalName))
+            {
+                return DiagnosticPlan(
+                    SemanticPatchDiagnosticCodes.NameConflict,
+                    $"A parameter or local named '{operation.NewLocalName}' already exists in " +
+                    $"method '{location.Method.Name}'.",
+                    statement);
+            }
+        }
+        else if (operation.NewLocalName is not null)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidStatementDuplication,
+                "A replacement local name is valid only when duplicating a local declaration.",
+                statement);
+        }
+
+        if (!TryFindEditableStatementContainer(
+                documents,
+                block,
+                out ParsedDocument? sourceDocument,
+                out EditableStatementContainer? sourceContainer) ||
+            sourceContainer!.Statements.Count != block.Statements.Count)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidStatementDuplication,
+                "Statement duplication requires an explicit C# block or switch-section body whose " +
+                "statement order still matches the analyzed HIR.",
+                statement);
+        }
+
+        if (sourceDocument!.Source.IdentitySidecar is null)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.PlanRequiresPersistentIdentity,
+                "Statement duplication requires a .usids identity sidecar so the original subtree " +
+                "keeps its identities while the copy receives fresh identities.",
+                statement);
+        }
+
+        if (!TryFindIdentitySyntax(sourceDocument, statement, out SyntaxNode? sourceSyntaxNode) ||
+            sourceSyntaxNode is not StatementSyntax sourceSyntax)
+        {
+            return MissingSyntax(statement, "duplicated statement");
+        }
+
+        if (sourceSyntax.ContainsDirectives)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidStatementDuplication,
+                "A statement containing preprocessor directives cannot be duplicated safely.",
+                statement);
+        }
+
+        if (!TryPrepareMethodMutation(
+                documents,
+                location.Method,
+                out ParsedDocument? document,
+                out MethodDeclarationSyntax? originalMethod,
+                out MethodDeclarationSyntax? annotatedMethod,
+                out IReadOnlyDictionary<SemanticId, SyntaxAnnotation>? identityAnnotations,
+                out List<PendingPin>? methodPins,
+                out string? identityFailure) ||
+            !identityAnnotations!.TryGetValue(block.Id, out SyntaxAnnotation? blockAnnotation))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.PlanRequiresPersistentIdentity,
+                identityFailure ??
+                    "Statement duplication could not pin the containing block and original " +
+                    "statement subtree in the persistent identity sidecar.",
+                statement);
+        }
+
+        SyntaxNode annotatedBlockSyntax = annotatedMethod!
+            .GetAnnotatedNodes(blockAnnotation)
+            .Single();
+        if (!TryCreateEditableStatementContainer(
+                annotatedBlockSyntax,
+                out EditableStatementContainer? annotatedContainer))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidStatementDuplication,
+                "The statement-copy destination is no longer an explicit block or switch-section " +
+                "body. Refresh the graph before pasting.",
+                statement);
+        }
+
+        StatementSyntax copiedStatement = sourceSyntax;
+        if (statement is HirVariableDeclarationStatement)
+        {
+            if (copiedStatement is not LocalDeclarationStatementSyntax
+                {
+                    Declaration.Variables.Count: 1,
+                } localSyntax)
+            {
+                return DiagnosticPlan(
+                    SemanticPatchDiagnosticCodes.InvalidStatementDuplication,
+                    "The copied local declaration no longer maps to one C# variable declarator.",
+                    statement);
+            }
+
+            VariableDeclaratorSyntax declarator = localSyntax.Declaration.Variables[0];
+            copiedStatement = localSyntax.ReplaceNode(
+                declarator,
+                declarator.WithIdentifier(
+                    SyntaxFactory.Identifier(operation.NewLocalName!)
+                        .WithTriviaFrom(declarator.Identifier)));
+        }
+
+        InsertionFormatting formatting = GetInsertionFormatting(
+            document!,
+            sourceContainer,
+            insertionIndex);
+        copiedStatement = ReindentMovedStatement(copiedStatement, formatting.Indentation);
+        var statements = annotatedContainer!.Statements.ToList();
+        statements.Insert(insertionIndex, copiedStatement);
+        SyntaxNode replacementContainer = annotatedContainer.WithStatements(
+            SyntaxFactory.List(statements));
+        SyntaxNode replacementMethod = annotatedMethod.ReplaceNode(
+            annotatedContainer.Syntax,
+            replacementContainer);
+        return SuccessPlan(document!, new PendingReplacement(
+            document!.Source.LogicalPath,
+            originalMethod!,
+            replacementMethod,
+            FilterPinsForSyntax(replacementMethod, methodPins!)));
+    }
+
     private static OperationPlan PlanSwitchSectionInsertion(
         InsertSwitchSectionPatchOperation operation,
         IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
@@ -4384,8 +4599,8 @@ public sealed class CSharpSourcePatchApplier
             annotatedSyntax = null;
             identityAnnotations = null;
             pins = null;
-            failure = "Cross-region control reconnection requires a .usids sidecar so all " +
-                "identities in the containing method survive the structural move.";
+            failure = "A structural method edit requires a .usids sidecar so all identities in " +
+                "the containing method survive the mutation.";
             return false;
         }
 

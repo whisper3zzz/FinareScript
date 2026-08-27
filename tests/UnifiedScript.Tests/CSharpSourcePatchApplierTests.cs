@@ -5697,6 +5697,247 @@ public sealed class CSharpSourcePatchApplierTests
             deletedSwitch.Sections.Select(static section => section.Id).ToArray());
     }
 
+    [Fact]
+    public void Apply_DuplicatesExpressionStatementWithFreshCopyIdentity()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run()
+                {
+                    int value = 1;
+                    // keep this comment with both copies
+                    value += 2;
+                    return value;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/DuplicateExpression.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement value = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirExpressionStatement expression = Assert.IsType<HirExpressionStatement>(
+            method.Body.Statements[1]);
+        HirReturnStatement @return = Assert.IsType<HirReturnStatement>(method.Body.Statements[2]);
+        HashSet<SemanticId> originalSubtreeIds = expression.DescendantsAndSelf()
+            .Select(static node => node.Id)
+            .ToHashSet();
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new DuplicateStatementPatchOperation(
+                expression.Id,
+                method.Body.Id,
+                value.Id,
+                @return.Id,
+                expression.Id,
+                @return.Id,
+                null)]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Equal(2, patchedSource.Split("value += 2;", StringSplitOptions.None).Length - 1);
+        Assert.Equal(
+            2,
+            patchedSource.Split("// keep this comment with both copies", StringSplitOptions.None).Length - 1);
+        HirMethodDeclaration changed = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        Assert.Equal(value.Id, changed.Body.Statements[0].Id);
+        HirExpressionStatement originalExpression = Assert.IsType<HirExpressionStatement>(
+            changed.Body.Statements[1]);
+        HirExpressionStatement copiedExpression = Assert.IsType<HirExpressionStatement>(
+            changed.Body.Statements[2]);
+        Assert.Equal(expression.Id, originalExpression.Id);
+        Assert.Equal(@return.Id, changed.Body.Statements[3].Id);
+        Assert.Empty(originalSubtreeIds.Intersect(
+            copiedExpression.DescendantsAndSelf().Select(static node => node.Id)));
+    }
+
+    [Fact]
+    public void Apply_DuplicatesStructuredStatementAndKeepsOriginalNestedIdentities()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(bool ready)
+                {
+                    int result = 0;
+                    // duplicate the complete branch
+                    if (ready)
+                    {
+                        int inside = 1;
+                        result += inside;
+                    }
+
+                    return result;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/DuplicateBranch.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement resultDefinition =
+            Assert.IsType<HirVariableDeclarationStatement>(method.Body.Statements[0]);
+        HirIfStatement branch = Assert.IsType<HirIfStatement>(method.Body.Statements[1]);
+        HirReturnStatement @return = Assert.IsType<HirReturnStatement>(method.Body.Statements[2]);
+        HashSet<SemanticId> originalBranchIds = branch.DescendantsAndSelf()
+            .Select(static node => node.Id)
+            .ToHashSet();
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new DuplicateStatementPatchOperation(
+                branch.Id,
+                method.Body.Id,
+                resultDefinition.Id,
+                @return.Id,
+                branch.Id,
+                @return.Id,
+                null)]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Equal(2, patchedSource.Split("// duplicate the complete branch", StringSplitOptions.None).Length - 1);
+        HirMethodDeclaration changed = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirIfStatement originalBranch = Assert.IsType<HirIfStatement>(changed.Body.Statements[1]);
+        HirIfStatement copiedBranch = Assert.IsType<HirIfStatement>(changed.Body.Statements[2]);
+        Assert.Equal(
+            originalBranchIds.OrderBy(static id => id.Value),
+            originalBranch.DescendantsAndSelf().Select(static node => node.Id).OrderBy(static id => id.Value));
+        Assert.Empty(originalBranchIds.Intersect(
+            copiedBranch.DescendantsAndSelf().Select(static node => node.Id)));
+        Assert.Equal(@return.Id, changed.Body.Statements[3].Id);
+    }
+
+    [Fact]
+    public void Apply_DuplicatesLocalWithNewNameWithoutRebindingOriginalUses()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run()
+                {
+                    int value = 1;
+                    return value;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/DuplicateLocal.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement value = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirReturnStatement @return = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new DuplicateStatementPatchOperation(
+                value.Id,
+                method.Body.Id,
+                null,
+                @return.Id,
+                value.Id,
+                @return.Id,
+                "valueCopy")]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        HirMethodDeclaration changed = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirVariableDeclarationStatement originalValue =
+            Assert.IsType<HirVariableDeclarationStatement>(changed.Body.Statements[0]);
+        HirVariableDeclarationStatement copiedValue =
+            Assert.IsType<HirVariableDeclarationStatement>(changed.Body.Statements[1]);
+        HirReturnStatement changedReturn = Assert.IsType<HirReturnStatement>(changed.Body.Statements[2]);
+        HirIdentifierExpression returnedValue = Assert.IsType<HirIdentifierExpression>(changedReturn.Expression);
+        Assert.Equal(value.Id, originalValue.Id);
+        Assert.Equal("valueCopy", copiedValue.Name);
+        Assert.NotEqual(value.Id, copiedValue.Id);
+        Assert.Equal(@return.Id, changedReturn.Id);
+        Assert.Equal(
+            value.Id,
+            Assert.Single(
+                result.Analysis.Semantics!.Nodes,
+                binding => binding.NodeId == returnedValue.Id).ReferencedSymbolId);
+    }
+
+    [Fact]
+    public void Apply_RejectsTerminalOrStaleStatementDuplication()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run()
+                {
+                    int value = 1;
+                    return value;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/RejectStatementDuplication.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement value = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirReturnStatement @return = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+
+        CSharpPatchResult terminalResult = new CSharpSourcePatchApplier().Apply(
+            request,
+            SemanticPatchDocument.Create(
+                original.Hir.Id,
+                original.Semantics!.ConfigurationId,
+                [new DuplicateStatementPatchOperation(
+                    @return.Id,
+                    method.Body.Id,
+                    value.Id,
+                    null,
+                    value.Id,
+                    @return.Id,
+                    null)]));
+        Assert.False(terminalResult.Succeeded);
+        Assert.Equal(
+            SemanticPatchDiagnosticCodes.InvalidStatementDuplication,
+            Assert.Single(terminalResult.Diagnostics).Code);
+
+        CSharpPatchResult staleResult = new CSharpSourcePatchApplier().Apply(
+            request,
+            SemanticPatchDocument.Create(
+                original.Hir.Id,
+                original.Semantics.ConfigurationId,
+                [new DuplicateStatementPatchOperation(
+                    value.Id,
+                    method.Body.Id,
+                    null,
+                    @return.Id,
+                    value.Id,
+                    null,
+                    "valueCopy") ]));
+        Assert.False(staleResult.Succeeded);
+        Assert.Equal(
+            SemanticPatchDiagnosticCodes.SiblingPreconditionFailed,
+            Assert.Single(staleResult.Diagnostics).Code);
+    }
+
     private static (CSharpCompilationRequest Request, CSharpAnalysisResult Analysis) CreatePersistentRequest(
         string source,
         string path)

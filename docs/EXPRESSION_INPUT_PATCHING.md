@@ -5,7 +5,7 @@
 M4.10 adds an exact Graph-input edit that replaces one nested expression
 subtree without rebuilding its enclosing assignment, condition, initializer,
 return value, or invocation. The standalone and transaction protocols are
-`unifiedscript.patch/v0.23` and `unifiedscript.patch-plan/v0.21`.
+`unifiedscript.patch/v0.24` and `unifiedscript.patch-plan/v0.21`.
 
 The operation uses the same input-port vocabulary already emitted by the Graph
 projector. It therefore models a visual connection change directly instead of

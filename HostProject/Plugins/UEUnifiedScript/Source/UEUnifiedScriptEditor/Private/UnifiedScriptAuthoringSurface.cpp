@@ -916,7 +916,7 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildSemanticPatch(
     }
 
     const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
-    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.23"));
+    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.24"));
     Root->SetStringField(TEXT("sourceCompilationId"), Document.SourceCompilationId);
     Root->SetStringField(TEXT("semanticConfigurationId"), Document.SemanticConfigurationId);
     Root->SetArrayField(TEXT("operations"), {MakeShared<FJsonValueObject>(Operation)});
@@ -990,7 +990,7 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildDataEdgeReconnectionPatch(
     Operation->SetStringField(TEXT("expectedTypeId"), TargetInput->TypeId);
 
     const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
-    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.23"));
+    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.24"));
     Root->SetStringField(TEXT("sourceCompilationId"), Document.SourceCompilationId);
     Root->SetStringField(TEXT("semanticConfigurationId"), Document.SemanticConfigurationId);
     Root->SetArrayField(TEXT("operations"), {MakeShared<FJsonValueObject>(Operation)});
@@ -1032,7 +1032,7 @@ TSharedRef<FJsonObject> MakePatchRoot(
     const TSharedRef<FJsonObject>& Operation)
 {
     const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
-    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.23"));
+    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.24"));
     Root->SetStringField(TEXT("sourceCompilationId"), Document.SourceCompilationId);
     Root->SetStringField(TEXT("semanticConfigurationId"), Document.SemanticConfigurationId);
     Root->SetArrayField(TEXT("operations"), {MakeShared<FJsonValueObject>(Operation)});
@@ -2761,6 +2761,97 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildStatementDeletionPatch(
     SetOptionalId(Operation, TEXT("expectedPreviousSiblingId"), Previous);
     SetOptionalId(Operation, TEXT("expectedNextSiblingId"), Next);
     return SerializeRoot(MakePatchRoot(Document, Operation), OutPatchJson, OutError, TEXT("the statement deletion patch"));
+}
+
+bool FUnifiedScriptAuthoringSurfaceReader::BuildStatementDuplicationPatch(
+    const FUnifiedScriptAuthoringSurfaceDocument& Document,
+    const FUnifiedScriptAuthoringFunction& Function,
+    const FUnifiedScriptAuthoringAction& SourceStatement,
+    const FUnifiedScriptAuthoringAction& DestinationStatement,
+    const FString& NewLocalName,
+    FString& OutPatchJson,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::AuthoringSurface::Editing::Private;
+    const FUnifiedScriptAuthoringRegion* SourceBlock =
+        FindOwningBlock(Function, SourceStatement.Id);
+    const FUnifiedScriptAuthoringRegion* DestinationBlock =
+        FindOwningBlock(Function, DestinationStatement.Id);
+    if (SourceBlock == nullptr || DestinationBlock == nullptr ||
+        SourceBlock->SourceNodeId != DestinationBlock->SourceNodeId)
+    {
+        OutError = TEXT("Copy/paste currently requires source and destination statements in the same explicit block.");
+        return false;
+    }
+
+    const auto IsTerminalOrSynthetic = [](const FUnifiedScriptAuthoringAction& Action)
+    {
+        return Action.GraphKind == TEXT("entry") ||
+            Action.GraphKind == TEXT("unrealEventEntry") ||
+            Action.GraphKind == TEXT("switchCase") ||
+            Action.GraphKind == TEXT("return") ||
+            Action.GraphKind == TEXT("break") ||
+            Action.GraphKind == TEXT("continue");
+    };
+    if (IsTerminalOrSynthetic(SourceStatement) || IsTerminalOrSynthetic(DestinationStatement))
+    {
+        OutError = TEXT("Return, break, continue, entry, and switch-label nodes cannot be copied or used as an after-node destination.");
+        return false;
+    }
+
+    const bool bCopiesLocal = SourceStatement.GraphKind == TEXT("variable");
+    if ((bCopiesLocal && NewLocalName.IsEmpty()) || (!bCopiesLocal && !NewLocalName.IsEmpty()))
+    {
+        OutError = bCopiesLocal
+            ? TEXT("Copying a local declaration requires a unique destination name.")
+            : TEXT("A copied local name is valid only for a variable declaration.");
+        return false;
+    }
+
+    const FString SourceStatementId = ResolveStatementId(SourceStatement);
+    const FString DestinationStatementId = ResolveStatementId(DestinationStatement);
+    const TArray<FString> StatementIds = GetStructuralStatementIds(Function, *SourceBlock);
+    const int32 SourceIndex = StatementIds.IndexOfByKey(SourceStatementId);
+    const int32 DestinationIndex = StatementIds.IndexOfByKey(DestinationStatementId);
+    if (SourceIndex == INDEX_NONE || DestinationIndex == INDEX_NONE)
+    {
+        OutError = TEXT("The compiler-owned statement order no longer contains the copy source or destination.");
+        return false;
+    }
+
+    FString SourcePrevious;
+    FString SourceNext;
+    GetStructuralSiblingPreconditions(
+        StatementIds,
+        SourceStatementId,
+        SourcePrevious,
+        SourceNext);
+    const FString DestinationPrevious = DestinationStatementId;
+    const FString DestinationNext = DestinationIndex + 1 < StatementIds.Num()
+        ? StatementIds[DestinationIndex + 1]
+        : FString();
+
+    const TSharedRef<FJsonObject> Operation = MakeShared<FJsonObject>();
+    Operation->SetStringField(TEXT("operation"), TEXT("duplicateStatement"));
+    Operation->SetStringField(TEXT("targetNodeId"), SourceStatementId);
+    Operation->SetStringField(TEXT("expectedParentBlockId"), SourceBlock->SourceNodeId);
+    SetOptionalId(Operation, TEXT("expectedSourcePreviousSiblingId"), SourcePrevious);
+    SetOptionalId(Operation, TEXT("expectedSourceNextSiblingId"), SourceNext);
+    SetOptionalId(Operation, TEXT("expectedDestinationPreviousSiblingId"), DestinationPrevious);
+    SetOptionalId(Operation, TEXT("expectedDestinationNextSiblingId"), DestinationNext);
+    if (NewLocalName.IsEmpty())
+    {
+        Operation->SetField(TEXT("newLocalName"), MakeShared<FJsonValueNull>());
+    }
+    else
+    {
+        Operation->SetStringField(TEXT("newLocalName"), NewLocalName);
+    }
+    return SerializeRoot(
+        MakePatchRoot(Document, Operation),
+        OutPatchJson,
+        OutError,
+        TEXT("the statement duplication patch"));
 }
 
 FString FUnifiedScriptAuthoringSurfaceReader::ResolveConfiguredPath(

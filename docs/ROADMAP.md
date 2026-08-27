@@ -661,7 +661,7 @@ var, discard, relational, logical, negated, and parenthesized patterns. Direct
 statement insertion/deletion/reordering also accepts a switch-section body.
 Authoring Surface v0.4 carries normalized Graph properties, including the exact
 semantic switch-section identity, so Slate can consume these operations without
-parsing presentation text. The 474/474 managed suite, UE 5.8 editor build,
+parsing presentation text. The 479/479 managed suite, UE 5.8 editor build,
 focused native Authoring Surface Automation, and 48/48 repository validator
 pass. The Slate palette now creates a typed switch, and its inspector converts
 bounded pattern text into semantic labels, inserts Case/Default sections,
@@ -672,8 +672,14 @@ one baseline-revision and idempotent-operation gate. A bounded 100-entry history
 restores exact stabilized source/identity snapshots, republishes every artifact,
 and advances both workspace revision and CoreCLR generation. Browser and Slate
 consume the same server history and never maintain a competing edit stack.
-Persisted/grouped history plus collapse and copy/paste transforms remain open,
-so M8.1 is not yet complete.
+Semantic Patch v0.24 now adds a bounded identity-safe copy/paste transaction.
+The Slate GraphEditor maps Copy/Paste to a compiler-owned statement identity
+and an exact same-block destination gap; the C# applier pins the original
+method subtree, gives the copy fresh IDs, preserves comments, generates a
+conflict-free name for copied locals, recompiles, and validates the projected
+CFG. Ctrl/Cmd+Z/Y use the same Workbench history as the toolbar. Persisted and
+user-grouped history, collapse/expand transforms, and broader multi-selection
+or cross-region clipboard semantics remain open, so M8.1 is not yet complete.
 
 ### M8.2 — Blueprint-grade Unreal experience
 

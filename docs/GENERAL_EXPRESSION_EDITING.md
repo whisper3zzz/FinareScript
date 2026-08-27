@@ -11,7 +11,7 @@ statements:
 - the initializer of an existing local declaration; and
 - the value of an existing non-void return.
 
-The standalone protocol is `unifiedscript.patch/v0.23`; the transaction
+The standalone protocol is `unifiedscript.patch/v0.24`; the transaction
 protocol is `unifiedscript.patch-plan/v0.21`. All replacements consume the
 same closed `PatchExpression` algebra used by statement construction and by
 M4.7 expression editing: literal, existing local/parameter reference, unary,

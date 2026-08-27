@@ -421,13 +421,42 @@ public sealed class SemanticPatchJsonTests
         SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
 
         Assert.Equal(
-            "unifiedscript.patch/v0.23",
+            "unifiedscript.patch/v0.24",
             roundTrip.SchemaVersion);
         Assert.Equal(
             move,
             Assert.IsType<MoveStatementPatchOperation>(Assert.Single(roundTrip.Operations)));
         Assert.Contains("\"operation\": \"moveStatement\"", json, StringComparison.Ordinal);
         Assert.Contains("\"destinationParentBlockId\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SerializeAndDeserialize_PreserveIdentitySafeStatementDuplication()
+    {
+        SemanticId statementId = SemanticId.FromKey("copy-target");
+        SemanticId blockId = SemanticId.FromKey("copy-block");
+        var duplicate = new DuplicateStatementPatchOperation(
+            statementId,
+            blockId,
+            SemanticId.FromKey("copy-source-previous"),
+            SemanticId.FromKey("copy-source-next"),
+            statementId,
+            SemanticId.FromKey("copy-destination-next"),
+            "valueCopy");
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            SemanticId.FromKey("copy-compilation"),
+            SemanticId.FromKey("copy-configuration"),
+            [duplicate]);
+
+        string json = SemanticPatchJson.Serialize(patch);
+        SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
+
+        Assert.Equal("unifiedscript.patch/v0.24", roundTrip.SchemaVersion);
+        Assert.Equal(
+            duplicate,
+            Assert.IsType<DuplicateStatementPatchOperation>(Assert.Single(roundTrip.Operations)));
+        Assert.Contains("\"operation\": \"duplicateStatement\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"newLocalName\": \"valueCopy\"", json, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1269,6 +1298,6 @@ public sealed class SemanticPatchJsonTests
         Assert.Contains("\"statement\": \"switch\"", json, StringComparison.Ordinal);
         Assert.Contains("\"pattern\": \"logical\"", json, StringComparison.Ordinal);
         Assert.Contains("\"operation\": \"moveSwitchSection\"", json, StringComparison.Ordinal);
-        Assert.Equal("unifiedscript.patch/v0.23", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch/v0.24", roundTrip.SchemaVersion);
     }
 }

@@ -161,8 +161,8 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
             TEXT("120"),
             PatchJson,
             Error));
-    TestTrue(TEXT("Patch uses semantic-patch v0.23"),
-        PatchJson.Contains(TEXT("\"unifiedscript.patch/v0.23\"")));
+    TestTrue(TEXT("Patch uses semantic-patch v0.24"),
+        PatchJson.Contains(TEXT("\"unifiedscript.patch/v0.24\"")));
     TestTrue(TEXT("Patch retains the exact target node"),
         PatchJson.Contains(LiteralEdit->TargetNodeId));
     TestTrue(TEXT("Patch carries the requested replacement"),
@@ -459,6 +459,26 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         TestTrue(TEXT("Deletion retains parent-block and sibling preconditions"),
             DeleteJson.Contains(RewireBlock->SourceNodeId) &&
                 DeleteJson.Contains(TEXT("expectedPreviousSiblingId")));
+
+        FString DuplicateJson;
+        const FString CopiedLocalName = RewireTarget->GraphKind == TEXT("variable")
+            ? TEXT("incrementedCopy")
+            : FString();
+        TestTrue(TEXT("Copy/paste can build an exact same-block statement duplication"),
+            FUnifiedScriptAuthoringSurfaceReader::BuildStatementDuplicationPatch(
+                Document,
+                RewireFunction,
+                *RewireTarget,
+                *RewireTarget,
+                CopiedLocalName,
+                DuplicateJson,
+                Error));
+        TestTrue(TEXT("Statement duplication preserves both source and destination gaps"),
+            DuplicateJson.Contains(TEXT("\"operation\": \"duplicateStatement\"")) &&
+                DuplicateJson.Contains(TEXT("\"expectedParentBlockId\"")) &&
+                DuplicateJson.Contains(TEXT("\"expectedSourcePreviousSiblingId\"")) &&
+                DuplicateJson.Contains(TEXT("\"expectedDestinationPreviousSiblingId\"")) &&
+                DuplicateJson.Contains(TEXT("\"newLocalName\": \"incrementedCopy\"")));
 
         FUnifiedScriptAuthoringFunction TransferFunction = RewireFunction;
         FUnifiedScriptAuthoringRegion SwitchRegion;

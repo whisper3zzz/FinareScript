@@ -64,6 +64,9 @@ apply twice. Workspace responses expose `canUndo`, `canRedo`, both depths, the
 next transaction IDs/descriptions, and the last committed operation ID.
 
 History is currently session-local and is reset when the authoring host exits.
-Atomic semantic patch plans already group dependent source operations. Persisted
-history, user-defined transaction grouping, collapse/expand transforms, and
-copy/paste transactions remain later M8.1 work.
+Atomic semantic patch plans already group dependent source operations. Semantic
+Patch v0.24 statement duplication is also one server-owned transaction, so its
+source, identity, generated artifacts, runtime reload, Undo, and Redo cannot
+split. Persisted history, user-defined transaction grouping, collapse/expand
+transforms, and broader multi-selection/cross-region clipboard transactions
+remain later M8.1 work.

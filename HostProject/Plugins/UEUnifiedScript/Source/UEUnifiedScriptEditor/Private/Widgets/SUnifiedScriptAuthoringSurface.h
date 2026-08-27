@@ -10,6 +10,7 @@ class SEditableTextBox;
 class SGraphEditor;
 class STextBlock;
 class SVerticalBox;
+class FUICommandList;
 class UEdGraphNode;
 class UUnifiedScriptAsset;
 class UUnifiedScriptEdGraph;
@@ -96,6 +97,14 @@ private:
         const UEdGraphPin* InputPin);
     void HandleNodeCreateRequested(const FString& ActionId, const FVector2D& Location);
     void HandleStatementDeleteRequested(const UEdGraphNode* Node);
+    void HandleCopySelectedStatement();
+    bool CanCopySelectedStatement() const;
+    void HandlePasteStatement();
+    bool CanPasteStatement() const;
+    void HandleUndoAuthoringCommand();
+    bool CanUndoAuthoringCommand() const;
+    void HandleRedoAuthoringCommand();
+    bool CanRedoAuthoringCommand() const;
     FReply HandleAddSwitchSection(
         FString SwitchActionId,
         TSharedPtr<SEditableTextBox> LabelEditor,
@@ -146,6 +155,7 @@ private:
         const FString& RegionId) const;
     const FUnifiedScriptAuthoringRegion* ResolveActiveBlockRegion(
         const FUnifiedScriptAuthoringFunction& Function) const;
+    const FUnifiedScriptAuthoringAction* GetSingleSelectedStatementAction() const;
     void RebuildNodePalette(const FUnifiedScriptAuthoringFunction& Function);
     void PersistCurrentLayout(bool bOnlyIfChanged);
     FUnifiedScriptSurfaceTreeItemPtr FindSurfaceItem(const FString& SemanticId) const;
@@ -184,12 +194,15 @@ private:
     FString ActiveFunctionId;
     FString ActiveBlockRegionId;
     FString ActiveFunctionSignature;
+    FString CopiedStatementId;
+    FString CopiedStatementFunctionId;
     int32 ActiveGraphActionCount = 0;
 
     TSharedPtr<SEditableTextBox> PathTextBox;
     TSharedPtr<SEditableTextBox> ServerUrlTextBox;
     TSharedPtr<STreeView<FUnifiedScriptSurfaceTreeItemPtr>> TreeView;
     TSharedPtr<SGraphEditor> GraphEditor;
+    TSharedPtr<FUICommandList> GraphCommands;
     TSharedPtr<SVerticalBox> InspectorBox;
     TSharedPtr<STextBlock> StatusText;
     TStrongObjectPtr<UUnifiedScriptEdGraph> AuthoringGraph;
