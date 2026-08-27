@@ -104,7 +104,7 @@ async function loadWorkspaceArtifacts() {
 
 function validateWorkspaceArtifacts(artifact, graph, surface) {
   assertArtifact(artifact?.schemaVersion === 'unifiedscript.script-asset/v0.1', 'Unsupported Declaration IR artifact');
-  assertArtifact(graph?.schemaVersion === 'unifiedscript.graph/v0.12', 'Unsupported Graph artifact');
+  assertArtifact(graph?.schemaVersion === 'unifiedscript.graph/v0.13', 'Unsupported Graph artifact');
   assertArtifact(surface?.schemaVersion === 'unifiedscript.authoring-surface/v0.3', 'Unsupported Authoring Surface artifact');
   assertArtifact(artifact.sourceCompilationId === graph.sourceCompilationId &&
     artifact.sourceCompilationId === surface.sourceCompilationId, 'Source compilation identity mismatch');

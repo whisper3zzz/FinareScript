@@ -77,10 +77,12 @@ public sealed class CSharpProgramEmitterTests
                 [Visual]
                 static int Run(int value)
                 {
-                    switch (value)
+                    try
                     {
-                        default:
-                            return value;
+                        return value;
+                    }
+                    finally
+                    {
                     }
                 }
             }

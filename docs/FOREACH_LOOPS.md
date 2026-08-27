@@ -9,9 +9,9 @@ is no editor-only expansion and no second VM.
 
 The strict-reader contracts for this slice are:
 
-- HIR `unifiedscript.hir/v0.7`;
+- HIR `unifiedscript.hir/v0.8`;
 - semantics `unifiedscript.semantics/v0.2`;
-- Graph `unifiedscript.graph/v0.12`;
+- Graph `unifiedscript.graph/v0.13`;
 - standalone patch `unifiedscript.patch/v0.21`;
 - patch plan `unifiedscript.patch-plan/v0.21`.
 

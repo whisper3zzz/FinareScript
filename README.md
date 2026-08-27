@@ -325,7 +325,7 @@ and identity pins for sidecar-backed renames. The CLI commits patched source,
 revalidated Declaration IR, and an optional updated `.usids` together. The
 prototype generates the same directly applicable JSON instead of a static
 preview. M5.5.3 connects the behavior surface to the generated
-`unifiedscript.graph/v0.12` artifact and exact source snapshot. The adapter
+`unifiedscript.graph/v0.13` artifact and exact source snapshot. The adapter
 reduces 17 fine-grained Graph nodes to six semantic action/region cards while
 recursively retaining ordinary expressions inline. Cards, source selection,
 AI outline, and source selection now share real Graph IDs; state-reference

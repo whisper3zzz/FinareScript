@@ -22,6 +22,8 @@ public static class VisualProfileDiagnosticCodes
     public const string DefaultParameterValueNotSupported = "UVS1018";
     public const string RefReturnNotSupported = "UVS1019";
     public const string LoopControlTargetRequired = "UVS1020";
+    public const string BreakTargetRequired = "UVS1021";
+    public const string PatternNotSupported = "UVS1022";
     public const string StatementNotSupported = "UVS1100";
     public const string ExpressionNotSupported = "UVS1101";
 }

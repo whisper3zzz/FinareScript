@@ -125,10 +125,11 @@ public sealed class GraphControlFlowAnalyzer
                 continue;
             }
 
-            if (outputs.Length > 1 && node.Kind is not ("branch" or "loop"))
+            if (outputs.Length > 1 && node.Kind is not ("branch" or "loop" or "switch"))
             {
                 throw new InvalidOperationException(
-                    $"Only a branch or loop node may expose multiple control outputs; node '{node.Id}' does so.");
+                    $"Only a branch, loop, or switch node may expose multiple control outputs; " +
+                    $"node '{node.Id}' does so.");
             }
 
             if (node.Kind == "branch" &&
@@ -147,6 +148,14 @@ public sealed class GraphControlFlowAnalyzer
             {
                 throw new InvalidOperationException(
                     $"Loop node '{node.Id}' requires ordered body/exit control outputs.");
+            }
+
+            if (node.Kind == "switch" && outputs.Any(static output =>
+                    output.Name != "unmatched" &&
+                    !output.Name.StartsWith("case-", StringComparison.Ordinal)))
+            {
+                throw new InvalidOperationException(
+                    $"Switch node '{node.Id}' exposes an invalid control output.");
             }
 
             foreach (GraphPort output in outputs)
@@ -232,6 +241,26 @@ public sealed class GraphControlFlowAnalyzer
             function,
             controlById,
             arcs);
+        GraphControlFlowSwitch[] switches = BuildSwitches(
+            function,
+            controlById,
+            exitId,
+            arcs);
+        HashSet<SemanticId> claimedBreaks = loops
+            .SelectMany(static loop => loop.BreakNodeIds)
+            .Concat(switches.SelectMany(static @switch => @switch.BreakNodeIds))
+            .ToHashSet();
+        SemanticId[] unclaimedBreaks = controlNodes
+            .Where(static node => node.Kind == "break")
+            .Select(static node => node.Id)
+            .Where(id => !claimedBreaks.Contains(id))
+            .OrderBy(static id => id.Value, StringComparer.Ordinal)
+            .ToArray();
+        if (unclaimedBreaks.Length > 0)
+        {
+            throw new InvalidOperationException(
+                $"Break node '{unclaimedBreaks[0]}' has no enclosing loop or switch region.");
+        }
         GraphControlFlowComponent[] components = BuildCyclicComponents(
             entry.Id,
             exitId,
@@ -248,6 +277,7 @@ public sealed class GraphControlFlowAnalyzer
             arcs.OrderBy(static arc => arc.Id.Value, StringComparer.Ordinal).ToArray(),
             branches,
             loops,
+            switches,
             components,
             controlById.Keys
                 .Where(id => !reachable.Contains(id))
@@ -754,7 +784,7 @@ public sealed class GraphControlFlowAnalyzer
             SemanticId[] breaks = controlNodes.Values
                 .Where(static node => node.Kind == "break")
                 .Where(node => nodeOwners.TryGetValue(node.Id, out SemanticId ownerId) &&
-                    FindNearestLoopRegion(ownerId, regions) == loopRegion.Id)
+                    FindNearestBreakableRegion(ownerId, regions) == loopRegion.Id)
                 .Select(static node => node.Id)
                 .OrderBy(static id => id.Value, StringComparer.Ordinal)
                 .ToArray();
@@ -816,7 +846,7 @@ public sealed class GraphControlFlowAnalyzer
         }
 
         SemanticId[] unclaimedTransfers = controlNodes.Values
-            .Where(static node => node.Kind is "break" or "continue")
+            .Where(static node => node.Kind == "continue")
             .Select(static node => node.Id)
             .Where(id => !claimedTransfers.Contains(id))
             .OrderBy(static id => id.Value, StringComparer.Ordinal)
@@ -824,10 +854,109 @@ public sealed class GraphControlFlowAnalyzer
         if (unclaimedTransfers.Length > 0)
         {
             throw new InvalidOperationException(
-                $"Loop-control node '{unclaimedTransfers[0]}' has no enclosing loop region.");
+                $"Continue node '{unclaimedTransfers[0]}' has no enclosing loop region.");
         }
 
         return result.ToArray();
+    }
+
+    private static GraphControlFlowSwitch[] BuildSwitches(
+        GraphFunction function,
+        IReadOnlyDictionary<SemanticId, GraphNode> controlNodes,
+        SemanticId functionExitId,
+        IReadOnlyList<GraphControlFlowArc> arcs)
+    {
+        IReadOnlyDictionary<SemanticId, GraphRegion> regions = function.Regions
+            .ToDictionary(static region => region.Id);
+        IReadOnlyDictionary<SemanticId, SemanticId> nodeOwners = function.Regions
+            .SelectMany(region => region.NodeIds.Select(nodeId => (nodeId, region.Id)))
+            .ToDictionary(static item => item.nodeId, static item => item.Id);
+        var result = new List<GraphControlFlowSwitch>();
+        foreach (GraphRegion switchRegion in function.Regions
+                     .Where(static region => region.Kind == GraphRegionKind.Switch)
+                     .OrderBy(static region => region.Id.Value, StringComparer.Ordinal))
+        {
+            GraphNode switchNode = controlNodes[switchRegion.SourceNodeId];
+            GraphRegion[] sectionRegions = switchRegion.ChildRegionIds
+                .Select(id => regions[id])
+                .ToArray();
+            GraphNode[] labelNodes = sectionRegions
+                .SelectMany(static region => region.NodeIds)
+                .Where(controlNodes.ContainsKey)
+                .Select(id => controlNodes[id])
+                .Where(static node => node.Kind == "switchCase")
+                .OrderBy(static node => node.Span.Start.Line)
+                .ThenBy(static node => node.Span.Start.Column)
+                .ThenBy(static node => node.Id.Value, StringComparer.Ordinal)
+                .ToArray();
+            GraphNode? defaultLabel = labelNodes.SingleOrDefault(node =>
+                node.Properties.GetValueOrDefault("isDefault") == "true");
+            foreach (GraphNode label in labelNodes)
+            {
+                string port = $"case-{label.Id.Value}";
+                _ = RequireControlSuccessor(switchNode.Id, port, arcs);
+            }
+
+            SemanticId[] breaks = controlNodes.Values
+                .Where(static node => node.Kind == "break")
+                .Where(node => nodeOwners.TryGetValue(node.Id, out SemanticId ownerId) &&
+                    FindNearestBreakableRegion(ownerId, regions) == switchRegion.Id)
+                .Select(static node => node.Id)
+                .OrderBy(static id => id.Value, StringComparer.Ordinal)
+                .ToArray();
+            var exitCandidates = new List<SemanticId>();
+            foreach (SemanticId breakNodeId in breaks)
+            {
+                exitCandidates.Add(RequireControlSuccessor(breakNodeId, "then", arcs));
+            }
+
+            if (switchNode.Ports.Any(static port =>
+                    port.Kind == GraphPortKind.Control &&
+                    port.Direction == GraphPortDirection.Output &&
+                    port.Name == "unmatched"))
+            {
+                exitCandidates.Add(RequireControlSuccessor(switchNode.Id, "unmatched", arcs));
+            }
+
+            SemanticId[] distinctExits = exitCandidates.Distinct().ToArray();
+            if (distinctExits.Length > 1)
+            {
+                throw new InvalidOperationException(
+                    $"Switch region '{switchRegion.Id}' has ambiguous break/unmatched exits.");
+            }
+
+            result.Add(new GraphControlFlowSwitch(
+                switchNode.Id,
+                switchRegion.Id,
+                sectionRegions.Select(static region => region.Id).ToArray(),
+                labelNodes.Select(static node => node.Id).ToArray(),
+                defaultLabel?.Id,
+                distinctExits.SingleOrDefault(functionExitId),
+                breaks));
+        }
+
+        return result.ToArray();
+    }
+
+    private static SemanticId FindNearestBreakableRegion(
+        SemanticId regionId,
+        IReadOnlyDictionary<SemanticId, GraphRegion> regions)
+    {
+        GraphRegion current = regions[regionId];
+        while (true)
+        {
+            if (current.Kind is GraphRegionKind.Loop or GraphRegionKind.Switch)
+            {
+                return current.Id;
+            }
+
+            if (current.ParentRegionId is not SemanticId parentId)
+            {
+                return default;
+            }
+
+            current = regions[parentId];
+        }
     }
 
     private static SemanticId? FindNearestLoopRegion(

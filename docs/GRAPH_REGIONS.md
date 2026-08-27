@@ -4,7 +4,7 @@
 
 `unifiedscript.graph/v0.3` introduced explicit structured regions to the
 semantic Graph, v0.4 added structured `while` loops, and v0.9 added explicit
-`for` initializer/increment phases. Current `unifiedscript.graph/v0.12` retains
+`for` initializer/increment phases. Current `unifiedscript.graph/v0.13` retains
 the distinct `do ... while` entry and indexed-foreach collection phases, then
 adds disposal ownership for enumerable `foreach`.
 Nodes and control/data edges still describe computation; regions

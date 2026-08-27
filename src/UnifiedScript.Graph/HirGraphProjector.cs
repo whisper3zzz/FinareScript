@@ -169,6 +169,7 @@ public sealed class HirGraphProjector
         private readonly Dictionary<SemanticId, GraphEdge> edges = [];
         private readonly Dictionary<SemanticId, RegionBuilder> regions = [];
         private readonly Stack<LoopContext> loops = [];
+        private readonly Stack<BreakContext> breakables = [];
 
         public IEnumerable<GraphNode> Nodes => nodes.Values;
 
@@ -265,11 +266,290 @@ public sealed class HirGraphProjector
                     forEachStatement,
                     incoming,
                     regionId),
+                HirSwitchStatement switchStatement => ProjectSwitch(
+                    switchStatement,
+                    incoming,
+                    regionId),
                 HirBreakStatement breakStatement => ProjectBreak(breakStatement, incoming, regionId),
                 HirContinueStatement continueStatement => ProjectContinue(continueStatement, incoming, regionId),
                 HirReturnStatement returnStatement => ProjectReturn(returnStatement, incoming, regionId),
                 _ => throw new ArgumentOutOfRangeException(nameof(statement), statement.GetType().Name),
             };
+
+        private IReadOnlyList<ControlEndpoint> ProjectSwitch(
+            HirSwitchStatement statement,
+            IReadOnlyList<ControlEndpoint> incoming,
+            SemanticId parentRegionId)
+        {
+            SemanticId switchRegionId = RegionId(statement.Id, GraphRegionKind.Switch);
+            AddRegion(new RegionBuilder(
+                switchRegionId,
+                GraphRegionKind.Switch,
+                parentRegionId,
+                statement.Id,
+                statement.Span,
+                false));
+            var sectionRegionIds = new Dictionary<SemanticId, SemanticId>();
+            foreach (HirSwitchSection section in statement.Sections)
+            {
+                SemanticId sectionRegionId = RegionId(
+                    section.Id,
+                    GraphRegionKind.SwitchSection);
+                sectionRegionIds.Add(section.Id, sectionRegionId);
+                AddRegion(new RegionBuilder(
+                    sectionRegionId,
+                    GraphRegionKind.SwitchSection,
+                    switchRegionId,
+                    section.Id,
+                    section.Span,
+                    false));
+            }
+
+            ExpressionProjection governing = ProjectExpression(
+                statement.GoverningExpression,
+                switchRegionId);
+            HirSwitchLabel[] labels = statement.Sections
+                .SelectMany(static section => section.Labels)
+                .ToArray();
+            bool hasDefault = labels.Any(static label => label is HirDefaultSwitchLabel);
+            var properties = new SortedDictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["evaluation"] = "governingExpressionOnce",
+                ["evaluationOrder"] = "governingExpression,labels,guard,section",
+                ["hasDefault"] = hasDefault ? "true" : "false",
+                ["labelCount"] = labels.Length.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture),
+                ["sectionCount"] = statement.Sections.Count.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture),
+            };
+            semantics.ApplyNodeProperties(statement.GoverningExpression.Id, properties);
+            var ports = new List<GraphPort>
+            {
+                new("in", GraphPortDirection.Input, GraphPortKind.Control),
+            };
+            ports.AddRange(labels.Select(label => new GraphPort(
+                SwitchLabelPort(label.Id),
+                GraphPortDirection.Output,
+                GraphPortKind.Control)));
+            if (!hasDefault)
+            {
+                ports.Add(new GraphPort(
+                    "unmatched",
+                    GraphPortDirection.Output,
+                    GraphPortKind.Control));
+            }
+            ports.Add(new GraphPort("value", GraphPortDirection.Input, GraphPortKind.Data));
+            AddNode(new GraphNode(
+                statement.Id,
+                "switch",
+                "Switch",
+                statement.Span,
+                ports,
+                properties),
+                switchRegionId);
+            IReadOnlyList<ControlEndpoint> beforeSwitch = ConnectEffectChain(
+                incoming,
+                governing.Effects.Distinct());
+            ConnectIncoming(beforeSwitch, statement.Id, "in");
+            AddRequiredDataEdge(governing.Value, new ValueEndpoint(statement.Id, "value"));
+
+            var context = new SwitchContext();
+            breakables.Push(context);
+            var exits = new List<ControlEndpoint>();
+            try
+            {
+                foreach (HirSwitchSection section in statement.Sections)
+                {
+                    SemanticId sectionRegionId = sectionRegionIds[section.Id];
+                    var sectionEntries = new List<ControlEndpoint>();
+                    foreach (HirSwitchLabel label in section.Labels)
+                    {
+                        IReadOnlyList<ControlEndpoint> current =
+                            [new ControlEndpoint(statement.Id, SwitchLabelPort(label.Id))];
+                        HirPatternSwitchLabel? patternLabel = label as HirPatternSwitchLabel;
+                        ExpressionProjection? guard = patternLabel?.Guard is null
+                            ? null
+                            : ProjectExpression(patternLabel.Guard, sectionRegionId);
+                        if (guard is not null)
+                        {
+                            current = ConnectEffectChain(current, guard.Effects.Distinct());
+                        }
+
+                        IReadOnlyList<ExpressionProjection> patternValues = patternLabel is null
+                            ? []
+                            : ProjectPatternValues(patternLabel.Pattern, sectionRegionId);
+                        var labelPorts = new List<GraphPort>
+                        {
+                            new("in", GraphPortDirection.Input, GraphPortKind.Control),
+                            new("then", GraphPortDirection.Output, GraphPortKind.Control),
+                        };
+                        if (guard is not null)
+                        {
+                            labelPorts.Add(new GraphPort(
+                                "guard",
+                                GraphPortDirection.Input,
+                                GraphPortKind.Data));
+                        }
+                        for (int index = 0; index < patternValues.Count; index++)
+                        {
+                            labelPorts.Add(new GraphPort(
+                                $"patternValue{index}",
+                                GraphPortDirection.Input,
+                                GraphPortKind.Data));
+                        }
+
+                        HirPatternVariable[] variables = patternLabel?.Pattern
+                            .DescendantsAndSelf()
+                            .OfType<HirPatternVariable>()
+                            .ToArray() ?? [];
+                        foreach (HirPatternVariable variable in variables)
+                        {
+                            labelPorts.Add(new GraphPort(
+                                PatternBindingPort(variable.Id),
+                                GraphPortDirection.Output,
+                                GraphPortKind.Data));
+                        }
+
+                        var labelProperties = new SortedDictionary<string, string>(
+                            StringComparer.Ordinal)
+                        {
+                            ["displayText"] = label.DisplayText,
+                            ["isDefault"] = label is HirDefaultSwitchLabel ? "true" : "false",
+                            ["sectionId"] = section.Id.Value,
+                        };
+                        if (patternLabel is not null)
+                        {
+                            labelProperties["patternKind"] = PatternKind(patternLabel.Pattern);
+                            labelProperties["patternText"] = patternLabel.Pattern.DisplayText;
+                            labelProperties["hasGuard"] = patternLabel.Guard is null
+                                ? "false"
+                                : "true";
+                        }
+                        AddNode(new GraphNode(
+                            label.Id,
+                            "switchCase",
+                            label.DisplayText,
+                            label.Span,
+                            labelPorts,
+                            labelProperties),
+                            sectionRegionId);
+                        ConnectIncoming(current, label.Id, "in");
+                        if (guard is not null)
+                        {
+                            AddRequiredDataEdge(
+                                guard.Value,
+                                new ValueEndpoint(label.Id, "guard"));
+                        }
+                        for (int index = 0; index < patternValues.Count; index++)
+                        {
+                            AddRequiredDataEdge(
+                                patternValues[index].Value,
+                                new ValueEndpoint(label.Id, $"patternValue{index}"));
+                        }
+
+                        foreach (HirPatternVariable variable in variables)
+                        {
+                            var variableProperties = new SortedDictionary<string, string>(
+                                StringComparer.Ordinal)
+                            {
+                                ["name"] = variable.Name,
+                                ["type"] = variable.TypeName,
+                                ["binding"] = "matchedValue",
+                                ["readOnly"] = "true",
+                            };
+                            semantics.ApplyNodeProperties(variable.Id, variableProperties);
+                            AddNode(new GraphNode(
+                                variable.Id,
+                                "patternVariable",
+                                $"Pattern {variable.Name}",
+                                variable.Span,
+                                [
+                                    new GraphPort(
+                                        "binding",
+                                        GraphPortDirection.Input,
+                                        GraphPortKind.Data),
+                                    new GraphPort(
+                                        "value",
+                                        GraphPortDirection.Output,
+                                        GraphPortKind.Data),
+                                ],
+                                variableProperties),
+                                sectionRegionId);
+                            AddEdge(
+                                GraphEdgeKind.Data,
+                                new ValueEndpoint(label.Id, PatternBindingPort(variable.Id)),
+                                new ValueEndpoint(variable.Id, "binding"));
+                        }
+
+                        sectionEntries.Add(new ControlEndpoint(label.Id, "then"));
+                    }
+
+                    exits.AddRange(ProjectBlockContents(
+                        section.Body,
+                        sectionEntries,
+                        sectionRegionId));
+                }
+            }
+            finally
+            {
+                _ = breakables.Pop();
+            }
+
+            if (!hasDefault)
+            {
+                exits.Add(new ControlEndpoint(statement.Id, "unmatched"));
+            }
+            exits.AddRange(context.BreakExits);
+            return exits;
+        }
+
+        private IReadOnlyList<ExpressionProjection> ProjectPatternValues(
+            HirPattern pattern,
+            SemanticId regionId)
+        {
+            HirExpression[] values = pattern
+                .DescendantsAndSelf()
+                .Select(static node => node switch
+                {
+                    HirConstantPattern constant => constant.Value,
+                    HirRelationalPattern relational => relational.Value,
+                    _ => null,
+                })
+                .Where(static expression => expression is not null)
+                .Cast<HirExpression>()
+                .DistinctBy(static expression => expression.Id)
+                .ToArray();
+            ExpressionProjection[] projections = values
+                .Select(value => ProjectExpression(value, regionId))
+                .ToArray();
+            if (projections.Any(static projection => projection.Effects.Count > 0))
+            {
+                throw new InvalidOperationException(
+                    $"Switch pattern '{pattern.Id}' contains an effectful constant operand.");
+            }
+
+            return projections;
+        }
+
+        private static string PatternKind(HirPattern pattern) => pattern switch
+        {
+            HirConstantPattern => "constant",
+            HirDeclarationPattern => "declaration",
+            HirTypePattern => "type",
+            HirVarPattern => "var",
+            HirDiscardPattern => "discard",
+            HirRelationalPattern => "relational",
+            HirLogicalPattern logical => logical.Operator,
+            HirNotPattern => "not",
+            HirParenthesizedPattern => "parenthesized",
+            _ => throw new ArgumentOutOfRangeException(nameof(pattern), pattern.GetType().Name),
+        };
+
+        private static string SwitchLabelPort(SemanticId labelId) =>
+            $"case-{labelId.Value}";
+
+        private static string PatternBindingPort(SemanticId variableId) =>
+            $"binding-{variableId.Value}";
 
         private IReadOnlyList<ControlEndpoint> ProjectVariable(
             HirVariableDeclarationStatement variable,
@@ -497,7 +777,7 @@ public sealed class HirGraphProjector
                 ? new ControlTarget(statement.Id, "in")
                 : new ControlTarget(conditionEffects[0], "execIn");
             var context = new LoopContext(continueTarget);
-            loops.Push(context);
+            PushLoop(context);
             IReadOnlyList<ControlEndpoint> bodyExits;
             try
             {
@@ -508,7 +788,7 @@ public sealed class HirGraphProjector
             }
             finally
             {
-                _ = loops.Pop();
+                PopLoop(context);
             }
 
             ConnectIncoming(bodyExits, continueTarget.NodeId, continueTarget.Port);
@@ -656,7 +936,7 @@ public sealed class HirGraphProjector
 
             ControlTarget continueTarget = incrementEntry ?? headerTarget;
             var context = new LoopContext(continueTarget);
-            loops.Push(context);
+            PushLoop(context);
             IReadOnlyList<ControlEndpoint> bodyExits;
             try
             {
@@ -667,7 +947,7 @@ public sealed class HirGraphProjector
             }
             finally
             {
-                _ = loops.Pop();
+                PopLoop(context);
             }
 
             ConnectIncoming(bodyExits, continueTarget.NodeId, continueTarget.Port);
@@ -753,7 +1033,7 @@ public sealed class HirGraphProjector
                 ? new ControlTarget(statement.Id, "in")
                 : new ControlTarget(conditionEffects[0], "execIn");
             var context = new LoopContext(conditionTarget);
-            loops.Push(context);
+            PushLoop(context);
             IReadOnlyList<ControlEndpoint> bodyExits;
             try
             {
@@ -767,7 +1047,7 @@ public sealed class HirGraphProjector
             }
             finally
             {
-                _ = loops.Pop();
+                PopLoop(context);
             }
 
             ConnectIncoming(bodyExits, conditionTarget.NodeId, conditionTarget.Port);
@@ -906,7 +1186,7 @@ public sealed class HirGraphProjector
                 new ValueEndpoint(statement.Variable.Id, "collection"));
 
             var context = new LoopContext(new ControlTarget(statement.Id, "in"));
-            loops.Push(context);
+            PushLoop(context);
             IReadOnlyList<ControlEndpoint> bodyExits;
             try
             {
@@ -917,7 +1197,7 @@ public sealed class HirGraphProjector
             }
             finally
             {
-                _ = loops.Pop();
+                PopLoop(context);
             }
 
             ConnectIncoming(bodyExits, statement.Id, "in");
@@ -1134,7 +1414,7 @@ public sealed class HirGraphProjector
                 new ControlTarget(statement.Id, "in"),
                 returnDisposeId,
                 exceptionDisposeId);
-            loops.Push(context);
+            PushLoop(context);
             IReadOnlyList<ControlEndpoint> bodyExits;
             try
             {
@@ -1145,7 +1425,7 @@ public sealed class HirGraphProjector
             }
             finally
             {
-                _ = loops.Pop();
+                PopLoop(context);
             }
 
             ConnectIncoming(bodyExits, statement.Id, "in");
@@ -1308,7 +1588,7 @@ public sealed class HirGraphProjector
             IReadOnlyList<ControlEndpoint> incoming,
             SemanticId regionId)
         {
-            LoopContext context = RequireLoopContext(statement);
+            BreakContext context = RequireBreakContext(statement);
             AddNode(ControlTransferNode(statement, "break", "Break"), regionId);
             ConnectIncoming(incoming, statement.Id, "in");
             context.BreakExits.Add(new ControlEndpoint(statement.Id, "then"));
@@ -1334,6 +1614,28 @@ public sealed class HirGraphProjector
             ? context
             : throw new InvalidOperationException(
                 $"Loop-control statement '{statement.Id}' has no enclosing loop.");
+
+        private BreakContext RequireBreakContext(HirStatement statement) =>
+            breakables.TryPeek(out BreakContext? context)
+                ? context
+                : throw new InvalidOperationException(
+                    $"Break statement '{statement.Id}' has no enclosing loop or switch.");
+
+        private void PushLoop(LoopContext context)
+        {
+            loops.Push(context);
+            breakables.Push(context);
+        }
+
+        private void PopLoop(LoopContext expected)
+        {
+            LoopContext loop = loops.Pop();
+            BreakContext breakable = breakables.Pop();
+            if (!ReferenceEquals(loop, expected) || !ReferenceEquals(breakable, expected))
+            {
+                throw new InvalidOperationException("Structured control context stack is inconsistent.");
+            }
+        }
 
         private static GraphNode ControlTransferNode(
             HirStatement statement,
@@ -1893,14 +2195,21 @@ public sealed class HirGraphProjector
         private LoopContext? FindCleanupContext() => loops.FirstOrDefault(
             static context => context.ReturnCleanupNodeId is not null);
 
+        private abstract class BreakContext
+        {
+            public List<ControlEndpoint> BreakExits { get; } = [];
+        }
+
+        private sealed class SwitchContext : BreakContext
+        {
+        }
+
         private sealed class LoopContext(
             ControlTarget continueTarget,
             SemanticId? returnCleanupNodeId = null,
-            SemanticId? exceptionCleanupNodeId = null)
+            SemanticId? exceptionCleanupNodeId = null) : BreakContext
         {
             public ControlTarget ContinueTarget { get; } = continueTarget;
-
-            public List<ControlEndpoint> BreakExits { get; } = [];
 
             public SemanticId? ReturnCleanupNodeId { get; } = returnCleanupNodeId;
 

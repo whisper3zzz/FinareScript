@@ -488,7 +488,7 @@ def main() -> int:
         if node["kind"] == "assignment"
     }
     require(
-        graph_document["schemaVersion"] == "unifiedscript.graph/v0.12"
+        graph_document["schemaVersion"] == "unifiedscript.graph/v0.13"
         and graph_document["sourceCompilationId"]
         == declaration_document["sourceCompilationId"]
         and graph_document["semanticConfigurationId"]
@@ -4035,9 +4035,9 @@ def main() -> int:
     )
     require(
         golden_manifest["artifacts"]["graph"]["schemaVersion"]
-        == "unifiedscript.graph/v0.12"
+        == "unifiedscript.graph/v0.13"
         and golden_manifest["artifacts"]["hir"]["schemaVersion"]
-        == "unifiedscript.hir/v0.7"
+        == "unifiedscript.hir/v0.8"
         and "if ((damage > threshold) && !disabled)" in region_source
         and "return true;" in region_source
         and "return false;" in region_source,

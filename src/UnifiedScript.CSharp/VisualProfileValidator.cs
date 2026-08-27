@@ -174,6 +174,31 @@ public sealed class VisualProfileValidator
                 return;
             }
 
+            if (node is PatternSyntax pattern && !IsSupportedPattern(pattern))
+            {
+                Add(
+                    diagnostics,
+                    VisualProfileDiagnosticCodes.PatternNotSupported,
+                    $"Pattern '{pattern.Kind()}' is not supported in Visual C# profile v0.2. " +
+                    "Use constant, declaration, type, var, discard, relational, not, and/or, " +
+                    "or parenthesized patterns.",
+                    pattern,
+                    filePath);
+                return;
+            }
+
+            if (node is VariableDesignationSyntax designation && designation is not (
+                    SingleVariableDesignationSyntax or DiscardDesignationSyntax))
+            {
+                Add(
+                    diagnostics,
+                    VisualProfileDiagnosticCodes.PatternNotSupported,
+                    "Only a single variable or discard designation is supported in a Visual pattern.",
+                    designation,
+                    filePath);
+                return;
+            }
+
             if (node is ExpressionSyntax expression && !IsSupportedExpression(expression))
             {
                 Add(
@@ -259,7 +284,18 @@ public sealed class VisualProfileValidator
 
         public override void VisitBreakStatement(BreakStatementSyntax node)
         {
-            ValidateLoopControlTarget(node);
+            if (!node.Ancestors().Any(static ancestor =>
+                    ancestor is WhileStatementSyntax or DoStatementSyntax or ForStatementSyntax or
+                        ForEachStatementSyntax or SwitchStatementSyntax))
+            {
+                Add(
+                    diagnostics,
+                    VisualProfileDiagnosticCodes.BreakTargetRequired,
+                    "'break' requires an enclosing loop or switch in Visual C# profile v0.2.",
+                    node,
+                    filePath);
+            }
+
             base.VisitBreakStatement(node);
         }
 
@@ -386,6 +422,9 @@ public sealed class VisualProfileValidator
                     ParameterSyntax parameter => parameter.Type?.Span.Contains(typeSyntax.Span) == true,
                     VariableDeclarationSyntax declaration => declaration.Type.Span.Contains(typeSyntax.Span),
                     ForEachStatementSyntax forEach => forEach.Type.Span.Contains(typeSyntax.Span),
+                    DeclarationPatternSyntax declarationPattern =>
+                        declarationPattern.Type.Span.Contains(typeSyntax.Span),
+                    TypePatternSyntax typePattern => typePattern.Type.Span.Contains(typeSyntax.Span),
                     MethodDeclarationSyntax method => method.ReturnType.Span.Contains(typeSyntax.Span),
                     CastExpressionSyntax cast => cast.Type.Span.Contains(typeSyntax.Span),
                     ObjectCreationExpressionSyntax creation => creation.Type.Span.Contains(typeSyntax.Span),
@@ -413,10 +452,22 @@ public sealed class VisualProfileValidator
             SyntaxKind.DoStatement or
             SyntaxKind.ForStatement or
             SyntaxKind.ForEachStatement or
+            SyntaxKind.SwitchStatement or
             SyntaxKind.BreakStatement or
             SyntaxKind.ContinueStatement or
             SyntaxKind.ReturnStatement or
             SyntaxKind.EmptyStatement;
+
+        private static bool IsSupportedPattern(PatternSyntax pattern) => pattern is
+            ConstantPatternSyntax or
+            DeclarationPatternSyntax or
+            TypePatternSyntax or
+            VarPatternSyntax or
+            DiscardPatternSyntax or
+            RelationalPatternSyntax or
+            BinaryPatternSyntax or
+            UnaryPatternSyntax or
+            ParenthesizedPatternSyntax;
 
         private static bool IsSupportedExpression(ExpressionSyntax expression) => expression is
             LiteralExpressionSyntax or

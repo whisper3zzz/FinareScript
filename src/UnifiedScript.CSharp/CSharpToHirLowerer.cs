@@ -203,6 +203,10 @@ public sealed class CSharpToHirLowerer
                 forEachStatement,
                 filePath,
                 ownerKey),
+            SwitchStatementSyntax switchStatement => LowerSwitch(
+                switchStatement,
+                filePath,
+                ownerKey),
             BreakStatementSyntax breakStatement => new HirBreakStatement(
                 CSharpSemanticIds.ForNode(filePath, ownerKey, breakStatement),
                 RoslynSourceSpan.FromNode(breakStatement, filePath)),
@@ -221,6 +225,154 @@ public sealed class CSharpToHirLowerer
                 []),
             _ => throw new InvalidOperationException($"Profile validator admitted unsupported statement {statement.Kind()}.")
         };
+
+    private static HirSwitchStatement LowerSwitch(
+        SwitchStatementSyntax statement,
+        string filePath,
+        string ownerKey) => new(
+            CSharpSemanticIds.ForNode(filePath, ownerKey, statement),
+            RoslynSourceSpan.FromNode(statement, filePath),
+            LowerExpression(statement.Expression, filePath, ownerKey),
+            statement.Sections
+                .Select(section => LowerSwitchSection(section, filePath, ownerKey))
+                .ToArray());
+
+    private static HirSwitchSection LowerSwitchSection(
+        SwitchSectionSyntax section,
+        string filePath,
+        string ownerKey) => new(
+            CSharpSemanticIds.ForNode(filePath, ownerKey, section),
+            RoslynSourceSpan.FromNode(section, filePath),
+            section.Labels
+                .Select(label => LowerSwitchLabel(label, filePath, ownerKey))
+                .ToArray(),
+            new HirBlockStatement(
+                CSharpSemanticIds.ForNode(filePath, ownerKey, section, "switchSectionBody"),
+                RoslynSourceSpan.FromNode(section, filePath),
+                section.Statements
+                    .Select(child => LowerStatement(child, filePath, ownerKey))
+                    .ToArray()));
+
+    private static HirSwitchLabel LowerSwitchLabel(
+        SwitchLabelSyntax label,
+        string filePath,
+        string ownerKey) => label switch
+        {
+            CaseSwitchLabelSyntax @case => new HirPatternSwitchLabel(
+                CSharpSemanticIds.ForNode(filePath, ownerKey, @case),
+                RoslynSourceSpan.FromNode(@case, filePath),
+                NormalizeSwitchLabel(@case),
+                new HirConstantPattern(
+                    CSharpSemanticIds.ForNode(
+                        filePath,
+                        ownerKey,
+                        @case.Value,
+                        "switchConstantPattern"),
+                    RoslynSourceSpan.FromNode(@case.Value, filePath),
+                    @case.Value.ToString(),
+                    LowerExpression(@case.Value, filePath, ownerKey)),
+                null),
+            CasePatternSwitchLabelSyntax @case => new HirPatternSwitchLabel(
+                CSharpSemanticIds.ForNode(filePath, ownerKey, @case),
+                RoslynSourceSpan.FromNode(@case, filePath),
+                NormalizeSwitchLabel(@case),
+                LowerPattern(@case.Pattern, filePath, ownerKey),
+                @case.WhenClause is null
+                    ? null
+                    : LowerExpression(@case.WhenClause.Condition, filePath, ownerKey)),
+            DefaultSwitchLabelSyntax @default => new HirDefaultSwitchLabel(
+                CSharpSemanticIds.ForNode(filePath, ownerKey, @default),
+                RoslynSourceSpan.FromNode(@default, filePath),
+                "default"),
+            _ => throw new InvalidOperationException(
+                $"Profile validator admitted unsupported switch label {label.Kind()}.")
+        };
+
+    private static HirPattern LowerPattern(
+        PatternSyntax pattern,
+        string filePath,
+        string ownerKey) => pattern switch
+        {
+            ConstantPatternSyntax constant => new HirConstantPattern(
+                CSharpSemanticIds.ForNode(filePath, ownerKey, constant),
+                RoslynSourceSpan.FromNode(constant, filePath),
+                constant.ToString(),
+                LowerExpression(constant.Expression, filePath, ownerKey)),
+            DeclarationPatternSyntax declaration => new HirDeclarationPattern(
+                CSharpSemanticIds.ForNode(filePath, ownerKey, declaration),
+                RoslynSourceSpan.FromNode(declaration, filePath),
+                declaration.ToString(),
+                declaration.Type.ToString(),
+                LowerPatternVariable(
+                    declaration.Designation,
+                    declaration.Type.ToString(),
+                    filePath,
+                    ownerKey),
+                declaration.Designation is DiscardDesignationSyntax),
+            TypePatternSyntax type => new HirTypePattern(
+                CSharpSemanticIds.ForNode(filePath, ownerKey, type),
+                RoslynSourceSpan.FromNode(type, filePath),
+                type.ToString(),
+                type.Type.ToString()),
+            VarPatternSyntax varPattern => new HirVarPattern(
+                CSharpSemanticIds.ForNode(filePath, ownerKey, varPattern),
+                RoslynSourceSpan.FromNode(varPattern, filePath),
+                varPattern.ToString(),
+                LowerPatternVariable(
+                    varPattern.Designation,
+                    "var",
+                    filePath,
+                    ownerKey),
+                varPattern.Designation is DiscardDesignationSyntax),
+            DiscardPatternSyntax discard => new HirDiscardPattern(
+                CSharpSemanticIds.ForNode(filePath, ownerKey, discard),
+                RoslynSourceSpan.FromNode(discard, filePath),
+                discard.ToString()),
+            RelationalPatternSyntax relational => new HirRelationalPattern(
+                CSharpSemanticIds.ForNode(filePath, ownerKey, relational),
+                RoslynSourceSpan.FromNode(relational, filePath),
+                relational.ToString(),
+                relational.OperatorToken.ValueText,
+                LowerExpression(relational.Expression, filePath, ownerKey)),
+            BinaryPatternSyntax binary => new HirLogicalPattern(
+                CSharpSemanticIds.ForNode(filePath, ownerKey, binary),
+                RoslynSourceSpan.FromNode(binary, filePath),
+                binary.ToString(),
+                binary.OperatorToken.ValueText,
+                LowerPattern(binary.Left, filePath, ownerKey),
+                LowerPattern(binary.Right, filePath, ownerKey)),
+            UnaryPatternSyntax unary => new HirNotPattern(
+                CSharpSemanticIds.ForNode(filePath, ownerKey, unary),
+                RoslynSourceSpan.FromNode(unary, filePath),
+                unary.ToString(),
+                LowerPattern(unary.Pattern, filePath, ownerKey)),
+            ParenthesizedPatternSyntax parenthesized => new HirParenthesizedPattern(
+                CSharpSemanticIds.ForNode(filePath, ownerKey, parenthesized),
+                RoslynSourceSpan.FromNode(parenthesized, filePath),
+                parenthesized.ToString(),
+                LowerPattern(parenthesized.Pattern, filePath, ownerKey)),
+            _ => throw new InvalidOperationException(
+                $"Profile validator admitted unsupported pattern {pattern.Kind()}.")
+        };
+
+    private static HirPatternVariable? LowerPatternVariable(
+        VariableDesignationSyntax designation,
+        string typeName,
+        string filePath,
+        string ownerKey) => designation switch
+        {
+            SingleVariableDesignationSyntax variable => new HirPatternVariable(
+                CSharpSemanticIds.ForNode(filePath, ownerKey, variable),
+                RoslynSourceSpan.FromNode(variable, filePath),
+                variable.Identifier.ValueText,
+                typeName),
+            DiscardDesignationSyntax => null,
+            _ => throw new InvalidOperationException(
+                $"Profile validator admitted unsupported designation {designation.Kind()}.")
+        };
+
+    private static string NormalizeSwitchLabel(SwitchLabelSyntax label) =>
+        label.ToString().Trim().TrimEnd(':').TrimEnd();
 
     private static HirForStatement LowerFor(
         ForStatementSyntax statement,

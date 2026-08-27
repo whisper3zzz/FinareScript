@@ -298,10 +298,73 @@ internal sealed class HirPatchIndex
                     AddExpression(forEachStatement.Collection, forEachStatement, block, method, null);
                     AddBlock(forEachStatement.Body, method, block, forEachStatement);
                     break;
+                case HirSwitchStatement switchStatement:
+                    AddExpression(
+                        switchStatement.GoverningExpression,
+                        switchStatement,
+                        block,
+                        method,
+                        null);
+                    foreach (HirSwitchSection section in switchStatement.Sections)
+                    {
+                        foreach (HirPatternSwitchLabel label in section.Labels
+                                     .OfType<HirPatternSwitchLabel>())
+                        {
+                            AddPatternExpressions(
+                                label.Pattern,
+                                switchStatement,
+                                block,
+                                method);
+                            if (label.Guard is not null)
+                            {
+                                AddExpression(
+                                    label.Guard,
+                                    switchStatement,
+                                    block,
+                                    method,
+                                    null);
+                            }
+                        }
+
+                        AddBlock(section.Body, method, block, switchStatement);
+                    }
+
+                    break;
                 case HirReturnStatement { Expression: not null } returnStatement:
                     AddExpression(returnStatement.Expression, returnStatement, block, method, null);
                     break;
             }
+        }
+    }
+
+    private void AddPatternExpressions(
+        HirPattern pattern,
+        HirSwitchStatement containingStatement,
+        HirBlockStatement parentBlock,
+        HirMethodDeclaration method)
+    {
+        switch (pattern)
+        {
+            case HirConstantPattern constant:
+                AddExpression(constant.Value, containingStatement, parentBlock, method, null);
+                break;
+            case HirRelationalPattern relational:
+                AddExpression(relational.Value, containingStatement, parentBlock, method, null);
+                break;
+            case HirLogicalPattern logical:
+                AddPatternExpressions(logical.Left, containingStatement, parentBlock, method);
+                AddPatternExpressions(logical.Right, containingStatement, parentBlock, method);
+                break;
+            case HirNotPattern not:
+                AddPatternExpressions(not.Operand, containingStatement, parentBlock, method);
+                break;
+            case HirParenthesizedPattern parenthesized:
+                AddPatternExpressions(
+                    parenthesized.Pattern,
+                    containingStatement,
+                    parentBlock,
+                    method);
+                break;
         }
     }
 

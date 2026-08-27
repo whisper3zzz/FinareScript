@@ -101,6 +101,16 @@ internal static class HirIdentityRewriter
                 Collection = RewriteExpression(forEachStatement.Collection, identities),
                 Body = RewriteBlock(forEachStatement.Body, identities),
             },
+            HirSwitchStatement switchStatement => switchStatement with
+            {
+                Id = GetId(switchStatement, identities),
+                GoverningExpression = RewriteExpression(
+                    switchStatement.GoverningExpression,
+                    identities),
+                Sections = switchStatement.Sections
+                    .Select(section => RewriteSwitchSection(section, identities))
+                    .ToArray(),
+            },
             HirBreakStatement breakStatement => breakStatement with
             {
                 Id = GetId(breakStatement, identities),
@@ -117,6 +127,91 @@ internal static class HirIdentityRewriter
                     : RewriteExpression(returnStatement.Expression, identities),
             },
             _ => throw new ArgumentOutOfRangeException(nameof(statement), statement.GetType().Name),
+        };
+
+    private static HirSwitchSection RewriteSwitchSection(
+        HirSwitchSection section,
+        IReadOnlyDictionary<SemanticId, SemanticId> identities) => section with
+        {
+            Id = GetId(section, identities),
+            Labels = section.Labels
+                .Select(label => RewriteSwitchLabel(label, identities))
+                .ToArray(),
+            Body = RewriteBlock(section.Body, identities),
+        };
+
+    private static HirSwitchLabel RewriteSwitchLabel(
+        HirSwitchLabel label,
+        IReadOnlyDictionary<SemanticId, SemanticId> identities) => label switch
+        {
+            HirPatternSwitchLabel pattern => pattern with
+            {
+                Id = GetId(pattern, identities),
+                Pattern = RewritePattern(pattern.Pattern, identities),
+                Guard = pattern.Guard is null
+                    ? null
+                    : RewriteExpression(pattern.Guard, identities),
+            },
+            HirDefaultSwitchLabel @default => @default with
+            {
+                Id = GetId(@default, identities),
+            },
+            _ => throw new ArgumentOutOfRangeException(nameof(label), label.GetType().Name),
+        };
+
+    private static HirPattern RewritePattern(
+        HirPattern pattern,
+        IReadOnlyDictionary<SemanticId, SemanticId> identities) => pattern switch
+        {
+            HirConstantPattern constant => constant with
+            {
+                Id = GetId(constant, identities),
+                Value = RewriteExpression(constant.Value, identities),
+            },
+            HirDeclarationPattern declaration => declaration with
+            {
+                Id = GetId(declaration, identities),
+                Variable = declaration.Variable is null
+                    ? null
+                    : declaration.Variable with
+                    {
+                        Id = GetId(declaration.Variable, identities),
+                    },
+            },
+            HirTypePattern type => type with { Id = GetId(type, identities) },
+            HirVarPattern varPattern => varPattern with
+            {
+                Id = GetId(varPattern, identities),
+                Variable = varPattern.Variable is null
+                    ? null
+                    : varPattern.Variable with
+                    {
+                        Id = GetId(varPattern.Variable, identities),
+                    },
+            },
+            HirDiscardPattern discard => discard with { Id = GetId(discard, identities) },
+            HirRelationalPattern relational => relational with
+            {
+                Id = GetId(relational, identities),
+                Value = RewriteExpression(relational.Value, identities),
+            },
+            HirLogicalPattern logical => logical with
+            {
+                Id = GetId(logical, identities),
+                Left = RewritePattern(logical.Left, identities),
+                Right = RewritePattern(logical.Right, identities),
+            },
+            HirNotPattern not => not with
+            {
+                Id = GetId(not, identities),
+                Operand = RewritePattern(not.Operand, identities),
+            },
+            HirParenthesizedPattern parenthesized => parenthesized with
+            {
+                Id = GetId(parenthesized, identities),
+                Pattern = RewritePattern(parenthesized.Pattern, identities),
+            },
+            _ => throw new ArgumentOutOfRangeException(nameof(pattern), pattern.GetType().Name),
         };
 
     private static HirForVariableDeclaration RewriteForDeclaration(

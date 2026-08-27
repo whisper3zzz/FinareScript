@@ -191,6 +191,14 @@ public static class GraphJson
                     $"Graph region '{region.Id}' must be a direct child of an if region.");
             }
 
+            if (region.Kind == GraphRegionKind.SwitchSection &&
+                (region.ParentRegionId is not SemanticId switchParentId ||
+                    regions[switchParentId].Kind != GraphRegionKind.Switch))
+            {
+                throw new JsonException(
+                    $"Graph region '{region.Id}' must be a direct child of a switch region.");
+            }
+
             if (region.Kind is (GraphRegionKind.LoopInitializer or
                     GraphRegionKind.LoopCollection or
                     GraphRegionKind.LoopBody or
@@ -244,6 +252,54 @@ public static class GraphJson
                 {
                     throw new JsonException(
                         $"If region '{region.Id}' requires its branch node and ordered then/else children.");
+                }
+            }
+
+            if (region.Kind == GraphRegionKind.Switch)
+            {
+                GraphRegion[] children = region.ChildRegionIds.Select(id => regions[id]).ToArray();
+                bool hasSwitchNode = region.NodeIds.Contains(region.SourceNodeId) &&
+                    nodes[region.SourceNodeId].Kind == "switch";
+                GraphNode? switchNode = hasSwitchNode ? nodes[region.SourceNodeId] : null;
+                GraphNode[] labels = children
+                    .SelectMany(static child => child.NodeIds)
+                    .Select(id => nodes[id])
+                    .Where(static node => node.Kind == "switchCase")
+                    .ToArray();
+                int defaultCount = labels.Count(static label =>
+                    label.Properties.GetValueOrDefault("isDefault") == "true");
+                bool hasDefault = defaultCount == 1;
+                bool hasValidCounts = switchNode is not null &&
+                    int.TryParse(
+                        switchNode.Properties.GetValueOrDefault("sectionCount"),
+                        System.Globalization.NumberStyles.None,
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        out int sectionCount) &&
+                    sectionCount == children.Length &&
+                    int.TryParse(
+                        switchNode.Properties.GetValueOrDefault("labelCount"),
+                        System.Globalization.NumberStyles.None,
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        out int labelCount) &&
+                    labelCount == labels.Length &&
+                    switchNode.Properties.GetValueOrDefault("hasDefault") ==
+                        (hasDefault ? "true" : "false");
+                bool hasValidChildren = defaultCount <= 1 &&
+                    children.All(static child => child.Kind == GraphRegionKind.SwitchSection) &&
+                    children.All(child => child.NodeIds
+                        .Select(id => nodes[id])
+                        .Any(static node => node.Kind == "switchCase"));
+                bool labelsOwnSections = children.All(child => child.NodeIds
+                    .Select(id => nodes[id])
+                    .Where(static node => node.Kind == "switchCase")
+                    .All(label => label.Properties.GetValueOrDefault("sectionId") ==
+                        child.SourceNodeId.Value));
+                if (!hasSwitchNode || !hasValidCounts || !hasValidChildren ||
+                    !labelsOwnSections)
+                {
+                    throw new JsonException(
+                        $"Switch region '{region.Id}' requires one switch node and ordered " +
+                        "case-label section regions with consistent counts and ownership.");
                 }
             }
 

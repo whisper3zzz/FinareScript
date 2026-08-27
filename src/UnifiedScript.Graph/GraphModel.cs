@@ -27,6 +27,8 @@ public enum GraphRegionKind
     If,
     Then,
     Else,
+    Switch,
+    SwitchSection,
     Loop,
     LoopInitializer,
     LoopCollection,
@@ -80,5 +82,5 @@ public sealed record GraphDocument(
     SemanticId? SemanticConfigurationId,
     IReadOnlyList<GraphFunction> Functions)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.graph/v0.12";
+    public const string CurrentSchemaVersion = "unifiedscript.graph/v0.13";
 }

@@ -8,8 +8,8 @@ program.
 
 The strict-reader contracts for this slice are:
 
-- HIR `unifiedscript.hir/v0.7`;
-- Graph `unifiedscript.graph/v0.12`;
+- HIR `unifiedscript.hir/v0.8`;
+- Graph `unifiedscript.graph/v0.13`;
 - standalone patch `unifiedscript.patch/v0.21`;
 - patch plan `unifiedscript.patch-plan/v0.21`.
 

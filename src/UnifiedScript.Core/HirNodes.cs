@@ -69,6 +69,7 @@ public sealed record HirStateDeclaration(
 [JsonDerivedType(typeof(HirDoWhileStatement), "doWhile")]
 [JsonDerivedType(typeof(HirForStatement), "for")]
 [JsonDerivedType(typeof(HirForEachStatement), "forEach")]
+[JsonDerivedType(typeof(HirSwitchStatement), "switch")]
 [JsonDerivedType(typeof(HirBreakStatement), "break")]
 [JsonDerivedType(typeof(HirContinueStatement), "continue")]
 [JsonDerivedType(typeof(HirReturnStatement), "return")]
@@ -127,6 +128,118 @@ public sealed record HirForEachStatement(
     HirBlockStatement Body) : HirStatement(Id, Span);
 
 public sealed record HirForEachVariable(
+    SemanticId Id,
+    SourceSpan Span,
+    string Name,
+    string TypeName) : HirNode(Id, Span);
+
+public sealed record HirSwitchStatement(
+    SemanticId Id,
+    SourceSpan Span,
+    HirExpression GoverningExpression,
+    IReadOnlyList<HirSwitchSection> Sections) : HirStatement(Id, Span);
+
+public sealed record HirSwitchSection(
+    SemanticId Id,
+    SourceSpan Span,
+    IReadOnlyList<HirSwitchLabel> Labels,
+    HirBlockStatement Body) : HirNode(Id, Span);
+
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]
+[JsonDerivedType(typeof(HirPatternSwitchLabel), "pattern")]
+[JsonDerivedType(typeof(HirDefaultSwitchLabel), "default")]
+public abstract record HirSwitchLabel(
+    SemanticId Id,
+    SourceSpan Span,
+    string DisplayText) : HirNode(Id, Span);
+
+public sealed record HirPatternSwitchLabel(
+    SemanticId Id,
+    SourceSpan Span,
+    string DisplayText,
+    HirPattern Pattern,
+    HirExpression? Guard) : HirSwitchLabel(Id, Span, DisplayText);
+
+public sealed record HirDefaultSwitchLabel(
+    SemanticId Id,
+    SourceSpan Span,
+    string DisplayText) : HirSwitchLabel(Id, Span, DisplayText);
+
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]
+[JsonDerivedType(typeof(HirConstantPattern), "constant")]
+[JsonDerivedType(typeof(HirDeclarationPattern), "declaration")]
+[JsonDerivedType(typeof(HirTypePattern), "type")]
+[JsonDerivedType(typeof(HirVarPattern), "var")]
+[JsonDerivedType(typeof(HirDiscardPattern), "discard")]
+[JsonDerivedType(typeof(HirRelationalPattern), "relational")]
+[JsonDerivedType(typeof(HirLogicalPattern), "logical")]
+[JsonDerivedType(typeof(HirNotPattern), "not")]
+[JsonDerivedType(typeof(HirParenthesizedPattern), "parenthesized")]
+public abstract record HirPattern(
+    SemanticId Id,
+    SourceSpan Span,
+    string DisplayText) : HirNode(Id, Span);
+
+public sealed record HirConstantPattern(
+    SemanticId Id,
+    SourceSpan Span,
+    string DisplayText,
+    HirExpression Value) : HirPattern(Id, Span, DisplayText);
+
+public sealed record HirDeclarationPattern(
+    SemanticId Id,
+    SourceSpan Span,
+    string DisplayText,
+    string TypeName,
+    HirPatternVariable? Variable,
+    bool IsDiscardDesignation) : HirPattern(Id, Span, DisplayText);
+
+public sealed record HirTypePattern(
+    SemanticId Id,
+    SourceSpan Span,
+    string DisplayText,
+    string TypeName) : HirPattern(Id, Span, DisplayText);
+
+public sealed record HirVarPattern(
+    SemanticId Id,
+    SourceSpan Span,
+    string DisplayText,
+    HirPatternVariable? Variable,
+    bool IsDiscardDesignation) : HirPattern(Id, Span, DisplayText);
+
+public sealed record HirDiscardPattern(
+    SemanticId Id,
+    SourceSpan Span,
+    string DisplayText) : HirPattern(Id, Span, DisplayText);
+
+public sealed record HirRelationalPattern(
+    SemanticId Id,
+    SourceSpan Span,
+    string DisplayText,
+    string Operator,
+    HirExpression Value) : HirPattern(Id, Span, DisplayText);
+
+public sealed record HirLogicalPattern(
+    SemanticId Id,
+    SourceSpan Span,
+    string DisplayText,
+    string Operator,
+    HirPattern Left,
+    HirPattern Right) : HirPattern(Id, Span, DisplayText);
+
+public sealed record HirNotPattern(
+    SemanticId Id,
+    SourceSpan Span,
+    string DisplayText,
+    HirPattern Operand) : HirPattern(Id, Span, DisplayText);
+
+public sealed record HirParenthesizedPattern(
+    SemanticId Id,
+    SourceSpan Span,
+    string DisplayText,
+    HirPattern Pattern) : HirPattern(Id, Span, DisplayText);
+
+public sealed record HirPatternVariable(
     SemanticId Id,
     SourceSpan Span,
     string Name,

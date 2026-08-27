@@ -227,6 +227,24 @@ public sealed class RoslynSemanticBinder
                         localType.Id,
                         DeclaredSymbolId: forEach.Variable.Id);
                 }
+
+                foreach (HirPatternVariable patternVariable in method.Body
+                             .DescendantsAndSelf()
+                             .OfType<HirPatternVariable>())
+                {
+                    SingleVariableDesignationSyntax designation =
+                        context.SyntaxIndex.Find<SingleVariableDesignationSyntax>(patternVariable);
+                    ILocalSymbol localSymbol =
+                        context.SemanticModel.GetDeclaredSymbol(designation) as ILocalSymbol ??
+                        throw new InvalidOperationException(
+                            $"Roslyn did not bind pattern local '{patternVariable.Name}'.");
+                    declaredSymbols[localSymbol] = patternVariable.Id;
+                    TypeDescriptor localType = GetTypeDescriptor(localSymbol.Type);
+                    nodes[patternVariable.Id] = new BoundNodeInfo(
+                        patternVariable.Id,
+                        localType.Id,
+                        DeclaredSymbolId: patternVariable.Id);
+                }
             }
         }
     }
@@ -911,6 +929,16 @@ public sealed class RoslynSemanticBinder
                     }
 
                     break;
+                case HirSwitchStatement switchStatement:
+                    foreach (HirSwitchSection section in switchStatement.Sections)
+                    {
+                        foreach (HirStatement child in EnumerateStatements(section.Body))
+                        {
+                            yield return child;
+                        }
+                    }
+
+                    break;
             }
         }
     }
@@ -929,6 +957,7 @@ public sealed class RoslynSemanticBinder
                 HirDoWhileStatement doWhileStatement => [doWhileStatement.Condition],
                 HirForStatement forStatement => GetForExpressionRoots(forStatement),
                 HirForEachStatement forEachStatement => [forEachStatement.Collection],
+                HirSwitchStatement switchStatement => GetSwitchExpressionRoots(switchStatement),
                 HirReturnStatement { Expression: not null } returnStatement =>
                     [returnStatement.Expression],
                 _ => [],
@@ -968,6 +997,28 @@ public sealed class RoslynSemanticBinder
         foreach (HirExpression incrementor in statement.Incrementors)
         {
             yield return incrementor;
+        }
+    }
+
+    private static IEnumerable<HirExpression> GetSwitchExpressionRoots(
+        HirSwitchStatement statement)
+    {
+        yield return statement.GoverningExpression;
+        foreach (HirPatternSwitchLabel label in statement.Sections
+                     .SelectMany(static section => section.Labels)
+                     .OfType<HirPatternSwitchLabel>())
+        {
+            foreach (HirExpression expression in label.Pattern
+                         .DescendantsAndSelf()
+                         .OfType<HirExpression>())
+            {
+                yield return expression;
+            }
+
+            if (label.Guard is not null)
+            {
+                yield return label.Guard;
+            }
         }
     }
 

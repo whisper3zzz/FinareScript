@@ -400,6 +400,52 @@ public sealed class CSharpIdentityReconciler
                     Visit(forEachStatement.Collection, owner, "collection", childParent);
                     Visit(forEachStatement.Body, owner, "body", childParent);
                     break;
+                case HirSwitchStatement switchStatement:
+                    Visit(switchStatement.GoverningExpression, owner, "governingExpression", childParent);
+                    foreach (HirSwitchSection section in switchStatement.Sections)
+                    {
+                        Visit(section, owner, "section", childParent);
+                    }
+
+                    break;
+                case HirSwitchSection section:
+                    foreach (HirSwitchLabel label in section.Labels)
+                    {
+                        Visit(label, owner, "label", childParent);
+                    }
+
+                    Visit(section.Body, owner, "body", childParent);
+                    break;
+                case HirPatternSwitchLabel label:
+                    Visit(label.Pattern, owner, "pattern", childParent);
+                    if (label.Guard is not null)
+                    {
+                        Visit(label.Guard, owner, "guard", childParent);
+                    }
+
+                    break;
+                case HirConstantPattern pattern:
+                    Visit(pattern.Value, owner, "value", childParent);
+                    break;
+                case HirDeclarationPattern { Variable: not null } pattern:
+                    Visit(pattern.Variable, owner, "variable", childParent);
+                    break;
+                case HirVarPattern { Variable: not null } pattern:
+                    Visit(pattern.Variable, owner, "variable", childParent);
+                    break;
+                case HirRelationalPattern pattern:
+                    Visit(pattern.Value, owner, "value", childParent);
+                    break;
+                case HirLogicalPattern pattern:
+                    Visit(pattern.Left, owner, "left", childParent);
+                    Visit(pattern.Right, owner, "right", childParent);
+                    break;
+                case HirNotPattern pattern:
+                    Visit(pattern.Operand, owner, "operand", childParent);
+                    break;
+                case HirParenthesizedPattern pattern:
+                    Visit(pattern.Pattern, owner, "pattern", childParent);
+                    break;
                 case HirForVariableDeclaration declaration:
                     foreach (HirForVariableDeclarator variable in declaration.Variables)
                     {
@@ -505,6 +551,24 @@ public sealed class CSharpIdentityReconciler
                 Child(forEachStatement.Variable) +
                 Child(forEachStatement.Collection) +
                 Child(forEachStatement.Body),
+            HirSwitchStatement switchStatement => GetShapeKey(switchStatement) +
+                Child(switchStatement.GoverningExpression) +
+                "[" + string.Join(',', switchStatement.Sections.Select(section =>
+                    GetStructuralFingerprint(section, cache))) + "]",
+            HirSwitchSection section => GetShapeKey(section) +
+                "[" + string.Join(',', section.Labels.Select(label =>
+                    GetStructuralFingerprint(label, cache))) + "]" +
+                Child(section.Body),
+            HirPatternSwitchLabel label => GetShapeKey(label) +
+                Child(label.Pattern) + Child(label.Guard),
+            HirConstantPattern pattern => GetShapeKey(pattern) + Child(pattern.Value),
+            HirDeclarationPattern pattern => GetShapeKey(pattern) + Child(pattern.Variable),
+            HirVarPattern pattern => GetShapeKey(pattern) + Child(pattern.Variable),
+            HirRelationalPattern pattern => GetShapeKey(pattern) + Child(pattern.Value),
+            HirLogicalPattern pattern => GetShapeKey(pattern) +
+                Child(pattern.Left) + Child(pattern.Right),
+            HirNotPattern pattern => GetShapeKey(pattern) + Child(pattern.Operand),
+            HirParenthesizedPattern pattern => GetShapeKey(pattern) + Child(pattern.Pattern),
             HirForVariableDeclaration declaration => GetShapeKey(declaration) +
                 "[" + string.Join(',', declaration.Variables.Select(variable =>
                     GetStructuralFingerprint(variable, cache))) + "]",
@@ -551,6 +615,21 @@ public sealed class CSharpIdentityReconciler
             $"{forStatement.Condition is not null}|{forStatement.Incrementors.Count}",
         HirForEachStatement => "forEach",
         HirForEachVariable variable => $"forEachVariable|{variable.Name}|{variable.TypeName}",
+        HirSwitchStatement statement => $"switch|{statement.Sections.Count}",
+        HirSwitchSection section => $"switchSection|{section.Labels.Count}",
+        HirPatternSwitchLabel label => $"switchLabel|pattern|{label.DisplayText}",
+        HirDefaultSwitchLabel => "switchLabel|default",
+        HirConstantPattern pattern => $"constantPattern|{pattern.DisplayText}",
+        HirDeclarationPattern pattern =>
+            $"declarationPattern|{pattern.TypeName}|{pattern.IsDiscardDesignation}",
+        HirTypePattern pattern => $"typePattern|{pattern.TypeName}",
+        HirVarPattern pattern => $"varPattern|{pattern.IsDiscardDesignation}",
+        HirDiscardPattern => "discardPattern",
+        HirRelationalPattern pattern => $"relationalPattern|{pattern.Operator}",
+        HirLogicalPattern pattern => $"logicalPattern|{pattern.Operator}",
+        HirNotPattern => "notPattern",
+        HirParenthesizedPattern => "parenthesizedPattern",
+        HirPatternVariable variable => $"patternVariable|{variable.Name}|{variable.TypeName}",
         HirForVariableDeclaration declaration =>
             $"forVariableDeclaration|{declaration.TypeName}|{declaration.Variables.Count}",
         HirForVariableDeclarator variable => $"forVariable|{variable.Name}",
@@ -587,6 +666,20 @@ public sealed class CSharpIdentityReconciler
         HirForStatement => "for",
         HirForEachStatement => "forEach",
         HirForEachVariable => "forEachVariable",
+        HirSwitchStatement => "switch",
+        HirSwitchSection => "switchSection",
+        HirPatternSwitchLabel => "switchLabel",
+        HirDefaultSwitchLabel => "switchLabel",
+        HirConstantPattern => "constantPattern",
+        HirDeclarationPattern => "declarationPattern",
+        HirTypePattern => "typePattern",
+        HirVarPattern => "varPattern",
+        HirDiscardPattern => "discardPattern",
+        HirRelationalPattern => "relationalPattern",
+        HirLogicalPattern => "logicalPattern",
+        HirNotPattern => "notPattern",
+        HirParenthesizedPattern => "parenthesizedPattern",
+        HirPatternVariable => "patternVariable",
         HirForVariableDeclaration => "forVariableDeclaration",
         HirForVariableDeclarator => "forVariable",
         HirBreakStatement => "break",

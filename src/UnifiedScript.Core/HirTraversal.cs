@@ -30,6 +30,20 @@ public static class HirTraversal
         HirDoWhileStatement statement => [statement.Body, statement.Condition],
         HirForStatement statement => GetForChildren(statement),
         HirForEachStatement statement => [statement.Variable, statement.Collection, statement.Body],
+        HirSwitchStatement statement => statement.Sections
+            .Cast<HirNode>()
+            .Prepend(statement.GoverningExpression),
+        HirSwitchSection section => section.Labels.Cast<HirNode>().Append(section.Body),
+        HirPatternSwitchLabel { Guard: not null } label =>
+            [label.Pattern, label.Guard],
+        HirPatternSwitchLabel label => [label.Pattern],
+        HirConstantPattern pattern => [pattern.Value],
+        HirDeclarationPattern { Variable: not null } pattern => [pattern.Variable],
+        HirVarPattern { Variable: not null } pattern => [pattern.Variable],
+        HirRelationalPattern pattern => [pattern.Value],
+        HirLogicalPattern pattern => [pattern.Left, pattern.Right],
+        HirNotPattern pattern => [pattern.Operand],
+        HirParenthesizedPattern pattern => [pattern.Pattern],
         HirForVariableDeclaration declaration => declaration.Variables,
         HirForVariableDeclarator { Initializer: not null } declarator => [declarator.Initializer],
         HirReturnStatement { Expression: not null } statement => [statement.Expression],

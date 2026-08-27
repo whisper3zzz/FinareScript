@@ -120,6 +120,17 @@ internal sealed class GraphPatchSafetyIndex
             return [loopNode];
         }
 
+        GraphControlFlowSwitch? @switch = region is null
+            ? null
+            : function.Flow.Switches.SingleOrDefault(candidate =>
+                candidate.SectionRegionIds.Contains(region.Id));
+        if (@switch is not null && function.Nodes.TryGetValue(
+            @switch.SwitchNodeId,
+            out GraphControlFlowNode? switchNode))
+        {
+            return [switchNode];
+        }
+
         if (blockLocation.ParentBlock is null || blockLocation.EntryStatement is null ||
             !patchIndex.TryGetStatement(
                 blockLocation.EntryStatement.Id,
@@ -193,7 +204,7 @@ internal sealed class GraphPatchSafetyIndex
         function.Regions.SingleOrDefault(region =>
             region.SourceNodeId == blockId &&
             region.Kind is GraphRegionKind.Block or GraphRegionKind.Then or GraphRegionKind.Else or
-                GraphRegionKind.LoopBody);
+                GraphRegionKind.LoopBody or GraphRegionKind.SwitchSection);
 
     private static bool RegionSubtreeHasNodes(GraphFunction function, SemanticId regionId)
     {

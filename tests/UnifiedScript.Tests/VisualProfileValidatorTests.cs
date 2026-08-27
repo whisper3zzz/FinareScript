@@ -64,10 +64,14 @@ public sealed class VisualProfileValidatorTests
             new VisualProfileValidator().Validate(
                 CSharpSyntaxTree.ParseText(invalid, path: "InvalidLoop.cs"));
 
-        Assert.Equal(
-            2,
-            diagnostics.Count(static diagnostic =>
-                diagnostic.Code == VisualProfileDiagnosticCodes.LoopControlTargetRequired));
+        Assert.Single(
+            diagnostics,
+            static diagnostic =>
+                diagnostic.Code == VisualProfileDiagnosticCodes.BreakTargetRequired);
+        Assert.Single(
+            diagnostics,
+            static diagnostic =>
+                diagnostic.Code == VisualProfileDiagnosticCodes.LoopControlTargetRequired);
     }
 
     [Fact]

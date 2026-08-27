@@ -122,7 +122,8 @@ public sealed class AuthoringSurfaceProjector
                     .Where(id => surfaceNodeIds.Contains(id) && IsStatementNode(nodes[id]))
                     .Concat(region.ChildRegionIds
                         .Select(id => function.Regions.Single(candidate => candidate.Id == id))
-                        .Where(static child => child.Kind is GraphRegionKind.If or GraphRegionKind.Loop)
+                        .Where(static child => child.Kind is
+                            GraphRegionKind.If or GraphRegionKind.Loop or GraphRegionKind.Switch)
                         .Select(static child => child.SourceNodeId)
                         .Where(surfaceNodeIds.Contains))
                     .Distinct()

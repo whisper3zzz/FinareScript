@@ -209,7 +209,7 @@ public sealed class CSharpSemanticPipelineTests
             conditionBinding.TypeId!.Value).Kind);
 
         GraphDocument document = new HirGraphProjector().Project(hir, semantics);
-        Assert.Equal("unifiedscript.graph/v0.12", document.SchemaVersion);
+        Assert.Equal("unifiedscript.graph/v0.13", document.SchemaVersion);
         GraphFunction graph = Assert.Single(document.Functions);
         GraphNode select = Assert.Single(graph.Nodes, static node => node.Kind == "conditional");
         Assert.Equal("Select", select.Label);
@@ -309,7 +309,7 @@ public sealed class CSharpSemanticPipelineTests
         HirCompilationUnit hir = Assert.IsType<HirCompilationUnit>(result.Hir);
         BoundCompilation semantics = Assert.IsType<BoundCompilation>(result.Semantics);
         GraphDocument document = new HirGraphProjector().Project(hir, semantics);
-        Assert.Equal("unifiedscript.graph/v0.12", document.SchemaVersion);
+        Assert.Equal("unifiedscript.graph/v0.13", document.SchemaVersion);
         GraphNode[] logicalNodes = document.Functions
             .SelectMany(static function => function.Nodes)
             .Where(static node => node.Kind == "binary" &&
@@ -527,7 +527,7 @@ public sealed class CSharpSemanticPipelineTests
         });
 
         GraphDocument document = new HirGraphProjector().Project(hir, semantics);
-        Assert.Equal("unifiedscript.graph/v0.12", document.SchemaVersion);
+        Assert.Equal("unifiedscript.graph/v0.13", document.SchemaVersion);
         GraphNode[] graphCoalesces = document.Functions
             .SelectMany(static function => function.Nodes)
             .Where(static node => node.Kind == "binary" &&
@@ -719,7 +719,7 @@ public sealed class CSharpSemanticPipelineTests
         Assert.Equal(UnifiedNullability.Nullable, resultType.Nullability);
 
         GraphDocument document = new HirGraphProjector().Project(hir, semantics);
-        Assert.Equal("unifiedscript.graph/v0.12", document.SchemaVersion);
+        Assert.Equal("unifiedscript.graph/v0.13", document.SchemaVersion);
         GraphFunction graph = Assert.Single(document.Functions);
         GraphNode conditionalNode = Assert.Single(
             graph.Nodes,
@@ -886,7 +886,7 @@ public sealed class CSharpSemanticPipelineTests
             FindNode(result.Semantics!, conditionLocal.Id).ReferencedSymbolId);
 
         GraphDocument document = new HirGraphProjector().Project(hir, result.Semantics);
-        Assert.Equal("unifiedscript.graph/v0.12", document.SchemaVersion);
+        Assert.Equal("unifiedscript.graph/v0.13", document.SchemaVersion);
         GraphFunction graph = Assert.Single(document.Functions);
         GraphNode loopNode = Assert.Single(graph.Nodes, node => node.Id == statement.Id);
         GraphNode variableNode = Assert.Single(graph.Nodes, node => node.Id == variable.Id);
@@ -973,7 +973,7 @@ public sealed class CSharpSemanticPipelineTests
         Assert.Equal(statement.Variable.Id, FindNode(result.Semantics!, use.Id).ReferencedSymbolId);
 
         GraphDocument document = new HirGraphProjector().Project(result.Hir!, result.Semantics);
-        Assert.Equal("unifiedscript.graph/v0.12", document.SchemaVersion);
+        Assert.Equal("unifiedscript.graph/v0.13", document.SchemaVersion);
         GraphFunction graph = Assert.Single(document.Functions);
         GraphNode loop = graph.Nodes.Single(node => node.Id == statement.Id);
         GraphNode variable = graph.Nodes.Single(node => node.Id == statement.Variable.Id);

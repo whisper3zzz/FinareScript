@@ -52,6 +52,15 @@ public sealed record GraphControlFlowLoop(
     IReadOnlyList<SemanticId> BreakNodeIds,
     IReadOnlyList<SemanticId> ContinueNodeIds);
 
+public sealed record GraphControlFlowSwitch(
+    SemanticId SwitchNodeId,
+    SemanticId SwitchRegionId,
+    IReadOnlyList<SemanticId> SectionRegionIds,
+    IReadOnlyList<SemanticId> LabelNodeIds,
+    SemanticId? DefaultLabelNodeId,
+    SemanticId ExitNodeId,
+    IReadOnlyList<SemanticId> BreakNodeIds);
+
 public sealed record GraphControlFlowComponent(
     IReadOnlyList<SemanticId> NodeIds,
     IReadOnlyList<SemanticId> EntryNodeIds,
@@ -65,6 +74,7 @@ public sealed record GraphControlFlowFunction(
     IReadOnlyList<GraphControlFlowArc> Arcs,
     IReadOnlyList<GraphControlFlowBranch> Branches,
     IReadOnlyList<GraphControlFlowLoop> Loops,
+    IReadOnlyList<GraphControlFlowSwitch> Switches,
     IReadOnlyList<GraphControlFlowComponent> CyclicComponents,
     IReadOnlyList<SemanticId> UnreachableNodeIds,
     bool HasCompleteExitCoverage,

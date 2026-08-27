@@ -198,7 +198,7 @@ public sealed class CSharpToHirLowererTests
 
         string json = UnifiedScript.Core.HirJson.Serialize(
             UnifiedScript.Core.HirDocument.Create(result.CompilationUnit));
-        Assert.Contains("\"schemaVersion\": \"unifiedscript.hir/v0.7\"", json);
+        Assert.Contains("\"schemaVersion\": \"unifiedscript.hir/v0.8\"", json);
         Assert.Contains("\"kind\": \"for\"", json);
         Assert.Contains("\"isPostfix\": true", json);
     }
@@ -275,7 +275,7 @@ public sealed class CSharpToHirLowererTests
 
         string json = UnifiedScript.Core.HirJson.Serialize(
             UnifiedScript.Core.HirDocument.Create(result.CompilationUnit));
-        Assert.Contains("\"schemaVersion\": \"unifiedscript.hir/v0.7\"", json);
+        Assert.Contains("\"schemaVersion\": \"unifiedscript.hir/v0.8\"", json);
         Assert.Contains("\"kind\": \"forEach\"", json);
     }
 
@@ -336,7 +336,7 @@ public sealed class CSharpToHirLowererTests
 
         string json = UnifiedScript.Core.HirJson.Serialize(
             UnifiedScript.Core.HirDocument.Create(result.CompilationUnit));
-        Assert.Contains("\"schemaVersion\": \"unifiedscript.hir/v0.7\"", json);
+        Assert.Contains("\"schemaVersion\": \"unifiedscript.hir/v0.8\"", json);
         Assert.Contains("\"kind\": \"conditional\"", json);
     }
 
@@ -376,7 +376,7 @@ public sealed class CSharpToHirLowererTests
 
         string json = UnifiedScript.Core.HirJson.Serialize(
             UnifiedScript.Core.HirDocument.Create(result.CompilationUnit));
-        Assert.Contains("\"schemaVersion\": \"unifiedscript.hir/v0.7\"", json);
+        Assert.Contains("\"schemaVersion\": \"unifiedscript.hir/v0.8\"", json);
         Assert.Contains("\"kind\": \"conditionalAccess\"", json);
         Assert.Contains("\"kind\": \"conditionalMemberBinding\"", json);
     }
