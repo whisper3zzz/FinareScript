@@ -64,6 +64,7 @@ DOCUMENTS = [
     ROOT / "docs" / "VISUAL_AUTHORING_MODEL.md",
     ROOT / "docs" / "AUTHORING_SURFACE.md",
     ROOT / "docs" / "NODE_PALETTE.md",
+    ROOT / "docs" / "PIN_AUTHORING.md",
     ROOT / "docs" / "UNREAL_ADAPTER.md",
     ROOT / "docs" / "UNREAL_DEPLOYMENT.md",
     ROOT / "docs" / "UNREAL_ONBOARDING.md",
@@ -755,7 +756,7 @@ def main() -> int:
         and "X-UnifiedScript-Transaction-Id" in prototype_source
         and "unifiedscript.authoring-workspace/v0.4" in prototype_source
         and "AuthoringSurfaceProjector" in debug_server_source
-        and "unifiedscript.patch/v0.27" in prototype_source,
+        and "unifiedscript.patch/v0.28" in prototype_source,
         "Visual authoring changes do not commit through the transactional host",
     )
     checks.append("declaration and behavior patches write source and reload one CoreCLR generation")
@@ -2789,7 +2790,7 @@ def main() -> int:
         and "HandleCollapseSelectedStatements" in unreal_authoring_widget
         and "HandleExpandBlockRegion" in unreal_authoring_widget
         and 'TEXT("flow.switch")' in unreal_authoring_widget
-        and "unifiedscript.patch/v0.27" in unreal_authoring_surface_source
+        and "unifiedscript.patch/v0.28" in unreal_authoring_surface_source
         and "SUnifiedScriptAuthoringSurface" in unreal_authoring_widget
         and "HandleDataRewireRequested" in unreal_authoring_widget
         and "SubmitSemanticPatch" in unreal_authoring_widget
@@ -2840,6 +2841,33 @@ def main() -> int:
     )
     checks.append(
         "UE Slate Palette is searchable, context-filtered, keyboard-driven, and preference-aware"
+    )
+    semantic_patch_model = (
+        ROOT / "src" / "UnifiedScript.Core" / "SemanticPatch.cs"
+    ).read_text(encoding="utf-8")
+    semantic_patch_json = (
+        ROOT / "src" / "UnifiedScript.Core" / "SemanticPatchJson.cs"
+    ).read_text(encoding="utf-8")
+    source_patch_applier = (
+        ROOT / "src" / "UnifiedScript.CSharp" / "CSharpSourcePatchApplier.cs"
+    ).read_text(encoding="utf-8")
+    require(
+        "SetDataInputValuePatchOperation" in semantic_patch_model
+        and "unifiedscript.patch/v0.28" in semantic_patch_model
+        and "ValidateSetDataInputValue" in semantic_patch_json
+        and "PlanDataInputReplacement" in source_patch_applier
+        and "BuildDataInputValuePatch" in unreal_authoring_surface_source
+        and "BuildDataInputPromotionPatch" in unreal_authoring_surface_source
+        and 'TEXT("setDataInputValue")' in unreal_authoring_surface_source
+        and "HandleApplyDataInputValue" in unreal_authoring_widget
+        and "HandleResetDataInputValue" in unreal_authoring_widget
+        and "HandlePromoteDataInput" in unreal_authoring_widget
+        and "Pin Details can build a typed literal replacement" in unreal_authoring_test
+        and "Pin Details can promote its source expression to a typed local" in unreal_authoring_test,
+        "Source-backed typed Pin Defaults or Promote to Local are incomplete",
+    )
+    checks.append(
+        "UE Slate Pin Authoring writes typed values and promoted locals through source transactions"
     )
     identity_reconciler_source = (
         ROOT / "src" / "UnifiedScript.CSharp" / "CSharpIdentityReconciler.cs"
@@ -3339,10 +3367,10 @@ def main() -> int:
     ).hexdigest()
     loop_source_digest = hashlib.sha256(loop_source.encode("utf-8")).hexdigest()
     require(
-        patch_document["schemaVersion"] == "unifiedscript.patch/v0.27"
-        and operator_patch["schemaVersion"] == "unifiedscript.patch/v0.27"
-        and insert_patch["schemaVersion"] == "unifiedscript.patch/v0.27"
-        and temporary_patch["schemaVersion"] == "unifiedscript.patch/v0.27"
+        patch_document["schemaVersion"] == "unifiedscript.patch/v0.28"
+        and operator_patch["schemaVersion"] == "unifiedscript.patch/v0.28"
+        and insert_patch["schemaVersion"] == "unifiedscript.patch/v0.28"
+        and temporary_patch["schemaVersion"] == "unifiedscript.patch/v0.28"
         and operator_patch["sourceCompilationId"]
         == patch_document["sourceCompilationId"]
         and insert_patch["sourceCompilationId"]
@@ -3390,7 +3418,7 @@ def main() -> int:
         "Temporary-introduction sample does not contain the expected typed payload",
     )
     require(
-        reconnect_patch["schemaVersion"] == "unifiedscript.patch/v0.27"
+        reconnect_patch["schemaVersion"] == "unifiedscript.patch/v0.28"
         and reconnect_identity["sourcePath"]
         == "samples/Patching/SharedValueRules.cs"
         and reconnect_identity["sourceDigest"]
@@ -3415,7 +3443,7 @@ def main() -> int:
     assignment_statement = assignment_operation["newStatement"]
     assignment_value = assignment_statement["value"]
     require(
-        assignment_patch["schemaVersion"] == "unifiedscript.patch/v0.27"
+        assignment_patch["schemaVersion"] == "unifiedscript.patch/v0.28"
         and assignment_identity["sourcePath"]
         == "samples/Patching/AssignmentRules.cs"
         and assignment_identity["sourceDigest"]
@@ -3511,7 +3539,7 @@ def main() -> int:
     guard_comparison = guard_condition["left"]
     guard_negation = guard_condition["right"]
     require(
-        guard_document["schemaVersion"] == "unifiedscript.patch/v0.27"
+        guard_document["schemaVersion"] == "unifiedscript.patch/v0.28"
         and guard_identity["sourcePath"] == "samples/Patching/GuardRules.cs"
         and guard_identity["sourceDigest"] == f"sha256:{guard_source_digest}"
         and guard_operation["operation"] == "insertStatement"

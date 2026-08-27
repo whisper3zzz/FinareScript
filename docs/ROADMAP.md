@@ -748,8 +748,10 @@ pass.
   keyboard workflows consistent with UE expectations
   - [x] context-derived token search, persistent Favorites, accepted Recent
     actions, and `Ctrl+Space` / Enter / double-click placement
-  - [ ] pin promotion/default editors, comment/reroute authoring, minimap, and
-    remaining Blueprint keyboard parity
+  - [x] source-backed typed Pin Default/Reset and safe Promote to Local Details
+    editors
+  - [ ] comment/reroute authoring, minimap, viewport state, and remaining
+    Blueprint keyboard parity
 - [ ] show concise author-facing node content by default while retaining exact
   type, effect, source, semantic ID, and generated API information on demand
 - [ ] provide compiler/contract diagnostics, quick fixes, source navigation,
@@ -767,6 +769,20 @@ do not. The focused UE 5.8 Authoring Surface Automation and 50/50 repository
 invariants pass. M8.2 remains open for pin defaults/promotion, comment and
 reroute editing, minimap/viewport persistence, advanced node details, and
 diagnostics/diff/rollback UX.
+
+The second M8.2 tranche adds source-backed Pin Authoring. Every connected data
+input in native Details can replace its exact compiler-owned edge with a typed
+C# literal, reset through a bounded semantic default, or promote the feeding
+stable pure expression to a conflict-free local declaration. Semantic Patch
+v0.28 carries the edge/endpoints/ports/type plus the closed authored expression;
+the Roslyn path validates literal runtime type, source freshness, effect order,
+scope, and identity before the ordinary Workbench transaction can publish.
+Promote reuses `introduceTemporary` and is deliberately limited to explicit
+local initializers and returns where evaluation order is proven unchanged. See
+[`PIN_AUTHORING.md`](PIN_AUTHORING.md). M8.2 next moves to comment/reroute
+authoring and persistent canvas viewport/minimap behavior. The 501/501 managed
+suite, UE 5.8 Editor build, focused native Authoring Surface Automation, and
+51/51 repository invariants pass.
 
 ### M8.3 — Asset, state, event, and API authoring
 

@@ -418,6 +418,17 @@ public sealed class CSharpSourcePatchApplier
                     types,
                     graphSafetyIndex,
                     documents),
+                SetDataInputValuePatchOperation setDataInputValue => PlanDataInputValue(
+                    setDataInputValue,
+                    graph,
+                    hirNodes,
+                    patchIndex,
+                    useDefinitionIndex,
+                    boundNodes,
+                    methods,
+                    types,
+                    graphSafetyIndex,
+                    documents),
                 _ => throw new InvalidOperationException(
                     $"Validated patch operation '{operation.GetType().Name}' was not handled."),
             };
@@ -1581,6 +1592,73 @@ public sealed class CSharpSourcePatchApplier
         IReadOnlyDictionary<SemanticId, MethodDescriptor> methods,
         IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
         GraphPatchSafetyIndex graphSafetyIndex,
+        IReadOnlyDictionary<string, ParsedDocument> documents) => PlanDataInputReplacement(
+            new DataInputEdit(
+                operation.TargetNodeId,
+                operation.TargetPort,
+                operation.ExpectedEdgeId,
+                operation.ExpectedSourceNodeId,
+                operation.ExpectedSourcePort,
+                operation.ExpectedTypeId,
+                null),
+            graph,
+            hirNodes,
+            patchIndex,
+            useDefinitionIndex,
+            boundNodes,
+            methods,
+            types,
+            graphSafetyIndex,
+            documents);
+
+    private static OperationPlan PlanDataInputValue(
+        SetDataInputValuePatchOperation operation,
+        GraphDocument graph,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        HirUseDefinitionIndex useDefinitionIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, MethodDescriptor> methods,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
+        GraphPatchSafetyIndex graphSafetyIndex,
+        IReadOnlyDictionary<string, ParsedDocument> documents) => PlanDataInputReplacement(
+            new DataInputEdit(
+                operation.TargetNodeId,
+                operation.TargetPort,
+                operation.ExpectedEdgeId,
+                operation.ExpectedSourceNodeId,
+                operation.ExpectedSourcePort,
+                operation.ExpectedTypeId,
+                operation.NewValue),
+            graph,
+            hirNodes,
+            patchIndex,
+            useDefinitionIndex,
+            boundNodes,
+            methods,
+            types,
+            graphSafetyIndex,
+            documents);
+
+    private readonly record struct DataInputEdit(
+        SemanticId TargetNodeId,
+        string TargetPort,
+        SemanticId ExpectedEdgeId,
+        SemanticId ExpectedSourceNodeId,
+        string ExpectedSourcePort,
+        SemanticId ExpectedTypeId,
+        PatchExpression? NewValue);
+
+    private static OperationPlan PlanDataInputReplacement(
+        DataInputEdit operation,
+        GraphDocument graph,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        HirUseDefinitionIndex useDefinitionIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, MethodDescriptor> methods,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
+        GraphPatchSafetyIndex graphSafetyIndex,
         IReadOnlyDictionary<string, ParsedDocument> documents)
     {
         if (!hirNodes.TryGetValue(operation.TargetNodeId, out HirNode? target))
@@ -1624,7 +1702,16 @@ public sealed class CSharpSourcePatchApplier
                 target);
         }
 
-        var newInput = new DefaultPatchExpression(expectedType.DisplayName, expectedType.Id);
+        PatchExpression newInput = operation.NewValue ??
+            new DefaultPatchExpression(expectedType.DisplayName, expectedType.Id);
+        if (newInput.ExpectedTypeId != expectedType.Id)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.TypeMismatch,
+                $"Data-input replacement type '{newInput.ExpectedTypeId}' no longer matches " +
+                $"'{expectedType.Id}'.",
+                target);
+        }
         SemanticPatchOperation? replacement = target switch
         {
             HirExpression expression when TryGetExpressionInput(

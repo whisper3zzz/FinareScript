@@ -179,7 +179,7 @@ public:
         FUnifiedScriptAuthoringSurfaceDocument& OutDocument,
         FString& OutError);
 
-    /** Builds the same semantic-patch v0.27 payload consumed by the shared authoring host. */
+    /** Builds the same semantic-patch v0.28 payload consumed by the shared authoring host. */
     static bool BuildSemanticPatch(
         const FUnifiedScriptAuthoringSurfaceDocument& Document,
         const FUnifiedScriptAuthoringEdit& Edit,
@@ -187,7 +187,7 @@ public:
         FString& OutPatchJson,
         FString& OutError);
 
-    /** Builds a preconditioned semantic-patch v0.27 data-edge rewire transaction. */
+    /** Builds a preconditioned semantic-patch v0.28 data-edge rewire transaction. */
     static bool BuildDataEdgeReconnectionPatch(
         const FUnifiedScriptAuthoringSurfaceDocument& Document,
         const FUnifiedScriptAuthoringFunction& Function,
@@ -212,6 +212,24 @@ public:
         const FUnifiedScriptAuthoringSurfaceDocument& Document,
         const FUnifiedScriptAuthoringFunction& Function,
         const FUnifiedScriptAuthoringEdge& ExpectedEdge,
+        FString& OutPatchJson,
+        FString& OutError);
+
+    /** Replaces one connected data input with a bounded typed literal or default value. */
+    static bool BuildDataInputValuePatch(
+        const FUnifiedScriptAuthoringSurfaceDocument& Document,
+        const FUnifiedScriptAuthoringFunction& Function,
+        const FUnifiedScriptAuthoringEdge& ExpectedEdge,
+        const FString& NewValueText,
+        FString& OutPatchJson,
+        FString& OutError);
+
+    /** Promotes the expression feeding one data input to a named local declaration. */
+    static bool BuildDataInputPromotionPatch(
+        const FUnifiedScriptAuthoringSurfaceDocument& Document,
+        const FUnifiedScriptAuthoringFunction& Function,
+        const FUnifiedScriptAuthoringEdge& ExpectedEdge,
+        const FString& LocalName,
         FString& OutPatchJson,
         FString& OutError);
 

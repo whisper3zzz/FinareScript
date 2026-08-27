@@ -178,6 +178,48 @@ TMap<FString, FString> SuggestCopiedLocalNames(
     }
     return Result;
 }
+
+FString SuggestPromotedLocalName(
+    const FUnifiedScriptAuthoringFunction& Function,
+    const FUnifiedScriptAuthoringPort& Port)
+{
+    FString Role = Port.Name.IsEmpty() ? TEXT("Value") : Port.Name;
+    for (int32 Index = Role.Len() - 1; Index >= 0; --Index)
+    {
+        if (!(FChar::IsAlnum(Role[Index]) || Role[Index] == TEXT('_')))
+        {
+            Role.RemoveAt(Index);
+        }
+    }
+    if (Role.IsEmpty())
+    {
+        Role = TEXT("Value");
+    }
+    Role[0] = FChar::ToUpper(Role[0]);
+
+    TSet<FString> UsedNames;
+    for (const FUnifiedScriptAuthoringParameter& Parameter : Function.Parameters)
+    {
+        UsedNames.Add(Parameter.Name);
+    }
+    for (const FUnifiedScriptAuthoringAction& Action : Function.Actions)
+    {
+        const FString Name = Action.Properties.FindRef(TEXT("name"));
+        if (!Name.IsEmpty())
+        {
+            UsedNames.Add(Name);
+        }
+    }
+
+    const FString BaseName = TEXT("promoted") + Role;
+    FString Candidate = BaseName;
+    int32 Suffix = 2;
+    while (UsedNames.Contains(Candidate))
+    {
+        Candidate = FString::Printf(TEXT("%s%d"), *BaseName, Suffix++);
+    }
+    return Candidate;
+}
 }
 
 void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
@@ -985,7 +1027,7 @@ FReply SUnifiedScriptAuthoringSurface::HandleCopyPatch(
         return FReply::Handled();
     }
     FPlatformApplicationMisc::ClipboardCopy(*Patch);
-    SetStatus(FString::Printf(TEXT("Copied semantic-patch v0.27 for %s"), *Edit.TargetNodeId), false);
+    SetStatus(FString::Printf(TEXT("Copied semantic-patch v0.28 for %s"), *Edit.TargetNodeId), false);
     return FReply::Handled();
 }
 
@@ -1151,6 +1193,118 @@ void SUnifiedScriptAuthoringSurface::HandleDataDisconnectRequested(
         return;
     }
     SubmitSemanticPatch(MoveTemp(Patch), TEXT("Replacing the disconnected input with typed default(...)"));
+}
+
+FReply SUnifiedScriptAuthoringSurface::HandleApplyDataInputValue(
+    FString TargetActionId,
+    FString TargetPort,
+    TSharedPtr<SEditableTextBox> ValueEditor)
+{
+    if (bPatchRequestPending || !ValueEditor.IsValid())
+    {
+        return FReply::Handled();
+    }
+    const FUnifiedScriptAuthoringFunction* Function = FindFunction(ActiveFunctionId);
+    const FUnifiedScriptAuthoringEdge* ExpectedEdge = Function != nullptr
+        ? Function->Edges.FindByPredicate(
+            [&TargetActionId, &TargetPort](const FUnifiedScriptAuthoringEdge& Edge)
+            {
+                return Edge.Kind == TEXT("data") && Edge.ToNode == TargetActionId &&
+                    Edge.ToPort == TargetPort;
+            })
+        : nullptr;
+    if (Function == nullptr || ExpectedEdge == nullptr)
+    {
+        SetStatus(TEXT("The selected input no longer has its compiler-owned data edge."), true);
+        return FReply::Handled();
+    }
+
+    FString Patch;
+    FString Error;
+    const FString ValueText = ValueEditor->GetText().ToString();
+    if (!FUnifiedScriptAuthoringSurfaceReader::BuildDataInputValuePatch(
+            Document, *Function, *ExpectedEdge, ValueText, Patch, Error))
+    {
+        SetStatus(MoveTemp(Error), true);
+        return FReply::Handled();
+    }
+    SubmitSemanticPatch(
+        MoveTemp(Patch),
+        FString::Printf(TEXT("Setting %s.%s = %s"), *TargetActionId, *TargetPort, *ValueText));
+    return FReply::Handled();
+}
+
+FReply SUnifiedScriptAuthoringSurface::HandleResetDataInputValue(
+    FString TargetActionId,
+    FString TargetPort)
+{
+    const FUnifiedScriptAuthoringFunction* Function = FindFunction(ActiveFunctionId);
+    const FUnifiedScriptAuthoringEdge* ExpectedEdge =
+        !bPatchRequestPending && Function != nullptr
+        ? Function->Edges.FindByPredicate(
+            [&TargetActionId, &TargetPort](const FUnifiedScriptAuthoringEdge& Edge)
+            {
+                return Edge.Kind == TEXT("data") && Edge.ToNode == TargetActionId &&
+                    Edge.ToPort == TargetPort;
+            })
+        : nullptr;
+    if (ExpectedEdge == nullptr)
+    {
+        SetStatus(TEXT("The selected input no longer has its compiler-owned data edge."), true);
+        return FReply::Handled();
+    }
+
+    FString Patch;
+    FString Error;
+    if (!FUnifiedScriptAuthoringSurfaceReader::BuildDataInputValuePatch(
+            Document, *Function, *ExpectedEdge, TEXT("default"), Patch, Error))
+    {
+        SetStatus(MoveTemp(Error), true);
+        return FReply::Handled();
+    }
+    SubmitSemanticPatch(
+        MoveTemp(Patch),
+        FString::Printf(TEXT("Resetting %s.%s to its typed default"), *TargetActionId, *TargetPort));
+    return FReply::Handled();
+}
+
+FReply SUnifiedScriptAuthoringSurface::HandlePromoteDataInput(
+    FString TargetActionId,
+    FString TargetPort,
+    TSharedPtr<SEditableTextBox> NameEditor)
+{
+    if (bPatchRequestPending || !NameEditor.IsValid())
+    {
+        return FReply::Handled();
+    }
+    const FUnifiedScriptAuthoringFunction* Function = FindFunction(ActiveFunctionId);
+    const FUnifiedScriptAuthoringEdge* ExpectedEdge = Function != nullptr
+        ? Function->Edges.FindByPredicate(
+            [&TargetActionId, &TargetPort](const FUnifiedScriptAuthoringEdge& Edge)
+            {
+                return Edge.Kind == TEXT("data") && Edge.ToNode == TargetActionId &&
+                    Edge.ToPort == TargetPort;
+            })
+        : nullptr;
+    if (Function == nullptr || ExpectedEdge == nullptr)
+    {
+        SetStatus(TEXT("The selected input no longer has its compiler-owned data edge."), true);
+        return FReply::Handled();
+    }
+
+    FString Patch;
+    FString Error;
+    const FString LocalName = NameEditor->GetText().ToString();
+    if (!FUnifiedScriptAuthoringSurfaceReader::BuildDataInputPromotionPatch(
+            Document, *Function, *ExpectedEdge, LocalName, Patch, Error))
+    {
+        SetStatus(MoveTemp(Error), true);
+        return FReply::Handled();
+    }
+    SubmitSemanticPatch(
+        MoveTemp(Patch),
+        FString::Printf(TEXT("Promoting %s.%s to local '%s'"), *TargetActionId, *TargetPort, *LocalName));
+    return FReply::Handled();
 }
 
 void SUnifiedScriptAuthoringSurface::HandleControlRewireRequested(
@@ -3780,6 +3934,140 @@ void SUnifiedScriptAuthoringSurface::RebuildInspector(
         ActiveFunction != nullptr && ActiveRegion != nullptr
         ? ActiveFunction->FindRegion(ActiveRegion->ParentRegionId)
         : nullptr;
+    if (ActiveFunction != nullptr && ActiveAction != nullptr)
+    {
+        TArray<const FUnifiedScriptAuthoringEdge*> InputEdges;
+        for (const FUnifiedScriptAuthoringPort& Port : ActiveAction->Ports)
+        {
+            if (!Port.IsInput() || Port.IsControl())
+            {
+                continue;
+            }
+            if (const FUnifiedScriptAuthoringEdge* Edge = ActiveFunction->Edges.FindByPredicate(
+                    [ActiveAction, &Port](const FUnifiedScriptAuthoringEdge& Candidate)
+                    {
+                        return Candidate.Kind == TEXT("data") &&
+                            Candidate.ToNode == ActiveAction->Id &&
+                            Candidate.ToPort == Port.Name;
+                    }))
+            {
+                InputEdges.Add(Edge);
+            }
+        }
+
+        if (!InputEdges.IsEmpty())
+        {
+            InspectorBox->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 8.0f)
+            [
+                SNew(STextBlock)
+                .Text(LOCTEXT("PinAuthoring", "PIN AUTHORING"))
+                .Font(FAppStyle::GetFontStyle(TEXT("SmallFontBold")))
+            ];
+        }
+        for (const FUnifiedScriptAuthoringEdge* Edge : InputEdges)
+        {
+            const FUnifiedScriptAuthoringPort* Port =
+                ActiveAction->FindPort(Edge->ToPort, TEXT("input"));
+            const FUnifiedScriptAuthoringAction* Source =
+                ActiveFunction->FindAction(Edge->FromNode);
+            if (Port == nullptr || Source == nullptr)
+            {
+                continue;
+            }
+
+            const FString CurrentValue = Source->GraphKind == TEXT("literal")
+                ? Source->Properties.FindRef(TEXT("value"))
+                : FString();
+            const FString SourceText = FString::Printf(
+                TEXT("%s  ·  %s  ·  source %s"),
+                *Port->Name,
+                *Port->TypeDisplayName,
+                *(Source->Summary.IsEmpty() ? Source->Title : Source->Summary));
+            TSharedPtr<SEditableTextBox> ValueEditor;
+            TSharedPtr<SEditableTextBox> NameEditor;
+            InspectorBox->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 8.0f)
+            [
+                SNew(SBorder)
+                .BorderImage(FAppStyle::GetBrush(TEXT("ToolPanel.GroupBorder")))
+                .Padding(8.0f)
+                [
+                    SNew(SVerticalBox)
+                    + SVerticalBox::Slot().AutoHeight()
+                    [
+                        SNew(STextBlock)
+                        .Text(FText::FromString(SourceText))
+                        .AutoWrapText(true)
+                    ]
+                    + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+                    [
+                        SNew(SHorizontalBox)
+                        + SHorizontalBox::Slot().FillWidth(1.0f)
+                        [
+                            SAssignNew(ValueEditor, SEditableTextBox)
+                            .Text(FText::FromString(CurrentValue))
+                            .HintText(LOCTEXT("PinLiteralHint", "C# literal, e.g. 42, 1.0f, false, \"text\""))
+                        ]
+                        + SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f, 0.0f, 0.0f)
+                        [
+                            SNew(SButton)
+                            .Text(LOCTEXT("ApplyPinValue", "Set Value"))
+                            .ToolTipText(LOCTEXT(
+                                "ApplyPinValueTip",
+                                "Replace this exact compiler-owned input edge with a type-checked C# literal."))
+                            .IsEnabled_Lambda([this]() { return !bPatchRequestPending; })
+                            .OnClicked(
+                                this,
+                                &SUnifiedScriptAuthoringSurface::HandleApplyDataInputValue,
+                                ActiveAction->Id,
+                                Port->Name,
+                                ValueEditor)
+                        ]
+                        + SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f, 0.0f, 0.0f)
+                        [
+                            SNew(SButton)
+                            .Text(LOCTEXT("ResetPinValue", "Reset"))
+                            .ToolTipText(LOCTEXT(
+                                "ResetPinValueTip",
+                                "Replace this input with its bounded typed default value."))
+                            .IsEnabled_Lambda([this]() { return !bPatchRequestPending; })
+                            .OnClicked(
+                                this,
+                                &SUnifiedScriptAuthoringSurface::HandleResetDataInputValue,
+                                ActiveAction->Id,
+                                Port->Name)
+                        ]
+                    ]
+                    + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+                    [
+                        SNew(SHorizontalBox)
+                        + SHorizontalBox::Slot().FillWidth(1.0f)
+                        [
+                            SAssignNew(NameEditor, SEditableTextBox)
+                            .Text(FText::FromString(
+                                UE::UnifiedScript::AuthoringSurface::Slate::Private::
+                                    SuggestPromotedLocalName(*ActiveFunction, *Port)))
+                            .HintText(LOCTEXT("PromotedLocalNameHint", "local name"))
+                        ]
+                        + SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f, 0.0f, 0.0f)
+                        [
+                            SNew(SButton)
+                            .Text(LOCTEXT("PromotePinToLocal", "Promote to Local"))
+                            .ToolTipText(LOCTEXT(
+                                "PromotePinToLocalTip",
+                                "Introduce a typed local immediately before the containing statement and replace this source expression with the local reference."))
+                            .IsEnabled_Lambda([this]() { return !bPatchRequestPending; })
+                            .OnClicked(
+                                this,
+                                &SUnifiedScriptAuthoringSurface::HandlePromoteDataInput,
+                                ActiveAction->Id,
+                                Port->Name,
+                                NameEditor)
+                        ]
+                    ]
+                ]
+            ];
+        }
+    }
     if (ActiveRegion != nullptr && ActiveRegion->Kind == TEXT("block") &&
         ActiveRegionParent != nullptr && ActiveRegionParent->Kind != TEXT("function"))
     {
@@ -4002,7 +4290,7 @@ void SUnifiedScriptAuthoringSurface::RebuildInspector(
                         [
                             SNew(SButton)
                             .Text(LOCTEXT("CopyPatch", "Copy Patch"))
-                            .ToolTipText(LOCTEXT("CopyPatchTip", "Copy a typed semantic-patch v0.27 payload using this value."))
+                            .ToolTipText(LOCTEXT("CopyPatchTip", "Copy a typed semantic-patch v0.28 payload using this value."))
                             .OnClicked(this, &SUnifiedScriptAuthoringSurface::HandleCopyPatch, Edit, ValueEditor)
                         ]
                         + SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f, 0.0f, 0.0f)

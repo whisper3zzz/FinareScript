@@ -38,6 +38,7 @@ namespace UnifiedScript.Core;
 [JsonDerivedType(typeof(ReconnectValuePatchOperation), "reconnectValue")]
 [JsonDerivedType(typeof(ReconnectDataEdgePatchOperation), "reconnectDataEdge")]
 [JsonDerivedType(typeof(DisconnectDataEdgePatchOperation), "disconnectDataEdge")]
+[JsonDerivedType(typeof(SetDataInputValuePatchOperation), "setDataInputValue")]
 public abstract record SemanticPatchOperation(SemanticId TargetNodeId);
 
 public sealed record ReplaceLiteralPatchOperation(
@@ -512,13 +513,22 @@ public sealed record DisconnectDataEdgePatchOperation(
     string ExpectedSourcePort,
     SemanticId ExpectedTypeId) : SemanticPatchOperation(TargetNodeId);
 
+public sealed record SetDataInputValuePatchOperation(
+    SemanticId TargetNodeId,
+    string TargetPort,
+    SemanticId ExpectedEdgeId,
+    SemanticId ExpectedSourceNodeId,
+    string ExpectedSourcePort,
+    SemanticId ExpectedTypeId,
+    PatchExpression NewValue) : SemanticPatchOperation(TargetNodeId);
+
 public sealed record SemanticPatchDocument(
     string SchemaVersion,
     SemanticId SourceCompilationId,
     SemanticId SemanticConfigurationId,
     IReadOnlyList<SemanticPatchOperation> Operations)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.27";
+    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.28";
 
     public static SemanticPatchDocument Create(
         SemanticId sourceCompilationId,

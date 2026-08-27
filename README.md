@@ -471,6 +471,11 @@ reflection catalog. Preferences live in per-project editor user config; they
 never enter C#, `.usids`, `.usgraph`, or the Authoring Surface. See
 [`docs/NODE_PALETTE.md`](docs/NODE_PALETTE.md).
 
+The next M8.2 tranche adds source-backed Pin Authoring in native Details:
+type-checked C# literals, bounded typed Reset, and safe Promote to Local all
+flow through exact edge preconditions and the transactional Workbench. See
+[`docs/PIN_AUTHORING.md`](docs/PIN_AUTHORING.md).
+
 The current runtime performance tranche activates ABI v3 for fixed scalars,
 enums, generation-safe object/class handles, vector/rotator, transform, UTF-8
   text, reflected structs, recursive arrays/sets/maps, and return plus `out`/`ref`. Generated wrappers
@@ -631,7 +636,7 @@ Declaration edit
   -> updated C# + asset JSON + optional .usids (only as one commit)
 
 Workbench authoring commit
-  -> declaration-patch v0.2 or semantic-patch v0.27
+  -> declaration-patch v0.2 or semantic-patch v0.28
   -> workspace v0.4 baseline revision + unique operation/group identity
   -> Begin Group -> in-memory draft edits -> atomic Commit or zero-write Cancel
   -> immutable candidate analysis + regenerated Graph
@@ -661,7 +666,7 @@ Current Unreal adapter path:
   -> Declaration IR -> fixed-layout Details state + stable-ID migration
   -> stable generated Member ID -> ABI v3 call frame -> module-owned native thunk -> live UObject
   -> Authoring Surface v0.4 -> native Slate GraphEditor pins/wires + inspector
-  -> typed edit capability -> semantic-patch v0.27 Workbench transaction
+  -> typed edit capability -> semantic-patch v0.28 Workbench transaction
   -> typed callable extraction -> inferred inputs + zero/one live result
   -> identity-safe same-method range copy/paste -> fresh copied subtree IDs
   -> reversible lexical-scope collapse/expand -> stable member IDs + fresh/retired region ID
@@ -963,7 +968,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
   --out-identity artifacts/patched/DamageRules.cs.usids
 ```
 
-`unifiedscript.patch/v0.27` binds every patch to both the source compilation ID
+`unifiedscript.patch/v0.28` binds every patch to both the source compilation ID
 and semantic configuration ID emitted in current Graph schema v0.13. A `replaceLiteral`
 operation also carries the expected old literal text. A stale source, changed
 reference/effect configuration, missing target, changed old value, non-literal

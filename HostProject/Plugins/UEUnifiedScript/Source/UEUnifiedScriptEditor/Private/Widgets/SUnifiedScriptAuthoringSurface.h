@@ -103,6 +103,15 @@ private:
     void HandleDataDisconnectRequested(
         const UEdGraphPin* OutputPin,
         const UEdGraphPin* InputPin);
+    FReply HandleApplyDataInputValue(
+        FString TargetActionId,
+        FString TargetPort,
+        TSharedPtr<SEditableTextBox> ValueEditor);
+    FReply HandleResetDataInputValue(FString TargetActionId, FString TargetPort);
+    FReply HandlePromoteDataInput(
+        FString TargetActionId,
+        FString TargetPort,
+        TSharedPtr<SEditableTextBox> NameEditor);
     void HandleNodeCreateRequested(const FString& ActionId, const FVector2D& Location);
     void HandleStatementDeleteRequested(const UEdGraphNode* Node);
     void HandleCopySelectedStatement();

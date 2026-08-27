@@ -1,6 +1,6 @@
 # Callable Extraction
 
-Semantic Patch `unifiedscript.patch/v0.27` adds `extractCallable`: a bounded,
+Semantic Patch `unifiedscript.patch/v0.28` adds `extractCallable`: a bounded,
 identity-aware transformation from one consecutive C# statement range to a
 private `[Visual]` method. The same operation is available through the Unreal
 Authoring Surface as **Extract Function**.

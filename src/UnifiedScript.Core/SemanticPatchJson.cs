@@ -164,6 +164,9 @@ public static class SemanticPatchJson
                 case DisconnectDataEdgePatchOperation disconnectDataEdge:
                     ValidateDisconnectDataEdge(disconnectDataEdge);
                     break;
+                case SetDataInputValuePatchOperation setDataInputValue:
+                    ValidateSetDataInputValue(setDataInputValue);
+                    break;
                 default:
                     throw new JsonException(
                         $"Unsupported semantic patch operation '{operation.GetType().Name}'.");
@@ -1444,6 +1447,25 @@ public static class SemanticPatchJson
             throw new JsonException(
                 "A data-edge disconnection requires exact edge, endpoint, port, and type preconditions.");
         }
+    }
+
+    private static void ValidateSetDataInputValue(SetDataInputValuePatchOperation operation)
+    {
+        if (operation.ExpectedEdgeId.IsEmpty || operation.ExpectedSourceNodeId.IsEmpty ||
+            operation.ExpectedTypeId.IsEmpty || string.IsNullOrWhiteSpace(operation.TargetPort) ||
+            string.IsNullOrWhiteSpace(operation.ExpectedSourcePort) || operation.NewValue is null)
+        {
+            throw new JsonException(
+                "A data-input value edit requires exact edge, endpoint, port, type, and value preconditions.");
+        }
+
+        if (operation.NewValue.ExpectedTypeId != operation.ExpectedTypeId)
+        {
+            throw new JsonException(
+                "A data-input value must declare the expected input-port type.");
+        }
+
+        ValidatePatchExpression(operation.NewValue, 0);
     }
 
     private static void ValidateSiblingIds(

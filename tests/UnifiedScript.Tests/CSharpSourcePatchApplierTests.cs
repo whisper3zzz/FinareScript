@@ -141,6 +141,69 @@ public sealed class CSharpSourcePatchApplierTests
     }
 
     [Fact]
+    public void Apply_SetsCompilerOwnedDataInputToTypedLiteral()
+    {
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(Source, "Game/Calculator.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        GraphFunction function = Assert.Single(new HirGraphProjector().Project(
+            original.Hir!, original.Semantics!).Functions);
+        GraphNode binary = Assert.Single(function.Nodes, static node => node.Kind == "binary");
+        GraphEdge edge = Assert.Single(function.Edges, candidate =>
+            candidate.Kind == GraphEdgeKind.Data && candidate.ToNode == binary.Id &&
+            candidate.ToPort == "right");
+        GraphNode source = Assert.Single(function.Nodes, node => node.Id == edge.FromNode);
+        SemanticId typeId = new(source.Properties["typeId"]);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir!.Id,
+            original.Semantics!.ConfigurationId,
+            [new SetDataInputValuePatchOperation(
+                binary.Id,
+                "right",
+                edge.Id,
+                edge.FromNode,
+                edge.FromPort,
+                typeId,
+                new LiteralPatchExpression("42", typeId))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Contains("return value + 42;", Assert.Single(result.PatchedRequest!.Sources).Source);
+    }
+
+    [Fact]
+    public void Apply_RejectsDataInputLiteralWhoseRuntimeTypeDoesNotMatchPin()
+    {
+        CSharpCompilationRequest request = CSharpCompilationRequest.Single(Source, "Game/Calculator.cs");
+        CSharpAnalysisResult original = new CSharpSemanticPipeline().Analyze(request);
+        GraphFunction function = Assert.Single(new HirGraphProjector().Project(
+            original.Hir!, original.Semantics!).Functions);
+        GraphNode binary = Assert.Single(function.Nodes, static node => node.Kind == "binary");
+        GraphEdge edge = Assert.Single(function.Edges, candidate =>
+            candidate.Kind == GraphEdgeKind.Data && candidate.ToNode == binary.Id &&
+            candidate.ToPort == "right");
+        GraphNode source = Assert.Single(function.Nodes, node => node.Id == edge.FromNode);
+        SemanticId typeId = new(source.Properties["typeId"]);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir!.Id,
+            original.Semantics!.ConfigurationId,
+            [new SetDataInputValuePatchOperation(
+                binary.Id,
+                "right",
+                edge.Id,
+                edge.FromNode,
+                edge.FromPort,
+                typeId,
+                new LiteralPatchExpression("false", typeId))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(result.Diagnostics, diagnostic =>
+            diagnostic.Code == SemanticPatchDiagnosticCodes.InvalidGraphExpression);
+    }
+
+    [Fact]
     public void Apply_InsertsStructuredUnrealMemberInvocationLocal()
     {
         const string source = """

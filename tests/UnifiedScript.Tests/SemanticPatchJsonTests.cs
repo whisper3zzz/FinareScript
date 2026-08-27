@@ -421,7 +421,7 @@ public sealed class SemanticPatchJsonTests
         SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
 
         Assert.Equal(
-            "unifiedscript.patch/v0.27",
+            "unifiedscript.patch/v0.28",
             roundTrip.SchemaVersion);
         Assert.Equal(
             move,
@@ -451,7 +451,7 @@ public sealed class SemanticPatchJsonTests
         string json = SemanticPatchJson.Serialize(patch);
         SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
 
-        Assert.Equal("unifiedscript.patch/v0.27", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch/v0.28", roundTrip.SchemaVersion);
         Assert.Equal(
             duplicate,
             Assert.IsType<DuplicateStatementPatchOperation>(Assert.Single(roundTrip.Operations)));
@@ -516,7 +516,7 @@ public sealed class SemanticPatchJsonTests
         ExtractCallablePatchOperation roundTrip = Assert.IsType<ExtractCallablePatchOperation>(
             Assert.Single(SemanticPatchJson.Deserialize(json).Operations));
 
-        Assert.Equal("unifiedscript.patch/v0.27", patch.SchemaVersion);
+        Assert.Equal("unifiedscript.patch/v0.28", patch.SchemaVersion);
         Assert.Equal(extract.TargetNodeId, roundTrip.TargetNodeId);
         Assert.Equal(extract.ExpectedContainingMethodId, roundTrip.ExpectedContainingMethodId);
         Assert.Equal(extract.ExpectedParentBlockId, roundTrip.ExpectedParentBlockId);
@@ -557,7 +557,7 @@ public sealed class SemanticPatchJsonTests
         string json = SemanticPatchJson.Serialize(patch);
         SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
 
-        Assert.Equal("unifiedscript.patch/v0.27", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch/v0.28", roundTrip.SchemaVersion);
         CollapseStatementRangePatchOperation collapsedRoundTrip =
             Assert.IsType<CollapseStatementRangePatchOperation>(roundTrip.Operations[0]);
         ExpandBlockPatchOperation expandedRoundTrip =
@@ -1202,6 +1202,54 @@ public sealed class SemanticPatchJsonTests
     }
 
     [Fact]
+    public void SerializeAndDeserialize_PreserveTypedDataInputValue()
+    {
+        SemanticId targetId = SemanticId.FromKey("data-input-value-target");
+        SemanticId edgeId = SemanticId.FromKey("data-input-value-edge");
+        SemanticId sourceId = SemanticId.FromKey("data-input-value-source");
+        SemanticId typeId = SemanticId.FromKey("System.Int32");
+        var operation = new SetDataInputValuePatchOperation(
+            targetId,
+            "right",
+            edgeId,
+            sourceId,
+            "value",
+            typeId,
+            new LiteralPatchExpression("42", typeId));
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            SemanticId.FromKey("data-input-value-compilation"),
+            SemanticId.FromKey("data-input-value-configuration"),
+            [operation]);
+
+        string json = SemanticPatchJson.Serialize(patch);
+        SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
+
+        Assert.Equal(
+            operation,
+            Assert.IsType<SetDataInputValuePatchOperation>(Assert.Single(roundTrip.Operations)));
+        Assert.Contains("\"operation\": \"setDataInputValue\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"expression\": \"literal\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Create_RejectsDataInputValueWithMismatchedExpressionType()
+    {
+        Assert.Throws<JsonException>(() => SemanticPatchDocument.Create(
+            SemanticId.FromKey("invalid-data-input-value-compilation"),
+            SemanticId.FromKey("invalid-data-input-value-configuration"),
+            [new SetDataInputValuePatchOperation(
+                SemanticId.FromKey("invalid-data-input-value-target"),
+                "right",
+                SemanticId.FromKey("invalid-data-input-value-edge"),
+                SemanticId.FromKey("invalid-data-input-value-source"),
+                "value",
+                SemanticId.FromKey("System.Int32"),
+                new LiteralPatchExpression(
+                    "false",
+                    SemanticId.FromKey("System.Boolean")))]));
+    }
+
+    [Fact]
     public void Create_RejectsNoOpOrSelfDataEdgeReconnection()
     {
         SemanticId targetId = SemanticId.FromKey("invalid-data-edge-target");
@@ -1411,6 +1459,6 @@ public sealed class SemanticPatchJsonTests
         Assert.Contains("\"statement\": \"switch\"", json, StringComparison.Ordinal);
         Assert.Contains("\"pattern\": \"logical\"", json, StringComparison.Ordinal);
         Assert.Contains("\"operation\": \"moveSwitchSection\"", json, StringComparison.Ordinal);
-        Assert.Equal("unifiedscript.patch/v0.27", roundTrip.SchemaVersion);
+        Assert.Equal("unifiedscript.patch/v0.28", roundTrip.SchemaVersion);
     }
 }

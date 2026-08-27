@@ -3,7 +3,7 @@
 Semantic Patch `unifiedscript.patch/v0.24` introduced the bounded
 `duplicateStatement` operation. Patch v0.26 added `duplicateStatements` for a
 consecutive range that may be pasted into another structured region of the same
-method; the current `unifiedscript.patch/v0.27` reader retains both contracts. Both
+method; the current `unifiedscript.patch/v0.28` reader retains both contracts. Both
 paths change C#, persistent identity, generated artifacts, and the running
 CoreCLR generation through one Workbench transaction.
 

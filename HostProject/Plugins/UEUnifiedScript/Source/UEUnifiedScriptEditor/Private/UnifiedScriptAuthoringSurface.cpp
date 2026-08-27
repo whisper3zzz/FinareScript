@@ -916,7 +916,7 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildSemanticPatch(
     }
 
     const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
-    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.27"));
+    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.28"));
     Root->SetStringField(TEXT("sourceCompilationId"), Document.SourceCompilationId);
     Root->SetStringField(TEXT("semanticConfigurationId"), Document.SemanticConfigurationId);
     Root->SetArrayField(TEXT("operations"), {MakeShared<FJsonValueObject>(Operation)});
@@ -990,7 +990,7 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildDataEdgeReconnectionPatch(
     Operation->SetStringField(TEXT("expectedTypeId"), TargetInput->TypeId);
 
     const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
-    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.27"));
+    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.28"));
     Root->SetStringField(TEXT("sourceCompilationId"), Document.SourceCompilationId);
     Root->SetStringField(TEXT("semanticConfigurationId"), Document.SemanticConfigurationId);
     Root->SetArrayField(TEXT("operations"), {MakeShared<FJsonValueObject>(Operation)});
@@ -1032,7 +1032,7 @@ TSharedRef<FJsonObject> MakePatchRoot(
     const TSharedRef<FJsonObject>& Operation)
 {
     const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
-    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.27"));
+    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.28"));
     Root->SetStringField(TEXT("sourceCompilationId"), Document.SourceCompilationId);
     Root->SetStringField(TEXT("semanticConfigurationId"), Document.SemanticConfigurationId);
     Root->SetArrayField(TEXT("operations"), {MakeShared<FJsonValueObject>(Operation)});
@@ -1814,6 +1814,50 @@ TSharedRef<FJsonObject> LocalReference(const FUnifiedScriptAuthoringParameter& P
     Expression->SetStringField(TEXT("expectedTypeId"), Parameter.TypeId);
     return Expression;
 }
+
+bool IsSimpleCSharpIdentifier(const FString& Value)
+{
+    if (Value.IsEmpty() || !(FChar::IsAlpha(Value[0]) || Value[0] == TEXT('_')))
+    {
+        return false;
+    }
+    for (int32 Index = 1; Index < Value.Len(); ++Index)
+    {
+        if (!(FChar::IsAlnum(Value[Index]) || Value[Index] == TEXT('_')))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+TSharedRef<FJsonObject> AuthoredDataInputExpression(
+    const FString& ValueText,
+    const FUnifiedScriptAuthoringPort& Port)
+{
+    if (ValueText.Equals(TEXT("default"), ESearchCase::IgnoreCase))
+    {
+        const TSharedRef<FJsonObject> Expression = MakeShared<FJsonObject>();
+        Expression->SetStringField(TEXT("expression"), TEXT("default"));
+        Expression->SetStringField(TEXT("typeName"), Port.TypeDisplayName);
+        Expression->SetStringField(TEXT("expectedTypeId"), Port.TypeId);
+        return Expression;
+    }
+
+    if (ValueText.StartsWith(TEXT("-")) && ValueText.Len() > 1)
+    {
+        const TSharedRef<FJsonObject> Expression = MakeShared<FJsonObject>();
+        Expression->SetStringField(TEXT("expression"), TEXT("unary"));
+        Expression->SetStringField(TEXT("operator"), TEXT("-"));
+        Expression->SetObjectField(
+            TEXT("operand"),
+            LiteralExpression(ValueText.Mid(1), Port.TypeId));
+        Expression->SetStringField(TEXT("expectedTypeId"), Port.TypeId);
+        return Expression;
+    }
+
+    return LiteralExpression(ValueText, Port.TypeId);
+}
 }
 
 bool FUnifiedScriptAuthoringSurfaceReader::BuildDataEdgeDisconnectionPatch(
@@ -1851,6 +1895,116 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildDataEdgeDisconnectionPatch(
     Operation->SetStringField(TEXT("expectedSourcePort"), ExpectedEdge.FromPort);
     Operation->SetStringField(TEXT("expectedTypeId"), TargetPort->TypeId);
     return SerializeRoot(MakePatchRoot(Document, Operation), OutPatchJson, OutError, TEXT("the data-edge disconnection patch"));
+}
+
+bool FUnifiedScriptAuthoringSurfaceReader::BuildDataInputValuePatch(
+    const FUnifiedScriptAuthoringSurfaceDocument& Document,
+    const FUnifiedScriptAuthoringFunction& Function,
+    const FUnifiedScriptAuthoringEdge& ExpectedEdge,
+    const FString& NewValueText,
+    FString& OutPatchJson,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::AuthoringSurface::Private;
+    using namespace UE::UnifiedScript::AuthoringSurface::Editing::Private;
+    FString TrimmedValue = NewValueText;
+    TrimmedValue.TrimStartAndEndInline();
+    const FUnifiedScriptAuthoringAction* Source = Function.FindAction(ExpectedEdge.FromNode);
+    const FUnifiedScriptAuthoringAction* Target = Function.FindAction(ExpectedEdge.ToNode);
+    const FUnifiedScriptAuthoringPort* SourcePort = Source != nullptr
+        ? Source->FindPort(ExpectedEdge.FromPort, TEXT("output"))
+        : nullptr;
+    const FUnifiedScriptAuthoringPort* TargetPort = Target != nullptr
+        ? Target->FindPort(ExpectedEdge.ToPort, TEXT("input"))
+        : nullptr;
+    if (!IsSemanticId(Document.SourceCompilationId) ||
+        !IsSemanticId(Document.SemanticConfigurationId) ||
+        !IsSemanticId(ExpectedEdge.Id) || ExpectedEdge.Kind != TEXT("data") ||
+        SourcePort == nullptr || TargetPort == nullptr || SourcePort->IsControl() ||
+        TargetPort->IsControl() || TargetPort->TypeId.IsEmpty() ||
+        TargetPort->TypeDisplayName.IsEmpty() || SourcePort->TypeId != TargetPort->TypeId ||
+        TrimmedValue.IsEmpty())
+    {
+        OutError = TEXT("A pin value edit requires an exact typed data edge and a C# literal or 'default'.");
+        return false;
+    }
+
+    const TSharedRef<FJsonObject> Operation = MakeShared<FJsonObject>();
+    Operation->SetStringField(TEXT("operation"), TEXT("setDataInputValue"));
+    Operation->SetStringField(TEXT("targetNodeId"), ExpectedEdge.ToNode);
+    Operation->SetStringField(TEXT("targetPort"), ExpectedEdge.ToPort);
+    Operation->SetStringField(TEXT("expectedEdgeId"), ExpectedEdge.Id);
+    Operation->SetStringField(TEXT("expectedSourceNodeId"), ExpectedEdge.FromNode);
+    Operation->SetStringField(TEXT("expectedSourcePort"), ExpectedEdge.FromPort);
+    Operation->SetStringField(TEXT("expectedTypeId"), TargetPort->TypeId);
+    Operation->SetObjectField(
+        TEXT("newValue"),
+        AuthoredDataInputExpression(TrimmedValue, *TargetPort));
+    return SerializeRoot(
+        MakePatchRoot(Document, Operation),
+        OutPatchJson,
+        OutError,
+        TEXT("the typed data-input value patch"));
+}
+
+bool FUnifiedScriptAuthoringSurfaceReader::BuildDataInputPromotionPatch(
+    const FUnifiedScriptAuthoringSurfaceDocument& Document,
+    const FUnifiedScriptAuthoringFunction& Function,
+    const FUnifiedScriptAuthoringEdge& ExpectedEdge,
+    const FString& LocalName,
+    FString& OutPatchJson,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::AuthoringSurface::Private;
+    using namespace UE::UnifiedScript::AuthoringSurface::Editing::Private;
+    FString TrimmedName = LocalName;
+    TrimmedName.TrimStartAndEndInline();
+    const FUnifiedScriptAuthoringAction* Source = Function.FindAction(ExpectedEdge.FromNode);
+    const FUnifiedScriptAuthoringAction* Target = Function.FindAction(ExpectedEdge.ToNode);
+    const FUnifiedScriptAuthoringPort* SourcePort = Source != nullptr
+        ? Source->FindPort(ExpectedEdge.FromPort, TEXT("output"))
+        : nullptr;
+    const FUnifiedScriptAuthoringPort* TargetPort = Target != nullptr
+        ? Target->FindPort(ExpectedEdge.ToPort, TEXT("input"))
+        : nullptr;
+    const FUnifiedScriptAuthoringAction* Statement = Source != nullptr
+        ? FindContainingStatement(Function, Source->Id)
+        : nullptr;
+    const FUnifiedScriptAuthoringRegion* Block = Statement != nullptr
+        ? FindOwningBlock(Function, Statement->Id)
+        : nullptr;
+    if (!IsSemanticId(Document.SourceCompilationId) ||
+        !IsSemanticId(Document.SemanticConfigurationId) ||
+        !IsSemanticId(ExpectedEdge.Id) || ExpectedEdge.Kind != TEXT("data") ||
+        Source == nullptr || Target == nullptr || SourcePort == nullptr || TargetPort == nullptr ||
+        SourcePort->IsControl() || TargetPort->IsControl() || SourcePort->TypeId.IsEmpty() ||
+        SourcePort->TypeDisplayName.IsEmpty() || SourcePort->TypeId != TargetPort->TypeId ||
+        Statement == nullptr || Block == nullptr ||
+        (Statement->GraphKind != TEXT("variable") && Statement->GraphKind != TEXT("return")) ||
+        !IsSimpleCSharpIdentifier(TrimmedName))
+    {
+        OutError = TEXT("Promote to Local requires a named, typed pure expression inside an explicit local initializer or return statement.");
+        return false;
+    }
+
+    FString Previous;
+    FString Next;
+    GetSiblingPreconditions(Function, *Block, Statement->Id, Previous, Next);
+    const TSharedRef<FJsonObject> Operation = MakeShared<FJsonObject>();
+    Operation->SetStringField(TEXT("operation"), TEXT("introduceTemporary"));
+    Operation->SetStringField(TEXT("targetNodeId"), Source->Id);
+    Operation->SetStringField(TEXT("expectedContainingStatementId"), Statement->Id);
+    Operation->SetStringField(TEXT("expectedParentBlockId"), Block->SourceNodeId);
+    SetOptionalId(Operation, TEXT("expectedPreviousSiblingId"), Previous);
+    SetOptionalId(Operation, TEXT("expectedNextSiblingId"), Next);
+    Operation->SetStringField(TEXT("name"), TrimmedName);
+    Operation->SetStringField(TEXT("typeName"), SourcePort->TypeDisplayName);
+    Operation->SetStringField(TEXT("expectedTypeId"), SourcePort->TypeId);
+    return SerializeRoot(
+        MakePatchRoot(Document, Operation),
+        OutPatchJson,
+        OutError,
+        TEXT("the data-input promotion patch"));
 }
 
 bool FUnifiedScriptAuthoringSurfaceReader::BuildControlEdgeReconnectionPatch(

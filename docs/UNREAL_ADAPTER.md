@@ -378,7 +378,7 @@ The workspace presents Script Asset state and behavior as a semantic hierarchy:
 function regions retain structured ownership of promoted actions, while the
 inspector exposes kind/category, exact semantic ID, source span, source preview,
 and source navigation. Literal and operator edit capabilities accept a candidate
-value and export a preconditioned `unifiedscript.patch/v0.27` document to the
+value and export a preconditioned `unifiedscript.patch/v0.28` document to the
 clipboard. This preserves one compiler-owned edit contract across browser and
 Slate frontends.
 
@@ -392,7 +392,7 @@ persisted visual layout.
 ## Phase B.15 transactional Slate Apply and component reload
 
 Each promoted literal/operator editor now exposes `Apply & Reload`. The Slate
-client posts the exact `unifiedscript.patch/v0.27` payload to the configured
+client posts the exact `unifiedscript.patch/v0.28` payload to the configured
 loopback Workbench URL and accepts only a strict
 `unifiedscript.authoring-workspace/v0.4` response. The returned Surface replaces
 the view without UE-side C# or Graph reconstruction; protocol diagnostics such
@@ -673,6 +673,23 @@ source block. Favorites and the bounded eight-entry Recent list persist in
 `GEditorPerProjectIni`. A placement reaches Recent only after the Workbench
 accepts its transaction, and preferences never alter source, identities,
 Surface, Graph, or `.usgraph`. See [NODE_PALETTE.md](NODE_PALETTE.md).
+
+## Phase B.28 typed Pin Authoring
+
+Selecting a graph node now exposes every connected data input in **PIN
+AUTHORING**. **Set Value** emits Semantic Patch v0.28 `setDataInputValue` with
+the exact old edge, endpoints, ports, semantic type, and a closed typed literal
+expression. **Reset** uses the same operation with a bounded typed default.
+The Roslyn patcher rejects stale edges and literal/runtime-type mismatches before
+the normal Workbench transaction can publish source or artifacts.
+
+**Promote to Local** targets the expression feeding the pin and reuses
+`introduceTemporary` with exact containing-statement, block, sibling, name, and
+type facts. Stable pure expressions inside explicit local initializers and
+returns become a typed declaration immediately before the statement; unsafe
+effect/order or name conflicts reject without writes. The graph remains
+compiler-owned until the accepted response reloads the next Surface. See
+[PIN_AUTHORING.md](PIN_AUTHORING.md).
 
 The bounded native pattern parser emits the shared JSON algebra for constant,
 declaration, type, var, discard, relational, logical, negated, and

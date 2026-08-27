@@ -162,8 +162,8 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
             TEXT("120"),
             PatchJson,
             Error));
-    TestTrue(TEXT("Patch uses semantic-patch v0.27"),
-        PatchJson.Contains(TEXT("\"unifiedscript.patch/v0.27\"")));
+    TestTrue(TEXT("Patch uses semantic-patch v0.28"),
+        PatchJson.Contains(TEXT("\"unifiedscript.patch/v0.28\"")));
     TestTrue(TEXT("Patch retains the exact target node"),
         PatchJson.Contains(LiteralEdit->TargetNodeId));
     TestTrue(TEXT("Patch carries the requested replacement"),
@@ -288,6 +288,63 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         TestTrue(TEXT("Disconnection uses its exact edge precondition"),
             DisconnectJson.Contains(TEXT("\"operation\": \"disconnectDataEdge\"")) &&
                 DisconnectJson.Contains(RewireEdge->Id));
+
+        FString PinValueJson;
+        TestTrue(
+            TEXT("Pin Details can build a typed literal replacement"),
+            FUnifiedScriptAuthoringSurfaceReader::BuildDataInputValuePatch(
+                Document,
+                RewireFunction,
+                *RewireEdge,
+                TEXT("42"),
+                PinValueJson,
+                Error));
+        TestTrue(TEXT("Pin value patch carries exact edge and typed expression facts"),
+            PinValueJson.Contains(TEXT("\"operation\": \"setDataInputValue\"")) &&
+                PinValueJson.Contains(TEXT("\"expression\": \"literal\"")) &&
+                PinValueJson.Contains(TEXT("\"valueText\": \"42\"")) &&
+                PinValueJson.Contains(RewireEdge->Id));
+
+        FString PinDefaultJson;
+        TestTrue(
+            TEXT("Pin Details can reset through a bounded typed default"),
+            FUnifiedScriptAuthoringSurfaceReader::BuildDataInputValuePatch(
+                Document,
+                RewireFunction,
+                *RewireEdge,
+                TEXT("default"),
+                PinDefaultJson,
+                Error));
+        TestTrue(TEXT("Pin reset carries the semantic type name and ID"),
+            PinDefaultJson.Contains(TEXT("\"expression\": \"default\"")) &&
+                PinDefaultJson.Contains(TEXT("\"typeName\"")) &&
+                PinDefaultJson.Contains(TEXT("\"expectedTypeId\"")));
+
+        FString PromotionJson;
+        TestTrue(
+            TEXT("Pin Details can promote its source expression to a typed local"),
+            FUnifiedScriptAuthoringSurfaceReader::BuildDataInputPromotionPatch(
+                Document,
+                RewireFunction,
+                *RewireEdge,
+                TEXT("promotedIncrement"),
+                PromotionJson,
+                Error));
+        TestTrue(TEXT("Promotion keeps expression, statement, block, name, and type preconditions"),
+            PromotionJson.Contains(TEXT("\"operation\": \"introduceTemporary\"")) &&
+                PromotionJson.Contains(RewireEdge->FromNode) &&
+                PromotionJson.Contains(RewireTarget->Id) &&
+                PromotionJson.Contains(TEXT("\"expectedParentBlockId\"")) &&
+                PromotionJson.Contains(TEXT("\"name\": \"promotedIncrement\"")) &&
+                PromotionJson.Contains(TEXT("\"expectedTypeId\"")));
+        TestFalse(TEXT("Promotion rejects a non-identifier local name"),
+            FUnifiedScriptAuthoringSurfaceReader::BuildDataInputPromotionPatch(
+                Document,
+                RewireFunction,
+                *RewireEdge,
+                TEXT("not a name"),
+                PromotionJson,
+                Error));
 
         FString SharedPlanJson;
         TestTrue(
