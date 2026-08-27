@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "unifiedscript.patch/v0.28",
+  "sourceCompilationId": "us_b8756f6de2a390ab1d9585887f2ad3a7",
+  "semanticConfigurationId": "us_3e3c5262d3a9996cf763f7b626505278",
+  "operations": [
+    {
+      "operation": "replaceLiteral",
+      "targetNodeId": "us_99cf0d944170ffdc5f3277562ede4dc7",
+      "expectedValueText": "0.5f",
+      "newValueText": "0.6f"
+    },
+    {
+      "operation": "replaceLiteral",
+      "targetNodeId": "us_c0e60818f472ecd4ca702e3808b6f6d1",
+      "expectedValueText": "1.0f",
+      "newValueText": "1.25f"
+    }
+  ]
+}

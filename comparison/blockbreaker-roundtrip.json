@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "unifiedscript.blockbreaker-round-trip/v0.1",
+  "baselineCommit": "b1d3de399c18fbf645ab533822d5f4f786a54683",
+  "projectPath": "Managed/BlockBreaker.UnifiedScript.csproj",
+  "visualPatchPath": "comparison/blockbreaker-roundtrip.patch.json",
+  "scripts": [
+    {
+      "id": "player",
+      "sourcePath": "Managed/BlockBreakerPlayerScript.cs",
+      "identityPath": "Managed/BlockBreakerPlayerScript.cs.usids",
+      "requirementsPath": "comparison/blockbreaker-player-roundtrip.requirements.json",
+      "assemblyName": "BlockBreaker.RoundTrip.Player",
+      "method": "BlockBreaker.UnifiedScript.BlockBreakerPlayerScript.ShouldFire",
+      "visualEvidence": "bool thresholdReached = shootInput >= 0.6f;",
+      "codeEdits": [
+        {
+          "oldText": "bool thresholdReached = shootInput >= 0.6f;",
+          "newText": "bool fireRequested = shootInput >= 0.60f;"
+        },
+        {
+          "oldText": "return thresholdReached && canShoot;",
+          "newText": "return fireRequested && canShoot;"
+        }
+      ]
+    },
+    {
+      "id": "rifle",
+      "sourcePath": "Managed/BlockBreakerGunScripts.cs",
+      "identityPath": "Managed/BlockBreakerGunScripts.cs.usids",
+      "requirementsPath": "comparison/blockbreaker-rifle-roundtrip.requirements.json",
+      "assemblyName": "BlockBreaker.RoundTrip.Rifle",
+      "method": "BlockBreaker.UnifiedScript.BlockBreakerRifleScript.ResolveDamage",
+      "visualEvidence": "float tunedDamage = baseDamage * 1.25f;",
+      "codeEdits": [
+        {
+          "oldText": "float tunedDamage = baseDamage * 1.25f;",
+          "newText": "float resolvedDamage = baseDamage * 1.250f;"
+        },
+        {
+          "oldText": "return tunedDamage;",
+          "newText": "return resolvedDamage;"
+        }
+      ]
+    }
+  ]
+}

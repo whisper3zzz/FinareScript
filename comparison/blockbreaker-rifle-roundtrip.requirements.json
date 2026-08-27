@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "unifiedscript.round-trip-requirements/v0.1",
+  "methods": [
+    {
+      "qualifiedName": "BlockBreaker.UnifiedScript.BlockBreakerRifleScript.ResolveDamage",
+      "cases": [
+        {
+          "id": "base-damage",
+          "arguments": [2.0]
+        },
+        {
+          "id": "zero-damage",
+          "arguments": [0.0]
+        },
+        {
+          "id": "negative-sentinel",
+          "arguments": [-1.0]
+        }
+      ]
+    }
+  ]
+}

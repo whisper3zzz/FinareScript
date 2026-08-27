@@ -61,6 +61,11 @@ internal static class Program
             return RunApply(args, isPlan: true);
         }
 
+        if (args.Count > 0 && args[0] is "apply-project-patch" or "apply-project-plan")
+        {
+            return RunProjectApply(args, isPlan: args[0] == "apply-project-plan");
+        }
+
         if (args.Count > 0 && args[0] == "apply-declaration-patch")
         {
             return RunDeclarationApply(args);
@@ -91,12 +96,219 @@ internal static class Program
             return RunUnrealPuertsInventory(args);
         }
 
+        if (args.Count > 0 && args[0] == "verify-roundtrip")
+        {
+            return RunRoundTripVerification(args);
+        }
+
         if (args.Count > 0 && args[0] is "emit" or "emit-files")
         {
             return RunEmit(args);
         }
 
         return RunAnalyze(args);
+    }
+
+    private static int RunRoundTripVerification(IReadOnlyList<string> args)
+    {
+        if (!TryParseRoundTripArguments(args, out RoundTripOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+
+        options = options ?? throw new InvalidOperationException(
+            "Argument parsing succeeded without round-trip options.");
+        var inputPaths = new List<string>
+        {
+            options.VisualSourcePath,
+            options.CodeSourcePath,
+            options.RequirementPath,
+        };
+        inputPaths.AddRange(options.ReferencePaths);
+        if (options.VisualIdentityPath is not null)
+        {
+            inputPaths.Add(options.VisualIdentityPath);
+        }
+        if (options.CodeIdentityPath is not null)
+        {
+            inputPaths.Add(options.CodeIdentityPath);
+        }
+        foreach (string path in inputPaths)
+        {
+            if (!File.Exists(path))
+            {
+                Console.Error.WriteLine($"Round-trip input does not exist: {path}");
+                return 66;
+            }
+        }
+
+        IdentitySidecarDocument? visualIdentity = options.VisualIdentityPath is null
+            ? null
+            : LoadIdentitySidecar(options.VisualIdentityPath);
+        IdentitySidecarDocument? codeIdentity = options.CodeIdentityPath is null
+            ? null
+            : LoadIdentitySidecar(options.CodeIdentityPath);
+        string logicalPath = visualIdentity?.SourcePath ?? codeIdentity?.SourcePath ??
+            Path.GetFileName(options.VisualSourcePath);
+        if (visualIdentity is not null && codeIdentity is not null &&
+            !string.Equals(
+                visualIdentity.SourcePath,
+                codeIdentity.SourcePath,
+                StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                "Visual and C# identity sidecars must describe the same logical source path.");
+        }
+
+        string[] references = options.ReferencePaths
+            .Select(Path.GetFullPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var visualRequest = new CSharpCompilationRequest(
+            options.AssemblyName,
+            [new CSharpSourceDocument(
+                logicalPath,
+                File.ReadAllText(options.VisualSourcePath),
+                visualIdentity)],
+            references);
+        var codeRequest = new CSharpCompilationRequest(
+            options.AssemblyName,
+            [new CSharpSourceDocument(
+                logicalPath,
+                File.ReadAllText(options.CodeSourcePath),
+                codeIdentity)],
+            references);
+        RoundTripRequirementDocument requirements = RoundTripRequirementJson.Deserialize(
+            File.ReadAllText(options.RequirementPath));
+        try
+        {
+            RoundTripEquivalenceReport report = new RoundTripEquivalenceVerifier().Verify(
+                visualRequest,
+                codeRequest,
+                requirements.ToRequirements());
+            string fullReportPath = Path.GetFullPath(options.ReportPath);
+            WriteAtomically(
+                fullReportPath,
+                RoundTripEquivalenceJson.Serialize(report) + "\n");
+            Console.WriteLine(fullReportPath);
+            Console.WriteLine(
+                $"Round-trip equivalence: {(report.Passed ? "PASS" : "FAIL")} " +
+                $"(methods={report.Methods.Count}, assets={report.AssetEquivalent})");
+            return report.Passed ? 0 : 3;
+        }
+        catch (ExecutionCompilationException exception)
+        {
+            foreach (UnifiedDiagnostic diagnostic in exception.Diagnostics)
+            {
+                Console.Error.WriteLine(FormatDiagnostic(diagnostic));
+            }
+            Console.Error.WriteLine(exception.Message);
+            return 2;
+        }
+    }
+
+    private static int RunProjectApply(IReadOnlyList<string> args, bool isPlan)
+    {
+        if (!TryParseProjectPatchArguments(args, isPlan, out ProjectPatchOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+
+        options = options ?? throw new InvalidOperationException(
+            "Argument parsing succeeded without project patch options.");
+        if (!File.Exists(options.ProjectPath))
+        {
+            Console.Error.WriteLine($"C# project does not exist: {options.ProjectPath}");
+            return 66;
+        }
+        if (!File.Exists(options.EditDocumentPath))
+        {
+            Console.Error.WriteLine(
+                $"{(isPlan ? "Patch plan" : "Patch")} does not exist: " +
+                options.EditDocumentPath);
+            return 66;
+        }
+
+        CSharpCompilationRequest request;
+        try
+        {
+            request = LoadAnalysisRequest(new AnalyzeOptions(
+                [options.ProjectPath],
+                null,
+                options.EffectCatalogPath,
+                options.AssemblyName,
+                options.ReferencePaths,
+                options.IdentityPaths,
+                options.Configuration,
+                options.TargetFramework,
+                options.Restore,
+                options.Build));
+        }
+        catch (CSharpProjectLoadException exception)
+        {
+            Console.Error.WriteLine($"error USCS3001: {exception.Message}");
+            return 2;
+        }
+
+        string editJson = File.ReadAllText(options.EditDocumentPath);
+        CSharpPatchResult result = isPlan
+            ? new CSharpPatchPlanApplier().Apply(
+                request,
+                SemanticPatchPlanJson.Deserialize(editJson))
+            : new CSharpSourcePatchApplier().Apply(
+                request,
+                SemanticPatchJson.Deserialize(editJson));
+        foreach (UnifiedDiagnostic diagnostic in result.Diagnostics)
+        {
+            Console.Error.WriteLine(FormatDiagnostic(diagnostic));
+        }
+        if (!result.Succeeded || result.PatchedRequest is null || result.Analysis is null)
+        {
+            Console.Error.WriteLine(
+                $"Project {(isPlan ? "patch plan" : "patch")} failed; no source was written.");
+            return 3;
+        }
+
+        string fullOutputDirectory = Path.GetFullPath(options.OutputDirectory);
+        var originalSources = request.Sources.ToDictionary(
+            static source => source.LogicalPath,
+            StringComparer.Ordinal);
+        CSharpSourceDocument[] changedSources = result.PatchedRequest.Sources
+            .Where(source => !originalSources.TryGetValue(
+                    source.LogicalPath,
+                    out CSharpSourceDocument? original) ||
+                !string.Equals(source.Source, original.Source, StringComparison.Ordinal))
+            .OrderBy(static source => source.LogicalPath, StringComparer.Ordinal)
+            .ToArray();
+        if (changedSources.Length == 0)
+        {
+            throw new InvalidOperationException("A successful project patch changed no source documents.");
+        }
+
+        Dictionary<string, IdentitySidecarDocument> updatedIdentities = result.Analysis.IdentitySidecars
+            .ToDictionary(static sidecar => sidecar.SourcePath, StringComparer.Ordinal);
+        var outputs = new List<OutputFile>();
+        foreach (CSharpSourceDocument source in changedSources)
+        {
+            string sourceOutputPath = ResolveOutputPath(fullOutputDirectory, source.LogicalPath);
+            outputs.Add(new OutputFile(sourceOutputPath, source.Source));
+            if (updatedIdentities.TryGetValue(
+                    source.LogicalPath,
+                    out IdentitySidecarDocument? identity))
+            {
+                outputs.Add(new OutputFile(
+                    sourceOutputPath + ".usids",
+                    IdentitySidecarJson.Serialize(identity) + "\n"));
+            }
+        }
+        WriteTransactionally(outputs);
+        foreach (OutputFile output in outputs)
+        {
+            Console.WriteLine(Path.GetFullPath(output.Path));
+        }
+        return 0;
     }
 
     private static int RunUnrealBindings(IReadOnlyList<string> args)
@@ -1777,6 +1989,176 @@ internal static class Program
         return true;
     }
 
+    private static bool TryParseRoundTripArguments(
+        IReadOnlyList<string> args,
+        out RoundTripOptions? options)
+    {
+        options = null;
+        if (args.Count < 7 || args[0] != "verify-roundtrip" ||
+            args[1].StartsWith("--", StringComparison.Ordinal) ||
+            args[2].StartsWith("--", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        string visualSourcePath = args[1];
+        string codeSourcePath = args[2];
+        string? requirementPath = null;
+        string? reportPath = null;
+        string? visualIdentityPath = null;
+        string? codeIdentityPath = null;
+        string? assemblyName = null;
+        var referencePaths = new List<string>();
+        int index = 3;
+        while (index < args.Count)
+        {
+            string option = args[index++];
+            if (index >= args.Count)
+            {
+                return false;
+            }
+
+            string value = args[index++];
+            switch (option)
+            {
+                case "--requirements" when requirementPath is null:
+                    requirementPath = value;
+                    break;
+                case "--report" when reportPath is null:
+                    reportPath = value;
+                    break;
+                case "--visual-identity" when visualIdentityPath is null:
+                    visualIdentityPath = value;
+                    break;
+                case "--code-identity" when codeIdentityPath is null:
+                    codeIdentityPath = value;
+                    break;
+                case "--assembly" when assemblyName is null:
+                    assemblyName = value;
+                    break;
+                case "--reference":
+                    referencePaths.Add(value);
+                    break;
+                default:
+                    return false;
+            }
+        }
+
+        if (requirementPath is null || reportPath is null ||
+            (visualIdentityPath is null) != (codeIdentityPath is null))
+        {
+            return false;
+        }
+
+        options = new RoundTripOptions(
+            visualSourcePath,
+            codeSourcePath,
+            requirementPath,
+            reportPath,
+            visualIdentityPath,
+            codeIdentityPath,
+            assemblyName ?? "UnifiedScript.RoundTrip",
+            referencePaths);
+        return true;
+    }
+
+    private static bool TryParseProjectPatchArguments(
+        IReadOnlyList<string> args,
+        bool isPlan,
+        out ProjectPatchOptions? options)
+    {
+        options = null;
+        string command = isPlan ? "apply-project-plan" : "apply-project-patch";
+        string editOption = isPlan ? "--plan" : "--patch";
+        if (args.Count < 6 || args[0] != command ||
+            args[1].StartsWith("--", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        string projectPath = args[1];
+        string? editDocumentPath = null;
+        string? outputDirectory = null;
+        string? effectCatalogPath = null;
+        string? assemblyName = null;
+        string configuration = "Debug";
+        string? targetFramework = null;
+        bool restore = true;
+        bool build = true;
+        var referencePaths = new List<string>();
+        var identityPaths = new List<string>();
+        int index = 2;
+        while (index < args.Count)
+        {
+            string option = args[index++];
+            if (option == "--no-restore" && restore)
+            {
+                restore = false;
+                continue;
+            }
+            if (option == "--no-build" && build)
+            {
+                build = false;
+                continue;
+            }
+            if (index >= args.Count)
+            {
+                return false;
+            }
+
+            string value = args[index++];
+            if (option == editOption && editDocumentPath is null)
+            {
+                editDocumentPath = value;
+                continue;
+            }
+            switch (option)
+            {
+                case "--out" when outputDirectory is null:
+                    outputDirectory = value;
+                    break;
+                case "--effects" when effectCatalogPath is null:
+                    effectCatalogPath = value;
+                    break;
+                case "--assembly" when assemblyName is null:
+                    assemblyName = value;
+                    break;
+                case "--configuration" when configuration == "Debug":
+                    configuration = value;
+                    break;
+                case "--framework" when targetFramework is null:
+                    targetFramework = value;
+                    break;
+                case "--reference":
+                    referencePaths.Add(value);
+                    break;
+                case "--identity":
+                    identityPaths.Add(value);
+                    break;
+                default:
+                    return false;
+            }
+        }
+
+        if (editDocumentPath is null || outputDirectory is null)
+        {
+            return false;
+        }
+        options = new ProjectPatchOptions(
+            projectPath,
+            editDocumentPath,
+            outputDirectory,
+            effectCatalogPath,
+            assemblyName,
+            referencePaths,
+            identityPaths,
+            configuration,
+            targetFramework,
+            restore,
+            build);
+        return true;
+    }
+
     private static bool TryParseLayoutArguments(
         IReadOnlyList<string> args,
         bool synchronize,
@@ -2051,6 +2433,36 @@ internal static class Program
         }
     }
 
+    private static string ResolveOutputPath(string outputDirectory, string logicalPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(outputDirectory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(logicalPath);
+        if (Path.IsPathRooted(logicalPath))
+        {
+            throw new ArgumentException(
+                $"Project source logical path '{logicalPath}' must be relative.",
+                nameof(logicalPath));
+        }
+
+        string fullRoot = Path.GetFullPath(outputDirectory);
+        string candidate = Path.GetFullPath(Path.Combine(
+            fullRoot,
+            logicalPath.Replace('/', Path.DirectorySeparatorChar)));
+        string rootPrefix = fullRoot.TrimEnd(
+            Path.DirectorySeparatorChar,
+            Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        StringComparison comparison = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        if (!candidate.StartsWith(rootPrefix, comparison))
+        {
+            throw new ArgumentException(
+                $"Project source logical path '{logicalPath}' escapes the output directory.",
+                nameof(logicalPath));
+        }
+        return candidate;
+    }
+
     private static void WriteAtomically(string outputPath, string content)
         => WriteTransactionally([new OutputFile(outputPath, content)]);
 
@@ -2147,6 +2559,8 @@ internal static class Program
         "  unifiedscript layout-sync <graph.json> --layout <layout.usgraph> --out <updated.usgraph>\n" +
         "  unifiedscript apply-patch <input.cs> --patch <patch.json> --out <output.cs> [options]\n" +
         "  unifiedscript apply-plan <input.cs> --plan <plan.json> --out <output.cs> [options]\n" +
+        "  unifiedscript apply-project-patch <project.csproj> --patch <patch.json> --out <directory> [options]\n" +
+        "  unifiedscript apply-project-plan <project.csproj> --plan <plan.json> --out <directory> [options]\n" +
         "  unifiedscript apply-declaration-patch <input.cs> --declaration-patch <patch.json> " +
         "--out <output.cs> --out-asset <asset.json> [options]\n" +
         "  unifiedscript execute <input.cs> (--method <name> | --method-id <us_...>) [options]\n" +
@@ -2154,6 +2568,7 @@ internal static class Program
         "  unifiedscript ue-bindings <reflection.json> --out <bindings.cs> [--contract <api-contract.json>] [--native-out <thunks.cpp>] [--nodes-out <nodes.json>] [--report <coverage.json>] [--fail-on-rejected] [--namespace <name>]\n" +
         "  unifiedscript ue-data-plane <schema.json> --managed-out <layouts.g.cs> --native-out <layouts.gen.h>\n" +
         "  unifiedscript ue-puerts-inventory <puerts-project> --out <inventory.json> [--native-project <target-project>] [--project-name <name>] [--coverage <coverage.json> --report <report.json> --fail-on-uncovered]\n" +
+        "  unifiedscript verify-roundtrip <visual.cs> <code.cs> --requirements <requirements.json> --report <report.json> [options]\n" +
         "Options:\n" +
         "  --out <path>            Artifact directory, initialized sidecar, or patched source output.\n" +
         "  --patch <patch.json>    Semantic patch document required by apply-patch.\n" +
@@ -2187,6 +2602,9 @@ internal static class Program
         "  --native-project <path> Scan remaining native facade functions in the migration target.\n" +
         "  --project-name <name>   Stable inventory name when source and target projects differ.\n" +
         "  --fail-on-uncovered     Return data-error status for drift, missing, or stale migration routes.\n" +
+        "  --requirements <file>   Visual/C# round-trip methods and execution cases.\n" +
+        "  --visual-identity <file> Persistent IDs for the Visual-authored source.\n" +
+        "  --code-identity <file>  Reconciled persistent IDs for the C#-edited source.\n" +
         "  --assembly <name>        Set the analysis assembly name.\n" +
         "  --effects <catalog.json> Apply effect catalog overrides.\n" +
         "  --reference <assembly>   Add a metadata reference; may be repeated.\n" +
@@ -2265,6 +2683,29 @@ internal static class Program
         string? EffectCatalogPath,
         string AssemblyName,
         IReadOnlyList<string> ReferencePaths);
+
+    private sealed record RoundTripOptions(
+        string VisualSourcePath,
+        string CodeSourcePath,
+        string RequirementPath,
+        string ReportPath,
+        string? VisualIdentityPath,
+        string? CodeIdentityPath,
+        string AssemblyName,
+        IReadOnlyList<string> ReferencePaths);
+
+    private sealed record ProjectPatchOptions(
+        string ProjectPath,
+        string EditDocumentPath,
+        string OutputDirectory,
+        string? EffectCatalogPath,
+        string? AssemblyName,
+        IReadOnlyList<string> ReferencePaths,
+        IReadOnlyList<string> IdentityPaths,
+        string Configuration,
+        string? TargetFramework,
+        bool Restore,
+        bool Build);
 
     private sealed record LayoutOptions(
         string GraphPath,

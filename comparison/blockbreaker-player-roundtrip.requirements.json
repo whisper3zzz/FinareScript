@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "unifiedscript.round-trip-requirements/v0.1",
+  "methods": [
+    {
+      "qualifiedName": "BlockBreaker.UnifiedScript.BlockBreakerPlayerScript.ShouldFire",
+      "cases": [
+        {
+          "id": "below-threshold",
+          "arguments": [0.59, true]
+        },
+        {
+          "id": "at-threshold",
+          "arguments": [0.6, true]
+        },
+        {
+          "id": "shoot-disabled",
+          "arguments": [1.0, false]
+        }
+      ]
+    }
+  ]
+}
