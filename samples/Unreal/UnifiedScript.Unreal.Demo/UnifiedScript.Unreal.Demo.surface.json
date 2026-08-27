@@ -1,7 +1,7 @@
 {
-  "schemaVersion": "unifiedscript.authoring-surface/v0.3",
-  "sourceCompilationId": "us_7f7eb78d7b6043c16502bfdb8a47d345",
-  "semanticConfigurationId": "us_38a1f623a4146094df6bc62d8e731651",
+  "schemaVersion": "unifiedscript.authoring-surface/v0.4",
+  "sourceCompilationId": "us_021d5af7c7eb878b9aceefbe456f9df9",
+  "semanticConfigurationId": "us_c043c7c8708de51f12789603533736d0",
   "assets": [
     {
       "id": "us_cefc9ee5805e3ed5610154145ea986dd",
@@ -14,7 +14,7 @@
           "column": 1
         },
         "end": {
-          "line": 81,
+          "line": 118,
           "column": 2
         }
       },
@@ -54,14 +54,14 @@
           "isStatic": false,
           "parameters": [
             {
-              "id": "us_9246fd4f2614fdf60fc24a253db2da76",
+              "id": "us_4cfe348ad15c0d07e6debaf831a531aa",
               "name": "value",
               "typeMetadataName": "System.Int32",
               "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
               "typeDisplayName": "int"
             },
             {
-              "id": "us_42fb878589a53d0eee5b86b3fdb370f5",
+              "id": "us_2c60d2735a9fa63d03999b3de486d177",
               "name": "signalContext",
               "typeMetadataName": "UnifiedScript.Unreal.UnrealObjectHandle",
               "typeId": "us_9de04fb1091bfd0124c7367318f73ab7",
@@ -77,11 +77,11 @@
               "span": {
                 "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
                 "start": {
-                  "line": 59,
+                  "line": 96,
                   "column": 5
                 },
                 "end": {
-                  "line": 66,
+                  "line": 103,
                   "column": 6
                 }
               },
@@ -93,36 +93,36 @@
                 "us_0b129115e14ae3e4653ddb2844533f23"
               ],
               "childRegionIds": [
-                "us_b1fcbdfc889f248472b942bedf216466"
+                "us_c8b995703779a639b77265c4f48600ee"
               ]
             },
             {
-              "id": "us_b1fcbdfc889f248472b942bedf216466",
+              "id": "us_c8b995703779a639b77265c4f48600ee",
               "kind": "block",
               "parentRegionId": "us_7b4a5f66bf3793503c7c3576e3e7560f",
-              "sourceNodeId": "us_0b0efe264bbe051ccfd16f8ebd252b27",
+              "sourceNodeId": "us_2015f2b1ade18207a7645562c0da407a",
               "span": {
                 "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
                 "start": {
-                  "line": 64,
+                  "line": 101,
                   "column": 5
                 },
                 "end": {
-                  "line": 66,
+                  "line": 103,
                   "column": 6
                 }
               },
               "isImplicit": false,
               "directStatementIds": [
-                "us_95a005b1882044550d8272942bbd9022"
+                "us_1b6158deed6c3e6e70912f0dcdc2d80d"
               ],
               "directActionIds": [
-                "us_7c3e2c271f5efb4c226d165dfed69088",
-                "us_8d9f56e49f717b5001d59c8fef02cebc",
-                "us_95a005b1882044550d8272942bbd9022",
-                "us_3c7c1de8cc945f8ccde1276a3c476051",
-                "us_e86bd2da1fcf32e0b12d6be07875d98c",
-                "us_9dcad6b8787af32972bc7782682ab072"
+                "us_1b6158deed6c3e6e70912f0dcdc2d80d",
+                "us_1ff3a904cf2f6a1ce5dfdb49b4d3b504",
+                "us_f321ed1b1650f3855c1a218070af7f40",
+                "us_2747a32211cd9f8bb7dbbe5b113646ff",
+                "us_69b6da10b94d84cff2bc4e099b94dd52",
+                "us_8a87f95a88c13b30c32e96ffadb871cc"
               ],
               "childRegionIds": []
             }
@@ -137,11 +137,11 @@
               "span": {
                 "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
                 "start": {
-                  "line": 59,
+                  "line": 96,
                   "column": 5
                 },
                 "end": {
-                  "line": 66,
+                  "line": 103,
                   "column": 6
                 }
               },
@@ -168,77 +168,24 @@
                   "typeId": "us_9de04fb1091bfd0124c7367318f73ab7",
                   "typeDisplayName": "UnrealObjectHandle"
                 }
-              ]
+              ],
+              "properties": {
+                "declaredSymbolId": "us_f65690f6080bf7ccfb4f90350d38f1ba",
+                "effects": "readsState|writesState",
+                "eventParameter0ResolvedType": "int",
+                "eventParameter0TypeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                "eventParameter1ResolvedType": "UnrealObjectHandle",
+                "eventParameter1TypeId": "us_9de04fb1091bfd0124c7367318f73ab7",
+                "graphSafe": "true",
+                "resolvedType": "void",
+                "typeId": "us_b05b0b6732061d54c39d8e1cb704a620",
+                "unrealEventPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:OnManagedSignal",
+                "unrealEventSource": "Target",
+                "unrealEventSourceType": "UnifiedScriptComponent"
+              }
             },
             {
-              "id": "us_7c3e2c271f5efb4c226d165dfed69088",
-              "graphKind": "memberAccess",
-              "category": "value",
-              "title": "ManagedState",
-              "summary": "ManagedState \u00B7 _component",
-              "span": {
-                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
-                "start": {
-                  "line": 65,
-                  "column": 9
-                },
-                "end": {
-                  "line": 65,
-                  "column": 32
-                }
-              },
-              "regionId": "us_b1fcbdfc889f248472b942bedf216466",
-              "declarationReferenceIds": [],
-              "editCapabilities": [],
-              "ports": [
-                {
-                  "name": "target",
-                  "direction": "input",
-                  "kind": "data",
-                  "typeId": "us_f801bf9355044e2f114a87a3e07118e2",
-                  "typeDisplayName": "UnifiedScriptComponent"
-                },
-                {
-                  "name": "value",
-                  "direction": "output",
-                  "kind": "data",
-                  "typeId": "us_2234432826861fe9dfbf3bbe017c6a2c",
-                  "typeDisplayName": "string"
-                }
-              ]
-            },
-            {
-              "id": "us_8d9f56e49f717b5001d59c8fef02cebc",
-              "graphKind": "identifier",
-              "category": "value",
-              "title": "Get _component",
-              "summary": "_component",
-              "span": {
-                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
-                "start": {
-                  "line": 65,
-                  "column": 9
-                },
-                "end": {
-                  "line": 65,
-                  "column": 19
-                }
-              },
-              "regionId": "us_b1fcbdfc889f248472b942bedf216466",
-              "declarationReferenceIds": [],
-              "editCapabilities": [],
-              "ports": [
-                {
-                  "name": "value",
-                  "direction": "output",
-                  "kind": "data",
-                  "typeId": "us_f801bf9355044e2f114a87a3e07118e2",
-                  "typeDisplayName": "UnifiedScriptComponent"
-                }
-              ]
-            },
-            {
-              "id": "us_95a005b1882044550d8272942bbd9022",
+              "id": "us_1b6158deed6c3e6e70912f0dcdc2d80d",
               "graphKind": "assignment",
               "category": "state",
               "title": "Set _component.ManagedState",
@@ -246,34 +193,34 @@
               "span": {
                 "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
                 "start": {
-                  "line": 65,
+                  "line": 102,
                   "column": 9
                 },
                 "end": {
-                  "line": 65,
+                  "line": 102,
                   "column": 53
                 }
               },
-              "regionId": "us_b1fcbdfc889f248472b942bedf216466",
-              "debugTargetId": "us_d278ce09b72aa6555a07cb2c68c35fb8",
+              "regionId": "us_c8b995703779a639b77265c4f48600ee",
+              "debugTargetId": "us_8d24b47981f3991a636d97dac365da8f",
               "declarationReferenceIds": [],
               "editCapabilities": [
                 {
-                  "id": "us_7fa172371c8dc519d7e1b9102bb3936c",
+                  "id": "us_423b9c67c02cceed10e8d62e1f7f0eaa",
                   "kind": "literal",
-                  "label": "Literal \u00B7 line 65",
+                  "label": "Literal \u00B7 line 102",
                   "operation": "replaceLiteral",
-                  "targetNodeId": "us_3c7c1de8cc945f8ccde1276a3c476051",
+                  "targetNodeId": "us_2747a32211cd9f8bb7dbbe5b113646ff",
                   "currentValue": "\u0022|Event:\u0022",
                   "expectedValueText": "\u0022|Event:\u0022",
                   "options": []
                 },
                 {
-                  "id": "us_75ded54b5443c34a56b6db5ad2281f8e",
+                  "id": "us_72034d59d1589e51dbfce3b4cc7a735e",
                   "kind": "operator",
-                  "label": "Operator \u00B7 line 65",
+                  "label": "Operator \u00B7 line 102",
                   "operation": "changeOperator",
-                  "targetNodeId": "us_e86bd2da1fcf32e0b12d6be07875d98c",
+                  "targetNodeId": "us_69b6da10b94d84cff2bc4e099b94dd52",
                   "currentValue": "\u002B",
                   "expectedOperator": "\u002B",
                   "expectedResultTypeId": "us_2234432826861fe9dfbf3bbe017c6a2c",
@@ -320,10 +267,99 @@
                   "typeId": "us_2234432826861fe9dfbf3bbe017c6a2c",
                   "typeDisplayName": "string"
                 }
-              ]
+              ],
+              "properties": {
+                "debugTargetId": "us_8d24b47981f3991a636d97dac365da8f",
+                "graphSafe": "true",
+                "operator": "\u002B=",
+                "referencedSymbolId": "us_a30b8e9c2cd57448acf4a589912198ca",
+                "resolvedType": "string",
+                "typeId": "us_2234432826861fe9dfbf3bbe017c6a2c"
+              }
             },
             {
-              "id": "us_3c7c1de8cc945f8ccde1276a3c476051",
+              "id": "us_1ff3a904cf2f6a1ce5dfdb49b4d3b504",
+              "graphKind": "memberAccess",
+              "category": "value",
+              "title": "ManagedState",
+              "summary": "ManagedState \u00B7 _component",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 102,
+                  "column": 9
+                },
+                "end": {
+                  "line": 102,
+                  "column": 32
+                }
+              },
+              "regionId": "us_c8b995703779a639b77265c4f48600ee",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "target",
+                  "direction": "input",
+                  "kind": "data",
+                  "typeId": "us_f801bf9355044e2f114a87a3e07118e2",
+                  "typeDisplayName": "UnifiedScriptComponent"
+                },
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_2234432826861fe9dfbf3bbe017c6a2c",
+                  "typeDisplayName": "string"
+                }
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "member": "ManagedState",
+                "referencedSymbolId": "us_b818b248b2fe8ab56749a68c89de9019",
+                "resolvedType": "string",
+                "typeId": "us_2234432826861fe9dfbf3bbe017c6a2c"
+              }
+            },
+            {
+              "id": "us_f321ed1b1650f3855c1a218070af7f40",
+              "graphKind": "identifier",
+              "category": "value",
+              "title": "Get _component",
+              "summary": "_component",
+              "span": {
+                "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
+                "start": {
+                  "line": 102,
+                  "column": 9
+                },
+                "end": {
+                  "line": 102,
+                  "column": 19
+                }
+              },
+              "regionId": "us_c8b995703779a639b77265c4f48600ee",
+              "declarationReferenceIds": [],
+              "editCapabilities": [],
+              "ports": [
+                {
+                  "name": "value",
+                  "direction": "output",
+                  "kind": "data",
+                  "typeId": "us_f801bf9355044e2f114a87a3e07118e2",
+                  "typeDisplayName": "UnifiedScriptComponent"
+                }
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "name": "_component",
+                "referencedSymbolId": "us_8656cf6df4b30c08e6693daf115dc1fc",
+                "resolvedType": "UnifiedScriptComponent",
+                "typeId": "us_f801bf9355044e2f114a87a3e07118e2"
+              }
+            },
+            {
+              "id": "us_2747a32211cd9f8bb7dbbe5b113646ff",
               "graphKind": "literal",
               "category": "value",
               "title": "\u0022|Event:\u0022",
@@ -331,23 +367,23 @@
               "span": {
                 "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
                 "start": {
-                  "line": 65,
+                  "line": 102,
                   "column": 36
                 },
                 "end": {
-                  "line": 65,
+                  "line": 102,
                   "column": 45
                 }
               },
-              "regionId": "us_b1fcbdfc889f248472b942bedf216466",
+              "regionId": "us_c8b995703779a639b77265c4f48600ee",
               "declarationReferenceIds": [],
               "editCapabilities": [
                 {
-                  "id": "us_7175aaeb64a22cb656b8ad0815f04bcb",
+                  "id": "us_fd687d0a2684391d2c94647eedd75456",
                   "kind": "literal",
-                  "label": "Literal \u00B7 line 65",
+                  "label": "Literal \u00B7 line 102",
                   "operation": "replaceLiteral",
-                  "targetNodeId": "us_3c7c1de8cc945f8ccde1276a3c476051",
+                  "targetNodeId": "us_2747a32211cd9f8bb7dbbe5b113646ff",
                   "currentValue": "\u0022|Event:\u0022",
                   "expectedValueText": "\u0022|Event:\u0022",
                   "options": []
@@ -361,10 +397,16 @@
                   "typeId": "us_2234432826861fe9dfbf3bbe017c6a2c",
                   "typeDisplayName": "string"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "resolvedType": "string",
+                "typeId": "us_2234432826861fe9dfbf3bbe017c6a2c",
+                "value": "\u0022|Event:\u0022"
+              }
             },
             {
-              "id": "us_e86bd2da1fcf32e0b12d6be07875d98c",
+              "id": "us_69b6da10b94d84cff2bc4e099b94dd52",
               "graphKind": "binary",
               "category": "value",
               "title": "\u002B",
@@ -372,33 +414,33 @@
               "span": {
                 "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
                 "start": {
-                  "line": 65,
+                  "line": 102,
                   "column": 36
                 },
                 "end": {
-                  "line": 65,
+                  "line": 102,
                   "column": 53
                 }
               },
-              "regionId": "us_b1fcbdfc889f248472b942bedf216466",
+              "regionId": "us_c8b995703779a639b77265c4f48600ee",
               "declarationReferenceIds": [],
               "editCapabilities": [
                 {
-                  "id": "us_314af1e62af4c374956460fcf973cde7",
+                  "id": "us_10961d7bd8cde5802f46f27fd0ae6396",
                   "kind": "literal",
-                  "label": "Literal \u00B7 line 65",
+                  "label": "Literal \u00B7 line 102",
                   "operation": "replaceLiteral",
-                  "targetNodeId": "us_3c7c1de8cc945f8ccde1276a3c476051",
+                  "targetNodeId": "us_2747a32211cd9f8bb7dbbe5b113646ff",
                   "currentValue": "\u0022|Event:\u0022",
                   "expectedValueText": "\u0022|Event:\u0022",
                   "options": []
                 },
                 {
-                  "id": "us_87f4482160d2a6acafd0c4588e2b76d4",
+                  "id": "us_dc4dd4683ab447195f843b86f8cca3eb",
                   "kind": "operator",
-                  "label": "Operator \u00B7 line 65",
+                  "label": "Operator \u00B7 line 102",
                   "operation": "changeOperator",
-                  "targetNodeId": "us_e86bd2da1fcf32e0b12d6be07875d98c",
+                  "targetNodeId": "us_69b6da10b94d84cff2bc4e099b94dd52",
                   "currentValue": "\u002B",
                   "expectedOperator": "\u002B",
                   "expectedResultTypeId": "us_2234432826861fe9dfbf3bbe017c6a2c",
@@ -435,10 +477,17 @@
                   "typeId": "us_2234432826861fe9dfbf3bbe017c6a2c",
                   "typeDisplayName": "string"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "operator": "\u002B",
+                "referencedSymbolId": "us_f16b56cbe38ec98f99f2f50fe0f90598",
+                "resolvedType": "string",
+                "typeId": "us_2234432826861fe9dfbf3bbe017c6a2c"
+              }
             },
             {
-              "id": "us_9dcad6b8787af32972bc7782682ab072",
+              "id": "us_8a87f95a88c13b30c32e96ffadb871cc",
               "graphKind": "identifier",
               "category": "value",
               "title": "Get value",
@@ -446,15 +495,15 @@
               "span": {
                 "filePath": "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs",
                 "start": {
-                  "line": 65,
+                  "line": 102,
                   "column": 48
                 },
                 "end": {
-                  "line": 65,
+                  "line": 102,
                   "column": 53
                 }
               },
-              "regionId": "us_b1fcbdfc889f248472b942bedf216466",
+              "regionId": "us_c8b995703779a639b77265c4f48600ee",
               "declarationReferenceIds": [],
               "editCapabilities": [],
               "ports": [
@@ -465,57 +514,64 @@
                   "typeId": "us_70b5df26d1ee49b1edcb1345505b3d0d",
                   "typeDisplayName": "object"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "false",
+                "name": "value",
+                "referencedSymbolId": "us_4cfe348ad15c0d07e6debaf831a531aa",
+                "resolvedType": "object",
+                "typeId": "us_70b5df26d1ee49b1edcb1345505b3d0d"
+              }
             }
           ],
           "edges": [
             {
-              "id": "us_7975f058a5c08b8790b0ac686c277db3",
+              "id": "us_cc0b747017940df31aba2c81a133c74b",
               "kind": "control",
               "fromNode": "us_0b129115e14ae3e4653ddb2844533f23",
               "fromPort": "then",
-              "toNode": "us_95a005b1882044550d8272942bbd9022",
+              "toNode": "us_1b6158deed6c3e6e70912f0dcdc2d80d",
               "toPort": "execIn"
             },
             {
-              "id": "us_e62db1874c3cf1df429e8aa9249f23a9",
+              "id": "us_997c11c7fefbbc537f7e1a832101ac7c",
               "kind": "data",
-              "fromNode": "us_3c7c1de8cc945f8ccde1276a3c476051",
+              "fromNode": "us_1ff3a904cf2f6a1ce5dfdb49b4d3b504",
               "fromPort": "value",
-              "toNode": "us_e86bd2da1fcf32e0b12d6be07875d98c",
+              "toNode": "us_1b6158deed6c3e6e70912f0dcdc2d80d",
+              "toPort": "target"
+            },
+            {
+              "id": "us_11ab5e9799e16274ccd72b867f448548",
+              "kind": "data",
+              "fromNode": "us_2747a32211cd9f8bb7dbbe5b113646ff",
+              "fromPort": "value",
+              "toNode": "us_69b6da10b94d84cff2bc4e099b94dd52",
               "toPort": "left"
             },
             {
-              "id": "us_ce4aec06af2cf0541f76db8aca84daa8",
+              "id": "us_e71193e8058de62f576153c2d6f0f3b3",
               "kind": "data",
-              "fromNode": "us_7c3e2c271f5efb4c226d165dfed69088",
+              "fromNode": "us_69b6da10b94d84cff2bc4e099b94dd52",
               "fromPort": "value",
-              "toNode": "us_95a005b1882044550d8272942bbd9022",
-              "toPort": "target"
+              "toNode": "us_1b6158deed6c3e6e70912f0dcdc2d80d",
+              "toPort": "assignedValue"
             },
             {
-              "id": "us_8cc0530cd35e0af2aab4734b5df73c2a",
+              "id": "us_d8c35f47ef5df461c73507b1b251ab02",
               "kind": "data",
-              "fromNode": "us_8d9f56e49f717b5001d59c8fef02cebc",
+              "fromNode": "us_8a87f95a88c13b30c32e96ffadb871cc",
               "fromPort": "value",
-              "toNode": "us_7c3e2c271f5efb4c226d165dfed69088",
-              "toPort": "target"
-            },
-            {
-              "id": "us_cbdd233a74f4e26bb72dedba38f69226",
-              "kind": "data",
-              "fromNode": "us_9dcad6b8787af32972bc7782682ab072",
-              "fromPort": "value",
-              "toNode": "us_e86bd2da1fcf32e0b12d6be07875d98c",
+              "toNode": "us_69b6da10b94d84cff2bc4e099b94dd52",
               "toPort": "right"
             },
             {
-              "id": "us_be8ee267c540c25c07edc2cb9d2ded06",
+              "id": "us_7ef596c2669c86fe26c1a244e6b256f4",
               "kind": "data",
-              "fromNode": "us_e86bd2da1fcf32e0b12d6be07875d98c",
+              "fromNode": "us_f321ed1b1650f3855c1a218070af7f40",
               "fromPort": "value",
-              "toNode": "us_95a005b1882044550d8272942bbd9022",
-              "toPort": "assignedValue"
+              "toNode": "us_1ff3a904cf2f6a1ce5dfdb49b4d3b504",
+              "toPort": "target"
             }
           ]
         },
@@ -704,7 +760,14 @@
                   "direction": "output",
                   "kind": "control"
                 }
-              ]
+              ],
+              "properties": {
+                "declaredSymbolId": "us_53ede5680c125188e1ec147de92fa39d",
+                "effects": "readsState|writesState",
+                "graphSafe": "true",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+              }
             },
             {
               "id": "us_47c30b5db37aa298bcfffff023296093",
@@ -767,7 +830,15 @@
                   "direction": "output",
                   "kind": "control"
                 }
-              ]
+              ],
+              "properties": {
+                "declaredSymbolId": "us_47c30b5db37aa298bcfffff023296093",
+                "graphSafe": "true",
+                "name": "result",
+                "resolvedType": "int",
+                "type": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+              }
             },
             {
               "id": "us_93ed647f78393aa32885ccd273e61bda",
@@ -799,7 +870,15 @@
                   "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
                   "typeDisplayName": "int"
                 }
-              ]
+              ],
+              "properties": {
+                "declarationId": "us_d4463d57397c77264a0e282ca6c29432",
+                "graphSafe": "true",
+                "name": "InitialValue",
+                "referencedSymbolId": "us_fdae76a3b381064580b3efde2e9b274f",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+              }
             },
             {
               "id": "us_c0c0c5e4018dca215fd70e85cc030fcd",
@@ -865,7 +944,14 @@
                   "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
                   "typeDisplayName": "int"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "operator": "\u002B",
+                "referencedSymbolId": "us_26dd2632dcd70a8167142551379f49cf",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+              }
             },
             {
               "id": "us_7a5d5e66061e177b20268319a1377c57",
@@ -895,7 +981,14 @@
                   "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
                   "typeDisplayName": "int"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "name": "bonus",
+                "referencedSymbolId": "us_7412e315b43d22a504aba7cfdf441d35",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+              }
             },
             {
               "id": "us_d95b2f7185bb90055f267d74f62438cd",
@@ -970,7 +1063,13 @@
                   "direction": "output",
                   "kind": "control"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "referencedSymbolId": "us_680c6d2217ae3100d40c908f849883c0",
+                "resolvedType": "bool",
+                "typeId": "us_b5f84bcf933b6593d45e9e031353bfef"
+              }
             },
             {
               "id": "us_b90754713be49fa5cf35f990e286b176",
@@ -1043,7 +1142,14 @@
                   "typeId": "us_b5f84bcf933b6593d45e9e031353bfef",
                   "typeDisplayName": "bool"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "operator": "\u003E",
+                "referencedSymbolId": "us_680c6d2217ae3100d40c908f849883c0",
+                "resolvedType": "bool",
+                "typeId": "us_b5f84bcf933b6593d45e9e031353bfef"
+              }
             },
             {
               "id": "us_bc8ff44462f2c3f3f7cbdeafbdc1694c",
@@ -1073,7 +1179,14 @@
                   "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
                   "typeDisplayName": "int"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "name": "result",
+                "referencedSymbolId": "us_47c30b5db37aa298bcfffff023296093",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+              }
             },
             {
               "id": "us_2469fcf6391d6ff503d7658f697e9bab",
@@ -1114,7 +1227,13 @@
                   "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
                   "typeDisplayName": "int"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                "value": "100"
+              }
             },
             {
               "id": "us_39c37edaa09222c4d9ca5ede9ee7c3c9",
@@ -1144,7 +1263,14 @@
                   "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
                   "typeDisplayName": "int"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "name": "result",
+                "referencedSymbolId": "us_47c30b5db37aa298bcfffff023296093",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+              }
             },
             {
               "id": "us_4ea9bc6d7b5173225babe174c0f6c171",
@@ -1210,7 +1336,14 @@
                   "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
                   "typeDisplayName": "int"
                 }
-              ]
+              ],
+              "properties": {
+                "debugTargetId": "us_03cca5ced3d9986f5984a0db88be6c65",
+                "graphSafe": "true",
+                "operator": "=",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+              }
             },
             {
               "id": "us_c7cd9dec02458944f376dbd5f13cb040",
@@ -1251,7 +1384,13 @@
                   "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
                   "typeDisplayName": "int"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                "value": "100"
+              }
             },
             {
               "id": "us_6f74e227cbc49184d5bcf11f06b5db51",
@@ -1287,7 +1426,8 @@
                   "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
                   "typeDisplayName": "int"
                 }
-              ]
+              ],
+              "properties": {}
             },
             {
               "id": "us_b437fb12fb4ca77f7b23f98976b64c69",
@@ -1317,7 +1457,14 @@
                   "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
                   "typeDisplayName": "int"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "name": "result",
+                "referencedSymbolId": "us_47c30b5db37aa298bcfffff023296093",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+              }
             }
           ],
           "edges": [
@@ -1629,7 +1776,14 @@
                   "direction": "output",
                   "kind": "control"
                 }
-              ]
+              ],
+              "properties": {
+                "declaredSymbolId": "us_4b2b9a44f72edea2e4f0cdf31376c2d1",
+                "effects": "readsState|writesState",
+                "graphSafe": "true",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+              }
             },
             {
               "id": "us_1a9f2e66a2271e01012d204756d01c06",
@@ -1700,7 +1854,15 @@
                   "direction": "output",
                   "kind": "control"
                 }
-              ]
+              ],
+              "properties": {
+                "declaredSymbolId": "us_1a9f2e66a2271e01012d204756d01c06",
+                "graphSafe": "true",
+                "name": "doubled",
+                "resolvedType": "int",
+                "type": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+              }
             },
             {
               "id": "us_095861b154f88301fa45a4130fb2212f",
@@ -1774,7 +1936,14 @@
                   "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
                   "typeDisplayName": "int"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "operator": "*",
+                "referencedSymbolId": "us_ca0bdda82bee73fbd2745e614a0ab47a",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+              }
             },
             {
               "id": "us_6d73433103fcc334b51fdf70a1092b28",
@@ -1804,7 +1973,14 @@
                   "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
                   "typeDisplayName": "int"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "name": "value",
+                "referencedSymbolId": "us_51ef57fe36095aff407260fb1714ea62",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+              }
             },
             {
               "id": "us_7e39bd949ca6c5b5c65151f20616aff0",
@@ -1845,7 +2021,13 @@
                   "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
                   "typeDisplayName": "int"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                "value": "2"
+              }
             },
             {
               "id": "us_72ce362f118f0c17216a140de2f65c9b",
@@ -1916,7 +2098,15 @@
                   "direction": "output",
                   "kind": "control"
                 }
-              ]
+              ],
+              "properties": {
+                "declaredSymbolId": "us_72ce362f118f0c17216a140de2f65c9b",
+                "graphSafe": "true",
+                "name": "incremented",
+                "resolvedType": "int",
+                "type": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+              }
             },
             {
               "id": "us_09932f279cb7be5256df59ac086e6708",
@@ -1990,7 +2180,14 @@
                   "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
                   "typeDisplayName": "int"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "operator": "\u002B",
+                "referencedSymbolId": "us_26dd2632dcd70a8167142551379f49cf",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+              }
             },
             {
               "id": "us_d5a014521bb3176710775f623cbe7262",
@@ -2020,7 +2217,14 @@
                   "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
                   "typeDisplayName": "int"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "name": "value",
+                "referencedSymbolId": "us_51ef57fe36095aff407260fb1714ea62",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+              }
             },
             {
               "id": "us_0e83ff5432db96a457a167aa07be48d0",
@@ -2061,7 +2265,13 @@
                   "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
                   "typeDisplayName": "int"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+                "value": "1"
+              }
             },
             {
               "id": "us_fd3b605ce7aa12f75c0f7a3b17295c7c",
@@ -2107,7 +2317,13 @@
                   "direction": "output",
                   "kind": "control"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "referencedSymbolId": "us_a753c6f378d5357dc67f7f9812e0af7a",
+                "resolvedType": "bool",
+                "typeId": "us_b5f84bcf933b6593d45e9e031353bfef"
+              }
             },
             {
               "id": "us_f41317ad5ed5e5bbee1d74a1a4fc205e",
@@ -2137,7 +2353,14 @@
                   "typeId": "us_b5f84bcf933b6593d45e9e031353bfef",
                   "typeDisplayName": "bool"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "name": "doubleValue",
+                "referencedSymbolId": "us_a753c6f378d5357dc67f7f9812e0af7a",
+                "resolvedType": "bool",
+                "typeId": "us_b5f84bcf933b6593d45e9e031353bfef"
+              }
             },
             {
               "id": "us_11006de58dfd982776070bfb9b48fc44",
@@ -2173,7 +2396,8 @@
                   "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
                   "typeDisplayName": "int"
                 }
-              ]
+              ],
+              "properties": {}
             },
             {
               "id": "us_c0112796b7e4eb46b7035bf099cdadb4",
@@ -2203,7 +2427,14 @@
                   "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
                   "typeDisplayName": "int"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "name": "doubled",
+                "referencedSymbolId": "us_1a9f2e66a2271e01012d204756d01c06",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+              }
             },
             {
               "id": "us_5545dec5482c5963196a54623a081505",
@@ -2239,7 +2470,8 @@
                   "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
                   "typeDisplayName": "int"
                 }
-              ]
+              ],
+              "properties": {}
             },
             {
               "id": "us_b3cce4e07c05d682c985d071d7e7e4c3",
@@ -2269,7 +2501,14 @@
                   "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
                   "typeDisplayName": "int"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "name": "incremented",
+                "referencedSymbolId": "us_72ce362f118f0c17216a140de2f65c9b",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+              }
             }
           ],
           "edges": [
@@ -2506,7 +2745,14 @@
                   "direction": "output",
                   "kind": "control"
                 }
-              ]
+              ],
+              "properties": {
+                "declaredSymbolId": "us_066ad528d7581de1cd7ae1725a1a16b4",
+                "effects": "readsState|writesState",
+                "graphSafe": "true",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+              }
             },
             {
               "id": "us_557d722283073a06454899b150c83b80",
@@ -2547,7 +2793,15 @@
                   "direction": "output",
                   "kind": "control"
                 }
-              ]
+              ],
+              "properties": {
+                "declaredSymbolId": "us_557d722283073a06454899b150c83b80",
+                "graphSafe": "true",
+                "name": "sum",
+                "resolvedType": "int",
+                "type": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+              }
             },
             {
               "id": "us_01ed46673b81fff436b39bb5bb4cf0a8",
@@ -2577,7 +2831,14 @@
                   "typeId": "us_f801bf9355044e2f114a87a3e07118e2",
                   "typeDisplayName": "UnifiedScriptComponent"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "name": "component",
+                "referencedSymbolId": "us_3e31927a08cbabc6e8258b4a591119f8",
+                "resolvedType": "UnifiedScriptComponent",
+                "typeId": "us_f801bf9355044e2f114a87a3e07118e2"
+              }
             },
             {
               "id": "us_1c1f26cfca1bfddcd9e94d88a1e2153f",
@@ -2636,7 +2897,16 @@
                   "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
                   "typeDisplayName": "int"
                 }
-              ]
+              ],
+              "properties": {
+                "effects": "readsState|writesState",
+                "graphSafe": "true",
+                "method": "UnifiedScript.Unreal.Generated.UnifiedScriptComponent.Add(System.Int32, System.Int32)",
+                "methodId": "us_f1039518c4f9b1aa1b9de625347ec27c",
+                "referencedSymbolId": "us_f1039518c4f9b1aa1b9de625347ec27c",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+              }
             },
             {
               "id": "us_9b40c0e9bc6e461edea33af40819d29c",
@@ -2671,7 +2941,11 @@
                   "direction": "output",
                   "kind": "data"
                 }
-              ]
+              ],
+              "properties": {
+                "member": "Add",
+                "referencedSymbolId": "us_f1039518c4f9b1aa1b9de625347ec27c"
+              }
             },
             {
               "id": "us_ffb624046f948797488b04011c9f12f4",
@@ -2701,7 +2975,14 @@
                   "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
                   "typeDisplayName": "int"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "name": "left",
+                "referencedSymbolId": "us_5fb1c8a78460cc4a043beead6880bd7a",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+              }
             },
             {
               "id": "us_e08b5c7e3d0158670b3b0216382dea4c",
@@ -2731,7 +3012,14 @@
                   "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
                   "typeDisplayName": "int"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "name": "right",
+                "referencedSymbolId": "us_34c8d7e2fb10736b35b35bd174c0d2f9",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+              }
             },
             {
               "id": "us_4e11b83af6862d727609e33ee87dd1fd",
@@ -2767,7 +3055,8 @@
                   "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
                   "typeDisplayName": "int"
                 }
-              ]
+              ],
+              "properties": {}
             },
             {
               "id": "us_f2233f3de553e9332470dfcaffaebed6",
@@ -2797,7 +3086,14 @@
                   "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
                   "typeDisplayName": "int"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "name": "sum",
+                "referencedSymbolId": "us_557d722283073a06454899b150c83b80",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+              }
             }
           ],
           "edges": [

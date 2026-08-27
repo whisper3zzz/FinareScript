@@ -1,7 +1,7 @@
 {
   "schemaVersion": "unifiedscript.script-asset/v0.1",
-  "sourceCompilationId": "us_7f7eb78d7b6043c16502bfdb8a47d345",
-  "semanticConfigurationId": "us_38a1f623a4146094df6bc62d8e731651",
+  "sourceCompilationId": "us_021d5af7c7eb878b9aceefbe456f9df9",
+  "semanticConfigurationId": "us_c043c7c8708de51f12789603533736d0",
   "assets": [
     {
       "id": "us_cefc9ee5805e3ed5610154145ea986dd",
@@ -14,7 +14,7 @@
           "column": 1
         },
         "end": {
-          "line": 81,
+          "line": 118,
           "column": 2
         }
       },
@@ -54,12 +54,12 @@
           "isStatic": false,
           "parameters": [
             {
-              "id": "us_9246fd4f2614fdf60fc24a253db2da76",
+              "id": "us_4cfe348ad15c0d07e6debaf831a531aa",
               "name": "value",
               "typeMetadataName": "System.Int32"
             },
             {
-              "id": "us_42fb878589a53d0eee5b86b3fdb370f5",
+              "id": "us_2c60d2735a9fa63d03999b3de486d177",
               "name": "signalContext",
               "typeMetadataName": "UnifiedScript.Unreal.UnrealObjectHandle"
             }

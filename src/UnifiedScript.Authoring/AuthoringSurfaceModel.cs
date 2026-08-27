@@ -66,7 +66,8 @@ public sealed record AuthoringActionSurface(
     SemanticId? DebugTargetId,
     IReadOnlyList<SemanticId> DeclarationReferenceIds,
     IReadOnlyList<AuthoringEditCapability> EditCapabilities,
-    IReadOnlyList<AuthoringPortSurface> Ports);
+    IReadOnlyList<AuthoringPortSurface> Ports,
+    IReadOnlyDictionary<string, string> Properties);
 
 public sealed record AuthoringRegionSurface(
     SemanticId Id,
@@ -106,5 +107,5 @@ public sealed record AuthoringSurfaceDocument(
     SemanticId SemanticConfigurationId,
     IReadOnlyList<AuthoringAssetSurface> Assets)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.authoring-surface/v0.3";
+    public const string CurrentSchemaVersion = "unifiedscript.authoring-surface/v0.4";
 }

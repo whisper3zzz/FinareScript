@@ -605,7 +605,7 @@ FReply SUnifiedScriptAuthoringSurface::HandleCopyPatch(
         return FReply::Handled();
     }
     FPlatformApplicationMisc::ClipboardCopy(*Patch);
-    SetStatus(FString::Printf(TEXT("Copied semantic-patch v0.22 for %s"), *Edit.TargetNodeId), false);
+    SetStatus(FString::Printf(TEXT("Copied semantic-patch v0.23 for %s"), *Edit.TargetNodeId), false);
     return FReply::Handled();
 }
 
@@ -2436,7 +2436,7 @@ void SUnifiedScriptAuthoringSurface::RebuildInspector(
                         [
                             SNew(SButton)
                             .Text(LOCTEXT("CopyPatch", "Copy Patch"))
-                            .ToolTipText(LOCTEXT("CopyPatchTip", "Copy a typed semantic-patch v0.22 payload using this value."))
+                            .ToolTipText(LOCTEXT("CopyPatchTip", "Copy a typed semantic-patch v0.23 payload using this value."))
                             .OnClicked(this, &SUnifiedScriptAuthoringSurface::HandleCopyPatch, Edit, ValueEditor)
                         ]
                         + SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f, 0.0f, 0.0f)

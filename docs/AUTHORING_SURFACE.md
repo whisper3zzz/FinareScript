@@ -1,6 +1,6 @@
-# Authoring Surface v0.3
+# Authoring Surface v0.4
 
-`unifiedscript.authoring-surface/v0.3` is the versioned, engine-neutral contract
+`unifiedscript.authoring-surface/v0.4` is the versioned, engine-neutral contract
 between the compiler pipeline and an authoring UI. It prevents a browser, a UE
 editor panel, or an AI client from re-implementing Graph interpretation and
 from accumulating sample-specific adapters.
@@ -36,7 +36,8 @@ An `AuthoringSurfaceDocument` owns:
   parameter participates in the projected graph;
 - `AuthoringActionSurface` records for every Graph node with a compact title and
   expression summary, source span, Graph kind, category, region, optional
-  probeable debug target, declaration references, edit capabilities, and ports;
+  probeable debug target, declaration references, edit capabilities, ports, and
+  the normalized semantic properties required by structure-aware clients;
 - `AuthoringPortSurface` records with direction, control/data kind, and known
   semantic type identity/display name;
 - `AuthoringEdgeSurface` records preserving every Graph control and data edge;
@@ -68,7 +69,7 @@ kind/type mismatches, and duplicate data inputs before rendering.
 
 ## Semantic edit capabilities
 
-v0.3 retains two inline editor capabilities:
+v0.4 retains two inline editor capabilities:
 
 - `replaceLiteral` includes the target expression ID, current/expected text,
   and source location;
@@ -76,7 +77,7 @@ v0.3 retains two inline editor capabilities:
   compatible options, result type ID, left/operand type ID, and optional right
   operand type ID.
 
-The Workbench serializes those fields as Semantic Patch v0.22. The ordinary
+The Workbench serializes those fields as Semantic Patch v0.23. The ordinary
 Roslyn patch path still enforces operator families, type preconditions, source
 identity, semantic configuration, localized syntax replacement, complete
 reanalysis, and transactional CoreCLR reload. The Surface does not weaken or
@@ -91,13 +92,15 @@ dominance violations are rejected before source commit. `disconnectDataEdge`
 replaces one exact connected input with the bounded scalar default for its
 declared type instead of leaving invalid C# behind.
 
-Surface v0.3 publishes enough structural preconditions for a client to author
+Surface v0.4 publishes enough structural preconditions for a client to author
 whole statements without treating screen coordinates as semantics. The UE
 client inserts locals, `if`, `while`, `do/while`, bounded `for`, nearest-region
 `break`/`continue`, and typed `return` statements against a real source block
 and exact sibling gap; Delete carries the same parent/sibling preconditions.
 Switch-section regions expose their HIR body block as `sourceNodeId`, while case
-labels remain visible actions outside the editable statement order. Reusing a
+labels remain visible actions outside the editable statement order. Every case
+action also carries `sectionId` for the editable body and `switchSectionId` for
+the exact semantic section targeted by relabel/move/delete operations. Reusing a
 computed output emits one atomic patch-plan that first introduces a local
 temporary and then reconnects the other expression to the produced local. The
 temporary name includes the complete producer semantic-ID payload, so repeated
@@ -105,7 +108,7 @@ planning is byte-stable and distinct producers do not collide through a short
 prefix. The host exposes that transaction at
 `POST /api/authoring/semantic-patch-plan`.
 
-Semantic Patch v0.22 adds a bounded `moveStatement` operation for control-wire
+Semantic Patch v0.22 added a bounded `moveStatement` operation for control-wire
 authoring. Dragging a sequential `then` pin onto an occupied statement `in` pin
 inside the same editable block moves the target after the source. The payload
 carries exact source and destination sibling gaps; the source applier requires
@@ -133,7 +136,7 @@ Surface JSON. No sample class, function, state, or API call is encoded in
 
 The UE adapter consumes this contract rather than parsing C#, rebuilding Graph
 regions, or owning Blueprint declarations. Its transient `UEdGraph` allocates
-real execution/data pins and links directly from Surface v0.3. Dragging a
+real execution/data pins and links directly from Surface v0.4. Dragging a
 compatible output onto an occupied data input submits a direct rewire or an
 automatic shared-value patch plan to the Workbench. Alt-click submits a typed
 default disconnection. A sequential control-pin drag inside one block submits a

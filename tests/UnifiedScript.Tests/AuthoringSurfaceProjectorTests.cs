@@ -86,6 +86,9 @@ public sealed class AuthoringSurfaceProjectorTests
         Assert.Equal(
             resolveGraph.Edges.Select(static edge => edge.Id).OrderBy(static id => id.Value),
             resolve.Edges.Select(static edge => edge.Id).OrderBy(static id => id.Value));
+        Assert.All(resolve.Actions, action => Assert.Equal(
+            resolveGraph.Nodes.Single(node => node.Id == action.Id).Properties.ToArray(),
+            action.Properties.ToArray()));
         Assert.Contains(resolve.Regions, static region => region.Kind == GraphRegionKind.If);
         Assert.Contains(resolve.Actions, static action => action.GraphKind == "branch");
         Assert.Contains(resolve.Actions, static action =>

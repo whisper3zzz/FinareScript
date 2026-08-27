@@ -19,7 +19,7 @@
 
 namespace UE::UnifiedScript::AuthoringSurface::Private
 {
-constexpr TCHAR SchemaVersion[] = TEXT("unifiedscript.authoring-surface/v0.3");
+constexpr TCHAR SchemaVersion[] = TEXT("unifiedscript.authoring-surface/v0.4");
 
 bool IsSemanticId(const FString& Value)
 {
@@ -354,6 +354,27 @@ bool ReadAction(
         !ReadIdArray(Object, TEXT("declarationReferenceIds"), OutAction.DeclarationReferenceIds, OutError))
     {
         return false;
+    }
+
+    const TSharedPtr<FJsonObject>* Properties = nullptr;
+    if (!Object->TryGetObjectField(TEXT("properties"), Properties) ||
+        Properties == nullptr || !Properties->IsValid())
+    {
+        OutError = FString::Printf(TEXT("Action '%s' requires properties."), *OutAction.Id);
+        return false;
+    }
+    for (const TPair<FString, TSharedPtr<FJsonValue>>& Property : (*Properties)->Values)
+    {
+        if (Property.Key.IsEmpty() || !Property.Value.IsValid() ||
+            Property.Value->Type != EJson::String)
+        {
+            OutError = FString::Printf(
+                TEXT("Action '%s' has an invalid property '%s'."),
+                *OutAction.Id,
+                *Property.Key);
+            return false;
+        }
+        OutAction.Properties.Add(Property.Key, Property.Value->AsString());
     }
 
     const TArray<TSharedPtr<FJsonValue>>* Edits = nullptr;
@@ -895,7 +916,7 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildSemanticPatch(
     }
 
     const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
-    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.22"));
+    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.23"));
     Root->SetStringField(TEXT("sourceCompilationId"), Document.SourceCompilationId);
     Root->SetStringField(TEXT("semanticConfigurationId"), Document.SemanticConfigurationId);
     Root->SetArrayField(TEXT("operations"), {MakeShared<FJsonValueObject>(Operation)});
@@ -969,7 +990,7 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildDataEdgeReconnectionPatch(
     Operation->SetStringField(TEXT("expectedTypeId"), TargetInput->TypeId);
 
     const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
-    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.22"));
+    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.23"));
     Root->SetStringField(TEXT("sourceCompilationId"), Document.SourceCompilationId);
     Root->SetStringField(TEXT("semanticConfigurationId"), Document.SemanticConfigurationId);
     Root->SetArrayField(TEXT("operations"), {MakeShared<FJsonValueObject>(Operation)});
@@ -1011,7 +1032,7 @@ TSharedRef<FJsonObject> MakePatchRoot(
     const TSharedRef<FJsonObject>& Operation)
 {
     const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
-    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.22"));
+    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.23"));
     Root->SetStringField(TEXT("sourceCompilationId"), Document.SourceCompilationId);
     Root->SetStringField(TEXT("semanticConfigurationId"), Document.SemanticConfigurationId);
     Root->SetArrayField(TEXT("operations"), {MakeShared<FJsonValueObject>(Operation)});

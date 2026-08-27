@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "unifiedscript.authoring-surface/v0.3",
+  "schemaVersion": "unifiedscript.authoring-surface/v0.4",
   "sourceCompilationId": "us_9c565600166a847b78177c5c25c03ba5",
   "semanticConfigurationId": "us_02f5fe78d296e2d4fe04bc50ca71acf1",
   "assets": [
@@ -105,12 +105,16 @@
             {
               "id": "us_ff55e3121a27108b2214b7fed6afb084",
               "name": "incomingDamage",
-              "typeMetadataName": "System.Int32"
+              "typeMetadataName": "System.Int32",
+              "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
+              "typeDisplayName": "int"
             },
             {
               "id": "us_e2214bcbbd20572d190c3e2f9fa2cb30",
               "name": "critical",
-              "typeMetadataName": "System.Boolean"
+              "typeMetadataName": "System.Boolean",
+              "typeId": "us_b5f84bcf933b6593d45e9e031353bfef",
+              "typeDisplayName": "bool"
             }
           ],
           "rootRegionId": "us_063de8c4e9c45a178b0a820d49e31508",
@@ -118,6 +122,7 @@
             {
               "id": "us_063de8c4e9c45a178b0a820d49e31508",
               "kind": "function",
+              "sourceNodeId": "us_f8ca585f8cc118ccb88836645e63068b",
               "span": {
                 "filePath": "samples/Authoring/DamagePolicy.cs",
                 "start": {
@@ -130,6 +135,9 @@
                 }
               },
               "isImplicit": false,
+              "directStatementIds": [
+                "us_a28b196343d94a27dc8837c9cde8861f"
+              ],
               "directActionIds": [
                 "us_a28b196343d94a27dc8837c9cde8861f"
               ],
@@ -141,6 +149,7 @@
               "id": "us_dd8beb4d9e9dd34d7b4a47d7928d870d",
               "kind": "block",
               "parentRegionId": "us_063de8c4e9c45a178b0a820d49e31508",
+              "sourceNodeId": "us_12a449c24418e69502863de18d686018",
               "span": {
                 "filePath": "samples/Authoring/DamagePolicy.cs",
                 "start": {
@@ -153,6 +162,12 @@
                 }
               },
               "isImplicit": false,
+              "directStatementIds": [
+                "us_c9aba80313f5b206c3b5222407a549b3",
+                "us_b24eeff90a17601ddafdc500302e7bf1",
+                "us_78ceaa28ab965873b37a441b3162f427",
+                "us_27393be68a2b8cd68ea420f494910eee"
+              ],
               "directActionIds": [
                 "us_c9aba80313f5b206c3b5222407a549b3",
                 "us_49097fb28d65f178d1f6a871b47ec679",
@@ -177,6 +192,7 @@
               "id": "us_0bc76916776bbe3f0cf88f3ebb7650e1",
               "kind": "else",
               "parentRegionId": "us_76038a17c7b22d058ca203b2610cc9ea",
+              "sourceNodeId": "us_b24eeff90a17601ddafdc500302e7bf1",
               "span": {
                 "filePath": "samples/Authoring/DamagePolicy.cs",
                 "start": {
@@ -189,6 +205,7 @@
                 }
               },
               "isImplicit": true,
+              "directStatementIds": [],
               "directActionIds": [],
               "childRegionIds": []
             },
@@ -196,6 +213,7 @@
               "id": "us_76038a17c7b22d058ca203b2610cc9ea",
               "kind": "if",
               "parentRegionId": "us_dd8beb4d9e9dd34d7b4a47d7928d870d",
+              "sourceNodeId": "us_b24eeff90a17601ddafdc500302e7bf1",
               "span": {
                 "filePath": "samples/Authoring/DamagePolicy.cs",
                 "start": {
@@ -209,6 +227,9 @@
               },
               "isImplicit": false,
               "anchorActionId": "us_b24eeff90a17601ddafdc500302e7bf1",
+              "directStatementIds": [
+                "us_b24eeff90a17601ddafdc500302e7bf1"
+              ],
               "directActionIds": [
                 "us_b24eeff90a17601ddafdc500302e7bf1",
                 "us_74e258069ab374d49becf631181b9a47"
@@ -222,6 +243,7 @@
               "id": "us_f65c20961b7318a60d1b46ca1e437373",
               "kind": "then",
               "parentRegionId": "us_76038a17c7b22d058ca203b2610cc9ea",
+              "sourceNodeId": "us_595ecd56259ef57dd8d0116b99d9799c",
               "span": {
                 "filePath": "samples/Authoring/DamagePolicy.cs",
                 "start": {
@@ -234,6 +256,9 @@
                 }
               },
               "isImplicit": false,
+              "directStatementIds": [
+                "us_860fad2c924bc2a597c555e6d2f42f95"
+              ],
               "directActionIds": [
                 "us_860fad2c924bc2a597c555e6d2f42f95",
                 "us_980e53a5ad492fd6a8fc4baa5f40d467",
@@ -269,7 +294,14 @@
                   "direction": "output",
                   "kind": "control"
                 }
-              ]
+              ],
+              "properties": {
+                "declaredSymbolId": "us_f8ca585f8cc118ccb88836645e63068b",
+                "effects": "readsState|writesState",
+                "graphSafe": "true",
+                "resolvedType": "float",
+                "typeId": "us_26a5b44da19acd678d268ed608e9829f"
+              }
             },
             {
               "id": "us_c9aba80313f5b206c3b5222407a549b3",
@@ -332,7 +364,15 @@
                   "direction": "output",
                   "kind": "control"
                 }
-              ]
+              ],
+              "properties": {
+                "declaredSymbolId": "us_c9aba80313f5b206c3b5222407a549b3",
+                "graphSafe": "true",
+                "name": "scaled",
+                "resolvedType": "float",
+                "type": "float",
+                "typeId": "us_26a5b44da19acd678d268ed608e9829f"
+              }
             },
             {
               "id": "us_49097fb28d65f178d1f6a871b47ec679",
@@ -362,7 +402,14 @@
                   "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
                   "typeDisplayName": "int"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "name": "incomingDamage",
+                "referencedSymbolId": "us_ff55e3121a27108b2214b7fed6afb084",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+              }
             },
             {
               "id": "us_e459f4f713fe26395f665bbfa5a44665",
@@ -428,7 +475,14 @@
                   "typeId": "us_26a5b44da19acd678d268ed608e9829f",
                   "typeDisplayName": "float"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "operator": "*",
+                "referencedSymbolId": "us_ca0bdda82bee73fbd2745e614a0ab47a",
+                "resolvedType": "float",
+                "typeId": "us_26a5b44da19acd678d268ed608e9829f"
+              }
             },
             {
               "id": "us_4734b1e54218f5be689bf666e7cca4a3",
@@ -460,7 +514,15 @@
                   "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67",
                   "typeDisplayName": "int"
                 }
-              ]
+              ],
+              "properties": {
+                "declarationId": "us_8bc5970ccb62f81bbb2d7e0f7185eea4",
+                "graphSafe": "true",
+                "name": "BaseDamage",
+                "referencedSymbolId": "us_09439bc04eefd8103777b0fc15b081d9",
+                "resolvedType": "int",
+                "typeId": "us_6ade0b0ef4ce78b6941c6bd0c91cfc67"
+              }
             },
             {
               "id": "us_b24eeff90a17601ddafdc500302e7bf1",
@@ -506,7 +568,13 @@
                   "direction": "output",
                   "kind": "control"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "referencedSymbolId": "us_e2214bcbbd20572d190c3e2f9fa2cb30",
+                "resolvedType": "bool",
+                "typeId": "us_b5f84bcf933b6593d45e9e031353bfef"
+              }
             },
             {
               "id": "us_74e258069ab374d49becf631181b9a47",
@@ -536,7 +604,14 @@
                   "typeId": "us_b5f84bcf933b6593d45e9e031353bfef",
                   "typeDisplayName": "bool"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "name": "critical",
+                "referencedSymbolId": "us_e2214bcbbd20572d190c3e2f9fa2cb30",
+                "resolvedType": "bool",
+                "typeId": "us_b5f84bcf933b6593d45e9e031353bfef"
+              }
             },
             {
               "id": "us_860fad2c924bc2a597c555e6d2f42f95",
@@ -593,7 +668,15 @@
                   "typeId": "us_26a5b44da19acd678d268ed608e9829f",
                   "typeDisplayName": "float"
                 }
-              ]
+              ],
+              "properties": {
+                "debugTargetId": "us_03d5648dccd4efd248e71ddfa48ffb66",
+                "graphSafe": "true",
+                "operator": "*=",
+                "referencedSymbolId": "us_eec1783d356b821ff8fc5228c6562c6b",
+                "resolvedType": "float",
+                "typeId": "us_26a5b44da19acd678d268ed608e9829f"
+              }
             },
             {
               "id": "us_980e53a5ad492fd6a8fc4baa5f40d467",
@@ -623,7 +706,14 @@
                   "typeId": "us_26a5b44da19acd678d268ed608e9829f",
                   "typeDisplayName": "float"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "name": "scaled",
+                "referencedSymbolId": "us_c9aba80313f5b206c3b5222407a549b3",
+                "resolvedType": "float",
+                "typeId": "us_26a5b44da19acd678d268ed608e9829f"
+              }
             },
             {
               "id": "us_04cd17548f588d033b9e2c3c376a487d",
@@ -655,7 +745,15 @@
                   "typeId": "us_26a5b44da19acd678d268ed608e9829f",
                   "typeDisplayName": "float"
                 }
-              ]
+              ],
+              "properties": {
+                "declarationId": "us_934c08ffff55696230b33faa88d27af9",
+                "graphSafe": "true",
+                "name": "CriticalMultiplier",
+                "referencedSymbolId": "us_4f35fd4e0359a6546ff5cacc319c6036",
+                "resolvedType": "float",
+                "typeId": "us_26a5b44da19acd678d268ed608e9829f"
+              }
             },
             {
               "id": "us_78ceaa28ab965873b37a441b3162f427",
@@ -723,7 +821,14 @@
                   "typeId": "us_26a5b44da19acd678d268ed608e9829f",
                   "typeDisplayName": "float"
                 }
-              ]
+              ],
+              "properties": {
+                "debugTargetId": "us_1f12be797ff449d62d658be629651b98",
+                "graphSafe": "true",
+                "operator": "=",
+                "resolvedType": "float",
+                "typeId": "us_26a5b44da19acd678d268ed608e9829f"
+              }
             },
             {
               "id": "us_91b4a3f92292810fadc147e37eae11ce",
@@ -753,7 +858,14 @@
                   "typeId": "us_26a5b44da19acd678d268ed608e9829f",
                   "typeDisplayName": "float"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "name": "scaled",
+                "referencedSymbolId": "us_c9aba80313f5b206c3b5222407a549b3",
+                "resolvedType": "float",
+                "typeId": "us_26a5b44da19acd678d268ed608e9829f"
+              }
             },
             {
               "id": "us_d5f8e90aa9c2a67eb3fcf7df4d0aa440",
@@ -788,7 +900,11 @@
                   "direction": "output",
                   "kind": "data"
                 }
-              ]
+              ],
+              "properties": {
+                "member": "Clamp",
+                "referencedSymbolId": "us_46ee86cf36b0fbfed42155cd3ecd1457"
+              }
             },
             {
               "id": "us_d669bb3980cddce07f64de04c3f245f1",
@@ -857,7 +973,15 @@
                   "typeId": "us_26a5b44da19acd678d268ed608e9829f",
                   "typeDisplayName": "float"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "method": "System.Math.Clamp(System.Single, System.Single, System.Single)",
+                "methodId": "us_46ee86cf36b0fbfed42155cd3ecd1457",
+                "referencedSymbolId": "us_46ee86cf36b0fbfed42155cd3ecd1457",
+                "resolvedType": "float",
+                "typeId": "us_26a5b44da19acd678d268ed608e9829f"
+              }
             },
             {
               "id": "us_fec53b114b1ac9cfea472ca5d9c63917",
@@ -887,7 +1011,14 @@
                   "typeId": "us_79aa6d536e97e45e08d4dcba6deb0837",
                   "typeDisplayName": "Math"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "false",
+                "name": "Math",
+                "referencedSymbolId": "us_92b74600f1beae070891cf5edb10dcca",
+                "resolvedType": "Math",
+                "typeId": "us_79aa6d536e97e45e08d4dcba6deb0837"
+              }
             },
             {
               "id": "us_c891c49a43dab0c6ce858a92a6f2dbb4",
@@ -917,7 +1048,14 @@
                   "typeId": "us_26a5b44da19acd678d268ed608e9829f",
                   "typeDisplayName": "float"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "name": "scaled",
+                "referencedSymbolId": "us_c9aba80313f5b206c3b5222407a549b3",
+                "resolvedType": "float",
+                "typeId": "us_26a5b44da19acd678d268ed608e9829f"
+              }
             },
             {
               "id": "us_cd1ac0cfc9ede79d03f4189b4253ce8b",
@@ -958,7 +1096,13 @@
                   "typeId": "us_26a5b44da19acd678d268ed608e9829f",
                   "typeDisplayName": "float"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "resolvedType": "float",
+                "typeId": "us_26a5b44da19acd678d268ed608e9829f",
+                "value": "0f"
+              }
             },
             {
               "id": "us_efeb1c15214838fefc6f4c37cbdfd6c5",
@@ -990,7 +1134,15 @@
                   "typeId": "us_26a5b44da19acd678d268ed608e9829f",
                   "typeDisplayName": "float"
                 }
-              ]
+              ],
+              "properties": {
+                "declarationId": "us_466fab9c566c7f4284b97d4bbb08fa60",
+                "graphSafe": "true",
+                "name": "MaxDamage",
+                "referencedSymbolId": "us_7d4631bb8cf651712550bebb77f4cb0b",
+                "resolvedType": "float",
+                "typeId": "us_26a5b44da19acd678d268ed608e9829f"
+              }
             },
             {
               "id": "us_27393be68a2b8cd68ea420f494910eee",
@@ -1026,7 +1178,8 @@
                   "typeId": "us_26a5b44da19acd678d268ed608e9829f",
                   "typeDisplayName": "float"
                 }
-              ]
+              ],
+              "properties": {}
             },
             {
               "id": "us_b626b33f628bc6c9093e945193831154",
@@ -1056,7 +1209,14 @@
                   "typeId": "us_26a5b44da19acd678d268ed608e9829f",
                   "typeDisplayName": "float"
                 }
-              ]
+              ],
+              "properties": {
+                "graphSafe": "true",
+                "name": "scaled",
+                "referencedSymbolId": "us_c9aba80313f5b206c3b5222407a549b3",
+                "resolvedType": "float",
+                "typeId": "us_26a5b44da19acd678d268ed608e9829f"
+              }
             }
           ],
           "edges": [

@@ -318,6 +318,33 @@ public sealed class CSharpSourcePatchApplier
                     patchIndex,
                     boundNodes,
                     documents),
+                InsertSwitchSectionPatchOperation insertSwitchSection =>
+                    PlanSwitchSectionInsertion(
+                        insertSwitchSection,
+                        hirNodes,
+                        patchIndex,
+                        boundNodes,
+                        types,
+                        graphSafetyIndex,
+                        documents),
+                ReplaceSwitchSectionPatchOperation replaceSwitchSection =>
+                    PlanSwitchSectionReplacement(
+                        replaceSwitchSection,
+                        hirNodes,
+                        patchIndex,
+                        boundNodes,
+                        types,
+                        graphSafetyIndex,
+                        documents),
+                MoveSwitchSectionPatchOperation moveSwitchSection => PlanSwitchSectionMove(
+                    moveSwitchSection,
+                    hirNodes,
+                    documents),
+                DeleteSwitchSectionPatchOperation deleteSwitchSection =>
+                    PlanSwitchSectionDeletion(
+                        deleteSwitchSection,
+                        hirNodes,
+                        documents),
                 IntroduceTemporaryPatchOperation introduceTemporary => PlanTemporaryIntroduction(
                     introduceTemporary,
                     hirNodes,
@@ -399,7 +426,15 @@ public sealed class CSharpSourcePatchApplier
             return Failure(patchedAnalysis.Diagnostics);
         }
 
-        if (patch.Operations.Any(static operation => operation is MoveStatementPatchOperation))
+        SemanticPatchOperation? controlFlowOperation = patch.Operations.FirstOrDefault(
+            static operation => operation is MoveStatementPatchOperation or
+                InsertSwitchSectionPatchOperation or ReplaceSwitchSectionPatchOperation or
+                MoveSwitchSectionPatchOperation or DeleteSwitchSectionPatchOperation ||
+                operation is InsertStatementPatchOperation
+                {
+                    NewStatement: SwitchPatchStatement,
+                });
+        if (controlFlowOperation is not null)
         {
             try
             {
@@ -411,17 +446,16 @@ public sealed class CSharpSourcePatchApplier
             }
             catch (InvalidOperationException exception)
             {
-                MoveStatementPatchOperation move = patch.Operations
-                    .OfType<MoveStatementPatchOperation>()
-                    .First();
-                HirNode? target = hirNodes.GetValueOrDefault(move.TargetNodeId);
+                HirNode? target = hirNodes.GetValueOrDefault(controlFlowOperation.TargetNodeId);
                 return Failure(new UnifiedDiagnostic(
-                    SemanticPatchDiagnosticCodes.InvalidControlFlowReconnection,
+                    controlFlowOperation is MoveStatementPatchOperation
+                        ? SemanticPatchDiagnosticCodes.InvalidControlFlowReconnection
+                        : SemanticPatchDiagnosticCodes.InvalidSwitchSection,
                     UnifiedDiagnosticSeverity.Error,
-                    "The control-flow reconnection was rejected because its projected CFG is " +
+                    "The structured control edit was rejected because its projected CFG is " +
                     $"invalid or irreducible: {exception.Message}",
                     target?.Span ?? SourceSpan.Unknown("<patch>"),
-                    move.TargetNodeId));
+                    controlFlowOperation.TargetNodeId));
             }
         }
 
@@ -2123,6 +2157,15 @@ public sealed class CSharpSourcePatchApplier
                 graphSafetyIndex,
                 boundNodes,
                 types),
+            SwitchPatchStatement switchStatement => BuildSwitchStatement(
+                switchStatement,
+                blockLocation!,
+                insertionIndex,
+                hirNodes,
+                patchIndex,
+                graphSafetyIndex,
+                boundNodes,
+                types),
             BreakPatchStatement => BuildControlTransferStatement(
                 isContinue: false,
                 blockLocation!,
@@ -2157,29 +2200,36 @@ public sealed class CSharpSourcePatchApplier
                 block);
         }
 
-        if (!TryFindSyntax(documents, block, out ParsedDocument? document, out BlockSyntax? syntax) ||
-            syntax!.Statements.Count != block.Statements.Count)
+        if (!TryFindEditableStatementContainer(
+                documents,
+                block,
+                out ParsedDocument? document,
+                out EditableStatementContainer? container) ||
+            container!.Statements.Count != block.Statements.Count)
         {
             return DiagnosticPlan(
                 SemanticPatchDiagnosticCodes.InvalidStatement,
-                "Statement insertion currently requires an explicit C# block whose statement list " +
-                "matches the analyzed HIR block.",
+                "Statement insertion requires an explicit C# block or switch-section body whose " +
+                "statement list matches the analyzed HIR block.",
                 block);
         }
 
         (List<StatementSyntax> annotatedStatements, List<PendingPin> pins) =
-            AnnotateStatementTrees(document!, syntax, block.Statements);
-        InsertionFormatting formatting = GetInsertionFormatting(document!, syntax, insertionIndex);
+            AnnotateStatementTrees(document!, container.Statements, block.Statements);
+        InsertionFormatting formatting = GetInsertionFormatting(
+            document!,
+            container,
+            insertionIndex);
         StatementSyntax newStatement = FormatInsertedStatement(statementResult.Syntax, formatting);
         annotatedStatements.Insert(insertionIndex, newStatement);
         var blockAnnotation = new SyntaxAnnotation(IdentityAnnotationKind, block.Id.Value);
-        BlockSyntax replacement = syntax
-            .WithStatements(SyntaxFactory.List(annotatedStatements))
+        SyntaxNode replacement = container.WithStatements(
+                SyntaxFactory.List(annotatedStatements))
             .WithAdditionalAnnotations(blockAnnotation);
         pins.Add(new PendingPin(block.Id, "block", blockAnnotation));
         return SuccessPlan(document!, new PendingReplacement(
             document!.Source.LogicalPath,
-            syntax,
+            container.Syntax,
             replacement,
             pins));
     }
@@ -3252,40 +3302,42 @@ public sealed class CSharpSourcePatchApplier
         }
 
         HirBlockStatement parentBlock = location.ParentBlock;
-        if (!TryFindSyntax(
+        if (!TryFindEditableStatementContainer(
                 documents,
                 parentBlock,
                 out ParsedDocument? document,
-                out BlockSyntax? syntax) ||
-            syntax!.Statements.Count != parentBlock.Statements.Count ||
+                out EditableStatementContainer? container) ||
+            container!.Statements.Count != parentBlock.Statements.Count ||
             RoslynSourceSpan.FromNode(
-                syntax.Statements[location.Index],
+                container.Statements[location.Index],
                 document!.Source.LogicalPath) != statement.Span)
         {
             return DiagnosticPlan(
                 SemanticPatchDiagnosticCodes.InvalidStatement,
-                "Statement deletion currently requires an explicit C# block whose statement list " +
-                "matches the analyzed HIR block.",
+                "Statement deletion requires an explicit C# block or switch-section body whose " +
+                "statement list matches the analyzed HIR block.",
                 statement);
         }
 
-        BlockSyntax removed = RemoveStatementPreservingComments(
+        SyntaxNode removed = RemoveStatementPreservingComments(
             document!,
-            syntax,
+            container,
             location.Index);
+        SyntaxList<StatementSyntax> removedStatements = GetStatements(removed);
         HirStatement[] survivingHir = parentBlock.Statements
             .Where((_, index) => index != location.Index)
             .ToArray();
         (List<StatementSyntax> annotatedStatements, List<PendingPin> pins) =
-            AnnotateStatements(removed, survivingHir);
+            AnnotateStatements(removedStatements, survivingHir);
         var blockAnnotation = new SyntaxAnnotation(IdentityAnnotationKind, parentBlock.Id.Value);
-        BlockSyntax replacement = removed
-            .WithStatements(SyntaxFactory.List(annotatedStatements))
+        SyntaxNode replacement = WithStatements(
+                removed,
+                SyntaxFactory.List(annotatedStatements))
             .WithAdditionalAnnotations(blockAnnotation);
         pins.Add(new PendingPin(parentBlock.Id, "block", blockAnnotation));
         return SuccessPlan(document!, new PendingReplacement(
             document!.Source.LogicalPath,
-            syntax,
+            container.Syntax,
             replacement,
             pins));
     }
@@ -3574,17 +3626,17 @@ public sealed class CSharpSourcePatchApplier
         }
 
         HirBlockStatement parentBlock = location.ParentBlock;
-        if (!TryFindSyntax(
+        if (!TryFindEditableStatementContainer(
                 documents,
                 parentBlock,
                 out ParsedDocument? document,
-                out BlockSyntax? syntax) ||
-            syntax!.Statements.Count != parentBlock.Statements.Count)
+                out EditableStatementContainer? container) ||
+            container!.Statements.Count != parentBlock.Statements.Count)
         {
             return DiagnosticPlan(
                 SemanticPatchDiagnosticCodes.InvalidControlFlowReconnection,
-                "Statement movement requires an explicit C# block whose statement order still " +
-                "matches the analyzed HIR.",
+                "Statement movement requires an explicit C# block or switch-section body whose " +
+                "statement order still matches the analyzed HIR.",
                 statement);
         }
 
@@ -3598,20 +3650,385 @@ public sealed class CSharpSourcePatchApplier
         }
 
         (List<StatementSyntax> annotatedStatements, List<PendingPin> pins) =
-            AnnotateStatementTrees(document, syntax, parentBlock.Statements);
+            AnnotateStatementTrees(document, container.Statements, parentBlock.Statements);
         StatementSyntax movedSyntax = annotatedStatements[location.Index];
         annotatedStatements.RemoveAt(location.Index);
         annotatedStatements.Insert(destinationIndex, movedSyntax);
         var blockAnnotation = new SyntaxAnnotation(IdentityAnnotationKind, parentBlock.Id.Value);
-        BlockSyntax replacement = syntax
-            .WithStatements(SyntaxFactory.List(annotatedStatements))
+        SyntaxNode replacement = container.WithStatements(
+                SyntaxFactory.List(annotatedStatements))
             .WithAdditionalAnnotations(blockAnnotation);
         pins.Add(new PendingPin(parentBlock.Id, "block", blockAnnotation));
         return SuccessPlan(document, new PendingReplacement(
             document.Source.LogicalPath,
-            syntax,
+            container.Syntax,
             replacement,
             pins));
+    }
+
+    private static OperationPlan PlanSwitchSectionInsertion(
+        InsertSwitchSectionPatchOperation operation,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
+        GraphPatchSafetyIndex graphSafetyIndex,
+        IReadOnlyDictionary<string, ParsedDocument> documents)
+    {
+        if (!hirNodes.TryGetValue(operation.TargetNodeId, out HirNode? target))
+        {
+            return MissingTarget(operation.TargetNodeId);
+        }
+
+        if (target is not HirSwitchStatement switchStatement ||
+            !patchIndex.TryGetStatement(
+                switchStatement.Id,
+                out HirPatchIndex.StatementLocation? location) ||
+            !patchIndex.TryGetBlock(
+                location!.ParentBlock.Id,
+                out HirPatchIndex.BlockLocation? blockLocation))
+        {
+            return KindMismatch(target, operation.TargetNodeId, "a switch statement");
+        }
+
+        if (!TryGetSwitchSectionInsertionIndex(
+                switchStatement.Sections,
+                operation.ExpectedPreviousSectionId,
+                operation.ExpectedNextSectionId,
+                out int sectionIndex))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.SiblingPreconditionFailed,
+                "The switch-section insertion gap changed. Refresh the Surface before editing.",
+                switchStatement);
+        }
+
+        if (!TryGetSwitchGoverningType(
+                switchStatement,
+                boundNodes,
+                types,
+                out TypeDescriptor? governingType))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.TypeMismatch,
+                "The switch governing expression no longer has one graph-safe semantic type.",
+                switchStatement);
+        }
+
+        SwitchSectionBuildResult built = BuildSwitchSection(
+            operation.NewSection,
+            governingType!,
+            blockLocation!,
+            location.Index,
+            hirNodes,
+            patchIndex,
+            graphSafetyIndex,
+            boundNodes,
+            types);
+        if (built.Syntax is null)
+        {
+            return DiagnosticPlan(
+                built.DiagnosticCode ?? SemanticPatchDiagnosticCodes.InvalidSwitchSection,
+                built.DiagnosticMessage ?? "The new switch section is invalid.",
+                switchStatement);
+        }
+
+        if (operation.NewSection.Labels.Any(static label => label is DefaultSwitchLabelPatch) &&
+            switchStatement.Sections.SelectMany(static section => section.Labels)
+                .Any(static label => label is HirDefaultSwitchLabel))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidSwitchSection,
+                "A switch cannot contain more than one default section.",
+                switchStatement);
+        }
+
+        if (!TryPrepareSwitchMutation(
+                documents,
+                switchStatement,
+                hirNodes,
+                out ParsedDocument? document,
+                out SwitchStatementSyntax? originalSyntax,
+                out SwitchStatementSyntax? annotatedSyntax,
+                out List<PendingPin>? pins,
+                out string? identityFailure))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.PlanRequiresPersistentIdentity,
+                identityFailure!,
+                switchStatement);
+        }
+
+        SwitchSectionSyntax formatted = FormatInsertedSwitchSection(
+            document!,
+            annotatedSyntax!,
+            sectionIndex,
+            built.Syntax);
+        SwitchStatementSyntax replacement = annotatedSyntax!.WithSections(
+            annotatedSyntax.Sections.Insert(sectionIndex, formatted));
+        return SuccessPlan(document!, new PendingReplacement(
+            document!.Source.LogicalPath,
+            originalSyntax!,
+            replacement,
+            FilterPinsForSyntax(replacement, pins!)));
+    }
+
+    private static OperationPlan PlanSwitchSectionReplacement(
+        ReplaceSwitchSectionPatchOperation operation,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
+        GraphPatchSafetyIndex graphSafetyIndex,
+        IReadOnlyDictionary<string, ParsedDocument> documents)
+    {
+        if (!TryResolveSwitchSection(
+                hirNodes,
+                operation.TargetNodeId,
+                operation.ExpectedSwitchStatementId,
+                out HirSwitchStatement? switchStatement,
+                out HirSwitchSection? section,
+                out int sectionIndex))
+        {
+            HirNode? target = hirNodes.GetValueOrDefault(operation.TargetNodeId);
+            return target is null
+                ? MissingTarget(operation.TargetNodeId)
+                : KindMismatch(target, operation.TargetNodeId, "a section of the expected switch");
+        }
+
+        if (!section!.Labels.Select(static label => label.Id)
+            .SequenceEqual(operation.ExpectedLabelIds))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.PreconditionFailed,
+                "The switch-section labels changed. Refresh the Surface before relabeling.",
+                section);
+        }
+
+        int existingDefaultsOutsideSection = switchStatement!.Sections
+            .Where(candidate => candidate.Id != section.Id)
+            .SelectMany(static candidate => candidate.Labels)
+            .Count(static label => label is HirDefaultSwitchLabel);
+        if (existingDefaultsOutsideSection > 0 &&
+            operation.NewLabels.Any(static label => label is DefaultSwitchLabelPatch))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidSwitchSection,
+                "A switch cannot contain more than one default label.",
+                section);
+        }
+
+        if (!patchIndex.TryGetStatement(
+                switchStatement.Id,
+                out HirPatchIndex.StatementLocation? location) ||
+            !patchIndex.TryGetBlock(
+                location!.ParentBlock.Id,
+                out HirPatchIndex.BlockLocation? blockLocation) ||
+            !TryGetSwitchGoverningType(
+                switchStatement,
+                boundNodes,
+                types,
+                out TypeDescriptor? governingType))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.TypeMismatch,
+                "The switch governing expression no longer has one graph-safe semantic type.",
+                switchStatement);
+        }
+
+        SwitchSectionBuildResult built = BuildSwitchSection(
+            new SwitchSectionPatch(operation.NewLabels),
+            governingType!,
+            blockLocation!,
+            location.Index,
+            hirNodes,
+            patchIndex,
+            graphSafetyIndex,
+            boundNodes,
+            types);
+        if (built.Syntax is null)
+        {
+            return DiagnosticPlan(
+                built.DiagnosticCode ?? SemanticPatchDiagnosticCodes.InvalidSwitchSection,
+                built.DiagnosticMessage ?? "The replacement switch labels are invalid.",
+                section);
+        }
+
+        if (!TryPrepareSwitchMutation(
+                documents, switchStatement, hirNodes, out ParsedDocument? document,
+                out SwitchStatementSyntax? originalSyntax,
+                out SwitchStatementSyntax? annotatedSyntax,
+                out List<PendingPin>? pins, out string? identityFailure))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.PlanRequiresPersistentIdentity,
+                identityFailure!,
+                switchStatement);
+        }
+
+        SwitchSectionSyntax current = annotatedSyntax!.Sections[sectionIndex];
+        SwitchSectionSyntax labelsOnly = FormatReplacementSwitchLabels(
+            document!,
+            current,
+            built.Syntax.Labels);
+        SwitchSectionSyntax changed = current.WithLabels(labelsOnly.Labels);
+        SwitchStatementSyntax replacement = annotatedSyntax!.WithSections(
+            annotatedSyntax.Sections.Replace(current, changed));
+        return SuccessPlan(document!, new PendingReplacement(
+            document!.Source.LogicalPath,
+            originalSyntax!,
+            replacement,
+            FilterPinsForSyntax(replacement, pins!)));
+    }
+
+    private static OperationPlan PlanSwitchSectionMove(
+        MoveSwitchSectionPatchOperation operation,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        IReadOnlyDictionary<string, ParsedDocument> documents)
+    {
+        if (!TryResolveSwitchSection(
+                hirNodes, operation.TargetNodeId, operation.ExpectedSwitchStatementId,
+                out HirSwitchStatement? switchStatement, out HirSwitchSection? section,
+                out int sectionIndex))
+        {
+            HirNode? target = hirNodes.GetValueOrDefault(operation.TargetNodeId);
+            return target is null
+                ? MissingTarget(operation.TargetNodeId)
+                : KindMismatch(target, operation.TargetNodeId, "a section of the expected switch");
+        }
+
+        if (!SwitchSectionSiblingsMatch(
+                switchStatement!,
+                sectionIndex,
+                operation.ExpectedSourcePreviousSectionId,
+                operation.ExpectedSourceNextSectionId))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.SiblingPreconditionFailed,
+                "The source switch-section order changed. Refresh the Surface before moving it.",
+                section!);
+        }
+
+        HirSwitchSection[] remaining = switchStatement!.Sections
+            .Where(candidate => candidate.Id != section!.Id)
+            .ToArray();
+        if (!TryGetSwitchSectionInsertionIndex(
+                remaining,
+                operation.ExpectedDestinationPreviousSectionId,
+                operation.ExpectedDestinationNextSectionId,
+                out int destinationIndex))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.SiblingPreconditionFailed,
+                "The destination switch-section gap changed. Refresh the Surface before moving it.",
+                section!);
+        }
+
+        var reorderedIds = remaining.Select(static candidate => candidate.Id).ToList();
+        reorderedIds.Insert(destinationIndex, section!.Id);
+        if (reorderedIds.SequenceEqual(
+                switchStatement.Sections.Select(static candidate => candidate.Id)))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidSwitchSection,
+                "The switch section already occupies the requested position.",
+                section);
+        }
+
+        if (!TryPrepareSwitchMutation(
+                documents, switchStatement, hirNodes, out ParsedDocument? document,
+                out SwitchStatementSyntax? originalSyntax,
+                out SwitchStatementSyntax? annotatedSyntax,
+                out List<PendingPin>? pins, out string? identityFailure))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.PlanRequiresPersistentIdentity,
+                identityFailure!,
+                switchStatement);
+        }
+
+        var syntaxSections = annotatedSyntax!.Sections.ToList();
+        SwitchSectionSyntax moved = syntaxSections[sectionIndex];
+        syntaxSections.RemoveAt(sectionIndex);
+        syntaxSections.Insert(destinationIndex, moved);
+        SwitchStatementSyntax replacement = annotatedSyntax!.WithSections(
+            SyntaxFactory.List(syntaxSections));
+        return SuccessPlan(document!, new PendingReplacement(
+            document!.Source.LogicalPath,
+            originalSyntax!,
+            replacement,
+            FilterPinsForSyntax(replacement, pins!)));
+    }
+
+    private static OperationPlan PlanSwitchSectionDeletion(
+        DeleteSwitchSectionPatchOperation operation,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        IReadOnlyDictionary<string, ParsedDocument> documents)
+    {
+        if (!TryResolveSwitchSection(
+                hirNodes, operation.TargetNodeId, operation.ExpectedSwitchStatementId,
+                out HirSwitchStatement? switchStatement, out HirSwitchSection? section,
+                out int sectionIndex))
+        {
+            HirNode? target = hirNodes.GetValueOrDefault(operation.TargetNodeId);
+            return target is null
+                ? MissingTarget(operation.TargetNodeId)
+                : KindMismatch(target, operation.TargetNodeId, "a section of the expected switch");
+        }
+
+        if (!SwitchSectionSiblingsMatch(
+                switchStatement!,
+                sectionIndex,
+                operation.ExpectedPreviousSectionId,
+                operation.ExpectedNextSectionId) ||
+            !section!.Labels.Select(static label => label.Id)
+                .SequenceEqual(operation.ExpectedLabelIds))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.SiblingPreconditionFailed,
+                "The switch section or its labels changed. Refresh the Surface before deleting it.",
+                section!);
+        }
+
+        if (section.Body.Statements.Count > 1 ||
+            section.Body.Statements.Count == 1 &&
+            section.Body.Statements[0] is not HirBreakStatement)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.UnsafeSwitchSectionDeletion,
+                "Only an empty switch section or a generated break-only section can be deleted. " +
+                "Delete authored body statements explicitly first.",
+                section);
+        }
+
+        if (!TryPrepareSwitchMutation(
+                documents, switchStatement!, hirNodes, out ParsedDocument? document,
+                out SwitchStatementSyntax? originalSyntax,
+                out SwitchStatementSyntax? annotatedSyntax,
+                out List<PendingPin>? pins, out string? identityFailure))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.PlanRequiresPersistentIdentity,
+                identityFailure!,
+                switchStatement!);
+        }
+
+        SwitchSectionSyntax syntaxSection = originalSyntax!.Sections[sectionIndex];
+        if (syntaxSection.DescendantTrivia(descendIntoTrivia: true).Any(IsMeaningfulTrivia))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.UnsafeSwitchSectionDeletion,
+                "The switch section contains comments or directives that cannot be discarded safely.",
+                section);
+        }
+
+        SwitchStatementSyntax replacement = annotatedSyntax!.WithSections(
+            annotatedSyntax.Sections.RemoveAt(sectionIndex));
+        return SuccessPlan(document!, new PendingReplacement(
+            document!.Source.LogicalPath,
+            originalSyntax,
+            replacement,
+            FilterPinsForSyntax(replacement, pins!)));
     }
 
     private static string? FindLocalOrderingFailure(
@@ -3644,6 +4061,218 @@ public sealed class CSharpSourcePatchApplier
         }
 
         return null;
+    }
+
+    private static bool TryResolveSwitchSection(
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        SemanticId sectionId,
+        SemanticId expectedSwitchId,
+        out HirSwitchStatement? switchStatement,
+        out HirSwitchSection? section,
+        out int sectionIndex)
+    {
+        switchStatement = hirNodes.Values
+            .OfType<HirSwitchStatement>()
+            .SingleOrDefault(candidate => candidate.Id == expectedSwitchId &&
+                candidate.Sections.Any(item => item.Id == sectionId));
+        sectionIndex = switchStatement?.Sections
+            .Select((item, index) => (item, index))
+            .Where(item => item.item.Id == sectionId)
+            .Select(static item => item.index)
+            .SingleOrDefault() ?? -1;
+        section = sectionIndex >= 0 ? switchStatement!.Sections[sectionIndex] : null;
+        return section is not null;
+    }
+
+    private static bool TryGetSwitchGoverningType(
+        HirSwitchStatement switchStatement,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
+        out TypeDescriptor? type)
+    {
+        type = null;
+        return boundNodes.TryGetValue(
+                switchStatement.GoverningExpression.Id,
+                out BoundNodeInfo? binding) &&
+            binding.TypeId is SemanticId typeId &&
+            types.TryGetValue(typeId, out type) &&
+            type.IsGraphSafe;
+    }
+
+    private static bool TryGetSwitchSectionInsertionIndex(
+        IReadOnlyList<HirSwitchSection> sections,
+        SemanticId? expectedPreviousSectionId,
+        SemanticId? expectedNextSectionId,
+        out int index)
+    {
+        if (expectedPreviousSectionId is null && expectedNextSectionId is null)
+        {
+            index = 0;
+            return sections.Count == 0;
+        }
+
+        if (expectedPreviousSectionId is null)
+        {
+            index = 0;
+            return sections.Count > 0 && sections[0].Id == expectedNextSectionId;
+        }
+
+        if (expectedNextSectionId is null)
+        {
+            index = sections.Count;
+            return sections.Count > 0 && sections[^1].Id == expectedPreviousSectionId;
+        }
+
+        int previousIndex = sections
+            .Select((section, sectionIndex) => (section, sectionIndex))
+            .Where(item => item.section.Id == expectedPreviousSectionId)
+            .Select(static item => item.sectionIndex)
+            .DefaultIfEmpty(-1)
+            .Single();
+        index = previousIndex + 1;
+        return previousIndex >= 0 && index < sections.Count &&
+            sections[index].Id == expectedNextSectionId;
+    }
+
+    private static bool SwitchSectionSiblingsMatch(
+        HirSwitchStatement switchStatement,
+        int sectionIndex,
+        SemanticId? expectedPreviousSectionId,
+        SemanticId? expectedNextSectionId)
+    {
+        SemanticId? previous = sectionIndex == 0
+            ? null
+            : switchStatement.Sections[sectionIndex - 1].Id;
+        SemanticId? next = sectionIndex == switchStatement.Sections.Count - 1
+            ? null
+            : switchStatement.Sections[sectionIndex + 1].Id;
+        return previous == expectedPreviousSectionId && next == expectedNextSectionId;
+    }
+
+    private static bool TryPrepareSwitchMutation(
+        IReadOnlyDictionary<string, ParsedDocument> documents,
+        HirSwitchStatement switchStatement,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        out ParsedDocument? document,
+        out SwitchStatementSyntax? originalSyntax,
+        out SwitchStatementSyntax? annotatedSyntax,
+        out List<PendingPin>? pins,
+        out string? failure)
+    {
+        if (!TryFindSyntax(
+                documents,
+                switchStatement,
+                out document,
+                out originalSyntax) ||
+            originalSyntax!.Sections.Count != switchStatement.Sections.Count)
+        {
+            annotatedSyntax = null;
+            pins = null;
+            failure = "The switch syntax no longer matches the analyzed HIR.";
+            return false;
+        }
+
+        if (document!.Source.IdentitySidecar is null)
+        {
+            annotatedSyntax = null;
+            pins = null;
+            failure = "Switch-section authoring requires a .usids sidecar so unaffected " +
+                "sections, labels, patterns, and body statements retain semantic identity.";
+            return false;
+        }
+
+        IReadOnlyDictionary<SemanticId, IdentityEntry> entries = document.Source.IdentitySidecar
+            .Entries.ToDictionary(static entry => entry.Id);
+        SwitchStatementSyntax sourceSyntax = originalSyntax!;
+        var annotations = new Dictionary<SyntaxNode, List<SyntaxAnnotation>>();
+        pins = [];
+        foreach (HirNode node in switchStatement.DescendantsAndSelf())
+        {
+            if (!entries.TryGetValue(node.Id, out IdentityEntry? entry) ||
+                !TryFindIdentitySyntax(document, node, out SyntaxNode? syntax) ||
+                !sourceSyntax.FullSpan.Contains(syntax!.FullSpan))
+            {
+                continue;
+            }
+
+            var annotation = new SyntaxAnnotation(IdentityAnnotationKind, node.Id.Value);
+            if (!annotations.TryGetValue(syntax, out List<SyntaxAnnotation>? nodeAnnotations))
+            {
+                nodeAnnotations = [];
+                annotations.Add(syntax, nodeAnnotations);
+            }
+            nodeAnnotations.Add(annotation);
+            pins.Add(new PendingPin(node.Id, entry.Kind, annotation));
+        }
+
+        SyntaxNode[] descendants = annotations.Keys
+            .Where(candidate => candidate != sourceSyntax)
+            .ToArray();
+        annotatedSyntax = sourceSyntax.ReplaceNodes(
+            descendants,
+            (original, rewritten) => rewritten.WithAdditionalAnnotations(
+                annotations[original].ToArray()));
+        if (annotations.TryGetValue(sourceSyntax, out List<SyntaxAnnotation>? rootAnnotations))
+        {
+            annotatedSyntax = annotatedSyntax.WithAdditionalAnnotations(rootAnnotations.ToArray());
+        }
+
+        failure = null;
+        return true;
+    }
+
+    private static List<PendingPin> FilterPinsForSyntax(
+        SyntaxNode syntax,
+        IEnumerable<PendingPin> pins) => pins
+        .Where(pin => syntax.GetAnnotatedNodes(pin.Annotation).Any())
+        .ToList();
+
+    private static SwitchSectionSyntax FormatInsertedSwitchSection(
+        ParsedDocument document,
+        SwitchStatementSyntax switchSyntax,
+        int insertionIndex,
+        SwitchSectionSyntax section)
+    {
+        string sectionIndent;
+        if (switchSyntax.Sections.Count > 0)
+        {
+            SwitchSectionSyntax reference = insertionIndex < switchSyntax.Sections.Count
+                ? switchSyntax.Sections[insertionIndex]
+                : switchSyntax.Sections[^1];
+            sectionIndent = GetLineIndentation(document, reference.Labels[0]);
+        }
+        else
+        {
+            int braceColumn = switchSyntax.OpenBraceToken.GetLocation()
+                .GetLineSpan().StartLinePosition.Character;
+            sectionIndent = new string(' ', braceColumn + 4);
+        }
+
+        string endOfLine = GetEndOfLine(document);
+        string statementIndent = sectionIndent + "    ";
+        SyntaxList<SwitchLabelSyntax> labels = SyntaxFactory.List(section.Labels.Select(label =>
+            label.WithLeadingTrivia(SyntaxFactory.Whitespace(sectionIndent))
+                .WithColonToken(label.ColonToken.WithTrailingTrivia(
+                    SyntaxFactory.EndOfLine(endOfLine)))));
+        SyntaxList<StatementSyntax> statements = SyntaxFactory.List(section.Statements.Select(
+            statement => statement
+                .WithLeadingTrivia(SyntaxFactory.Whitespace(statementIndent))
+                .WithTrailingTrivia(SyntaxFactory.EndOfLine(endOfLine))));
+        return section.WithLabels(labels).WithStatements(statements);
+    }
+
+    private static SwitchSectionSyntax FormatReplacementSwitchLabels(
+        ParsedDocument document,
+        SwitchSectionSyntax current,
+        SyntaxList<SwitchLabelSyntax> labels)
+    {
+        string indentation = GetLineIndentation(document, current.Labels[0]);
+        string endOfLine = GetEndOfLine(document);
+        SyntaxList<SwitchLabelSyntax> formatted = SyntaxFactory.List(labels.Select(label =>
+            label.WithLeadingTrivia(SyntaxFactory.Whitespace(indentation))
+                .WithColonToken(label.ColonToken.WithTrailingTrivia(
+                    SyntaxFactory.EndOfLine(endOfLine)))));
+        return current.WithLabels(formatted);
     }
 
     private static OperationPlan PlanValueReconnection(
@@ -3880,17 +4509,17 @@ public sealed class CSharpSourcePatchApplier
             pins));
     }
 
-    private static BlockSyntax RemoveStatementPreservingComments(
+    private static SyntaxNode RemoveStatementPreservingComments(
         ParsedDocument document,
-        BlockSyntax block,
+        EditableStatementContainer container,
         int statementIndex)
     {
-        StatementSyntax target = block.Statements[statementIndex];
+        StatementSyntax target = container.Statements[statementIndex];
         SyntaxTriviaList preservedTrivia = GetPreservedDeletionTrivia(document, target);
-        SyntaxList<StatementSyntax> statements = block.Statements.RemoveAt(statementIndex);
+        SyntaxList<StatementSyntax> statements = container.Statements.RemoveAt(statementIndex);
         if (preservedTrivia.Count == 0)
         {
-            return block.WithStatements(statements);
+            return container.WithStatements(statements);
         }
 
         if (statementIndex < statements.Count)
@@ -3899,14 +4528,44 @@ public sealed class CSharpSourcePatchApplier
             statements = statements.Replace(
                 next,
                 next.WithLeadingTrivia(preservedTrivia.AddRange(next.GetLeadingTrivia())));
-            return block.WithStatements(statements);
+            return container.WithStatements(statements);
         }
 
-        return block
+        if (container.Syntax is BlockSyntax block)
+        {
+            return block
+                .WithStatements(statements)
+                .WithCloseBraceToken(block.CloseBraceToken.WithLeadingTrivia(
+                    preservedTrivia.AddRange(block.CloseBraceToken.LeadingTrivia)));
+        }
+
+        SwitchSectionSyntax section = (SwitchSectionSyntax)container.Syntax;
+        SwitchLabelSyntax firstLabel = section.Labels[0];
+        return section
             .WithStatements(statements)
-            .WithCloseBraceToken(block.CloseBraceToken.WithLeadingTrivia(
-                preservedTrivia.AddRange(block.CloseBraceToken.LeadingTrivia)));
+            .WithLabels(section.Labels.Replace(
+                firstLabel,
+                firstLabel.WithLeadingTrivia(
+                    preservedTrivia.AddRange(firstLabel.GetLeadingTrivia()))));
     }
+
+    private static SyntaxList<StatementSyntax> GetStatements(SyntaxNode container) => container switch
+    {
+        BlockSyntax block => block.Statements,
+        SwitchSectionSyntax section => section.Statements,
+        _ => throw new InvalidOperationException(
+            $"Unsupported editable statement container '{container.GetType().Name}'."),
+    };
+
+    private static SyntaxNode WithStatements(
+        SyntaxNode container,
+        SyntaxList<StatementSyntax> statements) => container switch
+    {
+        BlockSyntax block => block.WithStatements(statements),
+        SwitchSectionSyntax section => section.WithStatements(statements),
+        _ => throw new InvalidOperationException(
+            $"Unsupported editable statement container '{container.GetType().Name}'."),
+    };
 
     private static SyntaxTriviaList GetPreservedDeletionTrivia(
         ParsedDocument document,
@@ -4016,9 +4675,15 @@ public sealed class CSharpSourcePatchApplier
 
     private static (List<StatementSyntax> Statements, List<PendingPin> Pins) AnnotateStatements(
         BlockSyntax block,
+        IReadOnlyList<HirStatement> hirStatements) => AnnotateStatements(
+            block.Statements,
+            hirStatements);
+
+    private static (List<StatementSyntax> Statements, List<PendingPin> Pins) AnnotateStatements(
+        SyntaxList<StatementSyntax> syntaxStatements,
         IReadOnlyList<HirStatement> hirStatements)
     {
-        if (block.Statements.Count != hirStatements.Count)
+        if (syntaxStatements.Count != hirStatements.Count)
         {
             throw new ArgumentException("Roslyn and HIR statement counts must match.", nameof(hirStatements));
         }
@@ -4029,7 +4694,7 @@ public sealed class CSharpSourcePatchApplier
         {
             HirStatement hirStatement = hirStatements[index];
             var annotation = new SyntaxAnnotation(IdentityAnnotationKind, hirStatement.Id.Value);
-            statements.Add(block.Statements[index].WithAdditionalAnnotations(annotation));
+            statements.Add(syntaxStatements[index].WithAdditionalAnnotations(annotation));
             pins.Add(new PendingPin(
                 hirStatement.Id,
                 GetIdentityKind(hirStatement),
@@ -4042,9 +4707,17 @@ public sealed class CSharpSourcePatchApplier
     private static (List<StatementSyntax> Statements, List<PendingPin> Pins) AnnotateStatementTrees(
         ParsedDocument document,
         BlockSyntax block,
+        IReadOnlyList<HirStatement> hirStatements) => AnnotateStatementTrees(
+            document,
+            block.Statements,
+            hirStatements);
+
+    private static (List<StatementSyntax> Statements, List<PendingPin> Pins) AnnotateStatementTrees(
+        ParsedDocument document,
+        SyntaxList<StatementSyntax> syntaxStatements,
         IReadOnlyList<HirStatement> hirStatements)
     {
-        if (block.Statements.Count != hirStatements.Count)
+        if (syntaxStatements.Count != hirStatements.Count)
         {
             throw new ArgumentException("Roslyn and HIR statement counts must match.", nameof(hirStatements));
         }
@@ -4056,7 +4729,7 @@ public sealed class CSharpSourcePatchApplier
             HirStatement hirStatement = hirStatements[index];
             if (!TryAnnotateExpressions(
                     document,
-                    block.Statements[index],
+                    syntaxStatements[index],
                     hirStatement,
                     null,
                     out StatementSyntax? annotated,
@@ -4900,6 +5573,370 @@ public sealed class CSharpSourcePatchApplier
             SyntaxFactory.Token(SyntaxKind.CloseParenToken),
             SyntaxFactory.Block());
         return StatementBuildResult.Success(syntax);
+    }
+
+    private static StatementBuildResult BuildSwitchStatement(
+        SwitchPatchStatement switchStatement,
+        HirPatchIndex.BlockLocation blockLocation,
+        int insertionIndex,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        GraphPatchSafetyIndex graphSafetyIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types)
+    {
+        if (!graphSafetyIndex.IsInsertionReachable(blockLocation, insertionIndex))
+        {
+            return StatementBuildResult.Failure(
+                SemanticPatchDiagnosticCodes.UnreachableInsertion,
+                "A graph-authored switch requires a CFG-reachable insertion gap.");
+        }
+
+        ExpressionBuildResult governing = BuildPatchExpression(
+            switchStatement.GoverningExpression,
+            blockLocation,
+            insertionIndex,
+            hirNodes,
+            patchIndex,
+            graphSafetyIndex,
+            boundNodes,
+            types);
+        if (governing.Syntax is null || governing.Type is null ||
+            governing.Type.Id != switchStatement.ExpectedGoverningTypeId)
+        {
+            return StatementBuildResult.Failure(
+                governing.DiagnosticCode ?? SemanticPatchDiagnosticCodes.TypeMismatch,
+                governing.DiagnosticMessage ??
+                    "The switch governing expression no longer matches its expected type.");
+        }
+
+        var sections = new List<SwitchSectionSyntax>(switchStatement.Sections.Count);
+        foreach (SwitchSectionPatch section in switchStatement.Sections)
+        {
+            SwitchSectionBuildResult built = BuildSwitchSection(
+                section,
+                governing.Type,
+                blockLocation,
+                insertionIndex,
+                hirNodes,
+                patchIndex,
+                graphSafetyIndex,
+                boundNodes,
+                types);
+            if (built.Syntax is null)
+            {
+                return StatementBuildResult.Failure(
+                    built.DiagnosticCode ?? SemanticPatchDiagnosticCodes.InvalidSwitchSection,
+                    built.DiagnosticMessage ?? "The graph-authored switch section is invalid.");
+            }
+
+            sections.Add(built.Syntax);
+        }
+
+        SwitchStatementSyntax syntax = SyntaxFactory.SwitchStatement(governing.Syntax)
+            .WithSections(SyntaxFactory.List(sections));
+        return StatementBuildResult.Success(syntax);
+    }
+
+    private static SwitchSectionBuildResult BuildSwitchSection(
+        SwitchSectionPatch section,
+        TypeDescriptor governingType,
+        HirPatchIndex.BlockLocation blockLocation,
+        int insertionIndex,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        GraphPatchSafetyIndex graphSafetyIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types)
+    {
+        var labels = new List<SwitchLabelSyntax>(section.Labels.Count);
+        var patternNames = new HashSet<string>(StringComparer.Ordinal);
+        foreach (SwitchLabelPatch label in section.Labels)
+        {
+            if (label is DefaultSwitchLabelPatch)
+            {
+                labels.Add(SyntaxFactory.DefaultSwitchLabel());
+                continue;
+            }
+
+            PatternSwitchLabelPatch patternLabel = (PatternSwitchLabelPatch)label;
+            SwitchPatternBuildResult pattern = BuildSwitchPatternText(
+                patternLabel.Pattern,
+                governingType,
+                blockLocation,
+                insertionIndex,
+                hirNodes,
+                patchIndex,
+                graphSafetyIndex,
+                boundNodes,
+                types,
+                patternNames);
+            if (pattern.Text is null)
+            {
+                return SwitchSectionBuildResult.Failure(
+                    pattern.DiagnosticCode ?? SemanticPatchDiagnosticCodes.InvalidSwitchSection,
+                    pattern.DiagnosticMessage ?? "The graph-authored switch pattern is invalid.");
+            }
+
+            string guardText = string.Empty;
+            if (patternLabel.Guard is not null)
+            {
+                ExpressionBuildResult guard = BuildPatchExpression(
+                    patternLabel.Guard,
+                    blockLocation,
+                    insertionIndex,
+                    hirNodes,
+                    patchIndex,
+                    graphSafetyIndex,
+                    boundNodes,
+                    types);
+                if (guard.Syntax is null || guard.Type is null ||
+                    guard.Type.Kind != UnifiedTypeKind.Boolean ||
+                    !string.Equals(
+                        guard.Type.MetadataName,
+                        "System.Boolean",
+                        StringComparison.Ordinal))
+                {
+                    return SwitchSectionBuildResult.Failure(
+                        guard.DiagnosticCode ?? SemanticPatchDiagnosticCodes.TypeMismatch,
+                        guard.DiagnosticMessage ??
+                            "A graph-authored switch guard must have semantic type System.Boolean.");
+                }
+
+                guardText = $" when {guard.Syntax.WithoutTrivia()}";
+            }
+
+            StatementSyntax parsed = SyntaxFactory.ParseStatement(
+                $"switch (__unifiedValue) {{ case {pattern.Text}{guardText}: break; }}",
+                options: CSharpToHirLowerer.ParseOptions,
+                consumeFullText: true);
+            if (parsed is not SwitchStatementSyntax parsedSwitch ||
+                parsed.ContainsDiagnostics ||
+                parsedSwitch.Sections.Count != 1 ||
+                parsedSwitch.Sections[0].Labels.Count != 1)
+            {
+                return SwitchSectionBuildResult.Failure(
+                    SemanticPatchDiagnosticCodes.InvalidSwitchSection,
+                    $"Switch pattern '{pattern.Text}' could not be represented as one C# case label.");
+            }
+
+            labels.Add(parsedSwitch.Sections[0].Labels[0].WithoutTrivia());
+        }
+
+        return SwitchSectionBuildResult.Success(SyntaxFactory.SwitchSection(
+            SyntaxFactory.List(labels),
+            SyntaxFactory.SingletonList<StatementSyntax>(SyntaxFactory.BreakStatement())));
+    }
+
+    private static SwitchPatternBuildResult BuildSwitchPatternText(
+        SwitchPatternPatch pattern,
+        TypeDescriptor governingType,
+        HirPatchIndex.BlockLocation blockLocation,
+        int insertionIndex,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        GraphPatchSafetyIndex graphSafetyIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
+        ISet<string> patternNames)
+    {
+        switch (pattern)
+        {
+            case ConstantSwitchPatternPatch constant:
+            {
+                ExpressionBuildResult value = BuildPatchExpression(
+                    constant.Value,
+                    blockLocation,
+                    insertionIndex,
+                    hirNodes,
+                    patchIndex,
+                    graphSafetyIndex,
+                    boundNodes,
+                    types);
+                if (value.Syntax is null || value.Type?.Id != governingType.Id)
+                {
+                    return SwitchPatternBuildResult.Failure(
+                        value.DiagnosticCode ?? SemanticPatchDiagnosticCodes.TypeMismatch,
+                        value.DiagnosticMessage ??
+                            "A constant switch pattern must exactly match the governing type.");
+                }
+
+                return SwitchPatternBuildResult.Success(value.Syntax.WithoutTrivia().ToString());
+            }
+            case DeclarationSwitchPatternPatch declaration:
+            {
+                if (!TryResolvePatternType(
+                        declaration.TypeName,
+                        declaration.ExpectedTypeId,
+                        types,
+                        out TypeSyntax? typeSyntax,
+                        out string? typeFailure))
+                {
+                    return SwitchPatternBuildResult.Failure(
+                        SemanticPatchDiagnosticCodes.TypeMismatch,
+                        typeFailure!);
+                }
+
+                string designation = declaration.IsDiscard ? "_" : declaration.VariableName;
+                if (!declaration.IsDiscard && !ValidatePatternVariable(
+                        designation,
+                        blockLocation.Method,
+                        patternNames,
+                        out string? variableFailure))
+                {
+                    return SwitchPatternBuildResult.Failure(
+                        SemanticPatchDiagnosticCodes.NameConflict,
+                        variableFailure!);
+                }
+
+                return SwitchPatternBuildResult.Success($"{typeSyntax} {designation}");
+            }
+            case TypeSwitchPatternPatch typePattern:
+                return TryResolvePatternType(
+                        typePattern.TypeName,
+                        typePattern.ExpectedTypeId,
+                        types,
+                        out TypeSyntax? matchedTypeSyntax,
+                        out string? matchedTypeFailure)
+                    ? SwitchPatternBuildResult.Success(matchedTypeSyntax!.ToString())
+                    : SwitchPatternBuildResult.Failure(
+                        SemanticPatchDiagnosticCodes.TypeMismatch,
+                        matchedTypeFailure!);
+            case VarSwitchPatternPatch varPattern:
+            {
+                string designation = varPattern.IsDiscard ? "_" : varPattern.VariableName;
+                if (!varPattern.IsDiscard && !ValidatePatternVariable(
+                        designation,
+                        blockLocation.Method,
+                        patternNames,
+                        out string? variableFailure))
+                {
+                    return SwitchPatternBuildResult.Failure(
+                        SemanticPatchDiagnosticCodes.NameConflict,
+                        variableFailure!);
+                }
+
+                return SwitchPatternBuildResult.Success($"var {designation}");
+            }
+            case DiscardSwitchPatternPatch:
+                return SwitchPatternBuildResult.Success("_");
+            case RelationalSwitchPatternPatch relational:
+            {
+                ExpressionBuildResult value = BuildPatchExpression(
+                    relational.Value,
+                    blockLocation,
+                    insertionIndex,
+                    hirNodes,
+                    patchIndex,
+                    graphSafetyIndex,
+                    boundNodes,
+                    types);
+                if (value.Syntax is null || value.Type?.Id != governingType.Id)
+                {
+                    return SwitchPatternBuildResult.Failure(
+                        value.DiagnosticCode ?? SemanticPatchDiagnosticCodes.TypeMismatch,
+                        value.DiagnosticMessage ??
+                            "A relational switch pattern must exactly match the governing type.");
+                }
+
+                return SwitchPatternBuildResult.Success(
+                    $"{relational.Operator} {value.Syntax.WithoutTrivia()}");
+            }
+            case LogicalSwitchPatternPatch logical:
+            {
+                SwitchPatternBuildResult left = BuildSwitchPatternText(
+                    logical.Left, governingType, blockLocation, insertionIndex, hirNodes,
+                    patchIndex, graphSafetyIndex, boundNodes, types, patternNames);
+                if (left.Text is null)
+                {
+                    return left;
+                }
+                SwitchPatternBuildResult right = BuildSwitchPatternText(
+                    logical.Right, governingType, blockLocation, insertionIndex, hirNodes,
+                    patchIndex, graphSafetyIndex, boundNodes, types, patternNames);
+                return right.Text is null
+                    ? right
+                    : SwitchPatternBuildResult.Success(
+                        $"{left.Text} {logical.Operator} {right.Text}");
+            }
+            case NotSwitchPatternPatch notPattern:
+            {
+                SwitchPatternBuildResult operand = BuildSwitchPatternText(
+                    notPattern.Operand, governingType, blockLocation, insertionIndex, hirNodes,
+                    patchIndex, graphSafetyIndex, boundNodes, types, patternNames);
+                return operand.Text is null
+                    ? operand
+                    : SwitchPatternBuildResult.Success($"not {operand.Text}");
+            }
+            case ParenthesizedSwitchPatternPatch parenthesized:
+            {
+                SwitchPatternBuildResult inner = BuildSwitchPatternText(
+                    parenthesized.Inner, governingType, blockLocation, insertionIndex, hirNodes,
+                    patchIndex, graphSafetyIndex, boundNodes, types, patternNames);
+                return inner.Text is null
+                    ? inner
+                    : SwitchPatternBuildResult.Success($"({inner.Text})");
+            }
+            default:
+                return SwitchPatternBuildResult.Failure(
+                    SemanticPatchDiagnosticCodes.InvalidSwitchSection,
+                    $"Switch pattern payload '{pattern.GetType().Name}' is not supported.");
+        }
+    }
+
+    private static bool TryResolvePatternType(
+        string typeName,
+        SemanticId expectedTypeId,
+        IReadOnlyDictionary<SemanticId, TypeDescriptor> types,
+        out TypeSyntax? syntax,
+        out string? failure)
+    {
+        if (!types.TryGetValue(expectedTypeId, out TypeDescriptor? type) ||
+            !type.IsGraphSafe || !TypeNameMatches(typeName, type))
+        {
+            syntax = null;
+            failure = $"Pattern type '{typeName}' does not match graph-safe semantic type " +
+                $"'{expectedTypeId}'.";
+            return false;
+        }
+
+        syntax = SyntaxFactory.ParseTypeName(
+            typeName,
+            options: CSharpToHirLowerer.ParseOptions,
+            consumeFullText: true);
+        if (syntax.ContainsDiagnostics || syntax.SpanStart != 0 ||
+            syntax.Span.Length != typeName.Length)
+        {
+            syntax = null;
+            failure = $"Pattern type '{typeName}' is not one C# type name.";
+            return false;
+        }
+
+        failure = null;
+        return true;
+    }
+
+    private static bool ValidatePatternVariable(
+        string name,
+        HirMethodDeclaration method,
+        ISet<string> patternNames,
+        out string? failure)
+    {
+        if (!SyntaxFacts.IsValidIdentifier(name) ||
+            SyntaxFacts.GetKeywordKind(name) != SyntaxKind.None)
+        {
+            failure = $"Pattern variable '{name}' is not one unescaped C# identifier.";
+            return false;
+        }
+
+        if (HasNameConflict(method, name) || !patternNames.Add(name))
+        {
+            failure = $"Pattern variable '{name}' conflicts with an existing or authored name.";
+            return false;
+        }
+
+        failure = null;
+        return true;
     }
 
     private static ExpressionBuildResult BuildForAssignmentExpression(
@@ -5964,20 +7001,35 @@ public sealed class CSharpSourcePatchApplier
     private static InsertionFormatting GetInsertionFormatting(
         ParsedDocument document,
         BlockSyntax block,
+        int insertionIndex) => GetInsertionFormatting(
+            document,
+            new EditableStatementContainer(block, block.Statements),
+            insertionIndex);
+
+    private static InsertionFormatting GetInsertionFormatting(
+        ParsedDocument document,
+        EditableStatementContainer container,
         int insertionIndex)
     {
         string indentation;
-        if (block.Statements.Count > 0)
+        if (container.Statements.Count > 0)
         {
-            StatementSyntax reference = insertionIndex < block.Statements.Count
-                ? block.Statements[insertionIndex]
-                : block.Statements[^1];
+            StatementSyntax reference = insertionIndex < container.Statements.Count
+                ? container.Statements[insertionIndex]
+                : container.Statements[^1];
             indentation = GetLineIndentation(document, reference);
         }
-        else
+        else if (container.Syntax is BlockSyntax block)
         {
             int blockColumn = block.OpenBraceToken.GetLocation().GetLineSpan().StartLinePosition.Character;
             indentation = new string(' ', blockColumn + 4);
+        }
+        else
+        {
+            SwitchSectionSyntax section = (SwitchSectionSyntax)container.Syntax;
+            int labelColumn = section.Labels[0].GetLocation()
+                .GetLineSpan().StartLinePosition.Character;
+            indentation = new string(' ', labelColumn + 4);
         }
 
         return new InsertionFormatting(indentation, GetEndOfLine(document));
@@ -5989,7 +7041,7 @@ public sealed class CSharpSourcePatchApplier
     {
         if (statement is not (
                 IfStatementSyntax or WhileStatementSyntax or DoStatementSyntax or ForStatementSyntax or
-                ForEachStatementSyntax))
+                ForEachStatementSyntax or SwitchStatementSyntax))
         {
             return statement
                 .WithLeadingTrivia(SyntaxFactory.Whitespace(formatting.Indentation))
@@ -6085,7 +7137,7 @@ public sealed class CSharpSourcePatchApplier
 
         IReadOnlyDictionary<TextSpan, PendingReplacement> bySpan = documentReplacements
             .ToDictionary(static replacement => replacement.Original.Span);
-        var globalAnnotations = new Dictionary<SyntaxNode, SyntaxAnnotation>();
+        var globalAnnotations = new Dictionary<SyntaxNode, List<SyntaxAnnotation>>();
         var globalPins = new List<PendingPin>();
         if (effectiveSidecar is not null)
         {
@@ -6101,7 +7153,14 @@ public sealed class CSharpSourcePatchApplier
                 }
 
                 var annotation = new SyntaxAnnotation(IdentityAnnotationKind, entry.Id.Value);
-                globalAnnotations.Add(syntax!, annotation);
+                if (!globalAnnotations.TryGetValue(
+                        syntax!,
+                        out List<SyntaxAnnotation>? syntaxAnnotations))
+                {
+                    syntaxAnnotations = [];
+                    globalAnnotations.Add(syntax!, syntaxAnnotations);
+                }
+                syntaxAnnotations.Add(annotation);
                 globalPins.Add(new PendingPin(entry.Id, entry.Kind, annotation));
             }
         }
@@ -6114,7 +7173,7 @@ public sealed class CSharpSourcePatchApplier
             changedNodes,
             (original, rewritten) => bySpan.TryGetValue(original.Span, out PendingReplacement? replacement)
                 ? replacement.Syntax
-                : rewritten.WithAdditionalAnnotations(globalAnnotations[original]));
+                : rewritten.WithAdditionalAnnotations(globalAnnotations[original].ToArray()));
         CSharpIdentityPin[] pins = effectiveSidecar is null
             ? []
             : documentReplacements.SelectMany(static replacement => replacement.Pins)
@@ -6150,7 +7209,7 @@ public sealed class CSharpSourcePatchApplier
     private static bool IdentitySyntaxMatches(HirNode hirNode, SyntaxNode syntax) => hirNode switch
     {
         HirParameter => syntax is ParameterSyntax,
-        HirBlockStatement => syntax is BlockSyntax,
+        HirBlockStatement => syntax is BlockSyntax or SwitchSectionSyntax,
         HirVariableDeclarationStatement => syntax is LocalDeclarationStatementSyntax,
         HirExpressionStatement => syntax is ExpressionStatementSyntax,
         HirIfStatement => syntax is IfStatementSyntax,
@@ -6159,6 +7218,18 @@ public sealed class CSharpSourcePatchApplier
         HirForStatement => syntax is ForStatementSyntax,
         HirForEachStatement => syntax is ForEachStatementSyntax,
         HirSwitchStatement => syntax is SwitchStatementSyntax,
+        HirSwitchSection => syntax is SwitchSectionSyntax,
+        HirSwitchLabel => syntax is SwitchLabelSyntax,
+        HirConstantPattern => syntax is ConstantPatternSyntax or ExpressionSyntax,
+        HirDeclarationPattern => syntax is DeclarationPatternSyntax,
+        HirTypePattern => syntax is TypePatternSyntax,
+        HirVarPattern => syntax is VarPatternSyntax,
+        HirDiscardPattern => syntax is DiscardPatternSyntax,
+        HirRelationalPattern => syntax is RelationalPatternSyntax,
+        HirLogicalPattern => syntax is BinaryPatternSyntax,
+        HirNotPattern => syntax is UnaryPatternSyntax,
+        HirParenthesizedPattern => syntax is ParenthesizedPatternSyntax,
+        HirPatternVariable => syntax is VariableDesignationSyntax,
         HirForEachVariable => syntax is TypeSyntax,
         HirForVariableDeclaration => syntax is VariableDeclarationSyntax,
         HirForVariableDeclarator => syntax is VariableDeclaratorSyntax,
@@ -6239,6 +7310,34 @@ public sealed class CSharpSourcePatchApplier
                 candidate,
                 resolvedDocument.Source.LogicalPath) == node.Span);
         return syntax is not null;
+    }
+
+    private static bool TryFindEditableStatementContainer(
+        IReadOnlyDictionary<string, ParsedDocument> documents,
+        HirBlockStatement block,
+        out ParsedDocument? document,
+        out EditableStatementContainer? container)
+    {
+        if (TryFindSyntax(documents, block, out document, out BlockSyntax? blockSyntax))
+        {
+            container = new EditableStatementContainer(blockSyntax!, blockSyntax!.Statements);
+            return true;
+        }
+
+        if (TryFindSyntax(
+                documents,
+                block,
+                out document,
+                out SwitchSectionSyntax? sectionSyntax))
+        {
+            container = new EditableStatementContainer(
+                sectionSyntax!,
+                sectionSyntax!.Statements);
+            return true;
+        }
+
+        container = null;
+        return false;
     }
 
     private static bool TryParseLiteral(
@@ -6434,6 +7533,30 @@ public sealed class CSharpSourcePatchApplier
             new(null, null, code, message);
     }
 
+    private sealed record SwitchSectionBuildResult(
+        SwitchSectionSyntax? Syntax,
+        string? DiagnosticCode,
+        string? DiagnosticMessage)
+    {
+        public static SwitchSectionBuildResult Success(SwitchSectionSyntax syntax) =>
+            new(syntax, null, null);
+
+        public static SwitchSectionBuildResult Failure(string code, string message) =>
+            new(null, code, message);
+    }
+
+    private sealed record SwitchPatternBuildResult(
+        string? Text,
+        string? DiagnosticCode,
+        string? DiagnosticMessage)
+    {
+        public static SwitchPatternBuildResult Success(string text) =>
+            new(text, null, null);
+
+        public static SwitchPatternBuildResult Failure(string code, string message) =>
+            new(null, code, message);
+    }
+
     private readonly record struct AuthoredForLocal(
         string Name,
         TypeDescriptor Type);
@@ -6448,6 +7571,19 @@ public sealed class CSharpSourcePatchApplier
         SemanticId Id,
         string Kind,
         SyntaxAnnotation Annotation);
+
+    private sealed record EditableStatementContainer(
+        SyntaxNode Syntax,
+        SyntaxList<StatementSyntax> Statements)
+    {
+        public SyntaxNode WithStatements(SyntaxList<StatementSyntax> statements) => Syntax switch
+        {
+            BlockSyntax block => block.WithStatements(statements),
+            SwitchSectionSyntax section => section.WithStatements(statements),
+            _ => throw new InvalidOperationException(
+                $"Unsupported editable statement container '{Syntax.GetType().Name}'."),
+        };
+    }
 
     private readonly record struct InsertionFormatting(
         string Indentation,

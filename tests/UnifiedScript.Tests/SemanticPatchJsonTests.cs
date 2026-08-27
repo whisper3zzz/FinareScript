@@ -420,7 +420,7 @@ public sealed class SemanticPatchJsonTests
         SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
 
         Assert.Equal(
-            "unifiedscript.patch/v0.22",
+            "unifiedscript.patch/v0.23",
             roundTrip.SchemaVersion);
         Assert.Equal(
             move,
@@ -1196,5 +1196,78 @@ public sealed class SemanticPatchJsonTests
                 "++",
                 true,
                 new LocalReferencePatchExpression(indexId, "index", intType))]));
+    }
+
+    [Fact]
+    public void SerializeAndDeserialize_PreserveSwitchAuthoringOperationsAndPatterns()
+    {
+        SemanticId intType = SemanticId.FromKey("switch-authoring-int");
+        SemanticId boolType = SemanticId.FromKey("switch-authoring-bool");
+        SemanticId switchId = SemanticId.FromKey("switch-authoring-switch");
+        SemanticId firstSection = SemanticId.FromKey("switch-authoring-first-section");
+        SemanticId secondSection = SemanticId.FromKey("switch-authoring-second-section");
+        SemanticId movedSection = SemanticId.FromKey("switch-authoring-moved-section");
+        SwitchSectionPatch authoredSection = new([
+            new PatternSwitchLabelPatch(
+                new LogicalSwitchPatternPatch(
+                    "and",
+                    new RelationalSwitchPatternPatch(
+                        ">=",
+                        new LiteralPatchExpression("1", intType)),
+                    new NotSwitchPatternPatch(new ParenthesizedSwitchPatternPatch(
+                        new ConstantSwitchPatternPatch(
+                            new LiteralPatchExpression("5", intType))))),
+                new LiteralPatchExpression("true", boolType)),
+        ]);
+        SemanticPatchOperation[] operations =
+        [
+            new InsertStatementPatchOperation(
+                SemanticId.FromKey("switch-authoring-block"),
+                null,
+                null,
+                new SwitchPatchStatement(
+                    new LiteralPatchExpression("0", intType),
+                    intType,
+                    [authoredSection, new SwitchSectionPatch([new DefaultSwitchLabelPatch()])])),
+            new InsertSwitchSectionPatchOperation(
+                switchId,
+                firstSection,
+                secondSection,
+                authoredSection),
+            new ReplaceSwitchSectionPatchOperation(
+                firstSection,
+                switchId,
+                [SemanticId.FromKey("switch-authoring-label")],
+                [new PatternSwitchLabelPatch(
+                    new TypeSwitchPatternPatch("int", intType),
+                    null)]),
+            new MoveSwitchSectionPatchOperation(
+                movedSection,
+                switchId,
+                null,
+                secondSection,
+                secondSection,
+                null),
+            new DeleteSwitchSectionPatchOperation(
+                secondSection,
+                switchId,
+                firstSection,
+                null,
+                [SemanticId.FromKey("switch-authoring-delete-label")]),
+        ];
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            SemanticId.FromKey("switch-authoring-compilation"),
+            SemanticId.FromKey("switch-authoring-configuration"),
+            operations);
+
+        string json = SemanticPatchJson.Serialize(patch);
+        SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
+
+        Assert.Equal(json, SemanticPatchJson.Serialize(roundTrip));
+        Assert.Equal(operations.Length, roundTrip.Operations.Count);
+        Assert.Contains("\"statement\": \"switch\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"pattern\": \"logical\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"operation\": \"moveSwitchSection\"", json, StringComparison.Ordinal);
+        Assert.Equal("unifiedscript.patch/v0.23", roundTrip.SchemaVersion);
     }
 }

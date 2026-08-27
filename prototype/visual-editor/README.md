@@ -36,7 +36,7 @@ and receiver without any sample-specific frontend adapter.
 2. Inspect compact action cards. Literals, identifiers, binary expressions,
    member access, and pure calls stay inline instead of becoming tiny nodes.
 3. Inspect `if` and loop regions. Their lanes come directly from Graph region
-   ownership plus graph pins/edges through Authoring Surface v0.3.
+   ownership plus graph pins/edges through Authoring Surface v0.4.
 4. Select a card with an `EDIT` badge. The inspector renders every literal or
    operator capability declared by the Surface and submits Semantic Patch
    v0.19 with complete typed preconditions.
@@ -54,7 +54,7 @@ and receiver without any sample-specific frontend adapter.
 
 The live page loads `unifiedscript.authoring-workspace/v0.2`. One committed
 workspace revision contains canonical source, Declaration IR v0.1, Graph
-v0.12, Authoring Surface v0.3, and a CoreCLR generation. After a declaration or
+v0.12, Authoring Surface v0.4, and a CoreCLR generation. After a declaration or
 behavior write, the server prepares and validates a full candidate, reloads the
 same CoreCLR transport, transactionally commits C# plus identity sidecar, and
 returns a completely regenerated workspace.

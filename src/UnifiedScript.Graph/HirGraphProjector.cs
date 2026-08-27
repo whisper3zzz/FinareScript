@@ -416,6 +416,7 @@ public sealed class HirGraphProjector
                             ["displayText"] = label.DisplayText,
                             ["isDefault"] = label is HirDefaultSwitchLabel ? "true" : "false",
                             ["sectionId"] = section.Body.Id.Value,
+                            ["switchSectionId"] = section.Id.Value,
                         };
                         if (patternLabel is not null)
                         {

@@ -103,7 +103,8 @@ public sealed class AuthoringSurfaceProjector
                 DebugTarget(node),
                 CollectDeclarationReferences(node.Id, nodes, incomingData),
                 CollectEditCapabilities(node.Id, nodes, incomingData),
-                ProjectPorts(node, nodes, incomingData)));
+                ProjectPorts(node, nodes, incomingData),
+                node.Properties));
         }
 
         AuthoringRegionSurface[] regions = function.Regions.Select(region =>

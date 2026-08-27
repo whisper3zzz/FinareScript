@@ -125,6 +125,18 @@ public static class SemanticPatchJson
                 case MoveStatementPatchOperation moveStatement:
                     ValidateMoveStatement(moveStatement);
                     break;
+                case InsertSwitchSectionPatchOperation insertSwitchSection:
+                    ValidateInsertSwitchSection(insertSwitchSection);
+                    break;
+                case ReplaceSwitchSectionPatchOperation replaceSwitchSection:
+                    ValidateReplaceSwitchSection(replaceSwitchSection);
+                    break;
+                case MoveSwitchSectionPatchOperation moveSwitchSection:
+                    ValidateMoveSwitchSection(moveSwitchSection);
+                    break;
+                case DeleteSwitchSectionPatchOperation deleteSwitchSection:
+                    ValidateDeleteSwitchSection(deleteSwitchSection);
+                    break;
                 case IntroduceTemporaryPatchOperation introduceTemporary:
                     ValidateIntroduceTemporary(introduceTemporary);
                     break;
@@ -634,6 +646,19 @@ public static class SemanticPatchJson
 
                 ValidatePatchExpression(forEachStatement.Collection, 0);
                 break;
+            case SwitchPatchStatement switchStatement:
+                if (switchStatement.GoverningExpression is null ||
+                    switchStatement.ExpectedGoverningTypeId.IsEmpty ||
+                    switchStatement.GoverningExpression.ExpectedTypeId !=
+                    switchStatement.ExpectedGoverningTypeId)
+                {
+                    throw new JsonException(
+                        "A switch insertion requires a governing expression with its exact expected type.");
+                }
+
+                ValidatePatchExpression(switchStatement.GoverningExpression, 0);
+                ValidateSwitchSections(switchStatement.Sections);
+                break;
             case BreakPatchStatement:
             case ContinuePatchStatement:
                 break;
@@ -958,6 +983,200 @@ public static class SemanticPatchJson
             operation.ExpectedDestinationPreviousSiblingId,
             operation.ExpectedDestinationNextSiblingId,
             "destination gap");
+    }
+
+    private static void ValidateInsertSwitchSection(
+        InsertSwitchSectionPatchOperation operation)
+    {
+        ValidateSiblingIds(
+            operation.ExpectedPreviousSectionId,
+            operation.ExpectedNextSectionId);
+        ValidateSwitchSections([operation.NewSection]);
+    }
+
+    private static void ValidateReplaceSwitchSection(
+        ReplaceSwitchSectionPatchOperation operation)
+    {
+        if (operation.ExpectedSwitchStatementId.IsEmpty ||
+            operation.ExpectedLabelIds is null ||
+            operation.ExpectedLabelIds.Count == 0 ||
+            operation.ExpectedLabelIds.Any(static id => id.IsEmpty) ||
+            operation.ExpectedLabelIds.Distinct().Count() != operation.ExpectedLabelIds.Count)
+        {
+            throw new JsonException(
+                "Switch-section replacement requires one parent switch and distinct expected label IDs.");
+        }
+
+        ValidateSwitchLabels(operation.NewLabels);
+    }
+
+    private static void ValidateMoveSwitchSection(MoveSwitchSectionPatchOperation operation)
+    {
+        if (operation.ExpectedSwitchStatementId.IsEmpty)
+        {
+            throw new JsonException("Switch-section movement requires an expected parent switch ID.");
+        }
+
+        ValidateSiblingIds(
+            operation.ExpectedSourcePreviousSectionId,
+            operation.ExpectedSourceNextSectionId);
+        ValidateSiblingTarget(
+            operation.TargetNodeId,
+            operation.ExpectedSourcePreviousSectionId,
+            operation.ExpectedSourceNextSectionId,
+            "moved switch section");
+        ValidateSiblingIds(
+            operation.ExpectedDestinationPreviousSectionId,
+            operation.ExpectedDestinationNextSectionId);
+        ValidateSiblingTarget(
+            operation.TargetNodeId,
+            operation.ExpectedDestinationPreviousSectionId,
+            operation.ExpectedDestinationNextSectionId,
+            "switch-section destination gap");
+    }
+
+    private static void ValidateDeleteSwitchSection(
+        DeleteSwitchSectionPatchOperation operation)
+    {
+        if (operation.ExpectedSwitchStatementId.IsEmpty ||
+            operation.ExpectedLabelIds is null ||
+            operation.ExpectedLabelIds.Count == 0 ||
+            operation.ExpectedLabelIds.Any(static id => id.IsEmpty) ||
+            operation.ExpectedLabelIds.Distinct().Count() != operation.ExpectedLabelIds.Count)
+        {
+            throw new JsonException(
+                "Switch-section deletion requires one parent switch and distinct expected label IDs.");
+        }
+
+        ValidateSiblingIds(operation.ExpectedPreviousSectionId, operation.ExpectedNextSectionId);
+        ValidateSiblingTarget(
+            operation.TargetNodeId,
+            operation.ExpectedPreviousSectionId,
+            operation.ExpectedNextSectionId,
+            "deleted switch section");
+    }
+
+    private static void ValidateSwitchSections(IReadOnlyList<SwitchSectionPatch>? sections)
+    {
+        if (sections is null || sections.Count == 0 || sections.Count > 64 ||
+            sections.Any(static section => section is null))
+        {
+            throw new JsonException(
+                "A graph-authored switch requires between one and 64 non-null sections.");
+        }
+
+        foreach (SwitchSectionPatch section in sections)
+        {
+            ValidateSwitchLabels(section.Labels);
+        }
+
+        if (sections.SelectMany(static section => section.Labels)
+            .Count(static label => label is DefaultSwitchLabelPatch) > 1)
+        {
+            throw new JsonException("A graph-authored switch can contain at most one default label.");
+        }
+    }
+
+    private static void ValidateSwitchLabels(IReadOnlyList<SwitchLabelPatch>? labels)
+    {
+        if (labels is null || labels.Count == 0 || labels.Count > 32 ||
+            labels.Any(static label => label is null))
+        {
+            throw new JsonException(
+                "A graph-authored switch section requires between one and 32 non-null labels.");
+        }
+
+        foreach (SwitchLabelPatch label in labels)
+        {
+            switch (label)
+            {
+                case DefaultSwitchLabelPatch:
+                    break;
+                case PatternSwitchLabelPatch pattern:
+                    if (pattern.Pattern is null)
+                    {
+                        throw new JsonException("A switch pattern label requires a pattern.");
+                    }
+
+                    ValidateSwitchPattern(pattern.Pattern, 0);
+                    if (pattern.Guard is not null)
+                    {
+                        ValidatePatchExpression(pattern.Guard, 0);
+                    }
+                    break;
+                default:
+                    throw new JsonException(
+                        $"Unsupported graph-authored switch label '{label.GetType().Name}'.");
+            }
+        }
+    }
+
+    private static void ValidateSwitchPattern(SwitchPatternPatch pattern, int depth)
+    {
+        if (depth > 16)
+        {
+            throw new JsonException("A graph-authored switch pattern cannot exceed depth 16.");
+        }
+
+        switch (pattern)
+        {
+            case ConstantSwitchPatternPatch constant when constant.Value is not null:
+                ValidatePatchExpression(constant.Value, 0);
+                break;
+            case DeclarationSwitchPatternPatch declaration:
+                if (string.IsNullOrWhiteSpace(declaration.TypeName) ||
+                    declaration.ExpectedTypeId.IsEmpty ||
+                    declaration.IsDiscard != string.IsNullOrWhiteSpace(declaration.VariableName))
+                {
+                    throw new JsonException(
+                        "A declaration pattern requires a type and either one variable or a discard.");
+                }
+                break;
+            case TypeSwitchPatternPatch type:
+                if (string.IsNullOrWhiteSpace(type.TypeName) || type.ExpectedTypeId.IsEmpty)
+                {
+                    throw new JsonException("A type pattern requires a type and expected type ID.");
+                }
+                break;
+            case VarSwitchPatternPatch varPattern:
+                if (varPattern.IsDiscard != string.IsNullOrWhiteSpace(varPattern.VariableName))
+                {
+                    throw new JsonException(
+                        "A var pattern requires either one variable name or a discard.");
+                }
+                break;
+            case DiscardSwitchPatternPatch:
+                break;
+            case RelationalSwitchPatternPatch relational:
+                if (relational.Operator is not ("<" or "<=" or ">" or ">=") ||
+                    relational.Value is null)
+                {
+                    throw new JsonException(
+                        "A relational pattern requires <, <=, >, or >= and one typed value.");
+                }
+                ValidatePatchExpression(relational.Value, 0);
+                break;
+            case LogicalSwitchPatternPatch logical:
+                if (logical.Operator is not ("and" or "or") ||
+                    logical.Left is null || logical.Right is null)
+                {
+                    throw new JsonException(
+                        "A logical pattern requires 'and' or 'or' and two operands.");
+                }
+                ValidateSwitchPattern(logical.Left, depth + 1);
+                ValidateSwitchPattern(logical.Right, depth + 1);
+                break;
+            case NotSwitchPatternPatch notPattern when notPattern.Operand is not null:
+                ValidateSwitchPattern(notPattern.Operand, depth + 1);
+                break;
+            case ParenthesizedSwitchPatternPatch parenthesized
+                when parenthesized.Inner is not null:
+                ValidateSwitchPattern(parenthesized.Inner, depth + 1);
+                break;
+            default:
+                throw new JsonException(
+                    $"Unsupported graph-authored switch pattern '{pattern.GetType().Name}'.");
+        }
     }
 
     private static void ValidateReconnectValue(ReconnectValuePatchOperation operation)

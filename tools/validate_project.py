@@ -538,6 +538,9 @@ def main() -> int:
     surface_function = surface_asset["functions"][0]
     surface_actions = surface_function["actions"]
     surface_action_ids = {action["id"] for action in surface_actions}
+    graph_node_properties = {
+        node["id"]: node["properties"] for node in graph_function["nodes"]
+    }
     surface_edges = surface_function["edges"]
     surface_ports = {
         (action["id"], port["direction"], port["name"]): port
@@ -558,7 +561,7 @@ def main() -> int:
     }
     require(
         surface_document["schemaVersion"]
-        == "unifiedscript.authoring-surface/v0.3"
+        == "unifiedscript.authoring-surface/v0.4"
         and surface_document["sourceCompilationId"]
         == declaration_document["sourceCompilationId"]
         and surface_document["semanticConfigurationId"]
@@ -568,6 +571,10 @@ def main() -> int:
         and surface_function["rootRegionId"] in surface_region_ids
         and len(surface_action_ids) == len(surface_actions)
         and surface_action_ids == graph_node_ids
+        and all(
+            action["properties"] == graph_node_properties[action["id"]]
+            for action in surface_actions
+        )
         and len(owned_action_ids) == len(surface_actions)
         and set(owned_action_ids) == surface_action_ids
         and all(
@@ -584,7 +591,9 @@ def main() -> int:
         and {"replaceLiteral", "changeOperator"}.issubset(edit_operations),
         "Authoring Surface is inconsistent with Declaration IR and Graph",
     )
-    checks.append("Authoring Surface owns every action and typed edit capability")
+    checks.append(
+        "Authoring Surface owns every action, Graph property, and typed edit capability"
+    )
 
     declaration_patch_path = (
         ROOT
@@ -692,8 +701,8 @@ def main() -> int:
         and "renderBehaviorGraph" in prototype_source
         and "data-semantic-id" in prototype_source
         and "data-debug-semantic-id" in prototype_source
-        and "unifiedscript.authoring-surface/v0.3" in prototype_source
-        and "unifiedscript.authoring-surface/v0.3" in authoring_model_source
+        and "unifiedscript.authoring-surface/v0.4" in prototype_source
+        and "unifiedscript.authoring-surface/v0.4" in authoring_model_source
         and "CollectEditCapabilities" in authoring_projector_source
         and "DamagePolicy" not in prototype_source
         and "Math.Clamp" not in prototype_source,
@@ -731,7 +740,7 @@ def main() -> int:
         and "saveSemanticPatch" in prototype_source
         and "unifiedscript.authoring-workspace/v0.2" in prototype_source
         and "AuthoringSurfaceProjector" in debug_server_source
-        and "unifiedscript.patch/v0.22" in prototype_source,
+        and "unifiedscript.patch/v0.23" in prototype_source,
         "Visual authoring changes do not commit through the transactional host",
     )
     checks.append("declaration and behavior patches write source and reload one CoreCLR generation")
@@ -2657,7 +2666,7 @@ def main() -> int:
     ]
     require(
         unreal_demo_surface["schemaVersion"]
-        == "unifiedscript.authoring-surface/v0.3"
+        == "unifiedscript.authoring-surface/v0.4"
         and len(unreal_demo_surface["assets"]) == 1
         and len(unreal_demo_surface_asset["states"]) == 1
         and len(unreal_demo_surface_asset["functions"]) == 4
@@ -2669,6 +2678,11 @@ def main() -> int:
             len(function["edges"])
             for function in unreal_demo_surface_asset["functions"]
         ) == 43
+        and all(
+            isinstance(action["properties"], dict)
+            for function in unreal_demo_surface_asset["functions"]
+            for action in function["actions"]
+        )
         and set(unreal_demo_surface_functions)
         == {"OnManagedSignal", "ResolveInitialValue", "RewirePreview", "UEApiPreview"}
         and len(unreal_demo_event_actions) == 1
@@ -2696,7 +2710,7 @@ def main() -> int:
         and "BuildControlEdgeReconnectionPatch" in unreal_authoring_surface_source
         and "moveStatement" in unreal_authoring_surface_source
         and "HandleControlRewireRequested" in unreal_authoring_widget
-        and "unifiedscript.patch/v0.22" in unreal_authoring_surface_source
+        and "unifiedscript.patch/v0.23" in unreal_authoring_surface_source
         and "SUnifiedScriptAuthoringSurface" in unreal_authoring_widget
         and "HandleDataRewireRequested" in unreal_authoring_widget
         and "SubmitSemanticPatch" in unreal_authoring_widget
@@ -2720,7 +2734,7 @@ def main() -> int:
         "Native Slate Authoring Surface or transactional data-edge patch is missing",
     )
     checks.append(
-        "UE Slate losslessly compacts Surface v0.3 into author-facing nodes and pins"
+        "UE Slate losslessly compacts Surface v0.4 into author-facing nodes and pins"
     )
     identity_reconciler_source = (
         ROOT / "src" / "UnifiedScript.CSharp" / "CSharpIdentityReconciler.cs"
@@ -3205,10 +3219,10 @@ def main() -> int:
     ).hexdigest()
     loop_source_digest = hashlib.sha256(loop_source.encode("utf-8")).hexdigest()
     require(
-        patch_document["schemaVersion"] == "unifiedscript.patch/v0.22"
-        and operator_patch["schemaVersion"] == "unifiedscript.patch/v0.22"
-        and insert_patch["schemaVersion"] == "unifiedscript.patch/v0.22"
-        and temporary_patch["schemaVersion"] == "unifiedscript.patch/v0.22"
+        patch_document["schemaVersion"] == "unifiedscript.patch/v0.23"
+        and operator_patch["schemaVersion"] == "unifiedscript.patch/v0.23"
+        and insert_patch["schemaVersion"] == "unifiedscript.patch/v0.23"
+        and temporary_patch["schemaVersion"] == "unifiedscript.patch/v0.23"
         and operator_patch["sourceCompilationId"]
         == patch_document["sourceCompilationId"]
         and insert_patch["sourceCompilationId"]
@@ -3256,7 +3270,7 @@ def main() -> int:
         "Temporary-introduction sample does not contain the expected typed payload",
     )
     require(
-        reconnect_patch["schemaVersion"] == "unifiedscript.patch/v0.22"
+        reconnect_patch["schemaVersion"] == "unifiedscript.patch/v0.23"
         and reconnect_identity["sourcePath"]
         == "samples/Patching/SharedValueRules.cs"
         and reconnect_identity["sourceDigest"]
@@ -3281,7 +3295,7 @@ def main() -> int:
     assignment_statement = assignment_operation["newStatement"]
     assignment_value = assignment_statement["value"]
     require(
-        assignment_patch["schemaVersion"] == "unifiedscript.patch/v0.22"
+        assignment_patch["schemaVersion"] == "unifiedscript.patch/v0.23"
         and assignment_identity["sourcePath"]
         == "samples/Patching/AssignmentRules.cs"
         and assignment_identity["sourceDigest"]
@@ -3377,7 +3391,7 @@ def main() -> int:
     guard_comparison = guard_condition["left"]
     guard_negation = guard_condition["right"]
     require(
-        guard_document["schemaVersion"] == "unifiedscript.patch/v0.22"
+        guard_document["schemaVersion"] == "unifiedscript.patch/v0.23"
         and guard_identity["sourcePath"] == "samples/Patching/GuardRules.cs"
         and guard_identity["sourceDigest"] == f"sha256:{guard_source_digest}"
         and guard_operation["operation"] == "insertStatement"

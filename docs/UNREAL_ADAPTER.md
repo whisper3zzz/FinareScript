@@ -369,7 +369,7 @@ it across Reload, and currently reports `DeclarationState=37`, `FastCalls=20`,
 
 The editor module now registers a `UnifiedScript Authoring` nomad tab and a
 Tools-menu entry. Its native Slate workspace consumes only the strict
-`unifiedscript.authoring-surface/v0.3` artifact; it does not parse C# or recreate
+`unifiedscript.authoring-surface/v0.4` artifact; it does not parse C# or recreate
 Graph semantics inside Unreal. A surface can be opened directly, loaded from
 the selected `UUnifiedScriptAsset.AuthoringSurfacePath`, reset to the staged
 Demo, and automatically refreshed when its file changes.
@@ -378,7 +378,7 @@ The workspace presents Script Asset state and behavior as a semantic hierarchy:
 function regions retain structured ownership of promoted actions, while the
 inspector exposes kind/category, exact semantic ID, source span, source preview,
 and source navigation. Literal and operator edit capabilities accept a candidate
-value and export a preconditioned `unifiedscript.patch/v0.22` document to the
+value and export a preconditioned `unifiedscript.patch/v0.23` document to the
 clipboard. This preserves one compiler-owned edit contract across browser and
 Slate frontends.
 
@@ -392,7 +392,7 @@ persisted visual layout.
 ## Phase B.15 transactional Slate Apply and component reload
 
 Each promoted literal/operator editor now exposes `Apply & Reload`. The Slate
-client posts the exact `unifiedscript.patch/v0.22` payload to the configured
+client posts the exact `unifiedscript.patch/v0.23` payload to the configured
 loopback Workbench URL and accepts only a strict
 `unifiedscript.authoring-workspace/v0.2` response. The returned Surface replaces
 the view without UE-side C# or Graph reconstruction; protocol diagnostics such

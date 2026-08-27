@@ -102,7 +102,7 @@ public:
     virtual void DestroyNode() override;
 };
 
-/** Compiler-owned semantic schema for Surface v0.3 pins and edges. */
+/** Compiler-owned semantic schema for Surface v0.4 pins and edges. */
 UCLASS(Transient)
 class UEUNIFIEDSCRIPTEDITOR_API UUnifiedScriptEdGraphSchema final : public UEdGraphSchema
 {

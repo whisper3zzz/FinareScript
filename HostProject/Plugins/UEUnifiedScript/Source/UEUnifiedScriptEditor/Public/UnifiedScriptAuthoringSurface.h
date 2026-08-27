@@ -103,6 +103,7 @@ struct FUnifiedScriptAuthoringAction
     TArray<FString> DeclarationReferenceIds;
     TArray<FUnifiedScriptAuthoringEdit> EditCapabilities;
     TArray<FUnifiedScriptAuthoringPort> Ports;
+    TMap<FString, FString> Properties;
 
     const FUnifiedScriptAuthoringPort* FindPort(
         const FString& PortName,
@@ -164,7 +165,7 @@ struct FUnifiedScriptAuthoringSurfaceDocument
     int32 GetEdgeCount() const;
 };
 
-/** Strict reader for the engine-neutral Authoring Surface v0.3 editing contract. */
+/** Strict reader for the engine-neutral Authoring Surface v0.4 editing contract. */
 class UEUNIFIEDSCRIPTEDITOR_API FUnifiedScriptAuthoringSurfaceReader
 {
 public:
@@ -178,7 +179,7 @@ public:
         FUnifiedScriptAuthoringSurfaceDocument& OutDocument,
         FString& OutError);
 
-    /** Builds the same semantic-patch v0.22 payload consumed by the shared authoring host. */
+    /** Builds the same semantic-patch v0.23 payload consumed by the shared authoring host. */
     static bool BuildSemanticPatch(
         const FUnifiedScriptAuthoringSurfaceDocument& Document,
         const FUnifiedScriptAuthoringEdit& Edit,
@@ -186,7 +187,7 @@ public:
         FString& OutPatchJson,
         FString& OutError);
 
-    /** Builds a preconditioned semantic-patch v0.22 data-edge rewire transaction. */
+    /** Builds a preconditioned semantic-patch v0.23 data-edge rewire transaction. */
     static bool BuildDataEdgeReconnectionPatch(
         const FUnifiedScriptAuthoringSurfaceDocument& Document,
         const FUnifiedScriptAuthoringFunction& Function,

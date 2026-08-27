@@ -650,12 +650,18 @@ Semantic Patch v0.22 `moveStatement` instead of mutating raw edges. It supports
 same-block reordering with exact source/destination sibling preconditions,
 requires `.usids`, preserves nested identity and comments, rejects invalid local
 ordering or terminal transfers, and validates the regenerated CFG. The Slate
-client keeps the old compiler-owned wire until the Workbench commits. The
-463/463 managed suite, UE 5.8 editor build, focused native Authoring Surface
-Automation, and 48/48 repository validator pass. Visual switch-section
-construction/relabel/reorder, cross-region structured control transforms, and
-the full edit transaction/undo contract remain open, so M8.1 is not yet
-complete.
+client keeps the old compiler-owned wire until the Workbench commits. Semantic
+Patch v0.23 now adds typed `switch` construction plus preconditioned section
+insert/relabel/reorder/delete operations across constant, declaration, type,
+var, discard, relational, logical, negated, and parenthesized patterns. Direct
+statement insertion/deletion/reordering also accepts a switch-section body.
+Authoring Surface v0.4 carries normalized Graph properties, including the exact
+semantic switch-section identity, so Slate can consume these operations without
+parsing presentation text. The 467/467 managed suite, UE 5.8 editor build,
+focused native Authoring Surface Automation, and 48/48 repository validator
+pass. Slate controls for the new section operations, cross-region structured
+control transforms, and the full edit transaction/undo contract remain open,
+so M8.1 is not yet complete.
 
 ### M8.2 — Blueprint-grade Unreal experience
 

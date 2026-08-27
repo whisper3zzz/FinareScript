@@ -149,7 +149,7 @@ The repository currently implements:
 - lossless text-authored `for` loops across HIR v0.7 and Graph v0.12, with
   declaration/expression initializers, optional conditions, ordered incrementors,
   prefix/postfix mutation identity, and CFG-validated continue-to-increment routing;
-- dedicated bounded `for` construction through patch v0.22/plan v0.21, with
+- dedicated bounded `for` construction through patch v0.23/plan v0.21, with
   declaration or assignment initialization, scoped for-local references,
   ordered `++`/`--`, symbolic body/local handles, and atomic CFG revalidation;
 - exact editing of an existing `for` condition, declaration initializer,
@@ -170,14 +170,14 @@ The repository currently implements:
 - lossless `switch` and bounded C# patterns across HIR v0.8 and Graph v0.13,
   with evaluate-once governing values, typed pattern variables, guarded case
   routing, editable section-body ownership, and nearest-switch `break` facts;
-- region-aware same-block control reconnection through patch v0.22
+- region-aware same-block control reconnection through patch v0.23
   `moveStatement`, with exact sibling preconditions, persistent identity,
   local-order and terminal-transfer guards, and regenerated-CFG validation;
 - opt-in `.usids` sidecars that preserve node identity across formatting and edits;
 - backend-neutral Script Asset / Declaration IR v0.1 with scalar and enum
   state, canonical defaults, engine exposure metadata, Visual signatures, and
   strict deterministic JSON;
-- engine-neutral Authoring Surface v0.3 projected from Declaration IR and Graph,
+- engine-neutral Authoring Surface v0.4 projected from Declaration IR and Graph,
   with multi-asset/function navigation, exact structured-region ownership,
   compiler-owned typed pins/control-data edges, source/debug identities, and
   typed edit capabilities;
@@ -360,7 +360,7 @@ M5.5 is therefore complete before Unreal integration begins.
 
 M6.0 removes the last sample-specific browser adapter before that integration.
 The new `UnifiedScript.Authoring` project projects every Script Asset and Visual
-function into strict `unifiedscript.authoring-surface/v0.3` JSON. The Workbench
+function into strict `unifiedscript.authoring-surface/v0.4` JSON. The Workbench
 now renders asset/function navigation, `if` and loop regions, compact actions,
 state references, semantic edit controls, source selection, AI outlines, and
 CoreCLR breakpoints from that Surface. `analyze --out` emits the Surface beside
@@ -442,7 +442,7 @@ failures leave the published artifact set unchanged.
 Phase B.16 replaces the hierarchy-only center pane with Unreal's native
 `SGraphEditor`. The workspace now follows the Blueprint layout: `My Script` on
 the left, a real zoom/pan/marquee graph canvas in the center, and semantic
-Details/source/edit controls on the right. Surface v0.3 now materializes every
+Details/source/edit controls on the right. Surface v0.4 now materializes every
 Graph node, real typed pins, and compiler-owned control/data wires. Manual
 occupied-data-input rewiring now uses that same transactional source-patch
 contract; control flow and structural construction remain compiler-owned.
@@ -607,7 +607,7 @@ Declaration edit
   -> updated C# + asset JSON + optional .usids (only as one commit)
 
 Workbench authoring commit
-  -> declaration-patch v0.2 or semantic-patch v0.22
+  -> declaration-patch v0.2 or semantic-patch v0.23
   -> immutable candidate analysis + regenerated Graph
   -> same CoreCLR transport reload
   -> rollback-capable source + .usids transaction
@@ -634,8 +634,8 @@ Current Unreal adapter path:
   -> UE Script Asset resolution + transactional entry-type reload
   -> Declaration IR -> fixed-layout Details state + stable-ID migration
   -> stable generated Member ID -> ABI v3 call frame -> module-owned native thunk -> live UObject
-  -> Authoring Surface v0.3 -> native Slate GraphEditor pins/wires + inspector
-  -> typed edit capability -> semantic-patch v0.22 Workbench transaction
+  -> Authoring Surface v0.4 -> native Slate GraphEditor pins/wires + inspector
+  -> typed edit capability -> semantic-patch v0.23 Workbench transaction
   -> atomic C#/identity/Declaration/Surface/DLL/PDB publication
   -> matching component transactional reload
   -> World Phase Scheduler -> caller-written Command Buffer -> next-frame Event Buffer
@@ -934,7 +934,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
   --out-identity artifacts/patched/DamageRules.cs.usids
 ```
 
-`unifiedscript.patch/v0.22` binds every patch to both the source compilation ID
+`unifiedscript.patch/v0.23` binds every patch to both the source compilation ID
 and semantic configuration ID emitted in current Graph schema v0.13. A `replaceLiteral`
 operation also carries the expected old literal text. A stale source, changed
 reference/effect configuration, missing target, changed old value, non-literal
@@ -1668,7 +1668,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
 ```
 
 The result is `return value + (value * 3);`, and the sidecar advances from
-generation 1 to 4. The symbolic step becomes an ordinary patch v0.22
+generation 1 to 4. The symbolic step becomes an ordinary patch v0.23
 `replaceExpressionInput` at execution time, so type, purity, dominance, trivia,
 identity, tombstone, and Graph-edge behavior stay on one code path. See
 [PRODUCED_EXPRESSION_HANDLES.md](docs/PRODUCED_EXPRESSION_HANDLES.md).
@@ -1676,7 +1676,7 @@ identity, tombstone, and Graph-edge behavior stay on one code path. See
 ### Author and edit a conditional expression
 
 M4.12 adds `condition ? whenTrue : whenFalse` as a first-class expression in
-current HIR v0.8, Graph v0.13, patch v0.22, and patch-plan v0.21. Graph emits one
+current HIR v0.8, Graph v0.13, patch v0.23, and patch-plan v0.21. Graph emits one
 `conditional`/`Select` node with `condition`, `whenTrue`, and `whenFalse` data
 inputs, a `value` output, and `evaluation: lazyBranches`. Text lowering keeps
 the original expression shape; it does not turn the expression into a call or

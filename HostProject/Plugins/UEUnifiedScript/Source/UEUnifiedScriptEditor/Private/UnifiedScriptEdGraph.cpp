@@ -49,7 +49,7 @@ private:
 
 void UUnifiedScriptEdGraphNode::AllocateDefaultPins()
 {
-    // Pins are allocated from the loaded compiler-owned Surface v0.3 metadata.
+    // Pins are allocated from the loaded compiler-owned Surface v0.4 metadata.
 }
 
 FText UUnifiedScriptEdGraphNode::GetNodeTitle(ENodeTitleType::Type TitleType) const

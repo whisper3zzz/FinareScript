@@ -112,6 +112,17 @@ public sealed class SwitchStructuredControlFlowTests
         Assert.Equal("4", switchNode.Properties["labelCount"]);
         Assert.Equal("true", switchNode.Properties["hasDefault"]);
         Assert.Equal(4, labels.Length);
+        Dictionary<string, string> sectionIdsByBodyId = @switch.Sections.ToDictionary(
+            static section => section.Body.Id.Value,
+            static section => section.Id.Value,
+            StringComparer.Ordinal);
+        foreach (GraphNode label in labels)
+        {
+            string sectionBodyId = label.Properties["sectionId"];
+            Assert.Equal(
+                sectionIdsByBodyId[sectionBodyId],
+                label.Properties["switchSectionId"]);
+        }
         Assert.Contains(
             function.Nodes,
             node => node.Id == declaration.Variable.Id && node.Kind == "patternVariable");
@@ -128,6 +139,12 @@ public sealed class SwitchStructuredControlFlowTests
             .ToArray();
         Assert.Equal(@switch.Sections.Select(static section => section.Body.Id),
             surfaceSections.Select(static region => region.SourceNodeId));
+        AuthoringActionSurface[] surfaceLabels = surfaceFunction.Actions
+            .Where(static action => action.GraphKind == "switchCase")
+            .ToArray();
+        Assert.All(surfaceLabels, action => Assert.Equal(
+            sectionIdsByBodyId[action.Properties["sectionId"]],
+            action.Properties["switchSectionId"]));
         Assert.All(surfaceSections, section => Assert.DoesNotContain(
             section.DirectStatementIds,
             id => surfaceFunction.Actions.Single(action => action.Id == id).GraphKind ==

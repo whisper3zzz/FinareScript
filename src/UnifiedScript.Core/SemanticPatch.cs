@@ -25,6 +25,10 @@ namespace UnifiedScript.Core;
 [JsonDerivedType(typeof(InsertStatementPatchOperation), "insertStatement")]
 [JsonDerivedType(typeof(DeleteStatementPatchOperation), "deleteStatement")]
 [JsonDerivedType(typeof(MoveStatementPatchOperation), "moveStatement")]
+[JsonDerivedType(typeof(InsertSwitchSectionPatchOperation), "insertSwitchSection")]
+[JsonDerivedType(typeof(ReplaceSwitchSectionPatchOperation), "replaceSwitchSection")]
+[JsonDerivedType(typeof(MoveSwitchSectionPatchOperation), "moveSwitchSection")]
+[JsonDerivedType(typeof(DeleteSwitchSectionPatchOperation), "deleteSwitchSection")]
 [JsonDerivedType(typeof(IntroduceTemporaryPatchOperation), "introduceTemporary")]
 [JsonDerivedType(typeof(ReconnectValuePatchOperation), "reconnectValue")]
 [JsonDerivedType(typeof(ReconnectDataEdgePatchOperation), "reconnectDataEdge")]
@@ -157,6 +161,7 @@ public sealed record ReplaceReturnValuePatchOperation(
 [JsonDerivedType(typeof(DoWhilePatchStatement), "doWhile")]
 [JsonDerivedType(typeof(ForPatchStatement), "for")]
 [JsonDerivedType(typeof(ForEachPatchStatement), "forEach")]
+[JsonDerivedType(typeof(SwitchPatchStatement), "switch")]
 [JsonDerivedType(typeof(BreakPatchStatement), "break")]
 [JsonDerivedType(typeof(ContinuePatchStatement), "continue")]
 [JsonDerivedType(typeof(ReturnPatchStatement), "return")]
@@ -298,6 +303,68 @@ public sealed record ForEachPatchStatement(
     SemanticId ExpectedElementTypeId,
     PatchExpression Collection) : InsertPatchStatement;
 
+public sealed record SwitchPatchStatement(
+    PatchExpression GoverningExpression,
+    SemanticId ExpectedGoverningTypeId,
+    IReadOnlyList<SwitchSectionPatch> Sections) : InsertPatchStatement;
+
+public sealed record SwitchSectionPatch(IReadOnlyList<SwitchLabelPatch> Labels);
+
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "label")]
+[JsonDerivedType(typeof(DefaultSwitchLabelPatch), "default")]
+[JsonDerivedType(typeof(PatternSwitchLabelPatch), "pattern")]
+public abstract record SwitchLabelPatch;
+
+public sealed record DefaultSwitchLabelPatch : SwitchLabelPatch;
+
+public sealed record PatternSwitchLabelPatch(
+    SwitchPatternPatch Pattern,
+    PatchExpression? Guard) : SwitchLabelPatch;
+
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "pattern")]
+[JsonDerivedType(typeof(ConstantSwitchPatternPatch), "constant")]
+[JsonDerivedType(typeof(DeclarationSwitchPatternPatch), "declaration")]
+[JsonDerivedType(typeof(TypeSwitchPatternPatch), "type")]
+[JsonDerivedType(typeof(VarSwitchPatternPatch), "var")]
+[JsonDerivedType(typeof(DiscardSwitchPatternPatch), "discard")]
+[JsonDerivedType(typeof(RelationalSwitchPatternPatch), "relational")]
+[JsonDerivedType(typeof(LogicalSwitchPatternPatch), "logical")]
+[JsonDerivedType(typeof(NotSwitchPatternPatch), "not")]
+[JsonDerivedType(typeof(ParenthesizedSwitchPatternPatch), "parenthesized")]
+public abstract record SwitchPatternPatch;
+
+public sealed record ConstantSwitchPatternPatch(PatchExpression Value) : SwitchPatternPatch;
+
+public sealed record DeclarationSwitchPatternPatch(
+    string TypeName,
+    string VariableName,
+    bool IsDiscard,
+    SemanticId ExpectedTypeId) : SwitchPatternPatch;
+
+public sealed record TypeSwitchPatternPatch(
+    string TypeName,
+    SemanticId ExpectedTypeId) : SwitchPatternPatch;
+
+public sealed record VarSwitchPatternPatch(
+    string VariableName,
+    bool IsDiscard) : SwitchPatternPatch;
+
+public sealed record DiscardSwitchPatternPatch : SwitchPatternPatch;
+
+public sealed record RelationalSwitchPatternPatch(
+    string Operator,
+    PatchExpression Value) : SwitchPatternPatch;
+
+public sealed record LogicalSwitchPatternPatch(
+    string Operator,
+    SwitchPatternPatch Left,
+    SwitchPatternPatch Right) : SwitchPatternPatch;
+
+public sealed record NotSwitchPatternPatch(SwitchPatternPatch Operand) : SwitchPatternPatch;
+
+public sealed record ParenthesizedSwitchPatternPatch(
+    SwitchPatternPatch Inner) : SwitchPatternPatch;
+
 public sealed record BreakPatchStatement : InsertPatchStatement;
 
 public sealed record ContinuePatchStatement : InsertPatchStatement;
@@ -326,6 +393,33 @@ public sealed record MoveStatementPatchOperation(
     SemanticId DestinationParentBlockId,
     SemanticId? ExpectedDestinationPreviousSiblingId,
     SemanticId? ExpectedDestinationNextSiblingId) : SemanticPatchOperation(TargetNodeId);
+
+public sealed record InsertSwitchSectionPatchOperation(
+    SemanticId TargetNodeId,
+    SemanticId? ExpectedPreviousSectionId,
+    SemanticId? ExpectedNextSectionId,
+    SwitchSectionPatch NewSection) : SemanticPatchOperation(TargetNodeId);
+
+public sealed record ReplaceSwitchSectionPatchOperation(
+    SemanticId TargetNodeId,
+    SemanticId ExpectedSwitchStatementId,
+    IReadOnlyList<SemanticId> ExpectedLabelIds,
+    IReadOnlyList<SwitchLabelPatch> NewLabels) : SemanticPatchOperation(TargetNodeId);
+
+public sealed record MoveSwitchSectionPatchOperation(
+    SemanticId TargetNodeId,
+    SemanticId ExpectedSwitchStatementId,
+    SemanticId? ExpectedSourcePreviousSectionId,
+    SemanticId? ExpectedSourceNextSectionId,
+    SemanticId? ExpectedDestinationPreviousSectionId,
+    SemanticId? ExpectedDestinationNextSectionId) : SemanticPatchOperation(TargetNodeId);
+
+public sealed record DeleteSwitchSectionPatchOperation(
+    SemanticId TargetNodeId,
+    SemanticId ExpectedSwitchStatementId,
+    SemanticId? ExpectedPreviousSectionId,
+    SemanticId? ExpectedNextSectionId,
+    IReadOnlyList<SemanticId> ExpectedLabelIds) : SemanticPatchOperation(TargetNodeId);
 
 public sealed record IntroduceTemporaryPatchOperation(
     SemanticId TargetNodeId,
@@ -371,7 +465,7 @@ public sealed record SemanticPatchDocument(
     SemanticId SemanticConfigurationId,
     IReadOnlyList<SemanticPatchOperation> Operations)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.22";
+    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.23";
 
     public static SemanticPatchDocument Create(
         SemanticId sourceCompilationId,

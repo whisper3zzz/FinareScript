@@ -294,8 +294,20 @@ public static class GraphJson
                     .Where(static node => node.Kind == "switchCase")
                     .All(label => label.Properties.GetValueOrDefault("sectionId") ==
                         child.SourceNodeId.Value));
+                bool labelsExposeSemanticSections = children.All(child =>
+                {
+                    string?[] sectionIds = child.NodeIds
+                        .Select(id => nodes[id])
+                        .Where(static node => node.Kind == "switchCase")
+                        .Select(static label =>
+                            label.Properties.GetValueOrDefault("switchSectionId"))
+                        .Distinct(StringComparer.Ordinal)
+                        .ToArray();
+                    return sectionIds.Length == 1 &&
+                        SemanticId.TryParse(sectionIds[0], out _);
+                });
                 if (!hasSwitchNode || !hasValidCounts || !hasValidChildren ||
-                    !labelsOwnSections)
+                    !labelsOwnSections || !labelsExposeSemanticSections)
                 {
                     throw new JsonException(
                         $"Switch region '{region.Id}' requires one switch node and ordered " +

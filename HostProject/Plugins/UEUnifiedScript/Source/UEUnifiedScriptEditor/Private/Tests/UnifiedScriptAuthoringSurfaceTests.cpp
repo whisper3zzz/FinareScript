@@ -161,8 +161,8 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
             TEXT("120"),
             PatchJson,
             Error));
-    TestTrue(TEXT("Patch uses semantic-patch v0.22"),
-        PatchJson.Contains(TEXT("\"unifiedscript.patch/v0.22\"")));
+    TestTrue(TEXT("Patch uses semantic-patch v0.23"),
+        PatchJson.Contains(TEXT("\"unifiedscript.patch/v0.23\"")));
     TestTrue(TEXT("Patch retains the exact target node"),
         PatchJson.Contains(LiteralEdit->TargetNodeId));
     TestTrue(TEXT("Patch carries the requested replacement"),
@@ -269,7 +269,7 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         {
             return Region.Kind == TEXT("block");
         });
-    TestNotNull(TEXT("Surface v0.3 exposes the real root block"), RewireBlock);
+    TestNotNull(TEXT("Surface v0.4 exposes the real root block"), RewireBlock);
     if (RewireBlock != nullptr && RewireTarget != nullptr && RewireSource != nullptr)
     {
         FString InsertJson;
@@ -590,7 +590,7 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Demo Surface source is readable"),
         FFileHelper::LoadFileToString(SurfaceJson, *SurfacePath));
     SurfaceJson.ReplaceInline(
-        TEXT("unifiedscript.authoring-surface/v0.3"),
+        TEXT("unifiedscript.authoring-surface/v0.4"),
         TEXT("unifiedscript.authoring-surface/v9.9"));
     FUnifiedScriptAuthoringSurfaceDocument FailedOutput = Document;
     TestFalse(
@@ -610,7 +610,7 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
              "\"surface\":%s,\"generation\":{\"number\":3}}"),
         *SurfaceJson.Replace(
             TEXT("unifiedscript.authoring-surface/v9.9"),
-            TEXT("unifiedscript.authoring-surface/v0.3")));
+            TEXT("unifiedscript.authoring-surface/v0.4")));
     FUnifiedScriptAuthoringWorkspaceResult Workspace;
     TestTrue(
         *FString::Printf(TEXT("Workbench response carries a strict Surface: %s"), *Error),

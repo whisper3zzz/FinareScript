@@ -30,4 +30,6 @@ public static class SemanticPatchDiagnosticCodes
     public const string InvalidExpressionInputPort = "UVS3026";
     public const string InvalidDataEdgeReconnection = "UVS3027";
     public const string InvalidControlFlowReconnection = "UVS3028";
+    public const string InvalidSwitchSection = "UVS3029";
+    public const string UnsafeSwitchSectionDeletion = "UVS3030";
 }

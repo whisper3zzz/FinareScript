@@ -4,7 +4,7 @@
 
 `unifiedscript.patch-plan/v0.21` represents one visual-editor gesture as an
 ordered, atomic sequence of the bounded semantic operation family established
-through `unifiedscript.patch/v0.21`. Standalone patch v0.22 additionally owns
+through `unifiedscript.patch/v0.21`. Standalone patch v0.23 additionally owns
 direct `moveStatement`; it is not yet a patch-plan step. A plan exists because
 a useful graph edit often needs
 IDs created by an earlier edit or changes several overlapping source regions.
@@ -175,7 +175,7 @@ authored tree, and selects one final `inputPort`:
 The consumer repeats the producer's original structural `targetNodeId`. The
 JSON validator resolves the path against the earlier authored tree and checks
 both exact types. The coordinator then follows the same path from the real HIR
-root captured after `sourceStepId` and creates an ordinary patch v0.22
+root captured after `sourceStepId` and creates an ordinary patch v0.23
 `replaceExpressionInput` operation with the real current parent and child IDs.
 
 The consumer's `newInput` becomes a new published root, so handles can chain

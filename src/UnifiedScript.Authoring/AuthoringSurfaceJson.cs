@@ -121,7 +121,9 @@ public static class AuthoringSurfaceJson
                 !IsValidSpan(action.Span) || action.RegionId.IsEmpty ||
                 action.DebugTargetId is SemanticId debugTargetId && debugTargetId.IsEmpty ||
                 action.DeclarationReferenceIds is null || action.EditCapabilities is null ||
-                action.Ports is null ||
+                action.Ports is null || action.Properties is null ||
+                action.Properties.Any(static property =>
+                    string.IsNullOrWhiteSpace(property.Key) || property.Value is null) ||
                 action.DeclarationReferenceIds.Any(static id => id.IsEmpty) ||
                 action.DeclarationReferenceIds.Distinct().Count() !=
                     action.DeclarationReferenceIds.Count ||
@@ -338,6 +340,12 @@ public static class AuthoringSurfaceJson
                     .ThenBy(static port => port.Kind)
                     .ThenBy(static port => port.Name, StringComparer.Ordinal)
                     .ToArray(),
+                Properties = action.Properties
+                    .OrderBy(static property => property.Key, StringComparer.Ordinal)
+                    .ToDictionary(
+                        static property => property.Key,
+                        static property => property.Value,
+                        StringComparer.Ordinal),
             })
             .ToArray(),
         Edges = function.Edges

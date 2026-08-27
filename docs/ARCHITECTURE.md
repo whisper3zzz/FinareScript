@@ -67,7 +67,7 @@ flowchart LR
     Projector --> Graph["Graph JSON"]
     Declaration --> Authoring["Authoring Surface Projector"]
     Graph --> Authoring
-    Authoring --> Surface["Authoring Surface v0.3 pins + edges"]
+    Authoring --> Surface["Authoring Surface v0.4 pins + edges"]
     Surface --> Presentation["Lossless Graph Presentation policy"]
     Presentation --> Workbench["Browser / native UE GraphEditor"]
     Projector --> EmitGate["Execution Graph/CFG gate"]
@@ -236,7 +236,7 @@ the previous script running. Cook-time dependency discovery remains open.
 - exact function/block/if/loop region ownership
 - declaration references, source spans, and debug-target identities
 - schema-driven literal/operator Semantic Patch capabilities
-- strict Authoring Surface v0.3 JSON with endpoint/type invariants
+- strict Authoring Surface v0.4 JSON with endpoint/type invariants
 
 It depends only on Core and Graph. It does not parse source, host Roslyn or
 CoreCLR, render a browser/Slate UI, apply patches, or depend on UE. A frontend
@@ -438,7 +438,7 @@ compilation identity is not safe for editing.
 ## Semantic patch transaction
 
 Graph schema v0.13 carries both the source compilation ID and semantic
-configuration ID. A `unifiedscript.patch/v0.22` document repeats those IDs and
+configuration ID. A `unifiedscript.patch/v0.23` document repeats those IDs and
 contains typed operations keyed by graph/HIR `SemanticId`. Implemented
 operations are `replaceLiteral`, `changeOperator`, `reconnectArgument`,
 `replaceExpressionInput`,

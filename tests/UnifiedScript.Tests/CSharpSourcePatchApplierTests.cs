@@ -5180,6 +5180,263 @@ public sealed class CSharpSourcePatchApplierTests
             Assert.Single(result.Analysis.Semantics.ForEachLoops).Strategy);
     }
 
+    [Fact]
+    public void Apply_InsertsStatementDirectlyIntoSwitchSectionBody()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int value)
+                {
+                    switch (value)
+                    {
+                        case 0:
+                            break;
+                        default:
+                            break;
+                    }
+
+                    return value;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/SwitchSectionBodyInsert.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirSwitchStatement @switch = Assert.IsType<HirSwitchStatement>(method.Body.Statements[0]);
+        HirSwitchSection firstSection = @switch.Sections[0];
+        HirBreakStatement existingBreak = Assert.IsType<HirBreakStatement>(
+            Assert.Single(firstSection.Body.Statements));
+        SemanticId intType = GetTypeId(original, method.Parameters[0]);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new InsertStatementPatchOperation(
+                firstSection.Body.Id,
+                null,
+                existingBreak.Id,
+                new LocalLiteralDeclarationPatchStatement(
+                    "sectionValue",
+                    "int",
+                    "3",
+                    intType))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Contains(
+            "int sectionValue = 3;",
+            Assert.Single(result.PatchedRequest!.Sources).Source,
+            StringComparison.Ordinal);
+        HirMethodDeclaration changedMethod = Assert.Single(
+            Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirSwitchStatement changedSwitch = Assert.IsType<HirSwitchStatement>(
+            changedMethod.Body.Statements[0]);
+        Assert.Equal(@switch.Id, changedSwitch.Id);
+        Assert.Equal(firstSection.Id, changedSwitch.Sections[0].Id);
+        Assert.Equal(firstSection.Body.Id, changedSwitch.Sections[0].Body.Id);
+        Assert.Equal(existingBreak.Id, changedSwitch.Sections[0].Body.Statements[1].Id);
+    }
+
+    [Fact]
+    public void Apply_InsertsStructuredSwitchWithPatternsAndReducibleCfg()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int value)
+                {
+                    return value;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/InsertSwitch.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirReturnStatement @return = Assert.IsType<HirReturnStatement>(
+            Assert.Single(method.Body.Statements));
+        SemanticId intType = GetTypeId(original, method.Parameters[0]);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new InsertStatementPatchOperation(
+                method.Body.Id,
+                null,
+                @return.Id,
+                new SwitchPatchStatement(
+                    new LocalReferencePatchExpression(
+                        method.Parameters[0].Id,
+                        "value",
+                        intType),
+                    intType,
+                    [
+                        new SwitchSectionPatch([new PatternSwitchLabelPatch(
+                            new ConstantSwitchPatternPatch(
+                                new LiteralPatchExpression("0", intType)),
+                            null)]),
+                        new SwitchSectionPatch([new PatternSwitchLabelPatch(
+                            new RelationalSwitchPatternPatch(
+                                ">",
+                                new LiteralPatchExpression("10", intType)),
+                            null)]),
+                        new SwitchSectionPatch([new DefaultSwitchLabelPatch()]),
+                    ]))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.Contains("switch (value)", patchedSource, StringComparison.Ordinal);
+        HirMethodDeclaration changedMethod = Assert.Single(
+            Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirSwitchStatement changedSwitch = Assert.IsType<HirSwitchStatement>(
+            changedMethod.Body.Statements[0]);
+        Assert.Equal(3, changedSwitch.Sections.Count);
+        Assert.IsType<HirRelationalPattern>(
+            Assert.IsType<HirPatternSwitchLabel>(
+                Assert.Single(changedSwitch.Sections[1].Labels)).Pattern);
+        Assert.All(changedSwitch.Sections, static section =>
+            Assert.IsType<HirBreakStatement>(Assert.Single(section.Body.Statements)));
+        GraphControlFlowSwitch flow = Assert.Single(Assert.Single(
+            new GraphControlFlowAnalyzer().AnalyzeAndValidate(
+                new HirGraphProjector().Project(
+                    result.Analysis.Hir,
+                    result.Analysis.Semantics!)).Functions).Switches);
+        Assert.Equal(changedSwitch.Id, flow.SwitchNodeId);
+    }
+
+    [Fact]
+    public void Apply_InsertsRelabelsMovesAndDeletesSwitchSections()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(int value)
+                {
+                    switch (value)
+                    {
+                        case 0:
+                            break;
+                        case 1:
+                            break;
+                        default:
+                            break;
+                    }
+
+                    return value;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/EditSwitchSections.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirSwitchStatement @switch = Assert.IsType<HirSwitchStatement>(method.Body.Statements[0]);
+        HirSwitchSection first = @switch.Sections[0];
+        HirSwitchSection second = @switch.Sections[1];
+        HirSwitchSection fallback = @switch.Sections[2];
+        SemanticId intType = GetTypeId(original, method.Parameters[0]);
+
+        CSharpPatchResult inserted = new CSharpSourcePatchApplier().Apply(
+            request,
+            SemanticPatchDocument.Create(
+                original.Hir.Id,
+                original.Semantics!.ConfigurationId,
+                [new InsertSwitchSectionPatchOperation(
+                    @switch.Id,
+                    second.Id,
+                    fallback.Id,
+                    new SwitchSectionPatch([new PatternSwitchLabelPatch(
+                        new ConstantSwitchPatternPatch(
+                            new LiteralPatchExpression("2", intType)),
+                        null)]))]));
+        Assert.True(inserted.Succeeded, string.Join(Environment.NewLine, inserted.Diagnostics));
+        HirMethodDeclaration insertedMethod = Assert.Single(
+            Assert.Single(inserted.Analysis!.Hir!.Types).Methods);
+        HirSwitchStatement insertedSwitch = Assert.IsType<HirSwitchStatement>(
+            insertedMethod.Body.Statements[0]);
+        Assert.Equal(4, insertedSwitch.Sections.Count);
+        Assert.Equal(
+            [first.Id, second.Id, fallback.Id],
+            insertedSwitch.Sections
+                .Where(section => section.Id == first.Id || section.Id == second.Id ||
+                    section.Id == fallback.Id)
+                .Select(static section => section.Id)
+                .ToArray());
+
+        CSharpPatchResult relabeled = new CSharpSourcePatchApplier().Apply(
+            request,
+            SemanticPatchDocument.Create(
+                original.Hir.Id,
+                original.Semantics.ConfigurationId,
+                [new ReplaceSwitchSectionPatchOperation(
+                    first.Id,
+                    @switch.Id,
+                    first.Labels.Select(static label => label.Id).ToArray(),
+                    [new PatternSwitchLabelPatch(
+                        new ConstantSwitchPatternPatch(
+                            new LiteralPatchExpression("5", intType)),
+                        null)])]));
+        Assert.True(relabeled.Succeeded, string.Join(Environment.NewLine, relabeled.Diagnostics));
+        HirMethodDeclaration relabeledMethod = Assert.Single(
+            Assert.Single(relabeled.Analysis!.Hir!.Types).Methods);
+        HirSwitchStatement relabeledSwitch = Assert.IsType<HirSwitchStatement>(
+            relabeledMethod.Body.Statements[0]);
+        Assert.Equal(first.Id, relabeledSwitch.Sections[0].Id);
+        Assert.Equal("case 5", Assert.Single(relabeledSwitch.Sections[0].Labels).DisplayText);
+
+        CSharpPatchResult moved = new CSharpSourcePatchApplier().Apply(
+            request,
+            SemanticPatchDocument.Create(
+                original.Hir.Id,
+                original.Semantics.ConfigurationId,
+                [new MoveSwitchSectionPatchOperation(
+                    first.Id,
+                    @switch.Id,
+                    null,
+                    second.Id,
+                    second.Id,
+                    fallback.Id)]));
+        Assert.True(moved.Succeeded, string.Join(Environment.NewLine, moved.Diagnostics));
+        HirMethodDeclaration movedMethod = Assert.Single(
+            Assert.Single(moved.Analysis!.Hir!.Types).Methods);
+        HirSwitchStatement movedSwitch = Assert.IsType<HirSwitchStatement>(
+            movedMethod.Body.Statements[0]);
+        Assert.Equal(
+            [second.Id, first.Id, fallback.Id],
+            movedSwitch.Sections.Select(static section => section.Id).ToArray());
+
+        CSharpPatchResult deleted = new CSharpSourcePatchApplier().Apply(
+            request,
+            SemanticPatchDocument.Create(
+                original.Hir.Id,
+                original.Semantics.ConfigurationId,
+                [new DeleteSwitchSectionPatchOperation(
+                    second.Id,
+                    @switch.Id,
+                    first.Id,
+                    fallback.Id,
+                    second.Labels.Select(static label => label.Id).ToArray())]));
+        Assert.True(deleted.Succeeded, string.Join(Environment.NewLine, deleted.Diagnostics));
+        HirMethodDeclaration deletedMethod = Assert.Single(
+            Assert.Single(deleted.Analysis!.Hir!.Types).Methods);
+        HirSwitchStatement deletedSwitch = Assert.IsType<HirSwitchStatement>(
+            deletedMethod.Body.Statements[0]);
+        Assert.Equal([first.Id, fallback.Id],
+            deletedSwitch.Sections.Select(static section => section.Id).ToArray());
+    }
+
     private static (CSharpCompilationRequest Request, CSharpAnalysisResult Analysis) CreatePersistentRequest(
         string source,
         string path)
