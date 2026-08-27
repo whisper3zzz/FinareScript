@@ -60,6 +60,14 @@ FText UUnifiedScriptEdGraphNode::GetNodeTitle(ENodeTitleType::Type TitleType) co
 
 FLinearColor UUnifiedScriptEdGraphNode::GetNodeTitleColor() const
 {
+    if (bDebugPaused)
+    {
+        return FLinearColor(1.0f, 0.55f, 0.08f);
+    }
+    if (bBreakpointEnabled)
+    {
+        return FLinearColor(0.72f, 0.08f, 0.08f);
+    }
     if (NodeKind == TEXT("region"))
     {
         return FLinearColor(0.88f, 0.43f, 0.08f);

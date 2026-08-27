@@ -111,7 +111,12 @@ pause, resume, and evaluation request carries the current generation and
 execution identity; resume and evaluation additionally carry the pause
 identity, and evaluation carries the selected frame identity. The browser can
 therefore keep a wait request outstanding while still issuing Pause, and stale
-commands cannot affect a newer run.
+commands cannot affect a newer run. Start may additionally carry the Surface's
+expected source-compilation and semantic-configuration IDs; native Slate uses
+both guards so a stale editor document is rejected before execution begins.
+A wait poll that sees neither pause nor completion within 15 seconds returns
+the unchanged `running` session, allowing browser and Slate clients to renew
+the poll without converting a long-lived method into an error.
 
 The same loopback process owns the authoring transaction boundary:
 
@@ -144,7 +149,9 @@ The bridge never interprets HIR. It adapts HTTP requests directly to
 `ICoreClrDebugTransport`, caps request bodies, serves only a path-confined
 content root, and exposes the generation identities that the workbench checks
 against its loaded artifacts. It is loopback development plumbing, not the
-later remote or UE process transport.
+later remote or UE process transport. The native Slate client now consumes
+this exact loopback contract; see
+[NATIVE_DEBUG_WORKBENCH.md](NATIVE_DEBUG_WORKBENCH.md).
 
 ## Suspension and stepping semantics
 
@@ -209,7 +216,7 @@ slice does not provide:
 - instruction-level stepping;
 - async state-machine suspension;
 - forced preemptive suspension between probes;
-- serialized remote/DAP framing or UE editor UI;
+- serialized remote/DAP framing or direct UE-process/World debug transport;
 - a native ICorDebug/netcoredbg trap backend.
 
 The cooperative backend is intended for trusted development code. As with the

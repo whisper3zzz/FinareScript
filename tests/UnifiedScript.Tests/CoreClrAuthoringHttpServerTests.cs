@@ -134,11 +134,30 @@ public sealed class CoreClrAuthoringHttpServerTests
             GraphNode clampAssignment = Assert.Single(
                 baseline.Graph.Functions[0].Nodes,
                 static node => node.Kind == "assignment");
+            var staleStartRequest = new DebugStartRequest(
+                baseline.Graph.Functions[0].Id,
+                [Json("12")],
+                new DebugReceiverRequest(asset.Id, []),
+                [new SemanticId(clampAssignment.Properties["debugTargetId"])],
+                SemanticId.FromKey("stale-native-surface"),
+                baseline.ScriptAssets.SemanticConfigurationId);
+            using HttpResponseMessage staleStartResponse = await client.PostAsync(
+                "api/debug/start",
+                JsonContent(JsonSerializer.Serialize(
+                    staleStartRequest,
+                    UnifiedJson.CreateOptions())));
+            Assert.Equal(HttpStatusCode.Conflict, staleStartResponse.StatusCode);
+            Assert.Contains(
+                "UDB1002",
+                await staleStartResponse.Content.ReadAsStringAsync(),
+                StringComparison.Ordinal);
             var startRequest = new DebugStartRequest(
                 baseline.Graph.Functions[0].Id,
                 [Json("12")],
                 new DebugReceiverRequest(asset.Id, []),
-                [new SemanticId(clampAssignment.Properties["debugTargetId"])]);
+                [new SemanticId(clampAssignment.Properties["debugTargetId"])],
+                baseline.ScriptAssets.SourceCompilationId,
+                baseline.ScriptAssets.SemanticConfigurationId);
             using HttpResponseMessage startResponse = await client.PostAsync(
                 "api/debug/start",
                 JsonContent(JsonSerializer.Serialize(startRequest, UnifiedJson.CreateOptions())));

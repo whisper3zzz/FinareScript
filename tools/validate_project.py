@@ -59,6 +59,7 @@ DOCUMENTS = [
     ROOT / "docs" / "EXECUTION_RUNTIME.md",
     ROOT / "docs" / "SOURCE_MAP.md",
     ROOT / "docs" / "BREAKPOINT_RELOAD.md",
+    ROOT / "docs" / "NATIVE_DEBUG_WORKBENCH.md",
     ROOT / "docs" / "PROJECT_LOADING.md",
     ROOT / "docs" / "DECLARATION_IR.md",
     ROOT / "docs" / "STATE_OVERRIDE_MIGRATION.md",
@@ -1446,6 +1447,37 @@ def main() -> int:
         / "Private"
         / "UnifiedScriptAuthoringWorkbench.cpp"
     )
+    unreal_debug_workbench_header_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptEditor"
+        / "Public"
+        / "UnifiedScriptDebugWorkbench.h"
+    )
+    unreal_debug_workbench_source_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptEditor"
+        / "Private"
+        / "UnifiedScriptDebugWorkbench.cpp"
+    )
+    unreal_debug_panel_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptEditor"
+        / "Private"
+        / "Widgets"
+        / "SUnifiedScriptDebugPanel.cpp"
+    )
     unreal_authoring_widget_path = (
         ROOT
         / "HostProject"
@@ -1644,6 +1676,9 @@ def main() -> int:
         and unreal_authoring_surface_source_path.is_file()
         and unreal_authoring_workbench_header_path.is_file()
         and unreal_authoring_workbench_source_path.is_file()
+        and unreal_debug_workbench_header_path.is_file()
+        and unreal_debug_workbench_source_path.is_file()
+        and unreal_debug_panel_path.is_file()
         and unreal_authoring_widget_path.is_file()
         and unreal_ed_graph_header_path.is_file()
         and unreal_ed_graph_source_path.is_file()
@@ -1896,6 +1931,13 @@ def main() -> int:
     unreal_authoring_workbench_source = unreal_authoring_workbench_source_path.read_text(
         encoding="utf-8"
     )
+    unreal_debug_workbench_header = unreal_debug_workbench_header_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_debug_workbench_source = unreal_debug_workbench_source_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_debug_panel = unreal_debug_panel_path.read_text(encoding="utf-8")
     unreal_authoring_widget = unreal_authoring_widget_path.read_text(encoding="utf-8")
     unreal_ed_graph_header = unreal_ed_graph_header_path.read_text(encoding="utf-8")
     unreal_ed_graph_source = unreal_ed_graph_source_path.read_text(encoding="utf-8")
@@ -3033,7 +3075,8 @@ def main() -> int:
         in unreal_world_host_test
         and "- [x] preserve instance overrides and compatible semantic identities"
         in roadmap
-        and "Next slice: **M9.1 — native editor debug integration**" in roadmap,
+        and "Next slice: **M9.1 — UE-process/World debug context and failure mapping**"
+        in roadmap,
         "Declaration IR state materialization or live component integration is missing",
     )
     checks.append("UE component materializes Declaration IR state with stable-ID migration")
@@ -3257,6 +3300,39 @@ def main() -> int:
     )
     checks.append(
         "UE Slate keeps author-facing cards compact and exact compiler/API facts on demand"
+    )
+    native_debug_doc = (
+        ROOT / "docs" / "NATIVE_DEBUG_WORKBENCH.md"
+    ).read_text(encoding="utf-8")
+    require(
+        "unifiedscript.debug-session/v0.2" in unreal_debug_workbench_source
+        and "unifiedscript.debug-evaluation/v0.1" in unreal_debug_workbench_source
+        and "BuildStartRequest" in unreal_debug_workbench_header
+        and "expectedSourceCompilationId" in unreal_debug_workbench_source
+        and "expectedSemanticConfigurationId" in unreal_debug_workbench_source
+        and "/api/debug/wait" in unreal_debug_workbench_source
+        and "/api/debug/pause" in unreal_debug_workbench_source
+        and "/api/debug/step-in" in unreal_debug_workbench_source
+        and "/api/debug/step-over" in unreal_debug_workbench_source
+        and "/api/debug/step-out" in unreal_debug_workbench_source
+        and "/api/debug/evaluate" in unreal_debug_workbench_source
+        and "SUnifiedScriptDebugPanel" in unreal_authoring_widget
+        and "HandleBreakpointToggleRequested" in unreal_authoring_widget
+        and "HandleDebugNodeFocused" in unreal_authoring_widget
+        and "CALL STACK" in unreal_debug_panel
+        and "LOCALS / PARAMETERS" in unreal_debug_panel
+        and "READ-ONLY WATCH" in unreal_debug_panel
+        and "DispatchWait" in unreal_debug_panel
+        and "DebugTargetId" in unreal_ed_graph_header
+        and "DebugBreakpointState" in unreal_ed_graph_header
+        and "Native debugger parses a paused v0.2 session" in unreal_authoring_test
+        and "Slate can toggle a graph/source semantic breakpoint" in unreal_authoring_test
+        and "Direct UE-process/World suspension" in native_debug_doc
+        and "direct UE-process/World suspension" in roadmap,
+        "Native Slate debugger protocol, controls, semantic navigation, or safety boundary is incomplete",
+    )
+    checks.append(
+        "UE Slate consumes guarded debug v0.2 controls, stack, per-frame locals, and watch"
     )
     authoring_diagnostics_doc = (
         ROOT / "docs" / "AUTHORING_DIAGNOSTICS.md"

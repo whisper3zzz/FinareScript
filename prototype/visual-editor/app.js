@@ -9,7 +9,8 @@ const state = {
   authoringConnected: false, authoringBusy: false, authoringRevision: null,
   authoringHistory: null, authoringGroup: null,
   generation: null, removedDeclarations: [], previewPatch: null,
-  debugConnected: false, debugBusy: false, debugHealth: null, debugSession: null,
+  debugConnected: false, debugBusy: false, debugCommandPending: false,
+  debugHealth: null, debugSession: null,
   debugFrameId: null,
 };
 
@@ -978,17 +979,18 @@ function clearDebugVisuals(hideStrip = true) {
 
 function setDebugBusy(busy) {
   state.debugBusy = busy;
+  const commandBusy = busy || state.debugCommandPending;
   const sessionState = state.debugSession?.state;
   const paused = sessionState === 'paused';
-  document.getElementById('runButton').disabled = busy || Boolean(state.authoringGroup) || Boolean(sessionState);
-  document.getElementById('pauseButton').disabled = busy || sessionState !== 'running';
-  document.getElementById('continueButton').disabled = busy || !paused;
-  document.getElementById('stepInButton').disabled = busy || !paused;
-  document.getElementById('stepOverButton').disabled = busy || !paused;
-  document.getElementById('stepOutButton').disabled = busy || !paused || state.debugSession.frames.length < 2;
-  document.getElementById('debugFramePicker').disabled = busy || !paused;
-  document.getElementById('debugWatchInput').disabled = busy || !paused;
-  document.getElementById('evaluateWatchButton').disabled = busy || !paused || state.debugFrameId === null;
+  document.getElementById('runButton').disabled = commandBusy || Boolean(state.authoringGroup) || Boolean(sessionState);
+  document.getElementById('pauseButton').disabled = commandBusy || sessionState !== 'running';
+  document.getElementById('continueButton').disabled = commandBusy || !paused;
+  document.getElementById('stepInButton').disabled = commandBusy || !paused;
+  document.getElementById('stepOverButton').disabled = commandBusy || !paused;
+  document.getElementById('stepOutButton').disabled = commandBusy || !paused || state.debugSession.frames.length < 2;
+  document.getElementById('debugFramePicker').disabled = commandBusy || !paused;
+  document.getElementById('debugWatchInput').disabled = commandBusy || !paused;
+  document.getElementById('evaluateWatchButton').disabled = commandBusy || !paused || state.debugFrameId === null;
 }
 
 async function debugRequest(path, body = {}, schemaVersion = 'unifiedscript.debug-session/v0.2') {
@@ -1112,6 +1114,8 @@ async function runDebug() {
       methodId: func.id,
       arguments: func.parameters.map(defaultArgument),
       breakpointNodeIds,
+      expectedSourceCompilationId: state.sourceCompilationId,
+      expectedSemanticConfigurationId: state.semanticConfigurationId,
     };
     if (!func.isStatic) {
       request.receiver = {
@@ -1129,20 +1133,29 @@ async function runDebug() {
 }
 
 async function waitForDebugState() {
-  const request = debugExecutionRequest();
-  const response = await debugRequest('/api/debug/wait', request);
-  response.state === 'paused' ? renderLiveDebugPause(response) : renderDebugCompletion(response);
+  while (state.debugSession?.state === 'running') {
+    const request = debugExecutionRequest();
+    const response = await debugRequest('/api/debug/wait', request);
+    if (response.state === 'running') {
+      renderDebugRunning(response);
+      continue;
+    }
+    response.state === 'paused' ? renderLiveDebugPause(response) : renderDebugCompletion(response);
+  }
 }
 
 async function pauseDebug() {
   if (state.debugSession?.state !== 'running') return;
+  state.debugCommandPending = true;
   setDebugBusy(true);
   try {
     const request = debugExecutionRequest();
     await debugRequest('/api/debug/pause', request);
     document.getElementById('debugReason').textContent = 'PAUSE REQUESTED';
+    state.debugCommandPending = false;
     setDebugBusy(false);
   } catch (error) {
+    state.debugCommandPending = false;
     setDebugBusy(false);
     showToast('Pause failed', error.message);
   }

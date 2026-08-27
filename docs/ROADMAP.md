@@ -48,9 +48,9 @@ current cursor, validate it, and advance this document.
 
 Last refreshed: **2026-08-28**
 
-- Active milestone: **M8 — Visual/C# Authoring Beta**
-- Next slice: **M9.1 — native editor debug integration**
-- Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
+- Active milestone: **M9 — Debugging, reload, and observability Beta**
+- Next slice: **M9.1 — UE-process/World debug context and failure mapping**
+- Primary engine gate: **Unreal Engine 5.8.1 source build at `D:\Project\UnrealEngine-5.8.1`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
 ## Verified baseline
@@ -60,10 +60,10 @@ machine-local unless an artifact explicitly says otherwise.
 
 | Gate | Verified result |
 | --- | --- |
-| Main source | `3bd67fd` (`feat: model async foreach execution`), plus this M8.5 profile change set |
+| Main source | `298c14f` (`feat: expand CoreCLR debugger controls`), plus this native Slate debug change set |
 | Comparison source | `e62a46e` (`feat: adopt round-tripped gameplay tuning`) |
 | Managed tests | 522 / 522 passed |
-| Repository validator | 59 / 59 passed |
+| Repository validator | 60 / 60 passed |
 | UE 5.8.1 native build | passed |
 | `UnifiedScript.Unreal` Automation | 13 / 13 passed with M8.3 declaration, Authoring Surface, override migration, and live World-host coverage |
 | BlockBreaker workload | 10,000 frames, three trials, one shot, one hit, two command completions per trial |
@@ -945,8 +945,14 @@ Progress (2026-08-28): the cooperative CoreCLR control plane and browser
 workbench now use debug-session v0.2 with non-blocking start/wait, cooperative
 Pause, Step In/Over/Out, semantic method/node stack identities, detached locals
 for every active Visual frame, and bounded read-only watch evaluation. Native
-Slate consumption and exception/bridge failure context remain the next M9.1
-slice, so this milestone is not yet marked complete.
+Slate now consumes the same guarded protocol: graph-card and source-inspector
+breakpoints survive graph rebuilds, binding state is generation-specific, all
+run controls are native, stack selection navigates semantic graph nodes, and
+per-frame locals/watch values remain detached. UE 5.8.1 Editor build, targeted
+Authoring Surface Automation, 522/522 managed tests, and 60/60 repository
+invariants pass. The panel currently drives the loopback debug generation;
+direct UE-process/World suspension plus exception/native-bridge failure context
+remain the next M9.1 slice, so this milestone is not yet marked complete.
 
 ### M9.2 — Hot-reload reliability
 

@@ -12,6 +12,7 @@
 class SEditableTextBox;
 class SGraphEditor;
 class SUnifiedScriptCanvasMinimap;
+class SUnifiedScriptDebugPanel;
 class SSearchBox;
 class STextBlock;
 class SVerticalBox;
@@ -97,6 +98,8 @@ public:
     bool GetNodePaletteAction(
         const FString& ActionId,
         FUnifiedScriptGraphPaletteAction& OutAction) const;
+    bool ToggleDebugBreakpoint(const FString& ActionId);
+    bool IsDebugBreakpointEnabled(const FString& ActionId) const;
 
 private:
     friend class SUnifiedScriptCanvasMinimap;
@@ -138,6 +141,9 @@ private:
         TSharedPtr<SEditableTextBox> NameEditor);
     void HandleNodeCreateRequested(const FString& ActionId, const FVector2D& Location);
     void HandleStatementDeleteRequested(const UEdGraphNode* Node);
+    void HandleBreakpointToggleRequested(const FString& DebugTargetId);
+    void HandleDebugNodeFocused(const FString& MethodId, const FString& NodeId);
+    void RefreshDebugNodeStates();
     void HandleCopySelectedStatement();
     bool CanCopySelectedStatement() const;
     void HandlePasteStatement();
@@ -348,6 +354,7 @@ private:
     TSharedPtr<STreeView<FUnifiedScriptSurfaceTreeItemPtr>> TreeView;
     TSharedPtr<SListView<FUnifiedScriptNodePaletteItemPtr>> NodePaletteListView;
     TSharedPtr<SGraphEditor> GraphEditor;
+    TSharedPtr<SUnifiedScriptDebugPanel> DebugPanel;
     TSharedPtr<FUICommandList> GraphCommands;
     TSharedPtr<SVerticalBox> InspectorBox;
     TSharedPtr<SVerticalBox> DiagnosticsBox;

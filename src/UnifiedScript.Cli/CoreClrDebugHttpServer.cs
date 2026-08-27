@@ -813,6 +813,20 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                         "UDB1004",
                         "The current debug execution is running or paused; finish it before starting again.");
                 }
+                if (request.ExpectedSourceCompilationId is { } expectedCompilation &&
+                    expectedCompilation != reload.Generation.SourceCompilationId)
+                {
+                    throw new BreakpointProtocolException(
+                        "UDB1002",
+                        $"The loaded source compilation is '{reload.Generation.SourceCompilationId}', not '{expectedCompilation}'.");
+                }
+                if (request.ExpectedSemanticConfigurationId is { } expectedConfiguration &&
+                    expectedConfiguration != reload.Generation.SemanticConfigurationId)
+                {
+                    throw new BreakpointProtocolException(
+                        "UDB1002",
+                        $"The loaded semantic configuration is '{reload.Generation.SemanticConfigurationId}', not '{expectedConfiguration}'.");
+                }
 
                 foreach (SemanticId breakpointId in breakpointIds)
                 {
@@ -1194,7 +1208,10 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
 
         public void Dispose()
         {
-            gate.Dispose();
+            // Request handlers are intentionally detached by the listener. A long-poll
+            // handler can still be unwinding through its gate-protected cleanup after
+            // the listener has closed, so disposing the semaphore here would race that
+            // cleanup. SemaphoreSlim owns no external handle until WaitHandle is used.
             transport.Dispose();
         }
 
@@ -1972,40 +1989,50 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             Task<ExecutionResult> completionTask = transport.WaitForCompletionAsync(
                 currentExecution.ExecutionId,
                 timeout.Token);
-            Task completed = await Task.WhenAny(pauseTask, completionTask);
-            timeout.Cancel();
-            if (completed == pauseTask && pauseTask.IsCompletedSuccessfully)
+            try
             {
-                CoreClrDebugPause nextPause = await pauseTask;
-                IReadOnlyList<CoreClrDebugStackFrame> frames = transport.GetStackTrace(
-                    reload.Generation.GenerationId,
-                    nextPause.PauseId);
-                DebugFrameLocalsResponse[] frameLocals = frames
-                    .Where(static frame => frame.HasLocals)
-                    .Select(frame => new DebugFrameLocalsResponse(
-                        frame.FrameId,
-                        transport.GetLocals(
-                            reload.Generation.GenerationId,
-                            nextPause.PauseId,
-                            frame.FrameId)))
-                    .ToArray();
-                IReadOnlyList<CoreClrDebugValue> locals = frameLocals.FirstOrDefault()?.Locals ?? [];
-                return DebugSessionResponse.Paused(
+                Task completed = await Task.WhenAny(pauseTask, completionTask);
+                timeout.Cancel();
+                if (completed == pauseTask && pauseTask.IsCompletedSuccessfully)
+                {
+                    CoreClrDebugPause nextPause = await pauseTask;
+                    IReadOnlyList<CoreClrDebugStackFrame> frames = transport.GetStackTrace(
+                        reload.Generation.GenerationId,
+                        nextPause.PauseId);
+                    DebugFrameLocalsResponse[] frameLocals = frames
+                        .Where(static frame => frame.HasLocals)
+                        .Select(frame => new DebugFrameLocalsResponse(
+                            frame.FrameId,
+                            transport.GetLocals(
+                                reload.Generation.GenerationId,
+                                nextPause.PauseId,
+                                frame.FrameId)))
+                        .ToArray();
+                    IReadOnlyList<CoreClrDebugValue> locals = frameLocals.FirstOrDefault()?.Locals ?? [];
+                    return DebugSessionResponse.Paused(
+                        reload.Generation,
+                        currentExecution.ExecutionId,
+                        nextPause,
+                        frames,
+                        locals,
+                        frameLocals,
+                        bindings);
+                }
+
+                ExecutionResult result = await completionTask;
+                return DebugSessionResponse.Completed(
                     reload.Generation,
                     currentExecution.ExecutionId,
-                    nextPause,
-                    frames,
-                    locals,
-                    frameLocals,
+                    result,
                     bindings);
             }
-
-            ExecutionResult result = await completionTask;
-            return DebugSessionResponse.Completed(
-                reload.Generation,
-                currentExecution.ExecutionId,
-                result,
-                bindings);
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                return DebugSessionResponse.Running(
+                    reload.Generation,
+                    currentExecution.ExecutionId,
+                    bindings);
+            }
         }
 
         private sealed record AuthoringOutput(string Path, byte[] Content);
@@ -2143,7 +2170,9 @@ internal sealed record DebugStartRequest(
     SemanticId MethodId,
     IReadOnlyList<JsonElement>? Arguments,
     DebugReceiverRequest? Receiver,
-    IReadOnlyList<SemanticId>? BreakpointNodeIds);
+    IReadOnlyList<SemanticId>? BreakpointNodeIds,
+    SemanticId? ExpectedSourceCompilationId = null,
+    SemanticId? ExpectedSemanticConfigurationId = null);
 
 internal sealed record DebugExecutionRequest(
     SemanticId GenerationId,

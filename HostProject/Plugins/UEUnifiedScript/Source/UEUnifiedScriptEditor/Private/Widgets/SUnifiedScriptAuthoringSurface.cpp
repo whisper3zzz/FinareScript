@@ -50,6 +50,7 @@
 #include "Widgets/Views/STreeView.h"
 #include "Widgets/Views/SListView.h"
 #include "Widgets/SLeafWidget.h"
+#include "Widgets/SUnifiedScriptDebugPanel.h"
 #include "Widgets/Text/STextBlock.h"
 
 #define LOCTEXT_NAMESPACE "UnifiedScriptAuthoringSurface"
@@ -920,6 +921,10 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
         FOnUnifiedScriptStatementDeleteRequested::CreateSP(
             this,
             &SUnifiedScriptAuthoringSurface::HandleStatementDeleteRequested);
+    AuthoringGraph->OnBreakpointToggleRequested =
+        FOnUnifiedScriptBreakpointToggleRequested::CreateSP(
+            this,
+            &SUnifiedScriptAuthoringSurface::HandleBreakpointToggleRequested);
 
     FGraphAppearanceInfo GraphAppearance;
     GraphAppearance.CornerText = LOCTEXT("GraphCorner", "UNIFIEDSCRIPT  /  VISUAL BEHAVIOR");
@@ -1024,6 +1029,24 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
                         this,
                         &SUnifiedScriptAuthoringSurface::HandleLoadInitialSurface)
                 ]
+            ]
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(2.0f, 8.0f, 2.0f, 0.0f)
+            [
+                SAssignNew(DebugPanel, SUnifiedScriptDebugPanel)
+                .ServerUrl_Lambda([this]()
+                {
+                    return ServerUrlTextBox.IsValid()
+                        ? ServerUrlTextBox->GetText().ToString()
+                        : FString();
+                })
+                .OnNodeFocused(FOnUnifiedScriptDebugNodeFocused::CreateSP(
+                    this,
+                    &SUnifiedScriptAuthoringSurface::HandleDebugNodeFocused))
+                .OnDebugStateChanged(FSimpleDelegate::CreateSP(
+                    this,
+                    &SUnifiedScriptAuthoringSurface::RefreshDebugNodeStates))
             ]
             + SVerticalBox::Slot()
             .AutoHeight()
@@ -4855,6 +4878,10 @@ void SUnifiedScriptAuthoringSurface::RebuildGraph(
     RefreshNodePaletteItems();
 
     const FUnifiedScriptAuthoringFunction* Function = FindFunction(ActiveFunctionId);
+    if (DebugPanel.IsValid())
+    {
+        DebugPanel->SetExecutionContext(Document, ActiveFunctionId);
+    }
     if (Function != nullptr)
     {
         FUnifiedScriptGraphFunctionLayout Layout;
@@ -5061,6 +5088,14 @@ UUnifiedScriptEdGraphNode* SUnifiedScriptAuthoringSurface::AddGraphNode(
     Node->Category = Item->Category;
     Node->SourceDisplay = Item->Span.ToDisplayString();
     Node->AdvancedTooltip = FUnifiedScriptGraphPresentation::GetNodeTooltip(Action);
+    Node->DebugTargetId = Action.DebugTargetId;
+    Node->bBreakpointEnabled = DebugPanel.IsValid() &&
+        DebugPanel->IsBreakpointEnabled(Action.DebugTargetId);
+    Node->DebugBreakpointState = DebugPanel.IsValid()
+        ? DebugPanel->GetBreakpointState(Action.DebugTargetId)
+        : TEXT("disabled");
+    Node->bDebugPaused = DebugPanel.IsValid() &&
+        DebugPanel->IsPausedNode(Action.DebugTargetId);
     Node->bShowSummary = FUnifiedScriptGraphPresentation::ShouldShowSummary(Action);
     Node->bCompactPresentation = FUnifiedScriptGraphPresentation::IsCompactNode(Action);
     Node->bCanDelete = Action.GraphKind == TEXT("switchCase") ||
@@ -5097,6 +5132,95 @@ UUnifiedScriptEdGraphNode* SUnifiedScriptAuthoringSurface::AddGraphNode(
     AuthoringGraph->AddNode(Node, false, false);
     GraphNodesBySemanticId.Add(Item->SemanticId, Node);
     return Node;
+}
+
+void SUnifiedScriptAuthoringSurface::HandleBreakpointToggleRequested(
+    const FString& DebugTargetId)
+{
+    if (DebugPanel.IsValid())
+    {
+        DebugPanel->ToggleBreakpoint(DebugTargetId);
+        RefreshDebugNodeStates();
+    }
+}
+
+void SUnifiedScriptAuthoringSurface::HandleDebugNodeFocused(
+    const FString& MethodId,
+    const FString& NodeId)
+{
+    if (NodeId.IsEmpty())
+    {
+        return;
+    }
+    FString ActionId;
+    FString FunctionId;
+    for (const FUnifiedScriptAuthoringAsset& Asset : Document.Assets)
+    {
+        for (const FUnifiedScriptAuthoringFunction& Function : Asset.Functions)
+        {
+            if (!MethodId.IsEmpty() && Function.Id != MethodId)
+            {
+                continue;
+            }
+            if (const FUnifiedScriptAuthoringAction* Action = Function.Actions.FindByPredicate(
+                    [&NodeId](const FUnifiedScriptAuthoringAction& Candidate)
+                    {
+                        return Candidate.DebugTargetId == NodeId;
+                    }))
+            {
+                FunctionId = Function.Id;
+                ActionId = Action->Id;
+                break;
+            }
+        }
+        if (!ActionId.IsEmpty())
+        {
+            break;
+        }
+    }
+    if (ActionId.IsEmpty())
+    {
+        return;
+    }
+    if (FunctionId != ActiveFunctionId && !SelectFunction(FunctionId))
+    {
+        return;
+    }
+    const TWeakObjectPtr<UUnifiedScriptEdGraphNode>* Node =
+        GraphNodesBySemanticId.Find(ActionId);
+    if (GraphEditor.IsValid() && Node != nullptr && Node->IsValid())
+    {
+        GraphEditor->ClearSelectionSet();
+        GraphEditor->SetNodeSelection(Node->Get(), true);
+        GraphEditor->JumpToNode(Node->Get(), false);
+    }
+    RefreshDebugNodeStates();
+}
+
+void SUnifiedScriptAuthoringSurface::RefreshDebugNodeStates()
+{
+    for (TPair<FString, TWeakObjectPtr<UUnifiedScriptEdGraphNode>>& Entry :
+         GraphNodesBySemanticId)
+    {
+        if (UUnifiedScriptEdGraphNode* Node = Entry.Value.Get())
+        {
+            Node->bBreakpointEnabled = DebugPanel.IsValid() &&
+                DebugPanel->IsBreakpointEnabled(Node->DebugTargetId);
+            Node->DebugBreakpointState = DebugPanel.IsValid()
+                ? DebugPanel->GetBreakpointState(Node->DebugTargetId)
+                : TEXT("disabled");
+            Node->bDebugPaused = DebugPanel.IsValid() &&
+                DebugPanel->IsPausedNode(Node->DebugTargetId);
+        }
+    }
+    if (AuthoringGraph.IsValid())
+    {
+        AuthoringGraph->NotifyGraphChanged();
+    }
+    if (GraphEditor.IsValid())
+    {
+        GraphEditor->NotifyGraphChanged();
+    }
 }
 
 const FUnifiedScriptAuthoringFunction* SUnifiedScriptAuthoringSurface::FindFunction(
@@ -6443,6 +6567,48 @@ bool SUnifiedScriptAuthoringSurface::GetNodePaletteAction(
     return true;
 }
 
+bool SUnifiedScriptAuthoringSurface::ToggleDebugBreakpoint(const FString& ActionId)
+{
+    for (const FUnifiedScriptAuthoringAsset& Asset : Document.Assets)
+    {
+        for (const FUnifiedScriptAuthoringFunction& Function : Asset.Functions)
+        {
+            if (const FUnifiedScriptAuthoringAction* Action = Function.FindAction(ActionId))
+            {
+                if (!DebugPanel.IsValid() || Action->DebugTargetId.IsEmpty())
+                {
+                    return false;
+                }
+                const bool bChanged = DebugPanel->ToggleBreakpoint(Action->DebugTargetId);
+                RefreshDebugNodeStates();
+                return bChanged;
+            }
+        }
+    }
+    return false;
+}
+
+bool SUnifiedScriptAuthoringSurface::IsDebugBreakpointEnabled(
+    const FString& ActionId) const
+{
+    if (!DebugPanel.IsValid())
+    {
+        return false;
+    }
+    for (const FUnifiedScriptAuthoringAsset& Asset : Document.Assets)
+    {
+        for (const FUnifiedScriptAuthoringFunction& Function : Asset.Functions)
+        {
+            if (const FUnifiedScriptAuthoringAction* Action = Function.FindAction(ActionId))
+            {
+                return !Action->DebugTargetId.IsEmpty() &&
+                    DebugPanel->IsBreakpointEnabled(Action->DebugTargetId);
+            }
+        }
+    }
+    return false;
+}
+
 TSharedRef<SWidget> SUnifiedScriptAuthoringSurface::BuildAdvancedNodeDetails(
     const FUnifiedScriptSurfaceTreeItemPtr& Item,
     const FUnifiedScriptAuthoringAction& Action)
@@ -6469,6 +6635,27 @@ TSharedRef<SWidget> SUnifiedScriptAuthoringSurface::BuildAdvancedNodeDetails(
             .OnClicked(this, &SUnifiedScriptAuthoringSurface::HandleCopyId, Action.Id)
         ]
     ];
+    if (!Action.DebugTargetId.IsEmpty())
+    {
+        Body->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 8.0f)
+        [
+            SNew(SButton)
+            .Text_Lambda([this, ActionId = Action.Id]()
+            {
+                return IsDebugBreakpointEnabled(ActionId)
+                    ? LOCTEXT("RemoveSourceBreakpoint", "Remove Semantic Breakpoint")
+                    : LOCTEXT("AddSourceBreakpoint", "Add Semantic Breakpoint");
+            })
+            .ToolTipText(FText::FromString(FString::Printf(
+                TEXT("Bind the graph card and C# source span through debug target %s."),
+                *Action.DebugTargetId)))
+            .OnClicked_Lambda([this, ActionId = Action.Id]()
+            {
+                ToggleDebugBreakpoint(ActionId);
+                return FReply::Handled();
+            })
+        ];
+    }
 
     const FString Effects = Action.Properties.FindRef(TEXT("effects"));
     const FString GraphSafe = Action.Properties.FindRef(TEXT("graphSafe"));

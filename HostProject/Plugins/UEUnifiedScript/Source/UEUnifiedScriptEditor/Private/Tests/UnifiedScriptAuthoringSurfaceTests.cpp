@@ -2,6 +2,7 @@
 
 #include "UnifiedScriptAuthoringSurface.h"
 #include "UnifiedScriptAuthoringWorkbench.h"
+#include "UnifiedScriptDebugWorkbench.h"
 
 #include "Framework/Docking/TabManager.h"
 #include "Graph/UnifiedScriptGraphLayoutStore.h"
@@ -1516,6 +1517,149 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         TEXT("Workbench group cancel endpoint is normalized"),
         FUnifiedScriptAuthoringWorkbench::BuildGroupCancelUrl(TEXT("http://127.0.0.1:4173/")),
         FString(TEXT("http://127.0.0.1:4173/api/authoring/group/cancel")));
+    TestEqual(
+        TEXT("Native debugger start endpoint is normalized"),
+        FUnifiedScriptDebugWorkbench::BuildStartUrl(TEXT("http://127.0.0.1:4173///")),
+        FString(TEXT("http://127.0.0.1:4173/api/debug/start")));
+    TestEqual(
+        TEXT("Native debugger wait endpoint is normalized"),
+        FUnifiedScriptDebugWorkbench::BuildWaitUrl(TEXT("http://127.0.0.1:4173/")),
+        FString(TEXT("http://127.0.0.1:4173/api/debug/wait")));
+    TestEqual(
+        TEXT("Native debugger Pause endpoint is normalized"),
+        FUnifiedScriptDebugWorkbench::BuildPauseUrl(TEXT("http://127.0.0.1:4173/")),
+        FString(TEXT("http://127.0.0.1:4173/api/debug/pause")));
+    TestEqual(
+        TEXT("Native debugger Step In endpoint is normalized"),
+        FUnifiedScriptDebugWorkbench::BuildStepInUrl(TEXT("http://127.0.0.1:4173/")),
+        FString(TEXT("http://127.0.0.1:4173/api/debug/step-in")));
+    TestEqual(
+        TEXT("Native debugger Step Out endpoint is normalized"),
+        FUnifiedScriptDebugWorkbench::BuildStepOutUrl(TEXT("http://127.0.0.1:4173/")),
+        FString(TEXT("http://127.0.0.1:4173/api/debug/step-out")));
+    TestEqual(
+        TEXT("Native debugger watch endpoint is normalized"),
+        FUnifiedScriptDebugWorkbench::BuildEvaluateUrl(TEXT("http://127.0.0.1:4173/")),
+        FString(TEXT("http://127.0.0.1:4173/api/debug/evaluate")));
+
+    if (Assignment != nullptr)
+    {
+        TSet<FString> DebugTargets;
+        DebugTargets.Add(Assignment->DebugTargetId);
+        FString DebugStartJson;
+        TestTrue(
+            *FString::Printf(TEXT("Native debugger builds a guarded start request: %s"), *Error),
+            FUnifiedScriptDebugWorkbench::BuildStartRequest(
+                Document.SourceCompilationId,
+                Document.SemanticConfigurationId,
+                Function,
+                Document.Assets[0],
+                DebugTargets,
+                DebugStartJson,
+                Error));
+        TestTrue(TEXT("Debug start carries the exact Visual method"),
+            DebugStartJson.Contains(Function.Id));
+        TestTrue(TEXT("Debug start carries the loaded compilation identity"),
+            DebugStartJson.Contains(Document.SourceCompilationId));
+        TestTrue(TEXT("Debug start carries the semantic breakpoint target"),
+            DebugStartJson.Contains(Assignment->DebugTargetId));
+
+        const FString PausedDebugJson = FString::Printf(
+            TEXT("{\"schemaVersion\":\"unifiedscript.debug-session/v0.2\","
+                 "\"state\":\"paused\",\"generation\":{\"number\":7,"
+                 "\"generationId\":\"us_generation\","
+                 "\"sourceCompilationId\":\"%s\","
+                 "\"semanticConfigurationId\":\"%s\"},"
+                 "\"executionId\":12,\"pause\":{"
+                 "\"schemaVersion\":\"unifiedscript.debug-pause/v0.2\","
+                 "\"pauseId\":\"us_pause\",\"reason\":\"breakpoint\","
+                 "\"stepKind\":null,\"methodId\":\"%s\",\"nodeId\":\"%s\"},"
+                 "\"frames\":[{\"frameId\":31,\"index\":0,"
+                 "\"methodId\":\"%s\",\"nodeId\":\"%s\","
+                 "\"methodMetadataName\":\"Demo.ResolveInitialValue\","
+                 "\"metadataToken\":100663297,\"ilOffset\":17,"
+                 "\"sourceSpan\":{\"filePath\":\"Demo.cs\","
+                 "\"start\":{\"line\":8,\"column\":9},"
+                 "\"end\":{\"line\":8,\"column\":24}},\"hasLocals\":true}],"
+                 "\"locals\":[],\"frameLocals\":[{\"frameId\":31,\"locals\":[{"
+                 "\"name\":\"result\",\"typeMetadataName\":\"System.Int32\","
+                 "\"display\":\"100\",\"kind\":\"scalar\","
+                 "\"children\":[],\"truncated\":false}]}],\"result\":null,"
+                 "\"breakpoints\":[{\"breakpointId\":\"us_breakpoint\","
+                 "\"nodeId\":\"%s\",\"state\":\"bound\","
+                 "\"methodId\":\"%s\",\"message\":null}]}"),
+            *Document.SourceCompilationId,
+            *Document.SemanticConfigurationId,
+            *Function.Id,
+            *Assignment->DebugTargetId,
+            *Function.Id,
+            *Assignment->DebugTargetId,
+            *Assignment->DebugTargetId,
+            *Function.Id);
+        FUnifiedScriptDebugSession DebugSession;
+        const bool bParsedDebugSession = TestTrue(
+            *FString::Printf(TEXT("Native debugger parses a paused v0.2 session: %s"), *Error),
+            FUnifiedScriptDebugWorkbench::ParseSessionResponse(
+                PausedDebugJson, DebugSession, Error));
+        if (bParsedDebugSession)
+        {
+            TestTrue(TEXT("Native debugger retains the exact pause"), DebugSession.IsPaused());
+            TestEqual(TEXT("Native debugger retains one managed stack frame"),
+                DebugSession.Frames.Num(), 1);
+            if (DebugSession.Frames.Num() == 1)
+            {
+                TestEqual(TEXT("Native debugger retains frame semantic node identity"),
+                    DebugSession.Frames[0].NodeId, Assignment->DebugTargetId);
+            }
+            TestEqual(TEXT("Native debugger retains one frame-local snapshot"),
+                DebugSession.FrameLocals.Num(), 1);
+            if (DebugSession.FrameLocals.Num() == 1)
+            {
+                TestEqual(TEXT("Native debugger retains one local in the selected frame"),
+                    DebugSession.FrameLocals[0].Locals.Num(), 1);
+                if (DebugSession.FrameLocals[0].Locals.Num() == 1)
+                {
+                    TestEqual(TEXT("Native debugger retains deeper-frame-ready locals"),
+                        DebugSession.FrameLocals[0].Locals[0].Display,
+                        FString(TEXT("100")));
+                }
+            }
+        }
+
+        FString ResumeJson;
+        TestTrue(TEXT("Native debugger builds an exact-pause resume request"),
+            FUnifiedScriptDebugWorkbench::BuildResumeRequest(
+                DebugSession, ResumeJson, Error));
+        TestTrue(TEXT("Resume request carries generation, execution, and pause IDs"),
+            ResumeJson.Contains(TEXT("us_generation")) &&
+                ResumeJson.Contains(TEXT("us_pause")) &&
+                ResumeJson.Contains(TEXT("12")));
+        FString EvaluateJson;
+        TestTrue(TEXT("Native debugger builds a bounded frame watch request"),
+            FUnifiedScriptDebugWorkbench::BuildEvaluateRequest(
+                DebugSession, 31, TEXT("result"), EvaluateJson, Error));
+        TestTrue(TEXT("Watch request carries the selected frame and expression"),
+            EvaluateJson.Contains(TEXT("31")) && EvaluateJson.Contains(TEXT("result")));
+
+        const FString EvaluationJson = FString::Printf(
+            TEXT("{\"schemaVersion\":\"unifiedscript.debug-evaluation/v0.1\","
+                 "\"generation\":{\"number\":7,\"generationId\":\"us_generation\","
+                 "\"sourceCompilationId\":\"%s\","
+                 "\"semanticConfigurationId\":\"%s\"},"
+                 "\"pauseId\":\"us_pause\",\"frameId\":31,"
+                 "\"expression\":\"result\",\"value\":{"
+                 "\"name\":\"result\",\"typeMetadataName\":\"System.Int32\","
+                 "\"display\":\"100\",\"kind\":\"scalar\","
+                 "\"children\":[],\"truncated\":false}}"),
+            *Document.SourceCompilationId,
+            *Document.SemanticConfigurationId);
+        FUnifiedScriptDebugEvaluation DebugEvaluation;
+        TestTrue(TEXT("Native debugger parses bounded watch evaluation"),
+            FUnifiedScriptDebugWorkbench::ParseEvaluationResponse(
+                EvaluationJson, DebugEvaluation, Error));
+        TestEqual(TEXT("Watch evaluation retains the detached value"),
+            DebugEvaluation.Value.Display, FString(TEXT("100")));
+    }
 
     FString SurfaceJson;
     TestTrue(TEXT("Demo Surface source is readable"),
@@ -1679,6 +1823,17 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         EventFunction->Id);
     TestTrue(TEXT("My Script can activate the reflected-default proof function"),
         Widget->SelectFunction(DefaultFunction->Id));
+    if (Assignment != nullptr)
+    {
+        TestTrue(TEXT("Slate can toggle a graph/source semantic breakpoint"),
+            Widget->ToggleDebugBreakpoint(Assignment->Id));
+        TestTrue(TEXT("Slate retains semantic breakpoint state across function selection"),
+            Widget->IsDebugBreakpointEnabled(Assignment->Id));
+        TestTrue(TEXT("Slate can remove the semantic breakpoint without editing source"),
+            Widget->ToggleDebugBreakpoint(Assignment->Id));
+        TestFalse(TEXT("Removed semantic breakpoint is no longer active"),
+            Widget->IsDebugBreakpointEnabled(Assignment->Id));
+    }
     FUnifiedScriptGraphPaletteAction DefaultApiAction;
     TestTrue(TEXT("Generated API defaults keep the action context-valid"),
         Widget->GetNodePaletteAction(

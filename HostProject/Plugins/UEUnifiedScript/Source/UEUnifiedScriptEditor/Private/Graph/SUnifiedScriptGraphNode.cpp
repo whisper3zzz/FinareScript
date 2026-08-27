@@ -2,6 +2,7 @@
 
 #include "Styling/AppStyle.h"
 #include "UnifiedScriptEdGraph.h"
+#include "Widgets/Input/SCheckBox.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Text/STextBlock.h"
 
@@ -16,7 +17,7 @@ void SUnifiedScriptGraphNode::Construct(
 
 TSharedRef<SWidget> SUnifiedScriptGraphNode::CreateNodeContentArea()
 {
-    const UUnifiedScriptEdGraphNode* Node = CastChecked<UUnifiedScriptEdGraphNode>(GraphNode);
+    UUnifiedScriptEdGraphNode* Node = CastChecked<UUnifiedScriptEdGraphNode>(GraphNode);
     const bool bShowSummary = Node->bShowSummary && !Node->Summary.IsEmpty() &&
         Node->Summary != Node->DisplayTitle;
 
@@ -40,7 +41,57 @@ TSharedRef<SWidget> SUnifiedScriptGraphNode::CreateNodeContentArea()
         .AutoWidth()
         .VAlign(VAlign_Center)
         [
-            SAssignNew(LeftNodeBox, SVerticalBox)
+            SNew(SVerticalBox)
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            .HAlign(HAlign_Center)
+            .Padding(2.0f, 0.0f, 2.0f, 3.0f)
+            [
+                SNew(SCheckBox)
+                .Visibility(Node->DebugTargetId.IsEmpty()
+                    ? EVisibility::Collapsed
+                    : EVisibility::Visible)
+                .IsChecked_Lambda([Node]()
+                {
+                    return Node->bBreakpointEnabled
+                        ? ECheckBoxState::Checked
+                        : ECheckBoxState::Unchecked;
+                })
+                .ToolTipText_Lambda([Node]()
+                {
+                    return FText::FromString(FString::Printf(
+                        TEXT("Semantic breakpoint · %s\n%s"),
+                        Node->DebugBreakpointState.IsEmpty()
+                            ? TEXT("disabled")
+                            : *Node->DebugBreakpointState,
+                        *Node->DebugTargetId));
+                })
+                .OnCheckStateChanged_Lambda([Node](ECheckBoxState)
+                {
+                    UUnifiedScriptEdGraph* Graph = Cast<UUnifiedScriptEdGraph>(Node->GetGraph());
+                    if (Graph != nullptr && Graph->OnBreakpointToggleRequested.IsBound())
+                    {
+                        Graph->OnBreakpointToggleRequested.Execute(Node->DebugTargetId);
+                    }
+                })
+                [
+                    SNew(STextBlock)
+                    .Text(FText::FromString(TEXT("●")))
+                    .ColorAndOpacity_Lambda([Node]()
+                    {
+                        return Node->DebugBreakpointState == TEXT("pending")
+                            ? FSlateColor(FLinearColor(0.95f, 0.66f, 0.08f))
+                            : Node->bBreakpointEnabled
+                            ? FSlateColor(FLinearColor(0.95f, 0.10f, 0.08f))
+                            : FSlateColor(FLinearColor(0.28f, 0.30f, 0.34f));
+                    })
+                ]
+            ]
+            + SVerticalBox::Slot()
+            .AutoHeight()
+            [
+                SAssignNew(LeftNodeBox, SVerticalBox)
+            ]
         ]
         + SHorizontalBox::Slot()
         .FillWidth(1.0f)

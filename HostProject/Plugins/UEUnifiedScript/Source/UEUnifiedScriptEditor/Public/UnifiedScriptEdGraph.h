@@ -40,6 +40,9 @@ DECLARE_DELEGATE_ThreeParams(
     UEdGraphPin*,
     UEdGraphPin*,
     const FVector2D&);
+DECLARE_DELEGATE_OneParam(
+    FOnUnifiedScriptBreakpointToggleRequested,
+    const FString&);
 
 struct FUnifiedScriptGraphPaletteAction
 {
@@ -69,6 +72,7 @@ public:
     FOnUnifiedScriptStatementDeleteRequested OnStatementDeleteRequested;
     FOnUnifiedScriptDataDisconnectRequested OnDataDisconnectRequested;
     FOnUnifiedScriptRerouteRequested OnRerouteRequested;
+    FOnUnifiedScriptBreakpointToggleRequested OnBreakpointToggleRequested;
     TArray<FUnifiedScriptGraphPaletteAction> PaletteActions;
     FString ActiveBlockRegionId;
 };
@@ -146,6 +150,12 @@ public:
     FString AdvancedTooltip;
 
     UPROPERTY(Transient)
+    FString DebugTargetId;
+
+    UPROPERTY(Transient)
+    FString DebugBreakpointState;
+
+    UPROPERTY(Transient)
     bool bShowSummary = false;
 
     UPROPERTY(Transient)
@@ -153,6 +163,12 @@ public:
 
     UPROPERTY(Transient)
     bool bCanDelete = false;
+
+    UPROPERTY(Transient)
+    bool bBreakpointEnabled = false;
+
+    UPROPERTY(Transient)
+    bool bDebugPaused = false;
 
     virtual void AllocateDefaultPins() override;
     virtual FText GetNodeTitle(ENodeTitleType::Type TitleType) const override;
