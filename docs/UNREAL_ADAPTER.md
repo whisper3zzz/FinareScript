@@ -399,7 +399,7 @@ persisted visual layout.
 Each promoted literal/operator editor now exposes `Apply & Reload`. The Slate
 client posts the exact `unifiedscript.patch/v0.28` payload to the configured
 loopback Workbench URL and accepts only a strict
-`unifiedscript.authoring-workspace/v0.4` response. The returned Surface replaces
+`unifiedscript.authoring-workspace/v0.5` response. The returned Surface replaces
 the view without UE-side C# or Graph reconstruction; protocol diagnostics such
 as stale compilation IDs and external-file conflicts are shown in the tab.
 

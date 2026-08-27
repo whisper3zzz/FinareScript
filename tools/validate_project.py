@@ -783,7 +783,7 @@ def main() -> int:
         and "X-UnifiedScript-Group-Id" in prototype_source
         and "X-UnifiedScript-Baseline-Revision" in prototype_source
         and "X-UnifiedScript-Transaction-Id" in prototype_source
-        and "unifiedscript.authoring-workspace/v0.4" in prototype_source
+        and "unifiedscript.authoring-workspace/v0.5" in prototype_source
         and "AuthoringSurfaceProjector" in debug_server_source
         and "unifiedscript.patch/v0.28" in prototype_source,
         "Visual authoring changes do not commit through the transactional host",
@@ -2714,7 +2714,7 @@ def main() -> int:
     graph_json_test = graph_json_test_path.read_text(encoding="utf-8")
     nullability_doc = nullability_doc_path.read_text(encoding="utf-8")
     require(
-        'CurrentSchemaVersion = "unifiedscript.semantics/v0.5"'
+        'CurrentSchemaVersion = "unifiedscript.semantics/v0.6"'
         in semantic_model_source
         and "UnifiedNullFlowState" in semantic_model_source
         and "NullFlowState" in semantic_model_source
@@ -2726,8 +2726,8 @@ def main() -> int:
         and "AnalyzeAndProject_PublishesFlowSensitiveNullStateAtEveryExpressionUse"
         in semantic_pipeline_test
         and "Serialize_RejectsInvalidNullFlowMetadata" in graph_json_test
-        and "unifiedscript.semantics/v0.5" in nullability_doc
-        and "unifiedscript.bound-method/v0.3" in roundtrip_runtime
+        and "unifiedscript.semantics/v0.6" in nullability_doc
+        and "unifiedscript.bound-method/v0.4" in roundtrip_runtime
         and "- [x] flow-sensitive nullability state" in roadmap,
         "M8.5 flow-sensitive nullability semantic, Graph, or documentation contract is incomplete",
     )
@@ -3025,7 +3025,7 @@ def main() -> int:
         in unreal_world_host_test
         and "- [x] preserve instance overrides and compatible semantic identities"
         in roadmap
-        and "Next slice: **M8.5 — language-profile closure**" in roadmap,
+        and "Next slice: **M9.1 — native editor debug integration**" in roadmap,
         "Declaration IR state materialization or live component integration is missing",
     )
     checks.append("UE component materializes Declaration IR state with stable-ID migration")
@@ -3281,7 +3281,7 @@ def main() -> int:
     ).read_text(encoding="utf-8")
     require(
         "FUnifiedScriptAuthoringWorkbench" in unreal_authoring_workbench_header
-        and "unifiedscript.authoring-workspace/v0.4"
+        and "unifiedscript.authoring-workspace/v0.5"
         in unreal_authoring_workbench_source
         and "/api/authoring/semantic-patch" in unreal_authoring_workbench_source
         and "/api/authoring/undo" in unreal_authoring_workbench_source
@@ -3320,6 +3320,55 @@ def main() -> int:
         "Transactional Slate Workbench apply or managed artifact publication is missing",
     )
     checks.append("UE Slate applies patches transactionally and reloads matching components")
+    visual_profile_model = (
+        ROOT / "src" / "UnifiedScript.CSharp" / "VisualProfileModel.cs"
+    ).read_text(encoding="utf-8")
+    visual_profile_json = (
+        ROOT / "src" / "UnifiedScript.CSharp" / "VisualProfileJson.cs"
+    ).read_text(encoding="utf-8")
+    visual_profile_inspector = (
+        ROOT / "src" / "UnifiedScript.CSharp" / "VisualProfileInspector.cs"
+    ).read_text(encoding="utf-8")
+    visual_profile_test = (
+        ROOT / "tests" / "UnifiedScript.Tests" / "VisualProfileInspectorTests.cs"
+    ).read_text(encoding="utf-8")
+    visual_profile_doc = (
+        ROOT / "docs" / "VISUAL_CSHARP_PROFILE.md"
+    ).read_text(encoding="utf-8")
+    semantic_diagnostic_codes = (
+        ROOT / "src" / "UnifiedScript.CSharp" / "SemanticDiagnosticCodes.cs"
+    ).read_text(encoding="utf-8")
+    authoring_surface_json = (
+        ROOT / "src" / "UnifiedScript.Authoring" / "AuthoringSurfaceJson.cs"
+    ).read_text(encoding="utf-8")
+    require(
+        "unifiedscript.visual-csharp-profile/v0.3" in visual_profile_model
+        and "unifiedscript.visual-csharp-profile-report/v0.1" in visual_profile_model
+        and "OpaqueCodeBoundaryContract" in visual_profile_model
+        and "NormalizeAndValidate" in visual_profile_json
+        and "VisualMethodRepresentation.OpaqueCode" in visual_profile_inspector
+        and "OpaqueCodeBoundaryNotSupported = \"UVS2009\"" in semantic_diagnostic_codes
+        and 'properties["calleeBodyRepresentation"]' in graph_projector_source
+        and 'properties["authoringBoundary"]' in graph_projector_source
+        and "ValidateInvocationBoundaryProperties" in graph_json_source
+        and "ValidateInvocationBoundary" in authoring_surface_json
+        and "PipelineProjectsOpaqueHelperAsOneSourceOnlyCallNode" in visual_profile_test
+        and ".profile.json" in cli_source
+        and "VisualProfileReport Profile" in debug_server_source
+        and "validateVisualProfile" in prototype_source
+        and "OPAQUE CODE BOUNDARY" in prototype_source
+        and "FUnifiedScriptVisualProfileResult" in unreal_authoring_workbench_header
+        and "source-only" in unreal_authoring_widget
+        and "Source-only C#" in unreal_graph_presentation
+        and 'TEXT("authoringBoundary")' in unreal_graph_presentation
+        and "Source-only call tooltip retains exact non-editable contract"
+        in unreal_authoring_test
+        and "unifiedscript.authoring-workspace/v0.5" in unreal_authoring_workbench_source
+        and "calleeBodyRepresentation = opaqueCode" in visual_profile_doc
+        and "- [x] publish the supported Visual C# profile" in roadmap,
+        "M8.5 Visual C# profile, opaque boundary, diagnostic, or authoring projection is incomplete",
+    )
+    checks.append("M8.5 publishes one versioned Visual C# and source-only opaque boundary")
     require(
         (ROOT / "samples" / "MultiFile" / "GameplayApi.cs").is_file()
         and (ROOT / "samples" / "MultiFile" / "DamageScript.cs").is_file()

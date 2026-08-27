@@ -27,11 +27,15 @@ public sealed class CSharpSemanticPipeline
                 request.Settings.ParseOptions,
                 document.LogicalPath))
             .ToArray();
+        VisualProfileReport profile = new VisualProfileInspector().Inspect(syntaxTrees);
         CSharpLoweringResult[] lowerings = syntaxTrees.Select(lowerer.Lower).ToArray();
         var diagnostics = lowerings.SelectMany(static lowering => lowering.Diagnostics).ToList();
         if (lowerings.Any(static lowering => !lowering.Succeeded || lowering.CompilationUnit is null))
         {
-            return new CSharpAnalysisResult(null, null, diagnostics);
+            return new CSharpAnalysisResult(null, null, diagnostics)
+            {
+                Profile = profile,
+            };
         }
 
         var identitySidecars = new List<IdentitySidecarDocument>();
@@ -66,6 +70,7 @@ public sealed class CSharpSemanticPipeline
             return new CSharpAnalysisResult(null, null, diagnostics)
             {
                 IdentitySidecars = GetOriginalIdentitySidecars(request),
+                Profile = profile,
             };
         }
 
@@ -82,6 +87,7 @@ public sealed class CSharpSemanticPipeline
             return new CSharpAnalysisResult(hir, null, diagnostics)
             {
                 IdentitySidecars = GetOriginalIdentitySidecars(request),
+                Profile = profile,
             };
         }
 
@@ -119,6 +125,7 @@ public sealed class CSharpSemanticPipeline
             DeclarationReferences = hasErrors
                 ? new Dictionary<SemanticId, SemanticId>()
                 : assetLowering.DeclarationReferences,
+            Profile = profile,
         };
     }
 

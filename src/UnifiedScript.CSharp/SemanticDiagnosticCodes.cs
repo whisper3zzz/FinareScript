@@ -10,4 +10,5 @@ public static class SemanticDiagnosticCodes
     public const string ConditionalAccessEffectsNotSupported = "UVS2006";
     public const string ConditionalAccessTypeShapeNotSupported = "UVS2007";
     public const string ForEachCollectionNotSupported = "UVS2008";
+    public const string OpaqueCodeBoundaryNotSupported = "UVS2009";
 }

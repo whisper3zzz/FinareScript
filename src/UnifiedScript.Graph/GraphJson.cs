@@ -92,6 +92,7 @@ public static class GraphJson
             }
 
             ValidateNullabilityProperties(node);
+            ValidateInvocationBoundaryProperties(node);
         }
 
         var edgeIds = new HashSet<SemanticId>();
@@ -591,6 +592,39 @@ public static class GraphJson
         {
             throw new JsonException(
                 $"Graph node '{node.Id}' has invalid null flow state '{nullFlowState}'.");
+        }
+    }
+
+    private static void ValidateInvocationBoundaryProperties(GraphNode node)
+    {
+        bool hasRepresentation = node.Properties.TryGetValue(
+            "calleeBodyRepresentation",
+            out string? representation);
+        bool hasBoundary = node.Properties.TryGetValue(
+            "authoringBoundary",
+            out string? boundary);
+        bool hasEditable = node.Properties.TryGetValue(
+            "calleeBodyEditable",
+            out string? editable);
+        if (!hasRepresentation && !hasBoundary && !hasEditable)
+        {
+            return;
+        }
+
+        bool valid = hasRepresentation && hasBoundary && hasEditable &&
+            node.Properties.ContainsKey("methodId") &&
+            node.Properties.ContainsKey("method") &&
+            (representation, boundary, editable) is
+                ("visualGraph", "visualGraph", "true") or
+                ("opaqueCode", "sourceOnly", "false") or
+                ("externalApi", "externalApi", "false");
+        if (!valid)
+        {
+            throw new JsonException(
+                $"Graph node '{node.Id}' has inconsistent invocation authoring-boundary metadata " +
+                $"(kind='{node.Kind}', representation='{representation}', boundary='{boundary}', " +
+                $"editable='{editable}', methodId={node.Properties.ContainsKey("methodId")}, " +
+                $"method={node.Properties.ContainsKey("method")}).");
         }
     }
 

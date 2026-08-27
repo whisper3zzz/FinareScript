@@ -14,7 +14,7 @@ there is no editor-only expansion and no second VM.
 The strict-reader contracts for this slice are:
 
 - HIR `unifiedscript.hir/v0.9`;
-- semantics `unifiedscript.semantics/v0.5`;
+- semantics `unifiedscript.semantics/v0.6`;
 - Graph `unifiedscript.graph/v0.13`;
 - standalone patch `unifiedscript.patch/v0.28`;
 - patch plan `unifiedscript.patch-plan/v0.21`.

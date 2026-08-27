@@ -133,6 +133,7 @@ public static class AuthoringSurfaceJson
             }
 
             ValidateEdits(action);
+            ValidateInvocationBoundary(action);
             var portKeys = new HashSet<(string Name, GraphPortDirection Direction)>();
             foreach (AuthoringPortSurface? port in action.Ports)
             {
@@ -297,6 +298,39 @@ public static class AuthoringSurfaceJson
             {
                 throw new JsonException($"Authoring action '{action.Id}' has an invalid edit capability.");
             }
+        }
+    }
+
+    private static void ValidateInvocationBoundary(AuthoringActionSurface action)
+    {
+        bool hasRepresentation = action.Properties.TryGetValue(
+            "calleeBodyRepresentation",
+            out string? representation);
+        bool hasBoundary = action.Properties.TryGetValue(
+            "authoringBoundary",
+            out string? boundary);
+        bool hasEditable = action.Properties.TryGetValue(
+            "calleeBodyEditable",
+            out string? editable);
+        if (!hasRepresentation && !hasBoundary && !hasEditable)
+        {
+            return;
+        }
+
+        bool valid = hasRepresentation && hasBoundary && hasEditable &&
+            action.Properties.ContainsKey("methodId") &&
+            action.Properties.ContainsKey("method") &&
+            (representation, boundary, editable) is
+                ("visualGraph", "visualGraph", "true") or
+                ("opaqueCode", "sourceOnly", "false") or
+                ("externalApi", "externalApi", "false");
+        if (!valid)
+        {
+            throw new JsonException(
+                $"Authoring action '{action.Id}' has inconsistent invocation boundary metadata " +
+                $"(representation='{representation}', boundary='{boundary}', editable='{editable}', " +
+                $"methodId={action.Properties.ContainsKey("methodId")}, " +
+                $"method={action.Properties.ContainsKey("method")}).");
         }
     }
 

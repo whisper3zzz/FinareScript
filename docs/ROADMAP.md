@@ -49,7 +49,7 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-28**
 
 - Active milestone: **M8 — Visual/C# Authoring Beta**
-- Next slice: **M8.5 — language-profile closure**
+- Next slice: **M9.1 — native editor debug integration**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -60,10 +60,10 @@ machine-local unless an artifact explicitly says otherwise.
 
 | Gate | Verified result |
 | --- | --- |
-| Main source | `9ad8d7d` (`feat: publish flow-sensitive nullability`), plus this M8.5 foreach change set |
+| Main source | `3bd67fd` (`feat: model async foreach execution`), plus this M8.5 profile change set |
 | Comparison source | `e62a46e` (`feat: adopt round-tripped gameplay tuning`) |
-| Managed tests | 517 / 517 passed |
-| Repository validator | 57 / 57 passed |
+| Managed tests | 522 / 522 passed |
+| Repository validator | 59 / 59 passed |
 | UE 5.8.1 native build | passed |
 | `UnifiedScript.Unreal` Automation | 13 / 13 passed with M8.3 declaration, Authoring Surface, override migration, and live World-host coverage |
 | BlockBreaker workload | 10,000 frames, three trials, one shot, one hit, two command completions per trial |
@@ -887,19 +887,19 @@ to M8.5. See [`BLOCKBREAKER_ROUND_TRIP.md`](BLOCKBREAKER_ROUND_TRIP.md).
 
 ### M8.5 — Language-profile closure
 
-- [ ] implement flow-sensitive nullability and the scheduled `foreach` variants
+- [x] implement flow-sensitive nullability and the scheduled `foreach` variants
   needed by real gameplay scripts
-- [ ] publish the supported Visual C# profile, opaque-code escape boundary, and
+- [x] publish the supported Visual C# profile, opaque-code escape boundary, and
   diagnostics for code that cannot be represented visually
 
-Progress (2026-08-28): semantics v0.5 carries Roslyn's exact per-expression
+Progress (2026-08-28): semantics v0.6 carries Roslyn's exact per-expression
 `NullFlowState` independently from type nullability. Graph and Authoring Surface
 actions publish validated `typeNullability`/`nullFlowState` properties, and the
 round-trip semantic digest includes the flow result. Regression proves a
 nullable parameter is `notNull` after an early-return guard and returns to
 `maybeNull` after assignment.
 
-HIR v0.9 and semantics v0.5 now also preserve `value` versus `ref readonly`
+HIR v0.9 and semantics v0.6 now also preserve `value` versus `ref readonly`
 iteration, scoped `Span<T>`/`ReadOnlySpan<T>` borrowed sequences, graph-safe
 pattern enumerators, and exact `none`/`required`/`conditional` disposal. Graph
 publishes copied versus borrowed-read-only value semantics and creates cleanup
@@ -907,12 +907,21 @@ regions only when C# actually owns disposal. Exact collection editing preserves
 the alias mode. `await foreach` over graph-safe `IAsyncEnumerable<T>` now
 preserves the exact async enumerator protocol, awaited move-next, and required
 or conditional `DisposeAsync` cleanup through Semantics, Graph, strict JSON,
-derived CFG, and exact collection replacement. Mutable `ref`, borrowed async
-iteration, async visual construction, and the published Visual C#/opaque-code
-boundary remain. The 519/519 managed suite and 58/58 repository invariants
-pass for this slice. See
+derived CFG, and exact collection replacement. Mutable `ref` iteration and
+borrowed async iteration are deliberate profile exclusions rather than implicit
+gaps.
+
+Visual C# profile v0.3 and report v0.1 now classify `[Visual]` bodies as
+bidirectionally graph-editable and unmarked helpers as source-only opaque code.
+Opaque calls project as one validated node, require graph-safe value signatures,
+and reject unsupported boundaries with `UVS2009`. CLI analysis publishes the
+profile even when visual lowering fails; authoring workspace v0.5, the browser
+prototype, and native Slate Workbench validate and display the same boundary.
+The 522/522 managed suite and 59/59 repository invariants pass for this slice.
+See
 [`NULLABILITY_FLOW.md`](NULLABILITY_FLOW.md) and
-[`FOREACH_LOOPS.md`](FOREACH_LOOPS.md).
+[`FOREACH_LOOPS.md`](FOREACH_LOOPS.md), and
+[`VISUAL_CSHARP_PROFILE.md`](VISUAL_CSHARP_PROFILE.md).
 
 Acceptance: Player and Rifle logic can be changed from either surface and hot
 reloaded into the same running scene without a second Blueprint behavior source.

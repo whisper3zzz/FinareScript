@@ -2,7 +2,7 @@ const state = {
   view: 'structure', zoom: 1, artifactLoaded: false, graphDirty: false,
   sourceCompilationId: null, semanticConfigurationId: null,
   sourceText: '', sourcePath: 'workspace.cs', graphSchemaVersion: null,
-  artifact: null, graph: null, surface: null,
+  artifact: null, graph: null, surface: null, profile: null,
   selectedAssetId: null, selectedFunctionId: null,
   asset: null, surfaceAsset: null, graphFunction: null, functionSurface: null,
   declarations: [], nodes: new Map(), selected: null,
@@ -74,7 +74,8 @@ async function loadWorkspaceArtifacts() {
     const response = await fetch('/api/authoring/workspace', { cache: 'no-store' });
     if (!response.ok) throw new Error(`Authoring workspace returned ${response.status}`);
     const workspace = await response.json();
-    assertArtifact(workspace.schemaVersion === 'unifiedscript.authoring-workspace/v0.4', 'Unsupported authoring workspace protocol');
+    assertArtifact(workspace.schemaVersion === 'unifiedscript.authoring-workspace/v0.5', 'Unsupported authoring workspace protocol');
+    validateVisualProfile(workspace.profile);
     applyWorkspaceArtifacts(workspace.scriptAssets, workspace.graph, workspace.surface, workspace.sourceText, workspace);
     await connectDebugBridge();
     return;
@@ -129,6 +130,26 @@ function validateWorkspaceArtifacts(artifact, graph, surface) {
   });
 }
 
+function validateVisualProfile(report) {
+  assertArtifact(report?.schemaVersion === 'unifiedscript.visual-csharp-profile-report/v0.1', 'Unsupported Visual C# profile report');
+  assertArtifact(report.profile?.schemaVersion === 'unifiedscript.visual-csharp-profile/v0.3', 'Unsupported Visual C# profile contract');
+  const boundary = report.profile.opaqueCodeBoundary;
+  assertArtifact(boundary?.markerAttribute === '[Visual]' &&
+    boundary.unmarkedMethodsAreSourceOnly === true &&
+    boundary.callsProjectAsSingleNodes === true &&
+    boundary.bodiesAreGraphEditable === false &&
+    boundary.requiresGraphSafeSignature === true &&
+    boundary.allowsRefParameters === false, 'Unsupported opaque-code boundary contract');
+  assertArtifact(Array.isArray(report.methods), 'Malformed Visual C# method profile');
+  report.methods.forEach(method => {
+    const validVisual = method.representation === 'visualGraph' &&
+      method.authoringBoundary === 'visualGraph' && typeof method.graphEditable === 'boolean';
+    const validOpaque = method.representation === 'opaqueCode' &&
+      method.authoringBoundary === 'sourceOnly' && method.graphEditable === false;
+    assertArtifact(validVisual || validOpaque, `Invalid authoring boundary for ${method.qualifiedName || method.name}`);
+  });
+}
+
 function applyWorkspaceArtifacts(artifact, graph, surface, sourceText, workspace = null) {
   validateWorkspaceArtifacts(artifact, graph, surface);
   const remembered = rememberSelection();
@@ -138,7 +159,7 @@ function applyWorkspaceArtifacts(artifact, graph, surface, sourceText, workspace
     sourceText,
     sourcePath: workspace?.sourcePath || artifact.assets[0]?.span?.filePath || 'workspace.cs',
     graphSchemaVersion: graph.schemaVersion,
-    artifact, graph, surface,
+    artifact, graph, surface, profile: workspace?.profile ?? null,
     authoringConnected: Boolean(workspace),
     authoringRevision: workspace?.revision ?? null,
     authoringHistory: workspace?.history ?? null,
@@ -165,8 +186,10 @@ function applyWorkspaceArtifacts(artifact, graph, surface, sourceText, workspace
       : `SYNCED · R${workspace.revision}${historyState ? ` · HISTORY ${historyState}` : ''}`
     : 'SURFACE · READ ONLY';
   document.querySelector('.target-label').textContent = workspace
-    ? `CLR GENERATION ${workspace.generation.number} · SURFACE v0.1`
+    ? `CLR GENERATION ${workspace.generation.number} · ${workspace.profile.profile.displayName.toUpperCase()}`
     : 'AUTHORING SURFACE v0.1 · GRAPH v0.12';
+  document.getElementById('opaqueMethodCount').textContent = String(
+    workspace?.profile?.methods?.filter(method => method.representation === 'opaqueCode').length ?? 0);
 }
 
 function renderAssetPicker() {
@@ -528,6 +551,13 @@ function editControl(edit) {
 
 function renderNodeInspector(node) {
   inspectorTitle.textContent = node.title;
+  const isOpaqueCall = node.properties?.authoringBoundary === 'sourceOnly';
+  const opaqueBoundarySection = isOpaqueCall ? `
+    <section class="inspector-section source-contract"><div class="section-title-row"><h3>OPAQUE CODE BOUNDARY</h3><span>SOURCE ONLY</span></div>
+      <p class="node-inspector-copy">This call is one graph node. Its unmarked C# method body remains source-only and cannot be opened or edited as graph actions.</p>
+      <div class="fact-grid"><span>Callee representation</span><strong>${escapeHtml(node.properties.calleeBodyRepresentation)}</strong></div>
+      <div class="fact-grid"><span>Body editable</span><strong>NO</strong></div>
+    </section>` : '';
   const editSection = node.editCapabilities.length ? `
     <section class="inspector-section behavior-editor"><div class="section-title-row"><h3>SEMANTIC EDITS</h3><span>SURFACE CAPABILITIES</span></div>
       ${node.editCapabilities.map(edit => `<div class="semantic-edit" data-edit="${edit.id}">${editControl(edit)}<button class="button primary inspector-save" data-apply-edit="${edit.id}" type="button">APPLY ${escapeHtml(edit.operation)}</button><small>Target ${semanticShort(edit.targetNodeId)} · typed precondition</small></div>`).join('')}
@@ -541,7 +571,7 @@ function renderNodeInspector(node) {
       <div class="fact-grid"><span>${escapeHtml(state.sourcePath.split('/').at(-1))}</span><strong>Line ${node.span.start.line}</strong></div>
       <div class="fact-grid"><span>Owned by region</span><strong>${semanticShort(node.regionId)}</strong></div>
       <div class="fact-grid"><span>Script state</span><strong>${escapeHtml(references.join(', ') || 'none')}</strong></div>
-    </section>${editSection}
+    </section>${opaqueBoundarySection}${editSection}
     <section class="inspector-section source-contract"><div class="section-title-row"><h3>AI OUTLINE</h3><span>SEMANTIC</span></div><pre>${escapeHtml(`${node.graphKind} ${node.summary}\nidentity: ${node.id}`)}</pre></section>
     <section class="inspector-section identity-section"><h3>ACTION IDENTITY</h3><button id="semanticId" class="identity-value" type="button">${semanticShort(node.id)}</button><h3 class="debug-identity-heading">DEBUG TARGET</h3><button id="debugSemanticId" class="identity-value debug-identity" type="button"${node.debugTargetId ? '' : ' disabled'}>${semanticShort(node.debugTargetId)}</button><div class="identity-facts"><span>TEXT <b>✓</b></span><span>SURFACE <b>✓</b></span><span>DEBUG <b>${node.debugTargetId ? '✓' : '—'}</b></span></div></section>
     <div class="prototype-warning"><strong>AUTHORING SURFACE v0.1</strong><p>UI 不推断 Graph 结构；层级、摘要、断点身份与编辑能力均由通用 .NET 投影器提供。</p></div>`;
@@ -772,7 +802,8 @@ async function authoringRequest(path, patch, label = 'Visual authoring edit', op
     error.code = payload.error?.code;
     throw error;
   }
-  if (payload.schemaVersion !== 'unifiedscript.authoring-workspace/v0.4') throw new Error('Unsupported authoring response');
+  if (payload.schemaVersion !== 'unifiedscript.authoring-workspace/v0.5') throw new Error('Unsupported authoring response');
+  validateVisualProfile(payload.profile);
   return payload;
 }
 

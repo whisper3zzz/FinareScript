@@ -159,6 +159,26 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
             FUnifiedScriptGraphPresentation::GetNodeTooltip(*MemberRead).Contains(
                 TEXT("typeId: us_")));
     }
+    FUnifiedScriptAuthoringAction OpaqueCall;
+    OpaqueCall.Id = TEXT("us_opaque_call");
+    OpaqueCall.GraphKind = TEXT("invocation");
+    OpaqueCall.Category = TEXT("Calls");
+    OpaqueCall.Title = TEXT("ClampInSource");
+    OpaqueCall.Summary = TEXT("ClampInSource(value)");
+    OpaqueCall.Properties.Add(TEXT("method"), TEXT("ClampInSource"));
+    OpaqueCall.Properties.Add(TEXT("methodId"), TEXT("us_opaque_method"));
+    OpaqueCall.Properties.Add(TEXT("calleeBodyRepresentation"), TEXT("opaqueCode"));
+    OpaqueCall.Properties.Add(TEXT("authoringBoundary"), TEXT("sourceOnly"));
+    OpaqueCall.Properties.Add(TEXT("calleeBodyEditable"), TEXT("false"));
+    TestTrue(TEXT("Source-only call card exposes its opaque authoring boundary"),
+        FUnifiedScriptGraphPresentation::GetNodeSubtitle(OpaqueCall).StartsWith(
+            TEXT("Source-only C#")));
+    const FString OpaqueTooltip =
+        FUnifiedScriptGraphPresentation::GetNodeTooltip(OpaqueCall);
+    TestTrue(TEXT("Source-only call tooltip retains exact non-editable contract"),
+        OpaqueTooltip.Contains(TEXT("calleeBodyRepresentation: opaqueCode")) &&
+            OpaqueTooltip.Contains(TEXT("authoringBoundary: sourceOnly")) &&
+            OpaqueTooltip.Contains(TEXT("calleeBodyEditable: false")));
     FString EventPatchJson;
     TestTrue(TEXT("Event palette can build a declaration-level Event Entry patch"),
         FUnifiedScriptAuthoringSurfaceReader::BuildUnrealEventHandlerInsertionPatch(
@@ -1516,7 +1536,7 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         51);
 
     const FString WorkspaceJson = FString::Printf(
-        TEXT("{\"schemaVersion\":\"unifiedscript.authoring-workspace/v0.4\","
+        TEXT("{\"schemaVersion\":\"unifiedscript.authoring-workspace/v0.5\","
              "\"revision\":2,\"sourcePath\":\"DemoScript.cs\","
              "\"history\":{\"canUndo\":true,\"canRedo\":false,"
              "\"undoDepth\":2,\"redoDepth\":0,"
@@ -1524,6 +1544,20 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
              "\"lastOperationId\":\"op-2\",\"persistenceState\":\"restored\"},"
              "\"group\":{\"id\":\"group-1\",\"description\":\"Damage tuning\","
              "\"baselineRevision\":1,\"stagedOperationCount\":2},"
+             "\"profile\":{"
+             "\"schemaVersion\":\"unifiedscript.visual-csharp-profile-report/v0.1\","
+             "\"profile\":{"
+             "\"schemaVersion\":\"unifiedscript.visual-csharp-profile/v0.3\","
+             "\"displayName\":\"Visual C# profile v0.3\","
+             "\"languageVersion\":\"C# preview parsed by Roslyn\","
+             "\"opaqueCodeBoundary\":{\"unmarkedMethodsAreSourceOnly\":true,"
+             "\"callsProjectAsSingleNodes\":true,\"bodiesAreGraphEditable\":false,"
+             "\"requiresGraphSafeSignature\":true,\"allowsRefParameters\":false}},"
+             "\"methods\":["
+             "{\"representation\":\"visualGraph\",\"graphEditable\":true,"
+             "\"authoringBoundary\":\"visualGraph\"},"
+             "{\"representation\":\"opaqueCode\",\"graphEditable\":false,"
+             "\"authoringBoundary\":\"sourceOnly\"}]},"
              "\"surface\":%s,\"generation\":{\"number\":3}}"),
         *SurfaceJson.Replace(
             TEXT("unifiedscript.authoring-surface/v9.9"),
@@ -1546,6 +1580,12 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Workbench response exposes an active grouped transaction"), Workspace.Group.bActive);
     TestEqual(TEXT("Workbench response retains group identity"), Workspace.Group.Id, FString(TEXT("group-1")));
     TestEqual(TEXT("Workbench response retains staged operation count"), Workspace.Group.StagedOperationCount, int64(2));
+    TestEqual(TEXT("Workbench response retains the Visual C# profile"),
+        Workspace.Profile.DisplayName, FString(TEXT("Visual C# profile v0.3")));
+    TestEqual(TEXT("Workbench response counts Visual methods"), Workspace.Profile.VisualMethodCount, 1);
+    TestEqual(TEXT("Workbench response counts source-only methods"), Workspace.Profile.OpaqueMethodCount, 1);
+    TestTrue(TEXT("Workbench response retains the opaque call-node contract"),
+        Workspace.Profile.bOpaqueCallsProjectAsSingleNodes);
     TestEqual(TEXT("Workbench response replaces the Surface transactionally"),
         Workspace.Surface.GetActionCount(), 51);
 

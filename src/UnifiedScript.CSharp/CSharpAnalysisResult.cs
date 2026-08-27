@@ -16,6 +16,11 @@ public sealed record CSharpAnalysisResult(
     public IReadOnlyDictionary<SemanticId, SemanticId> DeclarationReferences { get; init; } =
         new Dictionary<SemanticId, SemanticId>();
 
+    public VisualProfileReport Profile { get; init; } = new(
+        VisualProfileReport.CurrentSchemaVersion,
+        VisualCSharpProfileContract.Current,
+        []);
+
     public bool Succeeded =>
         Hir is not null &&
         Semantics is not null &&

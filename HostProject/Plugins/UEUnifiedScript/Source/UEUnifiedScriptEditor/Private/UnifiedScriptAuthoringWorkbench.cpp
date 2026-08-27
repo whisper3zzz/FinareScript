@@ -16,7 +16,9 @@
 
 namespace UE::UnifiedScript::AuthoringWorkbench::Private
 {
-constexpr TCHAR WorkspaceSchema[] = TEXT("unifiedscript.authoring-workspace/v0.4");
+constexpr TCHAR WorkspaceSchema[] = TEXT("unifiedscript.authoring-workspace/v0.5");
+constexpr TCHAR ProfileReportSchema[] = TEXT("unifiedscript.visual-csharp-profile-report/v0.1");
+constexpr TCHAR VisualProfileSchema[] = TEXT("unifiedscript.visual-csharp-profile/v0.3");
 constexpr TCHAR PreviewSchema[] = TEXT("unifiedscript.authoring-preview/v0.1");
 
 bool ReadPositiveInteger(
@@ -351,6 +353,83 @@ bool FUnifiedScriptAuthoringWorkbench::ParseWorkspaceResponse(
             return false;
         }
         Candidate.Group.bActive = true;
+    }
+
+    const TSharedPtr<FJsonObject>* ProfileReport = nullptr;
+    const TSharedPtr<FJsonObject>* Profile = nullptr;
+    const TSharedPtr<FJsonObject>* OpaqueBoundary = nullptr;
+    const TArray<TSharedPtr<FJsonValue>>* ProfileMethods = nullptr;
+    FString ProfileReportSchema;
+    bool bUnmarkedMethodsAreSourceOnly = false;
+    bool bRequiresGraphSafeSignature = false;
+    bool bAllowsRefParameters = true;
+    if (!Root->TryGetObjectField(TEXT("profile"), ProfileReport) ||
+        !ProfileReport->IsValid() ||
+        !(*ProfileReport)->TryGetStringField(TEXT("schemaVersion"), ProfileReportSchema) ||
+        ProfileReportSchema != UE::UnifiedScript::AuthoringWorkbench::Private::ProfileReportSchema ||
+        !(*ProfileReport)->TryGetObjectField(TEXT("profile"), Profile) || !Profile->IsValid() ||
+        !(*Profile)->TryGetStringField(
+            TEXT("schemaVersion"), Candidate.Profile.SchemaVersion) ||
+        Candidate.Profile.SchemaVersion !=
+            UE::UnifiedScript::AuthoringWorkbench::Private::VisualProfileSchema ||
+        !(*Profile)->TryGetStringField(TEXT("displayName"), Candidate.Profile.DisplayName) ||
+        Candidate.Profile.DisplayName.IsEmpty() ||
+        !(*Profile)->TryGetStringField(TEXT("languageVersion"), Candidate.Profile.LanguageVersion) ||
+        Candidate.Profile.LanguageVersion.IsEmpty() ||
+        !(*Profile)->TryGetObjectField(TEXT("opaqueCodeBoundary"), OpaqueBoundary) ||
+        !OpaqueBoundary->IsValid() ||
+        !(*OpaqueBoundary)->TryGetBoolField(
+            TEXT("unmarkedMethodsAreSourceOnly"), bUnmarkedMethodsAreSourceOnly) ||
+        !(*OpaqueBoundary)->TryGetBoolField(
+            TEXT("callsProjectAsSingleNodes"), Candidate.Profile.bOpaqueCallsProjectAsSingleNodes) ||
+        !(*OpaqueBoundary)->TryGetBoolField(
+            TEXT("bodiesAreGraphEditable"), Candidate.Profile.bOpaqueBodiesGraphEditable) ||
+        !(*OpaqueBoundary)->TryGetBoolField(
+            TEXT("requiresGraphSafeSignature"), bRequiresGraphSafeSignature) ||
+        !(*OpaqueBoundary)->TryGetBoolField(TEXT("allowsRefParameters"), bAllowsRefParameters) ||
+        !bUnmarkedMethodsAreSourceOnly ||
+        !Candidate.Profile.bOpaqueCallsProjectAsSingleNodes ||
+        Candidate.Profile.bOpaqueBodiesGraphEditable ||
+        !bRequiresGraphSafeSignature || bAllowsRefParameters ||
+        !(*ProfileReport)->TryGetArrayField(TEXT("methods"), ProfileMethods) ||
+        ProfileMethods == nullptr)
+    {
+        OutError = TEXT("The Workbench response has no valid Visual C# profile contract.");
+        return false;
+    }
+
+    for (const TSharedPtr<FJsonValue>& MethodValue : *ProfileMethods)
+    {
+        const TSharedPtr<FJsonObject> Method = MethodValue.IsValid()
+            ? MethodValue->AsObject()
+            : nullptr;
+        FString Representation;
+        FString AuthoringBoundary;
+        bool bGraphEditable = false;
+        if (!Method.IsValid() ||
+            !Method->TryGetStringField(TEXT("representation"), Representation) ||
+            !Method->TryGetStringField(TEXT("authoringBoundary"), AuthoringBoundary) ||
+            !Method->TryGetBoolField(TEXT("graphEditable"), bGraphEditable))
+        {
+            OutError = TEXT("The Workbench Visual C# profile has an invalid method entry.");
+            return false;
+        }
+
+        if (Representation == TEXT("visualGraph") && AuthoringBoundary == TEXT("visualGraph"))
+        {
+            ++Candidate.Profile.VisualMethodCount;
+            Candidate.Profile.InvalidVisualMethodCount += bGraphEditable ? 0 : 1;
+        }
+        else if (Representation == TEXT("opaqueCode") &&
+                 AuthoringBoundary == TEXT("sourceOnly") && !bGraphEditable)
+        {
+            ++Candidate.Profile.OpaqueMethodCount;
+        }
+        else
+        {
+            OutError = TEXT("The Workbench Visual C# profile has inconsistent method boundaries.");
+            return false;
+        }
     }
 
     const TSharedPtr<FJsonObject>* Generation = nullptr;

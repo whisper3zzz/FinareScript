@@ -74,10 +74,7 @@ public sealed class CSharpToHirLowerer
         string filePath,
         string qualifiedTypeName)
     {
-        string parameterSignature = string.Join(
-            ",",
-            method.ParameterList.Parameters.Select(static parameter => parameter.Type?.ToString() ?? "?"));
-        string methodKey = $"{qualifiedTypeName}.{method.Identifier.ValueText}({parameterSignature})";
+        string methodKey = VisualProfileInspector.GetMethodSignature(qualifiedTypeName, method);
         SemanticId methodId = CSharpSemanticIds.ForSymbol("method", methodKey);
         IReadOnlyList<HirParameter> parameters = method.ParameterList.Parameters
             .Select(parameter => new HirParameter(

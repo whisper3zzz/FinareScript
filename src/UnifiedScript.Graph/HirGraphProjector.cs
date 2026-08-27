@@ -2405,6 +2405,30 @@ public sealed class HirGraphProjector
                 if (methods.TryGetValue(invokedMethodId, out MethodDescriptor? method))
                 {
                     properties["method"] = method.MetadataName;
+                    properties["calleeBodyRepresentation"] = method.BodyRepresentation switch
+                    {
+                        MethodBodyRepresentation.VisualGraph => "visualGraph",
+                        MethodBodyRepresentation.OpaqueCode => "opaqueCode",
+                        MethodBodyRepresentation.ExternalApi => "externalApi",
+                        _ => throw new ArgumentOutOfRangeException(
+                            nameof(method.BodyRepresentation),
+                            method.BodyRepresentation,
+                            "Unknown method body representation."),
+                    };
+                    properties["authoringBoundary"] = method.BodyRepresentation switch
+                    {
+                        MethodBodyRepresentation.VisualGraph => "visualGraph",
+                        MethodBodyRepresentation.OpaqueCode => "sourceOnly",
+                        MethodBodyRepresentation.ExternalApi => "externalApi",
+                        _ => throw new ArgumentOutOfRangeException(
+                            nameof(method.BodyRepresentation),
+                            method.BodyRepresentation,
+                            "Unknown method body representation."),
+                    };
+                    properties["calleeBodyEditable"] =
+                        method.BodyRepresentation == MethodBodyRepresentation.VisualGraph
+                            ? "true"
+                            : "false";
                 }
             }
 

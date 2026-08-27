@@ -147,6 +147,13 @@ FString FUnifiedScriptGraphPresentation::GetNodeSubtitle(
     const FUnifiedScriptAuthoringAction& Action)
 {
     using namespace UE::UnifiedScript::Editor::Presentation::Private;
+    if (Action.Properties.FindRef(TEXT("authoringBoundary")) == TEXT("sourceOnly"))
+    {
+        const FString Description = CompactNodeText(Action.Summary);
+        return Description.IsEmpty()
+            ? TEXT("Source-only C#")
+            : TEXT("Source-only C#  ·  ") + Description;
+    }
     if (Action.Summary.IsEmpty() || Action.Summary == Action.Title)
     {
         return FString();
@@ -188,6 +195,9 @@ FString FUnifiedScriptGraphPresentation::GetNodeTooltip(
         TEXT("typeId"),
         TEXT("method"),
         TEXT("methodId"),
+        TEXT("calleeBodyRepresentation"),
+        TEXT("authoringBoundary"),
+        TEXT("calleeBodyEditable"),
         TEXT("member"),
         TEXT("unrealEventPath"),
         TEXT("unrealEventSource"),

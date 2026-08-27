@@ -7,6 +7,12 @@ namespace UnifiedScript.CSharp;
 
 public sealed class VisualProfileValidator
 {
+    private const string ProfileName = VisualCSharpProfileContract.CurrentDisplayName;
+
+    private const string OpaqueEscapeHint =
+        " Keep this implementation source-only by removing [Visual], then call it through an " +
+        "opaque node with graph-safe parameters and return type.";
+
     public IReadOnlyList<UnifiedDiagnostic> Validate(SyntaxTree syntaxTree)
     {
         ArgumentNullException.ThrowIfNull(syntaxTree);
@@ -21,10 +27,26 @@ public sealed class VisualProfileValidator
                 continue;
             }
 
-            ValidateMethodDeclaration(method, filePath, diagnostics);
-            new VisualMethodWalker(filePath, diagnostics).Visit(method);
+            diagnostics.AddRange(ValidateMethod(method));
         }
 
+        return diagnostics;
+    }
+
+    public IReadOnlyList<UnifiedDiagnostic> ValidateMethod(MethodDeclarationSyntax method)
+    {
+        ArgumentNullException.ThrowIfNull(method);
+        string filePath = string.IsNullOrEmpty(method.SyntaxTree.FilePath)
+            ? "<memory>"
+            : method.SyntaxTree.FilePath;
+        var diagnostics = new List<UnifiedDiagnostic>();
+        if (!IsVisualMethod(method))
+        {
+            return diagnostics;
+        }
+
+        ValidateMethodDeclaration(method, filePath, diagnostics);
+        new VisualMethodWalker(filePath, diagnostics).Visit(method);
         return diagnostics;
     }
 
@@ -56,7 +78,7 @@ public sealed class VisualProfileValidator
             Add(
                 diagnostics,
                 VisualProfileDiagnosticCodes.BlockBodyRequired,
-                "A [Visual] method must use a block body in profile v0.2.",
+                $"A [Visual] method must use a block body in {ProfileName}.",
                 method,
                 filePath);
         }
@@ -66,7 +88,7 @@ public sealed class VisualProfileValidator
             Add(
                 diagnostics,
                 VisualProfileDiagnosticCodes.GenericVisualMethodNotSupported,
-                "Generic [Visual] methods are not supported in profile v0.2.",
+                $"Generic [Visual] methods are not supported in {ProfileName}.",
                 method.TypeParameterList,
                 filePath);
         }
@@ -86,7 +108,7 @@ public sealed class VisualProfileValidator
             Add(
                 diagnostics,
                 VisualProfileDiagnosticCodes.RefReturnNotSupported,
-                "Ref return values are not supported in profile v0.2.",
+                $"Ref return values are not supported in {ProfileName}.",
                 method.ReturnType,
                 filePath);
         }
@@ -98,7 +120,7 @@ public sealed class VisualProfileValidator
                 Add(
                     diagnostics,
                     VisualProfileDiagnosticCodes.ParameterModifierNotSupported,
-                    $"Parameter modifier '{parameter.Modifiers}' is not supported in profile v0.2.",
+                    $"Parameter modifier '{parameter.Modifiers}' is not supported in {ProfileName}.",
                     parameter,
                     filePath);
             }
@@ -109,7 +131,7 @@ public sealed class VisualProfileValidator
                 Add(
                     diagnostics,
                     VisualProfileDiagnosticCodes.DefaultParameterValueNotSupported,
-                    "Default parameter values are not represented in profile v0.2.",
+                    $"Default parameter values are not represented in {ProfileName}.",
                     parameter.Default,
                     filePath);
             }
@@ -126,9 +148,13 @@ public sealed class VisualProfileValidator
         diagnostics.Add(new UnifiedDiagnostic(
             code,
             UnifiedDiagnosticSeverity.Error,
-            message,
+            SupportsOpaqueEscape(code) ? message + OpaqueEscapeHint : message,
             RoslynSourceSpan.FromNode(node, filePath)));
     }
+
+    private static bool SupportsOpaqueEscape(string code) => code is not (
+        VisualProfileDiagnosticCodes.LoopControlTargetRequired or
+        VisualProfileDiagnosticCodes.BreakTargetRequired);
 
     private sealed class VisualMethodWalker(
         string filePath,
@@ -168,7 +194,7 @@ public sealed class VisualProfileValidator
                 Add(
                     diagnostics,
                     VisualProfileDiagnosticCodes.StatementNotSupported,
-                    $"Statement '{statement.Kind()}' is not supported in Visual C# profile v0.2.",
+                    $"Statement '{statement.Kind()}' is not supported in {ProfileName}.",
                     statement,
                     filePath);
                 return;
@@ -179,7 +205,7 @@ public sealed class VisualProfileValidator
                 Add(
                     diagnostics,
                     VisualProfileDiagnosticCodes.PatternNotSupported,
-                    $"Pattern '{pattern.Kind()}' is not supported in Visual C# profile v0.2. " +
+                    $"Pattern '{pattern.Kind()}' is not supported in {ProfileName}. " +
                     "Use constant, declaration, type, var, discard, relational, not, and/or, " +
                     "or parenthesized patterns.",
                     pattern,
@@ -204,7 +230,7 @@ public sealed class VisualProfileValidator
                 Add(
                     diagnostics,
                     VisualProfileDiagnosticCodes.ExpressionNotSupported,
-                    $"Expression '{expression.Kind()}' is not supported in Visual C# profile v0.2.",
+                    $"Expression '{expression.Kind()}' is not supported in {ProfileName}.",
                     expression,
                     filePath);
                 return;
@@ -222,7 +248,8 @@ public sealed class VisualProfileValidator
                 Add(
                     diagnostics,
                     VisualProfileDiagnosticCodes.LocalModifierNotSupported,
-                    "Const, ref, scoped, and using local declarations are not represented in profile v0.2.",
+                    $"Const, ref, scoped, and using local declarations are not represented in " +
+                    $"{ProfileName}.",
                     node,
                     filePath);
             }
@@ -232,7 +259,7 @@ public sealed class VisualProfileValidator
                 Add(
                     diagnostics,
                     VisualProfileDiagnosticCodes.SingleVariableDeclarationRequired,
-                    "Declare one local variable per statement in profile v0.2.",
+                    $"Declare one local variable per statement in {ProfileName}.",
                     node,
                     filePath);
             }
@@ -247,7 +274,7 @@ public sealed class VisualProfileValidator
                 Add(
                     diagnostics,
                     VisualProfileDiagnosticCodes.NamedArgumentNotSupported,
-                    "Named arguments are not represented in profile v0.2; use positional arguments.",
+                    $"Named arguments are not represented in {ProfileName}; use positional arguments.",
                     node.NameColon,
                     filePath);
             }
@@ -257,7 +284,8 @@ public sealed class VisualProfileValidator
                 Add(
                     diagnostics,
                     VisualProfileDiagnosticCodes.ArgumentModifierNotSupported,
-                    $"Argument modifier '{node.RefKindKeyword.ValueText}' is not supported in profile v0.2.",
+                    $"Argument modifier '{node.RefKindKeyword.ValueText}' is not supported in " +
+                    $"{ProfileName}.",
                     node,
                     filePath);
             }
@@ -273,7 +301,7 @@ public sealed class VisualProfileValidator
                 Add(
                     diagnostics,
                     VisualProfileDiagnosticCodes.ExpressionNotSupported,
-                    $"Postfix expression '{node.Kind()}' is not supported in Visual C# profile v0.2.",
+                    $"Postfix expression '{node.Kind()}' is not supported in {ProfileName}.",
                     node,
                     filePath);
                 return;
@@ -291,7 +319,7 @@ public sealed class VisualProfileValidator
                 Add(
                     diagnostics,
                     VisualProfileDiagnosticCodes.BreakTargetRequired,
-                    "'break' requires an enclosing loop or switch in Visual C# profile v0.2.",
+                    $"'break' requires an enclosing loop or switch in {ProfileName}.",
                     node,
                     filePath);
             }
@@ -325,7 +353,7 @@ public sealed class VisualProfileValidator
                     diagnostics,
                     VisualProfileDiagnosticCodes.StatementNotSupported,
                     "Mutable ref foreach requires writable alias edges and is not yet represented " +
-                    "in Visual C# profile v0.2. Use ref readonly for borrowed iteration.",
+                    $"in {ProfileName}. Use ref readonly for borrowed iteration.",
                     node,
                     filePath);
                 return;
@@ -347,7 +375,7 @@ public sealed class VisualProfileValidator
                 diagnostics,
                 VisualProfileDiagnosticCodes.LoopControlTargetRequired,
                 $"'{node.Kind()}' requires an enclosing while, do, for, or foreach loop in " +
-                "Visual C# profile v0.2.",
+                $"{ProfileName}.",
                 node,
                 filePath);
         }
@@ -367,22 +395,22 @@ public sealed class VisualProfileValidator
                     "Arbitrary goto control flow is not graph-compatible."),
                 YieldStatementSyntax => (
                     VisualProfileDiagnosticCodes.YieldNotSupported,
-                    "Iterator state machines are not supported in profile v0.2."),
+                    $"Iterator state machines are not supported in {ProfileName}."),
                 LocalFunctionStatementSyntax => (
                     VisualProfileDiagnosticCodes.LocalFunctionNotSupported,
-                    "Local functions are not supported in profile v0.2."),
+                    $"Local functions are not supported in {ProfileName}."),
                 AnonymousFunctionExpressionSyntax => (
                     VisualProfileDiagnosticCodes.LambdaNotSupported,
-                    "Lambdas are not supported in profile v0.2."),
+                    $"Lambdas are not supported in {ProfileName}."),
                 TryStatementSyntax or ThrowStatementSyntax or ThrowExpressionSyntax => (
                     VisualProfileDiagnosticCodes.ExceptionFlowNotSupported,
-                    "Exception control flow is not supported in profile v0.2."),
+                    $"Exception control flow is not supported in {ProfileName}."),
                 LockStatementSyntax => (
                     VisualProfileDiagnosticCodes.LockNotSupported,
                     "Lock statements are not supported in Visual gameplay code."),
                 QueryExpressionSyntax => (
                     VisualProfileDiagnosticCodes.QueryNotSupported,
-                    "LINQ query syntax is not supported in profile v0.2."),
+                    $"LINQ query syntax is not supported in {ProfileName}."),
                 StackAllocArrayCreationExpressionSyntax or ImplicitStackAllocArrayCreationExpressionSyntax => (
                     VisualProfileDiagnosticCodes.StackAllocNotSupported,
                     "Stack allocation is not graph-compatible."),

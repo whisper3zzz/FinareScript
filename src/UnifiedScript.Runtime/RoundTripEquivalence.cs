@@ -279,11 +279,12 @@ public sealed class RoundTripEquivalenceVerifier
             .ToDictionary(static item => item.Id, static item => item.index);
         HashSet<SemanticId> methodNodeIds = methodNodeIndexes.Keys.ToHashSet();
         var canonical = new StringBuilder()
-            .Append("unifiedscript.bound-method/v0.3|")
+            .Append("unifiedscript.bound-method/v0.4|")
             .Append(descriptor.MetadataName).Append('|')
             .Append(descriptor.ContainingTypeId.Value).Append('|')
             .Append(descriptor.ReturnTypeId.Value).Append('|')
             .Append(descriptor.IsStatic).Append('|')
+            .Append((int)descriptor.BodyRepresentation).Append('|')
             .Append((int)descriptor.Effects);
         foreach (ParameterDescriptor parameter in descriptor.Parameters)
         {

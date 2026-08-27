@@ -36,6 +36,18 @@ struct FUnifiedScriptAuthoringGroupResult
     int64 StagedOperationCount = 0;
 };
 
+struct FUnifiedScriptVisualProfileResult
+{
+    FString SchemaVersion;
+    FString DisplayName;
+    FString LanguageVersion;
+    int32 VisualMethodCount = 0;
+    int32 OpaqueMethodCount = 0;
+    int32 InvalidVisualMethodCount = 0;
+    bool bOpaqueCallsProjectAsSingleNodes = false;
+    bool bOpaqueBodiesGraphEditable = false;
+};
+
 struct FUnifiedScriptAuthoringDiagnostic
 {
     FString Code;
@@ -104,6 +116,7 @@ struct FUnifiedScriptAuthoringWorkspaceResult
     int64 Generation = 0;
     FString SourcePath;
     FUnifiedScriptAuthoringSurfaceDocument Surface;
+    FUnifiedScriptVisualProfileResult Profile;
     FUnifiedScriptAuthoringHistoryResult History;
     FUnifiedScriptAuthoringGroupResult Group;
 };

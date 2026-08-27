@@ -513,7 +513,7 @@ public sealed class CSharpSemanticPipelineTests
 
         Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
         BoundCompilation semantics = Assert.IsType<BoundCompilation>(result.Semantics);
-        Assert.Equal("unifiedscript.semantics/v0.5", semantics.SchemaVersion);
+        Assert.Equal("unifiedscript.semantics/v0.6", semantics.SchemaVersion);
         HirMethodDeclaration method = Assert.Single(Assert.Single(result.Hir!.Types).Methods);
         HirIfStatement guard = Assert.IsType<HirIfStatement>(method.Body.Statements[0]);
         HirIdentifierExpression guardUse = Assert.IsType<HirIdentifierExpression>(
@@ -546,7 +546,7 @@ public sealed class CSharpSemanticPipelineTests
         Assert.Equal("maybeNull", optionalNode.Properties["nullFlowState"]);
         Assert.Equal("nullable", optionalNode.Properties["typeNullability"]);
         string semanticJson = SemanticJson.Serialize(semantics);
-        Assert.Contains("\"schemaVersion\": \"unifiedscript.semantics/v0.5\"", semanticJson);
+        Assert.Contains("\"schemaVersion\": \"unifiedscript.semantics/v0.6\"", semanticJson);
         Assert.Contains("\"nullFlowState\": \"maybeNull\"", semanticJson);
     }
 
@@ -1184,7 +1184,7 @@ public sealed class CSharpSemanticPipelineTests
 
         Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
         BoundCompilation semantics = result.Semantics!;
-        Assert.Equal("unifiedscript.semantics/v0.5", semantics.SchemaVersion);
+        Assert.Equal("unifiedscript.semantics/v0.6", semantics.SchemaVersion);
         HirForEachStatement statement = Assert.Single(
             result.Hir!.DescendantsAndSelf().OfType<HirForEachStatement>());
         Assert.True(statement.IsAsync);
@@ -1267,7 +1267,7 @@ public sealed class CSharpSemanticPipelineTests
             "BorrowedRefReadonlyForEach.cs");
 
         Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
-        Assert.Equal("unifiedscript.semantics/v0.5", result.Semantics!.SchemaVersion);
+        Assert.Equal("unifiedscript.semantics/v0.6", result.Semantics!.SchemaVersion);
         HirForEachStatement statement = Assert.Single(
             result.Hir!.DescendantsAndSelf().OfType<HirForEachStatement>());
         Assert.Equal(HirForEachIterationKind.RefReadOnly, statement.IterationKind);

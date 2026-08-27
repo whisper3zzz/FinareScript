@@ -85,7 +85,7 @@ public sealed class RoslynSemanticBinder
 
         RegisterTypeDeclarations(hir);
         RegisterMethodAndValueDeclarations(hir, diagnostics);
-        BindExpressions(hir);
+        BindExpressions(hir, diagnostics);
         ValidateForEachStatements(hir, diagnostics);
         ValidateConditionalExpressions(hir, diagnostics);
         ValidateShortCircuitExpressions(hir, diagnostics);
@@ -443,7 +443,9 @@ public sealed class RoslynSemanticBinder
                 : ForEachDisposalKind.None;
     }
 
-    private void BindExpressions(HirCompilationUnit hir)
+    private void BindExpressions(
+        HirCompilationUnit hir,
+        ICollection<UnifiedDiagnostic> diagnostics)
     {
         foreach (HirExpression expression in hir.Types
                      .SelectMany(static type => type.Methods)
@@ -469,6 +471,12 @@ public sealed class RoslynSemanticBinder
                 invokedMethodId = descriptor.Id;
                 referencedSymbolId = descriptor.Id;
                 effects = descriptor.Effects;
+                ValidateOpaqueCodeBoundary(
+                    invokedMethod,
+                    descriptor,
+                    invocationSyntax,
+                    context.FilePath,
+                    diagnostics);
             }
 
             nodes[expression.Id] = new BoundNodeInfo(
@@ -479,6 +487,61 @@ public sealed class RoslynSemanticBinder
                 Effects: effects,
                 NullFlowState: GetNullFlowState(typeInfo));
         }
+    }
+
+    private void ValidateOpaqueCodeBoundary(
+        IMethodSymbol method,
+        MethodDescriptor descriptor,
+        InvocationExpressionSyntax syntax,
+        string sourcePath,
+        ICollection<UnifiedDiagnostic> diagnostics)
+    {
+        if (descriptor.BodyRepresentation != MethodBodyRepresentation.OpaqueCode)
+        {
+            return;
+        }
+
+        var unsupported = new List<string>();
+        TypeDescriptor returnType = types[descriptor.ReturnTypeId];
+        if (!returnType.IsGraphSafe)
+        {
+            unsupported.Add($"return type '{returnType.DisplayName}'");
+        }
+
+        if (method.ReturnsByRef || method.ReturnsByRefReadonly)
+        {
+            unsupported.Add("ref return");
+        }
+
+        for (int index = 0; index < descriptor.Parameters.Count; index++)
+        {
+            ParameterDescriptor parameter = descriptor.Parameters[index];
+            TypeDescriptor parameterType = types[parameter.TypeId];
+            if (!parameterType.IsGraphSafe)
+            {
+                unsupported.Add($"parameter '{parameter.Name}' type '{parameterType.DisplayName}'");
+            }
+
+            if (method.Parameters[index].RefKind != RefKind.None)
+            {
+                unsupported.Add(
+                    $"parameter '{parameter.Name}' modifier '{method.Parameters[index].RefKind}'");
+            }
+        }
+
+        if (unsupported.Count == 0)
+        {
+            return;
+        }
+
+        diagnostics.Add(new UnifiedDiagnostic(
+            SemanticDiagnosticCodes.OpaqueCodeBoundaryNotSupported,
+            UnifiedDiagnosticSeverity.Error,
+            $"Opaque method '{descriptor.DisplayName}' can project as one source-only call node " +
+            "only through graph-safe value parameters and return type. Unsupported boundary: " +
+            $"{string.Join(", ", unsupported)}.",
+            RoslynSourceSpan.FromNode(syntax, sourcePath),
+            descriptor.Id));
     }
 
     private static UnifiedNullFlowState GetNullFlowState(TypeInfo typeInfo)
@@ -790,10 +853,28 @@ public sealed class RoslynSemanticBinder
             returnType.Id,
             parameters,
             method.IsStatic,
+            GetMethodBodyRepresentation(method),
             InferEffects(method));
         methodIds.Add(canonicalName, id);
         methods.Add(id, descriptor);
         return descriptor;
+    }
+
+    private static MethodBodyRepresentation GetMethodBodyRepresentation(IMethodSymbol method)
+    {
+        SyntaxNode[] declarations = method.DeclaringSyntaxReferences
+            .Select(static reference => reference.GetSyntax())
+            .ToArray();
+        if (declarations.Length == 0)
+        {
+            return MethodBodyRepresentation.ExternalApi;
+        }
+
+        return declarations
+            .OfType<MethodDeclarationSyntax>()
+            .Any(VisualProfileValidator.IsVisualMethod)
+                ? MethodBodyRepresentation.VisualGraph
+                : MethodBodyRepresentation.OpaqueCode;
     }
 
     private SemanticId GetSymbolId(ISymbol symbol)

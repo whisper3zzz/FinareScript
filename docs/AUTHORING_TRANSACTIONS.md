@@ -1,7 +1,7 @@
 # Authoring Transactions and History
 
 The loopback Workbench is the single commit authority for visual, C#, and AI
-authoring. Workspace protocol `unifiedscript.authoring-workspace/v0.4` exposes
+authoring. Workspace protocol `unifiedscript.authoring-workspace/v0.5` exposes
 a bounded server-owned history, while journal
 `unifiedscript.authoring-history/v0.1` persists that history inside the same
 source, identity, artifact, and CoreCLR publication boundary.

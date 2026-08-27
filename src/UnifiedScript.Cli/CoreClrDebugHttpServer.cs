@@ -1645,7 +1645,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 scriptAssets,
                 snapshot.Graph);
             return new AuthoringWorkspaceResponse(
-                "unifiedscript.authoring-workspace/v0.4",
+                "unifiedscript.authoring-workspace/v0.5",
                 snapshot.Revision,
                 sourceLogicalPath,
                 snapshot.Request.Sources.Single(source =>
@@ -1653,6 +1653,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 scriptAssets,
                 snapshot.Graph,
                 surface,
+                snapshot.Analysis.Profile,
                 CreateHistoryResponse(),
                 generation,
                 activeGroup is null
@@ -1896,6 +1897,7 @@ internal sealed record AuthoringWorkspaceResponse(
     ScriptAssetDocument ScriptAssets,
     GraphDocument Graph,
     AuthoringSurfaceDocument Surface,
+    VisualProfileReport Profile,
     AuthoringHistoryResponse History,
     CoreClrProgramGeneration Generation,
     AuthoringGroupResponse? Group);

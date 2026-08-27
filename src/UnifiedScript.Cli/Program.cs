@@ -947,11 +947,24 @@ internal static class Program
             Console.Error.WriteLine(FormatDiagnostic(diagnostic));
         }
 
+        string? fullOutputDirectory = options.OutputDirectory is null
+            ? null
+            : Path.GetFullPath(options.OutputDirectory);
+        string? baseName = fullOutputDirectory is null ? null : GetOutputBaseName(options);
+        if (fullOutputDirectory is not null)
+        {
+            Directory.CreateDirectory(fullOutputDirectory);
+            string profilePath = Path.Combine(fullOutputDirectory, $"{baseName}.profile.json");
+            WriteAtomically(profilePath, VisualProfileJson.Serialize(result.Profile) + "\n");
+            Console.WriteLine(profilePath);
+        }
+
         if (!result.Succeeded || result.Hir is null || result.Semantics is null ||
             result.ScriptAssets is null)
         {
             Console.Error.WriteLine(
-                "Analysis failed; declaration, HIR, semantics, and graph artifacts were not emitted.");
+                "Analysis failed; the profile report was emitted when --out was supplied, but " +
+                "declaration, HIR, semantics, and graph artifacts were not emitted.");
             return 2;
         }
 
@@ -971,9 +984,8 @@ internal static class Program
             return 0;
         }
 
-        string fullOutputDirectory = Path.GetFullPath(options.OutputDirectory);
-        Directory.CreateDirectory(fullOutputDirectory);
-        string baseName = GetOutputBaseName(options);
+        fullOutputDirectory ??= Path.GetFullPath(options.OutputDirectory);
+        baseName ??= GetOutputBaseName(options);
         string hirPath = Path.Combine(fullOutputDirectory, $"{baseName}.hir.json");
         string semanticPath = Path.Combine(fullOutputDirectory, $"{baseName}.semantics.json");
         string graphPath = Path.Combine(fullOutputDirectory, $"{baseName}.graph.json");

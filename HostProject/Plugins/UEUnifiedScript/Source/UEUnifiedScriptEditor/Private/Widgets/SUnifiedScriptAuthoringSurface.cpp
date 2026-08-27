@@ -983,11 +983,15 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
                         .Text_Lambda([this]()
                         {
                             return FText::Format(
-                                LOCTEXT("Counts", "C# <-> Visual  |  {0} assets  |  {1} states  |  {2} functions  |  {3} graph nodes"),
+                                LOCTEXT("Counts", "C# <-> Visual  |  {0} assets  |  {1} states  |  {2} functions  |  {3} graph nodes  |  {4}  |  {5} source-only"),
                                 Document.Assets.Num(),
                                 Document.GetStateCount(),
                                 Document.GetFunctionCount(),
-                                Document.GetActionCount());
+                                Document.GetActionCount(),
+                                FText::FromString(VisualProfileDisplayName.IsEmpty()
+                                    ? TEXT("profile pending")
+                                    : VisualProfileDisplayName),
+                                OpaqueMethodCount);
                         })
                         .ColorAndOpacity(FLinearColor(0.55f, 0.58f, 0.62f))
                     ]
@@ -3956,6 +3960,8 @@ void SUnifiedScriptAuthoringSurface::AdoptWorkspace(
     RedoAuthoringDescription = MoveTemp(Workspace.History.RedoDescription);
     HistoryPersistenceState = MoveTemp(Workspace.History.PersistenceState);
     HistoryPersistenceMessage = MoveTemp(Workspace.History.PersistenceMessage);
+    VisualProfileDisplayName = MoveTemp(Workspace.Profile.DisplayName);
+    OpaqueMethodCount = Workspace.Profile.OpaqueMethodCount;
     ActiveAuthoringGroupId = Workspace.Group.bActive ? MoveTemp(Workspace.Group.Id) : FString();
     ActiveAuthoringGroupDescription = Workspace.Group.bActive
         ? MoveTemp(Workspace.Group.Description)

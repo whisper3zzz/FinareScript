@@ -9,7 +9,7 @@ control-flow location are deliberately separate facts:
 - `BoundNodeInfo.NullFlowState` records Roslyn's state at that exact expression
   use (`unknown`, `notNull`, or `maybeNull`).
 
-Semantics schema `unifiedscript.semantics/v0.5` serializes both. This avoids a
+Semantics schema `unifiedscript.semantics/v0.6` serializes both. This avoids a
 client guessing null safety from source spelling or from a declaration that may
 have been narrowed, assigned, or merged before the selected node.
 
@@ -67,8 +67,9 @@ This metadata does not suppress C# nullable diagnostics and does not invent
 cross-method lifecycle guarantees. A field assigned in `OnBeginPlay` is not
 automatically considered non-null in `OnTick`; code must retain a guard,
 conditional access, constructor guarantee, or explicit null-forgiving boundary
-when Roslyn cannot prove the lifecycle fact. The opaque-code/profile work later
-in M8.5 will document those deliberate escape points separately.
+when Roslyn cannot prove the lifecycle fact. Deliberate source-only escape
+points use the versioned opaque-code boundary documented in
+[`VISUAL_CSHARP_PROFILE.md`](VISUAL_CSHARP_PROFILE.md).
 
 Round-trip semantic digests include `NullFlowState`, so Visual and C# candidates
 cannot pass equivalence after changing a guard or assignment in a way that

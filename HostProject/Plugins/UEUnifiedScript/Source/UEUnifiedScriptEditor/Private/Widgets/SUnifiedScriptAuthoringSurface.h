@@ -315,6 +315,8 @@ private:
     FString HistoryPersistenceMessage;
     FString ActiveAuthoringGroupId;
     FString ActiveAuthoringGroupDescription;
+    FString VisualProfileDisplayName;
+    int32 OpaqueMethodCount = 0;
     int64 ActiveAuthoringGroupStagedCount = 0;
     int64 WorkbenchRevision = 0;
     int64 UndoAuthoringDepth = 0;

@@ -103,6 +103,13 @@ public sealed record ParameterDescriptor(
     string Name,
     SemanticId TypeId);
 
+public enum MethodBodyRepresentation
+{
+    VisualGraph,
+    OpaqueCode,
+    ExternalApi,
+}
+
 public sealed record MethodDescriptor(
     SemanticId Id,
     string DisplayName,
@@ -111,6 +118,7 @@ public sealed record MethodDescriptor(
     SemanticId ReturnTypeId,
     IReadOnlyList<ParameterDescriptor> Parameters,
     bool IsStatic,
+    MethodBodyRepresentation BodyRepresentation,
     MethodEffects Effects);
 
 public sealed record BoundNodeInfo(
@@ -131,5 +139,5 @@ public sealed record BoundCompilation(
     IReadOnlyList<BoundNodeInfo> Nodes,
     IReadOnlyList<BoundForEachInfo> ForEachLoops)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.semantics/v0.5";
+    public const string CurrentSchemaVersion = "unifiedscript.semantics/v0.6";
 }

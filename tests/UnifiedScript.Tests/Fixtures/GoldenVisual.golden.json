@@ -8,9 +8,9 @@
       "utf8Bytes": 5453
     },
     "semantics": {
-      "schemaVersion": "unifiedscript.semantics/v0.5",
-      "sha256": "c5be1ce80555fa5afd767f8da69e5436f0d3998556d2c6a2c7ab27e035982142",
-      "utf8Bytes": 3833
+      "schemaVersion": "unifiedscript.semantics/v0.6",
+      "sha256": "0ff0397674ae4ee5e9bf3363ce462c626afd68d5a30b6e98f83f4f00c143debf",
+      "utf8Bytes": 3921
     },
     "graph": {
       "schemaVersion": "unifiedscript.graph/v0.13",

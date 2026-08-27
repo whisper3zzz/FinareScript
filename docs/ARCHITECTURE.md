@@ -21,8 +21,10 @@ runtime semantics and does not create a new parser in the first phase.
 ### Visual C# is an explicit profile
 
 Only methods marked `[Visual]` promise lossless visual projection. Unsupported
-syntax is diagnosed before lowering. Ordinary C# library methods may later be
-exposed as opaque call nodes when their signatures use graph-safe types.
+syntax is diagnosed before lowering. Unmarked C# methods are source-only and
+their graph-safe calls project as one non-editable opaque node under the
+versioned contract in
+[`VISUAL_CSHARP_PROFILE.md`](VISUAL_CSHARP_PROFILE.md).
 
 ### Declaration IR and HIR are the shared semantic contracts
 

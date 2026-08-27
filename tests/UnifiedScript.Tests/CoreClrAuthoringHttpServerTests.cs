@@ -94,7 +94,11 @@ public sealed class CoreClrAuthoringHttpServerTests
             using var client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}/") };
 
             AuthoringWorkspaceResponse baseline = await GetWorkspaceAsync(client);
-            Assert.Equal("unifiedscript.authoring-workspace/v0.4", baseline.SchemaVersion);
+            Assert.Equal("unifiedscript.authoring-workspace/v0.5", baseline.SchemaVersion);
+            Assert.Equal(
+                VisualCSharpProfileContract.CurrentSchemaVersion,
+                baseline.Profile.Profile.SchemaVersion);
+            Assert.True(baseline.Profile.Succeeded);
             Assert.False(baseline.History.CanUndo);
             Assert.False(baseline.History.CanRedo);
             Assert.Equal(0, baseline.History.UndoDepth);
