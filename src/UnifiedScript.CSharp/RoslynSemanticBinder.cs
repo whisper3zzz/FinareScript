@@ -170,7 +170,8 @@ public sealed class RoslynSemanticBinder
                     nodes[parameter.Id] = new BoundNodeInfo(
                         parameter.Id,
                         parameterType.Id,
-                        DeclaredSymbolId: parameter.Id);
+                        DeclaredSymbolId: parameter.Id,
+                        NullFlowState: GetInitialNullFlowState(parameterSymbol.Type));
                     ValidateGraphSafeType(
                         parameterType.Id,
                         $"parameter '{parameter.Name}'",
@@ -192,7 +193,8 @@ public sealed class RoslynSemanticBinder
                     nodes[local.Id] = new BoundNodeInfo(
                         local.Id,
                         localType.Id,
-                        DeclaredSymbolId: local.Id);
+                        DeclaredSymbolId: local.Id,
+                        NullFlowState: GetInitialNullFlowState(localSymbol.Type));
                 }
 
                 foreach (HirForVariableDeclarator local in method.Body
@@ -208,7 +210,8 @@ public sealed class RoslynSemanticBinder
                     nodes[local.Id] = new BoundNodeInfo(
                         local.Id,
                         localType.Id,
-                        DeclaredSymbolId: local.Id);
+                        DeclaredSymbolId: local.Id,
+                        NullFlowState: GetInitialNullFlowState(localSymbol.Type));
                 }
 
                 foreach (HirForEachStatement forEach in method.Body
@@ -225,7 +228,8 @@ public sealed class RoslynSemanticBinder
                     nodes[forEach.Variable.Id] = new BoundNodeInfo(
                         forEach.Variable.Id,
                         localType.Id,
-                        DeclaredSymbolId: forEach.Variable.Id);
+                        DeclaredSymbolId: forEach.Variable.Id,
+                        NullFlowState: GetInitialNullFlowState(localSymbol.Type));
                 }
 
                 foreach (HirPatternVariable patternVariable in method.Body
@@ -243,7 +247,8 @@ public sealed class RoslynSemanticBinder
                     nodes[patternVariable.Id] = new BoundNodeInfo(
                         patternVariable.Id,
                         localType.Id,
-                        DeclaredSymbolId: patternVariable.Id);
+                        DeclaredSymbolId: patternVariable.Id,
+                        NullFlowState: GetInitialNullFlowState(localSymbol.Type));
                 }
             }
         }
@@ -386,8 +391,43 @@ public sealed class RoslynSemanticBinder
                 typeId,
                 ReferencedSymbolId: referencedSymbolId,
                 InvokedMethodId: invokedMethodId,
-                Effects: effects);
+                Effects: effects,
+                NullFlowState: GetNullFlowState(typeInfo));
         }
+    }
+
+    private static UnifiedNullFlowState GetNullFlowState(TypeInfo typeInfo)
+    {
+        NullableFlowState flowState = typeInfo.ConvertedType is not null
+            ? typeInfo.ConvertedNullability.FlowState
+            : typeInfo.Nullability.FlowState;
+        return flowState switch
+        {
+            NullableFlowState.NotNull => UnifiedNullFlowState.NotNull,
+            NullableFlowState.MaybeNull => UnifiedNullFlowState.MaybeNull,
+            _ => UnifiedNullFlowState.Unknown,
+        };
+    }
+
+    private static UnifiedNullFlowState GetInitialNullFlowState(ITypeSymbol type)
+    {
+        if (type is INamedTypeSymbol nullable &&
+            nullable.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
+        {
+            return UnifiedNullFlowState.MaybeNull;
+        }
+
+        if (type.IsValueType)
+        {
+            return UnifiedNullFlowState.NotNull;
+        }
+
+        return type.NullableAnnotation switch
+        {
+            NullableAnnotation.Annotated => UnifiedNullFlowState.MaybeNull,
+            NullableAnnotation.NotAnnotated => UnifiedNullFlowState.NotNull,
+            _ => UnifiedNullFlowState.Unknown,
+        };
     }
 
     private void ValidateConditionalExpressions(

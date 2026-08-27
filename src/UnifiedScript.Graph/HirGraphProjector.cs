@@ -2283,7 +2283,10 @@ public sealed class HirGraphProjector
                 properties["typeId"] = typeId.Value;
                 properties["resolvedType"] = type.DisplayName;
                 properties["graphSafe"] = type.IsGraphSafe ? "true" : "false";
+                properties["typeNullability"] = ToProtocolValue(type.Nullability);
             }
+
+            properties["nullFlowState"] = ToProtocolValue(node.NullFlowState);
 
             if (node.DeclaredSymbolId is SemanticId declaredSymbolId)
             {
@@ -2321,5 +2324,22 @@ public sealed class HirGraphProjector
             effects.ToString()
                 .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
                 .Select(static name => JsonNamingPolicy.CamelCase.ConvertName(name)));
+
+        private static string ToProtocolValue(UnifiedNullability nullability) => nullability switch
+        {
+            UnifiedNullability.Unknown => "unknown",
+            UnifiedNullability.Oblivious => "oblivious",
+            UnifiedNullability.NotNull => "notNull",
+            UnifiedNullability.Nullable => "nullable",
+            _ => throw new ArgumentOutOfRangeException(nameof(nullability)),
+        };
+
+        private static string ToProtocolValue(UnifiedNullFlowState state) => state switch
+        {
+            UnifiedNullFlowState.Unknown => "unknown",
+            UnifiedNullFlowState.NotNull => "notNull",
+            UnifiedNullFlowState.MaybeNull => "maybeNull",
+            _ => throw new ArgumentOutOfRangeException(nameof(state)),
+        };
     }
 }

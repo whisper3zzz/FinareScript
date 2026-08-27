@@ -90,6 +90,8 @@ public static class GraphJson
                 throw new JsonException(
                     $"Graph function '{function.Id}' has duplicate node '{node.Id}'.");
             }
+
+            ValidateNullabilityProperties(node);
         }
 
         var edgeIds = new HashSet<SemanticId>();
@@ -495,6 +497,23 @@ public static class GraphJson
             SemanticId unreachable = regions.Keys.First(id => !visited.Contains(id));
             throw new JsonException(
                 $"Graph region '{unreachable}' is not reachable from root '{root.Id}'.");
+        }
+    }
+
+    private static void ValidateNullabilityProperties(GraphNode node)
+    {
+        if (node.Properties.TryGetValue("typeNullability", out string? typeNullability) &&
+            typeNullability is not ("unknown" or "oblivious" or "notNull" or "nullable"))
+        {
+            throw new JsonException(
+                $"Graph node '{node.Id}' has invalid type nullability '{typeNullability}'.");
+        }
+
+        if (node.Properties.TryGetValue("nullFlowState", out string? nullFlowState) &&
+            nullFlowState is not ("unknown" or "notNull" or "maybeNull"))
+        {
+            throw new JsonException(
+                $"Graph node '{node.Id}' has invalid null flow state '{nullFlowState}'.");
         }
     }
 

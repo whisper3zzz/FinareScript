@@ -63,6 +63,7 @@ DOCUMENTS = [
     ROOT / "docs" / "DECLARATION_IR.md",
     ROOT / "docs" / "STATE_OVERRIDE_MIGRATION.md",
     ROOT / "docs" / "BLOCKBREAKER_ROUND_TRIP.md",
+    ROOT / "docs" / "NULLABILITY_FLOW.md",
     ROOT / "docs" / "VISUAL_AUTHORING_MODEL.md",
     ROOT / "docs" / "AUTHORING_SURFACE.md",
     ROOT / "docs" / "NODE_PALETTE.md",
@@ -2678,6 +2679,59 @@ def main() -> int:
         "M8.4 whole-game Visual/C# round-trip proof or conflict gates are incomplete",
     )
     checks.append("M8.4 BlockBreaker Visual/C# round trip passes full equivalence and conflict gates")
+    semantic_model_path = (
+        ROOT / "src" / "UnifiedScript.Semantics" / "SemanticModel.cs"
+    )
+    semantic_binder_path = (
+        ROOT / "src" / "UnifiedScript.CSharp" / "RoslynSemanticBinder.cs"
+    )
+    graph_projector_path = (
+        ROOT / "src" / "UnifiedScript.Graph" / "HirGraphProjector.cs"
+    )
+    graph_json_path = ROOT / "src" / "UnifiedScript.Graph" / "GraphJson.cs"
+    semantic_pipeline_test_path = (
+        ROOT / "tests" / "UnifiedScript.Tests" / "CSharpSemanticPipelineTests.cs"
+    )
+    graph_json_test_path = (
+        ROOT / "tests" / "UnifiedScript.Tests" / "GraphJsonTests.cs"
+    )
+    nullability_doc_path = ROOT / "docs" / "NULLABILITY_FLOW.md"
+    for path in [
+        semantic_model_path,
+        semantic_binder_path,
+        graph_projector_path,
+        graph_json_path,
+        semantic_pipeline_test_path,
+        graph_json_test_path,
+        nullability_doc_path,
+    ]:
+        require(path.is_file(), f"Missing M8.5 null-flow artifact: {path}")
+    semantic_model_source = semantic_model_path.read_text(encoding="utf-8")
+    semantic_binder_source = semantic_binder_path.read_text(encoding="utf-8")
+    graph_projector_source = graph_projector_path.read_text(encoding="utf-8")
+    graph_json_source = graph_json_path.read_text(encoding="utf-8")
+    semantic_pipeline_test = semantic_pipeline_test_path.read_text(encoding="utf-8")
+    graph_json_test = graph_json_test_path.read_text(encoding="utf-8")
+    nullability_doc = nullability_doc_path.read_text(encoding="utf-8")
+    require(
+        'CurrentSchemaVersion = "unifiedscript.semantics/v0.3"'
+        in semantic_model_source
+        and "UnifiedNullFlowState" in semantic_model_source
+        and "NullFlowState" in semantic_model_source
+        and "typeInfo.ConvertedNullability.FlowState" in semantic_binder_source
+        and "GetInitialNullFlowState" in semantic_binder_source
+        and 'properties["typeNullability"]' in graph_projector_source
+        and 'properties["nullFlowState"]' in graph_projector_source
+        and "ValidateNullabilityProperties" in graph_json_source
+        and "AnalyzeAndProject_PublishesFlowSensitiveNullStateAtEveryExpressionUse"
+        in semantic_pipeline_test
+        and "Serialize_RejectsInvalidNullFlowMetadata" in graph_json_test
+        and "unifiedscript.semantics/v0.3" in nullability_doc
+        and "unifiedscript.bound-method/v0.2" in roundtrip_runtime
+        and "- [x] flow-sensitive nullability state" in roadmap,
+        "M8.5 flow-sensitive nullability semantic, Graph, or documentation contract is incomplete",
+    )
+    checks.append("M8.5 nullability follows Roslyn flow state through Semantics and Graph")
     require(
         "UUnifiedScriptWorldSubsystem final" in unreal_world_host_header
         and "public UWorldSubsystem" in unreal_world_host_header

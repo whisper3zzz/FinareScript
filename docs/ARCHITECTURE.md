@@ -515,6 +515,13 @@ effects in the selected subtree and `UVS2007` rejects void or hidden-conversion
 type shapes. Patch v0.20 can author a bounded simple conditional member access;
 plan v0.20 can replace its `receiver` through an actual produced root. See
 [NULL_CONDITIONAL_ACCESS.md](NULL_CONDITIONAL_ACCESS.md).
+
+Semantics v0.3 also records Roslyn's flow-sensitive null state per expression.
+Graph nodes expose `typeNullability` separately from `nullFlowState`, and the
+same properties reach every Authoring Surface client. A guard can therefore
+narrow a nullable value to `notNull` at one use while a later assignment returns
+it to `maybeNull`, without relying on source-text heuristics. See
+[NULLABILITY_FLOW.md](NULLABILITY_FLOW.md).
 An `if` insertion publishes internal `then`/`else` block handles for later
 `insertBranchStatement` steps without masquerading as a reconnectable local
 definition. The branch steps repeat the producer's original parent block as

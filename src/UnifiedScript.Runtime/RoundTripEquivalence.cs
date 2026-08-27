@@ -279,7 +279,7 @@ public sealed class RoundTripEquivalenceVerifier
             .ToDictionary(static item => item.Id, static item => item.index);
         HashSet<SemanticId> methodNodeIds = methodNodeIndexes.Keys.ToHashSet();
         var canonical = new StringBuilder()
-            .Append("unifiedscript.bound-method/v0.1|")
+            .Append("unifiedscript.bound-method/v0.2|")
             .Append(descriptor.MetadataName).Append('|')
             .Append(descriptor.ContainingTypeId.Value).Append('|')
             .Append(descriptor.ReturnTypeId.Value).Append('|')
@@ -299,7 +299,8 @@ public sealed class RoundTripEquivalenceVerifier
                 .Append(':').Append(NormalizeSymbol(node.DeclaredSymbolId, methodNodeIndexes))
                 .Append(':').Append(NormalizeSymbol(node.ReferencedSymbolId, methodNodeIndexes))
                 .Append(':').Append(node.InvokedMethodId?.Value)
-                .Append(':').Append((int)node.Effects);
+                .Append(':').Append((int)node.Effects)
+                .Append(':').Append((int)node.NullFlowState);
         }
         foreach (BoundForEachInfo loop in image.Semantics.ForEachLoops
                      .Where(loop => methodNodeIds.Contains(loop.NodeId))

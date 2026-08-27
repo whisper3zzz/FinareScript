@@ -1255,7 +1255,7 @@ its implicit receiver as an explicit shared-VM contract.
 
 ## M4.21 implemented vertical slice
 
-- semantics `unifiedscript.semantics/v0.2`, Graph
+- semantics `unifiedscript.semantics/v0.3`, Graph
   `unifiedscript.graph/v0.13`, patch `unifiedscript.patch/v0.19`, and plan
   `unifiedscript.patch-plan/v0.20` strict-reader contracts
 - `UnifiedTypeKind.Enumerable` plus exact element type identity and one

@@ -8,6 +8,8 @@ namespace UnifiedScript.Tests;
 public sealed class GraphJsonTests
 {
     private const string Source = """
+        using UnifiedScript;
+
         static class Rules
         {
             [Visual]
@@ -47,6 +49,38 @@ public sealed class GraphJsonTests
         Assert.Contains("\"kind\": \"function\"", json, StringComparison.Ordinal);
         Assert.Contains("\"kind\": \"then\"", json, StringComparison.Ordinal);
         Assert.Contains("\"isImplicit\": true", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Serialize_RejectsInvalidNullFlowMetadata()
+    {
+        CSharpAnalysisResult analysis = new CSharpSemanticPipeline().Analyze(
+            Source,
+            "NullFlowGraph.cs");
+        Assert.True(analysis.Succeeded, string.Join(Environment.NewLine, analysis.Diagnostics));
+        GraphDocument graph = new HirGraphProjector().Project(analysis.Hir!, analysis.Semantics!);
+        GraphFunction function = Assert.Single(graph.Functions);
+        GraphNode boundNode = Assert.Single(
+            function.Nodes,
+            static node => node.Properties.ContainsKey("nullFlowState") &&
+                node.Kind == "identifier");
+        Dictionary<string, string> invalidProperties = boundNode.Properties.ToDictionary(
+            static property => property.Key,
+            static property => property.Value,
+            StringComparer.Ordinal);
+        invalidProperties["nullFlowState"] = "sometimesNull";
+        GraphFunction invalidFunction = function with
+        {
+            Nodes = function.Nodes.Select(node =>
+                node.Id == boundNode.Id
+                    ? node with { Properties = invalidProperties }
+                    : node).ToArray(),
+        };
+
+        JsonException exception = Assert.Throws<JsonException>(() =>
+            GraphJson.Serialize(graph with { Functions = [invalidFunction] }));
+
+        Assert.Contains("invalid null flow state", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]

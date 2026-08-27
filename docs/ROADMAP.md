@@ -60,10 +60,10 @@ machine-local unless an artifact explicitly says otherwise.
 
 | Gate | Verified result |
 | --- | --- |
-| Main source | `299ceaa` (`feat: prove BlockBreaker visual code round trip`), plus this M8.4 conflict/documentation closeout |
+| Main source | `5b75aff` (`test: close BlockBreaker round trip milestone`), plus this M8.5 null-flow change set |
 | Comparison source | `e62a46e` (`feat: adopt round-tripped gameplay tuning`) |
-| Managed tests | 509 / 509 passed |
-| Repository validator | 55 / 55 passed |
+| Managed tests | 511 / 511 passed |
+| Repository validator | 56 / 56 passed |
 | UE 5.8.1 native build | passed |
 | `UnifiedScript.Unreal` Automation | 13 / 13 passed with M8.3 declaration, Authoring Surface, override migration, and live World-host coverage |
 | BlockBreaker workload | 10,000 frames, three trials, one shot, one hit, two command completions per trial |
@@ -132,7 +132,7 @@ Outcome: Roslyn symbols bind into a language-independent type/effect model.
 - [x] cross-file type and overload binding
 - [x] versioned method-effect catalog overrides
 - [x] semantic configuration identity for references and effect rules
-- [ ] flow-sensitive nullability state (scheduled in M8.5)
+- [x] flow-sensitive nullability state
 - [x] `.csproj`/MSBuild and NuGet reference loading
 - [x] configurable API allow/deny catalog
 - [x] semantic diagnostics for unsupported APIs
@@ -891,6 +891,15 @@ to M8.5. See [`BLOCKBREAKER_ROUND_TRIP.md`](BLOCKBREAKER_ROUND_TRIP.md).
   needed by real gameplay scripts
 - [ ] publish the supported Visual C# profile, opaque-code escape boundary, and
   diagnostics for code that cannot be represented visually
+
+Progress (2026-08-28): semantics v0.3 now carries Roslyn's exact per-expression
+`NullFlowState` independently from type nullability. Graph and Authoring Surface
+actions publish validated `typeNullability`/`nullFlowState` properties, and the
+round-trip semantic digest includes the flow result. Regression proves a
+nullable parameter is `notNull` after an early-return guard and returns to
+`maybeNull` after assignment. The remaining M8.5 language work is the scheduled
+real-gameplay `foreach` variants plus the published profile/opaque boundary.
+See [`NULLABILITY_FLOW.md`](NULLABILITY_FLOW.md).
 
 Acceptance: Player and Rifle logic can be changed from either surface and hot
 reloaded into the same running scene without a second Blueprint behavior source.

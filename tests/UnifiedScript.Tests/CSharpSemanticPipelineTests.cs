@@ -482,6 +482,74 @@ public sealed class CSharpSemanticPipelineTests
     }
 
     [Fact]
+    public void AnalyzeAndProject_PublishesFlowSensitiveNullStateAtEveryExpressionUse()
+    {
+        const string source = """
+            #nullable enable
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int Measure(string? value)
+                {
+                    if (value == null)
+                    {
+                        return 0;
+                    }
+
+                    int guarded = value.Length;
+                    value = null;
+                    int optional = value?.Length ?? 0;
+                    return guarded + optional;
+                }
+            }
+            """;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            source,
+            "NullFlowRules.cs");
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        BoundCompilation semantics = Assert.IsType<BoundCompilation>(result.Semantics);
+        Assert.Equal("unifiedscript.semantics/v0.3", semantics.SchemaVersion);
+        HirMethodDeclaration method = Assert.Single(Assert.Single(result.Hir!.Types).Methods);
+        HirIfStatement guard = Assert.IsType<HirIfStatement>(method.Body.Statements[0]);
+        HirIdentifierExpression guardUse = Assert.IsType<HirIdentifierExpression>(
+            Assert.IsType<HirBinaryExpression>(guard.Condition).Left);
+        HirMemberAccessExpression guardedAccess = Assert.IsType<HirMemberAccessExpression>(
+            Assert.IsType<HirVariableDeclarationStatement>(method.Body.Statements[1]).Initializer);
+        HirIdentifierExpression guardedUse = Assert.IsType<HirIdentifierExpression>(
+            guardedAccess.Target);
+        HirBinaryExpression coalesce = Assert.IsType<HirBinaryExpression>(
+            Assert.IsType<HirVariableDeclarationStatement>(method.Body.Statements[3]).Initializer);
+        HirConditionalAccessExpression optionalAccess = Assert.IsType<HirConditionalAccessExpression>(
+            coalesce.Left);
+        HirIdentifierExpression optionalUse = Assert.IsType<HirIdentifierExpression>(
+            optionalAccess.Receiver);
+
+        Assert.Equal(UnifiedNullFlowState.MaybeNull, FindNode(semantics, guardUse.Id).NullFlowState);
+        Assert.Equal(UnifiedNullFlowState.NotNull, FindNode(semantics, guardedUse.Id).NullFlowState);
+        Assert.Equal(UnifiedNullFlowState.MaybeNull, FindNode(semantics, optionalUse.Id).NullFlowState);
+        TypeDescriptor optionalType = FindType(
+            semantics,
+            FindNode(semantics, optionalUse.Id).TypeId!.Value);
+        Assert.Equal(UnifiedNullability.Nullable, optionalType.Nullability);
+
+        GraphFunction graph = Assert.Single(
+            new HirGraphProjector().Project(result.Hir, semantics).Functions);
+        GraphNode guardedNode = graph.Nodes.Single(node => node.Id == guardedUse.Id);
+        GraphNode optionalNode = graph.Nodes.Single(node => node.Id == optionalUse.Id);
+        Assert.Equal("notNull", guardedNode.Properties["nullFlowState"]);
+        Assert.Equal("notNull", guardedNode.Properties["typeNullability"]);
+        Assert.Equal("maybeNull", optionalNode.Properties["nullFlowState"]);
+        Assert.Equal("nullable", optionalNode.Properties["typeNullability"]);
+        string semanticJson = SemanticJson.Serialize(semantics);
+        Assert.Contains("\"schemaVersion\": \"unifiedscript.semantics/v0.3\"", semanticJson);
+        Assert.Contains("\"nullFlowState\": \"maybeNull\"", semanticJson);
+    }
+
+    [Fact]
     public void AnalyzeAndProject_DeclareNullCoalescingRightEvaluationAndTypes()
     {
         const string source = """

@@ -29,6 +29,13 @@ public enum UnifiedNullability
     Nullable,
 }
 
+public enum UnifiedNullFlowState
+{
+    Unknown,
+    NotNull,
+    MaybeNull,
+}
+
 [Flags]
 public enum MethodEffects
 {
@@ -91,7 +98,8 @@ public sealed record BoundNodeInfo(
     SemanticId? DeclaredSymbolId = null,
     SemanticId? ReferencedSymbolId = null,
     SemanticId? InvokedMethodId = null,
-    MethodEffects Effects = MethodEffects.None);
+    MethodEffects Effects = MethodEffects.None,
+    UnifiedNullFlowState NullFlowState = UnifiedNullFlowState.Unknown);
 
 public sealed record BoundCompilation(
     string SchemaVersion,
@@ -102,5 +110,5 @@ public sealed record BoundCompilation(
     IReadOnlyList<BoundNodeInfo> Nodes,
     IReadOnlyList<BoundForEachInfo> ForEachLoops)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.semantics/v0.2";
+    public const string CurrentSchemaVersion = "unifiedscript.semantics/v0.3";
 }

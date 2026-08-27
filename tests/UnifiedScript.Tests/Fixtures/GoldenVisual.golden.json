@@ -8,14 +8,14 @@
       "utf8Bytes": 5453
     },
     "semantics": {
-      "schemaVersion": "unifiedscript.semantics/v0.2",
-      "sha256": "d90b6d4a920fb8a97e027aead5f9e2a6bc528039e4e6f42ea0b8bef4ee7d72fc",
-      "utf8Bytes": 3588
+      "schemaVersion": "unifiedscript.semantics/v0.3",
+      "sha256": "362b05b6e676959c07c15511c0d61b9e51b57c14e1aff55a54550734f03aa972",
+      "utf8Bytes": 3833
     },
     "graph": {
       "schemaVersion": "unifiedscript.graph/v0.13",
-      "sha256": "d807dd5b37bf9586d47ff1a38662f7dd75ddf8a4537c9fed91b4285567cae57b",
-      "utf8Bytes": 7728
+      "sha256": "198c0ec27ae63cb4a734dc20b3bd22bde5e6881407a020b89bc44e6d9a35ee26",
+      "utf8Bytes": 8064
     }
   }
 }
