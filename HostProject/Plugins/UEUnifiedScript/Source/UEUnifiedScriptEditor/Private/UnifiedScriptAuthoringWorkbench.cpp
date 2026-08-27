@@ -153,6 +153,19 @@ bool FUnifiedScriptAuthoringWorkbench::ParseWorkspaceResponse(
     (*History)->TryGetStringField(TEXT("redoTransactionId"), Candidate.History.RedoTransactionId);
     (*History)->TryGetStringField(TEXT("redoDescription"), Candidate.History.RedoDescription);
     (*History)->TryGetStringField(TEXT("lastOperationId"), Candidate.History.LastOperationId);
+    if (!(*History)->TryGetStringField(
+            TEXT("persistenceState"), Candidate.History.PersistenceState) ||
+        !(Candidate.History.PersistenceState == TEXT("disabled") ||
+          Candidate.History.PersistenceState == TEXT("empty") ||
+          Candidate.History.PersistenceState == TEXT("restored") ||
+          Candidate.History.PersistenceState == TEXT("rejected") ||
+          Candidate.History.PersistenceState == TEXT("persisted")))
+    {
+        OutError = TEXT("The Workbench response has no valid history persistence state.");
+        return false;
+    }
+    (*History)->TryGetStringField(
+        TEXT("persistenceMessage"), Candidate.History.PersistenceMessage);
 
     const TSharedPtr<FJsonObject>* Generation = nullptr;
     if (!Root->TryGetObjectField(TEXT("generation"), Generation) ||

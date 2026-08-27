@@ -751,6 +751,21 @@ def main() -> int:
         "Visual authoring changes do not commit through the transactional host",
     )
     checks.append("declaration and behavior patches write source and reload one CoreCLR generation")
+    authoring_history_source = (
+        ROOT / "src" / "UnifiedScript.CSharp" / "CSharpAuthoringHistory.cs"
+    )
+    require(
+        authoring_history_source.is_file()
+        and "unifiedscript.authoring-history/v0.1"
+        in authoring_history_source.read_text(encoding="utf-8")
+        and "CSharpAuthoringWorkspace.Restore" in debug_server_source
+        and "PreviewCommit" in debug_server_source
+        and "HistoryPath" in debug_server_source
+        and 'case "--history"' in cli_source
+        and "persistenceState" in prototype_source,
+        "Restart-safe transactional authoring history is not connected end to end",
+    )
+    checks.append("authoring Undo/Redo history is restart-safe, stale-checked, and transactional")
     multi_asset_authoring_source = (
         ROOT / "samples" / "Authoring" / "MultiAssetControlFlow.cs"
     )
@@ -2799,12 +2814,14 @@ def main() -> int:
         and "emitter.Emit(snapshot.Request)" in debug_server_source
         and 'case "--source"' in cli_source
         and 'case "--managed-out"' in cli_source
+        and 'case "--history"' in cli_source
         and "isInitialBaseline" in identity_reconciler_source
         and "run-unreal-authoring.ps1" in (
             ROOT / "README.md"
         ).read_text(encoding="utf-8")
         and "--surface-out" in unreal_authoring_helper
-        and "--managed-out" in unreal_authoring_helper,
+        and "--managed-out" in unreal_authoring_helper
+        and "--history" in unreal_authoring_helper,
         "Transactional Slate Workbench apply or managed artifact publication is missing",
     )
     checks.append("UE Slate applies patches transactionally and reloads matching components")

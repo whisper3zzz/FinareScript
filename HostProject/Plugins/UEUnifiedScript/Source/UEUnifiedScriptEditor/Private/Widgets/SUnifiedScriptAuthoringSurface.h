@@ -186,6 +186,8 @@ private:
     FString StatusMessage;
     FString UndoAuthoringDescription;
     FString RedoAuthoringDescription;
+    FString HistoryPersistenceState;
+    FString HistoryPersistenceMessage;
     int64 WorkbenchRevision = 0;
     int64 UndoAuthoringDepth = 0;
     int64 RedoAuthoringDepth = 0;

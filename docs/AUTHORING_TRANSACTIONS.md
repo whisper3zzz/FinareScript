@@ -1,9 +1,10 @@
 # Authoring Transactions and History
 
 The loopback Workbench is the single commit authority for visual, C#, and AI
-authoring. Workspace protocol `unifiedscript.authoring-workspace/v0.3` adds a
-bounded server-owned history to the existing source, identity, artifact, and
-CoreCLR publication boundary.
+authoring. Workspace protocol `unifiedscript.authoring-workspace/v0.3` exposes
+a bounded server-owned history, while journal
+`unifiedscript.authoring-history/v0.1` persists that history inside the same
+source, identity, artifact, and CoreCLR publication boundary.
 
 ## Request contract
 
@@ -42,8 +43,8 @@ Every endpoint runs under the authoring/debug session gate:
 3. reject source or identity files changed outside the Workbench;
 4. prepare and fully analyze the candidate snapshot;
 5. reload the candidate through the same CoreCLR transport;
-6. transactionally publish source, `.usids`, Declaration IR, Surface, DLL, and
-   PDB outputs;
+6. transactionally publish source, `.usids`, Declaration IR, Surface, DLL, PDB,
+   and the prospective history journal;
 7. commit the in-memory workspace and history entry, then expose the new
    revision and runtime generation.
 
@@ -59,15 +60,30 @@ operations publish a new monotonically increasing workspace revision and a new
 CoreCLR generation, even when their source content matches an older revision.
 
 Committing a new edit after undo clears the redo branch. Transaction IDs remain
-reserved for the lifetime of the Workbench process, so an ambiguous retry cannot
-apply twice. Workspace responses expose `canUndo`, `canRedo`, both depths, the
-next transaction IDs/descriptions, and the last committed operation ID.
+reserved in the persisted journal, so an ambiguous retry cannot apply twice
+after either a request timeout or host restart. Workspace responses expose
+`canUndo`, `canRedo`, both depths, the next transaction IDs/descriptions, and
+the last committed operation ID.
 
-History is currently session-local and is reset when the authoring host exits.
+`debug-serve` writes the journal to `--history`; without an explicit path it
+uses `<input.cs>.ushistory.json`. The Unreal launchers place it beside staged
+authoring artifacts. A restart restores the monotonically increasing revision,
+both history stacks, transaction labels, and the complete operation-ID replay
+guard. Historical snapshots retain every source, reconciled sidecar, and
+identity pin, but are reanalyzed lazily only when Undo/Redo targets them.
+
+Restoration requires the exact source set and text, the current non-empty
+`.usids`, semantic configuration, snapshot digest, source-compilation ID, and
+continuous Undo/Redo chains. A stale, corrupt, or incompatible journal is left
+untouched and reported as `history.persistenceState = rejected`; the workspace
+starts a fresh revision-1 history instead of applying an unsafe snapshot. The
+states `empty`, `restored`, `persisted`, and `disabled` distinguish the other
+startup/publication paths in browser and Slate clients.
+
 Atomic semantic patch plans already group dependent source operations. Semantic
 Patch v0.24 statement duplication is also one server-owned transaction, so its
 source, identity, generated artifacts, runtime reload, Undo, and Redo cannot
 split. Patch v0.25 applies lexical Collapse Scope / Expand Scope through the
-same boundary. Persisted history, user-defined transaction grouping, true
-function/macro extraction, and broader multi-selection/cross-region clipboard
-transactions remain later M8.1 work.
+same boundary. User-defined transaction grouping, true function/macro
+extraction, and broader multi-selection/cross-region clipboard transactions
+remain later M8.1 work.

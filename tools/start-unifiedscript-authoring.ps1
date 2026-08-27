@@ -133,6 +133,7 @@ $assetPath = Join-Path $scriptStage "$assemblyName.asset.json"
 $surfacePath = Join-Path $scriptStage "$assemblyName.surface.json"
 $assemblyPath = Join-Path $scriptStage "$assemblyName.dll"
 $pdbPath = Join-Path $scriptStage "$assemblyName.pdb"
+$historyPath = Join-Path $scriptStage "$assemblyName.authoring-history.json"
 $coreAssembly = Join-Path $managedStage 'UnifiedScript.Core.dll'
 $unrealAssembly = Join-Path $managedStage 'UnifiedScript.Unreal.dll'
 foreach ($required in @($coreAssembly, $unrealAssembly)) {
@@ -173,7 +174,8 @@ foreach ($argument in @(
     '--asset-out', $assetPath,
     '--surface-out', $surfacePath,
     '--managed-out', $assemblyPath,
-    '--pdb-out', $pdbPath)) {
+    '--pdb-out', $pdbPath,
+    '--history', $historyPath)) {
     $arguments.Add([string]$argument)
 }
 Write-Host "UnifiedScript authoring server: http://127.0.0.1:$Port/"

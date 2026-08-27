@@ -157,8 +157,10 @@ function applyWorkspaceArtifacts(artifact, graph, surface, sourceText, workspace
   if (!remembered.breakpoints.length) enableDefaultBreakpoint();
   setAuthoringBusy(false);
   updateHistoryControls();
+  const historyState = workspace?.history?.persistenceState?.toUpperCase();
   document.querySelector('.sync-status strong').textContent = workspace
-    ? `SYNCED · R${workspace.revision}` : 'SURFACE · READ ONLY';
+    ? `SYNCED · R${workspace.revision}${historyState ? ` · HISTORY ${historyState}` : ''}`
+    : 'SURFACE · READ ONLY';
   document.querySelector('.target-label').textContent = workspace
     ? `CLR GENERATION ${workspace.generation.number} · SURFACE v0.1`
     : 'AUTHORING SURFACE v0.1 · GRAPH v0.12';
@@ -713,14 +715,17 @@ function updateHistoryControls() {
   const unavailable = !state.authoringConnected || state.authoringBusy || state.graphDirty;
   const undoButton = document.getElementById('undoButton');
   const redoButton = document.getElementById('redoButton');
+  const persistence = history?.persistenceState
+    ? ` · journal ${history.persistenceState}${history.persistenceMessage ? `: ${history.persistenceMessage}` : ''}`
+    : '';
   undoButton.disabled = unavailable || !history?.canUndo;
   redoButton.disabled = unavailable || !history?.canRedo;
   undoButton.title = history?.canUndo
-    ? `Undo: ${history.undoDescription} (${history.undoDepth})`
-    : 'Nothing to undo';
+    ? `Undo: ${history.undoDescription} (${history.undoDepth})${persistence}`
+    : `Nothing to undo${persistence}`;
   redoButton.title = history?.canRedo
-    ? `Redo: ${history.redoDescription} (${history.redoDepth})`
-    : 'Nothing to redo';
+    ? `Redo: ${history.redoDescription} (${history.redoDepth})${persistence}`
+    : `Nothing to redo${persistence}`;
 }
 
 function newAuthoringOperationId() {

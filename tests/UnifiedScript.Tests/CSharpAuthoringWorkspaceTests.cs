@@ -318,6 +318,107 @@ public sealed class CSharpAuthoringWorkspaceTests
         Assert.Equal(1, workspace.History.UndoDepth);
     }
 
+    [Fact]
+    public void PersistedHistoryRestoresRevisionUndoRedoAndOperationIdempotency()
+    {
+        const string path = "Tests/Authoring/DamagePolicy.cs";
+        var workspace = new CSharpAuthoringWorkspace(CSharpCompilationRequest.Single(
+            Source,
+            path,
+            identitySidecar: IdentitySidecarDocument.CreateEmpty(path)));
+        HirLiteralExpression minimum = workspace.Current.Analysis.Hir!
+            .DescendantsAndSelf()
+            .OfType<HirLiteralExpression>()
+            .Single(static literal => literal.ValueText == "0f");
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            workspace.Current.Analysis.ScriptAssets!.SourceCompilationId,
+            workspace.Current.Analysis.ScriptAssets.SemanticConfigurationId,
+            [new ReplaceLiteralPatchOperation(minimum.Id, "0f", "10f")]);
+        workspace.Commit(workspace.Prepare(patch), "txn-persisted", "Persisted edit");
+        string json = CSharpAuthoringHistoryJson.Serialize(workspace.ExportHistory());
+
+        CSharpAuthoringWorkspace restored = CSharpAuthoringWorkspace.Restore(
+            workspace.Current.Request,
+            CSharpAuthoringHistoryJson.Deserialize(json));
+
+        Assert.Equal(2, restored.Current.Revision);
+        Assert.Equal(1, restored.History.UndoDepth);
+        Assert.Equal("txn-persisted", restored.History.UndoTransactionId);
+        Assert.Equal("txn-persisted", restored.LastOperationId);
+        Assert.True(restored.ContainsOperationId("txn-persisted"));
+        Assert.Throws<InvalidOperationException>(() =>
+            restored.Commit(
+                restored.PrepareUndo(),
+                "txn-persisted"));
+
+        CSharpAuthoringHistoryMutation undo = restored.PrepareUndo();
+        restored.Commit(undo, "op-persisted-undo");
+        Assert.Contains("Math.Clamp(scaled, 0f, MaxDamage)", restored.Current.Request.Sources[0].Source);
+        Assert.Equal(3, restored.Current.Revision);
+        Assert.Equal(1, restored.History.RedoDepth);
+
+        CSharpAuthoringWorkspace restoredAgain = CSharpAuthoringWorkspace.Restore(
+            restored.Current.Request,
+            CSharpAuthoringHistoryJson.Deserialize(
+                CSharpAuthoringHistoryJson.Serialize(restored.ExportHistory())));
+        restoredAgain.Commit(restoredAgain.PrepareRedo(), "op-persisted-redo");
+
+        Assert.Equal(4, restoredAgain.Current.Revision);
+        Assert.Contains(
+            "Math.Clamp(scaled, 10f, MaxDamage)",
+            restoredAgain.Current.Request.Sources[0].Source);
+        Assert.Equal("op-persisted-redo", restoredAgain.LastOperationId);
+    }
+
+    [Fact]
+    public void PersistedHistoryRejectsExternalSourceAndTamperedSnapshot()
+    {
+        const string path = "Tests/Authoring/DamagePolicy.cs";
+        var workspace = new CSharpAuthoringWorkspace(CSharpCompilationRequest.Single(
+            Source,
+            path,
+            identitySidecar: IdentitySidecarDocument.CreateEmpty(path)));
+        HirLiteralExpression minimum = workspace.Current.Analysis.Hir!
+            .DescendantsAndSelf()
+            .OfType<HirLiteralExpression>()
+            .Single(static literal => literal.ValueText == "0f");
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            workspace.Current.Analysis.ScriptAssets!.SourceCompilationId,
+            workspace.Current.Analysis.ScriptAssets.SemanticConfigurationId,
+            [new ReplaceLiteralPatchOperation(minimum.Id, "0f", "10f")]);
+        workspace.Commit(workspace.Prepare(patch), "txn-history-integrity", "Integrity edit");
+        CSharpAuthoringHistoryDocument history = workspace.ExportHistory();
+        CSharpSourceDocument current = Assert.Single(workspace.Current.Request.Sources);
+        var externallyChanged = new CSharpCompilationRequest(
+            workspace.Current.Request.AssemblyName,
+            [new CSharpSourceDocument(
+                current.LogicalPath,
+                current.Source + "\n// external source change\n",
+                current.IdentitySidecar)],
+            workspace.Current.Request.ReferencePaths,
+            workspace.Current.Request.EffectCatalog,
+            workspace.Current.Request.Settings,
+            workspace.Current.Request.RuntimeReferencePaths,
+            workspace.Current.Request.IncludeDefaultReferences);
+
+        Assert.Throws<InvalidDataException>(() =>
+            CSharpAuthoringWorkspace.Restore(externallyChanged, history));
+
+        CSharpAuthoringHistorySnapshotDocument snapshot = history.Snapshots[0];
+        CSharpAuthoringHistorySourceDocument source = snapshot.Sources[0];
+        CSharpAuthoringHistorySnapshotDocument tampered = snapshot with
+        {
+            Sources = [source with { Source = source.Source + "\n// tampered\n" }],
+        };
+        CSharpAuthoringHistoryDocument tamperedHistory = history with
+        {
+            Snapshots = [tampered, .. history.Snapshots.Skip(1)],
+        };
+
+        Assert.Throws<JsonException>(() =>
+            CSharpAuthoringHistoryJson.NormalizeAndValidate(tamperedHistory));
+    }
+
     private static ScriptStatePatchPrecondition Expected(ScriptStateDeclaration state) => new(
         state.Name,
         state.TypeMetadataName,

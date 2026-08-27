@@ -402,13 +402,17 @@ The same response now carries bounded transaction history. Slate sends an exact
 baseline revision, unique operation ID, and author-facing label for each edit,
 then enables Undo/Redo from server history rather than maintaining a second UE
 edit stack. Navigation republishes source, identities, artifacts, and a fresh
-CoreCLR generation before the canvas and matching components refresh.
+CoreCLR generation before the canvas and matching components refresh. Its
+status also distinguishes empty, restored, persisted, disabled, and rejected
+history journals so a stale restart never looks like a valid empty stack.
 
 `debug-serve` now supports repeatable `--source` plus transactional
-`--asset-out`, `--surface-out`, `--managed-out`, and `--pdb-out` targets. A
+`--asset-out`, `--surface-out`, `--managed-out`, `--pdb-out`, and `--history`
+targets. A
 successful mutation validates the complete multi-source candidate and publishes
 C#, primary `.usids`, Declaration IR, Authoring Surface, uninstrumented managed
-DLL, and portable PDB through one rollback-capable file transaction. Initial
+DLL, portable PDB, and the prospective `authoring-history/v0.1` journal through
+one rollback-capable file transaction. Initial
 sidecar creation retains existing deterministic Semantic IDs, so a checked-in
 Surface remains a valid first-edit baseline.
 

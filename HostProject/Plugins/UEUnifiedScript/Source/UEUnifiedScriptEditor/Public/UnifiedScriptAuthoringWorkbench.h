@@ -23,6 +23,8 @@ struct FUnifiedScriptAuthoringHistoryResult
     FString RedoTransactionId;
     FString RedoDescription;
     FString LastOperationId;
+    FString PersistenceState;
+    FString PersistenceMessage;
 };
 
 struct FUnifiedScriptAuthoringWorkspaceResult

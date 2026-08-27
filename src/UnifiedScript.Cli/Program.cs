@@ -561,6 +561,7 @@ internal static class Program
         string fullInputPath = Path.GetFullPath(options.InputPath);
         string logicalPath = GetLogicalInputPath(fullInputPath);
         string identityPath = options.IdentityPath ?? options.InputPath + ".usids";
+        string historyPath = options.HistoryPath ?? options.InputPath + ".ushistory.json";
         IdentitySidecarDocument identitySidecar = File.Exists(identityPath)
             ? LoadIdentitySidecar(identityPath)
             : IdentitySidecarDocument.CreateEmpty(logicalPath);
@@ -614,7 +615,8 @@ internal static class Program
                     options.DeclarationOutputPath,
                     options.SurfaceOutputPath,
                     options.ManagedAssemblyOutputPath,
-                    options.PortablePdbOutputPath),
+                    options.PortablePdbOutputPath,
+                    historyPath),
                 sourceFiles);
             using var cancellation = new CancellationTokenSource();
             ConsoleCancelEventHandler cancelHandler = (_, eventArgs) =>
@@ -1622,6 +1624,7 @@ internal static class Program
         string? surfaceOutputPath = null;
         string? managedAssemblyOutputPath = null;
         string? portablePdbOutputPath = null;
+        string? historyPath = null;
         int port = 4173;
         bool hasPort = false;
         var referencePaths = new List<string>();
@@ -1672,6 +1675,9 @@ internal static class Program
                 case "--pdb-out" when portablePdbOutputPath is null:
                     portablePdbOutputPath = value;
                     break;
+                case "--history" when historyPath is null:
+                    historyPath = value;
+                    break;
                 default:
                     return false;
             }
@@ -1694,7 +1700,8 @@ internal static class Program
             declarationOutputPath,
             surfaceOutputPath,
             managedAssemblyOutputPath,
-            portablePdbOutputPath);
+            portablePdbOutputPath,
+            historyPath);
         return true;
     }
 
@@ -2166,6 +2173,7 @@ internal static class Program
         "  --surface-out <path>    Transactional Authoring Surface output for debug-serve.\n" +
         "  --managed-out <path>    Transactional managed assembly output for debug-serve.\n" +
         "  --pdb-out <path>        Transactional portable PDB output for debug-serve.\n" +
+        "  --history <path>        Persistent transactional Undo/Redo journal for debug-serve.\n" +
         "  --namespace <name>      Namespace for generated Unreal managed bindings.\n" +
         "  --native-out <path>     Also emit ABI v3 generated fast-binding C++.\n" +
         "  --native-header <path>  Header included by generated native fast bindings.\n" +
@@ -2222,7 +2230,8 @@ internal static class Program
         string? DeclarationOutputPath,
         string? SurfaceOutputPath,
         string? ManagedAssemblyOutputPath,
-        string? PortablePdbOutputPath);
+        string? PortablePdbOutputPath,
+        string? HistoryPath);
 
     private sealed record UnrealBindingOptions(
         string ManifestPath,

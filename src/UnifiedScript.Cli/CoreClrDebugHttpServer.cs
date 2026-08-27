@@ -407,13 +407,13 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         private readonly AuthoringArtifactOutputs artifactOutputs;
         private readonly CSharpProgramEmitter emitter = new();
         private readonly List<SemanticId> breakpointIds = [];
-        private readonly HashSet<string> committedOperationIds = new(StringComparer.Ordinal);
         private IReadOnlyList<SemanticBreakpointBinding> bindings = [];
         private CoreClrDebugReloadResult reload;
         private CoreClrDebugExecution? execution;
         private CoreClrDebugPause? pause;
         private string? persistedIdentity;
-        private string? lastOperationId;
+        private string historyPersistenceState;
+        private string? historyPersistenceMessage;
 
         public AuthoringSessionController(
             CSharpCompilationRequest request,
@@ -468,7 +468,34 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 : File.Exists(this.identityPath)
                     ? File.ReadAllText(this.identityPath)
                     : null;
-            authoring = new CSharpAuthoringWorkspace(request);
+            if (this.artifactOutputs.HistoryPath is null)
+            {
+                authoring = new CSharpAuthoringWorkspace(request);
+                historyPersistenceState = "disabled";
+            }
+            else if (!File.Exists(this.artifactOutputs.HistoryPath))
+            {
+                authoring = new CSharpAuthoringWorkspace(request);
+                historyPersistenceState = "empty";
+            }
+            else
+            {
+                try
+                {
+                    CSharpAuthoringHistoryDocument history =
+                        CSharpAuthoringHistoryJson.Deserialize(
+                            File.ReadAllText(this.artifactOutputs.HistoryPath));
+                    authoring = CSharpAuthoringWorkspace.Restore(request, history);
+                    historyPersistenceState = "restored";
+                }
+                catch (Exception exception) when (
+                    exception is JsonException or InvalidDataException or ArgumentException)
+                {
+                    authoring = new CSharpAuthoringWorkspace(request);
+                    historyPersistenceState = "rejected";
+                    historyPersistenceMessage = exception.Message;
+                }
+            }
             reload = transport.Reload(authoring.Current.Request);
             Health = CreateHealth(reload.Generation);
             Workspace = CreateWorkspace(authoring.Current, reload.Generation);
@@ -626,10 +653,13 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                     direction == CSharpAuthoringHistoryDirection.Undo
                         ? authoring.PrepareUndo()
                         : authoring.PrepareRedo();
+                CSharpAuthoringHistoryDocument persistedHistory = authoring.PreviewCommit(
+                    mutation,
+                    transaction.TransactionId);
                 return CommitPreparedSnapshot(
                     mutation.Snapshot,
-                    () => authoring.Commit(mutation),
-                    transaction.TransactionId);
+                    () => authoring.Commit(mutation, transaction.TransactionId),
+                    persistedHistory);
             }
             finally
             {
@@ -665,13 +695,17 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                         mutation.Diagnostics);
                 }
 
+                CSharpAuthoringHistoryDocument persistedHistory = authoring.PreviewCommit(
+                    mutation,
+                    transaction.TransactionId,
+                    transaction.Description);
                 return CommitPreparedSnapshot(
                     mutation.Snapshot,
                     () => authoring.Commit(
                         mutation,
                         transaction.TransactionId,
                         transaction.Description),
-                    transaction.TransactionId);
+                    persistedHistory);
             }
             finally
             {
@@ -702,7 +736,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                     $"the current revision is '{authoring.Current.Revision}'.");
             }
 
-            if (committedOperationIds.Contains(transaction.TransactionId))
+            if (authoring.ContainsOperationId(transaction.TransactionId))
             {
                 throw new AuthoringProtocolException(
                     HttpStatusCode.Conflict,
@@ -714,13 +748,13 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         private AuthoringWorkspaceResponse CommitPreparedSnapshot(
             CSharpAuthoringSnapshot snapshot,
             Action commit,
-            string operationId)
+            CSharpAuthoringHistoryDocument persistedHistory)
         {
             CSharpAuthoringSnapshot previous = authoring.Current;
             CoreClrDebugReloadResult nextReload = transport.Reload(snapshot.Request);
             try
             {
-                Persist(snapshot);
+                Persist(snapshot, persistedHistory);
             }
             catch
             {
@@ -731,8 +765,11 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             }
 
             commit();
-            _ = committedOperationIds.Add(operationId);
-            lastOperationId = operationId;
+            if (artifactOutputs.HistoryPath is not null)
+            {
+                historyPersistenceState = "persisted";
+                historyPersistenceMessage = null;
+            }
             reload = nextReload;
             bindings = reload.Breakpoints.Bindings;
             Health = CreateHealth(reload.Generation);
@@ -765,7 +802,9 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             }
         }
 
-        private void Persist(CSharpAuthoringSnapshot snapshot)
+        private void Persist(
+            CSharpAuthoringSnapshot snapshot,
+            CSharpAuthoringHistoryDocument history)
         {
             var outputs = snapshot.Request.Sources
                 .Select(source => new AuthoringOutput(
@@ -829,6 +868,13 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 }
             }
 
+            if (artifactOutputs.HistoryPath is not null)
+            {
+                outputs.Add(new AuthoringOutput(
+                    artifactOutputs.HistoryPath,
+                    Encoding.UTF8.GetBytes(CSharpAuthoringHistoryJson.Serialize(history) + "\n")));
+            }
+
             WriteTransactionally(outputs);
             foreach (CSharpSourceDocument source in snapshot.Request.Sources)
             {
@@ -877,7 +923,9 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 history.UndoDescription,
                 history.RedoTransactionId,
                 history.RedoDescription,
-                lastOperationId);
+                authoring.LastOperationId,
+                historyPersistenceState,
+                historyPersistenceMessage);
         }
 
         private static void WriteTransactionally(IReadOnlyList<AuthoringOutput> outputs)
@@ -1044,13 +1092,15 @@ internal sealed record AuthoringArtifactOutputs(
     string? DeclarationPath = null,
     string? SurfacePath = null,
     string? ManagedAssemblyPath = null,
-    string? PortablePdbPath = null)
+    string? PortablePdbPath = null,
+    string? HistoryPath = null)
 {
     public AuthoringArtifactOutputs Normalize() => new(
         NormalizePath(DeclarationPath),
         NormalizePath(SurfacePath),
         NormalizePath(ManagedAssemblyPath),
-        NormalizePath(PortablePdbPath));
+        NormalizePath(PortablePdbPath),
+        NormalizePath(HistoryPath));
 
     private static string? NormalizePath(string? path) =>
         string.IsNullOrWhiteSpace(path) ? null : Path.GetFullPath(path);
@@ -1076,7 +1126,9 @@ internal sealed record AuthoringHistoryResponse(
     string? UndoDescription,
     string? RedoTransactionId,
     string? RedoDescription,
-    string? LastOperationId);
+    string? LastOperationId,
+    string PersistenceState,
+    string? PersistenceMessage);
 
 internal sealed record DebugHealthResponse(
     string SchemaVersion,

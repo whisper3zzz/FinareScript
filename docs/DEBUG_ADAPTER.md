@@ -107,16 +107,19 @@ The same loopback process owns the authoring transaction boundary:
 Authoring and debug control share one gate, so source cannot reload while an
 execution is active. A successful candidate reloads the same transport and
 commits canonical source plus `.usids`; external disk changes and stale patch
-preconditions fail without replacing the current generation.
+preconditions fail without replacing the current generation. The versioned
+history journal restores revision, Undo/Redo stacks, and operation replay guards
+after `debug-serve` restarts, but rejects stale source/identity/configuration
+fingerprints and reports that rejection to clients.
 Updated clients send baseline revision, unique operation ID, and author-facing
 label headers so stale tabs and ambiguous retries fail before publication. See
 [AUTHORING_TRANSACTIONS.md](AUTHORING_TRANSACTIONS.md) for the v0.3 contract.
 
 For Unreal authoring, `debug-serve` also accepts repeatable `--source` inputs
-and optional `--asset-out`, `--surface-out`, `--managed-out`, and `--pdb-out`
-targets. These outputs join source and identity in the same rollback-capable
-file transaction, allowing a successful Slate request to publish the exact
-artifacts consumed by UE before component reload begins.
+and optional `--asset-out`, `--surface-out`, `--managed-out`, `--pdb-out`, and
+`--history` targets. These outputs join source and identity in the same
+rollback-capable file transaction, allowing a successful Slate request to
+publish the exact artifacts consumed by UE before component reload begins.
 
 The bridge never interprets HIR. It adapts HTTP requests directly to
 `ICoreClrDebugTransport`, caps request bodies, serves only a path-confined

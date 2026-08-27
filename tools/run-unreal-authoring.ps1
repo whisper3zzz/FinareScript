@@ -47,5 +47,6 @@ Write-Host "Keep this window open, then use Apply & Reload in the UE UnifiedScri
     --asset-out (Join-Path $demoDirectory "UnifiedScript.Unreal.Demo.asset.json") `
     --surface-out (Join-Path $demoDirectory "UnifiedScript.Unreal.Demo.surface.json") `
     --managed-out (Join-Path $managedDirectory "UnifiedScript.Unreal.Demo.dll") `
-    --pdb-out (Join-Path $managedDirectory "UnifiedScript.Unreal.Demo.pdb")
+    --pdb-out (Join-Path $managedDirectory "UnifiedScript.Unreal.Demo.pdb") `
+    --history (Join-Path $artifactDirectory "UnifiedScript.Unreal.Demo.authoring-history.json")
 exit $LASTEXITCODE

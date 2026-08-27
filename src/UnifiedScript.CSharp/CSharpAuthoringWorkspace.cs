@@ -68,7 +68,81 @@ public sealed class CSharpAuthoringWorkspace
         Current = CreateSnapshot(1, stabilizedRequest, analysis);
     }
 
+    private CSharpAuthoringWorkspace(CSharpAuthoringWorkspace source)
+    {
+        pipeline = source.pipeline;
+        declarationPatchApplier = source.declarationPatchApplier;
+        semanticPatchApplier = source.semanticPatchApplier;
+        patchPlanApplier = source.patchPlanApplier;
+        Current = source.Current;
+        undoHistory.AddRange(source.undoHistory);
+        redoHistory.AddRange(source.redoHistory);
+        transactionIds.UnionWith(source.transactionIds);
+        LastOperationId = source.LastOperationId;
+    }
+
+    private CSharpAuthoringWorkspace(
+        CSharpCompilationRequest template,
+        CSharpAuthoringHistoryDocument history)
+    {
+        CSharpAuthoringHistoryDocument normalized =
+            CSharpAuthoringHistoryJson.NormalizeAndValidate(history);
+        if (normalized.SemanticConfigurationId != template.ConfigurationId)
+        {
+            throw new InvalidDataException(
+                "The persisted authoring history was created with a different compilation configuration.");
+        }
+
+        Dictionary<string, CSharpAuthoringHistorySnapshotDocument> snapshotDocuments =
+            normalized.Snapshots.ToDictionary(
+                static snapshot => snapshot.SnapshotId,
+                StringComparer.Ordinal);
+        CSharpAuthoringHistorySnapshotDocument currentDocument =
+            snapshotDocuments[normalized.CurrentSnapshotId];
+        ValidateCurrentSources(template, currentDocument);
+        CSharpCompilationRequest restoredRequest = CreateRequest(template, currentDocument);
+        CSharpAnalysisResult analysis = pipeline.Analyze(restoredRequest);
+        if (!analysis.Succeeded || analysis.ScriptAssets?.SourceCompilationId !=
+            currentDocument.SourceCompilationId)
+        {
+            throw new InvalidDataException(
+                "The persisted authoring history current snapshot no longer analyzes to its recorded compilation.");
+        }
+
+        CSharpCompilationRequest stabilizedRequest = AttachReconciledSidecars(restoredRequest, analysis);
+        Current = CreateSnapshot(normalized.Revision, stabilizedRequest, analysis);
+        var snapshots = new Dictionary<string, StoredSnapshot>(StringComparer.Ordinal)
+        {
+            [normalized.CurrentSnapshotId] = new StoredSnapshot(Current),
+        };
+        foreach (CSharpAuthoringHistorySnapshotDocument snapshot in normalized.Snapshots)
+        {
+            snapshots.TryAdd(
+                snapshot.SnapshotId,
+                new StoredSnapshot(CreateRequest(template, snapshot), snapshot.SourceCompilationId));
+        }
+
+        undoHistory.AddRange(normalized.UndoHistory.Select(entry => RestoreEntry(entry, snapshots)));
+        redoHistory.AddRange(normalized.RedoHistory.Select(entry => RestoreEntry(entry, snapshots)));
+        transactionIds.UnionWith(normalized.CommittedOperationIds);
+        LastOperationId = normalized.LastOperationId;
+    }
+
+    public static CSharpAuthoringWorkspace Restore(
+        CSharpCompilationRequest request,
+        CSharpAuthoringHistoryDocument history)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(history);
+        return new CSharpAuthoringWorkspace(request, history);
+    }
+
     public CSharpAuthoringSnapshot Current { get; private set; }
+
+    public string? LastOperationId { get; private set; }
+
+    public bool ContainsOperationId(string operationId) =>
+        !string.IsNullOrWhiteSpace(operationId) && transactionIds.Contains(operationId);
 
     public CSharpAuthoringHistoryState History => new(
         undoHistory.Count > 0,
@@ -132,9 +206,24 @@ public sealed class CSharpAuthoringWorkspace
 
         PushHistory(
             undoHistory,
-            new HistoryEntry(transactionId, description, Current, mutation.Snapshot));
+            new HistoryEntry(
+                transactionId,
+                description,
+                new StoredSnapshot(Current),
+                new StoredSnapshot(mutation.Snapshot)));
         redoHistory.Clear();
         Current = mutation.Snapshot;
+        LastOperationId = transactionId;
+    }
+
+    public CSharpAuthoringHistoryDocument PreviewCommit(
+        CSharpAuthoringMutation mutation,
+        string transactionId,
+        string description)
+    {
+        var preview = new CSharpAuthoringWorkspace(this);
+        preview.Commit(mutation, transactionId, description);
+        return preview.ExportHistory();
     }
 
     public CSharpAuthoringHistoryMutation PrepareUndo() => PrepareHistoryMutation(
@@ -147,9 +236,14 @@ public sealed class CSharpAuthoringWorkspace
         redoHistory,
         "There is no undone authoring transaction to redo.");
 
-    public void Commit(CSharpAuthoringHistoryMutation mutation)
+    public void Commit(CSharpAuthoringHistoryMutation mutation) => Commit(
+        mutation,
+        $"local-{Guid.NewGuid():N}");
+
+    public void Commit(CSharpAuthoringHistoryMutation mutation, string operationId)
     {
         ArgumentNullException.ThrowIfNull(mutation);
+        ValidateOperationId(operationId);
         if (mutation.BaselineRevision != Current.Revision)
         {
             throw new InvalidOperationException(
@@ -171,19 +265,61 @@ public sealed class CSharpAuthoringWorkspace
                 "The authoring history changed after the undo/redo operation was prepared.");
         }
 
-        CSharpAuthoringSnapshot expected = mutation.Direction == CSharpAuthoringHistoryDirection.Undo
+        StoredSnapshot expected = mutation.Direction == CSharpAuthoringHistoryDirection.Undo
             ? entry.Before
             : entry.After;
         if (mutation.Snapshot.Revision != checked(Current.Revision + 1) ||
-            mutation.Snapshot.Analysis.Hir?.Id != expected.Analysis.Hir?.Id)
+            mutation.Snapshot.Analysis.ScriptAssets?.SourceCompilationId !=
+                expected.SourceCompilationId)
         {
             throw new InvalidOperationException(
                 "The prepared undo/redo snapshot no longer matches its history entry.");
         }
 
+        if (!transactionIds.Add(operationId))
+        {
+            throw new InvalidOperationException(
+                $"Authoring transaction ID '{operationId}' was already committed.");
+        }
+
         source.RemoveAt(source.Count - 1);
         PushHistory(destination, entry);
         Current = mutation.Snapshot;
+        LastOperationId = operationId;
+    }
+
+    public CSharpAuthoringHistoryDocument PreviewCommit(
+        CSharpAuthoringHistoryMutation mutation,
+        string operationId)
+    {
+        var preview = new CSharpAuthoringWorkspace(this);
+        preview.Commit(mutation, operationId);
+        return preview.ExportHistory();
+    }
+
+    public CSharpAuthoringHistoryDocument ExportHistory()
+    {
+        var snapshots = new Dictionary<string, CSharpAuthoringHistorySnapshotDocument>(
+            StringComparer.Ordinal);
+        CSharpAuthoringHistorySnapshotDocument current = CreateHistorySnapshot(Current);
+        snapshots.Add(current.SnapshotId, current);
+        CSharpAuthoringHistoryEntryDocument[] undo = undoHistory
+            .Select(entry => CreateHistoryEntry(entry, snapshots))
+            .ToArray();
+        CSharpAuthoringHistoryEntryDocument[] redo = redoHistory
+            .Select(entry => CreateHistoryEntry(entry, snapshots))
+            .ToArray();
+        return CSharpAuthoringHistoryJson.NormalizeAndValidate(
+            new CSharpAuthoringHistoryDocument(
+                CSharpAuthoringHistoryDocument.CurrentSchemaVersion,
+                Current.Revision,
+                Current.Request.ConfigurationId,
+                current.SnapshotId,
+                snapshots.Values.ToArray(),
+                undo,
+                redo,
+                transactionIds.Order(StringComparer.Ordinal).ToArray(),
+                LastOperationId));
     }
 
     private CSharpAuthoringMutation CreateMutation(CSharpPatchResult result)
@@ -213,15 +349,18 @@ public sealed class CSharpAuthoringWorkspace
     {
         HistoryEntry entry = history.LastOrDefault() ??
             throw new InvalidOperationException(emptyMessage);
-        CSharpAuthoringSnapshot target = direction == CSharpAuthoringHistoryDirection.Undo
+        StoredSnapshot target = direction == CSharpAuthoringHistoryDirection.Undo
             ? entry.Before
             : entry.After;
+        CSharpAuthoringSnapshot snapshot = target.Materialize(
+            pipeline,
+            checked(Current.Revision + 1));
         return new CSharpAuthoringHistoryMutation(
             Current.Revision,
             direction,
             entry.TransactionId,
             entry.Description,
-            target with { Revision = checked(Current.Revision + 1) });
+            snapshot);
     }
 
     private static void PushHistory(List<HistoryEntry> history, HistoryEntry entry)
@@ -235,12 +374,21 @@ public sealed class CSharpAuthoringWorkspace
 
     private static void ValidateTransactionMetadata(string transactionId, string description)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(transactionId);
+        ValidateOperationId(transactionId);
         ArgumentException.ThrowIfNullOrWhiteSpace(description);
-        if (transactionId.Length > 128 || description.Length > 256)
+        if (description.Length > 256)
         {
             throw new ArgumentException(
                 "Authoring transaction IDs and descriptions must be at most 128 and 256 characters.");
+        }
+    }
+
+    private static void ValidateOperationId(string operationId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(operationId);
+        if (operationId.Length > 128)
+        {
+            throw new ArgumentException("Authoring operation IDs must be at most 128 characters.");
         }
     }
 
@@ -287,9 +435,174 @@ public sealed class CSharpAuthoringWorkspace
             request.IncludeDefaultReferences);
     }
 
+    private static HistoryEntry RestoreEntry(
+        CSharpAuthoringHistoryEntryDocument entry,
+        IReadOnlyDictionary<string, StoredSnapshot> snapshots) => new(
+            entry.TransactionId,
+            entry.Description,
+            snapshots[entry.BeforeSnapshotId],
+            snapshots[entry.AfterSnapshotId]);
+
+    private static CSharpAuthoringHistoryEntryDocument CreateHistoryEntry(
+        HistoryEntry entry,
+        IDictionary<string, CSharpAuthoringHistorySnapshotDocument> snapshots)
+    {
+        CSharpAuthoringHistorySnapshotDocument before = entry.Before.ToDocument();
+        CSharpAuthoringHistorySnapshotDocument after = entry.After.ToDocument();
+        snapshots.TryAdd(before.SnapshotId, before);
+        snapshots.TryAdd(after.SnapshotId, after);
+        return new CSharpAuthoringHistoryEntryDocument(
+            entry.TransactionId,
+            entry.Description,
+            before.SnapshotId,
+            after.SnapshotId);
+    }
+
+    private static CSharpAuthoringHistorySnapshotDocument CreateHistorySnapshot(
+        CSharpAuthoringSnapshot snapshot) => CreateHistorySnapshot(
+            snapshot.Request,
+            snapshot.Analysis.ScriptAssets?.SourceCompilationId ??
+                throw new InvalidOperationException(
+                    "An authoring snapshot has no source compilation ID."));
+
+    private static CSharpAuthoringHistorySnapshotDocument CreateHistorySnapshot(
+        CSharpCompilationRequest request,
+        SemanticId sourceCompilationId)
+    {
+        CSharpAuthoringHistorySourceDocument[] sources = request.Sources
+            .Select(static source => new CSharpAuthoringHistorySourceDocument(
+                source.LogicalPath,
+                source.Source,
+                source.IdentitySidecar,
+                source.IdentityPins))
+            .ToArray();
+        return new CSharpAuthoringHistorySnapshotDocument(
+            CSharpAuthoringHistoryJson.CreateSnapshotId(sources),
+            sourceCompilationId,
+            sources);
+    }
+
+    private static CSharpCompilationRequest CreateRequest(
+        CSharpCompilationRequest template,
+        CSharpAuthoringHistorySnapshotDocument snapshot) => new(
+            template.AssemblyName,
+            snapshot.Sources.Select(static source => new CSharpSourceDocument(
+                source.LogicalPath,
+                source.Source,
+                source.IdentitySidecar,
+                source.IdentityPins)),
+            template.ReferencePaths,
+            template.EffectCatalog,
+            template.Settings,
+            template.RuntimeReferencePaths,
+            template.IncludeDefaultReferences);
+
+    private static void ValidateCurrentSources(
+        CSharpCompilationRequest request,
+        CSharpAuthoringHistorySnapshotDocument current)
+    {
+        Dictionary<string, CSharpAuthoringHistorySourceDocument> archived = current.Sources
+            .ToDictionary(static source => source.LogicalPath, StringComparer.Ordinal);
+        if (request.Sources.Count != archived.Count)
+        {
+            throw new InvalidDataException(
+                "The persisted authoring history source set no longer matches the workspace.");
+        }
+        foreach (CSharpSourceDocument source in request.Sources)
+        {
+            if (!archived.TryGetValue(source.LogicalPath, out CSharpAuthoringHistorySourceDocument? other) ||
+                !string.Equals(source.Source, other.Source, StringComparison.Ordinal))
+            {
+                throw new InvalidDataException(
+                    $"Source '{source.LogicalPath}' changed after the authoring history was persisted.");
+            }
+            if (source.IdentitySidecar is not null &&
+                !IsEmptyIdentity(source.IdentitySidecar) &&
+                !IdentityEquals(source.IdentitySidecar, other.IdentitySidecar))
+            {
+                throw new InvalidDataException(
+                    $"Identity sidecar for '{source.LogicalPath}' changed after history was persisted.");
+            }
+            if (source.IdentityPins.Count > 0 &&
+                !source.IdentityPins.OrderBy(static pin => pin.Id.Value, StringComparer.Ordinal)
+                    .SequenceEqual(other.IdentityPins))
+            {
+                throw new InvalidDataException(
+                    $"Identity pins for '{source.LogicalPath}' changed after history was persisted.");
+            }
+        }
+    }
+
+    private static bool IdentityEquals(
+        IdentitySidecarDocument expected,
+        IdentitySidecarDocument? actual) => actual is not null && string.Equals(
+            IdentitySidecarJson.Serialize(expected, writeIndented: false),
+            IdentitySidecarJson.Serialize(actual, writeIndented: false),
+            StringComparison.Ordinal);
+
+    private static bool IsEmptyIdentity(IdentitySidecarDocument identity) =>
+        identity.Generation == 0 &&
+        identity.Entries.Count == 0 &&
+        identity.Tombstones.Count == 0;
+
     private sealed record HistoryEntry(
         string TransactionId,
         string Description,
-        CSharpAuthoringSnapshot Before,
-        CSharpAuthoringSnapshot After);
+        StoredSnapshot Before,
+        StoredSnapshot After);
+
+    private sealed class StoredSnapshot
+    {
+        private CSharpAuthoringSnapshot? snapshot;
+
+        public StoredSnapshot(CSharpAuthoringSnapshot snapshot)
+        {
+            ArgumentNullException.ThrowIfNull(snapshot);
+            this.snapshot = snapshot;
+            Request = snapshot.Request;
+            SourceCompilationId = snapshot.Analysis.ScriptAssets?.SourceCompilationId ??
+                throw new ArgumentException(
+                    "A stored authoring snapshot requires a source compilation ID.",
+                    nameof(snapshot));
+        }
+
+        public StoredSnapshot(CSharpCompilationRequest request, SemanticId sourceCompilationId)
+        {
+            ArgumentNullException.ThrowIfNull(request);
+            if (sourceCompilationId.IsEmpty)
+            {
+                throw new ArgumentException(
+                    "A stored authoring snapshot requires a source compilation ID.",
+                    nameof(sourceCompilationId));
+            }
+            Request = request;
+            SourceCompilationId = sourceCompilationId;
+        }
+
+        public CSharpCompilationRequest Request { get; }
+
+        public SemanticId SourceCompilationId { get; }
+
+        public CSharpAuthoringSnapshot Materialize(
+            CSharpSemanticPipeline pipeline,
+            long revision)
+        {
+            if (snapshot is null)
+            {
+                CSharpAnalysisResult analysis = pipeline.Analyze(Request);
+                if (!analysis.Succeeded ||
+                    analysis.ScriptAssets?.SourceCompilationId != SourceCompilationId)
+                {
+                    throw new InvalidDataException(
+                        "A persisted authoring snapshot no longer compiles to its recorded identity.");
+                }
+                CSharpCompilationRequest stabilized = AttachReconciledSidecars(Request, analysis);
+                snapshot = CreateSnapshot(1, stabilized, analysis);
+            }
+            return snapshot with { Revision = revision };
+        }
+
+        public CSharpAuthoringHistorySnapshotDocument ToDocument() =>
+            CreateHistorySnapshot(Request, SourceCompilationId);
+    }
 }

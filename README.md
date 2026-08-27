@@ -360,7 +360,10 @@ publishes the next revision/generation. The Workbench can save declarations,
 apply an AI declaration patch, or edit a promoted behavior input without source-
 line operations. External file changes are rejected instead of overwritten,
 and persistent IDs restore selection and breakpoints across the regenerated
-artifacts. The finished Workbench uses dark contract/runtime surfaces around a
+artifacts. The same transaction now includes a versioned Undo/Redo journal, so
+revision, exact snapshots, and operation replay guards survive Workbench and UE
+editor restarts while stale source/identity/configuration state is rejected.
+The finished Workbench uses dark contract/runtime surfaces around a
 light semantic drafting canvas: Behavior keeps the compact flow primary, Dual
 temporarily yields inspector space to flow/source comparison, Source focuses
 the canonical C#, and AI Lens exposes the coordinate-free machine outline.

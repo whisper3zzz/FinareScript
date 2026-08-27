@@ -160,7 +160,9 @@ IR, Graph, Surface, canonical source, revision, bounded transaction history, and
 CoreCLR generation from one committed snapshot. Browser and Slate clients send
 the rendered baseline revision and a unique operation ID for every edit, Undo,
 or Redo. History restores exact stabilized source/identity snapshots and
-republishes every artifact under a new revision/generation. See
+republishes every artifact under a new revision/generation. Its versioned
+journal retains both stacks and operation replay IDs across editor/host restarts
+and exposes stale-journal rejection to both clients. See
 [AUTHORING_TRANSACTIONS.md](AUTHORING_TRANSACTIONS.md).
 
 The Workbench consumes the Surface for asset/function navigation, cards,

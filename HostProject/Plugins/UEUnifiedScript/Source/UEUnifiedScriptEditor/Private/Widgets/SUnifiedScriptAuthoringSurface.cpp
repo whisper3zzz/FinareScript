@@ -1645,6 +1645,8 @@ void SUnifiedScriptAuthoringSurface::HandlePatchResponse(
     RedoAuthoringDepth = Workspace.History.RedoDepth;
     UndoAuthoringDescription = MoveTemp(Workspace.History.UndoDescription);
     RedoAuthoringDescription = MoveTemp(Workspace.History.RedoDescription);
+    HistoryPersistenceState = MoveTemp(Workspace.History.PersistenceState);
+    HistoryPersistenceMessage = MoveTemp(Workspace.History.PersistenceMessage);
     if (!LoadedSurfacePath.IsEmpty())
     {
         LoadedSurfaceTimestamp = IFileManager::Get().GetTimeStamp(*LoadedSurfacePath);
@@ -1658,17 +1660,22 @@ void SUnifiedScriptAuthoringSurface::HandlePatchResponse(
     {
         ReloadMatchingComponents(Matched, Reloaded, Failed);
     }
+    const FString HistoryPersistenceDetail = HistoryPersistenceMessage.IsEmpty()
+        ? FString()
+        : FString::Printf(TEXT(" (%s)"), *HistoryPersistenceMessage);
     SetStatus(
         FString::Printf(
-            TEXT("Applied revision %lld / Workbench generation %lld; history %lld undo / %lld redo; Surface refreshed; components %d matched, %d updated, %d failed."),
+            TEXT("Applied revision %lld / Workbench generation %lld; history %lld undo / %lld redo; journal %s%s; Surface refreshed; components %d matched, %d updated, %d failed."),
             Workspace.Revision,
             Workspace.Generation,
             UndoAuthoringDepth,
             RedoAuthoringDepth,
+            *HistoryPersistenceState,
+            *HistoryPersistenceDetail,
             Matched,
             Reloaded,
             Failed),
-        Failed > 0);
+        Failed > 0 || HistoryPersistenceState == TEXT("rejected"));
 }
 
 void SUnifiedScriptAuthoringSurface::ReloadMatchingComponents(

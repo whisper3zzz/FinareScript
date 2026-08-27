@@ -967,7 +967,7 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
              "\"history\":{\"canUndo\":true,\"canRedo\":false,"
              "\"undoDepth\":2,\"redoDepth\":0,"
              "\"undoTransactionId\":\"txn-2\",\"undoDescription\":\"Reconnect flow\","
-             "\"lastOperationId\":\"op-2\"},"
+             "\"lastOperationId\":\"op-2\",\"persistenceState\":\"restored\"},"
              "\"surface\":%s,\"generation\":{\"number\":3}}"),
         *SurfaceJson.Replace(
             TEXT("unifiedscript.authoring-surface/v9.9"),
@@ -986,6 +986,7 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("Workbench response retains undo depth"), Workspace.History.UndoDepth, int64(2));
     TestEqual(TEXT("Workbench response retains undo label"), Workspace.History.UndoDescription, FString(TEXT("Reconnect flow")));
     TestEqual(TEXT("Workbench response retains operation identity"), Workspace.History.LastOperationId, FString(TEXT("op-2")));
+    TestEqual(TEXT("Workbench response exposes restored history"), Workspace.History.PersistenceState, FString(TEXT("restored")));
     TestEqual(TEXT("Workbench response replaces the Surface transactionally"),
         Workspace.Surface.GetActionCount(), 45);
     TestTrue(

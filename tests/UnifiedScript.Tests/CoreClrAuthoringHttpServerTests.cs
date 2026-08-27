@@ -49,6 +49,7 @@ public sealed class CoreClrAuthoringHttpServerTests
         string surfacePath = Path.Combine(directory, "DamagePolicy.surface.json");
         string managedPath = Path.Combine(directory, "UnifiedScript.Analysis.dll");
         string pdbPath = Path.Combine(directory, "UnifiedScript.Analysis.pdb");
+        string historyPath = Path.Combine(directory, "DamagePolicy.authoring-history.json");
         string contentRoot = Path.Combine(directory, "workbench");
         Directory.CreateDirectory(contentRoot);
         await File.WriteAllTextAsync(sourcePath, Source);
@@ -81,7 +82,8 @@ public sealed class CoreClrAuthoringHttpServerTests
                     declarationPath,
                     surfacePath,
                     managedPath,
-                    pdbPath),
+                    pdbPath,
+                    historyPath),
                 new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     [logicalPath] = sourcePath,
@@ -97,6 +99,7 @@ public sealed class CoreClrAuthoringHttpServerTests
             Assert.False(baseline.History.CanRedo);
             Assert.Equal(0, baseline.History.UndoDepth);
             Assert.Equal(0, baseline.History.RedoDepth);
+            Assert.Equal("empty", baseline.History.PersistenceState);
             Assert.Equal(AuthoringSurfaceDocument.CurrentSchemaVersion, baseline.Surface.SchemaVersion);
             ScriptAssetDeclaration asset = Assert.Single(baseline.ScriptAssets.Assets);
             AuthoringAssetSurface surfaceAsset = Assert.Single(baseline.Surface.Assets);
@@ -172,8 +175,13 @@ public sealed class CoreClrAuthoringHttpServerTests
             Assert.Equal("txn-declaration", declared.History.UndoTransactionId);
             Assert.Equal("Update MaxDamage", declared.History.UndoDescription);
             Assert.Equal("txn-declaration", declared.History.LastOperationId);
+            Assert.Equal("persisted", declared.History.PersistenceState);
             Assert.Contains("= 120;", await File.ReadAllTextAsync(sourcePath), StringComparison.Ordinal);
             Assert.True(File.Exists(identityPath));
+            Assert.Equal(
+                CSharpAuthoringHistoryDocument.CurrentSchemaVersion,
+                CSharpAuthoringHistoryJson.Deserialize(
+                    await File.ReadAllTextAsync(historyPath)).SchemaVersion);
             Assert.Equal(
                 "unifiedscript.script-asset/v0.1",
                 ScriptAssetJson.Deserialize(await File.ReadAllTextAsync(declarationPath)).SchemaVersion);
@@ -377,6 +385,145 @@ public sealed class CoreClrAuthoringHttpServerTests
         finally
         {
             Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task PersistedAuthoringHistorySurvivesRestartAndRejectsAStaleJournal()
+    {
+        string directory = Path.Combine(
+            Path.GetTempPath(),
+            $"unifiedscript-authoring-history-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        string sourcePath = Path.Combine(directory, "DamagePolicy.cs");
+        string identityPath = sourcePath + ".usids";
+        string historyPath = sourcePath + ".ushistory.json";
+        string contentRoot = Path.Combine(directory, "workbench");
+        Directory.CreateDirectory(contentRoot);
+        await File.WriteAllTextAsync(sourcePath, Source);
+        await File.WriteAllTextAsync(
+            Path.Combine(contentRoot, "index.html"),
+            "<!doctype html><title>test</title>");
+        string logicalPath = sourcePath.Replace('\\', '/');
+
+        try
+        {
+            AuthoringWorkspaceResponse edited;
+            int firstPort = ReserveLoopbackPort();
+            using (var server = new CoreClrDebugHttpServer(
+                CreateRequestFromDisk(sourcePath, identityPath),
+                sourcePath,
+                identityPath,
+                contentRoot,
+                firstPort,
+                new AuthoringArtifactOutputs(HistoryPath: historyPath)))
+            using (var cancellation = new CancellationTokenSource())
+            using (var client = new HttpClient
+            {
+                BaseAddress = new Uri($"http://127.0.0.1:{firstPort}/"),
+            })
+            {
+                Task serverTask = server.RunAsync(cancellation.Token);
+                AuthoringWorkspaceResponse baseline = await GetWorkspaceAsync(client);
+                GraphNode minimum = baseline.Graph.Functions[0].Nodes.Single(static node =>
+                    node.Kind == "literal" &&
+                    node.Properties.GetValueOrDefault("value") == "0f");
+                SemanticPatchDocument patch = SemanticPatchDocument.Create(
+                    baseline.ScriptAssets.SourceCompilationId,
+                    baseline.ScriptAssets.SemanticConfigurationId,
+                    [new ReplaceLiteralPatchOperation(minimum.Id, "0f", "10f")]);
+                edited = await PostAsync(
+                    client,
+                    "api/authoring/semantic-patch",
+                    SemanticPatchJson.Serialize(patch),
+                    baseline.Revision,
+                    "txn-before-restart",
+                    "Edit before restart");
+                cancellation.Cancel();
+                await serverTask.WaitAsync(TimeSpan.FromSeconds(5));
+            }
+
+            Assert.True(File.Exists(historyPath));
+            Assert.Equal(2, edited.Revision);
+
+            int secondPort = ReserveLoopbackPort();
+            using (var server = new CoreClrDebugHttpServer(
+                CreateRequestFromDisk(sourcePath, identityPath),
+                sourcePath,
+                identityPath,
+                contentRoot,
+                secondPort,
+                new AuthoringArtifactOutputs(HistoryPath: historyPath)))
+            using (var cancellation = new CancellationTokenSource())
+            using (var client = new HttpClient
+            {
+                BaseAddress = new Uri($"http://127.0.0.1:{secondPort}/"),
+            })
+            {
+                Task serverTask = server.RunAsync(cancellation.Token);
+                AuthoringWorkspaceResponse restored = await GetWorkspaceAsync(client);
+                Assert.Equal(2, restored.Revision);
+                Assert.Equal("restored", restored.History.PersistenceState);
+                Assert.True(restored.History.CanUndo);
+                Assert.Equal("txn-before-restart", restored.History.UndoTransactionId);
+                Assert.Equal("txn-before-restart", restored.History.LastOperationId);
+
+                AuthoringWorkspaceResponse undone = await PostAsync(
+                    client,
+                    "api/authoring/undo",
+                    "{}",
+                    restored.Revision,
+                    "op-after-restart",
+                    "Undo after restart");
+                Assert.Equal(3, undone.Revision);
+                Assert.Equal("persisted", undone.History.PersistenceState);
+                Assert.True(undone.History.CanRedo);
+                Assert.Contains(
+                    "Math.Clamp(scaled, 0f, MaxDamage)",
+                    await File.ReadAllTextAsync(sourcePath));
+                cancellation.Cancel();
+                await serverTask.WaitAsync(TimeSpan.FromSeconds(5));
+            }
+
+            await File.AppendAllTextAsync(sourcePath, "\n// external edit after shutdown\n");
+            int stalePort = ReserveLoopbackPort();
+            using (var server = new CoreClrDebugHttpServer(
+                CreateRequestFromDisk(sourcePath, identityPath),
+                sourcePath,
+                identityPath,
+                contentRoot,
+                stalePort,
+                new AuthoringArtifactOutputs(HistoryPath: historyPath)))
+            using (var cancellation = new CancellationTokenSource())
+            using (var client = new HttpClient
+            {
+                BaseAddress = new Uri($"http://127.0.0.1:{stalePort}/"),
+            })
+            {
+                Task serverTask = server.RunAsync(cancellation.Token);
+                AuthoringWorkspaceResponse rejected = await GetWorkspaceAsync(client);
+                Assert.Equal(1, rejected.Revision);
+                Assert.Equal("rejected", rejected.History.PersistenceState);
+                Assert.NotNull(rejected.History.PersistenceMessage);
+                Assert.False(rejected.History.CanUndo);
+                cancellation.Cancel();
+                await serverTask.WaitAsync(TimeSpan.FromSeconds(5));
+            }
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+
+        CSharpCompilationRequest CreateRequestFromDisk(string path, string idsPath)
+        {
+            string logical = path.Replace('\\', '/');
+            IdentitySidecarDocument identity = File.Exists(idsPath)
+                ? IdentitySidecarJson.Deserialize(File.ReadAllText(idsPath))
+                : IdentitySidecarDocument.CreateEmpty(logical);
+            return new CSharpCompilationRequest(
+                "UnifiedScript.Analysis",
+                [new CSharpSourceDocument(logical, File.ReadAllText(path), identity)]);
         }
     }
 
