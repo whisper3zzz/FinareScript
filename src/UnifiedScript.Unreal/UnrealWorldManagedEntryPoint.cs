@@ -330,6 +330,73 @@ public static class UnrealWorldManagedEntryPoint
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static int SetScriptProfilerEnabled(
+        ulong worldId,
+        ulong instanceId,
+        int enabled)
+    {
+        ClearBoundaryFailure(worldId);
+        if (worldId == 0 || instanceId == 0 || enabled is < 0 or > 1 ||
+            !Worlds.TryGetValue(worldId, out WorldEntry? entry))
+        {
+            return (int)UnrealWorldManagedEntryStatus.InvalidArgument;
+        }
+        try
+        {
+            return (int)entry.SetScriptProfilerEnabled(instanceId, enabled != 0);
+        }
+        catch (Exception exception)
+        {
+            ReportBoundaryFailure(
+                worldId,
+                instanceId,
+                nameof(SetScriptProfilerEnabled),
+                exception);
+            return (int)UnrealWorldManagedEntryStatus.InternalFailure;
+        }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static unsafe int GetScriptProfilerTrace(
+        ulong worldId,
+        ulong instanceId,
+        nint buffer,
+        int bufferCapacity)
+    {
+        if (worldId == 0 || instanceId == 0 || bufferCapacity < 0 ||
+            !Worlds.TryGetValue(worldId, out WorldEntry? entry))
+        {
+            return 0;
+        }
+        try
+        {
+            string? json = entry.GetScriptProfilerTrace(instanceId);
+            if (string.IsNullOrEmpty(json))
+            {
+                return 0;
+            }
+            int requiredBytes = Encoding.UTF8.GetByteCount(json);
+            if (buffer == nint.Zero || bufferCapacity <= requiredBytes)
+            {
+                return requiredBytes;
+            }
+            var destination = new Span<byte>((void*)buffer, bufferCapacity);
+            int written = Encoding.UTF8.GetBytes(json, destination);
+            destination[written] = 0;
+            return written;
+        }
+        catch (Exception exception)
+        {
+            ReportBoundaryFailure(
+                worldId,
+                instanceId,
+                nameof(GetScriptProfilerTrace),
+                exception);
+            return 0;
+        }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int ControlScriptDebug(
         ulong worldId,
         ulong instanceId,
@@ -769,6 +836,35 @@ public static class UnrealWorldManagedEntryPoint
             }
         }
 
+        public UnrealWorldManagedEntryStatus SetScriptProfilerEnabled(
+            ulong instanceId,
+            bool enabled)
+        {
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                if (!_scripts.TryGetValue(instanceId, out ManagedScriptInstance? script))
+                {
+                    return UnrealWorldManagedEntryStatus.ScriptNotFound;
+                }
+                script.SetProfilerEnabled(enabled);
+                Bridge.SetProfilerEnabled(
+                    _scripts.Values.Any(static candidate => candidate.IsProfilerEnabled));
+                return UnrealWorldManagedEntryStatus.Success;
+            }
+        }
+
+        public string? GetScriptProfilerTrace(ulong instanceId)
+        {
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                return _scripts.TryGetValue(instanceId, out ManagedScriptInstance? script)
+                    ? script.GetProfilerTrace()
+                    : null;
+            }
+        }
+
         public UnrealWorldManagedEntryStatus ControlScriptDebug(
             ulong instanceId,
             UnrealWorldDebugControl control,
@@ -854,6 +950,8 @@ public static class UnrealWorldManagedEntryPoint
                     return UnrealWorldManagedEntryStatus.ScriptNotFound;
                 }
                 script.Dispose();
+                Bridge.SetProfilerEnabled(
+                    _scripts.Values.Any(static candidate => candidate.IsProfilerEnabled));
                 return UnrealWorldManagedEntryStatus.Success;
             }
         }
@@ -880,6 +978,7 @@ public static class UnrealWorldManagedEntryPoint
                     }
                 }
                 _scripts.Clear();
+                Bridge.SetProfilerEnabled(false);
                 _transport.Dispose();
                 if (failures is not null)
                 {
@@ -902,6 +1001,7 @@ public static class UnrealWorldManagedEntryPoint
         private string _typeName;
         private ScriptGeneration _current;
         private readonly UnrealWorldDebugController _debug;
+        private readonly UnrealGameplayProfiler _profiler;
         private string _lastReloadTransactionJson = string.Empty;
         private bool _started;
 
@@ -923,6 +1023,10 @@ public static class UnrealWorldManagedEntryPoint
             _typeName = typeName;
             _current = LoadGeneration(1, _assemblyPath, _typeName);
             _debug = new UnrealWorldDebugController(worldId, instanceId);
+            _profiler = new UnrealGameplayProfiler(
+                worldId,
+                instanceId,
+                (NativeUnrealInvocationBridge)bridge);
         }
 
         public static ManagedScriptInstance Create(
@@ -947,8 +1051,18 @@ public static class UnrealWorldManagedEntryPoint
             {
                 throw new InvalidOperationException("The managed script is not started.");
             }
-            _current.Script.OnTick(deltaSeconds);
+            _profiler.ExecuteTick(
+                _current.Script,
+                _current.Generation,
+                _typeName,
+                deltaSeconds);
         }
+
+        public bool IsProfilerEnabled => _profiler.Enabled;
+
+        public void SetProfilerEnabled(bool enabled) => _profiler.SetEnabled(enabled);
+
+        public string GetProfilerTrace() => _profiler.ExportJson();
 
         public bool IsDebugConfigured => _debug.IsConfigured;
 

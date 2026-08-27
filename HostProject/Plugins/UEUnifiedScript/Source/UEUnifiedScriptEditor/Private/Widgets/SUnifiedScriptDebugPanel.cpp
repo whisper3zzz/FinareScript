@@ -160,12 +160,76 @@ void SUnifiedScriptDebugPanel::Construct(const FArguments& InArgs)
                     .IsEnabled(this, &SUnifiedScriptDebugPanel::CanContinueLiveWorld)
                     .OnClicked(this, &SUnifiedScriptDebugPanel::HandleContinueLiveWorld)
                 ]
+                + SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 4.0f, 0.0f)
+                [
+                    SNew(SButton)
+                    .Text_Lambda([this]()
+                    {
+                        return LiveComponent.IsValid() &&
+                            LiveComponent->bGameplayProfilerEnabled
+                            ? LOCTEXT("StopProfile", "Stop Profile")
+                            : LOCTEXT("StartProfile", "Start Profile");
+                    })
+                    .ToolTipText(LOCTEXT(
+                        "ToggleProfileTip",
+                        "Opt in to a bounded 120-frame gameplay, allocation, semantic-node, and bridge trace."))
+                    .IsEnabled(this, &SUnifiedScriptDebugPanel::CanControlGameplayProfiler)
+                    .OnClicked(this, &SUnifiedScriptDebugPanel::HandleToggleGameplayProfiler)
+                ]
+                + SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 8.0f, 0.0f)
+                [
+                    SNew(SButton)
+                    .Text(LOCTEXT("CaptureProfile", "Capture Profile"))
+                    .IsEnabled(this, &SUnifiedScriptDebugPanel::CanCaptureGameplayProfile)
+                    .OnClicked(this, &SUnifiedScriptDebugPanel::HandleCaptureGameplayProfile)
+                ]
                 + SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
                 [
                     SNew(STextBlock)
                     .Text_Lambda([this]() { return FText::FromString(DescribeLiveWorldTarget()); })
                     .Font(FAppStyle::GetFontStyle(TEXT("SmallFont")))
                     .ColorAndOpacity(FLinearColor(0.58f, 0.68f, 0.76f))
+                    .Clipping(EWidgetClipping::ClipToBounds)
+                ]
+            ]
+            + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 5.0f)
+            [
+                SNew(SHorizontalBox)
+                .Visibility_Lambda([this]()
+                {
+                    return GameplayProfile.IsSet() || !GameplayProfileStatus.IsEmpty()
+                        ? EVisibility::Visible
+                        : EVisibility::Collapsed;
+                })
+                + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 8.0f, 0.0f)
+                [
+                    SNew(STextBlock)
+                    .Text(LOCTEXT("GameplayProfiler", "GAMEPLAY / BRIDGE PROFILE"))
+                    .Font(FAppStyle::GetFontStyle(TEXT("SmallFontBold")))
+                    .ColorAndOpacity(FLinearColor(0.50f, 0.82f, 0.42f))
+                ]
+                + SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+                [
+                    SNew(STextBlock)
+                    .Text_Lambda([this]() { return FText::FromString(DescribeGameplayProfile()); })
+                    .Font(FAppStyle::GetFontStyle(TEXT("SmallFont")))
+                    .ColorAndOpacity(FLinearColor(0.62f, 0.74f, 0.60f))
+                    .ToolTipText_Lambda([this]()
+                    {
+                        if (!GameplayProfile.IsSet() || GameplayProfile->Frames.IsEmpty())
+                        {
+                            return FText::FromString(GameplayProfileStatus);
+                        }
+                        const FUnifiedScriptGameplayProfileFrame& Last =
+                            GameplayProfile->Frames.Last();
+                        return FText::FromString(FString::Printf(
+                            TEXT("Trace %s · World frame %s · generation %d · %.3f ms · %lld B"),
+                            *GameplayProfile->TraceId,
+                            *Last.WorldFrameNumber,
+                            Last.Generation,
+                            static_cast<double>(Last.DurationNanoseconds) / 1000000.0,
+                            static_cast<long long>(Last.AllocatedBytes)));
+                    })
                     .Clipping(EWidgetClipping::ClipToBounds)
                 ]
             ]
@@ -440,6 +504,81 @@ FReply SUnifiedScriptDebugPanel::HandleContinueLiveWorld()
         LiveRuntimeStatus = TEXT("Managed World execution resumed.");
         RefreshLiveWorldTargetNow();
     }
+    return FReply::Handled();
+}
+
+FReply SUnifiedScriptDebugPanel::HandleToggleGameplayProfiler()
+{
+    if (!CanControlGameplayProfiler())
+    {
+        return FReply::Handled();
+    }
+    UUnifiedScriptComponent* Component = LiveComponent.Get();
+    check(Component != nullptr);
+    FString Error;
+    if (Component->bGameplayProfilerEnabled)
+    {
+        FString Json;
+        if (!Component->CaptureGameplayProfileTrace(Json, Error))
+        {
+            GameplayProfileStatus = MoveTemp(Error);
+            return FReply::Handled();
+        }
+        FUnifiedScriptGameplayProfileResult Captured;
+        if (!FUnifiedScriptDebugWorkbench::ParseGameplayProfileTrace(
+                Json,
+                Captured,
+                Error))
+        {
+            GameplayProfileStatus = MoveTemp(Error);
+            return FReply::Handled();
+        }
+        GameplayProfile = MoveTemp(Captured);
+        if (!Component->SetGameplayProfilerEnabled(false, Error))
+        {
+            GameplayProfileStatus = MoveTemp(Error);
+            return FReply::Handled();
+        }
+        GameplayProfileStatus = TEXT("Profile stopped; the bounded capture remains available.");
+    }
+    else
+    {
+        if (!Component->SetGameplayProfilerEnabled(true, Error))
+        {
+            GameplayProfileStatus = MoveTemp(Error);
+            return FReply::Handled();
+        }
+        GameplayProfile.Reset();
+        GameplayProfileStatus = TEXT("Collecting up to 120 live World frames ...");
+    }
+    RefreshLiveWorldTargetNow();
+    return FReply::Handled();
+}
+
+FReply SUnifiedScriptDebugPanel::HandleCaptureGameplayProfile()
+{
+    if (!CanCaptureGameplayProfile())
+    {
+        return FReply::Handled();
+    }
+    FString Json;
+    FString Error;
+    if (!LiveComponent->CaptureGameplayProfileTrace(Json, Error))
+    {
+        GameplayProfileStatus = MoveTemp(Error);
+        return FReply::Handled();
+    }
+    FUnifiedScriptGameplayProfileResult Captured;
+    if (!FUnifiedScriptDebugWorkbench::ParseGameplayProfileTrace(
+            Json,
+            Captured,
+            Error))
+    {
+        GameplayProfileStatus = MoveTemp(Error);
+        return FReply::Handled();
+    }
+    GameplayProfile = MoveTemp(Captured);
+    GameplayProfileStatus = TEXT("Captured the current bounded timeline without stopping collection.");
     return FReply::Handled();
 }
 
@@ -1435,6 +1574,11 @@ void SUnifiedScriptDebugPanel::RefreshLiveWorldTargetNow()
     if (PreviousComponent != LiveComponent.Get() ||
         PreviousSequence != LastRuntimeDiagnosticSequence)
     {
+        if (PreviousComponent != LiveComponent.Get())
+        {
+            GameplayProfile.Reset();
+            GameplayProfileStatus.Reset();
+        }
         OnDebugStateChanged.ExecuteIfBound();
     }
 }
@@ -1477,6 +1621,18 @@ bool SUnifiedScriptDebugPanel::CanStepLiveWorld() const
 bool SUnifiedScriptDebugPanel::CanContinueLiveWorld() const
 {
     return CanStepLiveWorld();
+}
+
+bool SUnifiedScriptDebugPanel::CanControlGameplayProfiler() const
+{
+    return LiveComponent.IsValid() && LiveContext.IsSet() &&
+        LiveContext->bRunning && !bCommandPending;
+}
+
+bool SUnifiedScriptDebugPanel::CanCaptureGameplayProfile() const
+{
+    return CanControlGameplayProfiler() &&
+        LiveComponent->bGameplayProfilerEnabled;
 }
 
 bool SUnifiedScriptDebugPanel::CanFocusRuntimeFailure() const
@@ -1598,6 +1754,27 @@ FString SUnifiedScriptDebugPanel::DescribeRuntimeDiagnostic() const
         *Diagnostic.Message,
         *Source,
         *Bridge);
+}
+
+FString SUnifiedScriptDebugPanel::DescribeGameplayProfile() const
+{
+    if (!GameplayProfile.IsSet())
+    {
+        return GameplayProfileStatus;
+    }
+    FString Result = GameplayProfile->ToDisplayString();
+    if (GameplayProfile->DroppedFrameCount > 0)
+    {
+        Result += FString::Printf(
+            TEXT(" · dropped %lld old frame%s"),
+            static_cast<long long>(GameplayProfile->DroppedFrameCount),
+            GameplayProfile->DroppedFrameCount == 1 ? TEXT("") : TEXT("s"));
+    }
+    if (!GameplayProfileStatus.IsEmpty())
+    {
+        Result += TEXT(" · ") + GameplayProfileStatus;
+    }
+    return Result;
 }
 
 #undef LOCTEXT_NAMESPACE

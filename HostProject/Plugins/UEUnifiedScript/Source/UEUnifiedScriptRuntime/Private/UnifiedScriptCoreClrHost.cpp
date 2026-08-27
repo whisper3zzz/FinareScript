@@ -70,6 +70,11 @@ using FGetScriptDebugStateEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
     uint8* Buffer,
     int32 BufferCapacity);
 using FGetScriptReloadStateEntryPoint = FGetScriptDebugStateEntryPoint;
+using FSetScriptProfilerEnabledEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
+    uint64 WorldHostId,
+    uint64 InstanceId,
+    int32 Enabled);
+using FGetScriptProfilerTraceEntryPoint = FGetScriptDebugStateEntryPoint;
 using FControlScriptDebugEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
     uint64 WorldHostId,
     uint64 InstanceId,
@@ -365,6 +370,8 @@ void FUnifiedScriptCoreClrHost::Shutdown()
     BeginScriptDebugTickEntryPoint = nullptr;
     GetScriptDebugStateEntryPoint = nullptr;
     GetScriptReloadStateEntryPoint = nullptr;
+    SetScriptProfilerEnabledEntryPoint = nullptr;
+    GetScriptProfilerTraceEntryPoint = nullptr;
     ControlScriptDebugEntryPoint = nullptr;
     DisableScriptDebugEntryPoint = nullptr;
     IsScriptDebugActiveEntryPoint = nullptr;
@@ -710,6 +717,83 @@ bool FUnifiedScriptCoreClrHost::GetManagedScriptReloadState(
             ? TEXT("The managed script has no reload transaction state.")
             : FString::Printf(
                   TEXT("The managed reload transaction state could not be read.%s%s"),
+                  LINE_TERMINATOR,
+                  *Detail);
+        return false;
+    }
+    OutError.Reset();
+    return true;
+}
+
+bool FUnifiedScriptCoreClrHost::SetManagedScriptProfilerEnabled(
+    uint64 WorldHostId,
+    uint64 InstanceId,
+    bool bEnabled,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::CoreClr::Private;
+    check(IsInGameThread());
+    FSetScriptProfilerEnabledEntryPoint EntryPoint = nullptr;
+    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+    {
+        FScopeLock Lock(&StateLock);
+        if (State != EUnifiedScriptCoreClrHostState::Ready ||
+            SetScriptProfilerEnabledEntryPoint == nullptr)
+        {
+            OutError = TEXT("The managed gameplay profiler control entry point is unavailable.");
+            return false;
+        }
+        EntryPoint = reinterpret_cast<FSetScriptProfilerEnabledEntryPoint>(
+            SetScriptProfilerEnabledEntryPoint);
+        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+            GetLastManagedErrorEntryPoint);
+    }
+    const int32 Result = EntryPoint(WorldHostId, InstanceId, bEnabled ? 1 : 0);
+    if (Result != 0)
+    {
+        OutError = DescribeManagedFailure(
+            TEXT("Managed gameplay profiler control"),
+            Result,
+            ErrorEntryPoint,
+            WorldHostId);
+        return false;
+    }
+    OutError.Reset();
+    return true;
+}
+
+bool FUnifiedScriptCoreClrHost::GetManagedScriptProfilerTrace(
+    uint64 WorldHostId,
+    uint64 InstanceId,
+    FString& OutJson,
+    FString& OutError) const
+{
+    using namespace UE::UnifiedScript::CoreClr::Private;
+    check(IsInGameThread());
+    FGetScriptProfilerTraceEntryPoint EntryPoint = nullptr;
+    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+    {
+        FScopeLock Lock(&StateLock);
+        if (State != EUnifiedScriptCoreClrHostState::Ready ||
+            GetScriptProfilerTraceEntryPoint == nullptr)
+        {
+            OutJson.Reset();
+            OutError = TEXT("The managed gameplay profiler trace entry point is unavailable.");
+            return false;
+        }
+        EntryPoint = reinterpret_cast<FGetScriptProfilerTraceEntryPoint>(
+            GetScriptProfilerTraceEntryPoint);
+        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+            GetLastManagedErrorEntryPoint);
+    }
+    OutJson = ReadManagedDebugState(EntryPoint, WorldHostId, InstanceId);
+    if (OutJson.IsEmpty())
+    {
+        const FString Detail = ReadManagedBoundaryError(ErrorEntryPoint, WorldHostId);
+        OutError = Detail.IsEmpty()
+            ? TEXT("The managed script has no gameplay profiler trace.")
+            : FString::Printf(
+                  TEXT("The managed gameplay profiler trace could not be read.%s%s"),
                   LINE_TERMINATOR,
                   *Detail);
         return false;
@@ -1183,6 +1267,10 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
         TEXT("GetScriptDebugState"), &GetScriptDebugStateEntryPoint);
     const int32 ReloadStateResult = LoadEntryPoint(
         TEXT("GetScriptReloadState"), &GetScriptReloadStateEntryPoint);
+    const int32 ProfilerControlResult = LoadEntryPoint(
+        TEXT("SetScriptProfilerEnabled"), &SetScriptProfilerEnabledEntryPoint);
+    const int32 ProfilerTraceResult = LoadEntryPoint(
+        TEXT("GetScriptProfilerTrace"), &GetScriptProfilerTraceEntryPoint);
     const int32 DebugControlResult = LoadEntryPoint(
         TEXT("ControlScriptDebug"), &ControlScriptDebugEntryPoint);
     const int32 DisableDebugResult = LoadEntryPoint(
@@ -1212,6 +1300,10 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
         "GetScriptDebugState", &GetScriptDebugStateEntryPoint);
     const int32 ReloadStateResult = LoadEntryPoint(
         "GetScriptReloadState", &GetScriptReloadStateEntryPoint);
+    const int32 ProfilerControlResult = LoadEntryPoint(
+        "SetScriptProfilerEnabled", &SetScriptProfilerEnabledEntryPoint);
+    const int32 ProfilerTraceResult = LoadEntryPoint(
+        "GetScriptProfilerTrace", &GetScriptProfilerTraceEntryPoint);
     const int32 DebugControlResult = LoadEntryPoint(
         "ControlScriptDebug", &ControlScriptDebugEntryPoint);
     const int32 DisableDebugResult = LoadEntryPoint(
@@ -1228,7 +1320,7 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
     if (CreateResult != 0 || DestroyResult != 0 || CountResult != 0 || CollectResult != 0 ||
         CreateScriptResult != 0 || TickScriptResult != 0 || DispatchEventResult != 0 ||
         ConfigureDebugResult != 0 || BeginDebugTickResult != 0 || DebugStateResult != 0 ||
-        ReloadStateResult != 0 ||
+        ReloadStateResult != 0 || ProfilerControlResult != 0 || ProfilerTraceResult != 0 ||
         DebugControlResult != 0 || DisableDebugResult != 0 || DebugActiveResult != 0 ||
         ReloadScriptResult != 0 ||
         DestroyScriptResult != 0 || ScriptCountResult != 0 || MetricsResult != 0 ||
@@ -1243,6 +1335,8 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
         BeginScriptDebugTickEntryPoint == nullptr ||
         GetScriptDebugStateEntryPoint == nullptr ||
         GetScriptReloadStateEntryPoint == nullptr ||
+        SetScriptProfilerEnabledEntryPoint == nullptr ||
+        GetScriptProfilerTraceEntryPoint == nullptr ||
         ControlScriptDebugEntryPoint == nullptr ||
         DisableScriptDebugEntryPoint == nullptr ||
         IsScriptDebugActiveEntryPoint == nullptr ||
@@ -1254,7 +1348,7 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
         GetLastManagedErrorEntryPoint == nullptr)
     {
         return FailLocked(FString::Printf(
-            TEXT("Managed entry-point loading failed: world=(0x%08X,0x%08X,0x%08X,0x%08X) script=(0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X) debug=(0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X) diagnostics=(0x%08X,0x%08X)."),
+            TEXT("Managed entry-point loading failed: world=(0x%08X,0x%08X,0x%08X,0x%08X) script=(0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X) debug=(0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X) profiler=(0x%08X,0x%08X) diagnostics=(0x%08X,0x%08X)."),
             static_cast<uint32>(CreateResult),
             static_cast<uint32>(DestroyResult),
             static_cast<uint32>(CountResult),
@@ -1272,6 +1366,8 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
             static_cast<uint32>(DebugControlResult),
             static_cast<uint32>(DisableDebugResult),
             static_cast<uint32>(DebugActiveResult),
+            static_cast<uint32>(ProfilerControlResult),
+            static_cast<uint32>(ProfilerTraceResult),
             static_cast<uint32>(MetricsResult),
             static_cast<uint32>(LastErrorResult)));
     }
@@ -1303,6 +1399,8 @@ bool FUnifiedScriptCoreClrHost::FailLocked(FString Message)
     BeginScriptDebugTickEntryPoint = nullptr;
     GetScriptDebugStateEntryPoint = nullptr;
     GetScriptReloadStateEntryPoint = nullptr;
+    SetScriptProfilerEnabledEntryPoint = nullptr;
+    GetScriptProfilerTraceEntryPoint = nullptr;
     ControlScriptDebugEntryPoint = nullptr;
     DisableScriptDebugEntryPoint = nullptr;
     IsScriptDebugActiveEntryPoint = nullptr;

@@ -86,6 +86,14 @@ public:
     UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category="UnifiedScript|Reload")
     FString LastReloadTransaction;
 
+    /** Opt-in bounded gameplay/bridge profiler state. Disabled by default. */
+    UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category="UnifiedScript|Profiler")
+    bool bGameplayProfilerEnabled = false;
+
+    /** Last captured portable unifiedscript.gameplay-profile/v0.1 trace. */
+    UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category="UnifiedScript|Profiler")
+    FString LastGameplayProfileTrace;
+
     UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category="UnifiedScript")
     bool bScriptRunning = false;
 
@@ -134,6 +142,12 @@ public:
         FString& OutError);
     bool DisableSemanticDebug(FString& OutError);
     const FString& GetSemanticDebugStateJson() const { return SemanticDebugStateJson; }
+
+    /** Enables bounded timing/allocation/bridge profiling for this live script. */
+    bool SetGameplayProfilerEnabled(bool bEnabled, FString& OutError);
+
+    /** Captures the current portable profiler timeline and aggregate JSON. */
+    bool CaptureGameplayProfileTrace(FString& OutJson, FString& OutError);
 
     /** Restores one state to the current C# declaration default. */
     UFUNCTION(BlueprintCallable, CallInEditor, Category="UnifiedScript|State")

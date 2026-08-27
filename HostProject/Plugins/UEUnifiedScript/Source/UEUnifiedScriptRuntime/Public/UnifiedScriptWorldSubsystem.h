@@ -111,6 +111,14 @@ public:
         uint64 InstanceId,
         FString& OutJson,
         FString& OutError) const;
+    bool SetManagedScriptProfilerEnabled(
+        uint64 InstanceId,
+        bool bEnabled,
+        FString& OutError);
+    bool GetManagedScriptProfilerTrace(
+        uint64 InstanceId,
+        FString& OutJson,
+        FString& OutError) const;
 
     bool DestroyManagedScript(uint64 InstanceId, FString& OutError);
 

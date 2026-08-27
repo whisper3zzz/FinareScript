@@ -520,6 +520,8 @@ bool UUnifiedScriptComponent::StartScript()
     bSemanticDebugTickActive = false;
     bSemanticDebugPaused = false;
     SemanticDebugStateJson.Reset();
+    bGameplayProfilerEnabled = false;
+    LastGameplayProfileTrace.Reset();
     BindManagedActorEvents();
     SetComponentTickEnabled(bTickAutomatically || bReloadRequested);
     UE_LOG(
@@ -554,6 +556,18 @@ void UUnifiedScriptComponent::StopScript()
         if (!DisableSemanticDebugAndDrain(DebugStopError))
         {
             StopError = MoveTemp(DebugStopError);
+        }
+        if (bGameplayProfilerEnabled)
+        {
+            FString ProfileError;
+            if (!Host->GetManagedScriptProfilerTrace(
+                    ManagedScriptInstanceId,
+                    LastGameplayProfileTrace,
+                    ProfileError) &&
+                StopError.IsEmpty())
+            {
+                StopError = MoveTemp(ProfileError);
+            }
         }
         FString DestroyError;
         if (!Host->DestroyManagedScript(ManagedScriptInstanceId, DestroyError) &&
@@ -594,6 +608,7 @@ void UUnifiedScriptComponent::StopScript()
     bSemanticDebugEnabled = false;
     bSemanticDebugTickActive = false;
     bSemanticDebugPaused = false;
+    bGameplayProfilerEnabled = false;
     SemanticDebugStateJson.Reset();
     ActiveScriptAsset = nullptr;
     ActiveScriptAssetPath.Reset();
@@ -962,6 +977,68 @@ bool UUnifiedScriptComponent::StepOneDebugFrame()
     }
     bDebugStepFrameRequested = true;
     SetComponentTickEnabled(true);
+    return true;
+}
+
+bool UUnifiedScriptComponent::SetGameplayProfilerEnabled(
+    bool bEnabled,
+    FString& OutError)
+{
+    check(IsInGameThread());
+    if (!bScriptRunning || ManagedScriptInstanceId == 0)
+    {
+        OutError = TEXT("A live managed script is required before profiling.");
+        return false;
+    }
+    UUnifiedScriptWorldSubsystem* Host =
+        GetWorld() != nullptr
+        ? GetWorld()->GetSubsystem<UUnifiedScriptWorldSubsystem>()
+        : nullptr;
+    if (Host == nullptr || !Host->SetManagedScriptProfilerEnabled(
+            ManagedScriptInstanceId,
+            bEnabled,
+            OutError))
+    {
+        if (Host == nullptr)
+        {
+            OutError = TEXT("The UnifiedScript World host is unavailable during profiler control.");
+        }
+        return false;
+    }
+    bGameplayProfilerEnabled = bEnabled;
+    LastGameplayProfileTrace.Reset();
+    OutError.Reset();
+    return true;
+}
+
+bool UUnifiedScriptComponent::CaptureGameplayProfileTrace(
+    FString& OutJson,
+    FString& OutError)
+{
+    check(IsInGameThread());
+    UUnifiedScriptWorldSubsystem* Host =
+        GetWorld() != nullptr
+        ? GetWorld()->GetSubsystem<UUnifiedScriptWorldSubsystem>()
+        : nullptr;
+    if (!bScriptRunning || ManagedScriptInstanceId == 0 || Host == nullptr ||
+        !Host->GetManagedScriptProfilerTrace(
+            ManagedScriptInstanceId,
+            OutJson,
+            OutError))
+    {
+        if (!bScriptRunning || ManagedScriptInstanceId == 0)
+        {
+            OutError = TEXT("A live managed script is required before profile capture.");
+        }
+        else if (Host == nullptr)
+        {
+            OutError = TEXT("The UnifiedScript World host is unavailable during profile capture.");
+        }
+        OutJson.Reset();
+        return false;
+    }
+    LastGameplayProfileTrace = OutJson;
+    OutError.Reset();
     return true;
 }
 

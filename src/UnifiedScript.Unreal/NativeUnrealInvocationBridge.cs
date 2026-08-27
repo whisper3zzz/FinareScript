@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 
@@ -326,6 +327,7 @@ public sealed class NativeUnrealInvocationBridge
       IUnrealOutputInvocationBridge,
       IUnrealEventBridge,
       IUnrealInvocationMetrics,
+      IUnrealInvocationProfiler,
       IUnrealWorldDataPlaneProvider,
       IUnrealAsyncServiceProvider
 {
@@ -333,6 +335,13 @@ public sealed class NativeUnrealInvocationBridge
     private readonly IUnrealNativeInvocationTransport _transport;
     private long _callFrameInvocationCount;
     private long _legacyInvocationCount;
+    private long _directThunkProfilerCount;
+    private long _directThunkProfilerTicks;
+    private long _callFrameProfilerCount;
+    private long _callFrameProfilerTicks;
+    private long _reflectionProfilerCount;
+    private long _reflectionProfilerTicks;
+    private int _profilerEnabled;
 
     public NativeUnrealInvocationBridge(
         IUnrealNativeInvocationTransport transport,
@@ -363,6 +372,44 @@ public sealed class NativeUnrealInvocationBridge
 
     public long LegacyInvocationCount => Interlocked.Read(ref _legacyInvocationCount);
 
+    void IUnrealInvocationProfiler.SetProfilerEnabled(bool enabled)
+    {
+        Volatile.Write(ref _profilerEnabled, enabled ? 1 : 0);
+        if (_transport is IUnrealGameplayTransportProfiler transportProfiler)
+        {
+            transportProfiler.SetProfilerEnabled(enabled);
+        }
+    }
+
+    UnrealInvocationProfilerSnapshot IUnrealInvocationProfiler.GetProfilerSnapshot() =>
+        GetProfilerSnapshot();
+
+    internal void SetProfilerEnabled(bool enabled) =>
+        ((IUnrealInvocationProfiler)this).SetProfilerEnabled(enabled);
+
+    internal UnrealInvocationProfilerSnapshot GetProfilerSnapshot()
+    {
+        UnrealGameplayTransportProfilerSnapshot transport =
+            _transport is IUnrealGameplayTransportProfiler transportProfiler
+                ? transportProfiler.GetProfilerSnapshot()
+                : default;
+        return new UnrealInvocationProfilerSnapshot(
+            Interlocked.Read(ref _directThunkProfilerCount),
+            Interlocked.Read(ref _directThunkProfilerTicks),
+            Interlocked.Read(ref _callFrameProfilerCount),
+            Interlocked.Read(ref _callFrameProfilerTicks),
+            Interlocked.Read(ref _reflectionProfilerCount),
+            Interlocked.Read(ref _reflectionProfilerTicks),
+            transport.CommandCount,
+            transport.CommandStopwatchTicks,
+            transport.EventCount,
+            transport.EventStopwatchTicks,
+            transport.TraceCount,
+            transport.TraceStopwatchTicks,
+            transport.OverlapCount,
+            transport.OverlapStopwatchTicks);
+    }
+
     public IUnrealEventSubscription Subscribe(
         UnrealObjectHandle source,
         UnrealEventDescriptor descriptor,
@@ -380,12 +427,20 @@ public sealed class NativeUnrealInvocationBridge
     public T ReadProperty<T>(UnrealObjectHandle target, string propertyPath)
     {
         ValidateRequest(target, propertyPath);
-        UnrealInvocationValue value = RequireSuccess(
-            _transport.ReadProperty(target, propertyPath),
-            target,
-            null,
-            propertyPath);
-        return ConvertFromNative<T>(value, propertyPath);
+        long profilerStart = BeginProfilerSample();
+        try
+        {
+            UnrealInvocationValue value = RequireSuccess(
+                _transport.ReadProperty(target, propertyPath),
+                target,
+                null,
+                propertyPath);
+            return ConvertFromNative<T>(value, propertyPath);
+        }
+        finally
+        {
+            CompleteReflectionProfilerSample(profilerStart);
+        }
     }
 
     public void WriteProperty<T>(
@@ -394,13 +449,21 @@ public sealed class NativeUnrealInvocationBridge
         T value)
     {
         ValidateRequest(target, propertyPath);
-        UnrealInvocationValue nativeValue = ConvertToNative(value, propertyPath);
-        UnrealInvocationValue result = RequireSuccess(
-            _transport.WriteProperty(target, propertyPath, nativeValue),
-            target,
-            null,
-            propertyPath);
-        RequireVoid(result, propertyPath);
+        long profilerStart = BeginProfilerSample();
+        try
+        {
+            UnrealInvocationValue nativeValue = ConvertToNative(value, propertyPath);
+            UnrealInvocationValue result = RequireSuccess(
+                _transport.WriteProperty(target, propertyPath, nativeValue),
+                target,
+                null,
+                propertyPath);
+            RequireVoid(result, propertyPath);
+        }
+        finally
+        {
+            CompleteReflectionProfilerSample(profilerStart);
+        }
     }
 
     public T Invoke<T>(
@@ -409,15 +472,23 @@ public sealed class NativeUnrealInvocationBridge
         IReadOnlyList<object?> arguments)
     {
         ValidateRequest(target, functionPath);
-        IReadOnlyList<UnrealInvocationValue> nativeArguments = ConvertArguments(
-            arguments,
-            functionPath);
-        UnrealInvocationValue result = RequireSuccess(
-            _transport.Invoke(target, functionPath, nativeArguments),
-            target,
-            null,
-            functionPath);
-        return ConvertFromNative<T>(result, functionPath);
+        long profilerStart = BeginProfilerSample();
+        try
+        {
+            IReadOnlyList<UnrealInvocationValue> nativeArguments = ConvertArguments(
+                arguments,
+                functionPath);
+            UnrealInvocationValue result = RequireSuccess(
+                _transport.Invoke(target, functionPath, nativeArguments),
+                target,
+                null,
+                functionPath);
+            return ConvertFromNative<T>(result, functionPath);
+        }
+        finally
+        {
+            CompleteReflectionProfilerSample(profilerStart);
+        }
     }
 
     public void Invoke(
@@ -426,15 +497,23 @@ public sealed class NativeUnrealInvocationBridge
         IReadOnlyList<object?> arguments)
     {
         ValidateRequest(target, functionPath);
-        IReadOnlyList<UnrealInvocationValue> nativeArguments = ConvertArguments(
-            arguments,
-            functionPath);
-        UnrealInvocationValue result = RequireSuccess(
-            _transport.Invoke(target, functionPath, nativeArguments),
-            target,
-            null,
-            functionPath);
-        RequireVoid(result, functionPath);
+        long profilerStart = BeginProfilerSample();
+        try
+        {
+            IReadOnlyList<UnrealInvocationValue> nativeArguments = ConvertArguments(
+                arguments,
+                functionPath);
+            UnrealInvocationValue result = RequireSuccess(
+                _transport.Invoke(target, functionPath, nativeArguments),
+                target,
+                null,
+                functionPath);
+            RequireVoid(result, functionPath);
+        }
+        finally
+        {
+            CompleteReflectionProfilerSample(profilerStart);
+        }
     }
 
     public T ReadProperty<T>(
@@ -664,6 +743,7 @@ public sealed class NativeUnrealInvocationBridge
         {
             int nativeArgument0 = Unsafe.As<T0, int>(ref argument0);
             int nativeArgument1 = Unsafe.As<T1, int>(ref argument1);
+            long profilerStart = BeginProfilerSample();
             UnrealNativeCallOutcomeV3 scalarOutcome =
                 scalarTransport.ExecuteInt32x2ById(
                     target,
@@ -673,6 +753,7 @@ public sealed class NativeUnrealInvocationBridge
                     out int scalarResult);
             if (!IsMissingGeneratedMember(scalarOutcome))
             {
+                CompleteDirectProfilerSample(profilerStart);
                 RequireCallFrameSuccess(
                     scalarOutcome,
                     expectedResultCount: 1,
@@ -1151,6 +1232,7 @@ public sealed class NativeUnrealInvocationBridge
             throw new NotSupportedException(
                 "The native Unreal transport does not advertise ABI v3 output/reference support.");
         }
+        long profilerStart = BeginProfilerSample();
         UnrealNativeCallOutcomeV3 outcome = transport!.ExecuteById(
             UnrealNativeOperationV3.Invoke,
             target,
@@ -1211,6 +1293,7 @@ public sealed class NativeUnrealInvocationBridge
             }
         }
         Interlocked.Increment(ref _callFrameInvocationCount);
+        CompleteCallFrameProfilerSample(profilerStart);
         return new UnrealOutputInvocationResult(returnValue, outputs);
     }
 
@@ -1231,6 +1314,7 @@ public sealed class NativeUnrealInvocationBridge
 
         Span<UnrealNativeValueV3> results = stackalloc UnrealNativeValueV3[1];
         results[0] = descriptor;
+        long profilerStart = BeginProfilerSample();
         UnrealNativeCallOutcomeV3 outcome = transport.ExecuteFixedById(
             target,
             memberId,
@@ -1247,6 +1331,7 @@ public sealed class NativeUnrealInvocationBridge
                 "The ABI v3 fixed-value transport returned an incompatible result.");
         }
         Interlocked.Increment(ref _callFrameInvocationCount);
+        CompleteDirectProfilerSample(profilerStart);
         return true;
     }
 
@@ -1260,6 +1345,7 @@ public sealed class NativeUnrealInvocationBridge
         {
             return false;
         }
+        long profilerStart = BeginProfilerSample();
         UnrealNativeCallOutcomeV3 outcome = transport.ExecuteFixedById(
             target,
             memberId,
@@ -1271,6 +1357,7 @@ public sealed class NativeUnrealInvocationBridge
         }
         RequireCallFrameSuccess(outcome, expectedResultCount: 0, target, memberId);
         Interlocked.Increment(ref _callFrameInvocationCount);
+        CompleteDirectProfilerSample(profilerStart);
         return true;
     }
 
@@ -1298,6 +1385,7 @@ public sealed class NativeUnrealInvocationBridge
 
         Span<UnrealNativeValueV3> results = stackalloc UnrealNativeValueV3[1];
         results[0] = descriptor;
+        long profilerStart = BeginProfilerSample();
         UnrealNativeCallOutcomeV3 outcome = transport!.ExecuteById(
             operation,
             target,
@@ -1344,6 +1432,7 @@ public sealed class NativeUnrealInvocationBridge
                 "The ABI v3 transport returned an incompatible fixed-size result.");
         }
         Interlocked.Increment(ref _callFrameInvocationCount);
+        CompleteCallFrameProfilerSample(profilerStart);
         return true;
     }
 
@@ -1363,6 +1452,7 @@ public sealed class NativeUnrealInvocationBridge
         {
             return false;
         }
+        long profilerStart = BeginProfilerSample();
         UnrealNativeCallOutcomeV3 outcome = transport!.ExecuteById(
             operation,
             target,
@@ -1382,6 +1472,7 @@ public sealed class NativeUnrealInvocationBridge
             memberId,
             memberPath);
         Interlocked.Increment(ref _callFrameInvocationCount);
+        CompleteCallFrameProfilerSample(profilerStart);
         return true;
     }
 
@@ -1400,6 +1491,42 @@ public sealed class NativeUnrealInvocationBridge
     {
         transport = _transport as IUnrealNativeFastInvocationTransport;
         return transport is not null && transport.SupportsFastInvocation;
+    }
+
+    private long BeginProfilerSample() =>
+        Volatile.Read(ref _profilerEnabled) != 0 ? Stopwatch.GetTimestamp() : 0;
+
+    private void CompleteDirectProfilerSample(long started) =>
+        CompleteProfilerSample(
+            started,
+            ref _directThunkProfilerCount,
+            ref _directThunkProfilerTicks);
+
+    private void CompleteCallFrameProfilerSample(long started) =>
+        CompleteProfilerSample(
+            started,
+            ref _callFrameProfilerCount,
+            ref _callFrameProfilerTicks);
+
+    private void CompleteReflectionProfilerSample(long started) =>
+        CompleteProfilerSample(
+            started,
+            ref _reflectionProfilerCount,
+            ref _reflectionProfilerTicks);
+
+    private static void CompleteProfilerSample(
+        long started,
+        ref long count,
+        ref long stopwatchTicks)
+    {
+        if (started == 0)
+        {
+            return;
+        }
+        Interlocked.Increment(ref count);
+        Interlocked.Add(
+            ref stopwatchTicks,
+            Math.Max(0, Stopwatch.GetTimestamp() - started));
     }
 
     private static bool IsMissingGeneratedMember(UnrealInvocationResponse response) =>

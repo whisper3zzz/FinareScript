@@ -763,6 +763,201 @@ bool FUnifiedScriptDebugWorkbench::ParseEvaluationResponse(
     return true;
 }
 
+FString FUnifiedScriptGameplayProfileResult::ToDisplayString() const
+{
+    const auto CountBoundary = [this](const TCHAR* Name)
+    {
+        const FUnifiedScriptGameplayProfileBoundary* Boundary =
+            Boundaries.FindByPredicate(
+                [Name](const FUnifiedScriptGameplayProfileBoundary& Candidate)
+                {
+                    return Candidate.Name == Name;
+                });
+        return Boundary != nullptr ? Boundary->Count : int64{0};
+    };
+    return FString::Printf(
+        TEXT("%d frame%s · %.3f ms · %lld B · Direct %lld · CallFrame %lld · Reflection %lld · Batch %lld"),
+        Frames.Num(),
+        Frames.Num() == 1 ? TEXT("") : TEXT("s"),
+        static_cast<double>(TotalNanoseconds) / 1000000.0,
+        static_cast<long long>(AllocatedBytes),
+        static_cast<long long>(CountBoundary(TEXT("directThunk"))),
+        static_cast<long long>(CountBoundary(TEXT("callFrame"))),
+        static_cast<long long>(CountBoundary(TEXT("reflectionFallback"))),
+        static_cast<long long>(
+            CountBoundary(TEXT("batchTrace")) +
+            CountBoundary(TEXT("batchOverlap"))));
+}
+
+bool FUnifiedScriptDebugWorkbench::ParseGameplayProfileTrace(
+    const FString& Json,
+    FUnifiedScriptGameplayProfileResult& OutProfile,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::DebugWorkbench::Private;
+    TSharedPtr<FJsonObject> Root;
+    const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Json);
+    if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+    {
+        OutError = TEXT("The managed World returned invalid gameplay-profile JSON.");
+        return false;
+    }
+    FString Schema;
+    FUnifiedScriptGameplayProfileResult Candidate;
+    int64 FrameCapacity = 0;
+    if (!Root->TryGetStringField(TEXT("schemaVersion"), Schema) ||
+        Schema != TEXT("unifiedscript.gameplay-profile/v0.1") ||
+        !ReadRequiredString(Root, TEXT("traceId"), Candidate.TraceId, OutError) ||
+        !ReadRequiredString(Root, TEXT("worldHostId"), Candidate.WorldHostId, OutError) ||
+        !ReadRequiredString(Root, TEXT("instanceId"), Candidate.InstanceId, OutError) ||
+        !ReadInteger(Root, TEXT("frameCapacity"), FrameCapacity, OutError, true) ||
+        FrameCapacity > 4096 ||
+        !ReadInteger(
+            Root,
+            TEXT("droppedFrameCount"),
+            Candidate.DroppedFrameCount,
+            OutError,
+            false))
+    {
+        if (OutError.IsEmpty())
+        {
+            OutError = FString::Printf(
+                TEXT("Unsupported or unbounded gameplay-profile schema '%s'."),
+                *Schema);
+        }
+        return false;
+    }
+    Candidate.FrameCapacity = static_cast<int32>(FrameCapacity);
+
+    const TArray<TSharedPtr<FJsonValue>>* Frames = nullptr;
+    const TSharedPtr<FJsonObject>* Aggregate = nullptr;
+    if (!Root->TryGetArrayField(TEXT("frames"), Frames) || Frames == nullptr ||
+        Frames->Num() > Candidate.FrameCapacity ||
+        !Root->TryGetObjectField(TEXT("aggregate"), Aggregate) || Aggregate == nullptr)
+    {
+        OutError = TEXT("Gameplay profile requires a capacity-bounded frame timeline and aggregate.");
+        return false;
+    }
+    for (const TSharedPtr<FJsonValue>& Value : *Frames)
+    {
+        const TSharedPtr<FJsonObject> Frame = Value.IsValid() ? Value->AsObject() : nullptr;
+        FUnifiedScriptGameplayProfileFrame CandidateFrame;
+        int64 Generation = 0;
+        const TArray<TSharedPtr<FJsonValue>>* Boundaries = nullptr;
+        const TArray<TSharedPtr<FJsonValue>>* Nodes = nullptr;
+        const TSharedPtr<FJsonObject>* BufferPressure = nullptr;
+        if (!ReadInteger(Frame, TEXT("sequence"), CandidateFrame.Sequence, OutError, true) ||
+            !ReadRequiredString(
+                Frame, TEXT("worldFrameNumber"), CandidateFrame.WorldFrameNumber, OutError) ||
+            !ReadInteger(Frame, TEXT("generation"), Generation, OutError, true) ||
+            Generation > MAX_int32 ||
+            !ReadRequiredString(Frame, TEXT("scriptType"), CandidateFrame.ScriptType, OutError) ||
+            !ReadRequiredString(Frame, TEXT("worldPhase"), CandidateFrame.WorldPhase, OutError) ||
+            !ReadInteger(
+                Frame,
+                TEXT("durationNanoseconds"),
+                CandidateFrame.DurationNanoseconds,
+                OutError,
+                false) ||
+            !ReadInteger(
+                Frame,
+                TEXT("allocatedBytes"),
+                CandidateFrame.AllocatedBytes,
+                OutError,
+                false) ||
+            !Frame->TryGetArrayField(TEXT("boundaries"), Boundaries) || Boundaries == nullptr ||
+            !Frame->TryGetArrayField(TEXT("nodes"), Nodes) || Nodes == nullptr ||
+            !Frame->TryGetObjectField(TEXT("bufferPressure"), BufferPressure) ||
+            BufferPressure == nullptr)
+        {
+            if (OutError.IsEmpty())
+            {
+                OutError = TEXT("Gameplay profile frame is incomplete.");
+            }
+            return false;
+        }
+        CandidateFrame.Generation = static_cast<int32>(Generation);
+        Candidate.Frames.Add(MoveTemp(CandidateFrame));
+    }
+
+    int64 AggregateFrameCount = 0;
+    const TArray<TSharedPtr<FJsonValue>>* Boundaries = nullptr;
+    const TArray<TSharedPtr<FJsonValue>>* Nodes = nullptr;
+    const TSharedPtr<FJsonObject>* AggregatePressure = nullptr;
+    if (!ReadInteger(
+            *Aggregate,
+            TEXT("frameCount"),
+            AggregateFrameCount,
+            OutError,
+            false) ||
+        AggregateFrameCount != Candidate.Frames.Num() ||
+        !ReadInteger(
+            *Aggregate,
+            TEXT("totalNanoseconds"),
+            Candidate.TotalNanoseconds,
+            OutError,
+            false) ||
+        !ReadInteger(
+            *Aggregate,
+            TEXT("allocatedBytes"),
+            Candidate.AllocatedBytes,
+            OutError,
+            false) ||
+        !(*Aggregate)->TryGetArrayField(TEXT("boundaries"), Boundaries) ||
+        Boundaries == nullptr || Boundaries->Num() > 32 ||
+        !(*Aggregate)->TryGetArrayField(TEXT("nodes"), Nodes) ||
+        Nodes == nullptr || Nodes->Num() > 4096 ||
+        !(*Aggregate)->TryGetObjectField(TEXT("bufferPressure"), AggregatePressure) ||
+        AggregatePressure == nullptr)
+    {
+        if (OutError.IsEmpty())
+        {
+            OutError = TEXT("Gameplay profile aggregate is incomplete or exceeds native bounds.");
+        }
+        return false;
+    }
+    for (const TSharedPtr<FJsonValue>& Value : *Boundaries)
+    {
+        const TSharedPtr<FJsonObject> Boundary = Value.IsValid() ? Value->AsObject() : nullptr;
+        FUnifiedScriptGameplayProfileBoundary CandidateBoundary;
+        if (!ReadRequiredString(
+                Boundary, TEXT("name"), CandidateBoundary.Name, OutError) ||
+            !ReadInteger(
+                Boundary, TEXT("count"), CandidateBoundary.Count, OutError, false) ||
+            !ReadInteger(
+                Boundary,
+                TEXT("totalNanoseconds"),
+                CandidateBoundary.TotalNanoseconds,
+                OutError,
+                false))
+        {
+            return false;
+        }
+        Candidate.Boundaries.Add(MoveTemp(CandidateBoundary));
+    }
+    for (const TSharedPtr<FJsonValue>& Value : *Nodes)
+    {
+        const TSharedPtr<FJsonObject> Node = Value.IsValid() ? Value->AsObject() : nullptr;
+        FUnifiedScriptGameplayProfileNode CandidateNode;
+        if (!ReadRequiredString(Node, TEXT("methodId"), CandidateNode.MethodId, OutError) ||
+            !ReadRequiredString(Node, TEXT("nodeId"), CandidateNode.NodeId, OutError) ||
+            !ReadInteger(Node, TEXT("hitCount"), CandidateNode.HitCount, OutError, true) ||
+            !ReadInteger(
+                Node,
+                TEXT("totalNanoseconds"),
+                CandidateNode.TotalNanoseconds,
+                OutError,
+                false))
+        {
+            return false;
+        }
+        Candidate.Nodes.Add(MoveTemp(CandidateNode));
+    }
+    OutProfile = MoveTemp(Candidate);
+    OutError.Reset();
+    return true;
+}
+
 bool FUnifiedScriptDebugWorkbench::ResolveRuntimeDiagnosticNode(
     const FUnifiedScriptAuthoringAsset& Asset,
     TConstArrayView<FUnifiedScriptRuntimeSourceLocation> SourceFrames,

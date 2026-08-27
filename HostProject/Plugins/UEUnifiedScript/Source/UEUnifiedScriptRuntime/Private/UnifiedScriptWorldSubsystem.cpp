@@ -450,6 +450,41 @@ bool UUnifiedScriptWorldSubsystem::GetManagedScriptReloadState(
         OutError);
 }
 
+bool UUnifiedScriptWorldSubsystem::SetManagedScriptProfilerEnabled(
+    uint64 InstanceId,
+    bool bEnabled,
+    FString& OutError)
+{
+    if (!IsManagedWorldReady())
+    {
+        OutError = TEXT("The UnifiedScript managed World is not ready.");
+        return false;
+    }
+    return FUnifiedScriptCoreClrHost::Get().SetManagedScriptProfilerEnabled(
+        WorldHostId,
+        InstanceId,
+        bEnabled,
+        OutError);
+}
+
+bool UUnifiedScriptWorldSubsystem::GetManagedScriptProfilerTrace(
+    uint64 InstanceId,
+    FString& OutJson,
+    FString& OutError) const
+{
+    if (!IsManagedWorldReady())
+    {
+        OutJson.Reset();
+        OutError = TEXT("The UnifiedScript managed World is not ready.");
+        return false;
+    }
+    return FUnifiedScriptCoreClrHost::Get().GetManagedScriptProfilerTrace(
+        WorldHostId,
+        InstanceId,
+        OutJson,
+        OutError);
+}
+
 bool UUnifiedScriptWorldSubsystem::DestroyManagedScript(
     uint64 InstanceId,
     FString& OutError)

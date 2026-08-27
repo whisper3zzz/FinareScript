@@ -110,6 +110,48 @@ struct FUnifiedScriptDebugEvaluation
     FUnifiedScriptDebugValue Value;
 };
 
+struct FUnifiedScriptGameplayProfileBoundary
+{
+    FString Name;
+    int64 Count = 0;
+    int64 TotalNanoseconds = 0;
+};
+
+struct FUnifiedScriptGameplayProfileNode
+{
+    FString MethodId;
+    FString NodeId;
+    int64 HitCount = 0;
+    int64 TotalNanoseconds = 0;
+};
+
+struct FUnifiedScriptGameplayProfileFrame
+{
+    int64 Sequence = 0;
+    FString WorldFrameNumber;
+    int32 Generation = 0;
+    FString ScriptType;
+    FString WorldPhase;
+    int64 DurationNanoseconds = 0;
+    int64 AllocatedBytes = 0;
+};
+
+struct FUnifiedScriptGameplayProfileResult
+{
+    FString TraceId;
+    FString WorldHostId;
+    FString InstanceId;
+    int32 FrameCapacity = 0;
+    int64 DroppedFrameCount = 0;
+    TArray<FUnifiedScriptGameplayProfileFrame> Frames;
+    int64 TotalNanoseconds = 0;
+    int64 AllocatedBytes = 0;
+    TArray<FUnifiedScriptGameplayProfileBoundary> Boundaries;
+    TArray<FUnifiedScriptGameplayProfileNode> Nodes;
+
+    FString ToDisplayString() const;
+};
+
 /** Strict native client contract for the loopback CoreCLR debugger. */
 class UEUNIFIEDSCRIPTEDITOR_API FUnifiedScriptDebugWorkbench
 {
@@ -176,6 +218,11 @@ public:
     static bool ParseEvaluationResponse(
         const FString& Json,
         FUnifiedScriptDebugEvaluation& OutEvaluation,
+        FString& OutError);
+
+    static bool ParseGameplayProfileTrace(
+        const FString& Json,
+        FUnifiedScriptGameplayProfileResult& OutProfile,
         FString& OutError);
 
     /** Resolves the first runtime stack source owned by a semantic graph action. */

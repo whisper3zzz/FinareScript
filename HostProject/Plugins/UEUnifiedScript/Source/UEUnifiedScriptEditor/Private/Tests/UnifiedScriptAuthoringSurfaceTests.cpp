@@ -1625,6 +1625,47 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
                 LivePublish.ReloadTransactionJson.Contains(
                     TEXT("unifiedscript.reload-transaction/v0.1")));
 
+        const FString GameplayProfileJson =
+            TEXT("{\"schemaVersion\":\"unifiedscript.gameplay-profile/v0.1\","
+                 "\"traceId\":\"world-11-script-7\",\"worldHostId\":\"11\","
+                 "\"instanceId\":\"7\",\"frameCapacity\":120,\"droppedFrameCount\":1,"
+                 "\"frames\":[{\"sequence\":4,\"worldFrameNumber\":\"99\","
+                 "\"generation\":3,\"scriptType\":\"Demo.Player\","
+                 "\"deltaSeconds\":0.016,\"worldPhase\":\"ManagedTick\","
+                 "\"durationNanoseconds\":750000,\"allocatedBytes\":16,"
+                 "\"boundaries\":[],\"nodes\":[],\"bufferPressure\":{}}],"
+                 "\"aggregate\":{\"frameCount\":1,\"totalNanoseconds\":750000,"
+                 "\"allocatedBytes\":16,\"boundaries\":["
+                 "{\"name\":\"directThunk\",\"count\":8,\"totalNanoseconds\":12000},"
+                 "{\"name\":\"callFrame\",\"count\":2,\"totalNanoseconds\":18000},"
+                 "{\"name\":\"reflectionFallback\",\"count\":0,\"totalNanoseconds\":0},"
+                 "{\"name\":\"batchTrace\",\"count\":4,\"totalNanoseconds\":25000},"
+                 "{\"name\":\"batchOverlap\",\"count\":1,\"totalNanoseconds\":9000}],"
+                 "\"nodes\":[{\"methodId\":\"us_method\",\"nodeId\":\"us_node\","
+                 "\"hitCount\":3,\"totalNanoseconds\":400000}],"
+                 "\"bufferPressure\":{}}}");
+        FUnifiedScriptGameplayProfileResult GameplayProfile;
+        TestTrue(
+            TEXT("Native debugger parses the bounded gameplay/bridge timeline"),
+            FUnifiedScriptDebugWorkbench::ParseGameplayProfileTrace(
+                GameplayProfileJson,
+                GameplayProfile,
+                Error));
+        TestEqual(
+            TEXT("Native gameplay profiler retains the single captured frame"),
+            GameplayProfile.Frames.Num(),
+            1);
+        TestEqual(
+            TEXT("Native gameplay profiler retains the hottest semantic node"),
+            GameplayProfile.Nodes.Num(),
+            1);
+        TestTrue(
+            TEXT("Native gameplay profiler summary separates direct, CallFrame, reflection, and batch routes"),
+            GameplayProfile.ToDisplayString().Contains(TEXT("Direct 8")) &&
+                GameplayProfile.ToDisplayString().Contains(TEXT("CallFrame 2")) &&
+                GameplayProfile.ToDisplayString().Contains(TEXT("Reflection 0")) &&
+                GameplayProfile.ToDisplayString().Contains(TEXT("Batch 5")));
+
         const FUnifiedScriptRuntimeSourceLocation RuntimeSource{
             Assignment->Span.FilePath,
             Assignment->Span.StartLine + 1,

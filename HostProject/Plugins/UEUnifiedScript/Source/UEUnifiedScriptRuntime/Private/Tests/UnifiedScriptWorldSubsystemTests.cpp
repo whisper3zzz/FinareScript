@@ -319,11 +319,66 @@ bool FUnifiedScriptWorldSubsystemLifecycleTest::RunTest(const FString& Parameter
         ManagedLegacyCalls,
         uint64{0});
 
+    FString ProfilerError;
+    TestTrue(
+        *FString::Printf(
+            TEXT("Live gameplay profiler enables without changing the default-off runtime: %s"),
+            *ProfilerError),
+        FirstComponent->SetGameplayProfilerEnabled(true, ProfilerError));
     FirstComponent->TickComponent(0.016f, LEVELTICK_All, nullptr);
     TestEqual(
         TEXT("Managed OnTick executes through the component host"),
         FirstComponent->ManagedState,
         FString(TEXT("Ticked")));
+    FString GameplayProfileJson;
+    TestTrue(
+        *FString::Printf(TEXT("Live component exports a portable gameplay trace: %s"), *ProfilerError),
+        FirstComponent->CaptureGameplayProfileTrace(GameplayProfileJson, ProfilerError));
+    TSharedPtr<FJsonObject> GameplayProfileRoot;
+    const TSharedRef<TJsonReader<>> GameplayProfileReader =
+        TJsonReaderFactory<>::Create(GameplayProfileJson);
+    TestTrue(
+        TEXT("Gameplay profile JSON is structurally readable"),
+        FJsonSerializer::Deserialize(GameplayProfileReader, GameplayProfileRoot) &&
+            GameplayProfileRoot.IsValid());
+    FString GameplayProfileSchema;
+    const TArray<TSharedPtr<FJsonValue>>* GameplayFrames = nullptr;
+    const TSharedPtr<FJsonObject>* GameplayAggregate = nullptr;
+    const TArray<TSharedPtr<FJsonValue>>* GameplayBoundaries = nullptr;
+    TestTrue(
+        TEXT("Gameplay profile binds schema, bounded frame timeline, and aggregate view"),
+        GameplayProfileRoot.IsValid() &&
+            GameplayProfileRoot->TryGetStringField(
+                TEXT("schemaVersion"), GameplayProfileSchema) &&
+            GameplayProfileSchema == TEXT("unifiedscript.gameplay-profile/v0.1") &&
+            GameplayProfileRoot->TryGetArrayField(TEXT("frames"), GameplayFrames) &&
+            GameplayFrames != nullptr && GameplayFrames->Num() == 1 &&
+            GameplayProfileRoot->TryGetObjectField(TEXT("aggregate"), GameplayAggregate) &&
+            GameplayAggregate != nullptr &&
+            (*GameplayAggregate)->TryGetArrayField(
+                TEXT("boundaries"), GameplayBoundaries) &&
+            GameplayBoundaries != nullptr);
+    bool bCallFrameAttributed = false;
+    if (GameplayBoundaries != nullptr)
+    {
+        for (const TSharedPtr<FJsonValue>& BoundaryValue : *GameplayBoundaries)
+        {
+            const TSharedPtr<FJsonObject> Boundary = BoundaryValue->AsObject();
+            FString Name;
+            double Count = 0.0;
+            if (Boundary.IsValid() &&
+                Boundary->TryGetStringField(TEXT("name"), Name) &&
+                Name == TEXT("callFrame") &&
+                Boundary->TryGetNumberField(TEXT("count"), Count) && Count >= 1.0)
+            {
+                bCallFrameAttributed = true;
+                break;
+            }
+        }
+    }
+    TestTrue(
+        TEXT("Live profiler attributes the generated FString write to CallFrame"),
+        bCallFrameAttributed);
     FirstComponent->ManagedState = TEXT("PausedAtWorldBoundary");
     TestTrue(
         TEXT("Live debugger pauses the managed component at a frame boundary"),

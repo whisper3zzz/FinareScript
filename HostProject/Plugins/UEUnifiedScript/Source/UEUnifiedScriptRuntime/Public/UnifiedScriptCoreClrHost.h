@@ -63,6 +63,16 @@ public:
         uint64 InstanceId,
         FString& OutJson,
         FString& OutError) const;
+    bool SetManagedScriptProfilerEnabled(
+        uint64 WorldHostId,
+        uint64 InstanceId,
+        bool bEnabled,
+        FString& OutError);
+    bool GetManagedScriptProfilerTrace(
+        uint64 WorldHostId,
+        uint64 InstanceId,
+        FString& OutJson,
+        FString& OutError) const;
     bool ControlManagedScriptDebug(
         uint64 WorldHostId,
         uint64 InstanceId,
@@ -127,6 +137,8 @@ private:
     void* BeginScriptDebugTickEntryPoint = nullptr;
     void* GetScriptDebugStateEntryPoint = nullptr;
     void* GetScriptReloadStateEntryPoint = nullptr;
+    void* SetScriptProfilerEnabledEntryPoint = nullptr;
+    void* GetScriptProfilerTraceEntryPoint = nullptr;
     void* ControlScriptDebugEntryPoint = nullptr;
     void* DisableScriptDebugEntryPoint = nullptr;
     void* IsScriptDebugActiveEntryPoint = nullptr;

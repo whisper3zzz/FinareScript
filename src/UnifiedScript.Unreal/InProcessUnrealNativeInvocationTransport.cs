@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -226,6 +227,7 @@ public sealed class InProcessUnrealNativeInvocationTransport
       IUnrealGameplayDataTransport,
       IUnrealOverlapDataTransport,
       IUnrealDataPlaneTelemetryTransport,
+      IUnrealGameplayTransportProfiler,
       IUnrealAsyncServiceTransport,
       IDisposable
 {
@@ -272,6 +274,15 @@ public sealed class InProcessUnrealNativeInvocationTransport
     private readonly UnrealNativeReleaseContextV1 _releaseContext;
     private readonly object _lifetimeGate = new();
     private readonly HashSet<NativeEventSubscription> _eventSubscriptions = [];
+    private long _profileCommandCount;
+    private long _profileCommandTicks;
+    private long _profileEventCount;
+    private long _profileEventTicks;
+    private long _profileTraceCount;
+    private long _profileTraceTicks;
+    private long _profileOverlapCount;
+    private long _profileOverlapTicks;
+    private int _profilerEnabled;
     private bool _disposed;
 
     public InProcessUnrealNativeInvocationTransport(nint context, nint tablePointer)
@@ -695,6 +706,20 @@ public sealed class InProcessUnrealNativeInvocationTransport
 
     public UnrealAsyncCapabilitiesV5 AsyncCapabilities => _asyncCapabilities;
 
+    void IUnrealGameplayTransportProfiler.SetProfilerEnabled(bool enabled) =>
+        Volatile.Write(ref _profilerEnabled, enabled ? 1 : 0);
+
+    UnrealGameplayTransportProfilerSnapshot
+        IUnrealGameplayTransportProfiler.GetProfilerSnapshot() => new(
+            Interlocked.Read(ref _profileCommandCount),
+            Interlocked.Read(ref _profileCommandTicks),
+            Interlocked.Read(ref _profileEventCount),
+            Interlocked.Read(ref _profileEventTicks),
+            Interlocked.Read(ref _profileTraceCount),
+            Interlocked.Read(ref _profileTraceTicks),
+            Interlocked.Read(ref _profileOverlapCount),
+            Interlocked.Read(ref _profileOverlapTicks));
+
     bool IUnrealSharedSnapshotTransport.TryAcquireTransformSnapshot(
         out UnrealSharedSnapshotViewV4 view)
     {
@@ -758,8 +783,18 @@ public sealed class InProcessUnrealNativeInvocationTransport
         lock (_lifetimeGate)
         {
             ThrowIfDisposed();
-            return _commitCommandBatch is not null &&
+            long profilerStart = BeginProfilerSample();
+            bool succeeded = _commitCommandBatch is not null &&
                 _commitCommandBatch(_context, token, count) != 0;
+            if (succeeded)
+            {
+                CompleteProfilerSample(
+                    profilerStart,
+                    count,
+                    ref _profileCommandCount,
+                    ref _profileCommandTicks);
+            }
+            return succeeded;
         }
     }
 
@@ -769,8 +804,18 @@ public sealed class InProcessUnrealNativeInvocationTransport
         {
             ThrowIfDisposed();
             view = default;
-            return _acquireGameplayEvents is not null &&
+            long profilerStart = BeginProfilerSample();
+            bool succeeded = _acquireGameplayEvents is not null &&
                 _acquireGameplayEvents(_context, out view) != 0;
+            if (succeeded && view.EventCount > 0)
+            {
+                CompleteProfilerSample(
+                    profilerStart,
+                    view.EventCount,
+                    ref _profileEventCount,
+                    ref _profileEventTicks);
+            }
+            return succeeded;
         }
     }
 
@@ -796,8 +841,18 @@ public sealed class InProcessUnrealNativeInvocationTransport
         {
             ThrowIfDisposed();
             view = default;
-            return _executeTraceBatch is not null &&
+            long profilerStart = BeginProfilerSample();
+            bool succeeded = _executeTraceBatch is not null &&
                 _executeTraceBatch(_context, token, count, out view) != 0;
+            if (succeeded)
+            {
+                CompleteProfilerSample(
+                    profilerStart,
+                    count,
+                    ref _profileTraceCount,
+                    ref _profileTraceTicks);
+            }
+            return succeeded;
         }
     }
 
@@ -846,8 +901,18 @@ public sealed class InProcessUnrealNativeInvocationTransport
         {
             ThrowIfDisposed();
             view = default;
-            return _executeOverlapBatch is not null &&
+            long profilerStart = BeginProfilerSample();
+            bool succeeded = _executeOverlapBatch is not null &&
                 _executeOverlapBatch(_context, token, count, out view) != 0;
+            if (succeeded)
+            {
+                CompleteProfilerSample(
+                    profilerStart,
+                    count,
+                    ref _profileOverlapCount,
+                    ref _profileOverlapTicks);
+            }
+            return succeeded;
         }
     }
 
@@ -1013,7 +1078,7 @@ public sealed class InProcessUnrealNativeInvocationTransport
                     "The native Unreal transport does not advertise reflected event ABI v4.");
             }
 
-            var box = new EventCallbackBox(descriptor, handler);
+            var box = new EventCallbackBox(this, descriptor, handler);
             GCHandle callbackHandle = GCHandle.Alloc(box);
             try
             {
@@ -1401,6 +1466,25 @@ public sealed class InProcessUnrealNativeInvocationTransport
         }
     }
 
+    private long BeginProfilerSample() =>
+        Volatile.Read(ref _profilerEnabled) != 0 ? Stopwatch.GetTimestamp() : 0;
+
+    private void CompleteProfilerSample(
+        long started,
+        long amount,
+        ref long count,
+        ref long stopwatchTicks)
+    {
+        if (started == 0 || amount <= 0)
+        {
+            return;
+        }
+        Interlocked.Add(ref count, amount);
+        Interlocked.Add(
+            ref stopwatchTicks,
+            Math.Max(0, Stopwatch.GetTimestamp() - started));
+    }
+
     private void ThrowIfDisposed()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -1460,6 +1544,7 @@ public sealed class InProcessUnrealNativeInvocationTransport
             return;
         }
         EventCallbackBox? box = null;
+        long profilerStart = 0;
         try
         {
             box = GCHandle.FromIntPtr(userData).Target as EventCallbackBox;
@@ -1467,6 +1552,7 @@ public sealed class InProcessUnrealNativeInvocationTransport
             {
                 return;
             }
+            profilerStart = box.Owner.BeginProfilerSample();
             UnrealNativeEventFrameV4 frame =
                 Marshal.PtrToStructure<UnrealNativeEventFrameV4>(framePointer);
             if (frame.AbiVersion != UnrealNativeEventAbiV4.Version ||
@@ -1515,6 +1601,17 @@ public sealed class InProcessUnrealNativeInvocationTransport
                     invocation.InnerException is not null
                         ? invocation.InnerException
                         : exception;
+            }
+        }
+        finally
+        {
+            if (box is not null)
+            {
+                box.Owner.CompleteProfilerSample(
+                    profilerStart,
+                    1,
+                    ref box.Owner._profileEventCount,
+                    ref box.Owner._profileEventTicks);
             }
         }
     }
@@ -1794,9 +1891,12 @@ public sealed class InProcessUnrealNativeInvocationTransport
     }
 
     private sealed class EventCallbackBox(
+        InProcessUnrealNativeInvocationTransport owner,
         UnrealEventDescriptor descriptor,
         Delegate handler)
     {
+        public InProcessUnrealNativeInvocationTransport Owner { get; } = owner;
+
         public UnrealEventDescriptor Descriptor { get; } = descriptor;
 
         public Delegate Handler { get; } = handler;
