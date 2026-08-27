@@ -49,7 +49,7 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-28**
 
 - Active milestone: **M9 — Debugging, reload, and observability Beta**
-- Next slice: **M9.2 — observable transactional hot reload and leak soak**
+- Next slice: **M9.3 — gameplay and bridge profiler**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -60,12 +60,12 @@ machine-local unless an artifact explicitly says otherwise.
 
 | Gate | Verified result |
 | --- | --- |
-| Main source | `52b8fa4` (`feat: add live World semantic debug transport`), plus this M9.1 completion change set |
+| Main source | `0555623` (`feat: add observable reload transactions`), plus this M9.2 completion change set |
 | Comparison source | `e62a46e` (`feat: adopt round-tripped gameplay tuning`) |
 | Managed tests | 526 / 526 passed |
-| Repository validator | 62 / 62 passed |
+| Repository validator | 63 / 63 passed |
 | UE 5.8.1 native build | passed |
-| `UnifiedScript.Unreal` Automation | 14 / 14 passed, including Authoring Surface and live World semantic pause/step/reload/detach coverage |
+| `UnifiedScript.Unreal` Automation | 14 / 14 passed, including Authoring Surface, live World semantic pause/step/reload/detach, and repeated success/failure hot-reload leak coverage |
 | BlockBreaker workload | 10,000 frames, three trials, one shot, one hit, two command completions per trial |
 | Gameplay boundary | 120,031 fast/CallFrame calls, zero legacy calls |
 | Matched local median | UnifiedScript 4,927.191 ms; Puerts 4,759.930 ms; ratio 1.035139; functional parity only, performance claim deferred to M10 |
@@ -991,11 +991,26 @@ work rather than hidden gaps.
 
 ### M9.2 — Hot-reload reliability
 
-- [ ] make compile, artifact publication, instance state migration, event
+- [x] make compile, artifact publication, instance state migration, event
   rebinding, generation swap, rollback, and old-context collection observable
   phases of one transaction
-- [ ] soak repeated success/failure reload cycles and detect retained AssemblyLoadContexts,
+- [x] soak repeated success/failure reload cycles and detect retained AssemblyLoadContexts,
   UObject handles, delegates, latent work, and stale debug sessions
+
+Evidence (2026-08-28): authoring compile/publication and live World
+debug-drain/configuration/state migration/generation load-stop-start/event
+rebind/swap/state commit/context retirement and collection now extend one
+`unifiedscript.reload-transaction/v0.1` receipt. Compile and publication
+failures retain or restore prior artifacts; runtime failures preserve or restart
+the old generation and restore the captured state bag. Slate success status and
+failure diagnostics consume the same structured phase list. The v0.2 UE
+lifecycle soak executes 16 successful and 16 intentionally failed reloads while
+holding state, one reflected Host delegate, timers, and the active generation;
+it finishes with zero registered-object, delegate, pending-work, native-context,
+owned-resource, stale-debug-session, and retired-AssemblyLoadContext deltas.
+Managed tests pass 526/526, repository validation passes 63/63, the UE 5.8.1
+Editor build passes, and `UnifiedScript.Unreal` Automation passes 14/14. M9.2 is
+complete; the cursor advances to M9.3.
 
 ### M9.3 — Gameplay and bridge profiler
 

@@ -61,6 +61,7 @@ DOCUMENTS = [
     ROOT / "docs" / "BREAKPOINT_RELOAD.md",
     ROOT / "docs" / "NATIVE_DEBUG_WORKBENCH.md",
     ROOT / "docs" / "RUNTIME_DIAGNOSTICS.md",
+    ROOT / "docs" / "HOT_RELOAD_RELIABILITY.md",
     ROOT / "docs" / "PROJECT_LOADING.md",
     ROOT / "docs" / "DECLARATION_IR.md",
     ROOT / "docs" / "STATE_OVERRIDE_MIGRATION.md",
@@ -3110,8 +3111,6 @@ def main() -> int:
         and "Dropped override is observable after asset replacement"
         in unreal_world_host_test
         and "- [x] preserve instance overrides and compatible semantic identities"
-        in roadmap
-        and "Next slice: **M9.2 — observable transactional hot reload and leak soak**"
         in roadmap,
         "Declaration IR state materialization or live component integration is missing",
     )
@@ -3486,6 +3485,44 @@ def main() -> int:
     checks.append(
         "UE Slate controls live World semantic stacks without blocking the GameThread"
     )
+    hot_reload_reliability_doc = (
+        ROOT / "docs" / "HOT_RELOAD_RELIABILITY.md"
+    ).read_text(encoding="utf-8")
+    require(
+        "unifiedscript.reload-transaction/v0.1" in debug_server_source
+        and '"compile"' in debug_server_source
+        and '"artifactPublication"' in debug_server_source
+        and '"workbenchGenerationSwap"' in debug_server_source
+        and "oldGenerationStop" in unreal_world_managed_entry
+        and "candidateStart" in unreal_world_managed_entry
+        and "eventRebinding" in unreal_world_managed_entry
+        and "generationSwap" in unreal_world_managed_entry
+        and "oldContextRetirement" in unreal_world_managed_entry
+        and "stateMigration" in runtime_component_source
+        and "stateRollback" in runtime_component_source
+        and "oldContextCollection" in runtime_component_source
+        and "retiredLoadContextsAlive" in runtime_component_source
+        and "worldFromGeneration" in runtime_component_source
+        and "unifiedscript.unreal-lifecycle-stress/v0.2"
+        in unreal_lifecycle_stress_test
+        and "FailedReloadCycles" in unreal_lifecycle_stress_test
+        and "GetEventSubscriptionCount" in unreal_lifecycle_stress_test
+        and "staleDebugSessions" in unreal_lifecycle_stress_test
+        and "failedReloadCycles" in unreal_lifecycle_stress_helper
+        and "eventSubscriptionsDelta" in unreal_lifecycle_stress_helper
+        and "staleDebugSessions" in unreal_lifecycle_stress_helper
+        and "ParseReloadTransaction" in unreal_authoring_workbench_source
+        and "ObservedTransaction.ToDisplayString()" in unreal_authoring_widget
+        and "ObservedTransaction.ToDisplayString()" in unreal_debug_panel
+        and "16 successful reloads" in hot_reload_reliability_doc
+        and "16 intentionally failed reloads" in hot_reload_reliability_doc
+        and "- [x] make compile, artifact publication" in roadmap
+        and "M9.2 is\ncomplete" in roadmap,
+        "Observable hot-reload phases, rollback, leak soak, or Slate diagnostics are incomplete",
+    )
+    checks.append(
+        "UE hot reload is one observable rollback-safe transaction with zero-leak soak"
+    )
     authoring_diagnostics_doc = (
         ROOT / "docs" / "AUTHORING_DIAGNOSTICS.md"
     ).read_text(encoding="utf-8")
@@ -3536,7 +3573,7 @@ def main() -> int:
         and "HandleCancelAuthoringGroup" in unreal_authoring_widget
         and "Apply & Reload" in unreal_authoring_widget
         and "ReloadMatchingComponents" in unreal_authoring_widget
-        and "Component->ReloadScript()" in unreal_authoring_widget
+        and "Component->ReloadScriptWithTransaction(" in unreal_authoring_widget
         and "AuthoringServerUrl" in unreal_script_asset_header
         and "AuthoringArtifactOutputs" in debug_server_source
         and "persistedSources" in debug_server_source

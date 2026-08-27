@@ -167,6 +167,88 @@ FString FUnifiedScriptAuthoringErrorResult::ToDisplayString() const
     return FString::Printf(TEXT("Workbench %d %s: %s"), StatusCode, *Code, *Message);
 }
 
+FString FUnifiedScriptReloadTransactionResult::ToDisplayString() const
+{
+    TArray<FString> PhaseStates;
+    PhaseStates.Reserve(Phases.Num());
+    for (const FUnifiedScriptReloadPhaseResult& Phase : Phases)
+    {
+        PhaseStates.Add(FString::Printf(TEXT("%s:%s"), *Phase.Name, *Phase.State));
+    }
+    return FString::Printf(
+        TEXT("Reload %s · %s · %s"),
+        *TransactionId,
+        *State,
+        *FString::Join(PhaseStates, TEXT(" -> ")));
+}
+
+bool FUnifiedScriptAuthoringWorkbench::ParseReloadTransaction(
+    const FString& Json,
+    FUnifiedScriptReloadTransactionResult& OutTransaction,
+    FString& OutError)
+{
+    TSharedPtr<FJsonObject> Root;
+    const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Json);
+    FString Schema;
+    FUnifiedScriptReloadTransactionResult Candidate;
+    const TArray<TSharedPtr<FJsonValue>>* Phases = nullptr;
+    if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid() ||
+        !Root->TryGetStringField(TEXT("schemaVersion"), Schema) ||
+        Schema != TEXT("unifiedscript.reload-transaction/v0.1") ||
+        !UE::UnifiedScript::AuthoringWorkbench::Private::ReadRequiredString(
+            Root, TEXT("transactionId"), Candidate.TransactionId, OutError) ||
+        !UE::UnifiedScript::AuthoringWorkbench::Private::ReadRequiredString(
+            Root, TEXT("source"), Candidate.Source, OutError) ||
+        !UE::UnifiedScript::AuthoringWorkbench::Private::ReadRequiredString(
+            Root, TEXT("state"), Candidate.State, OutError) ||
+        !UE::UnifiedScript::AuthoringWorkbench::Private::ReadNonNegativeInteger(
+            Root, TEXT("fromGeneration"), Candidate.FromGeneration, OutError) ||
+        !UE::UnifiedScript::AuthoringWorkbench::Private::ReadNonNegativeInteger(
+            Root, TEXT("candidateGeneration"), Candidate.CandidateGeneration, OutError) ||
+        !UE::UnifiedScript::AuthoringWorkbench::Private::ReadNonNegativeInteger(
+            Root, TEXT("activeGeneration"), Candidate.ActiveGeneration, OutError) ||
+        !Root->TryGetArrayField(TEXT("phases"), Phases) || Phases == nullptr ||
+        Phases->IsEmpty())
+    {
+        if (OutError.IsEmpty())
+        {
+            OutError = TEXT("The reload transaction is missing its schema, identity, generations, or phases.");
+        }
+        return false;
+    }
+
+    for (const TSharedPtr<FJsonValue>& Value : *Phases)
+    {
+        const TSharedPtr<FJsonObject> PhaseObject =
+            Value.IsValid() ? Value->AsObject() : nullptr;
+        FUnifiedScriptReloadPhaseResult Phase;
+        if (!UE::UnifiedScript::AuthoringWorkbench::Private::ReadRequiredString(
+                PhaseObject, TEXT("name"), Phase.Name, OutError) ||
+            !UE::UnifiedScript::AuthoringWorkbench::Private::ReadRequiredString(
+                PhaseObject, TEXT("state"), Phase.State, OutError) ||
+            !UE::UnifiedScript::AuthoringWorkbench::Private::ReadNonNegativeInteger(
+                PhaseObject,
+                TEXT("durationMicroseconds"),
+                Phase.DurationMicroseconds,
+                OutError) ||
+            !UE::UnifiedScript::AuthoringWorkbench::Private::ReadRequiredString(
+                PhaseObject, TEXT("detail"), Phase.Detail, OutError))
+        {
+            if (OutError.IsEmpty())
+            {
+                OutError = TEXT("The reload transaction contains an invalid phase.");
+            }
+            return false;
+        }
+        Candidate.Phases.Add(MoveTemp(Phase));
+    }
+    Root->TryGetStringField(TEXT("failure"), Candidate.Failure);
+    Candidate.Json = Json;
+    OutTransaction = MoveTemp(Candidate);
+    OutError.Reset();
+    return true;
+}
+
 FString FUnifiedScriptAuthoringWorkbench::NormalizeServerUrl(const FString& ServerUrl)
 {
     FString Result = ServerUrl;
@@ -471,6 +553,13 @@ bool FUnifiedScriptAuthoringWorkbench::ParseWorkspaceResponse(
             OutError = TEXT("The Workbench reload transaction could not be decoded.");
             return false;
         }
+        if (!ParseReloadTransaction(
+                Candidate.ReloadTransactionJson,
+                Candidate.ReloadTransaction,
+                OutError))
+        {
+            return false;
+        }
     }
 
     const TSharedPtr<FJsonObject>* Surface = nullptr;
@@ -665,6 +754,28 @@ bool FUnifiedScriptAuthoringWorkbench::ParseErrorResponse(
             if (OutParseError.IsEmpty())
             {
                 OutParseError = TEXT("The Workbench error response contains invalid rollback metadata.");
+            }
+            return false;
+        }
+    }
+
+    const TSharedPtr<FJsonObject>* ReloadTransaction = nullptr;
+    if (Root->TryGetObjectField(TEXT("reloadTransaction"), ReloadTransaction) &&
+        ReloadTransaction != nullptr)
+    {
+        FString ReloadJson;
+        const TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
+            TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(
+                &ReloadJson);
+        if (!FJsonSerializer::Serialize(ReloadTransaction->ToSharedRef(), Writer) ||
+            !ParseReloadTransaction(
+                ReloadJson,
+                Candidate.ReloadTransaction,
+                OutParseError))
+        {
+            if (OutParseError.IsEmpty())
+            {
+                OutParseError = TEXT("The Workbench error response contains an invalid reload transaction.");
             }
             return false;
         }

@@ -53,6 +53,12 @@ calls are queued back to the GameThread, so a suspended CLR stack never blocks
 the engine thread. Detach, reload, stop, and World teardown abort and drain the
 worker before collectible-context disposal.
 
+Reload additionally clears coarse frame-boundary pause/step state and records
+debug drain, generation swap, rollback, event rebinding, and collectible-context
+cleanup as one `unifiedscript.reload-transaction/v0.1` receipt. The authoring
+and debug panels show the same structured transaction. See
+[Transactional hot-reload reliability](HOT_RELOAD_RELIABILITY.md).
+
 The frame-boundary control fallback remains available when semantic attach is not
 active:
 

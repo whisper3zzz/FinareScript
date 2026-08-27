@@ -1180,10 +1180,10 @@ public static class UnrealWorldManagedEntryPoint
             phaseStart = Stopwatch.GetTimestamp();
             previous.Dispose();
             phases.Add(CompletePhase(
-                "oldContextCollection",
+                "oldContextRetirement",
                 phaseStart,
                 "scheduled",
-                "Unloaded the old collectible context; lifecycle collection verifies reclamation."));
+                "Released the old generation and requested collectible-context unload."));
             SetReloadTransaction(
                 "committed",
                 previous.Generation,

@@ -11,11 +11,9 @@ then completed the full BlockBreaker migration with exact inventory coverage
 and no Puerts/TypeScript payload in the target project or package. M8.4 then
 completed a real Player/Rifle Visual-to-C#-to-Visual round trip with semantic,
 IL, execution, Script Asset, UE gameplay, and dual packaged-build equivalence.
-The active RoadMap cursor is M8.5 language-profile closure after M8.3 native
-Script Asset declaration editing, generated-reflection-driven API Palette
-metadata, and stable-ID instance override migration on top of the M8.2 Palette,
-Pin, Canvas, Advanced Details, diagnostics, exact Diff, safe quick-fix, and
-rollback-receipt tranches.
+M9.2 now completes observable transactional hot reload and repeated
+success/failure leak soak on top of live World semantic debugging. The active
+RoadMap cursor is M9.3 gameplay and bridge profiling.
 
 ## Product roadmap
 
@@ -47,6 +45,11 @@ Its deletion/travel/PIE/multi-World/reload soak can be reproduced with:
 powershell -ExecutionPolicy Bypass `
   -File tools/run-unreal-lifecycle-stress.ps1 -EngineRoot D:\UE_5.8
 ```
+
+The v0.2 soak now adds 16 successful and 16 intentionally failed transactional
+reloads, reflected Host-event rebinding, stale-debug cleanup, and zero retained
+collectible contexts. See
+[Transactional hot-reload reliability](docs/HOT_RELOAD_RELIABILITY.md).
 
 M7.3 generates Shared/Gameplay fixed layouts from one versioned schema and adds
 bounded telemetry plus Batch Overlap. Its live CoreCLR routing profile is:

@@ -3922,13 +3922,15 @@ void SUnifiedScriptAuthoringSurface::HandlePatchResponse(
     int32 Matched = 0;
     int32 Reloaded = 0;
     int32 Failed = 0;
+    FString ObservedReloadTransactionJson;
     if (bPublishedRuntime && bReloadMatchingComponents)
     {
         ReloadMatchingComponents(
             ReloadTransactionJson,
             Matched,
             Reloaded,
-            Failed);
+            Failed,
+            ObservedReloadTransactionJson);
     }
     const FString HistoryPersistenceDetail = HistoryPersistenceMessage.IsEmpty()
         ? FString()
@@ -3946,7 +3948,7 @@ void SUnifiedScriptAuthoringSurface::HandlePatchResponse(
             false);
         return;
     }
-    const FString CompletionStatus = bPublishedRuntime
+    FString CompletionStatus = bPublishedRuntime
         ? FString::Printf(
             TEXT("Applied revision %lld / Workbench generation %lld; history %lld undo / %lld redo; journal %s%s; Surface refreshed; components %d matched, %d updated, %d failed."),
             WorkspaceRevision,
@@ -3969,6 +3971,22 @@ void SUnifiedScriptAuthoringSurface::HandlePatchResponse(
             Matched,
             Reloaded,
             Failed);
+    const FString& TransactionJson = ObservedReloadTransactionJson.IsEmpty()
+        ? ReloadTransactionJson
+        : ObservedReloadTransactionJson;
+    if (!TransactionJson.IsEmpty())
+    {
+        FUnifiedScriptReloadTransactionResult ObservedTransaction;
+        FString TransactionError;
+        if (FUnifiedScriptAuthoringWorkbench::ParseReloadTransaction(
+                TransactionJson,
+                ObservedTransaction,
+                TransactionError))
+        {
+            CompletionStatus += TEXT("\n");
+            CompletionStatus += ObservedTransaction.ToDisplayString();
+        }
+    }
     SetStatus(
         CompletionStatus,
         Failed > 0 || HistoryPersistenceState == TEXT("rejected"));
@@ -4083,6 +4101,34 @@ void SUnifiedScriptAuthoringSurface::RebuildDiagnosticsPanel()
             .AutoWrapText(true)
             .ColorAndOpacity(FLinearColor(0.64f, 0.67f, 0.72f))
         ];
+    }
+    if (LastAuthoringFailure.ReloadTransaction.IsValid())
+    {
+        Body->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 2.0f)
+        [
+            SNew(STextBlock)
+            .Text(FText::FromString(
+                LastAuthoringFailure.ReloadTransaction.ToDisplayString()))
+            .Font(FAppStyle::GetFontStyle(TEXT("SmallFontBold")))
+            .AutoWrapText(true)
+            .ColorAndOpacity(FLinearColor(0.42f, 0.72f, 0.96f))
+        ];
+        for (const FUnifiedScriptReloadPhaseResult& Phase :
+            LastAuthoringFailure.ReloadTransaction.Phases)
+        {
+            Body->AddSlot().AutoHeight().Padding(8.0f, 1.0f, 0.0f, 1.0f)
+            [
+                SNew(STextBlock)
+                .Text(FText::FromString(FString::Printf(
+                    TEXT("%s  ·  %s  ·  %lld us  ·  %s"),
+                    *Phase.Name,
+                    *Phase.State,
+                    Phase.DurationMicroseconds,
+                    *Phase.Detail)))
+                .AutoWrapText(true)
+                .ColorAndOpacity(FLinearColor(0.68f, 0.71f, 0.76f))
+            ];
+        }
     }
     if (!LastAuthoringFailure.QuickFixes.IsEmpty())
     {
@@ -4272,11 +4318,13 @@ void SUnifiedScriptAuthoringSurface::ReloadMatchingComponents(
     const FString& ReloadTransactionJson,
     int32& OutMatched,
     int32& OutReloaded,
-    int32& OutFailed)
+    int32& OutFailed,
+    FString& OutObservedReloadTransactionJson)
 {
     OutMatched = 0;
     OutReloaded = 0;
     OutFailed = 0;
+    OutObservedReloadTransactionJson.Reset();
     const UUnifiedScriptAsset* PreferredAsset = LoadedScriptAsset.Get();
     for (TObjectIterator<UUnifiedScriptComponent> It; It; ++It)
     {
@@ -4306,6 +4354,10 @@ void SUnifiedScriptAuthoringSurface::ReloadMatchingComponents(
         const bool bUpdated = Component->bScriptRunning
             ? Component->ReloadScriptWithTransaction(ReloadTransactionJson)
             : Component->RefreshScriptState();
+        if (!Component->LastReloadTransaction.IsEmpty())
+        {
+            OutObservedReloadTransactionJson = Component->LastReloadTransaction;
+        }
         if (bUpdated)
         {
             ++OutReloaded;

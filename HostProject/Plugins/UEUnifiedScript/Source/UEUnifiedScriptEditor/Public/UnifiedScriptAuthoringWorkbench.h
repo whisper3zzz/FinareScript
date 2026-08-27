@@ -79,6 +79,30 @@ struct FUnifiedScriptAuthoringRollbackResult
     }
 };
 
+struct FUnifiedScriptReloadPhaseResult
+{
+    FString Name;
+    FString State;
+    int64 DurationMicroseconds = 0;
+    FString Detail;
+};
+
+struct FUnifiedScriptReloadTransactionResult
+{
+    FString TransactionId;
+    FString Source;
+    FString State;
+    int64 FromGeneration = 0;
+    int64 CandidateGeneration = 0;
+    int64 ActiveGeneration = 0;
+    TArray<FUnifiedScriptReloadPhaseResult> Phases;
+    FString Failure;
+    FString Json;
+
+    bool IsValid() const { return !TransactionId.IsEmpty(); }
+    FString ToDisplayString() const;
+};
+
 struct FUnifiedScriptAuthoringErrorResult
 {
     int32 StatusCode = 0;
@@ -87,6 +111,7 @@ struct FUnifiedScriptAuthoringErrorResult
     TArray<FUnifiedScriptAuthoringDiagnostic> Diagnostics;
     TArray<FUnifiedScriptAuthoringQuickFix> QuickFixes;
     FUnifiedScriptAuthoringRollbackResult Rollback;
+    FUnifiedScriptReloadTransactionResult ReloadTransaction;
 
     FString ToDisplayString() const;
 };
@@ -120,6 +145,7 @@ struct FUnifiedScriptAuthoringWorkspaceResult
     FUnifiedScriptAuthoringHistoryResult History;
     FUnifiedScriptAuthoringGroupResult Group;
     FString ReloadTransactionJson;
+    FUnifiedScriptReloadTransactionResult ReloadTransaction;
 };
 
 class UEUNIFIEDSCRIPTEDITOR_API FUnifiedScriptAuthoringWorkbench
@@ -155,6 +181,11 @@ public:
     static bool ParsePreviewResponse(
         const FString& Json,
         FUnifiedScriptAuthoringPreviewResult& OutPreview,
+        FString& OutError);
+
+    static bool ParseReloadTransaction(
+        const FString& Json,
+        FUnifiedScriptReloadTransactionResult& OutTransaction,
         FString& OutError);
 
     static bool ParseErrorResponse(

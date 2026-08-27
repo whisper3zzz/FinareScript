@@ -908,12 +908,24 @@ bool FUnifiedScriptWorldSemanticDebugTest::RunTest(const FString& Parameters)
         Component->ManagedState,
         FString(TEXT("SemanticDebugCompleted")));
 
-    Error.Reset();
     TestTrue(
-        *FString::Printf(TEXT("Completed semantic session detaches: %s"), *Error),
-        Component->DisableSemanticDebug(Error));
-    TestTrue(TEXT("Reload advances the live script generation"), Component->ReloadScript());
+        TEXT("Reload drains the completed semantic session and advances generation"),
+        Component->ReloadScript());
     TestEqual(TEXT("Reloaded semantic fixture is generation two"), Component->ActiveGeneration, FString(TEXT("2")));
+    FUnifiedScriptRuntimeDebugContext ReloadContext;
+    TestTrue(
+        TEXT("Reloaded semantic fixture retains its runtime identity"),
+        Component->GetRuntimeDebugContext(ReloadContext));
+    TestFalse(
+        TEXT("Reload leaves no stale semantic debug session"),
+        ReloadContext.bSemanticDebugEnabled || ReloadContext.bSemanticDebugActive ||
+            ReloadContext.bSemanticDebugPaused);
+    TestTrue(
+        TEXT("Reload transaction exposes debug drain and old-context collection"),
+        Component->LastReloadTransaction.Contains(TEXT("\"debugDrain\"")) &&
+            Component->LastReloadTransaction.Contains(TEXT("\"oldContextCollection\"")) &&
+            Component->LastReloadTransaction.Contains(
+                TEXT("\"retiredLoadContextsAlive\":0")));
 
     Component->bTickAutomatically = true;
     Error.Reset();

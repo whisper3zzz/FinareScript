@@ -98,6 +98,7 @@ bool FUnifiedScriptLifecycleStressTest::RunTest(const FString& Parameters)
     constexpr int32 ConcurrentWorlds = 4;
     constexpr int32 CollidingRequestsPerWorld = 8;
     constexpr int32 GenerationRollovers = 16;
+    constexpr int32 FailedReloadCycles = GenerationRollovers;
     constexpr uint64 OwnerInstanceId = 9001;
     constexpr uint32 OwnerGeneration = 17;
 
@@ -361,15 +362,90 @@ bool FUnifiedScriptLifecycleStressTest::RunTest(const FString& Parameters)
         TEXT("Initial stress generation owns one resource handle"),
         ManagedFixture.Host->GetOwnedAsyncResourceCount(),
         1);
+    TestEqual(
+        TEXT("Initial stress generation owns one reflected event subscription"),
+        ManagedFixture.Host->GetEventSubscriptionCount(),
+        1);
+
+    AddExpectedError(
+        TEXT("UnifiedScript component: managedException during ReloadScript:"),
+        EAutomationExpectedErrorFlags::Contains,
+        FailedReloadCycles);
 
     for (int32 Rollover = 0; Rollover <= GenerationRollovers; ++Rollover)
     {
         const int32 ExpectedGeneration = Rollover + 1;
         if (Rollover > 0)
         {
+            const FString PreviousState = Component->ManagedState;
+            TestTrue(
+                TEXT("A pending frame-boundary debug session can be drained by reload"),
+                Component->PauseAtDebugFrameBoundary());
+            Asset->ScriptTypeName = TEXT("UnifiedScript.Unreal.Demo.MissingScript");
+            TestFalse(
+                TEXT("Managed lifecycle rejected-candidate reload rolls back"),
+                Component->ReloadScript());
+            TestTrue(
+                TEXT("Rejected reload leaves the previous generation running"),
+                Component->bScriptRunning);
+            TestEqual(
+                TEXT("Rejected reload does not advance the active generation"),
+                Component->ActiveGeneration,
+                FString::FromInt(ExpectedGeneration - 1));
+            TestEqual(
+                TEXT("Rejected reload preserves the previous managed state"),
+                Component->ManagedState,
+                PreviousState);
+            TestFalse(
+                TEXT("Rejected reload does not retain a stale frame-boundary pause"),
+                Component->IsPausedAtDebugFrameBoundary());
+            FUnifiedScriptRuntimeDebugContext FailedReloadContext;
+            TestTrue(
+                TEXT("Rejected reload retains an inspectable runtime context"),
+                Component->GetRuntimeDebugContext(FailedReloadContext));
+            TestFalse(
+                TEXT("Rejected reload leaves no stale semantic debug attachment"),
+                FailedReloadContext.bSemanticDebugEnabled ||
+                    FailedReloadContext.bSemanticDebugActive ||
+                    FailedReloadContext.bSemanticDebugPaused);
+            TestTrue(
+                TEXT("Rejected reload reports one rolled-back cross-boundary transaction"),
+                Component->LastReloadTransaction.Contains(TEXT("\"state\":\"rolledBack\"")) &&
+                    Component->LastReloadTransaction.Contains(TEXT("\"generationLoad\"")) &&
+                    Component->LastReloadTransaction.Contains(TEXT("\"stateRollback\"")) &&
+                    Component->LastReloadTransaction.Contains(TEXT("\"oldContextCollection\"")) &&
+                    Component->LastReloadTransaction.Contains(
+                        TEXT("\"retiredLoadContextsAlive\":0")));
+            TestEqual(
+                TEXT("Rejected reload preserves the one live event subscription"),
+                ManagedFixture.Host->GetEventSubscriptionCount(),
+                1);
+            TestEqual(
+                TEXT("Rejected reload preserves the current timer"),
+                ManagedFixture.Host->GetPendingAsyncRequestCount(),
+                1);
+            TestEqual(
+                TEXT("Rejected reload preserves the current resource ownership"),
+                ManagedFixture.Host->GetOwnedAsyncResourceCount(),
+                1);
+
+            Asset->ScriptTypeName =
+                TEXT("UnifiedScript.Unreal.Demo.LifecycleStressScript");
             TestTrue(
                 TEXT("Managed lifecycle generation reload succeeds"),
                 Component->ReloadScript());
+            TestTrue(
+                TEXT("Successful reload reports every runtime transaction phase"),
+                Component->LastReloadTransaction.Contains(TEXT("\"state\":\"committed\"")) &&
+                    Component->LastReloadTransaction.Contains(TEXT("\"stateMigration\"")) &&
+                    Component->LastReloadTransaction.Contains(TEXT("\"oldGenerationStop\"")) &&
+                    Component->LastReloadTransaction.Contains(TEXT("\"candidateStart\"")) &&
+                    Component->LastReloadTransaction.Contains(TEXT("\"eventRebinding\"")) &&
+                    Component->LastReloadTransaction.Contains(TEXT("\"generationSwap\"")) &&
+                    Component->LastReloadTransaction.Contains(TEXT("\"oldContextRetirement\"")) &&
+                    Component->LastReloadTransaction.Contains(TEXT("\"oldContextCollection\"")) &&
+                    Component->LastReloadTransaction.Contains(
+                        TEXT("\"retiredLoadContextsAlive\":0")));
         }
         TestEqual(
             TEXT("Generation rollover leaves one current timer"),
@@ -383,6 +459,18 @@ bool FUnifiedScriptLifecycleStressTest::RunTest(const FString& Parameters)
             TEXT("Generation rollover leaves one current resource ownership"),
             ManagedFixture.Host->GetOwnedAsyncResourceCount(),
             1);
+        TestEqual(
+            TEXT("Generation rollover leaves one current event subscription"),
+            ManagedFixture.Host->GetEventSubscriptionCount(),
+            1);
+        Component->BroadcastManagedSignal(ExpectedGeneration * 10, Actor);
+        TestEqual(
+            TEXT("Only the current generation receives the reflected event"),
+            Component->ManagedState,
+            FString::Printf(
+                TEXT("StressEvent:%d:%d"),
+                ExpectedGeneration,
+                ExpectedGeneration * 10));
         Component->TickComponent(0.0f, LEVELTICK_All, nullptr);
         TestEqual(
             TEXT("Only the current generation receives its class-load callback"),
@@ -410,6 +498,10 @@ bool FUnifiedScriptLifecycleStressTest::RunTest(const FString& Parameters)
     TestEqual(
         TEXT("Target deletion releases its async resource ownership"),
         ManagedFixture.Host->GetOwnedAsyncResourceCount(),
+        0);
+    TestEqual(
+        TEXT("Target deletion releases every reflected event subscription"),
+        ManagedFixture.Host->GetEventSubscriptionCount(),
         0);
     TestEqual(
         TEXT("Target deletion removes the managed script entry"),
@@ -467,7 +559,7 @@ bool FUnifiedScriptLifecycleStressTest::RunTest(const FString& Parameters)
     UE_LOG(
         LogTemp,
         Display,
-        TEXT("UNIFIEDSCRIPT_LIFECYCLE_STRESS_JSON {\"schemaVersion\":\"unifiedscript.unreal-lifecycle-stress/v0.1\",\"platform\":\"%s\",\"engineMajor\":%d,\"engineMinor\":%d,\"enginePatch\":%d,\"travelCycles\":%d,\"pieCycles\":%d,\"concurrentWorlds\":%d,\"collidingRequestsPerWorld\":%d,\"generationRollovers\":%d,\"staleCompletions\":0,\"pendingRequestsDelta\":0,\"managedWorldsDelta\":0,\"nativeContextsDelta\":0,\"ownedResourcesDelta\":0,\"retiredLoadContextsAlive\":%d}"),
+        TEXT("UNIFIEDSCRIPT_LIFECYCLE_STRESS_JSON {\"schemaVersion\":\"unifiedscript.unreal-lifecycle-stress/v0.2\",\"platform\":\"%s\",\"engineMajor\":%d,\"engineMinor\":%d,\"enginePatch\":%d,\"travelCycles\":%d,\"pieCycles\":%d,\"concurrentWorlds\":%d,\"collidingRequestsPerWorld\":%d,\"generationRollovers\":%d,\"failedReloadCycles\":%d,\"staleCompletions\":0,\"pendingRequestsDelta\":0,\"managedWorldsDelta\":0,\"nativeContextsDelta\":0,\"registeredObjectsDelta\":0,\"eventSubscriptionsDelta\":0,\"ownedResourcesDelta\":0,\"staleDebugSessions\":0,\"retiredLoadContextsAlive\":%d}"),
         ANSI_TO_TCHAR(FPlatformProperties::PlatformName()),
         FEngineVersion::Current().GetMajor(),
         FEngineVersion::Current().GetMinor(),
@@ -477,6 +569,7 @@ bool FUnifiedScriptLifecycleStressTest::RunTest(const FString& Parameters)
         ConcurrentWorlds,
         CollidingRequestsPerWorld,
         GenerationRollovers,
+        FailedReloadCycles,
         RetiredLoadContextsAlive);
     return true;
 }

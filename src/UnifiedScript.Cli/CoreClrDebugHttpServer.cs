@@ -1084,18 +1084,76 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 }
 
                 EnsureFilesUnchanged();
+                string transactionId = $"live-world-{Guid.NewGuid():N}";
                 var phases = new List<ReloadTransactionPhaseResponse>();
                 long phaseStart = Stopwatch.GetTimestamp();
-                CSharpProgramEmitResult emitted = emitter.Emit(
-                    authoring.Current.Request,
-                    new CSharpDebugInstrumentation(typeof(CoreClrDebugProbe).Assembly.Location));
-                if (!emitted.Succeeded || emitted.Image is null)
+                CSharpProgramEmitResult emitted;
+                try
                 {
+                    emitted = emitter.Emit(
+                        authoring.Current.Request,
+                        new CSharpDebugInstrumentation(
+                            typeof(CoreClrDebugProbe).Assembly.Location));
+                }
+                catch (Exception exception)
+                {
+                    phases.Add(CompleteReloadPhase(
+                        "compile",
+                        phaseStart,
+                        "failed",
+                        exception.Message));
+                    phases.Add(new ReloadTransactionPhaseResponse(
+                        "rollback",
+                        "unchanged",
+                        0,
+                        "The published live World PE/PDB remained unchanged."));
+                    var failedTransaction = new ReloadTransactionResponse(
+                        "unifiedscript.reload-transaction/v0.1",
+                        transactionId,
+                        "liveWorldDebug",
+                        "rolledBack",
+                        reload.Generation.Number,
+                        reload.Generation.Number,
+                        reload.Generation.Number,
+                        phases,
+                        exception.Message);
                     throw new AuthoringProtocolException(
                         HttpStatusCode.Conflict,
                         "UAW1004",
                         "The instrumented live World assembly could not be emitted; the active artifact was not changed.",
-                        emitted.Diagnostics);
+                        reloadTransaction: failedTransaction,
+                        innerException: exception);
+                }
+                if (!emitted.Succeeded || emitted.Image is null)
+                {
+                    const string message =
+                        "The instrumented live World assembly could not be emitted; the active artifact was not changed.";
+                    phases.Add(CompleteReloadPhase(
+                        "compile",
+                        phaseStart,
+                        "failed",
+                        $"The compiler returned {emitted.Diagnostics.Count} diagnostic(s)."));
+                    phases.Add(new ReloadTransactionPhaseResponse(
+                        "rollback",
+                        "unchanged",
+                        0,
+                        "The published live World PE/PDB remained unchanged."));
+                    var failedTransaction = new ReloadTransactionResponse(
+                        "unifiedscript.reload-transaction/v0.1",
+                        transactionId,
+                        "liveWorldDebug",
+                        "rolledBack",
+                        reload.Generation.Number,
+                        reload.Generation.Number,
+                        reload.Generation.Number,
+                        phases,
+                        message);
+                    throw new AuthoringProtocolException(
+                        HttpStatusCode.Conflict,
+                        "UAW1004",
+                        message,
+                        emitted.Diagnostics,
+                        reloadTransaction: failedTransaction);
                 }
                 phases.Add(CompleteReloadPhase(
                     "compile",
@@ -1103,15 +1161,48 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                     "succeeded",
                     "Emitted the instrumented live World PE and portable PDB in memory."));
                 phaseStart = Stopwatch.GetTimestamp();
-                WriteTransactionally(
-                [
-                    new AuthoringOutput(
-                        artifactOutputs.ManagedAssemblyPath,
-                        emitted.Image.PortableExecutable),
-                    new AuthoringOutput(
-                        artifactOutputs.PortablePdbPath,
-                        emitted.Image.PortablePdb),
-                ]);
+                try
+                {
+                    WriteTransactionally(
+                    [
+                        new AuthoringOutput(
+                            artifactOutputs.ManagedAssemblyPath,
+                            emitted.Image.PortableExecutable),
+                        new AuthoringOutput(
+                            artifactOutputs.PortablePdbPath,
+                            emitted.Image.PortablePdb),
+                    ]);
+                }
+                catch (Exception exception)
+                {
+                    phases.Add(CompleteReloadPhase(
+                        "artifactPublication",
+                        phaseStart,
+                        "failed",
+                        exception.Message));
+                    phases.Add(new ReloadTransactionPhaseResponse(
+                        "rollback",
+                        "restored",
+                        0,
+                        "The transactional writer restored the previous live World PE/PDB."));
+                    var failedTransaction = new ReloadTransactionResponse(
+                        "unifiedscript.reload-transaction/v0.1",
+                        transactionId,
+                        "liveWorldDebug",
+                        "rolledBack",
+                        reload.Generation.Number,
+                        reload.Generation.Number,
+                        reload.Generation.Number,
+                        phases,
+                        exception.Message);
+                    throw new AuthoringProtocolException(
+                        HttpStatusCode.Conflict,
+                        "UAW1013",
+                        "The live World debug artifact publication failed; the previous PE/PDB was restored.",
+                        rollbackState: "restored",
+                        reloadTransaction: failedTransaction,
+                        innerException: exception);
+                }
                 phases.Add(CompleteReloadPhase(
                     "artifactPublication",
                     phaseStart,
@@ -1119,7 +1210,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                     "Atomically replaced the live World PE and portable PDB."));
                 var transaction = new ReloadTransactionResponse(
                     "unifiedscript.reload-transaction/v0.1",
-                    $"live-world-{reload.Generation.GenerationId}",
+                    transactionId,
                     "liveWorldDebug",
                     "published",
                     reload.Generation.Number,

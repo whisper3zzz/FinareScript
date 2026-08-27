@@ -94,18 +94,22 @@ $result = $line.Line.Substring($line.Line.IndexOf($marker) + $marker.Length) |
     ConvertFrom-Json
 
 $matrixPass =
-    $result.schemaVersion -eq 'unifiedscript.unreal-lifecycle-stress/v0.1' -and
+    $result.schemaVersion -eq 'unifiedscript.unreal-lifecycle-stress/v0.2' -and
     [int]$result.travelCycles -ge 8 -and
     [int]$result.pieCycles -ge 8 -and
     [int]$result.concurrentWorlds -ge 4 -and
     [int]$result.collidingRequestsPerWorld -ge 8 -and
-    [int]$result.generationRollovers -ge 16
+    [int]$result.generationRollovers -ge 16 -and
+    [int]$result.failedReloadCycles -ge 16
 $zeroLeakPass =
     [int]$result.staleCompletions -eq 0 -and
     [int]$result.pendingRequestsDelta -eq 0 -and
     [int]$result.managedWorldsDelta -eq 0 -and
     [int]$result.nativeContextsDelta -eq 0 -and
+    [int]$result.registeredObjectsDelta -eq 0 -and
+    [int]$result.eventSubscriptionsDelta -eq 0 -and
     [int]$result.ownedResourcesDelta -eq 0 -and
+    [int]$result.staleDebugSessions -eq 0 -and
     [int]$result.retiredLoadContextsAlive -eq 0
 
 $report = [ordered]@{
@@ -130,4 +134,5 @@ Write-Host "Lifecycle stress: PASS ($reportPath)"
 Write-Host (
     "Travel=$($result.travelCycles), PIE=$($result.pieCycles), " +
     "Worlds=$($result.concurrentWorlds), Generations=$($result.generationRollovers), " +
+    "FailedReloads=$($result.failedReloadCycles), Delegates=$($result.eventSubscriptionsDelta), " +
     "RetiredALC=$($result.retiredLoadContextsAlive)")

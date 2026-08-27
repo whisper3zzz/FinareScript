@@ -219,7 +219,8 @@ private:
         const FString& ReloadTransactionJson,
         int32& OutMatched,
         int32& OutReloaded,
-        int32& OutFailed);
+        int32& OutFailed,
+        FString& OutObservedReloadTransactionJson);
     EActiveTimerReturnType HandleAutoReload(
         double CurrentTime,
         float DeltaTime);

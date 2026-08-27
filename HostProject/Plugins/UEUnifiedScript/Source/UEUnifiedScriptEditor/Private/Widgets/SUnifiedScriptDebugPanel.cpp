@@ -912,11 +912,20 @@ void SUnifiedScriptDebugPanel::HandleLiveWorldPublishResponse(
     }
     if (!LiveComponent->ReloadScriptWithTransaction(Publish.ReloadTransactionJson))
     {
-        SetDebugStatus(
-            LiveComponent->LastScriptError.IsEmpty()
-                ? TEXT("The live component rejected the instrumented generation.")
-                : LiveComponent->LastScriptError,
-            true);
+        FString Status = LiveComponent->LastScriptError.IsEmpty()
+            ? TEXT("The live component rejected the instrumented generation.")
+            : LiveComponent->LastScriptError;
+        FUnifiedScriptReloadTransactionResult FailedTransaction;
+        FString TransactionError;
+        if (FUnifiedScriptAuthoringWorkbench::ParseReloadTransaction(
+                LiveComponent->LastReloadTransaction,
+                FailedTransaction,
+                TransactionError))
+        {
+            Status += TEXT("\n");
+            Status += FailedTransaction.ToDisplayString();
+        }
+        SetDebugStatus(MoveTemp(Status), true);
         return;
     }
 
@@ -943,12 +952,23 @@ void SUnifiedScriptDebugPanel::HandleLiveWorldPublishResponse(
     Session.Reset();
     SelectedFrameId = 0;
     RebuildFrameAndLocalViews();
-    SetDebugStatus(FString::Printf(
+    FString Status = FString::Printf(
         TEXT("Attached live World instance %llu generation %d · %d semantic breakpoint%s"),
         ReloadedContext.InstanceId,
         ReloadedContext.Generation,
         BreakpointNodeIds.Num(),
-        BreakpointNodeIds.Num() == 1 ? TEXT("") : TEXT("s")));
+        BreakpointNodeIds.Num() == 1 ? TEXT("") : TEXT("s"));
+    FUnifiedScriptReloadTransactionResult ObservedTransaction;
+    FString TransactionError;
+    if (FUnifiedScriptAuthoringWorkbench::ParseReloadTransaction(
+            LiveComponent->LastReloadTransaction,
+            ObservedTransaction,
+            TransactionError))
+    {
+        Status += TEXT("\n");
+        Status += ObservedTransaction.ToDisplayString();
+    }
+    SetDebugStatus(MoveTemp(Status));
     RefreshLiveWorldTargetNow();
 }
 

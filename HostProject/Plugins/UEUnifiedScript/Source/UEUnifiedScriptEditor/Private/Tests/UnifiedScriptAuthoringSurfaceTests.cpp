@@ -1782,6 +1782,13 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
              "\"authoringBoundary\":\"visualGraph\"},"
              "{\"representation\":\"opaqueCode\",\"graphEditable\":false,"
              "\"authoringBoundary\":\"sourceOnly\"}]},"
+             "\"reloadTransaction\":{"
+             "\"schemaVersion\":\"unifiedscript.reload-transaction/v0.1\","
+             "\"transactionId\":\"txn-workspace\",\"source\":\"authoring\","
+             "\"state\":\"published\",\"fromGeneration\":2,"
+             "\"candidateGeneration\":3,\"activeGeneration\":3,"
+             "\"phases\":[{\"name\":\"compile\",\"state\":\"succeeded\","
+             "\"durationMicroseconds\":12,\"detail\":\"Compiled candidate.\"}]},"
              "\"surface\":%s,\"generation\":{\"number\":3}}"),
         *SurfaceJson.Replace(
             TEXT("unifiedscript.authoring-surface/v9.9"),
@@ -1810,6 +1817,14 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("Workbench response counts source-only methods"), Workspace.Profile.OpaqueMethodCount, 1);
     TestTrue(TEXT("Workbench response retains the opaque call-node contract"),
         Workspace.Profile.bOpaqueCallsProjectAsSingleNodes);
+    TestEqual(
+        TEXT("Workbench response retains reload transaction identity"),
+        Workspace.ReloadTransaction.TransactionId,
+        FString(TEXT("txn-workspace")));
+    TestEqual(
+        TEXT("Workbench response retains observable reload phases"),
+        Workspace.ReloadTransaction.Phases.Num(),
+        1);
     TestEqual(TEXT("Workbench response replaces the Surface transactionally"),
         Workspace.Surface.GetActionCount(), 70);
 
@@ -1846,7 +1861,17 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
              "\"quickFixes\":[{\"id\":\"open-first-diagnostic\","
              "\"label\":\"Open Source\",\"kind\":\"openFirstDiagnostic\"}],"
              "\"rollback\":{\"state\":\"unchanged\",\"revision\":2,"
-             "\"generation\":3,\"message\":\"No writes.\"}}");
+             "\"generation\":3,\"message\":\"No writes.\"},"
+             "\"reloadTransaction\":{"
+             "\"schemaVersion\":\"unifiedscript.reload-transaction/v0.1\","
+             "\"transactionId\":\"txn-failed\",\"source\":\"authoring\","
+             "\"state\":\"rolledBack\",\"fromGeneration\":3,"
+             "\"candidateGeneration\":4,\"activeGeneration\":3,"
+             "\"phases\":[{\"name\":\"compile\",\"state\":\"failed\","
+             "\"durationMicroseconds\":7,\"detail\":\"Compiler rejected candidate.\"},"
+             "{\"name\":\"rollback\",\"state\":\"unchanged\","
+             "\"durationMicroseconds\":0,\"detail\":\"No writes.\"}],"
+             "\"failure\":\"Compiler rejected candidate.\"}}");
     FUnifiedScriptAuthoringErrorResult Failure;
     TestTrue(
         *FString::Printf(TEXT("Workbench parses structured authoring failure: %s"), *Error),
@@ -1858,6 +1883,14 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Failure explicitly confirms unchanged rollback"),
         Failure.Rollback.IsConfirmed());
     TestEqual(TEXT("Failure retains rollback revision"), Failure.Rollback.Revision, int64(2));
+    TestEqual(
+        TEXT("Failure retains reload transaction identity"),
+        Failure.ReloadTransaction.TransactionId,
+        FString(TEXT("txn-failed")));
+    TestEqual(
+        TEXT("Failure retains failed and rollback phases"),
+        Failure.ReloadTransaction.Phases.Num(),
+        2);
     TestTrue(
         TEXT("Workbench error responses retain protocol diagnostics"),
         FUnifiedScriptAuthoringWorkbench::ParseErrorResponse(

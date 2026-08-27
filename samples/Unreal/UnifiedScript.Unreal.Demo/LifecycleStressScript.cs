@@ -36,6 +36,15 @@ public sealed class LifecycleStressScript : UnrealActorScript
         _host!.ManagedState = $"StressEnd:{Generation}";
     }
 
+    [UnrealEvent(
+        typeof(UnifiedScriptComponent),
+        "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:OnManagedSignal",
+        Source = UnrealEventSource.Host)]
+    private void OnManagedSignal(int value, UnrealObjectHandle signalContext)
+    {
+        _host!.ManagedState = $"StressEvent:{Generation}:{value}";
+    }
+
     private async Task ObserveDelayAsync(int generation, CancellationToken lifetime)
     {
         try

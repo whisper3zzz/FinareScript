@@ -11,6 +11,7 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "UnifiedScriptAsset.h"
+#include "UnifiedScriptCoreClrHost.h"
 #include "UnifiedScriptDeclarationMaterializer.h"
 #include "UnifiedScriptObjectRegistry.h"
 #include "UnifiedScriptWorldSubsystem.h"
@@ -117,7 +118,11 @@ public:
                 0.0,
                 TEXT("Direct runtime reload performs no artifact write."));
         }
-        Root->SetNumberField(TEXT("fromGeneration"), FromGeneration);
+        if (!Root->HasField(TEXT("fromGeneration")))
+        {
+            Root->SetNumberField(TEXT("fromGeneration"), FromGeneration);
+        }
+        Root->SetNumberField(TEXT("worldFromGeneration"), FromGeneration);
         Root->SetStringField(TEXT("state"), TEXT("running"));
         OutError.Reset();
         return true;
@@ -173,11 +178,20 @@ public:
         int32 ActiveGeneration,
         const UUnifiedScriptWorldSubsystem* Host,
         bool bSemanticDebugActive,
-        const FString& Failure = FString())
+        const FString& Failure = FString(),
+        int32 RetiredLoadContextsAlive = INDEX_NONE)
     {
         Root->SetStringField(TEXT("state"), State);
-        Root->SetNumberField(TEXT("candidateGeneration"), CandidateGeneration);
-        Root->SetNumberField(TEXT("activeGeneration"), ActiveGeneration);
+        if (!Root->HasField(TEXT("candidateGeneration")))
+        {
+            Root->SetNumberField(TEXT("candidateGeneration"), CandidateGeneration);
+        }
+        if (!Root->HasField(TEXT("activeGeneration")))
+        {
+            Root->SetNumberField(TEXT("activeGeneration"), ActiveGeneration);
+        }
+        Root->SetNumberField(TEXT("worldCandidateGeneration"), CandidateGeneration);
+        Root->SetNumberField(TEXT("worldActiveGeneration"), ActiveGeneration);
         Root->SetArrayField(TEXT("phases"), Phases);
         if (!Failure.IsEmpty())
         {
@@ -200,6 +214,12 @@ public:
             TEXT("ownedAsyncResources"),
             Host != nullptr ? Host->GetOwnedAsyncResourceCount() : 0);
         Resources->SetBoolField(TEXT("semanticDebugActive"), bSemanticDebugActive);
+        if (RetiredLoadContextsAlive != INDEX_NONE)
+        {
+            Resources->SetNumberField(
+                TEXT("retiredLoadContextsAlive"),
+                RetiredLoadContextsAlive);
+        }
         Root->SetObjectField(TEXT("resources"), Resources);
 
         FString Json;
@@ -649,6 +669,8 @@ bool UUnifiedScriptComponent::ReloadScriptWithTransaction(
     }
 
     double PhaseStart = FPlatformTime::Seconds();
+    bDebugPausedAtFrameBoundary = false;
+    bDebugStepFrameRequested = false;
     FString DebugDrainError;
     if (!DisableSemanticDebugAndDrain(DebugDrainError))
     {
@@ -671,7 +693,7 @@ bool UUnifiedScriptComponent::ReloadScriptWithTransaction(
         TEXT("debugDrain"),
         TEXT("succeeded"),
         PhaseStart,
-        TEXT("Disabled semantic execution and drained its worker before reload."));
+        TEXT("Cleared frame-boundary state, disabled semantic execution, and drained its worker before reload."));
 
     FString Error;
     FString ResolvedAssemblyPath;
@@ -804,13 +826,24 @@ bool UUnifiedScriptComponent::ReloadScriptWithTransaction(
             TEXT("restored"),
             0.0,
             TEXT("Restored the previous property bag and explicit override identities."));
+        PhaseStart = FPlatformTime::Seconds();
+        const int32 RetiredLoadContextsAlive =
+            FUnifiedScriptCoreClrHost::Get().CollectRetiredManagedLoadContexts();
+        Transaction.AddPhase(
+            TEXT("oldContextCollection"),
+            RetiredLoadContextsAlive == 0 ? TEXT("succeeded") : TEXT("retained"),
+            PhaseStart,
+            FString::Printf(
+                TEXT("Collected rejected candidate contexts; %d retired context(s) remain alive."),
+                RetiredLoadContextsAlive));
         LastReloadTransaction = Transaction.Finish(
             TEXT("rolledBack"),
             CandidateGeneration,
             FromGeneration,
             Host,
             false,
-            Error);
+            Error,
+            RetiredLoadContextsAlive);
         SetScriptFailure(MoveTemp(Error));
         return false;
     }
@@ -829,12 +862,24 @@ bool UUnifiedScriptComponent::ReloadScriptWithTransaction(
         TEXT("succeeded"),
         0.0,
         TEXT("Committed the migrated property bag after the managed generation swap."));
+    PhaseStart = FPlatformTime::Seconds();
+    const int32 RetiredLoadContextsAlive =
+        FUnifiedScriptCoreClrHost::Get().CollectRetiredManagedLoadContexts();
+    Transaction.AddPhase(
+        TEXT("oldContextCollection"),
+        RetiredLoadContextsAlive == 0 ? TEXT("succeeded") : TEXT("retained"),
+        PhaseStart,
+        FString::Printf(
+            TEXT("Forced collectible-context reclamation; %d retired context(s) remain alive."),
+            RetiredLoadContextsAlive));
     LastReloadTransaction = Transaction.Finish(
         TEXT("committed"),
         CandidateGeneration,
         Generation,
         Host,
-        false);
+        false,
+        FString(),
+        RetiredLoadContextsAlive);
     LastScriptError.Reset();
     LastRuntimeDiagnostic = {};
     return true;

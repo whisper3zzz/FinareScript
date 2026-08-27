@@ -265,6 +265,21 @@ public sealed class CoreClrAuthoringHttpServerTests
                 livePublish.Generation.SemanticConfigurationId);
             Assert.Equal(Path.GetFullPath(managedPath), livePublish.AssemblyPath);
             Assert.Equal(Path.GetFullPath(pdbPath), livePublish.PortablePdbPath);
+            Assert.Equal(
+                "unifiedscript.reload-transaction/v0.1",
+                livePublish.ReloadTransaction.SchemaVersion);
+            Assert.Equal("liveWorldDebug", livePublish.ReloadTransaction.Source);
+            Assert.Equal("published", livePublish.ReloadTransaction.State);
+            Assert.Equal(
+                ["compile", "artifactPublication"],
+                livePublish.ReloadTransaction.Phases.Select(static phase => phase.Name));
+            Assert.All(
+                livePublish.ReloadTransaction.Phases,
+                static phase =>
+                {
+                    Assert.Equal("succeeded", phase.State);
+                    Assert.True(phase.DurationMicroseconds >= 0);
+                });
             Assert.Equal(sourceBeforeLivePublish, await File.ReadAllTextAsync(sourcePath));
             Assert.True(new FileInfo(managedPath).Length > 0);
             Assert.True(new FileInfo(pdbPath).Length > 0);
@@ -749,6 +764,19 @@ public sealed class CoreClrAuthoringHttpServerTests
             Assert.Equal(1, committed.History.UndoDepth);
             Assert.Equal("group-damage-tuning", committed.History.UndoTransactionId);
             Assert.Equal("Damage tuning", committed.History.UndoDescription);
+            Assert.NotNull(committed.ReloadTransaction);
+            Assert.Equal(
+                "unifiedscript.reload-transaction/v0.1",
+                committed.ReloadTransaction.SchemaVersion);
+            Assert.Equal("group-damage-tuning", committed.ReloadTransaction.TransactionId);
+            Assert.Equal("authoring", committed.ReloadTransaction.Source);
+            Assert.Equal("published", committed.ReloadTransaction.State);
+            Assert.Equal(
+                ["compile", "artifactPublication", "workbenchGenerationSwap"],
+                committed.ReloadTransaction.Phases.Select(static phase => phase.Name));
+            Assert.All(
+                committed.ReloadTransaction.Phases,
+                static phase => Assert.Equal("succeeded", phase.State));
             string committedSource = await File.ReadAllTextAsync(sourcePath);
             Assert.Contains("Math.Clamp(scaled, 10f, MaxDamage)", committedSource);
             Assert.Contains("= 120;", committedSource);
