@@ -19,6 +19,17 @@ managed lifecycle, 300 ticks, the UnifiedScript shot/hit path, and generated
 ABI v3 dispatch with nonzero fast calls and zero legacy calls. Its coverage
 report also requires every exported BlockBreaker member to have a native thunk.
 
+Before either smoke or gameplay measurement, the runners execute the complete
+migration audit. It can also be run directly:
+
+```powershell
+.\comparison\audit-blockbreaker-migration.ps1
+```
+
+The audit discovers 74 Puerts-project behaviors and requires exact coverage,
+19 byte-identical non-map gameplay assets, exactly two UnifiedScript Script
+Assets, 40 generated native thunks, and no Puerts/TypeScript legacy target.
+
 Run the complete migrated gameplay flow with three exact 10,000-frame trials
 and median aggregation:
 
@@ -40,9 +51,11 @@ The migrated shot is no longer a native Gun-facade shortcut. Resource/class
 loading and Actor spawn remain on the generated Binding control plane. The hot
 shot path uses one Gameplay Data Batch Trace, commits emitter and damage rows in
 one command reservation, and consumes their completion events on the next
-managed frame. The latest local three-trial median is 3,497.508 ms for
-UnifiedScript and 3,901.037 ms for Puerts, a ratio of 0.896559. Each result also
-requires exactly one shot/hit, both command events, and zero legacy calls.
+managed frame. The latest local three-trial median is 4,927.191 ms for
+UnifiedScript and 4,759.930 ms for Puerts, a ratio of 1.035139. Each result also
+requires exactly one shot/hit, both command events, 120,031 fast/CallFrame calls,
+and zero legacy calls. This result proves functional parity but is not a
+performance win; the at-least-5%-faster workload gate remains an M10 target.
 
 Run the matched generated `int32(int32, int32)` performance gate with:
 

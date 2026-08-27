@@ -1,0 +1,831 @@
+{
+  "schemaVersion": "unifiedscript.puerts-project-inventory/v0.1",
+  "projectName": "BlockBreaker-UnifiedScript",
+  "sourceFingerprint": "33b2311bb09af63594b411026cb293c62dc54299171642ab43f940780d10c4fe",
+  "items": [
+    {
+      "kind": "asyncPattern",
+      "key": "async:TS_Player.AShoot",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 55
+        }
+      ]
+    },
+    {
+      "kind": "asyncPattern",
+      "key": "await",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 61
+        }
+      ]
+    },
+    {
+      "kind": "asyncPattern",
+      "key": "promise",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 9
+        }
+      ]
+    },
+    {
+      "kind": "asyncPattern",
+      "key": "timer:setTimeout",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 10
+        }
+      ]
+    },
+    {
+      "kind": "decorator",
+      "key": "no-blueprint",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_BaseGun.ts",
+          "line": 21
+        },
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 54
+        }
+      ]
+    },
+    {
+      "kind": "decorator",
+      "key": "uproperty.attach",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 17
+        }
+      ]
+    },
+    {
+      "kind": "globalPattern",
+      "key": "function:delay",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 8
+        }
+      ]
+    },
+    {
+      "kind": "globalPattern",
+      "key": "module-augmentation:ue",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/ObjectExt.ts",
+          "line": 3
+        }
+      ]
+    },
+    {
+      "kind": "globalPattern",
+      "key": "prototype-mutation:UE.Object.prototype.CreateDefaultSubobjectGeneric",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/ObjectExt.ts",
+          "line": 9
+        }
+      ]
+    },
+    {
+      "kind": "import",
+      "key": "./ObjectExt",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 6
+        }
+      ]
+    },
+    {
+      "kind": "import",
+      "key": "./TS_BaseGun",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 5
+        },
+        {
+          "sourcePath": "TypeScript/TS_Rifle.ts",
+          "line": 1
+        }
+      ]
+    },
+    {
+      "kind": "import",
+      "key": "puerts",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_BaseGun.ts",
+          "line": 2
+        },
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 2
+        }
+      ]
+    },
+    {
+      "kind": "import",
+      "key": "ue",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/ObjectExt.ts",
+          "line": 1
+        },
+        {
+          "sourcePath": "TypeScript/TS_BaseGun.ts",
+          "line": 1
+        },
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 1
+        },
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 3
+        },
+        {
+          "sourcePath": "TypeScript/TS_Rifle.ts",
+          "line": 2
+        }
+      ]
+    },
+    {
+      "kind": "lifecycleHook",
+      "key": "TS_BaseGun.Constructor",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_BaseGun.ts",
+          "line": 12
+        }
+      ]
+    },
+    {
+      "kind": "lifecycleHook",
+      "key": "TS_BaseGun.ReceiveBeginPlay",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_BaseGun.ts",
+          "line": 16
+        }
+      ]
+    },
+    {
+      "kind": "lifecycleHook",
+      "key": "TS_Player.Constructor",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 21
+        }
+      ]
+    },
+    {
+      "kind": "lifecycleHook",
+      "key": "TS_Player.ReceiveBeginPlay",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 41
+        }
+      ]
+    },
+    {
+      "kind": "lifecycleHook",
+      "key": "TS_Rifle.Constructor",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Rifle.ts",
+          "line": 5
+        }
+      ]
+    },
+    {
+      "kind": "lifecycleHook",
+      "key": "TS_Rifle.ReceiveBeginPlay",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Rifle.ts",
+          "line": 11
+        }
+      ]
+    },
+    {
+      "kind": "nativeFacade",
+      "key": "AUnifiedScriptBlockBreakerCharacter.ReportManagedTick",
+      "locations": [
+        {
+          "sourcePath": "Source/BlockBreaker/UnifiedScriptBlockBreakerCharacter.h",
+          "line": 69
+        }
+      ]
+    },
+    {
+      "kind": "puertsApi",
+      "key": "$ref",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_BaseGun.ts",
+          "line": 2
+        },
+        {
+          "sourcePath": "TypeScript/TS_BaseGun.ts",
+          "line": 23
+        },
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 2
+        },
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 42
+        },
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 45
+        }
+      ]
+    },
+    {
+      "kind": "puertsApi",
+      "key": "$unref",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_BaseGun.ts",
+          "line": 2
+        },
+        {
+          "sourcePath": "TypeScript/TS_BaseGun.ts",
+          "line": 25
+        },
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 2
+        }
+      ]
+    },
+    {
+      "kind": "resource",
+      "key": "/Game/BlockBreaker/Meshes/SM_Rifle",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Rifle.ts",
+          "line": 13
+        }
+      ]
+    },
+    {
+      "kind": "resource",
+      "key": "/Game/BlockBreaker/ParticleSystems/PS_BulletImpact",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_BaseGun.ts",
+          "line": 18
+        }
+      ]
+    },
+    {
+      "kind": "resource",
+      "key": "/Game/Blueprints/TypeScript/TS_Rifle.TS_Rifle_C",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 47
+        }
+      ]
+    },
+    {
+      "kind": "script",
+      "key": "TypeScript/ObjectExt.ts",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/ObjectExt.ts",
+          "line": 1
+        }
+      ]
+    },
+    {
+      "kind": "script",
+      "key": "TypeScript/TS_BaseGun.ts",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_BaseGun.ts",
+          "line": 1
+        }
+      ]
+    },
+    {
+      "kind": "script",
+      "key": "TypeScript/TS_Player.ts",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 1
+        }
+      ]
+    },
+    {
+      "kind": "script",
+      "key": "TypeScript/TS_Rifle.ts",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Rifle.ts",
+          "line": 1
+        }
+      ]
+    },
+    {
+      "kind": "scriptMethod",
+      "key": "TS_BaseGun.Constructor",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_BaseGun.ts",
+          "line": 12
+        }
+      ]
+    },
+    {
+      "kind": "scriptMethod",
+      "key": "TS_BaseGun.ReceiveBeginPlay",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_BaseGun.ts",
+          "line": 16
+        }
+      ]
+    },
+    {
+      "kind": "scriptMethod",
+      "key": "TS_BaseGun.Shoot",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_BaseGun.ts",
+          "line": 22
+        }
+      ]
+    },
+    {
+      "kind": "scriptMethod",
+      "key": "TS_Player.AShoot",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 55
+        }
+      ]
+    },
+    {
+      "kind": "scriptMethod",
+      "key": "TS_Player.Constructor",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 21
+        }
+      ]
+    },
+    {
+      "kind": "scriptMethod",
+      "key": "TS_Player.LookHorizontal",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 33
+        }
+      ]
+    },
+    {
+      "kind": "scriptMethod",
+      "key": "TS_Player.LookVertical",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 37
+        }
+      ]
+    },
+    {
+      "kind": "scriptMethod",
+      "key": "TS_Player.MoveForward",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 25
+        }
+      ]
+    },
+    {
+      "kind": "scriptMethod",
+      "key": "TS_Player.MoveRight",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 29
+        }
+      ]
+    },
+    {
+      "kind": "scriptMethod",
+      "key": "TS_Player.ReceiveBeginPlay",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 41
+        }
+      ]
+    },
+    {
+      "kind": "scriptMethod",
+      "key": "TS_Player.Shoot",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 66
+        }
+      ]
+    },
+    {
+      "kind": "scriptMethod",
+      "key": "TS_Rifle.Constructor",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Rifle.ts",
+          "line": 5
+        }
+      ]
+    },
+    {
+      "kind": "scriptMethod",
+      "key": "TS_Rifle.ReceiveBeginPlay",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Rifle.ts",
+          "line": 11
+        }
+      ]
+    },
+    {
+      "kind": "scriptType",
+      "key": "TS_BaseGun extends UE.Actor",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_BaseGun.ts",
+          "line": 4
+        }
+      ]
+    },
+    {
+      "kind": "scriptType",
+      "key": "TS_Player extends UE.Character",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 14
+        }
+      ]
+    },
+    {
+      "kind": "scriptType",
+      "key": "TS_Rifle extends TS_BaseGun",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Rifle.ts",
+          "line": 4
+        }
+      ]
+    },
+    {
+      "kind": "unrealApi",
+      "key": "UE.Actor.K2_AttachToComponent",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 51
+        }
+      ]
+    },
+    {
+      "kind": "unrealApi",
+      "key": "UE.CameraComponent.GetForwardVector",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 58
+        }
+      ]
+    },
+    {
+      "kind": "unrealApi",
+      "key": "UE.CameraComponent.K2_GetComponentLocation",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 57
+        }
+      ]
+    },
+    {
+      "kind": "unrealApi",
+      "key": "UE.CameraComponent.K2_SetRelativeLocationAndRotation",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 42
+        }
+      ]
+    },
+    {
+      "kind": "unrealApi",
+      "key": "UE.CameraComponent.bUsePawnControlRotation:set",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 43
+        }
+      ]
+    },
+    {
+      "kind": "unrealApi",
+      "key": "UE.Character.AddControllerPitchInput",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 38
+        }
+      ]
+    },
+    {
+      "kind": "unrealApi",
+      "key": "UE.Character.AddControllerYawInput",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 34
+        }
+      ]
+    },
+    {
+      "kind": "unrealApi",
+      "key": "UE.Character.AddMovementInput",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 26
+        },
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 30
+        }
+      ]
+    },
+    {
+      "kind": "unrealApi",
+      "key": "UE.Character.GetActorForwardVector",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 26
+        }
+      ]
+    },
+    {
+      "kind": "unrealApi",
+      "key": "UE.Character.GetActorRightVector",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 30
+        }
+      ]
+    },
+    {
+      "kind": "unrealApi",
+      "key": "UE.Class.Load",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 47
+        }
+      ]
+    },
+    {
+      "kind": "unrealApi",
+      "key": "UE.EAttachmentRule.SnapToTarget",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 51
+        }
+      ]
+    },
+    {
+      "kind": "unrealApi",
+      "key": "UE.EPSCPoolMethod.AutoRelease",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_BaseGun.ts",
+          "line": 26
+        }
+      ]
+    },
+    {
+      "kind": "unrealApi",
+      "key": "UE.ESpawnActorCollisionHandlingMethod.Undefined",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 48
+        }
+      ]
+    },
+    {
+      "kind": "unrealApi",
+      "key": "UE.GameplayStatics.ApplyDamage",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_BaseGun.ts",
+          "line": 29
+        }
+      ]
+    },
+    {
+      "kind": "unrealApi",
+      "key": "UE.GameplayStatics.BeginDeferredActorSpawnFromClass",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 48
+        }
+      ]
+    },
+    {
+      "kind": "unrealApi",
+      "key": "UE.GameplayStatics.FinishSpawningActor",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 49
+        }
+      ]
+    },
+    {
+      "kind": "unrealApi",
+      "key": "UE.GameplayStatics.SpawnEmitterAtLocation",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_BaseGun.ts",
+          "line": 26
+        }
+      ]
+    },
+    {
+      "kind": "unrealApi",
+      "key": "UE.HitResult.GetActor",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_BaseGun.ts",
+          "line": 27
+        }
+      ]
+    },
+    {
+      "kind": "unrealApi",
+      "key": "UE.KismetSystemLibrary.LineTraceSingle",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_BaseGun.ts",
+          "line": 24
+        }
+      ]
+    },
+    {
+      "kind": "unrealApi",
+      "key": "UE.Object.prototype.CreateDefaultSubobjectGeneric",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/ObjectExt.ts",
+          "line": 9
+        }
+      ]
+    },
+    {
+      "kind": "unrealApi",
+      "key": "UE.ParticleSystem.Load",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_BaseGun.ts",
+          "line": 18
+        }
+      ]
+    },
+    {
+      "kind": "unrealApi",
+      "key": "UE.Rotator",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_BaseGun.ts",
+          "line": 26
+        },
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 45
+        }
+      ]
+    },
+    {
+      "kind": "unrealApi",
+      "key": "UE.SceneComponent.K2_SetRelativeLocationAndRotation",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 45
+        }
+      ]
+    },
+    {
+      "kind": "unrealApi",
+      "key": "UE.StaticMesh.Load",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Rifle.ts",
+          "line": 13
+        }
+      ]
+    },
+    {
+      "kind": "unrealApi",
+      "key": "UE.StaticMeshComponent.StaticMesh:set",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Rifle.ts",
+          "line": 13
+        }
+      ]
+    },
+    {
+      "kind": "unrealApi",
+      "key": "UE.Vector",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_BaseGun.ts",
+          "line": 26
+        },
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 42
+        },
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 45
+        }
+      ]
+    },
+    {
+      "kind": "unrealApi",
+      "key": "UE.Vector.op_Addition",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 58
+        }
+      ]
+    },
+    {
+      "kind": "unrealApi",
+      "key": "UE.Vector.op_Multiply",
+      "locations": [
+        {
+          "sourcePath": "TypeScript/TS_Player.ts",
+          "line": 58
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "scriptCount": 4,
+    "scriptTypeCount": 3,
+    "scriptMethodCount": 13,
+    "lifecycleHookCount": 6,
+    "importCount": 4,
+    "puertsApiCount": 2,
+    "unrealApiCount": 29,
+    "delegateCount": 0,
+    "resourceCount": 3,
+    "globalPatternCount": 3,
+    "asyncPatternCount": 4,
+    "decoratorCount": 2,
+    "nativeFacadeCount": 1,
+    "itemCount": 74
+  }
+}

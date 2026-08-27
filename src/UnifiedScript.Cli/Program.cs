@@ -86,6 +86,11 @@ internal static class Program
             return RunUnrealDataPlane(args);
         }
 
+        if (args.Count > 0 && args[0] == "ue-puerts-inventory")
+        {
+            return RunUnrealPuertsInventory(args);
+        }
+
         if (args.Count > 0 && args[0] is "emit" or "emit-files")
         {
             return RunEmit(args);
@@ -299,6 +304,108 @@ internal static class Program
         Console.WriteLine(fullManagedOutputPath);
         Console.WriteLine(fullNativeOutputPath);
         Console.WriteLine($"schema-fingerprint=0x{result.SchemaFingerprint:X16}");
+        return 0;
+    }
+
+    private static int RunUnrealPuertsInventory(IReadOnlyList<string> args)
+    {
+        if (!TryParseUnrealPuertsInventoryArguments(
+                args,
+                out UnrealPuertsInventoryOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+
+        options = options ?? throw new InvalidOperationException(
+            "Argument parsing succeeded without Puerts inventory options.");
+        if (!Directory.Exists(options.ProjectRoot))
+        {
+            Console.Error.WriteLine(
+                $"Puerts project root does not exist: {options.ProjectRoot}");
+            return 66;
+        }
+        if (!Directory.Exists(options.NativeProjectRoot))
+        {
+            Console.Error.WriteLine(
+                $"Migration target project root does not exist: {options.NativeProjectRoot}");
+            return 66;
+        }
+        if (options.CoveragePath is not null && !File.Exists(options.CoveragePath))
+        {
+            Console.Error.WriteLine(
+                $"Puerts migration coverage does not exist: {options.CoveragePath}");
+            return 66;
+        }
+
+        string fullOutputPath = Path.GetFullPath(options.OutputPath);
+        string? fullCoveragePath = options.CoveragePath is null
+            ? null
+            : Path.GetFullPath(options.CoveragePath);
+        string? fullReportPath = options.ReportPath is null
+            ? null
+            : Path.GetFullPath(options.ReportPath);
+        if (fullCoveragePath is not null)
+        {
+            EnsureDifferentPath(
+                fullCoveragePath,
+                fullOutputPath,
+                "Puerts inventory output cannot overwrite its coverage input.");
+        }
+        if (fullReportPath is not null)
+        {
+            EnsureDifferentPath(
+                fullOutputPath,
+                fullReportPath,
+                "Puerts inventory and coverage report outputs must be distinct.");
+            if (fullCoveragePath is not null)
+            {
+                EnsureDifferentPath(
+                    fullCoveragePath,
+                    fullReportPath,
+                    "Puerts coverage report cannot overwrite its coverage input.");
+            }
+        }
+
+        UnrealPuertsMigrationInventory inventory =
+            new UnrealPuertsMigrationInventoryBuilder().Build(
+                options.ProjectRoot,
+                options.NativeProjectRoot,
+                options.ProjectName);
+        var outputs = new List<OutputFile>
+        {
+            new(fullOutputPath, UnrealPuertsMigrationJson.Serialize(inventory)),
+        };
+        UnrealPuertsMigrationCoverageReport? report = null;
+        if (fullCoveragePath is not null)
+        {
+            UnrealPuertsMigrationCoverage coverage =
+                UnrealPuertsMigrationJson.DeserializeCoverage(
+                    File.ReadAllText(fullCoveragePath));
+            report = UnrealPuertsMigrationCoverageValidator.Validate(inventory, coverage);
+            foreach (string diagnostic in report.Diagnostics)
+            {
+                Console.Error.WriteLine(diagnostic);
+            }
+            if (fullReportPath is not null)
+            {
+                outputs.Add(new OutputFile(
+                    fullReportPath,
+                    UnrealPuertsMigrationJson.Serialize(report)));
+            }
+        }
+        WriteTransactionally(outputs);
+        foreach (OutputFile output in outputs)
+        {
+            Console.WriteLine(Path.GetFullPath(output.Path));
+        }
+        Console.WriteLine(
+            $"inventory-fingerprint={inventory.SourceFingerprint}; " +
+            $"items={inventory.Summary.ItemCount}");
+        if (options.FailOnUncovered && report is { Passed: false })
+        {
+            return 65;
+        }
         return 0;
     }
 
@@ -1350,6 +1457,77 @@ internal static class Program
         return true;
     }
 
+    private static bool TryParseUnrealPuertsInventoryArguments(
+        IReadOnlyList<string> args,
+        out UnrealPuertsInventoryOptions? options)
+    {
+        options = null;
+        if (args.Count < 4 || args[0] != "ue-puerts-inventory" ||
+            args[1].StartsWith("--", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        string projectRoot = args[1];
+        string? outputPath = null;
+        string? coveragePath = null;
+        string? reportPath = null;
+        string? nativeProjectRoot = null;
+        string? projectName = null;
+        bool failOnUncovered = false;
+        int index = 2;
+        while (index < args.Count)
+        {
+            string option = args[index++];
+            if (option == "--fail-on-uncovered" && !failOnUncovered)
+            {
+                failOnUncovered = true;
+                continue;
+            }
+            if (index >= args.Count)
+            {
+                return false;
+            }
+            string value = args[index++];
+            switch (option)
+            {
+                case "--out" when outputPath is null:
+                    outputPath = value;
+                    break;
+                case "--coverage" when coveragePath is null:
+                    coveragePath = value;
+                    break;
+                case "--report" when reportPath is null:
+                    reportPath = value;
+                    break;
+                case "--native-project" when nativeProjectRoot is null:
+                    nativeProjectRoot = value;
+                    break;
+                case "--project-name" when projectName is null:
+                    projectName = value;
+                    break;
+                default:
+                    return false;
+            }
+        }
+
+        if (outputPath is null ||
+            failOnUncovered && coveragePath is null ||
+            reportPath is not null && coveragePath is null)
+        {
+            return false;
+        }
+        options = new UnrealPuertsInventoryOptions(
+            projectRoot,
+            nativeProjectRoot ?? projectRoot,
+            projectName,
+            outputPath,
+            coveragePath,
+            reportPath,
+            failOnUncovered);
+        return true;
+    }
+
     private static bool TryParseExecuteArguments(
         IReadOnlyList<string> args,
         out ExecuteOptions? options)
@@ -1968,6 +2146,7 @@ internal static class Program
         "  unifiedscript debug-serve <input.cs> --root <visual-editor-directory> [--port <number>] [options]\n" +
         "  unifiedscript ue-bindings <reflection.json> --out <bindings.cs> [--contract <api-contract.json>] [--native-out <thunks.cpp>] [--nodes-out <nodes.json>] [--report <coverage.json>] [--fail-on-rejected] [--namespace <name>]\n" +
         "  unifiedscript ue-data-plane <schema.json> --managed-out <layouts.g.cs> --native-out <layouts.gen.h>\n" +
+        "  unifiedscript ue-puerts-inventory <puerts-project> --out <inventory.json> [--native-project <target-project>] [--project-name <name>] [--coverage <coverage.json> --report <report.json> --fail-on-uncovered]\n" +
         "Options:\n" +
         "  --out <path>            Artifact directory, initialized sidecar, or patched source output.\n" +
         "  --patch <patch.json>    Semantic patch document required by apply-patch.\n" +
@@ -1996,6 +2175,10 @@ internal static class Program
         "  --report <path>         Emit native/fallback/rejected UE API coverage JSON.\n" +
         "  --fail-on-rejected      Return data-error status when any UE member is rejected.\n" +
         "  --managed-out <path>    Emit schema-generated managed data-plane layouts.\n" +
+        "  --coverage <path>       Validate every Puerts inventory item against an explicit migration route.\n" +
+        "  --native-project <path> Scan remaining native facade functions in the migration target.\n" +
+        "  --project-name <name>   Stable inventory name when source and target projects differ.\n" +
+        "  --fail-on-uncovered     Return data-error status for drift, missing, or stale migration routes.\n" +
         "  --assembly <name>        Set the analysis assembly name.\n" +
         "  --effects <catalog.json> Apply effect catalog overrides.\n" +
         "  --reference <assembly>   Add a metadata reference; may be repeated.\n" +
@@ -2057,6 +2240,15 @@ internal static class Program
         string SchemaPath,
         string ManagedOutputPath,
         string NativeOutputPath);
+
+    private sealed record UnrealPuertsInventoryOptions(
+        string ProjectRoot,
+        string NativeProjectRoot,
+        string? ProjectName,
+        string OutputPath,
+        string? CoveragePath,
+        string? ReportPath,
+        bool FailOnUncovered);
 
     private sealed record IdentityOptions(
         string InputPath,

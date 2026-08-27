@@ -596,9 +596,12 @@ impact emission and damage are committed together through the command buffer;
 the next-frame event view confirms both completions. `FHitResult`-compatible
 trace rows cross no reflected struct boundary on this hot path. The Gun host no
 longer contains resource, trace, cached-hit, effect, or damage facade functions.
-The matched three-trial 10,000-frame gate prepares both runtimes once, alternates
-execution order, and currently reports a local median of 3,497.508 ms for
-UnifiedScript versus 3,901.037 ms for Puerts.
+The complete migration inventory covers 74/74 source and native items and the
+target contains no Puerts/TypeScript payload. The matched three-trial
+10,000-frame gate prepares both runtimes once, alternates execution order, and
+currently reports a local median of 4,927.191 ms for UnifiedScript versus
+4,759.930 ms for Puerts (ratio 1.035139). This is functional evidence, not a
+performance claim; the accepted performance workload remains an M10 gate.
 
 The performance gate builds managed code in Release, warms both runtimes with
 4,096 calls, measures five 100,000-call samples, and uses the median. A

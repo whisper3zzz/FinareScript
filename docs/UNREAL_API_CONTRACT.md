@@ -141,21 +141,22 @@ synchronous reflected calls.
 
 ## BlockBreaker slice
 
-BlockBreaker selects ten native types and 43 members. Its bootstrap path uses
+BlockBreaker selects nine native types and 40 members. Its bootstrap path uses
 generated `Actor`, `Pawn`, `SceneComponent`, `CameraComponent`,
 `StaticMeshComponent`, and `UnifiedScriptWorldLibrary` wrappers. The World
 service loads assets/classes, retains loaded resources for the World-host
-lifetime, and spawns Actors. `GameplayStatics` and the selected `FHitResult`
-shape remain in the product contract for compatibility and cold-path use, but
-the current player shot no longer invokes them across ABI v3.
+lifetime, and spawns Actors. The selected `FHitResult` shape remains because the
+generated SceneComponent transform call carries its native sweep result, while
+the current player shot routes trace, effect, and damage through the data plane.
 
 The migrated rifle performs its visibility query through one Gameplay Data
 Batch Trace and writes emitter/damage work into one command reservation. It
 observes the two completion events on the following managed frame. Seven Gun
 facade functions and their transient cached hit/effect state remain deleted.
 The current standalone 10,000-frame data-plane run executes one complete
-midpoint shot/hit and reports 120,027 generated ABI v3 calls with zero legacy
+midpoint shot/hit and reports 120,031 generated ABI v3 calls with zero legacy
 calls. The current matched three-trial gameplay gate prepares both runtimes
 before measurement, alternates execution order, and reports a median of
-3,497.508 ms for UnifiedScript versus 3,901.037 ms for Puerts on the local UE
-5.8.1 machine (`UnifiedScript/Puerts = 0.896559`).
+4,927.191 ms for UnifiedScript versus 4,759.930 ms for Puerts on the local UE
+5.8.1 machine (`UnifiedScript/Puerts = 1.035139`). It is functional evidence,
+not a performance claim; M10 owns the release performance threshold.

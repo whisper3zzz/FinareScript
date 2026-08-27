@@ -12,14 +12,21 @@ $buildBat = Join-Path $EngineRoot 'Engine\Build\BatchFiles\Build.bat'
 $editorCmd = Join-Path $EngineRoot 'Engine\Binaries\Win64\UnrealEditor-Cmd.exe'
 $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $resultRoot = Join-Path $repoRoot "artifacts\comparison\$timestamp"
+$migrationAudit = Join-Path $PSScriptRoot 'audit-blockbreaker-migration.ps1'
 
-foreach ($required in @($buildBat, $editorCmd, $puertsRoot, $unifiedRoot)) {
+foreach ($required in @(
+    $buildBat, $editorCmd, $puertsRoot, $unifiedRoot, $migrationAudit)) {
     if (-not (Test-Path -LiteralPath $required)) {
         throw "Required comparison path does not exist: $required"
     }
 }
 
 New-Item -ItemType Directory -Force -Path $resultRoot | Out-Null
+& $migrationAudit -EngineRoot $EngineRoot -ComparisonRoot $ComparisonRoot `
+    -ReportPath (Join-Path $resultRoot 'migration-audit.json')
+if ($LASTEXITCODE -ne 0) {
+    throw 'BlockBreaker whole-project migration audit failed before smoke comparison.'
+}
 $puertsBuildLog = Join-Path $resultRoot 'puerts-build.log'
 $puertsRuntimeLog = Join-Path $resultRoot 'puerts-runtime.log'
 $unifiedLog = Join-Path $resultRoot 'unifiedscript.log'

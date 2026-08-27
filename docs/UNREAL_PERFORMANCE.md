@@ -60,10 +60,12 @@ powershell -ExecutionPolicy Bypass -File comparison/run-gameplay-comparison.ps1 
 The current working-tree UnifiedScript player routes that shot through one
 Batch Trace plus an emitter/damage command reservation and consumes both
 completion events on the next managed frame. The runner prepares both runtimes
-once, performs only runtime work inside measured trials, and alternates which
-runtime executes first to reduce build heat and ordering bias. The latest local
-three-trial result reports 120,027 generated ABI v3 calls, zero legacy calls,
-and a median of 3,497.508 ms for UnifiedScript versus 3,901.037 ms for Puerts
-(`UnifiedScript/Puerts = 0.896559`). Every trial completed exactly one shot and
-one hit, and UnifiedScript observed both command events. This remains a
-machine-local UE 5.8.1 result rather than portable cross-machine evidence.
+once, performs only runtime work inside measured trials, alternates which
+runtime executes first to reduce build heat and ordering bias, and now runs the
+full 74-item migration audit before measurement. The latest local three-trial
+result reports 120,031 generated ABI v3 fast/CallFrame calls, zero legacy calls,
+and a median of 4,927.191 ms for UnifiedScript versus 4,759.930 ms for Puerts
+(`UnifiedScript/Puerts = 1.035139`). Every trial completed exactly one shot and
+one hit, and UnifiedScript observed both command events. This is functional
+parity evidence, not a performance claim, and remains a machine-local UE 5.8.1
+result. M10 owns the at-least-5%-faster accepted-workload gate.

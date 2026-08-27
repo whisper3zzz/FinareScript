@@ -25,16 +25,22 @@ $resultPath = Join-Path $artifactRoot 'comparison.json'
 $puertsProject = Join-Path $puertsRoot 'BlockBreaker.uproject'
 $unifiedProject = Join-Path $unifiedRoot 'BlockBreaker.uproject'
 $unifiedRunner = Join-Path $unifiedRoot 'Tools\run_unifiedscript_demo.ps1'
+$migrationAudit = Join-Path $PSScriptRoot 'audit-blockbreaker-migration.ps1'
 $unifiedMap = '/Game/BlockBreaker/Maps/TutorialMap?game=/Script/BlockBreaker.UnifiedScriptBlockBreakerGameMode'
 
 foreach ($required in @(
     $buildBat, $editorCmd, $puertsRoot, $unifiedRoot, $puertsProject,
-    $unifiedProject, $unifiedRunner)) {
+    $unifiedProject, $unifiedRunner, $migrationAudit)) {
     if (-not (Test-Path -LiteralPath $required)) {
         throw "Required gameplay comparison path does not exist: $required"
     }
 }
 New-Item -ItemType Directory -Force -Path $artifactRoot | Out-Null
+& $migrationAudit -EngineRoot $EngineRoot -ComparisonRoot $ComparisonRoot `
+    -ReportPath (Join-Path $artifactRoot 'migration-audit.json')
+if ($LASTEXITCODE -ne 0) {
+    throw 'BlockBreaker whole-project migration audit failed before comparison.'
+}
 
 function Get-Median([double[]]$Values) {
     $sorted = @($Values | Sort-Object)

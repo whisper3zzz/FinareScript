@@ -19,10 +19,11 @@ $prepareScript = Join-Path $projectRoot 'Tools\run_unifiedscript_demo.ps1'
 $runUat = Join-Path $EngineRoot 'Engine\Build\BatchFiles\RunUAT.bat'
 $gameAssembly = Join-Path $projectRoot 'Managed\BlockBreaker.UnifiedScript.dll'
 $gameDeps = Join-Path $projectRoot 'Managed\BlockBreaker.UnifiedScript.deps.json'
+$migrationAudit = Join-Path $PSScriptRoot 'audit-blockbreaker-migration.ps1'
 $map = '/Game/BlockBreaker/Maps/TutorialMap'
 $gameMode = '/Script/BlockBreaker.UnifiedScriptBlockBreakerGameMode'
 
-foreach ($required in @($projectPath, $prepareScript, $runUat)) {
+foreach ($required in @($projectPath, $prepareScript, $runUat, $migrationAudit)) {
     if (-not (Test-Path -LiteralPath $required)) {
         throw "Required BlockBreaker demo dependency is missing: $required"
     }
@@ -36,6 +37,12 @@ $smokeLog = Join-Path $runDirectory 'packaged-smoke.log'
 $smokeStdout = Join-Path $runDirectory 'packaged-smoke.stdout.log'
 $smokeStderr = Join-Path $runDirectory 'packaged-smoke.stderr.log'
 New-Item -ItemType Directory -Force -Path $runDirectory | Out-Null
+$migrationReport = Join-Path $runDirectory 'migration-audit.json'
+& $migrationAudit -EngineRoot $EngineRoot -ComparisonRoot $ComparisonRoot `
+    -ReportPath $migrationReport
+if ($LASTEXITCODE -ne 0) {
+    throw 'BlockBreaker whole-project migration audit failed before packaging.'
+}
 
 if (-not $SkipPrepare) {
     Write-Output '[prepare] Synchronizing plugin, bindings, Script Assets, and managed gameplay...'
@@ -225,6 +232,15 @@ if ($gateFailures.Count -ne 0) {
 }
 
 $packageFiles = @(Get-ChildItem -LiteralPath $deliveryRoot -Recurse -File)
+$legacyPackageFiles = @($packageFiles | Where-Object {
+    $relative = $_.FullName.Substring($deliveryRoot.Length + 1)
+    $relative -match '(^|\\)(Puerts|JavaScript|TypeScript)(\\|$)'
+})
+if ($legacyPackageFiles.Count -ne 0) {
+    throw (
+        'Packaged BlockBreaker still contains Puerts/TypeScript payloads: ' +
+        (($legacyPackageFiles | ForEach-Object FullName) -join ', '))
+}
 $comparisonStatus = @(& git -C $projectRoot status --porcelain)
 $reportPath = Join-Path $runDirectory 'demo-delivery.json'
 [ordered]@{
@@ -243,6 +259,10 @@ $reportPath = Join-Path $runDirectory 'demo-delivery.json'
     executableSha256 = (Get-FileHash -LiteralPath $executable.FullName -Algorithm SHA256).Hash
     packageFileCount = $packageFiles.Count
     packageBytes = [long](($packageFiles | Measure-Object Length -Sum).Sum)
+    puertsOrTypeScriptPackageFiles = $legacyPackageFiles.Count
+    migrationAudit = $migrationReport
+    migrationAuditSha256 = (Get-FileHash -LiteralPath $migrationReport `
+        -Algorithm SHA256).Hash
     launcher = $launcherPath
     readme = $readmePath
     managedGameplayAssembly = $packagedGameAssembly.FullName

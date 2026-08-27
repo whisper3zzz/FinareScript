@@ -140,5 +140,5 @@ knowledge should be needed.
 
 `HostProject/Config/UnifiedScript.onboarding.json` is the minimal runtime and
 Automation fixture. The BlockBreaker UnifiedScript project carries the same
-schema for its ten-type, 43-member gameplay contract. Both configurations pass
+schema for its nine-type, 40-member gameplay contract. Both configurations pass
 Apply and a following deterministic validation against UE 5.8.1.

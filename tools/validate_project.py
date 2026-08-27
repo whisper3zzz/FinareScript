@@ -79,6 +79,7 @@ DOCUMENTS = [
     ROOT / "docs" / "milestones" / "M5_5_AUTHORING_EXPERIENCE.md",
     ROOT / "docs" / "milestones" / "M6_0_GENERIC_AUTHORING.md",
     ROOT / "docs" / "milestones" / "M6_1_UNREAL_ADAPTER.md",
+    ROOT / "docs" / "milestones" / "M7_4_BLOCKBREAKER_MIGRATION.md",
 ]
 
 
@@ -2318,6 +2319,126 @@ def main() -> int:
         "Unreal binding coverage gate or safe reflected-path fallback is missing",
     )
     checks.append("M7.1 binding matrix and no-handwritten-dispatch regression gate are complete")
+    blockbreaker_inventory_path = (
+        ROOT / "comparison" / "blockbreaker-puerts-inventory.json"
+    )
+    blockbreaker_coverage_path = (
+        ROOT / "comparison" / "blockbreaker-migration-coverage.json"
+    )
+    blockbreaker_report_path = (
+        ROOT / "comparison" / "blockbreaker-migration-report.json"
+    )
+    blockbreaker_audit_path = (
+        ROOT / "comparison" / "audit-blockbreaker-migration.ps1"
+    )
+    blockbreaker_gameplay_runner_path = (
+        ROOT / "comparison" / "run-gameplay-comparison.ps1"
+    )
+    blockbreaker_smoke_runner_path = (
+        ROOT / "comparison" / "run-smoke-comparison.ps1"
+    )
+    blockbreaker_package_runner_path = (
+        ROOT / "comparison" / "package-blockbreaker-demo.ps1"
+    )
+    puerts_inventory_builder_path = (
+        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealPuertsMigrationInventory.cs"
+    )
+    roadmap_path = ROOT / "docs" / "ROADMAP.md"
+    for path in [
+        blockbreaker_inventory_path,
+        blockbreaker_coverage_path,
+        blockbreaker_report_path,
+        blockbreaker_audit_path,
+        blockbreaker_gameplay_runner_path,
+        blockbreaker_smoke_runner_path,
+        blockbreaker_package_runner_path,
+        puerts_inventory_builder_path,
+        roadmap_path,
+    ]:
+        require(path.is_file(), f"Missing M7.4 migration artifact: {path}")
+    with blockbreaker_inventory_path.open("r", encoding="utf-8") as handle:
+        blockbreaker_inventory = json.load(handle)
+    with blockbreaker_coverage_path.open("r", encoding="utf-8") as handle:
+        blockbreaker_coverage = json.load(handle)
+    with blockbreaker_report_path.open("r", encoding="utf-8-sig") as handle:
+        blockbreaker_report = json.load(handle)
+    blockbreaker_audit = blockbreaker_audit_path.read_text(encoding="utf-8")
+    blockbreaker_gameplay_runner = blockbreaker_gameplay_runner_path.read_text(
+        encoding="utf-8"
+    )
+    blockbreaker_smoke_runner = blockbreaker_smoke_runner_path.read_text(
+        encoding="utf-8"
+    )
+    blockbreaker_package_runner = blockbreaker_package_runner_path.read_text(
+        encoding="utf-8"
+    )
+    puerts_inventory_builder = puerts_inventory_builder_path.read_text(
+        encoding="utf-8"
+    )
+    roadmap = roadmap_path.read_text(encoding="utf-8")
+    facade_coverage = [
+        entry
+        for entry in blockbreaker_coverage["entries"]
+        if entry["kind"] == "nativeFacade"
+    ]
+    expected_inventory_summary = {
+        "scriptCount": 4,
+        "scriptTypeCount": 3,
+        "scriptMethodCount": 13,
+        "lifecycleHookCount": 6,
+        "importCount": 4,
+        "puertsApiCount": 2,
+        "unrealApiCount": 29,
+        "delegateCount": 0,
+        "resourceCount": 3,
+        "globalPatternCount": 3,
+        "asyncPatternCount": 4,
+        "decoratorCount": 2,
+        "nativeFacadeCount": 1,
+        "itemCount": 74,
+    }
+    require(
+        blockbreaker_inventory["schemaVersion"]
+        == "unifiedscript.puerts-project-inventory/v0.1"
+        and blockbreaker_inventory["summary"] == expected_inventory_summary
+        and len(blockbreaker_inventory["items"]) == 74
+        and blockbreaker_coverage["schemaVersion"]
+        == "unifiedscript.puerts-migration-coverage/v0.1"
+        and blockbreaker_coverage["inventoryFingerprint"]
+        == blockbreaker_inventory["sourceFingerprint"]
+        and len(blockbreaker_coverage["entries"]) == 74
+        and blockbreaker_report["schemaVersion"]
+        == "unifiedscript.puerts-migration-report/v0.1"
+        and blockbreaker_report["inventoryFingerprint"]
+        == blockbreaker_inventory["sourceFingerprint"]
+        and blockbreaker_report["fingerprintMatches"]
+        and blockbreaker_report["passed"]
+        and blockbreaker_report["inventoryItemCount"] == 74
+        and blockbreaker_report["coveredItemCount"] == 74
+        and blockbreaker_report["uncoveredItemCount"] == 0
+        and blockbreaker_report["staleEntryCount"] == 0
+        and len(facade_coverage) == 1
+        and facade_coverage[0]["route"] == "verification-only"
+        and facade_coverage[0]["notes"].strip()
+        and "UnrealPuertsMigrationInventoryBuilder" in puerts_inventory_builder
+        and "JsonUnmappedMemberHandling.Disallow" in puerts_inventory_builder
+        and "requires an explicit boundary explanation" in puerts_inventory_builder
+        and 'args[0] == "ue-puerts-inventory"' in cli_source
+        and "--fail-on-uncovered" in cli_source
+        and "Plugins\\Puerts" in blockbreaker_audit
+        and "shared assets changed during migration" in blockbreaker_audit
+        and "generated binding coverage is incomplete" in blockbreaker_audit
+        and "scriptAssets.Count -ne 2" in blockbreaker_audit
+        and "audit-blockbreaker-migration.ps1" in blockbreaker_gameplay_runner
+        and "audit-blockbreaker-migration.ps1" in blockbreaker_smoke_runner
+        and "audit-blockbreaker-migration.ps1" in blockbreaker_package_runner
+        and "puertsOrTypeScriptPackageFiles" in blockbreaker_package_runner
+        and "### M7.4 — Full BlockBreaker runtime migration" in roadmap
+        and "- [x] inventory all Puerts scripts" in roadmap
+        and "Next slice: **M8.1 — Structured graph editing completeness**" in roadmap,
+        "M7.4 whole-project Puerts inventory, coverage, or migration gates are incomplete",
+    )
+    checks.append("M7.4 BlockBreaker migration has exact coverage and zero legacy payload gates")
     require(
         "UUnifiedScriptWorldSubsystem final" in unreal_world_host_header
         and "public UWorldSubsystem" in unreal_world_host_header

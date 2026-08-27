@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "unifiedscript.puerts-migration-report/v0.1",
+  "projectName": "BlockBreaker-UnifiedScript",
+  "inventoryFingerprint": "33b2311bb09af63594b411026cb293c62dc54299171642ab43f940780d10c4fe",
+  "fingerprintMatches": true,
+  "passed": true,
+  "inventoryItemCount": 74,
+  "coveredItemCount": 74,
+  "uncoveredItemCount": 0,
+  "staleEntryCount": 0,
+  "uncoveredItems": [],
+  "staleEntries": [],
+  "diagnostics": []
+}

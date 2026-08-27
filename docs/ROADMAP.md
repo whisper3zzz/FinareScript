@@ -48,8 +48,8 @@ current cursor, validate it, and advance this document.
 
 Last refreshed: **2026-08-27**
 
-- Active milestone: **M7 — General gameplay API and runtime completeness**
-- Next slice: **M7.3 — schema-generated gameplay data plane layouts and bounds**
+- Active milestone: **M8 — Visual/C# Authoring Beta**
+- Next slice: **M8.1 — Structured graph editing completeness**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -60,17 +60,18 @@ machine-local unless an artifact explicitly says otherwise.
 
 | Gate | Verified result |
 | --- | --- |
-| Main source | `bef5156` (`feat: add M7.2 async services and world APIs`) |
-| Comparison source | `a6bee1b` (`feat: complete UnifiedScript gameplay demo`) |
-| Managed tests | 448 / 448 passed |
-| Repository validator | 44 / 44 passed |
+| Main source | `fe42c97` (`feat: complete M7.3 schema data plane`), plus this M7.4 change set |
+| Comparison source | `489ce9b` (`feat: complete full UnifiedScript migration`) |
+| Managed tests | 455 / 455 passed |
+| Repository validator | 48 / 48 passed |
 | UE 5.8.1 native build | passed |
-| `UnifiedScript.Unreal` Automation | 12 / 12 passed |
+| `UnifiedScript.Unreal` Automation | 13 / 13 passed at the M7.3 onboarding baseline; the migrated BlockBreaker Editor gate also passed |
 | BlockBreaker workload | 10,000 frames, three trials, one shot, one hit, two command completions per trial |
-| Gameplay boundary | 120,027 ABI v3 calls, zero legacy calls |
-| Matched local median | UnifiedScript 3,497.508 ms; Puerts 3,901.037 ms; ratio 0.896559 |
-| Deliverable smoke | 300 frames, one shot, one hit, two command completions, zero legacy calls |
-| Deliverable report | `artifacts/demo/blockbreaker-20260826-120227/demo-delivery.json` |
+| Gameplay boundary | 120,031 fast/CallFrame calls, zero legacy calls |
+| Matched local median | UnifiedScript 4,927.191 ms; Puerts 4,759.930 ms; ratio 1.035139; functional parity only, performance claim deferred to M10 |
+| Full migration audit | 74 / 74 inventory items, 19 / 19 shared assets, 40 / 40 generated thunks, zero legacy targets |
+| Deliverable smoke | 300 frames, one shot, one hit, two command completions, 3,631 fast/CallFrame calls, zero legacy calls |
+| Deliverable report | `artifacts/demo/blockbreaker-20260827-165719/demo-delivery.json` |
 
 ## Release ladder
 
@@ -582,16 +583,42 @@ cursor advances to M7.4 full BlockBreaker runtime migration.
 
 ### M7.4 — Full BlockBreaker runtime migration
 
-- [ ] inventory all Puerts scripts, Unreal APIs, delegates, resources, globals,
+- [x] inventory all Puerts scripts, Unreal APIs, delegates, resources, globals,
   lifecycle hooks, and remaining facade behavior
-- [ ] migrate the complete playable logic through generated contracts or the
+- [x] migrate the complete playable logic through generated contracts or the
   generic data plane; keep sample-only gameplay outside the plugin
-- [ ] remove the Puerts plugin from the UnifiedScript project and prove editor,
+- [x] remove the Puerts plugin from the UnifiedScript project and prove editor,
   packaged, functional, and asset-parity gates
 
 Acceptance: BlockBreaker is a whole-project migration proof rather than a
 single API or shot-path benchmark, and the coverage report contains no
 unexplained manual bridge.
+
+Evidence (2026-08-27): `ue-puerts-inventory` now scans the canonical Puerts
+source and target native headers into deterministic, fingerprinted inventory,
+coverage, and report schemas. BlockBreaker covers all 74 discovered items: four
+scripts, three script types, 13 methods, six lifecycle hooks, four imports, two
+Puerts APIs, 29 Unreal APIs, three resources, three global patterns, four async
+patterns, two decorators, zero delegates, and one explained native facade.
+`ReportManagedTick` remains verification-only for the exact-frame acceptance
+counter and process exit; gameplay policy does not cross it. Camera/gun mount,
+shot counters, hit counters, and status now use generated bindings or direct
+generated property access.
+
+The target comparison commit `489ce9b` removes 154 tracked Puerts/TypeScript
+files (about 55 MB) and all forbidden legacy roots while preserving 19/19
+non-map gameplay assets byte-for-byte. The project contains exactly two Script
+Assets and its nine-type, 40-member contract emits 40/40 native thunks with no
+fallback or rejection. The 300-frame Editor gate passed with one shot, one hit,
+two commands, 3,631 fast/CallFrame calls, and zero legacy calls. The Development
+package `artifacts/demo/blockbreaker-20260827-165719` passed the same gameplay
+gate across 249 files and 1,030,599,735 bytes, with zero Puerts/JavaScript/
+TypeScript package files. The exact 10,000-frame, three-trial comparison also
+kept functional parity and zero legacy calls, but its local median was
+4,927.191 ms versus Puerts at 4,759.930 ms (ratio 1.035139); this is not a
+performance win, and M10 retains the at-least-5%-faster release gate. The
+455/455 managed suite and 48/48 repository invariants pass. M7 is complete and
+the cursor advances to M8.1.
 
 ## M8 — Visual/C# Authoring Beta
 

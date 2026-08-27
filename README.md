@@ -6,8 +6,10 @@ lossless projections of one program model. Roslyn and CoreCLR are the active
 execution backend. The language and projection model are proven independently,
 and the versioned Unreal adapter has completed its adoptable-project alpha,
 M7.2 gameplay services/lifecycle productization, and M7.3 schema-generated
-gameplay data plane without adding UE dependencies to the compiler core. The
-active RoadMap cursor is M7.4 full BlockBreaker runtime migration.
+gameplay data plane without adding UE dependencies to the compiler core. M7.4
+then completed the full BlockBreaker migration with exact inventory coverage
+and no Puerts/TypeScript payload in the target project or package. The active
+RoadMap cursor is M8.1 structured graph editing completeness.
 
 ## Product roadmap
 
@@ -47,6 +49,22 @@ bounded telemetry plus Batch Overlap. Its live CoreCLR routing profile is:
 powershell -ExecutionPolicy Bypass `
   -File tools/run-unreal-data-plane-profile.ps1 -EngineRoot D:\UE_5.8
 ```
+
+M7.4 adds a deterministic Puerts-project inventory and exact migration coverage
+gate. Re-run the whole-project BlockBreaker proof with:
+
+```powershell
+powershell -ExecutionPolicy Bypass `
+  -File comparison/audit-blockbreaker-migration.ps1 `
+  -EngineRoot D:\UE_5.8 `
+  -ComparisonRoot D:\Project\UEUnifiedScriptComparison
+```
+
+The gate covers all 74 discovered scripts, types, methods, lifecycle hooks,
+imports, Puerts/Unreal APIs, resources, globals, async patterns, decorators,
+delegates, and native facades. It also requires 19 byte-identical gameplay
+assets, two Script Assets, 40 generated native thunks, and zero legacy targets.
+See [M7.4 BlockBreaker migration](docs/milestones/M7_4_BLOCKBREAKER_MIGRATION.md).
 
 Create a repository-independent alpha SDK with:
 
