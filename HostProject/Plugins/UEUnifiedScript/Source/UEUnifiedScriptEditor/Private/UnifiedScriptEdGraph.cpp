@@ -115,6 +115,41 @@ void UUnifiedScriptEdGraphNode::DestroyNode()
     }
 }
 
+void UUnifiedScriptEdGraphRerouteNode::AllocateDefaultPins()
+{
+    FEdGraphPinType PinType;
+    PinType.PinCategory = RoutedPinCategory;
+    PinType.PinSubCategory = RoutedPinSubCategory;
+    CreatePin(EGPD_Input, PinType, TEXT("in"));
+    CreatePin(EGPD_Output, PinType, TEXT("out"));
+}
+
+bool UUnifiedScriptEdGraphRerouteNode::ShouldDrawNodeAsControlPointOnly(
+    int32& OutInputPinIndex,
+    int32& OutOutputPinIndex) const
+{
+    OutInputPinIndex = 0;
+    OutOutputPinIndex = 1;
+    return Pins.Num() == 2;
+}
+
+void UUnifiedScriptEdGraphRerouteNode::DestroyNode()
+{
+    UEdGraphPin* Input = FindPin(TEXT("in"), EGPD_Input);
+    UEdGraphPin* Output = FindPin(TEXT("out"), EGPD_Output);
+    UEdGraphPin* Previous = Input != nullptr && Input->LinkedTo.Num() == 1
+        ? Input->LinkedTo[0]
+        : nullptr;
+    UEdGraphPin* Next = Output != nullptr && Output->LinkedTo.Num() == 1
+        ? Output->LinkedTo[0]
+        : nullptr;
+    if (Previous != nullptr && Next != nullptr)
+    {
+        Previous->MakeLinkTo(Next, false);
+    }
+    Super::DestroyNode();
+}
+
 void UUnifiedScriptEdGraphSchema::GetGraphContextActions(
     FGraphContextMenuBuilder& ContextMenuBuilder) const
 {
@@ -280,6 +315,21 @@ bool UUnifiedScriptEdGraphSchema::TryCreateConnection(UEdGraphPin* A, UEdGraphPi
     }
     Graph->OnDataRewireRequested.Execute(OutputPin, InputPin);
     return true;
+}
+
+void UUnifiedScriptEdGraphSchema::OnPinConnectionDoubleCicked(
+    UEdGraphPin* PinA,
+    UEdGraphPin* PinB,
+    const FVector2f& GraphPosition) const
+{
+    UEdGraphNode* Node = PinA != nullptr ? PinA->GetOwningNode() : nullptr;
+    UUnifiedScriptEdGraph* Graph = Node != nullptr
+        ? Cast<UUnifiedScriptEdGraph>(Node->GetGraph())
+        : nullptr;
+    if (Graph != nullptr && Graph->OnRerouteRequested.IsBound())
+    {
+        Graph->OnRerouteRequested.Execute(PinA, PinB, FVector2D(GraphPosition));
+    }
 }
 
 void UUnifiedScriptEdGraphSchema::BreakNodeLinks(UEdGraphNode& TargetNode) const

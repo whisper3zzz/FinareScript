@@ -4,6 +4,7 @@
 #include "Graph/SUnifiedScriptGraphNode.h"
 #include "HAL/IConsoleManager.h"
 #include "KismetPins/SGraphPinExec.h"
+#include "SGraphNodeKnot.h"
 #include "Styling/AppStyle.h"
 #include "ToolMenus.h"
 #include "UnifiedScriptEdGraph.h"
@@ -26,6 +27,11 @@ public:
         if (UUnifiedScriptEdGraphNode* UnifiedScriptNode = Cast<UUnifiedScriptEdGraphNode>(Node))
         {
             return SNew(SUnifiedScriptGraphNode, UnifiedScriptNode);
+        }
+        if (UUnifiedScriptEdGraphRerouteNode* Reroute =
+                Cast<UUnifiedScriptEdGraphRerouteNode>(Node))
+        {
+            return SNew(SGraphNodeKnot, Reroute);
         }
         return nullptr;
     }

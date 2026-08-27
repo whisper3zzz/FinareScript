@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GraphEditor.h"
+#include "Graph/UnifiedScriptGraphLayoutStore.h"
 #include "Graph/UnifiedScriptNodePalette.h"
 #include "UnifiedScriptAuthoringSurface.h"
 #include "UObject/StrongObjectPtr.h"
@@ -103,6 +104,11 @@ private:
     void HandleDataDisconnectRequested(
         const UEdGraphPin* OutputPin,
         const UEdGraphPin* InputPin);
+    void HandleRerouteRequested(
+        UEdGraphPin* PinA,
+        UEdGraphPin* PinB,
+        const FVector2D& Location);
+    FReply HandleAddComment();
     FReply HandleApplyDataInputValue(
         FString TargetActionId,
         FString TargetPort,
@@ -203,6 +209,7 @@ private:
     void RecordNodePaletteUsage(const FString& ActionId);
     FText GetNodePaletteContextText() const;
     void PersistCurrentLayout(bool bOnlyIfChanged);
+    FString BuildCanvasLayoutFingerprint() const;
     FUnifiedScriptSurfaceTreeItemPtr FindSurfaceItem(const FString& SemanticId) const;
     FReply HandleFocusGraph();
     void RebuildInspector(const FUnifiedScriptSurfaceTreeItemPtr& Item);
@@ -240,7 +247,7 @@ private:
     TArray<FUnifiedScriptSurfaceTreeItemPtr> RootItems;
     TMap<FString, FUnifiedScriptSurfaceTreeItemPtr> SurfaceItemsById;
     TMap<FString, TWeakObjectPtr<UUnifiedScriptEdGraphNode>> GraphNodesBySemanticId;
-    TMap<FString, FVector2D> PersistedNodePositions;
+    FString PersistedCanvasLayoutFingerprint;
     TMap<FString, FUnifiedScriptReflectedPaletteAction> ReflectedPaletteActions;
     TArray<FString> FavoriteNodePaletteActionIds;
     TArray<FString> RecentNodePaletteActionIds;

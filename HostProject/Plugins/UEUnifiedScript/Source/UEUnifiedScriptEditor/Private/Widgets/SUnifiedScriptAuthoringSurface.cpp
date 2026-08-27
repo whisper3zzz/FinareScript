@@ -244,6 +244,10 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
         FOnUnifiedScriptDataDisconnectRequested::CreateSP(
             this,
             &SUnifiedScriptAuthoringSurface::HandleDataDisconnectRequested);
+    AuthoringGraph->OnRerouteRequested =
+        FOnUnifiedScriptRerouteRequested::CreateSP(
+            this,
+            &SUnifiedScriptAuthoringSurface::HandleRerouteRequested);
     AuthoringGraph->OnNodeCreateRequested =
         FOnUnifiedScriptNodeCreateRequested::CreateSP(
             this,
@@ -756,6 +760,22 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
                             ]
                             + SHorizontalBox::Slot()
                             .AutoWidth()
+                            .Padding(0.0f, 0.0f, 6.0f, 0.0f)
+                            .VAlign(VAlign_Center)
+                            [
+                                SNew(SButton)
+                                .Text(LOCTEXT("AddComment", "Add Comment"))
+                                .ToolTipText(LOCTEXT(
+                                    "AddCommentTip",
+                                    "Create a .usgraph-only comment around the selected nodes. Double-click its title to rename it."))
+                                .IsEnabled_Lambda([this]()
+                                {
+                                    return GraphEditor.IsValid() && !ActiveFunctionId.IsEmpty();
+                                })
+                                .OnClicked(this, &SUnifiedScriptAuthoringSurface::HandleAddComment)
+                            ]
+                            + SHorizontalBox::Slot()
+                            .AutoWidth()
                             .VAlign(VAlign_Center)
                             [
                                 SNew(SButton)
@@ -1193,6 +1213,155 @@ void SUnifiedScriptAuthoringSurface::HandleDataDisconnectRequested(
         return;
     }
     SubmitSemanticPatch(MoveTemp(Patch), TEXT("Replacing the disconnected input with typed default(...)"));
+}
+
+void SUnifiedScriptAuthoringSurface::HandleRerouteRequested(
+    UEdGraphPin* PinA,
+    UEdGraphPin* PinB,
+    const FVector2D& Location)
+{
+    if (!AuthoringGraph.IsValid() || PinA == nullptr || PinB == nullptr ||
+        !PinA->LinkedTo.Contains(PinB))
+    {
+        return;
+    }
+    UEdGraphPin* OutputPin = PinA->Direction == EGPD_Output ? PinA : PinB;
+    UEdGraphPin* InputPin = PinA->Direction == EGPD_Input ? PinA : PinB;
+    if (OutputPin->Direction != EGPD_Output || InputPin->Direction != EGPD_Input ||
+        OutputPin->PinType.PinCategory != InputPin->PinType.PinCategory ||
+        OutputPin->PinType.PinSubCategory != InputPin->PinType.PinSubCategory)
+    {
+        SetStatus(TEXT("A reroute requires one exact typed wire segment."), true);
+        return;
+    }
+
+    const UUnifiedScriptEdGraphRerouteNode* OutputReroute =
+        Cast<UUnifiedScriptEdGraphRerouteNode>(OutputPin->GetOwningNode());
+    const UUnifiedScriptEdGraphRerouteNode* InputReroute =
+        Cast<UUnifiedScriptEdGraphRerouteNode>(InputPin->GetOwningNode());
+    FString EdgeId = OutputReroute != nullptr
+        ? OutputReroute->EdgeId
+        : InputReroute != nullptr ? InputReroute->EdgeId : FString();
+    if (OutputReroute != nullptr && InputReroute != nullptr &&
+        OutputReroute->EdgeId != InputReroute->EdgeId)
+    {
+        SetStatus(TEXT("The selected route segment no longer belongs to one semantic edge."), true);
+        return;
+    }
+    if (EdgeId.IsEmpty())
+    {
+        const UUnifiedScriptEdGraphNode* Source =
+            Cast<UUnifiedScriptEdGraphNode>(OutputPin->GetOwningNode());
+        const UUnifiedScriptEdGraphNode* Target =
+            Cast<UUnifiedScriptEdGraphNode>(InputPin->GetOwningNode());
+        const FUnifiedScriptAuthoringFunction* Function = FindFunction(ActiveFunctionId);
+        const FUnifiedScriptAuthoringEdge* Edge =
+            Source != nullptr && Target != nullptr && Function != nullptr
+            ? Function->Edges.FindByPredicate(
+                [Source, Target, OutputPin, InputPin](
+                    const FUnifiedScriptAuthoringEdge& Candidate)
+                {
+                    return Candidate.FromNode == Source->SemanticId &&
+                        Candidate.FromPort == OutputPin->PinName.ToString() &&
+                        Candidate.ToNode == Target->SemanticId &&
+                        Candidate.ToPort == InputPin->PinName.ToString();
+                })
+            : nullptr;
+        EdgeId = Edge != nullptr ? Edge->Id : FString();
+    }
+    if (EdgeId.IsEmpty())
+    {
+        SetStatus(TEXT("The selected segment has no compiler-owned semantic edge identity."), true);
+        return;
+    }
+
+    int32 InsertIndex = OutputReroute != nullptr ? OutputReroute->PointIndex + 1 : 0;
+    if (InputReroute != nullptr)
+    {
+        InsertIndex = OutputReroute != nullptr
+            ? FMath::Min(InsertIndex, InputReroute->PointIndex)
+            : InputReroute->PointIndex;
+    }
+    for (UEdGraphNode* Node : AuthoringGraph->Nodes)
+    {
+        UUnifiedScriptEdGraphRerouteNode* Existing =
+            Cast<UUnifiedScriptEdGraphRerouteNode>(Node);
+        if (Existing != nullptr && Existing->EdgeId == EdgeId &&
+            Existing->PointIndex >= InsertIndex)
+        {
+            ++Existing->PointIndex;
+        }
+    }
+
+    UUnifiedScriptEdGraphRerouteNode* Reroute =
+        NewObject<UUnifiedScriptEdGraphRerouteNode>(
+            AuthoringGraph.Get(), NAME_None, RF_Transient);
+    Reroute->CreateNewGuid();
+    Reroute->EdgeId = EdgeId;
+    Reroute->PointIndex = InsertIndex;
+    Reroute->RoutedPinCategory = OutputPin->PinType.PinCategory;
+    Reroute->RoutedPinSubCategory = OutputPin->PinType.PinSubCategory;
+    Reroute->NodePosX = FMath::RoundToInt(Location.X);
+    Reroute->NodePosY = FMath::RoundToInt(Location.Y);
+    Reroute->AllocateDefaultPins();
+    AuthoringGraph->AddNode(Reroute, true, false);
+
+    OutputPin->BreakLinkTo(InputPin);
+    OutputPin->MakeLinkTo(Reroute->FindPinChecked(TEXT("in"), EGPD_Input), false);
+    Reroute->FindPinChecked(TEXT("out"), EGPD_Output)->MakeLinkTo(InputPin, false);
+    AuthoringGraph->NotifyGraphChanged();
+    GraphEditor->NotifyGraphChanged();
+    PersistCurrentLayout(false);
+    SetStatus(TEXT("Added a .usgraph-only reroute. Double-click any wire segment to add another."), false);
+}
+
+FReply SUnifiedScriptAuthoringSurface::HandleAddComment()
+{
+    if (!AuthoringGraph.IsValid() || !GraphEditor.IsValid() || ActiveFunctionId.IsEmpty())
+    {
+        return FReply::Handled();
+    }
+
+    FVector2D Position(GraphEditor->GetPasteLocation2f());
+    FVector2D Size(420.0, 220.0);
+    FSlateRect SelectionBounds;
+    if (GraphEditor->GetBoundsForSelectedNodes(SelectionBounds, 45.0f))
+    {
+        Position = FVector2D(SelectionBounds.Left, SelectionBounds.Top);
+        Size = FVector2D(
+            FMath::Max(220.0f, SelectionBounds.Right - SelectionBounds.Left),
+            FMath::Max(120.0f, SelectionBounds.Bottom - SelectionBounds.Top));
+    }
+
+    UUnifiedScriptEdGraphCommentNode* Comment =
+        NewObject<UUnifiedScriptEdGraphCommentNode>(
+            AuthoringGraph.Get(), NAME_None, RF_Transient);
+    Comment->CreateNewGuid();
+    Comment->LayoutId = TEXT("comment_") +
+        FGuid::NewGuid().ToString(EGuidFormats::Digits).ToLower();
+    Comment->NodeComment = TEXT("Comment");
+    Comment->NodePosX = FMath::RoundToInt(Position.X);
+    Comment->NodePosY = FMath::RoundToInt(Position.Y);
+    Comment->NodeWidth = FMath::RoundToInt(Size.X);
+    Comment->NodeHeight = FMath::RoundToInt(Size.Y);
+    Comment->MoveMode = ECommentBoxMode::GroupMovement;
+    Comment->CommentColor = FLinearColor(0.10f, 0.24f, 0.42f, 0.35f);
+    for (UObject* Selected : GraphEditor->GetSelectedNodes())
+    {
+        if (Cast<UUnifiedScriptEdGraphNode>(Selected) != nullptr)
+        {
+            Comment->AddNodeUnderComment(Selected);
+        }
+    }
+    AuthoringGraph->AddNode(Comment, true, false);
+    AuthoringGraph->NotifyGraphChanged();
+    GraphEditor->NotifyGraphChanged();
+    GraphEditor->ClearSelectionSet();
+    GraphEditor->SetNodeSelection(Comment, true);
+    GraphEditor->IsNodeTitleVisible(Comment, true);
+    PersistCurrentLayout(false);
+    SetStatus(TEXT("Added a source-independent comment region to the .usgraph sidecar."), false);
+    return FReply::Handled();
 }
 
 FReply SUnifiedScriptAuthoringSurface::HandleApplyDataInputValue(
@@ -2859,7 +3028,7 @@ void SUnifiedScriptAuthoringSurface::RebuildGraph(
     }
     AuthoringGraph->Nodes.Reset();
     GraphNodesBySemanticId.Reset();
-    PersistedNodePositions.Reset();
+    PersistedCanvasLayoutFingerprint.Reset();
     ActiveFunctionId = FunctionItem->SemanticId;
     ActiveBlockRegionId.Reset();
     ActiveFunctionSignature = FunctionItem->Detail;
@@ -2871,11 +3040,11 @@ void SUnifiedScriptAuthoringSurface::RebuildGraph(
     const FUnifiedScriptAuthoringFunction* Function = FindFunction(ActiveFunctionId);
     if (Function != nullptr)
     {
-        TMap<FString, FVector2D> LayoutPositions;
+        FUnifiedScriptGraphFunctionLayout Layout;
         FString LayoutError;
         if (!LoadedLayoutPath.IsEmpty() &&
             !FUnifiedScriptGraphLayoutStore::LoadFunction(
-                LoadedLayoutPath, Function->Id, LayoutPositions, LayoutError))
+                LoadedLayoutPath, Function->Id, Layout, LayoutError))
         {
             SetStatus(MoveTemp(LayoutError), true);
         }
@@ -2948,7 +3117,7 @@ void SUnifiedScriptAuthoringSurface::RebuildGraph(
             }
             const int32 Depth = ComputeDepth(Action.Id);
             int32& Row = RowsByDepth.FindOrAdd(Depth);
-            const FVector2D* SavedPosition = LayoutPositions.Find(Action.Id);
+            const FVector2D* SavedPosition = Layout.NodePositions.Find(Action.Id);
             AddGraphNode(
                 FindSurfaceItem(Action.Id),
                 Action,
@@ -2974,19 +3143,70 @@ void SUnifiedScriptAuthoringSurface::RebuildGraph(
                 : nullptr;
             if (FromPin != nullptr && ToPin != nullptr)
             {
-                FromPin->MakeLinkTo(ToPin, false);
+                UEdGraphPin* PreviousOutput = FromPin;
+                const FUnifiedScriptGraphRoutingHintLayout* Route =
+                    Layout.RoutingHints.FindByPredicate(
+                        [&Edge](const FUnifiedScriptGraphRoutingHintLayout& Candidate)
+                        {
+                            return Candidate.EdgeId == Edge.Id;
+                        });
+                if (Route != nullptr)
+                {
+                    for (int32 PointIndex = 0;
+                         PointIndex < Route->ControlPoints.Num();
+                         ++PointIndex)
+                    {
+                        const FVector2D& Point = Route->ControlPoints[PointIndex];
+                        UUnifiedScriptEdGraphRerouteNode* Reroute =
+                            NewObject<UUnifiedScriptEdGraphRerouteNode>(
+                                AuthoringGraph.Get(), NAME_None, RF_Transient);
+                        Reroute->CreateNewGuid();
+                        Reroute->EdgeId = Edge.Id;
+                        Reroute->PointIndex = PointIndex;
+                        Reroute->RoutedPinCategory = FromPin->PinType.PinCategory;
+                        Reroute->RoutedPinSubCategory = FromPin->PinType.PinSubCategory;
+                        Reroute->NodePosX = FMath::RoundToInt(Point.X);
+                        Reroute->NodePosY = FMath::RoundToInt(Point.Y);
+                        Reroute->AllocateDefaultPins();
+                        AuthoringGraph->AddNode(Reroute, false, false);
+                        PreviousOutput->MakeLinkTo(
+                            Reroute->FindPinChecked(TEXT("in"), EGPD_Input), false);
+                        PreviousOutput = Reroute->FindPinChecked(TEXT("out"), EGPD_Output);
+                    }
+                }
+                PreviousOutput->MakeLinkTo(ToPin, false);
             }
         }
-        ActiveGraphActionCount = AuthoringGraph->Nodes.Num();
-        for (const UEdGraphNode* Node : AuthoringGraph->Nodes)
+        for (const FUnifiedScriptGraphCommentLayout& SavedComment : Layout.CommentRegions)
         {
-            if (const UUnifiedScriptEdGraphNode* ScriptNode = Cast<UUnifiedScriptEdGraphNode>(Node))
+            UUnifiedScriptEdGraphCommentNode* Comment =
+                NewObject<UUnifiedScriptEdGraphCommentNode>(
+                    AuthoringGraph.Get(), NAME_None, RF_Transient);
+            Comment->CreateNewGuid();
+            Comment->LayoutId = SavedComment.Id;
+            Comment->NodeComment = SavedComment.Title;
+            Comment->NodePosX = FMath::RoundToInt(SavedComment.Position.X);
+            Comment->NodePosY = FMath::RoundToInt(SavedComment.Position.Y);
+            Comment->NodeWidth = FMath::RoundToInt(SavedComment.Size.X);
+            Comment->NodeHeight = FMath::RoundToInt(SavedComment.Size.Y);
+            Comment->bLayoutCollapsed = SavedComment.bCollapsed;
+            Comment->MoveMode = ECommentBoxMode::GroupMovement;
+            Comment->CommentColor = FLinearColor(0.10f, 0.24f, 0.42f, 0.35f);
+            for (const FString& MemberId : SavedComment.NodeIds)
             {
-                PersistedNodePositions.Add(
-                    ScriptNode->SemanticId,
-                    FVector2D(ScriptNode->NodePosX, ScriptNode->NodePosY));
+                if (const TWeakObjectPtr<UUnifiedScriptEdGraphNode>* Member =
+                        GraphNodesBySemanticId.Find(MemberId))
+                {
+                    if (Member->IsValid())
+                    {
+                        Comment->AddNodeUnderComment(Member->Get());
+                    }
+                }
             }
+            AuthoringGraph->AddNode(Comment, false, false);
         }
+        ActiveGraphActionCount = GraphNodesBySemanticId.Num();
+        PersistedCanvasLayoutFingerprint = BuildCanvasLayoutFingerprint();
     }
 
     AuthoringGraph->NotifyGraphChanged();
@@ -3749,19 +3969,13 @@ void SUnifiedScriptAuthoringSurface::PersistCurrentLayout(bool bOnlyIfChanged)
     {
         return;
     }
-    TMap<FString, FVector2D> CurrentPositions;
     TArray<UEdGraphNode*> Nodes;
     for (UEdGraphNode* Node : AuthoringGraph->Nodes)
     {
         Nodes.Add(Node);
-        if (const UUnifiedScriptEdGraphNode* ScriptNode = Cast<UUnifiedScriptEdGraphNode>(Node))
-        {
-            CurrentPositions.Add(
-                ScriptNode->SemanticId,
-                FVector2D(ScriptNode->NodePosX, ScriptNode->NodePosY));
-        }
     }
-    if (bOnlyIfChanged && CurrentPositions.OrderIndependentCompareEqual(PersistedNodePositions))
+    const FString CurrentFingerprint = BuildCanvasLayoutFingerprint();
+    if (bOnlyIfChanged && CurrentFingerprint == PersistedCanvasLayoutFingerprint)
     {
         return;
     }
@@ -3769,12 +3983,58 @@ void SUnifiedScriptAuthoringSurface::PersistCurrentLayout(bool bOnlyIfChanged)
     if (FUnifiedScriptGraphLayoutStore::SaveFunction(
             LoadedLayoutPath, ActiveFunctionId, Nodes, Error))
     {
-        PersistedNodePositions = MoveTemp(CurrentPositions);
+        PersistedCanvasLayoutFingerprint = CurrentFingerprint;
     }
     else if (!Error.IsEmpty())
     {
         SetStatus(MoveTemp(Error), true);
     }
+}
+
+FString SUnifiedScriptAuthoringSurface::BuildCanvasLayoutFingerprint() const
+{
+    if (!AuthoringGraph.IsValid())
+    {
+        return FString();
+    }
+    TArray<FString> Entries;
+    for (const UEdGraphNode* Node : AuthoringGraph->Nodes)
+    {
+        if (const UUnifiedScriptEdGraphNode* ScriptNode =
+                Cast<UUnifiedScriptEdGraphNode>(Node))
+        {
+            Entries.Add(FString::Printf(
+                TEXT("S|%s|%d|%d"),
+                *ScriptNode->SemanticId,
+                ScriptNode->NodePosX,
+                ScriptNode->NodePosY));
+        }
+        else if (const UUnifiedScriptEdGraphCommentNode* Comment =
+                     Cast<UUnifiedScriptEdGraphCommentNode>(Node))
+        {
+            Entries.Add(FString::Printf(
+                TEXT("C|%s|%s|%d|%d|%d|%d|%d"),
+                *Comment->LayoutId,
+                *Comment->NodeComment,
+                Comment->NodePosX,
+                Comment->NodePosY,
+                Comment->NodeWidth,
+                Comment->NodeHeight,
+                Comment->bLayoutCollapsed ? 1 : 0));
+        }
+        else if (const UUnifiedScriptEdGraphRerouteNode* Reroute =
+                     Cast<UUnifiedScriptEdGraphRerouteNode>(Node))
+        {
+            Entries.Add(FString::Printf(
+                TEXT("R|%s|%d|%d|%d"),
+                *Reroute->EdgeId,
+                Reroute->PointIndex,
+                Reroute->NodePosX,
+                Reroute->NodePosY));
+        }
+    }
+    Entries.Sort();
+    return FString::Join(Entries, TEXT("\n"));
 }
 
 FUnifiedScriptSurfaceTreeItemPtr SUnifiedScriptAuthoringSurface::FindSurfaceItem(
@@ -3803,23 +4063,10 @@ int32 SUnifiedScriptAuthoringSurface::GetVisibleGraphNodeCount() const
 
 int32 SUnifiedScriptAuthoringSurface::GetVisibleGraphEdgeCount() const
 {
-    if (!AuthoringGraph.IsValid())
-    {
-        return 0;
-    }
-
-    int32 Count = 0;
-    for (const UEdGraphNode* Node : AuthoringGraph->Nodes)
-    {
-        for (const UEdGraphPin* Pin : Node->Pins)
-        {
-            if (Pin != nullptr && Pin->Direction == EGPD_Output)
-            {
-                Count += Pin->LinkedTo.Num();
-            }
-        }
-    }
-    return Count;
+    const FUnifiedScriptAuthoringFunction* Function = FindFunction(ActiveFunctionId);
+    return Function != nullptr
+        ? FUnifiedScriptGraphPresentation::CountVisibleEdges(*Function)
+        : 0;
 }
 
 FString SUnifiedScriptAuthoringSurface::GetActiveFunctionId() const

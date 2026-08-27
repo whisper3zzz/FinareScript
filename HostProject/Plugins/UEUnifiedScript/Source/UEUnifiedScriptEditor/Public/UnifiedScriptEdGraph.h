@@ -13,6 +13,7 @@
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphNode.h"
 #include "EdGraph/EdGraphSchema.h"
+#include "EdGraphNode_Comment.h"
 #include "UnifiedScriptEdGraph.generated.h"
 
 DECLARE_DELEGATE_TwoParams(
@@ -34,6 +35,11 @@ DECLARE_DELEGATE_TwoParams(
     FOnUnifiedScriptDataDisconnectRequested,
     const UEdGraphPin*,
     const UEdGraphPin*);
+DECLARE_DELEGATE_ThreeParams(
+    FOnUnifiedScriptRerouteRequested,
+    UEdGraphPin*,
+    UEdGraphPin*,
+    const FVector2D&);
 
 struct FUnifiedScriptGraphPaletteAction
 {
@@ -57,8 +63,53 @@ public:
     FOnUnifiedScriptNodeCreateRequested OnNodeCreateRequested;
     FOnUnifiedScriptStatementDeleteRequested OnStatementDeleteRequested;
     FOnUnifiedScriptDataDisconnectRequested OnDataDisconnectRequested;
+    FOnUnifiedScriptRerouteRequested OnRerouteRequested;
     TArray<FUnifiedScriptGraphPaletteAction> PaletteActions;
     FString ActiveBlockRegionId;
+};
+
+/** Layout-only comment persisted in .usgraph; it never owns program semantics. */
+UCLASS(Transient)
+class UEUNIFIEDSCRIPTEDITOR_API UUnifiedScriptEdGraphCommentNode final
+    : public UEdGraphNode_Comment
+{
+    GENERATED_BODY()
+
+public:
+    UPROPERTY(Transient)
+    FString LayoutId;
+
+    UPROPERTY(Transient)
+    bool bLayoutCollapsed = false;
+};
+
+/** Layout-only control point for one compiler-owned semantic edge. */
+UCLASS(Transient)
+class UEUNIFIEDSCRIPTEDITOR_API UUnifiedScriptEdGraphRerouteNode final
+    : public UEdGraphNode
+{
+    GENERATED_BODY()
+
+public:
+    UPROPERTY(Transient)
+    FString EdgeId;
+
+    UPROPERTY(Transient)
+    int32 PointIndex = 0;
+
+    UPROPERTY(Transient)
+    FName RoutedPinCategory;
+
+    UPROPERTY(Transient)
+    FName RoutedPinSubCategory;
+
+    virtual void AllocateDefaultPins() override;
+    virtual bool ShouldDrawNodeAsControlPointOnly(
+        int32& OutInputPinIndex,
+        int32& OutOutputPinIndex) const override;
+    virtual bool CanDuplicateNode() const override { return false; }
+    virtual bool CanUserDeleteNode() const override { return true; }
+    virtual void DestroyNode() override;
 };
 
 /** Transient presentation node backed by an Authoring Surface semantic item. */
@@ -116,6 +167,10 @@ public:
         const UEdGraphPin* A,
         const UEdGraphPin* B) const override;
     virtual bool TryCreateConnection(UEdGraphPin* A, UEdGraphPin* B) const override;
+    virtual void OnPinConnectionDoubleCicked(
+        UEdGraphPin* PinA,
+        UEdGraphPin* PinB,
+        const FVector2f& GraphPosition) const override;
     virtual void BreakNodeLinks(UEdGraphNode& TargetNode) const override;
     virtual void BreakPinLinks(
         UEdGraphPin& TargetPin,
