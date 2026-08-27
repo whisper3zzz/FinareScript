@@ -76,6 +76,13 @@ void FUnifiedScriptSharedDataPlane::PublishTransformSnapshot()
             continue;
         }
 
+        if (WriteBuffer.Num() >= static_cast<int32>(
+                UE::UnifiedScript::SharedData::MaximumTransformSnapshotCount))
+        {
+            ++DroppedSnapshotEntryCount;
+            continue;
+        }
+
         const TWeakObjectPtr<AActor> WeakActor(Actor);
         SeenActors.Add(WeakActor);
         FUnifiedScriptObjectHandle* ExistingHandle = ActorHandles.Find(WeakActor);
@@ -112,6 +119,7 @@ void FUnifiedScriptSharedDataPlane::PublishTransformSnapshot()
     }
 
     ActiveBufferIndex = WriteBufferIndex;
+    TotalPublishedEntryCount += static_cast<uint64>(WriteBuffer.Num());
     ++PublishedGeneration;
     if (PublishedGeneration == 0)
     {
@@ -141,6 +149,31 @@ bool FUnifiedScriptSharedDataPlane::AcquireTransformSnapshot(
         static_cast<uint32>(ActiveBuffer.Max()),
         sizeof(FUnifiedScriptTransformSnapshotEntryV4),
         EUnifiedScriptSharedSnapshotFlagsV4::BorrowedUntilNextPublish,
+    };
+    return true;
+}
+
+bool FUnifiedScriptSharedDataPlane::GetTelemetry(
+    FUnifiedScriptSharedDataTelemetryV1& OutTelemetry) const
+{
+    FReadScopeLock Lock(SnapshotLock);
+    if (bShutdown || WorldHostId == 0)
+    {
+        OutTelemetry = {};
+        return false;
+    }
+
+    const FSnapshotBuffer& ActiveBuffer = Buffers[ActiveBufferIndex];
+    OutTelemetry = {
+        UE::UnifiedScript::DataPlaneSchema::Revision,
+        sizeof(FUnifiedScriptSharedDataTelemetryV1),
+        UE::UnifiedScript::DataPlaneSchema::CompatibilityId,
+        WorldHostId,
+        PublishedGeneration,
+        TotalPublishedEntryCount,
+        DroppedSnapshotEntryCount,
+        static_cast<uint32>(ActiveBuffer.Num()),
+        UE::UnifiedScript::SharedData::MaximumTransformSnapshotCount,
     };
     return true;
 }

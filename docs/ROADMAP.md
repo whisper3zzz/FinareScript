@@ -550,13 +550,35 @@ M7.3 schema-generated gameplay data-plane layouts.
 
 ### M7.3 — Schema-generated gameplay data plane
 
-- [ ] generate borrowed snapshot, fixed command, completion event, and batched
+- [x] generate borrowed snapshot, fixed command, completion event, and batched
   query layouts from versioned schemas instead of handwritten row definitions
-- [ ] add bounded capacity, overflow telemetry, ordering, borrow lifetime, and
+- [x] add bounded capacity, overflow telemetry, ordering, borrow lifetime, and
   forward-compatible schema checks
-- [ ] extend the current Transform/Trace/impact/damage slice to representative
+- [x] extend the current Transform/Trace/impact/damage slice to representative
   movement, overlap, attribute, spawn, and query workloads only where profiling
   proves per-call binding is the wrong boundary
+
+Evidence (2026-08-27): one strict v0.1 JSON layout schema at compatible revision
+2 now deterministically emits the C++ and C# snapshot, command, completion,
+trace, overlap, view, enum, limit, offset, default, telemetry, and fingerprint
+contracts. Exact checked-in-output tests and
+`generate-unreal-data-plane.ps1 -Check` reject drift. The World runtime bounds
+all four lanes, reports cumulative
+overflow and execution/order counters, preserves borrowed view/handle lifetime,
+and accepts size-guarded forward-compatible transport suffixes. Batch Overlap
+adds sphere/box requests without exposing `FOverlapResult`. The matched live
+CoreCLR profile ran 1,024 operations across three median samples: movement row
+submission measured 0.200x scalar-binding cost, Batch Trace 0.0076x matched
+per-call trace cost, and fixed-row loops allocated zero managed bytes. Therefore
+movement/overlap/query use the data plane, generic attributes remain generated
+bindings, and spawn stays hybrid. The 452/452 managed suite, 47/47 repository
+invariants, UE 5.8.1 build, focused Gameplay Data/Workload Profile Automations,
+and the reproducible profile report passed. The final one-command onboarding
+report `artifacts/onboarding/m7-3-20260827.json` then passed deterministic
+regeneration, both native builds, deployment, CoreCLR startup, and 13/13
+Automation tests in 73,660 ms. SDK `0.1.0-m7.3-alpha.1` packaging also passed
+with the data-plane schema in its hashed manifest. M7.3 is complete and the
+cursor advances to M7.4 full BlockBreaker runtime migration.
 
 ### M7.4 — Full BlockBreaker runtime migration
 

@@ -2,6 +2,7 @@
 
 #include "Components/PrimitiveComponent.h"
 #include "Engine/DamageEvents.h"
+#include "Engine/OverlapResult.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/Controller.h"
@@ -14,6 +15,7 @@ namespace UE::UnifiedScript::GameplayData::Private
 {
 constexpr int32 InitialCommandCapacity = 256;
 constexpr int32 InitialTraceCapacity = 256;
+constexpr int32 InitialOverlapCapacity = 256;
 
 uint64 AllocateNonZero(uint64& Next)
 {
@@ -81,6 +83,12 @@ FUnifiedScriptGameplayDataPlane::FUnifiedScriptGameplayDataPlane(
     TraceRequests.Reserve(UE::UnifiedScript::GameplayData::Private::InitialTraceCapacity);
     TraceResults.Reserve(UE::UnifiedScript::GameplayData::Private::InitialTraceCapacity);
     TraceOwnedHandles.Reserve(UE::UnifiedScript::GameplayData::Private::InitialTraceCapacity);
+    OverlapRequests.Reserve(
+        UE::UnifiedScript::GameplayData::Private::InitialOverlapCapacity);
+    OverlapResults.Reserve(
+        UE::UnifiedScript::GameplayData::Private::InitialOverlapCapacity);
+    OverlapOwnedHandles.Reserve(
+        UE::UnifiedScript::GameplayData::Private::InitialOverlapCapacity);
 }
 
 FUnifiedScriptGameplayDataPlane::~FUnifiedScriptGameplayDataPlane()
@@ -111,6 +119,7 @@ void FUnifiedScriptGameplayDataPlane::BeginFrame()
     ReservationIndices.Reset();
     ActiveCommandBatchToken = 0;
     ActiveTraceBatchToken = 0;
+    ActiveOverlapBatchToken = 0;
     Phase = EUnifiedScriptGameplayDataPhaseV4::ManagedTick;
 }
 
@@ -124,6 +133,7 @@ void FUnifiedScriptGameplayDataPlane::EndFrame()
     Phase = EUnifiedScriptGameplayDataPhaseV4::NativePostActorTick;
     ExecuteCommittedCommands();
     ActiveTraceBatchToken = 0;
+    ActiveOverlapBatchToken = 0;
     Phase = EUnifiedScriptGameplayDataPhaseV4::Idle;
 }
 
@@ -133,10 +143,14 @@ bool FUnifiedScriptGameplayDataPlane::BeginCommandBatch(
 {
     check(IsInGameThread());
     OutView = {};
-    if (!IsManagedPhase() || ActiveCommandBatchToken != 0 || Capacity == 0 ||
-        Capacity > UE::UnifiedScript::GameplayData::MaximumCommandCount ||
+    if (Capacity > UE::UnifiedScript::GameplayData::MaximumCommandCount ||
         static_cast<uint64>(Commands.Num()) + Capacity >
             UE::UnifiedScript::GameplayData::MaximumCommandCount)
+    {
+        ++CommandOverflowCount;
+        return false;
+    }
+    if (!IsManagedPhase() || ActiveCommandBatchToken != 0 || Capacity == 0)
     {
         return false;
     }
@@ -202,6 +216,11 @@ bool FUnifiedScriptGameplayDataPlane::CommitCommandBatch(
         Commands[static_cast<int32>(Reservation.Offset + Index)].SequenceId =
             Reservation.FirstSequenceId + Index;
     }
+    TotalCommittedCommandCount += CommandCount;
+    if (CommandCount > 0)
+    {
+        LastCommittedSequenceId = Reservation.FirstSequenceId + CommandCount - 1;
+    }
     return true;
 }
 
@@ -238,8 +257,12 @@ bool FUnifiedScriptGameplayDataPlane::BeginTraceBatch(
 {
     check(IsInGameThread());
     OutView = {};
-    if (!IsManagedPhase() || ActiveTraceBatchToken != 0 || Capacity == 0 ||
-        Capacity > UE::UnifiedScript::GameplayData::MaximumTraceCount)
+    if (Capacity > UE::UnifiedScript::GameplayData::MaximumTraceCount)
+    {
+        ++TraceOverflowCount;
+        return false;
+    }
+    if (!IsManagedPhase() || ActiveTraceBatchToken != 0 || Capacity == 0)
     {
         return false;
     }
@@ -297,6 +320,7 @@ bool FUnifiedScriptGameplayDataPlane::ExecuteTraceBatch(
         }
         TraceResults.Add(ExecuteTrace(Request));
     }
+    TotalExecutedTraceCount += RequestCount;
     ActiveTraceBatchToken = 0;
     OutView = {
         UE::UnifiedScript::GameplayData::AbiVersion,
@@ -323,6 +347,104 @@ void FUnifiedScriptGameplayDataPlane::CancelTraceBatch(uint64 BatchToken)
     }
 }
 
+bool FUnifiedScriptGameplayDataPlane::BeginOverlapBatch(
+    uint32 Capacity,
+    FUnifiedScriptOverlapRequestViewV1& OutView)
+{
+    check(IsInGameThread());
+    OutView = {};
+    if (Capacity > UE::UnifiedScript::GameplayData::MaximumOverlapCount)
+    {
+        ++OverlapOverflowCount;
+        return false;
+    }
+    if (!IsManagedPhase() || ActiveOverlapBatchToken != 0 || Capacity == 0)
+    {
+        return false;
+    }
+    if (ObjectRegistry != nullptr)
+    {
+        for (FUnifiedScriptObjectHandle Handle : OverlapOwnedHandles)
+        {
+            FUnifiedScriptObjectHandleResult Result;
+            ObjectRegistry->ReleaseObject(Handle, Result);
+        }
+    }
+    OverlapOwnedHandles.Reset();
+    OverlapResults.Reset();
+    OverlapRequests.SetNumZeroed(static_cast<int32>(Capacity));
+    ActiveOverlapBatchToken =
+        UE::UnifiedScript::GameplayData::Private::AllocateNonZero(NextBatchToken);
+    OutView = {
+        UE::UnifiedScript::GameplayData::AbiVersion,
+        sizeof(FUnifiedScriptOverlapRequestViewV1),
+        UE::UnifiedScript::GameplayData::OverlapRequestSchemaId,
+        WorldHostId,
+        FrameNumber,
+        ActiveOverlapBatchToken,
+        OverlapRequests.GetData(),
+        Capacity,
+        sizeof(FUnifiedScriptOverlapRequestV1),
+        0,
+        0,
+    };
+    return true;
+}
+
+bool FUnifiedScriptGameplayDataPlane::ExecuteOverlapBatch(
+    uint64 BatchToken,
+    uint32 RequestCount,
+    FUnifiedScriptOverlapResultViewV1& OutView)
+{
+    check(IsInGameThread());
+    OutView = {};
+    if (!IsManagedPhase() || BatchToken == 0 ||
+        BatchToken != ActiveOverlapBatchToken ||
+        RequestCount > static_cast<uint32>(OverlapRequests.Num()))
+    {
+        return false;
+    }
+    OverlapResults.Reset();
+    OverlapResults.Reserve(static_cast<int32>(RequestCount));
+    for (uint32 Index = 0; Index < RequestCount; ++Index)
+    {
+        FUnifiedScriptOverlapRequestV1& Request =
+            OverlapRequests[static_cast<int32>(Index)];
+        if (Request.SequenceId == 0)
+        {
+            Request.SequenceId =
+                UE::UnifiedScript::GameplayData::Private::AllocateNonZero(
+                    NextSequenceId);
+        }
+        OverlapResults.Add(ExecuteOverlap(Request));
+    }
+    TotalExecutedOverlapCount += RequestCount;
+    ActiveOverlapBatchToken = 0;
+    OutView = {
+        UE::UnifiedScript::GameplayData::AbiVersion,
+        sizeof(FUnifiedScriptOverlapResultViewV1),
+        UE::UnifiedScript::GameplayData::OverlapResultSchemaId,
+        WorldHostId,
+        FrameNumber,
+        BatchToken,
+        OverlapResults.GetData(),
+        static_cast<uint32>(OverlapResults.Num()),
+        static_cast<uint32>(OverlapResults.Max()),
+        sizeof(FUnifiedScriptOverlapResultV1),
+        0,
+    };
+    return true;
+}
+
+void FUnifiedScriptGameplayDataPlane::CancelOverlapBatch(uint64 BatchToken)
+{
+    check(IsInGameThread());
+    if (BatchToken != 0 && BatchToken == ActiveOverlapBatchToken)
+    {
+        ActiveOverlapBatchToken = 0;
+    }
+}
+
 EUnifiedScriptGameplayDataPhaseV4 FUnifiedScriptGameplayDataPlane::GetPhase() const
 {
     return Phase;
@@ -331,6 +453,41 @@ EUnifiedScriptGameplayDataPhaseV4 FUnifiedScriptGameplayDataPlane::GetPhase() co
 uint64 FUnifiedScriptGameplayDataPlane::GetFrameNumber() const
 {
     return FrameNumber;
+}
+
+bool FUnifiedScriptGameplayDataPlane::GetTelemetry(
+    FUnifiedScriptGameplayDataTelemetryV1& OutTelemetry) const
+{
+    check(IsInGameThread());
+    if (bShutdown || WorldHostId == 0)
+    {
+        OutTelemetry = {};
+        return false;
+    }
+    OutTelemetry = {
+        UE::UnifiedScript::DataPlaneSchema::Revision,
+        sizeof(FUnifiedScriptGameplayDataTelemetryV1),
+        UE::UnifiedScript::DataPlaneSchema::CompatibilityId,
+        WorldHostId,
+        FrameNumber,
+        CommandOverflowCount,
+        DroppedEventCount,
+        TraceOverflowCount,
+        TotalCommittedCommandCount,
+        TotalExecutedCommandCount,
+        TotalExecutedTraceCount,
+        LastCommittedSequenceId,
+        LastExecutedSequenceId,
+        LastPublishedEventFrame,
+        UE::UnifiedScript::GameplayData::MaximumCommandCount,
+        UE::UnifiedScript::GameplayData::MaximumEventCount,
+        UE::UnifiedScript::GameplayData::MaximumTraceCount,
+        static_cast<uint32>(Phase),
+        OverlapOverflowCount,
+        TotalExecutedOverlapCount,
+        UE::UnifiedScript::GameplayData::MaximumOverlapCount,
+    };
+    return true;
 }
 
 bool FUnifiedScriptGameplayDataPlane::IsManagedPhase() const
@@ -357,6 +514,7 @@ void FUnifiedScriptGameplayDataPlane::PublishPendingEvents()
     EventBuffers[WriteIndex].Append(PendingEvents);
     PendingEvents.Reset();
     ActiveEventBufferIndex = WriteIndex;
+    LastPublishedEventFrame = FrameNumber;
 }
 
 void FUnifiedScriptGameplayDataPlane::ExecuteCommittedCommands()
@@ -372,6 +530,8 @@ void FUnifiedScriptGameplayDataPlane::ExecuteCommittedCommands()
             FUnifiedScriptCommandV4& Command =
                 Commands[static_cast<int32>(Reservation.Offset + Index)];
             const FUnifiedScriptGameplayEventV4 Event = ExecuteCommand(Command);
+            ++TotalExecutedCommandCount;
+            LastExecutedSequenceId = Command.SequenceId;
             const bool bOwnsArgument =
                 Event.Status == EUnifiedScriptCommandStatusV4::Success &&
                 (Event.Kind == EUnifiedScriptGameplayEventKindV4::ActorSpawned ||
@@ -649,8 +809,14 @@ FUnifiedScriptTraceResultV4 FUnifiedScriptGameplayDataPlane::ExecuteTrace(
     FUnifiedScriptTraceResultV4 Result;
     Result.SequenceId = Request.SequenceId;
     UWorld* CurrentWorld = World.Get();
+    const FUnifiedScriptSharedObjectHandleV4 IgnoredActors[] = {
+        Request.IgnoreActor0,
+        Request.IgnoreActor1,
+        Request.IgnoreActor2,
+        Request.IgnoreActor3,
+    };
     if (CurrentWorld == nullptr || Request.CollisionChannel >= ECC_MAX ||
-        Request.IgnoreActorCount > UE_ARRAY_COUNT(Request.IgnoreActors))
+        Request.IgnoreActorCount > UE_ARRAY_COUNT(IgnoredActors))
     {
         Result.Status = EUnifiedScriptTraceStatusV4::InvalidRequest;
         return Result;
@@ -661,7 +827,7 @@ FUnifiedScriptTraceResultV4 FUnifiedScriptGameplayDataPlane::ExecuteTrace(
     {
         UObject* IgnoredObject = nullptr;
         const EUnifiedScriptCommandStatusV4 ResolveStatus = ResolveObject(
-            Request.IgnoreActors[Index],
+            IgnoredActors[Index],
             AActor::StaticClass(),
             IgnoredObject);
         if (ResolveStatus != EUnifiedScriptCommandStatusV4::Success)
@@ -772,6 +938,112 @@ FUnifiedScriptTraceResultV4 FUnifiedScriptGameplayDataPlane::ExecuteTrace(
     return Result;
 }
 
+FUnifiedScriptOverlapResultV1 FUnifiedScriptGameplayDataPlane::ExecuteOverlap(
+    const FUnifiedScriptOverlapRequestV1& Request)
+{
+    FUnifiedScriptOverlapResultV1 Result;
+    Result.SequenceId = Request.SequenceId;
+    UWorld* CurrentWorld = World.Get();
+    const FUnifiedScriptSharedObjectHandleV4 IgnoredActors[] = {
+        Request.IgnoreActor0,
+        Request.IgnoreActor1,
+        Request.IgnoreActor2,
+        Request.IgnoreActor3,
+    };
+    if (CurrentWorld == nullptr || Request.CollisionChannel >= ECC_MAX ||
+        Request.IgnoreActorCount > UE_ARRAY_COUNT(IgnoredActors))
+    {
+        Result.Status = EUnifiedScriptTraceStatusV4::InvalidRequest;
+        return Result;
+    }
+
+    FCollisionQueryParams QueryParams(
+        SCENE_QUERY_STAT(UnifiedScriptBatchOverlap), true);
+    for (uint8 Index = 0; Index < Request.IgnoreActorCount; ++Index)
+    {
+        UObject* IgnoredObject = nullptr;
+        const EUnifiedScriptCommandStatusV4 ResolveStatus = ResolveObject(
+            IgnoredActors[Index],
+            AActor::StaticClass(),
+            IgnoredObject);
+        if (ResolveStatus != EUnifiedScriptCommandStatusV4::Success)
+        {
+            Result.Status = ResolveStatus ==
+                    EUnifiedScriptCommandStatusV4::WorldMismatch
+                ? EUnifiedScriptTraceStatusV4::WorldMismatch
+                : EUnifiedScriptTraceStatusV4::StaleHandle;
+            return Result;
+        }
+        QueryParams.AddIgnoredActor(CastChecked<AActor>(IgnoredObject));
+    }
+
+    FCollisionShape Shape;
+    FQuat Rotation = FQuat::Identity;
+    switch (Request.Shape)
+    {
+    case EUnifiedScriptTraceShapeV4::Sphere:
+        if (Request.ExtentX <= 0.0)
+        {
+            Result.Status = EUnifiedScriptTraceStatusV4::InvalidRequest;
+            return Result;
+        }
+        Shape = FCollisionShape::MakeSphere(Request.ExtentX);
+        break;
+    case EUnifiedScriptTraceShapeV4::Box:
+        if (Request.ExtentX <= 0.0 || Request.ExtentY <= 0.0 ||
+            Request.ExtentZ <= 0.0)
+        {
+            Result.Status = EUnifiedScriptTraceStatusV4::InvalidRequest;
+            return Result;
+        }
+        Shape = FCollisionShape::MakeBox(
+            FVector(Request.ExtentX, Request.ExtentY, Request.ExtentZ));
+        Rotation = FQuat(
+            Request.RotationX,
+            Request.RotationY,
+            Request.RotationZ,
+            Request.RotationW).GetNormalized();
+        break;
+    default:
+        Result.Status = EUnifiedScriptTraceStatusV4::InvalidRequest;
+        return Result;
+    }
+
+    TArray<FOverlapResult> Overlaps;
+    CurrentWorld->OverlapMultiByChannel(
+        Overlaps,
+        FVector(Request.CenterX, Request.CenterY, Request.CenterZ),
+        Rotation,
+        static_cast<ECollisionChannel>(Request.CollisionChannel),
+        Shape,
+        QueryParams);
+    Result.Status = EUnifiedScriptTraceStatusV4::Success;
+    for (const FOverlapResult& Overlap : Overlaps)
+    {
+        AActor* Actor = Overlap.GetActor();
+        UPrimitiveComponent* Component = Overlap.GetComponent();
+        if (Actor == nullptr && Component == nullptr)
+        {
+            continue;
+        }
+        Result.Flags = EUnifiedScriptOverlapResultFlagsV1::HasOverlap;
+        FUnifiedScriptObjectHandle OwnedActorHandle;
+        Result.HitActor = RegisterEventObject(Actor, OwnedActorHandle);
+        if (!OwnedActorHandle.IsNull())
+        {
+            OverlapOwnedHandles.Add(OwnedActorHandle);
+        }
+        FUnifiedScriptObjectHandle OwnedComponentHandle;
+        Result.HitComponent = RegisterEventObject(Component, OwnedComponentHandle);
+        if (!OwnedComponentHandle.IsNull())
+        {
+            OverlapOwnedHandles.Add(OwnedComponentHandle);
+        }
+        break;
+    }
+    return Result;
+}
+
 void FUnifiedScriptGameplayDataPlane::Shutdown()
 {
     check(IsInGameThread());
@@ -796,6 +1068,7 @@ void FUnifiedScriptGameplayDataPlane::Shutdown()
         ReleaseHandles(EventOwnedHandles[1]);
         ReleaseHandles(PendingEventOwnedHandles);
         ReleaseHandles(TraceOwnedHandles);
+        ReleaseHandles(OverlapOwnedHandles);
     }
     Commands.Reset();
     CommandReservations.Reset();
@@ -805,9 +1078,12 @@ void FUnifiedScriptGameplayDataPlane::Shutdown()
     PendingEvents.Reset();
     TraceRequests.Reset();
     TraceResults.Reset();
+    OverlapRequests.Reset();
+    OverlapResults.Reset();
     World.Reset();
     ObjectRegistry = nullptr;
     WorldHostId = 0;
     ActiveCommandBatchToken = 0;
     ActiveTraceBatchToken = 0;
+    ActiveOverlapBatchToken = 0;
 }

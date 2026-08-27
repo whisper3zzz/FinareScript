@@ -44,6 +44,15 @@
     <None Include="../../samples/Unreal/UEUnifiedScriptRuntime.api-contract.json"
           Link="UnrealFixtures/UEUnifiedScriptRuntime.api-contract.json"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../samples/Unreal/UEUnifiedScriptRuntime.data-plane.json"
+          Link="UnrealFixtures/UEUnifiedScriptRuntime.data-plane.json"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../src/UnifiedScript.Unreal/UnrealDataPlaneLayouts.g.cs"
+          Link="UnrealFixtures/UnrealDataPlaneLayouts.g.cs"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../HostProject/Plugins/UEUnifiedScript/Source/UEUnifiedScriptRuntime/Public/UnifiedScriptDataPlaneLayouts.gen.h"
+          Link="UnrealFixtures/UnifiedScriptDataPlaneLayouts.gen.h"
+          CopyToOutputDirectory="PreserveNewest" />
     <Compile Include="../../samples/Unreal/UEUnifiedScriptRuntime.bindings.cs"
              Link="UnrealFixtures/UEUnifiedScriptRuntime.bindings.cs"
              CopyToOutputDirectory="PreserveNewest" />

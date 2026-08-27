@@ -195,6 +195,7 @@ public:
         uint64& OutSubscriptionId);
     bool UnsubscribeEvent(uint64 SubscriptionId);
     bool AcquireTransformSnapshot(FUnifiedScriptSharedSnapshotViewV4& OutView);
+    bool GetSharedDataTelemetry(FUnifiedScriptSharedDataTelemetryV1& OutTelemetry);
     bool ExecuteGameplayData(
         TFunctionRef<bool(FUnifiedScriptGameplayDataPlane&)> Operation);
     bool ExecuteAsyncService(

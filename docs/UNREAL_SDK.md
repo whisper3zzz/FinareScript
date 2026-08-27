@@ -55,8 +55,9 @@ file. M6.3.2 publishes:
 - managed target `net10.0`;
 - bootstrap/fast-member ABI v2, call-frame ABI v3, and event/shared/gameplay
   data ABI v4;
-- onboarding v0.1, reflection v0.2, API Contract/node/coverage v0.1, and
-  deployment v0.1 schemas.
+- onboarding v0.1, reflection v0.2, API Contract/node/coverage v0.1,
+  data-plane layout v0.1 (current compatible revision 2), and deployment v0.1
+  schemas.
 
 The installer verifies every hash and rejects missing, duplicate, unsafe, or
 unmanifested files. Packaged-mode onboarding independently checks the selected

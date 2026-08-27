@@ -2,114 +2,8 @@ using System.Runtime.InteropServices;
 
 namespace UnifiedScript.Unreal;
 
-public enum UnrealGameplayDataPhaseV4 : byte
+public partial struct UnrealCommandV4
 {
-    Idle = 0,
-    NativePreActorTick = 1,
-    ManagedTick = 2,
-    NativePostActorTick = 3,
-    ShuttingDown = 4,
-}
-
-public enum UnrealCommandTypeV4 : ushort
-{
-    None = 0,
-    SetActorTransform = 1,
-    SetActorVelocity = 2,
-    ApplyDamage = 3,
-    SpawnActor = 4,
-    DestroyActor = 5,
-    SpawnEmitter = 6,
-}
-
-public enum UnrealCommandStatusV4 : ushort
-{
-    Success = 0,
-    InvalidCommand = 1,
-    WorldMismatch = 2,
-    StaleHandle = 3,
-    TypeMismatch = 4,
-    ExecutionFailed = 5,
-    BufferOverflow = 6,
-    WrongPhase = 7,
-}
-
-public enum UnrealGameplayEventKindV4 : ushort
-{
-    None = 0,
-    CommandCompleted = 1,
-    ActorSpawned = 2,
-    ActorDestroyed = 3,
-    DamageApplied = 4,
-    EffectSpawned = 5,
-}
-
-public enum UnrealTraceShapeV4 : byte
-{
-    Line = 0,
-    Sphere = 1,
-    Box = 2,
-}
-
-public enum UnrealTraceStatusV4 : byte
-{
-    Success = 0,
-    InvalidRequest = 1,
-    WorldMismatch = 2,
-    StaleHandle = 3,
-    ExecutionFailed = 4,
-}
-
-[Flags]
-public enum UnrealTraceResultFlagsV4 : byte
-{
-    None = 0,
-    BlockingHit = 1 << 0,
-    StartPenetrating = 1 << 1,
-}
-
-[Flags]
-public enum UnrealGameplayDataCapabilitiesV4 : ulong
-{
-    None = 0,
-    WorldPhaseScheduler = 1UL << 0,
-    CommandBuffer = 1UL << 1,
-    EventBuffer = 1UL << 2,
-    BatchLineTrace = 1UL << 3,
-    BatchSphereTrace = 1UL << 4,
-    BatchBoxTrace = 1UL << 5,
-}
-
-[StructLayout(LayoutKind.Sequential, Pack = 8)]
-public struct UnrealCommandV4
-{
-    public UnrealCommandTypeV4 Type;
-    public ushort Flags;
-    public uint Reserved;
-    public ulong SequenceId;
-    public UnrealSharedObjectHandleV4 Target;
-    public UnrealSharedObjectHandleV4 Argument0;
-    public UnrealSharedObjectHandleV4 Argument1;
-    public UnrealSharedObjectHandleV4 Argument2;
-    public double Scalar0;
-    public double Scalar1;
-    public double Scalar2;
-    public double Scalar3;
-    public double Vector0X;
-    public double Vector0Y;
-    public double Vector0Z;
-    public double Vector1X;
-    public double Vector1Y;
-    public double Vector1Z;
-    public double RotationX;
-    public double RotationY;
-    public double RotationZ;
-    public double RotationW;
-    public double Vector2X;
-    public double Vector2Y;
-    public double Vector2Z;
-    public ulong Payload0;
-
     public static UnrealCommandV4 SetActorTransform(
         UnrealSharedObjectHandleV4 target,
         UnrealTransform transform,
@@ -204,53 +98,15 @@ public struct UnrealCommandV4
     };
 }
 
-[StructLayout(LayoutKind.Sequential, Pack = 8)]
-public readonly struct UnrealGameplayEventV4
+public readonly partial struct UnrealGameplayEventV4
 {
-    public readonly ulong SequenceId;
-    public readonly UnrealGameplayEventKindV4 Kind;
-    public readonly UnrealCommandTypeV4 CommandType;
-    public readonly UnrealCommandStatusV4 Status;
-    public readonly ushort Flags;
-    public readonly UnrealSharedObjectHandleV4 Source;
-    public readonly UnrealSharedObjectHandleV4 Argument;
-    public readonly double Value0;
-    public readonly double VectorX;
-    public readonly double VectorY;
-    public readonly double VectorZ;
-    public readonly ulong FrameNumber;
-
     public bool IsSuccess => Status == UnrealCommandStatusV4.Success;
 
     public UnrealVector Vector => new(VectorX, VectorY, VectorZ);
 }
 
-[StructLayout(LayoutKind.Sequential, Pack = 8)]
-public struct UnrealTraceRequestV4
+public partial struct UnrealTraceRequestV4
 {
-    public ulong SequenceId;
-    public UnrealTraceShapeV4 Shape;
-    public byte IgnoreActorCount;
-    public ushort Flags;
-    public uint CollisionChannel;
-    public UnrealSharedObjectHandleV4 IgnoreActor0;
-    public UnrealSharedObjectHandleV4 IgnoreActor1;
-    public UnrealSharedObjectHandleV4 IgnoreActor2;
-    public UnrealSharedObjectHandleV4 IgnoreActor3;
-    public double StartX;
-    public double StartY;
-    public double StartZ;
-    public double EndX;
-    public double EndY;
-    public double EndZ;
-    public double ExtentX;
-    public double ExtentY;
-    public double ExtentZ;
-    public double RotationX;
-    public double RotationY;
-    public double RotationZ;
-    public double RotationW;
-
     public static UnrealTraceRequestV4 Line(
         UnrealVector start,
         UnrealVector end,
@@ -338,33 +194,8 @@ public struct UnrealTraceRequestV4
     }
 }
 
-[StructLayout(LayoutKind.Sequential, Pack = 8)]
-public readonly struct UnrealTraceResultV4
+public readonly partial struct UnrealTraceResultV4
 {
-    public readonly ulong SequenceId;
-    public readonly UnrealTraceStatusV4 Status;
-    public readonly UnrealTraceResultFlagsV4 Flags;
-    public readonly ushort Reserved;
-    public readonly int FaceIndex;
-    public readonly UnrealSharedObjectHandleV4 HitActor;
-    public readonly UnrealSharedObjectHandleV4 HitComponent;
-    public readonly double Distance;
-    public readonly double Time;
-    public readonly double LocationX;
-    public readonly double LocationY;
-    public readonly double LocationZ;
-    public readonly double ImpactPointX;
-    public readonly double ImpactPointY;
-    public readonly double ImpactPointZ;
-    public readonly double NormalX;
-    public readonly double NormalY;
-    public readonly double NormalZ;
-    public readonly double ImpactNormalX;
-    public readonly double ImpactNormalY;
-    public readonly double ImpactNormalZ;
-    public readonly int Item;
-    public readonly int ElementIndex;
-
     public bool IsSuccess => Status == UnrealTraceStatusV4.Success;
     public bool BlockingHit => (Flags & UnrealTraceResultFlagsV4.BlockingHit) != 0;
     public bool StartPenetrating =>
@@ -376,69 +207,79 @@ public readonly struct UnrealTraceResultV4
         new(ImpactNormalX, ImpactNormalY, ImpactNormalZ);
 }
 
-[StructLayout(LayoutKind.Sequential, Pack = 8)]
-internal struct UnrealCommandBatchViewV4
+public partial struct UnrealOverlapRequestV1
 {
-    public uint AbiVersion;
-    public uint ViewSize;
-    public ulong SchemaId;
-    public ulong WorldHostId;
-    public ulong FrameNumber;
-    public ulong BatchToken;
-    public ulong FirstSequenceId;
-    public nint Commands;
-    public uint CommandCapacity;
-    public uint CommandEntrySize;
-    public uint Flags;
-    public uint Reserved;
+    public static UnrealOverlapRequestV1 Sphere(
+        UnrealVector center,
+        double radius,
+        uint collisionChannel,
+        ReadOnlySpan<UnrealSharedObjectHandleV4> ignoreActors = default) =>
+        Create(
+            UnrealTraceShapeV4.Sphere,
+            center,
+            new UnrealVector(radius, 0.0, 0.0),
+            UnrealQuaternion.Identity,
+            collisionChannel,
+            ignoreActors);
+
+    public static UnrealOverlapRequestV1 Box(
+        UnrealVector center,
+        UnrealVector halfExtent,
+        UnrealQuaternion rotation,
+        uint collisionChannel,
+        ReadOnlySpan<UnrealSharedObjectHandleV4> ignoreActors = default) =>
+        Create(
+            UnrealTraceShapeV4.Box,
+            center,
+            halfExtent,
+            rotation,
+            collisionChannel,
+            ignoreActors);
+
+    private static UnrealOverlapRequestV1 Create(
+        UnrealTraceShapeV4 shape,
+        UnrealVector center,
+        UnrealVector extent,
+        UnrealQuaternion rotation,
+        uint collisionChannel,
+        ReadOnlySpan<UnrealSharedObjectHandleV4> ignoreActors)
+    {
+        if (ignoreActors.Length > 4)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(ignoreActors),
+                "A batch overlap request supports at most four ignored Actors.");
+        }
+        var request = new UnrealOverlapRequestV1
+        {
+            Shape = shape,
+            IgnoreActorCount = checked((byte)ignoreActors.Length),
+            CollisionChannel = collisionChannel,
+            CenterX = center.X,
+            CenterY = center.Y,
+            CenterZ = center.Z,
+            ExtentX = extent.X,
+            ExtentY = extent.Y,
+            ExtentZ = extent.Z,
+            RotationX = rotation.X,
+            RotationY = rotation.Y,
+            RotationZ = rotation.Z,
+            RotationW = rotation.W,
+        };
+        if (ignoreActors.Length > 0) request.IgnoreActor0 = ignoreActors[0];
+        if (ignoreActors.Length > 1) request.IgnoreActor1 = ignoreActors[1];
+        if (ignoreActors.Length > 2) request.IgnoreActor2 = ignoreActors[2];
+        if (ignoreActors.Length > 3) request.IgnoreActor3 = ignoreActors[3];
+        return request;
+    }
 }
 
-[StructLayout(LayoutKind.Sequential, Pack = 8)]
-internal struct UnrealGameplayEventViewV4
+public readonly partial struct UnrealOverlapResultV1
 {
-    public uint AbiVersion;
-    public uint ViewSize;
-    public ulong SchemaId;
-    public ulong WorldHostId;
-    public ulong FrameNumber;
-    public nint Events;
-    public uint EventCount;
-    public uint EventCapacity;
-    public uint EventEntrySize;
-    public uint Flags;
-    public ulong DroppedEventCount;
-}
+    public bool IsSuccess => Status == UnrealTraceStatusV4.Success;
 
-[StructLayout(LayoutKind.Sequential, Pack = 8)]
-internal struct UnrealTraceRequestViewV4
-{
-    public uint AbiVersion;
-    public uint ViewSize;
-    public ulong SchemaId;
-    public ulong WorldHostId;
-    public ulong FrameNumber;
-    public ulong BatchToken;
-    public nint Requests;
-    public uint RequestCapacity;
-    public uint RequestEntrySize;
-    public uint Flags;
-    public uint Reserved;
-}
-
-[StructLayout(LayoutKind.Sequential, Pack = 8)]
-internal struct UnrealTraceResultViewV4
-{
-    public uint AbiVersion;
-    public uint ViewSize;
-    public ulong SchemaId;
-    public ulong WorldHostId;
-    public ulong FrameNumber;
-    public ulong BatchToken;
-    public nint Results;
-    public uint ResultCount;
-    public uint ResultCapacity;
-    public uint ResultEntrySize;
-    public uint Flags;
+    public bool HasOverlap =>
+        (Flags & UnrealOverlapResultFlagsV1.HasOverlap) != 0;
 }
 
 [StructLayout(LayoutKind.Sequential, Pack = 8)]
@@ -462,22 +303,72 @@ internal struct UnrealGameplayDataTransportTableV4
     public nint GetPhase;
 }
 
-public static class UnrealGameplayDataAbiV4
+[StructLayout(LayoutKind.Sequential, Pack = 8)]
+internal struct UnrealGameplayDataTransportTableV4Extended
 {
-    public const uint Version = 4;
-    public const ulong CommandSchemaId = 0x5553434D44423401UL;
-    public const ulong EventSchemaId = 0x555345564E543401UL;
-    public const ulong TraceRequestSchemaId = 0x5553545245513401UL;
-    public const ulong TraceResultSchemaId = 0x5553545245533401UL;
-    public const int CommandEntrySize = 224;
-    public const int CommandBatchViewSize = 72;
-    public const int EventEntrySize = 88;
-    public const int EventViewSize = 64;
-    public const int TraceRequestEntrySize = 184;
-    public const int TraceResultEntrySize = 168;
-    public const int TraceRequestViewSize = 64;
-    public const int TraceResultViewSize = 64;
+    public uint AbiVersion;
+    public uint TableSize;
+    public uint CommandEntrySize;
+    public uint EventEntrySize;
+    public uint TraceRequestEntrySize;
+    public uint TraceResultEntrySize;
+    public UnrealGameplayDataCapabilitiesV4 Capabilities;
+    public nint RetainContext;
+    public nint ReleaseContext;
+    public nint BeginCommandBatch;
+    public nint CommitCommandBatch;
+    public nint AcquireEvents;
+    public nint BeginTraceBatch;
+    public nint ExecuteTraceBatch;
+    public nint CancelTraceBatch;
+    public nint GetPhase;
+    public ulong LayoutCompatibilityId;
+    public uint LayoutRevision;
+    public uint MaximumCommandCount;
+    public uint MaximumEventCount;
+    public uint MaximumTraceCount;
+    public nint GetTelemetry;
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 8)]
+internal struct UnrealGameplayDataTransportTableV4OverlapExtended
+{
+    public uint AbiVersion;
+    public uint TableSize;
+    public uint CommandEntrySize;
+    public uint EventEntrySize;
+    public uint TraceRequestEntrySize;
+    public uint TraceResultEntrySize;
+    public UnrealGameplayDataCapabilitiesV4 Capabilities;
+    public nint RetainContext;
+    public nint ReleaseContext;
+    public nint BeginCommandBatch;
+    public nint CommitCommandBatch;
+    public nint AcquireEvents;
+    public nint BeginTraceBatch;
+    public nint ExecuteTraceBatch;
+    public nint CancelTraceBatch;
+    public nint GetPhase;
+    public ulong LayoutCompatibilityId;
+    public uint LayoutRevision;
+    public uint MaximumCommandCount;
+    public uint MaximumEventCount;
+    public uint MaximumTraceCount;
+    public nint GetTelemetry;
+    public uint OverlapRequestEntrySize;
+    public uint OverlapResultEntrySize;
+    public uint MaximumOverlapCount;
+    public uint Reserved;
+    public nint BeginOverlapBatch;
+    public nint ExecuteOverlapBatch;
+    public nint CancelOverlapBatch;
+}
+
+public static partial class UnrealGameplayDataAbiV4
+{
     public const int TransportTableSize = 104;
+    public const int ExtendedTransportTableSize = 136;
+    public const int OverlapTransportTableSize = 176;
 }
 
 internal interface IUnrealGameplayDataTransport
@@ -493,6 +384,17 @@ internal interface IUnrealGameplayDataTransport
         out UnrealTraceResultViewV4 view);
     void CancelTraceBatch(ulong token);
     bool GetPhase(out UnrealGameplayDataPhaseV4 phase, out ulong frameNumber);
+}
+
+internal interface IUnrealOverlapDataTransport
+{
+    bool SupportsOverlapData { get; }
+    bool BeginOverlapBatch(uint capacity, out UnrealOverlapRequestViewV1 view);
+    bool ExecuteOverlapBatch(
+        ulong token,
+        uint count,
+        out UnrealOverlapResultViewV1 view);
+    void CancelOverlapBatch(ulong token);
 }
 
 public ref struct UnrealCommandBatch
@@ -627,6 +529,66 @@ public ref struct UnrealTraceBatch
         if (!_finished)
         {
             _transport.CancelTraceBatch(_token);
+            _finished = true;
+        }
+    }
+}
+
+public ref struct UnrealOverlapBatch
+{
+    private readonly IUnrealOverlapDataTransport _transport;
+    private readonly ulong _token;
+    private bool _finished;
+
+    internal unsafe UnrealOverlapBatch(
+        IUnrealOverlapDataTransport transport,
+        UnrealOverlapRequestViewV1 view)
+    {
+        _transport = transport;
+        _token = view.BatchToken;
+        WorldHostId = view.WorldHostId;
+        FrameNumber = view.FrameNumber;
+        Requests = new Span<UnrealOverlapRequestV1>(
+            (void*)view.Requests,
+            checked((int)view.RequestCapacity));
+        _finished = false;
+    }
+
+    public ulong WorldHostId { get; }
+    public ulong FrameNumber { get; }
+    public Span<UnrealOverlapRequestV1> Requests { get; }
+
+    public unsafe ReadOnlySpan<UnrealOverlapResultV1> Execute(int requestCount = -1)
+    {
+        if (_finished)
+        {
+            throw new InvalidOperationException("The overlap batch is already completed.");
+        }
+        int count = requestCount < 0 ? Requests.Length : requestCount;
+        if ((uint)count > (uint)Requests.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(requestCount));
+        }
+        if (!_transport.ExecuteOverlapBatch(
+                _token,
+                checked((uint)count),
+                out UnrealOverlapResultViewV1 view))
+        {
+            throw new InvalidOperationException(
+                "The native World rejected the overlap batch execution.");
+        }
+        UnrealWorldDataPlane.ValidateOverlapResultView(view, WorldHostId, _token);
+        _finished = true;
+        return new ReadOnlySpan<UnrealOverlapResultV1>(
+            (void*)view.Results,
+            checked((int)view.ResultCount));
+    }
+
+    public void Dispose()
+    {
+        if (!_finished)
+        {
+            _transport.CancelOverlapBatch(_token);
             _finished = true;
         }
     }

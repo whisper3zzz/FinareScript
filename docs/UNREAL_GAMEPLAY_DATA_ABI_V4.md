@@ -14,7 +14,9 @@ generated function calls:
 - completion events are published in a borrowed double buffer on the next
   managed phase;
 - line, sphere, and box traces are submitted and returned in one synchronous
-  boundary call.
+  boundary call;
+- sphere and box overlap queries use a second fixed-row batch without exposing
+  `FOverlapResult` or engine container memory.
 
 The Binding control plane remains authoritative for resource discovery,
 arbitrary reflected functions, properties, delegates, and uncommon signatures.
@@ -29,7 +31,7 @@ Each `UUnifiedScriptWorldSubsystem` owns one
 OnWorldPreActorTick
   -> NativePreActorTick
   -> publish Transform snapshot and prior command events
-  -> ManagedTick: scripts may reserve/commit commands and execute trace batches
+  -> ManagedTick: scripts may reserve/commit commands and execute trace/overlap batches
 
 OnWorldPostActorTick
   -> NativePostActorTick
@@ -43,11 +45,11 @@ removes both delegates, detaches the bridge context so retained transports fail
 safely, shuts down the Shared and Gameplay Data planes and releases their
 buffer-owned handles, and finally invalidates the World registry.
 
-All operations currently require the Unreal Game Thread. Command and trace
-reservation, commit, and execution require `ManagedTick` and reject the wrong
-phase before exposing writable memory or executing side effects. Read-only
-phase inspection and event acquisition remain available while the context and
-World are alive.
+All operations currently require the Unreal Game Thread. Command, trace, and
+overlap reservation, commit, and execution require `ManagedTick` and reject the
+wrong phase before exposing writable memory or executing side effects.
+Read-only phase inspection, telemetry, and event acquisition remain available
+while the context and World are alive.
 
 ## Command buffer
 
@@ -111,6 +113,35 @@ Only one trace batch may be active. Its request span is invalid after execute
 or cancel; its result span and hit handles are valid until the next trace batch
 begins or the World shuts down.
 
+## Batch Overlap
+
+Schema revision 2 adds up to 65,536 fixed 160-byte overlap requests. A request
+selects `Sphere` or `Box`, center, extent/rotation, collision channel, and zero
+to four ignored World-scoped Actors. One boundary call returns 48-byte rows
+containing request sequence, status, `HasOverlap`, and the first valid Actor and
+component handles. A valid query with no overlap is a successful row without
+the flag.
+
+Only one overlap batch may be active. Its request span ends at execute/cancel;
+result rows and registered hit handles remain borrowed until the next overlap
+batch or World shutdown. Trace and overlap reservations are independent, so a
+script may run both during one managed phase.
+
+## Bounds, order, and telemetry
+
+The versioned schema fixes logical maximums at 65,536 commands, 4,096 events,
+65,536 traces, and 65,536 overlaps. Reservations exceeding a limit fail before
+memory exposure and increment their cumulative overflow counter. Event
+production beyond its bound drops only the excess row and increments the event
+overflow counter.
+
+The first 120 bytes of the telemetry row remain the revision-1 prefix. Revision
+2 appends overlap counters/capacity and rounds the row to 144 bytes without
+moving any earlier field. It also reports committed/executed command totals,
+executed trace/overlap totals, last committed/executed sequence IDs, last event
+publication frame, current phase, and every advertised maximum. Sequence IDs
+are monotonic within a World and commands execute in reservation/row order.
+
 ## World-scoped handles and validation
 
 Every command operand, ignored Actor, and returned hit object uses the existing
@@ -128,9 +159,14 @@ layout crosses CoreCLR.
 ## Discovery and frozen layouts
 
 The append-only `FUnifiedScriptNativeTransportV2` suffix points to an
-independent 104-byte `FUnifiedScriptGameplayDataTransportV4` table. Managed code
-accepts it only when ABI/table/entry sizes, capabilities, and all function
-pointers match.
+independent `FUnifiedScriptGameplayDataTransportV4` table. The original 104-byte
+prefix remains readable, revision 1 telemetry/capacity extends it to 136 bytes,
+and schema revision 2 appends overlap discovery at 176 bytes. Managed code
+requires the stable compatibility ID, accepts a revision at least as new as its
+schema, validates each present size-guarded suffix, and ignores unknown future
+bytes. Telemetry getters receive the caller's destination size and copy only the
+compatible prefix, so a newer native telemetry suffix cannot overwrite an older
+managed structure.
 
 | Schema | ID | Entry/view size |
 | --- | --- | ---: |
@@ -138,10 +174,17 @@ pointers match.
 | event | `0x555345564E543401` | 88 / 64 |
 | trace request | `0x5553545245513401` | 184 / 64 |
 | trace result | `0x5553545245533401` | 168 / 64 |
+| overlap request | `0x55534F5652455101` | 160 / 64 |
+| overlap result | `0x55534F5652455301` | 48 / 64 |
 
-Native `static_assert`s and managed `Marshal.SizeOf` tests lock these layouts.
-Extensions must use new schema IDs or append a size-checked table suffix rather
-than mutating a frozen row.
+The checked-in `samples/Unreal/UEUnifiedScriptRuntime.data-plane.json` is the
+single source for these rows, views, enums, capacities, offsets, defaults,
+schema revision, compatibility ID, and fingerprint. `ue-data-plane` emits the
+C++ and C# layouts deterministically; native `static_assert`s, managed
+`Marshal.SizeOf`, exact-output tests, and
+`tools/generate-unreal-data-plane.ps1 -Check` reject drift. Extensions use new
+schema IDs or an appended size-checked suffix rather than mutating a frozen
+row.
 
 ## Managed example
 
@@ -151,6 +194,10 @@ UnrealWorldDataPlane data = Context.DataPlane;
 using UnrealTraceBatch traces = data.BeginTraceBatch(1);
 traces.Requests[0] = UnrealTraceRequestV4.Line(start, end, 3);
 ReadOnlySpan<UnrealTraceResultV4> hits = traces.Execute();
+
+using UnrealOverlapBatch overlaps = data.BeginOverlapBatch(1);
+overlaps.Requests[0] = UnrealOverlapRequestV1.Sphere(center, 100.0, 3);
+ReadOnlySpan<UnrealOverlapResultV1> nearby = overlaps.Execute();
 
 if (hits[0].IsSuccess && hits[0].BlockingHit)
 {
@@ -163,6 +210,16 @@ if (hits[0].IsSuccess && hits[0].BlockingHit)
 }
 ```
 
-The BlockBreaker comparison demo uses this exact architecture for its shot
-trace, impact emitter, and damage while keeping load/spawn discovery on the
+The matched live-CoreCLR profile (`tools/run-unreal-data-plane-profile.ps1`)
+measures 1,024 operations across three median samples in the same World. On the
+2026-08-27 UE 5.8.1 run, fixed movement submission was 0.200x the scalar-binding
+cost and Batch Trace was 0.0076x the matched per-call trace cost, with zero
+managed allocation in the data-plane loops. This evidence routes movement,
+overlap, and high-volume queries through the data plane; generic attributes
+remain generated type-safe bindings because Unreal provides no universal
+attribute semantics; spawn remains hybrid (binding for discovery, command row
+for repeated execution).
+
+The BlockBreaker comparison demo uses this architecture for its shot trace,
+impact emitter, and damage while keeping resource/class discovery on the
 generated World service binding.

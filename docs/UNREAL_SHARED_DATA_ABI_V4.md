@@ -15,6 +15,12 @@ UFunction calls remain on the existing Binding control plane. Common gameplay
 side effects and collision queries now also have an independent fixed-row
 contract described by `UNREAL_GAMEPLAY_DATA_ABI_V4.md`.
 
+All Shared and Gameplay rows now come from the same checked-in versioned layout
+schema. Its revision may advance while the compatibility ID and frozen row IDs
+remain stable; consumers accept an equal-or-newer compatible revision and
+validate only size-present append-only suffixes. Telemetry getters also receive
+the caller buffer size and copy only its compatible prefix.
+
 ## Lifetime and threading
 
 - One `FUnifiedScriptSharedDataPlane` belongs to one World subsystem.
@@ -25,6 +31,9 @@ contract described by `UNREAL_GAMEPLAY_DATA_ABI_V4.md`.
 - Acquisition currently runs on the Unreal Game Thread.
 - World teardown detaches the transport before freeing buffers and invalidating
   snapshot-owned object handles.
+- publication is capped at 65,536 rows; excess Actors increment a cumulative
+  dropped-row counter rather than growing the cross-language contract without
+  bound.
 
 No `UObject*`, `FTransform`, `TArray`, allocator, or engine-private layout
 crosses the boundary.
@@ -80,9 +89,15 @@ foreach (ref readonly UnrealTransformSnapshotEntryV4 actor in snapshot.Entries)
 This API performs no row copy and no steady-state allocation. Callers must not
 retain the borrowed view past the current managed tick.
 
+`GetSharedDataTelemetry()` exposes the schema revision/compatibility ID, World
+ID, current publication generation, current/total published counts, cumulative
+dropped rows, and the generated maximum. Runtime validation rejects impossible
+counts or a telemetry generation older than the current borrowed view.
+
 ## Compatible extensions
 
 The Gameplay Data ABI follows this rule by using independent command, event,
-trace-request, and trace-result schema IDs rather than changing the frozen
-Transform row. Future velocity, gameplay-attribute, or tag snapshots should do
-the same.
+trace, and overlap schema IDs rather than changing the frozen Transform row.
+Future velocity, gameplay-attribute, or tag snapshots must do the same and are
+added only after representative profiling proves that per-call bindings are the
+wrong boundary.

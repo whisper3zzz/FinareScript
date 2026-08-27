@@ -2,22 +2,6 @@ using System.Runtime.InteropServices;
 
 namespace UnifiedScript.Unreal;
 
-[Flags]
-public enum UnrealSharedDataCapabilitiesV4 : ulong
-{
-    None = 0,
-    TransformSnapshot = 1UL << 0,
-    DoubleBuffered = 1UL << 1,
-    WorldScopedHandles = 1UL << 2,
-}
-
-[Flags]
-public enum UnrealSharedSnapshotFlagsV4 : uint
-{
-    None = 0,
-    BorrowedUntilNextPublish = 1U << 0,
-}
-
 [StructLayout(LayoutKind.Sequential, Pack = 8)]
 public readonly record struct UnrealSharedObjectHandleV4(
     ulong WorldHostId,
@@ -33,8 +17,7 @@ public readonly record struct UnrealSharedObjectHandleV4(
 /// Fixed 96-byte Transform row shared directly from native World memory.
 /// It contains no UObject pointers or engine container layouts.
 /// </summary>
-[StructLayout(LayoutKind.Sequential, Pack = 8)]
-public readonly struct UnrealTransformSnapshotEntryV4
+public readonly partial struct UnrealTransformSnapshotEntryV4
 {
     public UnrealTransformSnapshotEntryV4(
         UnrealSharedObjectHandleV4 actor,
@@ -53,37 +36,10 @@ public readonly struct UnrealTransformSnapshotEntryV4
         ScaleZ = transform.Scale3D.Z;
     }
 
-    public readonly UnrealSharedObjectHandleV4 Actor;
-    public readonly double TranslationX;
-    public readonly double TranslationY;
-    public readonly double TranslationZ;
-    public readonly double RotationX;
-    public readonly double RotationY;
-    public readonly double RotationZ;
-    public readonly double RotationW;
-    public readonly double ScaleX;
-    public readonly double ScaleY;
-    public readonly double ScaleZ;
-
     public UnrealTransform Transform => new(
         new UnrealQuaternion(RotationX, RotationY, RotationZ, RotationW),
         new UnrealVector(TranslationX, TranslationY, TranslationZ),
         new UnrealVector(ScaleX, ScaleY, ScaleZ));
-}
-
-[StructLayout(LayoutKind.Sequential, Pack = 8)]
-internal struct UnrealSharedSnapshotViewV4
-{
-    public uint AbiVersion;
-    public uint ViewSize;
-    public ulong SchemaId;
-    public ulong WorldHostId;
-    public ulong Generation;
-    public nint Entries;
-    public uint EntryCount;
-    public uint EntryCapacity;
-    public uint EntrySize;
-    public UnrealSharedSnapshotFlagsV4 Flags;
 }
 
 [StructLayout(LayoutKind.Sequential, Pack = 8)]
@@ -100,13 +56,28 @@ internal struct UnrealSharedDataTransportTableV4
     public nint AcquireTransformSnapshot;
 }
 
-public static class UnrealSharedDataAbiV4
+[StructLayout(LayoutKind.Sequential, Pack = 8)]
+internal struct UnrealSharedDataTransportTableV4Extended
 {
-    public const uint Version = 4;
-    public const ulong TransformSnapshotSchemaId = 0x55535452414E5334UL;
-    public const int SnapshotViewSize = 56;
-    public const int TransformEntrySize = 96;
+    public uint AbiVersion;
+    public uint TableSize;
+    public uint SnapshotViewSize;
+    public uint TransformEntrySize;
+    public ulong TransformSchemaId;
+    public UnrealSharedDataCapabilitiesV4 Capabilities;
+    public nint RetainContext;
+    public nint ReleaseContext;
+    public nint AcquireTransformSnapshot;
+    public ulong LayoutCompatibilityId;
+    public uint LayoutRevision;
+    public uint MaximumTransformSnapshotCount;
+    public nint GetTelemetry;
+}
+
+public static partial class UnrealSharedDataAbiV4
+{
     public const int TransportTableSize = 56;
+    public const int ExtendedTransportTableSize = 80;
 }
 
 internal interface IUnrealSharedSnapshotTransport
@@ -114,6 +85,13 @@ internal interface IUnrealSharedSnapshotTransport
     bool SupportsSharedData { get; }
 
     bool TryAcquireTransformSnapshot(out UnrealSharedSnapshotViewV4 view);
+}
+
+internal interface IUnrealDataPlaneTelemetryTransport
+{
+    bool TryGetSharedDataTelemetry(out UnrealSharedDataTelemetryV1 telemetry);
+
+    bool TryGetGameplayDataTelemetry(out UnrealGameplayDataTelemetryV1 telemetry);
 }
 
 internal interface IUnrealWorldDataPlaneProvider
@@ -131,6 +109,7 @@ public sealed class UnrealWorldDataPlane
 
     private readonly IUnrealSharedSnapshotTransport? _transport;
     private readonly IUnrealGameplayDataTransport? _gameplayTransport;
+    private readonly IUnrealOverlapDataTransport? _overlapTransport;
     private readonly ulong _expectedWorldHostId;
 
     internal UnrealWorldDataPlane(
@@ -139,6 +118,7 @@ public sealed class UnrealWorldDataPlane
     {
         _transport = transport;
         _gameplayTransport = transport as IUnrealGameplayDataTransport;
+        _overlapTransport = transport as IUnrealOverlapDataTransport;
         _expectedWorldHostId = expectedWorldHostId;
     }
 
@@ -146,6 +126,63 @@ public sealed class UnrealWorldDataPlane
 
     public bool SupportsGameplayData =>
         _gameplayTransport?.SupportsGameplayData == true;
+
+    public bool SupportsOverlapQueries =>
+        _overlapTransport?.SupportsOverlapData == true;
+
+    public UnrealSharedDataTelemetryV1 GetSharedDataTelemetry()
+    {
+        if (_transport is not IUnrealDataPlaneTelemetryTransport telemetryTransport ||
+            !telemetryTransport.TryGetSharedDataTelemetry(
+                out UnrealSharedDataTelemetryV1 telemetry))
+        {
+            throw new NotSupportedException(
+                "The native World does not advertise data-plane capacity telemetry.");
+        }
+        if (telemetry.SchemaRevision < UnrealDataPlaneLayoutV1.Revision ||
+            telemetry.StructSize < UnrealSharedDataAbiV4.TelemetrySize ||
+            telemetry.CompatibilityId != UnrealDataPlaneLayoutV1.CompatibilityId ||
+            telemetry.WorldHostId == 0 ||
+            (_expectedWorldHostId != 0 &&
+             telemetry.WorldHostId != _expectedWorldHostId) ||
+            telemetry.PublishedEntryCount > telemetry.MaximumEntryCount ||
+            telemetry.MaximumEntryCount !=
+                UnrealSharedDataAbiV4.MaximumTransformSnapshotCount)
+        {
+            throw new InvalidOperationException(
+                "The native Shared Data telemetry has an incompatible schema or bounds.");
+        }
+        return telemetry;
+    }
+
+    public UnrealGameplayDataTelemetryV1 GetGameplayDataTelemetry()
+    {
+        if (_transport is not IUnrealDataPlaneTelemetryTransport telemetryTransport ||
+            !telemetryTransport.TryGetGameplayDataTelemetry(
+                out UnrealGameplayDataTelemetryV1 telemetry))
+        {
+            throw new NotSupportedException(
+                "The native World does not advertise gameplay data-plane telemetry.");
+        }
+        if (telemetry.SchemaRevision < UnrealDataPlaneLayoutV1.Revision ||
+            telemetry.StructSize < UnrealGameplayDataAbiV4.TelemetrySize ||
+            telemetry.CompatibilityId != UnrealDataPlaneLayoutV1.CompatibilityId ||
+            telemetry.WorldHostId == 0 ||
+            (_expectedWorldHostId != 0 &&
+             telemetry.WorldHostId != _expectedWorldHostId) ||
+            telemetry.MaximumCommandCount != UnrealGameplayDataAbiV4.MaximumCommandCount ||
+            telemetry.MaximumEventCount != UnrealGameplayDataAbiV4.MaximumEventCount ||
+            telemetry.MaximumTraceCount != UnrealGameplayDataAbiV4.MaximumTraceCount ||
+            telemetry.MaximumOverlapCount !=
+                UnrealGameplayDataAbiV4.MaximumOverlapCount ||
+            telemetry.LastExecutedSequenceId > telemetry.LastCommittedSequenceId ||
+            telemetry.Phase > (uint)UnrealGameplayDataPhaseV4.ShuttingDown)
+        {
+            throw new InvalidOperationException(
+                "The native Gameplay Data telemetry has an incompatible schema, order, or bounds.");
+        }
+        return telemetry;
+    }
 
     public UnrealSharedObjectHandleV4 Scope(UnrealObjectHandle handle)
     {
@@ -268,6 +305,42 @@ public sealed class UnrealWorldDataPlane
         return new UnrealTraceBatch(transport, view);
     }
 
+    public UnrealOverlapBatch BeginOverlapBatch(int capacity)
+    {
+        if (capacity <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(capacity));
+        }
+        IUnrealOverlapDataTransport transport = _overlapTransport is
+            { SupportsOverlapData: true } available
+                ? available
+                : throw new NotSupportedException(
+                    "The native World does not advertise Batch Overlap layouts.");
+        if (!transport.BeginOverlapBatch(
+                checked((uint)capacity),
+                out UnrealOverlapRequestViewV1 view))
+        {
+            throw new InvalidOperationException(
+                "An overlap batch can only begin during the managed World phase, " +
+                "and only one batch may be active at a time.");
+        }
+        if (view.AbiVersion != UnrealGameplayDataAbiV4.Version ||
+            view.ViewSize != UnrealGameplayDataAbiV4.OverlapRequestViewSize ||
+            view.SchemaId != UnrealGameplayDataAbiV4.OverlapRequestSchemaId ||
+            view.WorldHostId == 0 ||
+            (_expectedWorldHostId != 0 && view.WorldHostId != _expectedWorldHostId) ||
+            view.BatchToken == 0 ||
+            view.RequestEntrySize != UnrealGameplayDataAbiV4.OverlapRequestEntrySize ||
+            view.RequestCapacity != checked((uint)capacity) ||
+            view.Requests == nint.Zero)
+        {
+            transport.CancelOverlapBatch(view.BatchToken);
+            throw new InvalidOperationException(
+                "The native overlap request view has an incompatible layout.");
+        }
+        return new UnrealOverlapBatch(transport, view);
+    }
+
     public unsafe UnrealTransformSnapshot AcquireTransformSnapshot()
     {
         if (_transport is null || !_transport.SupportsSharedData)
@@ -325,6 +398,25 @@ public sealed class UnrealWorldDataPlane
         {
             throw new InvalidOperationException(
                 "The native trace result view has an incompatible layout.");
+        }
+    }
+
+    internal static void ValidateOverlapResultView(
+        UnrealOverlapResultViewV1 view,
+        ulong worldHostId,
+        ulong batchToken)
+    {
+        if (view.AbiVersion != UnrealGameplayDataAbiV4.Version ||
+            view.ViewSize != UnrealGameplayDataAbiV4.OverlapResultViewSize ||
+            view.SchemaId != UnrealGameplayDataAbiV4.OverlapResultSchemaId ||
+            view.WorldHostId != worldHostId ||
+            view.BatchToken != batchToken ||
+            view.ResultEntrySize != UnrealGameplayDataAbiV4.OverlapResultEntrySize ||
+            view.ResultCount > view.ResultCapacity ||
+            (view.ResultCount != 0 && view.Results == nint.Zero))
+        {
+            throw new InvalidOperationException(
+                "The native overlap result view has an incompatible layout.");
         }
     }
 

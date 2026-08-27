@@ -181,9 +181,20 @@ bool FUnifiedScriptNativeTransportAbiTest::RunTest(const FString& Parameters)
         TEXT("Batch trace request layout is fixed"),
         GameplayDataTransport->TraceRequestEntrySize,
         static_cast<uint32>(sizeof(FUnifiedScriptTraceRequestV4)));
+    TestEqual(
+        TEXT("Batch overlap request layout is fixed"),
+        GameplayDataTransport->OverlapRequestEntrySize,
+        static_cast<uint32>(sizeof(FUnifiedScriptOverlapRequestV1)));
+    TestEqual(
+        TEXT("Batch overlap result layout is fixed"),
+        GameplayDataTransport->OverlapResultEntrySize,
+        static_cast<uint32>(sizeof(FUnifiedScriptOverlapResultV1)));
     TestNotNull(TEXT("Gameplay command begin exists"), GameplayDataTransport->BeginCommandBatch);
     TestNotNull(TEXT("Gameplay event acquisition exists"), GameplayDataTransport->AcquireEvents);
     TestNotNull(TEXT("Gameplay batch trace exists"), GameplayDataTransport->ExecuteTraceBatch);
+    TestNotNull(
+        TEXT("Gameplay batch overlap exists"),
+        GameplayDataTransport->ExecuteOverlapBatch);
 
     const FUnifiedScriptNativeEventTransportV4* EventTransport =
         UEUnifiedScript_GetNativeEventTransportV4();
@@ -1271,6 +1282,30 @@ bool FUnifiedScriptSharedTransformSnapshotTest::RunTest(const FString& Parameter
     TestTrue(
         TEXT("Stable Actor handle points at the updated Transform row"),
         bFoundUpdatedActor);
+    TestEqual(
+        TEXT("Shared data publishes the generated compatibility set"),
+        Transport->LayoutCompatibilityId,
+        UE::UnifiedScript::DataPlaneSchema::CompatibilityId);
+    TestEqual(
+        TEXT("Generated Transform capacity is published"),
+        Transport->MaximumTransformSnapshotCount,
+        UE::UnifiedScript::SharedData::MaximumTransformSnapshotCount);
+    TestNotNull(TEXT("Shared capacity telemetry is discoverable"), Transport->GetTelemetry);
+    FUnifiedScriptSharedDataTelemetryV1 Telemetry;
+    TestTrue(
+        TEXT("Shared telemetry is readable through the schema extension"),
+        Transport->GetTelemetry(Context, &Telemetry, sizeof(Telemetry)) != 0);
+    TestEqual(
+        TEXT("Telemetry tracks the currently borrowed generation"),
+        Telemetry.PublicationGeneration,
+        SecondView.Generation);
+    TestEqual(
+        TEXT("Published Transform rows stay within the generated bound"),
+        Telemetry.MaximumEntryCount,
+        UE::UnifiedScript::SharedData::MaximumTransformSnapshotCount);
+    TestTrue(
+        TEXT("Published Transform count is bounded"),
+        Telemetry.PublishedEntryCount <= Telemetry.MaximumEntryCount);
 
     TestTrue(
         TEXT("Managed ownership can retain the shared context"),
@@ -1351,6 +1386,45 @@ bool FUnifiedScriptGameplayDataPlaneTest::RunTest(const FString& Parameters)
         TEXT("Managed scripts start inside the managed phase"),
         Phase,
         static_cast<uint8>(EUnifiedScriptGameplayDataPhaseV4::ManagedTick));
+    TestEqual(
+        TEXT("Gameplay data publishes the generated compatibility set"),
+        Transport->LayoutCompatibilityId,
+        UE::UnifiedScript::DataPlaneSchema::CompatibilityId);
+    TestTrue(
+        TEXT("Gameplay data accepts forward-compatible schema revisions"),
+        Transport->LayoutRevision >= UE::UnifiedScript::DataPlaneSchema::Revision);
+    TestEqual(
+        TEXT("Generated command capacity is published"),
+        Transport->MaximumCommandCount,
+        UE::UnifiedScript::GameplayData::MaximumCommandCount);
+    TestNotNull(TEXT("Gameplay capacity telemetry is discoverable"), Transport->GetTelemetry);
+    TestEqual(
+        TEXT("Generated overlap capacity is published"),
+        Transport->MaximumOverlapCount,
+        UE::UnifiedScript::GameplayData::MaximumOverlapCount);
+    TestNotNull(TEXT("Batch overlap reservation is discoverable"), Transport->BeginOverlapBatch);
+
+    FUnifiedScriptCommandBatchViewV4 RejectedCommandView;
+    TestFalse(
+        TEXT("Command reservations reject schema capacity overflow"),
+        Transport->BeginCommandBatch(
+            Context,
+            UE::UnifiedScript::GameplayData::MaximumCommandCount + 1,
+            &RejectedCommandView) != 0);
+    FUnifiedScriptTraceRequestViewV4 RejectedTraceView;
+    TestFalse(
+        TEXT("Trace reservations reject schema capacity overflow"),
+        Transport->BeginTraceBatch(
+            Context,
+            UE::UnifiedScript::GameplayData::MaximumTraceCount + 1,
+            &RejectedTraceView) != 0);
+    FUnifiedScriptOverlapRequestViewV1 RejectedOverlapView;
+    TestFalse(
+        TEXT("Overlap reservations reject schema capacity overflow"),
+        Transport->BeginOverlapBatch(
+            Context,
+            UE::UnifiedScript::GameplayData::MaximumOverlapCount + 1,
+            &RejectedOverlapView) != 0);
 
     FUnifiedScriptCommandBatchViewV4 CommandView;
     TestTrue(
@@ -1433,7 +1507,110 @@ bool FUnifiedScriptGameplayDataPlaneTest::RunTest(const FString& Parameters)
         static_cast<uint8>(TraceResults.Results[0].Flags) &
             static_cast<uint8>(EUnifiedScriptTraceResultFlagsV4::BlockingHit));
 
+    FUnifiedScriptOverlapRequestViewV1 OverlapView;
+    TestTrue(
+        TEXT("Managed phase reserves a sphere/box overlap batch"),
+        Transport->BeginOverlapBatch(Context, 2, &OverlapView) != 0);
+    OverlapView.Requests[0].Shape = EUnifiedScriptTraceShapeV4::Sphere;
+    OverlapView.Requests[0].CollisionChannel = ECC_Visibility;
+    OverlapView.Requests[0].ExtentX = 50.0;
+    OverlapView.Requests[1].Shape = EUnifiedScriptTraceShapeV4::Box;
+    OverlapView.Requests[1].CollisionChannel = ECC_Visibility;
+    OverlapView.Requests[1].ExtentX = 50.0;
+    OverlapView.Requests[1].ExtentY = 50.0;
+    OverlapView.Requests[1].ExtentZ = 50.0;
+    OverlapView.Requests[1].RotationW = 1.0;
+    FUnifiedScriptOverlapResultViewV1 OverlapResults;
+    TestTrue(
+        TEXT("Sphere/box overlaps execute through one boundary call"),
+        Transport->ExecuteOverlapBatch(
+            Context,
+            OverlapView.BatchToken,
+            2,
+            &OverlapResults) != 0);
+    TestEqual(
+        TEXT("Batch overlap returns one row per request"),
+        OverlapResults.ResultCount,
+        2u);
+    TestTrue(
+        TEXT("Both overlap shapes execute successfully"),
+        OverlapResults.Results[0].Status == EUnifiedScriptTraceStatusV4::Success &&
+            OverlapResults.Results[1].Status == EUnifiedScriptTraceStatusV4::Success);
+    TestTrue(
+        TEXT("Overlap result returns World-scoped Actor handles"),
+        OverlapResults.Results[0].Flags ==
+                EUnifiedScriptOverlapResultFlagsV1::HasOverlap &&
+            OverlapResults.Results[0].HitActor.WorldHostId ==
+                Host->GetWorldHostId() &&
+            OverlapResults.Results[0].HitActor.ObjectHandle != 0);
+
+    FUnifiedScriptCommandBatchViewV4 EventOverflowView;
+    const uint32 OverflowEventCount =
+        UE::UnifiedScript::GameplayData::MaximumEventCount + 1;
+    TestTrue(
+        TEXT("One bounded batch can exercise event overflow telemetry"),
+        Transport->BeginCommandBatch(Context, OverflowEventCount, &EventOverflowView) != 0);
+    TestTrue(
+        TEXT("Overflow exercise commits in reservation order"),
+        Transport->CommitCommandBatch(
+            Context,
+            EventOverflowView.BatchToken,
+            OverflowEventCount) != 0);
+
     Host->EndManagedFrame();
+    FUnifiedScriptGameplayDataTelemetryV1 Telemetry;
+    TestTrue(
+        TEXT("Gameplay telemetry is readable through the schema extension"),
+        Transport->GetTelemetry(Context, &Telemetry, sizeof(Telemetry)) != 0);
+    TestEqual(TEXT("Oversized command reservation is counted"), Telemetry.CommandOverflowCount, 1ull);
+    TestEqual(TEXT("Dropped completion event is counted"), Telemetry.EventOverflowCount, 1ull);
+    TestEqual(TEXT("Oversized trace reservation is counted"), Telemetry.TraceOverflowCount, 1ull);
+    TestEqual(TEXT("Oversized overlap reservation is counted"), Telemetry.OverlapOverflowCount, 1ull);
+    TestEqual(
+        TEXT("Committed command telemetry covers both reservations"),
+        Telemetry.TotalCommittedCommandCount,
+        static_cast<uint64>(2 + OverflowEventCount));
+    TestEqual(
+        TEXT("Every committed command executes despite event overflow"),
+        Telemetry.TotalExecutedCommandCount,
+        Telemetry.TotalCommittedCommandCount);
+    TestEqual(TEXT("Trace telemetry counts all shapes"), Telemetry.TotalExecutedTraceCount, 3ull);
+    TestEqual(TEXT("Overlap telemetry counts both shapes"), Telemetry.TotalExecutedOverlapCount, 2ull);
+    struct alignas(8) FTelemetryPrefixProbe
+    {
+        uint32 SchemaRevision = 0;
+        uint32 StructSize = 0;
+        uint64 Canary = 0xA55AA55AA55AA55Aull;
+    };
+    FTelemetryPrefixProbe PrefixProbe;
+    TestTrue(
+        TEXT("Telemetry copies only the caller-advertised compatible prefix"),
+        Transport->GetTelemetry(
+            Context,
+            reinterpret_cast<FUnifiedScriptGameplayDataTelemetryV1*>(&PrefixProbe),
+            sizeof(uint32) * 2) != 0);
+    TestEqual(
+        TEXT("Telemetry prefix reports the current schema revision"),
+        PrefixProbe.SchemaRevision,
+        UE::UnifiedScript::DataPlaneSchema::Revision);
+    TestEqual(
+        TEXT("Telemetry prefix reports the native full structure size"),
+        PrefixProbe.StructSize,
+        static_cast<uint32>(sizeof(FUnifiedScriptGameplayDataTelemetryV1)));
+    TestEqual(
+        TEXT("Telemetry prefix copy does not overwrite caller memory"),
+        PrefixProbe.Canary,
+        0xA55AA55AA55AA55Aull);
+    TestFalse(
+        TEXT("Telemetry rejects a buffer smaller than its version header"),
+        Transport->GetTelemetry(
+            Context,
+            reinterpret_cast<FUnifiedScriptGameplayDataTelemetryV1*>(&PrefixProbe),
+            sizeof(uint32)) != 0);
+    TestEqual(
+        TEXT("Command execution preserves monotonically assigned order"),
+        Telemetry.LastExecutedSequenceId,
+        Telemetry.LastCommittedSequenceId);
     World->RemoveFromRoot();
     World->DestroyWorld(false);
     return true;

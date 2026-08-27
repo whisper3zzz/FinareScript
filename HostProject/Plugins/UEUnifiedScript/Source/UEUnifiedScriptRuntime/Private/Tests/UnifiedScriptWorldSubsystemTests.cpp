@@ -4,6 +4,7 @@
 
 #include "Containers/StringConv.h"
 #include "Engine/World.h"
+#include "GameFramework/Actor.h"
 #include "HAL/PlatformProperties.h"
 #include "HAL/PlatformTime.h"
 #include "Misc/AutomationTest.h"
@@ -616,6 +617,163 @@ bool FUnifiedScriptManagedInteropPerformanceTest::RunTest(const FString& Paramet
         ManagedNanosecondsPerCall,
         static_cast<long long>(AllocatedBytes));
 
+    Component->EndPlay(EEndPlayReason::Destroyed);
+    Component->UnregisterComponent();
+    World->RemoveFromRoot();
+    World->DestroyWorld(false);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FUnifiedScriptDataPlaneWorkloadProfileTest,
+    "UnifiedScript.Unreal.Performance.DataPlaneWorkloadProfile",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUnifiedScriptDataPlaneWorkloadProfileTest::RunTest(
+    const FString& Parameters)
+{
+    constexpr int32 Iterations = 1024;
+    constexpr int32 SampleCount = 3;
+
+    UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+    TestNotNull(TEXT("Data-plane profile World exists"), World);
+    if (World == nullptr)
+    {
+        return false;
+    }
+    World->AddToRoot();
+    UUnifiedScriptWorldSubsystem* Host =
+        World->GetSubsystem<UUnifiedScriptWorldSubsystem>();
+    AActor* Actor = World->SpawnActor<AActor>();
+    TestNotNull(TEXT("Data-plane profile World host exists"), Host);
+    TestNotNull(TEXT("Data-plane profile Actor exists"), Actor);
+    if (Host == nullptr || Actor == nullptr)
+    {
+        World->RemoveFromRoot();
+        World->DestroyWorld(false);
+        return false;
+    }
+
+    UUnifiedScriptComponent* Component =
+        NewObject<UUnifiedScriptComponent>(Actor);
+    Actor->AddInstanceComponent(Component);
+    UUnifiedScriptAsset* Asset = NewObject<UUnifiedScriptAsset>(World);
+    Asset->ScriptAssemblyPath =
+        TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.dll");
+    Asset->ScriptTypeName =
+        TEXT("UnifiedScript.Unreal.Demo.DataPlaneWorkloadProfileScript");
+    Component->ScriptAsset = Asset;
+    Component->RegisterComponentWithWorld(World);
+    Component->BeginPlay();
+    TestTrue(
+        *FString::Printf(
+            TEXT("Managed data-plane profile starts: %s"),
+            *Component->LastScriptError),
+        Component->bScriptRunning);
+
+    auto ReadField = [](const FString& State, const TCHAR* Name, FString& OutValue)
+    {
+        TArray<FString> Fields;
+        State.ParseIntoArray(Fields, TEXT(";"), true);
+        const FString Prefix = FString(Name) + TEXT("=");
+        for (const FString& Field : Fields)
+        {
+            if (Field.StartsWith(Prefix))
+            {
+                OutValue = Field.Mid(Prefix.Len());
+                return true;
+            }
+        }
+        return false;
+    };
+
+    FString IterationsText;
+    FString SampleCountText;
+    FString BindingScalarText;
+    FString CommandSubmitText;
+    FString BindingTraceText;
+    FString BatchTraceText;
+    FString AttributeReadText;
+    FString AllocatedBytesText;
+    FString MovementRoute;
+    FString OverlapRoute;
+    FString AttributeRoute;
+    FString SpawnRoute;
+    FString QueryRoute;
+    int32 ManagedIterations = 0;
+    int32 ManagedSampleCount = 0;
+    double BindingScalarNs = 0.0;
+    double CommandSubmitNs = 0.0;
+    double BindingTraceNs = 0.0;
+    double BatchTraceNs = 0.0;
+    double AttributeReadNs = 0.0;
+    int64 DataPlaneAllocatedBytes = -1;
+    const bool bParsed =
+        Component->ManagedState.StartsWith(TEXT("DataPlaneProfile:v1;")) &&
+        ReadField(Component->ManagedState, TEXT("Iterations"), IterationsText) &&
+        ReadField(Component->ManagedState, TEXT("SampleCount"), SampleCountText) &&
+        ReadField(Component->ManagedState, TEXT("BindingScalarNs"), BindingScalarText) &&
+        ReadField(Component->ManagedState, TEXT("CommandSubmitNs"), CommandSubmitText) &&
+        ReadField(Component->ManagedState, TEXT("BindingTraceNs"), BindingTraceText) &&
+        ReadField(Component->ManagedState, TEXT("BatchTraceNs"), BatchTraceText) &&
+        ReadField(Component->ManagedState, TEXT("AttributeReadNs"), AttributeReadText) &&
+        ReadField(Component->ManagedState, TEXT("DataPlaneAllocatedBytes"), AllocatedBytesText) &&
+        ReadField(Component->ManagedState, TEXT("Movement"), MovementRoute) &&
+        ReadField(Component->ManagedState, TEXT("Overlap"), OverlapRoute) &&
+        ReadField(Component->ManagedState, TEXT("Attribute"), AttributeRoute) &&
+        ReadField(Component->ManagedState, TEXT("Spawn"), SpawnRoute) &&
+        ReadField(Component->ManagedState, TEXT("Query"), QueryRoute) &&
+        LexTryParseString(ManagedIterations, *IterationsText) &&
+        LexTryParseString(ManagedSampleCount, *SampleCountText) &&
+        LexTryParseString(BindingScalarNs, *BindingScalarText) &&
+        LexTryParseString(CommandSubmitNs, *CommandSubmitText) &&
+        LexTryParseString(BindingTraceNs, *BindingTraceText) &&
+        LexTryParseString(BatchTraceNs, *BatchTraceText) &&
+        LexTryParseString(AttributeReadNs, *AttributeReadText) &&
+        LexTryParseString(DataPlaneAllocatedBytes, *AllocatedBytesText);
+    TestTrue(
+        *FString::Printf(
+            TEXT("Data-plane workload profile is parseable: %s"),
+            *Component->ManagedState),
+        bParsed);
+    TestEqual(TEXT("Profile iteration count is stable"), ManagedIterations, Iterations);
+    TestEqual(TEXT("Profile sample count is stable"), ManagedSampleCount, SampleCount);
+    TestTrue(
+        TEXT("Movement command submission beats scalar binding overhead"),
+        CommandSubmitNs > 0.0 && CommandSubmitNs < BindingScalarNs);
+    TestTrue(
+        TEXT("Batch Trace beats the matched per-call binding workload"),
+        BatchTraceNs > 0.0 && BatchTraceNs < BindingTraceNs);
+    TestTrue(TEXT("Attribute binding remains measurable"), AttributeReadNs > 0.0);
+    TestEqual(
+        TEXT("Fixed-row data-plane loops allocate no managed memory"),
+        DataPlaneAllocatedBytes,
+        int64{0});
+    TestEqual(TEXT("Movement route is evidence-backed"), MovementRoute, TEXT("data-plane"));
+    TestEqual(TEXT("Overlap route is evidence-backed"), OverlapRoute, TEXT("data-plane"));
+    TestEqual(TEXT("Attribute route remains generated binding"), AttributeRoute, TEXT("binding"));
+    TestEqual(TEXT("Spawn route stays hybrid"), SpawnRoute, TEXT("hybrid"));
+    TestEqual(TEXT("Query route uses the data plane"), QueryRoute, TEXT("data-plane"));
+
+    UE_LOG(
+        LogTemp,
+        Display,
+        TEXT("UNIFIEDSCRIPT_DATA_PLANE_PROFILE_JSON {\"schemaVersion\":\"unifiedscript.unreal-data-plane-profile/v0.1\",\"iterations\":%d,\"sampleCount\":%d,\"bindingScalarNs\":%.3f,\"commandSubmitNs\":%.3f,\"bindingTraceNs\":%.3f,\"batchTraceNs\":%.3f,\"attributeReadNs\":%.3f,\"dataPlaneAllocatedBytes\":%lld,\"movement\":\"%s\",\"overlap\":\"%s\",\"attribute\":\"%s\",\"spawn\":\"%s\",\"query\":\"%s\"}"),
+        ManagedIterations,
+        ManagedSampleCount,
+        BindingScalarNs,
+        CommandSubmitNs,
+        BindingTraceNs,
+        BatchTraceNs,
+        AttributeReadNs,
+        static_cast<long long>(DataPlaneAllocatedBytes),
+        *MovementRoute,
+        *OverlapRoute,
+        *AttributeRoute,
+        *SpawnRoute,
+        *QueryRoute);
+
+    Host->EndManagedFrame();
     Component->EndPlay(EEndPlayReason::Destroyed);
     Component->UnregisterComponent();
     World->RemoveFromRoot();

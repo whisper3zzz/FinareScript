@@ -111,6 +111,12 @@ internal delegate byte UnrealNativeAcquireTransformSnapshotV4(
     out UnrealSharedSnapshotViewV4 view);
 
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+internal delegate byte UnrealNativeGetSharedDataTelemetryV1(
+    nint context,
+    out UnrealSharedDataTelemetryV1 telemetry,
+    uint telemetrySize);
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 internal delegate byte UnrealNativeBeginCommandBatchV4(
     nint context,
     uint capacity,
@@ -144,10 +150,32 @@ internal delegate byte UnrealNativeExecuteTraceBatchV4(
 internal delegate void UnrealNativeCancelTraceBatchV4(nint context, ulong token);
 
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+internal delegate byte UnrealNativeBeginOverlapBatchV1(
+    nint context,
+    uint capacity,
+    out UnrealOverlapRequestViewV1 view);
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+internal delegate byte UnrealNativeExecuteOverlapBatchV1(
+    nint context,
+    ulong token,
+    uint count,
+    out UnrealOverlapResultViewV1 view);
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+internal delegate void UnrealNativeCancelOverlapBatchV1(nint context, ulong token);
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 internal delegate byte UnrealNativeGetGameplayPhaseV4(
     nint context,
     out UnrealGameplayDataPhaseV4 phase,
     out ulong frameNumber);
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+internal delegate byte UnrealNativeGetGameplayDataTelemetryV1(
+    nint context,
+    out UnrealGameplayDataTelemetryV1 telemetry,
+    uint telemetrySize);
 
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 internal delegate byte UnrealNativeAsyncSubmitV5(
@@ -196,6 +224,8 @@ public sealed class InProcessUnrealNativeInvocationTransport
       IUnrealNativeEventTransport,
       IUnrealSharedSnapshotTransport,
       IUnrealGameplayDataTransport,
+      IUnrealOverlapDataTransport,
+      IUnrealDataPlaneTelemetryTransport,
       IUnrealAsyncServiceTransport,
       IDisposable
 {
@@ -221,13 +251,18 @@ public sealed class InProcessUnrealNativeInvocationTransport
     private readonly UnrealNativeSubscribeEventV4? _subscribeEvent;
     private readonly UnrealNativeUnsubscribeEventV4? _unsubscribeEvent;
     private readonly UnrealNativeAcquireTransformSnapshotV4? _acquireTransformSnapshot;
+    private readonly UnrealNativeGetSharedDataTelemetryV1? _getSharedDataTelemetry;
     private readonly UnrealNativeBeginCommandBatchV4? _beginCommandBatch;
     private readonly UnrealNativeCommitCommandBatchV4? _commitCommandBatch;
     private readonly UnrealNativeAcquireGameplayEventsV4? _acquireGameplayEvents;
     private readonly UnrealNativeBeginTraceBatchV4? _beginTraceBatch;
     private readonly UnrealNativeExecuteTraceBatchV4? _executeTraceBatch;
     private readonly UnrealNativeCancelTraceBatchV4? _cancelTraceBatch;
+    private readonly UnrealNativeBeginOverlapBatchV1? _beginOverlapBatch;
+    private readonly UnrealNativeExecuteOverlapBatchV1? _executeOverlapBatch;
+    private readonly UnrealNativeCancelOverlapBatchV1? _cancelOverlapBatch;
     private readonly UnrealNativeGetGameplayPhaseV4? _getGameplayPhase;
+    private readonly UnrealNativeGetGameplayDataTelemetryV1? _getGameplayDataTelemetry;
     private readonly UnrealNativeAsyncSubmitV5? _asyncSubmit;
     private readonly UnrealNativeAsyncPumpOwnerV5? _asyncPumpOwner;
     private readonly UnrealNativeAsyncCancelV5? _asyncCancel;
@@ -428,6 +463,30 @@ public sealed class InProcessUnrealNativeInvocationTransport
                     _acquireTransformSnapshot = Marshal.GetDelegateForFunctionPointer<
                         UnrealNativeAcquireTransformSnapshotV4>(
                             sharedTable.AcquireTransformSnapshot);
+                    if (sharedTable.TableSize >=
+                        UnrealSharedDataAbiV4.ExtendedTransportTableSize)
+                    {
+                        UnrealSharedDataTransportTableV4Extended extended =
+                            Marshal.PtrToStructure<UnrealSharedDataTransportTableV4Extended>(
+                                sharedExtension.SharedDataTransport);
+                        const UnrealSharedDataCapabilitiesV4 generatedCapabilities =
+                            UnrealSharedDataCapabilitiesV4.SchemaGeneratedLayouts |
+                            UnrealSharedDataCapabilitiesV4.CapacityTelemetry;
+                        if (extended.LayoutCompatibilityId !=
+                                UnrealDataPlaneLayoutV1.CompatibilityId ||
+                            extended.LayoutRevision < UnrealDataPlaneLayoutV1.Revision ||
+                            extended.MaximumTransformSnapshotCount !=
+                                UnrealSharedDataAbiV4.MaximumTransformSnapshotCount ||
+                            (extended.Capabilities & generatedCapabilities) !=
+                                generatedCapabilities ||
+                            extended.GetTelemetry == nint.Zero)
+                        {
+                            throw new InvalidOperationException(
+                                "The native Shared Data schema extension is incompatible.");
+                        }
+                        _getSharedDataTelemetry = Marshal.GetDelegateForFunctionPointer<
+                            UnrealNativeGetSharedDataTelemetryV1>(extended.GetTelemetry);
+                    }
                 }
             }
 
@@ -484,6 +543,70 @@ public sealed class InProcessUnrealNativeInvocationTransport
                         UnrealNativeCancelTraceBatchV4>(gameplayTable.CancelTraceBatch);
                     _getGameplayPhase = Marshal.GetDelegateForFunctionPointer<
                         UnrealNativeGetGameplayPhaseV4>(gameplayTable.GetPhase);
+                    if (gameplayTable.TableSize >=
+                        UnrealGameplayDataAbiV4.ExtendedTransportTableSize)
+                    {
+                        UnrealGameplayDataTransportTableV4Extended extended =
+                            Marshal.PtrToStructure<UnrealGameplayDataTransportTableV4Extended>(
+                                gameplayExtension.GameplayDataTransport);
+                        const UnrealGameplayDataCapabilitiesV4 generatedCapabilities =
+                            UnrealGameplayDataCapabilitiesV4.SchemaGeneratedLayouts |
+                            UnrealGameplayDataCapabilitiesV4.CapacityTelemetry;
+                        if (extended.LayoutCompatibilityId !=
+                                UnrealDataPlaneLayoutV1.CompatibilityId ||
+                            extended.LayoutRevision < UnrealDataPlaneLayoutV1.Revision ||
+                            extended.MaximumCommandCount !=
+                                UnrealGameplayDataAbiV4.MaximumCommandCount ||
+                            extended.MaximumEventCount !=
+                                UnrealGameplayDataAbiV4.MaximumEventCount ||
+                            extended.MaximumTraceCount !=
+                                UnrealGameplayDataAbiV4.MaximumTraceCount ||
+                            (extended.Capabilities & generatedCapabilities) !=
+                                generatedCapabilities ||
+                            extended.GetTelemetry == nint.Zero)
+                        {
+                            throw new InvalidOperationException(
+                                "The native Gameplay Data schema extension is incompatible.");
+                        }
+                        _getGameplayDataTelemetry = Marshal.GetDelegateForFunctionPointer<
+                            UnrealNativeGetGameplayDataTelemetryV1>(extended.GetTelemetry);
+                    }
+                    if (gameplayTable.TableSize >=
+                        UnrealGameplayDataAbiV4.OverlapTransportTableSize)
+                    {
+                        UnrealGameplayDataTransportTableV4OverlapExtended extended =
+                            Marshal.PtrToStructure<
+                                UnrealGameplayDataTransportTableV4OverlapExtended>(
+                                gameplayExtension.GameplayDataTransport);
+                        const UnrealGameplayDataCapabilitiesV4 overlapCapabilities =
+                            UnrealGameplayDataCapabilitiesV4.BatchSphereOverlap |
+                            UnrealGameplayDataCapabilitiesV4.BatchBoxOverlap;
+                        if (extended.LayoutCompatibilityId !=
+                                UnrealDataPlaneLayoutV1.CompatibilityId ||
+                            extended.LayoutRevision < UnrealDataPlaneLayoutV1.Revision ||
+                            extended.OverlapRequestEntrySize !=
+                                UnrealGameplayDataAbiV4.OverlapRequestEntrySize ||
+                            extended.OverlapResultEntrySize !=
+                                UnrealGameplayDataAbiV4.OverlapResultEntrySize ||
+                            extended.MaximumOverlapCount !=
+                                UnrealGameplayDataAbiV4.MaximumOverlapCount ||
+                            extended.Reserved != 0 ||
+                            (extended.Capabilities & overlapCapabilities) !=
+                                overlapCapabilities ||
+                            extended.BeginOverlapBatch == nint.Zero ||
+                            extended.ExecuteOverlapBatch == nint.Zero ||
+                            extended.CancelOverlapBatch == nint.Zero)
+                        {
+                            throw new InvalidOperationException(
+                                "The native Batch Overlap schema extension is incompatible.");
+                        }
+                        _beginOverlapBatch = Marshal.GetDelegateForFunctionPointer<
+                            UnrealNativeBeginOverlapBatchV1>(extended.BeginOverlapBatch);
+                        _executeOverlapBatch = Marshal.GetDelegateForFunctionPointer<
+                            UnrealNativeExecuteOverlapBatchV1>(extended.ExecuteOverlapBatch);
+                        _cancelOverlapBatch = Marshal.GetDelegateForFunctionPointer<
+                            UnrealNativeCancelOverlapBatchV1>(extended.CancelOverlapBatch);
+                    }
                 }
             }
 
@@ -565,6 +688,11 @@ public sealed class InProcessUnrealNativeInvocationTransport
         _cancelTraceBatch is not null &&
         _getGameplayPhase is not null;
 
+    public bool SupportsOverlapData =>
+        _beginOverlapBatch is not null &&
+        _executeOverlapBatch is not null &&
+        _cancelOverlapBatch is not null;
+
     public UnrealAsyncCapabilitiesV5 AsyncCapabilities => _asyncCapabilities;
 
     bool IUnrealSharedSnapshotTransport.TryAcquireTransformSnapshot(
@@ -579,6 +707,36 @@ public sealed class InProcessUnrealNativeInvocationTransport
                 return false;
             }
             return _acquireTransformSnapshot(_context, out view) != 0;
+        }
+    }
+
+    bool IUnrealDataPlaneTelemetryTransport.TryGetSharedDataTelemetry(
+        out UnrealSharedDataTelemetryV1 telemetry)
+    {
+        lock (_lifetimeGate)
+        {
+            ThrowIfDisposed();
+            telemetry = default;
+            return _getSharedDataTelemetry is not null &&
+                _getSharedDataTelemetry(
+                    _context,
+                    out telemetry,
+                    UnrealSharedDataAbiV4.TelemetrySize) != 0;
+        }
+    }
+
+    bool IUnrealDataPlaneTelemetryTransport.TryGetGameplayDataTelemetry(
+        out UnrealGameplayDataTelemetryV1 telemetry)
+    {
+        lock (_lifetimeGate)
+        {
+            ThrowIfDisposed();
+            telemetry = default;
+            return _getGameplayDataTelemetry is not null &&
+                _getGameplayDataTelemetry(
+                    _context,
+                    out telemetry,
+                    UnrealGameplayDataAbiV4.TelemetrySize) != 0;
         }
     }
 
@@ -663,6 +821,42 @@ public sealed class InProcessUnrealNativeInvocationTransport
             frameNumber = 0;
             return _getGameplayPhase is not null &&
                 _getGameplayPhase(_context, out phase, out frameNumber) != 0;
+        }
+    }
+
+    bool IUnrealOverlapDataTransport.BeginOverlapBatch(
+        uint capacity,
+        out UnrealOverlapRequestViewV1 view)
+    {
+        lock (_lifetimeGate)
+        {
+            ThrowIfDisposed();
+            view = default;
+            return _beginOverlapBatch is not null &&
+                _beginOverlapBatch(_context, capacity, out view) != 0;
+        }
+    }
+
+    bool IUnrealOverlapDataTransport.ExecuteOverlapBatch(
+        ulong token,
+        uint count,
+        out UnrealOverlapResultViewV1 view)
+    {
+        lock (_lifetimeGate)
+        {
+            ThrowIfDisposed();
+            view = default;
+            return _executeOverlapBatch is not null &&
+                _executeOverlapBatch(_context, token, count, out view) != 0;
+        }
+    }
+
+    void IUnrealOverlapDataTransport.CancelOverlapBatch(ulong token)
+    {
+        lock (_lifetimeGate)
+        {
+            ThrowIfDisposed();
+            _cancelOverlapBatch?.Invoke(_context, token);
         }
     }
 

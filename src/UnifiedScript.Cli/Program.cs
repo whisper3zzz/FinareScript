@@ -81,6 +81,11 @@ internal static class Program
             return RunUnrealBindings(args);
         }
 
+        if (args.Count > 0 && args[0] == "ue-data-plane")
+        {
+            return RunUnrealDataPlane(args);
+        }
+
         if (args.Count > 0 && args[0] is "emit" or "emit-files")
         {
             return RunEmit(args);
@@ -243,6 +248,57 @@ internal static class Program
         {
             Console.WriteLine(Path.GetFullPath(output.Path));
         }
+        return 0;
+    }
+
+    private static int RunUnrealDataPlane(IReadOnlyList<string> args)
+    {
+        if (!TryParseUnrealDataPlaneArguments(
+                args,
+                out UnrealDataPlaneOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+
+        options = options ?? throw new InvalidOperationException(
+            "Argument parsing succeeded without Unreal data-plane options.");
+        if (!File.Exists(options.SchemaPath))
+        {
+            Console.Error.WriteLine(
+                $"Unreal data-plane schema does not exist: {options.SchemaPath}");
+            return 66;
+        }
+
+        string fullSchemaPath = Path.GetFullPath(options.SchemaPath);
+        string fullManagedOutputPath = Path.GetFullPath(options.ManagedOutputPath);
+        string fullNativeOutputPath = Path.GetFullPath(options.NativeOutputPath);
+        EnsureDifferentPath(
+            fullSchemaPath,
+            fullManagedOutputPath,
+            "Unreal data-plane generation cannot overwrite its schema input.");
+        EnsureDifferentPath(
+            fullSchemaPath,
+            fullNativeOutputPath,
+            "Unreal data-plane generation cannot overwrite its schema input.");
+        EnsureDifferentPath(
+            fullManagedOutputPath,
+            fullNativeOutputPath,
+            "Unreal data-plane managed and native outputs must be distinct.");
+
+        UnrealDataPlaneLayoutSchema schema = UnrealDataPlaneLayoutJson.Deserialize(
+            File.ReadAllText(fullSchemaPath));
+        UnrealDataPlaneLayoutGenerationResult result =
+            new UnrealDataPlaneLayoutGenerator().Generate(schema);
+        var outputs = new List<OutputFile>
+        {
+            new(fullManagedOutputPath, result.ManagedSource),
+            new(fullNativeOutputPath, result.NativeSource),
+        };
+        WriteTransactionally(outputs);
+        Console.WriteLine(fullManagedOutputPath);
+        Console.WriteLine(fullNativeOutputPath);
+        Console.WriteLine($"schema-fingerprint=0x{result.SchemaFingerprint:X16}");
         return 0;
     }
 
@@ -1247,6 +1303,53 @@ internal static class Program
         return true;
     }
 
+    private static bool TryParseUnrealDataPlaneArguments(
+        IReadOnlyList<string> args,
+        out UnrealDataPlaneOptions? options)
+    {
+        options = null;
+        if (args.Count < 6 || args[0] != "ue-data-plane" ||
+            args[1].StartsWith("--", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        string schemaPath = args[1];
+        string? managedOutputPath = null;
+        string? nativeOutputPath = null;
+        int index = 2;
+        while (index < args.Count)
+        {
+            string option = args[index++];
+            if (index >= args.Count)
+            {
+                return false;
+            }
+            string value = args[index++];
+            switch (option)
+            {
+                case "--managed-out" when managedOutputPath is null:
+                    managedOutputPath = value;
+                    break;
+                case "--native-out" when nativeOutputPath is null:
+                    nativeOutputPath = value;
+                    break;
+                default:
+                    return false;
+            }
+        }
+
+        if (managedOutputPath is null || nativeOutputPath is null)
+        {
+            return false;
+        }
+        options = new UnrealDataPlaneOptions(
+            schemaPath,
+            managedOutputPath,
+            nativeOutputPath);
+        return true;
+    }
+
     private static bool TryParseExecuteArguments(
         IReadOnlyList<string> args,
         out ExecuteOptions? options)
@@ -1864,6 +1967,7 @@ internal static class Program
         "  unifiedscript execute <input.cs> (--method <name> | --method-id <us_...>) [options]\n" +
         "  unifiedscript debug-serve <input.cs> --root <visual-editor-directory> [--port <number>] [options]\n" +
         "  unifiedscript ue-bindings <reflection.json> --out <bindings.cs> [--contract <api-contract.json>] [--native-out <thunks.cpp>] [--nodes-out <nodes.json>] [--report <coverage.json>] [--fail-on-rejected] [--namespace <name>]\n" +
+        "  unifiedscript ue-data-plane <schema.json> --managed-out <layouts.g.cs> --native-out <layouts.gen.h>\n" +
         "Options:\n" +
         "  --out <path>            Artifact directory, initialized sidecar, or patched source output.\n" +
         "  --patch <patch.json>    Semantic patch document required by apply-patch.\n" +
@@ -1891,6 +1995,7 @@ internal static class Program
         "  --nodes-out <path>      Emit the visual API node catalog selected by --contract.\n" +
         "  --report <path>         Emit native/fallback/rejected UE API coverage JSON.\n" +
         "  --fail-on-rejected      Return data-error status when any UE member is rejected.\n" +
+        "  --managed-out <path>    Emit schema-generated managed data-plane layouts.\n" +
         "  --assembly <name>        Set the analysis assembly name.\n" +
         "  --effects <catalog.json> Apply effect catalog overrides.\n" +
         "  --reference <assembly>   Add a metadata reference; may be repeated.\n" +
@@ -1947,6 +2052,11 @@ internal static class Program
         string? ContractPath,
         string? NodeCatalogOutputPath,
         bool FailOnRejected);
+
+    private sealed record UnrealDataPlaneOptions(
+        string SchemaPath,
+        string ManagedOutputPath,
+        string NativeOutputPath);
 
     private sealed record IdentityOptions(
         string InputPath,

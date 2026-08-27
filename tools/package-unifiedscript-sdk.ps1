@@ -259,6 +259,7 @@ try {
         'unreal-api-contract.v0.1.example.json' = 'samples\Unreal\UEUnifiedScriptRuntime.api-contract.json'
         'unreal-api-nodes.v0.1.example.json' = 'samples\Unreal\UEUnifiedScriptRuntime.api-nodes.json'
         'unreal-binding-coverage.v0.1.example.json' = 'samples\Unreal\UEUnifiedScriptRuntime.binding-coverage.json'
+        'unreal-data-plane-layout.v0.1.example.json' = 'samples\Unreal\UEUnifiedScriptRuntime.data-plane.json'
         'unreal-script-deployment.v0.1.example.json' = 'samples\Unreal\UnifiedScript.Unreal.Demo.deployment.json'
     }
     foreach ($entry in $schemaSources.GetEnumerator()) {
@@ -366,6 +367,7 @@ try {
                 apiContract = 'unifiedscript.unreal-api-contract/v0.1'
                 apiNodeCatalog = 'unifiedscript.unreal-api-node-catalog/v0.1'
                 bindingCoverage = 'unifiedscript.unreal-binding-coverage/v0.1'
+                dataPlaneLayout = 'unifiedscript.unreal-data-plane-layout/v0.1'
                 deployment = 'unifiedscript.unreal-script-deployment/v0.1'
             }
         }

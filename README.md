@@ -4,10 +4,10 @@ UnifiedScript is an experimental dual-modal gameplay authoring system. A
 restricted C# profile and a structured visual graph are intended to be two
 lossless projections of one program model. Roslyn and CoreCLR are the active
 execution backend. The language and projection model are proven independently,
-and the versioned Unreal adapter has completed its adoptable-project alpha and
-M7.2 gameplay services/lifecycle productization without adding UE dependencies
-to the compiler core. The active RoadMap cursor is M7.3 schema-generated
-gameplay data-plane layouts.
+and the versioned Unreal adapter has completed its adoptable-project alpha,
+M7.2 gameplay services/lifecycle productization, and M7.3 schema-generated
+gameplay data plane without adding UE dependencies to the compiler core. The
+active RoadMap cursor is M7.4 full BlockBreaker runtime migration.
 
 ## Product roadmap
 
@@ -38,6 +38,14 @@ Its deletion/travel/PIE/multi-World/reload soak can be reproduced with:
 ```powershell
 powershell -ExecutionPolicy Bypass `
   -File tools/run-unreal-lifecycle-stress.ps1 -EngineRoot D:\UE_5.8
+```
+
+M7.3 generates Shared/Gameplay fixed layouts from one versioned schema and adds
+bounded telemetry plus Batch Overlap. Its live CoreCLR routing profile is:
+
+```powershell
+powershell -ExecutionPolicy Bypass `
+  -File tools/run-unreal-data-plane-profile.ps1 -EngineRoot D:\UE_5.8
 ```
 
 Create a repository-independent alpha SDK with:
@@ -439,8 +447,14 @@ Actor ticking. Managed scripts reserve caller-written fixed command rows during
 spawn, destroy, and emitter commands in `NativePostActorTick`, then publishes
 their completion events at the next `NativePreActorTick`. Line, sphere, and box
 queries execute through one synchronous Batch Trace boundary and return
-borrowed `FHitResult`-compatible rows. BlockBreaker now uses this path for its
-shot trace, impact effect, and damage, and passes the exact-frame headless gate.
+borrowed `FHitResult`-compatible rows; sphere/box overlap queries use an
+independent fixed-row batch. The rows, views, capacities, offsets, defaults, and
+compatibility fingerprint are emitted from one revisioned JSON schema for both
+C++ and C#. A matched 1,024-operation live CoreCLR profile keeps movement,
+overlap, and high-volume queries on the data plane, attributes on generated
+bindings, and spawn hybrid; the measured data-plane loops allocate zero managed
+bytes. BlockBreaker now uses this path for its shot trace, impact effect, and
+damage, and passes the exact-frame headless gate.
 See `docs/UNREAL_GAMEPLAY_DATA_ABI_V4.md` for phase, ownership, and schema rules.
 
 The BlockBreaker slice can also be emitted as a directly runnable Win64 demo.

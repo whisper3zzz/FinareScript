@@ -186,6 +186,19 @@ bool FUnifiedScriptNativeBridgeContext::AcquireTransformSnapshot(
         SharedDataPlane->AcquireTransformSnapshot(OutView);
 }
 
+bool FUnifiedScriptNativeBridgeContext::GetSharedDataTelemetry(
+    FUnifiedScriptSharedDataTelemetryV1& OutTelemetry)
+{
+    if (!IsInGameThread())
+    {
+        OutTelemetry = {};
+        return false;
+    }
+    FScopeLock Lock(&BridgeLock);
+    return Bridge != nullptr && SharedDataPlane != nullptr &&
+        SharedDataPlane->GetTelemetry(OutTelemetry);
+}
+
 bool FUnifiedScriptNativeBridgeContext::ExecuteGameplayData(
     TFunctionRef<bool(FUnifiedScriptGameplayDataPlane&)> Operation)
 {
@@ -1941,6 +1954,29 @@ uint8 AcquireTransformSnapshot(
         : 0;
 }
 
+uint8 GetSharedDataTelemetry(
+    void* Context,
+    FUnifiedScriptSharedDataTelemetryV1* OutTelemetry,
+    uint32 OutTelemetrySize)
+{
+    if (Context == nullptr || OutTelemetry == nullptr ||
+        OutTelemetrySize < sizeof(uint32) * 2)
+    {
+        return 0;
+    }
+    FUnifiedScriptSharedDataTelemetryV1 Current;
+    if (!static_cast<FUnifiedScriptNativeBridgeContext*>(Context)
+             ->GetSharedDataTelemetry(Current))
+    {
+        return 0;
+    }
+    FMemory::Memcpy(
+        OutTelemetry,
+        &Current,
+        FMath::Min<uint32>(OutTelemetrySize, sizeof(Current)));
+    return 1;
+}
+
 uint8 BeginCommandBatch(
     void* Context,
     uint32 Capacity,
@@ -2032,6 +2068,56 @@ void CancelTraceBatch(void* Context, uint64 BatchToken)
         });
 }
 
+uint8 BeginOverlapBatch(
+    void* Context,
+    uint32 Capacity,
+    FUnifiedScriptOverlapRequestViewV1* OutView)
+{
+    if (Context == nullptr || OutView == nullptr)
+    {
+        return 0;
+    }
+    return static_cast<FUnifiedScriptNativeBridgeContext*>(Context)
+        ->ExecuteGameplayData([&](FUnifiedScriptGameplayDataPlane& DataPlane)
+        {
+            return DataPlane.BeginOverlapBatch(Capacity, *OutView);
+        }) ? 1 : 0;
+}
+
+uint8 ExecuteOverlapBatch(
+    void* Context,
+    uint64 BatchToken,
+    uint32 RequestCount,
+    FUnifiedScriptOverlapResultViewV1* OutView)
+{
+    if (Context == nullptr || OutView == nullptr)
+    {
+        return 0;
+    }
+    return static_cast<FUnifiedScriptNativeBridgeContext*>(Context)
+        ->ExecuteGameplayData([&](FUnifiedScriptGameplayDataPlane& DataPlane)
+        {
+            return DataPlane.ExecuteOverlapBatch(
+                BatchToken,
+                RequestCount,
+                *OutView);
+        }) ? 1 : 0;
+}
+
+void CancelOverlapBatch(void* Context, uint64 BatchToken)
+{
+    if (Context == nullptr)
+    {
+        return;
+    }
+    static_cast<FUnifiedScriptNativeBridgeContext*>(Context)
+        ->ExecuteGameplayData([&](FUnifiedScriptGameplayDataPlane& DataPlane)
+        {
+            DataPlane.CancelOverlapBatch(BatchToken);
+            return true;
+        });
+}
+
 uint8 GetGameplayPhase(void* Context, uint8* OutPhase, uint64* OutFrameNumber)
 {
     if (Context == nullptr || OutPhase == nullptr || OutFrameNumber == nullptr)
@@ -2045,6 +2131,33 @@ uint8 GetGameplayPhase(void* Context, uint8* OutPhase, uint64* OutFrameNumber)
             *OutFrameNumber = DataPlane.GetFrameNumber();
             return true;
         }) ? 1 : 0;
+}
+
+uint8 GetGameplayDataTelemetry(
+    void* Context,
+    FUnifiedScriptGameplayDataTelemetryV1* OutTelemetry,
+    uint32 OutTelemetrySize)
+{
+    if (Context == nullptr || OutTelemetry == nullptr ||
+        OutTelemetrySize < sizeof(uint32) * 2)
+    {
+        return 0;
+    }
+    FUnifiedScriptGameplayDataTelemetryV1 Current;
+    const bool bRead = static_cast<FUnifiedScriptNativeBridgeContext*>(Context)
+        ->ExecuteGameplayData([&](FUnifiedScriptGameplayDataPlane& DataPlane)
+        {
+            return DataPlane.GetTelemetry(Current);
+        });
+    if (!bRead)
+    {
+        return 0;
+    }
+    FMemory::Memcpy(
+        OutTelemetry,
+        &Current,
+        FMath::Min<uint32>(OutTelemetrySize, sizeof(Current)));
+    return 1;
 }
 
 uint8 SubmitAsyncRequest(
@@ -2557,7 +2670,12 @@ UEUnifiedScript_GetGameplayDataTransportV4()
         static_cast<uint64>(EUnifiedScriptGameplayDataCapabilitiesV4::EventBuffer) |
         static_cast<uint64>(EUnifiedScriptGameplayDataCapabilitiesV4::BatchLineTrace) |
         static_cast<uint64>(EUnifiedScriptGameplayDataCapabilitiesV4::BatchSphereTrace) |
-        static_cast<uint64>(EUnifiedScriptGameplayDataCapabilitiesV4::BatchBoxTrace);
+        static_cast<uint64>(EUnifiedScriptGameplayDataCapabilitiesV4::BatchBoxTrace) |
+        static_cast<uint64>(
+            EUnifiedScriptGameplayDataCapabilitiesV4::SchemaGeneratedLayouts) |
+        static_cast<uint64>(EUnifiedScriptGameplayDataCapabilitiesV4::CapacityTelemetry) |
+        static_cast<uint64>(EUnifiedScriptGameplayDataCapabilitiesV4::BatchSphereOverlap) |
+        static_cast<uint64>(EUnifiedScriptGameplayDataCapabilitiesV4::BatchBoxOverlap);
     static const FUnifiedScriptGameplayDataTransportV4 Transport = {
         UE::UnifiedScript::GameplayData::AbiVersion,
         sizeof(FUnifiedScriptGameplayDataTransportV4),
@@ -2575,6 +2693,19 @@ UEUnifiedScript_GetGameplayDataTransportV4()
         &ExecuteTraceBatch,
         &CancelTraceBatch,
         &GetGameplayPhase,
+        UE::UnifiedScript::DataPlaneSchema::CompatibilityId,
+        UE::UnifiedScript::DataPlaneSchema::Revision,
+        UE::UnifiedScript::GameplayData::MaximumCommandCount,
+        UE::UnifiedScript::GameplayData::MaximumEventCount,
+        UE::UnifiedScript::GameplayData::MaximumTraceCount,
+        &GetGameplayDataTelemetry,
+        sizeof(FUnifiedScriptOverlapRequestV1),
+        sizeof(FUnifiedScriptOverlapResultV1),
+        UE::UnifiedScript::GameplayData::MaximumOverlapCount,
+        0,
+        &BeginOverlapBatch,
+        &ExecuteOverlapBatch,
+        &CancelOverlapBatch,
     };
     return &Transport;
 }
@@ -2586,7 +2717,9 @@ UEUnifiedScript_GetSharedDataTransportV4()
     constexpr uint64 Capabilities =
         static_cast<uint64>(EUnifiedScriptSharedDataCapabilitiesV4::TransformSnapshot) |
         static_cast<uint64>(EUnifiedScriptSharedDataCapabilitiesV4::DoubleBuffered) |
-        static_cast<uint64>(EUnifiedScriptSharedDataCapabilitiesV4::WorldScopedHandles);
+        static_cast<uint64>(EUnifiedScriptSharedDataCapabilitiesV4::WorldScopedHandles) |
+        static_cast<uint64>(EUnifiedScriptSharedDataCapabilitiesV4::SchemaGeneratedLayouts) |
+        static_cast<uint64>(EUnifiedScriptSharedDataCapabilitiesV4::CapacityTelemetry);
     static const FUnifiedScriptSharedDataTransportV4 Transport = {
         UE::UnifiedScript::SharedData::AbiVersion,
         sizeof(FUnifiedScriptSharedDataTransportV4),
@@ -2597,6 +2730,10 @@ UEUnifiedScript_GetSharedDataTransportV4()
         &RetainContext,
         &ReleaseContext,
         &AcquireTransformSnapshot,
+        UE::UnifiedScript::DataPlaneSchema::CompatibilityId,
+        UE::UnifiedScript::DataPlaneSchema::Revision,
+        UE::UnifiedScript::SharedData::MaximumTransformSnapshotCount,
+        &GetSharedDataTelemetry,
     };
     return &Transport;
 }

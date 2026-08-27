@@ -995,6 +995,67 @@ def main() -> int:
         / "Private"
         / "UnifiedScriptGameplayDataPlane.cpp"
     )
+    unreal_shared_data_header_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Public"
+        / "UnifiedScriptSharedDataPlane.h"
+    )
+    unreal_shared_data_source_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Private"
+        / "UnifiedScriptSharedDataPlane.cpp"
+    )
+    unreal_data_plane_schema_path = (
+        ROOT / "samples" / "Unreal" / "UEUnifiedScriptRuntime.data-plane.json"
+    )
+    unreal_data_plane_generator_path = (
+        ROOT
+        / "src"
+        / "UnifiedScript.Unreal"
+        / "UnrealDataPlaneLayoutGenerator.cs"
+    )
+    unreal_data_plane_managed_layout_path = (
+        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealDataPlaneLayouts.g.cs"
+    )
+    unreal_data_plane_native_layout_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Public"
+        / "UnifiedScriptDataPlaneLayouts.gen.h"
+    )
+    unreal_data_plane_generator_test_path = (
+        ROOT
+        / "tests"
+        / "UnifiedScript.Tests"
+        / "UnrealDataPlaneLayoutGeneratorTests.cs"
+    )
+    unreal_data_plane_generator_helper_path = (
+        ROOT / "tools" / "generate-unreal-data-plane.ps1"
+    )
+    unreal_data_plane_profile_demo_path = (
+        ROOT
+        / "samples"
+        / "Unreal"
+        / "UnifiedScript.Unreal.Demo"
+        / "DataPlaneWorkloadProfileScript.cs"
+    )
+    unreal_data_plane_profile_helper_path = (
+        ROOT / "tools" / "run-unreal-data-plane-profile.ps1"
+    )
     unreal_async_service_header_path = (
         ROOT
         / "HostProject"
@@ -1141,11 +1202,20 @@ def main() -> int:
     unreal_gameplay_data_abi_v4_path = (
         ROOT / "src" / "UnifiedScript.Unreal" / "UnrealGameplayDataAbiV4.cs"
     )
+    unreal_shared_data_abi_v4_path = (
+        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealSharedDataAbiV4.cs"
+    )
     unreal_gameplay_data_abi_v4_test_path = (
         ROOT
         / "tests"
         / "UnifiedScript.Tests"
         / "UnrealGameplayDataAbiV4Tests.cs"
+    )
+    unreal_shared_data_abi_v4_test_path = (
+        ROOT
+        / "tests"
+        / "UnifiedScript.Tests"
+        / "UnrealSharedDataAbiV4Tests.cs"
     )
     unreal_async_service_abi_v5_path = (
         ROOT / "src" / "UnifiedScript.Unreal" / "UnrealAsyncServiceAbiV5.cs"
@@ -1393,6 +1463,16 @@ def main() -> int:
         and unreal_native_transport_test_path.is_file()
         and unreal_gameplay_data_header_path.is_file()
         and unreal_gameplay_data_source_path.is_file()
+        and unreal_shared_data_header_path.is_file()
+        and unreal_shared_data_source_path.is_file()
+        and unreal_data_plane_schema_path.is_file()
+        and unreal_data_plane_generator_path.is_file()
+        and unreal_data_plane_managed_layout_path.is_file()
+        and unreal_data_plane_native_layout_path.is_file()
+        and unreal_data_plane_generator_test_path.is_file()
+        and unreal_data_plane_generator_helper_path.is_file()
+        and unreal_data_plane_profile_demo_path.is_file()
+        and unreal_data_plane_profile_helper_path.is_file()
         and unreal_async_service_header_path.is_file()
         and unreal_async_service_source_path.is_file()
         and unreal_world_host_header_path.is_file()
@@ -1414,6 +1494,8 @@ def main() -> int:
         and unreal_native_event_abi_v4_path.is_file()
         and unreal_gameplay_data_abi_v4_path.is_file()
         and unreal_gameplay_data_abi_v4_test_path.is_file()
+        and unreal_shared_data_abi_v4_path.is_file()
+        and unreal_shared_data_abi_v4_test_path.is_file()
         and unreal_gameplay_data_doc_path.is_file()
         and unreal_async_service_abi_v5_path.is_file()
         and unreal_async_service_abi_v5_test_path.is_file()
@@ -1508,6 +1590,35 @@ def main() -> int:
     unreal_gameplay_data_source = unreal_gameplay_data_source_path.read_text(
         encoding="utf-8"
     )
+    unreal_shared_data_header = unreal_shared_data_header_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_shared_data_source = unreal_shared_data_source_path.read_text(
+        encoding="utf-8"
+    )
+    with unreal_data_plane_schema_path.open("r", encoding="utf-8") as handle:
+        unreal_data_plane_schema = json.load(handle)
+    unreal_data_plane_generator = unreal_data_plane_generator_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_data_plane_managed_layout = (
+        unreal_data_plane_managed_layout_path.read_text(encoding="utf-8")
+    )
+    unreal_data_plane_native_layout = (
+        unreal_data_plane_native_layout_path.read_text(encoding="utf-8")
+    )
+    unreal_data_plane_generator_test = (
+        unreal_data_plane_generator_test_path.read_text(encoding="utf-8")
+    )
+    unreal_data_plane_generator_helper = (
+        unreal_data_plane_generator_helper_path.read_text(encoding="utf-8")
+    )
+    unreal_data_plane_profile_demo = unreal_data_plane_profile_demo_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_data_plane_profile_helper = (
+        unreal_data_plane_profile_helper_path.read_text(encoding="utf-8")
+    )
     unreal_world_host_header = unreal_world_host_header_path.read_text(encoding="utf-8")
     unreal_world_host_source = unreal_world_host_source_path.read_text(encoding="utf-8")
     unreal_world_host_test = unreal_world_host_test_path.read_text(encoding="utf-8")
@@ -1573,8 +1684,14 @@ def main() -> int:
     unreal_gameplay_data_abi_v4 = unreal_gameplay_data_abi_v4_path.read_text(
         encoding="utf-8"
     )
+    unreal_shared_data_abi_v4 = unreal_shared_data_abi_v4_path.read_text(
+        encoding="utf-8"
+    )
     unreal_gameplay_data_abi_v4_test = (
         unreal_gameplay_data_abi_v4_test_path.read_text(encoding="utf-8")
+    )
+    unreal_shared_data_abi_v4_test = (
+        unreal_shared_data_abi_v4_test_path.read_text(encoding="utf-8")
     )
     unreal_gameplay_data_doc = unreal_gameplay_data_doc_path.read_text(
         encoding="utf-8"
@@ -2004,12 +2121,62 @@ def main() -> int:
     )
     checks.append("ABI v4 reverse events are generated, World-scoped, reload-safe, and diagnosable")
     require(
+        unreal_data_plane_schema["schemaVersion"]
+        == "unifiedscript.unreal-data-plane-layout/v0.1"
+        and unreal_data_plane_schema["revision"] == 2
+        and unreal_data_plane_schema["compatibilityId"] == "0x555344504C415901"
+        and unreal_data_plane_schema["limits"]
+        == {
+            "transformSnapshots": 65536,
+            "commands": 65536,
+            "events": 4096,
+            "traceRequests": 65536,
+            "overlapRequests": 65536,
+        }
+        and {
+            item["role"] for item in unreal_data_plane_schema["structs"]
+        }
+        == {
+            "snapshot-row",
+            "borrowed-view",
+            "telemetry",
+            "command-row",
+            "completion-event",
+            "query-request",
+            "query-result",
+        }
+        and "class UnrealDataPlaneLayoutGenerator" in unreal_data_plane_generator
+        and "JsonUnmappedMemberHandling.Disallow" in unreal_data_plane_generator
+        and "ValidateLayouts" in unreal_data_plane_generator
+        and 'args[0] == "ue-data-plane"' in cli_source
+        and "schema-fingerprint=0x" in cli_source
+        and "UnrealDataPlaneLayoutV1" in unreal_data_plane_managed_layout
+        and "FUnifiedScriptCommandV4" in unreal_data_plane_native_layout
+        and "static_assert(sizeof(FUnifiedScriptCommandV4) == 224)"
+        in unreal_data_plane_native_layout
+        and "UnifiedScriptDataPlaneLayouts.gen.h" in unreal_shared_data_header
+        and "struct alignas(8) FUnifiedScriptCommandV4"
+        not in unreal_gameplay_data_header
+        and "CheckedInManagedAndNativeLayoutsAreDeterministicSchemaOutputs"
+        in unreal_data_plane_generator_test
+        and "Generated data-plane artifact is stale"
+        in unreal_data_plane_generator_helper,
+        "Versioned data-plane schema, deterministic generator, or drift gate is missing",
+    )
+    checks.append("one versioned schema generates native and managed data-plane layouts")
+    require(
         "FUnifiedScriptGameplayDataTransportV4" in unreal_gameplay_data_header
-        and "sizeof(FUnifiedScriptCommandV4) == 224" in unreal_gameplay_data_header
-        and "sizeof(FUnifiedScriptTraceResultV4) == 168" in unreal_gameplay_data_header
+        and "sizeof(FUnifiedScriptCommandV4) == 224" in unreal_data_plane_native_layout
+        and "sizeof(FUnifiedScriptTraceResultV4) == 168"
+        in unreal_data_plane_native_layout
+        and "sizeof(FUnifiedScriptOverlapRequestV1) == 160"
+        in unreal_data_plane_native_layout
+        and "sizeof(FUnifiedScriptOverlapResultV1) == 48"
+        in unreal_data_plane_native_layout
         and "ExecuteCommittedCommands" in unreal_gameplay_data_source
         and "LineTraceSingleByChannel" in unreal_gameplay_data_source
         and "SweepSingleByChannel" in unreal_gameplay_data_source
+        and "OverlapMultiByChannel" in unreal_gameplay_data_source
         and "GameplayDataTransport" in unreal_native_transport_header
         and "UEUnifiedScript_GetGameplayDataTransportV4"
         in unreal_native_transport_source
@@ -2018,6 +2185,7 @@ def main() -> int:
         and "UnrealCommandBatch" in unreal_gameplay_data_abi_v4
         and "UnrealGameplayEventSnapshot" in unreal_gameplay_data_abi_v4
         and "UnrealTraceBatch" in unreal_gameplay_data_abi_v4
+        and "UnrealOverlapBatch" in unreal_gameplay_data_abi_v4
         and "LayoutMatchesNativeGameplayDataContract"
         in unreal_gameplay_data_abi_v4_test
         and "CommandEventAndBatchTrace" in unreal_native_transport_test
@@ -2025,7 +2193,48 @@ def main() -> int:
         and "World phase scheduler" in unreal_gameplay_data_doc,
         "World phase, command/event buffer, or Batch Trace contract is missing",
     )
-    checks.append("UE gameplay data plane batches World commands, events, and traces")
+    checks.append("UE gameplay data plane batches World commands, events, traces, and overlaps")
+    require(
+        "MaximumTransformSnapshotCount" in unreal_shared_data_source
+        and "DroppedSnapshotEntryCount" in unreal_shared_data_source
+        and "CommandOverflowCount" in unreal_gameplay_data_source
+        and "DroppedEventCount" in unreal_gameplay_data_source
+        and "TraceOverflowCount" in unreal_gameplay_data_source
+        and "OverlapOverflowCount" in unreal_gameplay_data_source
+        and "LastCommittedSequenceId" in unreal_gameplay_data_source
+        and "LastExecutedSequenceId" in unreal_gameplay_data_source
+        and "GetSharedDataTelemetry" in unreal_native_transport_source
+        and "GetGameplayDataTelemetry" in unreal_native_transport_source
+        and "OutTelemetrySize" in unreal_native_transport_source
+        and "Telemetry prefix copy does not overwrite caller memory"
+        in unreal_native_transport_test
+        and "LayoutCompatibilityId" in unreal_in_process_transport
+        and "GetSharedDataTelemetry()" in unreal_shared_data_abi_v4
+        and "GetGameplayDataTelemetry()" in unreal_shared_data_abi_v4
+        and "ValidatesSchemaGeneratedCapacityAndOrderingTelemetry"
+        in unreal_gameplay_data_abi_v4_test
+        and "Command reservations reject schema capacity overflow"
+        in unreal_native_transport_test
+        and "Published Transform count is bounded" in unreal_native_transport_test,
+        "Data-plane capacity, overflow, ordering, or borrow telemetry gate is missing",
+    )
+    checks.append("UE data-plane bounds and borrow/order telemetry are runtime-enforced")
+    require(
+        "DataPlaneWorkloadProfileScript" in unreal_data_plane_profile_demo
+        and "MeasureMovementCommands" in unreal_data_plane_profile_demo
+        and "MeasureBatchTrace" in unreal_data_plane_profile_demo
+        and "MeasureAttributeBinding" in unreal_data_plane_profile_demo
+        and "DataPlaneAllocatedBytes" in unreal_data_plane_profile_demo
+        and "DataPlaneWorkloadProfile" in unreal_world_host_test
+        and "UNIFIEDSCRIPT_DATA_PLANE_PROFILE_JSON" in unreal_world_host_test
+        and "unifiedscript.unreal-data-plane-profile-report/v0.1"
+        in unreal_data_plane_profile_helper
+        and "commandSubmitToScalarBinding" in unreal_data_plane_profile_helper
+        and "batchTraceToPerCallBinding" in unreal_data_plane_profile_helper
+        and "evidenceBackedRouting" in unreal_data_plane_profile_helper,
+        "Matched CoreCLR data-plane workload profile or routing gate is missing",
+    )
+    checks.append("UE data-plane routing is backed by matched live-CoreCLR profiling")
     require(
         "FUnifiedScriptAsyncTransportV5" in unreal_async_service_header
         and "GenerationOwnership" in unreal_async_service_header
