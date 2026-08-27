@@ -201,6 +201,123 @@ public sealed class CSharpAuthoringWorkspaceTests
         Assert.DoesNotContain("ArmorRatio", workspace.Current.Request.Sources[0].Source);
     }
 
+    [Fact]
+    public void CommittedTransactionCanBeUndoneAndRedoneWithoutChangingStableIdentities()
+    {
+        const string path = "Tests/Authoring/DamagePolicy.cs";
+        var workspace = new CSharpAuthoringWorkspace(CSharpCompilationRequest.Single(
+            Source,
+            path,
+            identitySidecar: IdentitySidecarDocument.CreateEmpty(path)));
+        CSharpAuthoringSnapshot baseline = workspace.Current;
+        ScriptStateDeclaration baselineState = baseline.Analysis.ScriptAssets!.Assets[0].States
+            .Single(static state => state.Name == "BaseDamage");
+        HirLiteralExpression clampMinimum = baseline.Analysis.Hir!
+            .DescendantsAndSelf()
+            .OfType<HirLiteralExpression>()
+            .Single(static literal => literal.ValueText == "0f");
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            baseline.Analysis.ScriptAssets.SourceCompilationId,
+            baseline.Analysis.ScriptAssets.SemanticConfigurationId,
+            [new ReplaceLiteralPatchOperation(clampMinimum.Id, "0f", "10f")]);
+
+        CSharpAuthoringMutation edit = workspace.Prepare(patch);
+        workspace.Commit(edit, "txn-clamp-minimum", "Raise clamp minimum");
+
+        Assert.Equal(2, workspace.Current.Revision);
+        Assert.True(workspace.History.CanUndo);
+        Assert.False(workspace.History.CanRedo);
+        Assert.Equal("txn-clamp-minimum", workspace.History.UndoTransactionId);
+
+        CSharpAuthoringHistoryMutation undo = workspace.PrepareUndo();
+        workspace.Commit(undo);
+
+        Assert.Equal(3, workspace.Current.Revision);
+        Assert.Contains("Math.Clamp(scaled, 0f, MaxDamage)", workspace.Current.Request.Sources[0].Source);
+        Assert.Equal(
+            baselineState.Id,
+            workspace.Current.Analysis.ScriptAssets!.Assets[0].States
+                .Single(static state => state.Name == "BaseDamage").Id);
+        Assert.False(workspace.History.CanUndo);
+        Assert.True(workspace.History.CanRedo);
+
+        CSharpAuthoringHistoryMutation redo = workspace.PrepareRedo();
+        workspace.Commit(redo);
+
+        Assert.Equal(4, workspace.Current.Revision);
+        Assert.Contains("Math.Clamp(scaled, 10f, MaxDamage)", workspace.Current.Request.Sources[0].Source);
+        Assert.True(workspace.History.CanUndo);
+        Assert.False(workspace.History.CanRedo);
+    }
+
+    [Fact]
+    public void NewTransactionAfterUndoClearsRedoHistory()
+    {
+        var workspace = new CSharpAuthoringWorkspace(CSharpCompilationRequest.Single(
+            Source,
+            "Tests/Authoring/DamagePolicy.cs"));
+        CSharpAuthoringSnapshot baseline = workspace.Current;
+        HirLiteralExpression clampMinimum = baseline.Analysis.Hir!
+            .DescendantsAndSelf()
+            .OfType<HirLiteralExpression>()
+            .Single(static literal => literal.ValueText == "0f");
+        SemanticPatchDocument firstPatch = SemanticPatchDocument.Create(
+            baseline.Analysis.ScriptAssets!.SourceCompilationId,
+            baseline.Analysis.ScriptAssets.SemanticConfigurationId,
+            [new ReplaceLiteralPatchOperation(clampMinimum.Id, "0f", "10f")]);
+        workspace.Commit(workspace.Prepare(firstPatch), "txn-first", "First edit");
+        workspace.Commit(workspace.PrepareUndo());
+
+        CSharpAuthoringSnapshot restored = workspace.Current;
+        HirLiteralExpression restoredClampMinimum = restored.Analysis.Hir!
+            .DescendantsAndSelf()
+            .OfType<HirLiteralExpression>()
+            .Single(static literal => literal.ValueText == "0f");
+        SemanticPatchDocument branchPatch = SemanticPatchDocument.Create(
+            restored.Analysis.ScriptAssets!.SourceCompilationId,
+            restored.Analysis.ScriptAssets.SemanticConfigurationId,
+            [new ReplaceLiteralPatchOperation(restoredClampMinimum.Id, "0f", "20f")]);
+        workspace.Commit(workspace.Prepare(branchPatch), "txn-branch", "Branch edit");
+
+        Assert.Equal(4, workspace.Current.Revision);
+        Assert.Contains("Math.Clamp(scaled, 20f, MaxDamage)", workspace.Current.Request.Sources[0].Source);
+        Assert.False(workspace.History.CanRedo);
+        Assert.Throws<InvalidOperationException>(() => workspace.PrepareRedo());
+    }
+
+    [Fact]
+    public void DuplicateTransactionIdIsRejectedWithoutChangingTheWorkspace()
+    {
+        var workspace = new CSharpAuthoringWorkspace(CSharpCompilationRequest.Single(
+            Source,
+            "Tests/Authoring/DamagePolicy.cs"));
+        CSharpAuthoringSnapshot baseline = workspace.Current;
+        HirLiteralExpression clampMinimum = baseline.Analysis.Hir!
+            .DescendantsAndSelf()
+            .OfType<HirLiteralExpression>()
+            .Single(static literal => literal.ValueText == "0f");
+        SemanticPatchDocument firstPatch = SemanticPatchDocument.Create(
+            baseline.Analysis.ScriptAssets!.SourceCompilationId,
+            baseline.Analysis.ScriptAssets.SemanticConfigurationId,
+            [new ReplaceLiteralPatchOperation(clampMinimum.Id, "0f", "10f")]);
+        workspace.Commit(workspace.Prepare(firstPatch), "txn-duplicate", "First edit");
+        CSharpAuthoringSnapshot current = workspace.Current;
+        HirLiteralExpression clampMaximum = current.Analysis.Hir!
+            .DescendantsAndSelf()
+            .OfType<HirLiteralExpression>()
+            .Single(static literal => literal.ValueText == "10f");
+        SemanticPatchDocument secondPatch = SemanticPatchDocument.Create(
+            current.Analysis.ScriptAssets!.SourceCompilationId,
+            current.Analysis.ScriptAssets.SemanticConfigurationId,
+            [new ReplaceLiteralPatchOperation(clampMaximum.Id, "10f", "20f")]);
+        CSharpAuthoringMutation duplicate = workspace.Prepare(secondPatch);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            workspace.Commit(duplicate, "txn-duplicate", "Duplicate edit"));
+        Assert.Same(current, workspace.Current);
+        Assert.Equal(1, workspace.History.UndoDepth);
+    }
+
     private static ScriptStatePatchPrecondition Expected(ScriptStateDeclaration state) => new(
         state.Name,
         state.TypeMetadataName,
