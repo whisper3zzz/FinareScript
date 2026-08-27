@@ -69,6 +69,44 @@ TSharedRef<SWidget> MakeInspectorValue(const FString& Label, const FString& Valu
             .AutoWrapText(true)
         ];
 }
+
+FString SuggestSwitchCaseLabel(
+    const FUnifiedScriptAuthoringFunction& Function,
+    const FUnifiedScriptAuthoringAction& SwitchStatement)
+{
+    TSet<int32> UsedValues;
+    const FUnifiedScriptAuthoringRegion* SwitchRegion =
+        Function.FindRegion(SwitchStatement.RegionId);
+    if (SwitchRegion != nullptr && SwitchRegion->Kind == TEXT("switch"))
+    {
+        for (const FString& SectionId : SwitchRegion->ChildRegionIds)
+        {
+            const FUnifiedScriptAuthoringRegion* Section = Function.FindRegion(SectionId);
+            if (Section == nullptr)
+            {
+                continue;
+            }
+            for (const FString& ActionId : Section->DirectActionIds)
+            {
+                const FUnifiedScriptAuthoringAction* Label = Function.FindAction(ActionId);
+                int32 Value = 0;
+                if (Label != nullptr && Label->GraphKind == TEXT("switchCase") &&
+                    LexTryParseString(
+                        Value,
+                        *Label->Properties.FindRef(TEXT("patternText"))))
+                {
+                    UsedValues.Add(Value);
+                }
+            }
+        }
+    }
+    int32 Candidate = 0;
+    while (UsedValues.Contains(Candidate))
+    {
+        ++Candidate;
+    }
+    return LexToString(Candidate);
+}
 }
 
 void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
@@ -955,6 +993,11 @@ void SUnifiedScriptAuthoringSurface::HandleStatementDeleteRequested(const UEdGra
         SetStatus(TEXT("The selected node no longer belongs to the active Surface."), true);
         return;
     }
+    if (Statement->GraphKind == TEXT("switchCase"))
+    {
+        HandleDeleteSwitchSection(Statement->Id);
+        return;
+    }
     FString Patch;
     FString Error;
     if (!FUnifiedScriptAuthoringSurfaceReader::BuildStatementDeletionPatch(
@@ -964,6 +1007,154 @@ void SUnifiedScriptAuthoringSurface::HandleStatementDeleteRequested(const UEdGra
         return;
     }
     SubmitSemanticPatch(MoveTemp(Patch), FString::Printf(TEXT("Deleting %s"), *Statement->Title));
+}
+
+FReply SUnifiedScriptAuthoringSurface::HandleAddSwitchSection(
+    FString SwitchActionId,
+    TSharedPtr<SEditableTextBox> LabelEditor,
+    bool bDefault)
+{
+    if (bPatchRequestPending)
+    {
+        return FReply::Handled();
+    }
+    const FUnifiedScriptAuthoringFunction* Function = FindFunction(ActiveFunctionId);
+    const FUnifiedScriptAuthoringAction* SwitchStatement = Function != nullptr
+        ? Function->FindAction(SwitchActionId)
+        : nullptr;
+    if (Function == nullptr || SwitchStatement == nullptr)
+    {
+        SetStatus(TEXT("The selected switch no longer belongs to the active Surface."), true);
+        return FReply::Handled();
+    }
+
+    const FString LabelText = bDefault
+        ? FString(TEXT("default"))
+        : LabelEditor.IsValid() ? LabelEditor->GetText().ToString() : FString();
+    FString Patch;
+    FString Error;
+    if (!FUnifiedScriptAuthoringSurfaceReader::BuildSwitchSectionInsertionPatch(
+            Document,
+            *Function,
+            *SwitchStatement,
+            LabelText,
+            Patch,
+            Error))
+    {
+        SetStatus(MoveTemp(Error), true);
+        return FReply::Handled();
+    }
+    SubmitSemanticPatch(
+        MoveTemp(Patch),
+        FString::Printf(TEXT("Adding switch section '%s'"), *LabelText));
+    return FReply::Handled();
+}
+
+FReply SUnifiedScriptAuthoringSurface::HandleReplaceSwitchSection(
+    FString CaseActionId,
+    TSharedPtr<SEditableTextBox> LabelEditor)
+{
+    if (bPatchRequestPending)
+    {
+        return FReply::Handled();
+    }
+    const FUnifiedScriptAuthoringFunction* Function = FindFunction(ActiveFunctionId);
+    const FUnifiedScriptAuthoringAction* CaseLabel = Function != nullptr
+        ? Function->FindAction(CaseActionId)
+        : nullptr;
+    if (Function == nullptr || CaseLabel == nullptr || !LabelEditor.IsValid())
+    {
+        SetStatus(TEXT("The selected case label no longer belongs to the active Surface."), true);
+        return FReply::Handled();
+    }
+
+    const FString LabelText = LabelEditor->GetText().ToString();
+    FString Patch;
+    FString Error;
+    if (!FUnifiedScriptAuthoringSurfaceReader::BuildSwitchSectionReplacementPatch(
+            Document,
+            *Function,
+            *CaseLabel,
+            LabelText,
+            Patch,
+            Error))
+    {
+        SetStatus(MoveTemp(Error), true);
+        return FReply::Handled();
+    }
+    SubmitSemanticPatch(
+        MoveTemp(Patch),
+        FString::Printf(TEXT("Replacing switch section label with '%s'"), *LabelText));
+    return FReply::Handled();
+}
+
+FReply SUnifiedScriptAuthoringSurface::HandleMoveSwitchSection(
+    FString CaseActionId,
+    int32 Direction)
+{
+    if (bPatchRequestPending)
+    {
+        return FReply::Handled();
+    }
+    const FUnifiedScriptAuthoringFunction* Function = FindFunction(ActiveFunctionId);
+    const FUnifiedScriptAuthoringAction* CaseLabel = Function != nullptr
+        ? Function->FindAction(CaseActionId)
+        : nullptr;
+    if (Function == nullptr || CaseLabel == nullptr)
+    {
+        SetStatus(TEXT("The selected case label no longer belongs to the active Surface."), true);
+        return FReply::Handled();
+    }
+
+    FString Patch;
+    FString Error;
+    if (!FUnifiedScriptAuthoringSurfaceReader::BuildSwitchSectionMovePatch(
+            Document,
+            *Function,
+            *CaseLabel,
+            Direction,
+            Patch,
+            Error))
+    {
+        SetStatus(MoveTemp(Error), true);
+        return FReply::Handled();
+    }
+    SubmitSemanticPatch(
+        MoveTemp(Patch),
+        Direction < 0 ? TEXT("Moving switch section up") : TEXT("Moving switch section down"));
+    return FReply::Handled();
+}
+
+FReply SUnifiedScriptAuthoringSurface::HandleDeleteSwitchSection(FString CaseActionId)
+{
+    if (bPatchRequestPending)
+    {
+        return FReply::Handled();
+    }
+    const FUnifiedScriptAuthoringFunction* Function = FindFunction(ActiveFunctionId);
+    const FUnifiedScriptAuthoringAction* CaseLabel = Function != nullptr
+        ? Function->FindAction(CaseActionId)
+        : nullptr;
+    if (Function == nullptr || CaseLabel == nullptr)
+    {
+        SetStatus(TEXT("The selected case label no longer belongs to the active Surface."), true);
+        return FReply::Handled();
+    }
+
+    FString Patch;
+    FString Error;
+    if (!FUnifiedScriptAuthoringSurfaceReader::BuildSwitchSectionDeletionPatch(
+            Document,
+            *Function,
+            *CaseLabel,
+            Patch,
+            Error))
+    {
+        SetStatus(MoveTemp(Error), true);
+        return FReply::Handled();
+    }
+    SubmitSemanticPatch(MoveTemp(Patch), TEXT("Deleting switch section"));
+    return FReply::Handled();
 }
 
 void SUnifiedScriptAuthoringSurface::SubmitSemanticPatch(FString Patch, FString Activity)
@@ -1643,11 +1834,12 @@ UUnifiedScriptEdGraphNode* SUnifiedScriptAuthoringSurface::AddGraphNode(
     Node->SourceDisplay = Item->Span.ToDisplayString();
     Node->bShowSummary = FUnifiedScriptGraphPresentation::ShouldShowSummary(Action);
     Node->bCompactPresentation = FUnifiedScriptGraphPresentation::IsCompactNode(Action);
-    Node->bCanDelete = Function.Regions.ContainsByPredicate([&Action](
-        const FUnifiedScriptAuthoringRegion& Region)
-    {
-        return Region.DirectStatementIds.Contains(Action.Id);
-    });
+    Node->bCanDelete = Action.GraphKind == TEXT("switchCase") ||
+        Function.Regions.ContainsByPredicate([&Action](
+            const FUnifiedScriptAuthoringRegion& Region)
+        {
+            return Region.DirectStatementIds.Contains(Action.Id);
+        });
     Node->NodePosX = NodePosX;
     Node->NodePosY = NodePosY;
     Node->AllocateDefaultPins();
@@ -1763,6 +1955,12 @@ void SUnifiedScriptAuthoringSurface::RebuildNodePalette(
         {
             ++IntParameterCount;
         }
+    }
+    if (IntParameterCount >= 1)
+    {
+        AuthoringGraph->PaletteActions.Add(
+            {TEXT("flow.switch"), TEXT("Flow Control"), TEXT("Switch on Integer"),
+                TEXT("Insert a typed switch with case 0 and default sections.")});
     }
     if (IntParameterCount >= 2)
     {
@@ -2388,6 +2586,172 @@ void SUnifiedScriptAuthoringSurface::RebuildInspector(
                 .Text(FText::FromString(BuildSourcePreview(Item->Span)))
                 .IsReadOnly(true)
                 .Font(FAppStyle::GetFontStyle(TEXT("MonoFont")))
+            ]
+        ];
+    }
+
+    const FUnifiedScriptAuthoringFunction* ActiveFunction = FindFunction(ActiveFunctionId);
+    const FUnifiedScriptAuthoringAction* ActiveAction =
+        ActiveFunction != nullptr && Item->Kind == EUnifiedScriptSurfaceTreeItemKind::Action
+        ? ActiveFunction->FindAction(Item->SemanticId)
+        : nullptr;
+    if (ActiveFunction != nullptr && ActiveAction != nullptr &&
+        ActiveAction->GraphKind == TEXT("switch"))
+    {
+        TSharedPtr<SEditableTextBox> LabelEditor;
+        const bool bHasDefault =
+            ActiveAction->Properties.FindRef(TEXT("hasDefault")) == TEXT("true");
+        InspectorBox->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 8.0f)
+        [
+            SNew(STextBlock)
+            .Text(LOCTEXT("SwitchSections", "SWITCH SECTIONS"))
+            .Font(FAppStyle::GetFontStyle(TEXT("SmallFontBold")))
+        ];
+        InspectorBox->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 10.0f)
+        [
+            SNew(SBorder)
+            .BorderImage(FAppStyle::GetBrush(TEXT("ToolPanel.GroupBorder")))
+            .Padding(8.0f)
+            [
+                SNew(SVerticalBox)
+                + SVerticalBox::Slot().AutoHeight()
+                [
+                    SNew(STextBlock)
+                    .Text(LOCTEXT(
+                        "SwitchPatternHelp",
+                        "Pattern: 0, > 10, int value, var value, _, not ..., (...), and/or; optional 'when boolParameter'."))
+                    .AutoWrapText(true)
+                    .Font(FAppStyle::GetFontStyle(TEXT("SmallFont")))
+                    .ColorAndOpacity(FLinearColor(0.55f, 0.58f, 0.62f))
+                ]
+                + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+                [
+                    SNew(SHorizontalBox)
+                    + SHorizontalBox::Slot().FillWidth(1.0f)
+                    [
+                        SAssignNew(LabelEditor, SEditableTextBox)
+                        .Text(FText::FromString(
+                            UE::UnifiedScript::AuthoringSurface::Slate::Private::
+                                SuggestSwitchCaseLabel(*ActiveFunction, *ActiveAction)))
+                        .HintText(LOCTEXT("SwitchCaseHint", "case pattern"))
+                    ]
+                    + SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f, 0.0f, 0.0f)
+                    [
+                        SNew(SButton)
+                        .Text(LOCTEXT("AddSwitchCase", "Add Case"))
+                        .IsEnabled_Lambda([this]() { return !bPatchRequestPending; })
+                        .OnClicked(
+                            this,
+                            &SUnifiedScriptAuthoringSurface::HandleAddSwitchSection,
+                            ActiveAction->Id,
+                            LabelEditor,
+                            false)
+                    ]
+                    + SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f, 0.0f, 0.0f)
+                    [
+                        SNew(SButton)
+                        .Text(LOCTEXT("AddSwitchDefault", "Add Default"))
+                        .IsEnabled_Lambda([this, bHasDefault]()
+                        {
+                            return !bPatchRequestPending && !bHasDefault;
+                        })
+                        .OnClicked(
+                            this,
+                            &SUnifiedScriptAuthoringSurface::HandleAddSwitchSection,
+                            ActiveAction->Id,
+                            LabelEditor,
+                            true)
+                    ]
+                ]
+            ]
+        ];
+    }
+    else if (ActiveFunction != nullptr && ActiveAction != nullptr &&
+        ActiveAction->GraphKind == TEXT("switchCase"))
+    {
+        TSharedPtr<SEditableTextBox> LabelEditor;
+        FString CurrentLabel = ActiveAction->Properties.FindRef(TEXT("displayText"));
+        if (CurrentLabel.StartsWith(TEXT("case ")))
+        {
+            CurrentLabel.RightChopInline(5);
+        }
+        if (CurrentLabel.EndsWith(TEXT(":")))
+        {
+            CurrentLabel.LeftChopInline(1);
+        }
+        if (CurrentLabel.IsEmpty())
+        {
+            CurrentLabel = ActiveAction->Properties.FindRef(TEXT("isDefault")) == TEXT("true")
+                ? TEXT("default")
+                : ActiveAction->Properties.FindRef(TEXT("patternText"));
+        }
+
+        InspectorBox->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 8.0f)
+        [
+            SNew(STextBlock)
+            .Text(LOCTEXT("SwitchSectionEdit", "SWITCH SECTION"))
+            .Font(FAppStyle::GetFontStyle(TEXT("SmallFontBold")))
+        ];
+        InspectorBox->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 10.0f)
+        [
+            SNew(SBorder)
+            .BorderImage(FAppStyle::GetBrush(TEXT("ToolPanel.GroupBorder")))
+            .Padding(8.0f)
+            [
+                SNew(SVerticalBox)
+                + SVerticalBox::Slot().AutoHeight()
+                [
+                    SAssignNew(LabelEditor, SEditableTextBox)
+                    .Text(FText::FromString(CurrentLabel))
+                    .HintText(LOCTEXT("SwitchSectionLabelHint", "case pattern or default"))
+                ]
+                + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+                [
+                    SNew(SHorizontalBox)
+                    + SHorizontalBox::Slot().AutoWidth()
+                    [
+                        SNew(SButton)
+                        .Text(LOCTEXT("ApplySwitchLabel", "Apply Label"))
+                        .IsEnabled_Lambda([this]() { return !bPatchRequestPending; })
+                        .OnClicked(
+                            this,
+                            &SUnifiedScriptAuthoringSurface::HandleReplaceSwitchSection,
+                            ActiveAction->Id,
+                            LabelEditor)
+                    ]
+                    + SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f, 0.0f, 0.0f)
+                    [
+                        SNew(SButton)
+                        .Text(LOCTEXT("MoveSwitchSectionUp", "Move Up"))
+                        .IsEnabled_Lambda([this]() { return !bPatchRequestPending; })
+                        .OnClicked(
+                            this,
+                            &SUnifiedScriptAuthoringSurface::HandleMoveSwitchSection,
+                            ActiveAction->Id,
+                            -1)
+                    ]
+                    + SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f, 0.0f, 0.0f)
+                    [
+                        SNew(SButton)
+                        .Text(LOCTEXT("MoveSwitchSectionDown", "Move Down"))
+                        .IsEnabled_Lambda([this]() { return !bPatchRequestPending; })
+                        .OnClicked(
+                            this,
+                            &SUnifiedScriptAuthoringSurface::HandleMoveSwitchSection,
+                            ActiveAction->Id,
+                            1)
+                    ]
+                    + SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f, 0.0f, 0.0f)
+                    [
+                        SNew(SButton)
+                        .Text(LOCTEXT("DeleteSwitchSection", "Delete Section"))
+                        .IsEnabled_Lambda([this]() { return !bPatchRequestPending; })
+                        .OnClicked(
+                            this,
+                            &SUnifiedScriptAuthoringSurface::HandleDeleteSwitchSection,
+                            ActiveAction->Id)
+                    ]
+                ]
             ]
         ];
     }

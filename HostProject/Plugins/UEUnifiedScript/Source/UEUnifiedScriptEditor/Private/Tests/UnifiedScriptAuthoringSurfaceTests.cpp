@@ -306,6 +306,21 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
                 ForJson.Contains(TEXT("\"expression\": \"forLocalReference\"")) &&
                 ForJson.Contains(TEXT("\"isPostfix\": true")));
 
+        FString SwitchJson;
+        TestTrue(TEXT("Context menu can build a typed structured switch insertion"),
+            FUnifiedScriptAuthoringSurfaceReader::BuildBasicNodeInsertionPatch(
+                Document,
+                RewireFunction,
+                *RewireBlock,
+                TEXT("flow.switch"),
+                SwitchJson,
+                Error));
+        TestTrue(TEXT("Switch insertion binds one parameter and creates case/default sections"),
+            SwitchJson.Contains(TEXT("\"statement\": \"switch\"")) &&
+                SwitchJson.Contains(TEXT("\"governingExpression\"")) &&
+                SwitchJson.Contains(TEXT("\"label\": \"pattern\"")) &&
+                SwitchJson.Contains(TEXT("\"label\": \"default\"")));
+
         const FUnifiedScriptAuthoringAction* FirstStatement =
             RewireBlock->DirectStatementIds.Num() > 0
             ? RewireFunction.FindAction(RewireBlock->DirectStatementIds[0])
@@ -400,6 +415,169 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
                 Error));
         TestTrue(TEXT("Loop continue emits the bounded terminal statement"),
             ContinueJson.Contains(TEXT("\"statement\": \"continue\"")));
+
+        const FUnifiedScriptAuthoringParameter* ValueParameter =
+            RewireFunction.Parameters.FindByPredicate([](
+                const FUnifiedScriptAuthoringParameter& Parameter)
+            {
+                return Parameter.Name == TEXT("value");
+            });
+        TestNotNull(TEXT("Switch authoring fixture has a typed governing parameter"),
+            ValueParameter);
+        if (ValueParameter != nullptr)
+        {
+            FUnifiedScriptAuthoringFunction SwitchFunction = RewireFunction;
+            const FString SwitchId = TEXT("us_a1111111111111111111111111111111");
+            const FString SwitchRegionId = TEXT("us_a2222222222222222222222222222222");
+            const FString FirstSectionId = TEXT("us_a3333333333333333333333333333333");
+            const FString FirstRegionId = TEXT("us_a4444444444444444444444444444444");
+            const FString FirstBodyId = TEXT("us_a5555555555555555555555555555555");
+            const FString FirstLabelId = TEXT("us_a6666666666666666666666666666666");
+            const FString DefaultSectionId = TEXT("us_a7777777777777777777777777777777");
+            const FString DefaultRegionId = TEXT("us_a8888888888888888888888888888888");
+            const FString DefaultBodyId = TEXT("us_a9999999999999999999999999999999");
+            const FString DefaultLabelId = TEXT("us_abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+
+            FUnifiedScriptAuthoringAction SwitchAction;
+            SwitchAction.Id = SwitchId;
+            SwitchAction.GraphKind = TEXT("switch");
+            SwitchAction.RegionId = SwitchRegionId;
+            SwitchAction.Ports.Add({TEXT("value"), TEXT("input"), TEXT("data"),
+                ValueParameter->TypeId, ValueParameter->TypeDisplayName});
+            SwitchAction.Properties.Add(TEXT("hasDefault"), TEXT("true"));
+
+            const auto MakeLabel = [](
+                const FString& Id,
+                const FString& RegionId,
+                const FString& SectionId,
+                const FString& BodyId,
+                const FString& DisplayText,
+                bool bDefault)
+            {
+                FUnifiedScriptAuthoringAction Label;
+                Label.Id = Id;
+                Label.GraphKind = TEXT("switchCase");
+                Label.RegionId = RegionId;
+                Label.Properties.Add(TEXT("switchSectionId"), SectionId);
+                Label.Properties.Add(TEXT("sectionId"), BodyId);
+                Label.Properties.Add(TEXT("displayText"), DisplayText);
+                Label.Properties.Add(TEXT("isDefault"), bDefault ? TEXT("true") : TEXT("false"));
+                if (!bDefault)
+                {
+                    Label.Properties.Add(TEXT("patternText"), TEXT("0"));
+                }
+                return Label;
+            };
+            FUnifiedScriptAuthoringAction FirstLabel = MakeLabel(
+                FirstLabelId,
+                FirstRegionId,
+                FirstSectionId,
+                FirstBodyId,
+                TEXT("case 0"),
+                false);
+            FUnifiedScriptAuthoringAction DefaultLabel = MakeLabel(
+                DefaultLabelId,
+                DefaultRegionId,
+                DefaultSectionId,
+                DefaultBodyId,
+                TEXT("default"),
+                true);
+
+            FUnifiedScriptAuthoringRegion AuthoredSwitchRegion;
+            AuthoredSwitchRegion.Id = SwitchRegionId;
+            AuthoredSwitchRegion.Kind = TEXT("switch");
+            AuthoredSwitchRegion.SourceNodeId = SwitchId;
+            AuthoredSwitchRegion.ChildRegionIds = {FirstRegionId, DefaultRegionId};
+            FUnifiedScriptAuthoringRegion FirstSection;
+            FirstSection.Id = FirstRegionId;
+            FirstSection.Kind = TEXT("switchSection");
+            FirstSection.ParentRegionId = SwitchRegionId;
+            FirstSection.SourceNodeId = FirstBodyId;
+            FirstSection.DirectActionIds = {FirstLabelId};
+            FUnifiedScriptAuthoringRegion DefaultSection;
+            DefaultSection.Id = DefaultRegionId;
+            DefaultSection.Kind = TEXT("switchSection");
+            DefaultSection.ParentRegionId = SwitchRegionId;
+            DefaultSection.SourceNodeId = DefaultBodyId;
+            DefaultSection.DirectActionIds = {DefaultLabelId};
+            SwitchFunction.Actions.Add(SwitchAction);
+            SwitchFunction.Actions.Add(FirstLabel);
+            SwitchFunction.Actions.Add(DefaultLabel);
+            SwitchFunction.Regions.Add(AuthoredSwitchRegion);
+            SwitchFunction.Regions.Add(FirstSection);
+            SwitchFunction.Regions.Add(DefaultSection);
+
+            FString InsertSectionJson;
+            TestTrue(TEXT("Switch inspector can insert a full structured pattern section"),
+                FUnifiedScriptAuthoringSurfaceReader::BuildSwitchSectionInsertionPatch(
+                    Document,
+                    SwitchFunction,
+                    SwitchFunction.Actions[SwitchFunction.Actions.Num() - 3],
+                    TEXT("> 10 and not 42"),
+                    InsertSectionJson,
+                    Error));
+            TestTrue(TEXT("Pattern insertion preserves ordered section and pattern algebra"),
+                InsertSectionJson.Contains(TEXT("\"operation\": \"insertSwitchSection\"")) &&
+                    InsertSectionJson.Contains(FirstSectionId) &&
+                    InsertSectionJson.Contains(DefaultSectionId) &&
+                    InsertSectionJson.Contains(TEXT("\"pattern\": \"logical\"")) &&
+                    InsertSectionJson.Contains(TEXT("\"pattern\": \"relational\"")) &&
+                    InsertSectionJson.Contains(TEXT("\"pattern\": \"not\"")));
+
+            FString DuplicateDefaultJson;
+            TestFalse(TEXT("Switch inspector rejects a duplicate default section"),
+                FUnifiedScriptAuthoringSurfaceReader::BuildSwitchSectionInsertionPatch(
+                    Document,
+                    SwitchFunction,
+                    SwitchFunction.Actions[SwitchFunction.Actions.Num() - 3],
+                    TEXT("default"),
+                    DuplicateDefaultJson,
+                    Error));
+
+            FString ReplaceSectionJson;
+            TestTrue(TEXT("Case inspector can replace a section with typed guarded pattern text"),
+                FUnifiedScriptAuthoringSurfaceReader::BuildSwitchSectionReplacementPatch(
+                    Document,
+                    SwitchFunction,
+                    SwitchFunction.Actions[SwitchFunction.Actions.Num() - 2],
+                    TEXT("(int candidate) when doubleValue"),
+                    ReplaceSectionJson,
+                    Error));
+            TestTrue(TEXT("Replacement pins the old labels and emits typed pattern/guard nodes"),
+                ReplaceSectionJson.Contains(TEXT("\"operation\": \"replaceSwitchSection\"")) &&
+                    ReplaceSectionJson.Contains(FirstLabelId) &&
+                    ReplaceSectionJson.Contains(TEXT("\"pattern\": \"parenthesized\"")) &&
+                    ReplaceSectionJson.Contains(TEXT("\"pattern\": \"declaration\"")) &&
+                    ReplaceSectionJson.Contains(TEXT("\"guard\"")));
+
+            FString MoveSectionJson;
+            TestTrue(TEXT("Case inspector can move a section by one exact sibling slot"),
+                FUnifiedScriptAuthoringSurfaceReader::BuildSwitchSectionMovePatch(
+                    Document,
+                    SwitchFunction,
+                    SwitchFunction.Actions[SwitchFunction.Actions.Num() - 2],
+                    1,
+                    MoveSectionJson,
+                    Error));
+            TestTrue(TEXT("Section movement carries source and destination gaps"),
+                MoveSectionJson.Contains(TEXT("\"operation\": \"moveSwitchSection\"")) &&
+                    MoveSectionJson.Contains(TEXT("expectedSourceNextSectionId")) &&
+                    MoveSectionJson.Contains(TEXT("expectedDestinationPreviousSectionId")));
+
+            FString DeleteSectionJson;
+            TestTrue(TEXT("Delete key can build a safe switch-section deletion"),
+                FUnifiedScriptAuthoringSurfaceReader::BuildSwitchSectionDeletionPatch(
+                    Document,
+                    SwitchFunction,
+                    SwitchFunction.Actions[SwitchFunction.Actions.Num() - 2],
+                    DeleteSectionJson,
+                    Error));
+            TestTrue(TEXT("Section deletion pins its parent, siblings, and labels"),
+                DeleteSectionJson.Contains(TEXT("\"operation\": \"deleteSwitchSection\"")) &&
+                    DeleteSectionJson.Contains(SwitchId) &&
+                    DeleteSectionJson.Contains(DefaultSectionId) &&
+                    DeleteSectionJson.Contains(FirstLabelId));
+        }
     }
 
     const FUnifiedScriptAuthoringFunction& ApiFunction =
@@ -639,6 +817,9 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         TEXT("Slate context palette exposes the reflected multicast Event Entry action"),
         Widget->HasNodePaletteAction(
             TEXT("ue.event|UnifiedScriptComponent|OnManagedSignal")));
+    TestTrue(
+        TEXT("Slate context palette exposes typed switch construction"),
+        Widget->HasNodePaletteAction(TEXT("flow.switch")));
     TestEqual(
         TEXT("Blueprint-style graph uses the compact presentation projection"),
         Widget->GetVisibleGraphNodeCount(),

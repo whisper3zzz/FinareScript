@@ -185,10 +185,14 @@ The repository currently implements:
   edge/type preconditions, bounded pure-expression C# write-back, full
   reanalysis, Surface refresh, and old-wire retention on failure;
 - Graph Authoring v2 Alpha in the UE GraphEditor: a Blueprint-style right-click
-  palette, structured local/binary-expression/branch/while/do/for/break/continue/
-  return insertion, transaction-first
+  palette, structured local/binary-expression/branch/while/do/for/switch/
+  break/continue/return insertion, transaction-first
   Delete and Alt-click disconnection, and automatic source/Surface/runtime
   refresh after each accepted edit;
+- switch-section authoring from the Slate inspector, including typed
+  constant/declaration/type/var/discard/relational/logical/not/parenthesized
+  pattern text, bounded guards, ordered case/default insertion, relabeling,
+  one-slot movement, and safe break-only section deletion;
 - automatic shared-value extraction through an atomic
   `introduceTemporary` + `reconnectValue` patch plan, preserving one evaluation
   instead of copying a computed subtree into a second consumer, with a stable

@@ -118,6 +118,17 @@ CFG. Cross-region gestures are rejected as explicit branch/loop/switch
 transforms rather than approximated as arbitrary edges. See
 [CONTROL_FLOW_RECONNECTION.md](CONTROL_FLOW_RECONNECTION.md).
 
+Semantic Patch v0.23 completes the first switch-authoring transaction set. The
+palette inserts a typed switch over an existing `int` parameter with `case 0`
+and `default` break-only sections. Selecting a switch exposes ordered Case and
+Default creation; selecting any case label exposes section-wide relabel, move
+up/down, and safe deletion. Pattern text is converted into the versioned pattern
+algebra for constants, declaration/type/var/discard, relational, logical,
+negated, and parenthesized patterns. A guard may currently be `true`, `false`,
+or an existing bool function parameter. Every operation carries exact switch,
+section, label, and sibling preconditions; Slate never edits case text or graph
+edges directly.
+
 ## HTTP and CLI delivery
 
 `unifiedscript analyze ... --out <directory>` now writes

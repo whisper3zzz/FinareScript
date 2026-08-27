@@ -1221,6 +1221,534 @@ const FUnifiedScriptAuthoringPort* FindTypePort(
     return nullptr;
 }
 
+FString FindBoundTypeId(
+    const FUnifiedScriptAuthoringFunction& Function,
+    const FString& TypeName)
+{
+    for (const FUnifiedScriptAuthoringParameter& Parameter : Function.Parameters)
+    {
+        if (!Parameter.TypeId.IsEmpty() &&
+            (Parameter.TypeDisplayName == TypeName ||
+                Parameter.TypeMetadataName == TypeName))
+        {
+            return Parameter.TypeId;
+        }
+    }
+    const FUnifiedScriptAuthoringPort* Port = FindTypePort(Function, TypeName);
+    return Port != nullptr ? Port->TypeId : FString();
+}
+
+TSharedRef<FJsonObject> LiteralExpression(
+    const FString& ValueText,
+    const FString& TypeId)
+{
+    const TSharedRef<FJsonObject> Expression = MakeShared<FJsonObject>();
+    Expression->SetStringField(TEXT("expression"), TEXT("literal"));
+    Expression->SetStringField(TEXT("valueText"), ValueText);
+    Expression->SetStringField(TEXT("expectedTypeId"), TypeId);
+    return Expression;
+}
+
+TSharedRef<FJsonObject> LocalReference(
+    const FUnifiedScriptAuthoringParameter& Parameter);
+
+int32 FindTopLevelToken(const FString& Text, const FString& Token)
+{
+    int32 Depth = 0;
+    TCHAR Quote = 0;
+    bool bEscaped = false;
+    for (int32 Index = 0; Index + Token.Len() <= Text.Len(); ++Index)
+    {
+        const TCHAR Character = Text[Index];
+        if (Quote != 0)
+        {
+            if (bEscaped)
+            {
+                bEscaped = false;
+            }
+            else if (Character == TEXT('\\'))
+            {
+                bEscaped = true;
+            }
+            else if (Character == Quote)
+            {
+                Quote = 0;
+            }
+            continue;
+        }
+        if (Character == TEXT('"') || Character == TEXT('\''))
+        {
+            Quote = Character;
+            continue;
+        }
+        if (Character == TEXT('('))
+        {
+            ++Depth;
+            continue;
+        }
+        if (Character == TEXT(')'))
+        {
+            --Depth;
+            continue;
+        }
+        if (Depth == 0 && Text.Mid(Index, Token.Len()) == Token)
+        {
+            return Index;
+        }
+    }
+    return INDEX_NONE;
+}
+
+bool HasWholeOuterParentheses(const FString& Text)
+{
+    if (Text.Len() < 2 || Text[0] != TEXT('(') || Text[Text.Len() - 1] != TEXT(')'))
+    {
+        return false;
+    }
+    int32 Depth = 0;
+    TCHAR Quote = 0;
+    bool bEscaped = false;
+    for (int32 Index = 0; Index < Text.Len(); ++Index)
+    {
+        const TCHAR Character = Text[Index];
+        if (Quote != 0)
+        {
+            if (bEscaped)
+            {
+                bEscaped = false;
+            }
+            else if (Character == TEXT('\\'))
+            {
+                bEscaped = true;
+            }
+            else if (Character == Quote)
+            {
+                Quote = 0;
+            }
+            continue;
+        }
+        if (Character == TEXT('"') || Character == TEXT('\''))
+        {
+            Quote = Character;
+        }
+        else if (Character == TEXT('('))
+        {
+            ++Depth;
+        }
+        else if (Character == TEXT(')'))
+        {
+            --Depth;
+            if (Depth == 0 && Index != Text.Len() - 1)
+            {
+                return false;
+            }
+            if (Depth < 0)
+            {
+                return false;
+            }
+        }
+    }
+    return Depth == 0 && Quote == 0;
+}
+
+class FSwitchPatternTextParser
+{
+public:
+    FSwitchPatternTextParser(
+        const FUnifiedScriptAuthoringFunction& InFunction,
+        FString InGoverningTypeId)
+        : Function(InFunction), GoverningTypeId(MoveTemp(InGoverningTypeId))
+    {
+    }
+
+    bool BuildLabel(
+        const FString& Input,
+        TSharedPtr<FJsonObject>& OutLabel,
+        FString& OutError) const
+    {
+        FString Text = Input;
+        Text.TrimStartAndEndInline();
+        if (Text.StartsWith(TEXT("case "), ESearchCase::IgnoreCase))
+        {
+            Text.RightChopInline(5);
+            Text.TrimStartAndEndInline();
+        }
+        if (Text.EndsWith(TEXT(":")))
+        {
+            Text.LeftChopInline(1);
+            Text.TrimStartAndEndInline();
+        }
+        if (Text.IsEmpty())
+        {
+            OutError = TEXT("Enter a switch label such as 0, > 10, int value, var value, _, or default.");
+            return false;
+        }
+
+        if (Text.Equals(TEXT("default"), ESearchCase::IgnoreCase))
+        {
+            OutLabel = MakeShared<FJsonObject>();
+            OutLabel->SetStringField(TEXT("label"), TEXT("default"));
+            return true;
+        }
+
+        FString PatternText = Text;
+        FString GuardText;
+        const int32 GuardIndex = FindTopLevelToken(PatternText, TEXT(" when "));
+        if (GuardIndex != INDEX_NONE)
+        {
+            GuardText = PatternText.Mid(GuardIndex + 6);
+            PatternText = PatternText.Left(GuardIndex);
+            GuardText.TrimStartAndEndInline();
+            PatternText.TrimStartAndEndInline();
+        }
+
+        TSharedPtr<FJsonObject> Pattern;
+        if (!BuildPattern(PatternText, 0, Pattern, OutError))
+        {
+            return false;
+        }
+        TSharedPtr<FJsonObject> Guard;
+        if (!GuardText.IsEmpty() && !BuildGuard(GuardText, Guard, OutError))
+        {
+            return false;
+        }
+
+        OutLabel = MakeShared<FJsonObject>();
+        OutLabel->SetStringField(TEXT("label"), TEXT("pattern"));
+        OutLabel->SetObjectField(TEXT("pattern"), Pattern.ToSharedRef());
+        if (Guard.IsValid())
+        {
+            OutLabel->SetObjectField(TEXT("guard"), Guard.ToSharedRef());
+        }
+        else
+        {
+            OutLabel->SetField(TEXT("guard"), MakeShared<FJsonValueNull>());
+        }
+        return true;
+    }
+
+private:
+    bool BuildPattern(
+        FString Text,
+        int32 Depth,
+        TSharedPtr<FJsonObject>& OutPattern,
+        FString& OutError) const
+    {
+        Text.TrimStartAndEndInline();
+        if (Text.IsEmpty() || Depth > 16)
+        {
+            OutError = Depth > 16
+                ? TEXT("A switch pattern cannot exceed 16 nested nodes.")
+                : TEXT("A switch pattern cannot be empty.");
+            return false;
+        }
+
+        if (HasWholeOuterParentheses(Text))
+        {
+            TSharedPtr<FJsonObject> Inner;
+            if (!BuildPattern(Text.Mid(1, Text.Len() - 2), Depth + 1, Inner, OutError))
+            {
+                return false;
+            }
+            OutPattern = MakeShared<FJsonObject>();
+            OutPattern->SetStringField(TEXT("pattern"), TEXT("parenthesized"));
+            OutPattern->SetObjectField(TEXT("inner"), Inner.ToSharedRef());
+            return true;
+        }
+
+        for (const FString& Operator : {FString(TEXT(" or ")), FString(TEXT(" and "))})
+        {
+            const int32 OperatorIndex = FindTopLevelToken(Text, Operator);
+            if (OperatorIndex != INDEX_NONE)
+            {
+                TSharedPtr<FJsonObject> Left;
+                TSharedPtr<FJsonObject> Right;
+                if (!BuildPattern(Text.Left(OperatorIndex), Depth + 1, Left, OutError) ||
+                    !BuildPattern(
+                        Text.Mid(OperatorIndex + Operator.Len()),
+                        Depth + 1,
+                        Right,
+                        OutError))
+                {
+                    return false;
+                }
+                OutPattern = MakeShared<FJsonObject>();
+                OutPattern->SetStringField(TEXT("pattern"), TEXT("logical"));
+                FString TrimmedOperator = Operator;
+                TrimmedOperator.TrimStartAndEndInline();
+                OutPattern->SetStringField(TEXT("operator"), TrimmedOperator);
+                OutPattern->SetObjectField(TEXT("left"), Left.ToSharedRef());
+                OutPattern->SetObjectField(TEXT("right"), Right.ToSharedRef());
+                return true;
+            }
+        }
+
+        if (Text.StartsWith(TEXT("not "), ESearchCase::CaseSensitive))
+        {
+            TSharedPtr<FJsonObject> Operand;
+            if (!BuildPattern(Text.Mid(4), Depth + 1, Operand, OutError))
+            {
+                return false;
+            }
+            OutPattern = MakeShared<FJsonObject>();
+            OutPattern->SetStringField(TEXT("pattern"), TEXT("not"));
+            OutPattern->SetObjectField(TEXT("operand"), Operand.ToSharedRef());
+            return true;
+        }
+
+        for (const FString& Operator :
+            {FString(TEXT(">=")), FString(TEXT("<=")), FString(TEXT(">")), FString(TEXT("<"))})
+        {
+            if (Text.StartsWith(Operator))
+            {
+                FString ValueText = Text.Mid(Operator.Len());
+                ValueText.TrimStartAndEndInline();
+                if (ValueText.IsEmpty())
+                {
+                    OutError = TEXT("A relational switch pattern requires a typed literal value.");
+                    return false;
+                }
+                OutPattern = MakeShared<FJsonObject>();
+                OutPattern->SetStringField(TEXT("pattern"), TEXT("relational"));
+                OutPattern->SetStringField(TEXT("operator"), Operator);
+                OutPattern->SetObjectField(
+                    TEXT("value"),
+                    LiteralExpression(ValueText, GoverningTypeId));
+                return true;
+            }
+        }
+
+        if (Text == TEXT("_"))
+        {
+            OutPattern = MakeShared<FJsonObject>();
+            OutPattern->SetStringField(TEXT("pattern"), TEXT("discard"));
+            return true;
+        }
+
+        if (Text.StartsWith(TEXT("var "), ESearchCase::CaseSensitive))
+        {
+            FString Designation = Text.Mid(4);
+            Designation.TrimStartAndEndInline();
+            if (Designation.IsEmpty())
+            {
+                OutError = TEXT("A var pattern requires a variable name or underscore discard.");
+                return false;
+            }
+            const bool bDiscard = Designation == TEXT("_");
+            OutPattern = MakeShared<FJsonObject>();
+            OutPattern->SetStringField(TEXT("pattern"), TEXT("var"));
+            OutPattern->SetStringField(
+                TEXT("variableName"),
+                bDiscard ? FString() : Designation);
+            OutPattern->SetBoolField(TEXT("isDiscard"), bDiscard);
+            return true;
+        }
+
+        FString TypeName;
+        FString Designation;
+        if (Text.Split(TEXT(" "), &TypeName, &Designation))
+        {
+            TypeName.TrimStartAndEndInline();
+            Designation.TrimStartAndEndInline();
+            const FString TypeId = FindBoundTypeId(Function, TypeName);
+            if (!TypeId.IsEmpty() && !Designation.IsEmpty())
+            {
+                const bool bDiscard = Designation == TEXT("_");
+                OutPattern = MakeShared<FJsonObject>();
+                OutPattern->SetStringField(TEXT("pattern"), TEXT("declaration"));
+                OutPattern->SetStringField(TEXT("typeName"), TypeName);
+                OutPattern->SetStringField(
+                    TEXT("variableName"),
+                    bDiscard ? FString() : Designation);
+                OutPattern->SetBoolField(TEXT("isDiscard"), bDiscard);
+                OutPattern->SetStringField(TEXT("expectedTypeId"), TypeId);
+                return true;
+            }
+        }
+        else
+        {
+            const FString TypeId = FindBoundTypeId(Function, Text);
+            if (!TypeId.IsEmpty() && Text != TEXT("true") && Text != TEXT("false") &&
+                Text != TEXT("null"))
+            {
+                OutPattern = MakeShared<FJsonObject>();
+                OutPattern->SetStringField(TEXT("pattern"), TEXT("type"));
+                OutPattern->SetStringField(TEXT("typeName"), Text);
+                OutPattern->SetStringField(TEXT("expectedTypeId"), TypeId);
+                return true;
+            }
+        }
+
+        OutPattern = MakeShared<FJsonObject>();
+        OutPattern->SetStringField(TEXT("pattern"), TEXT("constant"));
+        OutPattern->SetObjectField(
+            TEXT("value"),
+            LiteralExpression(Text, GoverningTypeId));
+        return true;
+    }
+
+    bool BuildGuard(
+        FString Text,
+        TSharedPtr<FJsonObject>& OutGuard,
+        FString& OutError) const
+    {
+        Text.TrimStartAndEndInline();
+        const FString BoolTypeId = FindBoundTypeId(Function, TEXT("bool"));
+        if (BoolTypeId.IsEmpty())
+        {
+            OutError = TEXT("A guarded switch label requires a bound bool type.");
+            return false;
+        }
+        if (Text == TEXT("true") || Text == TEXT("false"))
+        {
+            OutGuard = LiteralExpression(Text, BoolTypeId);
+            return true;
+        }
+        const FUnifiedScriptAuthoringParameter* Parameter =
+            Function.Parameters.FindByPredicate([&Text, &BoolTypeId](
+                const FUnifiedScriptAuthoringParameter& Candidate)
+            {
+                return Candidate.Name == Text && Candidate.TypeId == BoolTypeId &&
+                    !Candidate.Id.IsEmpty();
+            });
+        if (Parameter == nullptr)
+        {
+            OutError = TEXT("A switch guard currently accepts true, false, or a bool function parameter.");
+            return false;
+        }
+        OutGuard = LocalReference(*Parameter);
+        return true;
+    }
+
+    const FUnifiedScriptAuthoringFunction& Function;
+    FString GoverningTypeId;
+};
+
+struct FSwitchSectionContext
+{
+    const FUnifiedScriptAuthoringRegion* Region = nullptr;
+    FString SectionId;
+    TArray<const FUnifiedScriptAuthoringAction*> Labels;
+    bool bHasDefault = false;
+};
+
+bool ResolveSwitchSections(
+    const FUnifiedScriptAuthoringFunction& Function,
+    const FUnifiedScriptAuthoringAction& SwitchStatement,
+    const FUnifiedScriptAuthoringRegion*& OutSwitchRegion,
+    TArray<FSwitchSectionContext>& OutSections,
+    FString& OutError)
+{
+    OutSwitchRegion = Function.FindRegion(SwitchStatement.RegionId);
+    if (SwitchStatement.GraphKind != TEXT("switch") ||
+        OutSwitchRegion == nullptr || OutSwitchRegion->Kind != TEXT("switch") ||
+        OutSwitchRegion->SourceNodeId != SwitchStatement.Id)
+    {
+        OutError = TEXT("The selected action is not the exact owner of a structured switch region.");
+        return false;
+    }
+
+    for (const FString& ChildId : OutSwitchRegion->ChildRegionIds)
+    {
+        const FUnifiedScriptAuthoringRegion* Child = Function.FindRegion(ChildId);
+        FSwitchSectionContext Section;
+        Section.Region = Child;
+        if (Child == nullptr || Child->Kind != TEXT("switchSection"))
+        {
+            OutError = TEXT("The switch contains an invalid section region.");
+            return false;
+        }
+        for (const FString& ActionId : Child->DirectActionIds)
+        {
+            const FUnifiedScriptAuthoringAction* Action = Function.FindAction(ActionId);
+            if (Action != nullptr && Action->GraphKind == TEXT("switchCase"))
+            {
+                const FString* SectionId = Action->Properties.Find(TEXT("switchSectionId"));
+                const FString* BodyId = Action->Properties.Find(TEXT("sectionId"));
+                if (SectionId == nullptr || BodyId == nullptr ||
+                    !UE::UnifiedScript::AuthoringSurface::Private::IsSemanticId(*SectionId) ||
+                    *BodyId != Child->SourceNodeId ||
+                    (!Section.SectionId.IsEmpty() && Section.SectionId != *SectionId))
+                {
+                    OutError = TEXT("A switch label is missing its exact section/body identity.");
+                    return false;
+                }
+                Section.SectionId = *SectionId;
+                Section.Labels.Add(Action);
+                Section.bHasDefault |=
+                    Action->Properties.FindRef(TEXT("isDefault")) == TEXT("true");
+            }
+        }
+        if (Section.SectionId.IsEmpty() || Section.Labels.IsEmpty())
+        {
+            OutError = TEXT("Every switch section requires at least one semantic case label.");
+            return false;
+        }
+        OutSections.Add(MoveTemp(Section));
+    }
+    return true;
+}
+
+bool ResolveSwitchSectionForLabel(
+    const FUnifiedScriptAuthoringFunction& Function,
+    const FUnifiedScriptAuthoringAction& CaseLabel,
+    const FUnifiedScriptAuthoringAction*& OutSwitchStatement,
+    TArray<FSwitchSectionContext>& OutSections,
+    int32& OutSectionIndex,
+    FString& OutError)
+{
+    if (CaseLabel.GraphKind != TEXT("switchCase"))
+    {
+        OutError = TEXT("Select a case/default action before editing a switch section.");
+        return false;
+    }
+    const FUnifiedScriptAuthoringRegion* SectionRegion = Function.FindRegion(CaseLabel.RegionId);
+    const FUnifiedScriptAuthoringRegion* SwitchRegion = SectionRegion != nullptr
+        ? Function.FindRegion(SectionRegion->ParentRegionId)
+        : nullptr;
+    OutSwitchStatement = SwitchRegion != nullptr
+        ? Function.FindAction(SwitchRegion->SourceNodeId)
+        : nullptr;
+    const FUnifiedScriptAuthoringRegion* ResolvedSwitchRegion = nullptr;
+    if (SectionRegion == nullptr || SectionRegion->Kind != TEXT("switchSection") ||
+        OutSwitchStatement == nullptr ||
+        !ResolveSwitchSections(
+            Function,
+            *OutSwitchStatement,
+            ResolvedSwitchRegion,
+            OutSections,
+            OutError))
+    {
+        if (OutError.IsEmpty())
+        {
+            OutError = TEXT("The selected label does not belong to a structured switch section.");
+        }
+        return false;
+    }
+    OutSectionIndex = OutSections.IndexOfByPredicate([SectionRegion](
+        const FSwitchSectionContext& Section)
+    {
+        return Section.Region == SectionRegion;
+    });
+    if (OutSectionIndex == INDEX_NONE)
+    {
+        OutError = TEXT("The selected switch section is no longer present in sibling order.");
+        return false;
+    }
+    return true;
+}
+
+TArray<TSharedPtr<FJsonValue>> JsonIds(
+    const TArray<const FUnifiedScriptAuthoringAction*>& Labels)
+{
+    TArray<TSharedPtr<FJsonValue>> Values;
+    for (const FUnifiedScriptAuthoringAction* Label : Labels)
+    {
+        Values.Add(MakeShared<FJsonValueString>(Label->Id));
+    }
+    return Values;
+}
+
 const FUnifiedScriptAuthoringRegion* FindNearestEnclosingRegion(
     const FUnifiedScriptAuthoringFunction& Function,
     const FUnifiedScriptAuthoringRegion& Start,
@@ -1542,6 +2070,52 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildBasicNodeInsertionPatch(
         Statement->SetObjectField(TEXT("initializer"), Expression);
         Statement->SetStringField(TEXT("expectedTypeId"), Operands[0]->TypeId);
     }
+    else if (TemplateId == TEXT("flow.switch"))
+    {
+        const FUnifiedScriptAuthoringParameter* GoverningParameter =
+            Function.Parameters.FindByPredicate([](
+                const FUnifiedScriptAuthoringParameter& Parameter)
+            {
+                return Parameter.TypeDisplayName == TEXT("int") &&
+                    !Parameter.Id.IsEmpty() && !Parameter.TypeId.IsEmpty();
+            });
+        if (GoverningParameter == nullptr)
+        {
+            OutError = TEXT("Switch requires a typed int parameter in the active function.");
+            return false;
+        }
+
+        TSharedPtr<FJsonObject> FirstLabel;
+        TSharedPtr<FJsonObject> DefaultLabel;
+        FSwitchPatternTextParser Parser(Function, GoverningParameter->TypeId);
+        if (!Parser.BuildLabel(TEXT("0"), FirstLabel, OutError) ||
+            !Parser.BuildLabel(TEXT("default"), DefaultLabel, OutError))
+        {
+            return false;
+        }
+        const auto MakeSection = [](const TSharedPtr<FJsonObject>& Label)
+        {
+            const TSharedRef<FJsonObject> Section = MakeShared<FJsonObject>();
+            Section->SetArrayField(
+                TEXT("labels"),
+                {MakeShared<FJsonValueObject>(Label)});
+            return Section;
+        };
+
+        Statement->SetStringField(TEXT("statement"), TEXT("switch"));
+        Statement->SetObjectField(
+            TEXT("governingExpression"),
+            LocalReference(*GoverningParameter));
+        Statement->SetStringField(
+            TEXT("expectedGoverningTypeId"),
+            GoverningParameter->TypeId);
+        Statement->SetArrayField(
+            TEXT("sections"),
+            {
+                MakeShared<FJsonValueObject>(MakeSection(FirstLabel)),
+                MakeShared<FJsonValueObject>(MakeSection(DefaultLabel)),
+            });
+    }
     else if (TemplateId == TEXT("flow.branch") || TemplateId == TEXT("flow.while") ||
         TemplateId == TEXT("flow.doWhile"))
     {
@@ -1687,6 +2261,288 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildBasicNodeInsertionPatch(
     SetOptionalId(Operation, TEXT("expectedNextSiblingId"), Next);
     Operation->SetObjectField(TEXT("newStatement"), Statement);
     return SerializeRoot(MakePatchRoot(Document, Operation), OutPatchJson, OutError, TEXT("the node insertion patch"));
+}
+
+bool FUnifiedScriptAuthoringSurfaceReader::BuildSwitchSectionInsertionPatch(
+    const FUnifiedScriptAuthoringSurfaceDocument& Document,
+    const FUnifiedScriptAuthoringFunction& Function,
+    const FUnifiedScriptAuthoringAction& SwitchStatement,
+    const FString& LabelText,
+    FString& OutPatchJson,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::AuthoringSurface::Private;
+    using namespace UE::UnifiedScript::AuthoringSurface::Editing::Private;
+    const FUnifiedScriptAuthoringPort* GoverningType =
+        SwitchStatement.FindPort(TEXT("value"), TEXT("input"));
+    const FUnifiedScriptAuthoringRegion* SwitchRegion = nullptr;
+    TArray<FSwitchSectionContext> Sections;
+    if (!IsSemanticId(Document.SourceCompilationId) ||
+        !IsSemanticId(Document.SemanticConfigurationId) ||
+        !IsSemanticId(SwitchStatement.Id) || GoverningType == nullptr ||
+        !IsSemanticId(GoverningType->TypeId) ||
+        !ResolveSwitchSections(
+            Function,
+            SwitchStatement,
+            SwitchRegion,
+            Sections,
+            OutError))
+    {
+        if (OutError.IsEmpty())
+        {
+            OutError = TEXT("A switch section insertion requires an exact switch and governing type.");
+        }
+        return false;
+    }
+
+    TSharedPtr<FJsonObject> Label;
+    if (!FSwitchPatternTextParser(Function, GoverningType->TypeId)
+            .BuildLabel(LabelText, Label, OutError))
+    {
+        return false;
+    }
+    FString LabelKind;
+    Label->TryGetStringField(TEXT("label"), LabelKind);
+    const bool bDefault = LabelKind == TEXT("default");
+    if (bDefault && Sections.ContainsByPredicate([](const FSwitchSectionContext& Section)
+        {
+            return Section.bHasDefault;
+        }))
+    {
+        OutError = TEXT("This switch already owns a default section.");
+        return false;
+    }
+
+    int32 InsertionIndex = Sections.Num();
+    if (!bDefault)
+    {
+        const int32 DefaultIndex = Sections.IndexOfByPredicate(
+            [](const FSwitchSectionContext& Section)
+            {
+                return Section.bHasDefault;
+            });
+        if (DefaultIndex != INDEX_NONE)
+        {
+            InsertionIndex = DefaultIndex;
+        }
+    }
+    const FString Previous = InsertionIndex > 0
+        ? Sections[InsertionIndex - 1].SectionId
+        : FString();
+    const FString Next = InsertionIndex < Sections.Num()
+        ? Sections[InsertionIndex].SectionId
+        : FString();
+
+    const TSharedRef<FJsonObject> NewSection = MakeShared<FJsonObject>();
+    NewSection->SetArrayField(
+        TEXT("labels"),
+        {MakeShared<FJsonValueObject>(Label)});
+    const TSharedRef<FJsonObject> Operation = MakeShared<FJsonObject>();
+    Operation->SetStringField(TEXT("operation"), TEXT("insertSwitchSection"));
+    Operation->SetStringField(TEXT("targetNodeId"), SwitchStatement.Id);
+    SetOptionalId(Operation, TEXT("expectedPreviousSectionId"), Previous);
+    SetOptionalId(Operation, TEXT("expectedNextSectionId"), Next);
+    Operation->SetObjectField(TEXT("newSection"), NewSection);
+    return SerializeRoot(
+        MakePatchRoot(Document, Operation),
+        OutPatchJson,
+        OutError,
+        TEXT("the switch-section insertion patch"));
+}
+
+bool FUnifiedScriptAuthoringSurfaceReader::BuildSwitchSectionReplacementPatch(
+    const FUnifiedScriptAuthoringSurfaceDocument& Document,
+    const FUnifiedScriptAuthoringFunction& Function,
+    const FUnifiedScriptAuthoringAction& CaseLabel,
+    const FString& LabelText,
+    FString& OutPatchJson,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::AuthoringSurface::Private;
+    using namespace UE::UnifiedScript::AuthoringSurface::Editing::Private;
+    const FUnifiedScriptAuthoringAction* SwitchStatement = nullptr;
+    TArray<FSwitchSectionContext> Sections;
+    int32 SectionIndex = INDEX_NONE;
+    if (!ResolveSwitchSectionForLabel(
+            Function,
+            CaseLabel,
+            SwitchStatement,
+            Sections,
+            SectionIndex,
+            OutError))
+    {
+        return false;
+    }
+    const FUnifiedScriptAuthoringPort* GoverningType =
+        SwitchStatement->FindPort(TEXT("value"), TEXT("input"));
+    if (GoverningType == nullptr || !IsSemanticId(GoverningType->TypeId))
+    {
+        OutError = TEXT("The switch no longer exposes its exact governing type.");
+        return false;
+    }
+
+    TSharedPtr<FJsonObject> Label;
+    if (!FSwitchPatternTextParser(Function, GoverningType->TypeId)
+            .BuildLabel(LabelText, Label, OutError))
+    {
+        return false;
+    }
+    FString LabelKind;
+    Label->TryGetStringField(TEXT("label"), LabelKind);
+    if (LabelKind == TEXT("default") && Sections.ContainsByPredicate(
+            [SectionIndex, &Sections](const FSwitchSectionContext& Section)
+            {
+                return &Section != &Sections[SectionIndex] && Section.bHasDefault;
+            }))
+    {
+        OutError = TEXT("Another section already owns the switch default label.");
+        return false;
+    }
+
+    const FSwitchSectionContext& Section = Sections[SectionIndex];
+    const TSharedRef<FJsonObject> Operation = MakeShared<FJsonObject>();
+    Operation->SetStringField(TEXT("operation"), TEXT("replaceSwitchSection"));
+    Operation->SetStringField(TEXT("targetNodeId"), Section.SectionId);
+    Operation->SetStringField(TEXT("expectedSwitchStatementId"), SwitchStatement->Id);
+    Operation->SetArrayField(TEXT("expectedLabelIds"), JsonIds(Section.Labels));
+    Operation->SetArrayField(
+        TEXT("newLabels"),
+        {MakeShared<FJsonValueObject>(Label)});
+    return SerializeRoot(
+        MakePatchRoot(Document, Operation),
+        OutPatchJson,
+        OutError,
+        TEXT("the switch-section replacement patch"));
+}
+
+bool FUnifiedScriptAuthoringSurfaceReader::BuildSwitchSectionMovePatch(
+    const FUnifiedScriptAuthoringSurfaceDocument& Document,
+    const FUnifiedScriptAuthoringFunction& Function,
+    const FUnifiedScriptAuthoringAction& CaseLabel,
+    int32 Direction,
+    FString& OutPatchJson,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::AuthoringSurface::Editing::Private;
+    const FUnifiedScriptAuthoringAction* SwitchStatement = nullptr;
+    TArray<FSwitchSectionContext> Sections;
+    int32 SectionIndex = INDEX_NONE;
+    if ((Direction != -1 && Direction != 1) ||
+        !ResolveSwitchSectionForLabel(
+            Function,
+            CaseLabel,
+            SwitchStatement,
+            Sections,
+            SectionIndex,
+            OutError))
+    {
+        if (OutError.IsEmpty())
+        {
+            OutError = TEXT("A switch section can move only one slot up or down.");
+        }
+        return false;
+    }
+    const int32 DestinationIndex = SectionIndex + Direction;
+    if (!Sections.IsValidIndex(DestinationIndex))
+    {
+        OutError = Direction < 0
+            ? TEXT("This switch section is already first.")
+            : TEXT("This switch section is already last.");
+        return false;
+    }
+
+    const FSwitchSectionContext& Section = Sections[SectionIndex];
+    const FString SourcePrevious = SectionIndex > 0
+        ? Sections[SectionIndex - 1].SectionId
+        : FString();
+    const FString SourceNext = SectionIndex + 1 < Sections.Num()
+        ? Sections[SectionIndex + 1].SectionId
+        : FString();
+    TArray<FString> Remaining;
+    for (const FSwitchSectionContext& Candidate : Sections)
+    {
+        if (Candidate.SectionId != Section.SectionId)
+        {
+            Remaining.Add(Candidate.SectionId);
+        }
+    }
+    const FString DestinationPrevious = DestinationIndex > 0
+        ? Remaining[DestinationIndex - 1]
+        : FString();
+    const FString DestinationNext = DestinationIndex < Remaining.Num()
+        ? Remaining[DestinationIndex]
+        : FString();
+
+    const TSharedRef<FJsonObject> Operation = MakeShared<FJsonObject>();
+    Operation->SetStringField(TEXT("operation"), TEXT("moveSwitchSection"));
+    Operation->SetStringField(TEXT("targetNodeId"), Section.SectionId);
+    Operation->SetStringField(TEXT("expectedSwitchStatementId"), SwitchStatement->Id);
+    SetOptionalId(
+        Operation,
+        TEXT("expectedSourcePreviousSectionId"),
+        SourcePrevious);
+    SetOptionalId(Operation, TEXT("expectedSourceNextSectionId"), SourceNext);
+    SetOptionalId(
+        Operation,
+        TEXT("expectedDestinationPreviousSectionId"),
+        DestinationPrevious);
+    SetOptionalId(
+        Operation,
+        TEXT("expectedDestinationNextSectionId"),
+        DestinationNext);
+    return SerializeRoot(
+        MakePatchRoot(Document, Operation),
+        OutPatchJson,
+        OutError,
+        TEXT("the switch-section move patch"));
+}
+
+bool FUnifiedScriptAuthoringSurfaceReader::BuildSwitchSectionDeletionPatch(
+    const FUnifiedScriptAuthoringSurfaceDocument& Document,
+    const FUnifiedScriptAuthoringFunction& Function,
+    const FUnifiedScriptAuthoringAction& CaseLabel,
+    FString& OutPatchJson,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::AuthoringSurface::Editing::Private;
+    const FUnifiedScriptAuthoringAction* SwitchStatement = nullptr;
+    TArray<FSwitchSectionContext> Sections;
+    int32 SectionIndex = INDEX_NONE;
+    if (!ResolveSwitchSectionForLabel(
+            Function,
+            CaseLabel,
+            SwitchStatement,
+            Sections,
+            SectionIndex,
+            OutError))
+    {
+        return false;
+    }
+    if (Sections.Num() <= 1)
+    {
+        OutError = TEXT("A switch must retain at least one section.");
+        return false;
+    }
+
+    const FSwitchSectionContext& Section = Sections[SectionIndex];
+    const FString Previous = SectionIndex > 0
+        ? Sections[SectionIndex - 1].SectionId
+        : FString();
+    const FString Next = SectionIndex + 1 < Sections.Num()
+        ? Sections[SectionIndex + 1].SectionId
+        : FString();
+    const TSharedRef<FJsonObject> Operation = MakeShared<FJsonObject>();
+    Operation->SetStringField(TEXT("operation"), TEXT("deleteSwitchSection"));
+    Operation->SetStringField(TEXT("targetNodeId"), Section.SectionId);
+    Operation->SetStringField(TEXT("expectedSwitchStatementId"), SwitchStatement->Id);
+    SetOptionalId(Operation, TEXT("expectedPreviousSectionId"), Previous);
+    SetOptionalId(Operation, TEXT("expectedNextSectionId"), Next);
+    Operation->SetArrayField(TEXT("expectedLabelIds"), JsonIds(Section.Labels));
+    return SerializeRoot(
+        MakePatchRoot(Document, Operation),
+        OutPatchJson,
+        OutError,
+        TEXT("the switch-section deletion patch"));
 }
 
 bool FUnifiedScriptAuthoringSurfaceReader::BuildMemberInvocationInsertionPatch(

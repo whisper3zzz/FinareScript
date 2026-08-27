@@ -630,7 +630,7 @@ the same semantic program.
 
 ### M8.1 — Structured graph editing completeness
 
-- [ ] add `switch` and supported patterns, deterministic temporary naming, and
+- [x] add `switch` and supported patterns, deterministic temporary naming, and
   the remaining high-value structured control operations
 - [ ] support safe control-flow reconnection through region-aware transforms;
   reject irreducible or semantically ambiguous wiring with actionable feedback
@@ -659,9 +659,12 @@ Authoring Surface v0.4 carries normalized Graph properties, including the exact
 semantic switch-section identity, so Slate can consume these operations without
 parsing presentation text. The 467/467 managed suite, UE 5.8 editor build,
 focused native Authoring Surface Automation, and 48/48 repository validator
-pass. Slate controls for the new section operations, cross-region structured
-control transforms, and the full edit transaction/undo contract remain open,
-so M8.1 is not yet complete.
+pass. The Slate palette now creates a typed switch, and its inspector converts
+bounded pattern text into semantic labels, inserts Case/Default sections,
+relabels whole sections, moves them by exact sibling gaps, and routes both its
+button and Delete-key paths through safe section deletion. Cross-region
+structured control transforms and the full edit transaction/undo contract
+remain open, so M8.1 is not yet complete.
 
 ### M8.2 — Blueprint-grade Unreal experience
 

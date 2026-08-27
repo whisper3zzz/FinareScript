@@ -2703,6 +2703,11 @@ def main() -> int:
         and "BuildDataEdgeDisconnectionPatch" in unreal_authoring_surface_source
         and "BuildSharedDataEdgePatchPlan" in unreal_authoring_surface_source
         and "BuildBasicNodeInsertionPatch" in unreal_authoring_surface_source
+        and "BuildSwitchSectionInsertionPatch" in unreal_authoring_surface_source
+        and "BuildSwitchSectionReplacementPatch" in unreal_authoring_surface_source
+        and "BuildSwitchSectionMovePatch" in unreal_authoring_surface_source
+        and "BuildSwitchSectionDeletionPatch" in unreal_authoring_surface_source
+        and "FSwitchPatternTextParser" in unreal_authoring_surface_source
         and "BuildMemberInvocationInsertionPatch" in unreal_authoring_surface_source
         and "BuildUnrealEventHandlerInsertionPatch" in unreal_authoring_surface_source
         and "BuildStatementDeletionPatch" in unreal_authoring_surface_source
@@ -2710,6 +2715,11 @@ def main() -> int:
         and "BuildControlEdgeReconnectionPatch" in unreal_authoring_surface_source
         and "moveStatement" in unreal_authoring_surface_source
         and "HandleControlRewireRequested" in unreal_authoring_widget
+        and "HandleAddSwitchSection" in unreal_authoring_widget
+        and "HandleReplaceSwitchSection" in unreal_authoring_widget
+        and "HandleMoveSwitchSection" in unreal_authoring_widget
+        and "HandleDeleteSwitchSection" in unreal_authoring_widget
+        and 'TEXT("flow.switch")' in unreal_authoring_widget
         and "unifiedscript.patch/v0.23" in unreal_authoring_surface_source
         and "SUnifiedScriptAuthoringSurface" in unreal_authoring_widget
         and "HandleDataRewireRequested" in unreal_authoring_widget

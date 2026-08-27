@@ -234,6 +234,41 @@ public:
         FString& OutPatchJson,
         FString& OutError);
 
+    /** Inserts a typed case/default section into one exact switch statement. */
+    static bool BuildSwitchSectionInsertionPatch(
+        const FUnifiedScriptAuthoringSurfaceDocument& Document,
+        const FUnifiedScriptAuthoringFunction& Function,
+        const FUnifiedScriptAuthoringAction& SwitchStatement,
+        const FString& LabelText,
+        FString& OutPatchJson,
+        FString& OutError);
+
+    /** Replaces all labels on one exact switch section from bounded pattern text. */
+    static bool BuildSwitchSectionReplacementPatch(
+        const FUnifiedScriptAuthoringSurfaceDocument& Document,
+        const FUnifiedScriptAuthoringFunction& Function,
+        const FUnifiedScriptAuthoringAction& CaseLabel,
+        const FString& LabelText,
+        FString& OutPatchJson,
+        FString& OutError);
+
+    /** Moves one exact switch section by one ordered sibling slot. */
+    static bool BuildSwitchSectionMovePatch(
+        const FUnifiedScriptAuthoringSurfaceDocument& Document,
+        const FUnifiedScriptAuthoringFunction& Function,
+        const FUnifiedScriptAuthoringAction& CaseLabel,
+        int32 Direction,
+        FString& OutPatchJson,
+        FString& OutError);
+
+    /** Deletes one exact empty/break-only switch section. */
+    static bool BuildSwitchSectionDeletionPatch(
+        const FUnifiedScriptAuthoringSurfaceDocument& Document,
+        const FUnifiedScriptAuthoringFunction& Function,
+        const FUnifiedScriptAuthoringAction& CaseLabel,
+        FString& OutPatchJson,
+        FString& OutError);
+
     /** Inserts one reflected instance call using existing same-function parameters. */
     static bool BuildMemberInvocationInsertionPatch(
         const FUnifiedScriptAuthoringSurfaceDocument& Document,

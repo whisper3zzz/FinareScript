@@ -96,6 +96,15 @@ private:
         const UEdGraphPin* InputPin);
     void HandleNodeCreateRequested(const FString& ActionId, const FVector2D& Location);
     void HandleStatementDeleteRequested(const UEdGraphNode* Node);
+    FReply HandleAddSwitchSection(
+        FString SwitchActionId,
+        TSharedPtr<SEditableTextBox> LabelEditor,
+        bool bDefault);
+    FReply HandleReplaceSwitchSection(
+        FString CaseActionId,
+        TSharedPtr<SEditableTextBox> LabelEditor);
+    FReply HandleMoveSwitchSection(FString CaseActionId, int32 Direction);
+    FReply HandleDeleteSwitchSection(FString CaseActionId);
     void SubmitSemanticPatch(FString Patch, FString Activity);
     void SubmitAuthoringTransaction(FString Payload, FString Url, FString Activity);
     void HandlePatchResponse(bool bRequestSucceeded, int32 StatusCode, FString ResponseJson);

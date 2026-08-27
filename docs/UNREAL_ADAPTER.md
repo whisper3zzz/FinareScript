@@ -613,6 +613,24 @@ empty. The generated scalar ABI v3 lane avoids generic call-frame construction
 for the measured fixed signature while preserving the complete marshaller for
 other shapes.
 
+## Phase B.24 structured switch authoring
+
+The native GraphEditor now exposes `Switch on Integer` beside the existing
+structured flow templates. It emits Semantic Patch v0.23 over a real typed
+function parameter and begins with explicit `case 0` and `default` break-only
+sections. The Switch inspector inserts ordered case/default sections; the Case
+inspector relabels, moves, or safely deletes the exact semantic section. Delete
+key routing recognizes case actions and submits the same section transaction
+instead of treating labels as ordinary statements.
+
+The bounded native pattern parser emits the shared JSON algebra for constant,
+declaration, type, var, discard, relational, logical, negated, and
+parenthesized patterns, plus literal or bool-parameter guards. It consumes
+Authoring Surface v0.4 `sectionId` and `switchSectionId` properties and includes
+old label and sibling identities in every request. Source text and visual wires
+remain compiler-owned until the Workbench accepts, rebuilds, and publishes the
+next Surface generation.
+
 ## Commands
 
 The helper keeps machine-local paths and all generated output outside Git:
