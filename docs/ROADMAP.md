@@ -49,8 +49,8 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-26**
 
 - Active milestone: **M7 — General gameplay API and runtime completeness**
-- Next slice: **M7.1 — Binding coverage matrix**
-- Primary engine gate: **Unreal Engine 5.8.1 release build at `D:\UE_5.8`**
+- Next slice: **M7.2 — Services, async, and lifecycle**
+- Primary engine gate: **Unreal Engine 5.8.1 source build at `D:\Project\UnrealEngine-5.8.1`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
 ## Verified baseline
@@ -60,9 +60,9 @@ machine-local unless an artifact explicitly says otherwise.
 
 | Gate | Verified result |
 | --- | --- |
-| Main source | `9b5b6ec` (`feat: package deliverable BlockBreaker demo`) |
+| Main source | `51c3571` (`feat: complete adoptable project alpha`) |
 | Comparison source | `a6bee1b` (`feat: complete UnifiedScript gameplay demo`) |
-| Managed tests | 441 / 441 passed |
+| Managed tests | 444 / 444 passed |
 | Repository validator | 42 / 42 passed |
 | UE 5.8.1 native build | passed |
 | `UnifiedScript.Unreal` Automation | 10 / 10 passed |
@@ -78,8 +78,8 @@ machine-local unless an artifact explicitly says otherwise.
 | --- | --- | --- |
 | R0 foundation | Deterministic language, graph, patch, CoreCLR, and UE adapter contracts | Complete |
 | R1 demonstrable alpha | A packaged sample runs meaningful gameplay without Puerts | Complete |
-| R2 adoptable alpha | A second UE project can install, generate, run, and package without repository-specific glue | Active — M6.3 |
-| R3 product beta | Practical gameplay API coverage, complete visual/code loop, debugging, and migration workflow | Queued — M7 to M9 |
+| R2 adoptable alpha | A second UE project can install, generate, run, and package without repository-specific glue | Complete |
+| R3 product beta | Practical gameplay API coverage, complete visual/code loop, debugging, and migration workflow | Active — M7 |
 | R4 release candidate | Broad performance, soak, packaging, upgrade, and CI evidence | Queued — M10 to M11 |
 | R5 1.0 | Versioned SDK and plugin distribution with supported compatibility and migration policy | Queued — M12 |
 
@@ -131,8 +131,8 @@ Outcome: Roslyn symbols bind into a language-independent type/effect model.
 - [x] semantic configuration identity for references and effect rules
 - [ ] flow-sensitive nullability state (scheduled in M8.5)
 - [x] `.csproj`/MSBuild and NuGet reference loading
-- [ ] configurable API allow/deny catalog (scheduled in M7.1)
-- [ ] semantic diagnostics for unsupported APIs (scheduled in M7.1)
+- [x] configurable API allow/deny catalog
+- [x] semantic diagnostics for unsupported APIs
 
 ## M3 — Bidirectional source projection
 
@@ -491,15 +491,29 @@ project facade for supported engine operations.
 
 ### M7.1 — Binding coverage matrix
 
-- [ ] cover inheritance, interfaces, overloads, default parameters, static
+- [x] cover inheritance, interfaces, overloads, default parameters, static
   members, Blueprint metadata, nested structs, enums, object/class/soft handles,
   containers, return values, and `out`/`ref` combinations with golden generation
-- [ ] generate explicit allow/deny policy and stable diagnostics for unsafe or
+- [x] generate explicit allow/deny policy and stable diagnostics for unsafe or
   unsupported APIs
-- [ ] classify every selected reflected member as direct thunk, CallFrame,
+- [x] classify every selected reflected member as direct thunk, CallFrame,
   data-plane operation, safe reflection fallback, or rejected-with-reason
-- [ ] fail CI when selected project coverage regresses or handwritten generated
+- [x] fail CI when selected project coverage regresses or handwritten generated
   dispatch reappears
+
+Evidence (2026-08-26): reflection/API Contract/coverage advanced to v0.3/v0.2/v0.2
+with a checked-in matrix for inheritance, interfaces, overloads, defaults,
+Blueprint metadata, nested types, enums, soft handles, containers, and
+return/ref/out shapes. Exact C#, C++, visual-node, and coverage goldens compile
+and compare in the 444/444 managed suite. The live contract classifies 73
+members as 22 direct thunks, 49 CallFrame members, two safe delegate fallbacks,
+and zero rejected members; all 71 native paths are generated. Stable policy and
+`USUE5101`-`USUE5106` baseline diagnostics plus the repository handwritten-
+dispatch scan passed 42/42 invariants. UE 5.8.1 completed a clean 3,768-action
+Editor build, and the final one-command onboarding report
+`artifacts/onboarding/m7-1-20260826.json` passed deterministic regeneration,
+both native builds, deployment, and 10/10 Automation in 55,664 ms. That run
+also found and fixed source-engine-relative Slate API catalog resolution.
 
 ### M7.2 — Services, async, and lifecycle
 

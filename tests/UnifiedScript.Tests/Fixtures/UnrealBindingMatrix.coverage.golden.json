@@ -1,0 +1,184 @@
+{
+  "schemaVersion": "unifiedscript.unreal-binding-coverage/v0.2",
+  "engine": {
+    "major": 5,
+    "minor": 8,
+    "patch": 1,
+    "branch": "fixture"
+  },
+  "summary": {
+    "typeCount": 6,
+    "memberCount": 18,
+    "directThunkCount": 3,
+    "callFrameCount": 12,
+    "dataPlaneOperationCount": 1,
+    "reflectionFallbackCount": 1,
+    "rejectedCount": 1,
+    "nativeThunkCount": 15,
+    "deferredTypeCount": 0
+  },
+  "baseline": {
+    "minimumMemberCount": 18,
+    "minimumDirectThunkCount": 3,
+    "minimumCallFrameCount": 12,
+    "minimumDataPlaneOperationCount": 1,
+    "minimumReflectionFallbackCount": 1,
+    "maximumRejectedCount": 1
+  },
+  "gate": {
+    "passed": true,
+    "diagnostics": []
+  },
+  "entries": [
+    {
+      "path": "/Script/BindingMatrix.FixtureDerived:BatchMove",
+      "ownerPath": "/Script/BindingMatrix.FixtureDerived",
+      "kind": "function",
+      "disposition": "dataPlaneOperation",
+      "diagnosticCodes": [
+        "USUE4102"
+      ],
+      "message": "The selected member is served by the generated gameplay data plane."
+    },
+    {
+      "path": "/Script/BindingMatrix.FixtureDerived:ClassValue",
+      "ownerPath": "/Script/BindingMatrix.FixtureDerived",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/BindingMatrix.FixtureDerived:EchoOuter",
+      "ownerPath": "/Script/BindingMatrix.FixtureDerived",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/BindingMatrix.FixtureDerived:MapValue",
+      "ownerPath": "/Script/BindingMatrix.FixtureDerived",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/BindingMatrix.FixtureDerived:Mode",
+      "ownerPath": "/Script/BindingMatrix.FixtureDerived",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/BindingMatrix.FixtureDerived:Mutate",
+      "ownerPath": "/Script/BindingMatrix.FixtureDerived",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/BindingMatrix.FixtureDerived:ObjectValue",
+      "ownerPath": "/Script/BindingMatrix.FixtureDerived",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/BindingMatrix.FixtureDerived:ProtectedLabel",
+      "ownerPath": "/Script/BindingMatrix.FixtureDerived",
+      "kind": "property",
+      "disposition": "reflectionFallback",
+      "diagnosticCodes": [
+        "USUE4103"
+      ],
+      "message": "The project API policy explicitly selects safe reflection fallback."
+    },
+    {
+      "path": "/Script/BindingMatrix.FixtureDerived:Scale(float)",
+      "ownerPath": "/Script/BindingMatrix.FixtureDerived",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/BindingMatrix.FixtureDerived:Scale(int32)",
+      "ownerPath": "/Script/BindingMatrix.FixtureDerived",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/BindingMatrix.FixtureDerived:SoftClass",
+      "ownerPath": "/Script/BindingMatrix.FixtureDerived",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/BindingMatrix.FixtureDerived:SoftObject",
+      "ownerPath": "/Script/BindingMatrix.FixtureDerived",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/BindingMatrix.FixtureDerived:Spawn",
+      "ownerPath": "/Script/BindingMatrix.FixtureDerived",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/BindingMatrix.FixtureDerived:UnsafeValue",
+      "ownerPath": "/Script/BindingMatrix.FixtureDerived",
+      "kind": "property",
+      "disposition": "rejected",
+      "diagnosticCodes": [
+        "USUE5201"
+      ],
+      "message": "Weak object references are excluded until generation-safe weak handles are defined."
+    },
+    {
+      "path": "/Script/BindingMatrix.FixtureDerived:WorldTime",
+      "ownerPath": "/Script/BindingMatrix.FixtureDerived",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/BindingMatrix.InnerData:Value",
+      "ownerPath": "/Script/BindingMatrix.InnerData",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/BindingMatrix.OuterData:Inner",
+      "ownerPath": "/Script/BindingMatrix.OuterData",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/BindingMatrix.OuterData:Modes",
+      "ownerPath": "/Script/BindingMatrix.OuterData",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    }
+  ]
+}

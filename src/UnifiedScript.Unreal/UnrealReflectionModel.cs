@@ -26,6 +26,8 @@ public enum UnrealValueKind
     Text,
     Object,
     Class,
+    SoftObject,
+    SoftClass,
     Struct,
     Enum,
     Array,
@@ -33,6 +35,19 @@ public enum UnrealValueKind
     Map,
     Unsupported,
 }
+
+public sealed record UnrealBlueprintMetadata(
+    string? DisplayName = null,
+    string? Category = null,
+    string? Tooltip = null,
+    bool Deprecated = false,
+    string? DeprecationMessage = null,
+    string? WorldContextParameter = null);
+
+public sealed record UnrealEnumValueDefinition(
+    string Name,
+    long Value,
+    string? DisplayName = null);
 
 public enum UnrealParameterDirection
 {
@@ -71,7 +86,10 @@ public sealed record UnrealTypeReference(
 
 public sealed record UnrealTypeTraits(
     bool Abstract,
-    bool BlueprintType);
+    bool BlueprintType)
+{
+    public bool Interface { get; init; }
+}
 
 public sealed record UnrealPropertyAccess(
     bool Readable,
@@ -83,12 +101,19 @@ public sealed record UnrealReflectedProperty(
     string Path,
     string Name,
     UnrealTypeReference Type,
-    UnrealPropertyAccess Access);
+    UnrealPropertyAccess Access)
+{
+    public UnrealBlueprintMetadata Metadata { get; init; } = new();
+}
 
 public sealed record UnrealReflectedParameter(
     string Name,
     UnrealTypeReference Type,
-    UnrealParameterDirection Direction);
+    UnrealParameterDirection Direction)
+{
+    /// <summary>Canonical Unreal default literal exported from CPP_Default_* metadata.</summary>
+    public string? DefaultValue { get; init; }
+}
 
 public sealed record UnrealFunctionTraits(
     bool Static,
@@ -101,7 +126,10 @@ public sealed record UnrealReflectedFunction(
     string Name,
     UnrealTypeReference ReturnType,
     IReadOnlyList<UnrealReflectedParameter> Parameters,
-    UnrealFunctionTraits Traits);
+    UnrealFunctionTraits Traits)
+{
+    public UnrealBlueprintMetadata Metadata { get; init; } = new();
+}
 
 public sealed record UnrealDelegateTraits(
     UnrealDelegateKind Kind,
@@ -131,6 +159,12 @@ public sealed record UnrealReflectedType(
     string? HeaderPath = null)
 {
     public IReadOnlyList<UnrealReflectedDelegate> Delegates { get; init; } = [];
+
+    public IReadOnlyList<string> InterfacePaths { get; init; } = [];
+
+    public IReadOnlyList<UnrealEnumValueDefinition> EnumValues { get; init; } = [];
+
+    public UnrealBlueprintMetadata Metadata { get; init; } = new();
 }
 
 public sealed record UnrealReflectionManifest(
@@ -139,7 +173,9 @@ public sealed record UnrealReflectionManifest(
     IReadOnlyList<string> Modules,
     IReadOnlyList<UnrealReflectedType> Types)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.unreal-reflection/v0.2";
+    public const string CurrentSchemaVersion = "unifiedscript.unreal-reflection/v0.3";
+
+    public const string PreviousSchemaVersion = "unifiedscript.unreal-reflection/v0.2";
 
     public const string LegacySchemaVersion = "unifiedscript.unreal-reflection/v0.1";
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -218,7 +219,7 @@ def main() -> int:
     }
     require(
         api_contract["schemaVersion"]
-        == "unifiedscript.unreal-api-contract/v0.1"
+        == "unifiedscript.unreal-api-contract/v0.2"
         and api_nodes["schemaVersion"]
         == "unifiedscript.unreal-api-node-catalog/v0.1"
         and api_nodes["contractName"] == api_contract["contractName"]
@@ -267,10 +268,13 @@ def main() -> int:
         and onboarding_config["editorTarget"] == "UEUnifiedScriptHostEditor"
         and onboarding_config["bindings"]["requireCompleteNativeCoverage"] is True
         and all(not Path(path).is_absolute() and ":" not in path for path in onboarding_paths)
-        and coverage_summary["memberCount"] == coverage_summary["nativeThunkCount"]
+        and coverage_summary["memberCount"]
+        == coverage_summary["nativeThunkCount"]
+        + coverage_summary["reflectionFallbackCount"]
+        + coverage_summary["dataPlaneOperationCount"]
         and coverage_summary["memberCount"]
         == len(onboarding_coverage["entries"])
-        and coverage_summary["reflectionFallbackCount"] == 0
+        and onboarding_coverage["gate"]["passed"] is True
         and coverage_summary["rejectedCount"] == 0
         and coverage_summary["deferredTypeCount"] == 0
         and "EngineAssociation" in onboarding_script
@@ -1462,6 +1466,38 @@ def main() -> int:
     unreal_binding_coverage_test = unreal_binding_coverage_test_path.read_text(
         encoding="utf-8"
     )
+    unreal_runtime_source_root = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+    )
+    handwritten_dispatch_files = []
+    for source_path in [
+        *unreal_runtime_source_root.rglob("*.cpp"),
+        *unreal_runtime_source_root.rglob("*.h"),
+    ]:
+        relative_parts = source_path.relative_to(unreal_runtime_source_root).parts
+        if "Generated" in relative_parts or "Tests" in relative_parts:
+            continue
+        source_text = source_path.read_text(encoding="utf-8")
+        if re.search(r"case\s+0x[0-9A-Fa-f]{16}(?:ull|UL)", source_text) or re.search(
+            r"switch\s*\(\s*MemberId\s*\)", source_text
+        ):
+            handwritten_dispatch_files.append(str(source_path))
+    binding_matrix_fixture_root = (
+        ROOT / "tests" / "UnifiedScript.Tests" / "Fixtures"
+    )
+    binding_matrix_golden_files = [
+        binding_matrix_fixture_root / "UnrealBindingMatrix.reflection.json",
+        binding_matrix_fixture_root / "UnrealBindingMatrix.api-contract.json",
+        binding_matrix_fixture_root / "UnrealBindingMatrix.bindings.golden.cs",
+        binding_matrix_fixture_root / "UnrealBindingMatrix.thunks.golden.cpp",
+        binding_matrix_fixture_root / "UnrealBindingMatrix.nodes.golden.json",
+        binding_matrix_fixture_root / "UnrealBindingMatrix.coverage.golden.json",
+    ]
     unreal_in_process_transport = unreal_in_process_transport_path.read_text(
         encoding="utf-8"
     )
@@ -1563,18 +1599,20 @@ def main() -> int:
     )
     require(
         unreal_manifest["schemaVersion"]
-        == "unifiedscript.unreal-reflection/v0.2"
+        == "unifiedscript.unreal-reflection/v0.3"
         and unreal_manifest["modules"] == ["Engine", "UEUnifiedScriptRuntime"]
         and {item["path"] for item in unreal_manifest["types"]}
         == {
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor",
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptAsset",
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract",
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary",
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldSubsystem",
             "/Script/Engine.ActorInstanceHandle",
             "/Script/Engine.HitResult",
+            "/Script/UEUnifiedScriptRuntime.EUnifiedScriptInteropMode",
         }
         and unreal_component_manifest["headerPath"] == "UnifiedScriptComponent.h"
         and all(
@@ -1642,6 +1680,8 @@ def main() -> int:
             "ObjectValue",
             "ClassValue",
             "RotatorValue",
+            "SoftClassValue",
+            "SoftObjectValue",
             "StringValue",
             "TextValue",
             "TransformValue",
@@ -1650,6 +1690,7 @@ def main() -> int:
         and {item["name"] for item in unreal_interop_manifest["functions"]}
         == {
             "AddInt64",
+            "AddWithDefault",
             "AddVector",
             "BroadcastInteropChanged",
             "CountSet",
@@ -1705,7 +1746,7 @@ def main() -> int:
         and {module["Name"] for module in unreal_plugin["Modules"]}
         == {"UEUnifiedScriptRuntime", "UEUnifiedScriptEditor"}
         and "UUnifiedScriptComponent : public UActorComponent" in unreal_component
-        and "unifiedscript.unreal-reflection/v0.2" in unreal_exporter
+        and "unifiedscript.unreal-reflection/v0.3" in unreal_exporter
         and "UnifiedScriptBindingInternal" in unreal_exporter
         and "UnifiedScriptBindingInternal" in unreal_delegate_proxy
         and "TObjectIterator<UClass>" in unreal_exporter
@@ -1924,7 +1965,10 @@ def main() -> int:
     )
     checks.append("UE performance gate uses median samples and matched Puerts environments")
     require(
-        "unifiedscript.unreal-binding-coverage/v0.1" in unreal_binding_coverage
+        "unifiedscript.unreal-binding-coverage/v0.2" in unreal_binding_coverage
+        and "DirectThunk" in unreal_binding_coverage
+        and "CallFrame" in unreal_binding_coverage
+        and "DataPlaneOperation" in unreal_binding_coverage
         and "ReflectionFallback" in unreal_binding_coverage
         and "USUE4001" in unreal_binding_coverage
         and "IsMissingGeneratedMember" in unreal_native_adapter
@@ -1934,11 +1978,15 @@ def main() -> int:
         in unreal_native_adapter_test
         and "CoverageSeparatesNativeFallbackAndRejectedMembers"
         in unreal_binding_coverage_test
+        and "M71MatrixMatchesAllGoldenArtifactsAndCompiles"
+        in unreal_binding_coverage_test
+        and all(path.is_file() for path in binding_matrix_golden_files)
+        and not handwritten_dispatch_files
         and "--report" in cli_source
         and "--fail-on-rejected" in cli_source,
         "Unreal binding coverage gate or safe reflected-path fallback is missing",
     )
-    checks.append("UE binding coverage distinguishes direct, safe fallback, and rejected members")
+    checks.append("M7.1 binding matrix and no-handwritten-dispatch regression gate are complete")
     require(
         "UUnifiedScriptWorldSubsystem final" in unreal_world_host_header
         and "public UWorldSubsystem" in unreal_world_host_header

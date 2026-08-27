@@ -18,31 +18,80 @@ silently exposing different Unreal members.
 
 ## Contract schema
 
-`unifiedscript.unreal-api-contract/v0.1` requires a contract name, managed
+`unifiedscript.unreal-api-contract/v0.2` requires a contract name, managed
 namespace, generated-thunk header and C++ namespace, plus one or more exact
 type/member selectors. Type paths and member names must exist in the supplied
-`unifiedscript.unreal-reflection/v0.2` document. Unknown fields, duplicate
+`unifiedscript.unreal-reflection/v0.3` document. Unknown fields, duplicate
 selectors, stale types, and stale members fail generation.
 
 ```json
 {
-  "schemaVersion": "unifiedscript.unreal-api-contract/v0.1",
+  "schemaVersion": "unifiedscript.unreal-api-contract/v0.2",
   "contractName": "Game.Gameplay",
   "managedNamespace": "Game.UnifiedScript.Generated",
   "nativeHeader": "GameGeneratedThunks.h",
   "nativeNamespace": "UE::UnifiedScript::Generated::Game",
   "types": [
     {
-      "path": "/Script/Engine.Actor",
-      "members": ["GetActorForwardVector", "GetActorRightVector"]
+      "path": "/Script/Game.Player",
+      "members": ["BatchMove", "UnsafeWeakValue"]
     }
-  ]
+  ],
+  "policy": {
+    "defaultAction": "allow",
+    "rules": [
+      {
+        "memberPath": "/Script/Game.Player:BatchMove",
+        "action": "allow",
+        "route": "dataPlaneOperation"
+      },
+      {
+        "memberPath": "/Script/Game.Player:UnsafeWeakValue",
+        "action": "deny",
+        "route": "auto",
+        "diagnosticCode": "USUE5201",
+        "reason": "Weak references require a generation-safe handle contract."
+      }
+    ]
+  },
+  "coverageBaseline": {
+    "minimumMemberCount": 2,
+    "minimumDirectThunkCount": 0,
+    "minimumCallFrameCount": 0,
+    "minimumDataPlaneOperationCount": 1,
+    "minimumReflectionFallbackCount": 0,
+    "maximumRejectedCount": 1
+  }
 }
 ```
 
 Member lists are explicit rather than wildcard-based. Adding a Blueprint API
 to an engine class therefore cannot accidentally expand the shipped scripting
 surface after an engine upgrade.
+
+Overload selectors use `Name(type,...)`, for example `Scale(int32)` and
+`Scale(float)`. The generator also closes required base classes, interfaces,
+nested structs, and enums so every emitted managed type is self-contained.
+
+## Policy and coverage gate
+
+Policy rules are exact member-path decisions. `allow` can retain automatic
+routing or require `directThunk`, `callFrame`, `dataPlaneOperation`, or
+`reflectionFallback`; `deny` requires a stable diagnostic code and reason.
+Unmatched members follow `defaultAction`.
+
+The `unifiedscript.unreal-binding-coverage/v0.2` report records one of five
+dispositions for every selected member:
+
+- `directThunk`: fixed ABI call with at most four supported input arguments;
+- `callFrame`: generated ABI v3 descriptor/dynamic/container/ref/out path;
+- `dataPlaneOperation`: generated shared gameplay batch/command boundary;
+- `reflectionFallback`: explicitly permitted safe cold-path reflection;
+- `rejected`: denied or unsupported, always with a stable reason.
+
+The checked-in baseline is monotonic: CI fails if member or route counts fall
+below their minimums, rejected members exceed the maximum, or handwritten
+member-ID dispatch appears outside generated/test sources.
 
 ## Reflection export
 

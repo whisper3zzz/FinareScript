@@ -934,10 +934,12 @@ try {
         $coverage = Get-Content -LiteralPath $resolved.coverageOutput -Raw |
             ConvertFrom-Json
         if ($resolved.requireCompleteNativeCoverage -and
-            ($coverage.summary.nativeThunkCount -ne $coverage.summary.memberCount -or
-             $coverage.summary.reflectionFallbackCount -ne 0 -or
+            (($coverage.summary.nativeThunkCount +
+               $coverage.summary.reflectionFallbackCount +
+               $coverage.summary.dataPlaneOperationCount) -ne $coverage.summary.memberCount -or
              $coverage.summary.rejectedCount -ne 0 -or
-             $coverage.summary.deferredTypeCount -ne 0)) {
+             $coverage.summary.deferredTypeCount -ne 0 -or
+             $coverage.gate.passed -ne $true)) {
             Throw-OnboardingError `
                 -Code 'USONB2501' `
                 -Message "Generated native coverage is incomplete: $($resolved.coverageOutput)"

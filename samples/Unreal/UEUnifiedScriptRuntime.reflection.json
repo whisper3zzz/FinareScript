@@ -1,11 +1,11 @@
 {
-	"schemaVersion": "unifiedscript.unreal-reflection/v0.2",
+	"schemaVersion": "unifiedscript.unreal-reflection/v0.3",
 	"engine":
 	{
 		"major": 5,
 		"minor": 8,
 		"patch": 1,
-		"branch": "//UE5/Release-5.8"
+		"branch": "UE5"
 	},
 	"modules": [
 		"Engine",
@@ -23,8 +23,17 @@
 			"traits":
 			{
 				"abstract": false,
-				"blueprintType": true
+				"blueprintType": true,
+				"interface": false
 			},
+			"metadata":
+			{
+				"displayName": "Unified Script Actor",
+				"tooltip": "Placeable Actor whose gameplay behavior is supplied by a managed\nUnrealActorScript. The native class remains the stable Blueprint/UObject\nidentity while managed generations can be reloaded independently.",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
 			"properties": [
 				{
 					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:ManagedActorState",
@@ -40,6 +49,13 @@
 						"writable": true,
 						"editorVisible": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Managed Actor State",
+						"category": "UnifiedScript|State",
+						"tooltip": "Blueprint-visible state controlled by the managed Actor behavior.",
+						"deprecated": false
 					}
 				},
 				{
@@ -56,6 +72,12 @@
 						"writable": false,
 						"editorVisible": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Managed Tick Count",
+						"category": "UnifiedScript|State",
+						"deprecated": false
 					}
 				},
 				{
@@ -74,6 +96,12 @@
 						"writable": false,
 						"editorVisible": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Script Component",
+						"category": "UnifiedScript",
+						"deprecated": false
 					}
 				}
 			],
@@ -96,6 +124,13 @@
 						"pure": true,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Unified Script Component",
+						"category": "UnifiedScript",
+						"tooltip": "Get Unified Script Component",
+						"deprecated": false
 					}
 				},
 				{
@@ -113,6 +148,13 @@
 						"pure": false,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Increment Managed Tick Count",
+						"category": "UnifiedScript|State",
+						"tooltip": "Increment Managed Tick Count",
+						"deprecated": false
 					}
 				},
 				{
@@ -130,6 +172,13 @@
 						"pure": false,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Reload Managed Behavior",
+						"category": "UnifiedScript",
+						"tooltip": "Reload Managed Behavior",
+						"deprecated": false
 					}
 				},
 				{
@@ -157,6 +206,13 @@
 						"pure": false,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Set Managed Actor State",
+						"category": "UnifiedScript|State",
+						"tooltip": "Set Managed Actor State",
+						"deprecated": false
 					}
 				},
 				{
@@ -174,6 +230,13 @@
 						"pure": false,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Start Managed Behavior",
+						"category": "UnifiedScript",
+						"tooltip": "Start Managed Behavior",
+						"deprecated": false
 					}
 				},
 				{
@@ -191,6 +254,13 @@
 						"pure": false,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Stop Managed Behavior",
+						"category": "UnifiedScript",
+						"tooltip": "Stop Managed Behavior",
+						"deprecated": false
 					}
 				}
 			]
@@ -206,8 +276,17 @@
 			"traits":
 			{
 				"abstract": false,
-				"blueprintType": true
+				"blueprintType": true,
+				"interface": false
 			},
+			"metadata":
+			{
+				"displayName": "Unified Script Asset",
+				"tooltip": "Project asset describing one managed UnifiedScript entry point.\n\nThe asset owns program identity only. Start/tick policy remains on each host\ncomponent so multiple instances can run the same script differently.",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
 			"properties": [],
 			"delegates": [],
 			"functions": []
@@ -223,8 +302,17 @@
 			"traits":
 			{
 				"abstract": false,
-				"blueprintType": true
+				"blueprintType": true,
+				"interface": false
 			},
+			"metadata":
+			{
+				"displayName": "Unified Script Component",
+				"tooltip": "Unified Script Component",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
 			"properties": [
 				{
 					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ActiveDeclarationAssetPath",
@@ -240,6 +328,12 @@
 						"writable": false,
 						"editorVisible": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Active Declaration Asset Path",
+						"category": "UnifiedScript",
+						"deprecated": false
 					}
 				},
 				{
@@ -256,6 +350,12 @@
 						"writable": false,
 						"editorVisible": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Active Generation",
+						"category": "UnifiedScript",
+						"deprecated": false
 					}
 				},
 				{
@@ -272,6 +372,12 @@
 						"writable": false,
 						"editorVisible": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Active Script Asset Path",
+						"category": "UnifiedScript",
+						"deprecated": false
 					}
 				},
 				{
@@ -288,6 +394,12 @@
 						"writable": false,
 						"editorVisible": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Script Running",
+						"category": "UnifiedScript",
+						"deprecated": false
 					}
 				},
 				{
@@ -304,6 +416,12 @@
 						"writable": true,
 						"editorVisible": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Start Automatically",
+						"category": "UnifiedScript",
+						"deprecated": false
 					}
 				},
 				{
@@ -320,6 +438,12 @@
 						"writable": true,
 						"editorVisible": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Tick Automatically",
+						"category": "UnifiedScript|Runtime",
+						"deprecated": false
 					}
 				},
 				{
@@ -336,6 +460,12 @@
 						"writable": false,
 						"editorVisible": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Last Script Error",
+						"category": "UnifiedScript",
+						"deprecated": false
 					}
 				},
 				{
@@ -352,6 +482,13 @@
 						"writable": true,
 						"editorVisible": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Managed State",
+						"category": "UnifiedScript|Runtime",
+						"tooltip": "Script-controlled diagnostic state used by the first hosted demo.",
+						"deprecated": false
 					}
 				},
 				{
@@ -368,6 +505,12 @@
 						"writable": false,
 						"editorVisible": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Materialized State Count",
+						"category": "UnifiedScript",
+						"deprecated": false
 					}
 				},
 				{
@@ -384,6 +527,13 @@
 						"writable": true,
 						"editorVisible": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Script Assembly Path",
+						"category": "UnifiedScript|Runtime",
+						"tooltip": "Legacy direct configuration retained for existing components.",
+						"deprecated": false
 					}
 				},
 				{
@@ -400,6 +550,13 @@
 						"writable": true,
 						"editorVisible": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Script Asset Path",
+						"category": "UnifiedScript",
+						"tooltip": "Optional soft asset path used when ScriptAsset is not assigned.",
+						"deprecated": false
 					}
 				},
 				{
@@ -416,6 +573,12 @@
 						"writable": true,
 						"editorVisible": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Script Type Name",
+						"category": "UnifiedScript|Runtime",
+						"deprecated": false
 					}
 				}
 			],
@@ -496,6 +659,13 @@
 						"pure": true,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Add",
+						"category": "UnifiedScript|Verification",
+						"tooltip": "Add",
+						"deprecated": false
 					}
 				},
 				{
@@ -534,6 +704,13 @@
 						"pure": false,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Broadcast Managed Signal",
+						"category": "UnifiedScript|Verification",
+						"tooltip": "Broadcast Managed Signal",
+						"deprecated": false
 					}
 				},
 				{
@@ -570,6 +747,13 @@
 						"pure": true,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Script State Int 32",
+						"category": "UnifiedScript|State",
+						"tooltip": "Get Script State Int 32",
+						"deprecated": false
 					}
 				},
 				{
@@ -589,6 +773,13 @@
 						"pure": true,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Script Target",
+						"category": "UnifiedScript",
+						"tooltip": "UObject whose behavior is implemented by the managed script.",
+						"deprecated": false
 					}
 				},
 				{
@@ -606,6 +797,13 @@
 						"pure": false,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Refresh Script State",
+						"category": "UnifiedScript|State",
+						"tooltip": "Rebuilds Script State from the configured declaration while preserving compatible overrides.",
+						"deprecated": false
 					}
 				},
 				{
@@ -623,6 +821,13 @@
 						"pure": false,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Reload Script",
+						"category": "UnifiedScript",
+						"tooltip": "Reload Script",
+						"deprecated": false
 					}
 				},
 				{
@@ -640,6 +845,13 @@
 						"pure": false,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Request Reload",
+						"category": "UnifiedScript",
+						"tooltip": "Request Reload",
+						"deprecated": false
 					}
 				},
 				{
@@ -676,6 +888,13 @@
 						"pure": false,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Set Script State Int 32",
+						"category": "UnifiedScript|State",
+						"tooltip": "Set Script State Int 32",
+						"deprecated": false
 					}
 				},
 				{
@@ -693,6 +912,13 @@
 						"pure": false,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Start Script",
+						"category": "UnifiedScript",
+						"tooltip": "Start Script",
+						"deprecated": false
 					}
 				},
 				{
@@ -710,9 +936,42 @@
 						"pure": false,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Stop Script",
+						"category": "UnifiedScript",
+						"tooltip": "Stop Script",
+						"deprecated": false
 					}
 				}
 			]
+		},
+		{
+			"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract",
+			"name": "UnifiedScriptInteropContract",
+			"nativeName": "UUnifiedScriptInteropContract",
+			"module": "UEUnifiedScriptRuntime",
+			"headerPath": "UnifiedScriptInteropFixture.h",
+			"kind": "class",
+			"baseTypePath": "/Script/CoreUObject.Interface",
+			"traits":
+			{
+				"abstract": true,
+				"blueprintType": true,
+				"interface": true
+			},
+			"metadata":
+			{
+				"displayName": "Unified Script Interop Contract",
+				"tooltip": "Unified Script Interop Contract",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
+			"properties": [],
+			"delegates": [],
+			"functions": []
 		},
 		{
 			"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
@@ -725,8 +984,19 @@
 			"traits":
 			{
 				"abstract": false,
-				"blueprintType": true
+				"blueprintType": true,
+				"interface": false
 			},
+			"metadata":
+			{
+				"displayName": "Unified Script Interop Fixture",
+				"tooltip": "Public interop fixture used to keep generated common-type bindings executable.",
+				"deprecated": false
+			},
+			"interfacePaths": [
+				"/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract"
+			],
+			"enumValues": [],
 			"properties": [
 				{
 					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ByteValue",
@@ -742,6 +1012,12 @@
 						"writable": true,
 						"editorVisible": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Byte Value",
+						"category": "UnifiedScript|Interop",
+						"deprecated": false
 					}
 				},
 				{
@@ -760,6 +1036,12 @@
 						"writable": true,
 						"editorVisible": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Class Value",
+						"category": "UnifiedScript|Interop",
+						"deprecated": false
 					}
 				},
 				{
@@ -776,6 +1058,12 @@
 						"writable": true,
 						"editorVisible": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Double Value",
+						"category": "UnifiedScript|Interop",
+						"deprecated": false
 					}
 				},
 				{
@@ -792,6 +1080,12 @@
 						"writable": true,
 						"editorVisible": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Float Value",
+						"category": "UnifiedScript|Interop",
+						"deprecated": false
 					}
 				},
 				{
@@ -808,6 +1102,12 @@
 						"writable": true,
 						"editorVisible": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Int 32Value",
+						"category": "UnifiedScript|Interop",
+						"deprecated": false
 					}
 				},
 				{
@@ -824,6 +1124,12 @@
 						"writable": true,
 						"editorVisible": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Int 64Value",
+						"category": "UnifiedScript|Interop",
+						"deprecated": false
 					}
 				},
 				{
@@ -845,6 +1151,12 @@
 						"writable": true,
 						"editorVisible": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Int Array Value",
+						"category": "UnifiedScript|Interop",
+						"deprecated": false
 					}
 				},
 				{
@@ -871,6 +1183,12 @@
 						"writable": true,
 						"editorVisible": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Int Map Value",
+						"category": "UnifiedScript|Interop",
+						"deprecated": false
 					}
 				},
 				{
@@ -892,6 +1210,12 @@
 						"writable": true,
 						"editorVisible": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Int Set Value",
+						"category": "UnifiedScript|Interop",
+						"deprecated": false
 					}
 				},
 				{
@@ -910,6 +1234,12 @@
 						"writable": true,
 						"editorVisible": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Mode",
+						"category": "UnifiedScript|Interop",
+						"deprecated": false
 					}
 				},
 				{
@@ -926,6 +1256,12 @@
 						"writable": true,
 						"editorVisible": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Name Value",
+						"category": "UnifiedScript|Interop",
+						"deprecated": false
 					}
 				},
 				{
@@ -944,6 +1280,12 @@
 						"writable": true,
 						"editorVisible": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Object Value",
+						"category": "UnifiedScript|Interop",
+						"deprecated": false
 					}
 				},
 				{
@@ -962,6 +1304,60 @@
 						"writable": true,
 						"editorVisible": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Rotator Value",
+						"category": "UnifiedScript|Interop",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftClassValue",
+					"name": "SoftClassValue",
+					"type":
+					{
+						"kind": "softClass",
+						"nativeName": "TSoftClassPtr<UObject> ",
+						"typePath": "/Script/CoreUObject.Object",
+						"headerPath": "UObject/Object.h"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Soft Class Value",
+						"category": "UnifiedScript|Interop",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftObjectValue",
+					"name": "SoftObjectValue",
+					"type":
+					{
+						"kind": "softObject",
+						"nativeName": "TSoftObjectPtr<UObject>",
+						"typePath": "/Script/CoreUObject.Object",
+						"headerPath": "UObject/Object.h"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Soft Object Value",
+						"category": "UnifiedScript|Interop",
+						"deprecated": false
 					}
 				},
 				{
@@ -978,6 +1374,12 @@
 						"writable": true,
 						"editorVisible": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "String Value",
+						"category": "UnifiedScript|Interop",
+						"deprecated": false
 					}
 				},
 				{
@@ -994,6 +1396,12 @@
 						"writable": true,
 						"editorVisible": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Text Value",
+						"category": "UnifiedScript|Interop",
+						"deprecated": false
 					}
 				},
 				{
@@ -1012,6 +1420,12 @@
 						"writable": true,
 						"editorVisible": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Transform Value",
+						"category": "UnifiedScript|Interop",
+						"deprecated": false
 					}
 				},
 				{
@@ -1030,6 +1444,12 @@
 						"writable": true,
 						"editorVisible": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Vector Value",
+						"category": "UnifiedScript|Interop",
+						"deprecated": false
 					}
 				}
 			],
@@ -1110,6 +1530,13 @@
 						"pure": true,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Add Int 64",
+						"category": "UnifiedScript|Interop",
+						"tooltip": "Add Int 64",
+						"deprecated": false
 					}
 				},
 				{
@@ -1152,6 +1579,57 @@
 						"pure": true,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Add Vector",
+						"category": "UnifiedScript|Interop",
+						"tooltip": "Add Vector",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:AddWithDefault",
+					"name": "AddWithDefault",
+					"returnType":
+					{
+						"kind": "int32",
+						"nativeName": "int32"
+					},
+					"parameters": [
+						{
+							"name": "Value",
+							"type":
+							{
+								"kind": "int32",
+								"nativeName": "int32"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Amount",
+							"type":
+							{
+								"kind": "int32",
+								"nativeName": "int32"
+							},
+							"direction": "input",
+							"defaultValue": "1"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Add With Default",
+						"category": "UnifiedScript|Interop",
+						"tooltip": "Add With Default",
+						"deprecated": false
 					}
 				},
 				{
@@ -1190,6 +1668,13 @@
 						"pure": false,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Broadcast Interop Changed",
+						"category": "UnifiedScript|Interop",
+						"tooltip": "Broadcast Interop Changed",
+						"deprecated": false
 					}
 				},
 				{
@@ -1222,6 +1707,13 @@
 						"pure": true,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Count Set",
+						"category": "UnifiedScript|Interop",
+						"tooltip": "Count Set",
+						"deprecated": false
 					}
 				},
 				{
@@ -1259,6 +1751,13 @@
 						"pure": true,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Echo Array",
+						"category": "UnifiedScript|Interop",
+						"tooltip": "Echo Array",
+						"deprecated": false
 					}
 				},
 				{
@@ -1290,6 +1789,13 @@
 						"pure": true,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Echo Class",
+						"category": "UnifiedScript|Interop",
+						"tooltip": "Echo Class",
+						"deprecated": false
 					}
 				},
 				{
@@ -1337,6 +1843,13 @@
 						"pure": true,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Echo Map",
+						"category": "UnifiedScript|Interop",
+						"tooltip": "Echo Map",
+						"deprecated": false
 					}
 				},
 				{
@@ -1368,6 +1881,13 @@
 						"pure": true,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Echo Object",
+						"category": "UnifiedScript|Interop",
+						"tooltip": "Echo Object",
+						"deprecated": false
 					}
 				},
 				{
@@ -1405,6 +1925,13 @@
 						"pure": true,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Echo Set",
+						"category": "UnifiedScript|Interop",
+						"tooltip": "Echo Set",
+						"deprecated": false
 					}
 				},
 				{
@@ -1436,6 +1963,13 @@
 						"pure": true,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Echo Transform",
+						"category": "UnifiedScript|Interop",
+						"tooltip": "Echo Transform",
+						"deprecated": false
 					}
 				},
 				{
@@ -1453,6 +1987,13 @@
 						"pure": true,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Fixed Arity 0",
+						"category": "UnifiedScript|Interop|Fixed",
+						"tooltip": "Fixed Arity 0",
+						"deprecated": false
 					}
 				},
 				{
@@ -1480,6 +2021,13 @@
 						"pure": true,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Fixed Arity 1",
+						"category": "UnifiedScript|Interop|Fixed",
+						"tooltip": "Fixed Arity 1",
+						"deprecated": false
 					}
 				},
 				{
@@ -1516,6 +2064,13 @@
 						"pure": true,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Fixed Arity 2",
+						"category": "UnifiedScript|Interop|Fixed",
+						"tooltip": "Fixed Arity 2",
+						"deprecated": false
 					}
 				},
 				{
@@ -1565,6 +2120,13 @@
 						"pure": true,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Fixed Arity 3",
+						"category": "UnifiedScript|Interop|Fixed",
+						"tooltip": "Fixed Arity 3",
+						"deprecated": false
 					}
 				},
 				{
@@ -1623,6 +2185,13 @@
 						"pure": true,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Fixed Arity 4",
+						"category": "UnifiedScript|Interop|Fixed",
+						"tooltip": "Fixed Arity 4",
+						"deprecated": false
 					}
 				},
 				{
@@ -1655,6 +2224,13 @@
 						"pure": true,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Make Array",
+						"category": "UnifiedScript|Interop",
+						"tooltip": "Make Array",
+						"deprecated": false
 					}
 				},
 				{
@@ -1700,6 +2276,13 @@
 						"pure": true,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Mutate Values",
+						"category": "UnifiedScript|Interop",
+						"tooltip": "Mutate Values",
+						"deprecated": false
 					}
 				},
 				{
@@ -1727,6 +2310,13 @@
 						"pure": true,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "String Length",
+						"category": "UnifiedScript|Interop",
+						"tooltip": "String Length",
+						"deprecated": false
 					}
 				},
 				{
@@ -1759,6 +2349,13 @@
 						"pure": true,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Sum Array",
+						"category": "UnifiedScript|Interop",
+						"tooltip": "Sum Array",
+						"deprecated": false
 					}
 				},
 				{
@@ -1796,6 +2393,13 @@
 						"pure": true,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Sum Map",
+						"category": "UnifiedScript|Interop",
+						"tooltip": "Sum Map",
+						"deprecated": false
 					}
 				}
 			]
@@ -1811,8 +2415,17 @@
 			"traits":
 			{
 				"abstract": false,
-				"blueprintType": false
+				"blueprintType": false,
+				"interface": false
 			},
+			"metadata":
+			{
+				"displayName": "Unified Script World Library",
+				"tooltip": "Product-level World and resource primitives used by generated static bindings.\nGameplay policy remains managed; this library only exposes engine ownership\noperations that do not have an instance UObject receiver.",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
 			"properties": [],
 			"delegates": [],
 			"functions": [
@@ -1898,6 +2511,14 @@
 						"pure": false,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Line Trace Single",
+						"category": "UnifiedScript|World",
+						"tooltip": "Line Trace Single",
+						"deprecated": false,
+						"worldContextParameter": "WorldContextObject"
 					}
 				},
 				{
@@ -1938,6 +2559,14 @@
 						"pure": false,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Load Class by Path",
+						"category": "UnifiedScript|Resources",
+						"tooltip": "Load Class by Path",
+						"deprecated": false,
+						"worldContextParameter": "WorldContextObject"
 					}
 				},
 				{
@@ -1978,6 +2607,14 @@
 						"pure": false,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Load Object by Path",
+						"category": "UnifiedScript|Resources",
+						"tooltip": "Load Object by Path",
+						"deprecated": false,
+						"worldContextParameter": "WorldContextObject"
 					}
 				},
 				{
@@ -2031,6 +2668,14 @@
 						"pure": false,
 						"callable": true,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Spawn Actor",
+						"category": "UnifiedScript|World",
+						"tooltip": "Spawn Actor",
+						"deprecated": false,
+						"worldContextParameter": "WorldContextObject"
 					}
 				}
 			]
@@ -2046,8 +2691,17 @@
 			"traits":
 			{
 				"abstract": false,
-				"blueprintType": false
+				"blueprintType": false,
+				"interface": false
 			},
+			"metadata":
+			{
+				"displayName": "Unified Script World Subsystem",
+				"tooltip": "One native UnifiedScript runtime boundary per supported UWorld.\n\nThe subsystem exclusively owns the weak-object registry and invocation\nbridge. Managed transports retain the opaque context, while Deinitialize\ndetaches it before invalidating handles and destroying native state.",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
 			"properties": [],
 			"delegates": [],
 			"functions": []
@@ -2062,8 +2716,17 @@
 			"traits":
 			{
 				"abstract": false,
-				"blueprintType": true
+				"blueprintType": true,
+				"interface": false
 			},
+			"metadata":
+			{
+				"displayName": "Actor实例句柄",
+				"tooltip": "唯一Object的句柄。这可以指定完整权重Actor，也可以仅指定表示相同Object的Actor实例。@note 注意此句柄拥有与UObject相关的游戏线程约束，应在其他线程中谨慎使用。\n\n    只能在游戏线程上使用\n    -       所有构造函数\n    -       所有Getter（GetXYZ、FetchActor、IsActorValid、DoesRepresent）\n    -       针对实时AActor指针的比较运算符可以在任意线程上使用\n\n    -       MakeActorHandleToResolve创建一个将在游戏上延迟解析的句柄游戏线程，\n            因为它只存储弱Object指针，\n    -       而无法访问实时Object-句柄有效性和与另一个句柄的比较运算符（IsValid(), operator==|!=(constFActorInstanceHandle& Other)）",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
 			"properties": [],
 			"functions": [],
 			"delegates": []
@@ -2078,8 +2741,17 @@
 			"traits":
 			{
 				"abstract": false,
-				"blueprintType": true
+				"blueprintType": true,
+				"interface": false
 			},
+			"metadata":
+			{
+				"displayName": "命中结果",
+				"tooltip": "包含检测一个命中信息的结构，如影响的一个点和此点上的表面法线。",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"enumValues": [],
 			"properties": [
 				{
 					"path": "/Script/Engine.HitResult:bBlockingHit",
@@ -2095,6 +2767,12 @@
 						"writable": true,
 						"editorVisible": false,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "阻挡命中",
+						"tooltip": "说明此命中是否为阻挡碰撞的结果。如为false，则无命中，或只是重叠或接触。",
+						"deprecated": false
 					}
 				},
 				{
@@ -2111,6 +2789,12 @@
 						"writable": true,
 						"editorVisible": false,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "骨骼名称",
+						"tooltip": "所命中骨骼的命名（用于骨骼网格体）。",
+						"deprecated": false
 					}
 				},
 				{
@@ -2127,6 +2811,12 @@
 						"writable": true,
 						"editorVisible": false,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "开始穿透",
+						"tooltip": "检测是否从穿透中开始，即带有初始阻挡重叠。\n在穿透中，如PenetrationDepth > 0.f，则其将代表沿法线向量的距离，会造成\n扫描形状和被命中对象之间的最小接触。在此情况下，ImpactNormal将是与位置处运动相反的法线（即法线可能不等于ImpactNormal）。ImpactPoint将与Location相同，因为没有要报告的单个影响点。",
+						"deprecated": false
 					}
 				},
 				{
@@ -2143,6 +2833,12 @@
 						"writable": true,
 						"editorVisible": false,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "组件",
+						"tooltip": "被检测命中的PrimitiveComponent。",
+						"deprecated": false
 					}
 				},
 				{
@@ -2159,6 +2855,12 @@
 						"writable": true,
 						"editorVisible": false,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "距离",
+						"tooltip": "从TraceStart到场景空间中Location的距离。如存在初始重叠，则此值为0（检测在另一个碰撞对象中开始）。",
+						"deprecated": false
 					}
 				},
 				{
@@ -2175,6 +2877,12 @@
 						"writable": true,
 						"editorVisible": false,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "元素索引",
+						"tooltip": "被命中项目的索引，为命中基元所特定的内容。",
+						"deprecated": false
 					}
 				},
 				{
@@ -2191,6 +2899,12 @@
 						"writable": true,
 						"editorVisible": false,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "面索引",
+						"tooltip": "命中的面索引（三角形网格体的复杂命中）。",
+						"deprecated": false
 					}
 				},
 				{
@@ -2209,6 +2923,12 @@
 						"writable": true,
 						"editorVisible": false,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "命中Object柄",
+						"tooltip": "处理被追踪命中的object。",
+						"deprecated": false
 					}
 				},
 				{
@@ -2227,6 +2947,12 @@
 						"writable": true,
 						"editorVisible": false,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "影响法线",
+						"tooltip": "场景空间中命中的法线，用于被扫描命中的对象（如有）。\n举例而言，如果一个球体命中一个平面，这便是一个从平面指出的标准化向量。\n在表面角或边受影响的情况下，通常会选择“最相反”的法线（与查询方向相反）。",
+						"deprecated": false
 					}
 				},
 				{
@@ -2245,6 +2971,12 @@
 						"writable": true,
 						"editorVisible": false,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "影响点",
+						"tooltip": "检测形状（盒体、球体、光线等）与受影响对象在场景空间中发生实际接触的位置。\n举例而言：在球体检测测试中，这是球体表面接触到其他对象的点。\n@注意：在初始重叠的情况中（bStartPenetrating为true），ImpactPoint将与Location相同，因为没有要报告的有意义的单个影响点。",
+						"deprecated": false
 					}
 				},
 				{
@@ -2261,6 +2993,12 @@
 						"writable": true,
 						"editorVisible": false,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "项目",
+						"tooltip": "关于被命中项目的额外数据（命中特定的基元）。",
+						"deprecated": false
 					}
 				},
 				{
@@ -2279,6 +3017,12 @@
 						"writable": true,
 						"editorVisible": false,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "位置",
+						"tooltip": "如发生命中，移动形状与受影响对象相对的场景空间位置。等于线条测试的影响点。\n举例而言：在一个球体检测测试中，这是球体接触到其他对象时其中心所处的点。\n在扫描运动（但非查询）中，这可能不等于形状的最终位置，因为命中会稍微回撤，防止覆盖另一个表面而产生的精确度问题。",
+						"deprecated": false
 					}
 				},
 				{
@@ -2295,6 +3039,12 @@
 						"writable": true,
 						"editorVisible": false,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "我的骨骼命名",
+						"tooltip": "参与命中事件的_我的_骨骼的命名（在两个骨骼网格体发生碰撞的情况中）。",
+						"deprecated": false
 					}
 				},
 				{
@@ -2311,6 +3061,12 @@
 						"writable": true,
 						"editorVisible": false,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "我的项目",
+						"tooltip": "如果命中结果来自碰撞，那么这将拥有关于命中第二个项目的项目的额外信息。",
+						"deprecated": false
 					}
 				},
 				{
@@ -2329,6 +3085,12 @@
 						"writable": true,
 						"editorVisible": false,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "法线",
+						"tooltip": "在场景空间中命中的法线，用于被扫描的对象。等于线条测试中的ImpactNormal。\n这为胶囊体和球体计算，否则其将与ImpactNormal相同。\n举例而言，在一个球体检测测试中，这是指向影响点处球体中心的标准化向量。",
+						"deprecated": false
 					}
 				},
 				{
@@ -2345,6 +3107,12 @@
 						"writable": true,
 						"editorVisible": false,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "穿透深度",
+						"tooltip": "如果此测试开始处于穿透中（bStartPenetrating为true）且可以计算一个反向穿透向量，\n则此值为沿法线的距离，此法线将导致移出穿透。\n如果距离无法计算，则此值将为零。",
+						"deprecated": false
 					}
 				},
 				{
@@ -2361,6 +3129,12 @@
 						"writable": true,
 						"editorVisible": false,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "物理材质",
+						"tooltip": "被命中的物理材质。\n@注意：必须在扫描PrimitiveComponent上或查询参数中设置bReturnPhysicalMaterial，使此项被返回。",
+						"deprecated": false
 					}
 				},
 				{
@@ -2377,6 +3151,12 @@
 						"writable": true,
 						"editorVisible": false,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "时间",
+						"tooltip": "如发生命中，沿检测方向的影响“时间”（范围从0.0到1.0），表明TraceStart和TraceEnd之间的时间。\n在扫描运动中（而非查询），此项可能会从实际的影响时间上稍微退却，防止与相邻几何体产生精确度问题。",
+						"deprecated": false
 					}
 				},
 				{
@@ -2395,6 +3175,12 @@
 						"writable": true,
 						"editorVisible": false,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "检测结束",
+						"tooltip": "检测的最终位置；这并非影响发生之处（如有），而是尝试进行的扫描中最远的点。\n举例而言，如果一个球体针对场景进行扫描，没有阻挡命中时这便是球体的中心。",
+						"deprecated": false
 					}
 				},
 				{
@@ -2413,11 +3199,63 @@
 						"writable": true,
 						"editorVisible": false,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "检测开始",
+						"tooltip": "检测的开始位置。\n举例而言，如果针对场景扫描球体，这便是球体中心的开始位置。",
+						"deprecated": false
 					}
 				}
 			],
 			"functions": [],
 			"delegates": []
+		},
+		{
+			"path": "/Script/UEUnifiedScriptRuntime.EUnifiedScriptInteropMode",
+			"name": "EUnifiedScriptInteropMode",
+			"nativeName": "EUnifiedScriptInteropMode",
+			"module": "UEUnifiedScriptRuntime",
+			"headerPath": "UnifiedScriptInteropFixture.h",
+			"kind": "enum",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": true,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "EUnified Script Interop Mode",
+				"tooltip": "EUnified Script Interop Mode",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"properties": [],
+			"functions": [],
+			"delegates": [],
+			"enumValues": [
+				{
+					"name": "Idle",
+					"value": 0,
+					"displayName": "Idle"
+				},
+				{
+					"name": "Active",
+					"value": 1,
+					"displayName": "Active"
+				},
+				{
+					"name": "Suspended",
+					"value": 2,
+					"displayName": "Suspended"
+				},
+				{
+					"name": "EUnifiedScriptInteropMode_MAX",
+					"value": 3,
+					"displayName": "EUnified Script Interop Mode MAX"
+				}
+			]
 		}
 	]
 }

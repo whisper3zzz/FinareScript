@@ -64,10 +64,13 @@ public sealed class UnrealNativeThunkGenerator
             }
             if (type.Kind != UnrealReflectedTypeKind.Class)
             {
-                diagnostics.Add(new UnrealNativeThunkDiagnostic(
-                    "USUE3001",
-                    $"Reflected {type.Kind.ToString().ToLowerInvariant()} native thunks are deferred.",
-                    type.Path));
+                if (type.Kind != UnrealReflectedTypeKind.Enum)
+                {
+                    diagnostics.Add(new UnrealNativeThunkDiagnostic(
+                        "USUE3001",
+                        $"Reflected {type.Kind.ToString().ToLowerInvariant()} native thunks are deferred.",
+                        type.Path));
+                }
                 continue;
             }
 
@@ -1105,6 +1108,23 @@ public sealed class UnrealNativeThunkGenerator
             source.Append(padding).AppendLine("}");
             return;
         }
+        if (type.Kind is UnrealValueKind.SoftObject or UnrealValueKind.SoftClass)
+        {
+            source.Append(padding).Append("FString ").Append(variable).AppendLine("Path;");
+            source.Append(padding).Append("if (!").Append(expression).Append(".TryGetString(")
+                .Append(variable).AppendLine("Path))");
+            source.Append(padding).AppendLine("{");
+            source.Append(padding).AppendLine("    return Fail(");
+            source.Append(padding).AppendLine("        OutResult,");
+            source.Append(padding).AppendLine("        EUnifiedScriptInvocationError::ValueTypeMismatch,");
+            source.Append(padding).Append("        TEXT(")
+                .Append(CppStringLiteral($"Generated native member '{memberPath}' received an incompatible soft path."))
+                .AppendLine("));");
+            source.Append(padding).AppendLine("}");
+            source.Append(padding).Append(CppType(type)).Append(' ').Append(variable)
+                .Append("{FSoftObjectPath(").Append(variable).AppendLine("Path)};");
+            return;
+        }
         if (type.Kind == UnrealValueKind.Enum)
         {
             source.Append(padding).Append("int64 ").Append(variable).AppendLine("Raw = 0;");
@@ -1275,6 +1295,12 @@ public sealed class UnrealNativeThunkGenerator
             source.Append(padding).AppendLine("}");
             return;
         }
+        if (type.Kind is UnrealValueKind.SoftObject or UnrealValueKind.SoftClass)
+        {
+            source.Append(padding).Append(output).Append(" = FUnifiedScriptValue::FromString(")
+                .Append(expression).AppendLine(".ToSoftObjectPath().ToString());");
+            return;
+        }
         source.Append(padding).Append(output).Append(" = ")
             .Append(FromNative(type, expression)).AppendLine(";");
     }
@@ -1401,7 +1427,8 @@ public sealed class UnrealNativeThunkGenerator
             UnrealValueKind.Int64 or UnrealValueKind.UInt64 or
             UnrealValueKind.Float32 or UnrealValueKind.Float64 or
             UnrealValueKind.String or UnrealValueKind.Name or UnrealValueKind.Text or
-            UnrealValueKind.Enum or UnrealValueKind.Object or UnrealValueKind.Class ||
+            UnrealValueKind.Enum or UnrealValueKind.Object or UnrealValueKind.Class or
+            UnrealValueKind.SoftObject or UnrealValueKind.SoftClass ||
         type.Kind == UnrealValueKind.Struct &&
             (IsCoreStruct(type.TypePath) ||
              type.TypePath is not null && supportedStructPaths.Contains(type.TypePath)) ||
@@ -1446,6 +1473,7 @@ public sealed class UnrealNativeThunkGenerator
         UnrealValueKind.Enum => "Enum",
         UnrealValueKind.Object => "Object",
         UnrealValueKind.Class => "Class",
+        UnrealValueKind.SoftObject or UnrealValueKind.SoftClass => "String",
         UnrealValueKind.Struct when type.TypePath == "/Script/CoreUObject.Vector" => "Vector",
         UnrealValueKind.Struct when type.TypePath == "/Script/CoreUObject.Rotator" => "Rotator",
         UnrealValueKind.Struct when type.TypePath == "/Script/CoreUObject.Transform" => "Transform",
@@ -1528,6 +1556,8 @@ public sealed class UnrealNativeThunkGenerator
         UnrealValueKind.String => $"FUnifiedScriptValue::FromString({expression})",
         UnrealValueKind.Name => $"FUnifiedScriptValue::FromName({expression})",
         UnrealValueKind.Text => $"FUnifiedScriptValue::FromText({expression})",
+        UnrealValueKind.SoftObject or UnrealValueKind.SoftClass =>
+            $"FUnifiedScriptValue::FromString({expression}.ToSoftObjectPath().ToString())",
         UnrealValueKind.Enum =>
             $"FUnifiedScriptValue::FromEnumTypeId(static_cast<int64>({expression}), {TypeIdLiteral(type.TypePath!)})",
         UnrealValueKind.Struct when type.TypePath == "/Script/CoreUObject.Vector" =>
@@ -1557,6 +1587,7 @@ public sealed class UnrealNativeThunkGenerator
         UnrealValueKind.Text => "FText",
         UnrealValueKind.Enum or UnrealValueKind.Struct => type.NativeName,
         UnrealValueKind.Object or UnrealValueKind.Class => CppObjectType(type.NativeName),
+        UnrealValueKind.SoftObject or UnrealValueKind.SoftClass => type.NativeName,
         UnrealValueKind.Array or UnrealValueKind.Set or UnrealValueKind.Map => type.NativeName,
         _ => throw new ArgumentOutOfRangeException(nameof(type)),
     };
@@ -1572,6 +1603,7 @@ public sealed class UnrealNativeThunkGenerator
         UnrealValueKind.Float64 => "0.0",
         UnrealValueKind.String or UnrealValueKind.Name or UnrealValueKind.Text or
         UnrealValueKind.Struct or UnrealValueKind.Array or UnrealValueKind.Set or UnrealValueKind.Map => "{}",
+        UnrealValueKind.SoftObject or UnrealValueKind.SoftClass => "{}",
         UnrealValueKind.Object or UnrealValueKind.Class => "nullptr",
         _ => throw new ArgumentOutOfRangeException(nameof(type)),
     };

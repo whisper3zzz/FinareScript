@@ -579,6 +579,24 @@ bool FUnifiedScriptNativeTransportAbiTest::RunTest(const FString& Parameters)
                 FixedResult.Payload0 == 1);
 
         FixedArguments[0] = {};
+        FixedArguments[0].Kind = EUnifiedScriptNativeValueKindV3::Int32;
+        FixedArguments[0].Payload0 = 9;
+        FixedArguments[1] = {};
+        FixedArguments[1].Kind = EUnifiedScriptNativeValueKindV3::Int32;
+        FixedArguments[1].Payload0 = 4;
+        FixedResult = {};
+        FixedResult.Kind = EUnifiedScriptNativeValueKindV3::Int32;
+        TestTrue(
+            TEXT("Reflected default-parameter function keeps its generated native signature"),
+            InvokeFixed(
+                UnifiedScriptMemberId(
+                    "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:AddWithDefault"),
+                FixedArguments,
+                2,
+                FixedResult) &&
+                static_cast<int32>(FixedResult.Payload0) == 13);
+
+        FixedArguments[0] = {};
         FixedArguments[0].Kind = EUnifiedScriptNativeValueKindV3::Object;
         FixedArguments[0].Payload0 = InteropHandle.Value;
         FixedArguments[1] = {};
@@ -748,6 +766,48 @@ bool FUnifiedScriptNativeTransportAbiTest::RunTest(const FString& Parameters)
             V3Frame.Status == EUnifiedScriptNativeCallStatusV3::Success &&
                 V3Result.Kind == EUnifiedScriptNativeValueKindV3::Class &&
                 V3Result.Payload0 == ClassValueHandle.Value);
+
+        const auto WriteSoftPath = [&](uint64 PropertyId, const FString& Path)
+        {
+            const FTCHARToUTF8 EncodedPath(*Path);
+            TArray<uint8> Arena;
+            Arena.Append(
+                reinterpret_cast<const uint8*>(EncodedPath.Get()),
+                EncodedPath.Length());
+            FUnifiedScriptNativeValueV3 SoftArgument;
+            SoftArgument.Kind = EUnifiedScriptNativeValueKindV3::String;
+            SoftArgument.Flags = EUnifiedScriptNativeValueFlagsV3::ArenaBacked;
+            SoftArgument.Payload1 = Arena.Num();
+            FUnifiedScriptNativeCallFrameV3 SoftFrame;
+            SoftFrame.Arguments = &SoftArgument;
+            SoftFrame.ArgumentCount = 1;
+            SoftFrame.ByteBuffer = Arena.GetData();
+            SoftFrame.ByteCapacity = Arena.Num();
+            SoftFrame.ByteCount = Arena.Num();
+            CallFrameTransport->WritePropertyById(
+                Context, InteropHandle.Value, PropertyId, &SoftFrame);
+            return SoftFrame.Status == EUnifiedScriptNativeCallStatusV3::Success;
+        };
+        const FString ExpectedSoftObjectPath =
+            TEXT("/Game/UnifiedScript/M7SoftObject.M7SoftObject");
+        TestTrue(
+            TEXT("ABI v3 writes a generated soft-object path"),
+            WriteSoftPath(
+                UnifiedScriptMemberId(
+                    "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftObjectValue"),
+                ExpectedSoftObjectPath) &&
+                Interop->SoftObjectValue.ToSoftObjectPath().ToString() ==
+                    ExpectedSoftObjectPath);
+        const FString ExpectedSoftClassPath =
+            TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture");
+        TestTrue(
+            TEXT("ABI v3 writes a generated soft-class path"),
+            WriteSoftPath(
+                UnifiedScriptMemberId(
+                    "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftClassValue"),
+                ExpectedSoftClassPath) &&
+                Interop->SoftClassValue.ToSoftObjectPath().ToString() ==
+                    ExpectedSoftClassPath);
 
         constexpr uint64 StringValueId = UnifiedScriptMemberId(
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:StringValue");

@@ -174,9 +174,10 @@ The repository currently implements:
   semantic breakpoint bind/pending/disabled plus stale-hit protocols;
 - automated execution equivalence between independently text-authored code and
   C# produced by a checked-in visual semantic patch plan;
-- a strict `unifiedscript.unreal-reflection/v0.2` contract with callable,
-  property, and multicast-delegate shapes, deterministic managed-wrapper/event
-  proxy generation, and the `ue-bindings` CLI command;
+- a strict `unifiedscript.unreal-reflection/v0.3` contract with inheritance,
+  interfaces, Blueprint metadata, enums, default parameters, soft references,
+  callable/property/delegate shapes, deterministic managed-wrapper/event proxy
+  generation, and the `ue-bindings` CLI command;
 - an UE 5.7/5.8-compatible host project and `UEUnifiedScript` plugin with a reflected script
   component plus headless reflection-export commandlet;
 - an opaque 64-bit slot/generation handle shared by managed wrappers and a

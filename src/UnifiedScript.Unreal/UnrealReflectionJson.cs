@@ -27,6 +27,7 @@ public static class UnrealReflectionJson
     {
         ArgumentNullException.ThrowIfNull(manifest);
         if (manifest.SchemaVersion != UnrealReflectionManifest.CurrentSchemaVersion &&
+            manifest.SchemaVersion != UnrealReflectionManifest.PreviousSchemaVersion &&
             manifest.SchemaVersion != UnrealReflectionManifest.LegacySchemaVersion)
         {
             throw new JsonException(
@@ -85,7 +86,8 @@ public static class UnrealReflectionJson
             !IsReflectedPath(type.Path, type.Module) ||
             !IsValidHeaderPath(type.HeaderPath) ||
             type.Traits is null || type.Properties is null || type.Functions is null ||
-            type.Delegates is null ||
+            type.Delegates is null || type.InterfacePaths is null || type.EnumValues is null ||
+            type.Metadata is null ||
             !typePaths.Add(type.Path))
         {
             throw new JsonException("The Unreal reflection manifest contains an invalid reflected type.");
@@ -94,6 +96,27 @@ public static class UnrealReflectionJson
         if (type.BaseTypePath is not null && !IsScriptPath(type.BaseTypePath))
         {
             throw new JsonException($"Unreal type '{type.Path}' has an invalid base type path.");
+        }
+        if (type.InterfacePaths.Any(static path => !IsScriptPath(path)) ||
+            type.InterfacePaths.Distinct(StringComparer.Ordinal).Count() != type.InterfacePaths.Count)
+        {
+            throw new JsonException($"Unreal type '{type.Path}' has invalid interface paths.");
+        }
+        ValidateMetadata(type.Metadata, $"type '{type.Path}'");
+        if (type.Kind == UnrealReflectedTypeKind.Enum)
+        {
+            if (type.Properties.Count != 0 || type.Functions.Count != 0 || type.Delegates.Count != 0 ||
+                type.EnumValues.Count == 0 || type.EnumValues.Any(static item =>
+                    item is null || !IsIdentifier(item.Name)) ||
+                type.EnumValues.Select(static item => item.Name)
+                    .Distinct(StringComparer.Ordinal).Count() != type.EnumValues.Count)
+            {
+                throw new JsonException($"Unreal enum '{type.Path}' has invalid values.");
+            }
+        }
+        else if (type.EnumValues.Count != 0)
+        {
+            throw new JsonException($"Non-enum Unreal type '{type.Path}' cannot declare enum values.");
         }
 
         var propertyPaths = new HashSet<string>(StringComparer.Ordinal);
@@ -112,6 +135,7 @@ public static class UnrealReflectionJson
             }
 
             ValidateTypeReference(property.Type, allowVoid: false, $"property '{property.Path}'");
+            ValidateMetadata(property.Metadata, $"property '{property.Path}'");
         }
 
         var functionPaths = new HashSet<string>(StringComparer.Ordinal);
@@ -119,20 +143,23 @@ public static class UnrealReflectionJson
         {
             if (function is null ||
                 !IsIdentifier(function.Name) ||
-                !IsMemberPath(function.Path, type.Path, function.Name) ||
+                !IsFunctionPath(function.Path, type.Path, function.Name) ||
                 function.Parameters is null || function.Traits is null ||
                 !Enum.IsDefined(function.Traits.NativeAccess) ||
                 !function.Traits.Callable || !functionPaths.Add(function.Path))
             {
                 throw new JsonException($"Unreal type '{type.Path}' has an invalid function.");
             }
+            ValidateMetadata(function.Metadata, $"function '{function.Path}'");
 
             ValidateTypeReference(function.ReturnType, allowVoid: true, $"function '{function.Path}' return");
             var parameterNames = new HashSet<string>(StringComparer.Ordinal);
             foreach (UnrealReflectedParameter? parameter in function.Parameters)
             {
                 if (parameter is null || !IsIdentifier(parameter.Name) ||
-                    !Enum.IsDefined(parameter.Direction) || !parameterNames.Add(parameter.Name))
+                    !Enum.IsDefined(parameter.Direction) || !parameterNames.Add(parameter.Name) ||
+                    parameter.Direction != UnrealParameterDirection.Input &&
+                    parameter.DefaultValue is not null)
                 {
                     throw new JsonException($"Unreal function '{function.Path}' has an invalid parameter.");
                 }
@@ -222,6 +249,7 @@ public static class UnrealReflectionJson
                 when !hasTypePath && !hasElement && !hasKey && !hasValue:
                 return;
             case UnrealValueKind.Object or UnrealValueKind.Class or
+                UnrealValueKind.SoftObject or UnrealValueKind.SoftClass or
                 UnrealValueKind.Struct or UnrealValueKind.Enum
                 when hasTypePath && IsScriptPath(type.TypePath!) && !hasElement && !hasKey && !hasValue:
                 return;
@@ -243,11 +271,18 @@ public static class UnrealReflectionJson
     {
         NativeName = type.NativeName.Trim(),
         HeaderPath = type.HeaderPath?.Trim().Replace('\\', '/'),
+        InterfacePaths = type.InterfacePaths.Order(StringComparer.Ordinal).ToArray(),
+        EnumValues = type.EnumValues
+            .OrderBy(static value => value.Value)
+            .ThenBy(static value => value.Name, StringComparer.Ordinal)
+            .ToArray(),
+        Metadata = NormalizeMetadata(type.Metadata),
         Properties = type.Properties
             .OrderBy(static property => property.Path, StringComparer.Ordinal)
             .Select(static property => property with
             {
                 Type = NormalizeTypeReference(property.Type),
+                Metadata = NormalizeMetadata(property.Metadata),
             })
             .ToArray(),
         Functions = type.Functions
@@ -255,9 +290,11 @@ public static class UnrealReflectionJson
             .Select(static function => function with
             {
                 ReturnType = NormalizeTypeReference(function.ReturnType),
+                Metadata = NormalizeMetadata(function.Metadata),
                 Parameters = function.Parameters.Select(static parameter => parameter with
                 {
                     Type = NormalizeTypeReference(parameter.Type),
+                    DefaultValue = NormalizeOptional(parameter.DefaultValue),
                 }).ToArray(),
             })
             .ToArray(),
@@ -300,6 +337,38 @@ public static class UnrealReflectionJson
 
     private static bool IsMemberPath(string path, string ownerPath, string memberName) =>
         string.Equals(path, $"{ownerPath}:{memberName}", StringComparison.Ordinal);
+
+    private static bool IsFunctionPath(string path, string ownerPath, string memberName)
+    {
+        string prefix = $"{ownerPath}:{memberName}";
+        return string.Equals(path, prefix, StringComparison.Ordinal) ||
+            path.StartsWith(prefix + "(", StringComparison.Ordinal) &&
+            path.EndsWith(')') && !path.Any(char.IsWhiteSpace);
+    }
+
+    private static void ValidateMetadata(UnrealBlueprintMetadata? metadata, string context)
+    {
+        if (metadata is null ||
+            metadata.WorldContextParameter is not null &&
+            !IsIdentifier(metadata.WorldContextParameter) ||
+            !metadata.Deprecated && metadata.DeprecationMessage is not null)
+        {
+            throw new JsonException($"Unreal {context} has invalid Blueprint metadata.");
+        }
+    }
+
+    private static UnrealBlueprintMetadata NormalizeMetadata(UnrealBlueprintMetadata metadata) =>
+        metadata with
+        {
+            DisplayName = NormalizeOptional(metadata.DisplayName),
+            Category = NormalizeOptional(metadata.Category),
+            Tooltip = NormalizeOptional(metadata.Tooltip),
+            DeprecationMessage = NormalizeOptional(metadata.DeprecationMessage),
+            WorldContextParameter = NormalizeOptional(metadata.WorldContextParameter),
+        };
+
+    private static string? NormalizeOptional(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static bool IsValidHeaderPath(string? value)
     {

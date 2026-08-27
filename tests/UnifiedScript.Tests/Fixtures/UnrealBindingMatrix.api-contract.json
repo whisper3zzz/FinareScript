@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "unifiedscript.unreal-api-contract/v0.2",
+  "contractName": "Tests.BindingMatrix",
+  "managedNamespace": "UnifiedScript.Unreal.Generated.Matrix",
+  "nativeHeader": "UnifiedScriptGeneratedThunks.h",
+  "nativeNamespace": "UE::UnifiedScript::Generated::Matrix",
+  "types": [
+    {
+      "path": "/Script/BindingMatrix.FixtureDerived",
+      "members": [
+        "BatchMove", "ClassValue", "EchoOuter", "MapValue", "Mode", "Mutate",
+        "ObjectValue", "ProtectedLabel", "Scale(float)", "Scale(int32)", "SoftClass",
+        "SoftObject", "Spawn", "UnsafeValue", "WorldTime"
+      ]
+    }
+  ],
+  "policy": {
+    "defaultAction": "allow",
+    "rules": [
+      {
+        "memberPath": "/Script/BindingMatrix.FixtureDerived:BatchMove",
+        "action": "allow",
+        "route": "dataPlaneOperation"
+      },
+      {
+        "memberPath": "/Script/BindingMatrix.FixtureDerived:ProtectedLabel",
+        "action": "allow",
+        "route": "reflectionFallback"
+      },
+      {
+        "memberPath": "/Script/BindingMatrix.FixtureDerived:UnsafeValue",
+        "action": "deny",
+        "route": "auto",
+        "diagnosticCode": "USUE5201",
+        "reason": "Weak object references are excluded until generation-safe weak handles are defined."
+      }
+    ]
+  },
+  "coverageBaseline": {
+    "minimumMemberCount": 18,
+    "minimumDirectThunkCount": 3,
+    "minimumCallFrameCount": 12,
+    "minimumDataPlaneOperationCount": 1,
+    "minimumReflectionFallbackCount": 1,
+    "maximumRejectedCount": 1
+  }
+}

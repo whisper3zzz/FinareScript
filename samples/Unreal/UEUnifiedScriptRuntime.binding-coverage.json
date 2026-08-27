@@ -1,25 +1,40 @@
 {
-  "schemaVersion": "unifiedscript.unreal-binding-coverage/v0.1",
+  "schemaVersion": "unifiedscript.unreal-binding-coverage/v0.2",
   "engine": {
     "major": 5,
     "minor": 8,
     "patch": 1,
-    "branch": "//UE5/Release-5.8"
+    "branch": "UE5"
   },
   "summary": {
-    "typeCount": 3,
-    "memberCount": 68,
-    "nativeThunkCount": 68,
-    "reflectionFallbackCount": 0,
+    "typeCount": 5,
+    "memberCount": 73,
+    "directThunkCount": 22,
+    "callFrameCount": 49,
+    "dataPlaneOperationCount": 0,
+    "reflectionFallbackCount": 2,
     "rejectedCount": 0,
+    "nativeThunkCount": 71,
     "deferredTypeCount": 0
+  },
+  "baseline": {
+    "minimumMemberCount": 73,
+    "minimumDirectThunkCount": 22,
+    "minimumCallFrameCount": 49,
+    "minimumDataPlaneOperationCount": 0,
+    "minimumReflectionFallbackCount": 2,
+    "maximumRejectedCount": 0
+  },
+  "gate": {
+    "passed": true,
+    "diagnostics": []
   },
   "entries": [
     {
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:GetUnifiedScriptComponent",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "directThunk",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -27,7 +42,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:IncrementManagedTickCount",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "directThunk",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -35,7 +50,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:ManagedActorState",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor",
       "kind": "property",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -43,7 +58,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:ManagedTickCount",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor",
       "kind": "property",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -51,7 +66,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:ReloadManagedBehavior",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "directThunk",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -59,7 +74,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:ScriptComponent",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor",
       "kind": "property",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -67,7 +82,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:SetManagedActorState",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -75,7 +90,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:StartManagedBehavior",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "directThunk",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -83,7 +98,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:StopManagedBehavior",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "directThunk",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -91,7 +106,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ActiveDeclarationAssetPath",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
       "kind": "property",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -99,7 +114,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ActiveGeneration",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
       "kind": "property",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -107,7 +122,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ActiveScriptAssetPath",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
       "kind": "property",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -115,7 +130,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:Add",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "directThunk",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -123,7 +138,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:BroadcastManagedSignal",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "directThunk",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -131,7 +146,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:GetScriptStateInt32",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -139,7 +154,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:GetScriptTarget",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "directThunk",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -147,7 +162,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:LastScriptError",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
       "kind": "property",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -155,7 +170,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ManagedState",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
       "kind": "property",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -163,15 +178,25 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:MaterializedStateCount",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
       "kind": "property",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:OnManagedSignal",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+      "kind": "delegate",
+      "disposition": "reflectionFallback",
+      "diagnosticCodes": [
+        "USUE4101"
+      ],
+      "message": "Delegate delivery uses the generation-safe native event proxy and reflected signature."
     },
     {
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:RefreshScriptState",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "directThunk",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -179,7 +204,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ReloadScript",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "directThunk",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -187,7 +212,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:RequestReload",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "directThunk",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -195,7 +220,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ScriptAssemblyPath",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
       "kind": "property",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -203,7 +228,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ScriptAssetPath",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
       "kind": "property",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -211,7 +236,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ScriptTypeName",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
       "kind": "property",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -219,7 +244,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:SetScriptStateInt32",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -227,7 +252,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:StartScript",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "directThunk",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -235,7 +260,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:StopScript",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "directThunk",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -243,7 +268,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:bScriptRunning",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
       "kind": "property",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -251,7 +276,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:bStartAutomatically",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
       "kind": "property",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -259,7 +284,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:bTickAutomatically",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
       "kind": "property",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -267,7 +292,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:AddInt64",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -275,7 +300,15 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:AddVector",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:AddWithDefault",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+      "kind": "function",
+      "disposition": "directThunk",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -283,7 +316,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:BroadcastInteropChanged",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "directThunk",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -291,7 +324,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ByteValue",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "property",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -299,7 +332,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ClassValue",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "property",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -307,7 +340,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:CountSet",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -315,7 +348,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:DoubleValue",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "property",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -323,7 +356,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoArray",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -331,7 +364,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoClass",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -339,7 +372,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoMap",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -347,7 +380,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoObject",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "directThunk",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -355,7 +388,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoSet",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -363,7 +396,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoTransform",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -371,7 +404,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FixedArity0",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "directThunk",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -379,7 +412,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FixedArity1",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "directThunk",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -387,7 +420,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FixedArity2",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "directThunk",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -395,7 +428,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FixedArity3",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "directThunk",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -403,7 +436,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FixedArity4",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "directThunk",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -411,7 +444,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FloatValue",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "property",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -419,7 +452,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:Int32Value",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "property",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -427,7 +460,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:Int64Value",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "property",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -435,7 +468,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:IntArrayValue",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "property",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -443,7 +476,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:IntMapValue",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "property",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -451,7 +484,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:IntSetValue",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "property",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -459,7 +492,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MakeArray",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -467,7 +500,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:Mode",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "property",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -475,7 +508,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateValues",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -483,7 +516,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:NameValue",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "property",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -491,15 +524,41 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ObjectValue",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "property",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:OnInteropChanged",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+      "kind": "delegate",
+      "disposition": "reflectionFallback",
+      "diagnosticCodes": [
+        "USUE4101"
+      ],
+      "message": "Delegate delivery uses the generation-safe native event proxy and reflected signature."
     },
     {
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:RotatorValue",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "property",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftClassValue",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftObjectValue",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+      "kind": "property",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -507,7 +566,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:StringLength",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -515,7 +574,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:StringValue",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "property",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -523,7 +582,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SumArray",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -531,7 +590,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SumMap",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "function",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -539,7 +598,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:TextValue",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "property",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -547,7 +606,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:TransformValue",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "property",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -555,7 +614,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:VectorValue",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "property",
-      "disposition": "nativeThunk",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     }

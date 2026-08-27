@@ -28,6 +28,7 @@
     <Compile Remove="Fixtures/**/*.cs" />
     <None Include="Fixtures/**/*.cs" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/**/*.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures/**/*.cpp" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../samples/Patching/EnumerableForEachBuildRules.cs"
           Link="ExecutionFixtures/EnumerableForEachBuildRules.cs"
           CopyToOutputDirectory="PreserveNewest" />

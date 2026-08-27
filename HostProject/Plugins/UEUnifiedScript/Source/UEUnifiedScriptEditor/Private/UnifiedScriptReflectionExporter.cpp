@@ -15,7 +15,7 @@
 
 namespace UE::UnifiedScript::Private
 {
-constexpr const TCHAR* ReflectionSchema = TEXT("unifiedscript.unreal-reflection/v0.2");
+constexpr const TCHAR* ReflectionSchema = TEXT("unifiedscript.unreal-reflection/v0.3");
 constexpr const TCHAR* InternalBindingMetadata = TEXT("UnifiedScriptBindingInternal");
 
 TSharedRef<FJsonObject> TypeReference(
@@ -35,6 +35,29 @@ TSharedRef<FJsonObject> TypeReference(
     {
         Json->SetStringField(TEXT("headerPath"), HeaderPath);
     }
+    return Json;
+}
+
+template <typename TField>
+TSharedRef<FJsonObject> BlueprintMetadata(const TField* Field)
+{
+    TSharedRef<FJsonObject> Json = MakeShared<FJsonObject>();
+    const FString DisplayName = Field->GetDisplayNameText().ToString();
+    const FString Category = Field->GetMetaData(TEXT("Category"));
+    const FString Tooltip = Field->GetToolTipText().ToString();
+    const FString DeprecationMessage = Field->GetMetaData(TEXT("DeprecationMessage"));
+    const FString WorldContext = Field->GetMetaData(TEXT("WorldContext"));
+    if (!DisplayName.IsEmpty()) Json->SetStringField(TEXT("displayName"), DisplayName);
+    if (!Category.IsEmpty()) Json->SetStringField(TEXT("category"), Category);
+    if (!Tooltip.IsEmpty()) Json->SetStringField(TEXT("tooltip"), Tooltip);
+    const bool bDeprecated = Field->HasMetaData(TEXT("DeprecatedFunction")) ||
+        Field->HasMetaData(TEXT("DeprecatedProperty"));
+    Json->SetBoolField(TEXT("deprecated"), bDeprecated);
+    if (bDeprecated && !DeprecationMessage.IsEmpty())
+    {
+        Json->SetStringField(TEXT("deprecationMessage"), DeprecationMessage);
+    }
+    if (!WorldContext.IsEmpty()) Json->SetStringField(TEXT("worldContextParameter"), WorldContext);
     return Json;
 }
 
@@ -181,8 +204,23 @@ TSharedRef<FJsonObject> PropertyTypeReference(const FProperty* Property)
         Json->SetObjectField(TEXT("valueType"), PropertyTypeReference(Map->ValueProp));
         return Json;
     }
-    if (CastField<FSoftClassProperty>(Property) || CastField<FSoftObjectProperty>(Property) ||
-        CastField<FWeakObjectProperty>(Property) || CastField<FLazyObjectProperty>(Property) ||
+    if (const FSoftClassProperty* SoftClass = CastField<FSoftClassProperty>(Property))
+    {
+        return TypeReference(
+            TEXT("softClass"),
+            NativeName,
+            SoftClass->MetaClass->GetPathName(),
+            ReflectedHeaderPath(SoftClass->MetaClass));
+    }
+    if (const FSoftObjectProperty* SoftObject = CastField<FSoftObjectProperty>(Property))
+    {
+        return TypeReference(
+            TEXT("softObject"),
+            NativeName,
+            SoftObject->PropertyClass->GetPathName(),
+            ReflectedHeaderPath(SoftObject->PropertyClass));
+    }
+    if (CastField<FWeakObjectProperty>(Property) || CastField<FLazyObjectProperty>(Property) ||
         CastField<FInterfaceProperty>(Property))
     {
         return TypeReference(TEXT("unsupported"), NativeName);
@@ -254,6 +292,7 @@ TSharedRef<FJsonObject> ExportProperty(const UStruct* Owner, const FProperty* Pr
     Access->SetBoolField(TEXT("editorVisible"), Property->HasAnyPropertyFlags(CPF_Edit));
     Access->SetStringField(TEXT("nativeAccess"), PropertyNativeAccess(Property));
     Json->SetObjectField(TEXT("access"), Access);
+    Json->SetObjectField(TEXT("metadata"), BlueprintMetadata(Property));
     return Json;
 }
 
@@ -291,6 +330,11 @@ TSharedRef<FJsonObject> ExportFunction(const UClass* Class, const UFunction* Fun
         ParameterJson->SetStringField(
             TEXT("direction"),
             bOutput && bReference ? TEXT("inputOutput") : bOutput ? TEXT("output") : TEXT("input"));
+        const FString DefaultKey = TEXT("CPP_Default_") + Parameter->GetName();
+        if (!bOutput && Function->HasMetaData(*DefaultKey))
+        {
+            ParameterJson->SetStringField(TEXT("defaultValue"), Function->GetMetaData(*DefaultKey));
+        }
         Parameters.Add(MakeShared<FJsonValueObject>(ParameterJson));
     }
     Json->SetArrayField(TEXT("parameters"), Parameters);
@@ -303,6 +347,7 @@ TSharedRef<FJsonObject> ExportFunction(const UClass* Class, const UFunction* Fun
         Function->HasAnyFunctionFlags(FUNC_BlueprintCallable | FUNC_BlueprintPure));
     Traits->SetStringField(TEXT("nativeAccess"), FunctionNativeAccess(Function));
     Json->SetObjectField(TEXT("traits"), Traits);
+    Json->SetObjectField(TEXT("metadata"), BlueprintMetadata(Function));
     return Json;
 }
 
@@ -407,7 +452,19 @@ TSharedRef<FJsonObject> ExportClass(
     TSharedRef<FJsonObject> Traits = MakeShared<FJsonObject>();
     Traits->SetBoolField(TEXT("abstract"), Class->HasAnyClassFlags(CLASS_Abstract));
     Traits->SetBoolField(TEXT("blueprintType"), Class->GetBoolMetaData(TEXT("BlueprintType")));
+    Traits->SetBoolField(TEXT("interface"), Class->HasAnyClassFlags(CLASS_Interface));
     Json->SetObjectField(TEXT("traits"), Traits);
+    Json->SetObjectField(TEXT("metadata"), BlueprintMetadata(Class));
+    TArray<TSharedPtr<FJsonValue>> InterfaceValues;
+    for (const FImplementedInterface& Interface : Class->Interfaces)
+    {
+        if (Interface.Class != nullptr)
+        {
+            InterfaceValues.Add(MakeShared<FJsonValueString>(Interface.Class->GetPathName()));
+        }
+    }
+    Json->SetArrayField(TEXT("interfacePaths"), InterfaceValues);
+    Json->SetArrayField(TEXT("enumValues"), {});
 
     TArray<const FProperty*> Properties;
     TArray<const FProperty*> Delegates;
@@ -512,6 +569,33 @@ void CollectReferencedStructs(
     }
 }
 
+void CollectReferencedEnums(const FProperty* Property, TSet<const UEnum*>& Enums)
+{
+    if (const FEnumProperty* EnumProperty = CastField<FEnumProperty>(Property))
+    {
+        Enums.Add(EnumProperty->GetEnum());
+        return;
+    }
+    if (const FByteProperty* ByteProperty = CastField<FByteProperty>(Property))
+    {
+        if (ByteProperty->Enum != nullptr) Enums.Add(ByteProperty->Enum);
+        return;
+    }
+    if (const FArrayProperty* Array = CastField<FArrayProperty>(Property))
+    {
+        CollectReferencedEnums(Array->Inner, Enums);
+    }
+    else if (const FSetProperty* Set = CastField<FSetProperty>(Property))
+    {
+        CollectReferencedEnums(Set->ElementProp, Enums);
+    }
+    else if (const FMapProperty* Map = CastField<FMapProperty>(Property))
+    {
+        CollectReferencedEnums(Map->KeyProp, Enums);
+        CollectReferencedEnums(Map->ValueProp, Enums);
+    }
+}
+
 TSharedRef<FJsonObject> ExportStruct(
     const UScriptStruct* Struct,
     FUnifiedScriptReflectionExportResult& Result)
@@ -541,7 +625,11 @@ TSharedRef<FJsonObject> ExportStruct(
     TSharedRef<FJsonObject> Traits = MakeShared<FJsonObject>();
     Traits->SetBoolField(TEXT("abstract"), false);
     Traits->SetBoolField(TEXT("blueprintType"), Struct->GetBoolMetaData(TEXT("BlueprintType")));
+    Traits->SetBoolField(TEXT("interface"), false);
     Json->SetObjectField(TEXT("traits"), Traits);
+    Json->SetObjectField(TEXT("metadata"), BlueprintMetadata(Struct));
+    Json->SetArrayField(TEXT("interfacePaths"), {});
+    Json->SetArrayField(TEXT("enumValues"), {});
 
     TArray<const FProperty*> Properties;
     for (TFieldIterator<FProperty> It(Struct, EFieldIteratorFlags::ExcludeSuper); It; ++It)
@@ -566,6 +654,42 @@ TSharedRef<FJsonObject> ExportStruct(
     Json->SetArrayField(TEXT("properties"), PropertyValues);
     Json->SetArrayField(TEXT("functions"), {});
     Json->SetArrayField(TEXT("delegates"), {});
+    ++Result.TypeCount;
+    return Json;
+}
+
+TSharedRef<FJsonObject> ExportEnum(const UEnum* Enum, FUnifiedScriptReflectionExportResult& Result)
+{
+    TSharedRef<FJsonObject> Json = MakeShared<FJsonObject>();
+    Json->SetStringField(TEXT("path"), Enum->GetPathName());
+    Json->SetStringField(TEXT("name"), Enum->GetName());
+    Json->SetStringField(TEXT("nativeName"), Enum->GetName());
+    Json->SetStringField(TEXT("module"), ModuleName(Enum));
+    const FString HeaderPath = ReflectedHeaderPath(Enum);
+    if (!HeaderPath.IsEmpty()) Json->SetStringField(TEXT("headerPath"), HeaderPath);
+    Json->SetStringField(TEXT("kind"), TEXT("enum"));
+    TSharedRef<FJsonObject> Traits = MakeShared<FJsonObject>();
+    Traits->SetBoolField(TEXT("abstract"), false);
+    Traits->SetBoolField(TEXT("blueprintType"), Enum->GetBoolMetaData(TEXT("BlueprintType")));
+    Traits->SetBoolField(TEXT("interface"), false);
+    Json->SetObjectField(TEXT("traits"), Traits);
+    Json->SetObjectField(TEXT("metadata"), BlueprintMetadata(Enum));
+    Json->SetArrayField(TEXT("interfacePaths"), {});
+    Json->SetArrayField(TEXT("properties"), {});
+    Json->SetArrayField(TEXT("functions"), {});
+    Json->SetArrayField(TEXT("delegates"), {});
+    TArray<TSharedPtr<FJsonValue>> Values;
+    for (int32 Index = 0; Index < Enum->NumEnums(); ++Index)
+    {
+        if (Enum->HasMetaData(TEXT("Hidden"), Index)) continue;
+        TSharedRef<FJsonObject> Value = MakeShared<FJsonObject>();
+        Value->SetStringField(TEXT("name"), Enum->GetNameStringByIndex(Index));
+        Value->SetNumberField(TEXT("value"), static_cast<double>(Enum->GetValueByIndex(Index)));
+        const FString DisplayName = Enum->GetDisplayNameTextByIndex(Index).ToString();
+        if (!DisplayName.IsEmpty()) Value->SetStringField(TEXT("displayName"), DisplayName);
+        Values.Add(MakeShared<FJsonValueObject>(Value));
+    }
+    Json->SetArrayField(TEXT("enumValues"), Values);
     ++Result.TypeCount;
     return Json;
 }
@@ -669,6 +793,7 @@ bool FUnifiedScriptReflectionExporter::Export(
     }
 
     TSet<const UScriptStruct*> ReferencedStructSet;
+    TSet<const UEnum*> ReferencedEnumSet;
     for (const UClass* Class : Classes)
     {
         for (TFieldIterator<FProperty> It(Class, EFieldIteratorFlags::ExcludeSuper); It; ++It)
@@ -677,6 +802,7 @@ bool FUnifiedScriptReflectionExporter::Export(
                 It->HasAnyPropertyFlags(CPF_BlueprintVisible))
             {
                 CollectReferencedStructs(*It, ReferencedStructSet);
+                CollectReferencedEnums(*It, ReferencedEnumSet);
             }
         }
         for (TFieldIterator<UFunction> It(Class, EFieldIteratorFlags::ExcludeSuper); It; ++It)
@@ -692,6 +818,7 @@ bool FUnifiedScriptReflectionExporter::Export(
                 if (ParameterIt->HasAnyPropertyFlags(CPF_Parm))
                 {
                     CollectReferencedStructs(*ParameterIt, ReferencedStructSet);
+                    CollectReferencedEnums(*ParameterIt, ReferencedEnumSet);
                 }
             }
         }
@@ -709,6 +836,7 @@ bool FUnifiedScriptReflectionExporter::Export(
                         CPF_NativeAccessSpecifierPrivate | CPF_NativeAccessSpecifierProtected))
                 {
                     CollectReferencedStructs(*It, ReferencedStructSet);
+                    CollectReferencedEnums(*It, ReferencedEnumSet);
                 }
             }
         }
@@ -721,6 +849,15 @@ bool FUnifiedScriptReflectionExporter::Export(
     for (const UScriptStruct* Struct : ReferencedStructs)
     {
         Modules.AddUnique(ModuleName(Struct));
+    }
+    TArray<const UEnum*> ReferencedEnums = ReferencedEnumSet.Array();
+    ReferencedEnums.Sort([](const UEnum& Left, const UEnum& Right)
+    {
+        return Left.GetPathName() < Right.GetPathName();
+    });
+    for (const UEnum* Enum : ReferencedEnums)
+    {
+        Modules.AddUnique(ModuleName(Enum));
     }
     Modules.Sort();
 
@@ -749,6 +886,10 @@ bool FUnifiedScriptReflectionExporter::Export(
     for (const UScriptStruct* Struct : ReferencedStructs)
     {
         TypeValues.Add(MakeShared<FJsonValueObject>(ExportStruct(Struct, OutResult)));
+    }
+    for (const UEnum* Enum : ReferencedEnums)
+    {
+        TypeValues.Add(MakeShared<FJsonValueObject>(ExportEnum(Enum, OutResult)));
     }
     Root->SetArrayField(TEXT("types"), TypeValues);
 

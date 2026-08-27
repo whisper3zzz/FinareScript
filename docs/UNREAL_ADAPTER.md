@@ -11,7 +11,7 @@ The first slice has four explicit boundaries:
 ```text
 UE 5.7/5.8 native reflection
   -> UnifiedScriptExport commandlet
-  -> unifiedscript.unreal-reflection/v0.2
+  -> unifiedscript.unreal-reflection/v0.3
   -> UnifiedScript.Unreal binding generator
   -> typed C# wrappers over IUnrealInvocationBridge
 ```
@@ -292,11 +292,14 @@ value-kind mismatches retain the existing stable bridge failures. Unsupported
 or non-public native shapes produce deterministic `USUE300x` diagnostics
 rather than silently falling back to unsafe direct access.
 
-`ue-bindings --report <path>` combines managed and native generator diagnostics
-into deterministic `unifiedscript.unreal-binding-coverage/v0.1` JSON. Every
-member is classified as `nativeThunk`, `reflectionFallback`, or `rejected`;
-non-class types remain `deferredType`. `--fail-on-rejected` exits with code 65,
-so projects can make incomplete API coverage a build gate. Runtime member-ID
+`ue-bindings --report <path>` combines policy, managed, and native generator
+diagnostics into deterministic `unifiedscript.unreal-binding-coverage/v0.2`
+JSON. Every selected member is classified as `directThunk`, `callFrame`,
+`dataPlaneOperation`, `reflectionFallback`, or `rejected`. The contract carries
+minimum per-route counts and a maximum rejected count; falling below that
+baseline fails generation with stable `USUE51xx` diagnostics.
+`--fail-on-rejected` exits with code 65, so projects can make incomplete API
+coverage a build gate. Runtime member-ID
 misses retry the exact ABI v1 reflected path for scalar, object/class, enum,
 FVector, FRotator, and FTransform members. The report rejects missing direct
 thunks for containers or `out`/`ref` functions because the legacy value contract

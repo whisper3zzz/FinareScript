@@ -5,10 +5,11 @@ namespace UnifiedScript.Unreal;
 
 public enum UnrealBindingDisposition
 {
-    NativeThunk,
+    DirectThunk,
+    CallFrame,
+    DataPlaneOperation,
     ReflectionFallback,
     Rejected,
-    DeferredType,
 }
 
 public sealed record UnrealBindingCoverageEntry(
@@ -22,27 +23,67 @@ public sealed record UnrealBindingCoverageEntry(
 public sealed record UnrealBindingCoverageSummary(
     int TypeCount,
     int MemberCount,
-    int NativeThunkCount,
+    int DirectThunkCount,
+    int CallFrameCount,
+    int DataPlaneOperationCount,
     int ReflectionFallbackCount,
-    int RejectedCount,
-    int DeferredTypeCount);
+    int RejectedCount)
+{
+    public int NativeThunkCount => DirectThunkCount + CallFrameCount;
+
+    public int DeferredTypeCount => 0;
+}
+
+public sealed record UnrealBindingCoverageGate(
+    bool Passed,
+    IReadOnlyList<string> Diagnostics);
 
 public sealed record UnrealBindingCoverageReport(
     string SchemaVersion,
     UnrealEngineIdentity Engine,
     UnrealBindingCoverageSummary Summary,
+    UnrealBindingCoverageBaseline? Baseline,
+    UnrealBindingCoverageGate Gate,
     IReadOnlyList<UnrealBindingCoverageEntry> Entries)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.unreal-binding-coverage/v0.1";
+    public const string CurrentSchemaVersion = "unifiedscript.unreal-binding-coverage/v0.2";
 
     public static UnrealBindingCoverageReport Create(
         UnrealReflectionManifest manifest,
         UnrealBindingGenerationResult managed,
+        UnrealNativeThunkGenerationResult native) =>
+        Create(
+            UnrealReflectionJson.NormalizeAndValidate(manifest),
+            managed,
+            native,
+            UnrealApiPolicyEvaluator.Evaluate(manifest, UnrealApiPolicy.AllowSelected),
+            baseline: null);
+
+    public static UnrealBindingCoverageReport Create(
+        UnrealApiContractProjection projection,
+        UnrealBindingGenerationResult managed,
         UnrealNativeThunkGenerationResult native)
     {
-        UnrealReflectionManifest normalized = UnrealReflectionJson.NormalizeAndValidate(manifest);
+        ArgumentNullException.ThrowIfNull(projection);
+        return Create(
+            projection.SelectedReflection,
+            managed,
+            native,
+            projection.PolicyEvaluation,
+            projection.Contract.CoverageBaseline);
+    }
+
+    private static UnrealBindingCoverageReport Create(
+        UnrealReflectionManifest selectedManifest,
+        UnrealBindingGenerationResult managed,
+        UnrealNativeThunkGenerationResult native,
+        UnrealApiPolicyEvaluation policy,
+        UnrealBindingCoverageBaseline? baseline)
+    {
+        UnrealReflectionManifest normalized = UnrealReflectionJson.NormalizeAndValidate(selectedManifest);
         ArgumentNullException.ThrowIfNull(managed);
         ArgumentNullException.ThrowIfNull(native);
+        ArgumentNullException.ThrowIfNull(policy);
 
         IReadOnlyDictionary<string, UnrealBindingDiagnostic[]> managedDiagnostics = managed.Diagnostics
             .GroupBy(static item => item.MemberPath, StringComparer.Ordinal)
@@ -60,44 +101,19 @@ public sealed record UnrealBindingCoverageReport(
         var entries = new List<UnrealBindingCoverageEntry>();
         foreach (UnrealReflectedType type in normalized.Types)
         {
-            if (type.Kind == UnrealReflectedTypeKind.Struct)
-            {
-                foreach (UnrealReflectedProperty field in type.Properties)
-                {
-                    AddMember(
-                        entries,
-                        type.Path,
-                        "structField",
-                        field.Path,
-                        supportsReflectionFallback: false,
-                        "Legacy reflection fallback cannot marshal generated complex structs.",
-                        managedDiagnostics,
-                        nativeDiagnostics);
-                }
-                continue;
-            }
-            if (type.Kind != UnrealReflectedTypeKind.Class)
-            {
-                AddEntry(
-                    entries,
-                    type.Path,
-                    type.Path,
-                    "type",
-                    UnrealBindingDisposition.DeferredType,
-                    managedDiagnostics.GetValueOrDefault(type.Path) ?? [],
-                    nativeDiagnostics.GetValueOrDefault(type.Path) ?? []);
-                continue;
-            }
-
             foreach (UnrealReflectedProperty property in type.Properties)
             {
                 AddMember(
                     entries,
                     type.Path,
-                    "property",
+                    type.Kind == UnrealReflectedTypeKind.Struct ? "structField" : "property",
                     property.Path,
-                    SupportsReflectionType(property.Type, allowVoid: false),
-                    "Legacy reflection fallback cannot marshal this property type.",
+                    property.Type,
+                    function: null,
+                    supportsReflectionFallback: type.Kind == UnrealReflectedTypeKind.Class &&
+                        SupportsReflectionType(property.Type, allowVoid: false),
+                    "Safe reflection fallback cannot marshal this property type.",
+                    policy.For(property.Path),
                     managedDiagnostics,
                     nativeDiagnostics);
             }
@@ -114,12 +130,37 @@ public sealed record UnrealBindingCoverageReport(
                     type.Path,
                     "function",
                     function.Path,
+                    function.ReturnType,
+                    function,
                     !hasOutputs && reflectionTypesSupported,
                     hasOutputs
-                        ? "Legacy reflection fallback cannot preserve output or reference parameters."
-                        : "Legacy reflection fallback cannot marshal one or more function value types.",
+                        ? "Safe reflection fallback cannot preserve output or reference parameters."
+                        : "Safe reflection fallback cannot marshal one or more function value types.",
+                    policy.For(function.Path),
                     managedDiagnostics,
                     nativeDiagnostics);
+            }
+            foreach (UnrealReflectedDelegate reflectedDelegate in type.Delegates)
+            {
+                UnrealApiPolicyDecision decision = policy.For(reflectedDelegate.Path);
+                UnrealBindingDiagnostic[] delegateDiagnostics =
+                    managedDiagnostics.GetValueOrDefault(reflectedDelegate.Path) ?? [];
+                AddEntry(
+                    entries,
+                    reflectedDelegate.Path,
+                    type.Path,
+                    "delegate",
+                    decision.Action == UnrealApiPolicyAction.Deny || delegateDiagnostics.Length > 0
+                        ? UnrealBindingDisposition.Rejected
+                        : UnrealBindingDisposition.ReflectionFallback,
+                    delegateDiagnostics,
+                    [],
+                    decision.Action == UnrealApiPolicyAction.Deny
+                        ? decision.DiagnosticCode
+                        : "USUE4101",
+                    decision.Action == UnrealApiPolicyAction.Deny
+                        ? decision.Reason
+                        : "Delegate delivery uses the generation-safe native event proxy and reflected signature.");
             }
         }
 
@@ -127,16 +168,20 @@ public sealed record UnrealBindingCoverageReport(
             .OrderBy(static item => item.Path, StringComparer.Ordinal)
             .ThenBy(static item => item.Kind, StringComparer.Ordinal)
             .ToArray();
+        var summary = new UnrealBindingCoverageSummary(
+            normalized.Types.Count,
+            ordered.Length,
+            ordered.Count(static item => item.Disposition == UnrealBindingDisposition.DirectThunk),
+            ordered.Count(static item => item.Disposition == UnrealBindingDisposition.CallFrame),
+            ordered.Count(static item => item.Disposition == UnrealBindingDisposition.DataPlaneOperation),
+            ordered.Count(static item => item.Disposition == UnrealBindingDisposition.ReflectionFallback),
+            ordered.Count(static item => item.Disposition == UnrealBindingDisposition.Rejected));
         return new UnrealBindingCoverageReport(
             CurrentSchemaVersion,
             normalized.Engine,
-            new UnrealBindingCoverageSummary(
-                normalized.Types.Count,
-                ordered.Count(static item => item.Kind != "type"),
-                ordered.Count(static item => item.Disposition == UnrealBindingDisposition.NativeThunk),
-                ordered.Count(static item => item.Disposition == UnrealBindingDisposition.ReflectionFallback),
-                ordered.Count(static item => item.Disposition == UnrealBindingDisposition.Rejected),
-                ordered.Count(static item => item.Disposition == UnrealBindingDisposition.DeferredType)),
+            summary,
+            baseline,
+            EvaluateGate(summary, baseline),
             ordered);
     }
 
@@ -145,32 +190,84 @@ public sealed record UnrealBindingCoverageReport(
         string ownerPath,
         string kind,
         string path,
+        UnrealTypeReference valueType,
+        UnrealReflectedFunction? function,
         bool supportsReflectionFallback,
         string fallbackLimitation,
+        UnrealApiPolicyDecision policy,
         IReadOnlyDictionary<string, UnrealBindingDiagnostic[]> managedDiagnostics,
         IReadOnlyDictionary<string, UnrealNativeThunkDiagnostic[]> nativeDiagnostics)
     {
         UnrealBindingDiagnostic[] managed = managedDiagnostics.GetValueOrDefault(path) ?? [];
         UnrealNativeThunkDiagnostic[] native = nativeDiagnostics.GetValueOrDefault(path) ?? [];
-        UnrealBindingDisposition disposition = managed.Length > 0
-            ? UnrealBindingDisposition.Rejected
-            : native.Length > 0
-                ? supportsReflectionFallback
+        if (policy.Action == UnrealApiPolicyAction.Deny)
+        {
+            AddEntry(entries, path, ownerPath, kind, UnrealBindingDisposition.Rejected, [], [],
+                policy.DiagnosticCode, policy.Reason);
+            return;
+        }
+        if (policy.Route == UnrealBindingRoute.DataPlaneOperation)
+        {
+            AddEntry(entries, path, ownerPath, kind, UnrealBindingDisposition.DataPlaneOperation,
+                [], [], "USUE4102", "The selected member is served by the generated gameplay data plane.");
+            return;
+        }
+        if (managed.Length > 0)
+        {
+            AddEntry(entries, path, ownerPath, kind, UnrealBindingDisposition.Rejected, managed, native);
+            return;
+        }
+        if (policy.Route == UnrealBindingRoute.ReflectionFallback)
+        {
+            AddEntry(
+                entries,
+                path,
+                ownerPath,
+                kind,
+                supportsReflectionFallback
                     ? UnrealBindingDisposition.ReflectionFallback
-                    : UnrealBindingDisposition.Rejected
-                : UnrealBindingDisposition.NativeThunk;
-        bool reportFallbackLimitation =
-            managed.Length == 0 && native.Length > 0 && !supportsReflectionFallback;
-        AddEntry(
-            entries,
-            path,
-            ownerPath,
-            kind,
-            disposition,
-            managed,
-            native,
-            reportFallbackLimitation ? "USUE4001" : null,
-            reportFallbackLimitation ? fallbackLimitation : null);
+                    : UnrealBindingDisposition.Rejected,
+                managed,
+                native,
+                supportsReflectionFallback ? "USUE4103" : "USUE4001",
+                supportsReflectionFallback
+                    ? "The project API policy explicitly selects safe reflection fallback."
+                    : fallbackLimitation);
+            return;
+        }
+        if (native.Length > 0)
+        {
+            AddEntry(
+                entries,
+                path,
+                ownerPath,
+                kind,
+                supportsReflectionFallback
+                    ? UnrealBindingDisposition.ReflectionFallback
+                    : UnrealBindingDisposition.Rejected,
+                managed,
+                native,
+                supportsReflectionFallback ? "USUE4104" : "USUE4001",
+                supportsReflectionFallback
+                    ? "The native thunk is unavailable; the member is safe on reflected fallback."
+                    : fallbackLimitation);
+            return;
+        }
+
+        bool direct = function is not null && IsDirectThunk(function);
+        if (policy.Route == UnrealBindingRoute.DirectThunk && !direct)
+        {
+            AddEntry(entries, path, ownerPath, kind, UnrealBindingDisposition.Rejected, [], [],
+                "USUE4002", "The policy requires a direct thunk but the signature requires CallFrame.");
+            return;
+        }
+        UnrealBindingDisposition disposition = policy.Route switch
+        {
+            UnrealBindingRoute.CallFrame => UnrealBindingDisposition.CallFrame,
+            UnrealBindingRoute.DirectThunk => UnrealBindingDisposition.DirectThunk,
+            _ => direct ? UnrealBindingDisposition.DirectThunk : UnrealBindingDisposition.CallFrame,
+        };
+        AddEntry(entries, path, ownerPath, kind, disposition, managed, native);
     }
 
     private static void AddEntry(
@@ -205,6 +302,18 @@ public sealed record UnrealBindingCoverageReport(
             message));
     }
 
+    private static bool IsDirectThunk(UnrealReflectedFunction function) =>
+        function.Parameters.Count <= 4 &&
+        function.Parameters.All(static parameter =>
+            parameter.Direction == UnrealParameterDirection.Input && IsFixedType(parameter.Type, allowVoid: false)) &&
+        IsFixedType(function.ReturnType, allowVoid: true);
+
+    private static bool IsFixedType(UnrealTypeReference type, bool allowVoid) =>
+        type.Kind is UnrealValueKind.Boolean or UnrealValueKind.Int32 or UnrealValueKind.Float32 or
+            UnrealValueKind.Object ||
+        type.Kind == UnrealValueKind.Struct && type.TypePath == "/Script/CoreUObject.Vector" ||
+        allowVoid && type.Kind == UnrealValueKind.Void;
+
     private static bool SupportsReflectionType(UnrealTypeReference type, bool allowVoid) =>
         type.Kind is
             UnrealValueKind.Boolean or
@@ -214,12 +323,48 @@ public sealed record UnrealBindingCoverageReport(
             UnrealValueKind.Int64 or UnrealValueKind.UInt64 or
             UnrealValueKind.Float32 or UnrealValueKind.Float64 or
             UnrealValueKind.String or UnrealValueKind.Name or UnrealValueKind.Text or
-            UnrealValueKind.Enum or UnrealValueKind.Object or UnrealValueKind.Class ||
+            UnrealValueKind.Enum or UnrealValueKind.Object or UnrealValueKind.Class or
+            UnrealValueKind.SoftObject or UnrealValueKind.SoftClass ||
         type.Kind == UnrealValueKind.Struct && type.TypePath is
             "/Script/CoreUObject.Vector" or
             "/Script/CoreUObject.Rotator" or
             "/Script/CoreUObject.Transform" ||
         allowVoid && type.Kind == UnrealValueKind.Void;
+
+    private static UnrealBindingCoverageGate EvaluateGate(
+        UnrealBindingCoverageSummary summary,
+        UnrealBindingCoverageBaseline? baseline)
+    {
+        if (baseline is null)
+        {
+            return new UnrealBindingCoverageGate(true, []);
+        }
+        var diagnostics = new List<string>();
+        RequireMinimum("USUE5101", "selected members", summary.MemberCount, baseline.MinimumMemberCount, diagnostics);
+        RequireMinimum("USUE5102", "direct thunks", summary.DirectThunkCount, baseline.MinimumDirectThunkCount, diagnostics);
+        RequireMinimum("USUE5103", "CallFrame members", summary.CallFrameCount, baseline.MinimumCallFrameCount, diagnostics);
+        RequireMinimum("USUE5104", "data-plane operations", summary.DataPlaneOperationCount, baseline.MinimumDataPlaneOperationCount, diagnostics);
+        RequireMinimum("USUE5105", "reflection fallbacks", summary.ReflectionFallbackCount, baseline.MinimumReflectionFallbackCount, diagnostics);
+        if (summary.RejectedCount > baseline.MaximumRejectedCount)
+        {
+            diagnostics.Add(
+                $"USUE5106: rejected members regressed to {summary.RejectedCount}; maximum is {baseline.MaximumRejectedCount}.");
+        }
+        return new UnrealBindingCoverageGate(diagnostics.Count == 0, diagnostics);
+    }
+
+    private static void RequireMinimum(
+        string code,
+        string label,
+        int actual,
+        int minimum,
+        ICollection<string> diagnostics)
+    {
+        if (actual < minimum)
+        {
+            diagnostics.Add($"{code}: {label} regressed to {actual}; minimum is {minimum}.");
+        }
+    }
 }
 
 public static class UnrealBindingCoverageJson

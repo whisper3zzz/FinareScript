@@ -23,12 +23,26 @@ public sealed record UnrealApiContract(
     string NativeNamespace,
     IReadOnlyList<UnrealApiContractType> Types)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.unreal-api-contract/v0.1";
+    public const string CurrentSchemaVersion = "unifiedscript.unreal-api-contract/v0.2";
+
+    public const string LegacySchemaVersion = "unifiedscript.unreal-api-contract/v0.1";
+
+    public UnrealApiPolicy Policy { get; init; } = UnrealApiPolicy.AllowSelected;
+
+    public UnrealBindingCoverageBaseline? CoverageBaseline { get; init; }
 }
 
 public sealed record UnrealApiContractProjection(
     UnrealApiContract Contract,
-    UnrealReflectionManifest Reflection);
+    UnrealReflectionManifest Reflection)
+{
+    public UnrealReflectionManifest SelectedReflection { get; init; } = Reflection;
+
+    public UnrealReflectionManifest NativeReflection { get; init; } = Reflection;
+
+    public UnrealApiPolicyEvaluation PolicyEvaluation { get; init; } =
+        UnrealApiPolicyEvaluator.Evaluate(Reflection, UnrealApiPolicy.AllowSelected);
+}
 
 public static class UnrealApiContractJson
 {
@@ -52,7 +66,8 @@ public static class UnrealApiContractJson
     private static UnrealApiContract Normalize(UnrealApiContract contract)
     {
         ArgumentNullException.ThrowIfNull(contract);
-        if (contract.SchemaVersion != UnrealApiContract.CurrentSchemaVersion)
+        if (contract.SchemaVersion != UnrealApiContract.CurrentSchemaVersion &&
+            contract.SchemaVersion != UnrealApiContract.LegacySchemaVersion)
         {
             throw new JsonException(
                 $"Unsupported Unreal API contract schema '{contract.SchemaVersion}'. " +
@@ -79,7 +94,7 @@ public static class UnrealApiContractJson
             string[] members = type.Members
                 .Select(static member => member?.Trim() ?? string.Empty)
                 .ToArray();
-            if (members.Any(static member => !IsIdentifier(member)) ||
+            if (members.Any(static member => !IsMemberSelector(member)) ||
                 members.Distinct(StringComparer.Ordinal).Count() != members.Length)
             {
                 throw new JsonException(
@@ -92,11 +107,14 @@ public static class UnrealApiContractJson
 
         return contract with
         {
+            SchemaVersion = UnrealApiContract.CurrentSchemaVersion,
             ContractName = contract.ContractName.Trim(),
             ManagedNamespace = contract.ManagedNamespace.Trim(),
             NativeHeader = contract.NativeHeader.Trim().Replace('\\', '/'),
             NativeNamespace = contract.NativeNamespace.Trim(),
             Types = normalizedTypes.OrderBy(static type => type.Path, StringComparer.Ordinal).ToArray(),
+            Policy = UnrealApiPolicyEvaluator.Normalize(contract.Policy),
+            CoverageBaseline = NormalizeBaseline(contract.CoverageBaseline),
         };
     }
 
@@ -127,7 +145,37 @@ public static class UnrealApiContractJson
     private static bool IsIdentifier(string? value) =>
         !string.IsNullOrWhiteSpace(value) &&
         (char.IsLetter(value[0]) || value[0] == '_') &&
-        value.Skip(1).All(static character => char.IsLetterOrDigit(character) || character == '_');
+            value.Skip(1).All(static character => char.IsLetterOrDigit(character) || character == '_');
+
+    private static bool IsMemberSelector(string? value)
+    {
+        if (IsIdentifier(value))
+        {
+            return true;
+        }
+        if (string.IsNullOrWhiteSpace(value) || value.Any(char.IsWhiteSpace))
+        {
+            return false;
+        }
+        int open = value.IndexOf('(');
+        return open > 0 && value.EndsWith(')') && IsIdentifier(value[..open]);
+    }
+
+    private static UnrealBindingCoverageBaseline? NormalizeBaseline(
+        UnrealBindingCoverageBaseline? baseline)
+    {
+        if (baseline is null)
+        {
+            return null;
+        }
+        if (baseline.MinimumMemberCount < 0 || baseline.MinimumDirectThunkCount < 0 ||
+            baseline.MinimumCallFrameCount < 0 || baseline.MinimumDataPlaneOperationCount < 0 ||
+            baseline.MinimumReflectionFallbackCount < 0 || baseline.MaximumRejectedCount < 0)
+        {
+            throw new JsonException("The Unreal API Contract coverage baseline cannot contain negative counts.");
+        }
+        return baseline;
+    }
 
     private static bool IsScriptPath(string path) =>
         path.StartsWith("/Script/", StringComparison.Ordinal) &&
@@ -169,7 +217,7 @@ public static class UnrealApiContractProjector
 
             var members = new Dictionary<string, (string Kind, object Value)>(StringComparer.Ordinal);
             AddMembers(type.Properties, "property", static value => value.Name, members, type.Path);
-            AddMembers(type.Functions, "function", static value => value.Name, members, type.Path);
+            AddFunctionMembers(type.Functions, members, type.Path);
             AddMembers(type.Delegates, "delegate", static value => value.Name, members, type.Path);
             foreach (string member in selector.Members)
             {
@@ -179,14 +227,18 @@ public static class UnrealApiContractProjector
                         $"Unreal API contract member '{selector.Path}:{member}' is absent from reflection input.");
                 }
             }
-            var selected = selector.Members.ToHashSet(StringComparer.Ordinal);
+            var selectedPaths = selector.Members
+                .Select(member => GetSelectedMember(members, member, selector.Path))
+                .ToHashSet(StringComparer.Ordinal);
             selectedTypes.Add(type with
             {
-                Properties = type.Properties.Where(property => selected.Contains(property.Name)).ToArray(),
-                Functions = type.Functions.Where(function => selected.Contains(function.Name)).ToArray(),
-                Delegates = type.Delegates.Where(item => selected.Contains(item.Name)).ToArray(),
+                Properties = type.Properties.Where(property => selectedPaths.Contains(property.Path)).ToArray(),
+                Functions = type.Functions.Where(function => selectedPaths.Contains(function.Path)).ToArray(),
+                Delegates = type.Delegates.Where(item => selectedPaths.Contains(item.Path)).ToArray(),
             });
         }
+
+        AddDependencyClosure(selectedTypes, reflectedTypes);
 
         string[] modules = selectedTypes
             .Select(static type => type.Module)
@@ -195,7 +247,138 @@ public static class UnrealApiContractProjector
             .ToArray();
         UnrealReflectionManifest selectedReflection = UnrealReflectionJson.NormalizeAndValidate(
             UnrealReflectionManifest.Create(normalizedReflection.Engine, modules, selectedTypes));
-        return new UnrealApiContractProjection(normalizedContract, selectedReflection);
+        UnrealApiPolicyEvaluation evaluation = UnrealApiPolicyEvaluator.Evaluate(
+            selectedReflection,
+            normalizedContract.Policy);
+        UnrealReflectionManifest managedReflection = UnrealApiPolicyEvaluator.Filter(
+            selectedReflection,
+            evaluation,
+            native: false);
+        UnrealReflectionManifest nativeReflection = UnrealApiPolicyEvaluator.Filter(
+            selectedReflection,
+            evaluation,
+            native: true);
+        return new UnrealApiContractProjection(normalizedContract, managedReflection)
+        {
+            SelectedReflection = selectedReflection,
+            NativeReflection = nativeReflection,
+            PolicyEvaluation = evaluation,
+        };
+    }
+
+    private static string GetSelectedMember(
+        IReadOnlyDictionary<string, (string Kind, object Value)> members,
+        string selector,
+        string ownerPath)
+    {
+        if (!members.TryGetValue(selector, out (string Kind, object Value) selected))
+        {
+            throw new JsonException(
+                $"Unreal API contract member '{ownerPath}:{selector}' is absent from reflection input.");
+        }
+        return selected.Value switch
+        {
+            UnrealReflectedProperty property => property.Path,
+            UnrealReflectedFunction function => function.Path,
+            UnrealReflectedDelegate reflectedDelegate => reflectedDelegate.Path,
+            _ => throw new InvalidOperationException("Unknown reflected member kind."),
+        };
+    }
+
+    private static void AddFunctionMembers(
+        IReadOnlyList<UnrealReflectedFunction> functions,
+        IDictionary<string, (string Kind, object Value)> members,
+        string ownerPath)
+    {
+        foreach (IGrouping<string, UnrealReflectedFunction> group in functions.GroupBy(
+                     static function => function.Name,
+                     StringComparer.Ordinal))
+        {
+            UnrealReflectedFunction[] overloads = group.ToArray();
+            if (overloads.Length == 1)
+            {
+                members.Add(group.Key, ("function", overloads[0]));
+                continue;
+            }
+            foreach (UnrealReflectedFunction function in overloads)
+            {
+                string selector = FunctionSelector(function);
+                if (!members.TryAdd(selector, ("function", function)))
+                {
+                    throw new JsonException(
+                        $"Reflected type '{ownerPath}' has an ambiguous overload selector '{selector}'.");
+                }
+            }
+        }
+    }
+
+    private static string FunctionSelector(UnrealReflectedFunction function)
+    {
+        int open = function.Path.IndexOf('(', StringComparison.Ordinal);
+        return open >= 0 ? function.Path[(function.Path.LastIndexOf(':') + 1)..] :
+            $"{function.Name}({string.Join(',', function.Parameters.Select(static parameter => parameter.Type.NativeName))})";
+    }
+
+    private static void AddDependencyClosure(
+        ICollection<UnrealReflectedType> selectedTypes,
+        IReadOnlyDictionary<string, UnrealReflectedType> reflectedTypes)
+    {
+        var selectedPaths = selectedTypes.Select(static type => type.Path)
+            .ToHashSet(StringComparer.Ordinal);
+        var pending = new Queue<string>(selectedTypes.SelectMany(EnumerateDependencies));
+        while (pending.TryDequeue(out string? path))
+        {
+            if (!selectedPaths.Add(path) || !reflectedTypes.TryGetValue(path, out UnrealReflectedType? dependency))
+            {
+                continue;
+            }
+            selectedTypes.Add(dependency);
+            foreach (string nested in EnumerateDependencies(dependency))
+            {
+                pending.Enqueue(nested);
+            }
+        }
+    }
+
+    private static IEnumerable<string> EnumerateDependencies(UnrealReflectedType type)
+    {
+        if (type.BaseTypePath is not null)
+        {
+            yield return type.BaseTypePath;
+        }
+        foreach (string path in type.InterfacePaths)
+        {
+            yield return path;
+        }
+        IEnumerable<UnrealTypeReference> references = type.Properties.Select(static item => item.Type)
+            .Concat(type.Functions.Select(static item => item.ReturnType))
+            .Concat(type.Functions.SelectMany(static item => item.Parameters.Select(static parameter => parameter.Type)))
+            .Concat(type.Delegates.Select(static item => item.ReturnType))
+            .Concat(type.Delegates.SelectMany(static item => item.Parameters.Select(static parameter => parameter.Type)));
+        foreach (UnrealTypeReference reference in references.SelectMany(EnumerateTypeReferences))
+        {
+            if (reference.TypePath is not null && reference.Kind is UnrealValueKind.Struct or UnrealValueKind.Enum)
+            {
+                yield return reference.TypePath;
+            }
+        }
+    }
+
+    private static IEnumerable<UnrealTypeReference> EnumerateTypeReferences(UnrealTypeReference type)
+    {
+        yield return type;
+        if (type.ElementType is not null)
+        {
+            foreach (UnrealTypeReference nested in EnumerateTypeReferences(type.ElementType)) yield return nested;
+        }
+        if (type.KeyType is not null)
+        {
+            foreach (UnrealTypeReference nested in EnumerateTypeReferences(type.KeyType)) yield return nested;
+        }
+        if (type.ValueType is not null)
+        {
+            foreach (UnrealTypeReference nested in EnumerateTypeReferences(type.ValueType)) yield return nested;
+        }
     }
 
     private static void AddMembers<T>(
@@ -222,7 +405,10 @@ public sealed record UnrealApiNodePin(
     string Name,
     string Direction,
     string Kind,
-    UnrealTypeReference? Type);
+    UnrealTypeReference? Type)
+{
+    public string? DefaultValue { get; init; }
+}
 
 public sealed record UnrealApiNodeDescriptor(
     string Id,
@@ -233,7 +419,12 @@ public sealed record UnrealApiNodeDescriptor(
     string Category,
     string Tooltip,
     bool Pure,
-    IReadOnlyList<UnrealApiNodePin> Pins);
+    IReadOnlyList<UnrealApiNodePin> Pins)
+{
+    public bool Deprecated { get; init; }
+
+    public string? DeprecationMessage { get; init; }
+}
 
 public sealed record UnrealApiNodeType(
     string Path,
@@ -265,7 +456,7 @@ public static class UnrealApiNodeCatalogGenerator
         UnrealApiNodeType[] types = projection.Reflection.Types.Select(type =>
         {
             string managedName = managedNames[type.Path];
-            string category = $"Unreal API|{type.Name}";
+            string category = type.Metadata.Category ?? $"Unreal API|{type.Name}";
             var nodes = new List<UnrealApiNodeDescriptor>();
             UnrealTypeReference receiverType = new(
                 UnrealValueKind.Object,
@@ -322,9 +513,9 @@ public static class UnrealApiNodeCatalogGenerator
                         $"ue.get|{managedName}|{property.Name}",
                         property.Path,
                         "propertyRead",
-                        property.Name,
+                        property.Metadata.DisplayName ?? property.Name,
                         category + "|Properties",
-                        $"Read {type.Name}.{property.Name}.",
+                        property.Metadata.Tooltip ?? $"Read {type.Name}.{property.Name}.",
                         pure: true,
                         [
                             new("Target", "input", "data", receiverType),
@@ -337,9 +528,9 @@ public static class UnrealApiNodeCatalogGenerator
                         $"ue.set|{managedName}|{property.Name}",
                         property.Path,
                         "propertyWrite",
-                        $"Set {property.Name}",
+                        $"Set {property.Metadata.DisplayName ?? property.Name}",
                         category + "|Properties",
-                        $"Write {type.Name}.{property.Name}.",
+                        property.Metadata.Tooltip ?? $"Write {type.Name}.{property.Name}.",
                         pure: false,
                         [
                             new("In", "input", "control", null),
@@ -351,6 +542,8 @@ public static class UnrealApiNodeCatalogGenerator
             }
             foreach (UnrealReflectedFunction function in type.Functions)
             {
+                bool overloaded = type.Functions.Count(candidate =>
+                    string.Equals(candidate.Name, function.Name, StringComparison.Ordinal)) > 1;
                 var pins = new List<UnrealApiNodePin>();
                 if (!function.Traits.Pure)
                 {
@@ -370,7 +563,10 @@ public static class UnrealApiNodeCatalogGenerator
                 {
                     if (parameter.Direction != UnrealParameterDirection.Output)
                     {
-                        pins.Add(new(parameter.Name, "input", "data", parameter.Type));
+                        pins.Add(new(parameter.Name, "input", "data", parameter.Type)
+                        {
+                            DefaultValue = parameter.DefaultValue,
+                        });
                     }
                     if (parameter.Direction != UnrealParameterDirection.Input)
                     {
@@ -386,14 +582,17 @@ public static class UnrealApiNodeCatalogGenerator
                     pins.Add(new("Out", "output", "control", null));
                 }
                 nodes.Add(CreateNode(
-                    $"ue.call|{managedName}|{function.Name}",
+                    overloaded
+                        ? $"ue.call|{managedName}|{function.Name}|{UnrealMemberId.FromPath(function.Path):X16}"
+                        : $"ue.call|{managedName}|{function.Name}",
                     function.Path,
                     "function",
-                    function.Name,
-                    category,
-                    $"Call {type.Name}.{function.Name}(...).",
+                    function.Metadata.DisplayName ?? function.Name,
+                    function.Metadata.Category ?? category,
+                    function.Metadata.Tooltip ?? $"Call {type.Name}.{function.Name}(...).",
                     function.Traits.Pure,
-                    pins));
+                    pins,
+                    function.Metadata));
             }
             foreach (UnrealReflectedDelegate reflectedDelegate in type.Delegates)
             {
@@ -458,7 +657,8 @@ public static class UnrealApiNodeCatalogGenerator
         string category,
         string tooltip,
         bool pure,
-        IReadOnlyList<UnrealApiNodePin> pins) =>
+        IReadOnlyList<UnrealApiNodePin> pins,
+        UnrealBlueprintMetadata? metadata = null) =>
         new(
             id,
             path,
@@ -468,7 +668,11 @@ public static class UnrealApiNodeCatalogGenerator
             category,
             tooltip,
             pure,
-            pins);
+            pins)
+        {
+            Deprecated = metadata?.Deprecated ?? false,
+            DeprecationMessage = metadata?.DeprecationMessage,
+        };
 
     private static IReadOnlyDictionary<string, string> CreateManagedTypeNames(
         IReadOnlyList<UnrealReflectedType> types)

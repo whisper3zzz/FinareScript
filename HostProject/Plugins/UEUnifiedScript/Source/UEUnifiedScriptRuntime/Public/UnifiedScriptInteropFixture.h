@@ -3,7 +3,7 @@
  * @Author: whispersong
  * @Date: 2026-08-25 10:42:29
  * @LastEditors: whispersong
- * @LastEditTime: 2026-08-25 14:22:40
+ * @LastEditTime: 2026-08-25 18:35:18
  * @FilePath: \Plugins\UEUnifiedScript\Source\UEUnifiedScriptRuntime\Public\UnifiedScriptInteropFixture.h
  * @Description:
  */
@@ -28,9 +28,22 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
     UObject*,
     Context);
 
+UINTERFACE(BlueprintType)
+class UEUNIFIEDSCRIPTRUNTIME_API UUnifiedScriptInteropContract : public UInterface
+{
+    GENERATED_BODY()
+};
+
+class UEUNIFIEDSCRIPTRUNTIME_API IUnifiedScriptInteropContract
+{
+    GENERATED_BODY()
+};
+
 /** Public interop fixture used to keep generated common-type bindings executable. */
 UCLASS(BlueprintType)
-class UEUNIFIEDSCRIPTRUNTIME_API UUnifiedScriptInteropFixture : public UObject
+class UEUNIFIEDSCRIPTRUNTIME_API UUnifiedScriptInteropFixture
+    : public UObject
+    , public IUnifiedScriptInteropContract
 {
     GENERATED_BODY()
 
@@ -76,6 +89,12 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="UnifiedScript|Interop")
     TObjectPtr<UClass> ClassValue = nullptr;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="UnifiedScript|Interop")
+    TSoftObjectPtr<UObject> SoftObjectValue;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="UnifiedScript|Interop")
+    TSoftClassPtr<UObject> SoftClassValue;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="UnifiedScript|Interop")
     EUnifiedScriptInteropMode Mode = EUnifiedScriptInteropMode::Idle;
@@ -149,6 +168,9 @@ public:
 
     UFUNCTION(BlueprintPure, Category="UnifiedScript|Interop")
     int64 AddInt64(int64 Left, int64 Right) const;
+
+    UFUNCTION(BlueprintPure, Category="UnifiedScript|Interop", meta=(DisplayName="Add With Default"))
+    int32 AddWithDefault(int32 Value, int32 Amount = 1) const;
 
     UFUNCTION(BlueprintCallable, Category="UnifiedScript|Interop")
     void BroadcastInteropChanged(int32 NewValue, UObject* Context);

@@ -1602,15 +1602,22 @@ FString FUnifiedScriptAuthoringSurfaceReader::ResolveConfiguredPath(
     const FString& ConfiguredPath)
 {
     FString Result = ConfiguredPath;
+    FString ProjectDir = FPaths::GetPath(FPaths::GetProjectFilePath());
+    if (ProjectDir.IsEmpty())
+    {
+        ProjectDir = FPaths::ProjectDir();
+    }
+    ProjectDir = FPaths::ConvertRelativePathToFull(ProjectDir);
+    FPaths::NormalizeDirectoryName(ProjectDir);
     const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("UEUnifiedScript"));
     if (Plugin.IsValid())
     {
         Result.ReplaceInline(TEXT("{PluginDir}"), *Plugin->GetBaseDir(), ESearchCase::IgnoreCase);
     }
-    Result.ReplaceInline(TEXT("{ProjectDir}"), *FPaths::ProjectDir(), ESearchCase::IgnoreCase);
+    Result.ReplaceInline(TEXT("{ProjectDir}"), *ProjectDir, ESearchCase::IgnoreCase);
     if (FPaths::IsRelative(Result))
     {
-        Result = FPaths::Combine(FPaths::ProjectDir(), Result);
+        Result = FPaths::Combine(ProjectDir, Result);
     }
     Result = FPaths::ConvertRelativePathToFull(Result);
     FPaths::NormalizeFilename(Result);

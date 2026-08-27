@@ -330,6 +330,14 @@ bool UE::UnifiedScript::Generated::DescribeReadResult(
         OutKind = EUnifiedScriptValueKind::Rotator;
         OutTypeId = 0ull;
         return true;
+    case 0xC3274F8A399CE7F5ull:
+        OutKind = EUnifiedScriptValueKind::String;
+        OutTypeId = 0ull;
+        return true;
+    case 0x6F0135EE1F0ABDC0ull:
+        OutKind = EUnifiedScriptValueKind::String;
+        OutTypeId = 0ull;
+        return true;
     case 0x6B3CC333752E62FAull:
         OutKind = EUnifiedScriptValueKind::String;
         OutTypeId = 0ull;
@@ -409,6 +417,9 @@ bool UE::UnifiedScript::Generated::DescribeInvokeResultCount(
         OutResultCount = 1;
         return true;
     case 0x72F00766D165C3ACull:
+        OutResultCount = 1;
+        return true;
+    case 0xAB3E544FCF8E0F20ull:
         OutResultCount = 1;
         return true;
     case 0xB122BDB717D2DBECull:
@@ -605,6 +616,16 @@ bool UE::UnifiedScript::Generated::DescribeInvokeResult(
         {
         case 0:
             OutKind = EUnifiedScriptValueKind::Vector;
+            OutTypeId = 0ull;
+            return true;
+        default:
+            return false;
+        }
+    case 0xAB3E544FCF8E0F20ull:
+        switch (ResultIndex)
+        {
+        case 0:
+            OutKind = EUnifiedScriptValueKind::Int32;
             OutTypeId = 0ull;
             return true;
         default:
@@ -1149,6 +1170,28 @@ bool UE::UnifiedScript::Generated::ReadProperty(
         Succeed(OutResult);
         return true;
     }
+    case 0xC3274F8A399CE7F5ull:
+    {
+        UUnifiedScriptInteropFixture* TypedTarget = ResolveTarget<UUnifiedScriptInteropFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutValue = FUnifiedScriptValue::FromString(TypedTarget->SoftClassValue.ToSoftObjectPath().ToString());
+        Succeed(OutResult);
+        return true;
+    }
+    case 0x6F0135EE1F0ABDC0ull:
+    {
+        UUnifiedScriptInteropFixture* TypedTarget = ResolveTarget<UUnifiedScriptInteropFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutValue = FUnifiedScriptValue::FromString(TypedTarget->SoftObjectValue.ToSoftObjectPath().ToString());
+        Succeed(OutResult);
+        return true;
+    }
     case 0x6B3CC333752E62FAull:
     {
         UUnifiedScriptInteropFixture* TypedTarget = ResolveTarget<UUnifiedScriptInteropFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"), OutResult);
@@ -1689,6 +1732,46 @@ bool UE::UnifiedScript::Generated::WriteProperty(
         Succeed(OutResult);
         return true;
     }
+    case 0xC3274F8A399CE7F5ull:
+    {
+        UUnifiedScriptInteropFixture* TypedTarget = ResolveTarget<UUnifiedScriptInteropFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        FString NativeValuePath;
+        if (!Value.TryGetString(NativeValuePath))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftClassValue' received an incompatible soft path."));
+        }
+        TSoftClassPtr<UObject> NativeValue{FSoftObjectPath(NativeValuePath)};
+        TypedTarget->SoftClassValue = NativeValue;
+        Succeed(OutResult);
+        return true;
+    }
+    case 0x6F0135EE1F0ABDC0ull:
+    {
+        UUnifiedScriptInteropFixture* TypedTarget = ResolveTarget<UUnifiedScriptInteropFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        FString NativeValuePath;
+        if (!Value.TryGetString(NativeValuePath))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftObjectValue' received an incompatible soft path."));
+        }
+        TSoftObjectPtr<UObject> NativeValue{FSoftObjectPath(NativeValuePath)};
+        TypedTarget->SoftObjectValue = NativeValue;
+        Succeed(OutResult);
+        return true;
+    }
     case 0x6B3CC333752E62FAull:
     {
         UUnifiedScriptInteropFixture* TypedTarget = ResolveTarget<UUnifiedScriptInteropFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"), OutResult);
@@ -2192,6 +2275,39 @@ bool UE::UnifiedScript::Generated::Invoke(
         }
         FVector ReturnValue = TypedTarget->AddVector(Argument0, Argument1);
         OutReturnValue = FUnifiedScriptValue::FromVector(ReturnValue);
+        Succeed(OutResult);
+        return true;
+    }
+    case 0xAB3E544FCF8E0F20ull:
+    {
+        if (!RequireArgumentCount(Arguments, 2, OutResult))
+        {
+            return false;
+        }
+        UUnifiedScriptInteropFixture* TypedTarget = ResolveTarget<UUnifiedScriptInteropFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        int32 Argument0 = 0;
+        if (!Arguments[0].TryGetInt32(Argument0))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:AddWithDefault' received an incompatible value."));
+        }
+        int32 Argument1 = 0;
+        if (!Arguments[1].TryGetInt32(Argument1))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:AddWithDefault' received an incompatible value."));
+        }
+        int32 ReturnValue = TypedTarget->AddWithDefault(Argument0, Argument1);
+        OutReturnValue = FUnifiedScriptValue::FromInt32(ReturnValue);
         Succeed(OutResult);
         return true;
     }
@@ -2868,6 +2984,17 @@ bool UE::UnifiedScript::Generated::InvokeInt32x2(
         Succeed(OutResult);
         return true;
     }
+    case 0xAB3E544FCF8E0F20ull:
+    {
+        UUnifiedScriptInteropFixture* TypedTarget = ResolveTarget<UUnifiedScriptInteropFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutReturnValue = TypedTarget->AddWithDefault(Argument0, Argument1);
+        Succeed(OutResult);
+        return true;
+    }
     default:
         return FailUnknownMember(OutResult, MemberId);
     }
@@ -3261,6 +3388,42 @@ bool UE::UnifiedScript::Generated::InvokeFixed(
         FMemory::Memcpy(&(*OutReturnValue).Payload1, &ReturnComponent1, sizeof(double));
         const double ReturnComponent2 = ReturnValue.Z;
         FMemory::Memcpy(&(*OutReturnValue).Payload2, &ReturnComponent2, sizeof(double));
+        Succeed(OutResult);
+        return true;
+    }
+    case 0xAB3E544FCF8E0F20ull:
+    {
+        if (Arguments.Num() != 2)
+        {
+            return Fail(OutResult, EUnifiedScriptInvocationError::ArgumentCountMismatch,
+                TEXT("Generated fixed thunk requires 2 arguments."));
+        }
+        UUnifiedScriptInteropFixture* TypedTarget = ResolveTarget<UUnifiedScriptInteropFixture>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        if (OutReturnValue == nullptr || OutReturnValue->Kind != EUnifiedScriptNativeValueKindV3::Int32)
+        {
+            return Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated fixed thunk result descriptor is incompatible."));
+        }
+        if (Arguments[0].Kind != EUnifiedScriptNativeValueKindV3::Int32)
+        {
+            return Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated fixed argument has an incompatible value kind."));
+        }
+        int32 Argument0 = static_cast<int32>(Arguments[0].Payload0);
+        if (Arguments[1].Kind != EUnifiedScriptNativeValueKindV3::Int32)
+        {
+            return Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated fixed argument has an incompatible value kind."));
+        }
+        int32 Argument1 = static_cast<int32>(Arguments[1].Payload0);
+        int32 ReturnValue = TypedTarget->AddWithDefault(Argument0, Argument1);
+        (*OutReturnValue) = {};
+        (*OutReturnValue).Kind = EUnifiedScriptNativeValueKindV3::Int32;
+        (*OutReturnValue).Payload0 = static_cast<uint64>(ReturnValue);
         Succeed(OutResult);
         return true;
     }

@@ -1,5 +1,31 @@
 namespace UnifiedScript.Unreal;
 
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = false, Inherited = false)]
+public sealed class UnrealInheritanceAttribute(string? baseTypePath, params string[] interfacePaths) : Attribute
+{
+    public string? BaseTypePath { get; } = baseTypePath;
+
+    public IReadOnlyList<string> InterfacePaths { get; } = interfacePaths;
+}
+
+[AttributeUsage(
+    AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Property | AttributeTargets.Method,
+    AllowMultiple = false,
+    Inherited = false)]
+public sealed class UnrealBlueprintMetadataAttribute : Attribute
+{
+    public string? DisplayName { get; set; }
+
+    public string? Category { get; set; }
+
+    public string? Tooltip { get; set; }
+
+    public string? WorldContextParameter { get; set; }
+}
+
+[AttributeUsage(AttributeTargets.Method, AllowMultiple = false, Inherited = false)]
+public sealed class UnrealStaticFunctionAttribute : Attribute;
+
 /// <summary>Identifies a generated, field-addressable UScriptStruct value.</summary>
 [AttributeUsage(AttributeTargets.Struct, AllowMultiple = false, Inherited = false)]
 public sealed class UnrealStructAttribute(string path, string nativeName) : Attribute
@@ -72,6 +98,38 @@ public readonly record struct UnrealEnumValue
     public string TypePath { get; }
 
     public long Value { get; }
+}
+
+/// <summary>Asset-path value for a reflected TSoftObjectPtr without forcing a synchronous load.</summary>
+[UnrealValue]
+public readonly record struct UnrealSoftObjectHandle
+{
+    public UnrealSoftObjectHandle(string assetPath)
+    {
+        AssetPath = assetPath ?? throw new ArgumentNullException(nameof(assetPath));
+    }
+
+    public string AssetPath { get; }
+
+    public bool IsNull => string.IsNullOrEmpty(AssetPath);
+
+    public override string ToString() => AssetPath ?? string.Empty;
+}
+
+/// <summary>Asset-path value for a reflected TSoftClassPtr without loading the class.</summary>
+[UnrealValue]
+public readonly record struct UnrealSoftClassHandle
+{
+    public UnrealSoftClassHandle(string assetPath)
+    {
+        AssetPath = assetPath ?? throw new ArgumentNullException(nameof(assetPath));
+    }
+
+    public string AssetPath { get; }
+
+    public bool IsNull => string.IsNullOrEmpty(AssetPath);
+
+    public override string ToString() => AssetPath ?? string.Empty;
 }
 
 /// <summary>Double-precision FVector shape used by UE5 large world coordinates.</summary>

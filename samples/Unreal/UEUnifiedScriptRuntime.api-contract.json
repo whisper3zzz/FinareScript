@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "unifiedscript.unreal-api-contract/v0.1",
+  "schemaVersion": "unifiedscript.unreal-api-contract/v0.2",
   "contractName": "UnifiedScript.Runtime.Demo",
   "managedNamespace": "UnifiedScript.Unreal.Generated",
   "nativeHeader": "UnifiedScriptGeneratedThunks.h",
@@ -51,6 +51,7 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "members": [
         "AddInt64",
+        "AddWithDefault",
         "AddVector",
         "BroadcastInteropChanged",
         "ByteValue",
@@ -81,6 +82,8 @@
         "ObjectValue",
         "OnInteropChanged",
         "RotatorValue",
+        "SoftClassValue",
+        "SoftObjectValue",
         "StringLength",
         "StringValue",
         "SumArray",
@@ -90,5 +93,17 @@
         "VectorValue"
       ]
     }
-  ]
+  ],
+  "policy": {
+    "defaultAction": "allow",
+    "rules": []
+  },
+  "coverageBaseline": {
+    "minimumMemberCount": 73,
+    "minimumDirectThunkCount": 22,
+    "minimumCallFrameCount": 49,
+    "minimumDataPlaneOperationCount": 0,
+    "minimumReflectionFallbackCount": 2,
+    "maximumRejectedCount": 0
+  }
 }

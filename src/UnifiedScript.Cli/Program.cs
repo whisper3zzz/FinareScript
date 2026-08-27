@@ -185,7 +185,7 @@ internal static class Program
         if (fullNativeOutputPath is not null || fullReportPath is not null || options.FailOnRejected)
         {
             nativeResult = new UnrealNativeThunkGenerator().Generate(
-                manifest,
+                projection?.NativeReflection ?? manifest,
                 new UnrealNativeThunkGeneratorOptions(
                     nativeHeader,
                     nativeNamespace));
@@ -198,16 +198,24 @@ internal static class Program
         UnrealBindingCoverageReport? coverage = null;
         if (fullReportPath is not null || options.FailOnRejected)
         {
-            coverage = UnrealBindingCoverageReport.Create(
-                manifest,
-                result,
-                nativeResult!);
+            coverage = projection is null
+                ? UnrealBindingCoverageReport.Create(manifest, result, nativeResult!)
+                : UnrealBindingCoverageReport.Create(projection, result, nativeResult!);
         }
         if (options.FailOnRejected && coverage!.Summary.RejectedCount > 0)
         {
             Console.Error.WriteLine(
                 $"Unreal binding generation rejected {coverage.Summary.RejectedCount} member(s). " +
                 "See diagnostics or the coverage report for details.");
+            return 65;
+        }
+        if (coverage is { Gate.Passed: false })
+        {
+            foreach (string diagnostic in coverage.Gate.Diagnostics)
+            {
+                Console.Error.WriteLine(diagnostic);
+            }
+            Console.Error.WriteLine("Unreal binding coverage regressed below the API Contract baseline.");
             return 65;
         }
 

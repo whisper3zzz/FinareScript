@@ -1541,6 +1541,10 @@ public sealed class NativeUnrealInvocationBridge
             float float32Value => UnrealInvocationValue.FromFloat32(float32Value),
             double float64Value => UnrealInvocationValue.FromFloat64(float64Value),
             string stringValue => UnrealInvocationValue.FromString(stringValue),
+            UnrealSoftObjectHandle softObject =>
+                UnrealInvocationValue.FromString(softObject.AssetPath ?? string.Empty),
+            UnrealSoftClassHandle softClass =>
+                UnrealInvocationValue.FromString(softClass.AssetPath ?? string.Empty),
             UnrealName nameValue => UnrealInvocationValue.FromName(nameValue),
             UnrealText textValue => UnrealInvocationValue.FromText(textValue),
             UnrealObjectHandle objectHandle => UnrealInvocationValue.FromObjectHandle(objectHandle),
@@ -1584,6 +1588,10 @@ public sealed class NativeUnrealInvocationBridge
                 value.FloatingPointValue,
             UnrealInvocationValueKind.String when typeof(T) == typeof(string) =>
                 value.StringValue,
+            UnrealInvocationValueKind.String when typeof(T) == typeof(UnrealSoftObjectHandle) =>
+                new UnrealSoftObjectHandle(value.StringValue ?? string.Empty),
+            UnrealInvocationValueKind.String when typeof(T) == typeof(UnrealSoftClassHandle) =>
+                new UnrealSoftClassHandle(value.StringValue ?? string.Empty),
             UnrealInvocationValueKind.Name when typeof(T) == typeof(UnrealName) =>
                 new UnrealName(value.StringValue ?? string.Empty),
             UnrealInvocationValueKind.Text when typeof(T) == typeof(UnrealText) =>

@@ -68,6 +68,11 @@ public sealed class UnrealBindingGenerator
                 EmitStruct(source, type, managedTypeNames[type.Path], managedTypeNames, diagnostics);
                 continue;
             }
+            if (type.Kind == UnrealReflectedTypeKind.Enum)
+            {
+                EmitEnum(source, type, managedTypeNames[type.Path]);
+                continue;
+            }
             if (type.Kind != UnrealReflectedTypeKind.Class)
             {
                 diagnostics.Add(new UnrealBindingDiagnostic(
@@ -95,6 +100,14 @@ public sealed class UnrealBindingGenerator
         IReadOnlyDictionary<string, string> managedTypeNames,
         ICollection<UnrealBindingDiagnostic> diagnostics)
     {
+        EmitBlueprintMetadata(source, type.Metadata, string.Empty);
+        source.Append("[global::UnifiedScript.Unreal.UnrealInheritanceAttribute(")
+            .Append(type.BaseTypePath is null ? "null" : Literal(type.BaseTypePath));
+        foreach (string interfacePath in type.InterfacePaths)
+        {
+            source.Append(", ").Append(Literal(interfacePath));
+        }
+        source.AppendLine(")]");
         source.Append("[global::UnifiedScript.Unreal.UnrealTypeAttribute(")
             .Append(Literal(type.Path)).AppendLine(")]");
         bool staticService = type.Properties.Count == 0 && type.Delegates.Count == 0 &&
@@ -114,6 +127,7 @@ public sealed class UnrealBindingGenerator
         source.AppendLine("    }");
 
         var memberNames = new HashSet<string>(StringComparer.Ordinal);
+        var functionNames = new HashSet<string>(StringComparer.Ordinal);
         foreach (UnrealReflectedProperty property in type.Properties)
         {
             string? managedType = GetManagedType(property.Type, managedTypeNames);
@@ -128,6 +142,8 @@ public sealed class UnrealBindingGenerator
 
             string memberName = MakeUniqueMemberName(ToIdentifier(property.Name), property.Path, memberNames);
             source.AppendLine();
+            EmitBlueprintMetadata(source, property.Metadata, "    ");
+            EmitObsolete(source, property.Metadata, "    ");
             source.Append("    public ").Append(managedType).Append(' ').Append(memberName).AppendLine();
             source.AppendLine("    {");
             if (property.Access.Readable)
@@ -245,9 +261,31 @@ public sealed class UnrealBindingGenerator
                 continue;
             }
 
-            string memberName = MakeUniqueMemberName(ToIdentifier(function.Name), function.Path, memberNames);
+            string candidateName = ToIdentifier(function.Name);
+            string memberName;
+            if (!memberNames.Contains(candidateName))
+            {
+                memberNames.Add(candidateName);
+                functionNames.Add(candidateName);
+                memberName = candidateName;
+            }
+            else if (functionNames.Contains(candidateName))
+            {
+                memberName = candidateName;
+            }
+            else
+            {
+                memberName = MakeUniqueMemberName(candidateName, function.Path, memberNames);
+                functionNames.Add(memberName);
+            }
             string[] parameterNames = CreateParameterNames(function.Parameters);
             source.AppendLine();
+            EmitBlueprintMetadata(source, function.Metadata, "    ");
+            EmitObsolete(source, function.Metadata, "    ");
+            if (function.Traits.Static)
+            {
+                source.AppendLine("    [global::UnifiedScript.Unreal.UnrealStaticFunctionAttribute]");
+            }
             source.Append("    public ").Append(returnType).Append(' ').Append(memberName).Append('(');
             EmitParameterList(source, function.Parameters, parameterNames, managedTypeNames);
 
@@ -262,6 +300,14 @@ public sealed class UnrealBindingGenerator
                     returnType,
                     parameterNames,
                     managedTypeNames);
+                EmitDefaultOverloads(
+                    source,
+                    function,
+                    memberName,
+                    returnType,
+                    parameterNames,
+                    managedTypeNames,
+                    diagnostics);
                 continue;
             }
             source.Append("        => ");
@@ -303,6 +349,14 @@ public sealed class UnrealBindingGenerator
             }
 
             source.AppendLine(");");
+            EmitDefaultOverloads(
+                source,
+                function,
+                memberName,
+                returnType,
+                parameterNames,
+                managedTypeNames,
+                diagnostics);
         }
 
         source.AppendLine("}");
@@ -335,6 +389,14 @@ public sealed class UnrealBindingGenerator
                 MakeUniqueMemberName(ToIdentifier(property.Name), property.Path, memberNames)));
         }
 
+        EmitBlueprintMetadata(source, type.Metadata, string.Empty);
+        source.Append("[global::UnifiedScript.Unreal.UnrealInheritanceAttribute(")
+            .Append(type.BaseTypePath is null ? "null" : Literal(type.BaseTypePath));
+        foreach (string interfacePath in type.InterfacePaths)
+        {
+            source.Append(", ").Append(Literal(interfacePath));
+        }
+        source.AppendLine(")]");
         source.Append("[global::UnifiedScript.Unreal.UnrealStructAttribute(")
             .Append(Literal(type.Path)).Append(", ").Append(Literal(type.NativeName)).AppendLine(")]");
         source.AppendLine("[global::UnifiedScript.Unreal.UnrealValueAttribute]");
@@ -351,6 +413,23 @@ public sealed class UnrealBindingGenerator
         {
             source.AppendLine(");");
         }
+        source.AppendLine();
+    }
+
+    private static void EmitEnum(StringBuilder source, UnrealReflectedType type, string enumName)
+    {
+        EmitBlueprintMetadata(source, type.Metadata, string.Empty);
+        source.Append("public static class ").Append(enumName).AppendLine();
+        source.AppendLine("{");
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (UnrealEnumValueDefinition value in type.EnumValues)
+        {
+            string name = MakeUniqueMemberName(ToIdentifier(value.Name), $"{type.Path}:{value.Name}", names);
+            source.Append("    public static global::UnifiedScript.Unreal.UnrealEnumValue ")
+                .Append(name).Append(" { get; } = new(")
+                .Append(Literal(type.Path)).Append(", ").Append(value.Value).AppendLine(");");
+        }
+        source.AppendLine("}");
         source.AppendLine();
     }
 
@@ -427,6 +506,161 @@ public sealed class UnrealBindingGenerator
         source.AppendLine("    }");
     }
 
+    private static void EmitDefaultOverloads(
+        StringBuilder source,
+        UnrealReflectedFunction function,
+        string memberName,
+        string returnType,
+        IReadOnlyList<string> parameterNames,
+        IReadOnlyDictionary<string, string> managedTypeNames,
+        ICollection<UnrealBindingDiagnostic> diagnostics)
+    {
+        int firstDefault = function.Parameters.Count;
+        while (firstDefault > 0 &&
+               function.Parameters[firstDefault - 1].Direction == UnrealParameterDirection.Input &&
+               function.Parameters[firstDefault - 1].DefaultValue is not null)
+        {
+            --firstDefault;
+        }
+        if (firstDefault == function.Parameters.Count)
+        {
+            return;
+        }
+        string?[] defaults = function.Parameters
+            .Select(parameter => GetDefaultExpression(parameter, managedTypeNames))
+            .ToArray();
+        if (defaults.Skip(firstDefault).Any(static value => value is null))
+        {
+            diagnostics.Add(new UnrealBindingDiagnostic(
+                "USUE2008",
+                "One or more reflected default parameter literals cannot be projected safely to C#.",
+                function.Path));
+            return;
+        }
+
+        for (int count = function.Parameters.Count - 1; count >= firstDefault; --count)
+        {
+            source.AppendLine();
+            source.Append("    public ").Append(returnType).Append(' ').Append(memberName).Append('(');
+            EmitParameterList(
+                source,
+                function.Parameters.Take(count).ToArray(),
+                parameterNames.Take(count).ToArray(),
+                managedTypeNames);
+            source.AppendLine(")");
+            source.Append("        => ");
+            if (function.ReturnType.Kind == UnrealValueKind.Void)
+            {
+                source.Append(memberName).Append('(');
+            }
+            else
+            {
+                source.Append(memberName).Append('(');
+            }
+            for (int index = 0; index < function.Parameters.Count; index++)
+            {
+                if (index > 0)
+                {
+                    source.Append(", ");
+                }
+                source.Append(index < count ? parameterNames[index] : defaults[index]);
+            }
+            source.AppendLine(");");
+        }
+    }
+
+    private static string? GetDefaultExpression(
+        UnrealReflectedParameter parameter,
+        IReadOnlyDictionary<string, string> managedTypeNames)
+    {
+        string? value = parameter.DefaultValue;
+        if (value is null)
+        {
+            return null;
+        }
+        return parameter.Type.Kind switch
+        {
+            UnrealValueKind.Boolean when bool.TryParse(value, out bool boolean) =>
+                boolean ? "true" : "false",
+            UnrealValueKind.Int8 or UnrealValueKind.UInt8 or
+                UnrealValueKind.Int16 or UnrealValueKind.UInt16 or
+                UnrealValueKind.Int32 or UnrealValueKind.UInt32 or
+                UnrealValueKind.Int64 or UnrealValueKind.UInt64
+                when long.TryParse(value, System.Globalization.NumberStyles.Integer,
+                    System.Globalization.CultureInfo.InvariantCulture, out _) => value,
+            UnrealValueKind.Float32 when float.TryParse(value,
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out _) => value + "f",
+            UnrealValueKind.Float64 when double.TryParse(value,
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out _) => value + "d",
+            UnrealValueKind.String => Literal(value),
+            UnrealValueKind.Name => $"new global::UnifiedScript.Unreal.UnrealName({Literal(value)})",
+            UnrealValueKind.Text => $"new global::UnifiedScript.Unreal.UnrealText({Literal(value)})",
+            UnrealValueKind.SoftObject =>
+                $"new global::UnifiedScript.Unreal.UnrealSoftObjectHandle({Literal(value)})",
+            UnrealValueKind.SoftClass =>
+                $"new global::UnifiedScript.Unreal.UnrealSoftClassHandle({Literal(value)})",
+            UnrealValueKind.Object or UnrealValueKind.Class when value is "None" or "null" => "default",
+            UnrealValueKind.Enum when long.TryParse(value,
+                System.Globalization.NumberStyles.Integer,
+                System.Globalization.CultureInfo.InvariantCulture, out _) =>
+                $"new global::UnifiedScript.Unreal.UnrealEnumValue({Literal(parameter.Type.TypePath!)}, {value})",
+            _ => null,
+        };
+    }
+
+    private static void EmitBlueprintMetadata(
+        StringBuilder source,
+        UnrealBlueprintMetadata metadata,
+        string indentation)
+    {
+        if (metadata.DisplayName is null && metadata.Category is null && metadata.Tooltip is null &&
+            metadata.WorldContextParameter is null)
+        {
+            return;
+        }
+        source.Append(indentation).Append("[global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(");
+        bool hasPrevious = false;
+        if (metadata.DisplayName is not null)
+        {
+            source.Append("DisplayName = ").Append(Literal(metadata.DisplayName));
+            hasPrevious = true;
+        }
+        if (metadata.Category is not null)
+        {
+            if (hasPrevious) source.Append(", ");
+            source.Append("Category = ").Append(Literal(metadata.Category));
+            hasPrevious = true;
+        }
+        if (metadata.Tooltip is not null)
+        {
+            if (hasPrevious) source.Append(", ");
+            source.Append("Tooltip = ").Append(Literal(metadata.Tooltip));
+            hasPrevious = true;
+        }
+        if (metadata.WorldContextParameter is not null)
+        {
+            if (hasPrevious) source.Append(", ");
+            source.Append("WorldContextParameter = ").Append(Literal(metadata.WorldContextParameter));
+        }
+        source.AppendLine(")]");
+    }
+
+    private static void EmitObsolete(
+        StringBuilder source,
+        UnrealBlueprintMetadata metadata,
+        string indentation)
+    {
+        if (!metadata.Deprecated)
+        {
+            return;
+        }
+        source.Append(indentation).Append("[global::System.Obsolete(")
+            .Append(Literal(metadata.DeprecationMessage ?? "Deprecated Unreal API."))
+            .AppendLine(")]");
+    }
+
     private static string DirectionModifier(UnrealParameterDirection direction) => direction switch
     {
         UnrealParameterDirection.Input => string.Empty,
@@ -470,6 +704,10 @@ public sealed class UnrealBindingGenerator
             "global::UnifiedScript.Unreal.UnrealObjectHandle",
         UnrealValueKind.Class =>
             "global::UnifiedScript.Unreal.UnrealClassHandle",
+        UnrealValueKind.SoftObject =>
+            "global::UnifiedScript.Unreal.UnrealSoftObjectHandle",
+        UnrealValueKind.SoftClass =>
+            "global::UnifiedScript.Unreal.UnrealSoftClassHandle",
         UnrealValueKind.Enum => "global::UnifiedScript.Unreal.UnrealEnumValue",
         UnrealValueKind.Struct when type.TypePath == "/Script/CoreUObject.Vector" =>
             "global::UnifiedScript.Unreal.UnrealVector",

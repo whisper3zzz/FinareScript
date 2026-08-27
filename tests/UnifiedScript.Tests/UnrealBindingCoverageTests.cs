@@ -1,9 +1,100 @@
 using UnifiedScript.Unreal;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using UnifiedScript.CSharp;
 
 namespace UnifiedScript.Tests;
 
 public sealed class UnrealBindingCoverageTests
 {
+    [Fact]
+    public void M71MatrixMatchesAllGoldenArtifactsAndCompiles()
+    {
+        string fixtureRoot = Path.Combine(AppContext.BaseDirectory, "Fixtures");
+        UnrealReflectionManifest reflection = UnrealReflectionJson.Deserialize(File.ReadAllText(
+            Path.Combine(fixtureRoot, "UnrealBindingMatrix.reflection.json")));
+        UnrealApiContract contract = UnrealApiContractJson.Deserialize(File.ReadAllText(
+            Path.Combine(fixtureRoot, "UnrealBindingMatrix.api-contract.json")));
+        UnrealApiContractProjection projection = UnrealApiContractProjector.Project(reflection, contract);
+        UnrealBindingGenerationResult managed = new UnrealBindingGenerator().Generate(
+            projection.Reflection,
+            new UnrealBindingGeneratorOptions(projection.Contract.ManagedNamespace));
+        UnrealNativeThunkGenerationResult native = new UnrealNativeThunkGenerator().Generate(
+            projection.NativeReflection,
+            new UnrealNativeThunkGeneratorOptions(
+                projection.Contract.NativeHeader,
+                projection.Contract.NativeNamespace));
+        UnrealBindingCoverageReport coverage = UnrealBindingCoverageReport.Create(
+            projection,
+            managed,
+            native);
+        UnrealApiNodeCatalog nodes = UnrealApiNodeCatalogGenerator.Generate(projection);
+
+        Assert.Equal(
+            File.ReadAllText(Path.Combine(fixtureRoot, "UnrealBindingMatrix.bindings.golden.cs")),
+            managed.Source);
+        Assert.Equal(
+            File.ReadAllText(Path.Combine(fixtureRoot, "UnrealBindingMatrix.thunks.golden.cpp")),
+            native.Source);
+        Assert.Equal(
+            File.ReadAllText(Path.Combine(fixtureRoot, "UnrealBindingMatrix.coverage.golden.json")),
+            UnrealBindingCoverageJson.Serialize(coverage));
+        Assert.Equal(
+            File.ReadAllText(Path.Combine(fixtureRoot, "UnrealBindingMatrix.nodes.golden.json")),
+            UnrealApiNodeCatalogGenerator.Serialize(nodes));
+
+        Assert.True(coverage.Gate.Passed);
+        Assert.Equal(18, coverage.Summary.MemberCount);
+        Assert.Equal(3, coverage.Summary.DirectThunkCount);
+        Assert.Equal(12, coverage.Summary.CallFrameCount);
+        Assert.Equal(1, coverage.Summary.DataPlaneOperationCount);
+        Assert.Equal(1, coverage.Summary.ReflectionFallbackCount);
+        Assert.Equal(1, coverage.Summary.RejectedCount);
+        Assert.DoesNotContain("UnsafeValue", managed.Source, StringComparison.Ordinal);
+        Assert.DoesNotContain("BatchMove", managed.Source, StringComparison.Ordinal);
+        Assert.Contains("public float Scale(float value)", managed.Source, StringComparison.Ordinal);
+        Assert.Contains("public int Scale(int value)", managed.Source, StringComparison.Ordinal);
+        Assert.Contains("public global::UnifiedScript.Unreal.UnrealObjectHandle Spawn()", managed.Source, StringComparison.Ordinal);
+        Assert.Contains("UnrealSoftObjectHandle", managed.Source, StringComparison.Ordinal);
+        Assert.Equal(
+            nodes.Types.SelectMany(static type => type.Nodes).Count(),
+            nodes.Types.SelectMany(static type => type.Nodes)
+                .Select(static node => node.Id).Distinct(StringComparer.Ordinal).Count());
+
+        CSharpCompilation compilation = new CSharpCompilationHost().Create(
+            CSharpSyntaxTree.ParseText(managed.Source),
+            [MetadataReference.CreateFromFile(typeof(UnrealObject).Assembly.Location)]);
+        Assert.Empty(compilation.GetDiagnostics().Where(static diagnostic =>
+            diagnostic.Severity == DiagnosticSeverity.Error));
+    }
+
+    [Fact]
+    public void CoverageBaselineReportsStableRegressionDiagnostics()
+    {
+        string fixtureRoot = Path.Combine(AppContext.BaseDirectory, "Fixtures");
+        UnrealReflectionManifest reflection = UnrealReflectionJson.Deserialize(File.ReadAllText(
+            Path.Combine(fixtureRoot, "UnrealBindingMatrix.reflection.json")));
+        UnrealApiContract contract = UnrealApiContractJson.Deserialize(File.ReadAllText(
+            Path.Combine(fixtureRoot, "UnrealBindingMatrix.api-contract.json"))) with
+        {
+            CoverageBaseline = new UnrealBindingCoverageBaseline(19, 4, 13, 2, 2, 0),
+        };
+        UnrealApiContractProjection projection = UnrealApiContractProjector.Project(reflection, contract);
+        UnrealBindingGenerationResult managed = new UnrealBindingGenerator().Generate(projection.Reflection);
+        UnrealNativeThunkGenerationResult native = new UnrealNativeThunkGenerator().Generate(
+            projection.NativeReflection);
+
+        UnrealBindingCoverageGate gate = UnrealBindingCoverageReport.Create(
+            projection,
+            managed,
+            native).Gate;
+
+        Assert.False(gate.Passed);
+        Assert.Equal(
+            ["USUE5101", "USUE5102", "USUE5103", "USUE5104", "USUE5105", "USUE5106"],
+            gate.Diagnostics.Select(static diagnostic => diagnostic[..8]));
+    }
+
     [Fact]
     public void CoverageSeparatesNativeFallbackAndRejectedMembers()
     {

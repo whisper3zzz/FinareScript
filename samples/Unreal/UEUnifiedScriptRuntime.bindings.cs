@@ -3,6 +3,17 @@
 
 namespace UnifiedScript.Unreal.Generated;
 
+[global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "EUnified Script Interop Mode", Tooltip = "EUnified Script Interop Mode")]
+public static class EUnifiedScriptInteropMode
+{
+    public static global::UnifiedScript.Unreal.UnrealEnumValue Idle { get; } = new("/Script/UEUnifiedScriptRuntime.EUnifiedScriptInteropMode", 0);
+    public static global::UnifiedScript.Unreal.UnrealEnumValue Active { get; } = new("/Script/UEUnifiedScriptRuntime.EUnifiedScriptInteropMode", 1);
+    public static global::UnifiedScript.Unreal.UnrealEnumValue Suspended { get; } = new("/Script/UEUnifiedScriptRuntime.EUnifiedScriptInteropMode", 2);
+    public static global::UnifiedScript.Unreal.UnrealEnumValue EUnifiedScriptInteropMode_MAX { get; } = new("/Script/UEUnifiedScriptRuntime.EUnifiedScriptInteropMode", 3);
+}
+
+[global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Unified Script Actor", Tooltip = "Placeable Actor whose gameplay behavior is supplied by a managed\nUnrealActorScript. The native class remains the stable Blueprint/UObject\nidentity while managed generations can be reloaded independently.")]
+[global::UnifiedScript.Unreal.UnrealInheritanceAttribute("/Script/Engine.Actor")]
 [global::UnifiedScript.Unreal.UnrealTypeAttribute("/Script/UEUnifiedScriptRuntime.UnifiedScriptActor")]
 public sealed partial class UnifiedScriptActor : global::UnifiedScript.Unreal.UnrealObject
 {
@@ -13,41 +24,52 @@ public sealed partial class UnifiedScriptActor : global::UnifiedScript.Unreal.Un
     {
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Managed Actor State", Category = "UnifiedScript|State", Tooltip = "Blueprint-visible state controlled by the managed Actor behavior.")]
     public string ManagedActorState
     {
         get => ReadProperty<string>(0x4B644A56B628F618UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:ManagedActorState");
         set => WriteProperty(0x4B644A56B628F618UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:ManagedActorState", value);
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Managed Tick Count", Category = "UnifiedScript|State")]
     public int ManagedTickCount
     {
         get => ReadProperty<int>(0x56A202B89420E08AUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:ManagedTickCount");
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Script Component", Category = "UnifiedScript")]
     public global::UnifiedScript.Unreal.UnrealObjectHandle ScriptComponent
     {
         get => ReadProperty<global::UnifiedScript.Unreal.UnrealObjectHandle>(0x0FA1C25360266D21UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:ScriptComponent");
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Get Unified Script Component", Category = "UnifiedScript", Tooltip = "Get Unified Script Component")]
     public global::UnifiedScript.Unreal.UnrealObjectHandle GetUnifiedScriptComponent()
         => Invoke<global::UnifiedScript.Unreal.UnrealObjectHandle>(0x7AF8502717707C7BUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:GetUnifiedScriptComponent");
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Increment Managed Tick Count", Category = "UnifiedScript|State", Tooltip = "Increment Managed Tick Count")]
     public void IncrementManagedTickCount()
         => Invoke(0x842E8572585D6EA1UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:IncrementManagedTickCount");
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Reload Managed Behavior", Category = "UnifiedScript", Tooltip = "Reload Managed Behavior")]
     public bool ReloadManagedBehavior()
         => Invoke<bool>(0xA2BC358C2C65DB1FUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:ReloadManagedBehavior");
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Set Managed Actor State", Category = "UnifiedScript|State", Tooltip = "Set Managed Actor State")]
     public void SetManagedActorState(string value)
         => Invoke<string>(0xCB7C74B0CC69588AUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:SetManagedActorState", value);
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Start Managed Behavior", Category = "UnifiedScript", Tooltip = "Start Managed Behavior")]
     public bool StartManagedBehavior()
         => Invoke<bool>(0x2FF1D5EB8FED6456UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:StartManagedBehavior");
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Stop Managed Behavior", Category = "UnifiedScript", Tooltip = "Stop Managed Behavior")]
     public void StopManagedBehavior()
         => Invoke(0xFD7407AAD8E613E8UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:StopManagedBehavior");
 }
 
+[global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Unified Script Component", Tooltip = "Unified Script Component")]
+[global::UnifiedScript.Unreal.UnrealInheritanceAttribute("/Script/Engine.ActorComponent")]
 [global::UnifiedScript.Unreal.UnrealTypeAttribute("/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent")]
 public sealed partial class UnifiedScriptComponent : global::UnifiedScript.Unreal.UnrealObject
 {
@@ -58,66 +80,78 @@ public sealed partial class UnifiedScriptComponent : global::UnifiedScript.Unrea
     {
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Active Declaration Asset Path", Category = "UnifiedScript")]
     public string ActiveDeclarationAssetPath
     {
         get => ReadProperty<string>(0x28736A9007707BEEUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ActiveDeclarationAssetPath");
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Active Generation", Category = "UnifiedScript")]
     public string ActiveGeneration
     {
         get => ReadProperty<string>(0x6DF75D872D39AE9FUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ActiveGeneration");
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Active Script Asset Path", Category = "UnifiedScript")]
     public string ActiveScriptAssetPath
     {
         get => ReadProperty<string>(0xE5A6A8D0834BD12DUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ActiveScriptAssetPath");
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Last Script Error", Category = "UnifiedScript")]
     public string LastScriptError
     {
         get => ReadProperty<string>(0xEB91C292E1A34192UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:LastScriptError");
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Managed State", Category = "UnifiedScript|Runtime", Tooltip = "Script-controlled diagnostic state used by the first hosted demo.")]
     public string ManagedState
     {
         get => ReadProperty<string>(0x31BC2AC640227065UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ManagedState");
         set => WriteProperty(0x31BC2AC640227065UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ManagedState", value);
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Materialized State Count", Category = "UnifiedScript")]
     public int MaterializedStateCount
     {
         get => ReadProperty<int>(0xB31F5AE7DDA6C984UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:MaterializedStateCount");
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Script Assembly Path", Category = "UnifiedScript|Runtime", Tooltip = "Legacy direct configuration retained for existing components.")]
     public string ScriptAssemblyPath
     {
         get => ReadProperty<string>(0xC2521576C7DFB237UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ScriptAssemblyPath");
         set => WriteProperty(0xC2521576C7DFB237UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ScriptAssemblyPath", value);
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Script Asset Path", Category = "UnifiedScript", Tooltip = "Optional soft asset path used when ScriptAsset is not assigned.")]
     public string ScriptAssetPath
     {
         get => ReadProperty<string>(0x61C4428EA10A780BUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ScriptAssetPath");
         set => WriteProperty(0x61C4428EA10A780BUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ScriptAssetPath", value);
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Script Type Name", Category = "UnifiedScript|Runtime")]
     public string ScriptTypeName
     {
         get => ReadProperty<string>(0x9A655BDD0F446987UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ScriptTypeName");
         set => WriteProperty(0x9A655BDD0F446987UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ScriptTypeName", value);
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Script Running", Category = "UnifiedScript")]
     public bool bScriptRunning
     {
         get => ReadProperty<bool>(0x78520C5EC4FF73D3UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:bScriptRunning");
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Start Automatically", Category = "UnifiedScript")]
     public bool bStartAutomatically
     {
         get => ReadProperty<bool>(0xB65E27C23A2F39CEUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:bStartAutomatically");
         set => WriteProperty(0xB65E27C23A2F39CEUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:bStartAutomatically", value);
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Tick Automatically", Category = "UnifiedScript|Runtime")]
     public bool bTickAutomatically
     {
         get => ReadProperty<bool>(0x23071804223C4DFFUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:bTickAutomatically");
@@ -141,37 +175,62 @@ public sealed partial class UnifiedScriptComponent : global::UnifiedScript.Unrea
     public global::UnifiedScript.Unreal.IUnrealEventSubscription SubscribeOnManagedSignal(OnManagedSignalHandler handler)
         => SubscribeEvent(OnManagedSignalEvent, handler);
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Add", Category = "UnifiedScript|Verification", Tooltip = "Add")]
     public int Add(int left, int right)
         => Invoke<int, int, int>(0xB324FB910D9CED26UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:Add", left, right);
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Broadcast Managed Signal", Category = "UnifiedScript|Verification", Tooltip = "Broadcast Managed Signal")]
     public void BroadcastManagedSignal(int value, global::UnifiedScript.Unreal.UnrealObjectHandle context)
         => Invoke<int, global::UnifiedScript.Unreal.UnrealObjectHandle>(0x5792FF1D76148D17UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:BroadcastManagedSignal", value, context);
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Get Script State Int 32", Category = "UnifiedScript|State", Tooltip = "Get Script State Int 32")]
     public int GetScriptStateInt32(string name, int fallback)
         => Invoke<int, string, int>(0x5B7CEF7BDAF29749UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:GetScriptStateInt32", name, fallback);
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Get Script Target", Category = "UnifiedScript", Tooltip = "UObject whose behavior is implemented by the managed script.")]
     public global::UnifiedScript.Unreal.UnrealObjectHandle GetScriptTarget()
         => Invoke<global::UnifiedScript.Unreal.UnrealObjectHandle>(0x4F4C123F422ED5A3UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:GetScriptTarget");
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Refresh Script State", Category = "UnifiedScript|State", Tooltip = "Rebuilds Script State from the configured declaration while preserving compatible overrides.")]
     public bool RefreshScriptState()
         => Invoke<bool>(0xBF8089C66CEB80D6UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:RefreshScriptState");
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Reload Script", Category = "UnifiedScript", Tooltip = "Reload Script")]
     public bool ReloadScript()
         => Invoke<bool>(0x7B868A110E45AFA1UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ReloadScript");
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Request Reload", Category = "UnifiedScript", Tooltip = "Request Reload")]
     public void RequestReload()
         => Invoke(0x9FD30761744D70A1UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:RequestReload");
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Set Script State Int 32", Category = "UnifiedScript|State", Tooltip = "Set Script State Int 32")]
     public bool SetScriptStateInt32(string name, int value)
         => Invoke<bool, string, int>(0xF83092B1E5E45D7DUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:SetScriptStateInt32", name, value);
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Start Script", Category = "UnifiedScript", Tooltip = "Start Script")]
     public bool StartScript()
         => Invoke<bool>(0x335CA93AEB62A23EUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:StartScript");
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Stop Script", Category = "UnifiedScript", Tooltip = "Stop Script")]
     public void StopScript()
         => Invoke(0xC2B2365ACCA0171CUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:StopScript");
 }
 
+[global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Unified Script Interop Contract", Tooltip = "Unified Script Interop Contract")]
+[global::UnifiedScript.Unreal.UnrealInheritanceAttribute("/Script/CoreUObject.Interface")]
+[global::UnifiedScript.Unreal.UnrealTypeAttribute("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract")]
+public sealed partial class UnifiedScriptInteropContract : global::UnifiedScript.Unreal.UnrealObject
+{
+    public UnifiedScriptInteropContract(
+        global::UnifiedScript.Unreal.UnrealObjectHandle handle,
+        global::UnifiedScript.Unreal.IUnrealInvocationBridge bridge)
+        : base(handle, bridge)
+    {
+    }
+}
+
+[global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Unified Script Interop Fixture", Tooltip = "Public interop fixture used to keep generated common-type bindings executable.")]
+[global::UnifiedScript.Unreal.UnrealInheritanceAttribute("/Script/CoreUObject.Object", "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract")]
 [global::UnifiedScript.Unreal.UnrealTypeAttribute("/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture")]
 public sealed partial class UnifiedScriptInteropFixture : global::UnifiedScript.Unreal.UnrealObject
 {
@@ -182,102 +241,133 @@ public sealed partial class UnifiedScriptInteropFixture : global::UnifiedScript.
     {
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Byte Value", Category = "UnifiedScript|Interop")]
     public byte ByteValue
     {
         get => ReadProperty<byte>(0xB9AF036F8D9D7B1FUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ByteValue");
         set => WriteProperty(0xB9AF036F8D9D7B1FUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ByteValue", value);
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Class Value", Category = "UnifiedScript|Interop")]
     public global::UnifiedScript.Unreal.UnrealClassHandle ClassValue
     {
         get => ReadProperty<global::UnifiedScript.Unreal.UnrealClassHandle>(0x0C28A4137B791315UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ClassValue");
         set => WriteProperty(0x0C28A4137B791315UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ClassValue", value);
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Double Value", Category = "UnifiedScript|Interop")]
     public double DoubleValue
     {
         get => ReadProperty<double>(0x0AE5CB76273EFDB6UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:DoubleValue");
         set => WriteProperty(0x0AE5CB76273EFDB6UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:DoubleValue", value);
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Float Value", Category = "UnifiedScript|Interop")]
     public float FloatValue
     {
         get => ReadProperty<float>(0x60A9B3373A0EA8E7UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FloatValue");
         set => WriteProperty(0x60A9B3373A0EA8E7UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FloatValue", value);
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Int 32Value", Category = "UnifiedScript|Interop")]
     public int Int32Value
     {
         get => ReadProperty<int>(0x813BE501DBB937C9UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:Int32Value");
         set => WriteProperty(0x813BE501DBB937C9UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:Int32Value", value);
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Int 64Value", Category = "UnifiedScript|Interop")]
     public long Int64Value
     {
         get => ReadProperty<long>(0x34075871872CC6C4UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:Int64Value");
         set => WriteProperty(0x34075871872CC6C4UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:Int64Value", value);
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Int Array Value", Category = "UnifiedScript|Interop")]
     public global::System.Collections.Generic.IReadOnlyList<int> IntArrayValue
     {
         get => ReadProperty<global::System.Collections.Generic.IReadOnlyList<int>>(0x58F081410EEA1B8FUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:IntArrayValue");
         set => WriteProperty(0x58F081410EEA1B8FUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:IntArrayValue", value);
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Int Map Value", Category = "UnifiedScript|Interop")]
     public global::System.Collections.Generic.IReadOnlyDictionary<int, int> IntMapValue
     {
         get => ReadProperty<global::System.Collections.Generic.IReadOnlyDictionary<int, int>>(0x9F95909F1D588926UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:IntMapValue");
         set => WriteProperty(0x9F95909F1D588926UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:IntMapValue", value);
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Int Set Value", Category = "UnifiedScript|Interop")]
     public global::System.Collections.Generic.IReadOnlySet<int> IntSetValue
     {
         get => ReadProperty<global::System.Collections.Generic.IReadOnlySet<int>>(0x5D8F4F14AD4EBB78UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:IntSetValue");
         set => WriteProperty(0x5D8F4F14AD4EBB78UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:IntSetValue", value);
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Mode", Category = "UnifiedScript|Interop")]
     public global::UnifiedScript.Unreal.UnrealEnumValue Mode
     {
         get => ReadProperty<global::UnifiedScript.Unreal.UnrealEnumValue>(0x8B89BE30CF9161D7UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:Mode");
         set => WriteProperty(0x8B89BE30CF9161D7UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:Mode", value);
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Name Value", Category = "UnifiedScript|Interop")]
     public global::UnifiedScript.Unreal.UnrealName NameValue
     {
         get => ReadProperty<global::UnifiedScript.Unreal.UnrealName>(0x0EDD5EC02B7BF7C4UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:NameValue");
         set => WriteProperty(0x0EDD5EC02B7BF7C4UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:NameValue", value);
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Object Value", Category = "UnifiedScript|Interop")]
     public global::UnifiedScript.Unreal.UnrealObjectHandle ObjectValue
     {
         get => ReadProperty<global::UnifiedScript.Unreal.UnrealObjectHandle>(0xF85C960C1094B360UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ObjectValue");
         set => WriteProperty(0xF85C960C1094B360UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ObjectValue", value);
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Rotator Value", Category = "UnifiedScript|Interop")]
     public global::UnifiedScript.Unreal.UnrealRotator RotatorValue
     {
         get => ReadProperty<global::UnifiedScript.Unreal.UnrealRotator>(0xE9FD870223025846UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:RotatorValue");
         set => WriteProperty(0xE9FD870223025846UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:RotatorValue", value);
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Soft Class Value", Category = "UnifiedScript|Interop")]
+    public global::UnifiedScript.Unreal.UnrealSoftClassHandle SoftClassValue
+    {
+        get => ReadProperty<global::UnifiedScript.Unreal.UnrealSoftClassHandle>(0xC3274F8A399CE7F5UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftClassValue");
+        set => WriteProperty(0xC3274F8A399CE7F5UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftClassValue", value);
+    }
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Soft Object Value", Category = "UnifiedScript|Interop")]
+    public global::UnifiedScript.Unreal.UnrealSoftObjectHandle SoftObjectValue
+    {
+        get => ReadProperty<global::UnifiedScript.Unreal.UnrealSoftObjectHandle>(0x6F0135EE1F0ABDC0UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftObjectValue");
+        set => WriteProperty(0x6F0135EE1F0ABDC0UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftObjectValue", value);
+    }
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "String Value", Category = "UnifiedScript|Interop")]
     public string StringValue
     {
         get => ReadProperty<string>(0x6B3CC333752E62FAUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:StringValue");
         set => WriteProperty(0x6B3CC333752E62FAUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:StringValue", value);
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Text Value", Category = "UnifiedScript|Interop")]
     public global::UnifiedScript.Unreal.UnrealText TextValue
     {
         get => ReadProperty<global::UnifiedScript.Unreal.UnrealText>(0x136048C026D91640UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:TextValue");
         set => WriteProperty(0x136048C026D91640UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:TextValue", value);
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Transform Value", Category = "UnifiedScript|Interop")]
     public global::UnifiedScript.Unreal.UnrealTransform TransformValue
     {
         get => ReadProperty<global::UnifiedScript.Unreal.UnrealTransform>(0x3ECB1DF061194271UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:TransformValue");
         set => WriteProperty(0x3ECB1DF061194271UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:TransformValue", value);
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Vector Value", Category = "UnifiedScript|Interop")]
     public global::UnifiedScript.Unreal.UnrealVector VectorValue
     {
         get => ReadProperty<global::UnifiedScript.Unreal.UnrealVector>(0x51CDC304CE471430UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:VectorValue");
@@ -301,54 +391,78 @@ public sealed partial class UnifiedScriptInteropFixture : global::UnifiedScript.
     public global::UnifiedScript.Unreal.IUnrealEventSubscription SubscribeOnInteropChanged(OnInteropChangedHandler handler)
         => SubscribeEvent(OnInteropChangedEvent, handler);
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Add Int 64", Category = "UnifiedScript|Interop", Tooltip = "Add Int 64")]
     public long AddInt64(long left, long right)
         => Invoke<long, long, long>(0x5005CC3042360722UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:AddInt64", left, right);
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Add Vector", Category = "UnifiedScript|Interop", Tooltip = "Add Vector")]
     public global::UnifiedScript.Unreal.UnrealVector AddVector(global::UnifiedScript.Unreal.UnrealVector left, global::UnifiedScript.Unreal.UnrealVector right)
         => Invoke<global::UnifiedScript.Unreal.UnrealVector, global::UnifiedScript.Unreal.UnrealVector, global::UnifiedScript.Unreal.UnrealVector>(0x72F00766D165C3ACUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:AddVector", left, right);
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Add With Default", Category = "UnifiedScript|Interop", Tooltip = "Add With Default")]
+    public int AddWithDefault(int value, int amount)
+        => Invoke<int, int, int>(0xAB3E544FCF8E0F20UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:AddWithDefault", value, amount);
+
+    public int AddWithDefault(int value)
+        => AddWithDefault(value, 1);
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Broadcast Interop Changed", Category = "UnifiedScript|Interop", Tooltip = "Broadcast Interop Changed")]
     public void BroadcastInteropChanged(int newValue, global::UnifiedScript.Unreal.UnrealObjectHandle context)
         => Invoke<int, global::UnifiedScript.Unreal.UnrealObjectHandle>(0xB122BDB717D2DBECUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:BroadcastInteropChanged", newValue, context);
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Count Set", Category = "UnifiedScript|Interop", Tooltip = "Count Set")]
     public int CountSet(global::System.Collections.Generic.IReadOnlySet<int> values)
         => Invoke<int, global::System.Collections.Generic.IReadOnlySet<int>>(0x3CDA489A528A7F59UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:CountSet", values);
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Echo Array", Category = "UnifiedScript|Interop", Tooltip = "Echo Array")]
     public global::System.Collections.Generic.IReadOnlyList<int> EchoArray(global::System.Collections.Generic.IReadOnlyList<int> values)
         => Invoke<global::System.Collections.Generic.IReadOnlyList<int>, global::System.Collections.Generic.IReadOnlyList<int>>(0x6DB8F58355D32AD6UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoArray", values);
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Echo Class", Category = "UnifiedScript|Interop", Tooltip = "Echo Class")]
     public global::UnifiedScript.Unreal.UnrealClassHandle EchoClass(global::UnifiedScript.Unreal.UnrealClassHandle value)
         => Invoke<global::UnifiedScript.Unreal.UnrealClassHandle, global::UnifiedScript.Unreal.UnrealClassHandle>(0x56941DB0D2A9DCEFUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoClass", value);
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Echo Map", Category = "UnifiedScript|Interop", Tooltip = "Echo Map")]
     public global::System.Collections.Generic.IReadOnlyDictionary<int, int> EchoMap(global::System.Collections.Generic.IReadOnlyDictionary<int, int> values)
         => Invoke<global::System.Collections.Generic.IReadOnlyDictionary<int, int>, global::System.Collections.Generic.IReadOnlyDictionary<int, int>>(0xA01428000F098AC1UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoMap", values);
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Echo Object", Category = "UnifiedScript|Interop", Tooltip = "Echo Object")]
     public global::UnifiedScript.Unreal.UnrealObjectHandle EchoObject(global::UnifiedScript.Unreal.UnrealObjectHandle value)
         => Invoke<global::UnifiedScript.Unreal.UnrealObjectHandle, global::UnifiedScript.Unreal.UnrealObjectHandle>(0x7C6C1C1123A6E08AUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoObject", value);
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Echo Set", Category = "UnifiedScript|Interop", Tooltip = "Echo Set")]
     public global::System.Collections.Generic.IReadOnlySet<int> EchoSet(global::System.Collections.Generic.IReadOnlySet<int> values)
         => Invoke<global::System.Collections.Generic.IReadOnlySet<int>, global::System.Collections.Generic.IReadOnlySet<int>>(0x051035FFB77D4FB3UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoSet", values);
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Echo Transform", Category = "UnifiedScript|Interop", Tooltip = "Echo Transform")]
     public global::UnifiedScript.Unreal.UnrealTransform EchoTransform(global::UnifiedScript.Unreal.UnrealTransform value)
         => Invoke<global::UnifiedScript.Unreal.UnrealTransform, global::UnifiedScript.Unreal.UnrealTransform>(0xAF29371D42BA1F6BUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoTransform", value);
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Fixed Arity 0", Category = "UnifiedScript|Interop|Fixed", Tooltip = "Fixed Arity 0")]
     public int FixedArity0()
         => Invoke<int>(0x23F65F8588FC5259UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FixedArity0");
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Fixed Arity 1", Category = "UnifiedScript|Interop|Fixed", Tooltip = "Fixed Arity 1")]
     public float FixedArity1(float value)
         => Invoke<float, float>(0x23F65E8588FC50A6UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FixedArity1", value);
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Fixed Arity 2", Category = "UnifiedScript|Interop|Fixed", Tooltip = "Fixed Arity 2")]
     public bool FixedArity2(bool bEnabled, int count)
         => Invoke<bool, bool, int>(0x23F65D8588FC4EF3UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FixedArity2", bEnabled, count);
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Fixed Arity 3", Category = "UnifiedScript|Interop|Fixed", Tooltip = "Fixed Arity 3")]
     public global::UnifiedScript.Unreal.UnrealObjectHandle FixedArity3(global::UnifiedScript.Unreal.UnrealObjectHandle context, bool bEnabled, float weight)
         => Invoke<global::UnifiedScript.Unreal.UnrealObjectHandle, global::UnifiedScript.Unreal.UnrealObjectHandle, bool, float>(0x23F65C8588FC4D40UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FixedArity3", context, bEnabled, weight);
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Fixed Arity 4", Category = "UnifiedScript|Interop|Fixed", Tooltip = "Fixed Arity 4")]
     public global::UnifiedScript.Unreal.UnrealVector FixedArity4(global::UnifiedScript.Unreal.UnrealVector location, int count, float scale, bool bEnabled)
         => Invoke<global::UnifiedScript.Unreal.UnrealVector, global::UnifiedScript.Unreal.UnrealVector, int, float, bool>(0x23F6638588FC5925UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FixedArity4", location, count, scale, bEnabled);
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Make Array", Category = "UnifiedScript|Interop", Tooltip = "Make Array")]
     public global::System.Collections.Generic.IReadOnlyList<int> MakeArray(int count)
         => Invoke<global::System.Collections.Generic.IReadOnlyList<int>, int>(0x8A8BAE19690D9AB7UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MakeArray", count);
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Mutate Values", Category = "UnifiedScript|Interop", Tooltip = "Mutate Values")]
     public bool MutateValues(int input, out int outDoubled, ref int accumulator)
     {
         global::UnifiedScript.Unreal.UnrealOutputInvocationResult __unifiedScriptResult = InvokeWithOutputs(
@@ -365,12 +479,15 @@ public sealed partial class UnifiedScriptInteropFixture : global::UnifiedScript.
         return (bool)__unifiedScriptResult.ReturnValue!;
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "String Length", Category = "UnifiedScript|Interop", Tooltip = "String Length")]
     public int StringLength(string value)
         => Invoke<int, string>(0x82ABEA0C98F04445UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:StringLength", value);
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Sum Array", Category = "UnifiedScript|Interop", Tooltip = "Sum Array")]
     public int SumArray(global::System.Collections.Generic.IReadOnlyList<int> values)
         => Invoke<int, global::System.Collections.Generic.IReadOnlyList<int>>(0x3A7F8150DE68CBE4UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SumArray", values);
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Sum Map", Category = "UnifiedScript|Interop", Tooltip = "Sum Map")]
     public int SumMap(global::System.Collections.Generic.IReadOnlyDictionary<int, int> values)
         => Invoke<int, global::System.Collections.Generic.IReadOnlyDictionary<int, int>>(0xB9016520F3956867UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SumMap", values);
 }

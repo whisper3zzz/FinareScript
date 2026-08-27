@@ -6,9 +6,19 @@
     "major": 5,
     "minor": 8,
     "patch": 1,
-    "branch": "//UE5/Release-5.8"
+    "branch": "UE5"
   },
   "types": [
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.EUnifiedScriptInteropMode",
+      "name": "EUnifiedScriptInteropMode",
+      "managedTypeName": "EUnifiedScriptInteropMode",
+      "category": "Unreal API|EUnifiedScriptInteropMode",
+      "properties": [],
+      "functions": [],
+      "delegates": [],
+      "nodes": []
+    },
     {
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor",
       "name": "UnifiedScriptActor",
@@ -32,6 +42,14 @@
             "writable": true,
             "editorVisible": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Managed Actor State",
+            "category": "UnifiedScript|State",
+            "tooltip": "Blueprint-visible state controlled by the managed Actor behavior.",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -51,6 +69,14 @@
             "writable": false,
             "editorVisible": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Managed Tick Count",
+            "category": "UnifiedScript|State",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -70,6 +96,14 @@
             "writable": false,
             "editorVisible": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Script Component",
+            "category": "UnifiedScript",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         }
       ],
@@ -92,6 +126,14 @@
             "pure": true,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Get Unified Script Component",
+            "category": "UnifiedScript",
+            "tooltip": "Get Unified Script Component",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -112,6 +154,14 @@
             "pure": false,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Increment Managed Tick Count",
+            "category": "UnifiedScript|State",
+            "tooltip": "Increment Managed Tick Count",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -132,6 +182,14 @@
             "pure": false,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Reload Managed Behavior",
+            "category": "UnifiedScript",
+            "tooltip": "Reload Managed Behavior",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -158,7 +216,8 @@
                 "valueType": null,
                 "headerPath": null
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             }
           ],
           "traits": {
@@ -166,6 +225,14 @@
             "pure": false,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Set Managed Actor State",
+            "category": "UnifiedScript|State",
+            "tooltip": "Set Managed Actor State",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -186,6 +253,14 @@
             "pure": false,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Start Managed Behavior",
+            "category": "UnifiedScript",
+            "tooltip": "Start Managed Behavior",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -206,6 +281,14 @@
             "pure": false,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Stop Managed Behavior",
+            "category": "UnifiedScript",
+            "tooltip": "Stop Managed Behavior",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         }
       ],
@@ -216,9 +299,9 @@
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:GetUnifiedScriptComponent",
           "memberId": "0x7AF8502717707C7B",
           "kind": "function",
-          "title": "GetUnifiedScriptComponent",
-          "category": "Unreal API|UnifiedScriptActor",
-          "tooltip": "Call UnifiedScriptActor.GetUnifiedScriptComponent(...).",
+          "title": "Get Unified Script Component",
+          "category": "UnifiedScript",
+          "tooltip": "Get Unified Script Component",
           "pure": true,
           "pins": [
             {
@@ -233,7 +316,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "ReturnValue",
@@ -247,25 +331,29 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UnifiedScriptComponent.h"
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.call|UnifiedScriptActor|IncrementManagedTickCount",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:IncrementManagedTickCount",
           "memberId": "0x842E8572585D6EA1",
           "kind": "function",
-          "title": "IncrementManagedTickCount",
-          "category": "Unreal API|UnifiedScriptActor",
-          "tooltip": "Call UnifiedScriptActor.IncrementManagedTickCount(...).",
+          "title": "Increment Managed Tick Count",
+          "category": "UnifiedScript|State",
+          "tooltip": "Increment Managed Tick Count",
           "pure": false,
           "pins": [
             {
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -279,31 +367,36 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.call|UnifiedScriptActor|ReloadManagedBehavior",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:ReloadManagedBehavior",
           "memberId": "0xA2BC358C2C65DB1F",
           "kind": "function",
-          "title": "ReloadManagedBehavior",
-          "category": "Unreal API|UnifiedScriptActor",
-          "tooltip": "Call UnifiedScriptActor.ReloadManagedBehavior(...).",
+          "title": "Reload Managed Behavior",
+          "category": "UnifiedScript",
+          "tooltip": "Reload Managed Behavior",
           "pure": false,
           "pins": [
             {
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -317,7 +410,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "ReturnValue",
@@ -331,31 +425,36 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.call|UnifiedScriptActor|SetManagedActorState",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:SetManagedActorState",
           "memberId": "0xCB7C74B0CC69588A",
           "kind": "function",
-          "title": "SetManagedActorState",
-          "category": "Unreal API|UnifiedScriptActor",
-          "tooltip": "Call UnifiedScriptActor.SetManagedActorState(...).",
+          "title": "Set Managed Actor State",
+          "category": "UnifiedScript|State",
+          "tooltip": "Set Managed Actor State",
           "pure": false,
           "pins": [
             {
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -369,7 +468,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -383,31 +483,36 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.call|UnifiedScriptActor|StartManagedBehavior",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:StartManagedBehavior",
           "memberId": "0x2FF1D5EB8FED6456",
           "kind": "function",
-          "title": "StartManagedBehavior",
-          "category": "Unreal API|UnifiedScriptActor",
-          "tooltip": "Call UnifiedScriptActor.StartManagedBehavior(...).",
+          "title": "Start Managed Behavior",
+          "category": "UnifiedScript",
+          "tooltip": "Start Managed Behavior",
           "pure": false,
           "pins": [
             {
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -421,7 +526,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "ReturnValue",
@@ -435,31 +541,36 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.call|UnifiedScriptActor|StopManagedBehavior",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:StopManagedBehavior",
           "memberId": "0xFD7407AAD8E613E8",
           "kind": "function",
-          "title": "StopManagedBehavior",
-          "category": "Unreal API|UnifiedScriptActor",
-          "tooltip": "Call UnifiedScriptActor.StopManagedBehavior(...).",
+          "title": "Stop Managed Behavior",
+          "category": "UnifiedScript",
+          "tooltip": "Stop Managed Behavior",
           "pure": false,
           "pins": [
             {
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -473,24 +584,28 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.get|UnifiedScriptActor|ManagedActorState",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:ManagedActorState",
           "memberId": "0x4B644A56B628F618",
           "kind": "propertyRead",
-          "title": "ManagedActorState",
+          "title": "Managed Actor State",
           "category": "Unreal API|UnifiedScriptActor|Properties",
-          "tooltip": "Read UnifiedScriptActor.ManagedActorState.",
+          "tooltip": "Blueprint-visible state controlled by the managed Actor behavior.",
           "pure": true,
           "pins": [
             {
@@ -505,7 +620,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -519,16 +635,19 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.get|UnifiedScriptActor|ManagedTickCount",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:ManagedTickCount",
           "memberId": "0x56A202B89420E08A",
           "kind": "propertyRead",
-          "title": "ManagedTickCount",
+          "title": "Managed Tick Count",
           "category": "Unreal API|UnifiedScriptActor|Properties",
           "tooltip": "Read UnifiedScriptActor.ManagedTickCount.",
           "pure": true,
@@ -545,7 +664,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -559,16 +679,19 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.get|UnifiedScriptActor|ScriptComponent",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:ScriptComponent",
           "memberId": "0x0FA1C25360266D21",
           "kind": "propertyRead",
-          "title": "ScriptComponent",
+          "title": "Script Component",
           "category": "Unreal API|UnifiedScriptActor|Properties",
           "tooltip": "Read UnifiedScriptActor.ScriptComponent.",
           "pure": true,
@@ -585,7 +708,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -599,25 +723,29 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UnifiedScriptComponent.h"
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.set|UnifiedScriptActor|ManagedActorState",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:ManagedActorState",
           "memberId": "0x4B644A56B628F618",
           "kind": "propertyWrite",
-          "title": "Set ManagedActorState",
+          "title": "Set Managed Actor State",
           "category": "Unreal API|UnifiedScriptActor|Properties",
-          "tooltip": "Write UnifiedScriptActor.ManagedActorState.",
+          "tooltip": "Blueprint-visible state controlled by the managed Actor behavior.",
           "pure": false,
           "pins": [
             {
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -631,7 +759,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -645,15 +774,19 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         }
       ]
     },
@@ -680,6 +813,14 @@
             "writable": false,
             "editorVisible": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Active Declaration Asset Path",
+            "category": "UnifiedScript",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -699,6 +840,14 @@
             "writable": false,
             "editorVisible": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Active Generation",
+            "category": "UnifiedScript",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -718,6 +867,14 @@
             "writable": false,
             "editorVisible": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Active Script Asset Path",
+            "category": "UnifiedScript",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -737,6 +894,14 @@
             "writable": false,
             "editorVisible": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Last Script Error",
+            "category": "UnifiedScript",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -756,6 +921,14 @@
             "writable": true,
             "editorVisible": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Managed State",
+            "category": "UnifiedScript|Runtime",
+            "tooltip": "Script-controlled diagnostic state used by the first hosted demo.",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -775,6 +948,14 @@
             "writable": false,
             "editorVisible": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Materialized State Count",
+            "category": "UnifiedScript",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -794,6 +975,14 @@
             "writable": true,
             "editorVisible": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Script Assembly Path",
+            "category": "UnifiedScript|Runtime",
+            "tooltip": "Legacy direct configuration retained for existing components.",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -813,6 +1002,14 @@
             "writable": true,
             "editorVisible": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Script Asset Path",
+            "category": "UnifiedScript",
+            "tooltip": "Optional soft asset path used when ScriptAsset is not assigned.",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -832,6 +1029,14 @@
             "writable": true,
             "editorVisible": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Script Type Name",
+            "category": "UnifiedScript|Runtime",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -851,6 +1056,14 @@
             "writable": false,
             "editorVisible": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Script Running",
+            "category": "UnifiedScript",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -870,6 +1083,14 @@
             "writable": true,
             "editorVisible": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Start Automatically",
+            "category": "UnifiedScript",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -889,6 +1110,14 @@
             "writable": true,
             "editorVisible": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Tick Automatically",
+            "category": "UnifiedScript|Runtime",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         }
       ],
@@ -917,7 +1146,8 @@
                 "valueType": null,
                 "headerPath": null
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             },
             {
               "name": "Right",
@@ -930,7 +1160,8 @@
                 "valueType": null,
                 "headerPath": null
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             }
           ],
           "traits": {
@@ -938,6 +1169,14 @@
             "pure": true,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Add",
+            "category": "UnifiedScript|Verification",
+            "tooltip": "Add",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -964,7 +1203,8 @@
                 "valueType": null,
                 "headerPath": null
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             },
             {
               "name": "Context",
@@ -977,7 +1217,8 @@
                 "valueType": null,
                 "headerPath": "UObject/Object.h"
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             }
           ],
           "traits": {
@@ -985,6 +1226,14 @@
             "pure": false,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Broadcast Managed Signal",
+            "category": "UnifiedScript|Verification",
+            "tooltip": "Broadcast Managed Signal",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -1011,7 +1260,8 @@
                 "valueType": null,
                 "headerPath": null
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             },
             {
               "name": "Fallback",
@@ -1024,7 +1274,8 @@
                 "valueType": null,
                 "headerPath": null
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             }
           ],
           "traits": {
@@ -1032,6 +1283,14 @@
             "pure": true,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Get Script State Int 32",
+            "category": "UnifiedScript|State",
+            "tooltip": "Get Script State Int 32",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -1052,6 +1311,14 @@
             "pure": true,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Get Script Target",
+            "category": "UnifiedScript",
+            "tooltip": "UObject whose behavior is implemented by the managed script.",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -1072,6 +1339,14 @@
             "pure": false,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Refresh Script State",
+            "category": "UnifiedScript|State",
+            "tooltip": "Rebuilds Script State from the configured declaration while preserving compatible overrides.",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -1092,6 +1367,14 @@
             "pure": false,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Reload Script",
+            "category": "UnifiedScript",
+            "tooltip": "Reload Script",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -1112,6 +1395,14 @@
             "pure": false,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Request Reload",
+            "category": "UnifiedScript",
+            "tooltip": "Request Reload",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -1138,7 +1429,8 @@
                 "valueType": null,
                 "headerPath": null
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -1151,7 +1443,8 @@
                 "valueType": null,
                 "headerPath": null
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             }
           ],
           "traits": {
@@ -1159,6 +1452,14 @@
             "pure": false,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Set Script State Int 32",
+            "category": "UnifiedScript|State",
+            "tooltip": "Set Script State Int 32",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -1179,6 +1480,14 @@
             "pure": false,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Start Script",
+            "category": "UnifiedScript",
+            "tooltip": "Start Script",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -1199,6 +1508,14 @@
             "pure": false,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Stop Script",
+            "category": "UnifiedScript",
+            "tooltip": "Stop Script",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         }
       ],
@@ -1228,7 +1545,8 @@
                 "valueType": null,
                 "headerPath": null
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             },
             {
               "name": "Context",
@@ -1241,7 +1559,8 @@
                 "valueType": null,
                 "headerPath": "UObject/Object.h"
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             }
           ],
           "traits": {
@@ -1260,8 +1579,8 @@
           "memberId": "0xB324FB910D9CED26",
           "kind": "function",
           "title": "Add",
-          "category": "Unreal API|UnifiedScriptComponent",
-          "tooltip": "Call UnifiedScriptComponent.Add(...).",
+          "category": "UnifiedScript|Verification",
+          "tooltip": "Add",
           "pure": true,
           "pins": [
             {
@@ -1276,7 +1595,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Left",
@@ -1290,7 +1610,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Right",
@@ -1304,7 +1625,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "ReturnValue",
@@ -1318,25 +1640,29 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.call|UnifiedScriptComponent|BroadcastManagedSignal",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:BroadcastManagedSignal",
           "memberId": "0x5792FF1D76148D17",
           "kind": "function",
-          "title": "BroadcastManagedSignal",
-          "category": "Unreal API|UnifiedScriptComponent",
-          "tooltip": "Call UnifiedScriptComponent.BroadcastManagedSignal(...).",
+          "title": "Broadcast Managed Signal",
+          "category": "UnifiedScript|Verification",
+          "tooltip": "Broadcast Managed Signal",
           "pure": false,
           "pins": [
             {
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -1350,7 +1676,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -1364,7 +1691,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Context",
@@ -1378,24 +1706,28 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UObject/Object.h"
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.call|UnifiedScriptComponent|GetScriptStateInt32",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:GetScriptStateInt32",
           "memberId": "0x5B7CEF7BDAF29749",
           "kind": "function",
-          "title": "GetScriptStateInt32",
-          "category": "Unreal API|UnifiedScriptComponent",
-          "tooltip": "Call UnifiedScriptComponent.GetScriptStateInt32(...).",
+          "title": "Get Script State Int 32",
+          "category": "UnifiedScript|State",
+          "tooltip": "Get Script State Int 32",
           "pure": true,
           "pins": [
             {
@@ -1410,7 +1742,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Name",
@@ -1424,7 +1757,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Fallback",
@@ -1438,7 +1772,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "ReturnValue",
@@ -1452,18 +1787,21 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.call|UnifiedScriptComponent|GetScriptTarget",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:GetScriptTarget",
           "memberId": "0x4F4C123F422ED5A3",
           "kind": "function",
-          "title": "GetScriptTarget",
-          "category": "Unreal API|UnifiedScriptComponent",
-          "tooltip": "Call UnifiedScriptComponent.GetScriptTarget(...).",
+          "title": "Get Script Target",
+          "category": "UnifiedScript",
+          "tooltip": "UObject whose behavior is implemented by the managed script.",
           "pure": true,
           "pins": [
             {
@@ -1478,7 +1816,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "ReturnValue",
@@ -1492,25 +1831,29 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UObject/Object.h"
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.call|UnifiedScriptComponent|RefreshScriptState",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:RefreshScriptState",
           "memberId": "0xBF8089C66CEB80D6",
           "kind": "function",
-          "title": "RefreshScriptState",
-          "category": "Unreal API|UnifiedScriptComponent",
-          "tooltip": "Call UnifiedScriptComponent.RefreshScriptState(...).",
+          "title": "Refresh Script State",
+          "category": "UnifiedScript|State",
+          "tooltip": "Rebuilds Script State from the configured declaration while preserving compatible overrides.",
           "pure": false,
           "pins": [
             {
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -1524,7 +1867,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "ReturnValue",
@@ -1538,31 +1882,36 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.call|UnifiedScriptComponent|ReloadScript",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ReloadScript",
           "memberId": "0x7B868A110E45AFA1",
           "kind": "function",
-          "title": "ReloadScript",
-          "category": "Unreal API|UnifiedScriptComponent",
-          "tooltip": "Call UnifiedScriptComponent.ReloadScript(...).",
+          "title": "Reload Script",
+          "category": "UnifiedScript",
+          "tooltip": "Reload Script",
           "pure": false,
           "pins": [
             {
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -1576,7 +1925,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "ReturnValue",
@@ -1590,31 +1940,36 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.call|UnifiedScriptComponent|RequestReload",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:RequestReload",
           "memberId": "0x9FD30761744D70A1",
           "kind": "function",
-          "title": "RequestReload",
-          "category": "Unreal API|UnifiedScriptComponent",
-          "tooltip": "Call UnifiedScriptComponent.RequestReload(...).",
+          "title": "Request Reload",
+          "category": "UnifiedScript",
+          "tooltip": "Request Reload",
           "pure": false,
           "pins": [
             {
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -1628,31 +1983,36 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.call|UnifiedScriptComponent|SetScriptStateInt32",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:SetScriptStateInt32",
           "memberId": "0xF83092B1E5E45D7D",
           "kind": "function",
-          "title": "SetScriptStateInt32",
-          "category": "Unreal API|UnifiedScriptComponent",
-          "tooltip": "Call UnifiedScriptComponent.SetScriptStateInt32(...).",
+          "title": "Set Script State Int 32",
+          "category": "UnifiedScript|State",
+          "tooltip": "Set Script State Int 32",
           "pure": false,
           "pins": [
             {
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -1666,7 +2026,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Name",
@@ -1680,7 +2041,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -1694,7 +2056,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "ReturnValue",
@@ -1708,31 +2071,36 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.call|UnifiedScriptComponent|StartScript",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:StartScript",
           "memberId": "0x335CA93AEB62A23E",
           "kind": "function",
-          "title": "StartScript",
-          "category": "Unreal API|UnifiedScriptComponent",
-          "tooltip": "Call UnifiedScriptComponent.StartScript(...).",
+          "title": "Start Script",
+          "category": "UnifiedScript",
+          "tooltip": "Start Script",
           "pure": false,
           "pins": [
             {
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -1746,7 +2114,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "ReturnValue",
@@ -1760,31 +2129,36 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.call|UnifiedScriptComponent|StopScript",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:StopScript",
           "memberId": "0xC2B2365ACCA0171C",
           "kind": "function",
-          "title": "StopScript",
-          "category": "Unreal API|UnifiedScriptComponent",
-          "tooltip": "Call UnifiedScriptComponent.StopScript(...).",
+          "title": "Stop Script",
+          "category": "UnifiedScript",
+          "tooltip": "Stop Script",
           "pure": false,
           "pins": [
             {
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -1798,15 +2172,19 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.event|UnifiedScriptComponent|OnManagedSignal",
@@ -1822,7 +2200,8 @@
               "name": "Then",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -1836,7 +2215,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Context",
@@ -1850,16 +2230,19 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UObject/Object.h"
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.get|UnifiedScriptComponent|ActiveDeclarationAssetPath",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ActiveDeclarationAssetPath",
           "memberId": "0x28736A9007707BEE",
           "kind": "propertyRead",
-          "title": "ActiveDeclarationAssetPath",
+          "title": "Active Declaration Asset Path",
           "category": "Unreal API|UnifiedScriptComponent|Properties",
           "tooltip": "Read UnifiedScriptComponent.ActiveDeclarationAssetPath.",
           "pure": true,
@@ -1876,7 +2259,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -1890,16 +2274,19 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.get|UnifiedScriptComponent|ActiveGeneration",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ActiveGeneration",
           "memberId": "0x6DF75D872D39AE9F",
           "kind": "propertyRead",
-          "title": "ActiveGeneration",
+          "title": "Active Generation",
           "category": "Unreal API|UnifiedScriptComponent|Properties",
           "tooltip": "Read UnifiedScriptComponent.ActiveGeneration.",
           "pure": true,
@@ -1916,7 +2303,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -1930,16 +2318,19 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.get|UnifiedScriptComponent|ActiveScriptAssetPath",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ActiveScriptAssetPath",
           "memberId": "0xE5A6A8D0834BD12D",
           "kind": "propertyRead",
-          "title": "ActiveScriptAssetPath",
+          "title": "Active Script Asset Path",
           "category": "Unreal API|UnifiedScriptComponent|Properties",
           "tooltip": "Read UnifiedScriptComponent.ActiveScriptAssetPath.",
           "pure": true,
@@ -1956,7 +2347,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -1970,16 +2362,19 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.get|UnifiedScriptComponent|LastScriptError",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:LastScriptError",
           "memberId": "0xEB91C292E1A34192",
           "kind": "propertyRead",
-          "title": "LastScriptError",
+          "title": "Last Script Error",
           "category": "Unreal API|UnifiedScriptComponent|Properties",
           "tooltip": "Read UnifiedScriptComponent.LastScriptError.",
           "pure": true,
@@ -1996,7 +2391,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -2010,18 +2406,21 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.get|UnifiedScriptComponent|ManagedState",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ManagedState",
           "memberId": "0x31BC2AC640227065",
           "kind": "propertyRead",
-          "title": "ManagedState",
+          "title": "Managed State",
           "category": "Unreal API|UnifiedScriptComponent|Properties",
-          "tooltip": "Read UnifiedScriptComponent.ManagedState.",
+          "tooltip": "Script-controlled diagnostic state used by the first hosted demo.",
           "pure": true,
           "pins": [
             {
@@ -2036,7 +2435,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -2050,16 +2450,19 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.get|UnifiedScriptComponent|MaterializedStateCount",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:MaterializedStateCount",
           "memberId": "0xB31F5AE7DDA6C984",
           "kind": "propertyRead",
-          "title": "MaterializedStateCount",
+          "title": "Materialized State Count",
           "category": "Unreal API|UnifiedScriptComponent|Properties",
           "tooltip": "Read UnifiedScriptComponent.MaterializedStateCount.",
           "pure": true,
@@ -2076,7 +2479,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -2090,18 +2494,21 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.get|UnifiedScriptComponent|ScriptAssemblyPath",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ScriptAssemblyPath",
           "memberId": "0xC2521576C7DFB237",
           "kind": "propertyRead",
-          "title": "ScriptAssemblyPath",
+          "title": "Script Assembly Path",
           "category": "Unreal API|UnifiedScriptComponent|Properties",
-          "tooltip": "Read UnifiedScriptComponent.ScriptAssemblyPath.",
+          "tooltip": "Legacy direct configuration retained for existing components.",
           "pure": true,
           "pins": [
             {
@@ -2116,7 +2523,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -2130,18 +2538,21 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.get|UnifiedScriptComponent|ScriptAssetPath",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ScriptAssetPath",
           "memberId": "0x61C4428EA10A780B",
           "kind": "propertyRead",
-          "title": "ScriptAssetPath",
+          "title": "Script Asset Path",
           "category": "Unreal API|UnifiedScriptComponent|Properties",
-          "tooltip": "Read UnifiedScriptComponent.ScriptAssetPath.",
+          "tooltip": "Optional soft asset path used when ScriptAsset is not assigned.",
           "pure": true,
           "pins": [
             {
@@ -2156,7 +2567,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -2170,16 +2582,19 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.get|UnifiedScriptComponent|ScriptTypeName",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ScriptTypeName",
           "memberId": "0x9A655BDD0F446987",
           "kind": "propertyRead",
-          "title": "ScriptTypeName",
+          "title": "Script Type Name",
           "category": "Unreal API|UnifiedScriptComponent|Properties",
           "tooltip": "Read UnifiedScriptComponent.ScriptTypeName.",
           "pure": true,
@@ -2196,7 +2611,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -2210,16 +2626,19 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.get|UnifiedScriptComponent|bScriptRunning",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:bScriptRunning",
           "memberId": "0x78520C5EC4FF73D3",
           "kind": "propertyRead",
-          "title": "bScriptRunning",
+          "title": "Script Running",
           "category": "Unreal API|UnifiedScriptComponent|Properties",
           "tooltip": "Read UnifiedScriptComponent.bScriptRunning.",
           "pure": true,
@@ -2236,7 +2655,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -2250,16 +2670,19 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.get|UnifiedScriptComponent|bStartAutomatically",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:bStartAutomatically",
           "memberId": "0xB65E27C23A2F39CE",
           "kind": "propertyRead",
-          "title": "bStartAutomatically",
+          "title": "Start Automatically",
           "category": "Unreal API|UnifiedScriptComponent|Properties",
           "tooltip": "Read UnifiedScriptComponent.bStartAutomatically.",
           "pure": true,
@@ -2276,7 +2699,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -2290,16 +2714,19 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.get|UnifiedScriptComponent|bTickAutomatically",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:bTickAutomatically",
           "memberId": "0x23071804223C4DFF",
           "kind": "propertyRead",
-          "title": "bTickAutomatically",
+          "title": "Tick Automatically",
           "category": "Unreal API|UnifiedScriptComponent|Properties",
           "tooltip": "Read UnifiedScriptComponent.bTickAutomatically.",
           "pure": true,
@@ -2316,7 +2743,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -2330,25 +2758,29 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.set|UnifiedScriptComponent|ManagedState",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ManagedState",
           "memberId": "0x31BC2AC640227065",
           "kind": "propertyWrite",
-          "title": "Set ManagedState",
+          "title": "Set Managed State",
           "category": "Unreal API|UnifiedScriptComponent|Properties",
-          "tooltip": "Write UnifiedScriptComponent.ManagedState.",
+          "tooltip": "Script-controlled diagnostic state used by the first hosted demo.",
           "pure": false,
           "pins": [
             {
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -2362,7 +2794,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -2376,31 +2809,36 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.set|UnifiedScriptComponent|ScriptAssemblyPath",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ScriptAssemblyPath",
           "memberId": "0xC2521576C7DFB237",
           "kind": "propertyWrite",
-          "title": "Set ScriptAssemblyPath",
+          "title": "Set Script Assembly Path",
           "category": "Unreal API|UnifiedScriptComponent|Properties",
-          "tooltip": "Write UnifiedScriptComponent.ScriptAssemblyPath.",
+          "tooltip": "Legacy direct configuration retained for existing components.",
           "pure": false,
           "pins": [
             {
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -2414,7 +2852,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -2428,31 +2867,36 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.set|UnifiedScriptComponent|ScriptAssetPath",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ScriptAssetPath",
           "memberId": "0x61C4428EA10A780B",
           "kind": "propertyWrite",
-          "title": "Set ScriptAssetPath",
+          "title": "Set Script Asset Path",
           "category": "Unreal API|UnifiedScriptComponent|Properties",
-          "tooltip": "Write UnifiedScriptComponent.ScriptAssetPath.",
+          "tooltip": "Optional soft asset path used when ScriptAsset is not assigned.",
           "pure": false,
           "pins": [
             {
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -2466,7 +2910,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -2480,22 +2925,26 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.set|UnifiedScriptComponent|ScriptTypeName",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ScriptTypeName",
           "memberId": "0x9A655BDD0F446987",
           "kind": "propertyWrite",
-          "title": "Set ScriptTypeName",
+          "title": "Set Script Type Name",
           "category": "Unreal API|UnifiedScriptComponent|Properties",
           "tooltip": "Write UnifiedScriptComponent.ScriptTypeName.",
           "pure": false,
@@ -2504,7 +2953,8 @@
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -2518,7 +2968,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -2532,22 +2983,26 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.set|UnifiedScriptComponent|bStartAutomatically",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:bStartAutomatically",
           "memberId": "0xB65E27C23A2F39CE",
           "kind": "propertyWrite",
-          "title": "Set bStartAutomatically",
+          "title": "Set Start Automatically",
           "category": "Unreal API|UnifiedScriptComponent|Properties",
           "tooltip": "Write UnifiedScriptComponent.bStartAutomatically.",
           "pure": false,
@@ -2556,7 +3011,8 @@
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -2570,7 +3026,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -2584,22 +3041,26 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.set|UnifiedScriptComponent|bTickAutomatically",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:bTickAutomatically",
           "memberId": "0x23071804223C4DFF",
           "kind": "propertyWrite",
-          "title": "Set bTickAutomatically",
+          "title": "Set Tick Automatically",
           "category": "Unreal API|UnifiedScriptComponent|Properties",
           "tooltip": "Write UnifiedScriptComponent.bTickAutomatically.",
           "pure": false,
@@ -2608,7 +3069,8 @@
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -2622,7 +3084,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -2636,17 +3099,31 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         }
       ]
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropContract",
+      "name": "UnifiedScriptInteropContract",
+      "managedTypeName": "UnifiedScriptInteropContract",
+      "category": "Unreal API|UnifiedScriptInteropContract",
+      "properties": [],
+      "functions": [],
+      "delegates": [],
+      "nodes": []
     },
     {
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
@@ -2671,6 +3148,14 @@
             "writable": true,
             "editorVisible": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Byte Value",
+            "category": "UnifiedScript|Interop",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -2690,6 +3175,14 @@
             "writable": true,
             "editorVisible": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Class Value",
+            "category": "UnifiedScript|Interop",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -2709,6 +3202,14 @@
             "writable": true,
             "editorVisible": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Double Value",
+            "category": "UnifiedScript|Interop",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -2728,6 +3229,14 @@
             "writable": true,
             "editorVisible": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Float Value",
+            "category": "UnifiedScript|Interop",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -2747,6 +3256,14 @@
             "writable": true,
             "editorVisible": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Int 32Value",
+            "category": "UnifiedScript|Interop",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -2766,6 +3283,14 @@
             "writable": true,
             "editorVisible": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Int 64Value",
+            "category": "UnifiedScript|Interop",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -2793,6 +3318,14 @@
             "writable": true,
             "editorVisible": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Int Array Value",
+            "category": "UnifiedScript|Interop",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -2828,6 +3361,14 @@
             "writable": true,
             "editorVisible": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Int Map Value",
+            "category": "UnifiedScript|Interop",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -2855,6 +3396,14 @@
             "writable": true,
             "editorVisible": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Int Set Value",
+            "category": "UnifiedScript|Interop",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -2874,6 +3423,14 @@
             "writable": true,
             "editorVisible": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Mode",
+            "category": "UnifiedScript|Interop",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -2893,6 +3450,14 @@
             "writable": true,
             "editorVisible": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Name Value",
+            "category": "UnifiedScript|Interop",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -2912,6 +3477,14 @@
             "writable": true,
             "editorVisible": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Object Value",
+            "category": "UnifiedScript|Interop",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -2931,6 +3504,68 @@
             "writable": true,
             "editorVisible": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Rotator Value",
+            "category": "UnifiedScript|Interop",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftClassValue",
+          "name": "SoftClassValue",
+          "type": {
+            "kind": "softClass",
+            "nativeName": "TSoftClassPtr\u003CUObject\u003E",
+            "typePath": "/Script/CoreUObject.Object",
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": "UObject/Object.h"
+          },
+          "access": {
+            "readable": true,
+            "writable": true,
+            "editorVisible": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Soft Class Value",
+            "category": "UnifiedScript|Interop",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftObjectValue",
+          "name": "SoftObjectValue",
+          "type": {
+            "kind": "softObject",
+            "nativeName": "TSoftObjectPtr\u003CUObject\u003E",
+            "typePath": "/Script/CoreUObject.Object",
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": "UObject/Object.h"
+          },
+          "access": {
+            "readable": true,
+            "writable": true,
+            "editorVisible": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Soft Object Value",
+            "category": "UnifiedScript|Interop",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -2950,6 +3585,14 @@
             "writable": true,
             "editorVisible": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "String Value",
+            "category": "UnifiedScript|Interop",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -2969,6 +3612,14 @@
             "writable": true,
             "editorVisible": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Text Value",
+            "category": "UnifiedScript|Interop",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -2988,6 +3639,14 @@
             "writable": true,
             "editorVisible": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Transform Value",
+            "category": "UnifiedScript|Interop",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -3007,6 +3666,14 @@
             "writable": true,
             "editorVisible": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Vector Value",
+            "category": "UnifiedScript|Interop",
+            "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         }
       ],
@@ -3035,7 +3702,8 @@
                 "valueType": null,
                 "headerPath": null
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             },
             {
               "name": "Right",
@@ -3048,7 +3716,8 @@
                 "valueType": null,
                 "headerPath": null
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             }
           ],
           "traits": {
@@ -3056,6 +3725,14 @@
             "pure": true,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Add Int 64",
+            "category": "UnifiedScript|Interop",
+            "tooltip": "Add Int 64",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -3082,7 +3759,8 @@
                 "valueType": null,
                 "headerPath": "UObject/NoExportTypes.h"
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             },
             {
               "name": "Right",
@@ -3095,7 +3773,8 @@
                 "valueType": null,
                 "headerPath": "UObject/NoExportTypes.h"
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             }
           ],
           "traits": {
@@ -3103,6 +3782,71 @@
             "pure": true,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Add Vector",
+            "category": "UnifiedScript|Interop",
+            "tooltip": "Add Vector",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:AddWithDefault",
+          "name": "AddWithDefault",
+          "returnType": {
+            "kind": "int32",
+            "nativeName": "int32",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [
+            {
+              "name": "Value",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "Amount",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": "1"
+            }
+          ],
+          "traits": {
+            "static": false,
+            "pure": true,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Add With Default",
+            "category": "UnifiedScript|Interop",
+            "tooltip": "Add With Default",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -3129,7 +3873,8 @@
                 "valueType": null,
                 "headerPath": null
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             },
             {
               "name": "Context",
@@ -3142,7 +3887,8 @@
                 "valueType": null,
                 "headerPath": "UObject/Object.h"
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             }
           ],
           "traits": {
@@ -3150,6 +3896,14 @@
             "pure": false,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Broadcast Interop Changed",
+            "category": "UnifiedScript|Interop",
+            "tooltip": "Broadcast Interop Changed",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -3184,7 +3938,8 @@
                 "valueType": null,
                 "headerPath": null
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             }
           ],
           "traits": {
@@ -3192,6 +3947,14 @@
             "pure": true,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Count Set",
+            "category": "UnifiedScript|Interop",
+            "tooltip": "Count Set",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -3234,7 +3997,8 @@
                 "valueType": null,
                 "headerPath": null
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             }
           ],
           "traits": {
@@ -3242,6 +4006,14 @@
             "pure": true,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Echo Array",
+            "category": "UnifiedScript|Interop",
+            "tooltip": "Echo Array",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -3268,7 +4040,8 @@
                 "valueType": null,
                 "headerPath": "UObject/Object.h"
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             }
           ],
           "traits": {
@@ -3276,6 +4049,14 @@
             "pure": true,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Echo Class",
+            "category": "UnifiedScript|Interop",
+            "tooltip": "Echo Class",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -3334,7 +4115,8 @@
                 },
                 "headerPath": null
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             }
           ],
           "traits": {
@@ -3342,6 +4124,14 @@
             "pure": true,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Echo Map",
+            "category": "UnifiedScript|Interop",
+            "tooltip": "Echo Map",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -3368,7 +4158,8 @@
                 "valueType": null,
                 "headerPath": "UObject/Object.h"
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             }
           ],
           "traits": {
@@ -3376,6 +4167,14 @@
             "pure": true,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Echo Object",
+            "category": "UnifiedScript|Interop",
+            "tooltip": "Echo Object",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -3418,7 +4217,8 @@
                 "valueType": null,
                 "headerPath": null
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             }
           ],
           "traits": {
@@ -3426,6 +4226,14 @@
             "pure": true,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Echo Set",
+            "category": "UnifiedScript|Interop",
+            "tooltip": "Echo Set",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -3452,7 +4260,8 @@
                 "valueType": null,
                 "headerPath": "UObject/NoExportTypes.h"
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             }
           ],
           "traits": {
@@ -3460,6 +4269,14 @@
             "pure": true,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Echo Transform",
+            "category": "UnifiedScript|Interop",
+            "tooltip": "Echo Transform",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -3480,6 +4297,14 @@
             "pure": true,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Fixed Arity 0",
+            "category": "UnifiedScript|Interop|Fixed",
+            "tooltip": "Fixed Arity 0",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -3506,7 +4331,8 @@
                 "valueType": null,
                 "headerPath": null
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             }
           ],
           "traits": {
@@ -3514,6 +4340,14 @@
             "pure": true,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Fixed Arity 1",
+            "category": "UnifiedScript|Interop|Fixed",
+            "tooltip": "Fixed Arity 1",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -3540,7 +4374,8 @@
                 "valueType": null,
                 "headerPath": null
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             },
             {
               "name": "Count",
@@ -3553,7 +4388,8 @@
                 "valueType": null,
                 "headerPath": null
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             }
           ],
           "traits": {
@@ -3561,6 +4397,14 @@
             "pure": true,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Fixed Arity 2",
+            "category": "UnifiedScript|Interop|Fixed",
+            "tooltip": "Fixed Arity 2",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -3587,7 +4431,8 @@
                 "valueType": null,
                 "headerPath": "UObject/Object.h"
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             },
             {
               "name": "bEnabled",
@@ -3600,7 +4445,8 @@
                 "valueType": null,
                 "headerPath": null
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             },
             {
               "name": "Weight",
@@ -3613,7 +4459,8 @@
                 "valueType": null,
                 "headerPath": null
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             }
           ],
           "traits": {
@@ -3621,6 +4468,14 @@
             "pure": true,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Fixed Arity 3",
+            "category": "UnifiedScript|Interop|Fixed",
+            "tooltip": "Fixed Arity 3",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -3647,7 +4502,8 @@
                 "valueType": null,
                 "headerPath": "UObject/NoExportTypes.h"
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             },
             {
               "name": "Count",
@@ -3660,7 +4516,8 @@
                 "valueType": null,
                 "headerPath": null
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             },
             {
               "name": "Scale",
@@ -3673,7 +4530,8 @@
                 "valueType": null,
                 "headerPath": null
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             },
             {
               "name": "bEnabled",
@@ -3686,7 +4544,8 @@
                 "valueType": null,
                 "headerPath": null
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             }
           ],
           "traits": {
@@ -3694,6 +4553,14 @@
             "pure": true,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Fixed Arity 4",
+            "category": "UnifiedScript|Interop|Fixed",
+            "tooltip": "Fixed Arity 4",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -3728,7 +4595,8 @@
                 "valueType": null,
                 "headerPath": null
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             }
           ],
           "traits": {
@@ -3736,6 +4604,14 @@
             "pure": true,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Make Array",
+            "category": "UnifiedScript|Interop",
+            "tooltip": "Make Array",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -3762,7 +4638,8 @@
                 "valueType": null,
                 "headerPath": null
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             },
             {
               "name": "OutDoubled",
@@ -3775,7 +4652,8 @@
                 "valueType": null,
                 "headerPath": null
               },
-              "direction": "output"
+              "direction": "output",
+              "defaultValue": null
             },
             {
               "name": "Accumulator",
@@ -3788,7 +4666,8 @@
                 "valueType": null,
                 "headerPath": null
               },
-              "direction": "inputOutput"
+              "direction": "inputOutput",
+              "defaultValue": null
             }
           ],
           "traits": {
@@ -3796,6 +4675,14 @@
             "pure": true,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Mutate Values",
+            "category": "UnifiedScript|Interop",
+            "tooltip": "Mutate Values",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -3822,7 +4709,8 @@
                 "valueType": null,
                 "headerPath": null
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             }
           ],
           "traits": {
@@ -3830,6 +4718,14 @@
             "pure": true,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "String Length",
+            "category": "UnifiedScript|Interop",
+            "tooltip": "String Length",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -3864,7 +4760,8 @@
                 "valueType": null,
                 "headerPath": null
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             }
           ],
           "traits": {
@@ -3872,6 +4769,14 @@
             "pure": true,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Sum Array",
+            "category": "UnifiedScript|Interop",
+            "tooltip": "Sum Array",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         },
         {
@@ -3914,7 +4819,8 @@
                 },
                 "headerPath": null
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             }
           ],
           "traits": {
@@ -3922,6 +4828,14 @@
             "pure": true,
             "callable": true,
             "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Sum Map",
+            "category": "UnifiedScript|Interop",
+            "tooltip": "Sum Map",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
           }
         }
       ],
@@ -3951,7 +4865,8 @@
                 "valueType": null,
                 "headerPath": null
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             },
             {
               "name": "Context",
@@ -3964,7 +4879,8 @@
                 "valueType": null,
                 "headerPath": "UObject/Object.h"
               },
-              "direction": "input"
+              "direction": "input",
+              "defaultValue": null
             }
           ],
           "traits": {
@@ -3982,9 +4898,9 @@
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:AddInt64",
           "memberId": "0x5005CC3042360722",
           "kind": "function",
-          "title": "AddInt64",
-          "category": "Unreal API|UnifiedScriptInteropFixture",
-          "tooltip": "Call UnifiedScriptInteropFixture.AddInt64(...).",
+          "title": "Add Int 64",
+          "category": "UnifiedScript|Interop",
+          "tooltip": "Add Int 64",
           "pure": true,
           "pins": [
             {
@@ -3999,7 +4915,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Left",
@@ -4013,7 +4930,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Right",
@@ -4027,7 +4945,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "ReturnValue",
@@ -4041,18 +4960,21 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.call|UnifiedScriptInteropFixture|AddVector",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:AddVector",
           "memberId": "0x72F00766D165C3AC",
           "kind": "function",
-          "title": "AddVector",
-          "category": "Unreal API|UnifiedScriptInteropFixture",
-          "tooltip": "Call UnifiedScriptInteropFixture.AddVector(...).",
+          "title": "Add Vector",
+          "category": "UnifiedScript|Interop",
+          "tooltip": "Add Vector",
           "pure": true,
           "pins": [
             {
@@ -4067,7 +4989,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Left",
@@ -4081,7 +5004,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UObject/NoExportTypes.h"
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Right",
@@ -4095,7 +5019,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UObject/NoExportTypes.h"
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "ReturnValue",
@@ -4109,25 +5034,103 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UObject/NoExportTypes.h"
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
+        },
+        {
+          "id": "ue.call|UnifiedScriptInteropFixture|AddWithDefault",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:AddWithDefault",
+          "memberId": "0xAB3E544FCF8E0F20",
+          "kind": "function",
+          "title": "Add With Default",
+          "category": "UnifiedScript|Interop",
+          "tooltip": "Add With Default",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptInteropFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Value",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Amount",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": "1"
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.call|UnifiedScriptInteropFixture|BroadcastInteropChanged",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:BroadcastInteropChanged",
           "memberId": "0xB122BDB717D2DBEC",
           "kind": "function",
-          "title": "BroadcastInteropChanged",
-          "category": "Unreal API|UnifiedScriptInteropFixture",
-          "tooltip": "Call UnifiedScriptInteropFixture.BroadcastInteropChanged(...).",
+          "title": "Broadcast Interop Changed",
+          "category": "UnifiedScript|Interop",
+          "tooltip": "Broadcast Interop Changed",
           "pure": false,
           "pins": [
             {
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -4141,7 +5144,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "NewValue",
@@ -4155,7 +5159,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Context",
@@ -4169,24 +5174,28 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UObject/Object.h"
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.call|UnifiedScriptInteropFixture|CountSet",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:CountSet",
           "memberId": "0x3CDA489A528A7F59",
           "kind": "function",
-          "title": "CountSet",
-          "category": "Unreal API|UnifiedScriptInteropFixture",
-          "tooltip": "Call UnifiedScriptInteropFixture.CountSet(...).",
+          "title": "Count Set",
+          "category": "UnifiedScript|Interop",
+          "tooltip": "Count Set",
           "pure": true,
           "pins": [
             {
@@ -4201,7 +5210,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Values",
@@ -4223,7 +5233,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "ReturnValue",
@@ -4237,18 +5248,21 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.call|UnifiedScriptInteropFixture|EchoArray",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoArray",
           "memberId": "0x6DB8F58355D32AD6",
           "kind": "function",
-          "title": "EchoArray",
-          "category": "Unreal API|UnifiedScriptInteropFixture",
-          "tooltip": "Call UnifiedScriptInteropFixture.EchoArray(...).",
+          "title": "Echo Array",
+          "category": "UnifiedScript|Interop",
+          "tooltip": "Echo Array",
           "pure": true,
           "pins": [
             {
@@ -4263,7 +5277,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Values",
@@ -4285,7 +5300,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "ReturnValue",
@@ -4307,18 +5323,21 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.call|UnifiedScriptInteropFixture|EchoClass",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoClass",
           "memberId": "0x56941DB0D2A9DCEF",
           "kind": "function",
-          "title": "EchoClass",
-          "category": "Unreal API|UnifiedScriptInteropFixture",
-          "tooltip": "Call UnifiedScriptInteropFixture.EchoClass(...).",
+          "title": "Echo Class",
+          "category": "UnifiedScript|Interop",
+          "tooltip": "Echo Class",
           "pure": true,
           "pins": [
             {
@@ -4333,7 +5352,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -4347,7 +5367,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UObject/Object.h"
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "ReturnValue",
@@ -4361,18 +5382,21 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UObject/Object.h"
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.call|UnifiedScriptInteropFixture|EchoMap",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoMap",
           "memberId": "0xA01428000F098AC1",
           "kind": "function",
-          "title": "EchoMap",
-          "category": "Unreal API|UnifiedScriptInteropFixture",
-          "tooltip": "Call UnifiedScriptInteropFixture.EchoMap(...).",
+          "title": "Echo Map",
+          "category": "UnifiedScript|Interop",
+          "tooltip": "Echo Map",
           "pure": true,
           "pins": [
             {
@@ -4387,7 +5411,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Values",
@@ -4417,7 +5442,8 @@
                   "headerPath": null
                 },
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "ReturnValue",
@@ -4447,18 +5473,21 @@
                   "headerPath": null
                 },
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.call|UnifiedScriptInteropFixture|EchoObject",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoObject",
           "memberId": "0x7C6C1C1123A6E08A",
           "kind": "function",
-          "title": "EchoObject",
-          "category": "Unreal API|UnifiedScriptInteropFixture",
-          "tooltip": "Call UnifiedScriptInteropFixture.EchoObject(...).",
+          "title": "Echo Object",
+          "category": "UnifiedScript|Interop",
+          "tooltip": "Echo Object",
           "pure": true,
           "pins": [
             {
@@ -4473,7 +5502,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -4487,7 +5517,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UObject/Object.h"
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "ReturnValue",
@@ -4501,18 +5532,21 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UObject/Object.h"
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.call|UnifiedScriptInteropFixture|EchoSet",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoSet",
           "memberId": "0x051035FFB77D4FB3",
           "kind": "function",
-          "title": "EchoSet",
-          "category": "Unreal API|UnifiedScriptInteropFixture",
-          "tooltip": "Call UnifiedScriptInteropFixture.EchoSet(...).",
+          "title": "Echo Set",
+          "category": "UnifiedScript|Interop",
+          "tooltip": "Echo Set",
           "pure": true,
           "pins": [
             {
@@ -4527,7 +5561,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Values",
@@ -4549,7 +5584,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "ReturnValue",
@@ -4571,18 +5607,21 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.call|UnifiedScriptInteropFixture|EchoTransform",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:EchoTransform",
           "memberId": "0xAF29371D42BA1F6B",
           "kind": "function",
-          "title": "EchoTransform",
-          "category": "Unreal API|UnifiedScriptInteropFixture",
-          "tooltip": "Call UnifiedScriptInteropFixture.EchoTransform(...).",
+          "title": "Echo Transform",
+          "category": "UnifiedScript|Interop",
+          "tooltip": "Echo Transform",
           "pure": true,
           "pins": [
             {
@@ -4597,7 +5636,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -4611,7 +5651,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UObject/NoExportTypes.h"
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "ReturnValue",
@@ -4625,18 +5666,21 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UObject/NoExportTypes.h"
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.call|UnifiedScriptInteropFixture|FixedArity0",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FixedArity0",
           "memberId": "0x23F65F8588FC5259",
           "kind": "function",
-          "title": "FixedArity0",
-          "category": "Unreal API|UnifiedScriptInteropFixture",
-          "tooltip": "Call UnifiedScriptInteropFixture.FixedArity0(...).",
+          "title": "Fixed Arity 0",
+          "category": "UnifiedScript|Interop|Fixed",
+          "tooltip": "Fixed Arity 0",
           "pure": true,
           "pins": [
             {
@@ -4651,7 +5695,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "ReturnValue",
@@ -4665,18 +5710,21 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.call|UnifiedScriptInteropFixture|FixedArity1",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FixedArity1",
           "memberId": "0x23F65E8588FC50A6",
           "kind": "function",
-          "title": "FixedArity1",
-          "category": "Unreal API|UnifiedScriptInteropFixture",
-          "tooltip": "Call UnifiedScriptInteropFixture.FixedArity1(...).",
+          "title": "Fixed Arity 1",
+          "category": "UnifiedScript|Interop|Fixed",
+          "tooltip": "Fixed Arity 1",
           "pure": true,
           "pins": [
             {
@@ -4691,7 +5739,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -4705,7 +5754,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "ReturnValue",
@@ -4719,18 +5769,21 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.call|UnifiedScriptInteropFixture|FixedArity2",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FixedArity2",
           "memberId": "0x23F65D8588FC4EF3",
           "kind": "function",
-          "title": "FixedArity2",
-          "category": "Unreal API|UnifiedScriptInteropFixture",
-          "tooltip": "Call UnifiedScriptInteropFixture.FixedArity2(...).",
+          "title": "Fixed Arity 2",
+          "category": "UnifiedScript|Interop|Fixed",
+          "tooltip": "Fixed Arity 2",
           "pure": true,
           "pins": [
             {
@@ -4745,7 +5798,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "bEnabled",
@@ -4759,7 +5813,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Count",
@@ -4773,7 +5828,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "ReturnValue",
@@ -4787,18 +5843,21 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.call|UnifiedScriptInteropFixture|FixedArity3",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FixedArity3",
           "memberId": "0x23F65C8588FC4D40",
           "kind": "function",
-          "title": "FixedArity3",
-          "category": "Unreal API|UnifiedScriptInteropFixture",
-          "tooltip": "Call UnifiedScriptInteropFixture.FixedArity3(...).",
+          "title": "Fixed Arity 3",
+          "category": "UnifiedScript|Interop|Fixed",
+          "tooltip": "Fixed Arity 3",
           "pure": true,
           "pins": [
             {
@@ -4813,7 +5872,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Context",
@@ -4827,7 +5887,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UObject/Object.h"
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "bEnabled",
@@ -4841,7 +5902,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Weight",
@@ -4855,7 +5917,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "ReturnValue",
@@ -4869,18 +5932,21 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UObject/Object.h"
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.call|UnifiedScriptInteropFixture|FixedArity4",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FixedArity4",
           "memberId": "0x23F6638588FC5925",
           "kind": "function",
-          "title": "FixedArity4",
-          "category": "Unreal API|UnifiedScriptInteropFixture",
-          "tooltip": "Call UnifiedScriptInteropFixture.FixedArity4(...).",
+          "title": "Fixed Arity 4",
+          "category": "UnifiedScript|Interop|Fixed",
+          "tooltip": "Fixed Arity 4",
           "pure": true,
           "pins": [
             {
@@ -4895,7 +5961,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Location",
@@ -4909,7 +5976,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UObject/NoExportTypes.h"
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Count",
@@ -4923,7 +5991,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Scale",
@@ -4937,7 +6006,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "bEnabled",
@@ -4951,7 +6021,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "ReturnValue",
@@ -4965,18 +6036,21 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UObject/NoExportTypes.h"
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.call|UnifiedScriptInteropFixture|MakeArray",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MakeArray",
           "memberId": "0x8A8BAE19690D9AB7",
           "kind": "function",
-          "title": "MakeArray",
-          "category": "Unreal API|UnifiedScriptInteropFixture",
-          "tooltip": "Call UnifiedScriptInteropFixture.MakeArray(...).",
+          "title": "Make Array",
+          "category": "UnifiedScript|Interop",
+          "tooltip": "Make Array",
           "pure": true,
           "pins": [
             {
@@ -4991,7 +6065,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Count",
@@ -5005,7 +6080,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "ReturnValue",
@@ -5027,18 +6103,21 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.call|UnifiedScriptInteropFixture|MutateValues",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:MutateValues",
           "memberId": "0x077EBB77D39DD224",
           "kind": "function",
-          "title": "MutateValues",
-          "category": "Unreal API|UnifiedScriptInteropFixture",
-          "tooltip": "Call UnifiedScriptInteropFixture.MutateValues(...).",
+          "title": "Mutate Values",
+          "category": "UnifiedScript|Interop",
+          "tooltip": "Mutate Values",
           "pure": true,
           "pins": [
             {
@@ -5053,7 +6132,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Input",
@@ -5067,7 +6147,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "OutDoubled",
@@ -5081,7 +6162,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Accumulator",
@@ -5095,7 +6177,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Accumulator",
@@ -5109,7 +6192,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "ReturnValue",
@@ -5123,18 +6207,21 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.call|UnifiedScriptInteropFixture|StringLength",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:StringLength",
           "memberId": "0x82ABEA0C98F04445",
           "kind": "function",
-          "title": "StringLength",
-          "category": "Unreal API|UnifiedScriptInteropFixture",
-          "tooltip": "Call UnifiedScriptInteropFixture.StringLength(...).",
+          "title": "String Length",
+          "category": "UnifiedScript|Interop",
+          "tooltip": "String Length",
           "pure": true,
           "pins": [
             {
@@ -5149,7 +6236,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -5163,7 +6251,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "ReturnValue",
@@ -5177,18 +6266,21 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.call|UnifiedScriptInteropFixture|SumArray",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SumArray",
           "memberId": "0x3A7F8150DE68CBE4",
           "kind": "function",
-          "title": "SumArray",
-          "category": "Unreal API|UnifiedScriptInteropFixture",
-          "tooltip": "Call UnifiedScriptInteropFixture.SumArray(...).",
+          "title": "Sum Array",
+          "category": "UnifiedScript|Interop",
+          "tooltip": "Sum Array",
           "pure": true,
           "pins": [
             {
@@ -5203,7 +6295,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Values",
@@ -5225,7 +6318,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "ReturnValue",
@@ -5239,18 +6333,21 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.call|UnifiedScriptInteropFixture|SumMap",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SumMap",
           "memberId": "0xB9016520F3956867",
           "kind": "function",
-          "title": "SumMap",
-          "category": "Unreal API|UnifiedScriptInteropFixture",
-          "tooltip": "Call UnifiedScriptInteropFixture.SumMap(...).",
+          "title": "Sum Map",
+          "category": "UnifiedScript|Interop",
+          "tooltip": "Sum Map",
           "pure": true,
           "pins": [
             {
@@ -5265,7 +6362,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Values",
@@ -5295,7 +6393,8 @@
                   "headerPath": null
                 },
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "ReturnValue",
@@ -5309,9 +6408,12 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.event|UnifiedScriptInteropFixture|OnInteropChanged",
@@ -5327,7 +6429,8 @@
               "name": "Then",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "NewValue",
@@ -5341,7 +6444,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Context",
@@ -5355,16 +6459,19 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UObject/Object.h"
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.get|UnifiedScriptInteropFixture|ByteValue",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ByteValue",
           "memberId": "0xB9AF036F8D9D7B1F",
           "kind": "propertyRead",
-          "title": "ByteValue",
+          "title": "Byte Value",
           "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
           "tooltip": "Read UnifiedScriptInteropFixture.ByteValue.",
           "pure": true,
@@ -5381,7 +6488,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -5395,16 +6503,19 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.get|UnifiedScriptInteropFixture|ClassValue",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ClassValue",
           "memberId": "0x0C28A4137B791315",
           "kind": "propertyRead",
-          "title": "ClassValue",
+          "title": "Class Value",
           "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
           "tooltip": "Read UnifiedScriptInteropFixture.ClassValue.",
           "pure": true,
@@ -5421,7 +6532,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -5435,16 +6547,19 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UObject/Object.h"
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.get|UnifiedScriptInteropFixture|DoubleValue",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:DoubleValue",
           "memberId": "0x0AE5CB76273EFDB6",
           "kind": "propertyRead",
-          "title": "DoubleValue",
+          "title": "Double Value",
           "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
           "tooltip": "Read UnifiedScriptInteropFixture.DoubleValue.",
           "pure": true,
@@ -5461,7 +6576,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -5475,16 +6591,19 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.get|UnifiedScriptInteropFixture|FloatValue",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FloatValue",
           "memberId": "0x60A9B3373A0EA8E7",
           "kind": "propertyRead",
-          "title": "FloatValue",
+          "title": "Float Value",
           "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
           "tooltip": "Read UnifiedScriptInteropFixture.FloatValue.",
           "pure": true,
@@ -5501,7 +6620,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -5515,16 +6635,19 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.get|UnifiedScriptInteropFixture|Int32Value",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:Int32Value",
           "memberId": "0x813BE501DBB937C9",
           "kind": "propertyRead",
-          "title": "Int32Value",
+          "title": "Int 32Value",
           "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
           "tooltip": "Read UnifiedScriptInteropFixture.Int32Value.",
           "pure": true,
@@ -5541,7 +6664,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -5555,16 +6679,19 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.get|UnifiedScriptInteropFixture|Int64Value",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:Int64Value",
           "memberId": "0x34075871872CC6C4",
           "kind": "propertyRead",
-          "title": "Int64Value",
+          "title": "Int 64Value",
           "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
           "tooltip": "Read UnifiedScriptInteropFixture.Int64Value.",
           "pure": true,
@@ -5581,7 +6708,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -5595,16 +6723,19 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.get|UnifiedScriptInteropFixture|IntArrayValue",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:IntArrayValue",
           "memberId": "0x58F081410EEA1B8F",
           "kind": "propertyRead",
-          "title": "IntArrayValue",
+          "title": "Int Array Value",
           "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
           "tooltip": "Read UnifiedScriptInteropFixture.IntArrayValue.",
           "pure": true,
@@ -5621,7 +6752,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -5643,16 +6775,19 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.get|UnifiedScriptInteropFixture|IntMapValue",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:IntMapValue",
           "memberId": "0x9F95909F1D588926",
           "kind": "propertyRead",
-          "title": "IntMapValue",
+          "title": "Int Map Value",
           "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
           "tooltip": "Read UnifiedScriptInteropFixture.IntMapValue.",
           "pure": true,
@@ -5669,7 +6804,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -5699,16 +6835,19 @@
                   "headerPath": null
                 },
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.get|UnifiedScriptInteropFixture|IntSetValue",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:IntSetValue",
           "memberId": "0x5D8F4F14AD4EBB78",
           "kind": "propertyRead",
-          "title": "IntSetValue",
+          "title": "Int Set Value",
           "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
           "tooltip": "Read UnifiedScriptInteropFixture.IntSetValue.",
           "pure": true,
@@ -5725,7 +6864,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -5747,9 +6887,12 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.get|UnifiedScriptInteropFixture|Mode",
@@ -5773,7 +6916,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -5787,16 +6931,19 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UnifiedScriptInteropFixture.h"
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.get|UnifiedScriptInteropFixture|NameValue",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:NameValue",
           "memberId": "0x0EDD5EC02B7BF7C4",
           "kind": "propertyRead",
-          "title": "NameValue",
+          "title": "Name Value",
           "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
           "tooltip": "Read UnifiedScriptInteropFixture.NameValue.",
           "pure": true,
@@ -5813,7 +6960,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -5827,16 +6975,19 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.get|UnifiedScriptInteropFixture|ObjectValue",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ObjectValue",
           "memberId": "0xF85C960C1094B360",
           "kind": "propertyRead",
-          "title": "ObjectValue",
+          "title": "Object Value",
           "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
           "tooltip": "Read UnifiedScriptInteropFixture.ObjectValue.",
           "pure": true,
@@ -5853,7 +7004,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -5867,16 +7019,19 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UObject/Object.h"
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.get|UnifiedScriptInteropFixture|RotatorValue",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:RotatorValue",
           "memberId": "0xE9FD870223025846",
           "kind": "propertyRead",
-          "title": "RotatorValue",
+          "title": "Rotator Value",
           "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
           "tooltip": "Read UnifiedScriptInteropFixture.RotatorValue.",
           "pure": true,
@@ -5893,7 +7048,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -5907,16 +7063,107 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UObject/NoExportTypes.h"
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
+        },
+        {
+          "id": "ue.get|UnifiedScriptInteropFixture|SoftClassValue",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftClassValue",
+          "memberId": "0xC3274F8A399CE7F5",
+          "kind": "propertyRead",
+          "title": "Soft Class Value",
+          "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
+          "tooltip": "Read UnifiedScriptInteropFixture.SoftClassValue.",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptInteropFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Value",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "softClass",
+                "nativeName": "TSoftClassPtr\u003CUObject\u003E",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
+        },
+        {
+          "id": "ue.get|UnifiedScriptInteropFixture|SoftObjectValue",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftObjectValue",
+          "memberId": "0x6F0135EE1F0ABDC0",
+          "kind": "propertyRead",
+          "title": "Soft Object Value",
+          "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
+          "tooltip": "Read UnifiedScriptInteropFixture.SoftObjectValue.",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptInteropFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Value",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "softObject",
+                "nativeName": "TSoftObjectPtr\u003CUObject\u003E",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.get|UnifiedScriptInteropFixture|StringValue",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:StringValue",
           "memberId": "0x6B3CC333752E62FA",
           "kind": "propertyRead",
-          "title": "StringValue",
+          "title": "String Value",
           "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
           "tooltip": "Read UnifiedScriptInteropFixture.StringValue.",
           "pure": true,
@@ -5933,7 +7180,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -5947,16 +7195,19 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.get|UnifiedScriptInteropFixture|TextValue",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:TextValue",
           "memberId": "0x136048C026D91640",
           "kind": "propertyRead",
-          "title": "TextValue",
+          "title": "Text Value",
           "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
           "tooltip": "Read UnifiedScriptInteropFixture.TextValue.",
           "pure": true,
@@ -5973,7 +7224,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -5987,16 +7239,19 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.get|UnifiedScriptInteropFixture|TransformValue",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:TransformValue",
           "memberId": "0x3ECB1DF061194271",
           "kind": "propertyRead",
-          "title": "TransformValue",
+          "title": "Transform Value",
           "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
           "tooltip": "Read UnifiedScriptInteropFixture.TransformValue.",
           "pure": true,
@@ -6013,7 +7268,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -6027,16 +7283,19 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UObject/NoExportTypes.h"
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.get|UnifiedScriptInteropFixture|VectorValue",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:VectorValue",
           "memberId": "0x51CDC304CE471430",
           "kind": "propertyRead",
-          "title": "VectorValue",
+          "title": "Vector Value",
           "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
           "tooltip": "Read UnifiedScriptInteropFixture.VectorValue.",
           "pure": true,
@@ -6053,7 +7312,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -6067,16 +7327,19 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UObject/NoExportTypes.h"
-              }
+              },
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.set|UnifiedScriptInteropFixture|ByteValue",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ByteValue",
           "memberId": "0xB9AF036F8D9D7B1F",
           "kind": "propertyWrite",
-          "title": "Set ByteValue",
+          "title": "Set Byte Value",
           "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
           "tooltip": "Write UnifiedScriptInteropFixture.ByteValue.",
           "pure": false,
@@ -6085,7 +7348,8 @@
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -6099,7 +7363,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -6113,22 +7378,26 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.set|UnifiedScriptInteropFixture|ClassValue",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ClassValue",
           "memberId": "0x0C28A4137B791315",
           "kind": "propertyWrite",
-          "title": "Set ClassValue",
+          "title": "Set Class Value",
           "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
           "tooltip": "Write UnifiedScriptInteropFixture.ClassValue.",
           "pure": false,
@@ -6137,7 +7406,8 @@
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -6151,7 +7421,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -6165,22 +7436,26 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UObject/Object.h"
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.set|UnifiedScriptInteropFixture|DoubleValue",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:DoubleValue",
           "memberId": "0x0AE5CB76273EFDB6",
           "kind": "propertyWrite",
-          "title": "Set DoubleValue",
+          "title": "Set Double Value",
           "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
           "tooltip": "Write UnifiedScriptInteropFixture.DoubleValue.",
           "pure": false,
@@ -6189,7 +7464,8 @@
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -6203,7 +7479,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -6217,22 +7494,26 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.set|UnifiedScriptInteropFixture|FloatValue",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:FloatValue",
           "memberId": "0x60A9B3373A0EA8E7",
           "kind": "propertyWrite",
-          "title": "Set FloatValue",
+          "title": "Set Float Value",
           "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
           "tooltip": "Write UnifiedScriptInteropFixture.FloatValue.",
           "pure": false,
@@ -6241,7 +7522,8 @@
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -6255,7 +7537,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -6269,22 +7552,26 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.set|UnifiedScriptInteropFixture|Int32Value",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:Int32Value",
           "memberId": "0x813BE501DBB937C9",
           "kind": "propertyWrite",
-          "title": "Set Int32Value",
+          "title": "Set Int 32Value",
           "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
           "tooltip": "Write UnifiedScriptInteropFixture.Int32Value.",
           "pure": false,
@@ -6293,7 +7580,8 @@
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -6307,7 +7595,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -6321,22 +7610,26 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.set|UnifiedScriptInteropFixture|Int64Value",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:Int64Value",
           "memberId": "0x34075871872CC6C4",
           "kind": "propertyWrite",
-          "title": "Set Int64Value",
+          "title": "Set Int 64Value",
           "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
           "tooltip": "Write UnifiedScriptInteropFixture.Int64Value.",
           "pure": false,
@@ -6345,7 +7638,8 @@
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -6359,7 +7653,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -6373,22 +7668,26 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.set|UnifiedScriptInteropFixture|IntArrayValue",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:IntArrayValue",
           "memberId": "0x58F081410EEA1B8F",
           "kind": "propertyWrite",
-          "title": "Set IntArrayValue",
+          "title": "Set Int Array Value",
           "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
           "tooltip": "Write UnifiedScriptInteropFixture.IntArrayValue.",
           "pure": false,
@@ -6397,7 +7696,8 @@
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -6411,7 +7711,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -6433,22 +7734,26 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.set|UnifiedScriptInteropFixture|IntMapValue",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:IntMapValue",
           "memberId": "0x9F95909F1D588926",
           "kind": "propertyWrite",
-          "title": "Set IntMapValue",
+          "title": "Set Int Map Value",
           "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
           "tooltip": "Write UnifiedScriptInteropFixture.IntMapValue.",
           "pure": false,
@@ -6457,7 +7762,8 @@
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -6471,7 +7777,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -6501,22 +7808,26 @@
                   "headerPath": null
                 },
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.set|UnifiedScriptInteropFixture|IntSetValue",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:IntSetValue",
           "memberId": "0x5D8F4F14AD4EBB78",
           "kind": "propertyWrite",
-          "title": "Set IntSetValue",
+          "title": "Set Int Set Value",
           "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
           "tooltip": "Write UnifiedScriptInteropFixture.IntSetValue.",
           "pure": false,
@@ -6525,7 +7836,8 @@
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -6539,7 +7851,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -6561,15 +7874,19 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.set|UnifiedScriptInteropFixture|Mode",
@@ -6585,7 +7902,8 @@
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -6599,7 +7917,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -6613,22 +7932,26 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UnifiedScriptInteropFixture.h"
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.set|UnifiedScriptInteropFixture|NameValue",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:NameValue",
           "memberId": "0x0EDD5EC02B7BF7C4",
           "kind": "propertyWrite",
-          "title": "Set NameValue",
+          "title": "Set Name Value",
           "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
           "tooltip": "Write UnifiedScriptInteropFixture.NameValue.",
           "pure": false,
@@ -6637,7 +7960,8 @@
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -6651,7 +7975,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -6665,22 +7990,26 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.set|UnifiedScriptInteropFixture|ObjectValue",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:ObjectValue",
           "memberId": "0xF85C960C1094B360",
           "kind": "propertyWrite",
-          "title": "Set ObjectValue",
+          "title": "Set Object Value",
           "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
           "tooltip": "Write UnifiedScriptInteropFixture.ObjectValue.",
           "pure": false,
@@ -6689,7 +8018,8 @@
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -6703,7 +8033,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -6717,22 +8048,26 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UObject/Object.h"
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.set|UnifiedScriptInteropFixture|RotatorValue",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:RotatorValue",
           "memberId": "0xE9FD870223025846",
           "kind": "propertyWrite",
-          "title": "Set RotatorValue",
+          "title": "Set Rotator Value",
           "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
           "tooltip": "Write UnifiedScriptInteropFixture.RotatorValue.",
           "pure": false,
@@ -6741,7 +8076,8 @@
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -6755,7 +8091,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -6769,31 +8106,36 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UObject/NoExportTypes.h"
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
-          "id": "ue.set|UnifiedScriptInteropFixture|StringValue",
-          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:StringValue",
-          "memberId": "0x6B3CC333752E62FA",
+          "id": "ue.set|UnifiedScriptInteropFixture|SoftClassValue",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftClassValue",
+          "memberId": "0xC3274F8A399CE7F5",
           "kind": "propertyWrite",
-          "title": "Set StringValue",
+          "title": "Set Soft Class Value",
           "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
-          "tooltip": "Write UnifiedScriptInteropFixture.StringValue.",
+          "tooltip": "Write UnifiedScriptInteropFixture.SoftClassValue.",
           "pure": false,
           "pins": [
             {
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -6807,7 +8149,124 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Value",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "softClass",
+                "nativeName": "TSoftClassPtr\u003CUObject\u003E",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
+        },
+        {
+          "id": "ue.set|UnifiedScriptInteropFixture|SoftObjectValue",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SoftObjectValue",
+          "memberId": "0x6F0135EE1F0ABDC0",
+          "kind": "propertyWrite",
+          "title": "Set Soft Object Value",
+          "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
+          "tooltip": "Write UnifiedScriptInteropFixture.SoftObjectValue.",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptInteropFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Value",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "softObject",
+                "nativeName": "TSoftObjectPtr\u003CUObject\u003E",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
+        },
+        {
+          "id": "ue.set|UnifiedScriptInteropFixture|StringValue",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:StringValue",
+          "memberId": "0x6B3CC333752E62FA",
+          "kind": "propertyWrite",
+          "title": "Set String Value",
+          "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
+          "tooltip": "Write UnifiedScriptInteropFixture.StringValue.",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptInteropFixture*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -6821,22 +8280,26 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.set|UnifiedScriptInteropFixture|TextValue",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:TextValue",
           "memberId": "0x136048C026D91640",
           "kind": "propertyWrite",
-          "title": "Set TextValue",
+          "title": "Set Text Value",
           "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
           "tooltip": "Write UnifiedScriptInteropFixture.TextValue.",
           "pure": false,
@@ -6845,7 +8308,8 @@
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -6859,7 +8323,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -6873,22 +8338,26 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.set|UnifiedScriptInteropFixture|TransformValue",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:TransformValue",
           "memberId": "0x3ECB1DF061194271",
           "kind": "propertyWrite",
-          "title": "Set TransformValue",
+          "title": "Set Transform Value",
           "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
           "tooltip": "Write UnifiedScriptInteropFixture.TransformValue.",
           "pure": false,
@@ -6897,7 +8366,8 @@
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -6911,7 +8381,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -6925,22 +8396,26 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UObject/NoExportTypes.h"
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         },
         {
           "id": "ue.set|UnifiedScriptInteropFixture|VectorValue",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:VectorValue",
           "memberId": "0x51CDC304CE471430",
           "kind": "propertyWrite",
-          "title": "Set VectorValue",
+          "title": "Set Vector Value",
           "category": "Unreal API|UnifiedScriptInteropFixture|Properties",
           "tooltip": "Write UnifiedScriptInteropFixture.VectorValue.",
           "pure": false,
@@ -6949,7 +8424,8 @@
               "name": "In",
               "direction": "input",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             },
             {
               "name": "Target",
@@ -6963,7 +8439,8 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": null
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Value",
@@ -6977,15 +8454,19 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UObject/NoExportTypes.h"
-              }
+              },
+              "defaultValue": null
             },
             {
               "name": "Out",
               "direction": "output",
               "kind": "control",
-              "type": null
+              "type": null,
+              "defaultValue": null
             }
-          ]
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
         }
       ]
     }

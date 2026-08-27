@@ -227,6 +227,26 @@ internal static class UnrealNativeValueCodecV3
                 ref byteCount,
                 out encoded);
         }
+        if (typeof(T) == typeof(UnrealSoftObjectHandle))
+        {
+            requiredCapability = UnrealNativeCapabilitiesV3.Utf8Text;
+            return TryEncodeUtf8(
+                Reinterpret<T, UnrealSoftObjectHandle>(ref value).AssetPath ?? string.Empty,
+                UnrealNativeValueKindV3.String,
+                arena,
+                ref byteCount,
+                out encoded);
+        }
+        if (typeof(T) == typeof(UnrealSoftClassHandle))
+        {
+            requiredCapability = UnrealNativeCapabilitiesV3.Utf8Text;
+            return TryEncodeUtf8(
+                Reinterpret<T, UnrealSoftClassHandle>(ref value).AssetPath ?? string.Empty,
+                UnrealNativeValueKindV3.String,
+                arena,
+                ref byteCount,
+                out encoded);
+        }
         if (typeof(T) == typeof(UnrealName))
         {
             requiredCapability = UnrealNativeCapabilitiesV3.Utf8Text;
@@ -398,6 +418,13 @@ internal static class UnrealNativeValueCodecV3
             descriptor.Flags = UnrealNativeValueFlagsV3.ArenaBacked;
             requiredCapability = UnrealNativeCapabilitiesV3.Utf8Results;
         }
+        else if (type == typeof(UnrealSoftObjectHandle) ||
+                 type == typeof(UnrealSoftClassHandle))
+        {
+            descriptor.Kind = UnrealNativeValueKindV3.String;
+            descriptor.Flags = UnrealNativeValueFlagsV3.ArenaBacked;
+            requiredCapability = UnrealNativeCapabilitiesV3.Utf8Results;
+        }
         else if (type == typeof(UnrealName))
         {
             descriptor.Kind = UnrealNativeValueKindV3.Name;
@@ -495,6 +522,14 @@ internal static class UnrealNativeValueCodecV3
         if (typeof(T) == typeof(string) && value.Kind == UnrealNativeValueKindV3.String &&
             TryDecodeUtf8(value, arena, byteCount, out string? stringValue))
             return Set(stringValue, out decoded);
+        if (typeof(T) == typeof(UnrealSoftObjectHandle) &&
+            value.Kind == UnrealNativeValueKindV3.String &&
+            TryDecodeUtf8(value, arena, byteCount, out string? softObjectPath))
+            return Set(new UnrealSoftObjectHandle(softObjectPath), out decoded);
+        if (typeof(T) == typeof(UnrealSoftClassHandle) &&
+            value.Kind == UnrealNativeValueKindV3.String &&
+            TryDecodeUtf8(value, arena, byteCount, out string? softClassPath))
+            return Set(new UnrealSoftClassHandle(softClassPath), out decoded);
         if (typeof(T) == typeof(UnrealName) && value.Kind == UnrealNativeValueKindV3.Name &&
             TryDecodeUtf8(value, arena, byteCount, out string? nameValue))
             return Set(new UnrealName(nameValue), out decoded);
@@ -597,6 +632,14 @@ internal static class UnrealNativeValueCodecV3
         else if (type == typeof(string) && value.Kind == UnrealNativeValueKindV3.String &&
                  TryDecodeUtf8(value, arena, byteCount, out string stringValue))
             decoded = stringValue;
+        else if (type == typeof(UnrealSoftObjectHandle) &&
+                 value.Kind == UnrealNativeValueKindV3.String &&
+                 TryDecodeUtf8(value, arena, byteCount, out string softObjectPath))
+            decoded = new UnrealSoftObjectHandle(softObjectPath);
+        else if (type == typeof(UnrealSoftClassHandle) &&
+                 value.Kind == UnrealNativeValueKindV3.String &&
+                 TryDecodeUtf8(value, arena, byteCount, out string softClassPath))
+            decoded = new UnrealSoftClassHandle(softClassPath);
         else if (type == typeof(UnrealName) && value.Kind == UnrealNativeValueKindV3.Name &&
                  TryDecodeUtf8(value, arena, byteCount, out string nameValue))
             decoded = new UnrealName(nameValue);
@@ -1009,6 +1052,26 @@ internal static class UnrealNativeValueCodecV3
                 ref byteCount,
                 out encoded);
         }
+        if (type == typeof(UnrealSoftObjectHandle) && value is UnrealSoftObjectHandle softObject)
+        {
+            requiredCapability = UnrealNativeCapabilitiesV3.Utf8Text;
+            return TryEncodeUtf8(
+                softObject.AssetPath ?? string.Empty,
+                UnrealNativeValueKindV3.String,
+                arena,
+                ref byteCount,
+                out encoded);
+        }
+        if (type == typeof(UnrealSoftClassHandle) && value is UnrealSoftClassHandle softClass)
+        {
+            requiredCapability = UnrealNativeCapabilitiesV3.Utf8Text;
+            return TryEncodeUtf8(
+                softClass.AssetPath ?? string.Empty,
+                UnrealNativeValueKindV3.String,
+                arena,
+                ref byteCount,
+                out encoded);
+        }
         if (type == typeof(UnrealName) && value is UnrealName nameValue)
         {
             requiredCapability = UnrealNativeCapabilitiesV3.Utf8Text;
@@ -1191,6 +1254,8 @@ internal static class UnrealNativeValueCodecV3
             type == typeof(string) ? "FString" :
             type == typeof(UnrealName) ? "FName" :
             type == typeof(UnrealText) ? "FText" :
+            type == typeof(UnrealSoftObjectHandle) ? "FSoftObjectPath" :
+            type == typeof(UnrealSoftClassHandle) ? "FSoftClassPath" :
             type == typeof(UnrealObjectHandle) ? "UObject*" :
             type == typeof(UnrealClassHandle) ? "UClass*" :
             type == typeof(UnrealVector) ? "FVector" :
