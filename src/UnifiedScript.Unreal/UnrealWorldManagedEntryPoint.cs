@@ -71,7 +71,7 @@ public static class UnrealWorldManagedEntryPoint
         }
         catch (Exception exception)
         {
-            ReportBoundaryFailure(worldId, nameof(CreateWorld), exception);
+            ReportBoundaryFailure(worldId, 0, nameof(CreateWorld), exception);
             return (int)UnrealWorldManagedEntryStatus.InternalFailure;
         }
 
@@ -100,7 +100,7 @@ public static class UnrealWorldManagedEntryPoint
         }
         catch (Exception exception)
         {
-            ReportBoundaryFailure(worldId, nameof(DestroyWorld), exception);
+            ReportBoundaryFailure(worldId, 0, nameof(DestroyWorld), exception);
             return (int)UnrealWorldManagedEntryStatus.InternalFailure;
         }
     }
@@ -162,7 +162,7 @@ public static class UnrealWorldManagedEntryPoint
         }
         catch (Exception exception)
         {
-            ReportBoundaryFailure(worldId, nameof(CreateScript), exception);
+            ReportBoundaryFailure(worldId, instanceId, nameof(CreateScript), exception);
             return (int)UnrealWorldManagedEntryStatus.InternalFailure;
         }
     }
@@ -181,7 +181,7 @@ public static class UnrealWorldManagedEntryPoint
         }
         catch (Exception exception)
         {
-            ReportBoundaryFailure(worldId, nameof(TickScript), exception);
+            ReportBoundaryFailure(worldId, instanceId, nameof(TickScript), exception);
             return (int)UnrealWorldManagedEntryStatus.InternalFailure;
         }
     }
@@ -215,7 +215,7 @@ public static class UnrealWorldManagedEntryPoint
         }
         catch (Exception exception)
         {
-            ReportBoundaryFailure(worldId, nameof(DispatchEvent), exception);
+            ReportBoundaryFailure(worldId, instanceId, nameof(DispatchEvent), exception);
             return (int)UnrealWorldManagedEntryStatus.InternalFailure;
         }
     }
@@ -246,7 +246,7 @@ public static class UnrealWorldManagedEntryPoint
         }
         catch (Exception exception)
         {
-            ReportBoundaryFailure(worldId, nameof(ReloadScript), exception);
+            ReportBoundaryFailure(worldId, instanceId, nameof(ReloadScript), exception);
             return -(int)UnrealWorldManagedEntryStatus.InternalFailure;
         }
     }
@@ -265,7 +265,7 @@ public static class UnrealWorldManagedEntryPoint
         }
         catch (Exception exception)
         {
-            ReportBoundaryFailure(worldId, nameof(DestroyScript), exception);
+            ReportBoundaryFailure(worldId, instanceId, nameof(DestroyScript), exception);
             return (int)UnrealWorldManagedEntryStatus.InternalFailure;
         }
     }
@@ -300,7 +300,7 @@ public static class UnrealWorldManagedEntryPoint
         }
         catch (Exception exception)
         {
-            ReportBoundaryFailure(worldId, nameof(GetInvocationMetrics), exception);
+            ReportBoundaryFailure(worldId, 0, nameof(GetInvocationMetrics), exception);
             return (int)UnrealWorldManagedEntryStatus.InternalFailure;
         }
     }
@@ -350,10 +350,22 @@ public static class UnrealWorldManagedEntryPoint
 
     private static void ReportBoundaryFailure(
         ulong worldId,
+        ulong instanceId,
         string operation,
         Exception exception)
     {
-        string detail = $"{operation}: {exception}";
+        UnrealRuntimeDiagnosticContext? diagnosticContext = null;
+        if (worldId != 0 && instanceId != 0 &&
+            Worlds.TryGetValue(worldId, out WorldEntry? world))
+        {
+            diagnosticContext = world.TryGetDiagnosticContext(instanceId);
+        }
+        string detail = UnrealRuntimeDiagnosticBuilder.CreateJson(
+            worldId,
+            instanceId,
+            operation,
+            exception,
+            diagnosticContext);
         if (worldId != 0)
         {
             BoundaryErrors[worldId] = detail;
@@ -414,6 +426,16 @@ public static class UnrealWorldManagedEntryPoint
                 IUnrealInvocationMetrics metrics = Bridge;
                 callFrame = metrics.CallFrameInvocationCount;
                 legacy = metrics.LegacyInvocationCount;
+            }
+        }
+
+        public UnrealRuntimeDiagnosticContext? TryGetDiagnosticContext(ulong instanceId)
+        {
+            lock (_gate)
+            {
+                return _scripts.TryGetValue(instanceId, out ManagedScriptInstance? script)
+                    ? script.GetDiagnosticContext()
+                    : null;
             }
         }
 
@@ -667,6 +689,13 @@ public static class UnrealWorldManagedEntryPoint
 
         private UnrealScriptContext CreateContext(ScriptGeneration generation)
             => new(generation.Bridge, _host, _target, _instanceId, generation.Generation);
+
+        public UnrealRuntimeDiagnosticContext GetDiagnosticContext() => new(
+            _current.Generation,
+            _assemblyPath,
+            _typeName,
+            _host,
+            _target);
 
         private void StartGeneration(ScriptGeneration generation)
         {

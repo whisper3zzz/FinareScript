@@ -14,6 +14,8 @@
           Condition="'$(DesignTimeBuild)' != 'true'">
     <ItemGroup>
       <_UnifiedScriptDemoFile Include="$(TargetPath)" />
+      <_UnifiedScriptDemoFile Include="$(TargetDir)$(AssemblyName).pdb"
+                              Condition="Exists('$(TargetDir)$(AssemblyName).pdb')" />
       <_UnifiedScriptDemoFile Include="$(TargetDir)UnifiedScript.Unreal.Demo.deps.json"
                               Condition="Exists('$(TargetDir)UnifiedScript.Unreal.Demo.deps.json')" />
       <_UnifiedScriptDemoFile Include="$(MSBuildProjectDirectory)/UnifiedScript.Unreal.Demo.asset.json" />

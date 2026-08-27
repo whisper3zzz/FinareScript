@@ -291,16 +291,28 @@ public sealed class UnrealInvocationException : Exception
     public UnrealInvocationException(
         UnrealInvocationError error,
         UnrealObjectHandleError handleError,
-        string message)
+        string message,
+        UnrealObjectHandle target = default,
+        ulong? memberId = null,
+        string? memberPath = null)
         : base(message)
     {
         Error = error;
         HandleError = handleError;
+        Target = target;
+        MemberId = memberId;
+        MemberPath = memberPath ?? string.Empty;
     }
 
     public UnrealInvocationError Error { get; }
 
     public UnrealObjectHandleError HandleError { get; }
+
+    public UnrealObjectHandle Target { get; }
+
+    public ulong? MemberId { get; }
+
+    public string MemberPath { get; }
 }
 
 /// <summary>
@@ -369,7 +381,10 @@ public sealed class NativeUnrealInvocationBridge
     {
         ValidateRequest(target, propertyPath);
         UnrealInvocationValue value = RequireSuccess(
-            _transport.ReadProperty(target, propertyPath));
+            _transport.ReadProperty(target, propertyPath),
+            target,
+            null,
+            propertyPath);
         return ConvertFromNative<T>(value, propertyPath);
     }
 
@@ -381,7 +396,10 @@ public sealed class NativeUnrealInvocationBridge
         ValidateRequest(target, propertyPath);
         UnrealInvocationValue nativeValue = ConvertToNative(value, propertyPath);
         UnrealInvocationValue result = RequireSuccess(
-            _transport.WriteProperty(target, propertyPath, nativeValue));
+            _transport.WriteProperty(target, propertyPath, nativeValue),
+            target,
+            null,
+            propertyPath);
         RequireVoid(result, propertyPath);
     }
 
@@ -395,7 +413,10 @@ public sealed class NativeUnrealInvocationBridge
             arguments,
             functionPath);
         UnrealInvocationValue result = RequireSuccess(
-            _transport.Invoke(target, functionPath, nativeArguments));
+            _transport.Invoke(target, functionPath, nativeArguments),
+            target,
+            null,
+            functionPath);
         return ConvertFromNative<T>(result, functionPath);
     }
 
@@ -409,7 +430,10 @@ public sealed class NativeUnrealInvocationBridge
             arguments,
             functionPath);
         UnrealInvocationValue result = RequireSuccess(
-            _transport.Invoke(target, functionPath, nativeArguments));
+            _transport.Invoke(target, functionPath, nativeArguments),
+            target,
+            null,
+            functionPath);
         RequireVoid(result, functionPath);
     }
 
@@ -428,7 +452,8 @@ public sealed class NativeUnrealInvocationBridge
                 arena,
                 0,
                 UnrealNativeCapabilitiesV3.None,
-                out T callFrameResult))
+                out T callFrameResult,
+                propertyPath))
         {
             return callFrameResult;
         }
@@ -442,7 +467,7 @@ public sealed class NativeUnrealInvocationBridge
         {
             return ReadProperty<T>(target, propertyPath);
         }
-        UnrealInvocationValue value = RequireSuccess(response);
+        UnrealInvocationValue value = RequireSuccess(response, target, memberId, propertyPath);
         return ConvertFromNative<T>(value, propertyPath);
     }
 
@@ -468,7 +493,8 @@ public sealed class NativeUnrealInvocationBridge
                 MemoryMarshal.CreateReadOnlySpan(ref argument, 1),
                 arena,
                 byteCount,
-                requiredCapability))
+                requiredCapability,
+                propertyPath))
         {
             return;
         }
@@ -488,7 +514,7 @@ public sealed class NativeUnrealInvocationBridge
             WriteProperty(target, propertyPath, value);
             return;
         }
-        UnrealInvocationValue result = RequireSuccess(response);
+        UnrealInvocationValue result = RequireSuccess(response, target, memberId, propertyPath);
         RequireVoid(result, propertyPath);
     }
 
@@ -514,7 +540,7 @@ public sealed class NativeUnrealInvocationBridge
         {
             return Invoke<T>(target, functionPath, arguments);
         }
-        UnrealInvocationValue result = RequireSuccess(response);
+        UnrealInvocationValue result = RequireSuccess(response, target, memberId, functionPath);
         return ConvertFromNative<T>(result, functionPath);
     }
 
@@ -542,7 +568,7 @@ public sealed class NativeUnrealInvocationBridge
             Invoke(target, functionPath, arguments);
             return;
         }
-        UnrealInvocationValue result = RequireSuccess(response);
+        UnrealInvocationValue result = RequireSuccess(response, target, memberId, functionPath);
         RequireVoid(result, functionPath);
     }
 
@@ -647,7 +673,12 @@ public sealed class NativeUnrealInvocationBridge
                     out int scalarResult);
             if (!IsMissingGeneratedMember(scalarOutcome))
             {
-                RequireCallFrameSuccess(scalarOutcome, expectedResultCount: 1);
+                RequireCallFrameSuccess(
+                    scalarOutcome,
+                    expectedResultCount: 1,
+                    target,
+                    memberId,
+                    memberPath);
                 Interlocked.Increment(ref _callFrameInvocationCount);
                 return Unsafe.As<int, TResult>(ref scalarResult);
             }
@@ -1144,7 +1175,7 @@ public sealed class NativeUnrealInvocationBridge
                 retryArena,
                 inputByteCount);
         }
-        RequireCallFrameSuccess(outcome, resultCount);
+        RequireCallFrameSuccess(outcome, resultCount, target, memberId, memberPath);
         ReadOnlySpan<byte> resultArena = retryArena is null ? arena : retryArena;
 
         resultIndex = 0;
@@ -1209,7 +1240,7 @@ public sealed class NativeUnrealInvocationBridge
         {
             return false;
         }
-        RequireCallFrameSuccess(outcome, expectedResultCount: 1);
+        RequireCallFrameSuccess(outcome, expectedResultCount: 1, target, memberId);
         if (!UnrealNativeFixedValueCodecV3.TryDecode(in results[0], out result))
         {
             throw new InvalidOperationException(
@@ -1238,7 +1269,7 @@ public sealed class NativeUnrealInvocationBridge
         {
             return false;
         }
-        RequireCallFrameSuccess(outcome, expectedResultCount: 0);
+        RequireCallFrameSuccess(outcome, expectedResultCount: 0, target, memberId);
         Interlocked.Increment(ref _callFrameInvocationCount);
         return true;
     }
@@ -1251,7 +1282,8 @@ public sealed class NativeUnrealInvocationBridge
         Span<byte> arena,
         int inputByteCount,
         UnrealNativeCapabilitiesV3 argumentCapabilities,
-        out TResult result)
+        out TResult result,
+        string? memberPath = null)
     {
         result = default!;
         if (!UnrealNativeValueCodecV3.TryCreateResultDescriptor<TResult>(
@@ -1295,7 +1327,12 @@ public sealed class NativeUnrealInvocationBridge
         {
             return false;
         }
-        RequireCallFrameSuccess(outcome, expectedResultCount: 1);
+        RequireCallFrameSuccess(
+            outcome,
+            expectedResultCount: 1,
+            target,
+            memberId,
+            memberPath);
         ReadOnlySpan<byte> resultArena = retryArena is null ? arena : retryArena;
         if (!UnrealNativeValueCodecV3.TryDecode(
                 in results[0],
@@ -1317,7 +1354,8 @@ public sealed class NativeUnrealInvocationBridge
         ReadOnlySpan<UnrealNativeValueV3> arguments,
         Span<byte> arena,
         int inputByteCount,
-        UnrealNativeCapabilitiesV3 argumentCapabilities)
+        UnrealNativeCapabilitiesV3 argumentCapabilities,
+        string? memberPath = null)
     {
         if (!TryGetCallFrameTransport(
                 argumentCapabilities,
@@ -1337,7 +1375,12 @@ public sealed class NativeUnrealInvocationBridge
         {
             return false;
         }
-        RequireCallFrameSuccess(outcome, expectedResultCount: 0);
+        RequireCallFrameSuccess(
+            outcome,
+            expectedResultCount: 0,
+            target,
+            memberId,
+            memberPath);
         Interlocked.Increment(ref _callFrameInvocationCount);
         return true;
     }
@@ -1368,7 +1411,10 @@ public sealed class NativeUnrealInvocationBridge
 
     private static void RequireCallFrameSuccess(
         UnrealNativeCallOutcomeV3 outcome,
-        int expectedResultCount)
+        int expectedResultCount,
+        UnrealObjectHandle target,
+        ulong? memberId,
+        string? memberPath = null)
     {
         if (outcome.Status == UnrealNativeCallStatusV3.Success)
         {
@@ -1388,7 +1434,10 @@ public sealed class NativeUnrealInvocationBridge
                 outcome.HandleError,
                 string.IsNullOrWhiteSpace(outcome.Message)
                     ? "The ABI v3 Unreal invocation failed."
-                    : outcome.Message);
+                    : outcome.Message,
+                target,
+                memberId,
+                memberPath);
         }
         if (outcome.Status == UnrealNativeCallStatusV3.TransportUnavailable)
         {
@@ -1397,7 +1446,10 @@ public sealed class NativeUnrealInvocationBridge
                 UnrealObjectHandleError.None,
                 string.IsNullOrWhiteSpace(outcome.Message)
                     ? "The ABI v3 Unreal transport is unavailable."
-                    : outcome.Message);
+                    : outcome.Message,
+                target,
+                memberId,
+                memberPath);
         }
         throw new InvalidOperationException(
             $"The ABI v3 transport rejected the call with status {outcome.Status}; " +
@@ -1507,7 +1559,10 @@ public sealed class NativeUnrealInvocationBridge
             throw new UnrealInvocationException(
                 UnrealInvocationError.ObjectHandleFailure,
                 UnrealObjectHandleError.InvalidHandle,
-                "The managed Unreal invocation target handle is invalid.");
+                "The managed Unreal invocation target handle is invalid.",
+                target,
+                null,
+                memberPath);
         }
         if (string.IsNullOrWhiteSpace(memberPath))
         {
@@ -1627,7 +1682,11 @@ public sealed class NativeUnrealInvocationBridge
         return (T)converted;
     }
 
-    private static UnrealInvocationValue RequireSuccess(UnrealInvocationResponse response)
+    private static UnrealInvocationValue RequireSuccess(
+        UnrealInvocationResponse response,
+        UnrealObjectHandle target,
+        ulong? memberId,
+        string memberPath)
     {
         if (response.IsSuccess)
         {
@@ -1647,7 +1706,10 @@ public sealed class NativeUnrealInvocationBridge
         throw new UnrealInvocationException(
             response.Error,
             response.HandleError,
-            response.Message);
+            response.Message,
+            target,
+            memberId,
+            memberPath);
     }
 
     private static void RequireVoid(

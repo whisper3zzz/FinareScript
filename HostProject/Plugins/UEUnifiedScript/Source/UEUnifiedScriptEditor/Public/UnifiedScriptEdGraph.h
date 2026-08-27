@@ -169,6 +169,7 @@ public:
 
     UPROPERTY(Transient)
     bool bDebugPaused = false;
+    bool bDebugFaulted = false;
 
     virtual void AllocateDefaultPins() override;
     virtual FText GetNodeTitle(ENodeTitleType::Type TitleType) const override;

@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "UnifiedScriptAuthoringSurface.h"
 #include "UnifiedScriptDebugWorkbench.h"
+#include "UnifiedScriptRuntimeDiagnostic.h"
 #include "Widgets/SCompoundWidget.h"
 
 class SEditableTextBox;
@@ -33,6 +34,7 @@ public:
     bool IsBreakpointEnabled(const FString& DebugTargetId) const;
     FString GetBreakpointState(const FString& DebugTargetId) const;
     bool IsPausedNode(const FString& DebugTargetId) const;
+    bool IsRuntimeFailureNode(const FString& DebugTargetId) const;
     int32 GetBreakpointCount() const { return BreakpointNodeIds.Num(); }
 
 private:
@@ -55,6 +57,10 @@ private:
     FReply HandleStepOver();
     FReply HandleStepOut();
     FReply HandleEvaluate();
+    FReply HandlePauseLiveWorld();
+    FReply HandleStepLiveWorld();
+    FReply HandleContinueLiveWorld();
+    FReply HandleFocusRuntimeFailure();
     void HandleFrameSelectionChanged(FDebugFrameItem Item, ESelectInfo::Type SelectInfo);
     TSharedRef<ITableRow> GenerateFrameRow(
         FDebugFrameItem Item,
@@ -83,6 +89,15 @@ private:
     bool CanStepOut() const;
     bool CanEvaluate() const;
     FString DescribeHttpFailure(int32 StatusCode, const FString& ResponseJson) const;
+    EActiveTimerReturnType RefreshLiveWorldTarget(double CurrentTime, float DeltaTime);
+    void RefreshLiveWorldTargetNow();
+    void MapRuntimeDiagnosticToGraph();
+    bool CanPauseLiveWorld() const;
+    bool CanStepLiveWorld() const;
+    bool CanContinueLiveWorld() const;
+    bool CanFocusRuntimeFailure() const;
+    FString DescribeLiveWorldTarget() const;
+    FString DescribeRuntimeDiagnostic() const;
 
     TAttribute<FString> ServerUrlAttribute;
     FOnUnifiedScriptDebugNodeFocused OnNodeFocused;
@@ -91,6 +106,12 @@ private:
     FString SemanticConfigurationId;
     TOptional<FUnifiedScriptAuthoringFunction> ActiveFunction;
     TOptional<FUnifiedScriptAuthoringAsset> ActiveAsset;
+    TWeakObjectPtr<class UUnifiedScriptComponent> LiveComponent;
+    TOptional<FUnifiedScriptRuntimeDebugContext> LiveContext;
+    FString RuntimeFailureMethodId;
+    FString RuntimeFailureNodeId;
+    int64 LastRuntimeDiagnosticSequence = 0;
+    FString LiveRuntimeStatus = TEXT("No matching PIE/Game World script is running.");
     TSet<FString> BreakpointNodeIds;
     TOptional<FUnifiedScriptDebugSession> Session;
     int64 SelectedFrameId = 0;

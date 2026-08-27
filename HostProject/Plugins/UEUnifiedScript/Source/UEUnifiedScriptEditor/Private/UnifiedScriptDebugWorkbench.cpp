@@ -5,6 +5,7 @@
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "UnifiedScriptAuthoringWorkbench.h"
+#include "Misc/Paths.h"
 
 namespace UE::UnifiedScript::DebugWorkbench::Private
 {
@@ -626,4 +627,68 @@ bool FUnifiedScriptDebugWorkbench::ParseEvaluationResponse(
     OutEvaluation = MoveTemp(Candidate);
     OutError.Reset();
     return true;
+}
+
+bool FUnifiedScriptDebugWorkbench::ResolveRuntimeDiagnosticNode(
+    const FUnifiedScriptAuthoringAsset& Asset,
+    TConstArrayView<FUnifiedScriptRuntimeSourceLocation> SourceFrames,
+    FString& OutMethodId,
+    FString& OutNodeId)
+{
+    OutMethodId.Reset();
+    OutNodeId.Reset();
+    for (const FUnifiedScriptRuntimeSourceLocation& Source : SourceFrames)
+    {
+        if (!Source.IsValid())
+        {
+            continue;
+        }
+        FString RuntimePath = Source.FilePath;
+        RuntimePath.ReplaceInline(TEXT("\\"), TEXT("/"));
+        const int32 SourceLine = Source.Line - 1;
+        const int32 SourceColumn = FMath::Max(Source.Column - 1, 0);
+        int64 BestExtent = MAX_int64;
+        for (const FUnifiedScriptAuthoringFunction& Function : Asset.Functions)
+        {
+            for (const FUnifiedScriptAuthoringAction& Action : Function.Actions)
+            {
+                FString SurfacePath = Action.Span.FilePath;
+                SurfacePath.ReplaceInline(TEXT("\\"), TEXT("/"));
+                const bool bPathMatches =
+                    RuntimePath.Equals(SurfacePath, ESearchCase::IgnoreCase) ||
+                    RuntimePath.EndsWith(
+                        TEXT("/") + SurfacePath,
+                        ESearchCase::IgnoreCase) ||
+                    FPaths::GetCleanFilename(RuntimePath).Equals(
+                        FPaths::GetCleanFilename(SurfacePath),
+                        ESearchCase::IgnoreCase);
+                const bool bPositionMatches = Action.Span.IsValid() &&
+                    SourceLine >= Action.Span.StartLine &&
+                    SourceLine <= Action.Span.EndLine &&
+                    (SourceLine != Action.Span.StartLine ||
+                     SourceColumn >= Action.Span.StartColumn) &&
+                    (SourceLine != Action.Span.EndLine ||
+                     SourceColumn <= Action.Span.EndColumn);
+                if (Action.DebugTargetId.IsEmpty() || !bPathMatches || !bPositionMatches)
+                {
+                    continue;
+                }
+                const int64 Extent =
+                    static_cast<int64>(Action.Span.EndLine - Action.Span.StartLine) *
+                        1000000ll +
+                    FMath::Max(Action.Span.EndColumn - Action.Span.StartColumn, 0);
+                if (Extent < BestExtent)
+                {
+                    BestExtent = Extent;
+                    OutMethodId = Function.Id;
+                    OutNodeId = Action.DebugTargetId;
+                }
+            }
+        }
+        if (!OutNodeId.IsEmpty())
+        {
+            return true;
+        }
+    }
+    return false;
 }

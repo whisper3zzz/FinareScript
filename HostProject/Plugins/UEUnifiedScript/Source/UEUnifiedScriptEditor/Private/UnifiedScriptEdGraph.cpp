@@ -60,6 +60,10 @@ FText UUnifiedScriptEdGraphNode::GetNodeTitle(ENodeTitleType::Type TitleType) co
 
 FLinearColor UUnifiedScriptEdGraphNode::GetNodeTitleColor() const
 {
+    if (bDebugFaulted)
+    {
+        return FLinearColor(0.75f, 0.08f, 0.12f);
+    }
     if (bDebugPaused)
     {
         return FLinearColor(1.0f, 0.55f, 0.08f);

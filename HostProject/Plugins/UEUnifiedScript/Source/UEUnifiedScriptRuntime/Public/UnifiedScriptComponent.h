@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "StructUtils/PropertyBag.h"
+#include "UnifiedScriptRuntimeDiagnostic.h"
 #include "UnifiedScriptComponent.generated.h"
 
 class UUnifiedScriptAsset;
@@ -109,6 +110,15 @@ public:
     UFUNCTION(BlueprintPure, Category="UnifiedScript|State")
     bool IsScriptStateOverridden(const FString& Name) const;
 
+    /** Returns the exact live World/instance/generation/handle debug identity. */
+    bool GetRuntimeDebugContext(FUnifiedScriptRuntimeDebugContext& OutContext) const;
+
+    /** Pauses automatic managed ticks without blocking the UE Game Thread. */
+    bool PauseAtDebugFrameBoundary();
+    bool ContinueFromDebugFrameBoundary();
+    bool StepOneDebugFrame();
+    bool IsPausedAtDebugFrameBoundary() const { return bDebugPausedAtFrameBoundary; }
+
     /** Restores one state to the current C# declaration default. */
     UFUNCTION(BlueprintCallable, CallInEditor, Category="UnifiedScript|State")
     bool ResetScriptStateOverride(const FString& Name);
@@ -190,4 +200,7 @@ private:
     uint64 ManagedScriptInstanceId = 0;
     uint64 ManagedHostHandle = 0;
     uint64 ManagedTargetHandle = 0;
+    FUnifiedScriptRuntimeDiagnostic LastRuntimeDiagnostic;
+    bool bDebugPausedAtFrameBoundary = false;
+    bool bDebugStepFrameRequested = false;
 };

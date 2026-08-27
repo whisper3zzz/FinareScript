@@ -49,7 +49,7 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-28**
 
 - Active milestone: **M9 — Debugging, reload, and observability Beta**
-- Next slice: **M9.1 — UE-process/World debug context and failure mapping**
+- Next slice: **M9.1 — live UE World semantic suspension transport**
 - Primary engine gate: **Unreal Engine 5.8.1 source build at `D:\Project\UnrealEngine-5.8.1`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -60,10 +60,10 @@ machine-local unless an artifact explicitly says otherwise.
 
 | Gate | Verified result |
 | --- | --- |
-| Main source | `298c14f` (`feat: expand CoreCLR debugger controls`), plus this native Slate debug change set |
+| Main source | `6dd403a` (`feat: integrate debugger into Slate workbench`), plus this live World diagnostic change set |
 | Comparison source | `e62a46e` (`feat: adopt round-tripped gameplay tuning`) |
-| Managed tests | 522 / 522 passed |
-| Repository validator | 60 / 60 passed |
+| Managed tests | 524 / 524 passed |
+| Repository validator | 61 / 61 passed |
 | UE 5.8.1 native build | passed |
 | `UnifiedScript.Unreal` Automation | 13 / 13 passed with M8.3 declaration, Authoring Surface, override migration, and live World-host coverage |
 | BlockBreaker workload | 10,000 frames, three trials, one shot, one hit, two command completions per trial |
@@ -938,7 +938,7 @@ graph, World, generation, and bridge boundaries.
   graph and C# source
 - [ ] implement pause/resume, step in/over/out, call stacks, deeper-frame locals,
   watches, bounded expression evaluation, and breakpoint migration on reload
-- [ ] map exceptions and native bridge failures to source span, graph node,
+- [x] map exceptions and native bridge failures to source span, graph node,
   UObject handle, World, and script generation
 
 Progress (2026-08-28): the cooperative CoreCLR control plane and browser
@@ -950,9 +950,23 @@ breakpoints survive graph rebuilds, binding state is generation-specific, all
 run controls are native, stack selection navigates semantic graph nodes, and
 per-frame locals/watch values remain detached. UE 5.8.1 Editor build, targeted
 Authoring Surface Automation, 522/522 managed tests, and 60/60 repository
-invariants pass. The panel currently drives the loopback debug generation;
-direct UE-process/World suspension plus exception/native-bridge failure context
-remain the next M9.1 slice, so this milestone is not yet marked complete.
+invariants passed that slice. Semantic statement controls still drive the
+loopback generation; attaching those probes to live World execution remains
+unfinished, so this milestone is not yet marked complete.
+
+Progress (2026-08-28, live World diagnostics): the Slate debugger now discovers
+the matching hosted PIE/Game component and exposes exact World host, script
+instance, collectible generation, and UObject handles. Pause/Step Frame/
+Continue operate at a non-blocking managed tick boundary. Managed lifecycle
+exceptions and native bridge failures cross the host as bounded
+`runtime-diagnostic/v0.1` records with exact bridge/handle categories, member
+identity, portable-PDB frames, and zero `uint64` JSON precision loss. Native
+Runtime parses and retains the record; Slate maps all source frames to the
+smallest matching Authoring Surface span, highlights the `DebugTargetId`, and
+navigates through Focus Node. Managed 524/524, UE WorldHost lifecycle/stress,
+native Authoring Surface mapping, UE 5.8.1 build, and repository 61/61 gates
+cover the slice. Live semantic statement suspension still requires a transport
+that can preserve the CLR stack without blocking Unreal's Game Thread.
 
 ### M9.2 — Hot-reload reliability
 

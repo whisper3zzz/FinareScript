@@ -208,6 +208,18 @@ bool FUnifiedScriptWorldSubsystemLifecycleTest::RunTest(const FString& Parameter
         TEXT("Initial collectible script generation is visible"),
         FirstComponent->ActiveGeneration,
         FString(TEXT("1")));
+    FUnifiedScriptRuntimeDebugContext LiveDebugContext;
+    TestTrue(
+        TEXT("Running component exposes a live UE World debug context"),
+        FirstComponent->GetRuntimeDebugContext(LiveDebugContext));
+    TestEqual(
+        TEXT("Live debug context owns the current World"),
+        LiveDebugContext.WorldHostId,
+        FirstHost->GetWorldHostId());
+    TestTrue(
+        TEXT("Live debug context retains exact native handles"),
+        LiveDebugContext.HostHandle != 0 && LiveDebugContext.TargetHandle != 0);
+    TestEqual(TEXT("Live debug context starts at generation one"), LiveDebugContext.Generation, 1);
     TestTrue(
         TEXT("Generated managed wrapper selects native member-ID thunks"),
         FirstHost->GetFastInvocationCount() >= FastCallsBeforeDemo + 3);
@@ -234,6 +246,40 @@ bool FUnifiedScriptWorldSubsystemLifecycleTest::RunTest(const FString& Parameter
         TEXT("Managed OnTick executes through the component host"),
         FirstComponent->ManagedState,
         FString(TEXT("Ticked")));
+    FirstComponent->ManagedState = TEXT("PausedAtWorldBoundary");
+    TestTrue(
+        TEXT("Live debugger pauses the managed component at a frame boundary"),
+        FirstComponent->PauseAtDebugFrameBoundary());
+    FirstComponent->TickComponent(0.016f, LEVELTICK_All, nullptr);
+    TestEqual(
+        TEXT("Paused frame boundary does not enter managed OnTick"),
+        FirstComponent->ManagedState,
+        FString(TEXT("PausedAtWorldBoundary")));
+    TestTrue(
+        TEXT("Live debugger schedules exactly one managed frame"),
+        FirstComponent->StepOneDebugFrame());
+    FirstComponent->TickComponent(0.016f, LEVELTICK_All, nullptr);
+    TestEqual(
+        TEXT("World frame step enters managed OnTick once"),
+        FirstComponent->ManagedState,
+        FString(TEXT("Ticked")));
+    TestTrue(
+        TEXT("World frame step remains paused after the managed tick"),
+        FirstComponent->IsPausedAtDebugFrameBoundary());
+    FirstComponent->bTickAutomatically = false;
+    FirstComponent->ManagedState = TEXT("ManualFramePaused");
+    TestTrue(
+        TEXT("A manually ticked script can schedule one debugger frame"),
+        FirstComponent->StepOneDebugFrame());
+    FirstComponent->TickComponent(0.016f, LEVELTICK_All, nullptr);
+    TestEqual(
+        TEXT("World frame step enters managed OnTick when automatic tick is disabled"),
+        FirstComponent->ManagedState,
+        FString(TEXT("Ticked")));
+    FirstComponent->bTickAutomatically = true;
+    TestTrue(
+        TEXT("Live debugger resumes automatic managed ticks"),
+        FirstComponent->ContinueFromDebugFrameBoundary());
 
     TestTrue(TEXT("Component reload creates a new script generation"), FirstComponent->ReloadScript());
     TestEqual(
@@ -256,7 +302,7 @@ bool FUnifiedScriptWorldSubsystemLifecycleTest::RunTest(const FString& Parameter
     InvalidScriptAsset->ScriptTypeName = TEXT("UnifiedScript.Unreal.Demo.MissingScript");
     FirstComponent->ScriptAsset = InvalidScriptAsset;
     AddExpectedError(
-        TEXT("UnifiedScript component: Managed script reload failed with status -5."),
+        TEXT("UnifiedScript component: managedException during ReloadScript:"),
         EAutomationExpectedErrorFlags::Contains,
         1);
     TestFalse(
@@ -285,6 +331,30 @@ bool FUnifiedScriptWorldSubsystemLifecycleTest::RunTest(const FString& Parameter
         TEXT("Failed Script Asset reload exposes the managed boundary and type"),
         FirstComponent->LastScriptError.Contains(TEXT("ReloadScript:")) &&
             FirstComponent->LastScriptError.Contains(TEXT("MissingScript")));
+    FUnifiedScriptRuntimeDebugContext FailedDebugContext;
+    TestTrue(
+        TEXT("Failed live generation remains inspectable through its World context"),
+        FirstComponent->GetRuntimeDebugContext(FailedDebugContext));
+    TestTrue(
+        TEXT("Managed boundary failure is parsed as runtime-diagnostic/v0.1"),
+        FailedDebugContext.LastDiagnostic.IsValid());
+    TestEqual(
+        TEXT("Managed failure retains its operation"),
+        FailedDebugContext.LastDiagnostic.Operation,
+        FString(TEXT("ReloadScript")));
+    TestEqual(
+        TEXT("Managed failure retains the real World identity"),
+        FailedDebugContext.LastDiagnostic.WorldHostId,
+        FirstHost->GetWorldHostId());
+    TestEqual(
+        TEXT("Managed failure retains the active generation"),
+        FailedDebugContext.LastDiagnostic.Generation,
+        2);
+    TestTrue(
+        TEXT("Managed failure retains the script instance and UObject handles"),
+        FailedDebugContext.LastDiagnostic.InstanceId != 0 &&
+            FailedDebugContext.LastDiagnostic.HostHandle != 0 &&
+            FailedDebugContext.LastDiagnostic.TargetHandle != 0);
 
     UUnifiedScriptAsset* ReloadScriptAsset =
         NewObject<UUnifiedScriptAsset>(FirstWorld);
@@ -317,6 +387,54 @@ bool FUnifiedScriptWorldSubsystemLifecycleTest::RunTest(const FString& Parameter
     TestTrue(
         TEXT("Dropped override is observable after asset replacement"),
         FirstComponent->LastStateMigration.Contains(TEXT("DroppedOverrides=1")));
+
+    UUnifiedScriptAsset* FailureScriptAsset = NewObject<UUnifiedScriptAsset>(FirstWorld);
+    FailureScriptAsset->ScriptAssemblyPath = InitialScriptAsset->ScriptAssemblyPath;
+    FailureScriptAsset->ScriptTypeName =
+        TEXT("UnifiedScript.Unreal.Demo.RuntimeFailureDemoScript");
+    UUnifiedScriptComponent* FailureComponent =
+        NewObject<UUnifiedScriptComponent>(FirstWorld);
+    FailureComponent->ScriptAsset = FailureScriptAsset;
+    FailureComponent->RegisterComponentWithWorld(FirstWorld);
+    TestTrue(
+        *FString::Printf(
+            TEXT("Bridge-failure fixture starts in the live World: %s"),
+            *FailureComponent->LastScriptError),
+        FailureComponent->StartScript());
+    AddExpectedError(
+        TEXT("UnifiedScript component: nativeBridgeFailure during TickScript:"),
+        EAutomationExpectedErrorFlags::Contains,
+        1);
+    FailureComponent->TickComponent(0.016f, LEVELTICK_All, nullptr);
+    TestFalse(
+        TEXT("A live native bridge failure stops only the failing component"),
+        FailureComponent->bScriptRunning);
+    FUnifiedScriptRuntimeDebugContext BridgeFailureContext;
+    TestTrue(
+        TEXT("Stopped bridge failure retains its live World debug identity"),
+        FailureComponent->GetRuntimeDebugContext(BridgeFailureContext));
+    TestEqual(
+        TEXT("Live failure is classified at the native bridge boundary"),
+        BridgeFailureContext.LastDiagnostic.Kind,
+        FString(TEXT("nativeBridgeFailure")));
+    TestEqual(
+        TEXT("Live bridge failure retains the native invocation category"),
+        BridgeFailureContext.LastDiagnostic.Bridge.Error,
+        FString(TEXT("ObjectHandleFailure")));
+    TestEqual(
+        TEXT("Live bridge failure retains the stale UObject category"),
+        BridgeFailureContext.LastDiagnostic.Bridge.HandleError,
+        FString(TEXT("StaleHandle")));
+    TestEqual(
+        TEXT("Live bridge failure retains the generated member path"),
+        BridgeFailureContext.LastDiagnostic.Bridge.MemberPath,
+        FString(TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ManagedState")));
+    TestTrue(
+        TEXT("Live bridge failure retains portable-PDB source frames"),
+        BridgeFailureContext.LastDiagnostic.Source.IsValid() &&
+            BridgeFailureContext.LastDiagnostic.Source.FilePath.EndsWith(
+                TEXT("RuntimeFailureDemoScript.cs")) &&
+            !BridgeFailureContext.LastDiagnostic.SourceFrames.IsEmpty());
 
     FirstComponent->EndPlay(EEndPlayReason::Destroyed);
     TestFalse(TEXT("Component reports a stopped script"), FirstComponent->bScriptRunning);

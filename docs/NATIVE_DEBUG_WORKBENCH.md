@@ -40,6 +40,23 @@ poll expiry returns the same `running` identity and is renewed by clients;
 Pause therefore remains responsive while a wait is outstanding and long-lived
 gameplay methods do not become false failures.
 
+## Live UE World target
+
+The same panel now discovers a matching `UUnifiedScriptComponent` already
+hosted inside a PIE or Game World. **Pause World Script**, **Step Frame**, and
+**Continue World** control managed `OnTick` at a non-blocking UE frame boundary
+and display the exact World host, script instance, collectible generation, and
+target UObject handle. These controls operate on gameplay state; the Run and
+Step In/Over/Out controls above still operate on the instrumented loopback
+generation.
+
+Managed exceptions and native bridge failures cross the host boundary as
+`unifiedscript.runtime-diagnostic/v0.1`. The panel shows the failure kind,
+operation, exception type, source, bridge/handle category, and member path.
+Portable-PDB frames are resolved against Authoring Surface spans; **Focus
+Node** navigates to and highlights the exact `DebugTargetId` when one matches.
+See [RUNTIME_DIAGNOSTICS.md](RUNTIME_DIAGNOSTICS.md).
+
 ## Safety and current boundary
 
 - The client never accepts a response from another source compilation,
@@ -54,8 +71,8 @@ gameplay methods do not become false failures.
 - Method arguments currently use deterministic type-based demo values, and
   instance methods use the declared Script Asset receiver with default state.
 
-This slice drives the loopback authoring/debug generation from inside Unreal.
-It does not yet attach the debugger control plane to a managed World already
-running inside `UnrealEditor`. Direct UE-process/World suspension, async state
-machines, native bridge failure traps, and source/graph/World exception
-correlation remain in M9.1.
+The editor now has real UE-process/World identity, frame-boundary control, and
+source/graph/World failure correlation. Semantic probes still drive a separate
+loopback execution: preserving an in-progress CLR stack while stopping inside
+a live synchronous World call, async state-machine suspension, and remote trap
+framing remain in M9.1.

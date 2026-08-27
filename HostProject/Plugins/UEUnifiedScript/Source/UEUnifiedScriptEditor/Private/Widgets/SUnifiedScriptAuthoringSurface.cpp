@@ -5096,6 +5096,8 @@ UUnifiedScriptEdGraphNode* SUnifiedScriptAuthoringSurface::AddGraphNode(
         : TEXT("disabled");
     Node->bDebugPaused = DebugPanel.IsValid() &&
         DebugPanel->IsPausedNode(Action.DebugTargetId);
+    Node->bDebugFaulted = DebugPanel.IsValid() &&
+        DebugPanel->IsRuntimeFailureNode(Action.DebugTargetId);
     Node->bShowSummary = FUnifiedScriptGraphPresentation::ShouldShowSummary(Action);
     Node->bCompactPresentation = FUnifiedScriptGraphPresentation::IsCompactNode(Action);
     Node->bCanDelete = Action.GraphKind == TEXT("switchCase") ||
@@ -5211,6 +5213,8 @@ void SUnifiedScriptAuthoringSurface::RefreshDebugNodeStates()
                 : TEXT("disabled");
             Node->bDebugPaused = DebugPanel.IsValid() &&
                 DebugPanel->IsPausedNode(Node->DebugTargetId);
+            Node->bDebugFaulted = DebugPanel.IsValid() &&
+                DebugPanel->IsRuntimeFailureNode(Node->DebugTargetId);
         }
     }
     if (AuthoringGraph.IsValid())

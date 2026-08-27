@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "UnifiedScriptAuthoringSurface.h"
+#include "UnifiedScriptRuntimeDiagnostic.h"
 
 enum class EUnifiedScriptDebugSessionState : uint8
 {
@@ -147,4 +148,11 @@ public:
         const FString& Json,
         FUnifiedScriptDebugEvaluation& OutEvaluation,
         FString& OutError);
+
+    /** Resolves the first runtime stack source owned by a semantic graph action. */
+    static bool ResolveRuntimeDiagnosticNode(
+        const FUnifiedScriptAuthoringAsset& Asset,
+        TConstArrayView<FUnifiedScriptRuntimeSourceLocation> SourceFrames,
+        FString& OutMethodId,
+        FString& OutNodeId);
 };

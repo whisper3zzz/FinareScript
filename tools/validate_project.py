@@ -60,6 +60,7 @@ DOCUMENTS = [
     ROOT / "docs" / "SOURCE_MAP.md",
     ROOT / "docs" / "BREAKPOINT_RELOAD.md",
     ROOT / "docs" / "NATIVE_DEBUG_WORKBENCH.md",
+    ROOT / "docs" / "RUNTIME_DIAGNOSTICS.md",
     ROOT / "docs" / "PROJECT_LOADING.md",
     ROOT / "docs" / "DECLARATION_IR.md",
     ROOT / "docs" / "STATE_OVERRIDE_MIGRATION.md",
@@ -1347,6 +1348,9 @@ def main() -> int:
         / "UnifiedScript.Unreal"
         / "UnrealWorldManagedEntryPoint.cs"
     )
+    unreal_runtime_diagnostic_managed_path = (
+        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealRuntimeDiagnostic.cs"
+    )
     unreal_script_object_model_path = (
         ROOT / "src" / "UnifiedScript.Unreal" / "UnrealScriptObjectModel.cs"
     )
@@ -1477,6 +1481,26 @@ def main() -> int:
         / "Private"
         / "Widgets"
         / "SUnifiedScriptDebugPanel.cpp"
+    )
+    unreal_runtime_diagnostic_header_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Public"
+        / "UnifiedScriptRuntimeDiagnostic.h"
+    )
+    unreal_runtime_diagnostic_source_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Private"
+        / "UnifiedScriptRuntimeDiagnostic.cpp"
     )
     unreal_authoring_widget_path = (
         ROOT
@@ -1660,6 +1684,7 @@ def main() -> int:
         and unreal_native_call_frame_v3_path.is_file()
         and unreal_in_process_transport_test_path.is_file()
         and unreal_world_managed_entry_path.is_file()
+        and unreal_runtime_diagnostic_managed_path.is_file()
         and unreal_script_object_model_path.is_file()
         and unreal_demo_project_path.is_file()
         and unreal_demo_source_path.is_file()
@@ -1679,6 +1704,8 @@ def main() -> int:
         and unreal_debug_workbench_header_path.is_file()
         and unreal_debug_workbench_source_path.is_file()
         and unreal_debug_panel_path.is_file()
+        and unreal_runtime_diagnostic_header_path.is_file()
+        and unreal_runtime_diagnostic_source_path.is_file()
         and unreal_authoring_widget_path.is_file()
         and unreal_ed_graph_header_path.is_file()
         and unreal_ed_graph_source_path.is_file()
@@ -1894,6 +1921,9 @@ def main() -> int:
     unreal_world_managed_entry = unreal_world_managed_entry_path.read_text(
         encoding="utf-8"
     )
+    unreal_runtime_diagnostic_managed = (
+        unreal_runtime_diagnostic_managed_path.read_text(encoding="utf-8")
+    )
     unreal_script_object_model = unreal_script_object_model_path.read_text(
         encoding="utf-8"
     )
@@ -1938,6 +1968,12 @@ def main() -> int:
         encoding="utf-8"
     )
     unreal_debug_panel = unreal_debug_panel_path.read_text(encoding="utf-8")
+    unreal_runtime_diagnostic_header = unreal_runtime_diagnostic_header_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_runtime_diagnostic_source = unreal_runtime_diagnostic_source_path.read_text(
+        encoding="utf-8"
+    )
     unreal_authoring_widget = unreal_authoring_widget_path.read_text(encoding="utf-8")
     unreal_ed_graph_header = unreal_ed_graph_header_path.read_text(encoding="utf-8")
     unreal_ed_graph_source = unreal_ed_graph_source_path.read_text(encoding="utf-8")
@@ -3075,7 +3111,7 @@ def main() -> int:
         in unreal_world_host_test
         and "- [x] preserve instance overrides and compatible semantic identities"
         in roadmap
-        and "Next slice: **M9.1 — UE-process/World debug context and failure mapping**"
+        and "Next slice: **M9.1 — live UE World semantic suspension transport**"
         in roadmap,
         "Declaration IR state materialization or live component integration is missing",
     )
@@ -3327,12 +3363,54 @@ def main() -> int:
         and "DebugBreakpointState" in unreal_ed_graph_header
         and "Native debugger parses a paused v0.2 session" in unreal_authoring_test
         and "Slate can toggle a graph/source semantic breakpoint" in unreal_authoring_test
-        and "Direct UE-process/World suspension" in native_debug_doc
-        and "direct UE-process/World suspension" in roadmap,
+        and "live synchronous World call" in native_debug_doc
+        and "live UE World semantic suspension transport" in roadmap,
         "Native Slate debugger protocol, controls, semantic navigation, or safety boundary is incomplete",
     )
     checks.append(
         "UE Slate consumes guarded debug v0.2 controls, stack, per-frame locals, and watch"
+    )
+    runtime_diagnostic_doc = (
+        ROOT / "docs" / "RUNTIME_DIAGNOSTICS.md"
+    ).read_text(encoding="utf-8")
+    runtime_diagnostic_test = (
+        ROOT / "tests" / "UnifiedScript.Tests" / "UnrealRuntimeDiagnosticTests.cs"
+    ).read_text(encoding="utf-8")
+    require(
+        "unifiedscript.runtime-diagnostic/v0.1" in unreal_runtime_diagnostic_managed
+        and "SourceFrames" in unreal_runtime_diagnostic_managed
+        and "UnrealInvocationException" in unreal_runtime_diagnostic_managed
+        and "MemberPath" in unreal_runtime_diagnostic_managed
+        and "runtime-diagnostic/v0.1" in unreal_runtime_diagnostic_source
+        and "TryParseBoundaryError" in unreal_runtime_diagnostic_source
+        and "GetRuntimeDebugContext" in runtime_component_source
+        and "PauseAtDebugFrameBoundary" in runtime_component_source
+        and "StepOneDebugFrame" in runtime_component_source
+        and "ContinueFromDebugFrameBoundary" in runtime_component_source
+        and "LIVE UE WORLD" in unreal_debug_panel
+        and "Pause World Script" in unreal_debug_panel
+        and "Focus Node" in unreal_debug_panel
+        and "ResolveRuntimeDiagnosticNode" in unreal_debug_workbench_source
+        and "Runtime PDB coordinates resolve to the exact semantic graph node"
+        in unreal_authoring_test
+        and "World frame step enters managed OnTick once" in unreal_world_host_test
+        and "Managed boundary failure is parsed as runtime-diagnostic/v0.1"
+        in unreal_world_host_test
+        and "GeneratedFixedCallFramePathHasZeroSteadyStateManagedAllocations"
+        in unreal_native_adapter_test
+        and "NativeBridgeFailureCarriesExactInvocationSiteAndStableJson"
+        in runtime_diagnostic_test
+        and "$(AssemblyName).pdb" in unreal_demo_project
+        and "Live bridge failure retains the generated member path"
+        in unreal_world_host_test
+        and "World frame step enters managed OnTick when automatic tick is disabled"
+        in unreal_world_host_test
+        and "frame-boundary control" in runtime_diagnostic_doc
+        and "- [x] map exceptions and native bridge failures" in roadmap,
+        "Live UE World context, frame-boundary control, or structured runtime failure mapping is incomplete",
+    )
+    checks.append(
+        "UE Slate correlates live World failures to generation, handles, source, and graph"
     )
     authoring_diagnostics_doc = (
         ROOT / "docs" / "AUTHORING_DIAGNOSTICS.md"

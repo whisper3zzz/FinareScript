@@ -5,6 +5,9 @@
 #include "Interfaces/IHttpResponse.h"
 #include "Styling/AppStyle.h"
 #include "UnifiedScriptAuthoringWorkbench.h"
+#include "UnifiedScriptAsset.h"
+#include "UnifiedScriptComponent.h"
+#include "UObject/UObjectIterator.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SEditableTextBox.h"
 #include "Widgets/Layout/SBorder.h"
@@ -22,6 +25,11 @@ void SUnifiedScriptDebugPanel::Construct(const FArguments& InArgs)
     ServerUrlAttribute = InArgs._ServerUrl;
     OnNodeFocused = InArgs._OnNodeFocused;
     OnDebugStateChanged = InArgs._OnDebugStateChanged;
+    RegisterActiveTimer(
+        0.25f,
+        FWidgetActiveTimerDelegate::CreateSP(
+            this,
+            &SUnifiedScriptDebugPanel::RefreshLiveWorldTarget));
 
     ChildSlot
     [
@@ -99,6 +107,88 @@ void SUnifiedScriptDebugPanel::Construct(const FArguments& InArgs)
             + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 5.0f)
             [
                 SNew(SSeparator)
+            ]
+            + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 5.0f)
+            [
+                SNew(SHorizontalBox)
+                + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 8.0f, 0.0f)
+                [
+                    SNew(STextBlock)
+                    .Text(LOCTEXT("LiveWorld", "LIVE UE WORLD"))
+                    .Font(FAppStyle::GetFontStyle(TEXT("SmallFontBold")))
+                    .ColorAndOpacity(FLinearColor(0.30f, 0.72f, 0.95f))
+                ]
+                + SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 4.0f, 0.0f)
+                [
+                    SNew(SButton)
+                    .Text(LOCTEXT("PauseWorld", "Pause World Script"))
+                    .ToolTipText(LOCTEXT(
+                        "PauseWorldTip",
+                        "Pause managed ticks at the next UE frame boundary without blocking the Game Thread."))
+                    .IsEnabled(this, &SUnifiedScriptDebugPanel::CanPauseLiveWorld)
+                    .OnClicked(this, &SUnifiedScriptDebugPanel::HandlePauseLiveWorld)
+                ]
+                + SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 4.0f, 0.0f)
+                [
+                    SNew(SButton)
+                    .Text(LOCTEXT("StepWorld", "Step Frame"))
+                    .IsEnabled(this, &SUnifiedScriptDebugPanel::CanStepLiveWorld)
+                    .OnClicked(this, &SUnifiedScriptDebugPanel::HandleStepLiveWorld)
+                ]
+                + SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 8.0f, 0.0f)
+                [
+                    SNew(SButton)
+                    .Text(LOCTEXT("ContinueWorld", "Continue World"))
+                    .IsEnabled(this, &SUnifiedScriptDebugPanel::CanContinueLiveWorld)
+                    .OnClicked(this, &SUnifiedScriptDebugPanel::HandleContinueLiveWorld)
+                ]
+                + SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+                [
+                    SNew(STextBlock)
+                    .Text_Lambda([this]() { return FText::FromString(DescribeLiveWorldTarget()); })
+                    .Font(FAppStyle::GetFontStyle(TEXT("SmallFont")))
+                    .ColorAndOpacity(FLinearColor(0.58f, 0.68f, 0.76f))
+                    .Clipping(EWidgetClipping::ClipToBounds)
+                ]
+            ]
+            + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 5.0f)
+            [
+                SNew(SHorizontalBox)
+                .Visibility_Lambda([this]()
+                {
+                    return LiveContext.IsSet() && LiveContext->LastDiagnostic.IsValid()
+                        ? EVisibility::Visible
+                        : EVisibility::Collapsed;
+                })
+                + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 6.0f, 0.0f)
+                [
+                    SNew(STextBlock)
+                    .Text(LOCTEXT("RuntimeFailure", "RUNTIME FAILURE"))
+                    .Font(FAppStyle::GetFontStyle(TEXT("SmallFontBold")))
+                    .ColorAndOpacity(FLinearColor(0.95f, 0.24f, 0.22f))
+                ]
+                + SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 8.0f, 0.0f)
+                [
+                    SNew(SButton)
+                    .Text(LOCTEXT("FocusRuntimeFailure", "Focus Node"))
+                    .IsEnabled(this, &SUnifiedScriptDebugPanel::CanFocusRuntimeFailure)
+                    .OnClicked(this, &SUnifiedScriptDebugPanel::HandleFocusRuntimeFailure)
+                ]
+                + SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+                [
+                    SNew(STextBlock)
+                    .Text_Lambda([this]() { return FText::FromString(DescribeRuntimeDiagnostic()); })
+                    .Font(FAppStyle::GetFontStyle(TEXT("SmallFont")))
+                    .ColorAndOpacity(FLinearColor(0.90f, 0.46f, 0.42f))
+                    .ToolTipText_Lambda([this]()
+                    {
+                        return FText::FromString(
+                            LiveContext.IsSet()
+                                ? LiveContext->LastDiagnostic.StackTrace
+                                : FString());
+                    })
+                    .Clipping(EWidgetClipping::ClipToBounds)
+                ]
             ]
             + SVerticalBox::Slot().AutoHeight()
             [
@@ -228,6 +318,7 @@ void SUnifiedScriptDebugPanel::SetExecutionContext(
                     BreakpointNodeIds.Num() == 1 ? TEXT("") : TEXT("s"))
                 : TEXT("Select a Visual function to start a managed debug session."));
     }
+    RefreshLiveWorldTargetNow();
 }
 
 bool SUnifiedScriptDebugPanel::ToggleBreakpoint(const FString& DebugTargetId)
@@ -297,6 +388,50 @@ bool SUnifiedScriptDebugPanel::IsPausedNode(const FString& DebugTargetId) const
             return Candidate.FrameId == SelectedFrameId;
         });
     return SelectedFrame != nullptr && SelectedFrame->NodeId == DebugTargetId;
+}
+
+bool SUnifiedScriptDebugPanel::IsRuntimeFailureNode(const FString& DebugTargetId) const
+{
+    return !DebugTargetId.IsEmpty() && RuntimeFailureNodeId == DebugTargetId;
+}
+
+FReply SUnifiedScriptDebugPanel::HandlePauseLiveWorld()
+{
+    if (CanPauseLiveWorld() && LiveComponent->PauseAtDebugFrameBoundary())
+    {
+        LiveRuntimeStatus = TEXT("Managed script paused at the UE frame boundary.");
+        RefreshLiveWorldTargetNow();
+    }
+    return FReply::Handled();
+}
+
+FReply SUnifiedScriptDebugPanel::HandleStepLiveWorld()
+{
+    if (CanStepLiveWorld() && LiveComponent->StepOneDebugFrame())
+    {
+        LiveRuntimeStatus = TEXT("One managed World frame is scheduled; the script remains paused.");
+        RefreshLiveWorldTargetNow();
+    }
+    return FReply::Handled();
+}
+
+FReply SUnifiedScriptDebugPanel::HandleContinueLiveWorld()
+{
+    if (CanContinueLiveWorld() && LiveComponent->ContinueFromDebugFrameBoundary())
+    {
+        LiveRuntimeStatus = TEXT("Managed World execution resumed.");
+        RefreshLiveWorldTargetNow();
+    }
+    return FReply::Handled();
+}
+
+FReply SUnifiedScriptDebugPanel::HandleFocusRuntimeFailure()
+{
+    if (CanFocusRuntimeFailure())
+    {
+        OnNodeFocused.ExecuteIfBound(RuntimeFailureMethodId, RuntimeFailureNodeId);
+    }
+    return FReply::Handled();
 }
 
 FReply SUnifiedScriptDebugPanel::HandleRun()
@@ -845,6 +980,175 @@ FString SUnifiedScriptDebugPanel::DescribeHttpFailure(
         return FUnifiedScriptAuthoringWorkbench::ParseErrorResponse(ResponseJson, StatusCode);
     }
     return TEXT("The CoreCLR debug bridge is offline or did not return a response.");
+}
+
+EActiveTimerReturnType SUnifiedScriptDebugPanel::RefreshLiveWorldTarget(
+    double CurrentTime,
+    float DeltaTime)
+{
+    RefreshLiveWorldTargetNow();
+    return EActiveTimerReturnType::Continue;
+}
+
+void SUnifiedScriptDebugPanel::RefreshLiveWorldTargetNow()
+{
+    UUnifiedScriptComponent* BestComponent = nullptr;
+    FUnifiedScriptRuntimeDebugContext BestContext;
+    int32 BestScore = MIN_int32;
+    if (ActiveAsset.IsSet())
+    {
+        for (TObjectIterator<UUnifiedScriptComponent> It; It; ++It)
+        {
+            UUnifiedScriptComponent* Component = *It;
+            if (!IsValid(Component) || Component->IsTemplate() || Component->GetWorld() == nullptr)
+            {
+                continue;
+            }
+            FUnifiedScriptRuntimeDebugContext Candidate;
+            if (!Component->GetRuntimeDebugContext(Candidate))
+            {
+                continue;
+            }
+            const UUnifiedScriptAsset* ScriptAsset = Component->ScriptAsset;
+            const FString ConfiguredType = ScriptAsset != nullptr
+                ? ScriptAsset->ScriptTypeName
+                : Component->ScriptTypeName;
+            if (Candidate.TypeName != ActiveAsset->QualifiedName &&
+                ConfiguredType != ActiveAsset->QualifiedName)
+            {
+                continue;
+            }
+            int32 Score = Candidate.WorldType == TEXT("PIE") ? 100 : 0;
+            Score += Candidate.bRunning ? 20 : 0;
+            Score += Candidate.bPausedAtFrameBoundary ? 5 : 0;
+            Score += Candidate.LastDiagnostic.IsValid() ? 1 : 0;
+            if (BestComponent == nullptr || Score > BestScore ||
+                (Score == BestScore && Candidate.WorldHostId < BestContext.WorldHostId))
+            {
+                BestComponent = Component;
+                BestContext = MoveTemp(Candidate);
+                BestScore = Score;
+            }
+        }
+    }
+
+    const UUnifiedScriptComponent* PreviousComponent = LiveComponent.Get();
+    const int64 PreviousSequence = LastRuntimeDiagnosticSequence;
+    if (BestComponent == nullptr)
+    {
+        LiveComponent.Reset();
+        LiveContext.Reset();
+        LastRuntimeDiagnosticSequence = 0;
+        RuntimeFailureMethodId.Reset();
+        RuntimeFailureNodeId.Reset();
+        LiveRuntimeStatus = TEXT("No matching PIE/Game World script is running.");
+    }
+    else
+    {
+        LiveComponent = BestComponent;
+        LiveContext = MoveTemp(BestContext);
+        LastRuntimeDiagnosticSequence = LiveContext->LastDiagnostic.IsValid()
+            ? LiveContext->LastDiagnostic.Sequence
+            : 0;
+        MapRuntimeDiagnosticToGraph();
+    }
+    if (PreviousComponent != LiveComponent.Get() ||
+        PreviousSequence != LastRuntimeDiagnosticSequence)
+    {
+        OnDebugStateChanged.ExecuteIfBound();
+    }
+}
+
+void SUnifiedScriptDebugPanel::MapRuntimeDiagnosticToGraph()
+{
+    RuntimeFailureMethodId.Reset();
+    RuntimeFailureNodeId.Reset();
+    if (!LiveContext.IsSet() || !ActiveAsset.IsSet() ||
+        (!LiveContext->LastDiagnostic.Source.IsValid() &&
+         LiveContext->LastDiagnostic.SourceFrames.IsEmpty()))
+    {
+        return;
+    }
+    TArray<FUnifiedScriptRuntimeSourceLocation> Sources =
+        LiveContext->LastDiagnostic.SourceFrames;
+    if (Sources.IsEmpty())
+    {
+        Sources.Add(LiveContext->LastDiagnostic.Source);
+    }
+    FUnifiedScriptDebugWorkbench::ResolveRuntimeDiagnosticNode(
+        ActiveAsset.GetValue(),
+        Sources,
+        RuntimeFailureMethodId,
+        RuntimeFailureNodeId);
+}
+
+bool SUnifiedScriptDebugPanel::CanPauseLiveWorld() const
+{
+    return LiveComponent.IsValid() && LiveContext.IsSet() && LiveContext->bRunning &&
+        !LiveContext->bPausedAtFrameBoundary;
+}
+
+bool SUnifiedScriptDebugPanel::CanStepLiveWorld() const
+{
+    return LiveComponent.IsValid() && LiveContext.IsSet() && LiveContext->bRunning &&
+        LiveContext->bPausedAtFrameBoundary;
+}
+
+bool SUnifiedScriptDebugPanel::CanContinueLiveWorld() const
+{
+    return CanStepLiveWorld();
+}
+
+bool SUnifiedScriptDebugPanel::CanFocusRuntimeFailure() const
+{
+    return !RuntimeFailureMethodId.IsEmpty() && !RuntimeFailureNodeId.IsEmpty();
+}
+
+FString SUnifiedScriptDebugPanel::DescribeLiveWorldTarget() const
+{
+    if (!LiveContext.IsSet())
+    {
+        return LiveRuntimeStatus;
+    }
+    return FString::Printf(
+        TEXT("%s %s · World %llu · Instance %llu · Gen %d · %s · Target 0x%016llX"),
+        *LiveContext->WorldType,
+        *LiveContext->WorldName,
+        LiveContext->WorldHostId,
+        LiveContext->InstanceId,
+        LiveContext->Generation,
+        LiveContext->bPausedAtFrameBoundary
+            ? TEXT("FRAME-PAUSED")
+            : LiveContext->bRunning ? TEXT("RUNNING") : TEXT("STOPPED"),
+        LiveContext->TargetHandle);
+}
+
+FString SUnifiedScriptDebugPanel::DescribeRuntimeDiagnostic() const
+{
+    if (!LiveContext.IsSet() || !LiveContext->LastDiagnostic.IsValid())
+    {
+        return FString();
+    }
+    const FUnifiedScriptRuntimeDiagnostic& Diagnostic = LiveContext->LastDiagnostic;
+    const FString Source = Diagnostic.Source.IsValid()
+        ? Diagnostic.Source.ToDisplayString()
+        : TEXT("no portable-PDB source");
+    const FString Bridge = Diagnostic.Bridge.IsSet()
+        ? FString::Printf(
+            TEXT(" · Bridge %s/%s · %s"),
+            *Diagnostic.Bridge.Error,
+            *Diagnostic.Bridge.HandleError,
+            Diagnostic.Bridge.MemberPath.IsEmpty()
+                ? TEXT("unknown member")
+                : *Diagnostic.Bridge.MemberPath)
+        : FString();
+    return FString::Printf(
+        TEXT("%s · %s · %s · %s%s"),
+        *Diagnostic.Operation,
+        *Diagnostic.ExceptionType,
+        *Diagnostic.Message,
+        *Source,
+        *Bridge);
 }
 
 #undef LOCTEXT_NAMESPACE

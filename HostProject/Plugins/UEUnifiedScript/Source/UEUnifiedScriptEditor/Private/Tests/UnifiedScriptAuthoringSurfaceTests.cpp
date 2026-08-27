@@ -1564,6 +1564,25 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         TestTrue(TEXT("Debug start carries the semantic breakpoint target"),
             DebugStartJson.Contains(Assignment->DebugTargetId));
 
+        const FUnifiedScriptRuntimeSourceLocation RuntimeSource{
+            Assignment->Span.FilePath,
+            Assignment->Span.StartLine + 1,
+            Assignment->Span.StartColumn + 1,
+            Function.QualifiedName};
+        FString RuntimeFailureMethodId;
+        FString RuntimeFailureNodeId;
+        TestTrue(
+            TEXT("Runtime PDB coordinates resolve to the exact semantic graph node"),
+            FUnifiedScriptDebugWorkbench::ResolveRuntimeDiagnosticNode(
+                Document.Assets[0],
+                MakeArrayView(&RuntimeSource, 1),
+                RuntimeFailureMethodId,
+                RuntimeFailureNodeId));
+        TestEqual(TEXT("Runtime failure retains the Visual method identity"),
+            RuntimeFailureMethodId, Function.Id);
+        TestEqual(TEXT("Runtime failure retains the DebugTargetId"),
+            RuntimeFailureNodeId, Assignment->DebugTargetId);
+
         const FString PausedDebugJson = FString::Printf(
             TEXT("{\"schemaVersion\":\"unifiedscript.debug-session/v0.2\","
                  "\"state\":\"paused\",\"generation\":{\"number\":7,"

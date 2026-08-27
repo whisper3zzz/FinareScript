@@ -216,7 +216,9 @@ slice does not provide:
 - instruction-level stepping;
 - async state-machine suspension;
 - forced preemptive suspension between probes;
-- serialized remote/DAP framing or direct UE-process/World debug transport;
+- serialized remote/DAP framing or semantic statement suspension inside a live
+  UE-process/World call (frame-boundary control and structured World failure
+  correlation are available in the native Slate Workbench);
 - a native ICorDebug/netcoredbg trap backend.
 
 The cooperative backend is intended for trusted development code. As with the

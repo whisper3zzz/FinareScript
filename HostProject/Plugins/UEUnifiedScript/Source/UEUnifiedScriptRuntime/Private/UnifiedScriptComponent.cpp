@@ -42,6 +42,22 @@ uint64 AllocateScriptInstanceId()
         }
     }
 }
+
+const TCHAR* DescribeWorldType(EWorldType::Type WorldType)
+{
+    switch (WorldType)
+    {
+        case EWorldType::None: return TEXT("None");
+        case EWorldType::Game: return TEXT("Game");
+        case EWorldType::Editor: return TEXT("Editor");
+        case EWorldType::PIE: return TEXT("PIE");
+        case EWorldType::EditorPreview: return TEXT("EditorPreview");
+        case EWorldType::GamePreview: return TEXT("GamePreview");
+        case EWorldType::GameRPC: return TEXT("GameRPC");
+        case EWorldType::Inactive: return TEXT("Inactive");
+        default: return TEXT("Unknown");
+    }
+}
 }
 
 UUnifiedScriptComponent::UUnifiedScriptComponent()
@@ -82,7 +98,15 @@ void UUnifiedScriptComponent::TickComponent(
         return;
     }
 
-    if (bTickAutomatically)
+    if (bDebugPausedAtFrameBoundary && !bDebugStepFrameRequested)
+    {
+        SetComponentTickEnabled(true);
+        return;
+    }
+    const bool bStepManagedFrame = bDebugStepFrameRequested;
+    bDebugStepFrameRequested = false;
+
+    if (bTickAutomatically || bStepManagedFrame)
     {
         UUnifiedScriptWorldSubsystem* Host =
             GetWorld() != nullptr
@@ -101,7 +125,8 @@ void UUnifiedScriptComponent::TickComponent(
         }
     }
 
-    SetComponentTickEnabled(bTickAutomatically || bReloadRequested);
+    SetComponentTickEnabled(
+        bTickAutomatically || bReloadRequested || bDebugPausedAtFrameBoundary);
 }
 
 #if WITH_EDITOR
@@ -268,6 +293,9 @@ bool UUnifiedScriptComponent::StartScript()
     ActiveResolvedAssemblyPath = ResolvedAssemblyPath;
     ActiveResolvedTypeName = ResolvedTypeName;
     LastScriptError.Reset();
+    LastRuntimeDiagnostic = {};
+    bDebugPausedAtFrameBoundary = false;
+    bDebugStepFrameRequested = false;
     BindManagedActorEvents();
     SetComponentTickEnabled(bTickAutomatically || bReloadRequested);
     UE_LOG(
@@ -327,6 +355,8 @@ void UUnifiedScriptComponent::StopScript()
     ManagedTargetHandle = 0;
     bScriptRunning = false;
     bReloadRequested = false;
+    bDebugPausedAtFrameBoundary = false;
+    bDebugStepFrameRequested = false;
     ActiveScriptAsset = nullptr;
     ActiveScriptAssetPath.Reset();
     ActiveDeclarationAssetPath.Reset();
@@ -431,6 +461,83 @@ bool UUnifiedScriptComponent::ReloadScript()
     ActiveResolvedAssemblyPath = MoveTemp(ResolvedAssemblyPath);
     ActiveResolvedTypeName = MoveTemp(ResolvedTypeName);
     LastScriptError.Reset();
+    LastRuntimeDiagnostic = {};
+    return true;
+}
+
+bool UUnifiedScriptComponent::GetRuntimeDebugContext(
+    FUnifiedScriptRuntimeDebugContext& OutContext) const
+{
+    const UWorld* World = GetWorld();
+    const UUnifiedScriptWorldSubsystem* Host =
+        World != nullptr ? World->GetSubsystem<UUnifiedScriptWorldSubsystem>() : nullptr;
+    if (Host == nullptr || (ManagedScriptInstanceId == 0 && !LastRuntimeDiagnostic.IsValid()))
+    {
+        return false;
+    }
+    OutContext = {};
+    OutContext.WorldHostId = ManagedScriptInstanceId != 0
+        ? Host->GetWorldHostId()
+        : LastRuntimeDiagnostic.WorldHostId;
+    OutContext.WorldName = World->GetName();
+    OutContext.WorldType = UE::UnifiedScript::Component::Private::DescribeWorldType(
+        World->WorldType);
+    OutContext.InstanceId = ManagedScriptInstanceId != 0
+        ? ManagedScriptInstanceId
+        : LastRuntimeDiagnostic.InstanceId;
+    OutContext.Generation = ManagedScriptInstanceId != 0
+        ? FCString::Atoi(*ActiveGeneration)
+        : LastRuntimeDiagnostic.Generation;
+    OutContext.HostHandle = ManagedHostHandle != 0
+        ? ManagedHostHandle
+        : LastRuntimeDiagnostic.HostHandle;
+    OutContext.TargetHandle = ManagedTargetHandle != 0
+        ? ManagedTargetHandle
+        : LastRuntimeDiagnostic.TargetHandle;
+    OutContext.AssemblyPath = ActiveResolvedAssemblyPath.IsEmpty()
+        ? LastRuntimeDiagnostic.AssemblyPath
+        : ActiveResolvedAssemblyPath;
+    OutContext.TypeName = ActiveResolvedTypeName.IsEmpty()
+        ? LastRuntimeDiagnostic.TypeName
+        : ActiveResolvedTypeName;
+    OutContext.bRunning = bScriptRunning;
+    OutContext.bPausedAtFrameBoundary = bDebugPausedAtFrameBoundary;
+    OutContext.LastDiagnostic = LastRuntimeDiagnostic;
+    return OutContext.IsValid();
+}
+
+bool UUnifiedScriptComponent::PauseAtDebugFrameBoundary()
+{
+    if (!bScriptRunning)
+    {
+        return false;
+    }
+    bDebugPausedAtFrameBoundary = true;
+    bDebugStepFrameRequested = false;
+    SetComponentTickEnabled(true);
+    return true;
+}
+
+bool UUnifiedScriptComponent::ContinueFromDebugFrameBoundary()
+{
+    if (!bScriptRunning || !bDebugPausedAtFrameBoundary)
+    {
+        return false;
+    }
+    bDebugPausedAtFrameBoundary = false;
+    bDebugStepFrameRequested = false;
+    SetComponentTickEnabled(bTickAutomatically || bReloadRequested);
+    return true;
+}
+
+bool UUnifiedScriptComponent::StepOneDebugFrame()
+{
+    if (!bScriptRunning || !bDebugPausedAtFrameBoundary)
+    {
+        return false;
+    }
+    bDebugStepFrameRequested = true;
+    SetComponentTickEnabled(true);
     return true;
 }
 
@@ -900,6 +1007,19 @@ FString UUnifiedScriptComponent::ResolveConfiguredPath(
 
 void UUnifiedScriptComponent::SetScriptFailure(FString Error)
 {
-    LastScriptError = MoveTemp(Error);
+    FUnifiedScriptRuntimeDiagnostic Diagnostic;
+    FString ParseError;
+    if (FUnifiedScriptRuntimeDiagnostic::TryParseBoundaryError(
+            Error,
+            Diagnostic,
+            ParseError))
+    {
+        LastRuntimeDiagnostic = MoveTemp(Diagnostic);
+        LastScriptError = LastRuntimeDiagnostic.ToDisplayString();
+    }
+    else
+    {
+        LastScriptError = MoveTemp(Error);
+    }
     UE_LOG(LogTemp, Error, TEXT("UnifiedScript component: %s"), *LastScriptError);
 }
