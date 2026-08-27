@@ -19,6 +19,7 @@ public enum UnifiedTypeKind
     TypeParameter,
     TaskLike,
     Enumerable,
+    AsyncEnumerable,
     BorrowedSequence,
 }
 
@@ -65,6 +66,7 @@ public enum ForEachIterationStrategy
 {
     Indexed,
     Enumerator,
+    AsyncEnumerator,
 }
 
 public enum ForEachIterationKind
@@ -129,5 +131,5 @@ public sealed record BoundCompilation(
     IReadOnlyList<BoundNodeInfo> Nodes,
     IReadOnlyList<BoundForEachInfo> ForEachLoops)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.semantics/v0.4";
+    public const string CurrentSchemaVersion = "unifiedscript.semantics/v0.5";
 }

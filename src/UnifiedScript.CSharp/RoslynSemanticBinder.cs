@@ -296,7 +296,8 @@ public sealed class RoslynSemanticBinder
                     iterationVariable.Type);
             if (isIndexedCollection &&
                 hasExactIndexedElementType &&
-                iterationKind == ForEachIterationKind.Value)
+                iterationKind == ForEachIterationKind.Value &&
+                !forEach.IsAsync)
             {
                 TypeDescriptor collectionDescriptor = GetTypeDescriptor(collectionType!);
                 TypeDescriptor elementDescriptor = GetTypeDescriptor(indexedElementType!);
@@ -323,30 +324,36 @@ public sealed class RoslynSemanticBinder
                 ? null
                 : GetTypeDescriptor(statementInfo.ElementType);
             bool hasGraphSafeCollectionContract =
+                (!forEach.IsAsync && enumerableCollection is
+                {
+                    Kind: UnifiedTypeKind.Enumerable,
+                    IsGraphSafe: true,
+                } && enumerableCollection.ElementTypeId == enumerableElement?.Id) ||
+                (forEach.IsAsync && enumerableCollection is
+                {
+                    Kind: UnifiedTypeKind.AsyncEnumerable,
+                    IsGraphSafe: true,
+                } && enumerableCollection.ElementTypeId == enumerableElement?.Id) ||
+                (!forEach.IsAsync && enumerableCollection is
+                {
+                    Kind: UnifiedTypeKind.BorrowedSequence,
+                } && enumerableCollection.ElementTypeId == enumerableElement?.Id) ||
                 (enumerableCollection is
-                    {
-                        Kind: UnifiedTypeKind.Enumerable,
-                        IsGraphSafe: true,
-                    } && enumerableCollection.ElementTypeId == enumerableElement?.Id) ||
-                (enumerableCollection is
-                    {
-                        Kind: UnifiedTypeKind.BorrowedSequence,
-                    } && enumerableCollection.ElementTypeId == enumerableElement?.Id) ||
-                (enumerableCollection is
-                    {
-                        IsGraphSafe: true,
-                    } && enumerableCollection.Kind is not (
-                        UnifiedTypeKind.Enumerable or UnifiedTypeKind.BorrowedSequence));
+                {
+                    IsGraphSafe: true,
+                } && enumerableCollection.Kind is not (
+                        UnifiedTypeKind.Enumerable or UnifiedTypeKind.AsyncEnumerable or
+                        UnifiedTypeKind.BorrowedSequence));
             bool hasCompatibleCurrentReference = iterationKind switch
             {
                 ForEachIterationKind.Value => true,
-                ForEachIterationKind.RefReadOnly =>
+                ForEachIterationKind.RefReadOnly when !forEach.IsAsync =>
                     statementInfo.CurrentProperty is { ReturnsByRef: true } or
-                        { ReturnsByRefReadonly: true },
+                    { ReturnsByRefReadonly: true },
                 _ => false,
             };
             bool supportsEnumerator =
-                !statementInfo.IsAsynchronous &&
+                statementInfo.IsAsynchronous == forEach.IsAsync &&
                 hasGraphSafeCollectionContract &&
                 enumerableElement is { IsGraphSafe: true } &&
                 iterationVariable is not null &&
@@ -366,7 +373,8 @@ public sealed class RoslynSemanticBinder
                 MethodDescriptor getCurrent = GetMethodDescriptor(statementInfo.CurrentProperty!.GetMethod!);
                 ForEachDisposalKind disposalKind = GetForEachDisposalKind(
                     context.SemanticModel.Compilation,
-                    statementInfo);
+                    statementInfo,
+                    forEach.IsAsync);
                 MethodDescriptor? dispose = disposalKind == ForEachDisposalKind.None
                     ? null
                     : GetMethodDescriptor(statementInfo.DisposeMethod!);
@@ -374,7 +382,9 @@ public sealed class RoslynSemanticBinder
                     statementInfo.GetEnumeratorMethod!.ReturnType);
                 forEachLoops.Add(forEach.Id, new BoundForEachInfo(
                     forEach.Id,
-                    ForEachIterationStrategy.Enumerator,
+                    forEach.IsAsync
+                        ? ForEachIterationStrategy.AsyncEnumerator
+                        : ForEachIterationStrategy.Enumerator,
                     iterationKind,
                     enumerableCollection!.Id,
                     enumerableElement!.Id,
@@ -391,7 +401,8 @@ public sealed class RoslynSemanticBinder
                 SemanticDiagnosticCodes.ForEachCollectionNotSupported,
                 UnifiedDiagnosticSeverity.Error,
                 "Foreach requires System.String, a one-dimensional zero-based array, a borrowed " +
-                "Span<T>/ReadOnlySpan<T>, or a graph-safe synchronous enumerable/pattern collection. " +
+                "Span<T>/ReadOnlySpan<T>, or a graph-safe synchronous/async enumerable or pattern " +
+                "collection with a matching foreach form. " +
                 "The iteration variable and Current value must use the exact graph-safe element " +
                 "type without hidden conversions; borrowed references must be ref readonly.",
                 forEach.Collection.Span,
@@ -401,7 +412,8 @@ public sealed class RoslynSemanticBinder
 
     private static ForEachDisposalKind GetForEachDisposalKind(
         Compilation compilation,
-        ForEachStatementInfo statementInfo)
+        ForEachStatementInfo statementInfo,
+        bool isAsync)
     {
         if (statementInfo.DisposeMethod is not IMethodSymbol disposeMethod ||
             statementInfo.GetEnumeratorMethod?.ReturnType is not ITypeSymbol enumeratorType)
@@ -409,7 +421,8 @@ public sealed class RoslynSemanticBinder
             return ForEachDisposalKind.None;
         }
 
-        INamedTypeSymbol? disposable = compilation.GetTypeByMetadataName("System.IDisposable");
+        INamedTypeSymbol? disposable = compilation.GetTypeByMetadataName(
+            isAsync ? "System.IAsyncDisposable" : "System.IDisposable");
         if (disposable is null ||
             !SymbolEqualityComparer.Default.Equals(
                 disposeMethod.ContainingType.OriginalDefinition,
@@ -736,7 +749,8 @@ public sealed class RoslynSemanticBinder
                 kind,
                 nullability,
                 isGraphSafe,
-                kind is UnifiedTypeKind.Enumerable or UnifiedTypeKind.BorrowedSequence &&
+                kind is UnifiedTypeKind.Enumerable or UnifiedTypeKind.AsyncEnumerable or
+                    UnifiedTypeKind.BorrowedSequence &&
                     TryGetSequenceElementType(type, out ITypeSymbol? element)
                     ? GetTypeDescriptor(element!).Id
                     : null);
@@ -834,6 +848,14 @@ public sealed class RoslynSemanticBinder
                 GetTypeDescriptor(enumerableElement!).IsGraphSafe);
         }
 
+        if (TryGetAsyncEnumerableElementType(type, out ITypeSymbol? asyncEnumerableElement))
+        {
+            return (
+                UnifiedTypeKind.AsyncEnumerable,
+                nullability,
+                GetTypeDescriptor(asyncEnumerableElement!).IsGraphSafe);
+        }
+
         if (TryGetBorrowedSequenceElementType(type, out _))
         {
             return (UnifiedTypeKind.BorrowedSequence, nullability, false);
@@ -920,7 +942,47 @@ public sealed class RoslynSemanticBinder
         ITypeSymbol type,
         out ITypeSymbol? elementType) =>
         TryGetEnumerableElementType(type, out elementType) ||
+        TryGetAsyncEnumerableElementType(type, out elementType) ||
         TryGetBorrowedSequenceElementType(type, out elementType);
+
+    private static bool TryGetAsyncEnumerableElementType(
+        ITypeSymbol type,
+        out ITypeSymbol? elementType)
+    {
+        if (type is not INamedTypeSymbol named)
+        {
+            elementType = null;
+            return false;
+        }
+
+        INamedTypeSymbol[] candidates = [named, .. named.AllInterfaces];
+        ITypeSymbol[] candidateElements = candidates
+            .Where(static candidate =>
+                candidate.Arity == 1 &&
+                candidate.Name == "IAsyncEnumerable" &&
+                candidate.ContainingNamespace.ToDisplayString() ==
+                    "System.Collections.Generic")
+            .Select(static candidate => candidate.TypeArguments[0])
+            .ToArray();
+        var elements = new List<ITypeSymbol>();
+        foreach (ITypeSymbol candidateElement in candidateElements)
+        {
+            if (!elements.Any(existing =>
+                    SymbolEqualityComparer.IncludeNullability.Equals(existing, candidateElement)))
+            {
+                elements.Add(candidateElement);
+            }
+        }
+
+        if (elements.Count != 1)
+        {
+            elementType = null;
+            return false;
+        }
+
+        elementType = elements[0];
+        return true;
+    }
 
     private static bool TryGetBorrowedSequenceElementType(
         ITypeSymbol type,

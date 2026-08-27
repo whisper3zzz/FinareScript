@@ -250,8 +250,9 @@ public sealed class AuthoringSurfaceProjector
         "variable" or "assignment" => AuthoringActionCategory.State,
         "branch" or "loop" or "loopEntry" or "break" or "continue" =>
             AuthoringActionCategory.Flow,
-        "invocation" or "await" or "enumeratorAcquire" or "enumeratorMoveNext" or
-            "enumeratorCurrent" or "enumeratorDispose" => AuthoringActionCategory.Call,
+        "invocation" or "await" or "enumeratorAcquire" or "asyncEnumeratorAcquire" or
+            "enumeratorMoveNext" or "enumeratorCurrent" or "enumeratorDispose" or
+            "asyncEnumeratorDispose" => AuthoringActionCategory.Call,
         "return" => AuthoringActionCategory.Exit,
         _ => AuthoringActionCategory.Value,
     };

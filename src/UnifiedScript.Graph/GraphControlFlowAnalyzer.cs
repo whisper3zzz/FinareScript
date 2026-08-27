@@ -737,7 +737,8 @@ public sealed class GraphControlFlowAnalyzer
             {
                 GraphNode[] cleanupNodes = cleanupRegion.NodeIds
                     .Select(id => controlNodes[id])
-                    .Where(static node => node.Kind == "enumeratorDispose")
+                    .Where(static node => node.Kind is
+                        "enumeratorDispose" or "asyncEnumeratorDispose")
                     .ToArray();
                 GraphNode normalCleanup = cleanupNodes.Single(node =>
                     node.Properties.GetValueOrDefault("reason") == "exhaustionOrBreak");

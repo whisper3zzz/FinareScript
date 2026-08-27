@@ -892,21 +892,25 @@ to M8.5. See [`BLOCKBREAKER_ROUND_TRIP.md`](BLOCKBREAKER_ROUND_TRIP.md).
 - [ ] publish the supported Visual C# profile, opaque-code escape boundary, and
   diagnostics for code that cannot be represented visually
 
-Progress (2026-08-28): semantics v0.4 carries Roslyn's exact per-expression
+Progress (2026-08-28): semantics v0.5 carries Roslyn's exact per-expression
 `NullFlowState` independently from type nullability. Graph and Authoring Surface
 actions publish validated `typeNullability`/`nullFlowState` properties, and the
 round-trip semantic digest includes the flow result. Regression proves a
 nullable parameter is `notNull` after an early-return guard and returns to
 `maybeNull` after assignment.
 
-HIR v0.9 and semantics v0.4 now also preserve `value` versus `ref readonly`
+HIR v0.9 and semantics v0.5 now also preserve `value` versus `ref readonly`
 iteration, scoped `Span<T>`/`ReadOnlySpan<T>` borrowed sequences, graph-safe
 pattern enumerators, and exact `none`/`required`/`conditional` disposal. Graph
 publishes copied versus borrowed-read-only value semantics and creates cleanup
 regions only when C# actually owns disposal. Exact collection editing preserves
-the alias mode. The 517/517 managed suite, 57/57 repository validator, and full
-BlockBreaker managed round trip pass. Mutable `ref`, `await foreach`, and the
-published Visual C#/opaque-code boundary remain. See
+the alias mode. `await foreach` over graph-safe `IAsyncEnumerable<T>` now
+preserves the exact async enumerator protocol, awaited move-next, and required
+or conditional `DisposeAsync` cleanup through Semantics, Graph, strict JSON,
+derived CFG, and exact collection replacement. Mutable `ref`, borrowed async
+iteration, async visual construction, and the published Visual C#/opaque-code
+boundary remain. The 519/519 managed suite and 58/58 repository invariants
+pass for this slice. See
 [`NULLABILITY_FLOW.md`](NULLABILITY_FLOW.md) and
 [`FOREACH_LOOPS.md`](FOREACH_LOOPS.md).
 

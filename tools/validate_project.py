@@ -2714,7 +2714,7 @@ def main() -> int:
     graph_json_test = graph_json_test_path.read_text(encoding="utf-8")
     nullability_doc = nullability_doc_path.read_text(encoding="utf-8")
     require(
-        'CurrentSchemaVersion = "unifiedscript.semantics/v0.4"'
+        'CurrentSchemaVersion = "unifiedscript.semantics/v0.5"'
         in semantic_model_source
         and "UnifiedNullFlowState" in semantic_model_source
         and "NullFlowState" in semantic_model_source
@@ -2726,7 +2726,7 @@ def main() -> int:
         and "AnalyzeAndProject_PublishesFlowSensitiveNullStateAtEveryExpressionUse"
         in semantic_pipeline_test
         and "Serialize_RejectsInvalidNullFlowMetadata" in graph_json_test
-        and "unifiedscript.semantics/v0.4" in nullability_doc
+        and "unifiedscript.semantics/v0.5" in nullability_doc
         and "unifiedscript.bound-method/v0.3" in roundtrip_runtime
         and "- [x] flow-sensitive nullability state" in roadmap,
         "M8.5 flow-sensitive nullability semantic, Graph, or documentation contract is incomplete",
@@ -2787,6 +2787,29 @@ def main() -> int:
         "M8.5 borrowed/ref-readonly or conditional-disposal foreach contract is incomplete",
     )
     checks.append("M8.5 foreach preserves borrowed refs and exact conditional disposal")
+    graph_cfg_source = (
+        ROOT / "src" / "UnifiedScript.Graph" / "GraphControlFlowAnalyzer.cs"
+    ).read_text(encoding="utf-8")
+    require(
+        "AsyncEnumerable" in semantic_model_source
+        and "AsyncEnumerator" in semantic_model_source
+        and "TryGetAsyncEnumerableElementType" in semantic_binder_source
+        and '"asyncEnumerator"' in graph_projector_source
+        and '"moveNextAsync"' in graph_projector_source
+        and '"asyncEnumeratorDispose"' in graph_projector_source
+        and '"disposeAsyncMethodId"' in graph_projector_source
+        and "isAsyncEnumeratorForEach" in graph_json_source
+        and '"asyncEnumeratorDispose"' in graph_cfg_source
+        and "UnifiedTypeKind.AsyncEnumerable" in source_patch_source
+        and "Apply_ReplacesAsyncForEachCollectionAndPreservesAwaitProtocol"
+        in source_patch_test
+        and "AnalyzeAndProject_PreservesAsyncEnumeratorAndAwaitedCleanup"
+        in semantic_pipeline_test
+        and "await foreach" in foreach_doc
+        and "DisposeAsync" in foreach_doc,
+        "M8.5 async foreach semantic, Graph, CFG, edit, test, or documentation contract is incomplete",
+    )
+    checks.append("M8.5 await foreach preserves async move-next and disposal cleanup")
     require(
         "UUnifiedScriptWorldSubsystem final" in unreal_world_host_header
         and "public UWorldSubsystem" in unreal_world_host_header

@@ -5504,6 +5504,66 @@ public sealed class CSharpSourcePatchApplierTests
     }
 
     [Fact]
+    public void Apply_ReplacesAsyncForEachCollectionAndPreservesAwaitProtocol()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using System.Threading.Tasks;
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static async Task<int> Count(
+                    IAsyncEnumerable<int> primary,
+                    IAsyncEnumerable<int> fallback)
+                {
+                    int total = 0;
+                    await foreach (int value in primary)
+                    {
+                        total = total + value;
+                    }
+
+                    return total;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/AsyncForEachCollectionEdit.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirForEachStatement loop = Assert.IsType<HirForEachStatement>(method.Body.Statements[1]);
+        SemanticId collectionType = GetTypeId(original, loop.Collection);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new ReplaceForEachCollectionPatchOperation(
+                loop.Id,
+                loop.Collection.Id,
+                collectionType,
+                new LocalReferencePatchExpression(
+                    method.Parameters[1].Id,
+                    method.Parameters[1].Name,
+                    collectionType))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Contains(
+            "await foreach (int value in fallback)",
+            Assert.Single(result.PatchedRequest!.Sources).Source,
+            StringComparison.Ordinal);
+        HirForEachStatement changedLoop = Assert.Single(
+            result.Analysis!.Hir!.DescendantsAndSelf().OfType<HirForEachStatement>());
+        Assert.Equal(loop.Id, changedLoop.Id);
+        Assert.Equal(loop.Variable.Id, changedLoop.Variable.Id);
+        Assert.True(changedLoop.IsAsync);
+        BoundForEachInfo binding = Assert.Single(result.Analysis.Semantics!.ForEachLoops);
+        Assert.Equal(ForEachIterationStrategy.AsyncEnumerator, binding.Strategy);
+        Assert.Equal(ForEachDisposalKind.Required, binding.DisposalKind);
+    }
+
+    [Fact]
     public void Apply_ReplacesBorrowedRefReadonlyForEachCollectionWithoutLosingAliasMode()
     {
         const string source = """

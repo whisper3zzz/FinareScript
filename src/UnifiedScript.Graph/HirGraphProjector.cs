@@ -1061,7 +1061,8 @@ public sealed class HirGraphProjector
             SemanticId parentRegionId)
         {
             BoundForEachInfo binding = semantics.GetForEach(statement.Id);
-            if (binding.Strategy == ForEachIterationStrategy.Enumerator)
+            if (binding.Strategy is ForEachIterationStrategy.Enumerator or
+                ForEachIterationStrategy.AsyncEnumerator)
             {
                 return ProjectEnumeratorForEach(statement, binding, incoming, parentRegionId);
             }
@@ -1232,6 +1233,14 @@ public sealed class HirGraphProjector
             IReadOnlyList<ControlEndpoint> incoming,
             SemanticId parentRegionId)
         {
+            bool isAsync = binding.Strategy == ForEachIterationStrategy.AsyncEnumerator;
+            if (isAsync != statement.IsAsync ||
+                isAsync && binding.IterationKind != ForEachIterationKind.Value)
+            {
+                throw new InvalidOperationException(
+                    $"Enumerator foreach '{statement.Id}' has inconsistent async/iteration semantics.");
+            }
+
             SemanticId? disposeMethodId = binding.DisposeMethodId;
             if (binding.EnumeratorTypeId is not SemanticId enumeratorTypeId ||
                 binding.GetEnumeratorMethodId is not SemanticId getEnumeratorMethodId ||
@@ -1240,7 +1249,7 @@ public sealed class HirGraphProjector
                 binding.RequiresDisposal != disposeMethodId.HasValue)
             {
                 throw new InvalidOperationException(
-                    $"Enumerator foreach '{statement.Id}' has an incomplete synchronous protocol.");
+                    $"Enumerator foreach '{statement.Id}' has an incomplete protocol.");
             }
 
             SemanticId loopRegionId = RegionId(statement.Id, GraphRegionKind.Loop);
@@ -1285,6 +1294,7 @@ public sealed class HirGraphProjector
             ExpressionProjection collection = ProjectExpression(
                 statement.Collection,
                 collectionRegionId);
+            string collectionStrategy = isAsync ? "asyncEnumerator" : "enumerator";
             SemanticId captureId = SemanticId.FromKey(
                 $"{statement.Id}:graph:foreach:collectionCapture");
             AddNode(new GraphNode(
@@ -1301,7 +1311,7 @@ public sealed class HirGraphProjector
                 new SortedDictionary<string, string>(StringComparer.Ordinal)
                 {
                     ["evaluation"] = "once",
-                    ["strategy"] = "enumerator",
+                    ["strategy"] = collectionStrategy,
                 }),
                 collectionRegionId);
             IReadOnlyList<ControlEndpoint> beforeCapture = ConnectEffectChain(
@@ -1311,11 +1321,11 @@ public sealed class HirGraphProjector
             AddRequiredDataEdge(collection.Value, new ValueEndpoint(captureId, "value"));
 
             SemanticId acquireId = SemanticId.FromKey(
-                $"{statement.Id}:graph:foreach:enumeratorAcquire");
+                $"{statement.Id}:graph:foreach:{collectionStrategy}Acquire");
             AddNode(new GraphNode(
                 acquireId,
-                "enumeratorAcquire",
-                "Get Enumerator",
+                isAsync ? "asyncEnumeratorAcquire" : "enumeratorAcquire",
+                isAsync ? "Get Async Enumerator" : "Get Enumerator",
                 statement.Collection.Span,
                 [
                     new GraphPort("in", GraphPortDirection.Input, GraphPortKind.Control),
@@ -1325,7 +1335,8 @@ public sealed class HirGraphProjector
                 ],
                 new SortedDictionary<string, string>(StringComparer.Ordinal)
                 {
-                    ["getEnumeratorMethodId"] = getEnumeratorMethodId.Value,
+                    [isAsync ? "getAsyncEnumeratorMethodId" : "getEnumeratorMethodId"] =
+                        getEnumeratorMethodId.Value,
                     ["enumeratorTypeId"] = enumeratorTypeId.Value,
                 }),
                 collectionRegionId);
@@ -1339,25 +1350,38 @@ public sealed class HirGraphProjector
             {
                 ["loopForm"] = "forEach",
                 ["collectionEvaluation"] = "once",
-                ["collectionStrategy"] = "enumerator",
+                ["collectionStrategy"] = collectionStrategy,
                 ["iterationAdvance"] = "beforeBody",
-                ["continueTarget"] = "moveNext",
+                ["continueTarget"] = isAsync ? "moveNextAsync" : "moveNext",
                 ["disposal"] = binding.DisposalKind switch
                 {
                     ForEachDisposalKind.None => "none",
-                    ForEachDisposalKind.Required => "finally",
-                    ForEachDisposalKind.Conditional => "conditionalFinally",
+                    ForEachDisposalKind.Required => isAsync ? "asyncFinally" : "finally",
+                    ForEachDisposalKind.Conditional => isAsync
+                        ? "conditionalAsyncFinally"
+                        : "conditionalFinally",
                     _ => throw new ArgumentOutOfRangeException(
                         nameof(binding.DisposalKind),
                         binding.DisposalKind,
                         "Unknown foreach disposal kind."),
                 },
                 ["evaluationOrder"] = binding.RequiresDisposal
-                    ? "collection,getEnumerator,moveNext,current,body,dispose"
-                    : "collection,getEnumerator,moveNext,current,body",
+                    ? isAsync
+                        ? "collection,getAsyncEnumerator,moveNextAsync,awaitMoveNext,current,body," +
+                            "disposeAsync,awaitDispose"
+                        : "collection,getEnumerator,moveNext,current,body,dispose"
+                    : isAsync
+                        ? "collection,getAsyncEnumerator,moveNextAsync,awaitMoveNext,current,body"
+                        : "collection,getEnumerator,moveNext,current,body",
                 ["iterationKind"] = GetForEachIterationKindName(binding.IterationKind),
-                ["moveNextMethodId"] = moveNextMethodId.Value,
+                [isAsync ? "moveNextAsyncMethodId" : "moveNextMethodId"] = moveNextMethodId.Value,
             };
+            if (isAsync)
+            {
+                loopProperties["suspension"] = binding.RequiresDisposal
+                    ? "moveNextAndDispose"
+                    : "moveNext";
+            }
             if (binding.RequiresDisposal)
             {
                 loopProperties["cleanupOn"] = "exhaustion,break,return,exception";
@@ -1366,7 +1390,7 @@ public sealed class HirGraphProjector
             AddNode(new GraphNode(
                 statement.Id,
                 "loop",
-                "Foreach Move Next",
+                isAsync ? "Await Foreach Move Next" : "Foreach Move Next",
                 statement.Span,
                 [
                     new GraphPort("in", GraphPortDirection.Input, GraphPortKind.Control),
@@ -1422,16 +1446,17 @@ public sealed class HirGraphProjector
             SemanticId? exceptionDisposeId = null;
             if (binding.RequiresDisposal)
             {
+                string disposeOperation = isAsync ? "disposeAsync" : "dispose";
                 normalDisposeId = SemanticId.FromKey(
-                    $"{statement.Id}:graph:foreach:dispose:normal");
+                    $"{statement.Id}:graph:foreach:{disposeOperation}:normal");
                 returnDisposeId = SemanticId.FromKey(
-                    $"{statement.Id}:graph:foreach:dispose:return");
+                    $"{statement.Id}:graph:foreach:{disposeOperation}:return");
                 exceptionDisposeId = SemanticId.FromKey(
-                    $"{statement.Id}:graph:foreach:dispose:exception");
+                    $"{statement.Id}:graph:foreach:{disposeOperation}:exception");
                 LoopContext? outerCleanup = FindCleanupContext();
                 AddEnumeratorDisposeNode(
                     normalDisposeId.Value,
-                    "Dispose Enumerator",
+                    isAsync ? "Await Dispose Async" : "Dispose Enumerator",
                     "exhaustionOrBreak",
                     "then",
                     disposeMethodId!.Value,
@@ -1439,10 +1464,11 @@ public sealed class HirGraphProjector
                     statement.Span,
                     cleanupRegionId!.Value,
                     binding.DisposalKind,
+                    isAsync,
                     nextExceptionalCleanupId: null);
                 AddEnumeratorDisposeNode(
                     returnDisposeId.Value,
-                    "Dispose Before Return",
+                    isAsync ? "Await Dispose Async Before Return" : "Dispose Before Return",
                     "return",
                     "then",
                     disposeMethodId.Value,
@@ -1450,10 +1476,11 @@ public sealed class HirGraphProjector
                     statement.Span,
                     cleanupRegionId.Value,
                     binding.DisposalKind,
+                    isAsync,
                     nextExceptionalCleanupId: null);
                 AddEnumeratorDisposeNode(
                     exceptionDisposeId.Value,
-                    "Dispose Before Rethrow",
+                    isAsync ? "Await Dispose Async Before Rethrow" : "Dispose Before Rethrow",
                     "exception",
                     "throw",
                     disposeMethodId.Value,
@@ -1461,6 +1488,7 @@ public sealed class HirGraphProjector
                     statement.Span,
                     cleanupRegionId.Value,
                     binding.DisposalKind,
+                    isAsync,
                     outerCleanup?.ExceptionCleanupNodeId);
             }
 
@@ -1516,18 +1544,23 @@ public sealed class HirGraphProjector
             SourceSpan span,
             SemanticId cleanupRegionId,
             ForEachDisposalKind disposalKind,
+            bool isAsync,
             SemanticId? nextExceptionalCleanupId)
         {
             var properties = new SortedDictionary<string, string>(StringComparer.Ordinal)
             {
-                ["cleanupSemantics"] = "finally",
-                ["disposeMethodId"] = disposeMethodId.Value,
+                ["cleanupSemantics"] = isAsync ? "asyncFinally" : "finally",
+                [isAsync ? "disposeAsyncMethodId" : "disposeMethodId"] = disposeMethodId.Value,
                 ["disposalCondition"] = disposalKind == ForEachDisposalKind.Conditional
                     ? "runtimeInterface"
                     : "always",
                 ["reason"] = reason,
                 ["preservesPendingTransfer"] = reason == "exhaustionOrBreak" ? "false" : "true",
             };
+            if (isAsync)
+            {
+                properties["await"] = "true";
+            }
             if (reason == "exception")
             {
                 properties["nextExceptionalCleanup"] =
@@ -1536,7 +1569,7 @@ public sealed class HirGraphProjector
 
             AddNode(new GraphNode(
                 nodeId,
-                "enumeratorDispose",
+                isAsync ? "asyncEnumeratorDispose" : "enumeratorDispose",
                 label,
                 span,
                 [

@@ -9,7 +9,7 @@ control-flow location are deliberately separate facts:
 - `BoundNodeInfo.NullFlowState` records Roslyn's state at that exact expression
   use (`unknown`, `notNull`, or `maybeNull`).
 
-Semantics schema `unifiedscript.semantics/v0.4` serializes both. This avoids a
+Semantics schema `unifiedscript.semantics/v0.5` serializes both. This avoids a
 client guessing null safety from source spelling or from a declaration that may
 have been narrowed, assigned, or merged before the selected node.
 

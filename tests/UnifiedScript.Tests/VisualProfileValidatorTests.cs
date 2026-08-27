@@ -125,15 +125,20 @@ public sealed class VisualProfileValidatorTests
         const string source = """
             using System;
             using System.Collections.Generic;
+            using System.Threading.Tasks;
 
             class Example
             {
                 [Visual]
-                void Run(Span<int> writable, ReadOnlySpan<int> borrowed, IAsyncEnumerable<int> asyncValues)
+                async Task Run(
+                    Span<int> writable,
+                    ReadOnlySpan<int> borrowed,
+                    IAsyncEnumerable<int> asyncValues)
                 {
                     foreach (ref readonly int value in borrowed) { }
                     foreach (ref int value in writable) { }
                     await foreach (int value in asyncValues) { }
+                    await foreach (ref readonly int value in asyncValues) { }
                 }
             }
             """;

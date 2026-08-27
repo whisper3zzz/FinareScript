@@ -307,12 +307,12 @@ public sealed class VisualProfileValidator
 
         public override void VisitForEachStatement(ForEachStatementSyntax node)
         {
-            if (!node.AwaitKeyword.IsKind(SyntaxKind.None))
+            if (!node.AwaitKeyword.IsKind(SyntaxKind.None) && node.Type is RefTypeSyntax)
             {
                 Add(
                     diagnostics,
                     VisualProfileDiagnosticCodes.StatementNotSupported,
-                    "Await foreach is not yet represented in Visual C# profile v0.2.",
+                    "Await foreach cannot carry borrowed ref iteration across suspension points.",
                     node,
                     filePath);
                 return;

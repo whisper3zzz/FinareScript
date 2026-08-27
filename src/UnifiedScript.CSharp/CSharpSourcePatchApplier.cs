@@ -8499,7 +8499,8 @@ public sealed class CSharpSourcePatchApplier
             return ExpressionBuildResult.Failure(
                 SemanticPatchDiagnosticCodes.TypeMismatch,
                 "A foreach collection must be a local/parameter reference with exact System.String, " +
-                "graph-safe one-dimensional array/enumerable, or borrowed Span<T>/ReadOnlySpan<T> type.");
+                "graph-safe one-dimensional array/sync-or-async enumerable, or borrowed " +
+                "Span<T>/ReadOnlySpan<T> type.");
         }
 
         return BuildLocalReferenceExpression(
@@ -8516,7 +8517,8 @@ public sealed class CSharpSourcePatchApplier
 
     private static bool IsForEachCollectionType(TypeDescriptor type) =>
         (type.IsGraphSafe &&
-            type.Kind is UnifiedTypeKind.String or UnifiedTypeKind.Array or UnifiedTypeKind.Enumerable) ||
+            type.Kind is UnifiedTypeKind.String or UnifiedTypeKind.Array or
+                UnifiedTypeKind.Enumerable or UnifiedTypeKind.AsyncEnumerable) ||
         (type.Kind == UnifiedTypeKind.BorrowedSequence && type.ElementTypeId is not null);
 
     private static bool ForEachCollectionElementMatches(
@@ -8530,7 +8532,8 @@ public sealed class CSharpSourcePatchApplier
                     collectionType.MetadataName[..^2],
                     elementType.MetadataName,
                     StringComparison.Ordinal),
-            UnifiedTypeKind.Enumerable or UnifiedTypeKind.BorrowedSequence =>
+            UnifiedTypeKind.Enumerable or UnifiedTypeKind.AsyncEnumerable or
+                UnifiedTypeKind.BorrowedSequence =>
                 collectionType.ElementTypeId == elementType.Id,
             _ => false,
         };

@@ -340,12 +340,20 @@ public static class GraphJson
                     "value") ?? "value";
                 bool isIndexedForEach = isForEach &&
                     string.Equals(collectionStrategy, "indexed", StringComparison.Ordinal);
-                bool isEnumeratorForEach = isForEach &&
+                bool isSynchronousEnumeratorForEach = isForEach &&
                     string.Equals(collectionStrategy, "enumerator", StringComparison.Ordinal);
-                bool isDisposalEnumeratorForEach = isEnumeratorForEach &&
-                    disposal is "finally" or "conditionalFinally";
-                bool isConditionalDisposalForEach = isEnumeratorForEach &&
-                    string.Equals(disposal, "conditionalFinally", StringComparison.Ordinal);
+                bool isAsyncEnumeratorForEach = isForEach &&
+                    string.Equals(collectionStrategy, "asyncEnumerator", StringComparison.Ordinal);
+                bool isEnumeratorForEach = isSynchronousEnumeratorForEach ||
+                    isAsyncEnumeratorForEach;
+                bool isDisposalEnumeratorForEach =
+                    isSynchronousEnumeratorForEach &&
+                        disposal is "finally" or "conditionalFinally" ||
+                    isAsyncEnumeratorForEach &&
+                        disposal is "asyncFinally" or "conditionalAsyncFinally";
+                bool isConditionalDisposalForEach =
+                    isSynchronousEnumeratorForEach && disposal == "conditionalFinally" ||
+                    isAsyncEnumeratorForEach && disposal == "conditionalAsyncFinally";
                 bool isNonDisposalEnumeratorForEach = isEnumeratorForEach &&
                     string.Equals(disposal, "none", StringComparison.Ordinal);
                 bool hasSupportedLoopForm = !hasLoopForm || isFor || isDoWhile || isForEach;
@@ -390,7 +398,10 @@ public static class GraphJson
                     loopNode.Properties.TryGetValue("iterationAdvance", out string? advance) &&
                     string.Equals(advance, "beforeBody", StringComparison.Ordinal) &&
                     loopNode.Properties.TryGetValue("continueTarget", out string? forEachContinueTarget) &&
-                    string.Equals(forEachContinueTarget, "moveNext", StringComparison.Ordinal) &&
+                    string.Equals(
+                        forEachContinueTarget,
+                        isAsyncEnumeratorForEach ? "moveNextAsync" : "moveNext",
+                        StringComparison.Ordinal) &&
                     disposal is not null &&
                     loopNode.Properties.TryGetValue("evaluationOrder", out string? forEachOrder) &&
                     (isIndexedForEach &&
@@ -403,7 +414,10 @@ public static class GraphJson
                         (isDisposalEnumeratorForEach &&
                             string.Equals(
                                 forEachOrder,
-                                "collection,getEnumerator,moveNext,current,body,dispose",
+                                isAsyncEnumeratorForEach
+                                    ? "collection,getAsyncEnumerator,moveNextAsync,awaitMoveNext," +
+                                        "current,body,disposeAsync,awaitDispose"
+                                    : "collection,getEnumerator,moveNext,current,body,dispose",
                                 StringComparison.Ordinal) &&
                             loopNode.Properties.TryGetValue("cleanupOn", out string? cleanupOn) &&
                             string.Equals(
@@ -413,11 +427,22 @@ public static class GraphJson
                         isNonDisposalEnumeratorForEach &&
                             string.Equals(
                                 forEachOrder,
-                                "collection,getEnumerator,moveNext,current,body",
+                                isAsyncEnumeratorForEach
+                                    ? "collection,getAsyncEnumerator,moveNextAsync,awaitMoveNext," +
+                                        "current,body"
+                                    : "collection,getEnumerator,moveNext,current,body",
                                 StringComparison.Ordinal) &&
                             !loopNode.Properties.ContainsKey("cleanupOn")) &&
-                        loopNode.Properties.TryGetValue("moveNextMethodId", out string? moveNextMethodId) &&
-                        SemanticId.TryParse(moveNextMethodId, out _));
+                        HasSemanticIdProperty(
+                            loopNode,
+                            isAsyncEnumeratorForEach
+                                ? "moveNextAsyncMethodId"
+                                : "moveNextMethodId") &&
+                        (!isAsyncEnumeratorForEach ||
+                            loopNode.Properties.GetValueOrDefault("suspension") ==
+                                (isDisposalEnumeratorForEach
+                                    ? "moveNextAndDispose"
+                                    : "moveNext")));
                 GraphNode[] collectionNodes = isForEach && hasValidChildren
                     ? children[0].NodeIds.Select(id => nodes[id]).ToArray()
                     : [];
@@ -431,12 +456,16 @@ public static class GraphJson
                     .Where(static node => node.Kind == "iterationVariable")
                     .ToArray();
                 GraphNode[] acquisitions = collectionNodes
-                    .Where(static node => node.Kind == "enumeratorAcquire")
+                    .Where(node => node.Kind == (isAsyncEnumeratorForEach
+                        ? "asyncEnumeratorAcquire"
+                        : "enumeratorAcquire"))
                     .ToArray();
                 GraphNode[] cleanupNodes = isDisposalEnumeratorForEach && hasValidChildren
                     ? children[2].NodeIds
                         .Select(id => nodes[id])
-                        .Where(static node => node.Kind == "enumeratorDispose")
+                        .Where(node => node.Kind == (isAsyncEnumeratorForEach
+                            ? "asyncEnumeratorDispose"
+                            : "enumeratorDispose"))
                         .ToArray()
                     : [];
                 bool hasValidCommonForEachNodes = !isForEach ||
@@ -454,23 +483,37 @@ public static class GraphJson
                         "valueSemantics",
                         "copy") ==
                         (iterationKind == "refReadOnly" ? "borrowedReadOnly" : "copy") &&
-                    (!isIndexedForEach || iterationKind == "value");
+                    (!(isIndexedForEach || isAsyncEnumeratorForEach) ||
+                        iterationKind == "value");
                 bool hasValidEnumeratorNodes = !isEnumeratorForEach ||
                     acquisitions.Length == 1 &&
                     iterationVariables.Length == 1 &&
-                    HasSemanticIdProperty(acquisitions[0], "getEnumeratorMethodId") &&
+                    HasSemanticIdProperty(
+                        acquisitions[0],
+                        isAsyncEnumeratorForEach
+                            ? "getAsyncEnumeratorMethodId"
+                            : "getEnumeratorMethodId") &&
                     HasSemanticIdProperty(acquisitions[0], "enumeratorTypeId") &&
                     HasSemanticIdProperty(iterationVariables[0], "currentGetterMethodId") &&
                     (isNonDisposalEnumeratorForEach && cleanupNodes.Length == 0 ||
                     isDisposalEnumeratorForEach && cleanupNodes.Length == 3 &&
-                    cleanupNodes.All(static node =>
-                        node.Properties.GetValueOrDefault("cleanupSemantics") == "finally" &&
-                        HasSemanticIdProperty(node, "disposeMethodId")) &&
+                    cleanupNodes.All(node =>
+                        node.Properties.GetValueOrDefault("cleanupSemantics") ==
+                            (isAsyncEnumeratorForEach ? "asyncFinally" : "finally") &&
+                        HasSemanticIdProperty(
+                            node,
+                            isAsyncEnumeratorForEach
+                                ? "disposeAsyncMethodId"
+                                : "disposeMethodId") &&
+                        (!isAsyncEnumeratorForEach ||
+                            node.Properties.GetValueOrDefault("await") == "true")) &&
                     cleanupNodes.All(node =>
                         node.Properties.GetValueOrDefault("disposalCondition", "always") ==
                         (isConditionalDisposalForEach ? "runtimeInterface" : "always")) &&
-                    cleanupNodes.Select(static node =>
-                            node.Properties.GetValueOrDefault("disposeMethodId"))
+                    cleanupNodes.Select(node => node.Properties.GetValueOrDefault(
+                            isAsyncEnumeratorForEach
+                                ? "disposeAsyncMethodId"
+                                : "disposeMethodId"))
                         .Distinct(StringComparer.Ordinal)
                         .Count() == 1 &&
                     cleanupNodes
@@ -500,7 +543,7 @@ public static class GraphJson
                 {
                     throw new JsonException(
                         $"Loop region '{region.Id}' requires a valid while, do-while, indexed or " +
-                        "synchronous enumerator foreach shape, or ordered for " +
+                        "synchronous enumerator foreach, async enumerator foreach, or ordered for " +
                         "initializer/body/increment children with the required entry nodes and properties.");
                 }
             }

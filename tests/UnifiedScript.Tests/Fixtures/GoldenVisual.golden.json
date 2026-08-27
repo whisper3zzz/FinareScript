@@ -8,8 +8,8 @@
       "utf8Bytes": 5453
     },
     "semantics": {
-      "schemaVersion": "unifiedscript.semantics/v0.4",
-      "sha256": "41897390bf34355a71d2331dc658bf426cdc3552720720639c1ba8cc8ad55974",
+      "schemaVersion": "unifiedscript.semantics/v0.5",
+      "sha256": "c5be1ce80555fa5afd767f8da69e5436f0d3998556d2c6a2c7ab27e035982142",
       "utf8Bytes": 3833
     },
     "graph": {

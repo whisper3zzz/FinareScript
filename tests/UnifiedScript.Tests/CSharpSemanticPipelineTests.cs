@@ -513,7 +513,7 @@ public sealed class CSharpSemanticPipelineTests
 
         Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
         BoundCompilation semantics = Assert.IsType<BoundCompilation>(result.Semantics);
-        Assert.Equal("unifiedscript.semantics/v0.4", semantics.SchemaVersion);
+        Assert.Equal("unifiedscript.semantics/v0.5", semantics.SchemaVersion);
         HirMethodDeclaration method = Assert.Single(Assert.Single(result.Hir!.Types).Methods);
         HirIfStatement guard = Assert.IsType<HirIfStatement>(method.Body.Statements[0]);
         HirIdentifierExpression guardUse = Assert.IsType<HirIdentifierExpression>(
@@ -546,7 +546,7 @@ public sealed class CSharpSemanticPipelineTests
         Assert.Equal("maybeNull", optionalNode.Properties["nullFlowState"]);
         Assert.Equal("nullable", optionalNode.Properties["typeNullability"]);
         string semanticJson = SemanticJson.Serialize(semantics);
-        Assert.Contains("\"schemaVersion\": \"unifiedscript.semantics/v0.4\"", semanticJson);
+        Assert.Contains("\"schemaVersion\": \"unifiedscript.semantics/v0.5\"", semanticJson);
         Assert.Contains("\"nullFlowState\": \"maybeNull\"", semanticJson);
     }
 
@@ -1155,6 +1155,90 @@ public sealed class CSharpSemanticPipelineTests
     }
 
     [Fact]
+    public void AnalyzeAndProject_PreservesAsyncEnumeratorAndAwaitedCleanup()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using System.Threading.Tasks;
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static async Task<int> Sum(IAsyncEnumerable<int> values)
+                {
+                    int total = 0;
+                    await foreach (int value in values)
+                    {
+                        total = total + value;
+                    }
+
+                    return total;
+                }
+            }
+            """;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            source,
+            "AsyncEnumerableForEach.cs");
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        BoundCompilation semantics = result.Semantics!;
+        Assert.Equal("unifiedscript.semantics/v0.5", semantics.SchemaVersion);
+        HirForEachStatement statement = Assert.Single(
+            result.Hir!.DescendantsAndSelf().OfType<HirForEachStatement>());
+        Assert.True(statement.IsAsync);
+        Assert.Equal(HirForEachIterationKind.Value, statement.IterationKind);
+
+        BoundForEachInfo binding = Assert.Single(semantics.ForEachLoops);
+        Assert.Equal(ForEachIterationStrategy.AsyncEnumerator, binding.Strategy);
+        Assert.Equal(ForEachIterationKind.Value, binding.IterationKind);
+        Assert.Equal(ForEachDisposalKind.Required, binding.DisposalKind);
+        Assert.True(binding.RequiresDisposal);
+        Assert.NotNull(binding.EnumeratorTypeId);
+        Assert.NotNull(binding.GetEnumeratorMethodId);
+        Assert.NotNull(binding.MoveNextMethodId);
+        Assert.NotNull(binding.CurrentGetterMethodId);
+        Assert.NotNull(binding.DisposeMethodId);
+        TypeDescriptor collectionType = FindType(semantics, binding.CollectionTypeId);
+        Assert.Equal(UnifiedTypeKind.AsyncEnumerable, collectionType.Kind);
+        Assert.Equal(binding.ElementTypeId, collectionType.ElementTypeId);
+        Assert.True(FindMethod(semantics, binding.MoveNextMethodId!.Value)
+            .Effects.HasFlag(MethodEffects.Async | MethodEffects.Latent));
+        Assert.True(FindMethod(semantics, binding.DisposeMethodId!.Value)
+            .Effects.HasFlag(MethodEffects.Async | MethodEffects.Latent));
+
+        GraphDocument graph = new HirGraphProjector().Project(result.Hir!, semantics);
+        GraphFunction function = Assert.Single(graph.Functions);
+        GraphNode loop = Assert.Single(function.Nodes, node => node.Id == binding.NodeId);
+        Assert.Equal("asyncEnumerator", loop.Properties["collectionStrategy"]);
+        Assert.Equal("asyncFinally", loop.Properties["disposal"]);
+        Assert.Equal("moveNextAsync", loop.Properties["continueTarget"]);
+        Assert.Equal("moveNextAndDispose", loop.Properties["suspension"]);
+        Assert.True(loop.Properties.ContainsKey("moveNextAsyncMethodId"));
+        Assert.Single(function.Nodes, static node => node.Kind == "asyncEnumeratorAcquire");
+        GraphNode[] cleanupNodes = function.Nodes
+            .Where(static node => node.Kind == "asyncEnumeratorDispose")
+            .ToArray();
+        Assert.Equal(3, cleanupNodes.Length);
+        Assert.All(cleanupNodes, static node =>
+        {
+            Assert.Equal("asyncFinally", node.Properties["cleanupSemantics"]);
+            Assert.Equal("true", node.Properties["await"]);
+            Assert.True(node.Properties.ContainsKey("disposeAsyncMethodId"));
+        });
+
+        string graphJson = GraphJson.Serialize(graph);
+        Assert.Equal(graphJson, GraphJson.Serialize(GraphJson.Deserialize(graphJson)));
+        GraphControlFlowLoop flow = Assert.Single(
+            Assert.Single(new GraphControlFlowAnalyzer().AnalyzeAndValidate(graph).Functions).Loops);
+        Assert.NotNull(flow.CleanupRegionId);
+        Assert.NotNull(flow.NormalCleanupNodeId);
+        Assert.NotNull(flow.ReturnCleanupNodeId);
+        Assert.NotNull(flow.ExceptionCleanupNodeId);
+    }
+
+    [Fact]
     public void AnalyzeAndProject_PreservesBorrowedRefReadonlySpanWithoutCleanup()
     {
         const string source = """
@@ -1183,7 +1267,7 @@ public sealed class CSharpSemanticPipelineTests
             "BorrowedRefReadonlyForEach.cs");
 
         Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
-        Assert.Equal("unifiedscript.semantics/v0.4", result.Semantics!.SchemaVersion);
+        Assert.Equal("unifiedscript.semantics/v0.5", result.Semantics!.SchemaVersion);
         HirForEachStatement statement = Assert.Single(
             result.Hir!.DescendantsAndSelf().OfType<HirForEachStatement>());
         Assert.Equal(HirForEachIterationKind.RefReadOnly, statement.IterationKind);
