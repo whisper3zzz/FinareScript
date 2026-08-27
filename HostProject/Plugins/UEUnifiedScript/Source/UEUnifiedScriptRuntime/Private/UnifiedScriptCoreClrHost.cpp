@@ -55,6 +55,32 @@ using FTickScriptEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
     uint64 WorldHostId,
     uint64 InstanceId,
     float DeltaSeconds);
+using FConfigureScriptDebugEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
+    uint64 WorldHostId,
+    uint64 InstanceId,
+    const uint8* ConfigurationData,
+    int32 ConfigurationLength);
+using FBeginScriptDebugTickEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
+    uint64 WorldHostId,
+    uint64 InstanceId,
+    float DeltaSeconds);
+using FGetScriptDebugStateEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
+    uint64 WorldHostId,
+    uint64 InstanceId,
+    uint8* Buffer,
+    int32 BufferCapacity);
+using FControlScriptDebugEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
+    uint64 WorldHostId,
+    uint64 InstanceId,
+    int32 Control,
+    const uint8* PauseIdData,
+    int32 PauseIdLength);
+using FDisableScriptDebugEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
+    uint64 WorldHostId,
+    uint64 InstanceId);
+using FIsScriptDebugActiveEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
+    uint64 WorldHostId,
+    uint64 InstanceId);
 using FDispatchEventEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
     uint64 WorldHostId,
     uint64 InstanceId,
@@ -84,22 +110,22 @@ using FGetLastErrorEntryPoint = int32(UNIFIEDSCRIPT_HOSTFXR_CALLTYPE *)(
 
 constexpr int32 LoadAssemblyAndGetFunctionPointerDelegateType = 5;
 constexpr int32 MaximumManagedBoundaryErrorBytes = 1024 * 1024;
+constexpr int32 MaximumManagedDebugStateBytes = 4 * 1024 * 1024;
 
-FString ReadManagedBoundaryError(
+FString ReadManagedUtf8(
     FGetLastErrorEntryPoint EntryPoint,
+    int32 MaximumBytes,
     uint64 WorldHostId)
 {
     if (EntryPoint == nullptr)
     {
         return {};
     }
-
     const int32 RequiredBytes = EntryPoint(WorldHostId, nullptr, 0);
-    if (RequiredBytes <= 0 || RequiredBytes > MaximumManagedBoundaryErrorBytes)
+    if (RequiredBytes <= 0 || RequiredBytes > MaximumBytes)
     {
         return {};
     }
-
     TArray<uint8> Buffer;
     Buffer.SetNumZeroed(RequiredBytes + 1);
     const int32 WrittenBytes = EntryPoint(
@@ -111,6 +137,44 @@ FString ReadManagedBoundaryError(
         return {};
     }
     return FString(UTF8_TO_TCHAR(reinterpret_cast<const char*>(Buffer.GetData())));
+}
+
+FString ReadManagedDebugState(
+    FGetScriptDebugStateEntryPoint EntryPoint,
+    uint64 WorldHostId,
+    uint64 InstanceId)
+{
+    if (EntryPoint == nullptr)
+    {
+        return {};
+    }
+    const int32 RequiredBytes = EntryPoint(WorldHostId, InstanceId, nullptr, 0);
+    if (RequiredBytes <= 0 || RequiredBytes > MaximumManagedDebugStateBytes)
+    {
+        return {};
+    }
+    TArray<uint8> Buffer;
+    Buffer.SetNumZeroed(RequiredBytes + 1);
+    const int32 WrittenBytes = EntryPoint(
+        WorldHostId,
+        InstanceId,
+        Buffer.GetData(),
+        Buffer.Num());
+    if (WrittenBytes <= 0 || WrittenBytes > RequiredBytes)
+    {
+        return {};
+    }
+    return FString(UTF8_TO_TCHAR(reinterpret_cast<const char*>(Buffer.GetData())));
+}
+
+FString ReadManagedBoundaryError(
+    FGetLastErrorEntryPoint EntryPoint,
+    uint64 WorldHostId)
+{
+    return ReadManagedUtf8(
+        EntryPoint,
+        MaximumManagedBoundaryErrorBytes,
+        WorldHostId);
 }
 
 FString DescribeManagedFailure(
@@ -285,6 +349,12 @@ void FUnifiedScriptCoreClrHost::Shutdown()
     CollectRetiredLoadContextsEntryPoint = nullptr;
     CreateScriptEntryPoint = nullptr;
     TickScriptEntryPoint = nullptr;
+    ConfigureScriptDebugEntryPoint = nullptr;
+    BeginScriptDebugTickEntryPoint = nullptr;
+    GetScriptDebugStateEntryPoint = nullptr;
+    ControlScriptDebugEntryPoint = nullptr;
+    DisableScriptDebugEntryPoint = nullptr;
+    IsScriptDebugActiveEntryPoint = nullptr;
     DispatchEventEntryPoint = nullptr;
     ReloadScriptEntryPoint = nullptr;
     DestroyScriptEntryPoint = nullptr;
@@ -467,6 +537,240 @@ bool FUnifiedScriptCoreClrHost::TickManagedScript(
             WorldHostId);
         return false;
     }
+    OutError.Reset();
+    return true;
+}
+
+bool FUnifiedScriptCoreClrHost::ConfigureManagedScriptDebug(
+    uint64 WorldHostId,
+    uint64 InstanceId,
+    const FString& ConfigurationJson,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::CoreClr::Private;
+    check(IsInGameThread());
+    FConfigureScriptDebugEntryPoint EntryPoint = nullptr;
+    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+    {
+        FScopeLock Lock(&StateLock);
+        if (State != EUnifiedScriptCoreClrHostState::Ready ||
+            ConfigureScriptDebugEntryPoint == nullptr)
+        {
+            OutError = TEXT("The live World debug configuration entry point is unavailable.");
+            return false;
+        }
+        EntryPoint = reinterpret_cast<FConfigureScriptDebugEntryPoint>(
+            ConfigureScriptDebugEntryPoint);
+        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+            GetLastManagedErrorEntryPoint);
+    }
+    if (ConfigurationJson.IsEmpty())
+    {
+        OutError = TEXT("A live World debug configuration is required.");
+        return false;
+    }
+    const FTCHARToUTF8 ConfigurationUtf8(*ConfigurationJson);
+    const int32 Result = EntryPoint(
+        WorldHostId,
+        InstanceId,
+        reinterpret_cast<const uint8*>(ConfigurationUtf8.Get()),
+        ConfigurationUtf8.Length());
+    if (Result != 0)
+    {
+        OutError = DescribeManagedFailure(
+            TEXT("Live World debug configuration"),
+            Result,
+            ErrorEntryPoint,
+            WorldHostId);
+        return false;
+    }
+    OutError.Reset();
+    return true;
+}
+
+bool FUnifiedScriptCoreClrHost::BeginManagedScriptDebugTick(
+    uint64 WorldHostId,
+    uint64 InstanceId,
+    float DeltaSeconds,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::CoreClr::Private;
+    check(IsInGameThread());
+    FBeginScriptDebugTickEntryPoint EntryPoint = nullptr;
+    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+    {
+        FScopeLock Lock(&StateLock);
+        if (State != EUnifiedScriptCoreClrHostState::Ready ||
+            BeginScriptDebugTickEntryPoint == nullptr)
+        {
+            OutError = TEXT("The live World debug tick entry point is unavailable.");
+            return false;
+        }
+        EntryPoint = reinterpret_cast<FBeginScriptDebugTickEntryPoint>(
+            BeginScriptDebugTickEntryPoint);
+        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+            GetLastManagedErrorEntryPoint);
+    }
+    const int32 Result = EntryPoint(WorldHostId, InstanceId, DeltaSeconds);
+    if (Result != 0)
+    {
+        OutError = DescribeManagedFailure(
+            TEXT("Live World debug tick"),
+            Result,
+            ErrorEntryPoint,
+            WorldHostId);
+        return false;
+    }
+    OutError.Reset();
+    return true;
+}
+
+bool FUnifiedScriptCoreClrHost::GetManagedScriptDebugState(
+    uint64 WorldHostId,
+    uint64 InstanceId,
+    FString& OutJson,
+    FString& OutError) const
+{
+    using namespace UE::UnifiedScript::CoreClr::Private;
+    check(IsInGameThread());
+    FGetScriptDebugStateEntryPoint EntryPoint = nullptr;
+    {
+        FScopeLock Lock(&StateLock);
+        if (State != EUnifiedScriptCoreClrHostState::Ready ||
+            GetScriptDebugStateEntryPoint == nullptr)
+        {
+            OutJson.Reset();
+            OutError = TEXT("The live World debug state entry point is unavailable.");
+            return false;
+        }
+        EntryPoint = reinterpret_cast<FGetScriptDebugStateEntryPoint>(
+            GetScriptDebugStateEntryPoint);
+    }
+    OutJson = ReadManagedDebugState(EntryPoint, WorldHostId, InstanceId);
+    if (OutJson.IsEmpty())
+    {
+        OutError = TEXT("The managed script has no live World debug state.");
+        return false;
+    }
+    OutError.Reset();
+    return true;
+}
+
+bool FUnifiedScriptCoreClrHost::ControlManagedScriptDebug(
+    uint64 WorldHostId,
+    uint64 InstanceId,
+    int32 Control,
+    const FString& PauseId,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::CoreClr::Private;
+    check(IsInGameThread());
+    FControlScriptDebugEntryPoint EntryPoint = nullptr;
+    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+    {
+        FScopeLock Lock(&StateLock);
+        if (State != EUnifiedScriptCoreClrHostState::Ready ||
+            ControlScriptDebugEntryPoint == nullptr)
+        {
+            OutError = TEXT("The live World debug control entry point is unavailable.");
+            return false;
+        }
+        EntryPoint = reinterpret_cast<FControlScriptDebugEntryPoint>(
+            ControlScriptDebugEntryPoint);
+        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+            GetLastManagedErrorEntryPoint);
+    }
+    const FTCHARToUTF8 PauseIdUtf8(*PauseId);
+    const int32 Result = EntryPoint(
+        WorldHostId,
+        InstanceId,
+        Control,
+        reinterpret_cast<const uint8*>(PauseIdUtf8.Get()),
+        PauseIdUtf8.Length());
+    if (Result != 0)
+    {
+        OutError = DescribeManagedFailure(
+            TEXT("Live World debug control"),
+            Result,
+            ErrorEntryPoint,
+            WorldHostId);
+        return false;
+    }
+    OutError.Reset();
+    return true;
+}
+
+bool FUnifiedScriptCoreClrHost::DisableManagedScriptDebug(
+    uint64 WorldHostId,
+    uint64 InstanceId,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::CoreClr::Private;
+    check(IsInGameThread());
+    FDisableScriptDebugEntryPoint EntryPoint = nullptr;
+    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+    {
+        FScopeLock Lock(&StateLock);
+        if (State != EUnifiedScriptCoreClrHostState::Ready ||
+            DisableScriptDebugEntryPoint == nullptr)
+        {
+            OutError = TEXT("The live World debug detach entry point is unavailable.");
+            return false;
+        }
+        EntryPoint = reinterpret_cast<FDisableScriptDebugEntryPoint>(
+            DisableScriptDebugEntryPoint);
+        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+            GetLastManagedErrorEntryPoint);
+    }
+    const int32 Result = EntryPoint(WorldHostId, InstanceId);
+    if (Result != 0)
+    {
+        OutError = DescribeManagedFailure(
+            TEXT("Live World debug detach"),
+            Result,
+            ErrorEntryPoint,
+            WorldHostId);
+        return false;
+    }
+    OutError.Reset();
+    return true;
+}
+
+bool FUnifiedScriptCoreClrHost::IsManagedScriptDebugActive(
+    uint64 WorldHostId,
+    uint64 InstanceId,
+    bool& bOutActive,
+    FString& OutError) const
+{
+    using namespace UE::UnifiedScript::CoreClr::Private;
+    check(IsInGameThread());
+    bOutActive = false;
+    FIsScriptDebugActiveEntryPoint EntryPoint = nullptr;
+    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
+    {
+        FScopeLock Lock(&StateLock);
+        if (State != EUnifiedScriptCoreClrHostState::Ready ||
+            IsScriptDebugActiveEntryPoint == nullptr)
+        {
+            OutError = TEXT("The live World debug activity entry point is unavailable.");
+            return false;
+        }
+        EntryPoint = reinterpret_cast<FIsScriptDebugActiveEntryPoint>(
+            IsScriptDebugActiveEntryPoint);
+        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+            GetLastManagedErrorEntryPoint);
+    }
+    const int32 Result = EntryPoint(WorldHostId, InstanceId);
+    if (Result < 0)
+    {
+        OutError = DescribeManagedFailure(
+            TEXT("Live World debug activity query"),
+            Result,
+            ErrorEntryPoint,
+            WorldHostId);
+        return false;
+    }
+    bOutActive = Result != 0;
     OutError.Reset();
     return true;
 }
@@ -809,6 +1113,18 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
         &CollectRetiredLoadContextsEntryPoint);
     const int32 CreateScriptResult = LoadEntryPoint(TEXT("CreateScript"), &CreateScriptEntryPoint);
     const int32 TickScriptResult = LoadEntryPoint(TEXT("TickScript"), &TickScriptEntryPoint);
+    const int32 ConfigureDebugResult = LoadEntryPoint(
+        TEXT("ConfigureScriptDebug"), &ConfigureScriptDebugEntryPoint);
+    const int32 BeginDebugTickResult = LoadEntryPoint(
+        TEXT("BeginScriptDebugTick"), &BeginScriptDebugTickEntryPoint);
+    const int32 DebugStateResult = LoadEntryPoint(
+        TEXT("GetScriptDebugState"), &GetScriptDebugStateEntryPoint);
+    const int32 DebugControlResult = LoadEntryPoint(
+        TEXT("ControlScriptDebug"), &ControlScriptDebugEntryPoint);
+    const int32 DisableDebugResult = LoadEntryPoint(
+        TEXT("DisableScriptDebug"), &DisableScriptDebugEntryPoint);
+    const int32 DebugActiveResult = LoadEntryPoint(
+        TEXT("IsScriptDebugActive"), &IsScriptDebugActiveEntryPoint);
     const int32 DispatchEventResult = LoadEntryPoint(TEXT("DispatchEvent"), &DispatchEventEntryPoint);
     const int32 ReloadScriptResult = LoadEntryPoint(TEXT("ReloadScript"), &ReloadScriptEntryPoint);
     const int32 DestroyScriptResult = LoadEntryPoint(TEXT("DestroyScript"), &DestroyScriptEntryPoint);
@@ -824,6 +1140,18 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
         &CollectRetiredLoadContextsEntryPoint);
     const int32 CreateScriptResult = LoadEntryPoint("CreateScript", &CreateScriptEntryPoint);
     const int32 TickScriptResult = LoadEntryPoint("TickScript", &TickScriptEntryPoint);
+    const int32 ConfigureDebugResult = LoadEntryPoint(
+        "ConfigureScriptDebug", &ConfigureScriptDebugEntryPoint);
+    const int32 BeginDebugTickResult = LoadEntryPoint(
+        "BeginScriptDebugTick", &BeginScriptDebugTickEntryPoint);
+    const int32 DebugStateResult = LoadEntryPoint(
+        "GetScriptDebugState", &GetScriptDebugStateEntryPoint);
+    const int32 DebugControlResult = LoadEntryPoint(
+        "ControlScriptDebug", &ControlScriptDebugEntryPoint);
+    const int32 DisableDebugResult = LoadEntryPoint(
+        "DisableScriptDebug", &DisableScriptDebugEntryPoint);
+    const int32 DebugActiveResult = LoadEntryPoint(
+        "IsScriptDebugActive", &IsScriptDebugActiveEntryPoint);
     const int32 DispatchEventResult = LoadEntryPoint("DispatchEvent", &DispatchEventEntryPoint);
     const int32 ReloadScriptResult = LoadEntryPoint("ReloadScript", &ReloadScriptEntryPoint);
     const int32 DestroyScriptResult = LoadEntryPoint("DestroyScript", &DestroyScriptEntryPoint);
@@ -833,6 +1161,8 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
 #endif
     if (CreateResult != 0 || DestroyResult != 0 || CountResult != 0 || CollectResult != 0 ||
         CreateScriptResult != 0 || TickScriptResult != 0 || DispatchEventResult != 0 ||
+        ConfigureDebugResult != 0 || BeginDebugTickResult != 0 || DebugStateResult != 0 ||
+        DebugControlResult != 0 || DisableDebugResult != 0 || DebugActiveResult != 0 ||
         ReloadScriptResult != 0 ||
         DestroyScriptResult != 0 || ScriptCountResult != 0 || MetricsResult != 0 ||
         LastErrorResult != 0 ||
@@ -842,6 +1172,12 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
         CollectRetiredLoadContextsEntryPoint == nullptr ||
         CreateScriptEntryPoint == nullptr ||
         TickScriptEntryPoint == nullptr ||
+        ConfigureScriptDebugEntryPoint == nullptr ||
+        BeginScriptDebugTickEntryPoint == nullptr ||
+        GetScriptDebugStateEntryPoint == nullptr ||
+        ControlScriptDebugEntryPoint == nullptr ||
+        DisableScriptDebugEntryPoint == nullptr ||
+        IsScriptDebugActiveEntryPoint == nullptr ||
         DispatchEventEntryPoint == nullptr ||
         ReloadScriptEntryPoint == nullptr ||
         DestroyScriptEntryPoint == nullptr ||
@@ -850,7 +1186,7 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
         GetLastManagedErrorEntryPoint == nullptr)
     {
         return FailLocked(FString::Printf(
-            TEXT("Managed entry-point loading failed: world=(0x%08X,0x%08X,0x%08X,0x%08X) script=(0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X) diagnostics=(0x%08X,0x%08X)."),
+            TEXT("Managed entry-point loading failed: world=(0x%08X,0x%08X,0x%08X,0x%08X) script=(0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X) debug=(0x%08X,0x%08X,0x%08X,0x%08X,0x%08X,0x%08X) diagnostics=(0x%08X,0x%08X)."),
             static_cast<uint32>(CreateResult),
             static_cast<uint32>(DestroyResult),
             static_cast<uint32>(CountResult),
@@ -861,6 +1197,12 @@ bool FUnifiedScriptCoreClrHost::InitializeLocked()
             static_cast<uint32>(ReloadScriptResult),
             static_cast<uint32>(DestroyScriptResult),
             static_cast<uint32>(ScriptCountResult),
+            static_cast<uint32>(ConfigureDebugResult),
+            static_cast<uint32>(BeginDebugTickResult),
+            static_cast<uint32>(DebugStateResult),
+            static_cast<uint32>(DebugControlResult),
+            static_cast<uint32>(DisableDebugResult),
+            static_cast<uint32>(DebugActiveResult),
             static_cast<uint32>(MetricsResult),
             static_cast<uint32>(LastErrorResult)));
     }
@@ -888,6 +1230,12 @@ bool FUnifiedScriptCoreClrHost::FailLocked(FString Message)
     GetWorldCountEntryPoint = nullptr;
     CreateScriptEntryPoint = nullptr;
     TickScriptEntryPoint = nullptr;
+    ConfigureScriptDebugEntryPoint = nullptr;
+    BeginScriptDebugTickEntryPoint = nullptr;
+    GetScriptDebugStateEntryPoint = nullptr;
+    ControlScriptDebugEntryPoint = nullptr;
+    DisableScriptDebugEntryPoint = nullptr;
+    IsScriptDebugActiveEntryPoint = nullptr;
     DispatchEventEntryPoint = nullptr;
     ReloadScriptEntryPoint = nullptr;
     DestroyScriptEntryPoint = nullptr;

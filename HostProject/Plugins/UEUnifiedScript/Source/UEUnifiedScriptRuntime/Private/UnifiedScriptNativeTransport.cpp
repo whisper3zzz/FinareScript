@@ -1,6 +1,8 @@
 #include "UnifiedScriptNativeTransport.h"
 
 #include "Containers/StringConv.h"
+#include "HAL/Event.h"
+#include "HAL/PlatformProcess.h"
 #include "Misc/ScopeLock.h"
 #include "Misc/ScopeExit.h"
 #include "UnifiedScriptDelegateProxy.h"
@@ -15,6 +17,25 @@ namespace UE::UnifiedScript::NativeTransport::LifecycleDiagnostics
 std::atomic<int32> GLiveContextCount{0};
 std::atomic<int32> GAttachedContextCount{0};
 }
+
+struct FUnifiedScriptNativeBridgeContext::FPendingGameThreadCall
+{
+    explicit FPendingGameThreadCall(
+        TUniqueFunction<void(FUnifiedScriptInvocationBridge&)>&& InOperation)
+        : Operation(MoveTemp(InOperation))
+        , Completion(FPlatformProcess::GetSynchEventFromPool(true))
+    {
+    }
+
+    ~FPendingGameThreadCall()
+    {
+        FPlatformProcess::ReturnSynchEventToPool(Completion);
+    }
+
+    TUniqueFunction<void(FUnifiedScriptInvocationBridge&)> Operation;
+    FEvent* Completion = nullptr;
+    std::atomic<bool> bExecuted{false};
+};
 
 FUnifiedScriptNativeBridgeContext::FUnifiedScriptNativeBridgeContext(
     FUnifiedScriptInvocationBridge& InBridge)
@@ -99,6 +120,7 @@ void FUnifiedScriptNativeBridgeContext::Release()
 void FUnifiedScriptNativeBridgeContext::Detach()
 {
     check(IsInGameThread());
+    SuspendWorkerDispatch();
     TArray<TStrongObjectPtr<UObject>> Subscriptions;
     bool bWasAttached = false;
     {
@@ -131,23 +153,43 @@ void FUnifiedScriptNativeBridgeContext::Detach()
 }
 
 bool FUnifiedScriptNativeBridgeContext::Execute(
-    TFunctionRef<void(FUnifiedScriptInvocationBridge&)> Operation)
+    TUniqueFunction<void(FUnifiedScriptInvocationBridge&)>&& Operation)
 {
-    FScopeLock Lock(&BridgeLock);
-    if (Bridge == nullptr)
+    if (IsInGameThread())
     {
-        return false;
+        FScopeLock Lock(&BridgeLock);
+        if (Bridge == nullptr)
+        {
+            return false;
+        }
+        Operation(*Bridge);
+        return true;
     }
-    Operation(*Bridge);
-    return true;
+
+    TSharedPtr<FPendingGameThreadCall> Pending =
+        MakeShared<FPendingGameThreadCall>(MoveTemp(Operation));
+    {
+        FScopeLock Lock(&BridgeLock);
+        if (Bridge == nullptr ||
+            !bAcceptWorkerDispatch.load(std::memory_order_acquire))
+        {
+            return false;
+        }
+        ReferenceCount.fetch_add(1, std::memory_order_relaxed);
+        PendingGameThreadCalls.Enqueue(Pending);
+    }
+    Pending->Completion->Wait();
+    const bool bExecuted = Pending->bExecuted.load(std::memory_order_acquire);
+    Release();
+    return bExecuted;
 }
 
 bool FUnifiedScriptNativeBridgeContext::ExecuteGameThreadFast(
-    TFunctionRef<void(FUnifiedScriptInvocationBridge&)> Operation)
+    TUniqueFunction<void(FUnifiedScriptInvocationBridge&)>&& Operation)
 {
     if (!IsInGameThread())
     {
-        return false;
+        return Execute(MoveTemp(Operation));
     }
     FUnifiedScriptInvocationBridge* Current =
         FastBridge.load(std::memory_order_acquire);
@@ -160,17 +202,46 @@ bool FUnifiedScriptNativeBridgeContext::ExecuteGameThreadFast(
 }
 
 bool FUnifiedScriptNativeBridgeContext::ExecuteCallFrame(
-    TFunctionRef<void(
+    TUniqueFunction<void(
         FUnifiedScriptInvocationBridge&,
-        FPendingCallFrameResult&)> Operation)
+        FPendingCallFrameResult&)>&& Operation)
 {
-    FScopeLock Lock(&BridgeLock);
-    if (Bridge == nullptr)
+    return Execute(
+        [this, Operation = MoveTemp(Operation)](
+            FUnifiedScriptInvocationBridge& CurrentBridge) mutable
+        {
+            Operation(CurrentBridge, PendingCallFrameResult);
+        });
+}
+
+void FUnifiedScriptNativeBridgeContext::PumpGameThreadCalls()
+{
+    check(IsInGameThread());
+    TSharedPtr<FPendingGameThreadCall> Pending;
+    while (PendingGameThreadCalls.Dequeue(Pending))
     {
-        return false;
+        {
+            FScopeLock Lock(&BridgeLock);
+            if (Bridge != nullptr &&
+                bAcceptWorkerDispatch.load(std::memory_order_acquire))
+            {
+                Pending->Operation(*Bridge);
+                Pending->bExecuted.store(true, std::memory_order_release);
+            }
+        }
+        Pending->Completion->Trigger();
     }
-    Operation(*Bridge, PendingCallFrameResult);
-    return true;
+}
+
+void FUnifiedScriptNativeBridgeContext::SuspendWorkerDispatch()
+{
+    check(IsInGameThread());
+    bAcceptWorkerDispatch.store(false, std::memory_order_release);
+    TSharedPtr<FPendingGameThreadCall> Pending;
+    while (PendingGameThreadCalls.Dequeue(Pending))
+    {
+        Pending->Completion->Trigger();
+    }
 }
 
 bool FUnifiedScriptNativeBridgeContext::AcquireTransformSnapshot(

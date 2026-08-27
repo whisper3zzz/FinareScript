@@ -119,6 +119,15 @@ public:
     bool StepOneDebugFrame();
     bool IsPausedAtDebugFrameBoundary() const { return bDebugPausedAtFrameBoundary; }
 
+    /** Attaches an instrumented semantic generation to this live World instance. */
+    bool ConfigureSemanticDebug(const FString& ConfigurationJson, FString& OutError);
+    bool ControlSemanticDebug(
+        EUnifiedScriptSemanticDebugControl Control,
+        const FString& PauseId,
+        FString& OutError);
+    bool DisableSemanticDebug(FString& OutError);
+    const FString& GetSemanticDebugStateJson() const { return SemanticDebugStateJson; }
+
     /** Restores one state to the current C# declaration default. */
     UFUNCTION(BlueprintCallable, CallInEditor, Category="UnifiedScript|State")
     bool ResetScriptStateOverride(const FString& Name);
@@ -181,6 +190,8 @@ private:
         const FUnifiedScriptStateMigrationReport& Migration);
     FString ResolveConfiguredPath(const FString& ConfiguredPath) const;
     void SetScriptFailure(FString Error);
+    bool RefreshSemanticDebugState(FString& OutError, bool& bOutFaulted);
+    bool DisableSemanticDebugAndDrain(FString& OutError);
 
     UPROPERTY(Transient)
     TObjectPtr<UUnifiedScriptAsset> ActiveScriptAsset;
@@ -203,4 +214,8 @@ private:
     FUnifiedScriptRuntimeDiagnostic LastRuntimeDiagnostic;
     bool bDebugPausedAtFrameBoundary = false;
     bool bDebugStepFrameRequested = false;
+    bool bSemanticDebugEnabled = false;
+    bool bSemanticDebugTickActive = false;
+    bool bSemanticDebugPaused = false;
+    FString SemanticDebugStateJson;
 };

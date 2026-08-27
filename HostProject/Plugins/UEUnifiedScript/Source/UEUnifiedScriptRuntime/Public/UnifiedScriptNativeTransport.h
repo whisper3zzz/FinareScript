@@ -179,13 +179,17 @@ public:
     bool TryRetain();
     void Release();
     void Detach();
-    bool Execute(TFunctionRef<void(FUnifiedScriptInvocationBridge&)> Operation);
+    bool Execute(TUniqueFunction<void(FUnifiedScriptInvocationBridge&)>&& Operation);
     bool ExecuteGameThreadFast(
-        TFunctionRef<void(FUnifiedScriptInvocationBridge&)> Operation);
+        TUniqueFunction<void(FUnifiedScriptInvocationBridge&)>&& Operation);
     bool ExecuteCallFrame(
-        TFunctionRef<void(
+        TUniqueFunction<void(
             FUnifiedScriptInvocationBridge&,
-            FPendingCallFrameResult&)> Operation);
+            FPendingCallFrameResult&)>&& Operation);
+    /** Executes worker-originated bridge calls without blocking the Game Thread. */
+    void PumpGameThreadCalls();
+    /** Rejects and releases worker calls before World teardown. */
+    void SuspendWorkerDispatch();
     bool SubscribeEvent(
         FUnifiedScriptObjectHandle Source,
         uint64 EventId,
@@ -202,6 +206,7 @@ public:
         TFunctionRef<bool(FUnifiedScriptAsyncService&)> Operation);
 
 private:
+    struct FPendingGameThreadCall;
     ~FUnifiedScriptNativeBridgeContext();
 
     std::atomic<uint32> ReferenceCount{1};
@@ -212,6 +217,8 @@ private:
     FUnifiedScriptGameplayDataPlane* GameplayDataPlane = nullptr;
     FUnifiedScriptAsyncService* AsyncService = nullptr;
     FPendingCallFrameResult PendingCallFrameResult;
+    TQueue<TSharedPtr<FPendingGameThreadCall>, EQueueMode::Mpsc> PendingGameThreadCalls;
+    std::atomic<bool> bAcceptWorkerDispatch{true};
     uint64 NextEventSubscriptionId = 1;
     TMap<uint64, TStrongObjectPtr<UObject>> EventSubscriptions;
 };

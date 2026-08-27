@@ -12,6 +12,8 @@ namespace UE::UnifiedScript::DebugWorkbench::Private
 constexpr TCHAR SessionSchema[] = TEXT("unifiedscript.debug-session/v0.2");
 constexpr TCHAR PauseSchema[] = TEXT("unifiedscript.debug-pause/v0.2");
 constexpr TCHAR EvaluationSchema[] = TEXT("unifiedscript.debug-evaluation/v0.1");
+constexpr TCHAR LiveWorldPublishSchema[] =
+    TEXT("unifiedscript.live-world-debug-publish/v0.1");
 
 FString BuildUrl(const FString& ServerUrl, const TCHAR* Path)
 {
@@ -129,6 +131,8 @@ bool ReadGeneration(
         return false;
     }
     OutGeneration.Number = Number;
+    Object->TryGetStringField(TEXT("domainId"), OutGeneration.DomainId);
+    Object->TryGetStringField(TEXT("imageKey"), OutGeneration.ImageKey);
     return true;
 }
 
@@ -270,6 +274,12 @@ FString FUnifiedScriptDebugWorkbench::BuildEvaluateUrl(const FString& ServerUrl)
         ServerUrl, TEXT("/api/debug/evaluate"));
 }
 
+FString FUnifiedScriptDebugWorkbench::BuildLiveWorldPublishUrl(const FString& ServerUrl)
+{
+    return UE::UnifiedScript::DebugWorkbench::Private::BuildUrl(
+        ServerUrl, TEXT("/api/debug/publish-live-world"));
+}
+
 bool FUnifiedScriptDebugWorkbench::BuildStartRequest(
     const FString& SourceCompilationId,
     const FString& SemanticConfigurationId,
@@ -376,6 +386,106 @@ bool FUnifiedScriptDebugWorkbench::BuildEvaluateRequest(
     Root->SetStringField(TEXT("pauseId"), Session.Pause->PauseId);
     Root->SetNumberField(TEXT("frameId"), FrameId);
     Root->SetStringField(TEXT("expression"), TrimmedExpression);
+    return UE::UnifiedScript::DebugWorkbench::Private::SerializeObject(
+        Root, OutJson, OutError);
+}
+
+bool FUnifiedScriptDebugWorkbench::BuildLiveWorldPublishRequest(
+    const FString& SourceCompilationId,
+    const FString& SemanticConfigurationId,
+    FString& OutJson,
+    FString& OutError)
+{
+    if (SourceCompilationId.IsEmpty() || SemanticConfigurationId.IsEmpty())
+    {
+        OutError = TEXT("Live World debug publish requires current compiler identities.");
+        return false;
+    }
+    const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
+    Root->SetStringField(TEXT("expectedSourceCompilationId"), SourceCompilationId);
+    Root->SetStringField(
+        TEXT("expectedSemanticConfigurationId"), SemanticConfigurationId);
+    return UE::UnifiedScript::DebugWorkbench::Private::SerializeObject(
+        Root, OutJson, OutError);
+}
+
+bool FUnifiedScriptDebugWorkbench::ParseLiveWorldPublishResponse(
+    const FString& Json,
+    FUnifiedScriptLiveWorldDebugPublish& OutPublish,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::DebugWorkbench::Private;
+    TSharedPtr<FJsonObject> Root;
+    const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Json);
+    const TSharedPtr<FJsonObject>* Generation = nullptr;
+    FString Schema;
+    FUnifiedScriptLiveWorldDebugPublish Candidate;
+    if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid() ||
+        !Root->TryGetStringField(TEXT("schemaVersion"), Schema) ||
+        Schema != LiveWorldPublishSchema ||
+        !Root->TryGetObjectField(TEXT("generation"), Generation) || Generation == nullptr ||
+        !ReadGeneration(*Generation, Candidate.Generation, OutError) ||
+        Candidate.Generation.DomainId.IsEmpty() || Candidate.Generation.ImageKey.IsEmpty() ||
+        !ReadRequiredString(Root, TEXT("assemblyPath"), Candidate.AssemblyPath, OutError) ||
+        !ReadRequiredString(Root, TEXT("portablePdbPath"), Candidate.PortablePdbPath, OutError))
+    {
+        if (OutError.IsEmpty())
+        {
+            OutError = TEXT("The Workbench returned an invalid live World debug publish response.");
+        }
+        return false;
+    }
+    Candidate.AssemblyPath = FPaths::ConvertRelativePathToFull(Candidate.AssemblyPath);
+    Candidate.PortablePdbPath = FPaths::ConvertRelativePathToFull(Candidate.PortablePdbPath);
+    OutPublish = MoveTemp(Candidate);
+    OutError.Reset();
+    return true;
+}
+
+bool FUnifiedScriptDebugWorkbench::BuildLiveWorldConfiguration(
+    const FUnifiedScriptLiveWorldDebugPublish& Publish,
+    int32 RuntimeGeneration,
+    const TSet<FString>& BreakpointNodeIds,
+    FString& OutJson,
+    FString& OutError)
+{
+    const FUnifiedScriptDebugGeneration& Generation = Publish.Generation;
+    if (RuntimeGeneration < 1 || Generation.Number < 1 ||
+        Generation.DomainId.IsEmpty() || Generation.GenerationId.IsEmpty() ||
+        Generation.ImageKey.IsEmpty() || Generation.SourceCompilationId.IsEmpty() ||
+        Generation.SemanticConfigurationId.IsEmpty() || BreakpointNodeIds.Num() > 4096)
+    {
+        OutError = TEXT("A live World debug configuration requires exact runtime/compiler identities.");
+        return false;
+    }
+
+    const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
+    Root->SetStringField(
+        TEXT("schemaVersion"), TEXT("unifiedscript.unreal-debug-config/v0.1"));
+    Root->SetNumberField(TEXT("runtimeGeneration"), RuntimeGeneration);
+    const TSharedRef<FJsonObject> GenerationJson = MakeShared<FJsonObject>();
+    GenerationJson->SetStringField(TEXT("domainId"), Generation.DomainId);
+    GenerationJson->SetNumberField(TEXT("number"), Generation.Number);
+    GenerationJson->SetStringField(TEXT("generationId"), Generation.GenerationId);
+    GenerationJson->SetStringField(TEXT("imageKey"), Generation.ImageKey);
+    GenerationJson->SetStringField(
+        TEXT("sourceCompilationId"), Generation.SourceCompilationId);
+    GenerationJson->SetStringField(
+        TEXT("semanticConfigurationId"), Generation.SemanticConfigurationId);
+    Root->SetObjectField(TEXT("generation"), GenerationJson);
+    TArray<FString> SortedBreakpoints = BreakpointNodeIds.Array();
+    SortedBreakpoints.Sort();
+    TArray<TSharedPtr<FJsonValue>> Breakpoints;
+    for (const FString& NodeId : SortedBreakpoints)
+    {
+        if (NodeId.IsEmpty())
+        {
+            OutError = TEXT("A live World breakpoint node ID cannot be empty.");
+            return false;
+        }
+        Breakpoints.Add(MakeShared<FJsonValueString>(NodeId));
+    }
+    Root->SetArrayField(TEXT("breakpointNodeIds"), MoveTemp(Breakpoints));
     return UE::UnifiedScript::DebugWorkbench::Private::SerializeObject(
         Root, OutJson, OutError);
 }

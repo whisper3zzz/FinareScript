@@ -3,6 +3,7 @@
 #include "HttpModule.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
+#include "Misc/Paths.h"
 #include "Styling/AppStyle.h"
 #include "UnifiedScriptAuthoringWorkbench.h"
 #include "UnifiedScriptAsset.h"
@@ -47,6 +48,23 @@ void SUnifiedScriptDebugPanel::Construct(const FArguments& InArgs)
                     .Text(LOCTEXT("DebuggerTitle", "CORECLR DEBUGGER"))
                     .Font(FAppStyle::GetFontStyle(TEXT("SmallFontBold")))
                     .ColorAndOpacity(FLinearColor(0.95f, 0.48f, 0.22f))
+                ]
+                + SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 4.0f, 0.0f)
+                [
+                    SNew(SButton)
+                    .Text(LOCTEXT("AttachSemanticWorld", "Attach Semantic"))
+                    .ToolTipText(LOCTEXT(
+                        "AttachSemanticWorldTip",
+                        "Publish an instrumented image, reload this World instance, and attach statement breakpoints."))
+                    .IsEnabled(this, &SUnifiedScriptDebugPanel::CanAttachSemanticWorld)
+                    .OnClicked(this, &SUnifiedScriptDebugPanel::HandleAttachSemanticWorld)
+                ]
+                + SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 4.0f, 0.0f)
+                [
+                    SNew(SButton)
+                    .Text(LOCTEXT("DetachSemanticWorld", "Detach Semantic"))
+                    .IsEnabled(this, &SUnifiedScriptDebugPanel::CanDetachSemanticWorld)
+                    .OnClicked(this, &SUnifiedScriptDebugPanel::HandleDetachSemanticWorld)
                 ]
                 + SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 4.0f, 0.0f)
                 [
@@ -434,6 +452,54 @@ FReply SUnifiedScriptDebugPanel::HandleFocusRuntimeFailure()
     return FReply::Handled();
 }
 
+FReply SUnifiedScriptDebugPanel::HandleAttachSemanticWorld()
+{
+    if (!CanAttachSemanticWorld())
+    {
+        return FReply::Handled();
+    }
+    FString Json;
+    FString Error;
+    if (!FUnifiedScriptDebugWorkbench::BuildLiveWorldPublishRequest(
+            SourceCompilationId,
+            SemanticConfigurationId,
+            Json,
+            Error))
+    {
+        SetDebugStatus(MoveTemp(Error), true);
+        return FReply::Handled();
+    }
+    bCommandPending = true;
+    SetDebugStatus(TEXT("Publishing the instrumented live World generation ..."));
+    DispatchSessionRequest(
+        ERequestKind::PublishLiveWorld,
+        FUnifiedScriptDebugWorkbench::BuildLiveWorldPublishUrl(GetServerUrl()),
+        Json);
+    return FReply::Handled();
+}
+
+FReply SUnifiedScriptDebugPanel::HandleDetachSemanticWorld()
+{
+    if (!CanDetachSemanticWorld())
+    {
+        return FReply::Handled();
+    }
+    FString Error;
+    if (!LiveComponent->DisableSemanticDebug(Error))
+    {
+        SetDebugStatus(MoveTemp(Error), true);
+        return FReply::Handled();
+    }
+    bSessionIsLiveWorld = false;
+    Session.Reset();
+    SelectedFrameId = 0;
+    RebuildFrameAndLocalViews();
+    SetDebugStatus(TEXT("Detached from the live World semantic generation."));
+    RefreshLiveWorldTargetNow();
+    OnDebugStateChanged.ExecuteIfBound();
+    return FReply::Handled();
+}
+
 FReply SUnifiedScriptDebugPanel::HandleRun()
 {
     if (!CanRun())
@@ -465,6 +531,11 @@ FReply SUnifiedScriptDebugPanel::HandleRun()
 
 FReply SUnifiedScriptDebugPanel::HandlePause()
 {
+    if (IsLiveSemanticSession())
+    {
+        ControlLiveSemantic(EUnifiedScriptSemanticDebugControl::Pause);
+        return FReply::Handled();
+    }
     if (!CanPause())
     {
         return FReply::Handled();
@@ -489,6 +560,11 @@ FReply SUnifiedScriptDebugPanel::HandlePause()
 FReply SUnifiedScriptDebugPanel::HandleContinue()
 {
     PendingResumeLabel = TEXT("Continue");
+    if (IsLiveSemanticSession())
+    {
+        ControlLiveSemantic(EUnifiedScriptSemanticDebugControl::Continue);
+        return FReply::Handled();
+    }
     FString Json;
     FString Error;
     if (!CanResume() ||
@@ -508,6 +584,11 @@ FReply SUnifiedScriptDebugPanel::HandleContinue()
 FReply SUnifiedScriptDebugPanel::HandleStepIn()
 {
     PendingResumeLabel = TEXT("Step In");
+    if (IsLiveSemanticSession())
+    {
+        ControlLiveSemantic(EUnifiedScriptSemanticDebugControl::StepInto);
+        return FReply::Handled();
+    }
     FString Json;
     FString Error;
     if (!CanResume() ||
@@ -527,6 +608,11 @@ FReply SUnifiedScriptDebugPanel::HandleStepIn()
 FReply SUnifiedScriptDebugPanel::HandleStepOver()
 {
     PendingResumeLabel = TEXT("Step Over");
+    if (IsLiveSemanticSession())
+    {
+        ControlLiveSemantic(EUnifiedScriptSemanticDebugControl::StepOver);
+        return FReply::Handled();
+    }
     FString Json;
     FString Error;
     if (!CanResume() ||
@@ -546,6 +632,11 @@ FReply SUnifiedScriptDebugPanel::HandleStepOver()
 FReply SUnifiedScriptDebugPanel::HandleStepOut()
 {
     PendingResumeLabel = TEXT("Step Out");
+    if (IsLiveSemanticSession())
+    {
+        ControlLiveSemantic(EUnifiedScriptSemanticDebugControl::StepOut);
+        return FReply::Handled();
+    }
     FString Json;
     FString Error;
     if (!CanStepOut() ||
@@ -566,6 +657,19 @@ FReply SUnifiedScriptDebugPanel::HandleEvaluate()
 {
     if (!CanEvaluate())
     {
+        return FReply::Handled();
+    }
+    if (IsLiveSemanticSession())
+    {
+        FString Result;
+        if (EvaluateLiveSemanticWatch(WatchTextBox->GetText().ToString(), Result))
+        {
+            EvaluationText = MoveTemp(Result);
+        }
+        else
+        {
+            EvaluationText = MoveTemp(Result);
+        }
         return FReply::Handled();
     }
     FString Json;
@@ -679,6 +783,15 @@ void SUnifiedScriptDebugPanel::HandleSessionResponse(
     int32 StatusCode,
     FString ResponseJson)
 {
+    if (Kind == ERequestKind::PublishLiveWorld)
+    {
+        bCommandPending = false;
+        HandleLiveWorldPublishResponse(
+            bSucceeded,
+            StatusCode,
+            MoveTemp(ResponseJson));
+        return;
+    }
     if (Kind == ERequestKind::Wait)
     {
         bWaitPending = false;
@@ -720,6 +833,7 @@ void SUnifiedScriptDebugPanel::HandleSessionResponse(
         }
         return;
     }
+    bSessionIsLiveWorld = false;
     AdoptSession(MoveTemp(Response));
     if (Session.IsSet() && Session->IsRunning())
     {
@@ -759,6 +873,203 @@ void SUnifiedScriptDebugPanel::HandleEvaluationResponse(
         *Evaluation.Expression,
         *Evaluation.Value.Display,
         *Evaluation.Value.TypeMetadataName);
+}
+
+void SUnifiedScriptDebugPanel::HandleLiveWorldPublishResponse(
+    bool bSucceeded,
+    int32 StatusCode,
+    FString ResponseJson)
+{
+    if (!bSucceeded || StatusCode < 200 || StatusCode >= 300)
+    {
+        SetDebugStatus(DescribeHttpFailure(StatusCode, ResponseJson), true);
+        return;
+    }
+    if (!LiveComponent.IsValid() || !LiveContext.IsSet())
+    {
+        SetDebugStatus(TEXT("The selected live World target disappeared during publish."), true);
+        return;
+    }
+
+    FUnifiedScriptLiveWorldDebugPublish Publish;
+    FString Error;
+    if (!FUnifiedScriptDebugWorkbench::ParseLiveWorldPublishResponse(
+            ResponseJson,
+            Publish,
+            Error))
+    {
+        SetDebugStatus(MoveTemp(Error), true);
+        return;
+    }
+    if (Publish.Generation.SourceCompilationId != SourceCompilationId ||
+        Publish.Generation.SemanticConfigurationId != SemanticConfigurationId ||
+        !FPaths::IsSamePath(Publish.AssemblyPath, LiveContext->AssemblyPath))
+    {
+        SetDebugStatus(
+            TEXT("The published debug image does not match the selected Surface or live component assembly."),
+            true);
+        return;
+    }
+    if (!LiveComponent->ReloadScript())
+    {
+        SetDebugStatus(
+            LiveComponent->LastScriptError.IsEmpty()
+                ? TEXT("The live component rejected the instrumented generation.")
+                : LiveComponent->LastScriptError,
+            true);
+        return;
+    }
+
+    FUnifiedScriptRuntimeDebugContext ReloadedContext;
+    if (!LiveComponent->GetRuntimeDebugContext(ReloadedContext))
+    {
+        SetDebugStatus(TEXT("The reloaded component has no live runtime identity."), true);
+        return;
+    }
+    FString ConfigurationJson;
+    if (!FUnifiedScriptDebugWorkbench::BuildLiveWorldConfiguration(
+            Publish,
+            ReloadedContext.Generation,
+            BreakpointNodeIds,
+            ConfigurationJson,
+            Error) ||
+        !LiveComponent->ConfigureSemanticDebug(ConfigurationJson, Error))
+    {
+        SetDebugStatus(MoveTemp(Error), true);
+        return;
+    }
+
+    bSessionIsLiveWorld = true;
+    Session.Reset();
+    SelectedFrameId = 0;
+    RebuildFrameAndLocalViews();
+    SetDebugStatus(FString::Printf(
+        TEXT("Attached live World instance %llu generation %d · %d semantic breakpoint%s"),
+        ReloadedContext.InstanceId,
+        ReloadedContext.Generation,
+        BreakpointNodeIds.Num(),
+        BreakpointNodeIds.Num() == 1 ? TEXT("") : TEXT("s")));
+    RefreshLiveWorldTargetNow();
+}
+
+bool SUnifiedScriptDebugPanel::ControlLiveSemantic(
+    EUnifiedScriptSemanticDebugControl Control)
+{
+    if (!LiveComponent.IsValid() || !Session.IsSet())
+    {
+        return false;
+    }
+    const FString PauseId = Session->Pause.IsSet()
+        ? Session->Pause->PauseId
+        : FString();
+    FString Error;
+    if (!LiveComponent->ControlSemanticDebug(Control, PauseId, Error))
+    {
+        SetDebugStatus(MoveTemp(Error), true);
+        return false;
+    }
+    const TCHAR* Label = Control == EUnifiedScriptSemanticDebugControl::Pause
+        ? TEXT("Pause requested at the next live semantic probe")
+        : Control == EUnifiedScriptSemanticDebugControl::Continue
+            ? TEXT("Continuing the suspended live World CLR stack")
+            : Control == EUnifiedScriptSemanticDebugControl::StepInto
+                ? TEXT("Stepping into the next live semantic probe")
+                : Control == EUnifiedScriptSemanticDebugControl::StepOver
+                    ? TEXT("Stepping over on the suspended live CLR stack")
+                    : TEXT("Stepping out on the suspended live CLR stack");
+    SetDebugStatus(Label);
+    RefreshLiveWorldTargetNow();
+    return true;
+}
+
+bool SUnifiedScriptDebugPanel::EvaluateLiveSemanticWatch(
+    const FString& Expression,
+    FString& OutResult) const
+{
+    const FString Trimmed = Expression.TrimStartAndEnd();
+    if (!Session.IsSet() || !Session->IsPaused() || SelectedFrameId < 1 ||
+        Trimmed.IsEmpty() || Trimmed.Len() > 256)
+    {
+        OutResult = TEXT("Live watch requires a paused frame and 1-256 characters.");
+        return false;
+    }
+    const FUnifiedScriptDebugFrameLocals* Frame = Session->FrameLocals.FindByPredicate(
+        [this](const FUnifiedScriptDebugFrameLocals& Candidate)
+        {
+            return Candidate.FrameId == SelectedFrameId;
+        });
+    if (Frame == nullptr)
+    {
+        OutResult = TEXT("The selected live frame has no detached locals.");
+        return false;
+    }
+
+    int32 Cursor = 0;
+    while (Cursor < Trimmed.Len() && Trimmed[Cursor] != TEXT('.') &&
+        Trimmed[Cursor] != TEXT('['))
+    {
+        ++Cursor;
+    }
+    const FString RootName = Trimmed.Left(Cursor);
+    const FUnifiedScriptDebugValue* Value = Frame->Locals.FindByPredicate(
+        [&RootName](const FUnifiedScriptDebugValue& Candidate)
+        {
+            return Candidate.Name == RootName;
+        });
+    while (Value != nullptr && Cursor < Trimmed.Len())
+    {
+        FString ChildName;
+        if (Trimmed[Cursor] == TEXT('.'))
+        {
+            const int32 Start = ++Cursor;
+            while (Cursor < Trimmed.Len() && Trimmed[Cursor] != TEXT('.') &&
+                Trimmed[Cursor] != TEXT('['))
+            {
+                ++Cursor;
+            }
+            ChildName = Trimmed.Mid(Start, Cursor - Start);
+        }
+        else if (Trimmed[Cursor] == TEXT('['))
+        {
+            const int32 Close = Trimmed.Find(TEXT("]"), ESearchCase::CaseSensitive,
+                ESearchDir::FromStart, Cursor + 1);
+            if (Close == INDEX_NONE)
+            {
+                Value = nullptr;
+                break;
+            }
+            ChildName = Trimmed.Mid(Cursor, Close - Cursor + 1);
+            Cursor = Close + 1;
+        }
+        else
+        {
+            Value = nullptr;
+            break;
+        }
+        if (ChildName.IsEmpty())
+        {
+            Value = nullptr;
+            break;
+        }
+        Value = Value->Children.FindByPredicate(
+            [&ChildName](const FUnifiedScriptDebugValue& Candidate)
+            {
+                return Candidate.Name == ChildName;
+            });
+    }
+    if (Value == nullptr)
+    {
+        OutResult = FString::Printf(
+            TEXT("'%s' is not available in the detached live frame snapshot."),
+            *Trimmed);
+        return false;
+    }
+    OutResult = FString::Printf(
+        TEXT("%s = %s\n%s · detached read-only live snapshot"),
+        *Trimmed,
+        *Value->Display,
+        *Value->TypeMetadataName);
+    return true;
 }
 
 void SUnifiedScriptDebugPanel::AdoptSession(FUnifiedScriptDebugSession NewSession)
@@ -947,7 +1258,8 @@ bool SUnifiedScriptDebugPanel::HasActiveSession() const
 bool SUnifiedScriptDebugPanel::CanRun() const
 {
     return ActiveFunction.IsSet() && ActiveAsset.IsSet() && !HasActiveSession() &&
-        !bCommandPending && !bWaitPending && !GetServerUrl().IsEmpty();
+        !IsLiveSemanticSession() && !bCommandPending && !bWaitPending &&
+        !GetServerUrl().IsEmpty();
 }
 
 bool SUnifiedScriptDebugPanel::CanPause() const
@@ -1042,6 +1354,13 @@ void SUnifiedScriptDebugPanel::RefreshLiveWorldTargetNow()
         RuntimeFailureMethodId.Reset();
         RuntimeFailureNodeId.Reset();
         LiveRuntimeStatus = TEXT("No matching PIE/Game World script is running.");
+        LastSemanticDebugStateJson.Reset();
+        if (bSessionIsLiveWorld)
+        {
+            bSessionIsLiveWorld = false;
+            Session.Reset();
+            RebuildFrameAndLocalViews();
+        }
     }
     else
     {
@@ -1051,6 +1370,7 @@ void SUnifiedScriptDebugPanel::RefreshLiveWorldTargetNow()
             ? LiveContext->LastDiagnostic.Sequence
             : 0;
         MapRuntimeDiagnosticToGraph();
+        AdoptLiveSemanticState();
     }
     if (PreviousComponent != LiveComponent.Get() ||
         PreviousSequence != LastRuntimeDiagnosticSequence)
@@ -1085,13 +1405,13 @@ void SUnifiedScriptDebugPanel::MapRuntimeDiagnosticToGraph()
 bool SUnifiedScriptDebugPanel::CanPauseLiveWorld() const
 {
     return LiveComponent.IsValid() && LiveContext.IsSet() && LiveContext->bRunning &&
-        !LiveContext->bPausedAtFrameBoundary;
+        !LiveContext->bSemanticDebugEnabled && !LiveContext->bPausedAtFrameBoundary;
 }
 
 bool SUnifiedScriptDebugPanel::CanStepLiveWorld() const
 {
     return LiveComponent.IsValid() && LiveContext.IsSet() && LiveContext->bRunning &&
-        LiveContext->bPausedAtFrameBoundary;
+        !LiveContext->bSemanticDebugEnabled && LiveContext->bPausedAtFrameBoundary;
 }
 
 bool SUnifiedScriptDebugPanel::CanContinueLiveWorld() const
@@ -1102,6 +1422,69 @@ bool SUnifiedScriptDebugPanel::CanContinueLiveWorld() const
 bool SUnifiedScriptDebugPanel::CanFocusRuntimeFailure() const
 {
     return !RuntimeFailureMethodId.IsEmpty() && !RuntimeFailureNodeId.IsEmpty();
+}
+
+bool SUnifiedScriptDebugPanel::CanAttachSemanticWorld() const
+{
+    return LiveComponent.IsValid() && LiveContext.IsSet() && LiveContext->bRunning &&
+        !LiveContext->bSemanticDebugEnabled && ActiveAsset.IsSet() &&
+        !SourceCompilationId.IsEmpty() && !SemanticConfigurationId.IsEmpty() &&
+        !HasActiveSession() && !bCommandPending && !bWaitPending &&
+        !GetServerUrl().IsEmpty();
+}
+
+bool SUnifiedScriptDebugPanel::CanDetachSemanticWorld() const
+{
+    return LiveComponent.IsValid() && LiveContext.IsSet() &&
+        LiveContext->bSemanticDebugEnabled && !bCommandPending;
+}
+
+bool SUnifiedScriptDebugPanel::IsLiveSemanticSession() const
+{
+    return bSessionIsLiveWorld && LiveContext.IsSet() &&
+        LiveContext->bSemanticDebugEnabled;
+}
+
+void SUnifiedScriptDebugPanel::AdoptLiveSemanticState()
+{
+    if (!LiveContext.IsSet() || !LiveContext->bSemanticDebugEnabled)
+    {
+        if (bSessionIsLiveWorld)
+        {
+            bSessionIsLiveWorld = false;
+            LastSemanticDebugStateJson.Reset();
+            Session.Reset();
+            RebuildFrameAndLocalViews();
+        }
+        return;
+    }
+    if (LiveContext->SemanticDebugStateJson.IsEmpty() ||
+        LiveContext->SemanticDebugStateJson == LastSemanticDebugStateJson)
+    {
+        return;
+    }
+
+    FUnifiedScriptDebugSession LiveSession;
+    FString Error;
+    if (!FUnifiedScriptDebugWorkbench::ParseSessionResponse(
+            LiveContext->SemanticDebugStateJson,
+            LiveSession,
+            Error))
+    {
+        SetDebugStatus(MoveTemp(Error), true);
+        return;
+    }
+    if (LiveSession.Generation.SourceCompilationId != SourceCompilationId ||
+        LiveSession.Generation.SemanticConfigurationId != SemanticConfigurationId)
+    {
+        SetDebugStatus(
+            TEXT("The live World semantic generation no longer matches the Slate Surface."),
+            true);
+        return;
+    }
+    LastSemanticDebugStateJson = LiveContext->SemanticDebugStateJson;
+    bSessionIsLiveWorld = true;
+    AdoptSession(MoveTemp(LiveSession));
 }
 
 FString SUnifiedScriptDebugPanel::DescribeLiveWorldTarget() const
@@ -1117,8 +1500,14 @@ FString SUnifiedScriptDebugPanel::DescribeLiveWorldTarget() const
         LiveContext->WorldHostId,
         LiveContext->InstanceId,
         LiveContext->Generation,
-        LiveContext->bPausedAtFrameBoundary
-            ? TEXT("FRAME-PAUSED")
+        LiveContext->bSemanticDebugPaused
+            ? TEXT("SEMANTIC-PAUSED")
+            : LiveContext->bSemanticDebugActive
+                ? TEXT("SEMANTIC-RUNNING")
+                : LiveContext->bSemanticDebugEnabled
+                    ? TEXT("SEMANTIC-ATTACHED")
+                    : LiveContext->bPausedAtFrameBoundary
+                        ? TEXT("FRAME-PAUSED")
             : LiveContext->bRunning ? TEXT("RUNNING") : TEXT("STOPPED"),
         LiveContext->TargetHandle);
 }

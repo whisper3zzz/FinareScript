@@ -57,6 +57,15 @@ struct UEUNIFIEDSCRIPTRUNTIME_API FUnifiedScriptRuntimeDiagnostic
         FString& OutError);
 };
 
+enum class EUnifiedScriptSemanticDebugControl : uint8
+{
+    Pause = 1,
+    Continue = 2,
+    StepInto = 3,
+    StepOver = 4,
+    StepOut = 5,
+};
+
 /** Current native identity for one managed script hosted by a real UWorld. */
 struct UEUNIFIEDSCRIPTRUNTIME_API FUnifiedScriptRuntimeDebugContext
 {
@@ -71,6 +80,10 @@ struct UEUNIFIEDSCRIPTRUNTIME_API FUnifiedScriptRuntimeDebugContext
     FString TypeName;
     bool bRunning = false;
     bool bPausedAtFrameBoundary = false;
+    bool bSemanticDebugEnabled = false;
+    bool bSemanticDebugActive = false;
+    bool bSemanticDebugPaused = false;
+    FString SemanticDebugStateJson;
     FUnifiedScriptRuntimeDiagnostic LastDiagnostic;
 
     bool IsValid() const { return WorldHostId != 0 && InstanceId != 0; }

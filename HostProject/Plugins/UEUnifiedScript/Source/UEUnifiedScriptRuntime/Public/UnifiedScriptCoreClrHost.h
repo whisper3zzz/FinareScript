@@ -43,6 +43,36 @@ public:
         uint64 InstanceId,
         float DeltaSeconds,
         FString& OutError);
+    bool ConfigureManagedScriptDebug(
+        uint64 WorldHostId,
+        uint64 InstanceId,
+        const FString& ConfigurationJson,
+        FString& OutError);
+    bool BeginManagedScriptDebugTick(
+        uint64 WorldHostId,
+        uint64 InstanceId,
+        float DeltaSeconds,
+        FString& OutError);
+    bool GetManagedScriptDebugState(
+        uint64 WorldHostId,
+        uint64 InstanceId,
+        FString& OutJson,
+        FString& OutError) const;
+    bool ControlManagedScriptDebug(
+        uint64 WorldHostId,
+        uint64 InstanceId,
+        int32 Control,
+        const FString& PauseId,
+        FString& OutError);
+    bool DisableManagedScriptDebug(
+        uint64 WorldHostId,
+        uint64 InstanceId,
+        FString& OutError);
+    bool IsManagedScriptDebugActive(
+        uint64 WorldHostId,
+        uint64 InstanceId,
+        bool& bOutActive,
+        FString& OutError) const;
     bool DispatchManagedEvent(
         uint64 WorldHostId,
         uint64 InstanceId,
@@ -88,6 +118,12 @@ private:
     void* CollectRetiredLoadContextsEntryPoint = nullptr;
     void* CreateScriptEntryPoint = nullptr;
     void* TickScriptEntryPoint = nullptr;
+    void* ConfigureScriptDebugEntryPoint = nullptr;
+    void* BeginScriptDebugTickEntryPoint = nullptr;
+    void* GetScriptDebugStateEntryPoint = nullptr;
+    void* ControlScriptDebugEntryPoint = nullptr;
+    void* DisableScriptDebugEntryPoint = nullptr;
+    void* IsScriptDebugActiveEntryPoint = nullptr;
     void* DispatchEventEntryPoint = nullptr;
     void* ReloadScriptEntryPoint = nullptr;
     void* DestroyScriptEntryPoint = nullptr;

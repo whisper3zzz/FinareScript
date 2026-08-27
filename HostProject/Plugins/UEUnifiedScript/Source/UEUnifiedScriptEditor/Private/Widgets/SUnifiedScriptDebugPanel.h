@@ -45,6 +45,7 @@ private:
         Pause,
         Resume,
         Evaluate,
+        PublishLiveWorld,
     };
 
     using FDebugFrameItem = TSharedPtr<FUnifiedScriptDebugStackFrame>;
@@ -61,6 +62,8 @@ private:
     FReply HandleStepLiveWorld();
     FReply HandleContinueLiveWorld();
     FReply HandleFocusRuntimeFailure();
+    FReply HandleAttachSemanticWorld();
+    FReply HandleDetachSemanticWorld();
     void HandleFrameSelectionChanged(FDebugFrameItem Item, ESelectInfo::Type SelectInfo);
     TSharedRef<ITableRow> GenerateFrameRow(
         FDebugFrameItem Item,
@@ -77,6 +80,12 @@ private:
         int32 StatusCode,
         FString ResponseJson);
     void HandleEvaluationResponse(bool bSucceeded, int32 StatusCode, FString ResponseJson);
+    void HandleLiveWorldPublishResponse(
+        bool bSucceeded,
+        int32 StatusCode,
+        FString ResponseJson);
+    bool ControlLiveSemantic(EUnifiedScriptSemanticDebugControl Control);
+    bool EvaluateLiveSemanticWatch(const FString& Expression, FString& OutResult) const;
     void AdoptSession(FUnifiedScriptDebugSession NewSession);
     void SelectFrame(int64 FrameId);
     void RebuildFrameAndLocalViews();
@@ -96,6 +105,10 @@ private:
     bool CanStepLiveWorld() const;
     bool CanContinueLiveWorld() const;
     bool CanFocusRuntimeFailure() const;
+    bool CanAttachSemanticWorld() const;
+    bool CanDetachSemanticWorld() const;
+    bool IsLiveSemanticSession() const;
+    void AdoptLiveSemanticState();
     FString DescribeLiveWorldTarget() const;
     FString DescribeRuntimeDiagnostic() const;
 
@@ -114,6 +127,8 @@ private:
     FString LiveRuntimeStatus = TEXT("No matching PIE/Game World script is running.");
     TSet<FString> BreakpointNodeIds;
     TOptional<FUnifiedScriptDebugSession> Session;
+    bool bSessionIsLiveWorld = false;
+    FString LastSemanticDebugStateJson;
     int64 SelectedFrameId = 0;
     bool bCommandPending = false;
     bool bWaitPending = false;

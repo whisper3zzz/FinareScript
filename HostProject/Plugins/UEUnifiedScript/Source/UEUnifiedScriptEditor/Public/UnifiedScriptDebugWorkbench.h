@@ -14,9 +14,18 @@ enum class EUnifiedScriptDebugSessionState : uint8
 struct FUnifiedScriptDebugGeneration
 {
     int64 Number = 0;
+    FString DomainId;
     FString GenerationId;
+    FString ImageKey;
     FString SourceCompilationId;
     FString SemanticConfigurationId;
+};
+
+struct FUnifiedScriptLiveWorldDebugPublish
+{
+    FUnifiedScriptDebugGeneration Generation;
+    FString AssemblyPath;
+    FString PortablePdbPath;
 };
 
 struct FUnifiedScriptDebugValue
@@ -112,6 +121,7 @@ public:
     static FString BuildStepOverUrl(const FString& ServerUrl);
     static FString BuildStepOutUrl(const FString& ServerUrl);
     static FString BuildEvaluateUrl(const FString& ServerUrl);
+    static FString BuildLiveWorldPublishUrl(const FString& ServerUrl);
 
     static bool BuildStartRequest(
         const FString& SourceCompilationId,
@@ -136,6 +146,24 @@ public:
         const FUnifiedScriptDebugSession& Session,
         int64 FrameId,
         const FString& Expression,
+        FString& OutJson,
+        FString& OutError);
+
+    static bool BuildLiveWorldPublishRequest(
+        const FString& SourceCompilationId,
+        const FString& SemanticConfigurationId,
+        FString& OutJson,
+        FString& OutError);
+
+    static bool ParseLiveWorldPublishResponse(
+        const FString& Json,
+        FUnifiedScriptLiveWorldDebugPublish& OutPublish,
+        FString& OutError);
+
+    static bool BuildLiveWorldConfiguration(
+        const FUnifiedScriptLiveWorldDebugPublish& Publish,
+        int32 RuntimeGeneration,
+        const TSet<FString>& BreakpointNodeIds,
         FString& OutJson,
         FString& OutError);
 

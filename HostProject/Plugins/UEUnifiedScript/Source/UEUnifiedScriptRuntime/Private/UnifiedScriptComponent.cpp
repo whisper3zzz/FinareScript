@@ -3,9 +3,13 @@
 #include "HAL/FileManager.h"
 #include "HAL/PlatformProcess.h"
 #include "HAL/PlatformProperties.h"
+#include "HAL/PlatformTime.h"
+#include "Dom/JsonObject.h"
 #include "GameFramework/Actor.h"
 #include "Interfaces/IPluginManager.h"
 #include "Misc/Paths.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 #include "UnifiedScriptAsset.h"
 #include "UnifiedScriptDeclarationMaterializer.h"
 #include "UnifiedScriptObjectRegistry.h"
@@ -93,9 +97,37 @@ void UUnifiedScriptComponent::TickComponent(
         return;
     }
 
+    UUnifiedScriptWorldSubsystem* Host =
+        GetWorld() != nullptr
+        ? GetWorld()->GetSubsystem<UUnifiedScriptWorldSubsystem>()
+        : nullptr;
+    if (bSemanticDebugEnabled && Host != nullptr)
+    {
+        Host->PumpManagedBridgeCalls();
+    }
+
     if (ConsumeReloadRequest() && !ReloadScript())
     {
         return;
+    }
+
+    bool bSemanticExecutionCompletedThisFrame = false;
+    if (bSemanticDebugEnabled && bSemanticDebugTickActive)
+    {
+        FString DebugError;
+        bool bFaulted = false;
+        if (!RefreshSemanticDebugState(DebugError, bFaulted))
+        {
+            SetScriptFailure(MoveTemp(DebugError));
+            StopScript();
+            return;
+        }
+        bSemanticExecutionCompletedThisFrame = !bSemanticDebugTickActive;
+        if (bFaulted)
+        {
+            StopScript();
+            return;
+        }
     }
 
     if (bDebugPausedAtFrameBoundary && !bDebugStepFrameRequested)
@@ -108,13 +140,31 @@ void UUnifiedScriptComponent::TickComponent(
 
     if (bTickAutomatically || bStepManagedFrame)
     {
-        UUnifiedScriptWorldSubsystem* Host =
-            GetWorld() != nullptr
-            ? GetWorld()->GetSubsystem<UUnifiedScriptWorldSubsystem>()
-            : nullptr;
         FString Error;
-        if (Host == nullptr ||
-            !Host->TickManagedScript(ManagedScriptInstanceId, DeltaTime, Error))
+        if (bSemanticDebugEnabled)
+        {
+            if (!bSemanticExecutionCompletedThisFrame && !bSemanticDebugTickActive &&
+                (Host == nullptr || !Host->BeginManagedScriptDebugTick(
+                    ManagedScriptInstanceId,
+                    DeltaTime,
+                    Error)))
+            {
+                SetScriptFailure(
+                    Host == nullptr
+                    ? TEXT("The UnifiedScript World host is unavailable during semantic Tick.")
+                    : MoveTemp(Error));
+                StopScript();
+                return;
+            }
+            if (!bSemanticExecutionCompletedThisFrame)
+            {
+                bSemanticDebugTickActive = true;
+                bSemanticDebugPaused = false;
+                SemanticDebugStateJson.Reset();
+            }
+        }
+        else if (Host == nullptr ||
+                 !Host->TickManagedScript(ManagedScriptInstanceId, DeltaTime, Error))
         {
             SetScriptFailure(
                 Host == nullptr
@@ -126,7 +176,8 @@ void UUnifiedScriptComponent::TickComponent(
     }
 
     SetComponentTickEnabled(
-        bTickAutomatically || bReloadRequested || bDebugPausedAtFrameBoundary);
+        bTickAutomatically || bReloadRequested || bDebugPausedAtFrameBoundary ||
+        bSemanticDebugEnabled);
 }
 
 #if WITH_EDITOR
@@ -296,6 +347,10 @@ bool UUnifiedScriptComponent::StartScript()
     LastRuntimeDiagnostic = {};
     bDebugPausedAtFrameBoundary = false;
     bDebugStepFrameRequested = false;
+    bSemanticDebugEnabled = false;
+    bSemanticDebugTickActive = false;
+    bSemanticDebugPaused = false;
+    SemanticDebugStateJson.Reset();
     BindManagedActorEvents();
     SetComponentTickEnabled(bTickAutomatically || bReloadRequested);
     UE_LOG(
@@ -326,7 +381,17 @@ void UUnifiedScriptComponent::StopScript()
     FString StopError;
     if (Host != nullptr && Host->IsManagedWorldReady() && ManagedScriptInstanceId != 0)
     {
-        Host->DestroyManagedScript(ManagedScriptInstanceId, StopError);
+        FString DebugStopError;
+        if (!DisableSemanticDebugAndDrain(DebugStopError))
+        {
+            StopError = MoveTemp(DebugStopError);
+        }
+        FString DestroyError;
+        if (!Host->DestroyManagedScript(ManagedScriptInstanceId, DestroyError) &&
+            StopError.IsEmpty())
+        {
+            StopError = MoveTemp(DestroyError);
+        }
     }
 
     if (Host != nullptr && Host->IsNativeRuntimeReady())
@@ -357,6 +422,10 @@ void UUnifiedScriptComponent::StopScript()
     bReloadRequested = false;
     bDebugPausedAtFrameBoundary = false;
     bDebugStepFrameRequested = false;
+    bSemanticDebugEnabled = false;
+    bSemanticDebugTickActive = false;
+    bSemanticDebugPaused = false;
+    SemanticDebugStateJson.Reset();
     ActiveScriptAsset = nullptr;
     ActiveScriptAssetPath.Reset();
     ActiveDeclarationAssetPath.Reset();
@@ -384,6 +453,13 @@ bool UUnifiedScriptComponent::ReloadScript()
     if (Host == nullptr)
     {
         SetScriptFailure(TEXT("The UnifiedScript World host is unavailable during Reload."));
+        return false;
+    }
+
+    FString DebugDrainError;
+    if (!DisableSemanticDebugAndDrain(DebugDrainError))
+    {
+        SetScriptFailure(MoveTemp(DebugDrainError));
         return false;
     }
 
@@ -502,6 +578,10 @@ bool UUnifiedScriptComponent::GetRuntimeDebugContext(
         : ActiveResolvedTypeName;
     OutContext.bRunning = bScriptRunning;
     OutContext.bPausedAtFrameBoundary = bDebugPausedAtFrameBoundary;
+    OutContext.bSemanticDebugEnabled = bSemanticDebugEnabled;
+    OutContext.bSemanticDebugActive = bSemanticDebugTickActive;
+    OutContext.bSemanticDebugPaused = bSemanticDebugPaused;
+    OutContext.SemanticDebugStateJson = SemanticDebugStateJson;
     OutContext.LastDiagnostic = LastRuntimeDiagnostic;
     return OutContext.IsValid();
 }
@@ -538,6 +618,240 @@ bool UUnifiedScriptComponent::StepOneDebugFrame()
     }
     bDebugStepFrameRequested = true;
     SetComponentTickEnabled(true);
+    return true;
+}
+
+bool UUnifiedScriptComponent::ConfigureSemanticDebug(
+    const FString& ConfigurationJson,
+    FString& OutError)
+{
+    check(IsInGameThread());
+    if (!bScriptRunning || ManagedScriptInstanceId == 0)
+    {
+        OutError = TEXT("A live managed script is required before semantic debug attach.");
+        return false;
+    }
+    UUnifiedScriptWorldSubsystem* Host =
+        GetWorld() != nullptr
+        ? GetWorld()->GetSubsystem<UUnifiedScriptWorldSubsystem>()
+        : nullptr;
+    if (Host == nullptr || !Host->ConfigureManagedScriptDebug(
+            ManagedScriptInstanceId,
+            ConfigurationJson,
+            OutError))
+    {
+        if (Host == nullptr)
+        {
+            OutError = TEXT("The UnifiedScript World host is unavailable during debug attach.");
+        }
+        return false;
+    }
+    bSemanticDebugEnabled = true;
+    bSemanticDebugTickActive = false;
+    bSemanticDebugPaused = false;
+    SemanticDebugStateJson.Reset();
+    bDebugPausedAtFrameBoundary = false;
+    bDebugStepFrameRequested = false;
+    SetComponentTickEnabled(true);
+    OutError.Reset();
+    return true;
+}
+
+bool UUnifiedScriptComponent::ControlSemanticDebug(
+    EUnifiedScriptSemanticDebugControl Control,
+    const FString& PauseId,
+    FString& OutError)
+{
+    check(IsInGameThread());
+    if (!bScriptRunning || !bSemanticDebugEnabled || ManagedScriptInstanceId == 0)
+    {
+        OutError = TEXT("The component has no attached live semantic debug session.");
+        return false;
+    }
+    if (Control != EUnifiedScriptSemanticDebugControl::Pause && PauseId.IsEmpty())
+    {
+        OutError = TEXT("Continue and step commands require the exact current pause ID.");
+        return false;
+    }
+    UUnifiedScriptWorldSubsystem* Host =
+        GetWorld() != nullptr
+        ? GetWorld()->GetSubsystem<UUnifiedScriptWorldSubsystem>()
+        : nullptr;
+    if (Host == nullptr || !Host->ControlManagedScriptDebug(
+            ManagedScriptInstanceId,
+            static_cast<int32>(Control),
+            PauseId,
+            OutError))
+    {
+        if (Host == nullptr)
+        {
+            OutError = TEXT("The UnifiedScript World host is unavailable during debug control.");
+        }
+        return false;
+    }
+    if (Control != EUnifiedScriptSemanticDebugControl::Pause)
+    {
+        bSemanticDebugPaused = false;
+    }
+    SetComponentTickEnabled(true);
+    OutError.Reset();
+    return true;
+}
+
+bool UUnifiedScriptComponent::DisableSemanticDebug(FString& OutError)
+{
+    check(IsInGameThread());
+    return DisableSemanticDebugAndDrain(OutError);
+}
+
+bool UUnifiedScriptComponent::RefreshSemanticDebugState(
+    FString& OutError,
+    bool& bOutFaulted)
+{
+    check(IsInGameThread());
+    bOutFaulted = false;
+    UUnifiedScriptWorldSubsystem* Host =
+        GetWorld() != nullptr
+        ? GetWorld()->GetSubsystem<UUnifiedScriptWorldSubsystem>()
+        : nullptr;
+    FString Json;
+    if (Host == nullptr || !Host->GetManagedScriptDebugState(
+            ManagedScriptInstanceId,
+            Json,
+            OutError))
+    {
+        if (Host == nullptr)
+        {
+            OutError = TEXT("The UnifiedScript World host is unavailable during debug polling.");
+        }
+        return false;
+    }
+
+    TSharedPtr<FJsonObject> Root;
+    const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Json);
+    FString Schema;
+    FString State;
+    if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid() ||
+        !Root->TryGetStringField(TEXT("schemaVersion"), Schema) ||
+        Schema != TEXT("unifiedscript.debug-session/v0.2") ||
+        !Root->TryGetStringField(TEXT("state"), State))
+    {
+        OutError = TEXT("The managed live World debugger returned invalid state JSON.");
+        return false;
+    }
+
+    SemanticDebugStateJson = MoveTemp(Json);
+    if (State == TEXT("running"))
+    {
+        bSemanticDebugTickActive = true;
+        bSemanticDebugPaused = false;
+    }
+    else if (State == TEXT("paused"))
+    {
+        bSemanticDebugTickActive = true;
+        bSemanticDebugPaused = true;
+    }
+    else if (State == TEXT("completed"))
+    {
+        bSemanticDebugTickActive = false;
+        bSemanticDebugPaused = false;
+        FString RuntimeDiagnostic;
+        if (Root->TryGetStringField(TEXT("runtimeDiagnostic"), RuntimeDiagnostic) &&
+            !RuntimeDiagnostic.IsEmpty())
+        {
+            SetScriptFailure(MoveTemp(RuntimeDiagnostic));
+            bOutFaulted = true;
+        }
+        else
+        {
+            const TSharedPtr<FJsonObject>* Result = nullptr;
+            const TSharedPtr<FJsonObject>* Fault = nullptr;
+            FString Outcome;
+            FString Message;
+            if (Root->TryGetObjectField(TEXT("result"), Result) && Result != nullptr &&
+                (*Result)->TryGetStringField(TEXT("outcome"), Outcome) &&
+                Outcome == TEXT("faulted") &&
+                (*Result)->TryGetObjectField(TEXT("fault"), Fault) && Fault != nullptr &&
+                (*Fault)->TryGetStringField(TEXT("message"), Message))
+            {
+                SetScriptFailure(FString::Printf(
+                    TEXT("Live semantic debug execution failed: %s"),
+                    *Message));
+                bOutFaulted = true;
+            }
+        }
+    }
+    else
+    {
+        OutError = FString::Printf(
+            TEXT("The managed live World debugger returned unsupported state '%s'."),
+            *State);
+        return false;
+    }
+    OutError.Reset();
+    return true;
+}
+
+bool UUnifiedScriptComponent::DisableSemanticDebugAndDrain(FString& OutError)
+{
+    check(IsInGameThread());
+    if ((!bSemanticDebugEnabled && !bSemanticDebugTickActive) ||
+        ManagedScriptInstanceId == 0)
+    {
+        bSemanticDebugEnabled = false;
+        bSemanticDebugTickActive = false;
+        bSemanticDebugPaused = false;
+        OutError.Reset();
+        return true;
+    }
+
+    UUnifiedScriptWorldSubsystem* Host =
+        GetWorld() != nullptr
+        ? GetWorld()->GetSubsystem<UUnifiedScriptWorldSubsystem>()
+        : nullptr;
+    if (Host == nullptr || !Host->DisableManagedScriptDebug(
+            ManagedScriptInstanceId,
+            OutError))
+    {
+        if (Host == nullptr)
+        {
+            OutError = TEXT("The UnifiedScript World host is unavailable during debug detach.");
+        }
+        return false;
+    }
+
+    const double Deadline = FPlatformTime::Seconds() + 2.0;
+    for (;;)
+    {
+        Host->PumpManagedBridgeCalls();
+        bool bActive = false;
+        if (!Host->IsManagedScriptDebugActive(
+                ManagedScriptInstanceId,
+                bActive,
+                OutError))
+        {
+            return false;
+        }
+        if (!bActive)
+        {
+            break;
+        }
+        if (FPlatformTime::Seconds() >= Deadline)
+        {
+            OutError = TEXT(
+                "Timed out draining the live semantic debug execution before lifecycle mutation.");
+            return false;
+        }
+        FPlatformProcess::SleepNoStats(0.0f);
+    }
+
+    bSemanticDebugEnabled = false;
+    bSemanticDebugTickActive = false;
+    bSemanticDebugPaused = false;
+    SemanticDebugStateJson.Reset();
+    SetComponentTickEnabled(
+        bTickAutomatically || bReloadRequested || bDebugPausedAtFrameBoundary);
+    OutError.Reset();
     return true;
 }
 

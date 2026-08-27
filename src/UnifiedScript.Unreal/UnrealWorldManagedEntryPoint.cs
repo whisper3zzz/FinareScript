@@ -18,6 +18,8 @@ public enum UnrealWorldManagedEntryStatus
     DuplicateScript = 6,
     ScriptNotFound = 7,
     ScriptContractMismatch = 8,
+    DebugNotConfigured = 9,
+    DebugExecutionBusy = 10,
 }
 
 public readonly record struct UnrealScriptContext(
@@ -184,6 +186,155 @@ public static class UnrealWorldManagedEntryPoint
             ReportBoundaryFailure(worldId, instanceId, nameof(TickScript), exception);
             return (int)UnrealWorldManagedEntryStatus.InternalFailure;
         }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static int ConfigureScriptDebug(
+        ulong worldId,
+        ulong instanceId,
+        nint configurationData,
+        int configurationLength)
+    {
+        ClearBoundaryFailure(worldId);
+        if (instanceId == 0 || configurationData == nint.Zero || configurationLength <= 0)
+        {
+            return (int)UnrealWorldManagedEntryStatus.InvalidArgument;
+        }
+        if (!Worlds.TryGetValue(worldId, out WorldEntry? entry))
+        {
+            return (int)UnrealWorldManagedEntryStatus.WorldNotFound;
+        }
+        try
+        {
+            return (int)entry.ConfigureScriptDebug(
+                instanceId,
+                ReadUtf8(configurationData, configurationLength));
+        }
+        catch (Exception exception)
+        {
+            ReportBoundaryFailure(worldId, instanceId, nameof(ConfigureScriptDebug), exception);
+            return (int)UnrealWorldManagedEntryStatus.InternalFailure;
+        }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static int BeginScriptDebugTick(
+        ulong worldId,
+        ulong instanceId,
+        float deltaSeconds)
+    {
+        ClearBoundaryFailure(worldId);
+        if (!Worlds.TryGetValue(worldId, out WorldEntry? entry))
+        {
+            return (int)UnrealWorldManagedEntryStatus.WorldNotFound;
+        }
+        try
+        {
+            return (int)entry.BeginScriptDebugTick(instanceId, deltaSeconds);
+        }
+        catch (Exception exception)
+        {
+            ReportBoundaryFailure(worldId, instanceId, nameof(BeginScriptDebugTick), exception);
+            return (int)UnrealWorldManagedEntryStatus.InternalFailure;
+        }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static unsafe int GetScriptDebugState(
+        ulong worldId,
+        ulong instanceId,
+        nint buffer,
+        int bufferCapacity)
+    {
+        if (worldId == 0 || instanceId == 0 || bufferCapacity < 0 ||
+            !Worlds.TryGetValue(worldId, out WorldEntry? entry))
+        {
+            return 0;
+        }
+        try
+        {
+            string? json = entry.GetScriptDebugState(instanceId);
+            if (string.IsNullOrEmpty(json))
+            {
+                return 0;
+            }
+            int requiredBytes = Encoding.UTF8.GetByteCount(json);
+            if (buffer == nint.Zero || bufferCapacity <= requiredBytes)
+            {
+                return requiredBytes;
+            }
+            var destination = new Span<byte>((void*)buffer, bufferCapacity);
+            int written = Encoding.UTF8.GetBytes(json, destination);
+            destination[written] = 0;
+            return written;
+        }
+        catch (Exception exception)
+        {
+            ReportBoundaryFailure(worldId, instanceId, nameof(GetScriptDebugState), exception);
+            return 0;
+        }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static int ControlScriptDebug(
+        ulong worldId,
+        ulong instanceId,
+        int control,
+        nint pauseIdData,
+        int pauseIdLength)
+    {
+        ClearBoundaryFailure(worldId);
+        if (instanceId == 0 || !Enum.IsDefined((UnrealWorldDebugControl)control) ||
+            (control != (int)UnrealWorldDebugControl.Pause &&
+             (pauseIdData == nint.Zero || pauseIdLength <= 0)))
+        {
+            return (int)UnrealWorldManagedEntryStatus.InvalidArgument;
+        }
+        if (!Worlds.TryGetValue(worldId, out WorldEntry? entry))
+        {
+            return (int)UnrealWorldManagedEntryStatus.WorldNotFound;
+        }
+        try
+        {
+            return (int)entry.ControlScriptDebug(
+                instanceId,
+                (UnrealWorldDebugControl)control,
+                pauseIdLength > 0 ? ReadUtf8(pauseIdData, pauseIdLength) : null);
+        }
+        catch (Exception exception)
+        {
+            ReportBoundaryFailure(worldId, instanceId, nameof(ControlScriptDebug), exception);
+            return (int)UnrealWorldManagedEntryStatus.InternalFailure;
+        }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static int DisableScriptDebug(ulong worldId, ulong instanceId)
+    {
+        ClearBoundaryFailure(worldId);
+        if (!Worlds.TryGetValue(worldId, out WorldEntry? entry))
+        {
+            return (int)UnrealWorldManagedEntryStatus.WorldNotFound;
+        }
+        try
+        {
+            return (int)entry.DisableScriptDebug(instanceId);
+        }
+        catch (Exception exception)
+        {
+            ReportBoundaryFailure(worldId, instanceId, nameof(DisableScriptDebug), exception);
+            return (int)UnrealWorldManagedEntryStatus.InternalFailure;
+        }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static int IsScriptDebugActive(ulong worldId, ulong instanceId)
+    {
+        if (!Worlds.TryGetValue(worldId, out WorldEntry? entry))
+        {
+            return -(int)UnrealWorldManagedEntryStatus.WorldNotFound;
+        }
+        return entry.IsScriptDebugActive(instanceId);
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
@@ -354,6 +505,15 @@ public static class UnrealWorldManagedEntryPoint
         string operation,
         Exception exception)
     {
+        _ = CaptureBoundaryFailure(worldId, instanceId, operation, exception);
+    }
+
+    private static string CaptureBoundaryFailure(
+        ulong worldId,
+        ulong instanceId,
+        string operation,
+        Exception exception)
+    {
         UnrealRuntimeDiagnosticContext? diagnosticContext = null;
         if (worldId != 0 && instanceId != 0 &&
             Worlds.TryGetValue(worldId, out WorldEntry? world))
@@ -376,7 +536,7 @@ public static class UnrealWorldManagedEntryPoint
             "UNIFIEDSCRIPT_MANAGED_DIAGNOSTIC_PATH");
         if (string.IsNullOrWhiteSpace(diagnosticPath))
         {
-            return;
+            return detail;
         }
         try
         {
@@ -386,6 +546,7 @@ public static class UnrealWorldManagedEntryPoint
         {
             // Boundary reporting must never replace the original host status.
         }
+        return detail;
     }
 
     private sealed class WorldEntry : IDisposable
@@ -492,6 +653,103 @@ public static class UnrealWorldManagedEntryPoint
             }
         }
 
+        public UnrealWorldManagedEntryStatus ConfigureScriptDebug(
+            ulong instanceId,
+            string configurationJson)
+        {
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                if (!_scripts.TryGetValue(instanceId, out ManagedScriptInstance? script))
+                {
+                    return UnrealWorldManagedEntryStatus.ScriptNotFound;
+                }
+                script.ConfigureDebug(configurationJson);
+                return UnrealWorldManagedEntryStatus.Success;
+            }
+        }
+
+        public UnrealWorldManagedEntryStatus BeginScriptDebugTick(
+            ulong instanceId,
+            float deltaSeconds)
+        {
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                if (!_scripts.TryGetValue(instanceId, out ManagedScriptInstance? script))
+                {
+                    return UnrealWorldManagedEntryStatus.ScriptNotFound;
+                }
+                if (!script.IsDebugConfigured)
+                {
+                    return UnrealWorldManagedEntryStatus.DebugNotConfigured;
+                }
+                if (script.IsDebugActive)
+                {
+                    return UnrealWorldManagedEntryStatus.DebugExecutionBusy;
+                }
+                script.BeginDebugTick(deltaSeconds);
+                return UnrealWorldManagedEntryStatus.Success;
+            }
+        }
+
+        public string? GetScriptDebugState(ulong instanceId)
+        {
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                return _scripts.TryGetValue(instanceId, out ManagedScriptInstance? script)
+                    ? script.GetDebugState()
+                    : null;
+            }
+        }
+
+        public UnrealWorldManagedEntryStatus ControlScriptDebug(
+            ulong instanceId,
+            UnrealWorldDebugControl control,
+            string? pauseId)
+        {
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                if (!_scripts.TryGetValue(instanceId, out ManagedScriptInstance? script))
+                {
+                    return UnrealWorldManagedEntryStatus.ScriptNotFound;
+                }
+                if (!script.IsDebugConfigured)
+                {
+                    return UnrealWorldManagedEntryStatus.DebugNotConfigured;
+                }
+                script.ControlDebug(control, pauseId);
+                return UnrealWorldManagedEntryStatus.Success;
+            }
+        }
+
+        public UnrealWorldManagedEntryStatus DisableScriptDebug(ulong instanceId)
+        {
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                if (!_scripts.TryGetValue(instanceId, out ManagedScriptInstance? script))
+                {
+                    return UnrealWorldManagedEntryStatus.ScriptNotFound;
+                }
+                script.DisableDebug();
+                return UnrealWorldManagedEntryStatus.Success;
+            }
+        }
+
+        public int IsScriptDebugActive(ulong instanceId)
+        {
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                return !_scripts.TryGetValue(instanceId, out ManagedScriptInstance? script)
+                    ? -(int)UnrealWorldManagedEntryStatus.ScriptNotFound
+                    : script.IsDebugActive ? 1 : 0;
+            }
+        }
+
         public UnrealWorldManagedEntryStatus DispatchEvent(
             ulong instanceId,
             UnrealScriptEvent scriptEvent)
@@ -578,6 +836,7 @@ public static class UnrealWorldManagedEntryPoint
         private string _assemblyPath;
         private string _typeName;
         private ScriptGeneration _current;
+        private readonly UnrealWorldDebugController _debug;
         private bool _started;
 
         private ManagedScriptInstance(
@@ -597,6 +856,7 @@ public static class UnrealWorldManagedEntryPoint
             _assemblyPath = Path.GetFullPath(assemblyPath);
             _typeName = typeName;
             _current = LoadGeneration(1, _assemblyPath, _typeName);
+            _debug = new UnrealWorldDebugController(worldId, instanceId);
         }
 
         public static ManagedScriptInstance Create(
@@ -624,6 +884,38 @@ public static class UnrealWorldManagedEntryPoint
             _current.Script.OnTick(deltaSeconds);
         }
 
+        public bool IsDebugConfigured => _debug.IsConfigured;
+
+        public bool IsDebugActive => _debug.IsActive;
+
+        public void ConfigureDebug(string configurationJson) =>
+            _debug.Configure(configurationJson, _current.Generation);
+
+        public void BeginDebugTick(float deltaSeconds)
+        {
+            if (!_started)
+            {
+                throw new InvalidOperationException("The managed script is not started.");
+            }
+            ScriptGeneration generation = _current;
+            _debug.BeginTick(
+                generation.Generation,
+                deltaSeconds,
+                generation.Script.OnTick,
+                exception => CaptureBoundaryFailure(
+                    _worldId,
+                    _instanceId,
+                    nameof(BeginScriptDebugTick),
+                    exception));
+        }
+
+        public string GetDebugState() => _debug.GetSnapshotJson();
+
+        public void ControlDebug(UnrealWorldDebugControl control, string? pauseId) =>
+            _debug.Control(control, pauseId);
+
+        public void DisableDebug() => _debug.Disable();
+
         public void DispatchEvent(UnrealScriptEvent scriptEvent)
         {
             if (!_started)
@@ -638,6 +930,12 @@ public static class UnrealWorldManagedEntryPoint
 
         public int Reload(string assemblyPath, string typeName)
         {
+            if (_debug.IsActive)
+            {
+                throw new InvalidOperationException(
+                    "A live World debug execution must be disabled before script reload.");
+            }
+            _debug.Disable();
             string nextAssemblyPath = Path.GetFullPath(assemblyPath);
             ScriptGeneration next = LoadGeneration(
                 checked(_current.Generation + 1),
@@ -675,6 +973,7 @@ public static class UnrealWorldManagedEntryPoint
         {
             try
             {
+                _debug.Dispose();
                 if (_started)
                 {
                     _current.Script.OnStop();

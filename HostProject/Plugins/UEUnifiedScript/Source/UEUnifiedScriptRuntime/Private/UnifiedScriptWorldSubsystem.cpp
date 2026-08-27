@@ -115,6 +115,7 @@ void UUnifiedScriptWorldSubsystem::BeginManagedFrame()
     {
         return;
     }
+    NativeContext->PumpGameThreadCalls();
     if (GameplayDataPlane != nullptr &&
         GameplayDataPlane->GetPhase() ==
             EUnifiedScriptGameplayDataPhaseV4::ManagedTick)
@@ -288,6 +289,101 @@ bool UUnifiedScriptWorldSubsystem::TickManagedScript(
         OutError);
 }
 
+bool UUnifiedScriptWorldSubsystem::ConfigureManagedScriptDebug(
+    uint64 InstanceId,
+    const FString& ConfigurationJson,
+    FString& OutError)
+{
+    if (!IsManagedWorldReady())
+    {
+        OutError = TEXT("The UnifiedScript managed World is not ready.");
+        return false;
+    }
+    return FUnifiedScriptCoreClrHost::Get().ConfigureManagedScriptDebug(
+        WorldHostId, InstanceId, ConfigurationJson, OutError);
+}
+
+bool UUnifiedScriptWorldSubsystem::BeginManagedScriptDebugTick(
+    uint64 InstanceId,
+    float DeltaSeconds,
+    FString& OutError)
+{
+    if (!IsManagedWorldReady())
+    {
+        OutError = TEXT("The UnifiedScript managed World is not ready.");
+        return false;
+    }
+    return FUnifiedScriptCoreClrHost::Get().BeginManagedScriptDebugTick(
+        WorldHostId, InstanceId, DeltaSeconds, OutError);
+}
+
+bool UUnifiedScriptWorldSubsystem::GetManagedScriptDebugState(
+    uint64 InstanceId,
+    FString& OutJson,
+    FString& OutError) const
+{
+    if (!IsManagedWorldReady())
+    {
+        OutJson.Reset();
+        OutError = TEXT("The UnifiedScript managed World is not ready.");
+        return false;
+    }
+    return FUnifiedScriptCoreClrHost::Get().GetManagedScriptDebugState(
+        WorldHostId, InstanceId, OutJson, OutError);
+}
+
+bool UUnifiedScriptWorldSubsystem::ControlManagedScriptDebug(
+    uint64 InstanceId,
+    int32 Control,
+    const FString& PauseId,
+    FString& OutError)
+{
+    if (!IsManagedWorldReady())
+    {
+        OutError = TEXT("The UnifiedScript managed World is not ready.");
+        return false;
+    }
+    return FUnifiedScriptCoreClrHost::Get().ControlManagedScriptDebug(
+        WorldHostId, InstanceId, Control, PauseId, OutError);
+}
+
+bool UUnifiedScriptWorldSubsystem::DisableManagedScriptDebug(
+    uint64 InstanceId,
+    FString& OutError)
+{
+    if (!IsManagedWorldReady())
+    {
+        OutError = TEXT("The UnifiedScript managed World is not ready.");
+        return false;
+    }
+    return FUnifiedScriptCoreClrHost::Get().DisableManagedScriptDebug(
+        WorldHostId, InstanceId, OutError);
+}
+
+bool UUnifiedScriptWorldSubsystem::IsManagedScriptDebugActive(
+    uint64 InstanceId,
+    bool& bOutActive,
+    FString& OutError) const
+{
+    if (!IsManagedWorldReady())
+    {
+        bOutActive = false;
+        OutError = TEXT("The UnifiedScript managed World is not ready.");
+        return false;
+    }
+    return FUnifiedScriptCoreClrHost::Get().IsManagedScriptDebugActive(
+        WorldHostId, InstanceId, bOutActive, OutError);
+}
+
+void UUnifiedScriptWorldSubsystem::PumpManagedBridgeCalls()
+{
+    check(IsInGameThread());
+    if (IsNativeRuntimeReady())
+    {
+        NativeContext->PumpGameThreadCalls();
+    }
+}
+
 bool UUnifiedScriptWorldSubsystem::DispatchManagedEvent(
     uint64 InstanceId,
     int32 EventKind,
@@ -419,6 +515,10 @@ void UUnifiedScriptWorldSubsystem::ShutdownNativeRuntime()
 
     const bool bManagedWorldWasReady = IsManagedWorldReady();
     HostState = EUnifiedScriptWorldHostState::ShuttingDown;
+    if (NativeContext != nullptr)
+    {
+        NativeContext->SuspendWorkerDispatch();
+    }
     if (bManagedWorldWasReady)
     {
         FString Error;

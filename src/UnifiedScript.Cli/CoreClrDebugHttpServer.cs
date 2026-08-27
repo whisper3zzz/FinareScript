@@ -157,6 +157,17 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             return;
         }
 
+        if (path == "/api/debug/publish-live-world")
+        {
+            DebugLiveWorldPublishResponse published = await session.PublishLiveWorldAsync(
+                await ReadJsonAsync<DebugLiveWorldPublishRequest>(
+                    context.Request,
+                    cancellationToken),
+                cancellationToken);
+            await WriteJsonAsync(context.Response, published, cancellationToken);
+            return;
+        }
+
         DebugSessionResponse response = path switch
         {
             "/api/debug/start" => await session.StartAsync(
@@ -1021,6 +1032,77 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                     currentPause.PauseId,
                     request.FrameId,
                     request.Expression);
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
+
+        public async Task<DebugLiveWorldPublishResponse> PublishLiveWorldAsync(
+            DebugLiveWorldPublishRequest request,
+            CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(request);
+            await gate.WaitAsync(cancellationToken);
+            try
+            {
+                if (activeGroup is not null)
+                {
+                    throw new AuthoringProtocolException(
+                        HttpStatusCode.Conflict,
+                        "UAW1009",
+                        "Commit or cancel the active authoring group before publishing a live World debug image.");
+                }
+                if (execution is not null)
+                {
+                    throw new BreakpointProtocolException(
+                        "UDB1004",
+                        "Finish the loopback execution before publishing a live World debug image.");
+                }
+                if (request.ExpectedSourceCompilationId != reload.Generation.SourceCompilationId ||
+                    request.ExpectedSemanticConfigurationId !=
+                    reload.Generation.SemanticConfigurationId)
+                {
+                    throw new BreakpointProtocolException(
+                        "UDB1002",
+                        "The live World publish request belongs to stale source or semantic configuration.");
+                }
+                if (artifactOutputs.ManagedAssemblyPath is null ||
+                    artifactOutputs.PortablePdbPath is null)
+                {
+                    throw new AuthoringProtocolException(
+                        HttpStatusCode.Conflict,
+                        "UAW1004",
+                        "Live World debugging requires both --managed-out and --pdb-out.");
+                }
+
+                EnsureFilesUnchanged();
+                CSharpProgramEmitResult emitted = emitter.Emit(
+                    authoring.Current.Request,
+                    new CSharpDebugInstrumentation(typeof(CoreClrDebugProbe).Assembly.Location));
+                if (!emitted.Succeeded || emitted.Image is null)
+                {
+                    throw new AuthoringProtocolException(
+                        HttpStatusCode.Conflict,
+                        "UAW1004",
+                        "The instrumented live World assembly could not be emitted; the active artifact was not changed.",
+                        emitted.Diagnostics);
+                }
+                WriteTransactionally(
+                [
+                    new AuthoringOutput(
+                        artifactOutputs.ManagedAssemblyPath,
+                        emitted.Image.PortableExecutable),
+                    new AuthoringOutput(
+                        artifactOutputs.PortablePdbPath,
+                        emitted.Image.PortablePdb),
+                ]);
+                return new DebugLiveWorldPublishResponse(
+                    "unifiedscript.live-world-debug-publish/v0.1",
+                    reload.Generation,
+                    artifactOutputs.ManagedAssemblyPath,
+                    artifactOutputs.PortablePdbPath);
             }
             finally
             {
@@ -2189,6 +2271,16 @@ internal sealed record DebugEvaluateRequest(
     SemanticId PauseId,
     long FrameId,
     string Expression);
+
+internal sealed record DebugLiveWorldPublishRequest(
+    SemanticId ExpectedSourceCompilationId,
+    SemanticId ExpectedSemanticConfigurationId);
+
+internal sealed record DebugLiveWorldPublishResponse(
+    string SchemaVersion,
+    CoreClrProgramGeneration Generation,
+    string AssemblyPath,
+    string PortablePdbPath);
 
 internal sealed record DebugReceiverRequest(
     SemanticId AssetId,
