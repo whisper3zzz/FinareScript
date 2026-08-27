@@ -60,10 +60,10 @@ machine-local unless an artifact explicitly says otherwise.
 
 | Gate | Verified result |
 | --- | --- |
-| Main source | `f2285ff` (`feat: add bounded remote debug framing`), plus this M9.3 completion change set |
+| Main source | `c8d2000` (`feat: complete remote debugging and gameplay diagnosis`), plus the current M10.1 workload-contract change set |
 | Comparison source | `e62a46e` (`feat: adopt round-tripped gameplay tuning`) |
-| Managed tests | 534 / 534 passed |
-| Repository validator | 65 / 65 passed |
+| Managed tests | 540 / 540 passed |
+| Repository validator | 66 / 66 passed |
 | UE 5.8.1 native build | passed |
 | `UnifiedScript.Unreal` Automation | 15 / 15 passed, including full gameplay-profiler attribution, Authoring Surface, live World semantic pause/step/reload/detach, and repeated success/failure hot-reload leak coverage |
 | BlockBreaker workload | 10,000 frames, three trials, one shot, one hit, two command completions per trial |
@@ -1065,13 +1065,27 @@ only on a selected scalar call.
 
 ### M10.1 — Workload suite
 
-- [ ] version workloads for scalar/property calls, struct/container transfer,
+- [x] version workloads for scalar/property calls, struct/container transfer,
   delegate storms, per-frame Actor logic, mass entities, batch queries,
   resource/spawn flows, hot reload, and the complete BlockBreaker project
 - [ ] capture median, p95/p99 frame time, bridge time, calls, bytes copied,
   allocations, GC, memory high-water mark, startup, reload, and package size
 - [ ] alternate engines and trials, freeze inputs/assets/build configuration,
   record machine fingerprints, and reject unmatched comparisons
+
+Progress (2026-08-28): the checked-in v0.1 suite now pins one recipe for each of
+the nine required workload families, UE 5.8.1/WindowsEditor/Development Editor/
+NullRHI/fixed-60-Hz build inputs, per-workload recipe and asset digests, three
+trials, and the complete required-metric applicability matrix. Versioned engine
+result and comparison schemas require explicit null for inapplicable values and
+reject missing required values, failed/duplicate trials, invalid percentiles,
+manifest drift, unverifiable machine descriptors, different engine/build
+environments, and execution ordinals outside the deterministic 54-slot
+alternating schedule. `ue-workload-compare` publishes matched neutral or losing
+ratios without moving the future M10.3 gate. The 540/540 managed suite and 66/66
+repository invariants pass. M10.1 remains active while real collectors and both
+runtime runners are adapted to emit every required metric across all 27 trials
+per engine.
 
 ### M10.2 — Shared data and batching optimization
 

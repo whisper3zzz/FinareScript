@@ -64,6 +64,7 @@ DOCUMENTS = [
     ROOT / "docs" / "RUNTIME_DIAGNOSTICS.md",
     ROOT / "docs" / "HOT_RELOAD_RELIABILITY.md",
     ROOT / "docs" / "GAMEPLAY_PROFILER.md",
+    ROOT / "docs" / "PERFORMANCE_WORKLOAD_SUITE.md",
     ROOT / "docs" / "PROJECT_LOADING.md",
     ROOT / "docs" / "DECLARATION_IR.md",
     ROOT / "docs" / "STATE_OVERRIDE_MIGRATION.md",
@@ -3660,6 +3661,93 @@ def main() -> int:
     )
     checks.append(
         "remote debug control and gameplay diagnosis are bounded, concurrent, and reproducible"
+    )
+    performance_suite_source = (
+        ROOT
+        / "src"
+        / "UnifiedScript.Unreal"
+        / "UnrealPerformanceWorkloadSuite.cs"
+    ).read_text(encoding="utf-8")
+    performance_suite_test = (
+        ROOT
+        / "tests"
+        / "UnifiedScript.Tests"
+        / "UnrealPerformanceWorkloadSuiteTests.cs"
+    ).read_text(encoding="utf-8")
+    performance_suite_doc = (
+        ROOT / "docs" / "PERFORMANCE_WORKLOAD_SUITE.md"
+    ).read_text(encoding="utf-8")
+    performance_suite_manifest_path = (
+        ROOT / "benchmarks" / "unreal" / "workload-suite.v0.1.json"
+    )
+    with performance_suite_manifest_path.open("r", encoding="utf-8") as handle:
+        performance_suite_manifest = json.load(handle)
+    expected_workload_categories = {
+        "scalarPropertyCalls",
+        "structContainerTransfer",
+        "delegateStorm",
+        "perFrameActorLogic",
+        "massEntities",
+        "batchQueries",
+        "resourceSpawnFlow",
+        "hotReload",
+        "blockBreaker",
+    }
+    expected_performance_metrics = {
+        "frameTimeMedianMilliseconds",
+        "frameTimeP95Milliseconds",
+        "frameTimeP99Milliseconds",
+        "bridgeTimeMilliseconds",
+        "calls",
+        "bytesCopied",
+        "allocatedBytes",
+        "gen0Collections",
+        "gen1Collections",
+        "gen2Collections",
+        "memoryHighWaterBytes",
+        "startupMilliseconds",
+        "reloadMilliseconds",
+        "packageSizeBytes",
+    }
+    suite_workloads = performance_suite_manifest["workloads"]
+    require(
+        performance_suite_manifest["schemaVersion"]
+        == "unifiedscript.performance-workload-suite/v0.1"
+        and performance_suite_manifest["trialCount"] == 3
+        and performance_suite_manifest["build"]["engineVersion"] == "5.8.1"
+        and performance_suite_manifest["build"]["rhi"] == "NullRHI"
+        and len(suite_workloads) == 9
+        and {workload["category"] for workload in suite_workloads}
+        == expected_workload_categories
+        and {
+            metric
+            for workload in suite_workloads
+            for metric in workload["requiredMetrics"]
+        }
+        == expected_performance_metrics
+        and abs(sum(workload["weight"] for workload in suite_workloads) - 1.0)
+        < 0.000001
+        and all(
+            re.fullmatch(r"sha256:[0-9a-f]{64}", workload["inputDigest"])
+            and re.fullmatch(r"sha256:[0-9a-f]{64}", workload["assetDigest"])
+            for workload in suite_workloads
+        )
+        and "unifiedscript.performance-engine-result/v0.1"
+        in performance_suite_source
+        and "CreateAlternatingSchedule" in performance_suite_source
+        and "ComputeMachineFingerprint" in performance_suite_source
+        and "environment differs" in performance_suite_source
+        and "CheckedInManifestCoversM10WorkloadsMetricsAndAlternatingOrder"
+        in performance_suite_test
+        and "ComparisonRejectsAValidButDifferentMachineFingerprint"
+        in performance_suite_test
+        and 'args[0] == "ue-workload-compare"' in cli_source
+        and "54 slots" in performance_suite_doc
+        and "no broad performance result is published" in performance_suite_doc,
+        "M10.1 workload manifest, metrics, alternating schedule, or strict comparison is incomplete",
+    )
+    checks.append(
+        "representative performance suite versions nine workloads and rejects unmatched evidence"
     )
     authoring_diagnostics_doc = (
         ROOT / "docs" / "AUTHORING_DIAGNOSTICS.md"

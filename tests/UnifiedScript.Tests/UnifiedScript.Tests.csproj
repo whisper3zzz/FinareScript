@@ -47,6 +47,9 @@
     <None Include="../../samples/Unreal/Diagnostics/GameplayDiagnosisFixture.cs"
           Link="UnrealDiagnostics/GameplayDiagnosisFixture.cs"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../benchmarks/unreal/workload-suite.v0.1.json"
+          Link="UnrealPerformance/workload-suite.v0.1.json"
+          CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../samples/Unreal/UEUnifiedScriptRuntime.api-contract.json"
           Link="UnrealFixtures/UEUnifiedScriptRuntime.api-contract.json"
           CopyToOutputDirectory="PreserveNewest" />

@@ -615,6 +615,9 @@ powershell -ExecutionPolicy Bypass -File tools/run-unreal-benchmark.ps1 `
 ```
 
 See `docs/UNREAL_PERFORMANCE.md` for the fixed scenario and competitive gate.
+M10's representative nine-workload contract, strict matched-environment rules,
+and alternating trial schedule are documented in
+[`docs/PERFORMANCE_WORKLOAD_SUITE.md`](docs/PERFORMANCE_WORKLOAD_SUITE.md).
 
 Build, archive, and smoke-test the self-contained Win64 Development and
 Shipping packages:
