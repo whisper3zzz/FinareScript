@@ -72,3 +72,20 @@ lane handles this fixed signature without constructing a generic call frame.
 The allocation-free fixed lane also covers supported zero-to-four-argument
 int, float, bool, object-handle, and FVector families; broader signatures use
 the complete ABI v3 CallFrame marshaller.
+
+## Visual/C# whole-game round trip
+
+M8.4 edits the actual migrated Player and Rifle gameplay from one pinned Visual
+baseline, inspects the emitted C#, makes behavior-preserving C# edits, and
+reopens equivalent Graphs. Run the managed proof with:
+
+```powershell
+.\comparison\verify-blockbreaker-roundtrip.ps1
+```
+
+Add the two UE gameplay candidates with `-RunUnreal`, or run the complete dual
+Build/Cook/Stage/Pak/Archive and packaged-smoke proof with
+`-RunUnreal -Package`. The report independently gates stable method identity,
+bound semantics, exact IL, execution cases, Script Assets, gameplay results,
+and package results. See
+[BlockBreaker Visual/C# round-trip proof](../docs/BLOCKBREAKER_ROUND_TRIP.md).

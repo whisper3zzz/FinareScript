@@ -8,8 +8,10 @@ and the versioned Unreal adapter has completed its adoptable-project alpha,
 M7.2 gameplay services/lifecycle productization, and M7.3 schema-generated
 gameplay data plane without adding UE dependencies to the compiler core. M7.4
 then completed the full BlockBreaker migration with exact inventory coverage
-and no Puerts/TypeScript payload in the target project or package. The active
-RoadMap cursor is M8.4 whole-game round-trip proof after completing M8.3 native
+and no Puerts/TypeScript payload in the target project or package. M8.4 then
+completed a real Player/Rifle Visual-to-C#-to-Visual round trip with semantic,
+IL, execution, Script Asset, UE gameplay, and dual packaged-build equivalence.
+The active RoadMap cursor is M8.5 language-profile closure after M8.3 native
 Script Asset declaration editing, generated-reflection-driven API Palette
 metadata, and stable-ID instance override migration on top of the M8.2 Palette,
 Pin, Canvas, Advanced Details, diagnostics, exact Diff, safe quick-fix, and
@@ -69,6 +71,20 @@ imports, Puerts/Unreal APIs, resources, globals, async patterns, decorators,
 delegates, and native facades. It also requires 19 byte-identical gameplay
 assets, two Script Assets, 40 generated native thunks, and zero legacy targets.
 See [M7.4 BlockBreaker migration](docs/milestones/M7_4_BLOCKBREAKER_MIGRATION.md).
+
+Run the M8.4 full Visual/C# round-trip proof with:
+
+```powershell
+powershell -ExecutionPolicy Bypass `
+  -File comparison/verify-blockbreaker-roundtrip.ps1 `
+  -RunUnreal -Package
+```
+
+It applies one atomic project-level Visual patch to the real Player and Rifle
+scripts, emits C#, applies behavior-preserving text edits, reopens equivalent
+Graphs, and runs both candidates through the same UE map and independently
+packaged executable. See
+[BlockBreaker Visual/C# round-trip proof](docs/BLOCKBREAKER_ROUND_TRIP.md).
 
 Create a repository-independent alpha SDK with:
 

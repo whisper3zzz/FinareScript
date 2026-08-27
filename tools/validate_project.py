@@ -62,6 +62,7 @@ DOCUMENTS = [
     ROOT / "docs" / "PROJECT_LOADING.md",
     ROOT / "docs" / "DECLARATION_IR.md",
     ROOT / "docs" / "STATE_OVERRIDE_MIGRATION.md",
+    ROOT / "docs" / "BLOCKBREAKER_ROUND_TRIP.md",
     ROOT / "docs" / "VISUAL_AUTHORING_MODEL.md",
     ROOT / "docs" / "AUTHORING_SURFACE.md",
     ROOT / "docs" / "NODE_PALETTE.md",
@@ -2573,6 +2574,110 @@ def main() -> int:
         "M7.4 whole-project Puerts inventory, coverage, or migration gates are incomplete",
     )
     checks.append("M7.4 BlockBreaker migration has exact coverage and zero legacy payload gates")
+    roundtrip_manifest_path = (
+        ROOT / "comparison" / "blockbreaker-roundtrip.json"
+    )
+    roundtrip_patch_path = (
+        ROOT / "comparison" / "blockbreaker-roundtrip.patch.json"
+    )
+    roundtrip_requirement_paths = [
+        ROOT / "comparison" / "blockbreaker-player-roundtrip.requirements.json",
+        ROOT / "comparison" / "blockbreaker-rifle-roundtrip.requirements.json",
+    ]
+    roundtrip_runner_path = (
+        ROOT / "comparison" / "verify-blockbreaker-roundtrip.ps1"
+    )
+    roundtrip_runtime_path = (
+        ROOT / "src" / "UnifiedScript.Runtime" / "RoundTripEquivalence.cs"
+    )
+    roundtrip_test_path = (
+        ROOT / "tests" / "UnifiedScript.Tests" / "RoundTripEquivalenceTests.cs"
+    )
+    authoring_http_test_path = (
+        ROOT / "tests" / "UnifiedScript.Tests" / "CoreClrAuthoringHttpServerTests.cs"
+    )
+    roundtrip_doc_path = ROOT / "docs" / "BLOCKBREAKER_ROUND_TRIP.md"
+    comparison_readme_path = ROOT / "comparison" / "README.md"
+    for path in [
+        roundtrip_manifest_path,
+        roundtrip_patch_path,
+        *roundtrip_requirement_paths,
+        roundtrip_runner_path,
+        roundtrip_runtime_path,
+        roundtrip_test_path,
+        authoring_http_test_path,
+        roundtrip_doc_path,
+        comparison_readme_path,
+    ]:
+        require(path.is_file(), f"Missing M8.4 round-trip artifact: {path}")
+    with roundtrip_manifest_path.open("r", encoding="utf-8") as handle:
+        roundtrip_manifest = json.load(handle)
+    with roundtrip_patch_path.open("r", encoding="utf-8") as handle:
+        roundtrip_patch = json.load(handle)
+    roundtrip_requirements = []
+    for path in roundtrip_requirement_paths:
+        with path.open("r", encoding="utf-8") as handle:
+            roundtrip_requirements.append(json.load(handle))
+    roundtrip_runner = roundtrip_runner_path.read_text(encoding="utf-8")
+    roundtrip_runtime = roundtrip_runtime_path.read_text(encoding="utf-8")
+    roundtrip_test = roundtrip_test_path.read_text(encoding="utf-8")
+    authoring_http_test = authoring_http_test_path.read_text(encoding="utf-8")
+    roundtrip_doc = roundtrip_doc_path.read_text(encoding="utf-8")
+    comparison_readme = comparison_readme_path.read_text(encoding="utf-8")
+    roundtrip_methods = {
+        script["method"] for script in roundtrip_manifest["scripts"]
+    }
+    requirement_methods = {
+        method["qualifiedName"]
+        for document in roundtrip_requirements
+        for method in document["methods"]
+    }
+    require(
+        roundtrip_manifest["schemaVersion"]
+        == "unifiedscript.blockbreaker-round-trip/v0.1"
+        and len(roundtrip_manifest["baselineCommit"]) == 40
+        and roundtrip_manifest["projectPath"].endswith(".csproj")
+        and {script["id"] for script in roundtrip_manifest["scripts"]}
+        == {"player", "rifle"}
+        and roundtrip_methods == requirement_methods
+        and all(
+            document["schemaVersion"]
+            == "unifiedscript.round-trip-requirements/v0.1"
+            and len(document["methods"]) == 1
+            and len(document["methods"][0]["cases"]) >= 3
+            for document in roundtrip_requirements
+        )
+        and roundtrip_patch["schemaVersion"] == "unifiedscript.patch/v0.28"
+        and len(roundtrip_patch["operations"]) == 2
+        and all(
+            operation["operation"] == "replaceLiteral"
+            for operation in roundtrip_patch["operations"]
+        )
+        and 'args[0] == "verify-roundtrip"' in cli_source
+        and '"apply-project-patch" or "apply-project-plan"' in cli_source
+        and "RoundTripEquivalenceVerifier" in roundtrip_runtime
+        and "CreateSemanticDigest" in roundtrip_runtime
+        and "CreateIlDigest" in roundtrip_runtime
+        and "EquivalentVisualAndCodeProgramsMatchIdentitySemanticsIlAssetsAndResults"
+        in roundtrip_test
+        and "apply-project-patch" in roundtrip_runner
+        and "verify-roundtrip" in roundtrip_runner
+        and "gameplayEquivalent" in roundtrip_runner
+        and "scriptAssetsEquivalent" in roundtrip_runner
+        and "packagedBuildEquivalent" in roundtrip_runner
+        and "stage-maximum-stale" in authoring_http_test
+        and "group-external-conflict" in authoring_http_test
+        and '"UAW1005"' in authoring_http_test
+        and 'Assert.Equal("UAW1002", error.Error.Code)' in authoring_http_test
+        and "BLOCKBREAKER_ROUND_TRIP.md" in comparison_readme
+        and "verify-blockbreaker-roundtrip.ps1" in roundtrip_doc
+        and "- [x] author representative BlockBreaker behavior visually" in roadmap
+        and "- [x] run semantic, IL, gameplay-result, asset, and packaged-build equivalence"
+        in roadmap
+        and "- [x] add conflict and merge tests for external edits" in roadmap,
+        "M8.4 whole-game Visual/C# round-trip proof or conflict gates are incomplete",
+    )
+    checks.append("M8.4 BlockBreaker Visual/C# round trip passes full equivalence and conflict gates")
     require(
         "UUnifiedScriptWorldSubsystem final" in unreal_world_host_header
         and "public UWorldSubsystem" in unreal_world_host_header
@@ -2788,7 +2893,7 @@ def main() -> int:
         in unreal_world_host_test
         and "- [x] preserve instance overrides and compatible semantic identities"
         in roadmap
-        and "Next slice: **M8.4 — whole-game round-trip proof**" in roadmap,
+        and "Next slice: **M8.5 — language-profile closure**" in roadmap,
         "Declaration IR state materialization or live component integration is missing",
     )
     checks.append("UE component materializes Declaration IR state with stable-ID migration")

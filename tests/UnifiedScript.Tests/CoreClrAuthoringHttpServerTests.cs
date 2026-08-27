@@ -562,6 +562,26 @@ public sealed class CoreClrAuthoringHttpServerTests
                         maxDamage.TypeKind,
                         Json("120"),
                         maxDamage.Exposure))]);
+            using (HttpRequestMessage staleGroupedRequest = AuthoringRequest(
+                "api/authoring/declaration-patch",
+                DeclarationPatchJson.Serialize(declarationPatch),
+                begun.Revision,
+                "stage-maximum-stale",
+                "Stage maximum from stale surface",
+                begun.Group.Id))
+            using (HttpResponseMessage staleGroupedResponse = await client.SendAsync(staleGroupedRequest))
+            {
+                Assert.Equal(HttpStatusCode.Conflict, staleGroupedResponse.StatusCode);
+                Assert.Contains(
+                    "UAW1005",
+                    await staleGroupedResponse.Content.ReadAsStringAsync(),
+                    StringComparison.Ordinal);
+                AuthoringWorkspaceResponse unchangedDraft = await GetWorkspaceAsync(client);
+                Assert.Equal(stagedBehavior.Revision, unchangedDraft.Revision);
+                Assert.Equal(1, unchangedDraft.Group!.StagedOperationCount);
+                Assert.Equal(Source, await File.ReadAllTextAsync(sourcePath));
+            }
+
             AuthoringWorkspaceResponse stagedDeclaration = await PostAsync(
                 client,
                 "api/authoring/declaration-patch",
@@ -652,6 +672,108 @@ public sealed class CoreClrAuthoringHttpServerTests
             Assert.Equal(undone.Revision, cancelled.Revision);
             Assert.Equal(undone.Generation.Number, cancelled.Generation.Number);
             Assert.Equal(Source, await File.ReadAllTextAsync(sourcePath));
+
+            AuthoringWorkspaceResponse conflictBegun = await PostAsync(
+                client,
+                "api/authoring/group/begin",
+                "{}",
+                cancelled.Revision,
+                "group-external-conflict",
+                "Externally conflicting damage tuning");
+            GraphNode conflictMinimum = conflictBegun.Graph.Functions[0].Nodes.Single(static node =>
+                node.Kind == "literal" && node.Properties.GetValueOrDefault("value") == "0f");
+            SemanticPatchDocument conflictBehaviorPatch = SemanticPatchDocument.Create(
+                conflictBegun.ScriptAssets.SourceCompilationId,
+                conflictBegun.ScriptAssets.SemanticConfigurationId,
+                [new ReplaceLiteralPatchOperation(conflictMinimum.Id, "0f", "5f")]);
+            AuthoringWorkspaceResponse conflictBehavior = await PostAsync(
+                client,
+                "api/authoring/semantic-patch",
+                SemanticPatchJson.Serialize(conflictBehaviorPatch),
+                conflictBegun.Revision,
+                "stage-conflicting-minimum",
+                "Stage conflicting minimum",
+                conflictBegun.Group!.Id);
+            ScriptStateDeclaration conflictMaximum = conflictBehavior.ScriptAssets.Assets[0].States
+                .Single(static state => state.Name == "MaxDamage");
+            DeclarationPatchDocument conflictDeclarationPatch = DeclarationPatchDocument.Create(
+                conflictBehavior.ScriptAssets.SourceCompilationId,
+                conflictBehavior.ScriptAssets.SemanticConfigurationId,
+                [new UpdateScriptStatePatchOperation(
+                    conflictMaximum.Id,
+                    new ScriptStatePatchPrecondition(
+                        conflictMaximum.Name,
+                        conflictMaximum.TypeMetadataName,
+                        conflictMaximum.TypeKind,
+                        conflictMaximum.DefaultValue,
+                        conflictMaximum.Exposure),
+                    new ScriptStatePatchSpec(
+                        conflictMaximum.Name,
+                        conflictMaximum.TypeMetadataName,
+                        conflictMaximum.TypeKind,
+                        Json("140"),
+                        conflictMaximum.Exposure))]);
+            AuthoringWorkspaceResponse conflictDeclaration = await PostAsync(
+                client,
+                "api/authoring/declaration-patch",
+                DeclarationPatchJson.Serialize(conflictDeclarationPatch),
+                conflictBehavior.Revision,
+                "stage-conflicting-maximum",
+                "Stage conflicting maximum",
+                conflictBegun.Group.Id);
+            AuthoringPreviewResponse conflictPreview = await PreviewAsync(
+                client,
+                "api/authoring/preview/group/commit",
+                "{}",
+                conflictDeclaration.Revision,
+                conflictBegun.Group.Id,
+                conflictBegun.Group.Description,
+                conflictBegun.Group.Id);
+            Assert.Contains("Math.Clamp(scaled, 5f, MaxDamage)", Assert.Single(conflictPreview.Files).AfterText);
+            Assert.Contains("= 140;", Assert.Single(conflictPreview.Files).AfterText);
+            string identityBeforeExternalConflict = await File.ReadAllTextAsync(identityPath);
+            string historyBeforeExternalConflict = await File.ReadAllTextAsync(historyPath);
+            await File.AppendAllTextAsync(sourcePath, "\n// external grouped edit\n");
+
+            using (HttpRequestMessage externalConflictRequest = AuthoringRequest(
+                "api/authoring/group/commit",
+                "{}",
+                conflictDeclaration.Revision,
+                conflictBegun.Group.Id,
+                conflictBegun.Group.Description,
+                conflictBegun.Group.Id,
+                conflictPreview.PreviewToken))
+            using (HttpResponseMessage externalConflictResponse = await client.SendAsync(externalConflictRequest))
+            {
+                Assert.Equal(HttpStatusCode.Conflict, externalConflictResponse.StatusCode);
+                DebugErrorResponse error = JsonSerializer.Deserialize<DebugErrorResponse>(
+                    await externalConflictResponse.Content.ReadAsStringAsync(),
+                    UnifiedJson.CreateOptions())!;
+                Assert.Equal("UAW1002", error.Error.Code);
+                Assert.Equal("unchanged", error.Rollback!.State);
+                Assert.Equal(conflictDeclaration.Revision, error.Rollback.Revision);
+            }
+
+            string externallyEditedSource = await File.ReadAllTextAsync(sourcePath);
+            Assert.Contains("// external grouped edit", externallyEditedSource);
+            Assert.DoesNotContain("Math.Clamp(scaled, 5f, MaxDamage)", externallyEditedSource);
+            Assert.DoesNotContain("= 140;", externallyEditedSource);
+            Assert.Equal(identityBeforeExternalConflict, await File.ReadAllTextAsync(identityPath));
+            Assert.Equal(historyBeforeExternalConflict, await File.ReadAllTextAsync(historyPath));
+            AuthoringWorkspaceResponse conflictedDraft = await GetWorkspaceAsync(client);
+            Assert.Equal(conflictDeclaration.Revision, conflictedDraft.Revision);
+            Assert.Equal(2, conflictedDraft.Group!.StagedOperationCount);
+            Assert.Equal(undone.Generation.Number, conflictedDraft.Generation.Number);
+            AuthoringWorkspaceResponse conflictCancelled = await PostAsync(
+                client,
+                "api/authoring/group/cancel",
+                "{}",
+                conflictDeclaration.Revision,
+                conflictBegun.Group.Id,
+                conflictBegun.Group.Description,
+                conflictBegun.Group.Id);
+            Assert.Null(conflictCancelled.Group);
+            Assert.Equal(cancelled.Revision, conflictCancelled.Revision);
 
             cancellation.Cancel();
             await serverTask.WaitAsync(TimeSpan.FromSeconds(5));

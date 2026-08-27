@@ -49,7 +49,7 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-28**
 
 - Active milestone: **M8 — Visual/C# Authoring Beta**
-- Next slice: **M8.4 — whole-game round-trip proof**
+- Next slice: **M8.5 — language-profile closure**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -60,10 +60,10 @@ machine-local unless an artifact explicitly says otherwise.
 
 | Gate | Verified result |
 | --- | --- |
-| Main source | `5ba5bf8` (`feat: drive node palette from reflection metadata`), plus this instance-override migration change set |
-| Comparison source | `489ce9b` (`feat: complete full UnifiedScript migration`) |
-| Managed tests | 507 / 507 passed |
-| Repository validator | 54 / 54 passed |
+| Main source | `299ceaa` (`feat: prove BlockBreaker visual code round trip`), plus this M8.4 conflict/documentation closeout |
+| Comparison source | `e62a46e` (`feat: adopt round-tripped gameplay tuning`) |
+| Managed tests | 509 / 509 passed |
+| Repository validator | 55 / 55 passed |
 | UE 5.8.1 native build | passed |
 | `UnifiedScript.Unreal` Automation | 13 / 13 passed with M8.3 declaration, Authoring Surface, override migration, and live World-host coverage |
 | BlockBreaker workload | 10,000 frames, three trials, one shot, one hit, two command completions per trial |
@@ -72,6 +72,8 @@ machine-local unless an artifact explicitly says otherwise.
 | Full migration audit | 74 / 74 inventory items, 19 / 19 shared assets, 40 / 40 generated thunks, zero legacy targets |
 | Deliverable smoke | 300 frames, one shot, one hit, two command completions, 3,631 fast/CallFrame calls, zero legacy calls |
 | Deliverable report | `artifacts/demo/blockbreaker-20260827-165719/demo-delivery.json` |
+| Visual/C# round trip | semantic, MethodDef IL, execution cases, Script Assets, two live UE candidates, and two packaged candidates equivalent |
+| Round-trip report | `artifacts/roundtrip/blockbreaker-20260828-013349-7a30871b/roundtrip-report.json` |
 
 ## Release ladder
 
@@ -857,12 +859,31 @@ whole-game round-trip proof. See
 
 ### M8.4 — Whole-game round-trip proof
 
-- [ ] author representative BlockBreaker behavior visually, inspect the emitted
+- [x] author representative BlockBreaker behavior visually, inspect the emitted
   C#, edit the same logic as C#, and reopen an equivalent graph
-- [ ] run semantic, IL, gameplay-result, asset, and packaged-build equivalence
+- [x] run semantic, IL, gameplay-result, asset, and packaged-build equivalence
   gates after both directions
-- [ ] add conflict and merge tests for external edits, stale surfaces, and
+- [x] add conflict and merge tests for external edits, stale surfaces, and
   simultaneous declaration/body changes
+
+Evidence (2026-08-28): the pinned comparison baseline `b1d3de3` exposes real
+Player `ShouldFire` and Rifle `ResolveDamage` Visual methods. One full-project
+patch changes their stable Graph literals, emits both C# sources, and reconciles
+their identity sidecars. Ordinary C# local renames and equivalent lexical
+float spellings then reopen as equivalent Graphs at comparison commit
+`e62a46e`. `verify-roundtrip` independently passes stable method identity,
+bound-semantic digest, exact MethodDef IL, boundary execution cases, and Script
+Asset declaration equivalence. The dual-candidate UE 5.8.1 run passes 300 frames,
+one shot, one hit, two gameplay command completions, 3,631 fast/CallFrame calls,
+zero legacy calls, and byte-identical Player/Rifle Script Assets on both sides.
+Both candidates independently Build/Cook/Stage/Pak/Archive 249 files
+(1,030,617,655 bytes), contain zero Puerts/TypeScript files, and pass the same
+packaged smoke. Workbench regression now rejects an in-group stale Surface with
+`UAW1005`, atomically merges declaration and method-body stages, and rejects an
+external post-preview edit with `UAW1002` without partially publishing source,
+identity, history, artifacts, or runtime generation. The 509/509 managed suite
+and 55/55 repository invariants pass. M8.4 is complete and the cursor advances
+to M8.5. See [`BLOCKBREAKER_ROUND_TRIP.md`](BLOCKBREAKER_ROUND_TRIP.md).
 
 ### M8.5 — Language-profile closure
 
