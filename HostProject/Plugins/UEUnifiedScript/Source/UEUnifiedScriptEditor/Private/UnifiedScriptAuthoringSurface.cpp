@@ -1842,26 +1842,48 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildControlEdgeReconnectionPatch(
     const FUnifiedScriptAuthoringPort* TargetInput = Target != nullptr
         ? Target->FindPort(ExpectedEdge.ToPort, TEXT("input"))
         : nullptr;
+    const auto CountControlPorts = [](const FUnifiedScriptAuthoringAction* Action,
+                                      const TCHAR* Direction)
+    {
+        int32 Count = 0;
+        if (Action != nullptr)
+        {
+            for (const FUnifiedScriptAuthoringPort& Port : Action->Ports)
+            {
+                Count += Port.Direction == Direction && Port.IsControl() ? 1 : 0;
+            }
+        }
+        return Count;
+    };
+    const int32 NewSourceControlOutputCount = CountControlPorts(NewSource, TEXT("output"));
+    const int32 TargetControlInputCount = CountControlPorts(Target, TEXT("input"));
     if (!IsSemanticId(ExpectedEdge.Id) || ExpectedEdge.Kind != TEXT("control") ||
         ExpectedSource == nullptr || NewSource == nullptr || Target == nullptr ||
         ExpectedSourcePort == nullptr || NewSourceOutput == nullptr || TargetInput == nullptr ||
         !ExpectedSourcePort->IsControl() || !NewSourceOutput->IsControl() ||
-        !TargetInput->IsControl() || ExpectedEdge.ToPort != TEXT("in") ||
-        NewSourcePort != TEXT("then") || NewSource->GraphKind == TEXT("entry") ||
-        NewSource->GraphKind == TEXT("branch") ||
+        !TargetInput->IsControl() || NewSourceControlOutputCount != 1 ||
+        TargetControlInputCount != 1 || NewSource->GraphKind == TEXT("entry") ||
         NewSource->GraphKind == TEXT("switchCase") ||
         NewSourceNodeId == ExpectedEdge.ToNode ||
         (ExpectedEdge.FromNode == NewSourceNodeId && ExpectedEdge.FromPort == NewSourcePort))
     {
-        OutError = TEXT("Control reconnection requires a distinct sequential 'then' output and an occupied 'in' input.");
+        OutError = TEXT("Control reconnection requires a distinct single-path control output and an occupied single-path control input.");
         return false;
     }
 
     const FUnifiedScriptAuthoringRegion* TargetBlock = FindOwningBlock(Function, Target->Id);
     const FUnifiedScriptAuthoringRegion* SourceBlock = FindOwningBlock(Function, NewSource->Id);
-    if (TargetBlock == nullptr || SourceBlock == nullptr || TargetBlock->Id != SourceBlock->Id)
+    if (TargetBlock == nullptr || SourceBlock == nullptr)
     {
-        OutError = TEXT("This control wire crosses a branch, loop, or switch boundary. Use an explicit structured transform instead.");
+        OutError = TEXT("Both control endpoints must belong to explicit block or switch-section regions.");
+        return false;
+    }
+    if (TargetBlock->Id != SourceBlock->Id &&
+        (Target->GraphKind == TEXT("branch") || Target->GraphKind == TEXT("loop") ||
+            Target->GraphKind == TEXT("switch") || Target->GraphKind == TEXT("return") ||
+            Target->GraphKind == TEXT("break") || Target->GraphKind == TEXT("continue")))
+    {
+        OutError = TEXT("Cross-region control reconnection moves only variable or expression statements. Use the node's explicit structured transform instead.");
         return false;
     }
 
@@ -1873,32 +1895,40 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildControlEdgeReconnectionPatch(
         return false;
     }
 
-    TArray<FString> StructuralIds = GetStructuralStatementIds(Function, *TargetBlock);
-    const int32 TargetIndex = StructuralIds.IndexOfByKey(TargetStatementId);
-    if (TargetIndex == INDEX_NONE || !StructuralIds.Contains(NewSourceStatementId))
+    TArray<FString> SourceStructuralIds = GetStructuralStatementIds(Function, *TargetBlock);
+    TArray<FString> DestinationStructuralIds = TargetBlock->Id == SourceBlock->Id
+        ? SourceStructuralIds
+        : GetStructuralStatementIds(Function, *SourceBlock);
+    const int32 TargetIndex = SourceStructuralIds.IndexOfByKey(TargetStatementId);
+    if (TargetIndex == INDEX_NONE || !DestinationStructuralIds.Contains(NewSourceStatementId))
     {
-        OutError = TEXT("Both control endpoints must resolve to statements in the selected structured block.");
+        OutError = TEXT("Both control endpoints must resolve to direct statements in their selected structured blocks.");
         return false;
     }
     FString SourcePrevious;
     FString SourceNext;
     GetStructuralSiblingPreconditions(
-        StructuralIds,
+        SourceStructuralIds,
         TargetStatementId,
         SourcePrevious,
         SourceNext);
-    StructuralIds.RemoveAt(TargetIndex);
-    const int32 DestinationPreviousIndex = StructuralIds.IndexOfByKey(NewSourceStatementId);
+    if (TargetBlock->Id == SourceBlock->Id)
+    {
+        DestinationStructuralIds.RemoveAt(TargetIndex);
+    }
+    const int32 DestinationPreviousIndex = DestinationStructuralIds.IndexOfByKey(
+        NewSourceStatementId);
     if (DestinationPreviousIndex == INDEX_NONE)
     {
         OutError = TEXT("The new control predecessor disappeared from the structural statement order.");
         return false;
     }
-    const FString DestinationPrevious = StructuralIds[DestinationPreviousIndex];
-    const FString DestinationNext = DestinationPreviousIndex + 1 < StructuralIds.Num()
-        ? StructuralIds[DestinationPreviousIndex + 1]
+    const FString DestinationPrevious = DestinationStructuralIds[DestinationPreviousIndex];
+    const FString DestinationNext = DestinationPreviousIndex + 1 < DestinationStructuralIds.Num()
+        ? DestinationStructuralIds[DestinationPreviousIndex + 1]
         : FString();
-    if (SourcePrevious == DestinationPrevious && SourceNext == DestinationNext)
+    if (TargetBlock->Id == SourceBlock->Id &&
+        SourcePrevious == DestinationPrevious && SourceNext == DestinationNext)
     {
         OutError = TEXT("This control wire already represents the requested statement order.");
         return false;
@@ -1910,7 +1940,7 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildControlEdgeReconnectionPatch(
     Operation->SetStringField(TEXT("expectedSourceParentBlockId"), TargetBlock->SourceNodeId);
     SetOptionalId(Operation, TEXT("expectedSourcePreviousSiblingId"), SourcePrevious);
     SetOptionalId(Operation, TEXT("expectedSourceNextSiblingId"), SourceNext);
-    Operation->SetStringField(TEXT("destinationParentBlockId"), TargetBlock->SourceNodeId);
+    Operation->SetStringField(TEXT("destinationParentBlockId"), SourceBlock->SourceNodeId);
     SetOptionalId(
         Operation,
         TEXT("expectedDestinationPreviousSiblingId"),

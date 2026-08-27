@@ -109,13 +109,17 @@ prefix. The host exposes that transaction at
 `POST /api/authoring/semantic-patch-plan`.
 
 Semantic Patch v0.22 added a bounded `moveStatement` operation for control-wire
-authoring. Dragging a sequential `then` pin onto an occupied statement `in` pin
-inside the same editable block moves the target after the source. The payload
-carries exact source and destination sibling gaps; the source applier requires
-persistent identity, preserves comments and nested IDs, rejects local
-use-before-declaration and non-terminal transfers, and validates the regenerated
-CFG. Cross-region gestures are rejected as explicit branch/loop/switch
-transforms rather than approximated as arbitrary edges. See
+authoring. Dragging a node's single-path control output onto an occupied
+single-path statement control input
+moves the target after the source, either within one editable block or across
+explicit function/then/else/loop/switch-section bodies. The payload carries
+exact source/destination block identities and sibling gaps; the source applier
+requires persistent identity, preserves the containing method's semantic IDs
+and moved comments, rejects local use-before-declaration and non-terminal
+transfers, recompiles the result, and validates the regenerated CFG. A
+cross-region move is deliberately limited to variable declarations and
+expression statements. Entire branches/loops/switches and return/break/continue
+remain dedicated structured operations rather than arbitrary edges. See
 [CONTROL_FLOW_RECONNECTION.md](CONTROL_FLOW_RECONNECTION.md).
 
 Semantic Patch v0.23 completes the first switch-authoring transaction set. The

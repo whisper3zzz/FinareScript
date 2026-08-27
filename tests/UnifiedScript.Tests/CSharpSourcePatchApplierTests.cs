@@ -2816,7 +2816,7 @@ public sealed class CSharpSourcePatchApplierTests
     }
 
     [Fact]
-    public void Apply_RejectsStatementMoveThatCrossesStructuredRegions()
+    public void Apply_MovesStatementAcrossStructuredRegionsAndPreservesSemanticIdentity()
     {
         const string source = """
             using UnifiedScript;
@@ -2860,11 +2860,271 @@ public sealed class CSharpSourcePatchApplierTests
 
         CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
 
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.True(
+            patchedSource.IndexOf("int inside = 2;", StringComparison.Ordinal) <
+            patchedSource.IndexOf("if (ready)", StringComparison.Ordinal));
+        HirMethodDeclaration changed = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        Assert.Equal(
+            [outside.Id, inside.Id, branch.Id, @return.Id],
+            changed.Body.Statements.Select(static candidate => candidate.Id));
+        HirIfStatement changedBranch = Assert.IsType<HirIfStatement>(changed.Body.Statements[2]);
+        Assert.Empty(changedBranch.Then.Statements);
+        Assert.Equal(branch.Then.Id, changedBranch.Then.Id);
+        Assert.Equal(
+            method.DescendantsAndSelf().Select(static node => node.Id).OrderBy(static id => id.Value),
+            changed.DescendantsAndSelf().Select(static node => node.Id).OrderBy(static id => id.Value));
+        Assert.True(Assert.Single(new GraphControlFlowAnalyzer().AnalyzeAndValidate(
+            new HirGraphProjector().Project(
+                result.Analysis.Hir,
+                result.Analysis.Semantics!)).Functions).IsReducible);
+    }
+
+    [Fact]
+    public void Apply_MovesOuterStatementIntoBranchBody()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(bool ready)
+                {
+                    int result = 0;
+                    if (ready)
+                    {
+                        result = 1;
+                    }
+
+                    // move into the branch
+                    result += 2;
+                    return result;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/MoveIntoBranch.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement resultDeclaration =
+            Assert.IsType<HirVariableDeclarationStatement>(method.Body.Statements[0]);
+        HirIfStatement branch = Assert.IsType<HirIfStatement>(method.Body.Statements[1]);
+        HirExpressionStatement branchAssignment = Assert.IsType<HirExpressionStatement>(
+            Assert.Single(branch.Then.Statements));
+        HirExpressionStatement increment = Assert.IsType<HirExpressionStatement>(
+            method.Body.Statements[2]);
+        HirReturnStatement @return = Assert.IsType<HirReturnStatement>(method.Body.Statements[3]);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new MoveStatementPatchOperation(
+                increment.Id,
+                method.Body.Id,
+                branch.Id,
+                @return.Id,
+                branch.Then.Id,
+                branchAssignment.Id,
+                null)]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        int branchStart = patchedSource.IndexOf("if (ready)", StringComparison.Ordinal);
+        int movedStart = patchedSource.IndexOf("// move into the branch", StringComparison.Ordinal);
+        int returnStart = patchedSource.IndexOf("return result;", StringComparison.Ordinal);
+        Assert.True(branchStart < movedStart && movedStart < returnStart);
+        Assert.Contains("            // move into the branch", patchedSource, StringComparison.Ordinal);
+        Assert.Contains("            result += 2;", patchedSource, StringComparison.Ordinal);
+        HirMethodDeclaration changed = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        Assert.Equal(
+            [resultDeclaration.Id, branch.Id, @return.Id],
+            changed.Body.Statements.Select(static candidate => candidate.Id));
+        HirIfStatement changedBranch = Assert.IsType<HirIfStatement>(changed.Body.Statements[1]);
+        Assert.Equal(
+            [branchAssignment.Id, increment.Id],
+            changedBranch.Then.Statements.Select(static candidate => candidate.Id));
+        Assert.True(Assert.Single(new GraphControlFlowAnalyzer().AnalyzeAndValidate(
+            new HirGraphProjector().Project(
+                result.Analysis.Hir,
+                result.Analysis.Semantics!)).Functions).IsReducible);
+    }
+
+    [Fact]
+    public void Apply_MovesStatementFromSwitchSectionIntoLoopBody()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(bool ready)
+                {
+                    int result = 0;
+                    while (ready)
+                    {
+                        result += 1;
+                        break;
+                    }
+
+                    switch (result)
+                    {
+                        case 0:
+                            result += 2;
+                            break;
+                        default:
+                            break;
+                    }
+
+                    return result;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/MoveSwitchStatementIntoLoop.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirWhileStatement loop = Assert.IsType<HirWhileStatement>(method.Body.Statements[1]);
+        HirExpressionStatement loopAssignment = Assert.IsType<HirExpressionStatement>(
+            loop.Body.Statements[0]);
+        HirBreakStatement loopBreak = Assert.IsType<HirBreakStatement>(loop.Body.Statements[1]);
+        HirSwitchStatement @switch = Assert.IsType<HirSwitchStatement>(method.Body.Statements[2]);
+        HirExpressionStatement caseAssignment = Assert.IsType<HirExpressionStatement>(
+            @switch.Sections[0].Body.Statements[0]);
+        HirBreakStatement caseBreak = Assert.IsType<HirBreakStatement>(
+            @switch.Sections[0].Body.Statements[1]);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new MoveStatementPatchOperation(
+                caseAssignment.Id,
+                @switch.Sections[0].Body.Id,
+                null,
+                caseBreak.Id,
+                loop.Body.Id,
+                loopAssignment.Id,
+                loopBreak.Id)]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        HirMethodDeclaration changed = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        HirWhileStatement changedLoop = Assert.IsType<HirWhileStatement>(changed.Body.Statements[1]);
+        Assert.Equal(
+            [loopAssignment.Id, caseAssignment.Id, loopBreak.Id],
+            changedLoop.Body.Statements.Select(static candidate => candidate.Id));
+        HirSwitchStatement changedSwitch = Assert.IsType<HirSwitchStatement>(changed.Body.Statements[2]);
+        Assert.Equal(
+            [caseBreak.Id],
+            changedSwitch.Sections[0].Body.Statements.Select(static candidate => candidate.Id));
+        Assert.True(Assert.Single(new GraphControlFlowAnalyzer().AnalyzeAndValidate(
+            new HirGraphProjector().Project(
+                result.Analysis.Hir,
+                result.Analysis.Semantics!)).Functions).IsReducible);
+    }
+
+    [Fact]
+    public void Apply_RejectsStatementMoveAcrossFunctions()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int First()
+                {
+                    int first = 1;
+                    return first;
+                }
+
+                [Visual]
+                static int Second()
+                {
+                    int second = 2;
+                    return second;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/RejectCrossFunctionMove.cs");
+        HirMethodDeclaration[] methods = Assert.Single(original.Hir!.Types).Methods.ToArray();
+        HirVariableDeclarationStatement first = Assert.IsType<HirVariableDeclarationStatement>(
+            methods[0].Body.Statements[0]);
+        HirReturnStatement firstReturn = Assert.IsType<HirReturnStatement>(
+            methods[0].Body.Statements[1]);
+        HirVariableDeclarationStatement second = Assert.IsType<HirVariableDeclarationStatement>(
+            methods[1].Body.Statements[0]);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new MoveStatementPatchOperation(
+                first.Id,
+                methods[0].Body.Id,
+                null,
+                firstReturn.Id,
+                methods[1].Body.Id,
+                second.Id,
+                methods[1].Body.Statements[1].Id)]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
         Assert.False(result.Succeeded);
         UnifiedDiagnostic diagnostic = Assert.Single(result.Diagnostics);
         Assert.Equal(SemanticPatchDiagnosticCodes.InvalidControlFlowReconnection, diagnostic.Code);
-        Assert.Contains("crosses structured region", diagnostic.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(inside.Id, new[] { outside.Id, branch.Id, @return.Id });
+        Assert.Contains("between functions", diagnostic.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Apply_RejectsCrossRegionMoveOfStructuredStatement()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(bool ready)
+                {
+                    if (ready)
+                    {
+                        int inside = 1;
+                    }
+
+                    return 0;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/RejectStructuredCrossRegionMove.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirIfStatement branch = Assert.IsType<HirIfStatement>(method.Body.Statements[0]);
+        HirVariableDeclarationStatement inside = Assert.IsType<HirVariableDeclarationStatement>(
+            Assert.Single(branch.Then.Statements));
+        HirReturnStatement @return = Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new MoveStatementPatchOperation(
+                branch.Id,
+                method.Body.Id,
+                null,
+                @return.Id,
+                branch.Then.Id,
+                inside.Id,
+                null)]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.False(result.Succeeded);
+        UnifiedDiagnostic diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(SemanticPatchDiagnosticCodes.InvalidControlFlowReconnection, diagnostic.Code);
+        Assert.Contains("explicit branch", diagnostic.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

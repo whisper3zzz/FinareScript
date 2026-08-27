@@ -168,6 +168,63 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Patch carries the requested replacement"),
         PatchJson.Contains(TEXT("\"newValueText\": \"120\"")));
 
+    const FUnifiedScriptAuthoringRegion* ResolveRootBlock = Function.Regions.FindByPredicate(
+        [](const FUnifiedScriptAuthoringRegion& Region)
+        {
+            return Region.Kind == TEXT("block");
+        });
+    const FUnifiedScriptAuthoringRegion* ResolveThenBlock = Function.Regions.FindByPredicate(
+        [](const FUnifiedScriptAuthoringRegion& Region)
+        {
+            return Region.Kind == TEXT("then");
+        });
+    const FUnifiedScriptAuthoringAction* ResolveRootSource =
+        ResolveRootBlock != nullptr && !ResolveRootBlock->DirectStatementIds.IsEmpty()
+        ? Function.FindAction(ResolveRootBlock->DirectStatementIds[0])
+        : nullptr;
+    const FUnifiedScriptAuthoringAction* ResolveThenTarget =
+        ResolveThenBlock != nullptr && !ResolveThenBlock->DirectStatementIds.IsEmpty()
+        ? Function.FindAction(ResolveThenBlock->DirectStatementIds[0])
+        : nullptr;
+    const FUnifiedScriptAuthoringEdge* ResolveThenIncoming = ResolveThenTarget != nullptr
+        ? Function.Edges.FindByPredicate(
+            [ResolveThenTarget](const FUnifiedScriptAuthoringEdge& Edge)
+            {
+                return Edge.Kind == TEXT("control") &&
+                    Edge.ToNode == ResolveThenTarget->Id;
+            })
+        : nullptr;
+    TestNotNull(TEXT("Cross-region fixture exposes the root and then blocks"),
+        ResolveRootBlock != nullptr && ResolveThenBlock != nullptr ? ResolveRootBlock : nullptr);
+    TestNotNull(TEXT("Cross-region fixture exposes an ordinary then statement"),
+        ResolveThenTarget);
+    TestNotNull(TEXT("Cross-region fixture exposes a root predecessor"), ResolveRootSource);
+    TestNotNull(TEXT("Cross-region fixture exposes the occupied then input"), ResolveThenIncoming);
+    if (ResolveRootBlock != nullptr && ResolveThenBlock != nullptr &&
+        ResolveRootSource != nullptr && ResolveThenTarget != nullptr &&
+        ResolveThenIncoming != nullptr)
+    {
+        FString CrossRegionMoveJson;
+        TestTrue(TEXT("Control drag can move an ordinary statement across structured regions"),
+            FUnifiedScriptAuthoringSurfaceReader::BuildControlEdgeReconnectionPatch(
+                Document,
+                Function,
+                *ResolveThenIncoming,
+                ResolveRootSource->Id,
+                TEXT("then"),
+                CrossRegionMoveJson,
+                Error));
+        TestTrue(TEXT("Cross-region move keeps distinct source and destination block identities"),
+            CrossRegionMoveJson.Contains(ResolveThenBlock->SourceNodeId) &&
+                CrossRegionMoveJson.Contains(ResolveRootBlock->SourceNodeId) &&
+                !ResolveThenTarget->DebugTargetId.IsEmpty() &&
+                CrossRegionMoveJson.Contains(ResolveThenTarget->DebugTargetId) &&
+                CrossRegionMoveJson.Contains(
+                    FString::Printf(
+                        TEXT("\"destinationParentBlockId\": \"%s\""),
+                        *ResolveRootBlock->SourceNodeId)));
+    }
+
     const FUnifiedScriptAuthoringFunction& RewireFunction =
         *Document.Assets[0].Functions.FindByPredicate([](
             const FUnifiedScriptAuthoringFunction& Candidate)
@@ -358,6 +415,41 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
                     ControlMoveJson.Contains(TEXT("\"expectedSourceParentBlockId\"")) &&
                     ControlMoveJson.Contains(TEXT("\"destinationParentBlockId\"")) &&
                     ControlMoveJson.Contains(RewireBlock->SourceNodeId));
+        }
+
+        const FUnifiedScriptAuthoringRegion* RewireThenBlock =
+            RewireFunction.Regions.FindByPredicate([](
+                const FUnifiedScriptAuthoringRegion& Region)
+            {
+                return Region.Kind == TEXT("then");
+            });
+        const FUnifiedScriptAuthoringAction* RewireThenReturn =
+            RewireThenBlock != nullptr && !RewireThenBlock->DirectStatementIds.IsEmpty()
+            ? RewireFunction.FindAction(RewireThenBlock->DirectStatementIds[0])
+            : nullptr;
+        const FUnifiedScriptAuthoringEdge* RewireThenIncoming = RewireThenReturn != nullptr
+            ? RewireFunction.Edges.FindByPredicate(
+                [RewireThenReturn](const FUnifiedScriptAuthoringEdge& Edge)
+                {
+                    return Edge.Kind == TEXT("control") &&
+                        Edge.ToNode == RewireThenReturn->Id && Edge.ToPort == TEXT("in");
+                })
+            : nullptr;
+        if (FirstStatement != nullptr && RewireThenReturn != nullptr &&
+            RewireThenIncoming != nullptr)
+        {
+            FString InvalidTerminalMoveJson;
+            TestFalse(TEXT("Cross-region drag rejects a terminal statement target"),
+                FUnifiedScriptAuthoringSurfaceReader::BuildControlEdgeReconnectionPatch(
+                    Document,
+                    RewireFunction,
+                    *RewireThenIncoming,
+                    FirstStatement->Id,
+                    TEXT("then"),
+                    InvalidTerminalMoveJson,
+                    Error));
+            TestTrue(TEXT("Terminal rejection directs the author to a structured transform"),
+                Error.Contains(TEXT("explicit structured transform")));
         }
 
         FString DeleteJson;
@@ -711,8 +803,8 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
     UUnifiedScriptEdGraphNode* ControlTargetNode =
         NewObject<UUnifiedScriptEdGraphNode>(TransactionGraph);
     OldControlNode->NodeKind = TEXT("variable");
-    NewControlNode->NodeKind = TEXT("variable");
-    ControlTargetNode->NodeKind = TEXT("variable");
+    NewControlNode->NodeKind = TEXT("assignment");
+    ControlTargetNode->NodeKind = TEXT("assignment");
     TransactionGraph->AddNode(OldControlNode, false, false);
     TransactionGraph->AddNode(NewControlNode, false, false);
     TransactionGraph->AddNode(ControlTargetNode, false, false);
@@ -721,9 +813,9 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
     UEdGraphPin* OldControlOutput = OldControlNode->CreatePin(
         EGPD_Output, ControlPinType, FName(TEXT("then")));
     UEdGraphPin* NewControlOutput = NewControlNode->CreatePin(
-        EGPD_Output, ControlPinType, FName(TEXT("then")));
+        EGPD_Output, ControlPinType, FName(TEXT("execOut")));
     UEdGraphPin* ControlInput = ControlTargetNode->CreatePin(
-        EGPD_Input, ControlPinType, FName(TEXT("in")));
+        EGPD_Input, ControlPinType, FName(TEXT("execIn")));
     OldControlOutput->MakeLinkTo(ControlInput, false);
     bool bControlRewireSubmitted = false;
     TransactionGraph->OnControlRewireRequested =
@@ -736,7 +828,7 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
                     SubmittedInput == ControlInput;
             });
     TestEqual(
-        TEXT("Sequential control output advertises a region-aware transform"),
+        TEXT("Single-path control output advertises a region-aware transform"),
         RewireSchema->CanCreateConnection(NewControlOutput, ControlInput).Response,
         CONNECT_RESPONSE_MAKE);
     TestTrue(

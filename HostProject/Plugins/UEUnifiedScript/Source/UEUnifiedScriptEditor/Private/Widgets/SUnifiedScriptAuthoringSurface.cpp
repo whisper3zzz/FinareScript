@@ -858,7 +858,7 @@ void SUnifiedScriptAuthoringSurface::HandleControlRewireRequested(
     SubmitSemanticPatch(
         MoveTemp(Patch),
         FString::Printf(
-            TEXT("Moving %s after %s inside one structured block"),
+            TEXT("Moving %s after %s through structured control flow"),
             *TargetNode->DisplayTitle,
             *SourceNode->DisplayTitle));
 }

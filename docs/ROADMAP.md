@@ -632,7 +632,7 @@ the same semantic program.
 
 - [x] add `switch` and supported patterns, deterministic temporary naming, and
   the remaining high-value structured control operations
-- [ ] support safe control-flow reconnection through region-aware transforms;
+- [x] support safe control-flow reconnection through region-aware transforms;
   reject irreducible or semantically ambiguous wiring with actionable feedback
 - [ ] make create, delete, reconnect, extract, collapse, copy/paste, undo/redo,
   and multi-step edits transactional and identity-stable
@@ -645,11 +645,15 @@ HIR body block and exclude case labels from statement order. The UE palette now
 authors `do/while`, bounded `for`, `break`, and `continue`; switch-section
 `break` is accepted while an unscoped `continue` is rejected. Automatic shared
 values use the complete producer semantic ID instead of a six-character prefix.
-The first control-reconnection slice now maps a sequential control-pin drag to
-Semantic Patch v0.22 `moveStatement` instead of mutating raw edges. It supports
-same-block reordering with exact source/destination sibling preconditions,
-requires `.usids`, preserves nested identity and comments, rejects invalid local
-ordering or terminal transfers, and validates the regenerated CFG. The Slate
+The control-reconnection path maps a single-path control-pin drag to Semantic
+Patch v0.22 `moveStatement` instead of mutating raw edges. It supports same-block
+reordering plus ordinary variable/expression statement movement across explicit
+function, then/else, loop, and switch-section bodies. Exact source/destination
+block and sibling preconditions reject stale surfaces; method-wide `.usids`
+pinning preserves nested identity and comments; local ordering, terminal,
+function-boundary, compilation, and reducible-CFG gates reject unsafe moves with
+actionable diagnostics. Entire branch/loop/switch statements and
+return/break/continue remain owned by explicit structured transforms. The Slate
 client keeps the old compiler-owned wire until the Workbench commits. Semantic
 Patch v0.23 now adds typed `switch` construction plus preconditioned section
 insert/relabel/reorder/delete operations across constant, declaration, type,
@@ -657,14 +661,13 @@ var, discard, relational, logical, negated, and parenthesized patterns. Direct
 statement insertion/deletion/reordering also accepts a switch-section body.
 Authoring Surface v0.4 carries normalized Graph properties, including the exact
 semantic switch-section identity, so Slate can consume these operations without
-parsing presentation text. The 467/467 managed suite, UE 5.8 editor build,
+parsing presentation text. The 471/471 managed suite, UE 5.8 editor build,
 focused native Authoring Surface Automation, and 48/48 repository validator
 pass. The Slate palette now creates a typed switch, and its inspector converts
 bounded pattern text into semantic labels, inserts Case/Default sections,
 relabels whole sections, moves them by exact sibling gaps, and routes both its
-button and Delete-key paths through safe section deletion. Cross-region
-structured control transforms and the full edit transaction/undo contract
-remain open, so M8.1 is not yet complete.
+button and Delete-key paths through safe section deletion. The full edit
+transaction/undo contract remains open, so M8.1 is not yet complete.
 
 ### M8.2 — Blueprint-grade Unreal experience
 

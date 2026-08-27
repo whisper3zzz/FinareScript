@@ -3569,20 +3569,48 @@ public sealed class CSharpSourcePatchApplier
                 operation.ExpectedSourceParentBlockId);
         }
 
-        if (operation.DestinationParentBlockId != location.ParentBlock.Id)
+        if (!patchIndex.TryGetBlock(
+                operation.DestinationParentBlockId,
+                out HirPatchIndex.BlockLocation? destinationLocation))
         {
             return DiagnosticPlan(
-                SemanticPatchDiagnosticCodes.InvalidControlFlowReconnection,
-                "This control-wire gesture crosses structured region boundaries. Move the " +
-                "statement through an explicit branch/loop/switch transform instead.",
+                SemanticPatchDiagnosticCodes.SiblingPreconditionFailed,
+                $"The destination block '{operation.DestinationParentBlockId}' no longer exists. " +
+                "Refresh the graph before reconnecting the wire.",
                 statement);
         }
 
-        HirStatement[] remaining = location.ParentBlock.Statements
+        HirBlockStatement sourceBlock = location.ParentBlock;
+        HirBlockStatement destinationBlock = destinationLocation!.Block;
+        bool crossesRegion = destinationBlock.Id != sourceBlock.Id;
+        if (destinationLocation.Method.Id != location.Method.Id)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidControlFlowReconnection,
+                "A control wire cannot move a statement between functions. Select a destination " +
+                "inside the same Visual method.",
+                statement);
+        }
+
+        if (crossesRegion && statement is not (
+                HirVariableDeclarationStatement or HirExpressionStatement))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidControlFlowReconnection,
+                "Cross-region control reconnection currently moves only a variable declaration or " +
+                "expression statement. Use the explicit branch, loop, switch, or terminal-statement " +
+                "transform for this node.",
+                statement);
+        }
+
+        HirStatement[] sourceRemaining = sourceBlock.Statements
             .Where(candidate => candidate.Id != statement.Id)
             .ToArray();
+        IReadOnlyList<HirStatement> destinationCandidates = crossesRegion
+            ? destinationBlock.Statements
+            : sourceRemaining;
         if (!TryGetInsertionIndex(
-                remaining,
+                destinationCandidates,
                 operation.ExpectedDestinationPreviousSiblingId,
                 operation.ExpectedDestinationNextSiblingId,
                 out int destinationIndex))
@@ -3594,10 +3622,10 @@ public sealed class CSharpSourcePatchApplier
                 statement);
         }
 
-        var reordered = remaining.ToList();
-        reordered.Insert(destinationIndex, statement);
-        if (reordered.Select(static candidate => candidate.Id).SequenceEqual(
-                location.ParentBlock.Statements.Select(static candidate => candidate.Id)))
+        var destinationStatements = destinationCandidates.ToList();
+        destinationStatements.Insert(destinationIndex, statement);
+        if (!crossesRegion && destinationStatements.Select(static candidate => candidate.Id).SequenceEqual(
+                sourceBlock.Statements.Select(static candidate => candidate.Id)))
         {
             return DiagnosticPlan(
                 SemanticPatchDiagnosticCodes.InvalidControlFlowReconnection,
@@ -3606,9 +3634,7 @@ public sealed class CSharpSourcePatchApplier
                 statement);
         }
 
-        int terminalIndex = reordered.FindIndex(static candidate =>
-            candidate is HirReturnStatement or HirBreakStatement or HirContinueStatement);
-        if (terminalIndex >= 0 && terminalIndex != reordered.Count - 1)
+        if (HasNonFinalTerminal(sourceRemaining) || HasNonFinalTerminal(destinationStatements))
         {
             return DiagnosticPlan(
                 SemanticPatchDiagnosticCodes.InvalidControlFlowReconnection,
@@ -3616,7 +3642,8 @@ public sealed class CSharpSourcePatchApplier
                 statement);
         }
 
-        string? dependencyFailure = FindLocalOrderingFailure(reordered, boundNodes);
+        string? dependencyFailure = FindLocalOrderingFailure(sourceRemaining, boundNodes) ??
+            FindLocalOrderingFailure(destinationStatements, boundNodes);
         if (dependencyFailure is not null)
         {
             return DiagnosticPlan(
@@ -3625,13 +3652,19 @@ public sealed class CSharpSourcePatchApplier
                 statement);
         }
 
-        HirBlockStatement parentBlock = location.ParentBlock;
         if (!TryFindEditableStatementContainer(
                 documents,
-                parentBlock,
-                out ParsedDocument? document,
-                out EditableStatementContainer? container) ||
-            container!.Statements.Count != parentBlock.Statements.Count)
+                sourceBlock,
+                out ParsedDocument? sourceDocument,
+                out EditableStatementContainer? sourceContainer) ||
+            sourceContainer!.Statements.Count != sourceBlock.Statements.Count ||
+            !TryFindEditableStatementContainer(
+                documents,
+                destinationBlock,
+                out ParsedDocument? destinationDocument,
+                out EditableStatementContainer? destinationContainer) ||
+            destinationContainer!.Statements.Count != destinationBlock.Statements.Count ||
+            sourceDocument!.Source.LogicalPath != destinationDocument!.Source.LogicalPath)
         {
             return DiagnosticPlan(
                 SemanticPatchDiagnosticCodes.InvalidControlFlowReconnection,
@@ -3640,7 +3673,7 @@ public sealed class CSharpSourcePatchApplier
                 statement);
         }
 
-        if (document!.Source.IdentitySidecar is null)
+        if (sourceDocument.Source.IdentitySidecar is null)
         {
             return DiagnosticPlan(
                 SemanticPatchDiagnosticCodes.PlanRequiresPersistentIdentity,
@@ -3649,21 +3682,115 @@ public sealed class CSharpSourcePatchApplier
                 statement);
         }
 
-        (List<StatementSyntax> annotatedStatements, List<PendingPin> pins) =
-            AnnotateStatementTrees(document, container.Statements, parentBlock.Statements);
-        StatementSyntax movedSyntax = annotatedStatements[location.Index];
-        annotatedStatements.RemoveAt(location.Index);
-        annotatedStatements.Insert(destinationIndex, movedSyntax);
-        var blockAnnotation = new SyntaxAnnotation(IdentityAnnotationKind, parentBlock.Id.Value);
-        SyntaxNode replacement = container.WithStatements(
-                SyntaxFactory.List(annotatedStatements))
-            .WithAdditionalAnnotations(blockAnnotation);
-        pins.Add(new PendingPin(parentBlock.Id, "block", blockAnnotation));
-        return SuccessPlan(document, new PendingReplacement(
-            document.Source.LogicalPath,
-            container.Syntax,
-            replacement,
-            pins));
+        if (!crossesRegion)
+        {
+            (List<StatementSyntax> annotatedStatements, List<PendingPin> pins) =
+                AnnotateStatementTrees(
+                    sourceDocument,
+                    sourceContainer.Statements,
+                    sourceBlock.Statements);
+            StatementSyntax movedSyntax = annotatedStatements[location.Index];
+            annotatedStatements.RemoveAt(location.Index);
+            annotatedStatements.Insert(destinationIndex, movedSyntax);
+            var blockAnnotation = new SyntaxAnnotation(IdentityAnnotationKind, sourceBlock.Id.Value);
+            SyntaxNode replacement = sourceContainer.WithStatements(
+                    SyntaxFactory.List(annotatedStatements))
+                .WithAdditionalAnnotations(blockAnnotation);
+            pins.Add(new PendingPin(sourceBlock.Id, "block", blockAnnotation));
+            return SuccessPlan(sourceDocument, new PendingReplacement(
+                sourceDocument.Source.LogicalPath,
+                sourceContainer.Syntax,
+                replacement,
+                pins));
+        }
+
+        if (!TryPrepareMethodMutation(
+                documents,
+                location.Method,
+                out ParsedDocument? document,
+                out MethodDeclarationSyntax? originalMethod,
+                out MethodDeclarationSyntax? annotatedMethod,
+                out IReadOnlyDictionary<SemanticId, SyntaxAnnotation>? identityAnnotations,
+                out List<PendingPin>? methodPins,
+                out string? identityFailure) ||
+            !identityAnnotations!.TryGetValue(sourceBlock.Id, out SyntaxAnnotation? sourceAnnotation) ||
+            !identityAnnotations.TryGetValue(destinationBlock.Id, out SyntaxAnnotation? destinationAnnotation) ||
+            !identityAnnotations.TryGetValue(statement.Id, out SyntaxAnnotation? statementAnnotation))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.PlanRequiresPersistentIdentity,
+                identityFailure ??
+                    "Cross-region control reconnection could not pin the source block, destination " +
+                    "block, and moved statement in the persistent identity sidecar.",
+                statement);
+        }
+
+        SyntaxNode annotatedSourceSyntax = annotatedMethod!
+            .GetAnnotatedNodes(sourceAnnotation)
+            .Single();
+        SyntaxNode annotatedDestinationSyntax = annotatedMethod
+            .GetAnnotatedNodes(destinationAnnotation)
+            .Single();
+        StatementSyntax movedStatement = annotatedMethod
+            .GetAnnotatedNodes(statementAnnotation)
+            .OfType<StatementSyntax>()
+            .Single();
+        if (!TryCreateEditableStatementContainer(
+                annotatedSourceSyntax,
+                out EditableStatementContainer? annotatedSource) ||
+            !TryCreateEditableStatementContainer(
+                annotatedDestinationSyntax,
+                out EditableStatementContainer? annotatedDestination) ||
+            annotatedDestinationSyntax.Ancestors().Contains(movedStatement))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidControlFlowReconnection,
+                "The destination is not an independent explicit block or switch-section body. " +
+                "Move the enclosing structure with its dedicated transform instead.",
+                statement);
+        }
+
+        InsertionFormatting destinationFormatting = GetInsertionFormatting(
+            document!,
+            destinationContainer,
+            destinationIndex);
+        movedStatement = ReindentMovedStatement(movedStatement, destinationFormatting.Indentation);
+        SyntaxNode[] changedContainers = [annotatedSource!.Syntax, annotatedDestination!.Syntax];
+        SyntaxNode replacementMethod = annotatedMethod.ReplaceNodes(
+            changedContainers,
+            (original, rewritten) =>
+            {
+                if (!TryCreateEditableStatementContainer(
+                        rewritten,
+                        out EditableStatementContainer? rewrittenContainer))
+                {
+                    throw new InvalidOperationException(
+                        "A tracked statement container changed syntax kind during movement.");
+                }
+
+                var statements = rewrittenContainer!.Statements.ToList();
+                if (original == annotatedSource.Syntax)
+                {
+                    int sourceIndex = statements.FindIndex(candidate =>
+                        candidate.HasAnnotation(statementAnnotation));
+                    if (sourceIndex < 0)
+                    {
+                        throw new InvalidOperationException(
+                            "The moved statement disappeared from its tracked source block.");
+                    }
+                    statements.RemoveAt(sourceIndex);
+                }
+                else
+                {
+                    statements.Insert(destinationIndex, movedStatement);
+                }
+                return rewrittenContainer.WithStatements(SyntaxFactory.List(statements));
+            });
+        return SuccessPlan(document!, new PendingReplacement(
+            document!.Source.LogicalPath,
+            originalMethod!,
+            replacementMethod,
+            FilterPinsForSyntax(replacementMethod, methodPins!)));
     }
 
     private static OperationPlan PlanSwitchSectionInsertion(
@@ -4063,6 +4190,18 @@ public sealed class CSharpSourcePatchApplier
         return null;
     }
 
+    private static bool HasNonFinalTerminal(IReadOnlyList<HirStatement> statements)
+    {
+        int terminalIndex = statements
+            .Select((candidate, index) => (candidate, index))
+            .Where(static item => item.candidate is
+                HirReturnStatement or HirBreakStatement or HirContinueStatement)
+            .Select(static item => item.index)
+            .DefaultIfEmpty(-1)
+            .First();
+        return terminalIndex >= 0 && terminalIndex != statements.Count - 1;
+    }
+
     private static bool TryResolveSwitchSection(
         IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
         SemanticId sectionId,
@@ -4217,6 +4356,78 @@ public sealed class CSharpSourcePatchApplier
             annotatedSyntax = annotatedSyntax.WithAdditionalAnnotations(rootAnnotations.ToArray());
         }
 
+        failure = null;
+        return true;
+    }
+
+    private static bool TryPrepareMethodMutation(
+        IReadOnlyDictionary<string, ParsedDocument> documents,
+        HirMethodDeclaration method,
+        out ParsedDocument? document,
+        out MethodDeclarationSyntax? originalSyntax,
+        out MethodDeclarationSyntax? annotatedSyntax,
+        out IReadOnlyDictionary<SemanticId, SyntaxAnnotation>? identityAnnotations,
+        out List<PendingPin>? pins,
+        out string? failure)
+    {
+        if (!TryFindSyntax(documents, method, out document, out originalSyntax))
+        {
+            annotatedSyntax = null;
+            identityAnnotations = null;
+            pins = null;
+            failure = "The containing method syntax no longer matches the analyzed HIR.";
+            return false;
+        }
+
+        if (document!.Source.IdentitySidecar is null)
+        {
+            annotatedSyntax = null;
+            identityAnnotations = null;
+            pins = null;
+            failure = "Cross-region control reconnection requires a .usids sidecar so all " +
+                "identities in the containing method survive the structural move.";
+            return false;
+        }
+
+        IReadOnlyDictionary<SemanticId, IdentityEntry> entries = document.Source.IdentitySidecar
+            .Entries.ToDictionary(static entry => entry.Id);
+        MethodDeclarationSyntax sourceSyntax = originalSyntax!;
+        var annotations = new Dictionary<SyntaxNode, List<SyntaxAnnotation>>();
+        var annotationsById = new Dictionary<SemanticId, SyntaxAnnotation>();
+        pins = [];
+        foreach (HirNode node in method.DescendantsAndSelf())
+        {
+            if (!entries.TryGetValue(node.Id, out IdentityEntry? entry) ||
+                !TryFindIdentitySyntax(document, node, out SyntaxNode? syntax) ||
+                !sourceSyntax.FullSpan.Contains(syntax!.FullSpan))
+            {
+                continue;
+            }
+
+            var annotation = new SyntaxAnnotation(IdentityAnnotationKind, node.Id.Value);
+            if (!annotations.TryGetValue(syntax, out List<SyntaxAnnotation>? nodeAnnotations))
+            {
+                nodeAnnotations = [];
+                annotations.Add(syntax, nodeAnnotations);
+            }
+            nodeAnnotations.Add(annotation);
+            annotationsById.Add(node.Id, annotation);
+            pins.Add(new PendingPin(node.Id, entry.Kind, annotation));
+        }
+
+        SyntaxNode[] descendants = annotations.Keys
+            .Where(candidate => candidate != sourceSyntax)
+            .ToArray();
+        annotatedSyntax = (MethodDeclarationSyntax)sourceSyntax.ReplaceNodes(
+            descendants,
+            (original, rewritten) => rewritten.WithAdditionalAnnotations(
+                annotations[original].ToArray()));
+        if (annotations.TryGetValue(sourceSyntax, out List<SyntaxAnnotation>? rootAnnotations))
+        {
+            annotatedSyntax = annotatedSyntax.WithAdditionalAnnotations(rootAnnotations.ToArray());
+        }
+
+        identityAnnotations = annotationsById;
         failure = null;
         return true;
     }
@@ -4560,12 +4771,12 @@ public sealed class CSharpSourcePatchApplier
     private static SyntaxNode WithStatements(
         SyntaxNode container,
         SyntaxList<StatementSyntax> statements) => container switch
-    {
-        BlockSyntax block => block.WithStatements(statements),
-        SwitchSectionSyntax section => section.WithStatements(statements),
-        _ => throw new InvalidOperationException(
-            $"Unsupported editable statement container '{container.GetType().Name}'."),
-    };
+        {
+            BlockSyntax block => block.WithStatements(statements),
+            SwitchSectionSyntax section => section.WithStatements(statements),
+            _ => throw new InvalidOperationException(
+                $"Unsupported editable statement container '{container.GetType().Name}'."),
+        };
 
     private static SyntaxTriviaList GetPreservedDeletionTrivia(
         ParsedDocument document,
@@ -5743,54 +5954,54 @@ public sealed class CSharpSourcePatchApplier
         switch (pattern)
         {
             case ConstantSwitchPatternPatch constant:
-            {
-                ExpressionBuildResult value = BuildPatchExpression(
-                    constant.Value,
-                    blockLocation,
-                    insertionIndex,
-                    hirNodes,
-                    patchIndex,
-                    graphSafetyIndex,
-                    boundNodes,
-                    types);
-                if (value.Syntax is null || value.Type?.Id != governingType.Id)
                 {
-                    return SwitchPatternBuildResult.Failure(
-                        value.DiagnosticCode ?? SemanticPatchDiagnosticCodes.TypeMismatch,
-                        value.DiagnosticMessage ??
-                            "A constant switch pattern must exactly match the governing type.");
-                }
+                    ExpressionBuildResult value = BuildPatchExpression(
+                        constant.Value,
+                        blockLocation,
+                        insertionIndex,
+                        hirNodes,
+                        patchIndex,
+                        graphSafetyIndex,
+                        boundNodes,
+                        types);
+                    if (value.Syntax is null || value.Type?.Id != governingType.Id)
+                    {
+                        return SwitchPatternBuildResult.Failure(
+                            value.DiagnosticCode ?? SemanticPatchDiagnosticCodes.TypeMismatch,
+                            value.DiagnosticMessage ??
+                                "A constant switch pattern must exactly match the governing type.");
+                    }
 
-                return SwitchPatternBuildResult.Success(value.Syntax.WithoutTrivia().ToString());
-            }
+                    return SwitchPatternBuildResult.Success(value.Syntax.WithoutTrivia().ToString());
+                }
             case DeclarationSwitchPatternPatch declaration:
-            {
-                if (!TryResolvePatternType(
-                        declaration.TypeName,
-                        declaration.ExpectedTypeId,
-                        types,
-                        out TypeSyntax? typeSyntax,
-                        out string? typeFailure))
                 {
-                    return SwitchPatternBuildResult.Failure(
-                        SemanticPatchDiagnosticCodes.TypeMismatch,
-                        typeFailure!);
-                }
+                    if (!TryResolvePatternType(
+                            declaration.TypeName,
+                            declaration.ExpectedTypeId,
+                            types,
+                            out TypeSyntax? typeSyntax,
+                            out string? typeFailure))
+                    {
+                        return SwitchPatternBuildResult.Failure(
+                            SemanticPatchDiagnosticCodes.TypeMismatch,
+                            typeFailure!);
+                    }
 
-                string designation = declaration.IsDiscard ? "_" : declaration.VariableName;
-                if (!declaration.IsDiscard && !ValidatePatternVariable(
-                        designation,
-                        blockLocation.Method,
-                        patternNames,
-                        out string? variableFailure))
-                {
-                    return SwitchPatternBuildResult.Failure(
-                        SemanticPatchDiagnosticCodes.NameConflict,
-                        variableFailure!);
-                }
+                    string designation = declaration.IsDiscard ? "_" : declaration.VariableName;
+                    if (!declaration.IsDiscard && !ValidatePatternVariable(
+                            designation,
+                            blockLocation.Method,
+                            patternNames,
+                            out string? variableFailure))
+                    {
+                        return SwitchPatternBuildResult.Failure(
+                            SemanticPatchDiagnosticCodes.NameConflict,
+                            variableFailure!);
+                    }
 
-                return SwitchPatternBuildResult.Success($"{typeSyntax} {designation}");
-            }
+                    return SwitchPatternBuildResult.Success($"{typeSyntax} {designation}");
+                }
             case TypeSwitchPatternPatch typePattern:
                 return TryResolvePatternType(
                         typePattern.TypeName,
@@ -5803,80 +6014,80 @@ public sealed class CSharpSourcePatchApplier
                         SemanticPatchDiagnosticCodes.TypeMismatch,
                         matchedTypeFailure!);
             case VarSwitchPatternPatch varPattern:
-            {
-                string designation = varPattern.IsDiscard ? "_" : varPattern.VariableName;
-                if (!varPattern.IsDiscard && !ValidatePatternVariable(
-                        designation,
-                        blockLocation.Method,
-                        patternNames,
-                        out string? variableFailure))
                 {
-                    return SwitchPatternBuildResult.Failure(
-                        SemanticPatchDiagnosticCodes.NameConflict,
-                        variableFailure!);
-                }
+                    string designation = varPattern.IsDiscard ? "_" : varPattern.VariableName;
+                    if (!varPattern.IsDiscard && !ValidatePatternVariable(
+                            designation,
+                            blockLocation.Method,
+                            patternNames,
+                            out string? variableFailure))
+                    {
+                        return SwitchPatternBuildResult.Failure(
+                            SemanticPatchDiagnosticCodes.NameConflict,
+                            variableFailure!);
+                    }
 
-                return SwitchPatternBuildResult.Success($"var {designation}");
-            }
+                    return SwitchPatternBuildResult.Success($"var {designation}");
+                }
             case DiscardSwitchPatternPatch:
                 return SwitchPatternBuildResult.Success("_");
             case RelationalSwitchPatternPatch relational:
-            {
-                ExpressionBuildResult value = BuildPatchExpression(
-                    relational.Value,
-                    blockLocation,
-                    insertionIndex,
-                    hirNodes,
-                    patchIndex,
-                    graphSafetyIndex,
-                    boundNodes,
-                    types);
-                if (value.Syntax is null || value.Type?.Id != governingType.Id)
                 {
-                    return SwitchPatternBuildResult.Failure(
-                        value.DiagnosticCode ?? SemanticPatchDiagnosticCodes.TypeMismatch,
-                        value.DiagnosticMessage ??
-                            "A relational switch pattern must exactly match the governing type.");
-                }
+                    ExpressionBuildResult value = BuildPatchExpression(
+                        relational.Value,
+                        blockLocation,
+                        insertionIndex,
+                        hirNodes,
+                        patchIndex,
+                        graphSafetyIndex,
+                        boundNodes,
+                        types);
+                    if (value.Syntax is null || value.Type?.Id != governingType.Id)
+                    {
+                        return SwitchPatternBuildResult.Failure(
+                            value.DiagnosticCode ?? SemanticPatchDiagnosticCodes.TypeMismatch,
+                            value.DiagnosticMessage ??
+                                "A relational switch pattern must exactly match the governing type.");
+                    }
 
-                return SwitchPatternBuildResult.Success(
-                    $"{relational.Operator} {value.Syntax.WithoutTrivia()}");
-            }
-            case LogicalSwitchPatternPatch logical:
-            {
-                SwitchPatternBuildResult left = BuildSwitchPatternText(
-                    logical.Left, governingType, blockLocation, insertionIndex, hirNodes,
-                    patchIndex, graphSafetyIndex, boundNodes, types, patternNames);
-                if (left.Text is null)
-                {
-                    return left;
+                    return SwitchPatternBuildResult.Success(
+                        $"{relational.Operator} {value.Syntax.WithoutTrivia()}");
                 }
-                SwitchPatternBuildResult right = BuildSwitchPatternText(
-                    logical.Right, governingType, blockLocation, insertionIndex, hirNodes,
-                    patchIndex, graphSafetyIndex, boundNodes, types, patternNames);
-                return right.Text is null
-                    ? right
-                    : SwitchPatternBuildResult.Success(
-                        $"{left.Text} {logical.Operator} {right.Text}");
-            }
+            case LogicalSwitchPatternPatch logical:
+                {
+                    SwitchPatternBuildResult left = BuildSwitchPatternText(
+                        logical.Left, governingType, blockLocation, insertionIndex, hirNodes,
+                        patchIndex, graphSafetyIndex, boundNodes, types, patternNames);
+                    if (left.Text is null)
+                    {
+                        return left;
+                    }
+                    SwitchPatternBuildResult right = BuildSwitchPatternText(
+                        logical.Right, governingType, blockLocation, insertionIndex, hirNodes,
+                        patchIndex, graphSafetyIndex, boundNodes, types, patternNames);
+                    return right.Text is null
+                        ? right
+                        : SwitchPatternBuildResult.Success(
+                            $"{left.Text} {logical.Operator} {right.Text}");
+                }
             case NotSwitchPatternPatch notPattern:
-            {
-                SwitchPatternBuildResult operand = BuildSwitchPatternText(
-                    notPattern.Operand, governingType, blockLocation, insertionIndex, hirNodes,
-                    patchIndex, graphSafetyIndex, boundNodes, types, patternNames);
-                return operand.Text is null
-                    ? operand
-                    : SwitchPatternBuildResult.Success($"not {operand.Text}");
-            }
+                {
+                    SwitchPatternBuildResult operand = BuildSwitchPatternText(
+                        notPattern.Operand, governingType, blockLocation, insertionIndex, hirNodes,
+                        patchIndex, graphSafetyIndex, boundNodes, types, patternNames);
+                    return operand.Text is null
+                        ? operand
+                        : SwitchPatternBuildResult.Success($"not {operand.Text}");
+                }
             case ParenthesizedSwitchPatternPatch parenthesized:
-            {
-                SwitchPatternBuildResult inner = BuildSwitchPatternText(
-                    parenthesized.Inner, governingType, blockLocation, insertionIndex, hirNodes,
-                    patchIndex, graphSafetyIndex, boundNodes, types, patternNames);
-                return inner.Text is null
-                    ? inner
-                    : SwitchPatternBuildResult.Success($"({inner.Text})");
-            }
+                {
+                    SwitchPatternBuildResult inner = BuildSwitchPatternText(
+                        parenthesized.Inner, governingType, blockLocation, insertionIndex, hirNodes,
+                        patchIndex, graphSafetyIndex, boundNodes, types, patternNames);
+                    return inner.Text is null
+                        ? inner
+                        : SwitchPatternBuildResult.Success($"({inner.Text})");
+                }
             default:
                 return SwitchPatternBuildResult.Failure(
                     SemanticPatchDiagnosticCodes.InvalidSwitchSection,
@@ -7065,6 +7276,36 @@ public sealed class CSharpSourcePatchApplier
             : formatted;
     }
 
+    private static StatementSyntax ReindentMovedStatement(
+        StatementSyntax statement,
+        string destinationIndentation)
+    {
+        SyntaxTriviaList leading = statement.GetLeadingTrivia();
+        var rewritten = new List<SyntaxTrivia>(leading.Count + 1);
+        bool atLineStart = true;
+        foreach (SyntaxTrivia trivia in leading)
+        {
+            if (atLineStart && trivia.IsKind(SyntaxKind.WhitespaceTrivia))
+            {
+                rewritten.Add(SyntaxFactory.Whitespace(destinationIndentation));
+                atLineStart = false;
+                continue;
+            }
+
+            if (atLineStart && !trivia.IsKind(SyntaxKind.EndOfLineTrivia))
+            {
+                rewritten.Add(SyntaxFactory.Whitespace(destinationIndentation));
+            }
+            rewritten.Add(trivia);
+            atLineStart = trivia.IsKind(SyntaxKind.EndOfLineTrivia);
+        }
+        if (atLineStart)
+        {
+            rewritten.Add(SyntaxFactory.Whitespace(destinationIndentation));
+        }
+        return statement.WithLeadingTrivia(SyntaxFactory.TriviaList(rewritten));
+    }
+
     private static ExpressionSyntax FormatReplacementExpression(
         ExpressionSyntax replacement,
         ExpressionSyntax original) => replacement
@@ -7338,6 +7579,21 @@ public sealed class CSharpSourcePatchApplier
 
         container = null;
         return false;
+    }
+
+    private static bool TryCreateEditableStatementContainer(
+        SyntaxNode syntax,
+        out EditableStatementContainer? container)
+    {
+        container = syntax switch
+        {
+            BlockSyntax block => new EditableStatementContainer(block, block.Statements),
+            SwitchSectionSyntax section => new EditableStatementContainer(
+                section,
+                section.Statements),
+            _ => null,
+        };
+        return container is not null;
     }
 
     private static bool TryParseLiteral(

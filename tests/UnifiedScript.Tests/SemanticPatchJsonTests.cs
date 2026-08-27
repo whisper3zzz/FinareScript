@@ -402,13 +402,14 @@ public sealed class SemanticPatchJsonTests
     [Fact]
     public void SerializeAndDeserialize_PreserveRegionAwareStatementMove()
     {
-        SemanticId blockId = SemanticId.FromKey("move-block");
+        SemanticId sourceBlockId = SemanticId.FromKey("move-source-block");
+        SemanticId destinationBlockId = SemanticId.FromKey("move-destination-block");
         var move = new MoveStatementPatchOperation(
             SemanticId.FromKey("move-target"),
-            blockId,
+            sourceBlockId,
             SemanticId.FromKey("move-old-previous"),
             SemanticId.FromKey("move-old-next"),
-            blockId,
+            destinationBlockId,
             SemanticId.FromKey("move-new-previous"),
             SemanticId.FromKey("move-new-next"));
         SemanticPatchDocument patch = SemanticPatchDocument.Create(

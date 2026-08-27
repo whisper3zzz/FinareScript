@@ -170,9 +170,10 @@ The repository currently implements:
 - lossless `switch` and bounded C# patterns across HIR v0.8 and Graph v0.13,
   with evaluate-once governing values, typed pattern variables, guarded case
   routing, editable section-body ownership, and nearest-switch `break` facts;
-- region-aware same-block control reconnection through patch v0.23
-  `moveStatement`, with exact sibling preconditions, persistent identity,
-  local-order and terminal-transfer guards, and regenerated-CFG validation;
+- region-aware control reconnection through patch v0.23 `moveStatement`, with
+  exact source/destination block and sibling preconditions, persistent identity,
+  cross-branch/loop/switch-section movement for ordinary statements, local-order
+  and terminal-transfer guards, and regenerated-CFG validation;
 - opt-in `.usids` sidecars that preserve node identity across formatting and edits;
 - backend-neutral Script Asset / Declaration IR v0.1 with scalar and enum
   state, canonical defaults, engine exposure metadata, Visual signatures, and

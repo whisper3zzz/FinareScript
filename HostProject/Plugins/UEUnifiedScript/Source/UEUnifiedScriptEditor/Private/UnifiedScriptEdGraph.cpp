@@ -168,17 +168,37 @@ const FPinConnectionResponse UUnifiedScriptEdGraphSchema::CanCreateConnection(
     {
         const UUnifiedScriptEdGraphNode* SourceNode =
             Cast<UUnifiedScriptEdGraphNode>(OutputPin->GetOwningNode());
-        const bool bSequentialSource = OutputPin->PinName == TEXT("then") &&
-            SourceNode != nullptr && SourceNode->NodeKind != TEXT("entry") &&
-            SourceNode->NodeKind != TEXT("branch") &&
-            SourceNode->NodeKind != TEXT("switchCase");
-        if (!bSequentialSource || InputPin->PinName != TEXT("in"))
+        const UUnifiedScriptEdGraphNode* TargetNode =
+            Cast<UUnifiedScriptEdGraphNode>(InputPin->GetOwningNode());
+        int32 SourceControlOutputCount = 0;
+        int32 TargetControlInputCount = 0;
+        if (SourceNode != nullptr)
+        {
+            for (const UEdGraphPin* Pin : SourceNode->Pins)
+            {
+                SourceControlOutputCount += Pin != nullptr && Pin->Direction == EGPD_Output &&
+                    Pin->PinType.PinCategory == TEXT("exec") ? 1 : 0;
+            }
+        }
+        if (TargetNode != nullptr)
+        {
+            for (const UEdGraphPin* Pin : TargetNode->Pins)
+            {
+                TargetControlInputCount += Pin != nullptr && Pin->Direction == EGPD_Input &&
+                    Pin->PinType.PinCategory == TEXT("exec") ? 1 : 0;
+            }
+        }
+        const bool bSequentialEndpoints = SourceNode != nullptr && TargetNode != nullptr &&
+            SourceNode->NodeKind != TEXT("entry") &&
+            SourceNode->NodeKind != TEXT("switchCase") &&
+            SourceControlOutputCount == 1 && TargetControlInputCount == 1;
+        if (!bSequentialEndpoints)
         {
             return FPinConnectionResponse(
                 CONNECT_RESPONSE_DISALLOW,
                 LOCTEXT(
                     "StructuredControlOnly",
-                    "Only a sequential 'then' output can reorder a statement through its 'in' pin."));
+                    "Choose a single-path control output and a single-path control input."));
         }
         if (InputPin->LinkedTo.Num() != 1)
         {
@@ -198,7 +218,7 @@ const FPinConnectionResponse UUnifiedScriptEdGraphSchema::CanCreateConnection(
             CONNECT_RESPONSE_MAKE,
             LOCTEXT(
                 "ReconnectControlEdge",
-                "Reorder this statement inside its structured block through the Workbench."));
+                "Move this statement after the source through the Workbench."));
     }
     if (OutputPin->PinType.PinSubCategory != InputPin->PinType.PinSubCategory)
     {
