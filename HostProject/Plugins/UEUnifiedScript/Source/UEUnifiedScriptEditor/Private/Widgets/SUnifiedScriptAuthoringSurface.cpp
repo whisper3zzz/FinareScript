@@ -4490,6 +4490,9 @@ TSharedRef<ITableRow> SUnifiedScriptAuthoringSurface::GenerateNodePaletteRow(
                     SNew(STextBlock)
                     .Text(FText::FromString(Item->Action.Title))
                     .Font(FAppStyle::GetFontStyle(TEXT("SmallFontBold")))
+                    .ColorAndOpacity(Item->Action.bEnabled
+                        ? FSlateColor::UseForeground()
+                        : FSlateColor(FLinearColor(0.42f, 0.44f, 0.48f)))
                     .HighlightText_Lambda([this]()
                     {
                         return FText::FromString(NodePaletteSearchText);
@@ -4503,6 +4506,31 @@ TSharedRef<ITableRow> SUnifiedScriptAuthoringSurface::GenerateNodePaletteRow(
                     .Font(FAppStyle::GetFontStyle(TEXT("SmallFont")))
                     .ColorAndOpacity(FLinearColor(0.46f, 0.50f, 0.55f))
                 ]
+            ]
+            + SHorizontalBox::Slot()
+            .AutoWidth()
+            .VAlign(VAlign_Center)
+            .Padding(3.0f, 0.0f)
+            [
+                SNew(STextBlock)
+                .Text_Lambda([Item]()
+                {
+                    if (!Item->Action.bEnabled)
+                    {
+                        return LOCTEXT("UnavailablePaletteAction", "UNAVAILABLE");
+                    }
+                    if (Item->Action.bDeprecated)
+                    {
+                        return LOCTEXT("DeprecatedPaletteAction", "DEPRECATED");
+                    }
+                    return Item->Action.bLatent
+                        ? LOCTEXT("LatentPaletteAction", "LATENT")
+                        : FText::GetEmpty();
+                })
+                .Font(FAppStyle::GetFontStyle(TEXT("SmallFont")))
+                .ColorAndOpacity(Item->Action.bDeprecated
+                    ? FLinearColor(0.90f, 0.52f, 0.20f)
+                    : FLinearColor(0.48f, 0.62f, 0.82f))
             ]
             + SHorizontalBox::Slot()
             .AutoWidth()
@@ -4526,9 +4554,9 @@ TSharedRef<ITableRow> SUnifiedScriptAuthoringSurface::GenerateNodePaletteRow(
                 .ToolTipText(LOCTEXT(
                     "InsertPaletteActionTip",
                     "Submit this node through the active Workbench transaction."))
-                .IsEnabled_Lambda([this]()
+                .IsEnabled_Lambda([this, Item]()
                 {
-                    return !bPatchRequestPending;
+                    return !bPatchRequestPending && Item->Action.bEnabled;
                 })
                 .ContentPadding(FMargin(5.0f, 0.0f))
                 .OnClicked(this, &SUnifiedScriptAuthoringSurface::HandleInsertNodePaletteItem, Item)
@@ -4569,6 +4597,15 @@ FReply SUnifiedScriptAuthoringSurface::HandleInsertNodePaletteItem(
     if (bPatchRequestPending)
     {
         SetStatus(TEXT("Wait for the active authoring transaction before placing another node."), true);
+        return FReply::Handled();
+    }
+    if (!Item->Action.bEnabled)
+    {
+        SetStatus(
+            Item->Action.UnavailableReason.IsEmpty()
+                ? TEXT("This generated API node is unavailable in the active function context.")
+                : Item->Action.UnavailableReason,
+            true);
         return FReply::Handled();
     }
     HandleNodeCreateRequested(Item->Action.ActionId, FVector2D::ZeroVector);
@@ -5479,7 +5516,7 @@ void SUnifiedScriptAuthoringSurface::RebuildNodePalette(
     if (ConfiguredCatalogPath.IsEmpty())
     {
         ConfiguredCatalogPath =
-            TEXT("{ProjectDir}/../samples/Unreal/UEUnifiedScriptRuntime.reflection.json");
+            TEXT("{ProjectDir}/../samples/Unreal/UEUnifiedScriptRuntime.api-nodes.json");
     }
     const FString ManifestPath = FUnifiedScriptAuthoringSurfaceReader::ResolveConfiguredPath(
         ConfiguredCatalogPath);
@@ -5492,6 +5529,161 @@ void SUnifiedScriptAuthoringSurface::RebuildNodePalette(
         RefreshNodePaletteItems();
         return;
     }
+    FString CatalogSchema;
+    if (!Manifest->TryGetStringField(TEXT("schemaVersion"), CatalogSchema) ||
+        CatalogSchema != TEXT("unifiedscript.unreal-api-node-catalog/v0.2") &&
+        CatalogSchema != TEXT("unifiedscript.unreal-api-node-catalog/v0.1"))
+    {
+        RefreshNodePaletteItems();
+        return;
+    }
+
+    const auto FindGeneratedNode = [](
+        const TSharedPtr<FJsonObject>& Type,
+        const FString& ActionId) -> TSharedPtr<FJsonObject>
+    {
+        const TArray<TSharedPtr<FJsonValue>>* Nodes = nullptr;
+        if (!Type.IsValid() || !Type->TryGetArrayField(TEXT("nodes"), Nodes) || Nodes == nullptr)
+        {
+            return nullptr;
+        }
+        for (const TSharedPtr<FJsonValue>& NodeValue : *Nodes)
+        {
+            const TSharedPtr<FJsonObject> Node =
+                NodeValue.IsValid() ? NodeValue->AsObject() : nullptr;
+            FString NodeId;
+            if (Node.IsValid() && Node->TryGetStringField(TEXT("id"), NodeId) &&
+                NodeId == ActionId)
+            {
+                return Node;
+            }
+        }
+        return nullptr;
+    };
+    const auto FindGeneratedNodeByMemberPath = [](
+        const TSharedPtr<FJsonObject>& Type,
+        const FString& MemberPath,
+        const FString& Kind) -> TSharedPtr<FJsonObject>
+    {
+        const TArray<TSharedPtr<FJsonValue>>* Nodes = nullptr;
+        if (!Type.IsValid() || !Type->TryGetArrayField(TEXT("nodes"), Nodes) || Nodes == nullptr)
+        {
+            return nullptr;
+        }
+        for (const TSharedPtr<FJsonValue>& NodeValue : *Nodes)
+        {
+            const TSharedPtr<FJsonObject> Node =
+                NodeValue.IsValid() ? NodeValue->AsObject() : nullptr;
+            FString NodeMemberPath;
+            FString NodeKind;
+            if (Node.IsValid() &&
+                Node->TryGetStringField(TEXT("memberPath"), NodeMemberPath) &&
+                Node->TryGetStringField(TEXT("kind"), NodeKind) &&
+                NodeMemberPath == MemberPath && NodeKind == Kind)
+            {
+                return Node;
+            }
+        }
+        return nullptr;
+    };
+    const auto MakeGeneratedPaletteAction = [](
+        const TSharedPtr<FJsonObject>& Node,
+        const FString& ActionId,
+        const FString& FallbackCategory,
+        const FString& FallbackTitle,
+        const FString& FallbackTooltip,
+        const FString& Keywords,
+        bool bRequiresBlock) -> FUnifiedScriptGraphPaletteAction
+    {
+        FUnifiedScriptGraphPaletteAction Action;
+        Action.ActionId = ActionId;
+        Action.Category = FallbackCategory;
+        Action.Title = FallbackTitle;
+        Action.Tooltip = FallbackTooltip;
+        Action.Keywords = Keywords;
+        Action.bRequiresBlock = bRequiresBlock;
+        if (!Node.IsValid())
+        {
+            return Action;
+        }
+        Node->TryGetStringField(TEXT("category"), Action.Category);
+        Node->TryGetStringField(TEXT("title"), Action.Title);
+        Node->TryGetStringField(TEXT("tooltip"), Action.Tooltip);
+        Node->TryGetBoolField(TEXT("deprecated"), Action.bDeprecated);
+        Node->TryGetBoolField(TEXT("latent"), Action.bLatent);
+
+        TArray<FString> Restrictions;
+        FString LatentInfo;
+        if (Action.bLatent)
+        {
+            Node->TryGetStringField(TEXT("latentInfoParameter"), LatentInfo);
+            Restrictions.Add(LatentInfo.IsEmpty()
+                ? TEXT("Latent")
+                : FString::Printf(TEXT("Latent (%s)"), *LatentInfo));
+        }
+        FString ThreadRequirement;
+        if (Node->TryGetStringField(TEXT("threadRequirement"), ThreadRequirement))
+        {
+            Restrictions.Add(ThreadRequirement == TEXT("anyThread")
+                ? TEXT("Any thread")
+                : TEXT("Game thread only"));
+        }
+        FString WorldRequirement;
+        FString WorldContextParameter;
+        Node->TryGetStringField(TEXT("worldRequirement"), WorldRequirement);
+        Node->TryGetStringField(TEXT("worldContextParameter"), WorldContextParameter);
+        if (WorldRequirement == TEXT("worldContext"))
+        {
+            Restrictions.Add(WorldContextParameter.IsEmpty()
+                ? TEXT("Requires World context")
+                : FString::Printf(
+                    TEXT("Requires World context (%s)"),
+                    *WorldContextParameter));
+        }
+        else if (!WorldContextParameter.IsEmpty())
+        {
+            Restrictions.Add(FString::Printf(
+                TEXT("World context optional (%s)"),
+                *WorldContextParameter));
+        }
+
+        TArray<FString> Defaults;
+        const TArray<TSharedPtr<FJsonValue>>* Pins = nullptr;
+        if (Node->TryGetArrayField(TEXT("pins"), Pins) && Pins != nullptr)
+        {
+            for (const TSharedPtr<FJsonValue>& PinValue : *Pins)
+            {
+                const TSharedPtr<FJsonObject> Pin =
+                    PinValue.IsValid() ? PinValue->AsObject() : nullptr;
+                FString PinName;
+                FString DefaultValue;
+                if (Pin.IsValid() && Pin->TryGetStringField(TEXT("name"), PinName) &&
+                    Pin->TryGetStringField(TEXT("defaultValue"), DefaultValue))
+                {
+                    Defaults.Add(PinName + TEXT("=") + DefaultValue);
+                }
+            }
+        }
+        if (!Defaults.IsEmpty())
+        {
+            Restrictions.Add(TEXT("Defaults: ") + FString::Join(Defaults, TEXT(", ")));
+        }
+        if (Action.bDeprecated)
+        {
+            FString Message;
+            Node->TryGetStringField(TEXT("deprecationMessage"), Message);
+            Restrictions.Add(Message.IsEmpty()
+                ? TEXT("Deprecated")
+                : TEXT("Deprecated: ") + Message);
+        }
+        Action.RestrictionSummary = FString::Join(Restrictions, TEXT(" | "));
+        if (!Action.RestrictionSummary.IsEmpty())
+        {
+            Action.Tooltip += TEXT("\n\nContract: ") + Action.RestrictionSummary;
+            Action.Keywords += TEXT(" ") + Action.RestrictionSummary;
+        }
+        return Action;
+    };
 
     const auto TypeDisplayName = [](const TSharedPtr<FJsonObject>& Type) -> FString
     {
@@ -5740,16 +5932,20 @@ void SUnifiedScriptAuthoringSurface::RebuildNodePalette(
                 EventAction.HandlerName = HandlerName;
                 EventAction.EventParameters = MoveTemp(EventParameters);
                 ReflectedPaletteActions.Add(ActionId, MoveTemp(EventAction));
-                AuthoringGraph->PaletteActions.Add(
-                    {ActionId,
-                        TEXT("Unreal Events|") + TypeName,
-                        TEXT("Event ") + MemberName,
-                        FString::Printf(
-                            TEXT("Create a target-bound visual Event Entry.\n%s(%s)"),
-                            *MemberName,
-                            *FString::Join(SignatureParts, TEXT(", "))),
-                        FString::Printf(TEXT("unreal ue event delegate %s %s"), *TypeName, *MemberName),
-                        false});
+                AuthoringGraph->PaletteActions.Add(MakeGeneratedPaletteAction(
+                    FindGeneratedNode(Type, ActionId),
+                    ActionId,
+                    TEXT("Unreal Events|") + TypeName,
+                    TEXT("Event ") + MemberName,
+                    FString::Printf(
+                        TEXT("Create a target-bound visual Event Entry.\n%s(%s)"),
+                        *MemberName,
+                        *FString::Join(SignatureParts, TEXT(", "))),
+                    FString::Printf(
+                        TEXT("unreal ue event delegate %s %s"),
+                        *TypeName,
+                        *MemberName),
+                    false));
             }
         }
         const FUnifiedScriptAuthoringParameter* Receiver = Function.Parameters.FindByPredicate(
@@ -5792,10 +5988,20 @@ void SUnifiedScriptAuthoringSurface::RebuildNodePalette(
                     TEXT("ue.get|%s|%s"), *ManagedTypeName, *MemberName);
                 ReflectedPaletteActions.Add(ActionId,
                     {false, *Receiver, MemberName, ResultTypeName, ResultTypeId, {}});
-                AuthoringGraph->PaletteActions.Add(
-                    {ActionId, TEXT("Unreal API|") + TypeName + TEXT("|Properties"), MemberName,
-                        FString::Printf(TEXT("Read reflected property %s.%s."), *TypeName, *MemberName),
-                        FString::Printf(TEXT("unreal ue api property get read %s %s"), *TypeName, *MemberName)});
+                AuthoringGraph->PaletteActions.Add(MakeGeneratedPaletteAction(
+                    FindGeneratedNode(Type, ActionId),
+                    ActionId,
+                    TEXT("Unreal API|") + TypeName + TEXT("|Properties"),
+                    MemberName,
+                    FString::Printf(
+                        TEXT("Read reflected property %s.%s."),
+                        *TypeName,
+                        *MemberName),
+                    FString::Printf(
+                        TEXT("unreal ue api property get read %s %s"),
+                        *TypeName,
+                        *MemberName),
+                    true));
             }
         }
         if (!Type->TryGetArrayField(TEXT("functions"), Functions) || Functions == nullptr)
@@ -5810,9 +6016,11 @@ void SUnifiedScriptAuthoringSurface::RebuildNodePalette(
             const TSharedPtr<FJsonObject>* ReturnType = nullptr;
             const TSharedPtr<FJsonObject>* Traits = nullptr;
             const TArray<TSharedPtr<FJsonValue>>* Parameters = nullptr;
+            FString MemberPath;
             bool bCallable = false;
             if (!ReflectedFunction.IsValid() ||
                 !ReflectedFunction->TryGetStringField(TEXT("name"), MemberName) ||
+                !ReflectedFunction->TryGetStringField(TEXT("path"), MemberPath) ||
                 !ReflectedFunction->TryGetObjectField(TEXT("returnType"), ReturnType) ||
                 ReturnType == nullptr ||
                 !ReflectedFunction->TryGetObjectField(TEXT("traits"), Traits) || Traits == nullptr ||
@@ -5822,31 +6030,72 @@ void SUnifiedScriptAuthoringSurface::RebuildNodePalette(
             {
                 continue;
             }
+            const TSharedPtr<FJsonObject> GeneratedNode = FindGeneratedNodeByMemberPath(
+                Type,
+                MemberPath,
+                TEXT("function"));
+            FString ActionId;
+            if (!GeneratedNode.IsValid() ||
+                !GeneratedNode->TryGetStringField(TEXT("id"), ActionId))
+            {
+                ActionId = FString::Printf(
+                    TEXT("ue.call|%s|%s"), *ManagedTypeName, *MemberName);
+            }
             const FString ResultTypeName = TypeDisplayName(*ReturnType);
             const FString ResultTypeId = FindBoundTypeId(ResultTypeName);
-            if (ResultTypeName.IsEmpty() || ResultTypeId.IsEmpty())
-            {
-                continue;
-            }
+            FUnifiedScriptGraphPaletteAction PaletteAction = MakeGeneratedPaletteAction(
+                GeneratedNode,
+                ActionId,
+                TEXT("Unreal API|") + TypeName,
+                MemberName,
+                FString::Printf(
+                    TEXT("Insert reflected call %s.%s(...)."),
+                    *TypeName,
+                    *MemberName),
+                FString::Printf(
+                    TEXT("unreal ue api function call invoke %s %s"),
+                    *TypeName,
+                    *MemberName),
+                true);
 
             TArray<FUnifiedScriptAuthoringParameter> Arguments;
             bool bAllArgumentsAvailable = true;
+            bool bOmittingTrailingDefaults = false;
+            FString MissingArgument;
             for (const TSharedPtr<FJsonValue>& ParameterValue : *Parameters)
             {
                 const TSharedPtr<FJsonObject> ParameterObject =
                     ParameterValue.IsValid() ? ParameterValue->AsObject() : nullptr;
                 FString Name;
                 FString Direction;
+                FString DefaultValue;
                 const TSharedPtr<FJsonObject>* ParameterType = nullptr;
                 if (!ParameterObject.IsValid() ||
                     !ParameterObject->TryGetStringField(TEXT("name"), Name) ||
                     !ParameterObject->TryGetStringField(TEXT("direction"), Direction) ||
-                    Direction != TEXT("input") ||
                     !ParameterObject->TryGetObjectField(TEXT("type"), ParameterType) ||
                     ParameterType == nullptr)
                 {
                     bAllArgumentsAvailable = false;
                     break;
+                }
+                if (Direction != TEXT("input"))
+                {
+                    bAllArgumentsAvailable = false;
+                    MissingArgument = Name + TEXT(" (") + Direction + TEXT(")");
+                    break;
+                }
+                const bool bHasDefault =
+                    ParameterObject->TryGetStringField(TEXT("defaultValue"), DefaultValue);
+                if (bOmittingTrailingDefaults)
+                {
+                    if (!bHasDefault)
+                    {
+                        bAllArgumentsAvailable = false;
+                        MissingArgument = Name;
+                        break;
+                    }
+                    continue;
                 }
                 const FString DisplayName = TypeDisplayName(*ParameterType);
                 const FUnifiedScriptAuthoringParameter* Argument = Function.Parameters.FindByPredicate(
@@ -5858,24 +6107,75 @@ void SUnifiedScriptAuthoringSurface::RebuildNodePalette(
                     });
                 if (Argument == nullptr)
                 {
+                    if (bHasDefault)
+                    {
+                        bOmittingTrailingDefaults = true;
+                        continue;
+                    }
                     bAllArgumentsAvailable = false;
+                    MissingArgument = Name;
                     break;
                 }
                 Arguments.Add(*Argument);
             }
-            if (!bAllArgumentsAvailable)
-            {
-                continue;
-            }
 
-            const FString ActionId = FString::Printf(
-                TEXT("ue.call|%s|%s"), *ManagedTypeName, *MemberName);
-            ReflectedPaletteActions.Add(ActionId,
-                {true, *Receiver, MemberName, ResultTypeName, ResultTypeId, MoveTemp(Arguments)});
-            AuthoringGraph->PaletteActions.Add(
-                {ActionId, TEXT("Unreal API|") + TypeName, MemberName,
-                    FString::Printf(TEXT("Insert reflected call %s.%s(...)."), *TypeName, *MemberName),
-                    FString::Printf(TEXT("unreal ue api function call invoke %s %s"), *TypeName, *MemberName)});
+            FString ReturnKind;
+            (*ReturnType)->TryGetStringField(TEXT("kind"), ReturnKind);
+            if (PaletteAction.bLatent)
+            {
+                PaletteAction.bEnabled = false;
+                PaletteAction.UnavailableReason =
+                    TEXT("Latent API nodes require continuation authoring and cannot be placed yet.");
+            }
+            else if (ReturnKind == TEXT("void"))
+            {
+                PaletteAction.bEnabled = false;
+                PaletteAction.UnavailableReason =
+                    TEXT("Void API calls require execution-statement authoring and cannot be placed yet.");
+            }
+            else if (ResultTypeName.IsEmpty() || ResultTypeId.IsEmpty())
+            {
+                PaletteAction.bEnabled = false;
+                PaletteAction.UnavailableReason =
+                    TEXT("The reflected return type is not bound in the active Visual function.");
+            }
+            else if (!bAllArgumentsAvailable)
+            {
+                PaletteAction.bEnabled = false;
+                FString WorldContextParameter;
+                if (GeneratedNode.IsValid())
+                {
+                    GeneratedNode->TryGetStringField(
+                        TEXT("worldContextParameter"),
+                        WorldContextParameter);
+                }
+                PaletteAction.UnavailableReason = MissingArgument == WorldContextParameter
+                    ? FString::Printf(
+                        TEXT("Requires World context parameter '%s' in the active function."),
+                        *MissingArgument)
+                    : FString::Printf(
+                        TEXT("Requires compatible input parameter '%s' in the active function."),
+                        *MissingArgument);
+            }
+            if (!PaletteAction.UnavailableReason.IsEmpty())
+            {
+                PaletteAction.Tooltip +=
+                    TEXT("\n\nUnavailable: ") + PaletteAction.UnavailableReason;
+                PaletteAction.RestrictionSummary +=
+                    (PaletteAction.RestrictionSummary.IsEmpty() ? FString() : TEXT(" | ")) +
+                    PaletteAction.UnavailableReason;
+            }
+            if (PaletteAction.bEnabled)
+            {
+                ReflectedPaletteActions.Add(ActionId,
+                    {true,
+                        *Receiver,
+                        MemberName,
+                        ResultTypeName,
+                        ResultTypeId,
+                        MoveTemp(Arguments)});
+            }
+            AuthoringGraph->PaletteActions.Add(MoveTemp(PaletteAction));
         }
     }
     RefreshNodePaletteItems();
@@ -6094,6 +6394,18 @@ FString SUnifiedScriptAuthoringSurface::GetActiveFunctionId() const
     return ActiveFunctionId;
 }
 
+bool SUnifiedScriptAuthoringSurface::SelectFunction(const FString& FunctionId)
+{
+    const FUnifiedScriptSurfaceTreeItemPtr* Item = SurfaceItemsById.Find(FunctionId);
+    if (Item == nullptr || !Item->IsValid() ||
+        (*Item)->Kind != EUnifiedScriptSurfaceTreeItemKind::Function)
+    {
+        return false;
+    }
+    RebuildGraph(*Item);
+    return ActiveFunctionId == FunctionId;
+}
+
 bool SUnifiedScriptAuthoringSurface::HasNodePaletteAction(const FString& ActionId) const
 {
     return AuthoringGraph.IsValid() && AuthoringGraph->PaletteActions.ContainsByPredicate(
@@ -6101,6 +6413,28 @@ bool SUnifiedScriptAuthoringSurface::HasNodePaletteAction(const FString& ActionI
         {
             return Action.ActionId == ActionId;
         });
+}
+
+bool SUnifiedScriptAuthoringSurface::GetNodePaletteAction(
+    const FString& ActionId,
+    FUnifiedScriptGraphPaletteAction& OutAction) const
+{
+    if (!AuthoringGraph.IsValid())
+    {
+        return false;
+    }
+    const FUnifiedScriptGraphPaletteAction* Action =
+        AuthoringGraph->PaletteActions.FindByPredicate(
+            [&ActionId](const FUnifiedScriptGraphPaletteAction& Candidate)
+            {
+                return Candidate.ActionId == ActionId;
+            });
+    if (Action == nullptr)
+    {
+        return false;
+    }
+    OutAction = *Action;
+    return true;
 }
 
 TSharedRef<SWidget> SUnifiedScriptAuthoringSurface::BuildAdvancedNodeDetails(

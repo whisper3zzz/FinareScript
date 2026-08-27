@@ -21,6 +21,14 @@ public sealed class UnrealBlueprintMetadataAttribute : Attribute
     public string? Tooltip { get; set; }
 
     public string? WorldContextParameter { get; set; }
+
+    public bool Latent { get; set; }
+
+    public string? LatentInfoParameter { get; set; }
+
+    public bool ThreadSafe { get; set; }
+
+    public bool CallableWithoutWorldContext { get; set; }
 }
 
 [AttributeUsage(AttributeTargets.Method, AllowMultiple = false, Inherited = false)]

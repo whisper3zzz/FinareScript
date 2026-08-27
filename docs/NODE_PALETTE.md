@@ -26,8 +26,18 @@ compiler-owned graph unchanged.
 - reflected delegates create declaration-level Event Entries and remain
   discoverable at function scope without a statement block.
 
-The generated reflection catalog remains the product API authority. Palette
-filtering only prevents known-invalid choices; Roslyn analysis and the
+The generated API node catalog remains the product API authority. Catalog v0.2
+carries the Blueprint display name, category, tooltip, pin defaults,
+deprecation, latent/latent-info, thread requirement, and World-context policy
+projected from reflection v0.4. Slate consumes those values directly instead of
+reconstructing product presentation from raw reflection.
+
+Missing required receivers, inputs, or World-context values leave an action
+visible but unavailable with an exact reason. A trailing reflected default can
+be omitted and uses the generated C# overload. Latent and current void-call
+actions are likewise discoverable but unavailable until the source transaction
+can represent their continuation or statement form. Deprecated actions retain
+a warning badge so existing APIs stay findable. Roslyn analysis and the
 Workbench remain the final correctness authority.
 
 ## Search and ranking

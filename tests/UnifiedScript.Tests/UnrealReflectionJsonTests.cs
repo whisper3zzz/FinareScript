@@ -104,6 +104,85 @@ public sealed class UnrealReflectionJsonTests
             }));
     }
 
+    [Fact]
+    public void RoundTripCarriesFunctionAndDelegateAuthoringPolicyMetadata()
+    {
+        UnrealReflectedFunction latent = Function(
+            "/Script/FixtureRuntime.FixtureObject:Wait",
+            "Wait") with
+        {
+            Parameters =
+            [
+                new UnrealReflectedParameter(
+                    "WorldContextObject",
+                    new UnrealTypeReference(
+                        UnrealValueKind.Object,
+                        "UObject*",
+                        "/Script/CoreUObject.Object"),
+                    UnrealParameterDirection.Input),
+                new UnrealReflectedParameter(
+                    "LatentInfo",
+                    new UnrealTypeReference(
+                        UnrealValueKind.Int32,
+                        "int32"),
+                    UnrealParameterDirection.Input),
+            ],
+            Metadata = new UnrealBlueprintMetadata(
+                DisplayName: "Wait for Fixture",
+                Category: "Fixture|Async",
+                Tooltip: "Completes on a later frame.",
+                WorldContextParameter: "WorldContextObject")
+            {
+                Latent = true,
+                LatentInfoParameter = "LatentInfo",
+            },
+        };
+        UnrealReflectedDelegate signal = Delegate(
+            "/Script/FixtureRuntime.FixtureObject:OnSignal",
+            "OnSignal") with
+        {
+            Metadata = new UnrealBlueprintMetadata(
+                DisplayName: "Signal Received",
+                Category: "Fixture|Events",
+                Tooltip: "Raised by the fixture."),
+        };
+        UnrealReflectionManifest manifest = UnrealReflectionManifest.Create(
+            new UnrealEngineIdentity(5, 8, 1, "UE5"),
+            ["FixtureRuntime"],
+            [Type("/Script/FixtureRuntime.FixtureObject", "FixtureObject", "FixtureRuntime") with
+            {
+                Functions = [latent],
+                Delegates = [signal],
+            }]);
+
+        UnrealReflectionManifest roundTripped = UnrealReflectionJson.Deserialize(
+            UnrealReflectionJson.Serialize(manifest));
+
+        UnrealReflectedFunction function = Assert.Single(roundTripped.Types[0].Functions);
+        Assert.True(function.Metadata.Latent);
+        Assert.Equal("LatentInfo", function.Metadata.LatentInfoParameter);
+        Assert.Equal("WorldContextObject", function.Metadata.WorldContextParameter);
+        Assert.Equal("Fixture|Events", Assert.Single(roundTripped.Types[0].Delegates).Metadata.Category);
+
+        Assert.Throws<JsonException>(() => UnrealReflectionJson.NormalizeAndValidate(
+            manifest with
+            {
+                Types =
+                [
+                    manifest.Types[0] with
+                    {
+                        Functions =
+                        [
+                            latent with
+                            {
+                                Metadata = latent.Metadata with { ThreadSafe = true },
+                            },
+                        ],
+                    },
+                ],
+            }));
+    }
+
     private static UnrealReflectedType Type(string path, string name, string module) => new(
         path,
         name,

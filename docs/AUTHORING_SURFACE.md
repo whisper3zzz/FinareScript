@@ -210,7 +210,7 @@ success regenerates C#, Declaration IR, Graph, Surface, DLL, and PDB, then
 reloads matching components. Rejection leaves the canvas unchanged.
 
 The node menu reads the loaded Script Asset's contract-generated API node
-catalog, falling back to the checked-in reflection fixture for the repository
+catalog, falling back to the checked-in API node catalog for the repository
 demo. Readable properties and callable instance methods appear when the active Visual function
 exposes a matching typed receiver and parameters. Selecting one emits a
 structured `memberAccess` or `memberInvocation` initializer, so normal
@@ -239,7 +239,8 @@ typed wire Reroutes. Per-function pan/zoom and the clickable minimap remain
 per-user editor state; `C`, `F`, and `Home` expose common Blueprint comment and
 framing gestures. See [CANVAS_AUTHORING.md](CANVAS_AUTHORING.md).
 
-Reflection v0.2 delegates appear under `Unreal Events`. Selecting one is a
+Reflection v0.4 delegates appear under their generated Blueprint categories.
+Selecting one is a
 declaration-level operation rather than a statement insertion: the client posts
 `addUnrealEventHandler` through declaration-patch v0.2, and Roslyn adds a
 strongly typed `[Visual] [UnrealEvent(...)]` method to the active Script Asset.
@@ -247,6 +248,15 @@ The next compiler projection renders that method as a red `unrealEventEntry`
 with one control continuation and typed delegate-payload outputs. Canonical UE
 event path and source type are preserved in HIR metadata; generated C# endpoint
 names are deliberately not used as semantic identity.
+
+M8.3 moves API presentation and execution restrictions into API node catalog
+v0.2. Slate now consumes generated titles, categories, tooltips, pin defaults,
+deprecation, latent, thread and World-context policy. Required inputs without a
+matching active-function value remain visible but unavailable with an exact
+reason. Trailing Unreal defaults may be omitted and bind to the generated C#
+overload. Latent and current void-statement actions remain discoverable with an
+unavailable marker until their continuation/statement source transactions are
+implemented; deprecation remains a warning rather than silently hiding an API.
 
 `FUnifiedScriptGraphPresentation` is a read-only display policy above that
 contract. It keeps every Surface record addressable while folding connected

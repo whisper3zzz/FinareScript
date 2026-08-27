@@ -255,10 +255,10 @@ try {
     New-Item -ItemType Directory -Force -Path $schemaDirectory, $templateDirectory |
         Out-Null
     $schemaSources = [ordered]@{
-        'unreal-reflection.v0.2.example.json' = 'samples\Unreal\UEUnifiedScriptRuntime.reflection.json'
-        'unreal-api-contract.v0.1.example.json' = 'samples\Unreal\UEUnifiedScriptRuntime.api-contract.json'
-        'unreal-api-nodes.v0.1.example.json' = 'samples\Unreal\UEUnifiedScriptRuntime.api-nodes.json'
-        'unreal-binding-coverage.v0.1.example.json' = 'samples\Unreal\UEUnifiedScriptRuntime.binding-coverage.json'
+        'unreal-reflection.v0.4.example.json' = 'samples\Unreal\UEUnifiedScriptRuntime.reflection.json'
+        'unreal-api-contract.v0.2.example.json' = 'samples\Unreal\UEUnifiedScriptRuntime.api-contract.json'
+        'unreal-api-nodes.v0.2.example.json' = 'samples\Unreal\UEUnifiedScriptRuntime.api-nodes.json'
+        'unreal-binding-coverage.v0.2.example.json' = 'samples\Unreal\UEUnifiedScriptRuntime.binding-coverage.json'
         'unreal-data-plane-layout.v0.1.example.json' = 'samples\Unreal\UEUnifiedScriptRuntime.data-plane.json'
         'unreal-script-deployment.v0.1.example.json' = 'samples\Unreal\UnifiedScript.Unreal.Demo.deployment.json'
     }
@@ -363,10 +363,10 @@ try {
             }
             schemas = [ordered]@{
                 onboarding = 'unifiedscript.unreal-project-onboarding/v0.1'
-                reflection = 'unifiedscript.unreal-reflection/v0.2'
-                apiContract = 'unifiedscript.unreal-api-contract/v0.1'
-                apiNodeCatalog = 'unifiedscript.unreal-api-node-catalog/v0.1'
-                bindingCoverage = 'unifiedscript.unreal-binding-coverage/v0.1'
+                reflection = 'unifiedscript.unreal-reflection/v0.4'
+                apiContract = 'unifiedscript.unreal-api-contract/v0.2'
+                apiNodeCatalog = 'unifiedscript.unreal-api-node-catalog/v0.2'
+                bindingCoverage = 'unifiedscript.unreal-binding-coverage/v0.2'
                 dataPlaneLayout = 'unifiedscript.unreal-data-plane-layout/v0.1'
                 deployment = 'unifiedscript.unreal-script-deployment/v0.1'
             }

@@ -224,21 +224,42 @@ def main() -> int:
         for member_group in ("properties", "functions", "delegates")
         for member in node_type[member_group]
     }
+    node_descriptors = [
+        node
+        for node_type in api_nodes["types"]
+        for node in node_type["nodes"]
+    ]
     require(
         api_contract["schemaVersion"]
         == "unifiedscript.unreal-api-contract/v0.2"
         and api_nodes["schemaVersion"]
-        == "unifiedscript.unreal-api-node-catalog/v0.1"
+        == "unifiedscript.unreal-api-node-catalog/v0.2"
         and api_nodes["contractName"] == api_contract["contractName"]
         and api_nodes["managedNamespace"] == api_contract["managedNamespace"]
         and contract_member_names == node_member_names
+        and all(
+            {
+                "latent",
+                "threadRequirement",
+                "worldRequirement",
+                "callableWithoutWorldContext",
+            }
+            <= node.keys()
+            for node in node_descriptors
+        )
+        and any(
+            pin.get("defaultValue") == "1"
+            for node in node_descriptors
+            for pin in node["pins"]
+        )
         and "UnrealApiContractProjector" in contract_generator
         and "UnrealApiNodeCatalogGenerator" in contract_generator
         and "--contract" in cli_source
         and "--nodes-out" in cli_source
         and "WriteTransactionally(outputs)" in cli_source
         and "ClassPathSet" in reflection_exporter
-        and "ResolveApiNodeCatalogPath" in authoring_widget,
+        and "ResolveApiNodeCatalogPath" in authoring_widget
+        and "UEUnifiedScriptRuntime.api-nodes.json" in authoring_widget,
         "Project API Contract generation or Script Asset-selected visual catalog is missing",
     )
     checks.append("one Unreal API Contract drives C++, C#, coverage, and visual nodes")
@@ -1905,7 +1926,7 @@ def main() -> int:
     )
     require(
         unreal_manifest["schemaVersion"]
-        == "unifiedscript.unreal-reflection/v0.3"
+        == "unifiedscript.unreal-reflection/v0.4"
         and unreal_manifest["modules"] == ["Engine", "UEUnifiedScriptRuntime"]
         and {item["path"] for item in unreal_manifest["types"]}
         == {
@@ -2052,7 +2073,7 @@ def main() -> int:
         and {module["Name"] for module in unreal_plugin["Modules"]}
         == {"UEUnifiedScriptRuntime", "UEUnifiedScriptEditor"}
         and "UUnifiedScriptComponent : public UActorComponent" in unreal_component
-        and "unifiedscript.unreal-reflection/v0.3" in unreal_exporter
+        and "unifiedscript.unreal-reflection/v0.4" in unreal_exporter
         and "UnifiedScriptBindingInternal" in unreal_exporter
         and "UnifiedScriptBindingInternal" in unreal_delegate_proxy
         and "TObjectIterator<UClass>" in unreal_exporter
@@ -2537,7 +2558,7 @@ def main() -> int:
         and "puertsOrTypeScriptPackageFiles" in blockbreaker_package_runner
         and "### M7.4 — Full BlockBreaker runtime migration" in roadmap
         and "- [x] inventory all Puerts scripts" in roadmap
-        and "Next slice: **M8.3 — asset, state, event, and API authoring**"
+        and "Next slice: **M8.3 — instance overrides and semantic identity migration**"
         in roadmap,
         "M7.4 whole-project Puerts inventory, coverage, or migration gates are incomplete",
     )
@@ -2763,22 +2784,28 @@ def main() -> int:
         == "unifiedscript.authoring-surface/v0.4"
         and len(unreal_demo_surface["assets"]) == 1
         and len(unreal_demo_surface_asset["states"]) == 1
-        and len(unreal_demo_surface_asset["functions"]) == 4
+        and len(unreal_demo_surface_asset["functions"]) == 5
         and sum(
             len(function["actions"])
             for function in unreal_demo_surface_asset["functions"]
-        ) == 45
+        ) == 51
         and sum(
             len(function["edges"])
             for function in unreal_demo_surface_asset["functions"]
-        ) == 43
+        ) == 49
         and all(
             isinstance(action["properties"], dict)
             for function in unreal_demo_surface_asset["functions"]
             for action in function["actions"]
         )
         and set(unreal_demo_surface_functions)
-        == {"OnManagedSignal", "ResolveInitialValue", "RewirePreview", "UEApiPreview"}
+        == {
+            "OnManagedSignal",
+            "ResolveInitialValue",
+            "RewirePreview",
+            "UEApiPreview",
+            "UEDefaultPreview",
+        }
         and len(unreal_demo_event_actions) == 1
         and unreal_demo_event_actions[0]["title"] == "Event OnManagedSignal"
         and "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:OnManagedSignal"
@@ -2976,7 +3003,8 @@ def main() -> int:
         and "Failure explicitly confirms unchanged rollback" in unreal_authoring_test
         and "mismatched preview token" in authoring_diagnostics_doc
         and "- [x] provide compiler/contract diagnostics" in roadmap
-        and "Next slice: **M8.3 — asset, state, event, and API authoring**" in roadmap,
+        and "Next slice: **M8.3 — instance overrides and semantic identity migration**"
+        in roadmap,
         "Native prepared Diff, structured diagnostics, safe fixes, or rollback receipt is incomplete",
     )
     checks.append(

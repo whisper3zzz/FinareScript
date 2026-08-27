@@ -11,7 +11,7 @@ The first slice has four explicit boundaries:
 ```text
 UE 5.7/5.8 native reflection
   -> UnifiedScriptExport commandlet
-  -> unifiedscript.unreal-reflection/v0.3
+  -> unifiedscript.unreal-reflection/v0.4
   -> UnifiedScript.Unreal binding generator
   -> typed C# wrappers over IUnrealInvocationBridge
 ```
@@ -29,7 +29,7 @@ handle-only bridge API. This makes the extractor and generator testable without
 launching an editor and prevents engine upgrades from contaminating HIR,
 Semantics, Graph, or Authoring.
 
-## Reflection manifest v0.2
+## Reflection manifest v0.4
 
 The manifest records only portable identity and callable shape:
 
@@ -40,6 +40,8 @@ The manifest records only portable identity and callable shape:
 - Blueprint-callable/pure declared functions with ordered parameters;
 - Blueprint-assignable multicast delegates with canonical paths, traits, and
   ordered parameter types;
+- stable display/category/tooltip/deprecation metadata plus latent, thread, and
+  World-context execution policy used by generated authoring surfaces;
 - recursive value types for primitives, UObject/class handles, structs, enums,
   arrays, sets, and maps.
 

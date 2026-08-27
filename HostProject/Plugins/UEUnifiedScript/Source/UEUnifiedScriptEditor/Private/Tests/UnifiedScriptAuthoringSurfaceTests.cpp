@@ -43,9 +43,9 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
 
     TestEqual(TEXT("Demo Surface has one Script Asset"), Document.Assets.Num(), 1);
     TestEqual(TEXT("Demo Surface has one state"), Document.GetStateCount(), 1);
-    TestEqual(TEXT("Demo Surface has four Visual functions"), Document.GetFunctionCount(), 4);
-    TestEqual(TEXT("Demo Surface preserves all Graph nodes"), Document.GetActionCount(), 45);
-    TestEqual(TEXT("Demo Surface preserves all Graph edges"), Document.GetEdgeCount(), 43);
+    TestEqual(TEXT("Demo Surface has five Visual functions"), Document.GetFunctionCount(), 5);
+    TestEqual(TEXT("Demo Surface preserves all Graph nodes"), Document.GetActionCount(), 51);
+    TestEqual(TEXT("Demo Surface preserves all Graph edges"), Document.GetEdgeCount(), 49);
     TestEqual(
         TEXT("Demo Surface keeps the engine-neutral asset path"),
         Document.Assets[0].AssetPath,
@@ -63,9 +63,16 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         {
             return Candidate.Name == TEXT("OnManagedSignal");
         });
+    const FUnifiedScriptAuthoringFunction* DefaultFunction =
+        Document.Assets[0].Functions.FindByPredicate([](
+            const FUnifiedScriptAuthoringFunction& Candidate)
+        {
+            return Candidate.Name == TEXT("UEDefaultPreview");
+        });
     TestNotNull(TEXT("Demo retains the scalar Visual function"), FunctionPtr);
     TestNotNull(TEXT("Demo projects the attributed UE Event Entry"), EventFunction);
-    if (FunctionPtr == nullptr || EventFunction == nullptr)
+    TestNotNull(TEXT("Demo projects the reflected-default API function"), DefaultFunction);
+    if (FunctionPtr == nullptr || EventFunction == nullptr || DefaultFunction == nullptr)
     {
         return false;
     }
@@ -1097,6 +1104,10 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
             TEXT("Create an integer local."), TEXT("int variable number")},
         {TEXT("ue.event|Test|Signal"), TEXT("Unreal Events|Test"), TEXT("Event Signal"),
             TEXT("Create an event entry."), TEXT("ue delegate signal"), false},
+        {TEXT("ue.call|Test|Wait"), TEXT("Test|Async"), TEXT("Wait"),
+            TEXT("Generated latent call."), TEXT("wait async"), true, false, false, true,
+            TEXT("Latent | Game thread only"),
+            TEXT("Latent continuation authoring is unavailable.")},
     };
     TArray<FString> FavoriteActions = {TEXT("flow.branch")};
     TArray<FString> RecentActions = {TEXT("value.add"), TEXT("local.int")};
@@ -1107,7 +1118,8 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
             FavoriteActions,
             RecentActions,
             true);
-    TestEqual(TEXT("Palette retains every action valid in an active block"), RankedPalette.Num(), 4);
+    TestEqual(TEXT("Palette retains enabled and discoverable unavailable actions"),
+        RankedPalette.Num(), 5);
     TestEqual(TEXT("Favorite node ranks before recent and alphabetical nodes"),
         RankedPalette[0].Action.ActionId, FString(TEXT("flow.branch")));
     TestEqual(TEXT("Most-recent node ranks immediately after favorites"),
@@ -1125,6 +1137,20 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
     {
         TestEqual(TEXT("Keyword search resolves the typed Add action"),
             SearchPalette[0].Action.ActionId, FString(TEXT("value.add")));
+    }
+    const TArray<FUnifiedScriptNodePaletteItem> RestrictionPalette =
+        FUnifiedScriptNodePaletteModel::Build(
+            PaletteActions,
+            TEXT("latent game thread"),
+            FavoriteActions,
+            RecentActions,
+            true);
+    TestEqual(TEXT("Generated policy text participates in Palette search"),
+        RestrictionPalette.Num(), 1);
+    if (!RestrictionPalette.IsEmpty())
+    {
+        TestFalse(TEXT("Unavailable generated actions stay non-executable"),
+            RestrictionPalette[0].Action.bEnabled);
     }
     const TArray<FUnifiedScriptNodePaletteItem> FunctionPalette =
         FUnifiedScriptNodePaletteModel::Build(
@@ -1487,7 +1513,7 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
     TestEqual(
         TEXT("Failed parse leaves the previous document unchanged"),
         FailedOutput.GetActionCount(),
-        45);
+        51);
 
     const FString WorkspaceJson = FString::Printf(
         TEXT("{\"schemaVersion\":\"unifiedscript.authoring-workspace/v0.4\","
@@ -1521,7 +1547,7 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("Workbench response retains group identity"), Workspace.Group.Id, FString(TEXT("group-1")));
     TestEqual(TEXT("Workbench response retains staged operation count"), Workspace.Group.StagedOperationCount, int64(2));
     TestEqual(TEXT("Workbench response replaces the Surface transactionally"),
-        Workspace.Surface.GetActionCount(), 45);
+        Workspace.Surface.GetActionCount(), 51);
 
     const FString PreviewJson =
         TEXT("{\"schemaVersion\":\"unifiedscript.authoring-preview/v0.1\","
@@ -1585,6 +1611,17 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         TEXT("Slate context palette exposes the reflected multicast Event Entry action"),
         Widget->HasNodePaletteAction(
             TEXT("ue.event|UnifiedScriptComponent|OnManagedSignal")));
+    FUnifiedScriptGraphPaletteAction GeneratedEventAction;
+    TestTrue(
+        TEXT("Slate retains the generated Event Entry node descriptor"),
+        Widget->GetNodePaletteAction(
+            TEXT("ue.event|UnifiedScriptComponent|OnManagedSignal"),
+            GeneratedEventAction));
+    TestEqual(TEXT("Generated Event Entry category drives the Palette"),
+        GeneratedEventAction.Category,
+        FString(TEXT("UnifiedScript|Events")));
+    TestTrue(TEXT("Generated thread restriction reaches the author tooltip"),
+        GeneratedEventAction.Tooltip.Contains(TEXT("Game thread only")));
     TestTrue(
         TEXT("Slate context palette exposes typed switch construction"),
         Widget->HasNodePaletteAction(TEXT("flow.switch")));
@@ -1600,6 +1637,23 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         TEXT("My Script navigation activates the UE Event Entry function"),
         Widget->GetActiveFunctionId(),
         EventFunction->Id);
+    TestTrue(TEXT("My Script can activate the reflected-default proof function"),
+        Widget->SelectFunction(DefaultFunction->Id));
+    FUnifiedScriptGraphPaletteAction DefaultApiAction;
+    TestTrue(TEXT("Generated API defaults keep the action context-valid"),
+        Widget->GetNodePaletteAction(
+            TEXT("ue.call|UnifiedScriptInteropFixture|AddWithDefault"),
+            DefaultApiAction));
+    TestTrue(TEXT("Default-backed action stays executable without an Amount parameter"),
+        DefaultApiAction.bEnabled);
+    TestEqual(TEXT("Generated display name drives the default-backed action title"),
+        DefaultApiAction.Title,
+        FString(TEXT("Add With Default")));
+    TestEqual(TEXT("Generated API category drives the default-backed action"),
+        DefaultApiAction.Category,
+        FString(TEXT("UnifiedScript|Interop")));
+    TestTrue(TEXT("Generated pin default reaches the Palette tooltip"),
+        DefaultApiAction.Tooltip.Contains(TEXT("Defaults: Amount=1")));
     return true;
 }
 

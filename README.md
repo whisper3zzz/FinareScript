@@ -9,9 +9,10 @@ M7.2 gameplay services/lifecycle productization, and M7.3 schema-generated
 gameplay data plane without adding UE dependencies to the compiler core. M7.4
 then completed the full BlockBreaker migration with exact inventory coverage
 and no Puerts/TypeScript payload in the target project or package. The active
-RoadMap cursor is M8.3 asset, state, event, and API authoring after completing
-the native M8.2 Palette, Pin, Canvas, Advanced Details, diagnostics, exact Diff,
-safe quick-fix, and rollback-receipt tranches.
+RoadMap cursor is the final M8.3 identity/override tranche after completing
+native Script Asset declaration editing and generated-reflection-driven API
+Palette metadata on top of the M8.2 Palette, Pin, Canvas, Advanced Details,
+diagnostics, exact Diff, safe quick-fix, and rollback-receipt tranches.
 
 ## Product roadmap
 
@@ -234,10 +235,11 @@ The repository currently implements:
   semantic breakpoint bind/pending/disabled plus stale-hit protocols;
 - automated execution equivalence between independently text-authored code and
   C# produced by a checked-in visual semantic patch plan;
-- a strict `unifiedscript.unreal-reflection/v0.3` contract with inheritance,
+- a strict `unifiedscript.unreal-reflection/v0.4` contract with inheritance,
   interfaces, Blueprint metadata, enums, default parameters, soft references,
-  callable/property/delegate shapes, deterministic managed-wrapper/event proxy
-  generation, and the `ue-bindings` CLI command;
+  callable/property/delegate shapes, latent/thread/World execution policy,
+  deterministic managed-wrapper/event proxy generation, and the `ue-bindings`
+  CLI command;
 - an UE 5.7/5.8-compatible host project and `UEUnifiedScript` plugin with a reflected script
   component plus headless reflection-export commandlet;
 - an opaque 64-bit slot/generation handle shared by managed wrappers and a

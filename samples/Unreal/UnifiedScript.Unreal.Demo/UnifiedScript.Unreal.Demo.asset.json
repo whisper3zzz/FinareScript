@@ -1,7 +1,7 @@
 {
   "schemaVersion": "unifiedscript.script-asset/v0.1",
-  "sourceCompilationId": "us_021d5af7c7eb878b9aceefbe456f9df9",
-  "semanticConfigurationId": "us_c043c7c8708de51f12789603533736d0",
+  "sourceCompilationId": "us_2bd368f8751c15e124ca8df7db2cd53e",
+  "semanticConfigurationId": "us_06de17342f1d98fba7d22c1d58a23fa7",
   "assets": [
     {
       "id": "us_cefc9ee5805e3ed5610154145ea986dd",
@@ -14,7 +14,7 @@
           "column": 1
         },
         "end": {
-          "line": 118,
+          "line": 124,
           "column": 2
         }
       },
@@ -54,12 +54,12 @@
           "isStatic": false,
           "parameters": [
             {
-              "id": "us_4cfe348ad15c0d07e6debaf831a531aa",
+              "id": "us_bc733d469a77070511e12901d9d63013",
               "name": "value",
               "typeMetadataName": "System.Int32"
             },
             {
-              "id": "us_2c60d2735a9fa63d03999b3de486d177",
+              "id": "us_52882d1ec462ccaee99f7a1f3337960d",
               "name": "signalContext",
               "typeMetadataName": "UnifiedScript.Unreal.UnrealObjectHandle"
             }
@@ -118,6 +118,25 @@
             {
               "id": "us_34c8d7e2fb10736b35b35bd174c0d2f9",
               "name": "right",
+              "typeMetadataName": "System.Int32"
+            }
+          ]
+        },
+        {
+          "id": "us_3f0fafd8bc21f0052298217cb2d7622f",
+          "name": "UEDefaultPreview",
+          "qualifiedName": "UnifiedScript.Unreal.Demo.DemoScript.UEDefaultPreview(UnifiedScript.Unreal.Generated.UnifiedScriptInteropFixture,System.Int32)",
+          "returnTypeMetadataName": "System.Int32",
+          "isStatic": false,
+          "parameters": [
+            {
+              "id": "us_1604852504c777090ced5eee16bf9ee8",
+              "name": "fixture",
+              "typeMetadataName": "UnifiedScript.Unreal.Generated.UnifiedScriptInteropFixture"
+            },
+            {
+              "id": "us_456885402c59440e3c453dbbf316574f",
+              "name": "value",
               "typeMetadataName": "System.Int32"
             }
           ]

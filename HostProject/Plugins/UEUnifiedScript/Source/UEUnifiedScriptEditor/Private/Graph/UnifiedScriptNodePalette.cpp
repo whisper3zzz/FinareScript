@@ -18,7 +18,9 @@ int32 ScoreMatch(
     const FString Title = Normalize(Action.Title);
     const FString Category = Normalize(Action.Category);
     const FString Tooltip = Normalize(Action.Tooltip);
-    const FString Keywords = Normalize(Action.Keywords + TEXT(" ") + Action.ActionId);
+    const FString Keywords = Normalize(
+        Action.Keywords + TEXT(" ") + Action.ActionId + TEXT(" ") +
+        Action.RestrictionSummary + TEXT(" ") + Action.UnavailableReason);
     const FString Searchable = Title + TEXT(" ") + Category + TEXT(" ") + Tooltip +
         TEXT(" ") + Keywords;
     for (const FString& Token : Tokens)

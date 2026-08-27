@@ -1,5 +1,5 @@
 {
-	"schemaVersion": "unifiedscript.unreal-reflection/v0.3",
+	"schemaVersion": "unifiedscript.unreal-reflection/v0.4",
 	"engine":
 	{
 		"major": 5,
@@ -621,6 +621,13 @@
 						"blueprintCallable": false,
 						"blueprintAuthorityOnly": false,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "On Managed Signal",
+						"category": "UnifiedScript|Events",
+						"tooltip": "General reflected event used by the end-to-end managed subscription demo.",
+						"deprecated": false
 					}
 				}
 			],
@@ -1492,6 +1499,12 @@
 						"blueprintCallable": false,
 						"blueprintAuthorityOnly": false,
 						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "On Interop Changed",
+						"category": "UnifiedScript|Interop",
+						"deprecated": false
 					}
 				}
 			],

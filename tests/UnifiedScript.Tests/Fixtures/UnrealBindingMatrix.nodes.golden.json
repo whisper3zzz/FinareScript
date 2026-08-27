@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "unifiedscript.unreal-api-node-catalog/v0.1",
+  "schemaVersion": "unifiedscript.unreal-api-node-catalog/v0.2",
   "contractName": "Tests.BindingMatrix",
   "managedNamespace": "UnifiedScript.Unreal.Generated.Matrix",
   "engine": {
@@ -578,7 +578,13 @@
             }
           ],
           "deprecated": false,
-          "deprecationMessage": null
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
         },
         {
           "id": "ue.call|FixtureDerived|Mutate",
@@ -681,7 +687,13 @@
             }
           ],
           "deprecated": false,
-          "deprecationMessage": null
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
         },
         {
           "id": "ue.call|FixtureDerived|Scale|49D03E947FF7D97F",
@@ -740,7 +752,13 @@
             }
           ],
           "deprecated": false,
-          "deprecationMessage": null
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
         },
         {
           "id": "ue.call|FixtureDerived|Scale|8CE2D11E4C6E0539",
@@ -799,7 +817,13 @@
             }
           ],
           "deprecated": false,
-          "deprecationMessage": null
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
         },
         {
           "id": "ue.call|FixtureDerived|Spawn",
@@ -887,7 +911,13 @@
             }
           ],
           "deprecated": false,
-          "deprecationMessage": null
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
         },
         {
           "id": "ue.call|FixtureDerived|WorldTime",
@@ -946,7 +976,13 @@
             }
           ],
           "deprecated": false,
-          "deprecationMessage": null
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "worldContext",
+          "worldContextParameter": "WorldContextObject",
+          "callableWithoutWorldContext": false
         },
         {
           "id": "ue.get|FixtureDerived|ClassValue",
@@ -990,7 +1026,13 @@
             }
           ],
           "deprecated": false,
-          "deprecationMessage": null
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
         },
         {
           "id": "ue.get|FixtureDerived|MapValue",
@@ -1050,7 +1092,13 @@
             }
           ],
           "deprecated": false,
-          "deprecationMessage": null
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
         },
         {
           "id": "ue.get|FixtureDerived|Mode",
@@ -1094,7 +1142,13 @@
             }
           ],
           "deprecated": false,
-          "deprecationMessage": null
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
         },
         {
           "id": "ue.get|FixtureDerived|ObjectValue",
@@ -1138,7 +1192,13 @@
             }
           ],
           "deprecated": false,
-          "deprecationMessage": null
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
         },
         {
           "id": "ue.get|FixtureDerived|ProtectedLabel",
@@ -1182,7 +1242,13 @@
             }
           ],
           "deprecated": false,
-          "deprecationMessage": null
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
         },
         {
           "id": "ue.get|FixtureDerived|SoftClass",
@@ -1226,7 +1292,13 @@
             }
           ],
           "deprecated": false,
-          "deprecationMessage": null
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
         },
         {
           "id": "ue.get|FixtureDerived|SoftObject",
@@ -1270,7 +1342,13 @@
             }
           ],
           "deprecated": false,
-          "deprecationMessage": null
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
         },
         {
           "id": "ue.set|FixtureDerived|ClassValue",
@@ -1328,7 +1406,13 @@
             }
           ],
           "deprecated": false,
-          "deprecationMessage": null
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
         },
         {
           "id": "ue.set|FixtureDerived|MapValue",
@@ -1402,7 +1486,13 @@
             }
           ],
           "deprecated": false,
-          "deprecationMessage": null
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
         },
         {
           "id": "ue.set|FixtureDerived|Mode",
@@ -1460,7 +1550,13 @@
             }
           ],
           "deprecated": false,
-          "deprecationMessage": null
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
         },
         {
           "id": "ue.set|FixtureDerived|ObjectValue",
@@ -1518,7 +1614,13 @@
             }
           ],
           "deprecated": false,
-          "deprecationMessage": null
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
         },
         {
           "id": "ue.set|FixtureDerived|SoftClass",
@@ -1576,7 +1678,13 @@
             }
           ],
           "deprecated": false,
-          "deprecationMessage": null
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
         },
         {
           "id": "ue.set|FixtureDerived|SoftObject",
@@ -1634,7 +1742,13 @@
             }
           ],
           "deprecated": false,
-          "deprecationMessage": null
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
         }
       ]
     },
@@ -1737,7 +1851,13 @@
             }
           ],
           "deprecated": false,
-          "deprecationMessage": null
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
         },
         {
           "id": "ue.struct.make|InnerData",
@@ -1781,7 +1901,13 @@
             }
           ],
           "deprecated": false,
-          "deprecationMessage": null
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
         }
       ]
     },
@@ -1922,7 +2048,13 @@
             }
           ],
           "deprecated": false,
-          "deprecationMessage": null
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
         },
         {
           "id": "ue.struct.make|OuterData",
@@ -1989,7 +2121,13 @@
             }
           ],
           "deprecated": false,
-          "deprecationMessage": null
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
         }
       ]
     }

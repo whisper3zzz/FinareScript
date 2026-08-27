@@ -122,6 +122,90 @@ public sealed class UnrealApiContractTests
             pin.GetProperty("direction").GetString() == "output");
     }
 
+    [Fact]
+    public void NodeCatalogCarriesGeneratedPaletteMetadataDefaultsAndRestrictions()
+    {
+        UnrealReflectionManifest fixture = UnrealReflectionJson.Deserialize(File.ReadAllText(
+            Path.Combine(
+                AppContext.BaseDirectory,
+                "Fixtures",
+                "UnrealBindingMatrix.reflection.json")));
+        UnrealReflectedType fixtureType = Assert.Single(
+            fixture.Types,
+            static type => type.Path == "/Script/BindingMatrix.FixtureDerived");
+        UnrealReflectedFunction spawn = Assert.Single(
+            fixtureType.Functions,
+            static function => function.Name == "Spawn");
+        UnrealReflectedFunction worldTime = Assert.Single(
+            fixtureType.Functions,
+            static function => function.Name == "WorldTime");
+        UnrealReflectionManifest reflection = fixture with
+        {
+            Types =
+            [
+                fixtureType with
+                {
+                    Functions =
+                    [
+                        spawn with
+                        {
+                            Metadata = spawn.Metadata with
+                            {
+                                Latent = true,
+                                LatentInfoParameter = "Deferred",
+                                Deprecated = true,
+                                DeprecationMessage = "Use SpawnAsync.",
+                            },
+                        },
+                        worldTime with
+                        {
+                            Metadata = worldTime.Metadata with { ThreadSafe = true },
+                        },
+                    ],
+                },
+            ],
+        };
+        UnrealApiContractProjection projection = UnrealApiContractProjector.Project(
+            reflection,
+            new UnrealApiContract(
+                UnrealApiContract.CurrentSchemaVersion,
+                "Tests.Policy",
+                "UnifiedScript.Tests.Policy",
+                "PolicyThunks.h",
+                "UE::UnifiedScript::Generated::Policy",
+                [new("/Script/BindingMatrix.FixtureDerived", ["Spawn", "WorldTime"])]));
+
+        UnrealApiNodeCatalog catalog = UnrealApiNodeCatalogGenerator.Generate(projection);
+        UnrealApiNodeDescriptor spawnNode = Assert.Single(
+            catalog.Types.SelectMany(static type => type.Nodes),
+            static node => node.MemberPath.EndsWith(":Spawn", StringComparison.Ordinal));
+        Assert.Equal("Spawn Fixture", spawnNode.Title);
+        Assert.Equal("Gameplay|Spawn", spawnNode.Category);
+        Assert.Equal("Spawns fixture objects.", spawnNode.Tooltip);
+        Assert.True(spawnNode.Latent);
+        Assert.Equal("Deferred", spawnNode.LatentInfoParameter);
+        Assert.Equal(UnrealApiThreadRequirement.GameThread, spawnNode.ThreadRequirement);
+        Assert.True(spawnNode.Deprecated);
+        Assert.Equal("Use SpawnAsync.", spawnNode.DeprecationMessage);
+        Assert.Equal(
+            ["1", "false"],
+            spawnNode.Pins
+                .Where(static pin => pin.DefaultValue is not null)
+                .Select(static pin => pin.DefaultValue));
+
+        UnrealApiNodeDescriptor worldNode = Assert.Single(
+            catalog.Types.SelectMany(static type => type.Nodes),
+            static node => node.MemberPath.EndsWith(":WorldTime", StringComparison.Ordinal));
+        Assert.Equal(UnrealApiThreadRequirement.AnyThread, worldNode.ThreadRequirement);
+        Assert.Equal(UnrealApiWorldRequirement.WorldContext, worldNode.WorldRequirement);
+        Assert.Equal("WorldContextObject", worldNode.WorldContextParameter);
+
+        string json = UnrealApiNodeCatalogGenerator.Serialize(catalog);
+        Assert.Contains("\"threadRequirement\": \"anyThread\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"worldRequirement\": \"worldContext\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"latentInfoParameter\": \"Deferred\"", json, StringComparison.Ordinal);
+    }
+
     private static UnrealReflectionManifest LoadFixture()
     {
         string path = Path.Combine(

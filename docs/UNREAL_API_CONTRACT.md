@@ -21,7 +21,7 @@ silently exposing different Unreal members.
 `unifiedscript.unreal-api-contract/v0.2` requires a contract name, managed
 namespace, generated-thunk header and C++ namespace, plus one or more exact
 type/member selectors. Type paths and member names must exist in the supplied
-`unifiedscript.unreal-reflection/v0.3` document. Unknown fields, duplicate
+`unifiedscript.unreal-reflection/v0.4` document. Unknown fields, duplicate
 selectors, stale types, and stale members fail generation.
 
 ```json
@@ -121,12 +121,15 @@ unifiedscript ue-bindings Generated\Game.reflection.json `
   --fail-on-rejected
 ```
 
-The `unifiedscript.unreal-api-node-catalog/v0.1` output is a
+The `unifiedscript.unreal-api-node-catalog/v0.2` output is a
 reflection-compatible visual catalog with stable member IDs, generated managed
-type names, categories, purity, and typed control/data pins. Script Assets can
-set `ApiNodeCatalogPath`; the Slate authoring surface then builds its Unreal API
-palette from that product-specific catalog instead of the repository demo
-manifest.
+type names, categories, tooltips, purity, typed control/data pins and pin
+defaults. Each node also carries latent/latent-info, game-thread/any-thread,
+required/optional World-context, and deprecation policy derived from the same
+native reflection metadata. Script Assets can set `ApiNodeCatalogPath`; the
+Slate authoring surface builds its Unreal API palette from that
+product-specific catalog instead of reconstructing presentation policy in the
+editor.
 
 Functions with more than four parameters use the generic ABI v3 CallFrame
 path, including names and enums. Fixed signatures with zero to four parameters

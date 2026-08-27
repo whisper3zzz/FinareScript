@@ -616,7 +616,9 @@ public sealed class UnrealBindingGenerator
         string indentation)
     {
         if (metadata.DisplayName is null && metadata.Category is null && metadata.Tooltip is null &&
-            metadata.WorldContextParameter is null)
+            metadata.WorldContextParameter is null && !metadata.Latent &&
+            metadata.LatentInfoParameter is null && !metadata.ThreadSafe &&
+            !metadata.CallableWithoutWorldContext)
         {
             return;
         }
@@ -643,6 +645,30 @@ public sealed class UnrealBindingGenerator
         {
             if (hasPrevious) source.Append(", ");
             source.Append("WorldContextParameter = ").Append(Literal(metadata.WorldContextParameter));
+            hasPrevious = true;
+        }
+        if (metadata.Latent)
+        {
+            if (hasPrevious) source.Append(", ");
+            source.Append("Latent = true");
+            hasPrevious = true;
+        }
+        if (metadata.LatentInfoParameter is not null)
+        {
+            if (hasPrevious) source.Append(", ");
+            source.Append("LatentInfoParameter = ").Append(Literal(metadata.LatentInfoParameter));
+            hasPrevious = true;
+        }
+        if (metadata.ThreadSafe)
+        {
+            if (hasPrevious) source.Append(", ");
+            source.Append("ThreadSafe = true");
+            hasPrevious = true;
+        }
+        if (metadata.CallableWithoutWorldContext)
+        {
+            if (hasPrevious) source.Append(", ");
+            source.Append("CallableWithoutWorldContext = true");
         }
         source.AppendLine(")]");
     }

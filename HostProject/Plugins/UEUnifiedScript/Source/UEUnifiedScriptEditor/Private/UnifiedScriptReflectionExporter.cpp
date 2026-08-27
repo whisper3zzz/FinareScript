@@ -15,7 +15,7 @@
 
 namespace UE::UnifiedScript::Private
 {
-constexpr const TCHAR* ReflectionSchema = TEXT("unifiedscript.unreal-reflection/v0.3");
+constexpr const TCHAR* ReflectionSchema = TEXT("unifiedscript.unreal-reflection/v0.4");
 constexpr const TCHAR* InternalBindingMetadata = TEXT("UnifiedScriptBindingInternal");
 
 TSharedRef<FJsonObject> TypeReference(
@@ -47,6 +47,7 @@ TSharedRef<FJsonObject> BlueprintMetadata(const TField* Field)
     const FString Tooltip = Field->GetToolTipText().ToString();
     const FString DeprecationMessage = Field->GetMetaData(TEXT("DeprecationMessage"));
     const FString WorldContext = Field->GetMetaData(TEXT("WorldContext"));
+    const FString LatentInfo = Field->GetMetaData(TEXT("LatentInfo"));
     if (!DisplayName.IsEmpty()) Json->SetStringField(TEXT("displayName"), DisplayName);
     if (!Category.IsEmpty()) Json->SetStringField(TEXT("category"), Category);
     if (!Tooltip.IsEmpty()) Json->SetStringField(TEXT("tooltip"), Tooltip);
@@ -58,6 +59,16 @@ TSharedRef<FJsonObject> BlueprintMetadata(const TField* Field)
         Json->SetStringField(TEXT("deprecationMessage"), DeprecationMessage);
     }
     if (!WorldContext.IsEmpty()) Json->SetStringField(TEXT("worldContextParameter"), WorldContext);
+    if (Field->HasMetaData(TEXT("Latent"))) Json->SetBoolField(TEXT("latent"), true);
+    if (!LatentInfo.IsEmpty()) Json->SetStringField(TEXT("latentInfoParameter"), LatentInfo);
+    if (Field->HasMetaData(TEXT("BlueprintThreadSafe")))
+    {
+        Json->SetBoolField(TEXT("threadSafe"), true);
+    }
+    if (Field->HasMetaData(TEXT("CallableWithoutWorldContext")))
+    {
+        Json->SetBoolField(TEXT("callableWithoutWorldContext"), true);
+    }
     return Json;
 }
 
@@ -347,7 +358,15 @@ TSharedRef<FJsonObject> ExportFunction(const UClass* Class, const UFunction* Fun
         Function->HasAnyFunctionFlags(FUNC_BlueprintCallable | FUNC_BlueprintPure));
     Traits->SetStringField(TEXT("nativeAccess"), FunctionNativeAccess(Function));
     Json->SetObjectField(TEXT("traits"), Traits);
-    Json->SetObjectField(TEXT("metadata"), BlueprintMetadata(Function));
+    TSharedRef<FJsonObject> Metadata = BlueprintMetadata(Function);
+    const bool bThreadSafe = Function->HasMetaData(TEXT("BlueprintThreadSafe")) ||
+        !Function->HasMetaData(TEXT("NotBlueprintThreadSafe")) &&
+        Class->HasMetaData(TEXT("BlueprintThreadSafe"));
+    if (bThreadSafe)
+    {
+        Metadata->SetBoolField(TEXT("threadSafe"), true);
+    }
+    Json->SetObjectField(TEXT("metadata"), Metadata);
     return Json;
 }
 
@@ -421,6 +440,7 @@ TSharedRef<FJsonObject> ExportDelegate(
         Property->HasAnyPropertyFlags(CPF_BlueprintAuthorityOnly));
     Traits->SetStringField(TEXT("nativeAccess"), PropertyNativeAccess(Property));
     Json->SetObjectField(TEXT("traits"), Traits);
+    Json->SetObjectField(TEXT("metadata"), BlueprintMetadata(Property));
     return Json;
 }
 

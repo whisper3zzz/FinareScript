@@ -28,7 +28,8 @@ public static class UnrealReflectionJson
         ArgumentNullException.ThrowIfNull(manifest);
         if (manifest.SchemaVersion != UnrealReflectionManifest.CurrentSchemaVersion &&
             manifest.SchemaVersion != UnrealReflectionManifest.PreviousSchemaVersion &&
-            manifest.SchemaVersion != UnrealReflectionManifest.LegacySchemaVersion)
+            manifest.SchemaVersion != UnrealReflectionManifest.LegacySchemaVersion &&
+            manifest.SchemaVersion != UnrealReflectionManifest.OldestSchemaVersion)
         {
             throw new JsonException(
                 $"Unsupported Unreal reflection schema '{manifest.SchemaVersion}'. " +
@@ -169,6 +170,14 @@ public static class UnrealReflectionJson
                     allowVoid: false,
                     $"parameter '{function.Path}:{parameter.Name}'");
             }
+            if (function.Metadata.WorldContextParameter is not null &&
+                !parameterNames.Contains(function.Metadata.WorldContextParameter) ||
+                function.Metadata.LatentInfoParameter is not null &&
+                !parameterNames.Contains(function.Metadata.LatentInfoParameter))
+            {
+                throw new JsonException(
+                    $"Unreal function '{function.Path}' references an absent policy parameter.");
+            }
         }
 
         var delegatePaths = new HashSet<string>(StringComparer.Ordinal);
@@ -180,6 +189,7 @@ public static class UnrealReflectionJson
                 !IsMemberPath(reflectedDelegate.Path, type.Path, reflectedDelegate.Name) ||
                 !IsScriptPath(reflectedDelegate.SignaturePath) ||
                 reflectedDelegate.Parameters is null || reflectedDelegate.Traits is null ||
+                reflectedDelegate.Metadata is null ||
                 !Enum.IsDefined(reflectedDelegate.Traits.Kind) ||
                 !Enum.IsDefined(reflectedDelegate.Traits.NativeAccess) ||
                 !delegatePaths.Add(reflectedDelegate.Path) ||
@@ -188,6 +198,10 @@ public static class UnrealReflectionJson
             {
                 throw new JsonException($"Unreal type '{type.Path}' has an invalid delegate.");
             }
+
+            ValidateMetadata(
+                reflectedDelegate.Metadata,
+                $"delegate '{reflectedDelegate.Path}'");
 
             if (reflectedDelegate.Traits.Kind == UnrealDelegateKind.Multicast &&
                 reflectedDelegate.ReturnType.Kind != UnrealValueKind.Void)
@@ -303,6 +317,7 @@ public static class UnrealReflectionJson
             .Select(static reflectedDelegate => reflectedDelegate with
             {
                 ReturnType = NormalizeTypeReference(reflectedDelegate.ReturnType),
+                Metadata = NormalizeMetadata(reflectedDelegate.Metadata),
                 Parameters = reflectedDelegate.Parameters.Select(static parameter => parameter with
                 {
                     Type = NormalizeTypeReference(parameter.Type),
@@ -351,6 +366,10 @@ public static class UnrealReflectionJson
         if (metadata is null ||
             metadata.WorldContextParameter is not null &&
             !IsIdentifier(metadata.WorldContextParameter) ||
+            metadata.LatentInfoParameter is not null &&
+            (!metadata.Latent || !IsIdentifier(metadata.LatentInfoParameter)) ||
+            metadata.CallableWithoutWorldContext && metadata.WorldContextParameter is null ||
+            metadata.Latent && metadata.ThreadSafe ||
             !metadata.Deprecated && metadata.DeprecationMessage is not null)
         {
             throw new JsonException($"Unreal {context} has invalid Blueprint metadata.");
@@ -365,6 +384,7 @@ public static class UnrealReflectionJson
             Tooltip = NormalizeOptional(metadata.Tooltip),
             DeprecationMessage = NormalizeOptional(metadata.DeprecationMessage),
             WorldContextParameter = NormalizeOptional(metadata.WorldContextParameter),
+            LatentInfoParameter = NormalizeOptional(metadata.LatentInfoParameter),
         };
 
     private static string? NormalizeOptional(string? value) =>

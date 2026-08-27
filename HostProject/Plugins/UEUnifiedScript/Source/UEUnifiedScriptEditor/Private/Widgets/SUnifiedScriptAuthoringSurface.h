@@ -92,7 +92,11 @@ public:
     int32 GetVisibleGraphNodeCount() const;
     int32 GetVisibleGraphEdgeCount() const;
     FString GetActiveFunctionId() const;
+    bool SelectFunction(const FString& FunctionId);
     bool HasNodePaletteAction(const FString& ActionId) const;
+    bool GetNodePaletteAction(
+        const FString& ActionId,
+        FUnifiedScriptGraphPaletteAction& OutAction) const;
 
 private:
     friend class SUnifiedScriptCanvasMinimap;

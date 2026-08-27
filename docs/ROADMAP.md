@@ -46,10 +46,10 @@ current cursor, validate it, and advance this document.
 
 ## Current execution cursor
 
-Last refreshed: **2026-08-27**
+Last refreshed: **2026-08-28**
 
 - Active milestone: **M8 — Visual/C# Authoring Beta**
-- Next slice: **M8.3 — asset, state, event, and API authoring**
+- Next slice: **M8.3 — instance overrides and semantic identity migration**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -60,12 +60,12 @@ machine-local unless an artifact explicitly says otherwise.
 
 | Gate | Verified result |
 | --- | --- |
-| Main source | `e899cc9` (`feat: add compact advanced node details`), plus this diagnostics/Diff/rollback change set |
+| Main source | `9121b9c` (`feat: add script declaration authoring`), plus this generated Palette metadata change set |
 | Comparison source | `489ce9b` (`feat: complete full UnifiedScript migration`) |
-| Managed tests | 502 / 502 passed |
+| Managed tests | 506 / 506 passed |
 | Repository validator | 54 / 54 passed |
 | UE 5.8.1 native build | passed |
-| `UnifiedScript.Unreal` Automation | 13 / 13 passed at the M7.3 onboarding baseline; the migrated BlockBreaker Editor gate and focused M8.2 Authoring Surface gate also passed |
+| `UnifiedScript.Unreal` Automation | 13 / 13 passed at the M7.3 onboarding baseline; the migrated BlockBreaker Editor gate and focused M8.3 Authoring Surface gate also passed |
 | BlockBreaker workload | 10,000 frames, three trials, one shot, one hit, two command completions per trial |
 | Gameplay boundary | 120,031 fast/CallFrame calls, zero legacy calls |
 | Matched local median | UnifiedScript 4,927.191 ms; Puerts 4,759.930 ms; ratio 1.035139; functional parity only, performance claim deferred to M10 |
@@ -828,12 +828,25 @@ M8.3 asset, state, event, and API authoring.
 
 ### M8.3 — Asset, state, event, and API authoring
 
-- [ ] create and edit Script Assets, exposed state, functions, lifecycle hooks,
+- [x] create and edit Script Assets, exposed state, functions, lifecycle hooks,
   reflected events, and API nodes without editing generated JSON
-- [ ] drive palette categories, tooltips, defaults, latent markers, thread/World
+- [x] drive palette categories, tooltips, defaults, latent markers, thread/World
   restrictions, and deprecation from generated reflection metadata
 - [ ] preserve instance overrides and compatible semantic identities across
   rename, reload, source edits, and graph edits
+
+The first M8.3 tranche added native create/update/remove workflows for Script
+Assets, exposed state, Visual functions, lifecycle hooks, reflected Event
+Entries, and API actions through previewed source transactions. The second
+tranche upgrades reflection to v0.4 and the API node catalog to v0.2: native
+Blueprint metadata now deterministically drives title, category, tooltip,
+defaults, deprecation, latent, thread, and World-context policy in Slate. The
+checked-in Demo proves a real reflected default through `AddWithDefault`; latent
+and current void-statement actions remain visible with exact unavailable
+reasons instead of being silently dropped. The 506/506 managed suite, 54/54
+repository invariants, UE 5.8.1 Editor build, and focused native Authoring
+Surface Automation pass. The remaining M8.3 slice is instance override and
+semantic-identity preservation across rename/reload/edit paths.
 
 ### M8.4 — Whole-game round-trip proof
 

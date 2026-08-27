@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace UnifiedScript.Unreal;
 
 public enum UnrealReflectedTypeKind
@@ -42,7 +44,20 @@ public sealed record UnrealBlueprintMetadata(
     string? Tooltip = null,
     bool Deprecated = false,
     string? DeprecationMessage = null,
-    string? WorldContextParameter = null);
+    string? WorldContextParameter = null)
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool Latent { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? LatentInfoParameter { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool ThreadSafe { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool CallableWithoutWorldContext { get; init; }
+}
 
 public sealed record UnrealEnumValueDefinition(
     string Name,
@@ -144,7 +159,10 @@ public sealed record UnrealReflectedDelegate(
     string SignaturePath,
     UnrealTypeReference ReturnType,
     IReadOnlyList<UnrealReflectedParameter> Parameters,
-    UnrealDelegateTraits Traits);
+    UnrealDelegateTraits Traits)
+{
+    public UnrealBlueprintMetadata Metadata { get; init; } = new();
+}
 
 public sealed record UnrealReflectedType(
     string Path,
@@ -173,11 +191,13 @@ public sealed record UnrealReflectionManifest(
     IReadOnlyList<string> Modules,
     IReadOnlyList<UnrealReflectedType> Types)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.unreal-reflection/v0.3";
+    public const string CurrentSchemaVersion = "unifiedscript.unreal-reflection/v0.4";
 
-    public const string PreviousSchemaVersion = "unifiedscript.unreal-reflection/v0.2";
+    public const string PreviousSchemaVersion = "unifiedscript.unreal-reflection/v0.3";
 
-    public const string LegacySchemaVersion = "unifiedscript.unreal-reflection/v0.1";
+    public const string LegacySchemaVersion = "unifiedscript.unreal-reflection/v0.2";
+
+    public const string OldestSchemaVersion = "unifiedscript.unreal-reflection/v0.1";
 
     public static UnrealReflectionManifest Create(
         UnrealEngineIdentity engine,

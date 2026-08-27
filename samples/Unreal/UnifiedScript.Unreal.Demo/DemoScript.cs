@@ -44,6 +44,12 @@ public sealed class DemoScript : IUnrealManagedScript
         return sum;
     }
 
+    [Visual]
+    public int UEDefaultPreview(UnifiedScriptInteropFixture fixture, int value)
+    {
+        return fixture.AddWithDefault(value);
+    }
+
     public void OnStart(UnrealScriptContext context)
     {
         if (!context.DataPlane.IsAvailable)

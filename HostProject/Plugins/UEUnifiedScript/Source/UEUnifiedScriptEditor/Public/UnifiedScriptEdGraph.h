@@ -49,6 +49,11 @@ struct FUnifiedScriptGraphPaletteAction
     FString Tooltip;
     FString Keywords;
     bool bRequiresBlock = true;
+    bool bEnabled = true;
+    bool bDeprecated = false;
+    bool bLatent = false;
+    FString RestrictionSummary;
+    FString UnavailableReason;
 };
 
 /** Transient graph that forwards authored data-wire changes to the Workbench transaction. */

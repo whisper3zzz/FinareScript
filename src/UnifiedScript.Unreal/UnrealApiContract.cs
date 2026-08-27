@@ -410,6 +410,18 @@ public sealed record UnrealApiNodePin(
     public string? DefaultValue { get; init; }
 }
 
+public enum UnrealApiThreadRequirement
+{
+    GameThread,
+    AnyThread,
+}
+
+public enum UnrealApiWorldRequirement
+{
+    None,
+    WorldContext,
+}
+
 public sealed record UnrealApiNodeDescriptor(
     string Id,
     string MemberPath,
@@ -424,6 +436,18 @@ public sealed record UnrealApiNodeDescriptor(
     public bool Deprecated { get; init; }
 
     public string? DeprecationMessage { get; init; }
+
+    public bool Latent { get; init; }
+
+    public string? LatentInfoParameter { get; init; }
+
+    public UnrealApiThreadRequirement ThreadRequirement { get; init; }
+
+    public UnrealApiWorldRequirement WorldRequirement { get; init; }
+
+    public string? WorldContextParameter { get; init; }
+
+    public bool CallableWithoutWorldContext { get; init; }
 }
 
 public sealed record UnrealApiNodeType(
@@ -443,7 +467,7 @@ public sealed record UnrealApiNodeCatalog(
     UnrealEngineIdentity Engine,
     IReadOnlyList<UnrealApiNodeType> Types)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.unreal-api-node-catalog/v0.1";
+    public const string CurrentSchemaVersion = "unifiedscript.unreal-api-node-catalog/v0.2";
 }
 
 public static class UnrealApiNodeCatalogGenerator
@@ -520,7 +544,8 @@ public static class UnrealApiNodeCatalogGenerator
                         [
                             new("Target", "input", "data", receiverType),
                             new("Value", "output", "data", property.Type),
-                        ]));
+                        ],
+                        property.Metadata));
                 }
                 if (property.Access.Writable)
                 {
@@ -537,7 +562,8 @@ public static class UnrealApiNodeCatalogGenerator
                             new("Target", "input", "data", receiverType),
                             new("Value", "input", "data", property.Type),
                             new("Out", "output", "control", null),
-                        ]));
+                        ],
+                        property.Metadata));
                 }
             }
             foreach (UnrealReflectedFunction function in type.Functions)
@@ -609,11 +635,13 @@ public static class UnrealApiNodeCatalogGenerator
                     $"ue.event|{managedName}|{reflectedDelegate.Name}",
                     reflectedDelegate.Path,
                     "event",
-                    $"Event {reflectedDelegate.Name}",
-                    $"Unreal Events|{type.Name}",
-                    $"Handle {type.Name}.{reflectedDelegate.Name}.",
+                    $"Event {reflectedDelegate.Metadata.DisplayName ?? reflectedDelegate.Name}",
+                    reflectedDelegate.Metadata.Category ?? $"Unreal Events|{type.Name}",
+                    reflectedDelegate.Metadata.Tooltip ??
+                        $"Handle {type.Name}.{reflectedDelegate.Name}.",
                     pure: false,
-                    pins));
+                    pins,
+                    reflectedDelegate.Metadata));
             }
             return new UnrealApiNodeType(
                 type.Path,
@@ -672,6 +700,17 @@ public static class UnrealApiNodeCatalogGenerator
         {
             Deprecated = metadata?.Deprecated ?? false,
             DeprecationMessage = metadata?.DeprecationMessage,
+            Latent = metadata?.Latent ?? false,
+            LatentInfoParameter = metadata?.LatentInfoParameter,
+            ThreadRequirement = metadata?.ThreadSafe == true
+                ? UnrealApiThreadRequirement.AnyThread
+                : UnrealApiThreadRequirement.GameThread,
+            WorldRequirement = metadata?.WorldContextParameter is not null &&
+                metadata.CallableWithoutWorldContext != true
+                ? UnrealApiWorldRequirement.WorldContext
+                : UnrealApiWorldRequirement.None,
+            WorldContextParameter = metadata?.WorldContextParameter,
+            CallableWithoutWorldContext = metadata?.CallableWithoutWorldContext ?? false,
         };
 
     private static IReadOnlyDictionary<string, string> CreateManagedTypeNames(
