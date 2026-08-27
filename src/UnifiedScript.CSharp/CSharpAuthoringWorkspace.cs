@@ -53,6 +53,9 @@ public sealed class CSharpAuthoringWorkspace
     private readonly List<HistoryEntry> undoHistory = [];
     private readonly List<HistoryEntry> redoHistory = [];
     private readonly HashSet<string> transactionIds = new(StringComparer.Ordinal);
+    private readonly Guid lineageId = Guid.NewGuid();
+    private long? draftBaselineRevision;
+    private SemanticId? draftBaselineCompilationId;
 
     public CSharpAuthoringWorkspace(CSharpCompilationRequest request)
     {
@@ -74,11 +77,14 @@ public sealed class CSharpAuthoringWorkspace
         declarationPatchApplier = source.declarationPatchApplier;
         semanticPatchApplier = source.semanticPatchApplier;
         patchPlanApplier = source.patchPlanApplier;
+        lineageId = source.lineageId;
         Current = source.Current;
         undoHistory.AddRange(source.undoHistory);
         redoHistory.AddRange(source.redoHistory);
         transactionIds.UnionWith(source.transactionIds);
         LastOperationId = source.LastOperationId;
+        draftBaselineRevision = source.draftBaselineRevision;
+        draftBaselineCompilationId = source.draftBaselineCompilationId;
     }
 
     private CSharpAuthoringWorkspace(
@@ -153,6 +159,49 @@ public sealed class CSharpAuthoringWorkspace
         undoHistory.LastOrDefault()?.Description,
         redoHistory.LastOrDefault()?.TransactionId,
         redoHistory.LastOrDefault()?.Description);
+
+    public CSharpAuthoringWorkspace CreateDraft()
+    {
+        if (draftBaselineRevision is not null)
+        {
+            throw new InvalidOperationException("A staged authoring draft cannot create a nested draft.");
+        }
+
+        var draft = new CSharpAuthoringWorkspace(this)
+        {
+            draftBaselineRevision = Current.Revision,
+            draftBaselineCompilationId = Current.Analysis.ScriptAssets?.SourceCompilationId ??
+                throw new InvalidOperationException(
+                    "An authoring draft requires a source compilation identity."),
+        };
+        return draft;
+    }
+
+    public CSharpAuthoringMutation PrepareDraftCommit(CSharpAuthoringWorkspace draft)
+    {
+        ArgumentNullException.ThrowIfNull(draft);
+        SemanticId currentCompilationId = Current.Analysis.ScriptAssets?.SourceCompilationId ??
+            throw new InvalidOperationException(
+                "The authoring workspace has no source compilation identity.");
+        if (draft.lineageId != lineageId ||
+            draft.draftBaselineRevision != Current.Revision ||
+            draft.draftBaselineCompilationId != currentCompilationId)
+        {
+            throw new InvalidOperationException(
+                "The staged authoring draft no longer belongs to the current workspace snapshot.");
+        }
+        if (draft.Current.Revision <= Current.Revision)
+        {
+            throw new InvalidOperationException(
+                "A staged authoring draft must contain at least one accepted edit before commit.");
+        }
+
+        CSharpAuthoringSnapshot snapshot = draft.Current with
+        {
+            Revision = checked(Current.Revision + 1),
+        };
+        return new CSharpAuthoringMutation(Current.Revision, snapshot, []);
+    }
 
     public CSharpAuthoringMutation Prepare(DeclarationPatchDocument patch)
     {

@@ -121,8 +121,17 @@ private:
     FReply HandleDeleteSwitchSection(FString CaseActionId);
     FReply HandleUndoAuthoringTransaction();
     FReply HandleRedoAuthoringTransaction();
+    FReply HandleBeginAuthoringGroup();
+    FReply HandleCommitAuthoringGroup();
+    FReply HandleCancelAuthoringGroup();
     void SubmitSemanticPatch(FString Patch, FString Activity);
-    void SubmitAuthoringTransaction(FString Payload, FString Url, FString Activity);
+    void SubmitAuthoringTransaction(
+        FString Payload,
+        FString Url,
+        FString Activity,
+        FString TransactionId = FString(),
+        FString GroupId = FString(),
+        bool bPublishesRuntime = true);
     void HandlePatchResponse(bool bRequestSucceeded, int32 StatusCode, FString ResponseJson);
     void ReloadMatchingComponents(int32& OutMatched, int32& OutReloaded, int32& OutFailed);
     EActiveTimerReturnType HandleAutoReload(
@@ -184,12 +193,16 @@ private:
     bool bCanUndoAuthoring = false;
     bool bCanRedoAuthoring = false;
     bool bPendingGraphFocus = false;
+    bool bPendingRequestPublishesRuntime = true;
     bool bStatusError = false;
     FString StatusMessage;
     FString UndoAuthoringDescription;
     FString RedoAuthoringDescription;
     FString HistoryPersistenceState;
     FString HistoryPersistenceMessage;
+    FString ActiveAuthoringGroupId;
+    FString ActiveAuthoringGroupDescription;
+    int64 ActiveAuthoringGroupStagedCount = 0;
     int64 WorkbenchRevision = 0;
     int64 UndoAuthoringDepth = 0;
     int64 RedoAuthoringDepth = 0;
@@ -208,6 +221,7 @@ private:
 
     TSharedPtr<SEditableTextBox> PathTextBox;
     TSharedPtr<SEditableTextBox> ServerUrlTextBox;
+    TSharedPtr<SEditableTextBox> AuthoringGroupLabelTextBox;
     TSharedPtr<SEditableTextBox> ExtractionNameTextBox;
     TSharedPtr<STreeView<FUnifiedScriptSurfaceTreeItemPtr>> TreeView;
     TSharedPtr<SGraphEditor> GraphEditor;

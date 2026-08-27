@@ -15,6 +15,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
     private const string BaselineRevisionHeader = "X-UnifiedScript-Baseline-Revision";
     private const string TransactionIdHeader = "X-UnifiedScript-Transaction-Id";
     private const string TransactionLabelHeader = "X-UnifiedScript-Transaction-Label";
+    private const string GroupIdHeader = "X-UnifiedScript-Group-Id";
     private static readonly JsonSerializerOptions JsonOptions = UnifiedJson.CreateOptions();
     private readonly HttpListener listener = new();
     private readonly string contentRoot;
@@ -172,12 +173,27 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 "/api/authoring/declaration-patch" => "Declaration patch",
                 "/api/authoring/semantic-patch" => "Semantic patch",
                 "/api/authoring/semantic-patch-plan" => "Semantic patch plan",
+                "/api/authoring/group/begin" => "Begin grouped authoring transaction",
+                "/api/authoring/group/commit" => "Commit grouped authoring transaction",
+                "/api/authoring/group/cancel" => "Cancel grouped authoring transaction",
                 "/api/authoring/undo" => "Undo authoring transaction",
                 "/api/authoring/redo" => "Redo authoring transaction",
                 _ => "Authoring transaction",
             });
         AuthoringWorkspaceResponse response;
-        if (path == "/api/authoring/undo")
+        if (path == "/api/authoring/group/begin")
+        {
+            response = await session.BeginGroupAsync(transaction, cancellationToken);
+        }
+        else if (path == "/api/authoring/group/commit")
+        {
+            response = await session.CommitGroupAsync(transaction, cancellationToken);
+        }
+        else if (path == "/api/authoring/group/cancel")
+        {
+            response = await session.CancelGroupAsync(transaction, cancellationToken);
+        }
+        else if (path == "/api/authoring/undo")
         {
             response = await session.NavigateHistoryAsync(
                 CSharpAuthoringHistoryDirection.Undo,
@@ -234,6 +250,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
 
         string transactionId = request.Headers[TransactionIdHeader] ?? $"http-{Guid.NewGuid():N}";
         string description = request.Headers[TransactionLabelHeader] ?? defaultDescription;
+        string? groupId = request.Headers[GroupIdHeader];
         if (string.IsNullOrWhiteSpace(transactionId) ||
             string.IsNullOrWhiteSpace(description) ||
             transactionId.Length > 128 ||
@@ -244,8 +261,15 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 "UAW1008",
                 "Authoring transaction IDs and labels must be non-empty and at most 128 and 256 characters.");
         }
+        if (groupId is not null && (string.IsNullOrWhiteSpace(groupId) || groupId.Length > 128))
+        {
+            throw new AuthoringProtocolException(
+                HttpStatusCode.BadRequest,
+                "UAW1008",
+                $"Header '{GroupIdHeader}' must contain a non-empty group ID of at most 128 characters.");
+        }
 
-        return new AuthoringTransactionContext(baselineRevision, transactionId, description);
+        return new AuthoringTransactionContext(baselineRevision, transactionId, description, groupId);
     }
 
     private async Task ServeStaticAsync(
@@ -392,7 +416,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
     private sealed record AuthoringTransactionContext(
         long? BaselineRevision,
         string TransactionId,
-        string Description);
+        string Description,
+        string? GroupId);
 
     private sealed class AuthoringSessionController : IDisposable
     {
@@ -411,6 +436,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         private CoreClrDebugReloadResult reload;
         private CoreClrDebugExecution? execution;
         private CoreClrDebugPause? pause;
+        private ActiveAuthoringGroup? activeGroup;
         private string? persistedIdentity;
         private string historyPersistenceState;
         private string? historyPersistenceMessage;
@@ -505,6 +531,103 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
 
         public AuthoringWorkspaceResponse Workspace { get; private set; }
 
+        public async Task<AuthoringWorkspaceResponse> BeginGroupAsync(
+            AuthoringTransactionContext transaction,
+            CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(transaction);
+            await gate.WaitAsync(cancellationToken);
+            try
+            {
+                EnsureAuthoringAvailable();
+                if (activeGroup is not null)
+                {
+                    throw new AuthoringProtocolException(
+                        HttpStatusCode.Conflict,
+                        "UAW1009",
+                        $"Authoring group '{activeGroup.Id}' is already active; commit or cancel it first.");
+                }
+                if (transaction.GroupId is not null)
+                {
+                    throw new AuthoringProtocolException(
+                        HttpStatusCode.BadRequest,
+                        "UAW1008",
+                        "Beginning an authoring group must not send an existing group ID.");
+                }
+                ValidateTransaction(transaction);
+                EnsureFilesUnchanged();
+                activeGroup = new ActiveAuthoringGroup(
+                    transaction.TransactionId,
+                    transaction.Description,
+                    authoring.Current.Revision,
+                    authoring.CreateDraft(),
+                    0);
+                Workspace = CreateWorkspace(activeGroup.Draft.Current, reload.Generation);
+                return Workspace;
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
+
+        public async Task<AuthoringWorkspaceResponse> CommitGroupAsync(
+            AuthoringTransactionContext transaction,
+            CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(transaction);
+            await gate.WaitAsync(cancellationToken);
+            try
+            {
+                EnsureAuthoringAvailable();
+                ActiveAuthoringGroup group = RequireActiveGroup(transaction);
+                EnsureFilesUnchanged();
+                if (group.StagedOperationCount == 0)
+                {
+                    throw new AuthoringProtocolException(
+                        HttpStatusCode.Conflict,
+                        "UAW1011",
+                        "A grouped authoring transaction must stage at least one accepted edit before commit.");
+                }
+
+                CSharpAuthoringMutation mutation = authoring.PrepareDraftCommit(group.Draft);
+                CSharpAuthoringHistoryDocument persistedHistory = authoring.PreviewCommit(
+                    mutation,
+                    group.Id,
+                    group.Description);
+                _ = CommitPreparedSnapshot(
+                    mutation.Snapshot!,
+                    () => authoring.Commit(mutation, group.Id, group.Description),
+                    persistedHistory);
+                activeGroup = null;
+                Workspace = CreateWorkspace(authoring.Current, reload.Generation);
+                return Workspace;
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
+
+        public async Task<AuthoringWorkspaceResponse> CancelGroupAsync(
+            AuthoringTransactionContext transaction,
+            CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(transaction);
+            await gate.WaitAsync(cancellationToken);
+            try
+            {
+                _ = RequireActiveGroup(transaction);
+                activeGroup = null;
+                Workspace = CreateWorkspace(authoring.Current, reload.Generation);
+                return Workspace;
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
+
         public async Task<DebugSessionResponse> StartAsync(
             DebugStartRequest request,
             CancellationToken cancellationToken)
@@ -513,6 +636,13 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             await gate.WaitAsync(cancellationToken);
             try
             {
+                if (activeGroup is not null)
+                {
+                    throw new AuthoringProtocolException(
+                        HttpStatusCode.Conflict,
+                        "UAW1009",
+                        "Commit or cancel the active authoring group before starting debug execution.");
+                }
                 if (execution is not null && pause is not null)
                 {
                     throw new BreakpointProtocolException(
@@ -604,7 +734,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(patch);
-            return ApplyAsync(() => authoring.Prepare(patch), transaction, cancellationToken);
+            return ApplyAsync(workspace => workspace.Prepare(patch), transaction, cancellationToken);
         }
 
         public Task<AuthoringWorkspaceResponse> ApplyAsync(
@@ -613,7 +743,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(patch);
-            return ApplyAsync(() => authoring.Prepare(patch), transaction, cancellationToken);
+            return ApplyAsync(workspace => workspace.Prepare(patch), transaction, cancellationToken);
         }
 
         public Task<AuthoringWorkspaceResponse> ApplyAsync(
@@ -622,7 +752,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(plan);
-            return ApplyAsync(() => authoring.Prepare(plan), transaction, cancellationToken);
+            return ApplyAsync(workspace => workspace.Prepare(plan), transaction, cancellationToken);
         }
 
         public async Task<AuthoringWorkspaceResponse> NavigateHistoryAsync(
@@ -674,7 +804,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         }
 
         private async Task<AuthoringWorkspaceResponse> ApplyAsync(
-            Func<CSharpAuthoringMutation> prepare,
+            Func<CSharpAuthoringWorkspace, CSharpAuthoringMutation> prepare,
             AuthoringTransactionContext transaction,
             CancellationToken cancellationToken)
         {
@@ -683,9 +813,51 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             try
             {
                 EnsureAuthoringAvailable();
+                if (transaction.GroupId is not null)
+                {
+                    ActiveAuthoringGroup group = RequireActiveGroup(
+                        transaction,
+                        requireGroupOperationId: false);
+                    EnsureFilesUnchanged();
+                    if (string.Equals(transaction.TransactionId, group.Id, StringComparison.Ordinal))
+                    {
+                        throw new AuthoringProtocolException(
+                            HttpStatusCode.BadRequest,
+                            "UAW1008",
+                            "A staged operation ID must differ from its grouped transaction ID.");
+                    }
+                    if (group.Draft.ContainsOperationId(transaction.TransactionId))
+                    {
+                        throw new AuthoringProtocolException(
+                            HttpStatusCode.Conflict,
+                            "UAW1006",
+                            $"Staged authoring operation ID '{transaction.TransactionId}' was already accepted.");
+                    }
+
+                    CSharpAuthoringMutation stagedMutation = prepare(group.Draft);
+                    if (!stagedMutation.Succeeded || stagedMutation.Snapshot is null)
+                    {
+                        throw new AuthoringProtocolException(
+                            HttpStatusCode.Conflict,
+                            "UAW1003",
+                            "The staged semantic patch was rejected; the grouped draft was not changed.",
+                            stagedMutation.Diagnostics);
+                    }
+                    group.Draft.Commit(
+                        stagedMutation,
+                        transaction.TransactionId,
+                        transaction.Description);
+                    activeGroup = group with
+                    {
+                        StagedOperationCount = checked(group.StagedOperationCount + 1),
+                    };
+                    Workspace = CreateWorkspace(activeGroup.Draft.Current, reload.Generation);
+                    return Workspace;
+                }
+
                 ValidateTransaction(transaction);
                 EnsureFilesUnchanged();
-                CSharpAuthoringMutation mutation = prepare();
+                CSharpAuthoringMutation mutation = prepare(authoring);
                 if (!mutation.Succeeded || mutation.Snapshot is null)
                 {
                     throw new AuthoringProtocolException(
@@ -726,6 +898,13 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
 
         private void ValidateTransaction(AuthoringTransactionContext transaction)
         {
+            if (activeGroup is not null)
+            {
+                throw new AuthoringProtocolException(
+                    HttpStatusCode.Conflict,
+                    "UAW1009",
+                    $"Authoring group '{activeGroup.Id}' is active; use its group ID or commit/cancel it first.");
+            }
             if (transaction.BaselineRevision is long baselineRevision &&
                 baselineRevision != authoring.Current.Revision)
             {
@@ -743,6 +922,42 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                     "UAW1006",
                     $"Authoring transaction ID '{transaction.TransactionId}' was already committed.");
             }
+        }
+
+        private ActiveAuthoringGroup RequireActiveGroup(
+            AuthoringTransactionContext transaction,
+            bool requireGroupOperationId = true)
+        {
+            ActiveAuthoringGroup group = activeGroup ??
+                throw new AuthoringProtocolException(
+                    HttpStatusCode.Conflict,
+                    "UAW1010",
+                    "There is no active grouped authoring transaction.");
+            if (!string.Equals(transaction.GroupId, group.Id, StringComparison.Ordinal))
+            {
+                throw new AuthoringProtocolException(
+                    HttpStatusCode.Conflict,
+                    "UAW1009",
+                    $"Request group '{transaction.GroupId ?? "<none>"}' does not match active group '{group.Id}'.");
+            }
+            if (requireGroupOperationId &&
+                !string.Equals(transaction.TransactionId, group.Id, StringComparison.Ordinal))
+            {
+                throw new AuthoringProtocolException(
+                    HttpStatusCode.BadRequest,
+                    "UAW1008",
+                    "Commit and cancel requests must use the grouped transaction ID as their operation ID.");
+            }
+            if (transaction.BaselineRevision is long baselineRevision &&
+                baselineRevision != group.Draft.Current.Revision)
+            {
+                throw new AuthoringProtocolException(
+                    HttpStatusCode.Conflict,
+                    "UAW1005",
+                    $"Grouped draft revision '{baselineRevision}' is stale; " +
+                    $"the current draft revision is '{group.Draft.Current.Revision}'.");
+            }
+            return group;
         }
 
         private AuthoringWorkspaceResponse CommitPreparedSnapshot(
@@ -899,7 +1114,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 scriptAssets,
                 snapshot.Graph);
             return new AuthoringWorkspaceResponse(
-                "unifiedscript.authoring-workspace/v0.3",
+                "unifiedscript.authoring-workspace/v0.4",
                 snapshot.Revision,
                 sourceLogicalPath,
                 snapshot.Request.Sources.Single(source =>
@@ -908,7 +1123,14 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 snapshot.Graph,
                 surface,
                 CreateHistoryResponse(),
-                generation);
+                generation,
+                activeGroup is null
+                    ? null
+                    : new AuthoringGroupResponse(
+                        activeGroup.Id,
+                        activeGroup.Description,
+                        activeGroup.BaselineRevision,
+                        activeGroup.StagedOperationCount));
         }
 
         private AuthoringHistoryResponse CreateHistoryResponse()
@@ -1065,6 +1287,13 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             string Path,
             string TemporaryPath,
             string BackupPath);
+
+        private sealed record ActiveAuthoringGroup(
+            string Id,
+            string Description,
+            long BaselineRevision,
+            CSharpAuthoringWorkspace Draft,
+            int StagedOperationCount);
     }
 
     private sealed class HttpProtocolException(HttpStatusCode status, string message)
@@ -1115,7 +1344,14 @@ internal sealed record AuthoringWorkspaceResponse(
     GraphDocument Graph,
     AuthoringSurfaceDocument Surface,
     AuthoringHistoryResponse History,
-    CoreClrProgramGeneration Generation);
+    CoreClrProgramGeneration Generation,
+    AuthoringGroupResponse? Group);
+
+internal sealed record AuthoringGroupResponse(
+    string Id,
+    string Description,
+    long BaselineRevision,
+    int StagedOperationCount);
 
 internal sealed record AuthoringHistoryResponse(
     bool CanUndo,

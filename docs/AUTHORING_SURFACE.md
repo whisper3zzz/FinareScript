@@ -171,7 +171,7 @@ control transfer, async boundaries, name conflicts, or multiple outputs. See
 
 `unifiedscript analyze ... --out <directory>` now writes
 `<name>.surface.json` beside HIR, semantic, Graph, and Declaration artifacts.
-The local authoring host publishes workspace v0.3, which contains Declaration
+The local authoring host publishes workspace v0.4, which contains Declaration
 IR, Graph, Surface, canonical source, revision, bounded transaction history, and
 CoreCLR generation from one committed snapshot. Browser and Slate clients send
 the rendered baseline revision and a unique operation ID for every edit, Undo,
@@ -180,6 +180,12 @@ republishes every artifact under a new revision/generation. Its versioned
 journal retains both stacks and operation replay IDs across editor/host restarts
 and exposes stale-journal rejection to both clients. See
 [AUTHORING_TRANSACTIONS.md](AUTHORING_TRANSACTIONS.md).
+
+Workspace v0.4 also carries optional grouped-draft state. Browser and Slate can
+begin one named group, stage declaration/semantic/plan edits against successive
+draft Surfaces without publishing, then commit one runtime generation and one
+Undo entry or cancel with no writes. History navigation, ordinary ungrouped
+writes, and debug execution stay disabled until the group is resolved.
 
 The Workbench consumes the Surface for asset/function navigation, cards,
 regions, inspector editors, state-reference labels, source selection, AI

@@ -9,7 +9,7 @@ M7.2 gameplay services/lifecycle productization, and M7.3 schema-generated
 gameplay data plane without adding UE dependencies to the compiler core. M7.4
 then completed the full BlockBreaker migration with exact inventory coverage
 and no Puerts/TypeScript payload in the target project or package. The active
-RoadMap cursor is M8.1 structured graph editing completeness.
+RoadMap cursor is M8.2 Blueprint-grade Unreal authoring experience.
 
 ## Product roadmap
 
@@ -194,9 +194,10 @@ The repository currently implements:
   constant/declaration/type/var/discard/relational/logical/not/parenthesized
   pattern text, bounded guards, ordered case/default insertion, relabeling,
   one-slot movement, and safe break-only section deletion;
-- Workbench workspace v0.3 transaction history with baseline-revision and
+- Workbench workspace v0.4 transaction history with baseline-revision and
   operation-ID conflict guards, exact identity-stable Undo/Redo snapshots,
-  monotonic CoreCLR reload generations, and shared browser/Slate controls;
+  named multi-edit drafts, one-shot grouped publication, and shared
+  browser/Slate controls;
 - automatic shared-value extraction through an atomic
   `introduceTemporary` + `reconnectValue` patch plan, preserving one evaluation
   instead of copying a computed subtree into a second consumer, with a stable
@@ -619,7 +620,8 @@ Declaration edit
 
 Workbench authoring commit
   -> declaration-patch v0.2 or semantic-patch v0.27
-  -> workspace v0.3 baseline revision + unique operation identity
+  -> workspace v0.4 baseline revision + unique operation/group identity
+  -> Begin Group -> in-memory draft edits -> atomic Commit or zero-write Cancel
   -> immutable candidate analysis + regenerated Graph
   -> same CoreCLR transport reload
   -> rollback-capable source + .usids transaction

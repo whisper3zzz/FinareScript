@@ -734,18 +734,25 @@ def main() -> int:
         and '"/api/authoring/semantic-patch"' in debug_server_source
         and '"/api/authoring/undo"' in debug_server_source
         and '"/api/authoring/redo"' in debug_server_source
+        and '"/api/authoring/group/begin"' in debug_server_source
+        and '"/api/authoring/group/commit"' in debug_server_source
+        and '"/api/authoring/group/cancel"' in debug_server_source
         and "WriteTransactionally" in debug_server_source
         and "EnsureFilesUnchanged" in debug_server_source
         and "CSharpAuthoringMutation" in authoring_workspace_source
         and "CSharpAuthoringHistoryMutation" in authoring_workspace_source
+        and "CreateDraft" in authoring_workspace_source
+        and "PrepareDraftCommit" in authoring_workspace_source
         and "NavigateHistoryAsync" in debug_server_source
         and "AttachReconciledSidecars" in authoring_workspace_source
         and "saveDeclarationChanges" in prototype_source
         and "saveSemanticPatch" in prototype_source
         and "navigateAuthoringHistory" in prototype_source
+        and "toggleAuthoringGroup" in prototype_source
+        and "X-UnifiedScript-Group-Id" in prototype_source
         and "X-UnifiedScript-Baseline-Revision" in prototype_source
         and "X-UnifiedScript-Transaction-Id" in prototype_source
-        and "unifiedscript.authoring-workspace/v0.3" in prototype_source
+        and "unifiedscript.authoring-workspace/v0.4" in prototype_source
         and "AuthoringSurfaceProjector" in debug_server_source
         and "unifiedscript.patch/v0.27" in prototype_source,
         "Visual authoring changes do not commit through the transactional host",
@@ -2466,7 +2473,7 @@ def main() -> int:
         and "puertsOrTypeScriptPackageFiles" in blockbreaker_package_runner
         and "### M7.4 — Full BlockBreaker runtime migration" in roadmap
         and "- [x] inventory all Puerts scripts" in roadmap
-        and "Next slice: **M8.1 — user-grouped transactions**" in roadmap,
+        and "Next slice: **M8.2 — Blueprint-grade Unreal experience**" in roadmap,
         "M7.4 whole-project Puerts inventory, coverage, or migration gates are incomplete",
     )
     checks.append("M7.4 BlockBreaker migration has exact coverage and zero legacy payload gates")
@@ -2802,16 +2809,23 @@ def main() -> int:
     ).read_text(encoding="utf-8")
     require(
         "FUnifiedScriptAuthoringWorkbench" in unreal_authoring_workbench_header
-        and "unifiedscript.authoring-workspace/v0.3"
+        and "unifiedscript.authoring-workspace/v0.4"
         in unreal_authoring_workbench_source
         and "/api/authoring/semantic-patch" in unreal_authoring_workbench_source
         and "/api/authoring/undo" in unreal_authoring_workbench_source
         and "/api/authoring/redo" in unreal_authoring_workbench_source
+        and "/api/authoring/group/begin" in unreal_authoring_workbench_source
+        and "/api/authoring/group/commit" in unreal_authoring_workbench_source
+        and "/api/authoring/group/cancel" in unreal_authoring_workbench_source
         and "FHttpModule::Get().CreateRequest" in unreal_authoring_widget
         and "X-UnifiedScript-Baseline-Revision" in unreal_authoring_widget
         and "X-UnifiedScript-Transaction-Id" in unreal_authoring_widget
+        and "X-UnifiedScript-Group-Id" in unreal_authoring_widget
         and "HandleUndoAuthoringTransaction" in unreal_authoring_widget
         and "HandleRedoAuthoringTransaction" in unreal_authoring_widget
+        and "HandleBeginAuthoringGroup" in unreal_authoring_widget
+        and "HandleCommitAuthoringGroup" in unreal_authoring_widget
+        and "HandleCancelAuthoringGroup" in unreal_authoring_widget
         and "Apply & Reload" in unreal_authoring_widget
         and "ReloadMatchingComponents" in unreal_authoring_widget
         and "Component->ReloadScript()" in unreal_authoring_widget

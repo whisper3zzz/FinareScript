@@ -94,7 +94,7 @@ public sealed class CoreClrAuthoringHttpServerTests
             using var client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}/") };
 
             AuthoringWorkspaceResponse baseline = await GetWorkspaceAsync(client);
-            Assert.Equal("unifiedscript.authoring-workspace/v0.3", baseline.SchemaVersion);
+            Assert.Equal("unifiedscript.authoring-workspace/v0.4", baseline.SchemaVersion);
             Assert.False(baseline.History.CanUndo);
             Assert.False(baseline.History.CanRedo);
             Assert.Equal(0, baseline.History.UndoDepth);
@@ -389,6 +389,192 @@ public sealed class CoreClrAuthoringHttpServerTests
     }
 
     [Fact]
+    public async Task GroupedAuthoringStagesWithoutWritesThenCommitsAndUndoesAtomically()
+    {
+        string directory = Path.Combine(
+            Path.GetTempPath(),
+            $"unifiedscript-authoring-group-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        string sourcePath = Path.Combine(directory, "DamagePolicy.cs");
+        string identityPath = sourcePath + ".usids";
+        string historyPath = Path.Combine(directory, "DamagePolicy.authoring-history.json");
+        string contentRoot = Path.Combine(directory, "workbench");
+        Directory.CreateDirectory(contentRoot);
+        await File.WriteAllTextAsync(sourcePath, Source);
+        await File.WriteAllTextAsync(Path.Combine(contentRoot, "index.html"), "<!doctype html><title>test</title>");
+        string logicalPath = sourcePath.Replace('\\', '/');
+        var compilation = CSharpCompilationRequest.Single(
+            Source,
+            logicalPath,
+            identitySidecar: IdentitySidecarDocument.CreateEmpty(logicalPath));
+        int port = ReserveLoopbackPort();
+
+        try
+        {
+            using var server = new CoreClrDebugHttpServer(
+                compilation,
+                sourcePath,
+                identityPath,
+                contentRoot,
+                port,
+                new AuthoringArtifactOutputs(HistoryPath: historyPath));
+            using var cancellation = new CancellationTokenSource();
+            Task serverTask = server.RunAsync(cancellation.Token);
+            using var client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}/") };
+
+            AuthoringWorkspaceResponse baseline = await GetWorkspaceAsync(client);
+            AuthoringWorkspaceResponse begun = await PostAsync(
+                client,
+                "api/authoring/group/begin",
+                "{}",
+                baseline.Revision,
+                "group-damage-tuning",
+                "Damage tuning");
+            Assert.Equal(1, begun.Revision);
+            Assert.Equal(1, begun.Generation.Number);
+            Assert.Equal("group-damage-tuning", begun.Group!.Id);
+            Assert.Equal(0, begun.Group.StagedOperationCount);
+
+            GraphNode minimum = begun.Graph.Functions[0].Nodes.Single(static node =>
+                node.Kind == "literal" && node.Properties.GetValueOrDefault("value") == "0f");
+            SemanticPatchDocument behaviorPatch = SemanticPatchDocument.Create(
+                begun.ScriptAssets.SourceCompilationId,
+                begun.ScriptAssets.SemanticConfigurationId,
+                [new ReplaceLiteralPatchOperation(minimum.Id, "0f", "10f")]);
+            using (HttpRequestMessage ungroupedRequest = AuthoringRequest(
+                "api/authoring/semantic-patch",
+                SemanticPatchJson.Serialize(behaviorPatch),
+                begun.Revision,
+                "ungrouped-minimum",
+                "Ungrouped minimum"))
+            using (HttpResponseMessage ungroupedResponse = await client.SendAsync(ungroupedRequest))
+            {
+                Assert.Equal(HttpStatusCode.Conflict, ungroupedResponse.StatusCode);
+                Assert.Contains(
+                    "UAW1009",
+                    await ungroupedResponse.Content.ReadAsStringAsync(),
+                    StringComparison.Ordinal);
+                Assert.Equal(Source, await File.ReadAllTextAsync(sourcePath));
+            }
+
+            AuthoringWorkspaceResponse stagedBehavior = await PostAsync(
+                client,
+                "api/authoring/semantic-patch",
+                SemanticPatchJson.Serialize(behaviorPatch),
+                begun.Revision,
+                "stage-minimum",
+                "Stage minimum",
+                begun.Group.Id);
+            Assert.Equal(2, stagedBehavior.Revision);
+            Assert.Equal(1, stagedBehavior.Generation.Number);
+            Assert.Equal(1, stagedBehavior.Group!.StagedOperationCount);
+            Assert.Equal(Source, await File.ReadAllTextAsync(sourcePath));
+            Assert.False(File.Exists(identityPath));
+
+            ScriptStateDeclaration maxDamage = stagedBehavior.ScriptAssets.Assets[0].States
+                .Single(static state => state.Name == "MaxDamage");
+            DeclarationPatchDocument declarationPatch = DeclarationPatchDocument.Create(
+                stagedBehavior.ScriptAssets.SourceCompilationId,
+                stagedBehavior.ScriptAssets.SemanticConfigurationId,
+                [new UpdateScriptStatePatchOperation(
+                    maxDamage.Id,
+                    new ScriptStatePatchPrecondition(
+                        maxDamage.Name,
+                        maxDamage.TypeMetadataName,
+                        maxDamage.TypeKind,
+                        maxDamage.DefaultValue,
+                        maxDamage.Exposure),
+                    new ScriptStatePatchSpec(
+                        maxDamage.Name,
+                        maxDamage.TypeMetadataName,
+                        maxDamage.TypeKind,
+                        Json("120"),
+                        maxDamage.Exposure))]);
+            AuthoringWorkspaceResponse stagedDeclaration = await PostAsync(
+                client,
+                "api/authoring/declaration-patch",
+                DeclarationPatchJson.Serialize(declarationPatch),
+                stagedBehavior.Revision,
+                "stage-maximum",
+                "Stage maximum",
+                begun.Group.Id);
+            Assert.Equal(3, stagedDeclaration.Revision);
+            Assert.Equal(1, stagedDeclaration.Generation.Number);
+            Assert.Equal(2, stagedDeclaration.Group!.StagedOperationCount);
+            Assert.Equal(Source, await File.ReadAllTextAsync(sourcePath));
+
+            AuthoringWorkspaceResponse committed = await PostAsync(
+                client,
+                "api/authoring/group/commit",
+                "{}",
+                stagedDeclaration.Revision,
+                begun.Group.Id,
+                begun.Group.Description,
+                begun.Group.Id);
+            Assert.Null(committed.Group);
+            Assert.Equal(2, committed.Revision);
+            Assert.Equal(2, committed.Generation.Number);
+            Assert.Equal(1, committed.History.UndoDepth);
+            Assert.Equal("group-damage-tuning", committed.History.UndoTransactionId);
+            Assert.Equal("Damage tuning", committed.History.UndoDescription);
+            string committedSource = await File.ReadAllTextAsync(sourcePath);
+            Assert.Contains("Math.Clamp(scaled, 10f, MaxDamage)", committedSource);
+            Assert.Contains("= 120;", committedSource);
+
+            AuthoringWorkspaceResponse undone = await PostAsync(
+                client,
+                "api/authoring/undo",
+                "{}",
+                committed.Revision,
+                "undo-group-damage-tuning",
+                "Undo damage tuning");
+            Assert.Equal(Source, await File.ReadAllTextAsync(sourcePath));
+            Assert.Equal(1, undone.History.RedoDepth);
+
+            AuthoringWorkspaceResponse cancelBegun = await PostAsync(
+                client,
+                "api/authoring/group/begin",
+                "{}",
+                undone.Revision,
+                "group-cancelled",
+                "Cancelled tuning");
+            GraphNode cancelMinimum = cancelBegun.Graph.Functions[0].Nodes.Single(static node =>
+                node.Kind == "literal" && node.Properties.GetValueOrDefault("value") == "0f");
+            SemanticPatchDocument cancelPatch = SemanticPatchDocument.Create(
+                cancelBegun.ScriptAssets.SourceCompilationId,
+                cancelBegun.ScriptAssets.SemanticConfigurationId,
+                [new ReplaceLiteralPatchOperation(cancelMinimum.Id, "0f", "5f")]);
+            AuthoringWorkspaceResponse cancelStaged = await PostAsync(
+                client,
+                "api/authoring/semantic-patch",
+                SemanticPatchJson.Serialize(cancelPatch),
+                cancelBegun.Revision,
+                "stage-cancelled",
+                "Stage cancelled edit",
+                cancelBegun.Group!.Id);
+            AuthoringWorkspaceResponse cancelled = await PostAsync(
+                client,
+                "api/authoring/group/cancel",
+                "{}",
+                cancelStaged.Revision,
+                cancelBegun.Group.Id,
+                cancelBegun.Group.Description,
+                cancelBegun.Group.Id);
+            Assert.Null(cancelled.Group);
+            Assert.Equal(undone.Revision, cancelled.Revision);
+            Assert.Equal(undone.Generation.Number, cancelled.Generation.Number);
+            Assert.Equal(Source, await File.ReadAllTextAsync(sourcePath));
+
+            cancellation.Cancel();
+            await serverTask.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task PersistedAuthoringHistorySurvivesRestartAndRejectsAStaleJournal()
     {
         string directory = Path.Combine(
@@ -540,14 +726,16 @@ public sealed class CoreClrAuthoringHttpServerTests
         string json,
         long baselineRevision,
         string transactionId,
-        string description)
+        string description,
+        string? groupId = null)
     {
         using HttpRequestMessage request = AuthoringRequest(
             path,
             json,
             baselineRevision,
             transactionId,
-            description);
+            description,
+            groupId);
         using HttpResponseMessage response = await client.SendAsync(request);
         response.EnsureSuccessStatusCode();
         return Deserialize(await response.Content.ReadAsStringAsync());
@@ -558,7 +746,8 @@ public sealed class CoreClrAuthoringHttpServerTests
         string json,
         long baselineRevision,
         string transactionId,
-        string description)
+        string description,
+        string? groupId = null)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, path)
         {
@@ -567,6 +756,10 @@ public sealed class CoreClrAuthoringHttpServerTests
         request.Headers.Add("X-UnifiedScript-Baseline-Revision", baselineRevision.ToString());
         request.Headers.Add("X-UnifiedScript-Transaction-Id", transactionId);
         request.Headers.Add("X-UnifiedScript-Transaction-Label", description);
+        if (groupId is not null)
+        {
+            request.Headers.Add("X-UnifiedScript-Group-Id", groupId);
+        }
         return request;
     }
 

@@ -329,11 +329,86 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
                 .AutoWidth()
                 .Padding(6.0f, 0.0f, 0.0f, 0.0f)
                 [
+                    SNew(SBox)
+                    .WidthOverride(132.0f)
+                    [
+                        SAssignNew(AuthoringGroupLabelTextBox, SEditableTextBox)
+                        .Text(LOCTEXT("DefaultAuthoringGroupLabel", "Grouped edit"))
+                        .HintText(LOCTEXT("AuthoringGroupLabelHint", "Transaction label"))
+                        .IsEnabled_Lambda([this]()
+                        {
+                            return !bPatchRequestPending && ActiveAuthoringGroupId.IsEmpty();
+                        })
+                    ]
+                ]
+                + SHorizontalBox::Slot()
+                .AutoWidth()
+                .Padding(4.0f, 0.0f, 0.0f, 0.0f)
+                [
+                    SNew(SButton)
+                    .Text_Lambda([this]()
+                    {
+                        return ActiveAuthoringGroupId.IsEmpty()
+                            ? LOCTEXT("BeginAuthoringGroup", "Begin Group")
+                            : FText::Format(
+                                LOCTEXT("CommitAuthoringGroup", "Commit ({0})"),
+                                ActiveAuthoringGroupStagedCount);
+                    })
+                    .ToolTipText_Lambda([this]()
+                    {
+                        return ActiveAuthoringGroupId.IsEmpty()
+                            ? LOCTEXT(
+                                "BeginAuthoringGroupTip",
+                                "Start an in-memory draft. Following edits are staged without source writes or runtime reload until Commit.")
+                            : FText::Format(
+                                LOCTEXT(
+                                    "CommitAuthoringGroupTip",
+                                    "Atomically publish {0} staged edit(s) as one named Undo/Redo transaction: {1}"),
+                                ActiveAuthoringGroupStagedCount,
+                                FText::FromString(ActiveAuthoringGroupDescription));
+                    })
+                    .IsEnabled_Lambda([this]()
+                    {
+                        return !bPatchRequestPending &&
+                            (ActiveAuthoringGroupId.IsEmpty()
+                                ? AuthoringGroupLabelTextBox.IsValid() &&
+                                    !AuthoringGroupLabelTextBox->GetText().IsEmpty()
+                                : ActiveAuthoringGroupStagedCount > 0);
+                    })
+                    .OnClicked_Lambda([this]()
+                    {
+                        return ActiveAuthoringGroupId.IsEmpty()
+                            ? HandleBeginAuthoringGroup()
+                            : HandleCommitAuthoringGroup();
+                    })
+                ]
+                + SHorizontalBox::Slot()
+                .AutoWidth()
+                .Padding(4.0f, 0.0f, 0.0f, 0.0f)
+                [
+                    SNew(SButton)
+                    .Text(LOCTEXT("CancelAuthoringGroup", "Cancel Group"))
+                    .Visibility_Lambda([this]()
+                    {
+                        return ActiveAuthoringGroupId.IsEmpty()
+                            ? EVisibility::Collapsed
+                            : EVisibility::Visible;
+                    })
+                    .IsEnabled_Lambda([this]()
+                    {
+                        return !bPatchRequestPending && !ActiveAuthoringGroupId.IsEmpty();
+                    })
+                    .OnClicked(this, &SUnifiedScriptAuthoringSurface::HandleCancelAuthoringGroup)
+                ]
+                + SHorizontalBox::Slot()
+                .AutoWidth()
+                .Padding(6.0f, 0.0f, 0.0f, 0.0f)
+                [
                     SNew(SButton)
                     .Text(LOCTEXT("UndoAuthoring", "Undo"))
                     .IsEnabled_Lambda([this]()
                     {
-                        return !bPatchRequestPending && bCanUndoAuthoring;
+                        return !bPatchRequestPending && ActiveAuthoringGroupId.IsEmpty() && bCanUndoAuthoring;
                     })
                     .ToolTipText_Lambda([this]()
                     {
@@ -358,7 +433,7 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
                     .Text(LOCTEXT("RedoAuthoring", "Redo"))
                     .IsEnabled_Lambda([this]()
                     {
-                        return !bPatchRequestPending && bCanRedoAuthoring;
+                        return !bPatchRequestPending && ActiveAuthoringGroupId.IsEmpty() && bCanRedoAuthoring;
                     })
                     .ToolTipText_Lambda([this]()
                     {
@@ -1380,7 +1455,7 @@ void SUnifiedScriptAuthoringSurface::HandleUndoAuthoringCommand()
 
 bool SUnifiedScriptAuthoringSurface::CanUndoAuthoringCommand() const
 {
-    return !bPatchRequestPending && bCanUndoAuthoring;
+    return !bPatchRequestPending && ActiveAuthoringGroupId.IsEmpty() && bCanUndoAuthoring;
 }
 
 void SUnifiedScriptAuthoringSurface::HandleRedoAuthoringCommand()
@@ -1390,7 +1465,7 @@ void SUnifiedScriptAuthoringSurface::HandleRedoAuthoringCommand()
 
 bool SUnifiedScriptAuthoringSurface::CanRedoAuthoringCommand() const
 {
-    return !bPatchRequestPending && bCanRedoAuthoring;
+    return !bPatchRequestPending && ActiveAuthoringGroupId.IsEmpty() && bCanRedoAuthoring;
 }
 
 TArray<FString> SUnifiedScriptAuthoringSurface::GetSelectedStatementActionIds() const
@@ -1727,10 +1802,73 @@ FReply SUnifiedScriptAuthoringSurface::HandleRedoAuthoringTransaction()
     return FReply::Handled();
 }
 
+FReply SUnifiedScriptAuthoringSurface::HandleBeginAuthoringGroup()
+{
+    const FString Description = AuthoringGroupLabelTextBox.IsValid()
+        ? AuthoringGroupLabelTextBox->GetText().ToString().TrimStartAndEnd()
+        : FString();
+    if (Description.IsEmpty())
+    {
+        SetStatus(TEXT("Enter a non-empty grouped transaction label."), true);
+        return FReply::Handled();
+    }
+    const FString GroupId = FString::Printf(
+        TEXT("group-%s"),
+        *FGuid::NewGuid().ToString(EGuidFormats::Digits));
+    SubmitAuthoringTransaction(
+        TEXT("{}"),
+        FUnifiedScriptAuthoringWorkbench::BuildGroupBeginUrl(
+            ServerUrlTextBox.IsValid() ? ServerUrlTextBox->GetText().ToString() : FString()),
+        Description,
+        GroupId,
+        FString(),
+        false);
+    return FReply::Handled();
+}
+
+FReply SUnifiedScriptAuthoringSurface::HandleCommitAuthoringGroup()
+{
+    if (ActiveAuthoringGroupId.IsEmpty())
+    {
+        SetStatus(TEXT("There is no active grouped authoring transaction to commit."), true);
+        return FReply::Handled();
+    }
+    SubmitAuthoringTransaction(
+        TEXT("{}"),
+        FUnifiedScriptAuthoringWorkbench::BuildGroupCommitUrl(
+            ServerUrlTextBox.IsValid() ? ServerUrlTextBox->GetText().ToString() : FString()),
+        ActiveAuthoringGroupDescription,
+        ActiveAuthoringGroupId,
+        ActiveAuthoringGroupId,
+        true);
+    return FReply::Handled();
+}
+
+FReply SUnifiedScriptAuthoringSurface::HandleCancelAuthoringGroup()
+{
+    if (ActiveAuthoringGroupId.IsEmpty())
+    {
+        SetStatus(TEXT("There is no active grouped authoring transaction to cancel."), true);
+        return FReply::Handled();
+    }
+    SubmitAuthoringTransaction(
+        TEXT("{}"),
+        FUnifiedScriptAuthoringWorkbench::BuildGroupCancelUrl(
+            ServerUrlTextBox.IsValid() ? ServerUrlTextBox->GetText().ToString() : FString()),
+        ActiveAuthoringGroupDescription,
+        ActiveAuthoringGroupId,
+        ActiveAuthoringGroupId,
+        false);
+    return FReply::Handled();
+}
+
 void SUnifiedScriptAuthoringSurface::SubmitAuthoringTransaction(
     FString Payload,
     FString Url,
-    FString Activity)
+    FString Activity,
+    FString TransactionId,
+    FString GroupId,
+    bool bPublishesRuntime)
 {
     if (bPatchRequestPending)
     {
@@ -1747,10 +1885,20 @@ void SUnifiedScriptAuthoringSurface::SubmitAuthoringTransaction(
     Request->SetURL(Url);
     Request->SetVerb(TEXT("POST"));
     Request->SetHeader(TEXT("Content-Type"), TEXT("application/json; charset=utf-8"));
-    Request->SetHeader(
-        TEXT("X-UnifiedScript-Transaction-Id"),
-        FGuid::NewGuid().ToString(EGuidFormats::Digits));
+    if (TransactionId.IsEmpty())
+    {
+        TransactionId = FGuid::NewGuid().ToString(EGuidFormats::Digits);
+    }
+    if (GroupId.IsEmpty() && !ActiveAuthoringGroupId.IsEmpty())
+    {
+        GroupId = ActiveAuthoringGroupId;
+    }
+    Request->SetHeader(TEXT("X-UnifiedScript-Transaction-Id"), TransactionId);
     Request->SetHeader(TEXT("X-UnifiedScript-Transaction-Label"), Activity);
+    if (!GroupId.IsEmpty())
+    {
+        Request->SetHeader(TEXT("X-UnifiedScript-Group-Id"), GroupId);
+    }
     if (WorkbenchRevision > 0)
     {
         Request->SetHeader(
@@ -1772,6 +1920,8 @@ void SUnifiedScriptAuthoringSurface::SubmitAuthoringTransaction(
         });
 
     bPatchRequestPending = true;
+    bPendingRequestPublishesRuntime = bPublishesRuntime &&
+        (ActiveAuthoringGroupId.IsEmpty() || Url.EndsWith(TEXT("/api/authoring/group/commit")));
     SetStatus(FString::Printf(TEXT("%s via %s ..."), *Activity, *Url), false);
     if (!Request->ProcessRequest())
     {
@@ -1785,7 +1935,9 @@ void SUnifiedScriptAuthoringSurface::HandlePatchResponse(
     int32 StatusCode,
     FString ResponseJson)
 {
+    const bool bPublishedRuntime = bPendingRequestPublishesRuntime;
     bPatchRequestPending = false;
+    bPendingRequestPublishesRuntime = true;
     if (!bRequestSucceeded || StatusCode < 200 || StatusCode >= 300)
     {
         SetStatus(
@@ -1817,6 +1969,13 @@ void SUnifiedScriptAuthoringSurface::HandlePatchResponse(
     RedoAuthoringDescription = MoveTemp(Workspace.History.RedoDescription);
     HistoryPersistenceState = MoveTemp(Workspace.History.PersistenceState);
     HistoryPersistenceMessage = MoveTemp(Workspace.History.PersistenceMessage);
+    ActiveAuthoringGroupId = Workspace.Group.bActive ? MoveTemp(Workspace.Group.Id) : FString();
+    ActiveAuthoringGroupDescription = Workspace.Group.bActive
+        ? MoveTemp(Workspace.Group.Description)
+        : FString();
+    ActiveAuthoringGroupStagedCount = Workspace.Group.bActive
+        ? Workspace.Group.StagedOperationCount
+        : 0;
     if (!LoadedSurfacePath.IsEmpty())
     {
         LoadedSurfaceTimestamp = IFileManager::Get().GetTimeStamp(*LoadedSurfacePath);
@@ -1826,15 +1985,28 @@ void SUnifiedScriptAuthoringSurface::HandlePatchResponse(
     int32 Matched = 0;
     int32 Reloaded = 0;
     int32 Failed = 0;
-    if (bReloadMatchingComponents)
+    if (bPublishedRuntime && bReloadMatchingComponents)
     {
         ReloadMatchingComponents(Matched, Reloaded, Failed);
     }
     const FString HistoryPersistenceDetail = HistoryPersistenceMessage.IsEmpty()
         ? FString()
         : FString::Printf(TEXT(" (%s)"), *HistoryPersistenceMessage);
-    SetStatus(
-        FString::Printf(
+    if (Workspace.Group.bActive)
+    {
+        SetStatus(
+            FString::Printf(
+                TEXT("Grouped draft '%s': %lld staged edit%s at draft revision %lld; source, history, runtime generation %lld, and components are unchanged."),
+                *ActiveAuthoringGroupDescription,
+                ActiveAuthoringGroupStagedCount,
+                ActiveAuthoringGroupStagedCount == 1 ? TEXT("") : TEXT("s"),
+                Workspace.Revision,
+                Workspace.Generation),
+            false);
+        return;
+    }
+    const FString CompletionStatus = bPublishedRuntime
+        ? FString::Printf(
             TEXT("Applied revision %lld / Workbench generation %lld; history %lld undo / %lld redo; journal %s%s; Surface refreshed; components %d matched, %d updated, %d failed."),
             Workspace.Revision,
             Workspace.Generation,
@@ -1844,7 +2016,20 @@ void SUnifiedScriptAuthoringSurface::HandlePatchResponse(
             *HistoryPersistenceDetail,
             Matched,
             Reloaded,
-            Failed),
+            Failed)
+        : FString::Printf(
+            TEXT("Grouped draft discarded; committed revision %lld / Workbench generation %lld remains active; history %lld undo / %lld redo; journal %s%s; Surface restored; components %d matched, %d updated, %d failed."),
+            Workspace.Revision,
+            Workspace.Generation,
+            UndoAuthoringDepth,
+            RedoAuthoringDepth,
+            *HistoryPersistenceState,
+            *HistoryPersistenceDetail,
+            Matched,
+            Reloaded,
+            Failed);
+    SetStatus(
+        CompletionStatus,
         Failed > 0 || HistoryPersistenceState == TEXT("rejected"));
 }
 

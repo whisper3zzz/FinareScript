@@ -394,7 +394,7 @@ persisted visual layout.
 Each promoted literal/operator editor now exposes `Apply & Reload`. The Slate
 client posts the exact `unifiedscript.patch/v0.27` payload to the configured
 loopback Workbench URL and accepts only a strict
-`unifiedscript.authoring-workspace/v0.3` response. The returned Surface replaces
+`unifiedscript.authoring-workspace/v0.4` response. The returned Surface replaces
 the view without UE-side C# or Graph reconstruction; protocol diagnostics such
 as stale compilation IDs and external-file conflicts are shown in the tab.
 
@@ -643,6 +643,17 @@ Roslyn applier derives graph-safe inputs and at most one live result, creates a
 private `[Visual]` helper, preserves moved semantic identities, recompiles every
 projected Visual method, validates CFGs, and commits through the existing
 Workbench transaction and reload boundary.
+
+## Phase B.26 named grouped transactions
+
+Workspace v0.4 adds a server-owned draft above the normal Workbench commit
+path. Slate exposes **Begin Group**, a live staged-operation count, **Commit**,
+and **Cancel Group**. Each graph/declaration request carries the active group ID
+and a unique stage ID. Accepted stages refresh the compiler-owned Surface only;
+they do not write source, reload CoreCLR, or reload matching components. Commit
+publishes the final draft through one source/identity/artifact/history/runtime
+transaction and creates one named Undo entry. Cancel restores the committed
+Surface without touching the runtime generation.
 
 The bounded native pattern parser emits the shared JSON algebra for constant,
 declaration, type, var, discard, relational, logical, negated, and

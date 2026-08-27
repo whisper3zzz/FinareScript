@@ -1013,6 +1013,18 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         TEXT("Workbench redo endpoint is normalized"),
         FUnifiedScriptAuthoringWorkbench::BuildRedoUrl(TEXT("http://127.0.0.1:4173/")),
         FString(TEXT("http://127.0.0.1:4173/api/authoring/redo")));
+    TestEqual(
+        TEXT("Workbench group begin endpoint is normalized"),
+        FUnifiedScriptAuthoringWorkbench::BuildGroupBeginUrl(TEXT("http://127.0.0.1:4173/")),
+        FString(TEXT("http://127.0.0.1:4173/api/authoring/group/begin")));
+    TestEqual(
+        TEXT("Workbench group commit endpoint is normalized"),
+        FUnifiedScriptAuthoringWorkbench::BuildGroupCommitUrl(TEXT("http://127.0.0.1:4173/")),
+        FString(TEXT("http://127.0.0.1:4173/api/authoring/group/commit")));
+    TestEqual(
+        TEXT("Workbench group cancel endpoint is normalized"),
+        FUnifiedScriptAuthoringWorkbench::BuildGroupCancelUrl(TEXT("http://127.0.0.1:4173/")),
+        FString(TEXT("http://127.0.0.1:4173/api/authoring/group/cancel")));
 
     FString SurfaceJson;
     TestTrue(TEXT("Demo Surface source is readable"),
@@ -1033,12 +1045,14 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         45);
 
     const FString WorkspaceJson = FString::Printf(
-        TEXT("{\"schemaVersion\":\"unifiedscript.authoring-workspace/v0.3\","
+        TEXT("{\"schemaVersion\":\"unifiedscript.authoring-workspace/v0.4\","
              "\"revision\":2,\"sourcePath\":\"DemoScript.cs\","
              "\"history\":{\"canUndo\":true,\"canRedo\":false,"
              "\"undoDepth\":2,\"redoDepth\":0,"
              "\"undoTransactionId\":\"txn-2\",\"undoDescription\":\"Reconnect flow\","
              "\"lastOperationId\":\"op-2\",\"persistenceState\":\"restored\"},"
+             "\"group\":{\"id\":\"group-1\",\"description\":\"Damage tuning\","
+             "\"baselineRevision\":1,\"stagedOperationCount\":2},"
              "\"surface\":%s,\"generation\":{\"number\":3}}"),
         *SurfaceJson.Replace(
             TEXT("unifiedscript.authoring-surface/v9.9"),
@@ -1058,6 +1072,9 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("Workbench response retains undo label"), Workspace.History.UndoDescription, FString(TEXT("Reconnect flow")));
     TestEqual(TEXT("Workbench response retains operation identity"), Workspace.History.LastOperationId, FString(TEXT("op-2")));
     TestEqual(TEXT("Workbench response exposes restored history"), Workspace.History.PersistenceState, FString(TEXT("restored")));
+    TestTrue(TEXT("Workbench response exposes an active grouped transaction"), Workspace.Group.bActive);
+    TestEqual(TEXT("Workbench response retains group identity"), Workspace.Group.Id, FString(TEXT("group-1")));
+    TestEqual(TEXT("Workbench response retains staged operation count"), Workspace.Group.StagedOperationCount, int64(2));
     TestEqual(TEXT("Workbench response replaces the Surface transactionally"),
         Workspace.Surface.GetActionCount(), 45);
     TestTrue(

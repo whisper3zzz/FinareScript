@@ -1,7 +1,7 @@
 # Authoring Transactions and History
 
 The loopback Workbench is the single commit authority for visual, C#, and AI
-authoring. Workspace protocol `unifiedscript.authoring-workspace/v0.3` exposes
+authoring. Workspace protocol `unifiedscript.authoring-workspace/v0.4` exposes
 a bounded server-owned history, while journal
 `unifiedscript.authoring-history/v0.1` persists that history inside the same
 source, identity, artifact, and CoreCLR publication boundary.
@@ -16,6 +16,8 @@ Mutation clients send these headers:
   characters;
 - `X-UnifiedScript-Transaction-Label`: an author-facing description, at most
   256 characters.
+- `X-UnifiedScript-Group-Id`: the active grouped draft ID for stage, commit,
+  and cancel requests.
 
 The revision and IDs remain optional for older clients. Updated browser and
 Slate clients always send them after receiving a live workspace. The server
@@ -27,12 +29,39 @@ The write endpoints are:
 - `POST /api/authoring/declaration-patch`;
 - `POST /api/authoring/semantic-patch`;
 - `POST /api/authoring/semantic-patch-plan`;
+- `POST /api/authoring/group/begin`;
+- `POST /api/authoring/group/commit`;
+- `POST /api/authoring/group/cancel`;
 - `POST /api/authoring/undo`;
 - `POST /api/authoring/redo`.
 
 Undo and redo accept `{}`. They use the same revision and operation headers as
 ordinary edits. `UAW1007` reports an empty side of the history; `UAW1008`
 reports invalid transaction metadata.
+
+## User-grouped transactions
+
+`group/begin` reserves one unique transaction ID and label at the current
+committed revision. While the group is active, declaration, semantic, and plan
+requests carry its group ID and unique stage operation IDs. Each accepted stage
+fully analyzes a new in-memory draft and returns its regenerated Surface, but
+does not write C# or `.usids`, emit artifacts, reload CoreCLR, change components,
+or append history.
+
+`group/commit` requires the group ID as both group and transaction identity. It
+rebases the final draft onto exactly one new committed workspace revision, then
+runs the normal reload/publication path once. All stages therefore appear as
+one named Undo/Redo entry. `group/cancel` discards the draft and returns the
+unchanged committed Surface and runtime generation. Empty commits, nested
+groups, stale draft revisions, mismatched group IDs, duplicate stage IDs,
+ordinary writes, history navigation, and debug start while a group is active
+are rejected explicitly.
+
+Workspace responses expose optional `group` state with ID, label, committed
+baseline revision, and staged operation count. A staged response may carry a
+provisional revision greater than the committed revision; commit advances the
+persisted revision only once, and cancel returns to the unchanged committed
+revision.
 
 ## Commit order
 
@@ -87,5 +116,5 @@ split. Patch v0.25 applies lexical Collapse Scope / Expand Scope through the
 same boundary. Patch v0.26 applies multi-statement, cross-region copy/paste with
 exact source/destination gaps and binding checks. Patch v0.27 extracts one
 consecutive range into a typed private Visual method, including its C# and
-identity migration, within the same transaction. User-defined transaction
-grouping remains later M8.1 work.
+identity migration, within the same transaction. Workspace v0.4 then closes
+M8.1 user-defined grouping with server-owned begin/stage/commit/cancel drafts.

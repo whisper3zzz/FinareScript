@@ -27,6 +27,15 @@ struct FUnifiedScriptAuthoringHistoryResult
     FString PersistenceMessage;
 };
 
+struct FUnifiedScriptAuthoringGroupResult
+{
+    bool bActive = false;
+    FString Id;
+    FString Description;
+    int64 BaselineRevision = 0;
+    int64 StagedOperationCount = 0;
+};
+
 struct FUnifiedScriptAuthoringWorkspaceResult
 {
     int64 Revision = 0;
@@ -34,6 +43,7 @@ struct FUnifiedScriptAuthoringWorkspaceResult
     FString SourcePath;
     FUnifiedScriptAuthoringSurfaceDocument Surface;
     FUnifiedScriptAuthoringHistoryResult History;
+    FUnifiedScriptAuthoringGroupResult Group;
 };
 
 class UEUNIFIEDSCRIPTEDITOR_API FUnifiedScriptAuthoringWorkbench
@@ -50,6 +60,12 @@ public:
     static FString BuildUndoUrl(const FString& ServerUrl);
 
     static FString BuildRedoUrl(const FString& ServerUrl);
+
+    static FString BuildGroupBeginUrl(const FString& ServerUrl);
+
+    static FString BuildGroupCommitUrl(const FString& ServerUrl);
+
+    static FString BuildGroupCancelUrl(const FString& ServerUrl);
 
     static bool ParseWorkspaceResponse(
         const FString& Json,

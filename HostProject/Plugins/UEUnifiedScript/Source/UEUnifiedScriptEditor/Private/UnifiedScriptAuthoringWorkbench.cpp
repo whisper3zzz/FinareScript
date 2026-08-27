@@ -16,7 +16,7 @@
 
 namespace UE::UnifiedScript::AuthoringWorkbench::Private
 {
-constexpr TCHAR WorkspaceSchema[] = TEXT("unifiedscript.authoring-workspace/v0.3");
+constexpr TCHAR WorkspaceSchema[] = TEXT("unifiedscript.authoring-workspace/v0.4");
 
 bool ReadPositiveInteger(
     const TSharedPtr<FJsonObject>& Object,
@@ -104,6 +104,30 @@ FString FUnifiedScriptAuthoringWorkbench::BuildRedoUrl(const FString& ServerUrl)
         : Normalized + TEXT("/api/authoring/redo");
 }
 
+FString FUnifiedScriptAuthoringWorkbench::BuildGroupBeginUrl(const FString& ServerUrl)
+{
+    const FString Normalized = NormalizeServerUrl(ServerUrl);
+    return Normalized.IsEmpty()
+        ? FString()
+        : Normalized + TEXT("/api/authoring/group/begin");
+}
+
+FString FUnifiedScriptAuthoringWorkbench::BuildGroupCommitUrl(const FString& ServerUrl)
+{
+    const FString Normalized = NormalizeServerUrl(ServerUrl);
+    return Normalized.IsEmpty()
+        ? FString()
+        : Normalized + TEXT("/api/authoring/group/commit");
+}
+
+FString FUnifiedScriptAuthoringWorkbench::BuildGroupCancelUrl(const FString& ServerUrl)
+{
+    const FString Normalized = NormalizeServerUrl(ServerUrl);
+    return Normalized.IsEmpty()
+        ? FString()
+        : Normalized + TEXT("/api/authoring/group/cancel");
+}
+
 bool FUnifiedScriptAuthoringWorkbench::ParseWorkspaceResponse(
     const FString& Json,
     FUnifiedScriptAuthoringWorkspaceResult& OutWorkspace,
@@ -166,6 +190,27 @@ bool FUnifiedScriptAuthoringWorkbench::ParseWorkspaceResponse(
     }
     (*History)->TryGetStringField(
         TEXT("persistenceMessage"), Candidate.History.PersistenceMessage);
+
+    const TSharedPtr<FJsonObject>* Group = nullptr;
+    if (Root->TryGetObjectField(TEXT("group"), Group) && Group->IsValid())
+    {
+        if (!(*Group)->TryGetStringField(TEXT("id"), Candidate.Group.Id) ||
+            Candidate.Group.Id.IsEmpty() ||
+            !(*Group)->TryGetStringField(TEXT("description"), Candidate.Group.Description) ||
+            Candidate.Group.Description.IsEmpty() ||
+            !UE::UnifiedScript::AuthoringWorkbench::Private::ReadPositiveInteger(
+                *Group, TEXT("baselineRevision"), Candidate.Group.BaselineRevision, OutError) ||
+            !UE::UnifiedScript::AuthoringWorkbench::Private::ReadNonNegativeInteger(
+                *Group, TEXT("stagedOperationCount"), Candidate.Group.StagedOperationCount, OutError))
+        {
+            if (OutError.IsEmpty())
+            {
+                OutError = TEXT("The Workbench response has invalid grouped transaction state.");
+            }
+            return false;
+        }
+        Candidate.Group.bActive = true;
+    }
 
     const TSharedPtr<FJsonObject>* Generation = nullptr;
     if (!Root->TryGetObjectField(TEXT("generation"), Generation) ||

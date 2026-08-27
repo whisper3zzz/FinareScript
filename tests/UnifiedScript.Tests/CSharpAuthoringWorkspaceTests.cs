@@ -319,6 +319,63 @@ public sealed class CSharpAuthoringWorkspaceTests
     }
 
     [Fact]
+    public void DraftGroupsSequentialDeclarationAndBehaviorEditsIntoOneHistoryEntry()
+    {
+        const string path = "Tests/Authoring/DamagePolicy.cs";
+        var workspace = new CSharpAuthoringWorkspace(CSharpCompilationRequest.Single(
+            Source,
+            path,
+            identitySidecar: IdentitySidecarDocument.CreateEmpty(path)));
+        CSharpAuthoringWorkspace draft = workspace.CreateDraft();
+        ScriptStateDeclaration maxDamage = draft.Current.Analysis.ScriptAssets!.Assets[0].States
+            .Single(static state => state.Name == "MaxDamage");
+        DeclarationPatchDocument declarationPatch = DeclarationPatchDocument.Create(
+            draft.Current.Analysis.ScriptAssets.SourceCompilationId,
+            draft.Current.Analysis.ScriptAssets.SemanticConfigurationId,
+            [new UpdateScriptStatePatchOperation(
+                maxDamage.Id,
+                Expected(maxDamage),
+                new ScriptStatePatchSpec(
+                    maxDamage.Name,
+                    maxDamage.TypeMetadataName,
+                    maxDamage.TypeKind,
+                    Json("120"),
+                    maxDamage.Exposure))]);
+        draft.Commit(draft.Prepare(declarationPatch), "stage-state", "Stage state edit");
+
+        HirLiteralExpression minimum = draft.Current.Analysis.Hir!
+            .DescendantsAndSelf()
+            .OfType<HirLiteralExpression>()
+            .Single(static literal => literal.ValueText == "0f");
+        SemanticPatchDocument behaviorPatch = SemanticPatchDocument.Create(
+            draft.Current.Analysis.ScriptAssets!.SourceCompilationId,
+            draft.Current.Analysis.ScriptAssets.SemanticConfigurationId,
+            [new ReplaceLiteralPatchOperation(minimum.Id, "0f", "10f")]);
+        draft.Commit(draft.Prepare(behaviorPatch), "stage-behavior", "Stage behavior edit");
+
+        Assert.Equal(1, workspace.Current.Revision);
+        Assert.Equal(3, draft.Current.Revision);
+        Assert.DoesNotContain("= 120;", workspace.Current.Request.Sources[0].Source);
+        CSharpAuthoringMutation grouped = workspace.PrepareDraftCommit(draft);
+        Assert.Equal(1, grouped.BaselineRevision);
+        Assert.Equal(2, grouped.Snapshot!.Revision);
+
+        workspace.Commit(grouped, "group-damage-tuning", "Damage tuning");
+
+        Assert.Equal(2, workspace.Current.Revision);
+        Assert.Contains("= 120;", workspace.Current.Request.Sources[0].Source);
+        Assert.Contains("Math.Clamp(scaled, 10f, MaxDamage)", workspace.Current.Request.Sources[0].Source);
+        Assert.Equal(1, workspace.History.UndoDepth);
+        Assert.Equal("group-damage-tuning", workspace.History.UndoTransactionId);
+        Assert.Equal("Damage tuning", workspace.History.UndoDescription);
+
+        workspace.Commit(workspace.PrepareUndo(), "undo-group-damage-tuning");
+
+        Assert.Contains("= 999;", workspace.Current.Request.Sources[0].Source);
+        Assert.Contains("Math.Clamp(scaled, 0f, MaxDamage)", workspace.Current.Request.Sources[0].Source);
+    }
+
+    [Fact]
     public void PersistedHistoryRestoresRevisionUndoRedoAndOperationIdempotency()
     {
         const string path = "Tests/Authoring/DamagePolicy.cs";

@@ -52,7 +52,7 @@ and receiver without any sample-specific frontend adapter.
 
 ## Data flow
 
-The live page loads `unifiedscript.authoring-workspace/v0.3`. One committed
+The live page loads `unifiedscript.authoring-workspace/v0.4`. One committed
 workspace revision contains canonical source, Declaration IR v0.1, Graph
 v0.13, Authoring Surface v0.4, transaction history, and a CoreCLR generation. After a declaration or
 behavior write, the server prepares and validates a full candidate, reloads the

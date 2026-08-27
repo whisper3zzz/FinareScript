@@ -7,7 +7,7 @@ const state = {
   asset: null, surfaceAsset: null, graphFunction: null, functionSurface: null,
   declarations: [], nodes: new Map(), selected: null,
   authoringConnected: false, authoringBusy: false, authoringRevision: null,
-  authoringHistory: null,
+  authoringHistory: null, authoringGroup: null,
   generation: null, removedDeclarations: [], previewPatch: null,
   debugConnected: false, debugBusy: false, debugHealth: null, debugSession: null,
 };
@@ -74,7 +74,7 @@ async function loadWorkspaceArtifacts() {
     const response = await fetch('/api/authoring/workspace', { cache: 'no-store' });
     if (!response.ok) throw new Error(`Authoring workspace returned ${response.status}`);
     const workspace = await response.json();
-    assertArtifact(workspace.schemaVersion === 'unifiedscript.authoring-workspace/v0.3', 'Unsupported authoring workspace protocol');
+    assertArtifact(workspace.schemaVersion === 'unifiedscript.authoring-workspace/v0.4', 'Unsupported authoring workspace protocol');
     applyWorkspaceArtifacts(workspace.scriptAssets, workspace.graph, workspace.surface, workspace.sourceText, workspace);
     await connectDebugBridge();
     return;
@@ -142,6 +142,7 @@ function applyWorkspaceArtifacts(artifact, graph, surface, sourceText, workspace
     authoringConnected: Boolean(workspace),
     authoringRevision: workspace?.revision ?? null,
     authoringHistory: workspace?.history ?? null,
+    authoringGroup: workspace?.group ?? null,
     generation: workspace?.generation ?? null,
     artifactLoaded: true, graphDirty: false, removedDeclarations: [], previewPatch: null,
   });
@@ -159,7 +160,9 @@ function applyWorkspaceArtifacts(artifact, graph, surface, sourceText, workspace
   updateHistoryControls();
   const historyState = workspace?.history?.persistenceState?.toUpperCase();
   document.querySelector('.sync-status strong').textContent = workspace
-    ? `SYNCED · R${workspace.revision}${historyState ? ` · HISTORY ${historyState}` : ''}`
+    ? workspace.group
+      ? `DRAFT · ${workspace.group.stagedOperationCount} STAGED · R${workspace.revision}`
+      : `SYNCED · R${workspace.revision}${historyState ? ` · HISTORY ${historyState}` : ''}`
     : 'SURFACE · READ ONLY';
   document.querySelector('.target-label').textContent = workspace
     ? `CLR GENERATION ${workspace.generation.number} · SURFACE v0.1`
@@ -712,7 +715,7 @@ function setAuthoringBusy(busy) {
 
 function updateHistoryControls() {
   const history = state.authoringHistory;
-  const unavailable = !state.authoringConnected || state.authoringBusy || state.graphDirty;
+  const unavailable = !state.authoringConnected || state.authoringBusy || state.graphDirty || Boolean(state.authoringGroup);
   const undoButton = document.getElementById('undoButton');
   const redoButton = document.getElementById('redoButton');
   const persistence = history?.persistenceState
@@ -726,18 +729,37 @@ function updateHistoryControls() {
   redoButton.title = history?.canRedo
     ? `Redo: ${history.redoDescription} (${history.redoDepth})${persistence}`
     : `Nothing to redo${persistence}`;
+  updateAuthoringGroupControls();
+}
+
+function updateAuthoringGroupControls() {
+  const groupButton = document.getElementById('groupButton');
+  const cancelButton = document.getElementById('cancelGroupButton');
+  const group = state.authoringGroup;
+  groupButton.disabled = !state.authoringConnected || state.authoringBusy ||
+    Boolean(group && group.stagedOperationCount === 0);
+  groupButton.textContent = group ? `COMMIT GROUP (${group.stagedOperationCount})` : 'GROUP EDITS';
+  groupButton.title = group
+    ? `Atomically publish ${group.stagedOperationCount} staged edit(s) as “${group.description}”`
+    : 'Begin an in-memory named draft; source and CoreCLR remain unchanged until commit';
+  cancelButton.hidden = !group;
+  cancelButton.disabled = state.authoringBusy;
+  document.getElementById('runButton').disabled = state.debugBusy || Boolean(group);
 }
 
 function newAuthoringOperationId() {
   return crypto.randomUUID?.() || `web-${Date.now()}-${crypto.getRandomValues(new Uint32Array(2)).join('')}`;
 }
 
-async function authoringRequest(path, patch, label = 'Visual authoring edit') {
+async function authoringRequest(path, patch, label = 'Visual authoring edit', options = {}) {
+  const transactionId = options.transactionId || newAuthoringOperationId();
+  const groupId = options.groupId ?? (state.authoringGroup?.id || null);
   const headers = {
     'Content-Type': 'application/json',
-    'X-UnifiedScript-Transaction-Id': newAuthoringOperationId(),
+    'X-UnifiedScript-Transaction-Id': transactionId,
     'X-UnifiedScript-Transaction-Label': label,
   };
+  if (groupId) headers['X-UnifiedScript-Group-Id'] = groupId;
   if (state.authoringRevision !== null) {
     headers['X-UnifiedScript-Baseline-Revision'] = String(state.authoringRevision);
   }
@@ -750,8 +772,51 @@ async function authoringRequest(path, patch, label = 'Visual authoring edit') {
     error.code = payload.error?.code;
     throw error;
   }
-  if (payload.schemaVersion !== 'unifiedscript.authoring-workspace/v0.3') throw new Error('Unsupported authoring response');
+  if (payload.schemaVersion !== 'unifiedscript.authoring-workspace/v0.4') throw new Error('Unsupported authoring response');
   return payload;
+}
+
+async function toggleAuthoringGroup() {
+  if (!state.authoringConnected || state.authoringBusy) return;
+  const group = state.authoringGroup;
+  const description = group?.description || window.prompt('Grouped transaction label', 'Grouped edit')?.trim();
+  if (!description) return;
+  const groupId = group?.id || `group-${newAuthoringOperationId()}`;
+  try {
+    setAuthoringBusy(true);
+    const workspace = await authoringRequest(
+      group ? '/api/authoring/group/commit' : '/api/authoring/group/begin',
+      {},
+      description,
+      { transactionId: groupId, groupId: group ? groupId : null });
+    applyWorkspaceArtifacts(workspace.scriptAssets, workspace.graph, workspace.surface, workspace.sourceText, workspace);
+    showToast(
+      group ? `Committed “${description}”` : `Started “${description}”`,
+      group
+        ? `One Undo entry · CoreCLR generation ${workspace.generation.number}`
+        : 'Edits now stage in memory without source writes or runtime reload');
+  } catch (error) {
+    showToast(error.code || 'Grouped transaction failed', error.message);
+    setAuthoringBusy(false);
+  }
+}
+
+async function cancelAuthoringGroup() {
+  const group = state.authoringGroup;
+  if (!group || state.authoringBusy) return;
+  try {
+    setAuthoringBusy(true);
+    const workspace = await authoringRequest(
+      '/api/authoring/group/cancel',
+      {},
+      group.description,
+      { transactionId: group.id, groupId: group.id });
+    applyWorkspaceArtifacts(workspace.scriptAssets, workspace.graph, workspace.surface, workspace.sourceText, workspace);
+    showToast(`Discarded “${group.description}”`, 'No source, history, component, or runtime generation was changed');
+  } catch (error) {
+    showToast(error.code || 'Cancel group failed', error.message);
+    setAuthoringBusy(false);
+  }
 }
 
 async function saveDeclarationChanges(patch = null) {
@@ -762,7 +827,9 @@ async function saveDeclarationChanges(patch = null) {
     setAuthoringBusy(true);
     const workspace = await authoringRequest('/api/authoring/declaration-patch', nextPatch, 'Edit script declarations');
     applyWorkspaceArtifacts(workspace.scriptAssets, workspace.graph, workspace.surface, workspace.sourceText, workspace);
-    showToast(`Saved revision ${workspace.revision}`, `CoreCLR generation ${workspace.generation.number} is live`);
+    showToast(
+      workspace.group ? `Staged edit ${workspace.group.stagedOperationCount}` : `Saved revision ${workspace.revision}`,
+      workspace.group ? 'Source and CoreCLR are unchanged until group commit' : `CoreCLR generation ${workspace.generation.number} is live`);
   } catch (error) {
     document.querySelector('.sync-status strong').textContent = error.code === 'UAW1002' ? 'EXTERNAL CONFLICT' : 'PATCH REJECTED';
     showToast(error.code || 'Save failed', error.message);
@@ -776,7 +843,9 @@ async function saveSemanticPatch(patch) {
     setAuthoringBusy(true);
     const workspace = await authoringRequest('/api/authoring/semantic-patch', patch, 'Edit behavior graph');
     applyWorkspaceArtifacts(workspace.scriptAssets, workspace.graph, workspace.surface, workspace.sourceText, workspace);
-    showToast(`Behavior saved · R${workspace.revision}`, `CoreCLR generation ${workspace.generation.number} reloaded`);
+    showToast(
+      workspace.group ? `Staged edit ${workspace.group.stagedOperationCount}` : `Behavior saved · R${workspace.revision}`,
+      workspace.group ? 'Source and CoreCLR are unchanged until group commit' : `CoreCLR generation ${workspace.generation.number} reloaded`);
   } catch (error) {
     document.querySelector('.sync-status strong').textContent = error.code === 'UAW1002' ? 'EXTERNAL CONFLICT' : 'PATCH REJECTED';
     showToast(error.code || 'Behavior patch failed', error.message);
@@ -877,7 +946,7 @@ function clearDebugVisuals(hideStrip = true) {
 
 function setDebugBusy(busy) {
   state.debugBusy = busy;
-  document.getElementById('runButton').disabled = busy || state.debugSession?.state === 'paused';
+  document.getElementById('runButton').disabled = busy || Boolean(state.authoringGroup) || state.debugSession?.state === 'paused';
   document.getElementById('continueButton').disabled = busy || state.debugSession?.state !== 'paused';
   document.getElementById('stepOverButton').disabled = busy || state.debugSession?.state !== 'paused';
 }
@@ -1014,6 +1083,8 @@ document.getElementById('previewPatchButton').addEventListener('click', showDecl
 document.getElementById('applyPreviewPatchButton').addEventListener('click', () =>
   state.previewPatch && saveDeclarationChanges(state.previewPatch));
 document.getElementById('saveButton').addEventListener('click', () => saveDeclarationChanges());
+document.getElementById('groupButton').addEventListener('click', toggleAuthoringGroup);
+document.getElementById('cancelGroupButton').addEventListener('click', cancelAuthoringGroup);
 document.getElementById('undoButton').addEventListener('click', () => navigateAuthoringHistory('undo'));
 document.getElementById('redoButton').addEventListener('click', () => navigateAuthoringHistory('redo'));
 document.getElementById('addVariableButton').addEventListener('click', () => {
