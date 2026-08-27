@@ -105,6 +105,10 @@ static workbench and a same-origin loopback JSON API from `127.0.0.1`:
   the exact pause and immediately return the `running` session;
 - `POST /api/debug/evaluate` reads a bounded expression from the exact paused
   frame snapshot.
+- `POST /api/debug/publish-live-world` validates the current compiler
+  identities and transactionally writes an instrumented PE/PDB for a live
+  Unreal component. It is rejected while a loopback execution or authoring
+  draft is active.
 
 Debug session responses use `unifiedscript.debug-session/v0.2`. Every wait,
 pause, resume, and evaluation request carries the current generation and
@@ -152,6 +156,29 @@ against its loaded artifacts. It is loopback development plumbing, not the
 later remote or UE process transport. The native Slate client now consumes
 this exact loopback contract; see
 [NATIVE_DEBUG_WORKBENCH.md](NATIVE_DEBUG_WORKBENCH.md).
+
+## Live Unreal World transport
+
+The Unreal host reuses the probe/snapshot semantics above rather than adding a
+second debugger model. Slate publishes an instrumented image, reloads the
+selected `UUnifiedScriptComponent`, and sends
+`unifiedscript.unreal-debug-config/v0.1` with the exact runtime generation,
+program generation, and semantic breakpoint node IDs. The managed host starts
+each debug `OnTick` on a named background thread. A probe hit publishes the
+same immutable `unifiedscript.debug-session/v0.2` state and blocks only that
+thread on its resume signal.
+
+Unreal API calls cannot run on this worker. `FUnifiedScriptNativeTransport`
+therefore queues worker-originated generated calls in an MPSC queue, retains
+their World context, and waits on a pooled event. The World subsystem pumps the
+queue on the GameThread before managed phase work. Detach, reload, component
+stop, and World shutdown first reject new worker dispatch, wake pending calls,
+abort suspended probes, and drain the worker before unloading its collectible
+context.
+
+State reads use a bounded retry because `running` can become a larger `paused`
+snapshot between the ABI length query and copy. This prevents a legitimate
+concurrent pause from being misreported as an empty session.
 
 ## Suspension and stepping semantics
 
@@ -216,9 +243,8 @@ slice does not provide:
 - instruction-level stepping;
 - async state-machine suspension;
 - forced preemptive suspension between probes;
-- serialized remote/DAP framing or semantic statement suspension inside a live
-  UE-process/World call (frame-boundary control and structured World failure
-  correlation are available in the native Slate Workbench);
+- serialized remote/DAP framing;
+- async state-machine suspension inside a live UE World call;
 - a native ICorDebug/netcoredbg trap backend.
 
 The cooperative backend is intended for trusted development code. As with the

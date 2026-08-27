@@ -43,7 +43,7 @@ Write-Host "Keep this window open, then use Apply & Reload in the UE UnifiedScri
     --assembly "UnifiedScript.Unreal.Demo" `
     --reference $coreAssembly `
     --reference $unrealAssembly `
-    --identity (Join-Path $artifactDirectory "DemoScript.cs.usids") `
+    --identity (Join-Path $demoDirectory "DemoScript.cs.usids") `
     --asset-out (Join-Path $demoDirectory "UnifiedScript.Unreal.Demo.asset.json") `
     --surface-out (Join-Path $demoDirectory "UnifiedScript.Unreal.Demo.surface.json") `
     --managed-out (Join-Path $managedDirectory "UnifiedScript.Unreal.Demo.dll") `

@@ -718,9 +718,11 @@ Current Unreal adapter path:
   -> matching component transactional reload
   -> World Phase Scheduler -> caller-written Command Buffer -> next-frame Event Buffer
   -> synchronous line/sphere/box Batch Trace through one managed/native boundary
+  -> instrumented live-World publication -> non-blocking semantic pause/step/stack/locals/watch
+  -> generation-guarded worker execution -> GameThread bridge return and teardown drain
 
 Later:
-  -> native managed-debug trap backend, remote framing, and async stepping
+  -> serialized remote debug framing, async stepping, and richer expression evaluation
   -> Script Asset cook/packaging dependency discovery
   -> optional graph-canvas layout and cook/package integration
 ```

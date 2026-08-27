@@ -49,8 +49,8 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-28**
 
 - Active milestone: **M9 — Debugging, reload, and observability Beta**
-- Next slice: **M9.1 — live UE World semantic suspension transport**
-- Primary engine gate: **Unreal Engine 5.8.1 source build at `D:\Project\UnrealEngine-5.8.1`**
+- Next slice: **M9.2 — observable transactional hot reload and leak soak**
+- Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
 ## Verified baseline
@@ -60,12 +60,12 @@ machine-local unless an artifact explicitly says otherwise.
 
 | Gate | Verified result |
 | --- | --- |
-| Main source | `6dd403a` (`feat: integrate debugger into Slate workbench`), plus this live World diagnostic change set |
+| Main source | `52b8fa4` (`feat: add live World semantic debug transport`), plus this M9.1 completion change set |
 | Comparison source | `e62a46e` (`feat: adopt round-tripped gameplay tuning`) |
-| Managed tests | 524 / 524 passed |
-| Repository validator | 61 / 61 passed |
+| Managed tests | 526 / 526 passed |
+| Repository validator | 62 / 62 passed |
 | UE 5.8.1 native build | passed |
-| `UnifiedScript.Unreal` Automation | 13 / 13 passed with M8.3 declaration, Authoring Surface, override migration, and live World-host coverage |
+| `UnifiedScript.Unreal` Automation | 14 / 14 passed, including Authoring Surface and live World semantic pause/step/reload/detach coverage |
 | BlockBreaker workload | 10,000 frames, three trials, one shot, one hit, two command completions per trial |
 | Gameplay boundary | 120,031 fast/CallFrame calls, zero legacy calls |
 | Matched local median | UnifiedScript 4,927.191 ms; Puerts 4,759.930 ms; ratio 1.035139; functional parity only, performance claim deferred to M10 |
@@ -264,8 +264,8 @@ Outcome: text and graph versions compile to and execute the same IL.
 - [x] live CLR stack, bounded graph-safe per-frame locals, step in/over/out, and
   read-only snapshot evaluation
 - [x] generation-safe in-process loopback debug transport
-- [ ] native managed-debug traps and remote transport framing (scheduled in
-  M9.1-M9.3)
+- [x] live UE World cooperative semantic traps and GameThread-safe bridge return
+- [ ] remote debug transport framing (scheduled in M9.3)
 - [x] async invocation and cancellation/time-budget contract (delivered in M7.2)
 
 ## M5.5 — Script asset and authoring experience
@@ -934,9 +934,9 @@ graph, World, generation, and bridge boundaries.
 
 ### M9.1 — Native editor debug integration
 
-- [ ] bind semantic breakpoints to current managed generations from the Slate
+- [x] bind semantic breakpoints to current managed generations from the Slate
   graph and C# source
-- [ ] implement pause/resume, step in/over/out, call stacks, deeper-frame locals,
+- [x] implement pause/resume, step in/over/out, call stacks, deeper-frame locals,
   watches, bounded expression evaluation, and breakpoint migration on reload
 - [x] map exceptions and native bridge failures to source span, graph node,
   UObject handle, World, and script generation
@@ -967,6 +967,27 @@ navigates through Focus Node. Managed 524/524, UE WorldHost lifecycle/stress,
 native Authoring Surface mapping, UE 5.8.1 build, and repository 61/61 gates
 cover the slice. Live semantic statement suspension still requires a transport
 that can preserve the CLR stack without blocking Unreal's Game Thread.
+
+Progress (2026-08-28, live World semantic completion): `debug-serve` now
+publishes a generation-guarded instrumented PE/PDB through
+`/api/debug/publish-live-world`. Slate reloads the selected PIE/Game component,
+binds its graph/source `DebugTargetId` set to the new runtime generation, and
+uses the same `debug-session/v0.2` pause, stack, per-frame locals, and control
+model as loopback execution. `OnTick` runs on a named debugger worker; statement
+traps preserve the real CLR stack while worker-originated generated UObject
+calls enter an MPSC queue that the World GameThread pumps. Reload, stop, detach,
+and World teardown abort and drain the worker before collectible-context
+disposal. Native state reads retry a concurrent running-to-paused size change,
+and the script ALC shares the probe runtime with instrumented images.
+
+The checked-in Demo now contains real nested `[Visual]` tick work plus a stable
+identity sidecar. Managed HTTP coverage proves stale-generation rejection and
+instrumented PE/PDB publication without source mutation. UE World Automation
+proves exact statement breakpoints, non-blocking GameThread start, Step In/Out,
+two-frame locals, pause-unique frame IDs, generated worker-to-GameThread bridge
+calls, generation-two breakpoint rebinding, and detach while suspended. M9.1 is
+complete; async state-machine traps and remote framing remain deliberate later
+work rather than hidden gaps.
 
 ### M9.2 — Hot-reload reliability
 

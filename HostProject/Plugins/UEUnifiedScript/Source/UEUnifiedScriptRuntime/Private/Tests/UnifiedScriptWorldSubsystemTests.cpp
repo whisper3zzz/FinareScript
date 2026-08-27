@@ -3,12 +3,16 @@
 #include "UnifiedScriptWorldSubsystem.h"
 
 #include "Containers/StringConv.h"
+#include "Dom/JsonObject.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
+#include "HAL/PlatformProcess.h"
 #include "HAL/PlatformProperties.h"
 #include "HAL/PlatformTime.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/EngineVersion.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 #include "UnifiedScriptComponent.h"
 #include "UnifiedScriptCoreClrHost.h"
 #include "UnifiedScriptAsset.h"
@@ -43,6 +47,80 @@ void Capture(
     Result.bSuccess = bSuccess != 0;
     Result.Error = static_cast<EUnifiedScriptInvocationError>(Error);
     Result.HandleError = static_cast<EUnifiedScriptObjectHandleError>(HandleError);
+}
+
+struct FSemanticDebugSnapshot
+{
+    FString State;
+    FString PauseId;
+    FString NodeId;
+    FString StepKind;
+    TArray<int64> FrameIds;
+    TMap<FString, FString> Locals;
+};
+
+bool ParseSemanticDebugSnapshot(
+    const FString& Json,
+    FSemanticDebugSnapshot& OutSnapshot)
+{
+    OutSnapshot = {};
+    TSharedPtr<FJsonObject> Root;
+    const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Json);
+    if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid() ||
+        !Root->TryGetStringField(TEXT("state"), OutSnapshot.State))
+    {
+        return false;
+    }
+
+    const TSharedPtr<FJsonObject>* Pause = nullptr;
+    if (Root->TryGetObjectField(TEXT("pause"), Pause) && Pause != nullptr)
+    {
+        (*Pause)->TryGetStringField(TEXT("pauseId"), OutSnapshot.PauseId);
+        (*Pause)->TryGetStringField(TEXT("nodeId"), OutSnapshot.NodeId);
+        (*Pause)->TryGetStringField(TEXT("stepKind"), OutSnapshot.StepKind);
+    }
+
+    const TArray<TSharedPtr<FJsonValue>>* Frames = nullptr;
+    if (Root->TryGetArrayField(TEXT("frames"), Frames) && Frames != nullptr)
+    {
+        for (const TSharedPtr<FJsonValue>& FrameValue : *Frames)
+        {
+            const TSharedPtr<FJsonObject> Frame = FrameValue->AsObject();
+            double FrameId = 0.0;
+            if (Frame.IsValid() && Frame->TryGetNumberField(TEXT("frameId"), FrameId))
+            {
+                OutSnapshot.FrameIds.Add(static_cast<int64>(FrameId));
+            }
+        }
+    }
+
+    const TArray<TSharedPtr<FJsonValue>>* FrameLocals = nullptr;
+    if (Root->TryGetArrayField(TEXT("frameLocals"), FrameLocals) &&
+        FrameLocals != nullptr)
+    {
+        for (const TSharedPtr<FJsonValue>& FrameValue : *FrameLocals)
+        {
+            const TSharedPtr<FJsonObject> Frame = FrameValue->AsObject();
+            const TArray<TSharedPtr<FJsonValue>>* Locals = nullptr;
+            if (!Frame.IsValid() || !Frame->TryGetArrayField(TEXT("locals"), Locals) ||
+                Locals == nullptr)
+            {
+                continue;
+            }
+            for (const TSharedPtr<FJsonValue>& LocalValue : *Locals)
+            {
+                const TSharedPtr<FJsonObject> Local = LocalValue->AsObject();
+                FString Name;
+                FString Display;
+                if (Local.IsValid() && Local->TryGetStringField(TEXT("name"), Name) &&
+                    Local->TryGetStringField(TEXT("display"), Display))
+                {
+                    OutSnapshot.Locals.Add(MoveTemp(Name), MoveTemp(Display));
+                }
+            }
+        }
+    }
+    return true;
 }
 }
 
@@ -639,6 +717,231 @@ bool FUnifiedScriptWorldSubsystemLifecycleTest::RunTest(const FString& Parameter
     SecondWorld->DestroyWorld(false);
     TestEqual(
         TEXT("Second World teardown restores the managed entry count"),
+        FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount(),
+        InitialManagedWorldCount);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FUnifiedScriptWorldSemanticDebugTest,
+    "UnifiedScript.Unreal.WorldHost.SemanticDebug",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUnifiedScriptWorldSemanticDebugTest::RunTest(const FString& Parameters)
+{
+    using namespace UE::UnifiedScript::WorldHost::Tests;
+
+    constexpr TCHAR OuterNodeId[] = TEXT("us_22222222222222222222222222222222");
+    constexpr TCHAR ChildNodeId[] = TEXT("us_44444444444444444444444444444444");
+    constexpr TCHAR AfterNodeId[] = TEXT("us_55555555555555555555555555555555");
+    const int32 InitialManagedWorldCount =
+        FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount();
+
+    UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+    TestNotNull(TEXT("Semantic debugger World exists"), World);
+    if (World == nullptr)
+    {
+        return false;
+    }
+    World->AddToRoot();
+    UUnifiedScriptWorldSubsystem* Host =
+        World->GetSubsystem<UUnifiedScriptWorldSubsystem>();
+    TestNotNull(TEXT("Semantic debugger World host exists"), Host);
+    if (Host == nullptr)
+    {
+        World->RemoveFromRoot();
+        World->DestroyWorld(false);
+        return false;
+    }
+
+    UUnifiedScriptAsset* Asset = NewObject<UUnifiedScriptAsset>(World);
+    Asset->ScriptAssemblyPath =
+        TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.dll");
+    Asset->ScriptTypeName =
+        TEXT("UnifiedScript.Unreal.Demo.RuntimeSemanticDebugDemoScript");
+    UUnifiedScriptComponent* Component =
+        NewObject<UUnifiedScriptComponent>(World);
+    Component->ScriptAsset = Asset;
+    Component->RegisterComponentWithWorld(World);
+    TestTrue(
+        *FString::Printf(
+            TEXT("Semantic debugger fixture starts: %s"),
+            *Component->LastScriptError),
+        Component->StartScript());
+    TestEqual(
+        TEXT("Semantic debugger fixture enters its ready state"),
+        Component->ManagedState,
+        FString(TEXT("SemanticDebugReady")));
+
+    const auto BuildConfiguration = [](int32 RuntimeGeneration)
+    {
+        return FString::Printf(
+            TEXT("{\"schemaVersion\":\"unifiedscript.unreal-debug-config/v0.1\","
+                 "\"runtimeGeneration\":%d,\"generation\":{"
+                 "\"domainId\":\"us_66666666666666666666666666666666\","
+                 "\"number\":1,"
+                 "\"generationId\":\"us_77777777777777777777777777777777\","
+                 "\"imageKey\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\","
+                 "\"sourceCompilationId\":\"us_88888888888888888888888888888888\","
+                 "\"semanticConfigurationId\":\"us_99999999999999999999999999999999\"},"
+                 "\"breakpointNodeIds\":[\"%s\"]}"),
+            RuntimeGeneration,
+            OuterNodeId);
+    };
+    const auto PumpUntil = [Component](
+                               const FString& ExpectedState,
+                               const FString& ExpectedNode,
+                               FSemanticDebugSnapshot& OutSnapshot)
+    {
+        for (int32 Attempt = 0; Attempt < 2000; ++Attempt)
+        {
+            Component->TickComponent(0.016f, LEVELTICK_All, nullptr);
+            FSemanticDebugSnapshot Candidate;
+            if (ParseSemanticDebugSnapshot(
+                    Component->GetSemanticDebugStateJson(), Candidate) &&
+                Candidate.State == ExpectedState &&
+                (ExpectedNode.IsEmpty() || Candidate.NodeId == ExpectedNode))
+            {
+                OutSnapshot = MoveTemp(Candidate);
+                return true;
+            }
+            FPlatformProcess::SleepNoStats(0.001f);
+        }
+        FSemanticDebugSnapshot LastSnapshot;
+        const bool bParsedLastSnapshot = ParseSemanticDebugSnapshot(
+            Component->GetSemanticDebugStateJson(), LastSnapshot);
+        UE_LOG(
+            LogTemp,
+            Error,
+            TEXT("Semantic debug wait timed out for state='%s' node='%s' "
+                 "(parsed=%s actualState='%s' actualNode='%s'): %s"),
+            *ExpectedState,
+            *ExpectedNode,
+            bParsedLastSnapshot ? TEXT("true") : TEXT("false"),
+            *LastSnapshot.State,
+            *LastSnapshot.NodeId,
+            *Component->GetSemanticDebugStateJson());
+        return false;
+    };
+
+    FString Error;
+    TestTrue(
+        *FString::Printf(TEXT("Live semantic debugger attaches: %s"), *Error),
+        Component->ConfigureSemanticDebug(BuildConfiguration(1), Error));
+    const double TickStart = FPlatformTime::Seconds();
+    Component->TickComponent(0.016f, LEVELTICK_All, nullptr);
+    TestTrue(
+        TEXT("Starting semantic execution never blocks the Unreal Game Thread"),
+        FPlatformTime::Seconds() - TickStart < 0.25);
+
+    FSemanticDebugSnapshot OuterPause;
+    TestTrue(
+        TEXT("The live World reaches the exact outer semantic breakpoint"),
+        PumpUntil(TEXT("paused"), OuterNodeId, OuterPause));
+    TestEqual(TEXT("Outer pause has one Visual frame"), OuterPause.FrameIds.Num(), 1);
+    TestEqual(
+        TEXT("Outer-frame locals retain the counter"),
+        OuterPause.Locals.FindRef(TEXT("counter")),
+        FString(TEXT("7")));
+    FString StaleControlError;
+    TestFalse(
+        TEXT("A stale pause cannot control the live World execution"),
+        Component->ControlSemanticDebug(
+            EUnifiedScriptSemanticDebugControl::StepInto,
+            TEXT("us_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+            StaleControlError));
+    TestTrue(
+        TEXT("The stale-pause rejection is actionable"),
+        StaleControlError.Contains(TEXT("stale pause")));
+
+    Error.Reset();
+    TestTrue(
+        *FString::Printf(TEXT("Step Into resumes the exact outer pause: %s"), *Error),
+        Component->ControlSemanticDebug(
+            EUnifiedScriptSemanticDebugControl::StepInto,
+            OuterPause.PauseId,
+            Error));
+    FSemanticDebugSnapshot ChildPause;
+    TestTrue(
+        TEXT("Step Into suspends inside the nested Visual frame"),
+        PumpUntil(TEXT("paused"), ChildNodeId, ChildPause));
+    TestEqual(TEXT("Nested pause exposes two Visual frames"), ChildPause.FrameIds.Num(), 2);
+    TestEqual(
+        TEXT("Deeper-frame locals retain the nested value"),
+        ChildPause.Locals.FindRef(TEXT("nestedValue")),
+        FString(TEXT("19")));
+    TestTrue(
+        TEXT("Frame IDs are unique across live pauses"),
+        OuterPause.FrameIds.Num() == 1 && ChildPause.FrameIds.Num() == 2 &&
+            !ChildPause.FrameIds.Contains(OuterPause.FrameIds[0]));
+
+    Error.Reset();
+    TestTrue(
+        *FString::Printf(TEXT("Step Out resumes the nested pause: %s"), *Error),
+        Component->ControlSemanticDebug(
+            EUnifiedScriptSemanticDebugControl::StepOut,
+            ChildPause.PauseId,
+            Error));
+    FSemanticDebugSnapshot AfterPause;
+    TestTrue(
+        TEXT("Step Out suspends at the caller statement"),
+        PumpUntil(TEXT("paused"), AfterNodeId, AfterPause));
+    TestEqual(
+        TEXT("Step Out reports its completed control kind"),
+        AfterPause.StepKind,
+        FString(TEXT("out")));
+
+    Component->bTickAutomatically = false;
+    Error.Reset();
+    TestTrue(
+        *FString::Printf(TEXT("Continue resumes the caller pause: %s"), *Error),
+        Component->ControlSemanticDebug(
+            EUnifiedScriptSemanticDebugControl::Continue,
+            AfterPause.PauseId,
+            Error));
+    FSemanticDebugSnapshot Completed;
+    TestTrue(
+        TEXT("Continued live World execution completes"),
+        PumpUntil(TEXT("completed"), FString(), Completed));
+    TestEqual(
+        TEXT("Worker-originated generated bridge calls return through the Game Thread"),
+        Component->ManagedState,
+        FString(TEXT("SemanticDebugCompleted")));
+
+    Error.Reset();
+    TestTrue(
+        *FString::Printf(TEXT("Completed semantic session detaches: %s"), *Error),
+        Component->DisableSemanticDebug(Error));
+    TestTrue(TEXT("Reload advances the live script generation"), Component->ReloadScript());
+    TestEqual(TEXT("Reloaded semantic fixture is generation two"), Component->ActiveGeneration, FString(TEXT("2")));
+
+    Component->bTickAutomatically = true;
+    Error.Reset();
+    TestTrue(
+        *FString::Printf(TEXT("The same breakpoint rebinds to generation two: %s"), *Error),
+        Component->ConfigureSemanticDebug(BuildConfiguration(2), Error));
+    FSemanticDebugSnapshot ReloadedPause;
+    TestTrue(
+        TEXT("Reloaded generation reaches the migrated semantic breakpoint"),
+        PumpUntil(TEXT("paused"), OuterNodeId, ReloadedPause));
+    Error.Reset();
+    TestTrue(
+        *FString::Printf(TEXT("Detach drains a suspended worker safely: %s"), *Error),
+        Component->DisableSemanticDebug(Error));
+
+    FUnifiedScriptRuntimeDebugContext DebugContext;
+    TestTrue(
+        TEXT("Detached component retains its live World identity"),
+        Component->GetRuntimeDebugContext(DebugContext));
+    TestFalse(TEXT("Detached component clears semantic enablement"), DebugContext.bSemanticDebugEnabled);
+    TestFalse(TEXT("Detached component has no active worker"), DebugContext.bSemanticDebugActive);
+
+    Component->StopScript();
+    Component->UnregisterComponent();
+    World->RemoveFromRoot();
+    World->DestroyWorld(false);
+    TestEqual(
+        TEXT("Semantic debugger teardown restores the managed World count"),
         FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount(),
         InitialManagedWorldCount);
     return true;

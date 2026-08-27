@@ -1076,6 +1076,7 @@ public static class UnrealWorldManagedEntryPoint
                 {
                     typeof(IUnrealManagedScript).Assembly,
                     typeof(global::UnifiedScript.VisualAttribute).Assembly,
+                    typeof(global::UnifiedScript.Runtime.CoreClrDebugProbe).Assembly,
                 }
                 .Distinct()
                 .FirstOrDefault(candidate => AssemblyName.ReferenceMatchesDefinition(

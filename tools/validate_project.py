@@ -3111,7 +3111,7 @@ def main() -> int:
         in unreal_world_host_test
         and "- [x] preserve instance overrides and compatible semantic identities"
         in roadmap
-        and "Next slice: **M9.1 — live UE World semantic suspension transport**"
+        and "Next slice: **M9.2 — observable transactional hot reload and leak soak**"
         in roadmap,
         "Declaration IR state materialization or live component integration is missing",
     )
@@ -3138,15 +3138,15 @@ def main() -> int:
         == "unifiedscript.authoring-surface/v0.4"
         and len(unreal_demo_surface["assets"]) == 1
         and len(unreal_demo_surface_asset["states"]) == 1
-        and len(unreal_demo_surface_asset["functions"]) == 5
+        and len(unreal_demo_surface_asset["functions"]) == 7
         and sum(
             len(function["actions"])
             for function in unreal_demo_surface_asset["functions"]
-        ) == 51
+        ) == 70
         and sum(
             len(function["edges"])
             for function in unreal_demo_surface_asset["functions"]
-        ) == 49
+        ) == 68
         and all(
             isinstance(action["properties"], dict)
             for function in unreal_demo_surface_asset["functions"]
@@ -3155,7 +3155,9 @@ def main() -> int:
         and set(unreal_demo_surface_functions)
         == {
             "OnManagedSignal",
+            "NormalizeTickDelta",
             "ResolveInitialValue",
+            "ResolveTickDelta",
             "RewirePreview",
             "UEApiPreview",
             "UEDefaultPreview",
@@ -3170,7 +3172,7 @@ def main() -> int:
             if port["kind"] == "data"
         ]
         == ["int", "UnrealObjectHandle"]
-        and len({edit["targetNodeId"] for edit in unreal_demo_edit_capabilities}) == 10
+        and len({edit["targetNodeId"] for edit in unreal_demo_edit_capabilities}) == 13
         and "FUnifiedScriptAuthoringSurfaceReader" in unreal_authoring_surface_header
         and "ParseJson" in unreal_authoring_surface_source
         and "BuildSemanticPatch" in unreal_authoring_surface_source
@@ -3363,8 +3365,8 @@ def main() -> int:
         and "DebugBreakpointState" in unreal_ed_graph_header
         and "Native debugger parses a paused v0.2 session" in unreal_authoring_test
         and "Slate can toggle a graph/source semantic breakpoint" in unreal_authoring_test
-        and "live synchronous World call" in native_debug_doc
-        and "live UE World semantic suspension transport" in roadmap,
+        and "Attach Semantic" in native_debug_doc
+        and "live World semantic completion" in roadmap,
         "Native Slate debugger protocol, controls, semantic navigation, or safety boundary is incomplete",
     )
     checks.append(
@@ -3411,6 +3413,78 @@ def main() -> int:
     )
     checks.append(
         "UE Slate correlates live World failures to generation, handles, source, and graph"
+    )
+    unreal_world_debug_session = (
+        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealWorldDebugSession.cs"
+    ).read_text(encoding="utf-8")
+    unreal_world_debug_session_test = (
+        ROOT
+        / "tests"
+        / "UnifiedScript.Tests"
+        / "UnrealWorldDebugSessionTests.cs"
+    ).read_text(encoding="utf-8")
+    authoring_http_test = (
+        ROOT
+        / "tests"
+        / "UnifiedScript.Tests"
+        / "CoreClrAuthoringHttpServerTests.cs"
+    ).read_text(encoding="utf-8")
+    semantic_debug_fixture_path = (
+        ROOT
+        / "samples"
+        / "Unreal"
+        / "UnifiedScript.Unreal.Demo"
+        / "RuntimeSemanticDebugDemoScript.cs"
+    )
+    semantic_debug_fixture = semantic_debug_fixture_path.read_text(encoding="utf-8")
+    demo_identity_path = (
+        ROOT
+        / "samples"
+        / "Unreal"
+        / "UnifiedScript.Unreal.Demo"
+        / "DemoScript.cs.usids"
+    )
+    with demo_identity_path.open("r", encoding="utf-8") as handle:
+        demo_identity = json.load(handle)
+    demo_source_digest = hashlib.sha256(unreal_demo_source_path.read_bytes()).hexdigest()
+    require(
+        '"/api/debug/publish-live-world"' in debug_server_source
+        and "CSharpDebugInstrumentation" in debug_server_source
+        and "unifiedscript.live-world-debug-publish/v0.1" in debug_server_source
+        and "new Thread" in unreal_world_debug_session
+        and "Volatile.Read(ref completed)" in unreal_world_debug_session
+        and "checked(++nextFrameId)" in unreal_world_debug_session
+        and "LiveWorldProbe_PreservesWorkerStackAndStepsWithoutBlockingCaller"
+        in unreal_world_debug_session_test
+        and "typeof(global::UnifiedScript.Runtime.CoreClrDebugProbe).Assembly"
+        in unreal_world_managed_entry
+        and "WrittenBytes > RequiredBytes" in unreal_coreclr_host_source
+        and "PumpGameThreadCalls" in unreal_native_transport_source
+        and "BeginManagedScriptDebugTick" in runtime_component_source
+        and "HandleAttachSemanticWorld" in unreal_debug_panel
+        and "EvaluateLiveSemanticWatch" in unreal_debug_panel
+        and "SegmentCount > 16" in unreal_debug_panel
+        and "Native debugger parses the instrumented live World publication"
+        in unreal_authoring_test
+        and "FUnifiedScriptWorldSemanticDebugTest" in unreal_world_host_test
+        and "Worker-originated generated bridge calls return through the Game Thread"
+        in unreal_world_host_test
+        and "Reloaded generation reaches the migrated semantic breakpoint"
+        in unreal_world_host_test
+        and "stale-live-world-source" in authoring_http_test
+        and "UnifiedScript.Runtime" in authoring_http_test
+        and "RuntimeSemanticDebugDemoScript" in semantic_debug_fixture
+        and "CoreClrDebugProbe.Hit" in semantic_debug_fixture
+        and demo_identity["sourcePath"]
+        == "samples/Unreal/UnifiedScript.Unreal.Demo/DemoScript.cs"
+        and demo_identity["sourceDigest"] == f"sha256:{demo_source_digest}"
+        and "- [x] bind semantic breakpoints to current managed generations"
+        in roadmap
+        and "M9.1 is\ncomplete" in roadmap,
+        "Live UE World semantic suspension, bridge return, or generation binding is incomplete",
+    )
+    checks.append(
+        "UE Slate controls live World semantic stacks without blocking the GameThread"
     )
     authoring_diagnostics_doc = (
         ROOT / "docs" / "AUTHORING_DIAGNOSTICS.md"

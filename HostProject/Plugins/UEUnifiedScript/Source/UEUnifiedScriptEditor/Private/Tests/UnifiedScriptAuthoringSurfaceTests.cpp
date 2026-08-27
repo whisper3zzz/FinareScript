@@ -44,9 +44,9 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
 
     TestEqual(TEXT("Demo Surface has one Script Asset"), Document.Assets.Num(), 1);
     TestEqual(TEXT("Demo Surface has one state"), Document.GetStateCount(), 1);
-    TestEqual(TEXT("Demo Surface has five Visual functions"), Document.GetFunctionCount(), 5);
-    TestEqual(TEXT("Demo Surface preserves all Graph nodes"), Document.GetActionCount(), 51);
-    TestEqual(TEXT("Demo Surface preserves all Graph edges"), Document.GetEdgeCount(), 49);
+    TestEqual(TEXT("Demo Surface has seven Visual functions"), Document.GetFunctionCount(), 7);
+    TestEqual(TEXT("Demo Surface preserves all Graph nodes"), Document.GetActionCount(), 70);
+    TestEqual(TEXT("Demo Surface preserves all Graph edges"), Document.GetEdgeCount(), 68);
     TestEqual(
         TEXT("Demo Surface keeps the engine-neutral asset path"),
         Document.Assets[0].AssetPath,
@@ -1541,6 +1541,11 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         TEXT("Native debugger watch endpoint is normalized"),
         FUnifiedScriptDebugWorkbench::BuildEvaluateUrl(TEXT("http://127.0.0.1:4173/")),
         FString(TEXT("http://127.0.0.1:4173/api/debug/evaluate")));
+    TestEqual(
+        TEXT("Live World debug publish endpoint is normalized"),
+        FUnifiedScriptDebugWorkbench::BuildLiveWorldPublishUrl(
+            TEXT("http://127.0.0.1:4173/")),
+        FString(TEXT("http://127.0.0.1:4173/api/debug/publish-live-world")));
 
     if (Assignment != nullptr)
     {
@@ -1563,6 +1568,51 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
             DebugStartJson.Contains(Document.SourceCompilationId));
         TestTrue(TEXT("Debug start carries the semantic breakpoint target"),
             DebugStartJson.Contains(Assignment->DebugTargetId));
+
+        FString LivePublishRequestJson;
+        TestTrue(
+            TEXT("Native debugger builds a generation-guarded live publish request"),
+            FUnifiedScriptDebugWorkbench::BuildLiveWorldPublishRequest(
+                Document.SourceCompilationId,
+                Document.SemanticConfigurationId,
+                LivePublishRequestJson,
+                Error));
+        TestTrue(
+            TEXT("Live publish carries both current compiler identities"),
+            LivePublishRequestJson.Contains(Document.SourceCompilationId) &&
+                LivePublishRequestJson.Contains(Document.SemanticConfigurationId));
+        const FString LivePublishResponseJson = FString::Printf(
+            TEXT("{\"schemaVersion\":\"unifiedscript.live-world-debug-publish/v0.1\","
+                 "\"generation\":{\"domainId\":\"us_domain\",\"number\":9,"
+                 "\"generationId\":\"us_live_generation\","
+                 "\"imageKey\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\","
+                 "\"sourceCompilationId\":\"%s\","
+                 "\"semanticConfigurationId\":\"%s\"},"
+                 "\"assemblyPath\":\"Binaries/Managed/Demo.dll\","
+                 "\"portablePdbPath\":\"Binaries/Managed/Demo.pdb\"}"),
+            *Document.SourceCompilationId,
+            *Document.SemanticConfigurationId);
+        FUnifiedScriptLiveWorldDebugPublish LivePublish;
+        TestTrue(
+            TEXT("Native debugger parses the instrumented live World publication"),
+            FUnifiedScriptDebugWorkbench::ParseLiveWorldPublishResponse(
+                LivePublishResponseJson,
+                LivePublish,
+                Error));
+        FString LiveConfigurationJson;
+        TestTrue(
+            TEXT("Native debugger binds semantic breakpoints to runtime generation two"),
+            FUnifiedScriptDebugWorkbench::BuildLiveWorldConfiguration(
+                LivePublish,
+                2,
+                DebugTargets,
+                LiveConfigurationJson,
+                Error));
+        TestTrue(
+            TEXT("Live World configuration retains runtime, program, and breakpoint identities"),
+            LiveConfigurationJson.Contains(TEXT("\"runtimeGeneration\": 2")) &&
+                LiveConfigurationJson.Contains(TEXT("us_live_generation")) &&
+                LiveConfigurationJson.Contains(Assignment->DebugTargetId));
 
         const FUnifiedScriptRuntimeSourceLocation RuntimeSource{
             Assignment->Span.FilePath,
@@ -1696,7 +1746,7 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
     TestEqual(
         TEXT("Failed parse leaves the previous document unchanged"),
         FailedOutput.GetActionCount(),
-        51);
+        70);
 
     const FString WorkspaceJson = FString::Printf(
         TEXT("{\"schemaVersion\":\"unifiedscript.authoring-workspace/v0.5\","
@@ -1750,7 +1800,7 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Workbench response retains the opaque call-node contract"),
         Workspace.Profile.bOpaqueCallsProjectAsSingleNodes);
     TestEqual(TEXT("Workbench response replaces the Surface transactionally"),
-        Workspace.Surface.GetActionCount(), 51);
+        Workspace.Surface.GetActionCount(), 70);
 
     const FString PreviewJson =
         TEXT("{\"schemaVersion\":\"unifiedscript.authoring-preview/v0.1\","
@@ -1810,6 +1860,8 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         SNew(SUnifiedScriptAuthoringSurface).InitialSurfacePath(SurfacePath);
     TestTrue(TEXT("Native Slate workspace loads the checked-in Surface"),
         Widget->LoadSurface(SurfacePath));
+    TestTrue(TEXT("My Script navigation activates the UE Event Entry function"),
+        Widget->SelectFunction(EventFunction->Id));
     TestTrue(
         TEXT("Slate context palette exposes the reflected multicast Event Entry action"),
         Widget->HasNodePaletteAction(
@@ -1836,10 +1888,8 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         TEXT("Blueprint-style graph materializes every visible compiler-owned wire"),
         Widget->GetVisibleGraphEdgeCount(),
         FUnifiedScriptGraphPresentation::CountVisibleEdges(*EventFunction));
-    TestEqual(
-        TEXT("My Script navigation activates the UE Event Entry function"),
-        Widget->GetActiveFunctionId(),
-        EventFunction->Id);
+    TestEqual(TEXT("Selected UE Event Entry remains active"),
+        Widget->GetActiveFunctionId(), EventFunction->Id);
     TestTrue(TEXT("My Script can activate the reflected-default proof function"),
         Widget->SelectFunction(DefaultFunction->Id));
     if (Assignment != nullptr)

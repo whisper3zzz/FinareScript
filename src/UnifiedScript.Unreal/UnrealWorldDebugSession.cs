@@ -241,10 +241,12 @@ internal sealed class UnrealWorldDebugController : IDisposable
         private ManualResetEventSlim? resumeSignal;
         private CoreClrDebugPause? currentPause;
         private StepState? step;
-        private Task? task;
+        private Thread? workerThread;
+        private int completed;
         private bool pauseRequested;
         private bool aborted;
         private long pauseNumber;
+        private long nextFrameId;
         private SemanticId lastMethodId;
 
         public UnrealWorldDebugExecution(
@@ -274,7 +276,7 @@ internal sealed class UnrealWorldDebugController : IDisposable
                     null)).ToArray();
         }
 
-        public bool IsCompleted => task?.IsCompleted ?? false;
+        public bool IsCompleted => Volatile.Read(ref completed) != 0;
 
         public UnrealWorldDebugSessionSnapshot CreateRunningSnapshot() => new(
             UnrealWorldDebugSessionSnapshot.CurrentSchemaVersion,
@@ -294,7 +296,7 @@ internal sealed class UnrealWorldDebugController : IDisposable
             Action<float> tick,
             Func<Exception, string> captureFailure)
         {
-            task = Task.Run(() =>
+            workerThread = new Thread(() =>
             {
                 Exception? failure = null;
                 string? runtimeDiagnostic = null;
@@ -311,8 +313,14 @@ internal sealed class UnrealWorldDebugController : IDisposable
                 finally
                 {
                     Complete(failure, runtimeDiagnostic);
+                    Volatile.Write(ref completed, 1);
                 }
-            });
+            })
+            {
+                IsBackground = true,
+                Name = $"UnifiedScript.WorldDebug.{worldHostId}.{instanceId}.{executionId}",
+            };
+            workerThread.Start();
         }
 
         public void Control(UnrealWorldDebugControl control, string? pauseIdText)
@@ -374,7 +382,7 @@ internal sealed class UnrealWorldDebugController : IDisposable
             signal?.Set();
         }
 
-        public void WaitForCompletion() => task?.GetAwaiter().GetResult();
+        public void WaitForCompletion() => workerThread?.Join();
 
         public void Hit(
             string methodIdText,
@@ -397,8 +405,8 @@ internal sealed class UnrealWorldDebugController : IDisposable
                     return;
                 }
                 lastMethodId = methodId;
-                StackSnapshot stack = CaptureStack(methodId, nodeId, locals, frameSnapshots);
-                CurrentDepth = stack.Frames.Count;
+                int currentDepth = Math.Min(frameSnapshots.Count == 0 ? 1 : frameSnapshots.Count, 64);
+                CurrentDepth = currentDepth;
                 SemanticId[] breakpointIds = bindings
                     .Where(binding => binding.NodeId == nodeId && breakpointNodes.Contains(nodeId))
                     .Select(static binding => binding.BreakpointId)
@@ -410,7 +418,7 @@ internal sealed class UnrealWorldDebugController : IDisposable
                         : null;
                 CoreClrDebugStepKind? completedStep = null;
                 if (reason is null && step is StepState pendingStep &&
-                    ShouldPauseForStep(pendingStep, stack.Frames.Count))
+                    ShouldPauseForStep(pendingStep, currentDepth))
                 {
                     reason = CoreClrDebugPauseReason.Step;
                     completedStep = pendingStep.Kind;
@@ -422,9 +430,11 @@ internal sealed class UnrealWorldDebugController : IDisposable
 
                 pauseRequested = false;
                 step = null;
+                long currentPauseNumber = checked(++pauseNumber);
+                StackSnapshot stack = CaptureStack(methodId, nodeId, locals, frameSnapshots);
                 SemanticId pauseId = SemanticId.FromKey(
                     $"unreal-world-pause/v0.1|{worldHostId}|{instanceId}|" +
-                    $"{configuration.RuntimeGeneration}|{executionId}|{++pauseNumber}");
+                    $"{configuration.RuntimeGeneration}|{executionId}|{currentPauseNumber}");
                 var pause = new CoreClrDebugPause(
                     CoreClrDebugPause.CurrentSchemaVersion,
                     configuration.Generation,
@@ -512,7 +522,7 @@ internal sealed class UnrealWorldDebugController : IDisposable
                 _ => throw new ArgumentOutOfRangeException(nameof(state)),
             };
 
-        private static StackSnapshot CaptureStack(
+        private StackSnapshot CaptureStack(
             SemanticId topMethodId,
             SemanticId topNodeId,
             IReadOnlyList<CoreClrDebugValue> topLocals,
@@ -532,7 +542,7 @@ internal sealed class UnrealWorldDebugController : IDisposable
                 SemanticId nodeId = SemanticId.TryParse(item.NodeId, out SemanticId parsedNode)
                     ? parsedNode
                     : index == 0 ? topNodeId : default;
-                long frameId = index + 1;
+                long frameId = checked(++nextFrameId);
                 frames.Add(new CoreClrDebugStackFrame(
                     frameId,
                     index,

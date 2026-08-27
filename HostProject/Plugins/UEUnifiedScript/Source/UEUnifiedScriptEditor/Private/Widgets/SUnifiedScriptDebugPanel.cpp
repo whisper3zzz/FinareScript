@@ -1011,13 +1011,40 @@ bool SUnifiedScriptDebugPanel::EvaluateLiveSemanticWatch(
         ++Cursor;
     }
     const FString RootName = Trimmed.Left(Cursor);
+    const auto IsIdentifier = [](const FString& Candidate)
+    {
+        if (Candidate.IsEmpty() ||
+            !(FChar::IsAlpha(Candidate[0]) || Candidate[0] == TEXT('_')))
+        {
+            return false;
+        }
+        for (int32 Index = 1; Index < Candidate.Len(); ++Index)
+        {
+            if (!(FChar::IsAlnum(Candidate[Index]) || Candidate[Index] == TEXT('_')))
+            {
+                return false;
+            }
+        }
+        return true;
+    };
+    if (!IsIdentifier(RootName))
+    {
+        OutResult = TEXT("Live watch must begin with a local or parameter name.");
+        return false;
+    }
     const FUnifiedScriptDebugValue* Value = Frame->Locals.FindByPredicate(
         [&RootName](const FUnifiedScriptDebugValue& Candidate)
         {
             return Candidate.Name == RootName;
         });
+    int32 SegmentCount = 0;
     while (Value != nullptr && Cursor < Trimmed.Len())
     {
+        if (++SegmentCount > 16)
+        {
+            OutResult = TEXT("Live watch paths are limited to 16 detached segments.");
+            return false;
+        }
         FString ChildName;
         if (Trimmed[Cursor] == TEXT('.'))
         {
@@ -1028,6 +1055,11 @@ bool SUnifiedScriptDebugPanel::EvaluateLiveSemanticWatch(
                 ++Cursor;
             }
             ChildName = Trimmed.Mid(Start, Cursor - Start);
+            if (!IsIdentifier(ChildName))
+            {
+                Value = nullptr;
+                break;
+            }
         }
         else if (Trimmed[Cursor] == TEXT('['))
         {
@@ -1038,7 +1070,15 @@ bool SUnifiedScriptDebugPanel::EvaluateLiveSemanticWatch(
                 Value = nullptr;
                 break;
             }
-            ChildName = Trimmed.Mid(Cursor, Close - Cursor + 1);
+            const FString IndexText = Trimmed.Mid(Cursor + 1, Close - Cursor - 1);
+            if (IndexText.IsEmpty() ||
+                !IndexText.Equals(FString::FromInt(FCString::Atoi(*IndexText))) ||
+                FCString::Atoi(*IndexText) < 0)
+            {
+                Value = nullptr;
+                break;
+            }
+            ChildName = FString::Printf(TEXT("[%d]"), FCString::Atoi(*IndexText));
             Cursor = Close + 1;
         }
         else

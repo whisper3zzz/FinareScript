@@ -148,23 +148,34 @@ FString ReadManagedDebugState(
     {
         return {};
     }
-    const int32 RequiredBytes = EntryPoint(WorldHostId, InstanceId, nullptr, 0);
-    if (RequiredBytes <= 0 || RequiredBytes > MaximumManagedDebugStateBytes)
+    int32 RequiredBytes = EntryPoint(WorldHostId, InstanceId, nullptr, 0);
+    for (int32 Attempt = 0; Attempt < 4; ++Attempt)
     {
-        return {};
+        if (RequiredBytes <= 0 || RequiredBytes > MaximumManagedDebugStateBytes)
+        {
+            return {};
+        }
+        TArray<uint8> Buffer;
+        Buffer.SetNumZeroed(RequiredBytes + 1);
+        const int32 WrittenBytes = EntryPoint(
+            WorldHostId,
+            InstanceId,
+            Buffer.GetData(),
+            Buffer.Num());
+        if (WrittenBytes <= 0 || WrittenBytes > MaximumManagedDebugStateBytes)
+        {
+            return {};
+        }
+        if (WrittenBytes > RequiredBytes)
+        {
+            // The worker published a larger snapshot between the size query and
+            // copy. Retry against the newly reported immutable snapshot size.
+            RequiredBytes = WrittenBytes;
+            continue;
+        }
+        return FString(UTF8_TO_TCHAR(reinterpret_cast<const char*>(Buffer.GetData())));
     }
-    TArray<uint8> Buffer;
-    Buffer.SetNumZeroed(RequiredBytes + 1);
-    const int32 WrittenBytes = EntryPoint(
-        WorldHostId,
-        InstanceId,
-        Buffer.GetData(),
-        Buffer.Num());
-    if (WrittenBytes <= 0 || WrittenBytes > RequiredBytes)
-    {
-        return {};
-    }
-    return FString(UTF8_TO_TCHAR(reinterpret_cast<const char*>(Buffer.GetData())));
+    return {};
 }
 
 FString ReadManagedBoundaryError(
@@ -634,6 +645,7 @@ bool FUnifiedScriptCoreClrHost::GetManagedScriptDebugState(
     using namespace UE::UnifiedScript::CoreClr::Private;
     check(IsInGameThread());
     FGetScriptDebugStateEntryPoint EntryPoint = nullptr;
+    FGetLastErrorEntryPoint ErrorEntryPoint = nullptr;
     {
         FScopeLock Lock(&StateLock);
         if (State != EUnifiedScriptCoreClrHostState::Ready ||
@@ -645,11 +657,19 @@ bool FUnifiedScriptCoreClrHost::GetManagedScriptDebugState(
         }
         EntryPoint = reinterpret_cast<FGetScriptDebugStateEntryPoint>(
             GetScriptDebugStateEntryPoint);
+        ErrorEntryPoint = reinterpret_cast<FGetLastErrorEntryPoint>(
+            GetLastManagedErrorEntryPoint);
     }
     OutJson = ReadManagedDebugState(EntryPoint, WorldHostId, InstanceId);
     if (OutJson.IsEmpty())
     {
-        OutError = TEXT("The managed script has no live World debug state.");
+        const FString Detail = ReadManagedBoundaryError(ErrorEntryPoint, WorldHostId);
+        OutError = Detail.IsEmpty()
+            ? TEXT("The managed script has no live World debug state.")
+            : FString::Printf(
+                  TEXT("The managed live World debug state could not be read.%s%s"),
+                  LINE_TERMINATOR,
+                  *Detail);
         return false;
     }
     OutError.Reset();

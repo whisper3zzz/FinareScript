@@ -50,6 +50,25 @@ public sealed class DemoScript : IUnrealManagedScript
         return fixture.AddWithDefault(value);
     }
 
+    [Visual]
+    public float ResolveTickDelta(float deltaSeconds)
+    {
+        float resolved = NormalizeTickDelta(deltaSeconds);
+        return resolved;
+    }
+
+    [Visual]
+    public float NormalizeTickDelta(float deltaSeconds)
+    {
+        float resolved = deltaSeconds;
+        if (resolved < 0f)
+        {
+            resolved = 0f;
+        }
+
+        return resolved;
+    }
+
     public void OnStart(UnrealScriptContext context)
     {
         if (!context.DataPlane.IsAvailable)
@@ -114,6 +133,7 @@ public sealed class DemoScript : IUnrealManagedScript
         {
             throw new ArgumentOutOfRangeException(nameof(deltaSeconds));
         }
+        _ = ResolveTickDelta(deltaSeconds);
         _component!.ManagedState = "Ticked";
     }
 

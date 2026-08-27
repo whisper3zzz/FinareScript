@@ -37,18 +37,32 @@ managed boundary error is cleared.
 
 The Slate debugger automatically discovers the best matching PIE/Game
 `UUnifiedScriptComponent` for the selected managed type. It displays exact
-World, instance, generation, and target-handle identity and exposes:
+World, instance, generation, and target-handle identity. **Attach Semantic**
+publishes and reloads an instrumented image, then binds graph/source semantic
+breakpoints to that exact live runtime generation. The normal debugger controls
+now operate on the live `OnTick` CLR stack:
+
+- **Pause**: cooperatively stop at the next semantic statement probe;
+- **Continue / Step In / Step Over / Step Out**: resume the exact pause ID and
+  preserve nested Visual frame semantics;
+- **Call Stack / Locals / Watch**: inspect detached bounded snapshots for any
+  active Visual frame without retaining a managed object or UObject pointer.
+
+The managed call runs on a dedicated debugger worker. Worker-originated Unreal
+calls are queued back to the GameThread, so a suspended CLR stack never blocks
+the engine thread. Detach, reload, stop, and World teardown abort and drain the
+worker before collectible-context disposal.
+
+The frame-boundary control fallback remains available when semantic attach is not
+active:
 
 - **Pause World Script**: stop entering managed `OnTick` at the next frame
   boundary without blocking the Unreal Game Thread;
 - **Step Frame**: allow exactly one managed World tick and remain paused;
 - **Continue World**: resume automatic managed ticks.
 
-This frame-boundary control is intentionally distinct from the loopback
-debugger's semantic Step In/Over/Out. It is safe for the current synchronous UE
-bridge, but it does not preserve an in-progress CLR stack or stop midway through
-a managed call. True semantic statement suspension inside a live UE World still
-requires the next M9.1 transport/backend slice.
+These three controls deliberately do not preserve an in-progress CLR stack;
+they remain useful for coarse gameplay stepping and diagnostics.
 
 ## Evidence
 
@@ -58,4 +72,7 @@ UE Automation drives a real hosted component through pause, one-frame step,
 continue, transactional reload failure, managed JSON export, native parsing,
 and World/generation/handle retention. Authoring Surface Automation verifies
 that one-based runtime PDB coordinates resolve back to the exact semantic
-method and `DebugTargetId`.
+method and `DebugTargetId`. The semantic World Automation additionally proves
+statement breakpoint suspension, Step In/Out, deeper-frame locals, unique
+frame identities, worker-to-GameThread generated bridge calls, generation-two
+breakpoint rebinding, and detach while suspended.

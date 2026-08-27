@@ -1,7 +1,7 @@
 {
   "schemaVersion": "unifiedscript.script-asset/v0.1",
-  "sourceCompilationId": "us_2bd368f8751c15e124ca8df7db2cd53e",
-  "semanticConfigurationId": "us_06de17342f1d98fba7d22c1d58a23fa7",
+  "sourceCompilationId": "us_d9a16db3c198f736637b39c80c423d65",
+  "semanticConfigurationId": "us_1e2264a1ca2a4790b19667426236fc4a",
   "assets": [
     {
       "id": "us_cefc9ee5805e3ed5610154145ea986dd",
@@ -14,7 +14,7 @@
           "column": 1
         },
         "end": {
-          "line": 124,
+          "line": 144,
           "column": 2
         }
       },
@@ -47,6 +47,20 @@
       ],
       "functions": [
         {
+          "id": "us_cbe02435e2c3f41de4c535f53f59d39b",
+          "name": "NormalizeTickDelta",
+          "qualifiedName": "UnifiedScript.Unreal.Demo.DemoScript.NormalizeTickDelta(System.Single)",
+          "returnTypeMetadataName": "System.Single",
+          "isStatic": false,
+          "parameters": [
+            {
+              "id": "us_c3e0ef1591a863e8dda6d45e71a7b872",
+              "name": "deltaSeconds",
+              "typeMetadataName": "System.Single"
+            }
+          ]
+        },
+        {
           "id": "us_f65690f6080bf7ccfb4f90350d38f1ba",
           "name": "OnManagedSignal",
           "qualifiedName": "UnifiedScript.Unreal.Demo.DemoScript.OnManagedSignal(System.Int32,UnifiedScript.Unreal.UnrealObjectHandle)",
@@ -76,6 +90,20 @@
               "id": "us_7412e315b43d22a504aba7cfdf441d35",
               "name": "bonus",
               "typeMetadataName": "System.Int32"
+            }
+          ]
+        },
+        {
+          "id": "us_985041a29f846c06bab5bdc4c1c3a464",
+          "name": "ResolveTickDelta",
+          "qualifiedName": "UnifiedScript.Unreal.Demo.DemoScript.ResolveTickDelta(System.Single)",
+          "returnTypeMetadataName": "System.Single",
+          "isStatic": false,
+          "parameters": [
+            {
+              "id": "us_95bd5754af07e26694e21fb11d82d94a",
+              "name": "deltaSeconds",
+              "typeMetadataName": "System.Single"
             }
           ]
         },

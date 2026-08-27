@@ -143,21 +143,20 @@ void UUnifiedScriptComponent::TickComponent(
         FString Error;
         if (bSemanticDebugEnabled)
         {
-            if (!bSemanticExecutionCompletedThisFrame && !bSemanticDebugTickActive &&
-                (Host == nullptr || !Host->BeginManagedScriptDebugTick(
-                    ManagedScriptInstanceId,
-                    DeltaTime,
-                    Error)))
+            if (!bSemanticExecutionCompletedThisFrame && !bSemanticDebugTickActive)
             {
-                SetScriptFailure(
-                    Host == nullptr
-                    ? TEXT("The UnifiedScript World host is unavailable during semantic Tick.")
-                    : MoveTemp(Error));
-                StopScript();
-                return;
-            }
-            if (!bSemanticExecutionCompletedThisFrame)
-            {
+                if (Host == nullptr || !Host->BeginManagedScriptDebugTick(
+                        ManagedScriptInstanceId,
+                        DeltaTime,
+                        Error))
+                {
+                    SetScriptFailure(
+                        Host == nullptr
+                        ? TEXT("The UnifiedScript World host is unavailable during semantic Tick.")
+                        : MoveTemp(Error));
+                    StopScript();
+                    return;
+                }
                 bSemanticDebugTickActive = true;
                 bSemanticDebugPaused = false;
                 SemanticDebugStateJson.Reset();

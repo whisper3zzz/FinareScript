@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
 using System.Text;
 using System.Text.Json;
 using UnifiedScript.Authoring;
@@ -229,6 +231,57 @@ public sealed class CoreClrAuthoringHttpServerTests
                 await completionWaitResponse.Content.ReadAsStringAsync(),
                 UnifiedJson.CreateOptions())!;
             Assert.Equal("240", completed.Result!.ReturnValue!.Json);
+
+            string sourceBeforeLivePublish = await File.ReadAllTextAsync(sourcePath);
+            using HttpResponseMessage staleLivePublishResponse = await client.PostAsync(
+                "api/debug/publish-live-world",
+                JsonContent(JsonSerializer.Serialize(
+                    new DebugLiveWorldPublishRequest(
+                        SemanticId.FromKey("stale-live-world-source"),
+                        baseline.ScriptAssets.SemanticConfigurationId),
+                    UnifiedJson.CreateOptions())));
+            Assert.Equal(HttpStatusCode.Conflict, staleLivePublishResponse.StatusCode);
+            Assert.Contains(
+                "UDB1002",
+                await staleLivePublishResponse.Content.ReadAsStringAsync(),
+                StringComparison.Ordinal);
+
+            using HttpResponseMessage livePublishResponse = await client.PostAsync(
+                "api/debug/publish-live-world",
+                JsonContent(JsonSerializer.Serialize(
+                    new DebugLiveWorldPublishRequest(
+                        baseline.ScriptAssets.SourceCompilationId,
+                        baseline.ScriptAssets.SemanticConfigurationId),
+                    UnifiedJson.CreateOptions())));
+            livePublishResponse.EnsureSuccessStatusCode();
+            DebugLiveWorldPublishResponse livePublish =
+                JsonSerializer.Deserialize<DebugLiveWorldPublishResponse>(
+                    await livePublishResponse.Content.ReadAsStringAsync(),
+                    UnifiedJson.CreateOptions())!;
+            Assert.Equal("unifiedscript.live-world-debug-publish/v0.1", livePublish.SchemaVersion);
+            Assert.Equal(baseline.ScriptAssets.SourceCompilationId, livePublish.Generation.SourceCompilationId);
+            Assert.Equal(
+                baseline.ScriptAssets.SemanticConfigurationId,
+                livePublish.Generation.SemanticConfigurationId);
+            Assert.Equal(Path.GetFullPath(managedPath), livePublish.AssemblyPath);
+            Assert.Equal(Path.GetFullPath(pdbPath), livePublish.PortablePdbPath);
+            Assert.Equal(sourceBeforeLivePublish, await File.ReadAllTextAsync(sourcePath));
+            Assert.True(new FileInfo(managedPath).Length > 0);
+            Assert.True(new FileInfo(pdbPath).Length > 0);
+            using (var assemblyStream = File.OpenRead(managedPath))
+            using (var peReader = new PEReader(assemblyStream))
+            {
+                MetadataReader metadata = peReader.GetMetadataReader();
+                Assert.Contains(metadata.AssemblyReferences, handle =>
+                    metadata.GetString(metadata.GetAssemblyReference(handle).Name) ==
+                    "UnifiedScript.Runtime");
+            }
+            using (var pdbStream = File.OpenRead(pdbPath))
+            using (MetadataReaderProvider pdbProvider =
+                MetadataReaderProvider.FromPortablePdbStream(pdbStream))
+            {
+                Assert.NotEmpty(pdbProvider.GetMetadataReader().Documents);
+            }
 
             AuthoringPreviewResponse declarationPreview = await PreviewAsync(
                 client,

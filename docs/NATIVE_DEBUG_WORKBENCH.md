@@ -43,12 +43,31 @@ gameplay methods do not become false failures.
 ## Live UE World target
 
 The same panel now discovers a matching `UUnifiedScriptComponent` already
-hosted inside a PIE or Game World. **Pause World Script**, **Step Frame**, and
-**Continue World** control managed `OnTick` at a non-blocking UE frame boundary
-and display the exact World host, script instance, collectible generation, and
-target UObject handle. These controls operate on gameplay state; the Run and
-Step In/Over/Out controls above still operate on the instrumented loopback
-generation.
+hosted inside a PIE or Game World and displays the exact World host, script
+instance, collectible generation, and target UObject handle. **Attach Semantic**
+performs one guarded operation chain:
+
+1. `debug-serve` validates the loaded source and semantic-configuration IDs;
+2. `/api/debug/publish-live-world` emits an instrumented PE and portable PDB to
+   the configured `--managed-out` and `--pdb-out` targets without changing
+   source, identity, Declaration IR, or Surface artifacts;
+3. Slate reloads the component from that image and binds its current semantic
+   breakpoint set to the new runtime generation;
+4. managed `OnTick` runs on a dedicated debugger worker, so a statement trap
+   preserves the real CLR stack without blocking Unreal's Game Thread.
+
+**Pause**, **Continue**, **Step In**, **Step Over**, and **Step Out** then
+control that live World stack through the same `debug-session/v0.2` model used
+by loopback execution. Stack selection, deeper-frame locals, semantic graph
+highlighting, and detached watch paths all operate on the live component.
+Generated UObject bridge calls made by the worker enter a bounded MPSC command
+queue; the World GameThread pumps the call and wakes the worker, preserving the
+engine's thread-affinity contract. **Detach Semantic** aborts and drains a
+suspended worker before reload, stop, or World teardown.
+
+The older **Pause World Script**, **Step Frame**, and **Continue World** controls
+remain available as frame-boundary gameplay controls when semantic attach is
+not active. They do not claim statement-level suspension.
 
 Managed exceptions and native bridge failures cross the host boundary as
 `unifiedscript.runtime-diagnostic/v0.1`. The panel shows the failure kind,
@@ -68,11 +87,14 @@ See [RUNTIME_DIAGNOSTICS.md](RUNTIME_DIAGNOSTICS.md).
 - Breakpoint changes are accepted only between executions; the active binding
   snapshot reports `bound`, `pending`, or `disabled` for the current
   generation.
+- Live watch grammar is limited to one local/parameter root plus at most 16
+  public-field or constant array-index segments and 256 characters. It only
+  traverses detached values already present in the selected pause.
 - Method arguments currently use deterministic type-based demo values, and
   instance methods use the declared Script Asset receiver with default state.
 
-The editor now has real UE-process/World identity, frame-boundary control, and
-source/graph/World failure correlation. Semantic probes still drive a separate
-loopback execution: preserving an in-progress CLR stack while stopping inside
-a live synchronous World call, async state-machine suspension, and remote trap
-framing remain in M9.1.
+Live synchronous World calls now preserve their in-progress CLR stack on a
+dedicated worker while the GameThread remains responsive. Remaining debugger
+limits are async state-machine suspension, forced preemptive stops between
+cooperative probes, conditional/log breakpoints, and serialized remote/DAP
+framing.
