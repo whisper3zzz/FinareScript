@@ -28,6 +28,27 @@ public sealed class CoreClrDebugRemoteTransportTests
         }
         """;
 
+    private const string LongRunningSource = """
+        using UnifiedScript;
+
+        namespace Tests.Debug;
+
+        public static class RemoteLoop
+        {
+            [Visual]
+            public static int Run(int count)
+            {
+                int value = 0;
+                while (value < count)
+                {
+                    value = value + 1;
+                }
+
+                return value;
+            }
+        }
+        """;
+
     [Fact]
     public async Task FrameCodecRoundTripsVersionedRequestAndRejectsMismatchedIdentity()
     {
@@ -147,6 +168,62 @@ public sealed class CoreClrDebugRemoteTransportTests
             BreakpointProtocolException stale = Assert.Throws<BreakpointProtocolException>(() =>
                 remote.Pause(reload.Generation.GenerationId, execution.ExecutionId));
             Assert.Equal("UDB1002", stale.Code);
+            Assert.Null(server.LastConnectionError);
+        }
+        finally
+        {
+            serverCancellation.Cancel();
+            await serverTask;
+        }
+    }
+
+    [Fact]
+    public async Task LongPollConnectionDoesNotBlockIndependentPauseAndContinueRequests()
+    {
+        await using var server = new CoreClrDebugTcpServer(
+            new CoreClrDebugLoopbackTransport(),
+            port: 0,
+            maximumConnections: 2,
+            ownsTransport: true);
+        server.Start();
+        using var serverCancellation = new CancellationTokenSource();
+        Task serverTask = server.RunAsync(serverCancellation.Token);
+
+        try
+        {
+            using var remote = new CoreClrDebugRemoteTransport(
+                "127.0.0.1",
+                server.LocalEndpoint.Port);
+            CoreClrDebugReloadResult reload = remote.Reload(
+                CSharpCompilationRequest.Single(
+                    LongRunningSource,
+                    "Tests/Debug/RemoteLoop.cs"));
+            SemanticId methodId = remote.ResolveVisualMethodId(
+                "Tests.Debug.RemoteLoop.Run");
+            CoreClrDebugExecution execution = remote.Start(new ExecutionInvocation(
+                methodId,
+                [new ExecutionArgument("100000")]));
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            Assert.True(SpinWait.SpinUntil(
+                () => server.ActiveConnectionCount == 0,
+                TimeSpan.FromSeconds(2)));
+
+            Task<CoreClrDebugPause> longPoll = remote.WaitForPauseAsync(
+                execution.ExecutionId,
+                timeout.Token);
+            Assert.True(SpinWait.SpinUntil(
+                () => server.ActiveConnectionCount == 1,
+                TimeSpan.FromSeconds(2)));
+            remote.Pause(reload.Generation.GenerationId, execution.ExecutionId);
+            CoreClrDebugPause pause = await longPoll;
+
+            Assert.Equal(CoreClrDebugPauseReason.Pause, pause.Reason);
+            Assert.False(pause.NodeId.IsEmpty);
+            remote.Continue(reload.Generation.GenerationId, pause.PauseId);
+            ExecutionResult result = await remote.WaitForCompletionAsync(
+                execution.ExecutionId,
+                timeout.Token);
+            Assert.Equal("100000", result.ReturnValue!.Json);
             Assert.Null(server.LastConnectionError);
         }
         finally

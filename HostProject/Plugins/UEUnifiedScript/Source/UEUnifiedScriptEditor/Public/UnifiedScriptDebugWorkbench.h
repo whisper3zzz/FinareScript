@@ -123,6 +123,7 @@ struct FUnifiedScriptGameplayProfileNode
     FString NodeId;
     int64 HitCount = 0;
     int64 TotalNanoseconds = 0;
+    TArray<FUnifiedScriptGameplayProfileBoundary> Boundaries;
 };
 
 struct FUnifiedScriptGameplayProfileBufferPressure

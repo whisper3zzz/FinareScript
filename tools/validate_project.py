@@ -60,6 +60,7 @@ DOCUMENTS = [
     ROOT / "docs" / "SOURCE_MAP.md",
     ROOT / "docs" / "BREAKPOINT_RELOAD.md",
     ROOT / "docs" / "NATIVE_DEBUG_WORKBENCH.md",
+    ROOT / "docs" / "REMOTE_DEBUG_FRAMING.md",
     ROOT / "docs" / "RUNTIME_DIAGNOSTICS.md",
     ROOT / "docs" / "HOT_RELOAD_RELIABILITY.md",
     ROOT / "docs" / "GAMEPLAY_PROFILER.md",
@@ -3552,7 +3553,7 @@ def main() -> int:
         / "UnifiedScriptGameplayProfilerTests.cpp"
     ).read_text(encoding="utf-8")
     require(
-        "unifiedscript.gameplay-profile/v0.2" in gameplay_profiler_source
+        "unifiedscript.gameplay-profile/v0.3" in gameplay_profiler_source
         and "DefaultFrameCapacity = 120" in gameplay_profiler_source
         and "BuildWorldPhases" in gameplay_profiler_source
         and "BuildPressure" in gameplay_profiler_source
@@ -3560,7 +3561,7 @@ def main() -> int:
         and "probeObserver?.Hit" in unreal_world_debug_session
         and "NativePreActorTickNanoseconds" in unreal_gameplay_data_source
         and "NativePostActorTickNanoseconds" in unreal_gameplay_data_source
-        and "unifiedscript.gameplay-profile/v0.2"
+        and "unifiedscript.gameplay-profile/v0.3"
         in unreal_debug_workbench_source
         and '"Focus Hot Node"' in unreal_debug_panel
         and '"Save JSON"' in unreal_debug_panel
@@ -3574,11 +3575,91 @@ def main() -> int:
         and "Saved/UnifiedScript/Profiles" in gameplay_profiler_doc
         and "performance baseline" in gameplay_profiler_doc
         and "- [x] attribute time and count to scripts" in roadmap
-        and "M9.3 remains active" in roadmap,
+        and "M9.3 is\ncomplete" in roadmap,
         "Gameplay profiler attribution, bounded trace, Slate workflow, or live World proof is incomplete",
     )
     checks.append(
         "UE gameplay profiler attributes World, semantic, bridge, data, allocation, and pressure cost"
+    )
+    remote_debug_frame_source = (
+        ROOT
+        / "src"
+        / "UnifiedScript.Runtime"
+        / "CoreClrDebugFrameProtocol.cs"
+    ).read_text(encoding="utf-8")
+    remote_debug_transport_source = (
+        ROOT
+        / "src"
+        / "UnifiedScript.Runtime"
+        / "CoreClrDebugRemoteTransport.cs"
+    ).read_text(encoding="utf-8")
+    remote_debug_test = (
+        ROOT
+        / "tests"
+        / "UnifiedScript.Tests"
+        / "CoreClrDebugRemoteTransportTests.cs"
+    ).read_text(encoding="utf-8")
+    gameplay_diagnosis_source = (
+        ROOT
+        / "src"
+        / "UnifiedScript.Unreal"
+        / "UnrealGameplayDiagnosis.cs"
+    ).read_text(encoding="utf-8")
+    gameplay_diagnosis_test = (
+        ROOT
+        / "tests"
+        / "UnifiedScript.Tests"
+        / "UnrealGameplayDiagnosisTests.cs"
+    ).read_text(encoding="utf-8")
+    remote_debug_doc = (
+        ROOT / "docs" / "REMOTE_DEBUG_FRAMING.md"
+    ).read_text(encoding="utf-8")
+    gameplay_diagnosis_report_path = (
+        ROOT
+        / "samples"
+        / "Unreal"
+        / "Diagnostics"
+        / "GameplayDiagnosis.report.json"
+    )
+    with gameplay_diagnosis_report_path.open("r", encoding="utf-8") as handle:
+        gameplay_diagnosis_report = json.load(handle)
+    require(
+        "unifiedscript.debug-frame/v0.1" in remote_debug_frame_source
+        and 'Magic = 0x42445355' in remote_debug_frame_source
+        and "MaximumPayloadBytes = 1024 * 1024" in remote_debug_frame_source
+        and "CoreClrDebugRemoteTransport" in remote_debug_transport_source
+        and "maximumConnections = 32" in remote_debug_transport_source
+        and "LongPollConnectionDoesNotBlockIndependentPauseAndContinueRequests"
+        in remote_debug_test
+        and 'args[0] == "debug-frame-serve"' in cli_source
+        and "unifiedscript.debug-frame-server/v0.1" in cli_source
+        and "24-byte little-endian header" in remote_debug_doc
+        and "unifiedscript.gameplay-diagnosis/v0.1" in gameplay_diagnosis_source
+        and "GetBoundaryCosts" in gameplay_diagnosis_source
+        and "LiveDebugValueAndProfileDeltaLocateDefectAndRegressionWithoutLogs"
+        in gameplay_diagnosis_test
+        and 'args[0] == "ue-profile-diagnose"' in cli_source
+        and gameplay_diagnosis_report["schemaVersion"]
+        == "unifiedscript.gameplay-diagnosis/v0.1"
+        and gameplay_diagnosis_report["acceptanceSatisfied"] is True
+        and {
+            finding["kind"] for finding in gameplay_diagnosis_report["findings"]
+        }
+        == {"gameplayDefect", "performanceRegression"}
+        and all(
+            finding["nodeId"].startswith("us_")
+            and finding["sourceSpan"]["filePath"].endswith(
+                "GameplayDiagnosisFixture.cs"
+            )
+            and finding["runtimeBoundary"]
+            in {"reflectionFallback", "batchTrace"}
+            for finding in gameplay_diagnosis_report["findings"]
+        )
+        and "- [x] add bounded versioned remote debug framing" in roadmap,
+        "Bounded process debug framing or source/node/boundary diagnosis proof is incomplete",
+    )
+    checks.append(
+        "remote debug control and gameplay diagnosis are bounded, concurrent, and reproducible"
     )
     authoring_diagnostics_doc = (
         ROOT / "docs" / "AUTHORING_DIAGNOSTICS.md"

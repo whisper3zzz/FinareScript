@@ -353,7 +353,7 @@ bool FUnifiedScriptWorldSubsystemLifecycleTest::RunTest(const FString& Parameter
         GameplayProfileRoot.IsValid() &&
             GameplayProfileRoot->TryGetStringField(
                 TEXT("schemaVersion"), GameplayProfileSchema) &&
-            GameplayProfileSchema == TEXT("unifiedscript.gameplay-profile/v0.2") &&
+            GameplayProfileSchema == TEXT("unifiedscript.gameplay-profile/v0.3") &&
             GameplayProfileRoot->TryGetArrayField(TEXT("frames"), GameplayFrames) &&
             GameplayFrames != nullptr && GameplayFrames->Num() == 1 &&
             GameplayProfileRoot->TryGetObjectField(TEXT("aggregate"), GameplayAggregate) &&

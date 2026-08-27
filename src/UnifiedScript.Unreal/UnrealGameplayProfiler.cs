@@ -13,7 +13,8 @@ public sealed record UnrealGameplayProfileNode(
     string MethodId,
     string NodeId,
     long HitCount,
-    long TotalNanoseconds);
+    long TotalNanoseconds,
+    IReadOnlyList<UnrealGameplayProfileBoundary> Boundaries);
 
 public sealed record UnrealGameplayProfileBufferPressure(
     long CommandOverflowCount,
@@ -55,7 +56,7 @@ public sealed record UnrealGameplayProfileTrace(
     IReadOnlyList<UnrealGameplayProfileFrame> Frames,
     UnrealGameplayProfileAggregate Aggregate)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.gameplay-profile/v0.2";
+    public const string CurrentSchemaVersion = "unifiedscript.gameplay-profile/v0.3";
 }
 
 internal readonly record struct UnrealInvocationProfilerSnapshot(
@@ -91,6 +92,27 @@ internal readonly record struct UnrealInvocationProfilerSnapshot(
             Math.Max(0, right.TraceStopwatchTicks - left.TraceStopwatchTicks),
             Math.Max(0, right.OverlapCount - left.OverlapCount),
             Math.Max(0, right.OverlapStopwatchTicks - left.OverlapStopwatchTicks));
+
+    public static UnrealInvocationProfilerSnapshot operator +(
+        UnrealInvocationProfilerSnapshot left,
+        UnrealInvocationProfilerSnapshot right) => new(
+            Add(left.DirectThunkCount, right.DirectThunkCount),
+            Add(left.DirectThunkStopwatchTicks, right.DirectThunkStopwatchTicks),
+            Add(left.CallFrameCount, right.CallFrameCount),
+            Add(left.CallFrameStopwatchTicks, right.CallFrameStopwatchTicks),
+            Add(left.ReflectionFallbackCount, right.ReflectionFallbackCount),
+            Add(left.ReflectionFallbackStopwatchTicks, right.ReflectionFallbackStopwatchTicks),
+            Add(left.CommandCount, right.CommandCount),
+            Add(left.CommandStopwatchTicks, right.CommandStopwatchTicks),
+            Add(left.EventCount, right.EventCount),
+            Add(left.EventStopwatchTicks, right.EventStopwatchTicks),
+            Add(left.TraceCount, right.TraceCount),
+            Add(left.TraceStopwatchTicks, right.TraceStopwatchTicks),
+            Add(left.OverlapCount, right.OverlapCount),
+            Add(left.OverlapStopwatchTicks, right.OverlapStopwatchTicks));
+
+    private static long Add(long left, long right) =>
+        right > 0 && left > long.MaxValue - right ? long.MaxValue : left + right;
 }
 
 internal interface IUnrealInvocationProfiler
@@ -217,7 +239,7 @@ internal sealed class UnrealGameplayProfiler : ICoreClrDebugProbeSink
             UnrealGameplayDataTelemetryV1? telemetryBefore = TryGetGameplayTelemetry();
             long started = Stopwatch.GetTimestamp();
             long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
-            var capture = new ActiveFrame(started);
+            var capture = new ActiveFrame(started, before);
             lock (gate)
             {
                 activeFrame = capture;
@@ -232,12 +254,12 @@ internal sealed class UnrealGameplayProfiler : ICoreClrDebugProbeSink
                 long allocated = Math.Max(
                     0,
                     GC.GetAllocatedBytesForCurrentThread() - allocatedBefore);
-                UnrealInvocationProfilerSnapshot boundaries =
-                    bridge.GetProfilerSnapshot() - before;
+                UnrealInvocationProfilerSnapshot after = bridge.GetProfilerSnapshot();
+                UnrealInvocationProfilerSnapshot boundaries = after - before;
                 UnrealGameplayDataTelemetryV1? telemetryAfter = TryGetGameplayTelemetry();
                 lock (gate)
                 {
-                    capture.CloseNode(finished);
+                    capture.CloseNode(finished, after);
                     if (enabled && ReferenceEquals(activeFrame, capture))
                     {
                         activeFrame = null;
@@ -301,9 +323,14 @@ internal sealed class UnrealGameplayProfiler : ICoreClrDebugProbeSink
         {
             return;
         }
+        UnrealInvocationProfilerSnapshot boundaries = bridge.GetProfilerSnapshot();
         lock (gate)
         {
-            activeFrame?.Hit(methodId, nodeId, Stopwatch.GetTimestamp());
+            activeFrame?.Hit(
+                methodId,
+                nodeId,
+                Stopwatch.GetTimestamp(),
+                boundaries);
         }
     }
 
@@ -355,11 +382,12 @@ internal sealed class UnrealGameplayProfiler : ICoreClrDebugProbeSink
                 .OrderByDescending(static pair => pair.Value.StopwatchTicks)
                 .ThenBy(static pair => pair.Key.MethodId, StringComparer.Ordinal)
                 .ThenBy(static pair => pair.Key.NodeId, StringComparer.Ordinal)
-                .Select(static pair => new UnrealGameplayProfileNode(
+                .Select(pair => new UnrealGameplayProfileNode(
                     pair.Key.MethodId,
                     pair.Key.NodeId,
                     pair.Value.HitCount,
-                    StopwatchTicksToNanoseconds(pair.Value.StopwatchTicks)))
+                    StopwatchTicksToNanoseconds(pair.Value.StopwatchTicks),
+                    BuildBoundaries(pair.Value.Boundaries)))
                 .ToArray(),
             BuildPressure(telemetryBefore, telemetryAfter));
     }
@@ -458,6 +486,9 @@ internal sealed class UnrealGameplayProfiler : ICoreClrDebugProbeSink
         var worldPhases = new Dictionary<string, (long Count, long Nanoseconds)>(
             StringComparer.Ordinal);
         var nodes = new Dictionary<(string MethodId, string NodeId), (long Hits, long Nanoseconds)>();
+        var nodeBoundaries = new Dictionary<
+            (string MethodId, string NodeId),
+            Dictionary<string, (long Count, long Nanoseconds)>>();
         long duration = 0;
         long allocated = 0;
         long commandOverflow = 0;
@@ -489,6 +520,21 @@ internal sealed class UnrealGameplayProfiler : ICoreClrDebugProbeSink
                 nodes[key] = (
                     SaturatingAdd(current.Hits, node.HitCount),
                     SaturatingAdd(current.Nanoseconds, node.TotalNanoseconds));
+                foreach (UnrealGameplayProfileBoundary boundary in node.Boundaries)
+                {
+                    if (!nodeBoundaries.TryGetValue(key, out var byName))
+                    {
+                        byName = new Dictionary<string, (long Count, long Nanoseconds)>(
+                            StringComparer.Ordinal);
+                        nodeBoundaries.Add(key, byName);
+                    }
+                    byName.TryGetValue(boundary.Name, out var boundaryCurrent);
+                    byName[boundary.Name] = (
+                        SaturatingAdd(boundaryCurrent.Count, boundary.Count),
+                        SaturatingAdd(
+                            boundaryCurrent.Nanoseconds,
+                            boundary.TotalNanoseconds));
+                }
             }
             commandOverflow = SaturatingAdd(
                 commandOverflow,
@@ -525,11 +571,25 @@ internal sealed class UnrealGameplayProfiler : ICoreClrDebugProbeSink
                 .OrderByDescending(static pair => pair.Value.Nanoseconds)
                 .ThenBy(static pair => pair.Key.MethodId, StringComparer.Ordinal)
                 .ThenBy(static pair => pair.Key.NodeId, StringComparer.Ordinal)
-                .Select(static pair => new UnrealGameplayProfileNode(
-                    pair.Key.MethodId,
-                    pair.Key.NodeId,
-                    pair.Value.Hits,
-                    pair.Value.Nanoseconds))
+                .Select(pair =>
+                {
+                    IReadOnlyList<UnrealGameplayProfileBoundary> aggregatedBoundaries =
+                        nodeBoundaries.TryGetValue(pair.Key, out var byName)
+                            ? byName
+                                .OrderBy(static boundary => boundary.Key, StringComparer.Ordinal)
+                                .Select(static boundary => new UnrealGameplayProfileBoundary(
+                                    boundary.Key,
+                                    boundary.Value.Count,
+                                    boundary.Value.Nanoseconds))
+                                .ToArray()
+                            : [];
+                    return new UnrealGameplayProfileNode(
+                        pair.Key.MethodId,
+                        pair.Key.NodeId,
+                        pair.Value.Hits,
+                        pair.Value.Nanoseconds,
+                        aggregatedBoundaries);
+                })
                 .ToArray(),
             new UnrealGameplayProfileBufferPressure(
                 commandOverflow,
@@ -553,20 +613,28 @@ internal sealed class UnrealGameplayProfiler : ICoreClrDebugProbeSink
     private static long SaturatingAdd(long left, long right) =>
         right > 0 && left > long.MaxValue - right ? long.MaxValue : left + right;
 
-    private sealed class ActiveFrame(long started)
+    private sealed class ActiveFrame(
+        long started,
+        UnrealInvocationProfilerSnapshot initialBoundaries)
     {
         private (string MethodId, string NodeId)? currentNode;
         private long nodeStarted = started;
+        private UnrealInvocationProfilerSnapshot nodeBoundaryStarted = initialBoundaries;
 
         public long Started { get; } = started;
 
         public Dictionary<(string MethodId, string NodeId), NodeCounter> Nodes { get; } = [];
 
-        public void Hit(string methodId, string nodeId, long timestamp)
+        public void Hit(
+            string methodId,
+            string nodeId,
+            long timestamp,
+            UnrealInvocationProfilerSnapshot boundaries)
         {
-            CloseNode(timestamp);
+            CloseNode(timestamp, boundaries);
             currentNode = (methodId, nodeId);
             nodeStarted = timestamp;
+            nodeBoundaryStarted = boundaries;
             Nodes.TryGetValue(currentNode.Value, out NodeCounter current);
             Nodes[currentNode.Value] = current with
             {
@@ -574,7 +642,9 @@ internal sealed class UnrealGameplayProfiler : ICoreClrDebugProbeSink
             };
         }
 
-        public void CloseNode(long timestamp)
+        public void CloseNode(
+            long timestamp,
+            UnrealInvocationProfilerSnapshot boundaries)
         {
             if (currentNode is not { } key)
             {
@@ -586,11 +656,16 @@ internal sealed class UnrealGameplayProfiler : ICoreClrDebugProbeSink
                 StopwatchTicks = SaturatingAdd(
                     current.StopwatchTicks,
                     Math.Max(0, timestamp - nodeStarted)),
+                Boundaries = current.Boundaries + (boundaries - nodeBoundaryStarted),
             };
             currentNode = null;
             nodeStarted = timestamp;
+            nodeBoundaryStarted = boundaries;
         }
     }
 
-    private readonly record struct NodeCounter(long HitCount, long StopwatchTicks);
+    private readonly record struct NodeCounter(
+        long HitCount,
+        long StopwatchTicks,
+        UnrealInvocationProfilerSnapshot Boundaries);
 }

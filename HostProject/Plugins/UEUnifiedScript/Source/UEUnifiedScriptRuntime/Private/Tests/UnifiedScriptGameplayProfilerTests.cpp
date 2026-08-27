@@ -104,7 +104,7 @@ bool FUnifiedScriptGameplayProfilerFullAttributionTest::RunTest(
     FString SchemaVersion;
     const bool bHasAggregate = bParsed &&
         Root->TryGetStringField(TEXT("schemaVersion"), SchemaVersion) &&
-        SchemaVersion == TEXT("unifiedscript.gameplay-profile/v0.2") &&
+        SchemaVersion == TEXT("unifiedscript.gameplay-profile/v0.3") &&
         Root->TryGetObjectField(TEXT("aggregate"), Aggregate) &&
         Aggregate != nullptr &&
         (*Aggregate)->TryGetArrayField(TEXT("boundaries"), Boundaries) &&
@@ -175,6 +175,7 @@ bool FUnifiedScriptGameplayProfilerFullAttributionTest::RunTest(
             FString NodeId;
             double HitCount = 0.0;
             double Nanoseconds = 0.0;
+            const TArray<TSharedPtr<FJsonValue>>* NodeBoundaries = nullptr;
             bSemanticNodesAttributed = bSemanticNodesAttributed && Node.IsValid() &&
                 Node->TryGetStringField(TEXT("methodId"), MethodId) &&
                 MethodId.StartsWith(TEXT("us_")) &&
@@ -183,7 +184,9 @@ bool FUnifiedScriptGameplayProfilerFullAttributionTest::RunTest(
                 Node->TryGetNumberField(TEXT("hitCount"), HitCount) &&
                 HitCount >= 1.0 &&
                 Node->TryGetNumberField(TEXT("totalNanoseconds"), Nanoseconds) &&
-                Nanoseconds >= 0.0;
+                Nanoseconds >= 0.0 &&
+                Node->TryGetArrayField(TEXT("boundaries"), NodeBoundaries) &&
+                NodeBoundaries != nullptr && NodeBoundaries->Num() == 7;
         }
     }
     TestTrue(

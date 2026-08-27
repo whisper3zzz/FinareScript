@@ -96,5 +96,6 @@ See [RUNTIME_DIAGNOSTICS.md](RUNTIME_DIAGNOSTICS.md).
 Live synchronous World calls now preserve their in-progress CLR stack on a
 dedicated worker while the GameThread remains responsive. Remaining debugger
 limits are async state-machine suspension, forced preemptive stops between
-cooperative probes, conditional/log breakpoints, and serialized remote/DAP
-framing.
+cooperative probes, conditional/log breakpoints, remote-machine authentication,
+and DAP adaptation. The versioned bounded process framing itself is documented
+in [REMOTE_DEBUG_FRAMING.md](REMOTE_DEBUG_FRAMING.md).

@@ -858,7 +858,7 @@ bool FUnifiedScriptDebugWorkbench::ParseGameplayProfileTrace(
         }
         return true;
     };
-    const auto ReadNodeArray = [&OutError](
+    const auto ReadNodeArray = [&OutError, &ReadBoundaryArray](
         const TSharedPtr<FJsonObject>& Object,
         const TCHAR* Field,
         TArray<FUnifiedScriptGameplayProfileNode>& OutNodes)
@@ -899,7 +899,12 @@ bool FUnifiedScriptDebugWorkbench::ParseGameplayProfileTrace(
                     TEXT("totalNanoseconds"),
                     CandidateNode.TotalNanoseconds,
                     OutError,
-                    false))
+                    false) ||
+                !ReadBoundaryArray(
+                    Node,
+                    TEXT("boundaries"),
+                    32,
+                    CandidateNode.Boundaries))
             {
                 return false;
             }
@@ -952,7 +957,7 @@ bool FUnifiedScriptDebugWorkbench::ParseGameplayProfileTrace(
     FUnifiedScriptGameplayProfileResult Candidate;
     int64 FrameCapacity = 0;
     if (!Root->TryGetStringField(TEXT("schemaVersion"), Schema) ||
-        Schema != TEXT("unifiedscript.gameplay-profile/v0.2") ||
+        Schema != TEXT("unifiedscript.gameplay-profile/v0.3") ||
         !ReadRequiredString(Root, TEXT("traceId"), Candidate.TraceId, OutError) ||
         !ReadRequiredString(Root, TEXT("worldHostId"), Candidate.WorldHostId, OutError) ||
         !ReadRequiredString(Root, TEXT("instanceId"), Candidate.InstanceId, OutError) ||

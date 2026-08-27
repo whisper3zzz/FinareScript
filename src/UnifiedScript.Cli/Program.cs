@@ -81,6 +81,11 @@ internal static class Program
             return RunDebugServe(args);
         }
 
+        if (args.Count > 0 && args[0] == "debug-frame-serve")
+        {
+            return RunDebugFrameServe(args);
+        }
+
         if (args.Count > 0 && args[0] == "ue-bindings")
         {
             return RunUnrealBindings(args);
@@ -94,6 +99,11 @@ internal static class Program
         if (args.Count > 0 && args[0] == "ue-puerts-inventory")
         {
             return RunUnrealPuertsInventory(args);
+        }
+
+        if (args.Count > 0 && args[0] == "ue-profile-diagnose")
+        {
+            return RunUnrealProfileDiagnosis(args);
         }
 
         if (args.Count > 0 && args[0] == "verify-roundtrip")
@@ -859,6 +869,182 @@ internal static class Program
 
             Console.Error.WriteLine(exception.Message);
             return 2;
+        }
+    }
+
+    private static int RunDebugFrameServe(IReadOnlyList<string> args)
+    {
+        if (!TryParseDebugFrameServeArguments(args, out DebugFrameServeOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+
+        options = options ?? throw new InvalidOperationException(
+            "Argument parsing succeeded without remote debug frame server options.");
+        if (!File.Exists(options.InputPath))
+        {
+            Console.Error.WriteLine($"Input file does not exist: {options.InputPath}");
+            return 66;
+        }
+
+        string fullInputPath = Path.GetFullPath(options.InputPath);
+        string logicalPath = GetLogicalInputPath(fullInputPath);
+        string identityPath = options.IdentityPath ?? options.InputPath + ".usids";
+        IdentitySidecarDocument identitySidecar = File.Exists(identityPath)
+            ? LoadIdentitySidecar(identityPath)
+            : IdentitySidecarDocument.CreateEmpty(logicalPath);
+        string[] additionalSourcePaths = options.AdditionalSourcePaths
+            .Select(Path.GetFullPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        string? missingSource = additionalSourcePaths.FirstOrDefault(path => !File.Exists(path));
+        if (missingSource is not null)
+        {
+            Console.Error.WriteLine($"Additional source file does not exist: {missingSource}");
+            return 66;
+        }
+
+        CSharpSourceDocument[] sources =
+        [
+            new CSharpSourceDocument(
+                logicalPath,
+                File.ReadAllText(fullInputPath),
+                identitySidecar),
+            .. additionalSourcePaths
+                .Where(path => !string.Equals(path, fullInputPath, StringComparison.OrdinalIgnoreCase))
+                .Select(path => new CSharpSourceDocument(
+                    GetLogicalInputPath(path),
+                    File.ReadAllText(path),
+                    IdentitySidecarDocument.CreateEmpty(GetLogicalInputPath(path)))),
+        ];
+        var request = new CSharpCompilationRequest(
+            options.AssemblyName,
+            sources,
+            options.ReferencePaths,
+            LoadEffectCatalog(options.EffectCatalogPath));
+        try
+        {
+            using var transport = new CoreClrDebugLoopbackTransport();
+            CoreClrDebugReloadResult reload = transport.Reload(request);
+            var server = new CoreClrDebugTcpServer(
+                transport,
+                options.Port,
+                options.MaximumConnections);
+            try
+            {
+                server.Start();
+                using var cancellation = new CancellationTokenSource();
+                ConsoleCancelEventHandler cancelHandler = (_, eventArgs) =>
+                {
+                    eventArgs.Cancel = true;
+                    cancellation.Cancel();
+                };
+                Console.CancelKeyPress += cancelHandler;
+                try
+                {
+                    var ready = new DebugFrameServerReady(
+                        DebugFrameServerReady.CurrentSchemaVersion,
+                        $"tcp://127.0.0.1:{server.LocalEndpoint.Port}",
+                        reload.Generation,
+                        CoreClrDebugFrameCodec.ProtocolVersion,
+                        CoreClrDebugFrameCodec.HeaderSize,
+                        CoreClrDebugFrameCodec.MaximumPayloadBytes,
+                        server.MaximumConnections);
+                    Console.WriteLine(JsonSerializer.Serialize(
+                        ready,
+                        UnifiedJson.CreateOptions(writeIndented: false)));
+                    server.RunAsync(cancellation.Token).GetAwaiter().GetResult();
+                }
+                finally
+                {
+                    Console.CancelKeyPress -= cancelHandler;
+                }
+            }
+            finally
+            {
+                server.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            }
+
+            return 0;
+        }
+        catch (ExecutionCompilationException exception)
+        {
+            foreach (UnifiedDiagnostic diagnostic in exception.Diagnostics)
+            {
+                Console.Error.WriteLine(FormatDiagnostic(diagnostic));
+            }
+
+            Console.Error.WriteLine(exception.Message);
+            return 2;
+        }
+    }
+
+    private static int RunUnrealProfileDiagnosis(IReadOnlyList<string> args)
+    {
+        const long MaximumDiagnosisInputBytes = 16L * 1024 * 1024;
+        if (!TryParseUnrealProfileDiagnosisArguments(
+                args,
+                out UnrealProfileDiagnosisOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+        options = options ?? throw new InvalidOperationException(
+            "Argument parsing succeeded without gameplay diagnosis options.");
+        foreach (string input in new[]
+        {
+            options.BaselinePath,
+            options.CurrentPath,
+            options.EvidencePath,
+        })
+        {
+            if (!File.Exists(input))
+            {
+                Console.Error.WriteLine($"Gameplay diagnosis input does not exist: {input}");
+                return 66;
+            }
+            if (new FileInfo(input).Length > MaximumDiagnosisInputBytes)
+            {
+                Console.Error.WriteLine(
+                    $"Gameplay diagnosis input exceeds 16 MiB: {input}");
+                return 65;
+            }
+        }
+        try
+        {
+            UnrealGameplayProfileTrace baseline =
+                UnrealGameplayDiagnosisJson.DeserializeTrace(
+                    File.ReadAllText(options.BaselinePath));
+            UnrealGameplayProfileTrace current =
+                UnrealGameplayDiagnosisJson.DeserializeTrace(
+                    File.ReadAllText(options.CurrentPath));
+            UnrealGameplayDiagnosisEvidence evidence =
+                UnrealGameplayDiagnosisJson.DeserializeEvidence(
+                    File.ReadAllText(options.EvidencePath));
+            UnrealGameplayDiagnosisReport report = UnrealGameplayDiagnosis.Analyze(
+                baseline,
+                current,
+                evidence.DebugObservation,
+                evidence.NodeLocations,
+                evidence.Options);
+            string outputPath = Path.GetFullPath(options.OutputPath);
+            WriteAtomically(
+                outputPath,
+                UnrealGameplayDiagnosisJson.Serialize(report) + "\n");
+            Console.WriteLine(outputPath);
+            Console.WriteLine(
+                $"Gameplay diagnosis: " +
+                $"{(report.AcceptanceSatisfied ? "LOCATED" : "INCOMPLETE")} " +
+                $"(defect={report.LocatedGameplayDefect}, " +
+                $"regression={report.LocatedPerformanceRegression}, " +
+                $"findings={report.Findings.Count})");
+            return report.AcceptanceSatisfied ? 0 : 3;
+        }
+        catch (InvalidDataException exception)
+        {
+            Console.Error.WriteLine(exception.Message);
+            return 65;
         }
     }
 
@@ -1929,6 +2115,135 @@ internal static class Program
         return true;
     }
 
+    private static bool TryParseDebugFrameServeArguments(
+        IReadOnlyList<string> args,
+        out DebugFrameServeOptions? options)
+    {
+        options = null;
+        if (args.Count < 2 || args[0] != "debug-frame-serve" ||
+            args[1].StartsWith("--", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        string inputPath = args[1];
+        string? effectCatalogPath = null;
+        string? assemblyName = null;
+        string? identityPath = null;
+        int port = 4174;
+        int maximumConnections = 32;
+        bool hasPort = false;
+        bool hasMaximumConnections = false;
+        var referencePaths = new List<string>();
+        var additionalSourcePaths = new List<string>();
+        int index = 2;
+        while (index < args.Count)
+        {
+            string option = args[index++];
+            if (index >= args.Count)
+            {
+                return false;
+            }
+
+            string value = args[index++];
+            switch (option)
+            {
+                case "--port" when !hasPort && int.TryParse(value, out int parsedPort):
+                    port = parsedPort;
+                    hasPort = true;
+                    break;
+                case "--max-connections" when !hasMaximumConnections &&
+                    int.TryParse(value, out int parsedMaximumConnections):
+                    maximumConnections = parsedMaximumConnections;
+                    hasMaximumConnections = true;
+                    break;
+                case "--effects" when effectCatalogPath is null:
+                    effectCatalogPath = value;
+                    break;
+                case "--assembly" when assemblyName is null:
+                    assemblyName = value;
+                    break;
+                case "--reference":
+                    referencePaths.Add(value);
+                    break;
+                case "--source":
+                    additionalSourcePaths.Add(value);
+                    break;
+                case "--identity" when identityPath is null:
+                    identityPath = value;
+                    break;
+                default:
+                    return false;
+            }
+        }
+
+        if (port is > 0 and < 1024 or > 65535 ||
+            maximumConnections is < 1 or > 256)
+        {
+            return false;
+        }
+
+        options = new DebugFrameServeOptions(
+            inputPath,
+            port,
+            maximumConnections,
+            effectCatalogPath,
+            assemblyName ?? "UnifiedScript.RemoteDebug",
+            referencePaths,
+            identityPath,
+            additionalSourcePaths);
+        return true;
+    }
+
+    private static bool TryParseUnrealProfileDiagnosisArguments(
+        IReadOnlyList<string> args,
+        out UnrealProfileDiagnosisOptions? options)
+    {
+        options = null;
+        if (args.Count != 9 || args[0] != "ue-profile-diagnose")
+        {
+            return false;
+        }
+        string? baselinePath = null;
+        string? currentPath = null;
+        string? evidencePath = null;
+        string? outputPath = null;
+        int index = 1;
+        while (index < args.Count)
+        {
+            string option = args[index++];
+            string value = args[index++];
+            switch (option)
+            {
+                case "--baseline" when baselinePath is null:
+                    baselinePath = value;
+                    break;
+                case "--current" when currentPath is null:
+                    currentPath = value;
+                    break;
+                case "--evidence" when evidencePath is null:
+                    evidencePath = value;
+                    break;
+                case "--out" when outputPath is null:
+                    outputPath = value;
+                    break;
+                default:
+                    return false;
+            }
+        }
+        if (baselinePath is null || currentPath is null ||
+            evidencePath is null || outputPath is null)
+        {
+            return false;
+        }
+        options = new UnrealProfileDiagnosisOptions(
+            baselinePath,
+            currentPath,
+            evidencePath,
+            outputPath);
+        return true;
+    }
+
     private static ExecutionArgument[] ParseExecutionArguments(string argumentsJson)
     {
         using JsonDocument document = JsonDocument.Parse(argumentsJson);
@@ -2577,9 +2892,11 @@ internal static class Program
         "--out <output.cs> --out-asset <asset.json> [options]\n" +
         "  unifiedscript execute <input.cs> (--method <name> | --method-id <us_...>) [options]\n" +
         "  unifiedscript debug-serve <input.cs> --root <visual-editor-directory> [--port <number>] [options]\n" +
+        "  unifiedscript debug-frame-serve <input.cs> [--port <number>] [--max-connections <count>] [options]\n" +
         "  unifiedscript ue-bindings <reflection.json> --out <bindings.cs> [--contract <api-contract.json>] [--native-out <thunks.cpp>] [--nodes-out <nodes.json>] [--report <coverage.json>] [--fail-on-rejected] [--namespace <name>]\n" +
         "  unifiedscript ue-data-plane <schema.json> --managed-out <layouts.g.cs> --native-out <layouts.gen.h>\n" +
         "  unifiedscript ue-puerts-inventory <puerts-project> --out <inventory.json> [--native-project <target-project>] [--project-name <name>] [--coverage <coverage.json> --report <report.json> --fail-on-uncovered]\n" +
+        "  unifiedscript ue-profile-diagnose --baseline <profile.json> --current <profile.json> --evidence <evidence.json> --out <report.json>\n" +
         "  unifiedscript verify-roundtrip <visual.cs> <code.cs> --requirements <requirements.json> --report <report.json> [options]\n" +
         "Options:\n" +
         "  --out <path>            Artifact directory, initialized sidecar, or patched source output.\n" +
@@ -2594,8 +2911,9 @@ internal static class Program
         "  --args <json-array>     Execute arguments; defaults to an empty array.\n" +
         "  --layout <file.usgraph> Existing visual layout required by layout-sync.\n" +
         "  --root <directory>      Static visual workbench root required by debug-serve.\n" +
-        "  --port <number>         Loopback debug server port; defaults to 4173.\n" +
-        "  --source <input.cs>     Add a compilation source to debug-serve; may repeat.\n" +
+        "  --port <number>         Loopback server port; debug-serve defaults to 4173, frame server to 4174.\n" +
+        "  --max-connections <n>   Remote debug frame connection cap; defaults to 32.\n" +
+        "  --source <input.cs>     Add a debug compilation source; may repeat.\n" +
         "  --asset-out <path>      Transactional Declaration IR output for debug-serve.\n" +
         "  --surface-out <path>    Transactional Authoring Surface output for debug-serve.\n" +
         "  --managed-out <path>    Transactional managed assembly output for debug-serve.\n" +
@@ -2662,6 +2980,35 @@ internal static class Program
         string? ManagedAssemblyOutputPath,
         string? PortablePdbOutputPath,
         string? HistoryPath);
+
+    private sealed record DebugFrameServeOptions(
+        string InputPath,
+        int Port,
+        int MaximumConnections,
+        string? EffectCatalogPath,
+        string AssemblyName,
+        IReadOnlyList<string> ReferencePaths,
+        string? IdentityPath,
+        IReadOnlyList<string> AdditionalSourcePaths);
+
+    private sealed record DebugFrameServerReady(
+        string SchemaVersion,
+        string Endpoint,
+        CoreClrProgramGeneration Generation,
+        ushort ProtocolVersion,
+        int HeaderBytes,
+        int MaximumPayloadBytes,
+        int MaximumConnections)
+    {
+        public const string CurrentSchemaVersion =
+            "unifiedscript.debug-frame-server/v0.1";
+    }
+
+    private sealed record UnrealProfileDiagnosisOptions(
+        string BaselinePath,
+        string CurrentPath,
+        string EvidencePath,
+        string OutputPath);
 
     private sealed record UnrealBindingOptions(
         string ManifestPath,

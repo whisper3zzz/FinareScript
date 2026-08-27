@@ -48,8 +48,8 @@ current cursor, validate it, and advance this document.
 
 Last refreshed: **2026-08-28**
 
-- Active milestone: **M9 — Debugging, reload, and observability Beta**
-- Next slice: **M9.3 — remote framing and end-to-end profiler regression proof**
+- Active milestone: **M10 — Performance architecture and honest Puerts comparison**
+- Next slice: **M10.1 — versioned representative workload suite and metrics**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -60,10 +60,10 @@ machine-local unless an artifact explicitly says otherwise.
 
 | Gate | Verified result |
 | --- | --- |
-| Main source | `9e96cf4` (`feat: add gameplay profiler trace foundation`), plus this M9.3 attribution change set |
+| Main source | `f2285ff` (`feat: add bounded remote debug framing`), plus this M9.3 completion change set |
 | Comparison source | `e62a46e` (`feat: adopt round-tripped gameplay tuning`) |
-| Managed tests | 528 / 528 passed |
-| Repository validator | 64 / 64 passed |
+| Managed tests | 534 / 534 passed |
+| Repository validator | 65 / 65 passed |
 | UE 5.8.1 native build | passed |
 | `UnifiedScript.Unreal` Automation | 15 / 15 passed, including full gameplay-profiler attribution, Authoring Surface, live World semantic pause/step/reload/detach, and repeated success/failure hot-reload leak coverage |
 | BlockBreaker workload | 10,000 frames, three trials, one shot, one hit, two command completions per trial |
@@ -265,7 +265,7 @@ Outcome: text and graph versions compile to and execute the same IL.
   read-only snapshot evaluation
 - [x] generation-safe in-process loopback debug transport
 - [x] live UE World cooperative semantic traps and GameThread-safe bridge return
-- [ ] remote debug transport framing (scheduled in M9.3)
+- [x] bounded versioned remote debug transport framing (delivered in M9.3)
 - [x] async invocation and cancellation/time-budget contract (delivered in M7.2)
 
 ## M5.5 — Script asset and authoring experience
@@ -986,8 +986,8 @@ instrumented PE/PDB publication without source mutation. UE World Automation
 proves exact statement breakpoints, non-blocking GameThread start, Step In/Out,
 two-frame locals, pause-unique frame IDs, generated worker-to-GameThread bridge
 calls, generation-two breakpoint rebinding, and detach while suspended. M9.1 is
-complete; async state-machine traps and remote framing remain deliberate later
-work rather than hidden gaps.
+complete; async state-machine traps remain later work, while process framing
+was deferred explicitly to and completed in M9.3.
 
 ### M9.2 — Hot-reload reliability
 
@@ -1019,12 +1019,12 @@ complete; the cursor advances to M9.3.
   allocations, and buffer pressure
 - [x] expose frame timeline and aggregate views in Unreal and emit a portable
   machine-readable trace for regression comparison
-- [ ] add bounded versioned remote debug framing, then reproduce one gameplay
+- [x] add bounded versioned remote debug framing, then reproduce one gameplay
   defect and one performance regression and locate both to the responsible
   source/graph node and runtime boundary
 
 Evidence (2026-08-28): the opt-in managed profiler now owns a bounded 120-frame
-ring and emits `unifiedscript.gameplay-profile/v0.2`. Each frame and aggregate
+ring and emits `unifiedscript.gameplay-profile/v0.3`. Each frame and aggregate
 separates script duration/allocation, stable semantic method/node timing, all
 three World scheduler phases, direct thunk, CallFrame, reflection fallback,
 Command/Event, Batch Trace/Overlap, and buffer-pressure deltas. Gameplay Data
@@ -1032,11 +1032,28 @@ schema revision 3 appends cumulative phase count/nanosecond telemetry without
 moving the revision-1/2 prefixes. The native parser rejects incompatible or
 unbounded captures; Slate shows the aggregate/latest-frame summary, focuses the
 hottest node that resolves in the active graph, and saves exact JSON under
-`Saved/UnifiedScript/Profiles`. One live World workload exercises every
-attribution family. Managed tests pass 528/528, repository validation passes
-64/64, the UE 5.8.1 Editor build passes, and `UnifiedScript.Unreal` Automation
-passes 15/15. M9.3 remains active for remote framing and the explicit
-defect/regression acceptance proof.
+`Saved/UnifiedScript/Profiles`. Each semantic node also retains the bridge and
+data-plane counters accumulated while it is active. One live World workload
+exercises every attribution family.
+
+The process control plane uses `unifiedscript.debug-frame/v0.1`: a fixed
+24-byte `USDB` header, 1 MiB pre-allocation payload cap, bounded compilation and
+invocation collections, correlated request IDs, stable `UDBF...` failures, and
+one concurrent loopback TCP connection per operation. `debug-frame-serve`
+publishes its actual endpoint and loaded generation. A real TCP gate holds a
+wait-for-pause request open while independent Pause and Continue operations
+complete.
+
+The reproducible `ue-profile-diagnose` fixture joins a detached live-debug local
+observation, compiler source spans, and baseline/current per-node profiles. It
+locates the wrong `damage` value at the exact Return source/graph node and
+`reflectionFallback` boundary, and separately locates a 5.00x Batch Trace
+regression at the exact `traceBudget` declaration node and `batchTrace`
+boundary. The report is `unifiedscript.gameplay-diagnosis/v0.1` and contains no
+custom gameplay logging. Managed tests pass 534/534, repository validation
+passes 65/65, the UE 5.8.1 Editor build passes, and `UnifiedScript.Unreal`
+Automation passes 15/15. M9.3 is
+complete; the cursor advances to M10.1.
 
 Acceptance: a scripted gameplay defect and a performance regression can both be
 located to a source/graph node and runtime boundary without custom logging.

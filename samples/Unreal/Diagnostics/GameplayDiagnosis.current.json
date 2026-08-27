@@ -1,0 +1,88 @@
+{
+  "schemaVersion": "unifiedscript.gameplay-profile/v0.3",
+  "traceId": "gameplay-diagnosis-current",
+  "capturedAtUtc": "2026-08-28T00:01:00+00:00",
+  "worldHostId": "fixture-world",
+  "instanceId": "fixture-script",
+  "frameCapacity": 1,
+  "droppedFrameCount": 0,
+  "frames": [
+    {
+      "sequence": 1,
+      "worldFrameNumber": "2",
+      "generation": 2,
+      "scriptType": "UnifiedScript.Unreal.Diagnostics.GameplayDiagnosisFixture",
+      "deltaSeconds": 0.016,
+      "worldPhase": "ManagedTick",
+      "worldPhases": [],
+      "durationNanoseconds": 730000,
+      "allocatedBytes": 0,
+      "boundaries": [
+        { "name": "reflectionFallback", "count": 1, "totalNanoseconds": 40000 },
+        { "name": "batchTrace", "count": 1, "totalNanoseconds": 500000 }
+      ],
+      "nodes": [
+        {
+          "methodId": "us_b5bdc88a3b0e097928395b744b8dbeae",
+          "nodeId": "us_f715220ad4a6bf2db0a1dcc939d1a532",
+          "hitCount": 1,
+          "totalNanoseconds": 80000,
+          "boundaries": [
+            { "name": "reflectionFallback", "count": 1, "totalNanoseconds": 40000 }
+          ]
+        },
+        {
+          "methodId": "us_b5bdc88a3b0e097928395b744b8dbeae",
+          "nodeId": "us_4517cb50e3b19e357d4636826e7abb02",
+          "hitCount": 1,
+          "totalNanoseconds": 650000,
+          "boundaries": [
+            { "name": "batchTrace", "count": 1, "totalNanoseconds": 500000 }
+          ]
+        }
+      ],
+      "bufferPressure": {
+        "commandOverflowCount": 0,
+        "eventOverflowCount": 0,
+        "traceOverflowCount": 0,
+        "overlapOverflowCount": 0
+      }
+    }
+  ],
+  "aggregate": {
+    "frameCount": 1,
+    "totalNanoseconds": 730000,
+    "allocatedBytes": 0,
+    "worldPhases": [],
+    "boundaries": [
+      { "name": "reflectionFallback", "count": 1, "totalNanoseconds": 40000 },
+      { "name": "batchTrace", "count": 1, "totalNanoseconds": 500000 }
+    ],
+    "nodes": [
+      {
+        "methodId": "us_b5bdc88a3b0e097928395b744b8dbeae",
+        "nodeId": "us_f715220ad4a6bf2db0a1dcc939d1a532",
+        "hitCount": 1,
+        "totalNanoseconds": 80000,
+        "boundaries": [
+          { "name": "reflectionFallback", "count": 1, "totalNanoseconds": 40000 }
+        ]
+      },
+      {
+        "methodId": "us_b5bdc88a3b0e097928395b744b8dbeae",
+        "nodeId": "us_4517cb50e3b19e357d4636826e7abb02",
+        "hitCount": 1,
+        "totalNanoseconds": 650000,
+        "boundaries": [
+          { "name": "batchTrace", "count": 1, "totalNanoseconds": 500000 }
+        ]
+      }
+    ],
+    "bufferPressure": {
+      "commandOverflowCount": 0,
+      "eventOverflowCount": 0,
+      "traceOverflowCount": 0,
+      "overlapOverflowCount": 0
+    }
+  }
+}

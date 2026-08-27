@@ -1,0 +1,42 @@
+{
+  "schemaVersion": "unifiedscript.gameplay-diagnosis-evidence/v0.1",
+  "debugObservation": {
+    "schemaVersion": "unifiedscript.gameplay-debug-observation/v0.1",
+    "methodId": "us_b5bdc88a3b0e097928395b744b8dbeae",
+    "nodeId": "us_f715220ad4a6bf2db0a1dcc939d1a532",
+    "sourceSpan": {
+      "filePath": "samples/Unreal/Diagnostics/GameplayDiagnosisFixture.cs",
+      "start": { "line": 12, "column": 9 },
+      "end": { "line": 12, "column": 51 }
+    },
+    "localName": "damage",
+    "expectedDisplay": "20",
+    "actualDisplay": "0",
+    "actualType": "System.Int32"
+  },
+  "nodeLocations": [
+    {
+      "methodId": "us_b5bdc88a3b0e097928395b744b8dbeae",
+      "nodeId": "us_f715220ad4a6bf2db0a1dcc939d1a532",
+      "sourceSpan": {
+        "filePath": "samples/Unreal/Diagnostics/GameplayDiagnosisFixture.cs",
+        "start": { "line": 12, "column": 9 },
+        "end": { "line": 12, "column": 51 }
+      }
+    },
+    {
+      "methodId": "us_b5bdc88a3b0e097928395b744b8dbeae",
+      "nodeId": "us_4517cb50e3b19e357d4636826e7abb02",
+      "sourceSpan": {
+        "filePath": "samples/Unreal/Diagnostics/GameplayDiagnosisFixture.cs",
+        "start": { "line": 11, "column": 9 },
+        "end": { "line": 11, "column": 45 }
+      }
+    }
+  ],
+  "options": {
+    "minimumRegressionRatio": 1.25,
+    "minimumAverageIncreaseNanoseconds": 100000,
+    "maximumPerformanceFindings": 64
+  }
+}

@@ -108,6 +108,12 @@ public sealed class UnrealGameplayProfilerTests
             Assert.Equal("us_method", node.MethodId);
             Assert.Equal("us_node", node.NodeId);
             Assert.Equal(1, node.HitCount);
+            Assert.Equal(1, Assert.Single(
+                node.Boundaries,
+                static boundary => boundary.Name == "reflectionFallback").Count);
+            Assert.Equal(1, Assert.Single(
+                node.Boundaries,
+                static boundary => boundary.Name == "directThunk").Count);
         });
         Assert.Equal(2, trace.Aggregate.FrameCount);
         Assert.Equal(3, trace.Aggregate.WorldPhases.Count);
@@ -115,6 +121,9 @@ public sealed class UnrealGameplayProfilerTests
             trace.Aggregate.Boundaries,
             static boundary => boundary.Name == "reflectionFallback").Count);
         Assert.Equal(2, Assert.Single(trace.Aggregate.Nodes).HitCount);
+        Assert.Equal(2, Assert.Single(
+            Assert.Single(trace.Aggregate.Nodes).Boundaries,
+            static boundary => boundary.Name == "reflectionFallback").Count);
 
         profiler.SetEnabled(false);
         profiler.ExecuteTick(script, 3, typeof(ProfiledScript).FullName!, 0.019f);

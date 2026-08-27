@@ -1626,7 +1626,7 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
                     TEXT("unifiedscript.reload-transaction/v0.1")));
 
         const FString GameplayProfileJson =
-            TEXT("{\"schemaVersion\":\"unifiedscript.gameplay-profile/v0.2\","
+            TEXT("{\"schemaVersion\":\"unifiedscript.gameplay-profile/v0.3\","
                  "\"traceId\":\"world-11-script-7\",\"worldHostId\":\"11\","
                  "\"instanceId\":\"7\",\"frameCapacity\":120,\"droppedFrameCount\":1,"
                  "\"frames\":[{\"sequence\":4,\"worldFrameNumber\":\"99\","
@@ -1650,9 +1650,11 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
                  "{\"name\":\"callFrame\",\"count\":2,\"totalNanoseconds\":18000},"
                  "{\"name\":\"reflectionFallback\",\"count\":0,\"totalNanoseconds\":0},"
                  "{\"name\":\"batchTrace\",\"count\":4,\"totalNanoseconds\":25000},"
-                 "{\"name\":\"batchOverlap\",\"count\":1,\"totalNanoseconds\":9000}],"
-                 "\"nodes\":[{\"methodId\":\"us_method\",\"nodeId\":\"us_node\","
-                 "\"hitCount\":3,\"totalNanoseconds\":400000}],"
+                  "{\"name\":\"batchOverlap\",\"count\":1,\"totalNanoseconds\":9000}],"
+                  "\"nodes\":[{\"methodId\":\"us_method\",\"nodeId\":\"us_node\","
+                  "\"hitCount\":3,\"totalNanoseconds\":400000,\"boundaries\":["
+                  "{\"name\":\"reflectionFallback\",\"count\":1,"
+                  "\"totalNanoseconds\":120000}]}],"
                  "\"bufferPressure\":{\"commandOverflowCount\":1,"
                  "\"eventOverflowCount\":0,\"traceOverflowCount\":0,"
                  "\"overlapOverflowCount\":0}}}");
@@ -1675,6 +1677,10 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
             TEXT("Native gameplay profiler retains the hottest semantic node"),
             GameplayProfile.Nodes.Num(),
             1);
+        TestTrue(
+            TEXT("Native gameplay profiler retains the node runtime boundary"),
+            GameplayProfile.Nodes.Num() == 1 &&
+                GameplayProfile.Nodes[0].Boundaries.Num() == 1);
         TestTrue(
             TEXT("Native gameplay profiler summary separates direct, CallFrame, reflection, and batch routes"),
             GameplayProfile.ToDisplayString().Contains(TEXT("Direct 8")) &&

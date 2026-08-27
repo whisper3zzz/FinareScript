@@ -41,6 +41,12 @@
     <None Include="../../samples/Unreal/UEUnifiedScriptRuntime.reflection.json"
           Link="UnrealFixtures/UEUnifiedScriptRuntime.reflection.json"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../samples/Unreal/Diagnostics/*.json"
+          Link="UnrealDiagnostics/%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../samples/Unreal/Diagnostics/GameplayDiagnosisFixture.cs"
+          Link="UnrealDiagnostics/GameplayDiagnosisFixture.cs"
+          CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../samples/Unreal/UEUnifiedScriptRuntime.api-contract.json"
           Link="UnrealFixtures/UEUnifiedScriptRuntime.api-contract.json"
           CopyToOutputDirectory="PreserveNewest" />

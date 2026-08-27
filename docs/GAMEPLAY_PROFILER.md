@@ -1,7 +1,7 @@
 # Gameplay and bridge profiler
 
 Status: M9.3 attribution slice, schema
-`unifiedscript.gameplay-profile/v0.2`.
+`unifiedscript.gameplay-profile/v0.3`.
 
 ## Purpose
 
@@ -18,7 +18,8 @@ Each captured frame records:
 - direct generated thunks, ABI v3 CallFrame calls, canonical reflection
   fallback, command submission, event acquisition, Batch Trace, and Batch
   Overlap count/time;
-- stable semantic method/node IDs and their hit count/time;
+- stable semantic method/node IDs, hit count/time, and the bridge/data boundary
+  cost accumulated while each node is active;
 - command, event, trace, and overlap overflow deltas.
 
 The component owns a 120-frame ring by default. When full, the oldest frame is
@@ -47,9 +48,12 @@ graph element.
 
 ## Portable trace contract
 
-`unifiedscript.gameplay-profile/v0.2` contains World/script identities, capture
+`unifiedscript.gameplay-profile/v0.3` contains World/script identities, capture
 time, ring capacity, dropped-frame count, an ordered `frames` array, and one
-`aggregate` object. Frame and aggregate boundary names are stable identifiers:
+`aggregate` object. Frame and aggregate nodes each contain their own bounded
+`boundaries` array, allowing a bridge or data-plane regression to be attributed
+to the source/graph node that owned the call. Boundary names are stable
+identifiers:
 
 ```text
 World:    NativePreActorTick, ManagedTick, NativePostActorTick
@@ -69,6 +73,43 @@ tooling. M10 owns statistical baselines, machine fingerprints, percentile
 budgets, and matched Puerts reports; a single trace is diagnostic evidence, not
 a broad performance claim.
 
+## Defect and regression diagnosis
+
+`ue-profile-diagnose` joins three existing evidence sources without adding
+custom gameplay logs:
+
+1. a baseline `gameplay-profile/v0.3` trace;
+2. a current trace with per-node boundary costs;
+3. one detached debugger local observation plus the compiler/Authoring Surface
+   node-to-source locations.
+
+The debugger observation is captured from the real pause, frame, and locals,
+so its method ID, node ID, source span, expected value, and actual value remain
+correlated. The analyzer chooses that node's dominant runtime boundary for a
+gameplay defect. It then compares per-frame costs for every resolvable
+node/boundary pair, including residual `managedCode`, and reports candidates
+that cross both a ratio and absolute-nanosecond threshold. Output uses
+`unifiedscript.gameplay-diagnosis/v0.1` and only sets `acceptanceSatisfied` when
+both kinds are located. Each CLI input is capped at 16 MiB in addition to the
+trace's frame, node, and boundary collection limits.
+
+The checked-in fixture is reproducible with:
+
+```powershell
+dotnet run --project src/UnifiedScript.Cli -- `
+  ue-profile-diagnose `
+  --baseline samples/Unreal/Diagnostics/GameplayDiagnosis.baseline.json `
+  --current samples/Unreal/Diagnostics/GameplayDiagnosis.current.json `
+  --evidence samples/Unreal/Diagnostics/GameplayDiagnosis.evidence.json `
+  --out samples/Unreal/Diagnostics/GameplayDiagnosis.report.json
+```
+
+Its report locates the incorrect `damage = 0` observation at the exact Return
+source/graph node and `reflectionFallback` boundary. It separately locates a
+5.00x Batch Trace regression at the exact `traceBudget` declaration node and
+`batchTrace` boundary. The managed acceptance test obtains the defect evidence
+from a real suspended CoreCLR execution rather than constructing a log record.
+
 ## Instrumenting semantic nodes
 
 Generated or authored managed code emits `CoreClrDebugProbe.Enter(methodId)`
@@ -84,10 +125,11 @@ disabled.
 ## Reproducible gates
 
 The managed tests prove ring bounds, aggregate math, World telemetry deltas,
-semantic probe sharing, direct/CallFrame/reflection routes, allocation, and
-buffer pressure. The live UE gate runs two adjacent World Ticks through every
-attribution family, so the second Tick also consumes the first Tick's published
-command event:
+semantic probe sharing, per-node direct/CallFrame/reflection/data routes,
+allocation, buffer pressure, live-local defect correlation, and normalized
+regression comparison. The live UE gate runs two adjacent World Ticks through
+every attribution family, so the second Tick also consumes the first Tick's
+published command event:
 
 ```powershell
 & D:\UE_5.8\Engine\Binaries\Win64\UnrealEditor-Cmd.exe `
@@ -96,5 +138,5 @@ command event:
   -Unattended -NullRHI -NoSound -NoSplash
 ```
 
-The native workbench parser rejects non-v0.2, incomplete, negative, or
+The native workbench parser rejects non-v0.3, incomplete, negative, or
 unbounded payloads before Slate displays them.

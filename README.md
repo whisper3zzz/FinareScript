@@ -63,7 +63,8 @@ powershell -ExecutionPolicy Bypass `
 
 M9.3 adds an opt-in 120-frame gameplay profiler. The Unreal Debug panel can
 capture or stop a live trace, focus the hottest resolvable semantic node, and
-save `unifiedscript.gameplay-profile/v0.2` JSON under
+save `unifiedscript.gameplay-profile/v0.3` JSON with per-node runtime-boundary
+cost under
 `Saved/UnifiedScript/Profiles`. See
 [Gameplay and bridge profiler](docs/GAMEPLAY_PROFILER.md).
 
@@ -731,9 +732,11 @@ Current Unreal adapter path:
   -> synchronous line/sphere/box Batch Trace through one managed/native boundary
   -> instrumented live-World publication -> non-blocking semantic pause/step/stack/locals/watch
   -> generation-guarded worker execution -> GameThread bridge return and teardown drain
+  -> bounded USDB process framing -> concurrent remote wait/Pause/Continue
+  -> debug observation + profile delta -> source/graph node and runtime-boundary diagnosis
 
 Later:
-  -> serialized remote debug framing, async stepping, and richer expression evaluation
+  -> authenticated remote-machine/DAP transport, async stepping, and richer expression evaluation
   -> Script Asset cook/packaging dependency discovery
   -> optional graph-canvas layout and cook/package integration
 ```
@@ -1946,7 +1949,7 @@ This milestone does not include:
 - a UE graph editor;
 - persistent engine runtime domains, execution sandboxing, time budgets, async
   scheduling, native managed-debug traps, expression/watch evaluation,
-  deeper-frame locals, async stepping, and serialized remote debug transport;
+  deeper-frame locals, async stepping, and authenticated remote-machine/DAP transport;
 - semantic type binding against UE APIs;
 - `.csproj`/MSBuild compilation loading;
 - namespace/API allow and deny policies;

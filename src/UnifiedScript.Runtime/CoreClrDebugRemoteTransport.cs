@@ -71,12 +71,9 @@ public sealed class CoreClrDebugRemoteTransport : ICoreClrDebugTransport
         this.connect = connect ?? throw new ArgumentNullException(nameof(connect));
     }
 
-    public CSharpCompilationRequest? LastReloadRequest { get; private set; }
-
     public CoreClrDebugReloadResult Reload(CSharpCompilationRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        LastReloadRequest = request;
         return Call<CoreClrDebugReloadResult>(
             CoreClrDebugFrameOperations.Reload,
             DebugWireCompilation.From(request));
@@ -554,11 +551,25 @@ public sealed class CoreClrDebugTcpServer : IAsyncDisposable
         listener = new TcpListener(IPAddress.Loopback, port);
         frameServer = new CoreClrDebugFrameServer(transport, ownsTransport);
         connectionSlots = new SemaphoreSlim(maximumConnections, maximumConnections);
+        MaximumConnections = maximumConnections;
     }
 
     public IPEndPoint LocalEndpoint => started
         ? (IPEndPoint)listener.LocalEndpoint
         : throw new InvalidOperationException("The remote debug TCP server is not started.");
+
+    public int MaximumConnections { get; }
+
+    public int ActiveConnectionCount
+    {
+        get
+        {
+            lock (gate)
+            {
+                return activeConnections.Count;
+            }
+        }
+    }
 
     public Exception? LastConnectionError { get; private set; }
 
@@ -599,7 +610,15 @@ public sealed class CoreClrDebugTcpServer : IAsyncDisposable
                 {
                     break;
                 }
-                await connectionSlots.WaitAsync(cancellationToken);
+                try
+                {
+                    await connectionSlots.WaitAsync(cancellationToken);
+                }
+                catch
+                {
+                    client.Dispose();
+                    throw;
+                }
                 client.NoDelay = true;
                 Task connection = ServeClientAsync(client, cancellationToken);
                 lock (gate)

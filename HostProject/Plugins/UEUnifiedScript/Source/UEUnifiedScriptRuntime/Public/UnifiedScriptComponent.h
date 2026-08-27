@@ -90,7 +90,7 @@ public:
     UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category="UnifiedScript|Profiler")
     bool bGameplayProfilerEnabled = false;
 
-    /** Last captured portable unifiedscript.gameplay-profile/v0.2 trace. */
+    /** Last captured portable unifiedscript.gameplay-profile/v0.3 trace. */
     UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category="UnifiedScript|Profiler")
     FString LastGameplayProfileTrace;
 

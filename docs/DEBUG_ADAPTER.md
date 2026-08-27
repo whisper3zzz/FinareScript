@@ -53,8 +53,10 @@ performs the extra instrumented emission.
 - generation, execution, and pause identity validation.
 
 `ICoreClrDebugTransport` is the editor-facing boundary.
-`CoreClrDebugLoopbackTransport` delegates it in process and is the integration
-path used by the visual editor before process or UE transport framing exists.
+`CoreClrDebugLoopbackTransport` delegates it in process. The M9.3
+`CoreClrDebugRemoteTransport` carries the same operations between processes
+over the bounded versioned `USDB` loopback TCP frame described in
+[REMOTE_DEBUG_FRAMING.md](REMOTE_DEBUG_FRAMING.md).
 Every stateful command carries a generation, execution, or pause identity, so a
 consumer cannot accidentally continue a superseded image or inspect a resumed
 pause.
@@ -156,6 +158,17 @@ against its loaded artifacts. It is loopback development plumbing, not the
 later remote or UE process transport. The native Slate client now consumes
 this exact loopback contract; see
 [NATIVE_DEBUG_WORKBENCH.md](NATIVE_DEBUG_WORKBENCH.md).
+
+## Process transport
+
+`unifiedscript debug-frame-serve` preloads one debug compilation and publishes
+a machine-readable endpoint. Each operation opens one correlated request/
+response connection. This allows a wait request to remain outstanding while
+Pause, Continue, Step, stack, locals, and evaluation use independent
+connections. The 24-byte `USDB` header, 1 MiB payload ceiling, 32-connection
+default, compile/invocation collection bounds, and stable `UDBF...` failures
+are enforced before dispatch. The listener is loopback-only and trusts local
+clients; it is not a DAP or authenticated remote-machine endpoint.
 
 ## Live Unreal World transport
 
