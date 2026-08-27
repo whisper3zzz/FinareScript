@@ -69,6 +69,12 @@ int32 FUnifiedScriptNativeBridgeContext::GetAttachedContextCount()
         std::memory_order_relaxed);
 }
 
+int32 FUnifiedScriptNativeBridgeContext::GetEventSubscriptionCount()
+{
+    FScopeLock Lock(&BridgeLock);
+    return EventSubscriptions.Num();
+}
+
 void FUnifiedScriptNativeBridgeContext::AttachSharedDataPlane(
     FUnifiedScriptSharedDataPlane* InSharedDataPlane)
 {

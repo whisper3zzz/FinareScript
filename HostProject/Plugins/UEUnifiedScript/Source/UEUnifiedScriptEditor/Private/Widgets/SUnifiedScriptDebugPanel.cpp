@@ -910,7 +910,7 @@ void SUnifiedScriptDebugPanel::HandleLiveWorldPublishResponse(
             true);
         return;
     }
-    if (!LiveComponent->ReloadScript())
+    if (!LiveComponent->ReloadScriptWithTransaction(Publish.ReloadTransactionJson))
     {
         SetDebugStatus(
             LiveComponent->LastScriptError.IsEmpty()

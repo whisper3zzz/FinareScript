@@ -215,7 +215,11 @@ private:
         int32 StatusCode,
         FString ResponseJson);
     void AdoptWorkspace(FUnifiedScriptAuthoringWorkspaceResult Workspace);
-    void ReloadMatchingComponents(int32& OutMatched, int32& OutReloaded, int32& OutFailed);
+    void ReloadMatchingComponents(
+        const FString& ReloadTransactionJson,
+        int32& OutMatched,
+        int32& OutReloaded,
+        int32& OutFailed);
     EActiveTimerReturnType HandleAutoReload(
         double CurrentTime,
         float DeltaTime);

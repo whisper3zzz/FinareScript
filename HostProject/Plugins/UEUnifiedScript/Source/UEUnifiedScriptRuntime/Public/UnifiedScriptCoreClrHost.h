@@ -58,6 +58,11 @@ public:
         uint64 InstanceId,
         FString& OutJson,
         FString& OutError) const;
+    bool GetManagedScriptReloadState(
+        uint64 WorldHostId,
+        uint64 InstanceId,
+        FString& OutJson,
+        FString& OutError) const;
     bool ControlManagedScriptDebug(
         uint64 WorldHostId,
         uint64 InstanceId,
@@ -121,6 +126,7 @@ private:
     void* ConfigureScriptDebugEntryPoint = nullptr;
     void* BeginScriptDebugTickEntryPoint = nullptr;
     void* GetScriptDebugStateEntryPoint = nullptr;
+    void* GetScriptReloadStateEntryPoint = nullptr;
     void* ControlScriptDebugEntryPoint = nullptr;
     void* DisableScriptDebugEntryPoint = nullptr;
     void* IsScriptDebugActiveEntryPoint = nullptr;

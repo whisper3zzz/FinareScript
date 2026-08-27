@@ -1589,7 +1589,13 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
                  "\"sourceCompilationId\":\"%s\","
                  "\"semanticConfigurationId\":\"%s\"},"
                  "\"assemblyPath\":\"Binaries/Managed/Demo.dll\","
-                 "\"portablePdbPath\":\"Binaries/Managed/Demo.pdb\"}"),
+                 "\"portablePdbPath\":\"Binaries/Managed/Demo.pdb\","
+                 "\"reloadTransaction\":{"
+                 "\"schemaVersion\":\"unifiedscript.reload-transaction/v0.1\","
+                 "\"transactionId\":\"live-world-test\","
+                 "\"source\":\"liveWorldDebug\",\"state\":\"published\","
+                 "\"fromGeneration\":9,\"candidateGeneration\":9,"
+                 "\"activeGeneration\":9,\"phases\":[]}}"),
             *Document.SourceCompilationId,
             *Document.SemanticConfigurationId);
         FUnifiedScriptLiveWorldDebugPublish LivePublish;
@@ -1613,6 +1619,11 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
             LiveConfigurationJson.Contains(TEXT("\"runtimeGeneration\": 2")) &&
                 LiveConfigurationJson.Contains(TEXT("us_live_generation")) &&
                 LiveConfigurationJson.Contains(Assignment->DebugTargetId));
+        TestTrue(
+            TEXT("Live World publication retains reload transaction provenance"),
+            LivePublish.ReloadTransactionJson.Contains(TEXT("live-world-test")) &&
+                LivePublish.ReloadTransactionJson.Contains(
+                    TEXT("unifiedscript.reload-transaction/v0.1")));
 
         const FUnifiedScriptRuntimeSourceLocation RuntimeSource{
             Assignment->Span.FilePath,

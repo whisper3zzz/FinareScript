@@ -1,4 +1,5 @@
 using System.Net;
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -509,7 +510,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 authoringFailure is null ? null : CreateQuickFixes(authoringFailure),
                 authoringFailure is null
                     ? null
-                    : session.CreateRollbackResponse(authoringFailure.RollbackState)),
+                    : session.CreateRollbackResponse(authoringFailure.RollbackState),
+                authoringFailure?.ReloadTransaction),
             JsonOptions);
         response.StatusCode = (int)status;
         response.ContentType = "application/json; charset=utf-8";
@@ -768,13 +770,17 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                     mutation,
                     group.Id,
                     group.Description);
-                _ = CommitPreparedSnapshot(
+                AuthoringWorkspaceResponse committed = CommitPreparedSnapshot(
                     mutation.Snapshot!,
                     () => authoring.Commit(mutation, group.Id, group.Description),
-                    persistedHistory);
+                    persistedHistory,
+                    group.Id);
                 activeGroup = null;
                 preparedPreviews.Clear();
-                Workspace = CreateWorkspace(authoring.Current, reload.Generation);
+                Workspace = CreateWorkspace(
+                    authoring.Current,
+                    reload.Generation,
+                    committed.ReloadTransaction);
                 return Workspace;
             }
             finally
@@ -1078,6 +1084,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 }
 
                 EnsureFilesUnchanged();
+                var phases = new List<ReloadTransactionPhaseResponse>();
+                long phaseStart = Stopwatch.GetTimestamp();
                 CSharpProgramEmitResult emitted = emitter.Emit(
                     authoring.Current.Request,
                     new CSharpDebugInstrumentation(typeof(CoreClrDebugProbe).Assembly.Location));
@@ -1089,6 +1097,12 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                         "The instrumented live World assembly could not be emitted; the active artifact was not changed.",
                         emitted.Diagnostics);
                 }
+                phases.Add(CompleteReloadPhase(
+                    "compile",
+                    phaseStart,
+                    "succeeded",
+                    "Emitted the instrumented live World PE and portable PDB in memory."));
+                phaseStart = Stopwatch.GetTimestamp();
                 WriteTransactionally(
                 [
                     new AuthoringOutput(
@@ -1098,11 +1112,27 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                         artifactOutputs.PortablePdbPath,
                         emitted.Image.PortablePdb),
                 ]);
+                phases.Add(CompleteReloadPhase(
+                    "artifactPublication",
+                    phaseStart,
+                    "succeeded",
+                    "Atomically replaced the live World PE and portable PDB."));
+                var transaction = new ReloadTransactionResponse(
+                    "unifiedscript.reload-transaction/v0.1",
+                    $"live-world-{reload.Generation.GenerationId}",
+                    "liveWorldDebug",
+                    "published",
+                    reload.Generation.Number,
+                    reload.Generation.Number,
+                    reload.Generation.Number,
+                    phases,
+                    null);
                 return new DebugLiveWorldPublishResponse(
                     "unifiedscript.live-world-debug-publish/v0.1",
                     reload.Generation,
                     artifactOutputs.ManagedAssemblyPath,
-                    artifactOutputs.PortablePdbPath);
+                    artifactOutputs.PortablePdbPath,
+                    transaction);
             }
             finally
             {
@@ -1280,7 +1310,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 return CommitPreparedSnapshot(
                     mutation.Snapshot,
                     () => authoring.Commit(mutation, transaction.TransactionId),
-                    persistedHistory);
+                    persistedHistory,
+                    transaction.TransactionId);
             }
             finally
             {
@@ -1610,7 +1641,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                         mutation,
                         transaction.TransactionId,
                         transaction.Description),
-                    persistedHistory);
+                    persistedHistory,
+                    transaction.TransactionId);
             }
             finally
             {
@@ -1737,56 +1769,131 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         private AuthoringWorkspaceResponse CommitPreparedSnapshot(
             CSharpAuthoringSnapshot snapshot,
             Action commit,
-            CSharpAuthoringHistoryDocument persistedHistory)
+            CSharpAuthoringHistoryDocument persistedHistory,
+            string transactionId)
         {
             CSharpAuthoringSnapshot previous = authoring.Current;
+            long fromGeneration = reload.Generation.Number;
+            var phases = new List<ReloadTransactionPhaseResponse>();
+            long phaseStart = Stopwatch.GetTimestamp();
             CoreClrDebugReloadResult nextReload;
             try
             {
                 nextReload = transport.Reload(snapshot.Request);
+                phases.Add(CompleteReloadPhase(
+                    "compile",
+                    phaseStart,
+                    "succeeded",
+                    "Compiled and loaded the candidate Workbench CoreCLR generation."));
             }
             catch (Exception exception)
             {
+                phases.Add(CompleteReloadPhase(
+                    "compile",
+                    phaseStart,
+                    "failed",
+                    exception.Message));
+                phases.Add(new ReloadTransactionPhaseResponse(
+                    "rollback",
+                    "unchanged",
+                    0,
+                    "No source, artifact, history, or active generation was changed."));
+                var failedTransaction = new ReloadTransactionResponse(
+                    "unifiedscript.reload-transaction/v0.1",
+                    transactionId,
+                    "authoring",
+                    "rolledBack",
+                    fromGeneration,
+                    fromGeneration + 1,
+                    fromGeneration,
+                    phases,
+                    exception.Message);
                 throw new AuthoringProtocolException(
                     HttpStatusCode.Conflict,
                     "UAW1004",
                     "The candidate runtime generation was rejected; the previous source, artifacts, history, and runtime generation remain active.",
+                    reloadTransaction: failedTransaction,
                     innerException: exception);
             }
+            phaseStart = Stopwatch.GetTimestamp();
             try
             {
                 Persist(snapshot, persistedHistory);
+                phases.Add(CompleteReloadPhase(
+                    "artifactPublication",
+                    phaseStart,
+                    "succeeded",
+                    "Atomically published source, identities, authoring artifacts, PE/PDB, and history."));
             }
             catch (Exception exception)
             {
+                phases.Add(CompleteReloadPhase(
+                    "artifactPublication",
+                    phaseStart,
+                    "failed",
+                    exception.Message));
+                phaseStart = Stopwatch.GetTimestamp();
                 try
                 {
                     reload = transport.Reload(previous.Request);
                     Health = CreateHealth(reload.Generation);
                     Workspace = CreateWorkspace(previous, reload.Generation);
+                    phases.Add(CompleteReloadPhase(
+                        "rollback",
+                        phaseStart,
+                        "restored",
+                        "Restored the previous runtime program as a new Workbench generation."));
                 }
                 catch (Exception restoreException)
                 {
+                    phases.Add(CompleteReloadPhase(
+                        "rollback",
+                        phaseStart,
+                        "failed",
+                        restoreException.Message));
+                    var failedTransaction = new ReloadTransactionResponse(
+                        "unifiedscript.reload-transaction/v0.1",
+                        transactionId,
+                        "authoring",
+                        "failed",
+                        fromGeneration,
+                        nextReload.Generation.Number,
+                        reload.Generation.Number,
+                        phases,
+                        restoreException.Message);
                     throw new AuthoringProtocolException(
                         HttpStatusCode.InternalServerError,
                         "UAW1014",
                         "The authoring commit failed and the previous runtime program could not be fully restored.",
                         rollbackState: "failed",
+                        reloadTransaction: failedTransaction,
                         innerException: new AggregateException(exception, restoreException));
                 }
 
+                var restoredTransaction = new ReloadTransactionResponse(
+                    "unifiedscript.reload-transaction/v0.1",
+                    transactionId,
+                    "authoring",
+                    "rolledBack",
+                    fromGeneration,
+                    nextReload.Generation.Number,
+                    reload.Generation.Number,
+                    phases,
+                    exception.Message);
                 if (exception is AuthoringProtocolException authoringException)
                 {
-                    throw authoringException.WithRollback("restored");
+                    throw authoringException.WithRollback("restored", restoredTransaction);
                 }
                 throw new AuthoringProtocolException(
                     HttpStatusCode.Conflict,
                     "UAW1013",
                     "The authoring commit failed; the previous source, artifacts, history, and runtime program were restored as a new generation.",
                     rollbackState: "restored",
+                    reloadTransaction: restoredTransaction,
                     innerException: exception);
             }
 
+            phaseStart = Stopwatch.GetTimestamp();
             commit();
             preparedPreviews.Clear();
             if (artifactOutputs.HistoryPath is not null)
@@ -1797,8 +1904,40 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             reload = nextReload;
             bindings = reload.Breakpoints.Bindings;
             Health = CreateHealth(reload.Generation);
-            Workspace = CreateWorkspace(authoring.Current, reload.Generation);
+            phases.Add(CompleteReloadPhase(
+                "workbenchGenerationSwap",
+                phaseStart,
+                "succeeded",
+                "Committed authoring history and exposed the candidate Workbench generation."));
+            var transaction = new ReloadTransactionResponse(
+                "unifiedscript.reload-transaction/v0.1",
+                transactionId,
+                "authoring",
+                "published",
+                fromGeneration,
+                reload.Generation.Number,
+                reload.Generation.Number,
+                phases,
+                null);
+            Workspace = CreateWorkspace(authoring.Current, reload.Generation, transaction);
             return Workspace;
+        }
+
+        private static ReloadTransactionPhaseResponse CompleteReloadPhase(
+            string name,
+            long startedTimestamp,
+            string state,
+            string detail)
+        {
+            long elapsedTicks = Stopwatch.GetTimestamp() - startedTimestamp;
+            long microseconds = Math.Max(
+                0,
+                (long)Math.Ceiling(elapsedTicks * 1_000_000d / Stopwatch.Frequency));
+            return new ReloadTransactionPhaseResponse(
+                name,
+                state,
+                microseconds,
+                detail.Length <= 2048 ? detail : detail[..2048]);
         }
 
         private void EnsureFilesUnchanged()
@@ -1930,7 +2069,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
 
         private AuthoringWorkspaceResponse CreateWorkspace(
             CSharpAuthoringSnapshot snapshot,
-            CoreClrProgramGeneration generation)
+            CoreClrProgramGeneration generation,
+            ReloadTransactionResponse? reloadTransaction = null)
         {
             ScriptAssetDocument scriptAssets = snapshot.Analysis.ScriptAssets!;
             AuthoringSurfaceDocument surface = new AuthoringSurfaceProjector().Project(
@@ -1954,7 +2094,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                         activeGroup.Id,
                         activeGroup.Description,
                         activeGroup.BaselineRevision,
-                        activeGroup.StagedOperationCount));
+                        activeGroup.StagedOperationCount),
+                reloadTransaction);
         }
 
         private AuthoringHistoryResponse CreateHistoryResponse()
@@ -2154,6 +2295,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         string message,
         IReadOnlyList<UnifiedDiagnostic>? diagnostics = null,
         string rollbackState = "unchanged",
+        ReloadTransactionResponse? reloadTransaction = null,
         Exception? innerException = null)
         : Exception(message, innerException)
     {
@@ -2165,12 +2307,17 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
 
         public string RollbackState { get; } = rollbackState;
 
-        public AuthoringProtocolException WithRollback(string state) => new(
+        public ReloadTransactionResponse? ReloadTransaction { get; } = reloadTransaction;
+
+        public AuthoringProtocolException WithRollback(
+            string state,
+            ReloadTransactionResponse? reloadTransaction = null) => new(
             Status,
             Code,
             Message,
             Diagnostics,
             state,
+            reloadTransaction ?? ReloadTransaction,
             this);
     }
 }
@@ -2204,7 +2351,25 @@ internal sealed record AuthoringWorkspaceResponse(
     VisualProfileReport Profile,
     AuthoringHistoryResponse History,
     CoreClrProgramGeneration Generation,
-    AuthoringGroupResponse? Group);
+    AuthoringGroupResponse? Group,
+    ReloadTransactionResponse? ReloadTransaction);
+
+internal sealed record ReloadTransactionPhaseResponse(
+    string Name,
+    string State,
+    long DurationMicroseconds,
+    string Detail);
+
+internal sealed record ReloadTransactionResponse(
+    string SchemaVersion,
+    string TransactionId,
+    string Source,
+    string State,
+    long FromGeneration,
+    long CandidateGeneration,
+    long ActiveGeneration,
+    IReadOnlyList<ReloadTransactionPhaseResponse> Phases,
+    string? Failure);
 
 internal sealed record AuthoringPreviewResponse(
     string SchemaVersion,
@@ -2280,7 +2445,8 @@ internal sealed record DebugLiveWorldPublishResponse(
     string SchemaVersion,
     CoreClrProgramGeneration Generation,
     string AssemblyPath,
-    string PortablePdbPath);
+    string PortablePdbPath,
+    ReloadTransactionResponse ReloadTransaction);
 
 internal sealed record DebugReceiverRequest(
     SemanticId AssetId,
@@ -2361,7 +2527,8 @@ internal sealed record DebugErrorResponse(
     DebugError Error,
     IReadOnlyList<UnifiedDiagnostic>? Diagnostics = null,
     IReadOnlyList<AuthoringQuickFixResponse>? QuickFixes = null,
-    AuthoringRollbackResponse? Rollback = null);
+    AuthoringRollbackResponse? Rollback = null,
+    ReloadTransactionResponse? ReloadTransaction = null);
 
 internal sealed record DebugError(string Code, string Message);
 

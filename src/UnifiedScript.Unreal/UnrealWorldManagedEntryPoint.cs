@@ -1,9 +1,12 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Loader;
 using System.Text;
+using System.Text.Json;
+using UnifiedScript.Core;
 
 namespace UnifiedScript.Unreal;
 
@@ -45,6 +48,21 @@ public interface IUnrealManagedScript
 
     void OnStop();
 }
+
+internal sealed record UnrealManagedReloadPhase(
+    string Name,
+    string State,
+    long DurationMicroseconds,
+    string Detail);
+
+internal sealed record UnrealManagedReloadTransaction(
+    string SchemaVersion,
+    string State,
+    int FromGeneration,
+    int CandidateGeneration,
+    int ActiveGeneration,
+    IReadOnlyList<UnrealManagedReloadPhase> Phases,
+    string? Failure);
 
 public static class UnrealWorldManagedEntryPoint
 {
@@ -271,6 +289,42 @@ public static class UnrealWorldManagedEntryPoint
         catch (Exception exception)
         {
             ReportBoundaryFailure(worldId, instanceId, nameof(GetScriptDebugState), exception);
+            return 0;
+        }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static unsafe int GetScriptReloadState(
+        ulong worldId,
+        ulong instanceId,
+        nint buffer,
+        int bufferCapacity)
+    {
+        if (worldId == 0 || instanceId == 0 || bufferCapacity < 0 ||
+            !Worlds.TryGetValue(worldId, out WorldEntry? entry))
+        {
+            return 0;
+        }
+        try
+        {
+            string? json = entry.GetScriptReloadState(instanceId);
+            if (string.IsNullOrEmpty(json))
+            {
+                return 0;
+            }
+            int requiredBytes = Encoding.UTF8.GetByteCount(json);
+            if (buffer == nint.Zero || bufferCapacity <= requiredBytes)
+            {
+                return requiredBytes;
+            }
+            var destination = new Span<byte>((void*)buffer, bufferCapacity);
+            int written = Encoding.UTF8.GetBytes(json, destination);
+            destination[written] = 0;
+            return written;
+        }
+        catch (Exception exception)
+        {
+            ReportBoundaryFailure(worldId, instanceId, nameof(GetScriptReloadState), exception);
             return 0;
         }
     }
@@ -704,6 +758,17 @@ public static class UnrealWorldManagedEntryPoint
             }
         }
 
+        public string? GetScriptReloadState(ulong instanceId)
+        {
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                return _scripts.TryGetValue(instanceId, out ManagedScriptInstance? script)
+                    ? script.GetReloadState()
+                    : null;
+            }
+        }
+
         public UnrealWorldManagedEntryStatus ControlScriptDebug(
             ulong instanceId,
             UnrealWorldDebugControl control,
@@ -837,6 +902,7 @@ public static class UnrealWorldManagedEntryPoint
         private string _typeName;
         private ScriptGeneration _current;
         private readonly UnrealWorldDebugController _debug;
+        private string _lastReloadTransactionJson = string.Empty;
         private bool _started;
 
         private ManagedScriptInstance(
@@ -911,6 +977,8 @@ public static class UnrealWorldManagedEntryPoint
 
         public string GetDebugState() => _debug.GetSnapshotJson();
 
+        public string GetReloadState() => _lastReloadTransactionJson;
+
         public void ControlDebug(UnrealWorldDebugControl control, string? pauseId) =>
             _debug.Control(control, pauseId);
 
@@ -937,35 +1005,192 @@ public static class UnrealWorldManagedEntryPoint
             }
             _debug.Disable();
             string nextAssemblyPath = Path.GetFullPath(assemblyPath);
-            ScriptGeneration next = LoadGeneration(
-                checked(_current.Generation + 1),
-                nextAssemblyPath,
-                typeName);
             ScriptGeneration previous = _current;
-            if (_started)
-            {
-                previous.Script.OnStop();
-                previous.Bridge.ClearSubscriptions();
-                _started = false;
-            }
-
+            int candidateGeneration = checked(previous.Generation + 1);
+            var phases = new List<UnrealManagedReloadPhase>();
+            ScriptGeneration? next = null;
+            long phaseStart = Stopwatch.GetTimestamp();
             try
             {
-                StartGeneration(next);
-                _started = true;
+                next = LoadGeneration(candidateGeneration, nextAssemblyPath, typeName);
+                phases.Add(CompletePhase(
+                    "generationLoad",
+                    phaseStart,
+                    "succeeded",
+                    "Loaded the candidate assembly into a collectible script context."));
             }
-            catch
+            catch (Exception exception)
             {
-                next.Dispose();
-                StartGeneration(previous);
-                _started = true;
+                phases.Add(CompletePhase(
+                    "generationLoad",
+                    phaseStart,
+                    "failed",
+                    exception.Message));
+                phases.Add(new UnrealManagedReloadPhase(
+                    "rollback",
+                    "unchanged",
+                    0,
+                    "The active generation was never stopped or swapped."));
+                SetReloadTransaction(
+                    "rolledBack",
+                    previous.Generation,
+                    candidateGeneration,
+                    previous.Generation,
+                    phases,
+                    exception);
                 throw;
             }
 
+            bool previousWasStarted = _started;
+            bool previousStopAttempted = false;
+            bool candidateStartAttempted = false;
+            string activePhase = "oldGenerationStop";
+            try
+            {
+                if (_started)
+                {
+                    activePhase = "oldGenerationStop";
+                    phaseStart = Stopwatch.GetTimestamp();
+                    _started = false;
+                    previousStopAttempted = true;
+                    StopGeneration(previous);
+                    phases.Add(CompletePhase(
+                        "oldGenerationStop",
+                        phaseStart,
+                        "succeeded",
+                        "Stopped the old script and released every generation-owned event subscription."));
+                }
+
+                activePhase = "candidateStart";
+                phaseStart = Stopwatch.GetTimestamp();
+                UnrealScriptContext context = CreateContext(next);
+                candidateStartAttempted = true;
+                next.Script.OnStart(context);
+                phases.Add(CompletePhase(
+                    "candidateStart",
+                    phaseStart,
+                    "succeeded",
+                    "Started the candidate script against its generation-owned bridge."));
+
+                activePhase = "eventRebinding";
+                phaseStart = Stopwatch.GetTimestamp();
+                IReadOnlyList<IUnrealEventSubscription> subscriptions =
+                    UnrealEventBinder.BindAttributedEvents(next.Script, context);
+                phases.Add(CompletePhase(
+                    "eventRebinding",
+                    phaseStart,
+                    "succeeded",
+                    $"Bound {subscriptions.Count} reflected event subscription(s)."));
+                _started = true;
+            }
+            catch (Exception exception)
+            {
+                phases.Add(CompletePhase(
+                    activePhase,
+                    phaseStart,
+                    "failed",
+                    exception.Message));
+                Exception? cleanupFailure = null;
+                try
+                {
+                    if (candidateStartAttempted)
+                    {
+                        StopGeneration(next);
+                    }
+                    else
+                    {
+                        next.Bridge.ClearSubscriptions();
+                    }
+                }
+                catch (Exception cleanupException)
+                {
+                    cleanupFailure = cleanupException;
+                }
+                finally
+                {
+                    next.Dispose();
+                }
+
+                phaseStart = Stopwatch.GetTimestamp();
+                try
+                {
+                    if (previousWasStarted && previousStopAttempted)
+                    {
+                        StartGeneration(previous);
+                        _started = true;
+                    }
+                    else
+                    {
+                        _started = previousWasStarted;
+                    }
+                    phases.Add(CompletePhase(
+                        "rollback",
+                        phaseStart,
+                        previousStopAttempted ? "restored" : "unchanged",
+                        previousStopAttempted
+                            ? "Restarted the previous generation and rebound its events."
+                            : "The active generation was never stopped."));
+                }
+                catch (Exception restoreException)
+                {
+                    _started = false;
+                    phases.Add(CompletePhase(
+                        "rollback",
+                        phaseStart,
+                        "failed",
+                        restoreException.Message));
+                    var aggregate = new AggregateException(
+                        "The candidate generation failed and the previous generation could not be restored.",
+                        cleanupFailure is null
+                            ? [exception, restoreException]
+                            : [exception, cleanupFailure, restoreException]);
+                    SetReloadTransaction(
+                        "failed",
+                        previous.Generation,
+                        candidateGeneration,
+                        previous.Generation,
+                        phases,
+                        aggregate);
+                    throw aggregate;
+                }
+
+                Exception reported = cleanupFailure is null
+                    ? exception
+                    : new AggregateException(exception, cleanupFailure);
+                SetReloadTransaction(
+                    "rolledBack",
+                    previous.Generation,
+                    candidateGeneration,
+                    previous.Generation,
+                    phases,
+                    reported);
+                throw reported;
+            }
+
+            phaseStart = Stopwatch.GetTimestamp();
             _current = next;
             _assemblyPath = nextAssemblyPath;
             _typeName = typeName;
+            phases.Add(CompletePhase(
+                "generationSwap",
+                phaseStart,
+                "succeeded",
+                "Published the candidate as the only active managed generation."));
+
+            phaseStart = Stopwatch.GetTimestamp();
             previous.Dispose();
+            phases.Add(CompletePhase(
+                "oldContextCollection",
+                phaseStart,
+                "scheduled",
+                "Unloaded the old collectible context; lifecycle collection verifies reclamation."));
+            SetReloadTransaction(
+                "committed",
+                previous.Generation,
+                candidateGeneration,
+                next.Generation,
+                phases,
+                failure: null);
             return next.Generation;
         }
 
@@ -1001,6 +1226,67 @@ public static class UnrealWorldManagedEntryPoint
             UnrealScriptContext context = CreateContext(generation);
             generation.Script.OnStart(context);
             _ = UnrealEventBinder.BindAttributedEvents(generation.Script, context);
+        }
+
+        private static void StopGeneration(ScriptGeneration generation)
+        {
+            List<Exception>? failures = null;
+            try
+            {
+                generation.Script.OnStop();
+            }
+            catch (Exception exception)
+            {
+                (failures ??= []).Add(exception);
+            }
+            try
+            {
+                generation.Bridge.ClearSubscriptions();
+            }
+            catch (Exception exception)
+            {
+                (failures ??= []).Add(exception);
+            }
+            if (failures is not null)
+            {
+                throw new AggregateException(
+                    "The managed generation did not stop cleanly.",
+                    failures);
+            }
+        }
+
+        private static UnrealManagedReloadPhase CompletePhase(
+            string name,
+            long startedTimestamp,
+            string state,
+            string detail)
+        {
+            long elapsedTicks = Stopwatch.GetTimestamp() - startedTimestamp;
+            long microseconds = Math.Max(
+                0,
+                (long)Math.Ceiling(
+                    elapsedTicks * 1_000_000d / Stopwatch.Frequency));
+            return new UnrealManagedReloadPhase(name, state, microseconds, detail);
+        }
+
+        private void SetReloadTransaction(
+            string state,
+            int fromGeneration,
+            int candidateGeneration,
+            int activeGeneration,
+            IReadOnlyList<UnrealManagedReloadPhase> phases,
+            Exception? failure)
+        {
+            _lastReloadTransactionJson = JsonSerializer.Serialize(
+                new UnrealManagedReloadTransaction(
+                    "unifiedscript.managed-reload-transaction/v0.1",
+                    state,
+                    fromGeneration,
+                    candidateGeneration,
+                    activeGeneration,
+                    phases,
+                    failure?.Message),
+                UnifiedJson.CreateOptions(writeIndented: false));
         }
 
         private ScriptGeneration LoadGeneration(

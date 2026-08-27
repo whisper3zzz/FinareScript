@@ -444,6 +444,35 @@ bool FUnifiedScriptAuthoringWorkbench::ParseWorkspaceResponse(
         return false;
     }
 
+    const TSharedPtr<FJsonObject>* ReloadTransaction = nullptr;
+    if (Root->TryGetObjectField(TEXT("reloadTransaction"), ReloadTransaction) &&
+        ReloadTransaction != nullptr)
+    {
+        FString ReloadSchema;
+        FString ReloadTransactionId;
+        const TArray<TSharedPtr<FJsonValue>>* ReloadPhases = nullptr;
+        if (!(*ReloadTransaction)->TryGetStringField(
+                TEXT("schemaVersion"), ReloadSchema) ||
+            ReloadSchema != TEXT("unifiedscript.reload-transaction/v0.1") ||
+            !(*ReloadTransaction)->TryGetStringField(
+                TEXT("transactionId"), ReloadTransactionId) ||
+            ReloadTransactionId.IsEmpty() ||
+            !(*ReloadTransaction)->TryGetArrayField(TEXT("phases"), ReloadPhases) ||
+            ReloadPhases == nullptr)
+        {
+            OutError = TEXT("The Workbench response has an invalid reload transaction.");
+            return false;
+        }
+        const TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> ReloadWriter =
+            TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(
+                &Candidate.ReloadTransactionJson);
+        if (!FJsonSerializer::Serialize(ReloadTransaction->ToSharedRef(), ReloadWriter))
+        {
+            OutError = TEXT("The Workbench reload transaction could not be decoded.");
+            return false;
+        }
+    }
+
     const TSharedPtr<FJsonObject>* Surface = nullptr;
     if (!Root->TryGetObjectField(TEXT("surface"), Surface) || !Surface->IsValid())
     {

@@ -432,6 +432,24 @@ bool UUnifiedScriptWorldSubsystem::ReloadManagedScript(
         OutError);
 }
 
+bool UUnifiedScriptWorldSubsystem::GetManagedScriptReloadState(
+    uint64 InstanceId,
+    FString& OutJson,
+    FString& OutError) const
+{
+    if (!IsManagedWorldReady())
+    {
+        OutJson.Reset();
+        OutError = TEXT("The UnifiedScript managed World is not ready.");
+        return false;
+    }
+    return FUnifiedScriptCoreClrHost::Get().GetManagedScriptReloadState(
+        WorldHostId,
+        InstanceId,
+        OutJson,
+        OutError);
+}
+
 bool UUnifiedScriptWorldSubsystem::DestroyManagedScript(
     uint64 InstanceId,
     FString& OutError)
@@ -470,6 +488,11 @@ bool UUnifiedScriptWorldSubsystem::GetManagedInvocationMetrics(
 int32 UUnifiedScriptWorldSubsystem::NumRegisteredObjects() const
 {
     return IsNativeRuntimeReady() ? ObjectRegistry->Num() : 0;
+}
+
+int32 UUnifiedScriptWorldSubsystem::GetEventSubscriptionCount() const
+{
+    return NativeContext != nullptr ? NativeContext->GetEventSubscriptionCount() : 0;
 }
 
 uint64 UUnifiedScriptWorldSubsystem::GetFastInvocationCount() const

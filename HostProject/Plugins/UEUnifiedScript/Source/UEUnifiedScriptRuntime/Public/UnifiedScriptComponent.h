@@ -82,6 +82,10 @@ public:
     UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category="UnifiedScript")
     FString LastScriptError;
 
+    /** Last compile-to-World reload transaction, including rollback and resource evidence. */
+    UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category="UnifiedScript|Reload")
+    FString LastReloadTransaction;
+
     UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category="UnifiedScript")
     bool bScriptRunning = false;
 
@@ -93,6 +97,9 @@ public:
 
     UFUNCTION(BlueprintCallable, Category="UnifiedScript")
     bool ReloadScript();
+
+    /** Extends an authoring publication transaction through the live World swap. */
+    bool ReloadScriptWithTransaction(const FString& PublicationTransactionJson);
 
     UFUNCTION(BlueprintCallable, Category="UnifiedScript")
     void RequestReload();

@@ -418,6 +418,7 @@ bool FUnifiedScriptDebugWorkbench::ParseLiveWorldPublishResponse(
     TSharedPtr<FJsonObject> Root;
     const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Json);
     const TSharedPtr<FJsonObject>* Generation = nullptr;
+    const TSharedPtr<FJsonObject>* ReloadTransaction = nullptr;
     FString Schema;
     FUnifiedScriptLiveWorldDebugPublish Candidate;
     if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid() ||
@@ -427,12 +428,35 @@ bool FUnifiedScriptDebugWorkbench::ParseLiveWorldPublishResponse(
         !ReadGeneration(*Generation, Candidate.Generation, OutError) ||
         Candidate.Generation.DomainId.IsEmpty() || Candidate.Generation.ImageKey.IsEmpty() ||
         !ReadRequiredString(Root, TEXT("assemblyPath"), Candidate.AssemblyPath, OutError) ||
-        !ReadRequiredString(Root, TEXT("portablePdbPath"), Candidate.PortablePdbPath, OutError))
+        !ReadRequiredString(Root, TEXT("portablePdbPath"), Candidate.PortablePdbPath, OutError) ||
+        !Root->TryGetObjectField(TEXT("reloadTransaction"), ReloadTransaction) ||
+        ReloadTransaction == nullptr)
     {
         if (OutError.IsEmpty())
         {
             OutError = TEXT("The Workbench returned an invalid live World debug publish response.");
         }
+        return false;
+    }
+    FString ReloadSchema;
+    FString ReloadTransactionId;
+    const TArray<TSharedPtr<FJsonValue>>* ReloadPhases = nullptr;
+    if (!(*ReloadTransaction)->TryGetStringField(TEXT("schemaVersion"), ReloadSchema) ||
+        ReloadSchema != TEXT("unifiedscript.reload-transaction/v0.1") ||
+        !(*ReloadTransaction)->TryGetStringField(TEXT("transactionId"), ReloadTransactionId) ||
+        ReloadTransactionId.IsEmpty() ||
+        !(*ReloadTransaction)->TryGetArrayField(TEXT("phases"), ReloadPhases) ||
+        ReloadPhases == nullptr)
+    {
+        OutError = TEXT("The live World publication has no valid reload transaction.");
+        return false;
+    }
+    const TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> ReloadWriter =
+        TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(
+            &Candidate.ReloadTransactionJson);
+    if (!FJsonSerializer::Serialize(ReloadTransaction->ToSharedRef(), ReloadWriter))
+    {
+        OutError = TEXT("The live World reload transaction could not be decoded.");
         return false;
     }
     Candidate.AssemblyPath = FPaths::ConvertRelativePathToFull(Candidate.AssemblyPath);

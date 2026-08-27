@@ -26,6 +26,7 @@ struct FUnifiedScriptLiveWorldDebugPublish
     FUnifiedScriptDebugGeneration Generation;
     FString AssemblyPath;
     FString PortablePdbPath;
+    FString ReloadTransactionJson;
 };
 
 struct FUnifiedScriptDebugValue

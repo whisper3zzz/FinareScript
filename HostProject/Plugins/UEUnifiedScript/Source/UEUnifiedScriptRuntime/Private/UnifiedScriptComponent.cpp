@@ -62,6 +62,156 @@ const TCHAR* DescribeWorldType(EWorldType::Type WorldType)
         default: return TEXT("Unknown");
     }
 }
+
+class FReloadTransactionBuilder
+{
+public:
+    bool Initialize(
+        const FString& PublicationJson,
+        int32 FromGeneration,
+        FString& OutError)
+    {
+        Root = MakeShared<FJsonObject>();
+        if (!PublicationJson.IsEmpty())
+        {
+            const TSharedRef<TJsonReader<>> Reader =
+                TJsonReaderFactory<>::Create(PublicationJson);
+            if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+            {
+                OutError = TEXT("The reload publication transaction is invalid JSON.");
+                return false;
+            }
+            FString Schema;
+            if (!Root->TryGetStringField(TEXT("schemaVersion"), Schema) ||
+                Schema != TEXT("unifiedscript.reload-transaction/v0.1"))
+            {
+                OutError = FString::Printf(
+                    TEXT("Unsupported reload transaction schema '%s'."),
+                    *Schema);
+                return false;
+            }
+            const TArray<TSharedPtr<FJsonValue>>* ExistingPhases = nullptr;
+            if (Root->TryGetArrayField(TEXT("phases"), ExistingPhases) &&
+                ExistingPhases != nullptr)
+            {
+                Phases = *ExistingPhases;
+            }
+        }
+        else
+        {
+            Root->SetStringField(
+                TEXT("schemaVersion"),
+                TEXT("unifiedscript.reload-transaction/v0.1"));
+            Root->SetStringField(
+                TEXT("transactionId"),
+                FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower));
+            Root->SetStringField(TEXT("source"), TEXT("runtime"));
+            AddPhase(
+                TEXT("compile"),
+                TEXT("notApplicable"),
+                0.0,
+                TEXT("Direct runtime reload uses the currently published assembly."));
+            AddPhase(
+                TEXT("artifactPublication"),
+                TEXT("notApplicable"),
+                0.0,
+                TEXT("Direct runtime reload performs no artifact write."));
+        }
+        Root->SetNumberField(TEXT("fromGeneration"), FromGeneration);
+        Root->SetStringField(TEXT("state"), TEXT("running"));
+        OutError.Reset();
+        return true;
+    }
+
+    void AddPhase(
+        const FString& Name,
+        const FString& State,
+        double StartedSeconds,
+        const FString& Detail)
+    {
+        const double DurationMicroseconds = StartedSeconds > 0.0
+            ? FMath::Max(0.0, (FPlatformTime::Seconds() - StartedSeconds) * 1000000.0)
+            : 0.0;
+        const TSharedRef<FJsonObject> Phase = MakeShared<FJsonObject>();
+        Phase->SetStringField(TEXT("name"), Name);
+        Phase->SetStringField(TEXT("state"), State);
+        Phase->SetNumberField(TEXT("durationMicroseconds"), DurationMicroseconds);
+        Phase->SetStringField(TEXT("detail"), Detail.Left(2048));
+        Phases.Add(MakeShared<FJsonValueObject>(Phase));
+    }
+
+    void AppendManagedPhases(const FString& ManagedJson)
+    {
+        TSharedPtr<FJsonObject> Managed;
+        const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ManagedJson);
+        FString Schema;
+        const TArray<TSharedPtr<FJsonValue>>* ManagedPhases = nullptr;
+        if (!FJsonSerializer::Deserialize(Reader, Managed) || !Managed.IsValid() ||
+            !Managed->TryGetStringField(TEXT("schemaVersion"), Schema) ||
+            Schema != TEXT("unifiedscript.managed-reload-transaction/v0.1") ||
+            !Managed->TryGetArrayField(TEXT("phases"), ManagedPhases) ||
+            ManagedPhases == nullptr)
+        {
+            AddPhase(
+                TEXT("managedTransactionRead"),
+                TEXT("failed"),
+                0.0,
+                TEXT("The managed reload phase report was missing or invalid."));
+            return;
+        }
+        Phases.Append(*ManagedPhases);
+        FString ManagedState;
+        if (Managed->TryGetStringField(TEXT("state"), ManagedState))
+        {
+            Root->SetStringField(TEXT("managedState"), ManagedState);
+        }
+    }
+
+    FString Finish(
+        const FString& State,
+        int32 CandidateGeneration,
+        int32 ActiveGeneration,
+        const UUnifiedScriptWorldSubsystem* Host,
+        bool bSemanticDebugActive,
+        const FString& Failure = FString())
+    {
+        Root->SetStringField(TEXT("state"), State);
+        Root->SetNumberField(TEXT("candidateGeneration"), CandidateGeneration);
+        Root->SetNumberField(TEXT("activeGeneration"), ActiveGeneration);
+        Root->SetArrayField(TEXT("phases"), Phases);
+        if (!Failure.IsEmpty())
+        {
+            Root->SetStringField(TEXT("failure"), Failure.Left(4096));
+        }
+        const TSharedRef<FJsonObject> Resources = MakeShared<FJsonObject>();
+        Resources->SetNumberField(
+            TEXT("registeredObjects"),
+            Host != nullptr ? Host->NumRegisteredObjects() : 0);
+        Resources->SetNumberField(
+            TEXT("eventSubscriptions"),
+            Host != nullptr ? Host->GetEventSubscriptionCount() : 0);
+        Resources->SetNumberField(
+            TEXT("pendingAsyncRequests"),
+            Host != nullptr ? Host->GetPendingAsyncRequestCount() : 0);
+        Resources->SetNumberField(
+            TEXT("queuedAsyncCompletions"),
+            Host != nullptr ? Host->GetQueuedAsyncCompletionCount() : 0);
+        Resources->SetNumberField(
+            TEXT("ownedAsyncResources"),
+            Host != nullptr ? Host->GetOwnedAsyncResourceCount() : 0);
+        Resources->SetBoolField(TEXT("semanticDebugActive"), bSemanticDebugActive);
+        Root->SetObjectField(TEXT("resources"), Resources);
+
+        FString Json;
+        const TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
+            TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Json);
+        return FJsonSerializer::Serialize(Root.ToSharedRef(), Writer) ? Json : FString();
+    }
+
+private:
+    TSharedPtr<FJsonObject> Root;
+    TArray<TSharedPtr<FJsonValue>> Phases;
+};
 }
 
 UUnifiedScriptComponent::UUnifiedScriptComponent()
@@ -439,10 +589,44 @@ void UUnifiedScriptComponent::StopScript()
 
 bool UUnifiedScriptComponent::ReloadScript()
 {
+    return ReloadScriptWithTransaction(FString());
+}
+
+bool UUnifiedScriptComponent::ReloadScriptWithTransaction(
+    const FString& PublicationTransactionJson)
+{
     check(IsInGameThread());
     if (!bScriptRunning)
     {
         return StartScript();
+    }
+
+    const int32 FromGeneration = FCString::Atoi(*ActiveGeneration);
+    const int32 CandidateGeneration = FMath::Max(1, FromGeneration + 1);
+    UE::UnifiedScript::Component::Private::FReloadTransactionBuilder Transaction;
+    FString TransactionError;
+    if (!Transaction.Initialize(
+            PublicationTransactionJson,
+            FromGeneration,
+            TransactionError))
+    {
+        UE::UnifiedScript::Component::Private::FReloadTransactionBuilder Failure;
+        FString Ignored;
+        Failure.Initialize(FString(), FromGeneration, Ignored);
+        Failure.AddPhase(
+            TEXT("publicationProvenance"),
+            TEXT("failed"),
+            0.0,
+            TransactionError);
+        LastReloadTransaction = Failure.Finish(
+            TEXT("failed"),
+            CandidateGeneration,
+            FromGeneration,
+            nullptr,
+            bSemanticDebugTickActive,
+            TransactionError);
+        SetScriptFailure(MoveTemp(TransactionError));
+        return false;
     }
 
     UUnifiedScriptWorldSubsystem* Host =
@@ -451,42 +635,100 @@ bool UUnifiedScriptComponent::ReloadScript()
         : nullptr;
     if (Host == nullptr)
     {
-        SetScriptFailure(TEXT("The UnifiedScript World host is unavailable during Reload."));
+        FString Error = TEXT("The UnifiedScript World host is unavailable during Reload.");
+        Transaction.AddPhase(TEXT("worldValidation"), TEXT("failed"), 0.0, Error);
+        LastReloadTransaction = Transaction.Finish(
+            TEXT("failed"),
+            CandidateGeneration,
+            FromGeneration,
+            nullptr,
+            bSemanticDebugTickActive,
+            Error);
+        SetScriptFailure(MoveTemp(Error));
         return false;
     }
 
+    double PhaseStart = FPlatformTime::Seconds();
     FString DebugDrainError;
     if (!DisableSemanticDebugAndDrain(DebugDrainError))
     {
+        Transaction.AddPhase(
+            TEXT("debugDrain"),
+            TEXT("failed"),
+            PhaseStart,
+            DebugDrainError);
+        LastReloadTransaction = Transaction.Finish(
+            TEXT("rolledBack"),
+            CandidateGeneration,
+            FromGeneration,
+            Host,
+            bSemanticDebugTickActive,
+            DebugDrainError);
         SetScriptFailure(MoveTemp(DebugDrainError));
         return false;
     }
+    Transaction.AddPhase(
+        TEXT("debugDrain"),
+        TEXT("succeeded"),
+        PhaseStart,
+        TEXT("Disabled semantic execution and drained its worker before reload."));
 
     FString Error;
     FString ResolvedAssemblyPath;
     FString ResolvedTypeName;
     UUnifiedScriptAsset* ResolvedAsset = nullptr;
+    PhaseStart = FPlatformTime::Seconds();
     if (!ResolveScriptConfiguration(
             ResolvedAssemblyPath,
             ResolvedTypeName,
             ResolvedAsset,
             Error))
     {
+        Transaction.AddPhase(
+            TEXT("configurationResolution"), TEXT("failed"), PhaseStart, Error);
+        LastReloadTransaction = Transaction.Finish(
+            TEXT("rolledBack"),
+            CandidateGeneration,
+            FromGeneration,
+            Host,
+            false,
+            Error);
         SetScriptFailure(MoveTemp(Error));
         return false;
     }
+    Transaction.AddPhase(
+        TEXT("configurationResolution"),
+        TEXT("succeeded"),
+        PhaseStart,
+        TEXT("Resolved the Script Asset assembly, type, and declaration paths."));
     if (!IFileManager::Get().FileExists(*ResolvedAssemblyPath))
     {
-        SetScriptFailure(FString::Printf(
+        Error = FString::Printf(
             TEXT("The managed script assembly does not exist: '%s'."),
-            *ResolvedAssemblyPath));
+            *ResolvedAssemblyPath);
+        Transaction.AddPhase(
+            TEXT("artifactValidation"), TEXT("failed"), 0.0, Error);
+        LastReloadTransaction = Transaction.Finish(
+            TEXT("rolledBack"),
+            CandidateGeneration,
+            FromGeneration,
+            Host,
+            false,
+            Error);
+        SetScriptFailure(MoveTemp(Error));
         return false;
     }
+    Transaction.AddPhase(
+        TEXT("artifactValidation"),
+        TEXT("succeeded"),
+        0.0,
+        TEXT("Validated that the published managed assembly is readable."));
 
     FInstancedPropertyBag CandidateScriptState;
     TArray<FGuid> CandidateOverrideIds;
     FUnifiedScriptStateMigrationReport CandidateMigration;
     FString CandidateDeclarationAssetPath;
+    PhaseStart = FPlatformTime::Seconds();
     if (!BuildScriptState(
             ResolvedAsset,
             ScriptState,
@@ -497,9 +739,26 @@ bool UUnifiedScriptComponent::ReloadScript()
             CandidateDeclarationAssetPath,
             Error))
     {
+        Transaction.AddPhase(
+            TEXT("stateMigration"), TEXT("failed"), PhaseStart, Error);
+        LastReloadTransaction = Transaction.Finish(
+            TEXT("rolledBack"),
+            CandidateGeneration,
+            FromGeneration,
+            Host,
+            false,
+            Error);
         SetScriptFailure(MoveTemp(Error));
         return false;
     }
+    Transaction.AddPhase(
+        TEXT("stateMigration"),
+        TEXT("succeeded"),
+        PhaseStart,
+        FString::Printf(
+            TEXT("Prepared %d state value(s), preserving %d override(s)."),
+            CandidateScriptState.GetNumPropertiesInBag(),
+            CandidateOverrideIds.Num()));
 
     FInstancedPropertyBag PreviousScriptState = ScriptState;
     TArray<FGuid> PreviousOverrideIds = ScriptStateOverrideIds;
@@ -510,18 +769,48 @@ bool UUnifiedScriptComponent::ReloadScript()
     ScriptStateOverrideIds = MoveTemp(CandidateOverrideIds);
     bScriptStateOverrideBaselineInitialized = true;
     int32 Generation = 0;
-    if (!Host->ReloadManagedScript(
+    const bool bManagedReloaded = Host->ReloadManagedScript(
             ManagedScriptInstanceId,
             ResolvedAssemblyPath,
             ResolvedTypeName,
             Generation,
-            Error))
+            Error);
+    FString ManagedTransactionJson;
+    FString ManagedTransactionError;
+    if (Host->GetManagedScriptReloadState(
+            ManagedScriptInstanceId,
+            ManagedTransactionJson,
+            ManagedTransactionError))
+    {
+        Transaction.AppendManagedPhases(ManagedTransactionJson);
+    }
+    else
+    {
+        Transaction.AddPhase(
+            TEXT("managedTransactionRead"),
+            TEXT("failed"),
+            0.0,
+            ManagedTransactionError);
+    }
+    if (!bManagedReloaded)
     {
         ScriptState = MoveTemp(PreviousScriptState);
         ScriptStateOverrideIds = MoveTemp(PreviousOverrideIds);
         bScriptStateOverrideBaselineInitialized =
             bPreviousOverrideBaselineInitialized;
         MaterializedStateOverrideCount = PreviousOverrideCount;
+        Transaction.AddPhase(
+            TEXT("stateRollback"),
+            TEXT("restored"),
+            0.0,
+            TEXT("Restored the previous property bag and explicit override identities."));
+        LastReloadTransaction = Transaction.Finish(
+            TEXT("rolledBack"),
+            CandidateGeneration,
+            FromGeneration,
+            Host,
+            false,
+            Error);
         SetScriptFailure(MoveTemp(Error));
         return false;
     }
@@ -535,6 +824,17 @@ bool UUnifiedScriptComponent::ReloadScript()
     ApplyStateMigrationDiagnostics(CandidateMigration);
     ActiveResolvedAssemblyPath = MoveTemp(ResolvedAssemblyPath);
     ActiveResolvedTypeName = MoveTemp(ResolvedTypeName);
+    Transaction.AddPhase(
+        TEXT("stateCommit"),
+        TEXT("succeeded"),
+        0.0,
+        TEXT("Committed the migrated property bag after the managed generation swap."));
+    LastReloadTransaction = Transaction.Finish(
+        TEXT("committed"),
+        CandidateGeneration,
+        Generation,
+        Host,
+        false);
     LastScriptError.Reset();
     LastRuntimeDiagnostic = {};
     return true;

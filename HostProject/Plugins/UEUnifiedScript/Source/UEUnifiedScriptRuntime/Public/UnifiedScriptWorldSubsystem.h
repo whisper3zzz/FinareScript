@@ -107,6 +107,11 @@ public:
         int32& OutGeneration,
         FString& OutError);
 
+    bool GetManagedScriptReloadState(
+        uint64 InstanceId,
+        FString& OutJson,
+        FString& OutError) const;
+
     bool DestroyManagedScript(uint64 InstanceId, FString& OutError);
 
     int32 GetManagedScriptCount() const;
@@ -116,6 +121,8 @@ public:
         uint64& OutLegacyInvocationCount) const;
 
     int32 NumRegisteredObjects() const;
+
+    int32 GetEventSubscriptionCount() const;
 
     uint64 GetFastInvocationCount() const;
 

@@ -119,6 +119,7 @@ struct FUnifiedScriptAuthoringWorkspaceResult
     FUnifiedScriptVisualProfileResult Profile;
     FUnifiedScriptAuthoringHistoryResult History;
     FUnifiedScriptAuthoringGroupResult Group;
+    FString ReloadTransactionJson;
 };
 
 class UEUNIFIEDSCRIPTEDITOR_API FUnifiedScriptAuthoringWorkbench

@@ -3904,6 +3904,7 @@ void SUnifiedScriptAuthoringSurface::HandlePatchResponse(
     const bool bWorkspaceGroupActive = Workspace.Group.bActive;
     const int64 WorkspaceRevision = Workspace.Revision;
     const int64 WorkspaceGeneration = Workspace.Generation;
+    const FString ReloadTransactionJson = Workspace.ReloadTransactionJson;
     AdoptWorkspace(MoveTemp(Workspace));
     PendingAuthoringTransaction.Reset();
     bHasAuthoringFailure = false;
@@ -3923,7 +3924,11 @@ void SUnifiedScriptAuthoringSurface::HandlePatchResponse(
     int32 Failed = 0;
     if (bPublishedRuntime && bReloadMatchingComponents)
     {
-        ReloadMatchingComponents(Matched, Reloaded, Failed);
+        ReloadMatchingComponents(
+            ReloadTransactionJson,
+            Matched,
+            Reloaded,
+            Failed);
     }
     const FString HistoryPersistenceDetail = HistoryPersistenceMessage.IsEmpty()
         ? FString()
@@ -4264,6 +4269,7 @@ void SUnifiedScriptAuthoringSurface::HandleWorkspaceRefreshResponse(
 }
 
 void SUnifiedScriptAuthoringSurface::ReloadMatchingComponents(
+    const FString& ReloadTransactionJson,
     int32& OutMatched,
     int32& OutReloaded,
     int32& OutFailed)
@@ -4298,7 +4304,7 @@ void SUnifiedScriptAuthoringSurface::ReloadMatchingComponents(
 
         ++OutMatched;
         const bool bUpdated = Component->bScriptRunning
-            ? Component->ReloadScript()
+            ? Component->ReloadScriptWithTransaction(ReloadTransactionJson)
             : Component->RefreshScriptState();
         if (bUpdated)
         {

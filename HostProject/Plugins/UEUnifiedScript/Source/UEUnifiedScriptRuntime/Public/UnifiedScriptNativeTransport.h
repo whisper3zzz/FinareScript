@@ -173,6 +173,8 @@ public:
     static int32 GetLiveContextCount();
     static int32 GetAttachedContextCount();
 
+    int32 GetEventSubscriptionCount();
+
     void AttachSharedDataPlane(FUnifiedScriptSharedDataPlane* InSharedDataPlane);
     void AttachGameplayDataPlane(FUnifiedScriptGameplayDataPlane* InGameplayDataPlane);
     void AttachAsyncService(FUnifiedScriptAsyncService* InAsyncService);
