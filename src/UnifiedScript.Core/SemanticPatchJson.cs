@@ -125,6 +125,9 @@ public static class SemanticPatchJson
                 case MoveStatementPatchOperation moveStatement:
                     ValidateMoveStatement(moveStatement);
                     break;
+                case DuplicateStatementPatchOperation duplicateStatement:
+                    ValidateDuplicateStatement(duplicateStatement);
+                    break;
                 case InsertSwitchSectionPatchOperation insertSwitchSection:
                     ValidateInsertSwitchSection(insertSwitchSection);
                     break;
@@ -983,6 +986,39 @@ public static class SemanticPatchJson
             operation.ExpectedDestinationPreviousSiblingId,
             operation.ExpectedDestinationNextSiblingId,
             "destination gap");
+    }
+
+    private static void ValidateDuplicateStatement(DuplicateStatementPatchOperation operation)
+    {
+        if (operation.ExpectedParentBlockId.IsEmpty)
+        {
+            throw new JsonException(
+                "Statement duplication requires a non-empty parent block ID.");
+        }
+
+        ValidateSiblingIds(
+            operation.ExpectedSourcePreviousSiblingId,
+            operation.ExpectedSourceNextSiblingId);
+        ValidateSiblingTarget(
+            operation.TargetNodeId,
+            operation.ExpectedSourcePreviousSiblingId,
+            operation.ExpectedSourceNextSiblingId,
+            "copied statement");
+        ValidateSiblingIds(
+            operation.ExpectedDestinationPreviousSiblingId,
+            operation.ExpectedDestinationNextSiblingId);
+        if (operation.ExpectedDestinationPreviousSiblingId is null &&
+            operation.ExpectedDestinationNextSiblingId is null)
+        {
+            throw new JsonException(
+                "Statement duplication requires an exact non-empty destination gap.");
+        }
+        if (operation.NewLocalName is not null &&
+            (string.IsNullOrWhiteSpace(operation.NewLocalName) || operation.NewLocalName.Length > 128))
+        {
+            throw new JsonException(
+                "A duplicated local name must be non-empty and at most 128 characters.");
+        }
     }
 
     private static void ValidateInsertSwitchSection(
