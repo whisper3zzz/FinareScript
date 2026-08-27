@@ -1626,16 +1626,26 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
                     TEXT("unifiedscript.reload-transaction/v0.1")));
 
         const FString GameplayProfileJson =
-            TEXT("{\"schemaVersion\":\"unifiedscript.gameplay-profile/v0.1\","
+            TEXT("{\"schemaVersion\":\"unifiedscript.gameplay-profile/v0.2\","
                  "\"traceId\":\"world-11-script-7\",\"worldHostId\":\"11\","
                  "\"instanceId\":\"7\",\"frameCapacity\":120,\"droppedFrameCount\":1,"
                  "\"frames\":[{\"sequence\":4,\"worldFrameNumber\":\"99\","
                  "\"generation\":3,\"scriptType\":\"Demo.Player\","
                  "\"deltaSeconds\":0.016,\"worldPhase\":\"ManagedTick\","
                  "\"durationNanoseconds\":750000,\"allocatedBytes\":16,"
-                 "\"boundaries\":[],\"nodes\":[],\"bufferPressure\":{}}],"
+                 "\"worldPhases\":["
+                 "{\"name\":\"NativePreActorTick\",\"count\":1,\"totalNanoseconds\":10000},"
+                 "{\"name\":\"ManagedTick\",\"count\":1,\"totalNanoseconds\":40000},"
+                 "{\"name\":\"NativePostActorTick\",\"count\":1,\"totalNanoseconds\":10000}],"
+                 "\"boundaries\":[],\"nodes\":[],\"bufferPressure\":{"
+                 "\"commandOverflowCount\":1,\"eventOverflowCount\":0,"
+                 "\"traceOverflowCount\":0,\"overlapOverflowCount\":0}}],"
                  "\"aggregate\":{\"frameCount\":1,\"totalNanoseconds\":750000,"
-                 "\"allocatedBytes\":16,\"boundaries\":["
+                 "\"allocatedBytes\":16,\"worldPhases\":["
+                 "{\"name\":\"NativePreActorTick\",\"count\":1,\"totalNanoseconds\":10000},"
+                 "{\"name\":\"ManagedTick\",\"count\":1,\"totalNanoseconds\":40000},"
+                 "{\"name\":\"NativePostActorTick\",\"count\":1,\"totalNanoseconds\":10000}],"
+                 "\"boundaries\":["
                  "{\"name\":\"directThunk\",\"count\":8,\"totalNanoseconds\":12000},"
                  "{\"name\":\"callFrame\",\"count\":2,\"totalNanoseconds\":18000},"
                  "{\"name\":\"reflectionFallback\",\"count\":0,\"totalNanoseconds\":0},"
@@ -1643,7 +1653,9 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
                  "{\"name\":\"batchOverlap\",\"count\":1,\"totalNanoseconds\":9000}],"
                  "\"nodes\":[{\"methodId\":\"us_method\",\"nodeId\":\"us_node\","
                  "\"hitCount\":3,\"totalNanoseconds\":400000}],"
-                 "\"bufferPressure\":{}}}");
+                 "\"bufferPressure\":{\"commandOverflowCount\":1,"
+                 "\"eventOverflowCount\":0,\"traceOverflowCount\":0,"
+                 "\"overlapOverflowCount\":0}}}");
         FUnifiedScriptGameplayProfileResult GameplayProfile;
         TestTrue(
             TEXT("Native debugger parses the bounded gameplay/bridge timeline"),
@@ -1656,6 +1668,10 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
             GameplayProfile.Frames.Num(),
             1);
         TestEqual(
+            TEXT("Native gameplay profiler retains per-frame World phase detail"),
+            GameplayProfile.Frames[0].WorldPhases.Num(),
+            3);
+        TestEqual(
             TEXT("Native gameplay profiler retains the hottest semantic node"),
             GameplayProfile.Nodes.Num(),
             1);
@@ -1664,7 +1680,9 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
             GameplayProfile.ToDisplayString().Contains(TEXT("Direct 8")) &&
                 GameplayProfile.ToDisplayString().Contains(TEXT("CallFrame 2")) &&
                 GameplayProfile.ToDisplayString().Contains(TEXT("Reflection 0")) &&
-                GameplayProfile.ToDisplayString().Contains(TEXT("Batch 5")));
+                GameplayProfile.ToDisplayString().Contains(TEXT("Batch 5")) &&
+                GameplayProfile.ToDisplayString().Contains(TEXT("World 0.060 ms")) &&
+                GameplayProfile.ToDisplayString().Contains(TEXT("Pressure 1")));
 
         const FUnifiedScriptRuntimeSourceLocation RuntimeSource{
             Assignment->Span.FilePath,

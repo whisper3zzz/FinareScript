@@ -62,6 +62,7 @@ DOCUMENTS = [
     ROOT / "docs" / "NATIVE_DEBUG_WORKBENCH.md",
     ROOT / "docs" / "RUNTIME_DIAGNOSTICS.md",
     ROOT / "docs" / "HOT_RELOAD_RELIABILITY.md",
+    ROOT / "docs" / "GAMEPLAY_PROFILER.md",
     ROOT / "docs" / "PROJECT_LOADING.md",
     ROOT / "docs" / "DECLARATION_IR.md",
     ROOT / "docs" / "STATE_OVERRIDE_MIGRATION.md",
@@ -2347,7 +2348,7 @@ def main() -> int:
     require(
         unreal_data_plane_schema["schemaVersion"]
         == "unifiedscript.unreal-data-plane-layout/v0.1"
-        and unreal_data_plane_schema["revision"] == 2
+        and unreal_data_plane_schema["revision"] == 3
         and unreal_data_plane_schema["compatibilityId"] == "0x555344504C415901"
         and unreal_data_plane_schema["limits"]
         == {
@@ -3522,6 +3523,62 @@ def main() -> int:
     )
     checks.append(
         "UE hot reload is one observable rollback-safe transaction with zero-leak soak"
+    )
+    gameplay_profiler_doc = (
+        ROOT / "docs" / "GAMEPLAY_PROFILER.md"
+    ).read_text(encoding="utf-8")
+    gameplay_profiler_source = (
+        ROOT
+        / "src"
+        / "UnifiedScript.Unreal"
+        / "UnrealGameplayProfiler.cs"
+    ).read_text(encoding="utf-8")
+    gameplay_profiler_fixture = (
+        ROOT
+        / "samples"
+        / "Unreal"
+        / "UnifiedScript.Unreal.Demo"
+        / "GameplayProfilerDemoScript.cs"
+    ).read_text(encoding="utf-8")
+    gameplay_profiler_native_test = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Private"
+        / "Tests"
+        / "UnifiedScriptGameplayProfilerTests.cpp"
+    ).read_text(encoding="utf-8")
+    require(
+        "unifiedscript.gameplay-profile/v0.2" in gameplay_profiler_source
+        and "DefaultFrameCapacity = 120" in gameplay_profiler_source
+        and "BuildWorldPhases" in gameplay_profiler_source
+        and "BuildPressure" in gameplay_profiler_source
+        and 'new("reflectionFallback"' in gameplay_profiler_source
+        and "probeObserver?.Hit" in unreal_world_debug_session
+        and "NativePreActorTickNanoseconds" in unreal_gameplay_data_source
+        and "NativePostActorTickNanoseconds" in unreal_gameplay_data_source
+        and "unifiedscript.gameplay-profile/v0.2"
+        in unreal_debug_workbench_source
+        and '"Focus Hot Node"' in unreal_debug_panel
+        and '"Save JSON"' in unreal_debug_panel
+        and "GameplayProfilerDemoScript" in gameplay_profiler_fixture
+        and "BeginTraceBatch" in gameplay_profiler_fixture
+        and "BeginOverlapBatch" in gameplay_profiler_fixture
+        and "UnifiedScript.Unreal.Profiler.FullAttribution"
+        in gameplay_profiler_native_test
+        and "Semantic source and graph nodes share the gameplay timeline"
+        in gameplay_profiler_native_test
+        and "Saved/UnifiedScript/Profiles" in gameplay_profiler_doc
+        and "performance baseline" in gameplay_profiler_doc
+        and "- [x] attribute time and count to scripts" in roadmap
+        and "M9.3 remains active" in roadmap,
+        "Gameplay profiler attribution, bounded trace, Slate workflow, or live World proof is incomplete",
+    )
+    checks.append(
+        "UE gameplay profiler attributes World, semantic, bridge, data, allocation, and pressure cost"
     )
     authoring_diagnostics_doc = (
         ROOT / "docs" / "AUTHORING_DIAGNOSTICS.md"

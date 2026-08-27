@@ -28,6 +28,7 @@ public sealed record UnrealGameplayProfileFrame(
     string ScriptType,
     float DeltaSeconds,
     string WorldPhase,
+    IReadOnlyList<UnrealGameplayProfileBoundary> WorldPhases,
     long DurationNanoseconds,
     long AllocatedBytes,
     IReadOnlyList<UnrealGameplayProfileBoundary> Boundaries,
@@ -38,6 +39,7 @@ public sealed record UnrealGameplayProfileAggregate(
     long FrameCount,
     long TotalNanoseconds,
     long AllocatedBytes,
+    IReadOnlyList<UnrealGameplayProfileBoundary> WorldPhases,
     IReadOnlyList<UnrealGameplayProfileBoundary> Boundaries,
     IReadOnlyList<UnrealGameplayProfileNode> Nodes,
     UnrealGameplayProfileBufferPressure BufferPressure);
@@ -53,7 +55,7 @@ public sealed record UnrealGameplayProfileTrace(
     IReadOnlyList<UnrealGameplayProfileFrame> Frames,
     UnrealGameplayProfileAggregate Aggregate)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.gameplay-profile/v0.1";
+    public const string CurrentSchemaVersion = "unifiedscript.gameplay-profile/v0.2";
 }
 
 internal readonly record struct UnrealInvocationProfilerSnapshot(
@@ -136,6 +138,7 @@ internal sealed class UnrealGameplayProfiler : ICoreClrDebugProbeSink
     private int nextFrameIndex;
     private int frameCount;
     private bool enabled;
+    private UnrealGameplayDataTelemetryV1? lastWorldPhaseTelemetry;
 
     public UnrealGameplayProfiler(
         ulong worldHostId,
@@ -172,6 +175,9 @@ internal sealed class UnrealGameplayProfiler : ICoreClrDebugProbeSink
 
     public void SetEnabled(bool value)
     {
+        UnrealGameplayDataTelemetryV1? phaseBaseline = value
+            ? TryGetGameplayTelemetry()
+            : null;
         lock (gate)
         {
             if (enabled == value)
@@ -185,6 +191,7 @@ internal sealed class UnrealGameplayProfiler : ICoreClrDebugProbeSink
             droppedFrameCount = 0;
             nextFrameIndex = 0;
             frameCount = 0;
+            lastWorldPhaseTelemetry = phaseBaseline;
         }
         bridge.SetProfilerEnabled(value);
     }
@@ -193,7 +200,8 @@ internal sealed class UnrealGameplayProfiler : ICoreClrDebugProbeSink
         IUnrealManagedScript script,
         int generation,
         string scriptType,
-        float deltaSeconds)
+        float deltaSeconds,
+        bool attachProbe = true)
     {
         ArgumentNullException.ThrowIfNull(script);
         if (!Enabled)
@@ -202,49 +210,59 @@ internal sealed class UnrealGameplayProfiler : ICoreClrDebugProbeSink
             return;
         }
 
-        UnrealInvocationProfilerSnapshot before = bridge.GetProfilerSnapshot();
-        UnrealGameplayDataTelemetryV1? telemetryBefore = TryGetGameplayTelemetry();
-        long started = Stopwatch.GetTimestamp();
-        long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
-        var capture = new ActiveFrame(started);
-        lock (gate)
-        {
-            activeFrame = capture;
-        }
+        IDisposable? attachment = attachProbe ? CoreClrDebugProbe.Attach(this) : null;
         try
         {
-            using IDisposable attachment = CoreClrDebugProbe.Attach(this);
-            script.OnTick(deltaSeconds);
+            UnrealInvocationProfilerSnapshot before = bridge.GetProfilerSnapshot();
+            UnrealGameplayDataTelemetryV1? telemetryBefore = TryGetGameplayTelemetry();
+            long started = Stopwatch.GetTimestamp();
+            long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+            var capture = new ActiveFrame(started);
+            lock (gate)
+            {
+                activeFrame = capture;
+            }
+            try
+            {
+                script.OnTick(deltaSeconds);
+            }
+            finally
+            {
+                long finished = Stopwatch.GetTimestamp();
+                long allocated = Math.Max(
+                    0,
+                    GC.GetAllocatedBytesForCurrentThread() - allocatedBefore);
+                UnrealInvocationProfilerSnapshot boundaries =
+                    bridge.GetProfilerSnapshot() - before;
+                UnrealGameplayDataTelemetryV1? telemetryAfter = TryGetGameplayTelemetry();
+                lock (gate)
+                {
+                    capture.CloseNode(finished);
+                    if (enabled && ReferenceEquals(activeFrame, capture))
+                    {
+                        activeFrame = null;
+                        UnrealGameplayDataTelemetryV1? phaseBaseline =
+                            lastWorldPhaseTelemetry;
+                        lastWorldPhaseTelemetry = telemetryAfter ?? telemetryBefore ??
+                            lastWorldPhaseTelemetry;
+                        AppendFrame(BuildFrame(
+                            capture,
+                            generation,
+                            scriptType,
+                            deltaSeconds,
+                            finished,
+                            allocated,
+                            boundaries,
+                            phaseBaseline,
+                            telemetryBefore,
+                            telemetryAfter));
+                    }
+                }
+            }
         }
         finally
         {
-            long finished = Stopwatch.GetTimestamp();
-            long allocated = Math.Max(
-                0,
-                GC.GetAllocatedBytesForCurrentThread() - allocatedBefore);
-            UnrealInvocationProfilerSnapshot boundaries =
-                bridge.GetProfilerSnapshot() - before;
-            UnrealGameplayDataTelemetryV1? telemetryAfter = TryGetGameplayTelemetry();
-            UnrealGameplayProfileFrame frame;
-            lock (gate)
-            {
-                capture.CloseNode(finished);
-                if (ReferenceEquals(activeFrame, capture))
-                {
-                    activeFrame = null;
-                }
-                frame = BuildFrame(
-                    capture,
-                    generation,
-                    scriptType,
-                    deltaSeconds,
-                    finished,
-                    allocated,
-                    boundaries,
-                    telemetryBefore,
-                    telemetryAfter);
-                AppendFrame(frame);
-            }
+            attachment?.Dispose();
         }
     }
 
@@ -313,20 +331,23 @@ internal sealed class UnrealGameplayProfiler : ICoreClrDebugProbeSink
         long finished,
         long allocatedBytes,
         UnrealInvocationProfilerSnapshot boundaries,
+        UnrealGameplayDataTelemetryV1? phaseBaseline,
         UnrealGameplayDataTelemetryV1? telemetryBefore,
         UnrealGameplayDataTelemetryV1? telemetryAfter)
     {
         ulong worldFrame = telemetryAfter?.FrameNumber ?? telemetryBefore?.FrameNumber ?? 0;
-        uint phase = telemetryAfter?.Phase ?? telemetryBefore?.Phase ?? 0;
+        UnrealGameplayDataTelemetryV1? currentTelemetry = telemetryAfter ?? telemetryBefore;
+        uint? phase = currentTelemetry?.Phase;
         return new UnrealGameplayProfileFrame(
             checked(++nextSequence),
             worldFrame.ToString(System.Globalization.CultureInfo.InvariantCulture),
             generation,
             scriptType,
             deltaSeconds,
-            Enum.IsDefined((UnrealGameplayDataPhaseV4)phase)
-                ? ((UnrealGameplayDataPhaseV4)phase).ToString()
+            phase.HasValue && Enum.IsDefined((UnrealGameplayDataPhaseV4)phase.Value)
+                ? ((UnrealGameplayDataPhaseV4)phase.Value).ToString()
                 : "Unknown",
+            BuildWorldPhases(phaseBaseline, currentTelemetry),
             StopwatchTicksToNanoseconds(Math.Max(0, finished - capture.Started)),
             allocatedBytes,
             BuildBoundaries(boundaries),
@@ -341,6 +362,31 @@ internal sealed class UnrealGameplayProfiler : ICoreClrDebugProbeSink
                     StopwatchTicksToNanoseconds(pair.Value.StopwatchTicks)))
                 .ToArray(),
             BuildPressure(telemetryBefore, telemetryAfter));
+    }
+
+    private static IReadOnlyList<UnrealGameplayProfileBoundary> BuildWorldPhases(
+        UnrealGameplayDataTelemetryV1? before,
+        UnrealGameplayDataTelemetryV1? after)
+    {
+        if (before is not UnrealGameplayDataTelemetryV1 left ||
+            after is not UnrealGameplayDataTelemetryV1 right ||
+            left.StructSize < UnrealGameplayDataAbiV4.TelemetrySize ||
+            right.StructSize < UnrealGameplayDataAbiV4.TelemetrySize)
+        {
+            return [];
+        }
+        return
+        [
+            new("NativePreActorTick",
+                Delta(right.NativePreActorTickCount, left.NativePreActorTickCount),
+                Delta(right.NativePreActorTickNanoseconds, left.NativePreActorTickNanoseconds)),
+            new("ManagedTick",
+                Delta(right.ManagedTickCount, left.ManagedTickCount),
+                Delta(right.ManagedTickNanoseconds, left.ManagedTickNanoseconds)),
+            new("NativePostActorTick",
+                Delta(right.NativePostActorTickCount, left.NativePostActorTickCount),
+                Delta(right.NativePostActorTickNanoseconds, left.NativePostActorTickNanoseconds)),
+        ];
     }
 
     private static IReadOnlyList<UnrealGameplayProfileBoundary> BuildBoundaries(
@@ -409,6 +455,8 @@ internal sealed class UnrealGameplayProfiler : ICoreClrDebugProbeSink
     {
         var boundaries = new Dictionary<string, (long Count, long Nanoseconds)>(
             StringComparer.Ordinal);
+        var worldPhases = new Dictionary<string, (long Count, long Nanoseconds)>(
+            StringComparer.Ordinal);
         var nodes = new Dictionary<(string MethodId, string NodeId), (long Hits, long Nanoseconds)>();
         long duration = 0;
         long allocated = 0;
@@ -420,6 +468,13 @@ internal sealed class UnrealGameplayProfiler : ICoreClrDebugProbeSink
         {
             duration = SaturatingAdd(duration, frame.DurationNanoseconds);
             allocated = SaturatingAdd(allocated, frame.AllocatedBytes);
+            foreach (UnrealGameplayProfileBoundary phase in frame.WorldPhases)
+            {
+                worldPhases.TryGetValue(phase.Name, out var current);
+                worldPhases[phase.Name] = (
+                    SaturatingAdd(current.Count, phase.Count),
+                    SaturatingAdd(current.Nanoseconds, phase.TotalNanoseconds));
+            }
             foreach (UnrealGameplayProfileBoundary boundary in frame.Boundaries)
             {
                 boundaries.TryGetValue(boundary.Name, out var current);
@@ -452,6 +507,13 @@ internal sealed class UnrealGameplayProfiler : ICoreClrDebugProbeSink
             frames.Count,
             duration,
             allocated,
+            worldPhases
+                .OrderBy(static pair => pair.Key, StringComparer.Ordinal)
+                .Select(static pair => new UnrealGameplayProfileBoundary(
+                    pair.Key,
+                    pair.Value.Count,
+                    pair.Value.Nanoseconds))
+                .ToArray(),
             boundaries
                 .OrderBy(static pair => pair.Key, StringComparer.Ordinal)
                 .Select(static pair => new UnrealGameplayProfileBoundary(

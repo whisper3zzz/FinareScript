@@ -772,21 +772,38 @@ FString FUnifiedScriptGameplayProfileResult::ToDisplayString() const
                 [Name](const FUnifiedScriptGameplayProfileBoundary& Candidate)
                 {
                     return Candidate.Name == Name;
-                });
+        });
         return Boundary != nullptr ? Boundary->Count : int64{0};
     };
+    const auto PhaseNanoseconds = [this](const TCHAR* Name)
+    {
+        const FUnifiedScriptGameplayProfileBoundary* Phase =
+            WorldPhases.FindByPredicate(
+                [Name](const FUnifiedScriptGameplayProfileBoundary& Candidate)
+                {
+                    return Candidate.Name == Name;
+                });
+        return Phase != nullptr ? Phase->TotalNanoseconds : int64{0};
+    };
+    const double WorldMilliseconds =
+        (static_cast<double>(PhaseNanoseconds(TEXT("NativePreActorTick"))) +
+         static_cast<double>(PhaseNanoseconds(TEXT("ManagedTick"))) +
+         static_cast<double>(PhaseNanoseconds(TEXT("NativePostActorTick")))) /
+        1000000.0;
     return FString::Printf(
-        TEXT("%d frame%s · %.3f ms · %lld B · Direct %lld · CallFrame %lld · Reflection %lld · Batch %lld"),
+        TEXT("%d frame%s · Script %.3f ms · World %.3f ms · %lld B · Direct %lld · CallFrame %lld · Reflection %lld · Batch %lld · Pressure %lld"),
         Frames.Num(),
         Frames.Num() == 1 ? TEXT("") : TEXT("s"),
         static_cast<double>(TotalNanoseconds) / 1000000.0,
+        WorldMilliseconds,
         static_cast<long long>(AllocatedBytes),
         static_cast<long long>(CountBoundary(TEXT("directThunk"))),
         static_cast<long long>(CountBoundary(TEXT("callFrame"))),
         static_cast<long long>(CountBoundary(TEXT("reflectionFallback"))),
         static_cast<long long>(
             CountBoundary(TEXT("batchTrace")) +
-            CountBoundary(TEXT("batchOverlap"))));
+            CountBoundary(TEXT("batchOverlap"))),
+        static_cast<long long>(BufferPressure.TotalOverflowCount()));
 }
 
 bool FUnifiedScriptDebugWorkbench::ParseGameplayProfileTrace(
@@ -795,6 +812,135 @@ bool FUnifiedScriptDebugWorkbench::ParseGameplayProfileTrace(
     FString& OutError)
 {
     using namespace UE::UnifiedScript::DebugWorkbench::Private;
+    const auto ReadBoundaryArray = [&OutError](
+        const TSharedPtr<FJsonObject>& Object,
+        const TCHAR* Field,
+        int32 MaximumCount,
+        TArray<FUnifiedScriptGameplayProfileBoundary>& OutBoundaries)
+    {
+        const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+        if (!Object.IsValid() || !Object->TryGetArrayField(Field, Values) ||
+            Values == nullptr || Values->Num() > MaximumCount)
+        {
+            OutError = FString::Printf(
+                TEXT("Gameplay profile field '%s' is missing or exceeds %d entries."),
+                Field,
+                MaximumCount);
+            return false;
+        }
+        OutBoundaries.Reset(Values->Num());
+        for (const TSharedPtr<FJsonValue>& Value : *Values)
+        {
+            const TSharedPtr<FJsonObject> Boundary =
+                Value.IsValid() ? Value->AsObject() : nullptr;
+            FUnifiedScriptGameplayProfileBoundary CandidateBoundary;
+            if (!ReadRequiredString(
+                    Boundary,
+                    TEXT("name"),
+                    CandidateBoundary.Name,
+                    OutError) ||
+                !ReadInteger(
+                    Boundary,
+                    TEXT("count"),
+                    CandidateBoundary.Count,
+                    OutError,
+                    false) ||
+                !ReadInteger(
+                    Boundary,
+                    TEXT("totalNanoseconds"),
+                    CandidateBoundary.TotalNanoseconds,
+                    OutError,
+                    false))
+            {
+                return false;
+            }
+            OutBoundaries.Add(MoveTemp(CandidateBoundary));
+        }
+        return true;
+    };
+    const auto ReadNodeArray = [&OutError](
+        const TSharedPtr<FJsonObject>& Object,
+        const TCHAR* Field,
+        TArray<FUnifiedScriptGameplayProfileNode>& OutNodes)
+    {
+        const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+        if (!Object.IsValid() || !Object->TryGetArrayField(Field, Values) ||
+            Values == nullptr || Values->Num() > 4096)
+        {
+            OutError = FString::Printf(
+                TEXT("Gameplay profile field '%s' is missing or exceeds 4096 entries."),
+                Field);
+            return false;
+        }
+        OutNodes.Reset(Values->Num());
+        for (const TSharedPtr<FJsonValue>& Value : *Values)
+        {
+            const TSharedPtr<FJsonObject> Node =
+                Value.IsValid() ? Value->AsObject() : nullptr;
+            FUnifiedScriptGameplayProfileNode CandidateNode;
+            if (!ReadRequiredString(
+                    Node,
+                    TEXT("methodId"),
+                    CandidateNode.MethodId,
+                    OutError) ||
+                !ReadRequiredString(
+                    Node,
+                    TEXT("nodeId"),
+                    CandidateNode.NodeId,
+                    OutError) ||
+                !ReadInteger(
+                    Node,
+                    TEXT("hitCount"),
+                    CandidateNode.HitCount,
+                    OutError,
+                    true) ||
+                !ReadInteger(
+                    Node,
+                    TEXT("totalNanoseconds"),
+                    CandidateNode.TotalNanoseconds,
+                    OutError,
+                    false))
+            {
+                return false;
+            }
+            OutNodes.Add(MoveTemp(CandidateNode));
+        }
+        return true;
+    };
+    const auto ReadPressure = [&OutError](
+        const TSharedPtr<FJsonObject>& Object,
+        FUnifiedScriptGameplayProfileBufferPressure& OutPressure)
+    {
+        const TSharedPtr<FJsonObject>* Pressure = nullptr;
+        return Object.IsValid() &&
+            Object->TryGetObjectField(TEXT("bufferPressure"), Pressure) &&
+            Pressure != nullptr &&
+            ReadInteger(
+                *Pressure,
+                TEXT("commandOverflowCount"),
+                OutPressure.CommandOverflowCount,
+                OutError,
+                false) &&
+            ReadInteger(
+                *Pressure,
+                TEXT("eventOverflowCount"),
+                OutPressure.EventOverflowCount,
+                OutError,
+                false) &&
+            ReadInteger(
+                *Pressure,
+                TEXT("traceOverflowCount"),
+                OutPressure.TraceOverflowCount,
+                OutError,
+                false) &&
+            ReadInteger(
+                *Pressure,
+                TEXT("overlapOverflowCount"),
+                OutPressure.OverlapOverflowCount,
+                OutError,
+                false);
+    };
+
     TSharedPtr<FJsonObject> Root;
     const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Json);
     if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
@@ -806,7 +952,7 @@ bool FUnifiedScriptDebugWorkbench::ParseGameplayProfileTrace(
     FUnifiedScriptGameplayProfileResult Candidate;
     int64 FrameCapacity = 0;
     if (!Root->TryGetStringField(TEXT("schemaVersion"), Schema) ||
-        Schema != TEXT("unifiedscript.gameplay-profile/v0.1") ||
+        Schema != TEXT("unifiedscript.gameplay-profile/v0.2") ||
         !ReadRequiredString(Root, TEXT("traceId"), Candidate.TraceId, OutError) ||
         !ReadRequiredString(Root, TEXT("worldHostId"), Candidate.WorldHostId, OutError) ||
         !ReadRequiredString(Root, TEXT("instanceId"), Candidate.InstanceId, OutError) ||
@@ -843,15 +989,15 @@ bool FUnifiedScriptDebugWorkbench::ParseGameplayProfileTrace(
         const TSharedPtr<FJsonObject> Frame = Value.IsValid() ? Value->AsObject() : nullptr;
         FUnifiedScriptGameplayProfileFrame CandidateFrame;
         int64 Generation = 0;
-        const TArray<TSharedPtr<FJsonValue>>* Boundaries = nullptr;
-        const TArray<TSharedPtr<FJsonValue>>* Nodes = nullptr;
-        const TSharedPtr<FJsonObject>* BufferPressure = nullptr;
+        double DeltaSeconds = 0.0;
         if (!ReadInteger(Frame, TEXT("sequence"), CandidateFrame.Sequence, OutError, true) ||
             !ReadRequiredString(
                 Frame, TEXT("worldFrameNumber"), CandidateFrame.WorldFrameNumber, OutError) ||
             !ReadInteger(Frame, TEXT("generation"), Generation, OutError, true) ||
             Generation > MAX_int32 ||
             !ReadRequiredString(Frame, TEXT("scriptType"), CandidateFrame.ScriptType, OutError) ||
+            !Frame->TryGetNumberField(TEXT("deltaSeconds"), DeltaSeconds) ||
+            !FMath::IsFinite(DeltaSeconds) || DeltaSeconds < 0.0 || DeltaSeconds > 3600.0 ||
             !ReadRequiredString(Frame, TEXT("worldPhase"), CandidateFrame.WorldPhase, OutError) ||
             !ReadInteger(
                 Frame,
@@ -865,10 +1011,18 @@ bool FUnifiedScriptDebugWorkbench::ParseGameplayProfileTrace(
                 CandidateFrame.AllocatedBytes,
                 OutError,
                 false) ||
-            !Frame->TryGetArrayField(TEXT("boundaries"), Boundaries) || Boundaries == nullptr ||
-            !Frame->TryGetArrayField(TEXT("nodes"), Nodes) || Nodes == nullptr ||
-            !Frame->TryGetObjectField(TEXT("bufferPressure"), BufferPressure) ||
-            BufferPressure == nullptr)
+            !ReadBoundaryArray(
+                Frame,
+                TEXT("worldPhases"),
+                8,
+                CandidateFrame.WorldPhases) ||
+            !ReadBoundaryArray(
+                Frame,
+                TEXT("boundaries"),
+                32,
+                CandidateFrame.Boundaries) ||
+            !ReadNodeArray(Frame, TEXT("nodes"), CandidateFrame.Nodes) ||
+            !ReadPressure(Frame, CandidateFrame.BufferPressure))
         {
             if (OutError.IsEmpty())
             {
@@ -877,13 +1031,11 @@ bool FUnifiedScriptDebugWorkbench::ParseGameplayProfileTrace(
             return false;
         }
         CandidateFrame.Generation = static_cast<int32>(Generation);
+        CandidateFrame.DeltaSeconds = DeltaSeconds;
         Candidate.Frames.Add(MoveTemp(CandidateFrame));
     }
 
     int64 AggregateFrameCount = 0;
-    const TArray<TSharedPtr<FJsonValue>>* Boundaries = nullptr;
-    const TArray<TSharedPtr<FJsonValue>>* Nodes = nullptr;
-    const TSharedPtr<FJsonObject>* AggregatePressure = nullptr;
     if (!ReadInteger(
             *Aggregate,
             TEXT("frameCount"),
@@ -903,55 +1055,24 @@ bool FUnifiedScriptDebugWorkbench::ParseGameplayProfileTrace(
             Candidate.AllocatedBytes,
             OutError,
             false) ||
-        !(*Aggregate)->TryGetArrayField(TEXT("boundaries"), Boundaries) ||
-        Boundaries == nullptr || Boundaries->Num() > 32 ||
-        !(*Aggregate)->TryGetArrayField(TEXT("nodes"), Nodes) ||
-        Nodes == nullptr || Nodes->Num() > 4096 ||
-        !(*Aggregate)->TryGetObjectField(TEXT("bufferPressure"), AggregatePressure) ||
-        AggregatePressure == nullptr)
+        !ReadBoundaryArray(
+            *Aggregate,
+            TEXT("worldPhases"),
+            8,
+            Candidate.WorldPhases) ||
+        !ReadBoundaryArray(
+            *Aggregate,
+            TEXT("boundaries"),
+            32,
+            Candidate.Boundaries) ||
+        !ReadNodeArray(*Aggregate, TEXT("nodes"), Candidate.Nodes) ||
+        !ReadPressure(*Aggregate, Candidate.BufferPressure))
     {
         if (OutError.IsEmpty())
         {
             OutError = TEXT("Gameplay profile aggregate is incomplete or exceeds native bounds.");
         }
         return false;
-    }
-    for (const TSharedPtr<FJsonValue>& Value : *Boundaries)
-    {
-        const TSharedPtr<FJsonObject> Boundary = Value.IsValid() ? Value->AsObject() : nullptr;
-        FUnifiedScriptGameplayProfileBoundary CandidateBoundary;
-        if (!ReadRequiredString(
-                Boundary, TEXT("name"), CandidateBoundary.Name, OutError) ||
-            !ReadInteger(
-                Boundary, TEXT("count"), CandidateBoundary.Count, OutError, false) ||
-            !ReadInteger(
-                Boundary,
-                TEXT("totalNanoseconds"),
-                CandidateBoundary.TotalNanoseconds,
-                OutError,
-                false))
-        {
-            return false;
-        }
-        Candidate.Boundaries.Add(MoveTemp(CandidateBoundary));
-    }
-    for (const TSharedPtr<FJsonValue>& Value : *Nodes)
-    {
-        const TSharedPtr<FJsonObject> Node = Value.IsValid() ? Value->AsObject() : nullptr;
-        FUnifiedScriptGameplayProfileNode CandidateNode;
-        if (!ReadRequiredString(Node, TEXT("methodId"), CandidateNode.MethodId, OutError) ||
-            !ReadRequiredString(Node, TEXT("nodeId"), CandidateNode.NodeId, OutError) ||
-            !ReadInteger(Node, TEXT("hitCount"), CandidateNode.HitCount, OutError, true) ||
-            !ReadInteger(
-                Node,
-                TEXT("totalNanoseconds"),
-                CandidateNode.TotalNanoseconds,
-                OutError,
-                false))
-        {
-            return false;
-        }
-        Candidate.Nodes.Add(MoveTemp(CandidateNode));
     }
     OutProfile = MoveTemp(Candidate);
     OutError.Reset();

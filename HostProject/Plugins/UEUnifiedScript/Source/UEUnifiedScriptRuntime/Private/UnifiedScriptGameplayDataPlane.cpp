@@ -6,6 +6,7 @@
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/Controller.h"
+#include "HAL/PlatformTime.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/App.h"
 #include "Particles/ParticleSystem.h"
@@ -16,6 +17,31 @@ namespace UE::UnifiedScript::GameplayData::Private
 constexpr int32 InitialCommandCapacity = 256;
 constexpr int32 InitialTraceCapacity = 256;
 constexpr int32 InitialOverlapCapacity = 256;
+
+uint64 CyclesToNanoseconds(uint64 Cycles)
+{
+    const double Nanoseconds = FPlatformTime::ToSeconds64(Cycles) * 1000000000.0;
+    return Nanoseconds >= static_cast<double>(MAX_uint64)
+        ? MAX_uint64
+        : static_cast<uint64>(Nanoseconds);
+}
+
+void AccumulatePhase(
+    uint64 StartedCycles,
+    uint64 FinishedCycles,
+    uint64& Count,
+    uint64& TotalNanoseconds)
+{
+    if (Count != MAX_uint64)
+    {
+        ++Count;
+    }
+    const uint64 ElapsedNanoseconds = CyclesToNanoseconds(
+        FinishedCycles >= StartedCycles ? FinishedCycles - StartedCycles : 0);
+    TotalNanoseconds = ElapsedNanoseconds > MAX_uint64 - TotalNanoseconds
+        ? MAX_uint64
+        : TotalNanoseconds + ElapsedNanoseconds;
+}
 
 uint64 AllocateNonZero(uint64& Next)
 {
@@ -107,6 +133,7 @@ void FUnifiedScriptGameplayDataPlane::BeginFrame()
     {
         EndFrame();
     }
+    const uint64 PreActorTickStartedCycles = FPlatformTime::Cycles64();
     Phase = EUnifiedScriptGameplayDataPhaseV4::NativePreActorTick;
     ++FrameNumber;
     if (FrameNumber == 0)
@@ -120,7 +147,13 @@ void FUnifiedScriptGameplayDataPlane::BeginFrame()
     ActiveCommandBatchToken = 0;
     ActiveTraceBatchToken = 0;
     ActiveOverlapBatchToken = 0;
+    UE::UnifiedScript::GameplayData::Private::AccumulatePhase(
+        PreActorTickStartedCycles,
+        FPlatformTime::Cycles64(),
+        NativePreActorTickCount,
+        NativePreActorTickNanoseconds);
     Phase = EUnifiedScriptGameplayDataPhaseV4::ManagedTick;
+    ManagedTickStartedCycles = FPlatformTime::Cycles64();
 }
 
 void FUnifiedScriptGameplayDataPlane::EndFrame()
@@ -130,10 +163,23 @@ void FUnifiedScriptGameplayDataPlane::EndFrame()
     {
         return;
     }
+    const uint64 ManagedTickFinishedCycles = FPlatformTime::Cycles64();
+    UE::UnifiedScript::GameplayData::Private::AccumulatePhase(
+        ManagedTickStartedCycles,
+        ManagedTickFinishedCycles,
+        ManagedTickCount,
+        ManagedTickNanoseconds);
+    ManagedTickStartedCycles = 0;
     Phase = EUnifiedScriptGameplayDataPhaseV4::NativePostActorTick;
+    const uint64 PostActorTickStartedCycles = FPlatformTime::Cycles64();
     ExecuteCommittedCommands();
     ActiveTraceBatchToken = 0;
     ActiveOverlapBatchToken = 0;
+    UE::UnifiedScript::GameplayData::Private::AccumulatePhase(
+        PostActorTickStartedCycles,
+        FPlatformTime::Cycles64(),
+        NativePostActorTickCount,
+        NativePostActorTickNanoseconds);
     Phase = EUnifiedScriptGameplayDataPhaseV4::Idle;
 }
 
@@ -486,6 +532,12 @@ bool FUnifiedScriptGameplayDataPlane::GetTelemetry(
         OverlapOverflowCount,
         TotalExecutedOverlapCount,
         UE::UnifiedScript::GameplayData::MaximumOverlapCount,
+        NativePreActorTickCount,
+        NativePreActorTickNanoseconds,
+        ManagedTickCount,
+        ManagedTickNanoseconds,
+        NativePostActorTickCount,
+        NativePostActorTickNanoseconds,
     };
     return true;
 }

@@ -137,10 +137,15 @@ overflow counter.
 
 The first 120 bytes of the telemetry row remain the revision-1 prefix. Revision
 2 appends overlap counters/capacity and rounds the row to 144 bytes without
-moving any earlier field. It also reports committed/executed command totals,
-executed trace/overlap totals, last committed/executed sequence IDs, last event
-publication frame, current phase, and every advertised maximum. Sequence IDs
-are monotonic within a World and commands execute in reservation/row order.
+moving any earlier field. Revision 3 appends cumulative count/nanosecond pairs
+for `NativePreActorTick`, `ManagedTick`, and `NativePostActorTick`, producing a
+192-byte row while preserving both earlier prefixes. It also reports
+committed/executed command totals, executed trace/overlap totals, last
+committed/executed sequence IDs, last event publication frame, current phase,
+and every advertised maximum. Sequence IDs are monotonic within a World and
+commands execute in reservation/row order. Profiler consumers calculate
+per-frame phase cost from cumulative deltas, so reading telemetry does not
+reset shared World counters.
 
 ## World-scoped handles and validation
 

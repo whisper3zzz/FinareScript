@@ -2,7 +2,7 @@
   "schemaVersion": "unifiedscript.unreal-data-plane-layout/v0.1",
   "contractName": "UEUnifiedScriptRuntime",
   "abiVersion": 4,
-  "revision": 2,
+  "revision": 3,
   "alignment": 8,
   "compatibilityId": "0x555344504C415901",
   "limits": {
@@ -603,11 +603,11 @@
       "managedReadonly": false,
       "domain": "gameplay",
       "role": "telemetry",
-      "expectedSize": 144,
+      "expectedSize": 192,
       "sizeConstant": "TelemetrySize",
       "fields": [
-        { "name": "SchemaRevision", "type": "u32", "nativeDefault": "2" },
-        { "name": "StructSize", "type": "u32", "nativeDefault": "144" },
+        { "name": "SchemaRevision", "type": "u32", "nativeDefault": "3" },
+        { "name": "StructSize", "type": "u32", "nativeDefault": "192" },
         { "name": "CompatibilityId", "type": "u64" },
         { "name": "WorldHostId", "type": "u64" },
         { "name": "FrameNumber", "type": "u64" },
@@ -626,7 +626,13 @@
         { "name": "Phase", "type": "u32" },
         { "name": "OverlapOverflowCount", "type": "u64" },
         { "name": "TotalExecutedOverlapCount", "type": "u64" },
-        { "name": "MaximumOverlapCount", "type": "u32" }
+        { "name": "MaximumOverlapCount", "type": "u32" },
+        { "name": "NativePreActorTickCount", "type": "u64" },
+        { "name": "NativePreActorTickNanoseconds", "type": "u64" },
+        { "name": "ManagedTickCount", "type": "u64" },
+        { "name": "ManagedTickNanoseconds", "type": "u64" },
+        { "name": "NativePostActorTickCount", "type": "u64" },
+        { "name": "NativePostActorTickNanoseconds", "type": "u64" }
       ]
     }
   ]

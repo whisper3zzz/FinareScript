@@ -125,15 +125,42 @@ struct FUnifiedScriptGameplayProfileNode
     int64 TotalNanoseconds = 0;
 };
 
+struct FUnifiedScriptGameplayProfileBufferPressure
+{
+    int64 CommandOverflowCount = 0;
+    int64 EventOverflowCount = 0;
+    int64 TraceOverflowCount = 0;
+    int64 OverlapOverflowCount = 0;
+
+    int64 TotalOverflowCount() const
+    {
+        int64 Result = 0;
+        for (const int64 Value : {
+                 CommandOverflowCount,
+                 EventOverflowCount,
+                 TraceOverflowCount,
+                 OverlapOverflowCount})
+        {
+            Result = Value > MAX_int64 - Result ? MAX_int64 : Result + Value;
+        }
+        return Result;
+    }
+};
+
 struct FUnifiedScriptGameplayProfileFrame
 {
     int64 Sequence = 0;
     FString WorldFrameNumber;
     int32 Generation = 0;
     FString ScriptType;
+    double DeltaSeconds = 0.0;
     FString WorldPhase;
     int64 DurationNanoseconds = 0;
     int64 AllocatedBytes = 0;
+    TArray<FUnifiedScriptGameplayProfileBoundary> WorldPhases;
+    TArray<FUnifiedScriptGameplayProfileBoundary> Boundaries;
+    TArray<FUnifiedScriptGameplayProfileNode> Nodes;
+    FUnifiedScriptGameplayProfileBufferPressure BufferPressure;
 };
 
 struct FUnifiedScriptGameplayProfileResult
@@ -146,8 +173,10 @@ struct FUnifiedScriptGameplayProfileResult
     TArray<FUnifiedScriptGameplayProfileFrame> Frames;
     int64 TotalNanoseconds = 0;
     int64 AllocatedBytes = 0;
+    TArray<FUnifiedScriptGameplayProfileBoundary> WorldPhases;
     TArray<FUnifiedScriptGameplayProfileBoundary> Boundaries;
     TArray<FUnifiedScriptGameplayProfileNode> Nodes;
+    FUnifiedScriptGameplayProfileBufferPressure BufferPressure;
 
     FString ToDisplayString() const;
 };

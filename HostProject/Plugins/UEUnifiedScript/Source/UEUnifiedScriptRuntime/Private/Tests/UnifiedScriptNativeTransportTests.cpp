@@ -1576,6 +1576,16 @@ bool FUnifiedScriptGameplayDataPlaneTest::RunTest(const FString& Parameters)
         Telemetry.TotalCommittedCommandCount);
     TestEqual(TEXT("Trace telemetry counts all shapes"), Telemetry.TotalExecutedTraceCount, 3ull);
     TestEqual(TEXT("Overlap telemetry counts both shapes"), Telemetry.TotalExecutedOverlapCount, 2ull);
+    TestTrue(
+        TEXT("World scheduler telemetry counts native pre, managed, and native post phases"),
+        Telemetry.NativePreActorTickCount > 0 &&
+            Telemetry.ManagedTickCount > 0 &&
+            Telemetry.NativePostActorTickCount > 0);
+    TestTrue(
+        TEXT("World scheduler telemetry measures native pre, managed, and native post time"),
+        Telemetry.NativePreActorTickNanoseconds > 0 &&
+            Telemetry.ManagedTickNanoseconds > 0 &&
+            Telemetry.NativePostActorTickNanoseconds > 0);
     struct alignas(8) FTelemetryPrefixProbe
     {
         uint32 SchemaRevision = 0;

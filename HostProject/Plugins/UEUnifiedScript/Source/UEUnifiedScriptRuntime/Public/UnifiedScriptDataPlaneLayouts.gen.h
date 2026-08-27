@@ -4,9 +4,9 @@
 
 namespace UE::UnifiedScript::DataPlaneSchema
 {
-inline constexpr uint32 Revision = 2u;
+inline constexpr uint32 Revision = 3u;
 inline constexpr uint64 CompatibilityId = 0x555344504C415901ull;
-inline constexpr uint64 SchemaFingerprint = 0xA6051C503F071FDAull;
+inline constexpr uint64 SchemaFingerprint = 0x754A31DCE3A25636ull;
 }
 
 namespace UE::UnifiedScript::SharedData
@@ -181,8 +181,8 @@ struct alignas(8) FUnifiedScriptCommandBatchViewV4
 
 struct alignas(8) FUnifiedScriptGameplayDataTelemetryV1
 {
-    uint32 SchemaRevision = 2;
-    uint32 StructSize = 144;
+    uint32 SchemaRevision = 3;
+    uint32 StructSize = 192;
     uint64 CompatibilityId = 0;
     uint64 WorldHostId = 0;
     uint64 FrameNumber = 0;
@@ -202,6 +202,12 @@ struct alignas(8) FUnifiedScriptGameplayDataTelemetryV1
     uint64 OverlapOverflowCount = 0;
     uint64 TotalExecutedOverlapCount = 0;
     uint32 MaximumOverlapCount = 0;
+    uint64 NativePreActorTickCount = 0;
+    uint64 NativePreActorTickNanoseconds = 0;
+    uint64 ManagedTickCount = 0;
+    uint64 ManagedTickNanoseconds = 0;
+    uint64 NativePostActorTickCount = 0;
+    uint64 NativePostActorTickNanoseconds = 0;
 };
 
 struct alignas(8) FUnifiedScriptGameplayEventV4
@@ -471,7 +477,7 @@ static_assert(STRUCT_OFFSET(FUnifiedScriptCommandBatchViewV4, Reserved) == 68);
 
 static_assert(std::is_standard_layout_v<FUnifiedScriptGameplayDataTelemetryV1>);
 static_assert(std::is_trivially_copyable_v<FUnifiedScriptGameplayDataTelemetryV1>);
-static_assert(sizeof(FUnifiedScriptGameplayDataTelemetryV1) == 144);
+static_assert(sizeof(FUnifiedScriptGameplayDataTelemetryV1) == 192);
 static_assert(STRUCT_OFFSET(FUnifiedScriptGameplayDataTelemetryV1, SchemaRevision) == 0);
 static_assert(STRUCT_OFFSET(FUnifiedScriptGameplayDataTelemetryV1, StructSize) == 4);
 static_assert(STRUCT_OFFSET(FUnifiedScriptGameplayDataTelemetryV1, CompatibilityId) == 8);
@@ -493,6 +499,12 @@ static_assert(STRUCT_OFFSET(FUnifiedScriptGameplayDataTelemetryV1, Phase) == 116
 static_assert(STRUCT_OFFSET(FUnifiedScriptGameplayDataTelemetryV1, OverlapOverflowCount) == 120);
 static_assert(STRUCT_OFFSET(FUnifiedScriptGameplayDataTelemetryV1, TotalExecutedOverlapCount) == 128);
 static_assert(STRUCT_OFFSET(FUnifiedScriptGameplayDataTelemetryV1, MaximumOverlapCount) == 136);
+static_assert(STRUCT_OFFSET(FUnifiedScriptGameplayDataTelemetryV1, NativePreActorTickCount) == 144);
+static_assert(STRUCT_OFFSET(FUnifiedScriptGameplayDataTelemetryV1, NativePreActorTickNanoseconds) == 152);
+static_assert(STRUCT_OFFSET(FUnifiedScriptGameplayDataTelemetryV1, ManagedTickCount) == 160);
+static_assert(STRUCT_OFFSET(FUnifiedScriptGameplayDataTelemetryV1, ManagedTickNanoseconds) == 168);
+static_assert(STRUCT_OFFSET(FUnifiedScriptGameplayDataTelemetryV1, NativePostActorTickCount) == 176);
+static_assert(STRUCT_OFFSET(FUnifiedScriptGameplayDataTelemetryV1, NativePostActorTickNanoseconds) == 184);
 
 static_assert(std::is_standard_layout_v<FUnifiedScriptGameplayEventV4>);
 static_assert(std::is_trivially_copyable_v<FUnifiedScriptGameplayEventV4>);

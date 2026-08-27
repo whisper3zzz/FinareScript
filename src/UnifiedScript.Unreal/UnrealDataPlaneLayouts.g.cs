@@ -6,9 +6,9 @@ namespace UnifiedScript.Unreal;
 
 public static class UnrealDataPlaneLayoutV1
 {
-    public const uint Revision = 2U;
+    public const uint Revision = 3U;
     public const ulong CompatibilityId = 0x555344504C415901UL;
-    public const ulong SchemaFingerprint = 0xA6051C503F071FDAUL;
+    public const ulong SchemaFingerprint = 0x754A31DCE3A25636UL;
 }
 
 public static partial class UnrealSharedDataAbiV4
@@ -31,7 +31,7 @@ public static partial class UnrealGameplayDataAbiV4
     public const ulong CommandSchemaId = 0x5553434D44423401UL;
     public const int CommandEntrySize = 224;
     public const int CommandBatchViewSize = 72;
-    public const int TelemetrySize = 144;
+    public const int TelemetrySize = 192;
     public const ulong EventSchemaId = 0x555345564E543401UL;
     public const int EventEntrySize = 88;
     public const int EventViewSize = 64;
@@ -228,6 +228,12 @@ public partial struct UnrealGameplayDataTelemetryV1
     public ulong OverlapOverflowCount;
     public ulong TotalExecutedOverlapCount;
     public uint MaximumOverlapCount;
+    public ulong NativePreActorTickCount;
+    public ulong NativePreActorTickNanoseconds;
+    public ulong ManagedTickCount;
+    public ulong ManagedTickNanoseconds;
+    public ulong NativePostActorTickCount;
+    public ulong NativePostActorTickNanoseconds;
 }
 
 [StructLayout(LayoutKind.Sequential, Pack = 8)]

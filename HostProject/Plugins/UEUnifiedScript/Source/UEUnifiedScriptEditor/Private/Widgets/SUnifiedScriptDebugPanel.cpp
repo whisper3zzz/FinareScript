@@ -1,8 +1,10 @@
 #include "Widgets/SUnifiedScriptDebugPanel.h"
 
+#include "HAL/FileManager.h"
 #include "HttpModule.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
+#include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Styling/AppStyle.h"
 #include "UnifiedScriptAuthoringWorkbench.h"
@@ -207,6 +209,26 @@ void SUnifiedScriptDebugPanel::Construct(const FArguments& InArgs)
                     .Text(LOCTEXT("GameplayProfiler", "GAMEPLAY / BRIDGE PROFILE"))
                     .Font(FAppStyle::GetFontStyle(TEXT("SmallFontBold")))
                     .ColorAndOpacity(FLinearColor(0.50f, 0.82f, 0.42f))
+                ]
+                + SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 6.0f, 0.0f)
+                [
+                    SNew(SButton)
+                    .Text(LOCTEXT("FocusHottestProfileNode", "Focus Hot Node"))
+                    .ToolTipText(LOCTEXT(
+                        "FocusHottestProfileNodeTip",
+                        "Select and frame the highest-cost semantic node in the Visual graph."))
+                    .IsEnabled(this, &SUnifiedScriptDebugPanel::CanFocusHottestProfileNode)
+                    .OnClicked(this, &SUnifiedScriptDebugPanel::HandleFocusHottestProfileNode)
+                ]
+                + SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 8.0f, 0.0f)
+                [
+                    SNew(SButton)
+                    .Text(LOCTEXT("SaveGameplayProfile", "Save JSON"))
+                    .ToolTipText(LOCTEXT(
+                        "SaveGameplayProfileTip",
+                        "Write the portable bounded trace under Saved/UnifiedScript/Profiles."))
+                    .IsEnabled(this, &SUnifiedScriptDebugPanel::CanSaveGameplayProfile)
+                    .OnClicked(this, &SUnifiedScriptDebugPanel::HandleSaveGameplayProfile)
                 ]
                 + SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
                 [
@@ -534,6 +556,7 @@ FReply SUnifiedScriptDebugPanel::HandleToggleGameplayProfiler()
             return FReply::Handled();
         }
         GameplayProfile = MoveTemp(Captured);
+        GameplayProfileJson = MoveTemp(Json);
         if (!Component->SetGameplayProfilerEnabled(false, Error))
         {
             GameplayProfileStatus = MoveTemp(Error);
@@ -549,6 +572,7 @@ FReply SUnifiedScriptDebugPanel::HandleToggleGameplayProfiler()
             return FReply::Handled();
         }
         GameplayProfile.Reset();
+        GameplayProfileJson.Reset();
         GameplayProfileStatus = TEXT("Collecting up to 120 live World frames ...");
     }
     RefreshLiveWorldTargetNow();
@@ -578,7 +602,53 @@ FReply SUnifiedScriptDebugPanel::HandleCaptureGameplayProfile()
         return FReply::Handled();
     }
     GameplayProfile = MoveTemp(Captured);
+    GameplayProfileJson = MoveTemp(Json);
     GameplayProfileStatus = TEXT("Captured the current bounded timeline without stopping collection.");
+    return FReply::Handled();
+}
+
+FReply SUnifiedScriptDebugPanel::HandleFocusHottestProfileNode()
+{
+    if (const FUnifiedScriptGameplayProfileNode* Node = FindHottestProfileNode())
+    {
+        OnNodeFocused.ExecuteIfBound(Node->MethodId, Node->NodeId);
+    }
+    return FReply::Handled();
+}
+
+FReply SUnifiedScriptDebugPanel::HandleSaveGameplayProfile()
+{
+    if (!CanSaveGameplayProfile())
+    {
+        return FReply::Handled();
+    }
+    const FString Directory = FPaths::Combine(
+        FPaths::ProjectSavedDir(),
+        TEXT("UnifiedScript"),
+        TEXT("Profiles"));
+    if (!IFileManager::Get().MakeDirectory(*Directory, true))
+    {
+        GameplayProfileStatus = FString::Printf(
+            TEXT("Could not create profile directory: %s"),
+            *Directory);
+        return FReply::Handled();
+    }
+    const FString TraceName = FPaths::MakeValidFileName(GameplayProfile->TraceId);
+    const FString Timestamp = FDateTime::UtcNow().ToString(TEXT("%Y%m%d-%H%M%S"));
+    const FString Path = FPaths::Combine(
+        Directory,
+        FString::Printf(TEXT("%s-%s.json"), *TraceName, *Timestamp));
+    if (!FFileHelper::SaveStringToFile(
+            GameplayProfileJson,
+            *Path,
+            FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+    {
+        GameplayProfileStatus = FString::Printf(
+            TEXT("Could not write gameplay profile: %s"),
+            *Path);
+        return FReply::Handled();
+    }
+    GameplayProfileStatus = FString::Printf(TEXT("Saved portable trace: %s"), *Path);
     return FReply::Handled();
 }
 
@@ -1577,6 +1647,7 @@ void SUnifiedScriptDebugPanel::RefreshLiveWorldTargetNow()
         if (PreviousComponent != LiveComponent.Get())
         {
             GameplayProfile.Reset();
+            GameplayProfileJson.Reset();
             GameplayProfileStatus.Reset();
         }
         OnDebugStateChanged.ExecuteIfBound();
@@ -1633,6 +1704,16 @@ bool SUnifiedScriptDebugPanel::CanCaptureGameplayProfile() const
 {
     return CanControlGameplayProfiler() &&
         LiveComponent->bGameplayProfilerEnabled;
+}
+
+bool SUnifiedScriptDebugPanel::CanFocusHottestProfileNode() const
+{
+    return FindHottestProfileNode() != nullptr && OnNodeFocused.IsBound();
+}
+
+bool SUnifiedScriptDebugPanel::CanSaveGameplayProfile() const
+{
+    return GameplayProfile.IsSet() && !GameplayProfileJson.IsEmpty();
 }
 
 bool SUnifiedScriptDebugPanel::CanFocusRuntimeFailure() const
@@ -1770,11 +1851,77 @@ FString SUnifiedScriptDebugPanel::DescribeGameplayProfile() const
             static_cast<long long>(GameplayProfile->DroppedFrameCount),
             GameplayProfile->DroppedFrameCount == 1 ? TEXT("") : TEXT("s"));
     }
+    if (const FUnifiedScriptGameplayProfileNode* Node = FindHottestProfileNode())
+    {
+        FString NodeLabel = Node->NodeId;
+        if (ActiveAsset.IsSet())
+        {
+            for (const FUnifiedScriptAuthoringFunction& Function : ActiveAsset->Functions)
+            {
+                if (Function.Id != Node->MethodId)
+                {
+                    continue;
+                }
+                if (const FUnifiedScriptAuthoringAction* Action =
+                        Function.Actions.FindByPredicate(
+                            [Node](const FUnifiedScriptAuthoringAction& Candidate)
+                            {
+                                return Candidate.DebugTargetId == Node->NodeId;
+                            }))
+                {
+                    NodeLabel = Action->Title;
+                }
+                break;
+            }
+        }
+        Result += FString::Printf(
+            TEXT(" · Hot %s %.3f ms/%lld hit%s"),
+            *NodeLabel,
+            static_cast<double>(Node->TotalNanoseconds) / 1000000.0,
+            static_cast<long long>(Node->HitCount),
+            Node->HitCount == 1 ? TEXT("") : TEXT("s"));
+    }
     if (!GameplayProfileStatus.IsEmpty())
     {
         Result += TEXT(" · ") + GameplayProfileStatus;
     }
     return Result;
+}
+
+const FUnifiedScriptGameplayProfileNode*
+SUnifiedScriptDebugPanel::FindHottestProfileNode() const
+{
+    if (!GameplayProfile.IsSet() || !ActiveAsset.IsSet())
+    {
+        return nullptr;
+    }
+    const FUnifiedScriptGameplayProfileNode* Hottest = nullptr;
+    for (const FUnifiedScriptGameplayProfileNode& Node : GameplayProfile->Nodes)
+    {
+        bool bResolvable = false;
+        for (const FUnifiedScriptAuthoringFunction& Function : ActiveAsset->Functions)
+        {
+            if (Function.Id == Node.MethodId &&
+                Function.Actions.ContainsByPredicate(
+                    [&Node](const FUnifiedScriptAuthoringAction& Candidate)
+                    {
+                        return Candidate.DebugTargetId == Node.NodeId;
+                    }))
+            {
+                bResolvable = true;
+                break;
+            }
+        }
+        if (bResolvable &&
+            (Hottest == nullptr ||
+             Node.TotalNanoseconds > Hottest->TotalNanoseconds ||
+             (Node.TotalNanoseconds == Hottest->TotalNanoseconds &&
+              Node.HitCount > Hottest->HitCount)))
+        {
+            Hottest = &Node;
+        }
+    }
+    return Hottest;
 }
 
 #undef LOCTEXT_NAMESPACE

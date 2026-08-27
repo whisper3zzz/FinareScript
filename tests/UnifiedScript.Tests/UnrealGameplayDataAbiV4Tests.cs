@@ -71,6 +71,16 @@ public sealed class UnrealGameplayDataAbiV4Tests
             Marshal.OffsetOf<UnrealGameplayDataTelemetryV1>(
                 nameof(UnrealGameplayDataTelemetryV1.OverlapOverflowCount))
                 .ToInt32());
+        Assert.Equal(
+            144,
+            Marshal.OffsetOf<UnrealGameplayDataTelemetryV1>(
+                nameof(UnrealGameplayDataTelemetryV1.NativePreActorTickCount))
+                .ToInt32());
+        Assert.Equal(
+            184,
+            Marshal.OffsetOf<UnrealGameplayDataTelemetryV1>(
+                nameof(UnrealGameplayDataTelemetryV1.NativePostActorTickNanoseconds))
+                .ToInt32());
     }
 
     [Fact]

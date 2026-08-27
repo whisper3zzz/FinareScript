@@ -141,6 +141,13 @@ private:
     uint64 LastCommittedSequenceId = 0;
     uint64 LastExecutedSequenceId = 0;
     uint64 LastPublishedEventFrame = 0;
+    uint64 NativePreActorTickCount = 0;
+    uint64 NativePreActorTickNanoseconds = 0;
+    uint64 ManagedTickCount = 0;
+    uint64 ManagedTickNanoseconds = 0;
+    uint64 NativePostActorTickCount = 0;
+    uint64 NativePostActorTickNanoseconds = 0;
+    uint64 ManagedTickStartedCycles = 0;
     EUnifiedScriptGameplayDataPhaseV4 Phase =
         EUnifiedScriptGameplayDataPhaseV4::Idle;
 

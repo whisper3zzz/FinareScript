@@ -11,9 +11,11 @@ then completed the full BlockBreaker migration with exact inventory coverage
 and no Puerts/TypeScript payload in the target project or package. M8.4 then
 completed a real Player/Rifle Visual-to-C#-to-Visual round trip with semantic,
 IL, execution, Script Asset, UE gameplay, and dual packaged-build equivalence.
-M9.2 now completes observable transactional hot reload and repeated
-success/failure leak soak on top of live World semantic debugging. The active
-RoadMap cursor is M9.3 gameplay and bridge profiling.
+M9.2 completes observable transactional hot reload and repeated
+success/failure leak soak on top of live World semantic debugging. M9.3 now
+adds the first complete gameplay-profiler attribution path across semantic
+nodes, World phases, bridge/data-plane boundaries, allocation, and pressure;
+the RoadMap cursor remains on its end-to-end regression proof.
 
 ## Product roadmap
 
@@ -58,6 +60,12 @@ bounded telemetry plus Batch Overlap. Its live CoreCLR routing profile is:
 powershell -ExecutionPolicy Bypass `
   -File tools/run-unreal-data-plane-profile.ps1 -EngineRoot D:\UE_5.8
 ```
+
+M9.3 adds an opt-in 120-frame gameplay profiler. The Unreal Debug panel can
+capture or stop a live trace, focus the hottest resolvable semantic node, and
+save `unifiedscript.gameplay-profile/v0.2` JSON under
+`Saved/UnifiedScript/Profiles`. See
+[Gameplay and bridge profiler](docs/GAMEPLAY_PROFILER.md).
 
 M7.4 adds a deterministic Puerts-project inventory and exact migration coverage
 gate. Re-run the whole-project BlockBreaker proof with:

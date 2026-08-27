@@ -49,7 +49,7 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-28**
 
 - Active milestone: **M9 — Debugging, reload, and observability Beta**
-- Next slice: **M9.3 — gameplay and bridge profiler**
+- Next slice: **M9.3 — remote framing and end-to-end profiler regression proof**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -60,12 +60,12 @@ machine-local unless an artifact explicitly says otherwise.
 
 | Gate | Verified result |
 | --- | --- |
-| Main source | `0555623` (`feat: add observable reload transactions`), plus this M9.2 completion change set |
+| Main source | `9e96cf4` (`feat: add gameplay profiler trace foundation`), plus this M9.3 attribution change set |
 | Comparison source | `e62a46e` (`feat: adopt round-tripped gameplay tuning`) |
-| Managed tests | 526 / 526 passed |
-| Repository validator | 63 / 63 passed |
+| Managed tests | 528 / 528 passed |
+| Repository validator | 64 / 64 passed |
 | UE 5.8.1 native build | passed |
-| `UnifiedScript.Unreal` Automation | 14 / 14 passed, including Authoring Surface, live World semantic pause/step/reload/detach, and repeated success/failure hot-reload leak coverage |
+| `UnifiedScript.Unreal` Automation | 15 / 15 passed, including full gameplay-profiler attribution, Authoring Surface, live World semantic pause/step/reload/detach, and repeated success/failure hot-reload leak coverage |
 | BlockBreaker workload | 10,000 frames, three trials, one shot, one hit, two command completions per trial |
 | Gameplay boundary | 120,031 fast/CallFrame calls, zero legacy calls |
 | Matched local median | UnifiedScript 4,927.191 ms; Puerts 4,759.930 ms; ratio 1.035139; functional parity only, performance claim deferred to M10 |
@@ -1014,11 +1014,29 @@ complete; the cursor advances to M9.3.
 
 ### M9.3 — Gameplay and bridge profiler
 
-- [ ] attribute time and count to scripts, semantic nodes, World phases, direct
+- [x] attribute time and count to scripts, semantic nodes, World phases, direct
   thunks, CallFrame calls, reflection fallback, batch queries, commands, events,
   allocations, and buffer pressure
-- [ ] expose frame timeline and aggregate views in Unreal and emit a portable
+- [x] expose frame timeline and aggregate views in Unreal and emit a portable
   machine-readable trace for regression comparison
+- [ ] add bounded versioned remote debug framing, then reproduce one gameplay
+  defect and one performance regression and locate both to the responsible
+  source/graph node and runtime boundary
+
+Evidence (2026-08-28): the opt-in managed profiler now owns a bounded 120-frame
+ring and emits `unifiedscript.gameplay-profile/v0.2`. Each frame and aggregate
+separates script duration/allocation, stable semantic method/node timing, all
+three World scheduler phases, direct thunk, CallFrame, reflection fallback,
+Command/Event, Batch Trace/Overlap, and buffer-pressure deltas. Gameplay Data
+schema revision 3 appends cumulative phase count/nanosecond telemetry without
+moving the revision-1/2 prefixes. The native parser rejects incompatible or
+unbounded captures; Slate shows the aggregate/latest-frame summary, focuses the
+hottest node that resolves in the active graph, and saves exact JSON under
+`Saved/UnifiedScript/Profiles`. One live World workload exercises every
+attribution family. Managed tests pass 528/528, repository validation passes
+64/64, the UE 5.8.1 Editor build passes, and `UnifiedScript.Unreal` Automation
+passes 15/15. M9.3 remains active for remote framing and the explicit
+defect/regression acceptance proof.
 
 Acceptance: a scripted gameplay defect and a performance regression can both be
 located to a source/graph node and runtime boundary without custom logging.

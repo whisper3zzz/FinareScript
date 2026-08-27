@@ -1081,12 +1081,18 @@ public static class UnrealWorldManagedEntryPoint
             _debug.BeginTick(
                 generation.Generation,
                 deltaSeconds,
-                generation.Script.OnTick,
+                value => _profiler.ExecuteTick(
+                    generation.Script,
+                    generation.Generation,
+                    _typeName,
+                    value,
+                    attachProbe: false),
                 exception => CaptureBoundaryFailure(
                     _worldId,
                     _instanceId,
                     nameof(BeginScriptDebugTick),
-                    exception));
+                    exception),
+                _profiler);
         }
 
         public string GetDebugState() => _debug.GetSnapshotJson();

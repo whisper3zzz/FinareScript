@@ -541,11 +541,13 @@ public sealed class NativeUnrealInvocationBridge
         {
             return ReadProperty<T>(target, propertyPath);
         }
+        long profilerStart = BeginProfilerSample();
         UnrealInvocationResponse response = transport!.ReadPropertyById(target, memberId);
         if (IsMissingGeneratedMember(response))
         {
             return ReadProperty<T>(target, propertyPath);
         }
+        CompleteDirectProfilerSample(profilerStart);
         UnrealInvocationValue value = RequireSuccess(response, target, memberId, propertyPath);
         return ConvertFromNative<T>(value, propertyPath);
     }
@@ -584,6 +586,7 @@ public sealed class NativeUnrealInvocationBridge
             WriteProperty(target, propertyPath, value);
             return;
         }
+        long profilerStart = BeginProfilerSample();
         UnrealInvocationResponse response = transport!.WritePropertyById(
             target,
             memberId,
@@ -593,6 +596,7 @@ public sealed class NativeUnrealInvocationBridge
             WriteProperty(target, propertyPath, value);
             return;
         }
+        CompleteDirectProfilerSample(profilerStart);
         UnrealInvocationValue result = RequireSuccess(response, target, memberId, propertyPath);
         RequireVoid(result, propertyPath);
     }
@@ -611,6 +615,7 @@ public sealed class NativeUnrealInvocationBridge
         IReadOnlyList<UnrealInvocationValue> nativeArguments = ConvertArguments(
             arguments,
             functionPath);
+        long profilerStart = BeginProfilerSample();
         UnrealInvocationResponse response = transport!.InvokeById(
             target,
             memberId,
@@ -619,6 +624,7 @@ public sealed class NativeUnrealInvocationBridge
         {
             return Invoke<T>(target, functionPath, arguments);
         }
+        CompleteDirectProfilerSample(profilerStart);
         UnrealInvocationValue result = RequireSuccess(response, target, memberId, functionPath);
         return ConvertFromNative<T>(result, functionPath);
     }
@@ -638,6 +644,7 @@ public sealed class NativeUnrealInvocationBridge
         IReadOnlyList<UnrealInvocationValue> nativeArguments = ConvertArguments(
             arguments,
             functionPath);
+        long profilerStart = BeginProfilerSample();
         UnrealInvocationResponse response = transport!.InvokeById(
             target,
             memberId,
@@ -647,6 +654,7 @@ public sealed class NativeUnrealInvocationBridge
             Invoke(target, functionPath, arguments);
             return;
         }
+        CompleteDirectProfilerSample(profilerStart);
         UnrealInvocationValue result = RequireSuccess(response, target, memberId, functionPath);
         RequireVoid(result, functionPath);
     }

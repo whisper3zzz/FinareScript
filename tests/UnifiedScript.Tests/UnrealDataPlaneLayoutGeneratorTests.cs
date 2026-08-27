@@ -19,7 +19,7 @@ public sealed class UnrealDataPlaneLayoutGeneratorTests
         UnrealDataPlaneLayoutGenerationResult first = generator.Generate(schema);
         UnrealDataPlaneLayoutGenerationResult second = generator.Generate(schema);
 
-        Assert.Equal(0xA6051C503F071FDAUL, first.SchemaFingerprint);
+        Assert.Equal(0x754A31DCE3A25636UL, first.SchemaFingerprint);
         Assert.Equal(first, second);
         Assert.Equal(
             File.ReadAllText(Path.Combine(
@@ -43,6 +43,10 @@ public sealed class UnrealDataPlaneLayoutGeneratorTests
             StringComparison.Ordinal);
         Assert.Contains(
             "MaximumTransformSnapshotCount = 65536u",
+            first.NativeSource,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "static_assert(sizeof(FUnifiedScriptGameplayDataTelemetryV1) == 192);",
             first.NativeSource,
             StringComparison.Ordinal);
     }

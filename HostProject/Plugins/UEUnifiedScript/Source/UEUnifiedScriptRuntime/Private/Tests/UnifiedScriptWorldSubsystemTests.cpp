@@ -325,6 +325,8 @@ bool FUnifiedScriptWorldSubsystemLifecycleTest::RunTest(const FString& Parameter
             TEXT("Live gameplay profiler enables without changing the default-off runtime: %s"),
             *ProfilerError),
         FirstComponent->SetGameplayProfilerEnabled(true, ProfilerError));
+    FirstHost->EndManagedFrame();
+    FirstHost->BeginManagedFrame();
     FirstComponent->TickComponent(0.016f, LEVELTICK_All, nullptr);
     TestEqual(
         TEXT("Managed OnTick executes through the component host"),
@@ -345,19 +347,23 @@ bool FUnifiedScriptWorldSubsystemLifecycleTest::RunTest(const FString& Parameter
     const TArray<TSharedPtr<FJsonValue>>* GameplayFrames = nullptr;
     const TSharedPtr<FJsonObject>* GameplayAggregate = nullptr;
     const TArray<TSharedPtr<FJsonValue>>* GameplayBoundaries = nullptr;
+    const TArray<TSharedPtr<FJsonValue>>* GameplayWorldPhases = nullptr;
     TestTrue(
         TEXT("Gameplay profile binds schema, bounded frame timeline, and aggregate view"),
         GameplayProfileRoot.IsValid() &&
             GameplayProfileRoot->TryGetStringField(
                 TEXT("schemaVersion"), GameplayProfileSchema) &&
-            GameplayProfileSchema == TEXT("unifiedscript.gameplay-profile/v0.1") &&
+            GameplayProfileSchema == TEXT("unifiedscript.gameplay-profile/v0.2") &&
             GameplayProfileRoot->TryGetArrayField(TEXT("frames"), GameplayFrames) &&
             GameplayFrames != nullptr && GameplayFrames->Num() == 1 &&
             GameplayProfileRoot->TryGetObjectField(TEXT("aggregate"), GameplayAggregate) &&
             GameplayAggregate != nullptr &&
             (*GameplayAggregate)->TryGetArrayField(
                 TEXT("boundaries"), GameplayBoundaries) &&
-            GameplayBoundaries != nullptr);
+            GameplayBoundaries != nullptr &&
+            (*GameplayAggregate)->TryGetArrayField(
+                TEXT("worldPhases"), GameplayWorldPhases) &&
+            GameplayWorldPhases != nullptr && GameplayWorldPhases->Num() == 3);
     bool bCallFrameAttributed = false;
     if (GameplayBoundaries != nullptr)
     {
@@ -379,6 +385,24 @@ bool FUnifiedScriptWorldSubsystemLifecycleTest::RunTest(const FString& Parameter
     TestTrue(
         TEXT("Live profiler attributes the generated FString write to CallFrame"),
         bCallFrameAttributed);
+    bool bWorldPhasesAttributed =
+        GameplayWorldPhases != nullptr && GameplayWorldPhases->Num() == 3;
+    if (GameplayWorldPhases != nullptr)
+    {
+        for (const TSharedPtr<FJsonValue>& PhaseValue : *GameplayWorldPhases)
+        {
+            const TSharedPtr<FJsonObject> Phase = PhaseValue->AsObject();
+            double Count = 0.0;
+            double Nanoseconds = 0.0;
+            bWorldPhasesAttributed = bWorldPhasesAttributed && Phase.IsValid() &&
+                Phase->TryGetNumberField(TEXT("count"), Count) && Count >= 1.0 &&
+                Phase->TryGetNumberField(TEXT("totalNanoseconds"), Nanoseconds) &&
+                Nanoseconds > 0.0;
+        }
+    }
+    TestTrue(
+        TEXT("Live profiler attributes all three World scheduler phases"),
+        bWorldPhasesAttributed);
     FirstComponent->ManagedState = TEXT("PausedAtWorldBoundary");
     TestTrue(
         TEXT("Live debugger pauses the managed component at a frame boundary"),
@@ -596,6 +620,8 @@ bool FUnifiedScriptWorldSubsystemLifecycleTest::RunTest(const FString& Parameter
         static_cast<unsigned long long>(ManagedCallFrameCalls),
         static_cast<unsigned long long>(ManagedLegacyCalls));
 
+    const int32 DataPlaneBorrowedHandleCount =
+        FirstHost->NumRegisteredObjects();
     AUnifiedScriptActor* ScriptActor =
         FirstWorld->SpawnActor<AUnifiedScriptActor>();
     TestNotNull(TEXT("Placeable UnifiedScript Actor can be spawned"), ScriptActor);
@@ -654,9 +680,9 @@ bool FUnifiedScriptWorldSubsystemLifecycleTest::RunTest(const FString& Parameter
                 ScriptActor->ManagedActorState,
                 FString(TEXT("ActorEndOverlap")));
             TestEqual(
-                TEXT("Temporary event argument handle is released after dispatch"),
+                TEXT("Temporary event argument releases back to the data-plane baseline"),
                 FirstHost->NumRegisteredObjects(),
-                2);
+                DataPlaneBorrowedHandleCount + 2);
             OtherActor->Destroy();
         }
 
@@ -679,9 +705,9 @@ bool FUnifiedScriptWorldSubsystemLifecycleTest::RunTest(const FString& Parameter
             ScriptActor->ManagedActorState,
             FString(TEXT("ActorEnd")));
         TestEqual(
-            TEXT("Actor behavior teardown releases both managed handles"),
+            TEXT("Actor teardown preserves only the data-plane borrowed handles"),
             FirstHost->NumRegisteredObjects(),
-            0);
+            DataPlaneBorrowedHandleCount);
         ScriptActor->Destroy();
     }
 

@@ -124,7 +124,8 @@ internal sealed class UnrealWorldDebugController : IDisposable
         int runtimeGeneration,
         float deltaSeconds,
         Action<float> tick,
-        Func<Exception, string> captureFailure)
+        Func<Exception, string> captureFailure,
+        ICoreClrDebugProbeSink? probeObserver = null)
     {
         ArgumentNullException.ThrowIfNull(tick);
         ArgumentNullException.ThrowIfNull(captureFailure);
@@ -151,7 +152,8 @@ internal sealed class UnrealWorldDebugController : IDisposable
                 instanceId,
                 current,
                 executionId,
-                PublishSnapshot);
+                PublishSnapshot,
+                probeObserver);
             execution = next;
             snapshot = next.CreateRunningSnapshot();
         }
@@ -236,6 +238,7 @@ internal sealed class UnrealWorldDebugController : IDisposable
         private readonly UnrealWorldDebugConfiguration configuration;
         private readonly long executionId;
         private readonly Action<UnrealWorldDebugExecution, UnrealWorldDebugSessionSnapshot> publish;
+        private readonly ICoreClrDebugProbeSink? probeObserver;
         private readonly IReadOnlyList<SemanticBreakpointBinding> bindings;
         private readonly HashSet<SemanticId> breakpointNodes;
         private ManualResetEventSlim? resumeSignal;
@@ -254,13 +257,15 @@ internal sealed class UnrealWorldDebugController : IDisposable
             ulong instanceId,
             UnrealWorldDebugConfiguration configuration,
             long executionId,
-            Action<UnrealWorldDebugExecution, UnrealWorldDebugSessionSnapshot> publish)
+            Action<UnrealWorldDebugExecution, UnrealWorldDebugSessionSnapshot> publish,
+            ICoreClrDebugProbeSink? probeObserver)
         {
             this.worldHostId = worldHostId;
             this.instanceId = instanceId;
             this.configuration = configuration;
             this.executionId = executionId;
             this.publish = publish;
+            this.probeObserver = probeObserver;
             breakpointNodes = configuration.BreakpointNodeIds.ToHashSet();
             bindings = configuration.BreakpointNodeIds.Select(nodeId =>
                 new SemanticBreakpointBinding(
@@ -425,6 +430,11 @@ internal sealed class UnrealWorldDebugController : IDisposable
                 }
                 if (reason is null)
                 {
+                    probeObserver?.Hit(
+                        methodIdText,
+                        nodeIdText,
+                        locals,
+                        frameSnapshots);
                     return;
                 }
 
@@ -464,6 +474,11 @@ internal sealed class UnrealWorldDebugController : IDisposable
 
             signal.Wait();
             signal.Dispose();
+            probeObserver?.Hit(
+                methodIdText,
+                nodeIdText,
+                locals,
+                frameSnapshots);
         }
 
         private void Complete(Exception? failure, string? runtimeDiagnostic)

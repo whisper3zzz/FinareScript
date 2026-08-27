@@ -56,7 +56,7 @@ file. M6.3.2 publishes:
 - bootstrap/fast-member ABI v2, call-frame ABI v3, and event/shared/gameplay
   data ABI v4;
 - onboarding v0.1, reflection v0.2, API Contract/node/coverage v0.1,
-  data-plane layout v0.1 (current compatible revision 2), and deployment v0.1
+  data-plane layout v0.1 (current compatible revision 3), and deployment v0.1
   schemas.
 
 The installer verifies every hash and rejects missing, duplicate, unsafe, or

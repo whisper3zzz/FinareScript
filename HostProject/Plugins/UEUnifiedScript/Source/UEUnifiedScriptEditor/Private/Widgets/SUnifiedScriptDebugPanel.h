@@ -63,6 +63,8 @@ private:
     FReply HandleContinueLiveWorld();
     FReply HandleToggleGameplayProfiler();
     FReply HandleCaptureGameplayProfile();
+    FReply HandleFocusHottestProfileNode();
+    FReply HandleSaveGameplayProfile();
     FReply HandleFocusRuntimeFailure();
     FReply HandleAttachSemanticWorld();
     FReply HandleDetachSemanticWorld();
@@ -108,6 +110,8 @@ private:
     bool CanContinueLiveWorld() const;
     bool CanControlGameplayProfiler() const;
     bool CanCaptureGameplayProfile() const;
+    bool CanFocusHottestProfileNode() const;
+    bool CanSaveGameplayProfile() const;
     bool CanFocusRuntimeFailure() const;
     bool CanAttachSemanticWorld() const;
     bool CanDetachSemanticWorld() const;
@@ -116,6 +120,7 @@ private:
     FString DescribeLiveWorldTarget() const;
     FString DescribeRuntimeDiagnostic() const;
     FString DescribeGameplayProfile() const;
+    const FUnifiedScriptGameplayProfileNode* FindHottestProfileNode() const;
 
     TAttribute<FString> ServerUrlAttribute;
     FOnUnifiedScriptDebugNodeFocused OnNodeFocused;
@@ -131,6 +136,7 @@ private:
     int64 LastRuntimeDiagnosticSequence = 0;
     FString LiveRuntimeStatus = TEXT("No matching PIE/Game World script is running.");
     TOptional<FUnifiedScriptGameplayProfileResult> GameplayProfile;
+    FString GameplayProfileJson;
     FString GameplayProfileStatus;
     TSet<FString> BreakpointNodeIds;
     TOptional<FUnifiedScriptDebugSession> Session;
