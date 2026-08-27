@@ -3,7 +3,7 @@
  * @Author: whispersong
  * @Date: 2026-08-25 17:47:14
  * @LastEditors: whispersong
- * @LastEditTime: 2026-08-25 17:55:11
+ * @LastEditTime: 2026-08-25 18:35:18
  * @FilePath: \Plugins\UEUnifiedScript\Source\UEUnifiedScriptRuntime\Private\UnifiedScriptWorldLibrary.cpp
  * @Description:
  */
@@ -11,6 +11,8 @@
 
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
+#include "GameFramework/PlayerController.h"
+#include "InputCoreTypes.h"
 #include "UObject/UObjectGlobals.h"
 #include "UnifiedScriptWorldSubsystem.h"
 
@@ -69,6 +71,48 @@ AActor* UUnifiedScriptWorldLibrary::SpawnActor(
         return nullptr;
     }
     return World->SpawnActor<AActor>(ActorClass, Transform);
+}
+
+bool UUnifiedScriptWorldLibrary::DestroyActor(
+    UObject* WorldContextObject,
+    AActor* Actor)
+{
+    UWorld* World = IsValid(WorldContextObject) ? WorldContextObject->GetWorld() : nullptr;
+    return World != nullptr && IsValid(Actor) && Actor->GetWorld() == World &&
+        Actor->Destroy();
+}
+
+UActorComponent* UUnifiedScriptWorldLibrary::FindComponentByClass(
+    UObject* WorldContextObject,
+    AActor* Actor,
+    UClass* ComponentClass)
+{
+    UWorld* World = IsValid(WorldContextObject) ? WorldContextObject->GetWorld() : nullptr;
+    if (World == nullptr || !IsValid(Actor) || Actor->GetWorld() != World ||
+        ComponentClass == nullptr ||
+        !ComponentClass->IsChildOf(UActorComponent::StaticClass()))
+    {
+        return nullptr;
+    }
+    return Actor->GetComponentByClass(ComponentClass);
+}
+
+bool UUnifiedScriptWorldLibrary::IsInputKeyDown(
+    UObject* WorldContextObject,
+    APlayerController* PlayerController,
+    FName KeyName)
+{
+    UWorld* World = IsValid(WorldContextObject) ? WorldContextObject->GetWorld() : nullptr;
+    return World != nullptr && IsValid(PlayerController) &&
+        PlayerController->GetWorld() == World && !KeyName.IsNone() &&
+        PlayerController->IsInputKeyDown(FKey(KeyName));
+}
+
+float UUnifiedScriptWorldLibrary::GetWorldTimeSeconds(UObject* WorldContextObject)
+{
+    const UWorld* World =
+        IsValid(WorldContextObject) ? WorldContextObject->GetWorld() : nullptr;
+    return World != nullptr ? World->GetTimeSeconds() : 0.0f;
 }
 
 bool UUnifiedScriptWorldLibrary::LineTraceSingle(

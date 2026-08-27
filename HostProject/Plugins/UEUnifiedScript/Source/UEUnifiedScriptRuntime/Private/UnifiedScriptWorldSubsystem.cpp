@@ -38,6 +38,7 @@ void UUnifiedScriptWorldSubsystem::Initialize(FSubsystemCollectionBase& Collecti
     check(InvocationBridge == nullptr);
     check(SharedDataPlane == nullptr);
     check(GameplayDataPlane == nullptr);
+    check(AsyncService == nullptr);
     check(NativeContext == nullptr);
 
     UWorld* World = GetWorld();
@@ -47,6 +48,11 @@ void UUnifiedScriptWorldSubsystem::Initialize(FSubsystemCollectionBase& Collecti
     InvocationBridge = MakeUnique<FUnifiedScriptInvocationBridge>(*ObjectRegistry);
     NativeContext = new FUnifiedScriptNativeBridgeContext(*InvocationBridge);
     WorldHostId = UE::UnifiedScript::WorldHost::Private::AllocateWorldHostId();
+    AsyncService = MakeUnique<FUnifiedScriptAsyncService>(
+        *World,
+        *ObjectRegistry,
+        WorldHostId);
+    NativeContext->AttachAsyncService(AsyncService.Get());
     SharedDataPlane = MakeUnique<FUnifiedScriptSharedDataPlane>(
         *World,
         *ObjectRegistry,
@@ -377,6 +383,11 @@ uint64 UUnifiedScriptWorldSubsystem::GetFastInvocationCount() const
         : 0;
 }
 
+int32 UUnifiedScriptWorldSubsystem::GetPendingAsyncRequestCount() const
+{
+    return AsyncService != nullptr ? AsyncService->NumPending() : 0;
+}
+
 FUnifiedScriptNativeBridgeContext*
 UUnifiedScriptWorldSubsystem::GetNativeInvocationContext() const
 {
@@ -420,6 +431,11 @@ void UUnifiedScriptWorldSubsystem::ShutdownNativeRuntime()
     {
         GameplayDataPlane->Shutdown();
         GameplayDataPlane.Reset();
+    }
+    if (AsyncService != nullptr)
+    {
+        AsyncService->Shutdown();
+        AsyncService.Reset();
     }
 
     if (ObjectRegistry != nullptr)

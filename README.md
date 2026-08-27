@@ -4,9 +4,9 @@ UnifiedScript is an experimental dual-modal gameplay authoring system. A
 restricted C# profile and a structured visual graph are intended to be two
 lossless projections of one program model. Roslyn and CoreCLR are the active
 execution backend. The language and projection model are proven independently,
-and the versioned Unreal adapter has completed its M6.2 packaged-demo baseline
-and entered M6.3 adoptable-project productization without adding UE dependencies
-to the compiler core.
+and the versioned Unreal adapter has completed its adoptable-project alpha and
+entered M7.2 gameplay services/lifecycle productization without adding UE
+dependencies to the compiler core.
 
 ## Product roadmap
 
@@ -28,6 +28,10 @@ Re-run with `-ValidateOnly` to preflight Script Assets, compare deterministic
 generated outputs, enforce binding coverage, and execute the configured managed
 startup gate without rewriting project source. See
 [Unreal project onboarding](docs/UNREAL_ONBOARDING.md).
+
+M7.2 adds generated World services plus the World-scoped Async Service ABI v5
+for Delay, async object/class loading, timeout, cancellation, reload ownership,
+and teardown safety. See [Async Service ABI v5](docs/UNREAL_ASYNC_SERVICE_ABI_V5.md).
 
 Create a repository-independent alpha SDK with:
 

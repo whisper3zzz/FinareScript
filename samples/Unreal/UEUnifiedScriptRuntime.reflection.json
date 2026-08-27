@@ -2430,6 +2430,209 @@
 			"delegates": [],
 			"functions": [
 				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:DestroyActor",
+					"name": "DestroyActor",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [
+						{
+							"name": "WorldContextObject",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UObject*",
+								"typePath": "/Script/CoreUObject.Object",
+								"headerPath": "UObject/Object.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Actor",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": true,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Destroy Actor",
+						"category": "UnifiedScript|World",
+						"tooltip": "Destroy Actor",
+						"deprecated": false,
+						"worldContextParameter": "WorldContextObject"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:FindComponentByClass",
+					"name": "FindComponentByClass",
+					"returnType":
+					{
+						"kind": "object",
+						"nativeName": "UActorComponent*",
+						"typePath": "/Script/Engine.ActorComponent",
+						"headerPath": "Components/ActorComponent.h"
+					},
+					"parameters": [
+						{
+							"name": "WorldContextObject",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UObject*",
+								"typePath": "/Script/CoreUObject.Object",
+								"headerPath": "UObject/Object.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Actor",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "AActor*",
+								"typePath": "/Script/Engine.Actor",
+								"headerPath": "GameFramework/Actor.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "ComponentClass",
+							"type":
+							{
+								"kind": "class",
+								"nativeName": "UClass*",
+								"typePath": "/Script/CoreUObject.Object",
+								"headerPath": "UObject/Object.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": true,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Find Component by Class",
+						"category": "UnifiedScript|Components",
+						"tooltip": "Find Component by Class",
+						"deprecated": false,
+						"worldContextParameter": "WorldContextObject"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:GetWorldTimeSeconds",
+					"name": "GetWorldTimeSeconds",
+					"returnType":
+					{
+						"kind": "float32",
+						"nativeName": "float"
+					},
+					"parameters": [
+						{
+							"name": "WorldContextObject",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UObject*",
+								"typePath": "/Script/CoreUObject.Object",
+								"headerPath": "UObject/Object.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": true,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get World Time Seconds",
+						"category": "UnifiedScript|World",
+						"tooltip": "Get World Time Seconds",
+						"deprecated": false,
+						"worldContextParameter": "WorldContextObject"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:IsInputKeyDown",
+					"name": "IsInputKeyDown",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [
+						{
+							"name": "WorldContextObject",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UObject*",
+								"typePath": "/Script/CoreUObject.Object",
+								"headerPath": "UObject/Object.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "PlayerController",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "APlayerController*",
+								"typePath": "/Script/Engine.PlayerController",
+								"headerPath": "GameFramework/PlayerController.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "KeyName",
+							"type":
+							{
+								"kind": "name",
+								"nativeName": "FName"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": true,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Is Input Key Down",
+						"category": "UnifiedScript|Input",
+						"tooltip": "Is Input Key Down",
+						"deprecated": false,
+						"worldContextParameter": "WorldContextObject"
+					}
+				},
+				{
 					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:LineTraceSingle",
 					"name": "LineTraceSingle",
 					"returnType":

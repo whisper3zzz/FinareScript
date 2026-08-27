@@ -23,7 +23,7 @@ public interface IUnrealManagedEventSink
 public abstract class UnrealObjectScript : IUnrealManagedScript, IUnrealManagedEventSink
 {
     private CancellationTokenSource? _lifetime;
-    private readonly List<LatentDelay> _latentDelays = [];
+    private UnrealAsyncScope? _asyncScope;
     private bool _running;
 
     public UnrealScriptContext Context { get; private set; }
@@ -61,6 +61,11 @@ public abstract class UnrealObjectScript : IUnrealManagedScript, IUnrealManagedE
 
         Context = context;
         _lifetime = new CancellationTokenSource();
+        _asyncScope = new UnrealAsyncScope(
+            context.Bridge,
+            context.InstanceId,
+            context.Generation,
+            _lifetime.Token);
         _running = true;
         try
         {
@@ -69,7 +74,8 @@ public abstract class UnrealObjectScript : IUnrealManagedScript, IUnrealManagedE
         catch
         {
             _lifetime.Cancel();
-            CancelLatentDelays(_lifetime.Token);
+            _asyncScope.Dispose();
+            _asyncScope = null;
             _lifetime.Dispose();
             _lifetime = null;
             _running = false;
@@ -84,7 +90,7 @@ public abstract class UnrealObjectScript : IUnrealManagedScript, IUnrealManagedE
         {
             throw new InvalidOperationException("The Unreal script instance is not running.");
         }
-        AdvanceLatentDelays(deltaSeconds);
+        _asyncScope!.Advance(deltaSeconds);
         OnUpdate(deltaSeconds);
     }
 
@@ -111,7 +117,7 @@ public abstract class UnrealObjectScript : IUnrealManagedScript, IUnrealManagedE
 
         CancellationTokenSource lifetime = _lifetime!;
         lifetime.Cancel();
-        CancelLatentDelays(lifetime.Token);
+        _asyncScope!.Dispose();
         try
         {
             OnDestroyed();
@@ -119,6 +125,7 @@ public abstract class UnrealObjectScript : IUnrealManagedScript, IUnrealManagedE
         finally
         {
             _running = false;
+            _asyncScope = null;
             _lifetime = null;
             Context = default;
             lifetime.Dispose();
@@ -147,67 +154,52 @@ public abstract class UnrealObjectScript : IUnrealManagedScript, IUnrealManagedE
     /// </summary>
     protected Task DelayAsync(float seconds)
     {
-        if (!float.IsFinite(seconds) || seconds < 0.0f)
-        {
-            throw new ArgumentOutOfRangeException(nameof(seconds));
-        }
         _ = RequireRunning();
-        var delay = new LatentDelay(seconds);
-        _latentDelays.Add(delay);
-        return delay.Task;
+        return _asyncScope!.DelayAsync(seconds, 0.0f, Lifetime);
     }
 
     protected Task NextTickAsync() => DelayAsync(0.0f);
 
-    private void AdvanceLatentDelays(float deltaSeconds)
+    /// <summary>Completes on Tick or fails with TimeoutException.</summary>
+    protected Task DelayAsync(
+        float seconds,
+        float timeoutSeconds,
+        CancellationToken cancellationToken = default)
     {
-        if (!float.IsFinite(deltaSeconds) || deltaSeconds < 0.0f)
-        {
-            throw new ArgumentOutOfRangeException(nameof(deltaSeconds));
-        }
-
-        for (int index = _latentDelays.Count - 1; index >= 0; --index)
-        {
-            LatentDelay delay = _latentDelays[index];
-            if (!delay.Advance(deltaSeconds))
-            {
-                continue;
-            }
-            _latentDelays.RemoveAt(index);
-            delay.Complete();
-        }
+        _ = RequireRunning();
+        return _asyncScope!.DelayAsync(seconds, timeoutSeconds, cancellationToken);
     }
 
-    private void CancelLatentDelays(CancellationToken token)
+    /// <summary>Loads an object through the World-owned async asset service.</summary>
+    protected Task<UnrealObjectHandle> LoadObjectAsync(
+        string objectPath,
+        float timeoutSeconds = 0.0f,
+        CancellationToken cancellationToken = default)
     {
-        foreach (LatentDelay delay in _latentDelays)
-        {
-            delay.Cancel(token);
-        }
-        _latentDelays.Clear();
+        _ = RequireRunning();
+        return _asyncScope!.LoadObjectAsync(
+            objectPath,
+            timeoutSeconds,
+            cancellationToken);
+    }
+
+    /// <summary>Loads a class through the World-owned async asset service.</summary>
+    protected Task<UnrealObjectHandle> LoadClassAsync(
+        string classPath,
+        float timeoutSeconds = 0.0f,
+        CancellationToken cancellationToken = default)
+    {
+        _ = RequireRunning();
+        return _asyncScope!.LoadClassAsync(
+            classPath,
+            timeoutSeconds,
+            cancellationToken);
     }
 
     private UnrealScriptContext RequireRunning() => _running
         ? Context
         : throw new InvalidOperationException("The Unreal script is not running.");
 
-    private sealed class LatentDelay(float remainingSeconds)
-    {
-        private readonly TaskCompletionSource _completion = new();
-        private float _remainingSeconds = remainingSeconds;
-
-        public Task Task => _completion.Task;
-
-        public bool Advance(float deltaSeconds)
-        {
-            _remainingSeconds -= deltaSeconds;
-            return _remainingSeconds <= 0.0f;
-        }
-
-        public void Complete() => _completion.TrySetResult();
-
-        public void Cancel(CancellationToken token) => _completion.TrySetCanceled(token);
-    }
 }
 
 /// <summary>

@@ -1439,4 +1439,172 @@ bool FUnifiedScriptGameplayDataPlaneTest::RunTest(const FString& Parameters)
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FUnifiedScriptAsyncServiceTest,
+    "UnifiedScript.Unreal.AsyncService.DelayLoadCancelAndLifecycle",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUnifiedScriptAsyncServiceTest::RunTest(const FString& Parameters)
+{
+    UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+    TestNotNull(TEXT("Async service World exists"), World);
+    if (World == nullptr)
+    {
+        return false;
+    }
+    World->AddToRoot();
+    UUnifiedScriptWorldSubsystem* Host =
+        World->GetSubsystem<UUnifiedScriptWorldSubsystem>();
+    const FUnifiedScriptNativeTransportV2* Bootstrap =
+        Host != nullptr ? Host->GetNativeTransport() : nullptr;
+    FUnifiedScriptNativeBridgeContext* Context =
+        Host != nullptr ? Host->GetNativeInvocationContext() : nullptr;
+    const FUnifiedScriptAsyncTransportV5* Transport =
+        Bootstrap != nullptr ? Bootstrap->AsyncTransport : nullptr;
+    TestNotNull(TEXT("Async service World host exists"), Host);
+    TestNotNull(TEXT("Async service context exists"), Context);
+    TestNotNull(TEXT("Async service ABI v5 is discoverable"), Transport);
+    if (Host == nullptr || Context == nullptr || Transport == nullptr)
+    {
+        World->RemoveFromRoot();
+        World->DestroyWorld(false);
+        return false;
+    }
+
+    TestEqual(
+        TEXT("Async request ABI layout is stable"),
+        Transport->RequestSize,
+        static_cast<uint32>(sizeof(FUnifiedScriptAsyncRequestV5)));
+    const uint64 RequiredCapabilities =
+        static_cast<uint64>(EUnifiedScriptAsyncCapabilitiesV5::Delay) |
+        static_cast<uint64>(EUnifiedScriptAsyncCapabilitiesV5::AsyncAssetLoad) |
+        static_cast<uint64>(EUnifiedScriptAsyncCapabilitiesV5::Cancellation) |
+        static_cast<uint64>(EUnifiedScriptAsyncCapabilitiesV5::Timeout) |
+        static_cast<uint64>(EUnifiedScriptAsyncCapabilitiesV5::GenerationOwnership) |
+        static_cast<uint64>(EUnifiedScriptAsyncCapabilitiesV5::WorldTeardown);
+    TestEqual(
+        TEXT("Async service advertises the complete M7.2 lifecycle contract"),
+        Transport->Capabilities & RequiredCapabilities,
+        RequiredCapabilities);
+
+    auto Submit = [&](uint64 RequestId,
+                      EUnifiedScriptAsyncOperationV5 Operation,
+                      float DurationSeconds,
+                      float TimeoutSeconds,
+                      const FString& Payload = FString())
+    {
+        const FTCHARToUTF8 PayloadUtf8(*Payload);
+        FUnifiedScriptAsyncRequestV5 Request;
+        Request.RequestId = RequestId;
+        Request.OwnerInstanceId = 101;
+        Request.OwnerGeneration = 7;
+        Request.Operation = Operation;
+        Request.DurationSeconds = DurationSeconds;
+        Request.TimeoutSeconds = TimeoutSeconds;
+        Request.PayloadData = reinterpret_cast<const uint8*>(PayloadUtf8.Get());
+        Request.PayloadLength = static_cast<uint32>(PayloadUtf8.Length());
+        return Transport->SubmitRequest(Context, &Request) != 0;
+    };
+
+    FUnifiedScriptAsyncCompletionViewV5 View;
+    TestTrue(
+        TEXT("Generation-owned Delay request is accepted"),
+        Submit(1, EUnifiedScriptAsyncOperationV5::Delay, 0.5f, 0.0f));
+    TestTrue(
+        TEXT("First owner pump succeeds"),
+        Transport->PumpOwner(Context, 101, 7, 0.25f) != 0);
+    TestTrue(
+        TEXT("Incomplete Delay can be polled"),
+        Transport->PollCompletions(Context, 101, 7, &View) != 0);
+    TestEqual(TEXT("Delay remains pending before its duration"), View.Count, 0u);
+    TestTrue(
+        TEXT("Second owner pump completes Delay"),
+        Transport->PumpOwner(Context, 101, 7, 0.25f) != 0);
+    TestTrue(
+        TEXT("Completed Delay can be polled"),
+        Transport->PollCompletions(Context, 101, 7, &View) != 0);
+    TestTrue(
+        TEXT("Delay completion preserves owner and request identity"),
+        View.Count == 1 && View.Completions[0].RequestId == 1 &&
+            View.Completions[0].OwnerInstanceId == 101 &&
+            View.Completions[0].OwnerGeneration == 7 &&
+            View.Completions[0].Status ==
+                EUnifiedScriptAsyncCompletionStatusV5::Succeeded);
+
+    TestTrue(
+        TEXT("Timed Delay request is accepted"),
+        Submit(2, EUnifiedScriptAsyncOperationV5::Delay, 5.0f, 0.1f));
+    TestTrue(
+        TEXT("Timeout pump succeeds"),
+        Transport->PumpOwner(Context, 101, 7, 0.1f) != 0);
+    TestTrue(
+        TEXT("Timed-out request can be polled"),
+        Transport->PollCompletions(Context, 101, 7, &View) != 0);
+    TestTrue(
+        TEXT("Timeout is a stable completion state"),
+        View.Count == 1 && View.Completions[0].RequestId == 2 &&
+            View.Completions[0].Status ==
+                EUnifiedScriptAsyncCompletionStatusV5::TimedOut);
+
+    const FString ClassPath = UUnifiedScriptComponent::StaticClass()->GetPathName();
+    TestTrue(
+        TEXT("Async class load is accepted"),
+        Submit(3, EUnifiedScriptAsyncOperationV5::LoadClass, 0.0f, 1.0f, ClassPath));
+    TestTrue(
+        TEXT("Resolved class load completion can be polled"),
+        Transport->PollCompletions(Context, 101, 7, &View) != 0);
+    TestTrue(
+        TEXT("Async class load returns a generation-safe object handle"),
+        View.Count == 1 && View.Completions[0].RequestId == 3 &&
+            View.Completions[0].Status ==
+                EUnifiedScriptAsyncCompletionStatusV5::Succeeded &&
+            View.Completions[0].ResultHandle != 0);
+
+    TestTrue(
+        TEXT("Cancelable Delay request is accepted"),
+        Submit(4, EUnifiedScriptAsyncOperationV5::Delay, 5.0f, 0.0f));
+    TestTrue(
+        TEXT("Individual cancellation succeeds"),
+        Transport->CancelRequest(Context, 101, 7, 4) != 0);
+    TestTrue(
+        TEXT("Canceled request can be polled"),
+        Transport->PollCompletions(Context, 101, 7, &View) != 0);
+    TestTrue(
+        TEXT("Cancellation is a stable completion state"),
+        View.Count == 1 && View.Completions[0].RequestId == 4 &&
+            View.Completions[0].Status ==
+                EUnifiedScriptAsyncCompletionStatusV5::Canceled);
+
+    TestTrue(
+        TEXT("First rollover request is accepted"),
+        Submit(5, EUnifiedScriptAsyncOperationV5::Delay, 5.0f, 0.0f));
+    TestTrue(
+        TEXT("Second rollover request is accepted"),
+        Submit(6, EUnifiedScriptAsyncOperationV5::Delay, 5.0f, 0.0f));
+    TestEqual(
+        TEXT("Generation rollover cancels every owned request"),
+        Transport->CancelOwner(Context, 101, 7),
+        2u);
+    TestEqual(
+        TEXT("Generation rollover leaves no native async request"),
+        Host->GetPendingAsyncRequestCount(),
+        0);
+
+    TestTrue(
+        TEXT("Managed ownership can retain the async context"),
+        Transport->RetainContext(Context) != 0);
+    World->RemoveFromRoot();
+    World->DestroyWorld(false);
+    World = nullptr;
+    FUnifiedScriptAsyncRequestV5 DetachedRequest;
+    DetachedRequest.RequestId = 7;
+    DetachedRequest.OwnerInstanceId = 101;
+    DetachedRequest.OwnerGeneration = 7;
+    TestFalse(
+        TEXT("World teardown rejects new async requests"),
+        Transport->SubmitRequest(Context, &DetachedRequest) != 0);
+    Transport->ReleaseContext(Context);
+    return true;
+}
+
 #endif

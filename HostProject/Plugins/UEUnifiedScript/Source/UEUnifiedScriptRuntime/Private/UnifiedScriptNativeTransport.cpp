@@ -34,6 +34,15 @@ void FUnifiedScriptNativeBridgeContext::AttachGameplayDataPlane(
     GameplayDataPlane = InGameplayDataPlane;
 }
 
+void FUnifiedScriptNativeBridgeContext::AttachAsyncService(
+    FUnifiedScriptAsyncService* InAsyncService)
+{
+    check(IsInGameThread());
+    FScopeLock Lock(&BridgeLock);
+    check(Bridge != nullptr);
+    AsyncService = InAsyncService;
+}
+
 bool FUnifiedScriptNativeBridgeContext::TryRetain()
 {
     FScopeLock Lock(&BridgeLock);
@@ -65,6 +74,7 @@ void FUnifiedScriptNativeBridgeContext::Detach()
         Bridge = nullptr;
         SharedDataPlane = nullptr;
         GameplayDataPlane = nullptr;
+        AsyncService = nullptr;
         PendingCallFrameResult.Reset();
         EventSubscriptions.GenerateValueArray(Subscriptions);
         EventSubscriptions.Reset();
@@ -146,6 +156,17 @@ bool FUnifiedScriptNativeBridgeContext::ExecuteGameplayData(
     FScopeLock Lock(&BridgeLock);
     return Bridge != nullptr && GameplayDataPlane != nullptr &&
         Operation(*GameplayDataPlane);
+}
+
+bool FUnifiedScriptNativeBridgeContext::ExecuteAsyncService(
+    TFunctionRef<bool(FUnifiedScriptAsyncService&)> Operation)
+{
+    if (!IsInGameThread())
+    {
+        return false;
+    }
+    FScopeLock Lock(&BridgeLock);
+    return Bridge != nullptr && AsyncService != nullptr && Operation(*AsyncService);
 }
 
 namespace UE::UnifiedScript::NativeTransport::Private
@@ -1985,6 +2006,93 @@ uint8 GetGameplayPhase(void* Context, uint8* OutPhase, uint64* OutFrameNumber)
             return true;
         }) ? 1 : 0;
 }
+
+uint8 SubmitAsyncRequest(
+    void* Context,
+    const FUnifiedScriptAsyncRequestV5* Request)
+{
+    if (Context == nullptr || Request == nullptr)
+    {
+        return 0;
+    }
+    return static_cast<FUnifiedScriptNativeBridgeContext*>(Context)
+        ->ExecuteAsyncService([&](FUnifiedScriptAsyncService& Service)
+        {
+            return Service.Submit(*Request);
+        }) ? 1 : 0;
+}
+
+uint8 PumpAsyncOwner(
+    void* Context,
+    uint64 OwnerInstanceId,
+    uint32 OwnerGeneration,
+    float DeltaSeconds)
+{
+    if (Context == nullptr)
+    {
+        return 0;
+    }
+    return static_cast<FUnifiedScriptNativeBridgeContext*>(Context)
+        ->ExecuteAsyncService([&](FUnifiedScriptAsyncService& Service)
+        {
+            return Service.PumpOwner(
+                OwnerInstanceId,
+                OwnerGeneration,
+                DeltaSeconds);
+        }) ? 1 : 0;
+}
+
+uint8 CancelAsyncRequest(
+    void* Context,
+    uint64 OwnerInstanceId,
+    uint32 OwnerGeneration,
+    uint64 RequestId)
+{
+    if (Context == nullptr)
+    {
+        return 0;
+    }
+    return static_cast<FUnifiedScriptNativeBridgeContext*>(Context)
+        ->ExecuteAsyncService([&](FUnifiedScriptAsyncService& Service)
+        {
+            return Service.Cancel(OwnerInstanceId, OwnerGeneration, RequestId);
+        }) ? 1 : 0;
+}
+
+uint8 PollAsyncCompletions(
+    void* Context,
+    uint64 OwnerInstanceId,
+    uint32 OwnerGeneration,
+    FUnifiedScriptAsyncCompletionViewV5* OutView)
+{
+    if (Context == nullptr || OutView == nullptr)
+    {
+        return 0;
+    }
+    return static_cast<FUnifiedScriptNativeBridgeContext*>(Context)
+        ->ExecuteAsyncService([&](FUnifiedScriptAsyncService& Service)
+        {
+            return Service.Poll(OwnerInstanceId, OwnerGeneration, *OutView);
+        }) ? 1 : 0;
+}
+
+uint32 CancelAsyncOwner(
+    void* Context,
+    uint64 OwnerInstanceId,
+    uint32 OwnerGeneration)
+{
+    uint32 Canceled = 0;
+    if (Context != nullptr)
+    {
+        static_cast<FUnifiedScriptNativeBridgeContext*>(Context)
+            ->ExecuteAsyncService([&](FUnifiedScriptAsyncService& Service)
+            {
+                Canceled = Service.CancelOwner(OwnerInstanceId, OwnerGeneration);
+                return true;
+            });
+    }
+    return Canceled;
+}
 }
 
 UFunction* UUnifiedScriptDelegateProxy::FindOrCreateDispatchFunction(
@@ -2364,6 +2472,37 @@ UEUnifiedScript_GetNativeTransportV2()
         UEUnifiedScript_GetNativeEventTransportV4(),
         UEUnifiedScript_GetSharedDataTransportV4(),
         UEUnifiedScript_GetGameplayDataTransportV4(),
+        UEUnifiedScript_GetAsyncTransportV5(),
+    };
+    return &Transport;
+}
+
+extern "C" const FUnifiedScriptAsyncTransportV5*
+UEUnifiedScript_GetAsyncTransportV5()
+{
+    using namespace UE::UnifiedScript::NativeTransport::Private;
+    constexpr uint64 Capabilities =
+        static_cast<uint64>(EUnifiedScriptAsyncCapabilitiesV5::Delay) |
+        static_cast<uint64>(EUnifiedScriptAsyncCapabilitiesV5::AsyncAssetLoad) |
+        static_cast<uint64>(EUnifiedScriptAsyncCapabilitiesV5::Cancellation) |
+        static_cast<uint64>(EUnifiedScriptAsyncCapabilitiesV5::Timeout) |
+        static_cast<uint64>(EUnifiedScriptAsyncCapabilitiesV5::GenerationOwnership) |
+        static_cast<uint64>(EUnifiedScriptAsyncCapabilitiesV5::WorldTeardown);
+    static const FUnifiedScriptAsyncTransportV5 Transport = {
+        UE::UnifiedScript::AsyncService::AbiVersion,
+        sizeof(FUnifiedScriptAsyncTransportV5),
+        sizeof(FUnifiedScriptAsyncRequestV5),
+        sizeof(FUnifiedScriptAsyncCompletionV5),
+        sizeof(FUnifiedScriptAsyncCompletionViewV5),
+        0,
+        Capabilities,
+        &RetainContext,
+        &ReleaseContext,
+        &SubmitAsyncRequest,
+        &PumpAsyncOwner,
+        &CancelAsyncRequest,
+        &PollAsyncCompletions,
+        &CancelAsyncOwner,
     };
     return &Transport;
 }

@@ -96,6 +96,8 @@ public:
 
     uint64 GetFastInvocationCount() const;
 
+    int32 GetPendingAsyncRequestCount() const;
+
     /** Borrowed pointer. A consumer must retain it through the transport table. */
     FUnifiedScriptNativeBridgeContext* GetNativeInvocationContext() const;
 
@@ -111,6 +113,7 @@ private:
     TUniquePtr<FUnifiedScriptInvocationBridge> InvocationBridge;
     TUniquePtr<FUnifiedScriptSharedDataPlane> SharedDataPlane;
     TUniquePtr<FUnifiedScriptGameplayDataPlane> GameplayDataPlane;
+    TUniquePtr<FUnifiedScriptAsyncService> AsyncService;
     FUnifiedScriptNativeBridgeContext* NativeContext = nullptr;
     uint64 WorldHostId = 0;
     FDelegateHandle PreActorTickHandle;

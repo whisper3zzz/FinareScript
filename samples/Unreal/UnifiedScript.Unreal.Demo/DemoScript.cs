@@ -79,6 +79,11 @@ public sealed class DemoScript : IUnrealManagedScript
             }
         }
         _component = new UnifiedScriptComponent(context.Host, context.Bridge);
+        var worldServices = new UnifiedScriptWorldLibrary(context.Target, context.Bridge);
+        if (worldServices.GetWorldTimeSeconds(context.Target) < 0.0f)
+        {
+            throw new InvalidOperationException("Generated World service invocation failed.");
+        }
         if (_component.Add(20, 22) != 42)
         {
             throw new InvalidOperationException("Generated wrapper invocation failed.");

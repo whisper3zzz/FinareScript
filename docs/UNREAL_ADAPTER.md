@@ -566,9 +566,16 @@ Blueprint function libraries now generate as `UnrealStaticService` wrappers.
 Their managed instance retains the ordinary World context handle, while the
 native thunk invokes the static C++ function directly and never casts that
 context to the library class. `UUnifiedScriptWorldLibrary` supplies typed
-object/class loading, Actor spawn, and visibility tracing. Synchronously loaded
-objects are retained by the World subsystem until teardown, so a managed handle
-cannot become stale during Unreal GC while gameplay still owns the resource.
+object/class loading, Actor spawn and destroy, component lookup, input polling,
+World time, and visibility tracing. Synchronously loaded objects are retained by
+the World subsystem until teardown, so a managed handle cannot become stale
+during Unreal GC while gameplay still owns the resource.
+
+Async Service ABI v5 appends a separate World-owned service table for Delay and
+asynchronous object/class loading. Requests carry script instance and collectible
+generation identity; timeout, explicit cancellation, reload, EndPlay, and World
+teardown remove native work before the managed load context is released. See
+`UNREAL_ASYNC_SERVICE_ABI_V5.md` for fixed layouts and completion semantics.
 
 ABI v3 `Struct` cells carry an arena-backed ordered field-cell block keyed by
 the canonical struct TypeId. The contract generator emits a readonly C# record

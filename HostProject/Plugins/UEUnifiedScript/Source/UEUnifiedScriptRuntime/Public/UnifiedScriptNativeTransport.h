@@ -4,6 +4,7 @@
 #include "HAL/CriticalSection.h"
 #include "Templates/Function.h"
 #include "UObject/StrongObjectPtr.h"
+#include "UnifiedScriptAsyncService.h"
 #include "UnifiedScriptGameplayDataPlane.h"
 #include "UnifiedScriptInvocationBridge.h"
 #include "UnifiedScriptSharedDataPlane.h"
@@ -170,6 +171,7 @@ public:
 
     void AttachSharedDataPlane(FUnifiedScriptSharedDataPlane* InSharedDataPlane);
     void AttachGameplayDataPlane(FUnifiedScriptGameplayDataPlane* InGameplayDataPlane);
+    void AttachAsyncService(FUnifiedScriptAsyncService* InAsyncService);
     bool TryRetain();
     void Release();
     void Detach();
@@ -191,6 +193,8 @@ public:
     bool AcquireTransformSnapshot(FUnifiedScriptSharedSnapshotViewV4& OutView);
     bool ExecuteGameplayData(
         TFunctionRef<bool(FUnifiedScriptGameplayDataPlane&)> Operation);
+    bool ExecuteAsyncService(
+        TFunctionRef<bool(FUnifiedScriptAsyncService&)> Operation);
 
 private:
     ~FUnifiedScriptNativeBridgeContext() = default;
@@ -201,6 +205,7 @@ private:
     std::atomic<FUnifiedScriptInvocationBridge*> FastBridge{nullptr};
     FUnifiedScriptSharedDataPlane* SharedDataPlane = nullptr;
     FUnifiedScriptGameplayDataPlane* GameplayDataPlane = nullptr;
+    FUnifiedScriptAsyncService* AsyncService = nullptr;
     FPendingCallFrameResult PendingCallFrameResult;
     uint64 NextEventSubscriptionId = 1;
     TMap<uint64, TStrongObjectPtr<UObject>> EventSubscriptions;
@@ -251,6 +256,8 @@ struct FUnifiedScriptNativeTransportV2
     const FUnifiedScriptSharedDataTransportV4* SharedDataTransport = nullptr;
     /** Optional command/event/trace ABI; older v2 clients ignore this suffix. */
     const FUnifiedScriptGameplayDataTransportV4* GameplayDataTransport = nullptr;
+    /** Optional async/latent service ABI; older v2 clients ignore this suffix. */
+    const FUnifiedScriptAsyncTransportV5* AsyncTransport = nullptr;
 };
 
 /**
@@ -467,6 +474,9 @@ static_assert(
 static_assert(
     STRUCT_OFFSET(FUnifiedScriptNativeTransportV2, GameplayDataTransport) ==
     STRUCT_OFFSET(FUnifiedScriptNativeTransportV2, SharedDataTransport) + sizeof(void*));
+static_assert(
+    STRUCT_OFFSET(FUnifiedScriptNativeTransportV2, AsyncTransport) ==
+    STRUCT_OFFSET(FUnifiedScriptNativeTransportV2, GameplayDataTransport) + sizeof(void*));
 
 extern "C" UEUNIFIEDSCRIPTRUNTIME_API const FUnifiedScriptNativeTransportV1*
 UEUnifiedScript_GetNativeTransportV1();

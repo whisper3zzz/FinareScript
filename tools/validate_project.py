@@ -213,9 +213,10 @@ def main() -> int:
         for member in type_selector["members"]
     }
     node_member_names = {
-        node["memberPath"].rsplit(":", 1)[1]
+        member["path"].rsplit(":", 1)[1]
         for node_type in api_nodes["types"]
-        for node in node_type["nodes"]
+        for member_group in ("properties", "functions", "delegates")
+        for member in node_type[member_group]
     }
     require(
         api_contract["schemaVersion"]
@@ -994,6 +995,26 @@ def main() -> int:
         / "Private"
         / "UnifiedScriptGameplayDataPlane.cpp"
     )
+    unreal_async_service_header_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Public"
+        / "UnifiedScriptAsyncService.h"
+    )
+    unreal_async_service_source_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Private"
+        / "UnifiedScriptAsyncService.cpp"
+    )
     unreal_world_host_header_path = (
         ROOT
         / "HostProject"
@@ -1114,6 +1135,18 @@ def main() -> int:
         / "tests"
         / "UnifiedScript.Tests"
         / "UnrealGameplayDataAbiV4Tests.cs"
+    )
+    unreal_async_service_abi_v5_path = (
+        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealAsyncServiceAbiV5.cs"
+    )
+    unreal_async_service_abi_v5_test_path = (
+        ROOT
+        / "tests"
+        / "UnifiedScript.Tests"
+        / "UnrealAsyncServiceAbiV5Tests.cs"
+    )
+    unreal_async_service_doc_path = (
+        ROOT / "docs" / "UNREAL_ASYNC_SERVICE_ABI_V5.md"
     )
     unreal_gameplay_data_doc_path = (
         ROOT / "docs" / "UNREAL_GAMEPLAY_DATA_ABI_V4.md"
@@ -1339,6 +1372,8 @@ def main() -> int:
         and unreal_native_transport_test_path.is_file()
         and unreal_gameplay_data_header_path.is_file()
         and unreal_gameplay_data_source_path.is_file()
+        and unreal_async_service_header_path.is_file()
+        and unreal_async_service_source_path.is_file()
         and unreal_world_host_header_path.is_file()
         and unreal_world_host_source_path.is_file()
         and unreal_world_host_test_path.is_file()
@@ -1358,6 +1393,9 @@ def main() -> int:
         and unreal_gameplay_data_abi_v4_path.is_file()
         and unreal_gameplay_data_abi_v4_test_path.is_file()
         and unreal_gameplay_data_doc_path.is_file()
+        and unreal_async_service_abi_v5_path.is_file()
+        and unreal_async_service_abi_v5_test_path.is_file()
+        and unreal_async_service_doc_path.is_file()
         and unreal_generation_invocation_bridge_path.is_file()
         and unreal_event_binder_path.is_file()
         and unreal_event_binder_test_path.is_file()
@@ -1512,6 +1550,21 @@ def main() -> int:
         unreal_gameplay_data_abi_v4_test_path.read_text(encoding="utf-8")
     )
     unreal_gameplay_data_doc = unreal_gameplay_data_doc_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_async_service_header = unreal_async_service_header_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_async_service_source = unreal_async_service_source_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_async_service_abi_v5 = unreal_async_service_abi_v5_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_async_service_abi_v5_test = (
+        unreal_async_service_abi_v5_test_path.read_text(encoding="utf-8")
+    )
+    unreal_async_service_doc = unreal_async_service_doc_path.read_text(
         encoding="utf-8"
     )
     unreal_generation_invocation_bridge = (
@@ -1941,6 +1994,23 @@ def main() -> int:
     )
     checks.append("UE gameplay data plane batches World commands, events, and traces")
     require(
+        "FUnifiedScriptAsyncTransportV5" in unreal_async_service_header
+        and "GenerationOwnership" in unreal_async_service_header
+        and "RequestAsyncLoad" in unreal_async_service_source
+        and "CancelOwner" in unreal_async_service_source
+        and "AsyncTransport" in unreal_native_transport_header
+        and "UEUnifiedScript_GetAsyncTransportV5" in unreal_native_transport_source
+        and "UnrealAsyncScope" in unreal_async_service_abi_v5
+        and "LoadObjectAsync" in unreal_async_service_abi_v5
+        and "ScopeCompletesDelayAndAssetLoadThenCancelsItsGeneration"
+        in unreal_async_service_abi_v5_test
+        and "AsyncService.DelayLoadCancelAndLifecycle"
+        in unreal_native_transport_test
+        and "generation-owned" in unreal_async_service_doc,
+        "ABI v5 async services, cancellation, or generation lifecycle gate is missing",
+    )
+    checks.append("UE async services are World-scoped, timeout-aware, and generation-owned")
+    require(
         unreal_benchmark_thresholds["schemaVersion"]
         == "unifiedscript.unreal-benchmark-thresholds/v0.2"
         and unreal_benchmark_thresholds["scenario"] == "generated-int32-add"
@@ -2119,7 +2189,8 @@ def main() -> int:
         and "Context.HasDistinctTarget" in unreal_actor_demo_source
         and "IUnrealManagedEventSink" in unreal_script_object_model
         and "DelayAsync" in unreal_script_object_model
-        and "CancelLatentDelays" in unreal_script_object_model
+        and "UnrealAsyncScope" in unreal_script_object_model
+        and "_asyncScope!.Dispose()" in unreal_script_object_model
         and "DispatchEventEntryPoint" in unreal_coreclr_host_source
         and "HandleActorBeginOverlap" in unreal_component
         and "World-safe BeginOverlap reaches managed Actor behavior"

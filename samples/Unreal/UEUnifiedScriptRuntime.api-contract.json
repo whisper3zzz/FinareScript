@@ -6,6 +6,28 @@
   "nativeNamespace": "UE::UnifiedScript::Generated",
   "types": [
     {
+      "path": "/Script/Engine.HitResult",
+      "members": [
+        "bBlockingHit",
+        "BoneName",
+        "bStartPenetrating",
+        "Distance",
+        "ElementIndex",
+        "FaceIndex",
+        "ImpactNormal",
+        "ImpactPoint",
+        "Item",
+        "Location",
+        "MyBoneName",
+        "MyItem",
+        "Normal",
+        "PenetrationDepth",
+        "Time",
+        "TraceEnd",
+        "TraceStart"
+      ]
+    },
+    {
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor",
       "members": [
         "GetUnifiedScriptComponent",
@@ -92,6 +114,19 @@
         "TransformValue",
         "VectorValue"
       ]
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary",
+      "members": [
+        "DestroyActor",
+        "FindComponentByClass",
+        "GetWorldTimeSeconds",
+        "IsInputKeyDown",
+        "LineTraceSingle",
+        "LoadClassByPath",
+        "LoadObjectByPath",
+        "SpawnActor"
+      ]
     }
   ],
   "policy": {
@@ -99,9 +134,9 @@
     "rules": []
   },
   "coverageBaseline": {
-    "minimumMemberCount": 73,
-    "minimumDirectThunkCount": 22,
-    "minimumCallFrameCount": 49,
+    "minimumMemberCount": 98,
+    "minimumDirectThunkCount": 24,
+    "minimumCallFrameCount": 72,
     "minimumDataPlaneOperationCount": 0,
     "minimumReflectionFallbackCount": 2,
     "maximumRejectedCount": 0

@@ -7,20 +7,20 @@
     "branch": "UE5"
   },
   "summary": {
-    "typeCount": 5,
-    "memberCount": 73,
-    "directThunkCount": 22,
-    "callFrameCount": 49,
+    "typeCount": 7,
+    "memberCount": 98,
+    "directThunkCount": 24,
+    "callFrameCount": 72,
     "dataPlaneOperationCount": 0,
     "reflectionFallbackCount": 2,
     "rejectedCount": 0,
-    "nativeThunkCount": 71,
+    "nativeThunkCount": 96,
     "deferredTypeCount": 0
   },
   "baseline": {
-    "minimumMemberCount": 73,
-    "minimumDirectThunkCount": 22,
-    "minimumCallFrameCount": 49,
+    "minimumMemberCount": 98,
+    "minimumDirectThunkCount": 24,
+    "minimumCallFrameCount": 72,
     "minimumDataPlaneOperationCount": 0,
     "minimumReflectionFallbackCount": 2,
     "maximumRejectedCount": 0
@@ -30,6 +30,142 @@
     "diagnostics": []
   },
   "entries": [
+    {
+      "path": "/Script/Engine.HitResult:BoneName",
+      "ownerPath": "/Script/Engine.HitResult",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.HitResult:Distance",
+      "ownerPath": "/Script/Engine.HitResult",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.HitResult:ElementIndex",
+      "ownerPath": "/Script/Engine.HitResult",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.HitResult:FaceIndex",
+      "ownerPath": "/Script/Engine.HitResult",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.HitResult:ImpactNormal",
+      "ownerPath": "/Script/Engine.HitResult",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.HitResult:ImpactPoint",
+      "ownerPath": "/Script/Engine.HitResult",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.HitResult:Item",
+      "ownerPath": "/Script/Engine.HitResult",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.HitResult:Location",
+      "ownerPath": "/Script/Engine.HitResult",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.HitResult:MyBoneName",
+      "ownerPath": "/Script/Engine.HitResult",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.HitResult:MyItem",
+      "ownerPath": "/Script/Engine.HitResult",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.HitResult:Normal",
+      "ownerPath": "/Script/Engine.HitResult",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.HitResult:PenetrationDepth",
+      "ownerPath": "/Script/Engine.HitResult",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.HitResult:Time",
+      "ownerPath": "/Script/Engine.HitResult",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.HitResult:TraceEnd",
+      "ownerPath": "/Script/Engine.HitResult",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.HitResult:TraceStart",
+      "ownerPath": "/Script/Engine.HitResult",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.HitResult:bBlockingHit",
+      "ownerPath": "/Script/Engine.HitResult",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/Engine.HitResult:bStartPenetrating",
+      "ownerPath": "/Script/Engine.HitResult",
+      "kind": "structField",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
     {
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor:GetUnifiedScriptComponent",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor",
@@ -614,6 +750,70 @@
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:VectorValue",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture",
       "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:DestroyActor",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:FindComponentByClass",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:GetWorldTimeSeconds",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:IsInputKeyDown",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:LineTraceSingle",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:LoadClassByPath",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:LoadObjectByPath",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:SpawnActor",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary",
+      "kind": "function",
       "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""

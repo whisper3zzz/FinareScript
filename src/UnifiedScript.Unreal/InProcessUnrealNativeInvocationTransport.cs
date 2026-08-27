@@ -149,6 +149,38 @@ internal delegate byte UnrealNativeGetGameplayPhaseV4(
     out UnrealGameplayDataPhaseV4 phase,
     out ulong frameNumber);
 
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+internal delegate byte UnrealNativeAsyncSubmitV5(
+    nint context,
+    in UnrealAsyncRequestV5 request);
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+internal delegate byte UnrealNativeAsyncPumpOwnerV5(
+    nint context,
+    ulong ownerInstanceId,
+    uint ownerGeneration,
+    float deltaSeconds);
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+internal delegate byte UnrealNativeAsyncCancelV5(
+    nint context,
+    ulong ownerInstanceId,
+    uint ownerGeneration,
+    ulong requestId);
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+internal delegate byte UnrealNativeAsyncPollV5(
+    nint context,
+    ulong ownerInstanceId,
+    uint ownerGeneration,
+    out UnrealAsyncCompletionViewV5 view);
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+internal delegate uint UnrealNativeAsyncCancelOwnerV5(
+    nint context,
+    ulong ownerInstanceId,
+    uint ownerGeneration);
+
 /// <summary>
 /// Calls the versioned synchronous function table exported by the UE plugin.
 /// The function table is borrowed from the plugin. The context is retained until
@@ -164,6 +196,7 @@ public sealed class InProcessUnrealNativeInvocationTransport
       IUnrealNativeEventTransport,
       IUnrealSharedSnapshotTransport,
       IUnrealGameplayDataTransport,
+      IUnrealAsyncServiceTransport,
       IDisposable
 {
     private const uint MinimumAbiVersion = 1;
@@ -195,6 +228,12 @@ public sealed class InProcessUnrealNativeInvocationTransport
     private readonly UnrealNativeExecuteTraceBatchV4? _executeTraceBatch;
     private readonly UnrealNativeCancelTraceBatchV4? _cancelTraceBatch;
     private readonly UnrealNativeGetGameplayPhaseV4? _getGameplayPhase;
+    private readonly UnrealNativeAsyncSubmitV5? _asyncSubmit;
+    private readonly UnrealNativeAsyncPumpOwnerV5? _asyncPumpOwner;
+    private readonly UnrealNativeAsyncCancelV5? _asyncCancel;
+    private readonly UnrealNativeAsyncPollV5? _asyncPoll;
+    private readonly UnrealNativeAsyncCancelOwnerV5? _asyncCancelOwner;
+    private readonly UnrealAsyncCapabilitiesV5 _asyncCapabilities;
     private readonly UnrealNativeReleaseContextV1 _releaseContext;
     private readonly object _lifetimeGate = new();
     private readonly HashSet<NativeEventSubscription> _eventSubscriptions = [];
@@ -447,6 +486,51 @@ public sealed class InProcessUnrealNativeInvocationTransport
                         UnrealNativeGetGameplayPhaseV4>(gameplayTable.GetPhase);
                 }
             }
+
+            uint asyncServicesV2Size = checked(
+                (uint)Marshal.SizeOf<NativeTransportTableV2AsyncServices>());
+            if (table.TableSize >= asyncServicesV2Size)
+            {
+                NativeTransportTableV2AsyncServices asyncExtension =
+                    Marshal.PtrToStructure<NativeTransportTableV2AsyncServices>(
+                        tablePointer);
+                if (asyncExtension.AsyncTransport != nint.Zero)
+                {
+                    UnrealAsyncTransportTableV5 asyncTable =
+                        Marshal.PtrToStructure<UnrealAsyncTransportTableV5>(
+                            asyncExtension.AsyncTransport);
+                    if (asyncTable.AbiVersion != UnrealAsyncServiceAbiV5.Version ||
+                        asyncTable.TableSize < UnrealAsyncServiceAbiV5.TransportTableSize ||
+                        asyncTable.RequestSize != UnrealAsyncServiceAbiV5.RequestSize ||
+                        asyncTable.CompletionSize != UnrealAsyncServiceAbiV5.CompletionSize ||
+                        asyncTable.CompletionViewSize != UnrealAsyncServiceAbiV5.CompletionViewSize ||
+                        asyncTable.Reserved != 0 ||
+                        (asyncTable.Capabilities & UnrealAsyncServiceAbiV5.RequiredCapabilities) !=
+                            UnrealAsyncServiceAbiV5.RequiredCapabilities ||
+                        asyncTable.RetainContext != table.RetainContext ||
+                        asyncTable.ReleaseContext != table.ReleaseContext ||
+                        asyncTable.SubmitRequest == nint.Zero ||
+                        asyncTable.PumpOwner == nint.Zero ||
+                        asyncTable.CancelRequest == nint.Zero ||
+                        asyncTable.PollCompletions == nint.Zero ||
+                        asyncTable.CancelOwner == nint.Zero)
+                    {
+                        throw new InvalidOperationException(
+                            "The optional native Unreal async service ABI v5 table has an incompatible layout.");
+                    }
+                    _asyncCapabilities = asyncTable.Capabilities;
+                    _asyncSubmit = Marshal.GetDelegateForFunctionPointer<
+                        UnrealNativeAsyncSubmitV5>(asyncTable.SubmitRequest);
+                    _asyncPumpOwner = Marshal.GetDelegateForFunctionPointer<
+                        UnrealNativeAsyncPumpOwnerV5>(asyncTable.PumpOwner);
+                    _asyncCancel = Marshal.GetDelegateForFunctionPointer<
+                        UnrealNativeAsyncCancelV5>(asyncTable.CancelRequest);
+                    _asyncPoll = Marshal.GetDelegateForFunctionPointer<
+                        UnrealNativeAsyncPollV5>(asyncTable.PollCompletions);
+                    _asyncCancelOwner = Marshal.GetDelegateForFunctionPointer<
+                        UnrealNativeAsyncCancelOwnerV5>(asyncTable.CancelOwner);
+                }
+            }
         }
 
         UnrealNativeRetainContextV1 retainContext =
@@ -480,6 +564,8 @@ public sealed class InProcessUnrealNativeInvocationTransport
         _executeTraceBatch is not null &&
         _cancelTraceBatch is not null &&
         _getGameplayPhase is not null;
+
+    public UnrealAsyncCapabilitiesV5 AsyncCapabilities => _asyncCapabilities;
 
     bool IUnrealSharedSnapshotTransport.TryAcquireTransformSnapshot(
         out UnrealSharedSnapshotViewV4 view)
@@ -577,6 +663,128 @@ public sealed class InProcessUnrealNativeInvocationTransport
             frameNumber = 0;
             return _getGameplayPhase is not null &&
                 _getGameplayPhase(_context, out phase, out frameNumber) != 0;
+        }
+    }
+
+    bool IUnrealAsyncServiceTransport.Submit(
+        ulong ownerInstanceId,
+        uint ownerGeneration,
+        ulong requestId,
+        UnrealAsyncOperationV5 operation,
+        float durationSeconds,
+        float timeoutSeconds,
+        string payload)
+    {
+        lock (_lifetimeGate)
+        {
+            ThrowIfDisposed();
+            if (_asyncSubmit is null)
+            {
+                return false;
+            }
+            using var payloadBuffer = new Utf8Buffer(payload);
+            var request = new UnrealAsyncRequestV5
+            {
+                AbiVersion = UnrealAsyncServiceAbiV5.Version,
+                StructSize = UnrealAsyncServiceAbiV5.RequestSize,
+                RequestId = requestId,
+                OwnerInstanceId = ownerInstanceId,
+                OwnerGeneration = ownerGeneration,
+                Operation = operation,
+                DurationSeconds = durationSeconds,
+                TimeoutSeconds = timeoutSeconds,
+                PayloadData = payloadBuffer.Pointer,
+                PayloadLength = checked((uint)payloadBuffer.Length),
+            };
+            return _asyncSubmit(_context, in request) != 0;
+        }
+    }
+
+    bool IUnrealAsyncServiceTransport.PumpOwner(
+        ulong ownerInstanceId,
+        uint ownerGeneration,
+        float deltaSeconds)
+    {
+        lock (_lifetimeGate)
+        {
+            ThrowIfDisposed();
+            return _asyncPumpOwner is not null &&
+                _asyncPumpOwner(
+                    _context,
+                    ownerInstanceId,
+                    ownerGeneration,
+                    deltaSeconds) != 0;
+        }
+    }
+
+    bool IUnrealAsyncServiceTransport.Cancel(
+        ulong ownerInstanceId,
+        uint ownerGeneration,
+        ulong requestId)
+    {
+        lock (_lifetimeGate)
+        {
+            ThrowIfDisposed();
+            return _asyncCancel is not null &&
+                _asyncCancel(
+                    _context,
+                    ownerInstanceId,
+                    ownerGeneration,
+                    requestId) != 0;
+        }
+    }
+
+    bool IUnrealAsyncServiceTransport.Poll(
+        ulong ownerInstanceId,
+        uint ownerGeneration,
+        out ulong worldHostId,
+        out UnrealAsyncCompletionV5[] completions)
+    {
+        lock (_lifetimeGate)
+        {
+            ThrowIfDisposed();
+            worldHostId = 0;
+            completions = [];
+            if (_asyncPoll is null ||
+                _asyncPoll(
+                    _context,
+                    ownerInstanceId,
+                    ownerGeneration,
+                    out UnrealAsyncCompletionViewV5 view) == 0)
+            {
+                return false;
+            }
+            if (view.AbiVersion != UnrealAsyncServiceAbiV5.Version ||
+                view.StructSize < UnrealAsyncServiceAbiV5.CompletionViewSize ||
+                view.WorldHostId == 0 || view.Reserved != 0 ||
+                view.Count > int.MaxValue ||
+                (view.Count > 0 && view.Completions == nint.Zero))
+            {
+                throw new InvalidOperationException(
+                    "The native Unreal async service returned an invalid completion view.");
+            }
+            worldHostId = view.WorldHostId;
+            completions = new UnrealAsyncCompletionV5[checked((int)view.Count)];
+            for (int index = 0; index < completions.Length; index++)
+            {
+                completions[index] = Marshal.PtrToStructure<UnrealAsyncCompletionV5>(
+                    view.Completions + index * UnrealAsyncServiceAbiV5.CompletionSize);
+            }
+            return true;
+        }
+    }
+
+    uint IUnrealAsyncServiceTransport.CancelOwner(
+        ulong ownerInstanceId,
+        uint ownerGeneration)
+    {
+        lock (_lifetimeGate)
+        {
+            ThrowIfDisposed();
+            return _asyncCancelOwner?.Invoke(
+                _context,
+                ownerInstanceId,
+                ownerGeneration) ?? 0;
         }
     }
 
@@ -1349,6 +1557,28 @@ public sealed class InProcessUnrealNativeInvocationTransport
         public nint EventTransport;
         public nint SharedDataTransport;
         public nint GameplayDataTransport;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeTransportTableV2AsyncServices
+    {
+        public uint AbiVersion;
+        public uint TableSize;
+        public uint ValueSize;
+        public uint Reserved;
+        public nint ReadProperty;
+        public nint WriteProperty;
+        public nint Invoke;
+        public nint RetainContext;
+        public nint ReleaseContext;
+        public nint ReadPropertyById;
+        public nint WritePropertyById;
+        public nint InvokeById;
+        public nint CallFrameTransport;
+        public nint EventTransport;
+        public nint SharedDataTransport;
+        public nint GameplayDataTransport;
+        public nint AsyncTransport;
     }
 
     [StructLayout(LayoutKind.Sequential)]

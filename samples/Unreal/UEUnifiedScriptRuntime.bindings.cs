@@ -3,6 +3,29 @@
 
 namespace UnifiedScript.Unreal.Generated;
 
+[global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "\u547D\u4E2D\u7ED3\u679C", Tooltip = "\u5305\u542B\u68C0\u6D4B\u4E00\u4E2A\u547D\u4E2D\u4FE1\u606F\u7684\u7ED3\u6784\uFF0C\u5982\u5F71\u54CD\u7684\u4E00\u4E2A\u70B9\u548C\u6B64\u70B9\u4E0A\u7684\u8868\u9762\u6CD5\u7EBF\u3002")]
+[global::UnifiedScript.Unreal.UnrealInheritanceAttribute(null)]
+[global::UnifiedScript.Unreal.UnrealStructAttribute("/Script/Engine.HitResult", "FHitResult")]
+[global::UnifiedScript.Unreal.UnrealValueAttribute]
+public readonly record struct HitResult(
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(0)] global::UnifiedScript.Unreal.UnrealName BoneName,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(1)] float Distance,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(2)] byte ElementIndex,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(3)] int FaceIndex,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(4)] global::UnifiedScript.Unreal.UnrealVector ImpactNormal,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(5)] global::UnifiedScript.Unreal.UnrealVector ImpactPoint,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(6)] int Item,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(7)] global::UnifiedScript.Unreal.UnrealVector Location,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(8)] global::UnifiedScript.Unreal.UnrealName MyBoneName,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(9)] int MyItem,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(10)] global::UnifiedScript.Unreal.UnrealVector Normal,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(11)] float PenetrationDepth,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(12)] float Time,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(13)] global::UnifiedScript.Unreal.UnrealVector TraceEnd,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(14)] global::UnifiedScript.Unreal.UnrealVector TraceStart,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(15)] bool bBlockingHit,
+    [property: global::UnifiedScript.Unreal.UnrealStructFieldAttribute(16)] bool bStartPenetrating);
+
 [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "EUnified Script Interop Mode", Tooltip = "EUnified Script Interop Mode")]
 public static class EUnifiedScriptInteropMode
 {
@@ -490,4 +513,73 @@ public sealed partial class UnifiedScriptInteropFixture : global::UnifiedScript.
     [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Sum Map", Category = "UnifiedScript|Interop", Tooltip = "Sum Map")]
     public int SumMap(global::System.Collections.Generic.IReadOnlyDictionary<int, int> values)
         => Invoke<int, global::System.Collections.Generic.IReadOnlyDictionary<int, int>>(0xB9016520F3956867UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:SumMap", values);
+}
+
+[global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Unified Script World Library", Tooltip = "Product-level World and resource primitives used by generated static bindings.\nGameplay policy remains managed; this library only exposes engine ownership\noperations that do not have an instance UObject receiver.")]
+[global::UnifiedScript.Unreal.UnrealInheritanceAttribute("/Script/Engine.BlueprintFunctionLibrary")]
+[global::UnifiedScript.Unreal.UnrealTypeAttribute("/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary")]
+public sealed partial class UnifiedScriptWorldLibrary : global::UnifiedScript.Unreal.UnrealStaticService
+{
+    public UnifiedScriptWorldLibrary(
+        global::UnifiedScript.Unreal.UnrealObjectHandle handle,
+        global::UnifiedScript.Unreal.IUnrealInvocationBridge bridge)
+        : base(handle, bridge)
+    {
+    }
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Destroy Actor", Category = "UnifiedScript|World", Tooltip = "Destroy Actor", WorldContextParameter = "WorldContextObject")]
+    [global::UnifiedScript.Unreal.UnrealStaticFunctionAttribute]
+    public bool DestroyActor(global::UnifiedScript.Unreal.UnrealObjectHandle worldContextObject, global::UnifiedScript.Unreal.UnrealObjectHandle actor)
+        => Invoke<bool, global::UnifiedScript.Unreal.UnrealObjectHandle, global::UnifiedScript.Unreal.UnrealObjectHandle>(0x66FF01CF6D7A46C8UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:DestroyActor", worldContextObject, actor);
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Find Component by Class", Category = "UnifiedScript|Components", Tooltip = "Find Component by Class", WorldContextParameter = "WorldContextObject")]
+    [global::UnifiedScript.Unreal.UnrealStaticFunctionAttribute]
+    public global::UnifiedScript.Unreal.UnrealObjectHandle FindComponentByClass(global::UnifiedScript.Unreal.UnrealObjectHandle worldContextObject, global::UnifiedScript.Unreal.UnrealObjectHandle actor, global::UnifiedScript.Unreal.UnrealClassHandle componentClass)
+        => Invoke<global::UnifiedScript.Unreal.UnrealObjectHandle, global::UnifiedScript.Unreal.UnrealObjectHandle, global::UnifiedScript.Unreal.UnrealObjectHandle, global::UnifiedScript.Unreal.UnrealClassHandle>(0xBA4ACD2C004A8252UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:FindComponentByClass", worldContextObject, actor, componentClass);
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Get World Time Seconds", Category = "UnifiedScript|World", Tooltip = "Get World Time Seconds", WorldContextParameter = "WorldContextObject")]
+    [global::UnifiedScript.Unreal.UnrealStaticFunctionAttribute]
+    public float GetWorldTimeSeconds(global::UnifiedScript.Unreal.UnrealObjectHandle worldContextObject)
+        => Invoke<float, global::UnifiedScript.Unreal.UnrealObjectHandle>(0x92FDC69B7C02B89FUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:GetWorldTimeSeconds", worldContextObject);
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Is Input Key Down", Category = "UnifiedScript|Input", Tooltip = "Is Input Key Down", WorldContextParameter = "WorldContextObject")]
+    [global::UnifiedScript.Unreal.UnrealStaticFunctionAttribute]
+    public bool IsInputKeyDown(global::UnifiedScript.Unreal.UnrealObjectHandle worldContextObject, global::UnifiedScript.Unreal.UnrealObjectHandle playerController, global::UnifiedScript.Unreal.UnrealName keyName)
+        => Invoke<bool, global::UnifiedScript.Unreal.UnrealObjectHandle, global::UnifiedScript.Unreal.UnrealObjectHandle, global::UnifiedScript.Unreal.UnrealName>(0x01831B170E603AC0UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:IsInputKeyDown", worldContextObject, playerController, keyName);
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Line Trace Single", Category = "UnifiedScript|World", Tooltip = "Line Trace Single", WorldContextParameter = "WorldContextObject")]
+    [global::UnifiedScript.Unreal.UnrealStaticFunctionAttribute]
+    public bool LineTraceSingle(global::UnifiedScript.Unreal.UnrealObjectHandle worldContextObject, global::UnifiedScript.Unreal.UnrealVector start, global::UnifiedScript.Unreal.UnrealVector end, global::UnifiedScript.Unreal.UnrealObjectHandle ignoreActor, out HitResult outHit, out global::UnifiedScript.Unreal.UnrealObjectHandle outHitActor)
+    {
+        global::UnifiedScript.Unreal.UnrealOutputInvocationResult __unifiedScriptResult = InvokeWithOutputs(
+            0xCCCCC22AEA7D18EAUL,
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:LineTraceSingle",
+            typeof(bool),
+            [
+                new(typeof(global::UnifiedScript.Unreal.UnrealObjectHandle), global::UnifiedScript.Unreal.UnrealParameterDirection.Input, worldContextObject),
+                new(typeof(global::UnifiedScript.Unreal.UnrealVector), global::UnifiedScript.Unreal.UnrealParameterDirection.Input, start),
+                new(typeof(global::UnifiedScript.Unreal.UnrealVector), global::UnifiedScript.Unreal.UnrealParameterDirection.Input, end),
+                new(typeof(global::UnifiedScript.Unreal.UnrealObjectHandle), global::UnifiedScript.Unreal.UnrealParameterDirection.Input, ignoreActor),
+                new(typeof(HitResult), global::UnifiedScript.Unreal.UnrealParameterDirection.Output, null),
+                new(typeof(global::UnifiedScript.Unreal.UnrealObjectHandle), global::UnifiedScript.Unreal.UnrealParameterDirection.Output, null),
+            ]);
+        outHit = (HitResult)__unifiedScriptResult.Outputs[0]!;
+        outHitActor = (global::UnifiedScript.Unreal.UnrealObjectHandle)__unifiedScriptResult.Outputs[1]!;
+        return (bool)__unifiedScriptResult.ReturnValue!;
+    }
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Load Class by Path", Category = "UnifiedScript|Resources", Tooltip = "Load Class by Path", WorldContextParameter = "WorldContextObject")]
+    [global::UnifiedScript.Unreal.UnrealStaticFunctionAttribute]
+    public global::UnifiedScript.Unreal.UnrealClassHandle LoadClassByPath(global::UnifiedScript.Unreal.UnrealObjectHandle worldContextObject, string classPath)
+        => Invoke<global::UnifiedScript.Unreal.UnrealClassHandle, global::UnifiedScript.Unreal.UnrealObjectHandle, string>(0x92951FEE685B277BUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:LoadClassByPath", worldContextObject, classPath);
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Load Object by Path", Category = "UnifiedScript|Resources", Tooltip = "Load Object by Path", WorldContextParameter = "WorldContextObject")]
+    [global::UnifiedScript.Unreal.UnrealStaticFunctionAttribute]
+    public global::UnifiedScript.Unreal.UnrealObjectHandle LoadObjectByPath(global::UnifiedScript.Unreal.UnrealObjectHandle worldContextObject, string objectPath)
+        => Invoke<global::UnifiedScript.Unreal.UnrealObjectHandle, global::UnifiedScript.Unreal.UnrealObjectHandle, string>(0x5388DBBA23474EEEUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:LoadObjectByPath", worldContextObject, objectPath);
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Spawn Actor", Category = "UnifiedScript|World", Tooltip = "Spawn Actor", WorldContextParameter = "WorldContextObject")]
+    [global::UnifiedScript.Unreal.UnrealStaticFunctionAttribute]
+    public global::UnifiedScript.Unreal.UnrealObjectHandle SpawnActor(global::UnifiedScript.Unreal.UnrealObjectHandle worldContextObject, global::UnifiedScript.Unreal.UnrealClassHandle actorClass, global::UnifiedScript.Unreal.UnrealTransform transform)
+        => Invoke<global::UnifiedScript.Unreal.UnrealObjectHandle, global::UnifiedScript.Unreal.UnrealObjectHandle, global::UnifiedScript.Unreal.UnrealClassHandle, global::UnifiedScript.Unreal.UnrealTransform>(0x2B6E88013D019C97UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:SpawnActor", worldContextObject, actorClass, transform);
 }

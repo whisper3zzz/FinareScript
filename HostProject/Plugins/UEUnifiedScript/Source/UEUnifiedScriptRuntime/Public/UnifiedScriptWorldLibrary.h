@@ -39,6 +39,24 @@ public:
         const FTransform& Transform);
 
     UFUNCTION(BlueprintCallable, Category="UnifiedScript|World", meta=(WorldContext="WorldContextObject"))
+    static bool DestroyActor(UObject* WorldContextObject, AActor* Actor);
+
+    UFUNCTION(BlueprintPure, Category="UnifiedScript|Components", meta=(WorldContext="WorldContextObject"))
+    static UActorComponent* FindComponentByClass(
+        UObject* WorldContextObject,
+        AActor* Actor,
+        UClass* ComponentClass);
+
+    UFUNCTION(BlueprintPure, Category="UnifiedScript|Input", meta=(WorldContext="WorldContextObject"))
+    static bool IsInputKeyDown(
+        UObject* WorldContextObject,
+        APlayerController* PlayerController,
+        FName KeyName);
+
+    UFUNCTION(BlueprintPure, Category="UnifiedScript|World", meta=(WorldContext="WorldContextObject"))
+    static float GetWorldTimeSeconds(UObject* WorldContextObject);
+
+    UFUNCTION(BlueprintCallable, Category="UnifiedScript|World", meta=(WorldContext="WorldContextObject"))
     static bool LineTraceSingle(
         UObject* WorldContextObject,
         const FVector& Start,

@@ -46,10 +46,10 @@ current cursor, validate it, and advance this document.
 
 ## Current execution cursor
 
-Last refreshed: **2026-08-26**
+Last refreshed: **2026-08-27**
 
 - Active milestone: **M7 — General gameplay API and runtime completeness**
-- Next slice: **M7.2 — Services, async, and lifecycle**
+- Next slice: **M7.2 — lifecycle stress across deletion, travel, PIE, and multiple Worlds**
 - Primary engine gate: **Unreal Engine 5.8.1 source build at `D:\Project\UnrealEngine-5.8.1`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -60,12 +60,12 @@ machine-local unless an artifact explicitly says otherwise.
 
 | Gate | Verified result |
 | --- | --- |
-| Main source | `51c3571` (`feat: complete adoptable project alpha`) |
+| Main source | `a8916d3` (`feat: complete M7.1 binding coverage matrix`) |
 | Comparison source | `a6bee1b` (`feat: complete UnifiedScript gameplay demo`) |
-| Managed tests | 444 / 444 passed |
-| Repository validator | 42 / 42 passed |
+| Managed tests | 448 / 448 passed |
+| Repository validator | 43 / 43 passed |
 | UE 5.8.1 native build | passed |
-| `UnifiedScript.Unreal` Automation | 10 / 10 passed |
+| `UnifiedScript.Unreal` Automation | 11 / 11 passed |
 | BlockBreaker workload | 10,000 frames, three trials, one shot, one hit, two command completions per trial |
 | Gameplay boundary | 120,027 ABI v3 calls, zero legacy calls |
 | Matched local median | UnifiedScript 3,497.508 ms; Puerts 3,901.037 ms; ratio 0.896559 |
@@ -517,13 +517,29 @@ also found and fixed source-engine-relative Slate API catalog resolution.
 
 ### M7.2 — Services, async, and lifecycle
 
-- [ ] add generated World/static services for timers, input, component lookup,
+- [x] add generated World/static services for timers, input, component lookup,
   spawn/destroy, resource and async asset loading, collision queries, and common
   gameplay events
-- [ ] define task/latent completion, cancellation, timeout, World teardown, and
+- [x] define task/latent completion, cancellation, timeout, World teardown, and
   hot-reload ownership as one versioned contract
 - [ ] stress object deletion, level travel, PIE restart, multiple Worlds, and
   generation rollover without stale callbacks or leaked managed contexts
+
+Evidence (2026-08-27): Async Service ABI v5 adds a World-owned fixed request,
+completion, borrowed-view, and function-table contract for Delay, async object/
+class load, per-request cancellation, game-time timeout, generation cancellation,
+and teardown rejection. `UnrealObjectScript` now binds latent work to one
+instance/generation scope and cancels it before EndPlay or collectible reload.
+The generated product contract expanded from 73 to 98 members: World services
+now include input polling, component lookup, spawn/destroy, time, resource load,
+visibility trace, and the selected 17-field `FHitResult` shape. Coverage reports
+24 direct thunks, 72 CallFrame members, two safe fallbacks, 96 native paths, and
+zero rejected members. The 448/448 managed suite and 43/43 validator passed;
+UE 5.8.1 completed both native builds, deterministic regeneration, deployment,
+CoreCLR startup, and 11/11 Automation in 100,111 ms in
+`artifacts/onboarding/m7-2-async-20260827.json`. Remaining M7.2 work is the
+dedicated deletion/travel/PIE/multi-World soak matrix described in
+`docs/milestones/M7_2_ASYNC_SERVICES.md`.
 
 ### M7.3 — Schema-generated gameplay data plane
 

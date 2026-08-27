@@ -118,6 +118,151 @@ public sealed class InProcessUnrealNativeInvocationTransportTests : IDisposable
     }
 
     [Fact]
+    public void AbiV2BootstrapDiscoversAsyncServiceV5AndCopiesBorrowedCompletions()
+    {
+        UnrealAsyncRequestV5 capturedRequest = default;
+        string capturedPayload = string.Empty;
+        nint completionPointer = Marshal.AllocHGlobal(
+            UnrealAsyncServiceAbiV5.CompletionSize);
+        UnrealNativeAsyncSubmitV5 submit = (
+            nint context,
+            in UnrealAsyncRequestV5 request) =>
+        {
+            capturedRequest = request;
+            capturedPayload = request.PayloadLength == 0
+                ? string.Empty
+                : Marshal.PtrToStringUTF8(
+                    request.PayloadData,
+                    checked((int)request.PayloadLength))!;
+            return 1;
+        };
+        UnrealNativeAsyncPumpOwnerV5 pump = static (
+            nint context,
+            ulong owner,
+            uint generation,
+            float deltaSeconds) => 1;
+        UnrealNativeAsyncCancelV5 cancel = static (
+            nint context,
+            ulong owner,
+            uint generation,
+            ulong requestId) => 1;
+        UnrealNativeAsyncPollV5 poll = (
+            nint context,
+            ulong owner,
+            uint generation,
+            out UnrealAsyncCompletionViewV5 view) =>
+        {
+            Marshal.StructureToPtr(
+                new UnrealAsyncCompletionV5
+                {
+                    RequestId = capturedRequest.RequestId,
+                    OwnerInstanceId = owner,
+                    OwnerGeneration = generation,
+                    Operation = capturedRequest.Operation,
+                    Status = UnrealAsyncCompletionStatusV5.Succeeded,
+                    ResultHandle = UnrealObjectHandle.Create(8, 12).Value,
+                },
+                completionPointer,
+                false);
+            view = new UnrealAsyncCompletionViewV5
+            {
+                AbiVersion = UnrealAsyncServiceAbiV5.Version,
+                StructSize = UnrealAsyncServiceAbiV5.CompletionViewSize,
+                WorldHostId = 97,
+                Completions = completionPointer,
+                Count = 1,
+                Sequence = 1,
+            };
+            return 1;
+        };
+        UnrealNativeAsyncCancelOwnerV5 cancelOwner = static (
+            nint context,
+            ulong owner,
+            uint generation) => 2;
+
+        nint asyncTablePointer = Marshal.AllocHGlobal(
+            UnrealAsyncServiceAbiV5.TransportTableSize);
+        nint tablePointer = Marshal.AllocHGlobal(
+            Marshal.SizeOf<TestTableV2AsyncServices>());
+        try
+        {
+            Marshal.StructureToPtr(
+                new UnrealAsyncTransportTableV5
+                {
+                    AbiVersion = UnrealAsyncServiceAbiV5.Version,
+                    TableSize = UnrealAsyncServiceAbiV5.TransportTableSize,
+                    RequestSize = UnrealAsyncServiceAbiV5.RequestSize,
+                    CompletionSize = UnrealAsyncServiceAbiV5.CompletionSize,
+                    CompletionViewSize = UnrealAsyncServiceAbiV5.CompletionViewSize,
+                    Capabilities = UnrealAsyncServiceAbiV5.RequiredCapabilities,
+                    RetainContext = Marshal.GetFunctionPointerForDelegate(_retain),
+                    ReleaseContext = Marshal.GetFunctionPointerForDelegate(_release),
+                    SubmitRequest = Marshal.GetFunctionPointerForDelegate(submit),
+                    PumpOwner = Marshal.GetFunctionPointerForDelegate(pump),
+                    CancelRequest = Marshal.GetFunctionPointerForDelegate(cancel),
+                    PollCompletions = Marshal.GetFunctionPointerForDelegate(poll),
+                    CancelOwner = Marshal.GetFunctionPointerForDelegate(cancelOwner),
+                },
+                asyncTablePointer,
+                false);
+            Marshal.StructureToPtr(
+                new TestTableV2AsyncServices
+                {
+                    AbiVersion = 2,
+                    TableSize = checked((uint)Marshal.SizeOf<TestTableV2AsyncServices>()),
+                    ValueSize = checked((uint)Marshal.SizeOf<TestValue>()),
+                    ReadProperty = Marshal.GetFunctionPointerForDelegate(_read),
+                    WriteProperty = Marshal.GetFunctionPointerForDelegate(_write),
+                    Invoke = Marshal.GetFunctionPointerForDelegate(_invoke),
+                    RetainContext = Marshal.GetFunctionPointerForDelegate(_retain),
+                    ReleaseContext = Marshal.GetFunctionPointerForDelegate(_release),
+                    ReadPropertyById = Marshal.GetFunctionPointerForDelegate(_fastRead),
+                    WritePropertyById = Marshal.GetFunctionPointerForDelegate(_fastWrite),
+                    InvokeById = Marshal.GetFunctionPointerForDelegate(_fastInvoke),
+                    AsyncTransport = asyncTablePointer,
+                },
+                tablePointer,
+                false);
+
+            using var transport = new InProcessUnrealNativeInvocationTransport(
+                context: new nint(0x1234),
+                tablePointer);
+            var asyncTransport = (IUnrealAsyncServiceTransport)transport;
+            Assert.Equal(
+                UnrealAsyncServiceAbiV5.RequiredCapabilities,
+                asyncTransport.AsyncCapabilities);
+            Assert.True(asyncTransport.Submit(
+                41,
+                3,
+                101,
+                UnrealAsyncOperationV5.LoadObject,
+                0.0f,
+                2.0f,
+                "/Game/Fixture.Asset"));
+            Assert.Equal("/Game/Fixture.Asset", capturedPayload);
+            Assert.True(asyncTransport.PumpOwner(41, 3, 0.016f));
+            Assert.True(asyncTransport.Poll(41, 3, out ulong worldHostId, out var rows));
+            Assert.Equal((ulong)97, worldHostId);
+            UnrealAsyncCompletionV5 row = Assert.Single(rows);
+            Assert.Equal((ulong)101, row.RequestId);
+            Assert.Equal(UnrealObjectHandle.Create(8, 12).Value, row.ResultHandle);
+            Assert.Equal((uint)2, asyncTransport.CancelOwner(41, 3));
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(tablePointer);
+            Marshal.FreeHGlobal(asyncTablePointer);
+            Marshal.FreeHGlobal(completionPointer);
+            GC.KeepAlive(submit);
+            GC.KeepAlive(pump);
+            GC.KeepAlive(cancel);
+            GC.KeepAlive(poll);
+            GC.KeepAlive(cancelOwner);
+        }
+        Assert.Equal(0, _retainedContexts);
+    }
+
+    [Fact]
     public unsafe void AbiV2BootstrapDiscoversV3CallFrameAndKeepsLegacyFallback()
     {
         _activeV3Fixture = this;
@@ -691,6 +836,28 @@ public sealed class InProcessUnrealNativeInvocationTransportTests : IDisposable
         public nint WritePropertyById;
         public nint InvokeById;
         public nint CallFrameTransport;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct TestTableV2AsyncServices
+    {
+        public uint AbiVersion;
+        public uint TableSize;
+        public uint ValueSize;
+        public uint Reserved;
+        public nint ReadProperty;
+        public nint WriteProperty;
+        public nint Invoke;
+        public nint RetainContext;
+        public nint ReleaseContext;
+        public nint ReadPropertyById;
+        public nint WritePropertyById;
+        public nint InvokeById;
+        public nint CallFrameTransport;
+        public nint EventTransport;
+        public nint SharedDataTransport;
+        public nint GameplayDataTransport;
+        public nint AsyncTransport;
     }
 
     [StructLayout(LayoutKind.Sequential)]

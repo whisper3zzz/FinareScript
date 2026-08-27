@@ -314,7 +314,8 @@ public sealed class NativeUnrealInvocationBridge
       IUnrealOutputInvocationBridge,
       IUnrealEventBridge,
       IUnrealInvocationMetrics,
-      IUnrealWorldDataPlaneProvider
+      IUnrealWorldDataPlaneProvider,
+      IUnrealAsyncServiceProvider
 {
     private const int CallFrameArenaByteCapacity = 4096;
     private readonly IUnrealNativeInvocationTransport _transport;
@@ -332,6 +333,9 @@ public sealed class NativeUnrealInvocationBridge
     }
 
     public UnrealWorldDataPlane DataPlane { get; }
+
+    IUnrealAsyncServiceTransport? IUnrealAsyncServiceProvider.AsyncTransport =>
+        _transport as IUnrealAsyncServiceTransport;
 
     public bool SupportsFastInvocation =>
         _transport is IUnrealNativeCallFrameTransportV3 callFrameTransport &&

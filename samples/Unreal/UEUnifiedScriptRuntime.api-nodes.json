@@ -10,6 +10,1045 @@
   },
   "types": [
     {
+      "path": "/Script/Engine.HitResult",
+      "name": "HitResult",
+      "managedTypeName": "HitResult",
+      "category": "Unreal API|HitResult",
+      "properties": [
+        {
+          "path": "/Script/Engine.HitResult:BoneName",
+          "name": "BoneName",
+          "type": {
+            "kind": "name",
+            "nativeName": "FName",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "access": {
+            "readable": true,
+            "writable": true,
+            "editorVisible": false,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "\u9AA8\u9ABC\u540D\u79F0",
+            "category": null,
+            "tooltip": "\u6240\u547D\u4E2D\u9AA8\u9ABC\u7684\u547D\u540D\uFF08\u7528\u4E8E\u9AA8\u9ABC\u7F51\u683C\u4F53\uFF09\u3002",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/Engine.HitResult:Distance",
+          "name": "Distance",
+          "type": {
+            "kind": "float32",
+            "nativeName": "float",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "access": {
+            "readable": true,
+            "writable": true,
+            "editorVisible": false,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "\u8DDD\u79BB",
+            "category": null,
+            "tooltip": "\u4ECETraceStart\u5230\u573A\u666F\u7A7A\u95F4\u4E2DLocation\u7684\u8DDD\u79BB\u3002\u5982\u5B58\u5728\u521D\u59CB\u91CD\u53E0\uFF0C\u5219\u6B64\u503C\u4E3A0\uFF08\u68C0\u6D4B\u5728\u53E6\u4E00\u4E2A\u78B0\u649E\u5BF9\u8C61\u4E2D\u5F00\u59CB\uFF09\u3002",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/Engine.HitResult:ElementIndex",
+          "name": "ElementIndex",
+          "type": {
+            "kind": "uInt8",
+            "nativeName": "uint8",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "access": {
+            "readable": true,
+            "writable": true,
+            "editorVisible": false,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "\u5143\u7D20\u7D22\u5F15",
+            "category": null,
+            "tooltip": "\u88AB\u547D\u4E2D\u9879\u76EE\u7684\u7D22\u5F15\uFF0C\u4E3A\u547D\u4E2D\u57FA\u5143\u6240\u7279\u5B9A\u7684\u5185\u5BB9\u3002",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/Engine.HitResult:FaceIndex",
+          "name": "FaceIndex",
+          "type": {
+            "kind": "int32",
+            "nativeName": "int32",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "access": {
+            "readable": true,
+            "writable": true,
+            "editorVisible": false,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "\u9762\u7D22\u5F15",
+            "category": null,
+            "tooltip": "\u547D\u4E2D\u7684\u9762\u7D22\u5F15\uFF08\u4E09\u89D2\u5F62\u7F51\u683C\u4F53\u7684\u590D\u6742\u547D\u4E2D\uFF09\u3002",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/Engine.HitResult:ImpactNormal",
+          "name": "ImpactNormal",
+          "type": {
+            "kind": "struct",
+            "nativeName": "FVector_NetQuantizeNormal",
+            "typePath": "/Script/CoreUObject.Vector",
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": "Engine/NetSerialization.h"
+          },
+          "access": {
+            "readable": true,
+            "writable": true,
+            "editorVisible": false,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "\u5F71\u54CD\u6CD5\u7EBF",
+            "category": null,
+            "tooltip": "\u573A\u666F\u7A7A\u95F4\u4E2D\u547D\u4E2D\u7684\u6CD5\u7EBF\uFF0C\u7528\u4E8E\u88AB\u626B\u63CF\u547D\u4E2D\u7684\u5BF9\u8C61\uFF08\u5982\u6709\uFF09\u3002\n\u4E3E\u4F8B\u800C\u8A00\uFF0C\u5982\u679C\u4E00\u4E2A\u7403\u4F53\u547D\u4E2D\u4E00\u4E2A\u5E73\u9762\uFF0C\u8FD9\u4FBF\u662F\u4E00\u4E2A\u4ECE\u5E73\u9762\u6307\u51FA\u7684\u6807\u51C6\u5316\u5411\u91CF\u3002\n\u5728\u8868\u9762\u89D2\u6216\u8FB9\u53D7\u5F71\u54CD\u7684\u60C5\u51B5\u4E0B\uFF0C\u901A\u5E38\u4F1A\u9009\u62E9\u201C\u6700\u76F8\u53CD\u201D\u7684\u6CD5\u7EBF\uFF08\u4E0E\u67E5\u8BE2\u65B9\u5411\u76F8\u53CD\uFF09\u3002",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/Engine.HitResult:ImpactPoint",
+          "name": "ImpactPoint",
+          "type": {
+            "kind": "struct",
+            "nativeName": "FVector_NetQuantize",
+            "typePath": "/Script/CoreUObject.Vector",
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": "Engine/NetSerialization.h"
+          },
+          "access": {
+            "readable": true,
+            "writable": true,
+            "editorVisible": false,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "\u5F71\u54CD\u70B9",
+            "category": null,
+            "tooltip": "\u68C0\u6D4B\u5F62\u72B6\uFF08\u76D2\u4F53\u3001\u7403\u4F53\u3001\u5149\u7EBF\u7B49\uFF09\u4E0E\u53D7\u5F71\u54CD\u5BF9\u8C61\u5728\u573A\u666F\u7A7A\u95F4\u4E2D\u53D1\u751F\u5B9E\u9645\u63A5\u89E6\u7684\u4F4D\u7F6E\u3002\n\u4E3E\u4F8B\u800C\u8A00\uFF1A\u5728\u7403\u4F53\u68C0\u6D4B\u6D4B\u8BD5\u4E2D\uFF0C\u8FD9\u662F\u7403\u4F53\u8868\u9762\u63A5\u89E6\u5230\u5176\u4ED6\u5BF9\u8C61\u7684\u70B9\u3002\n@\u6CE8\u610F\uFF1A\u5728\u521D\u59CB\u91CD\u53E0\u7684\u60C5\u51B5\u4E2D\uFF08bStartPenetrating\u4E3Atrue\uFF09\uFF0CImpactPoint\u5C06\u4E0ELocation\u76F8\u540C\uFF0C\u56E0\u4E3A\u6CA1\u6709\u8981\u62A5\u544A\u7684\u6709\u610F\u4E49\u7684\u5355\u4E2A\u5F71\u54CD\u70B9\u3002",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/Engine.HitResult:Item",
+          "name": "Item",
+          "type": {
+            "kind": "int32",
+            "nativeName": "int32",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "access": {
+            "readable": true,
+            "writable": true,
+            "editorVisible": false,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "\u9879\u76EE",
+            "category": null,
+            "tooltip": "\u5173\u4E8E\u88AB\u547D\u4E2D\u9879\u76EE\u7684\u989D\u5916\u6570\u636E\uFF08\u547D\u4E2D\u7279\u5B9A\u7684\u57FA\u5143\uFF09\u3002",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/Engine.HitResult:Location",
+          "name": "Location",
+          "type": {
+            "kind": "struct",
+            "nativeName": "FVector_NetQuantize",
+            "typePath": "/Script/CoreUObject.Vector",
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": "Engine/NetSerialization.h"
+          },
+          "access": {
+            "readable": true,
+            "writable": true,
+            "editorVisible": false,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "\u4F4D\u7F6E",
+            "category": null,
+            "tooltip": "\u5982\u53D1\u751F\u547D\u4E2D\uFF0C\u79FB\u52A8\u5F62\u72B6\u4E0E\u53D7\u5F71\u54CD\u5BF9\u8C61\u76F8\u5BF9\u7684\u573A\u666F\u7A7A\u95F4\u4F4D\u7F6E\u3002\u7B49\u4E8E\u7EBF\u6761\u6D4B\u8BD5\u7684\u5F71\u54CD\u70B9\u3002\n\u4E3E\u4F8B\u800C\u8A00\uFF1A\u5728\u4E00\u4E2A\u7403\u4F53\u68C0\u6D4B\u6D4B\u8BD5\u4E2D\uFF0C\u8FD9\u662F\u7403\u4F53\u63A5\u89E6\u5230\u5176\u4ED6\u5BF9\u8C61\u65F6\u5176\u4E2D\u5FC3\u6240\u5904\u7684\u70B9\u3002\n\u5728\u626B\u63CF\u8FD0\u52A8\uFF08\u4F46\u975E\u67E5\u8BE2\uFF09\u4E2D\uFF0C\u8FD9\u53EF\u80FD\u4E0D\u7B49\u4E8E\u5F62\u72B6\u7684\u6700\u7EC8\u4F4D\u7F6E\uFF0C\u56E0\u4E3A\u547D\u4E2D\u4F1A\u7A0D\u5FAE\u56DE\u64A4\uFF0C\u9632\u6B62\u8986\u76D6\u53E6\u4E00\u4E2A\u8868\u9762\u800C\u4EA7\u751F\u7684\u7CBE\u786E\u5EA6\u95EE\u9898\u3002",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/Engine.HitResult:MyBoneName",
+          "name": "MyBoneName",
+          "type": {
+            "kind": "name",
+            "nativeName": "FName",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "access": {
+            "readable": true,
+            "writable": true,
+            "editorVisible": false,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "\u6211\u7684\u9AA8\u9ABC\u547D\u540D",
+            "category": null,
+            "tooltip": "\u53C2\u4E0E\u547D\u4E2D\u4E8B\u4EF6\u7684_\u6211\u7684_\u9AA8\u9ABC\u7684\u547D\u540D\uFF08\u5728\u4E24\u4E2A\u9AA8\u9ABC\u7F51\u683C\u4F53\u53D1\u751F\u78B0\u649E\u7684\u60C5\u51B5\u4E2D\uFF09\u3002",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/Engine.HitResult:MyItem",
+          "name": "MyItem",
+          "type": {
+            "kind": "int32",
+            "nativeName": "int32",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "access": {
+            "readable": true,
+            "writable": true,
+            "editorVisible": false,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "\u6211\u7684\u9879\u76EE",
+            "category": null,
+            "tooltip": "\u5982\u679C\u547D\u4E2D\u7ED3\u679C\u6765\u81EA\u78B0\u649E\uFF0C\u90A3\u4E48\u8FD9\u5C06\u62E5\u6709\u5173\u4E8E\u547D\u4E2D\u7B2C\u4E8C\u4E2A\u9879\u76EE\u7684\u9879\u76EE\u7684\u989D\u5916\u4FE1\u606F\u3002",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/Engine.HitResult:Normal",
+          "name": "Normal",
+          "type": {
+            "kind": "struct",
+            "nativeName": "FVector_NetQuantizeNormal",
+            "typePath": "/Script/CoreUObject.Vector",
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": "Engine/NetSerialization.h"
+          },
+          "access": {
+            "readable": true,
+            "writable": true,
+            "editorVisible": false,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "\u6CD5\u7EBF",
+            "category": null,
+            "tooltip": "\u5728\u573A\u666F\u7A7A\u95F4\u4E2D\u547D\u4E2D\u7684\u6CD5\u7EBF\uFF0C\u7528\u4E8E\u88AB\u626B\u63CF\u7684\u5BF9\u8C61\u3002\u7B49\u4E8E\u7EBF\u6761\u6D4B\u8BD5\u4E2D\u7684ImpactNormal\u3002\n\u8FD9\u4E3A\u80F6\u56CA\u4F53\u548C\u7403\u4F53\u8BA1\u7B97\uFF0C\u5426\u5219\u5176\u5C06\u4E0EImpactNormal\u76F8\u540C\u3002\n\u4E3E\u4F8B\u800C\u8A00\uFF0C\u5728\u4E00\u4E2A\u7403\u4F53\u68C0\u6D4B\u6D4B\u8BD5\u4E2D\uFF0C\u8FD9\u662F\u6307\u5411\u5F71\u54CD\u70B9\u5904\u7403\u4F53\u4E2D\u5FC3\u7684\u6807\u51C6\u5316\u5411\u91CF\u3002",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/Engine.HitResult:PenetrationDepth",
+          "name": "PenetrationDepth",
+          "type": {
+            "kind": "float32",
+            "nativeName": "float",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "access": {
+            "readable": true,
+            "writable": true,
+            "editorVisible": false,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "\u7A7F\u900F\u6DF1\u5EA6",
+            "category": null,
+            "tooltip": "\u5982\u679C\u6B64\u6D4B\u8BD5\u5F00\u59CB\u5904\u4E8E\u7A7F\u900F\u4E2D\uFF08bStartPenetrating\u4E3Atrue\uFF09\u4E14\u53EF\u4EE5\u8BA1\u7B97\u4E00\u4E2A\u53CD\u5411\u7A7F\u900F\u5411\u91CF\uFF0C\n\u5219\u6B64\u503C\u4E3A\u6CBF\u6CD5\u7EBF\u7684\u8DDD\u79BB\uFF0C\u6B64\u6CD5\u7EBF\u5C06\u5BFC\u81F4\u79FB\u51FA\u7A7F\u900F\u3002\n\u5982\u679C\u8DDD\u79BB\u65E0\u6CD5\u8BA1\u7B97\uFF0C\u5219\u6B64\u503C\u5C06\u4E3A\u96F6\u3002",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/Engine.HitResult:Time",
+          "name": "Time",
+          "type": {
+            "kind": "float32",
+            "nativeName": "float",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "access": {
+            "readable": true,
+            "writable": true,
+            "editorVisible": false,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "\u65F6\u95F4",
+            "category": null,
+            "tooltip": "\u5982\u53D1\u751F\u547D\u4E2D\uFF0C\u6CBF\u68C0\u6D4B\u65B9\u5411\u7684\u5F71\u54CD\u201C\u65F6\u95F4\u201D\uFF08\u8303\u56F4\u4ECE0.0\u52301.0\uFF09\uFF0C\u8868\u660ETraceStart\u548CTraceEnd\u4E4B\u95F4\u7684\u65F6\u95F4\u3002\n\u5728\u626B\u63CF\u8FD0\u52A8\u4E2D\uFF08\u800C\u975E\u67E5\u8BE2\uFF09\uFF0C\u6B64\u9879\u53EF\u80FD\u4F1A\u4ECE\u5B9E\u9645\u7684\u5F71\u54CD\u65F6\u95F4\u4E0A\u7A0D\u5FAE\u9000\u5374\uFF0C\u9632\u6B62\u4E0E\u76F8\u90BB\u51E0\u4F55\u4F53\u4EA7\u751F\u7CBE\u786E\u5EA6\u95EE\u9898\u3002",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/Engine.HitResult:TraceEnd",
+          "name": "TraceEnd",
+          "type": {
+            "kind": "struct",
+            "nativeName": "FVector_NetQuantize",
+            "typePath": "/Script/CoreUObject.Vector",
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": "Engine/NetSerialization.h"
+          },
+          "access": {
+            "readable": true,
+            "writable": true,
+            "editorVisible": false,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "\u68C0\u6D4B\u7ED3\u675F",
+            "category": null,
+            "tooltip": "\u68C0\u6D4B\u7684\u6700\u7EC8\u4F4D\u7F6E\uFF1B\u8FD9\u5E76\u975E\u5F71\u54CD\u53D1\u751F\u4E4B\u5904\uFF08\u5982\u6709\uFF09\uFF0C\u800C\u662F\u5C1D\u8BD5\u8FDB\u884C\u7684\u626B\u63CF\u4E2D\u6700\u8FDC\u7684\u70B9\u3002\n\u4E3E\u4F8B\u800C\u8A00\uFF0C\u5982\u679C\u4E00\u4E2A\u7403\u4F53\u9488\u5BF9\u573A\u666F\u8FDB\u884C\u626B\u63CF\uFF0C\u6CA1\u6709\u963B\u6321\u547D\u4E2D\u65F6\u8FD9\u4FBF\u662F\u7403\u4F53\u7684\u4E2D\u5FC3\u3002",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/Engine.HitResult:TraceStart",
+          "name": "TraceStart",
+          "type": {
+            "kind": "struct",
+            "nativeName": "FVector_NetQuantize",
+            "typePath": "/Script/CoreUObject.Vector",
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": "Engine/NetSerialization.h"
+          },
+          "access": {
+            "readable": true,
+            "writable": true,
+            "editorVisible": false,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "\u68C0\u6D4B\u5F00\u59CB",
+            "category": null,
+            "tooltip": "\u68C0\u6D4B\u7684\u5F00\u59CB\u4F4D\u7F6E\u3002\n\u4E3E\u4F8B\u800C\u8A00\uFF0C\u5982\u679C\u9488\u5BF9\u573A\u666F\u626B\u63CF\u7403\u4F53\uFF0C\u8FD9\u4FBF\u662F\u7403\u4F53\u4E2D\u5FC3\u7684\u5F00\u59CB\u4F4D\u7F6E\u3002",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/Engine.HitResult:bBlockingHit",
+          "name": "bBlockingHit",
+          "type": {
+            "kind": "boolean",
+            "nativeName": "uint8",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "access": {
+            "readable": true,
+            "writable": true,
+            "editorVisible": false,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "\u963B\u6321\u547D\u4E2D",
+            "category": null,
+            "tooltip": "\u8BF4\u660E\u6B64\u547D\u4E2D\u662F\u5426\u4E3A\u963B\u6321\u78B0\u649E\u7684\u7ED3\u679C\u3002\u5982\u4E3Afalse\uFF0C\u5219\u65E0\u547D\u4E2D\uFF0C\u6216\u53EA\u662F\u91CD\u53E0\u6216\u63A5\u89E6\u3002",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/Engine.HitResult:bStartPenetrating",
+          "name": "bStartPenetrating",
+          "type": {
+            "kind": "boolean",
+            "nativeName": "uint8",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "access": {
+            "readable": true,
+            "writable": true,
+            "editorVisible": false,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "\u5F00\u59CB\u7A7F\u900F",
+            "category": null,
+            "tooltip": "\u68C0\u6D4B\u662F\u5426\u4ECE\u7A7F\u900F\u4E2D\u5F00\u59CB\uFF0C\u5373\u5E26\u6709\u521D\u59CB\u963B\u6321\u91CD\u53E0\u3002\n\u5728\u7A7F\u900F\u4E2D\uFF0C\u5982PenetrationDepth \u003E 0.f\uFF0C\u5219\u5176\u5C06\u4EE3\u8868\u6CBF\u6CD5\u7EBF\u5411\u91CF\u7684\u8DDD\u79BB\uFF0C\u4F1A\u9020\u6210\n\u626B\u63CF\u5F62\u72B6\u548C\u88AB\u547D\u4E2D\u5BF9\u8C61\u4E4B\u95F4\u7684\u6700\u5C0F\u63A5\u89E6\u3002\u5728\u6B64\u60C5\u51B5\u4E0B\uFF0CImpactNormal\u5C06\u662F\u4E0E\u4F4D\u7F6E\u5904\u8FD0\u52A8\u76F8\u53CD\u7684\u6CD5\u7EBF\uFF08\u5373\u6CD5\u7EBF\u53EF\u80FD\u4E0D\u7B49\u4E8EImpactNormal\uFF09\u3002ImpactPoint\u5C06\u4E0ELocation\u76F8\u540C\uFF0C\u56E0\u4E3A\u6CA1\u6709\u8981\u62A5\u544A\u7684\u5355\u4E2A\u5F71\u54CD\u70B9\u3002",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        }
+      ],
+      "functions": [],
+      "delegates": [],
+      "nodes": [
+        {
+          "id": "ue.struct.break|HitResult",
+          "memberPath": "/Script/Engine.HitResult:__Break",
+          "memberId": "0x43CA6CEE130D50C1",
+          "kind": "structBreak",
+          "title": "Break HitResult",
+          "category": "Unreal API|HitResult|Structs",
+          "tooltip": "Expose the reflected fields of HitResult.",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Value",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FHitResult",
+                "typePath": "/Script/Engine.HitResult",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "BoneName",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "name",
+                "nativeName": "FName",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Distance",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "float32",
+                "nativeName": "float",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ElementIndex",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "uInt8",
+                "nativeName": "uint8",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "FaceIndex",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ImpactNormal",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FVector_NetQuantizeNormal",
+                "typePath": "/Script/CoreUObject.Vector",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Engine/NetSerialization.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ImpactPoint",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FVector_NetQuantize",
+                "typePath": "/Script/CoreUObject.Vector",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Engine/NetSerialization.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Item",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Location",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FVector_NetQuantize",
+                "typePath": "/Script/CoreUObject.Vector",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Engine/NetSerialization.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "MyBoneName",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "name",
+                "nativeName": "FName",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "MyItem",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Normal",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FVector_NetQuantizeNormal",
+                "typePath": "/Script/CoreUObject.Vector",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Engine/NetSerialization.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "PenetrationDepth",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "float32",
+                "nativeName": "float",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Time",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "float32",
+                "nativeName": "float",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "TraceEnd",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FVector_NetQuantize",
+                "typePath": "/Script/CoreUObject.Vector",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Engine/NetSerialization.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "TraceStart",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FVector_NetQuantize",
+                "typePath": "/Script/CoreUObject.Vector",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Engine/NetSerialization.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "bBlockingHit",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "uint8",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "bStartPenetrating",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "uint8",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
+        },
+        {
+          "id": "ue.struct.make|HitResult",
+          "memberPath": "/Script/Engine.HitResult:__Make",
+          "memberId": "0x77FA3505486815B0",
+          "kind": "structMake",
+          "title": "Make HitResult",
+          "category": "Unreal API|HitResult|Structs",
+          "tooltip": "Construct HitResult from reflected fields.",
+          "pure": true,
+          "pins": [
+            {
+              "name": "BoneName",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "name",
+                "nativeName": "FName",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Distance",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "float32",
+                "nativeName": "float",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ElementIndex",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "uInt8",
+                "nativeName": "uint8",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "FaceIndex",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ImpactNormal",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FVector_NetQuantizeNormal",
+                "typePath": "/Script/CoreUObject.Vector",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Engine/NetSerialization.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ImpactPoint",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FVector_NetQuantize",
+                "typePath": "/Script/CoreUObject.Vector",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Engine/NetSerialization.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Item",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Location",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FVector_NetQuantize",
+                "typePath": "/Script/CoreUObject.Vector",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Engine/NetSerialization.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "MyBoneName",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "name",
+                "nativeName": "FName",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "MyItem",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Normal",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FVector_NetQuantizeNormal",
+                "typePath": "/Script/CoreUObject.Vector",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Engine/NetSerialization.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "PenetrationDepth",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "float32",
+                "nativeName": "float",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Time",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "float32",
+                "nativeName": "float",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "TraceEnd",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FVector_NetQuantize",
+                "typePath": "/Script/CoreUObject.Vector",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Engine/NetSerialization.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "TraceStart",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FVector_NetQuantize",
+                "typePath": "/Script/CoreUObject.Vector",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Engine/NetSerialization.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "bBlockingHit",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "uint8",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "bStartPenetrating",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "uint8",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Value",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FHitResult",
+                "typePath": "/Script/Engine.HitResult",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
+        }
+      ]
+    },
+    {
       "path": "/Script/UEUnifiedScriptRuntime.EUnifiedScriptInteropMode",
       "name": "EUnifiedScriptInteropMode",
       "managedTypeName": "EUnifiedScriptInteropMode",
@@ -8454,6 +9493,1310 @@
                 "keyType": null,
                 "valueType": null,
                 "headerPath": "UObject/NoExportTypes.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
+        }
+      ]
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary",
+      "name": "UnifiedScriptWorldLibrary",
+      "managedTypeName": "UnifiedScriptWorldLibrary",
+      "category": "Unreal API|UnifiedScriptWorldLibrary",
+      "properties": [],
+      "functions": [
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:DestroyActor",
+          "name": "DestroyActor",
+          "returnType": {
+            "kind": "boolean",
+            "nativeName": "bool",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [
+            {
+              "name": "WorldContextObject",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "Actor",
+              "type": {
+                "kind": "object",
+                "nativeName": "AActor*",
+                "typePath": "/Script/Engine.Actor",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "GameFramework/Actor.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": true,
+            "pure": false,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Destroy Actor",
+            "category": "UnifiedScript|World",
+            "tooltip": "Destroy Actor",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": "WorldContextObject"
+          }
+        },
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:FindComponentByClass",
+          "name": "FindComponentByClass",
+          "returnType": {
+            "kind": "object",
+            "nativeName": "UActorComponent*",
+            "typePath": "/Script/Engine.ActorComponent",
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": "Components/ActorComponent.h"
+          },
+          "parameters": [
+            {
+              "name": "WorldContextObject",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "Actor",
+              "type": {
+                "kind": "object",
+                "nativeName": "AActor*",
+                "typePath": "/Script/Engine.Actor",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "GameFramework/Actor.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "ComponentClass",
+              "type": {
+                "kind": "class",
+                "nativeName": "UClass*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": true,
+            "pure": true,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Find Component by Class",
+            "category": "UnifiedScript|Components",
+            "tooltip": "Find Component by Class",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": "WorldContextObject"
+          }
+        },
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:GetWorldTimeSeconds",
+          "name": "GetWorldTimeSeconds",
+          "returnType": {
+            "kind": "float32",
+            "nativeName": "float",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [
+            {
+              "name": "WorldContextObject",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": true,
+            "pure": true,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Get World Time Seconds",
+            "category": "UnifiedScript|World",
+            "tooltip": "Get World Time Seconds",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": "WorldContextObject"
+          }
+        },
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:IsInputKeyDown",
+          "name": "IsInputKeyDown",
+          "returnType": {
+            "kind": "boolean",
+            "nativeName": "bool",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [
+            {
+              "name": "WorldContextObject",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "PlayerController",
+              "type": {
+                "kind": "object",
+                "nativeName": "APlayerController*",
+                "typePath": "/Script/Engine.PlayerController",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "GameFramework/PlayerController.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "KeyName",
+              "type": {
+                "kind": "name",
+                "nativeName": "FName",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": true,
+            "pure": true,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Is Input Key Down",
+            "category": "UnifiedScript|Input",
+            "tooltip": "Is Input Key Down",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": "WorldContextObject"
+          }
+        },
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:LineTraceSingle",
+          "name": "LineTraceSingle",
+          "returnType": {
+            "kind": "boolean",
+            "nativeName": "bool",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [
+            {
+              "name": "WorldContextObject",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "Start",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FVector",
+                "typePath": "/Script/CoreUObject.Vector",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/NoExportTypes.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "End",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FVector",
+                "typePath": "/Script/CoreUObject.Vector",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/NoExportTypes.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "IgnoreActor",
+              "type": {
+                "kind": "object",
+                "nativeName": "AActor*",
+                "typePath": "/Script/Engine.Actor",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "GameFramework/Actor.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "OutHit",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FHitResult",
+                "typePath": "/Script/Engine.HitResult",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Engine/HitResult.h"
+              },
+              "direction": "output",
+              "defaultValue": null
+            },
+            {
+              "name": "OutHitActor",
+              "type": {
+                "kind": "object",
+                "nativeName": "AActor*",
+                "typePath": "/Script/Engine.Actor",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "GameFramework/Actor.h"
+              },
+              "direction": "output",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": true,
+            "pure": false,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Line Trace Single",
+            "category": "UnifiedScript|World",
+            "tooltip": "Line Trace Single",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": "WorldContextObject"
+          }
+        },
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:LoadClassByPath",
+          "name": "LoadClassByPath",
+          "returnType": {
+            "kind": "class",
+            "nativeName": "UClass*",
+            "typePath": "/Script/CoreUObject.Object",
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": "UObject/Object.h"
+          },
+          "parameters": [
+            {
+              "name": "WorldContextObject",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "ClassPath",
+              "type": {
+                "kind": "string",
+                "nativeName": "FString",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": true,
+            "pure": false,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Load Class by Path",
+            "category": "UnifiedScript|Resources",
+            "tooltip": "Load Class by Path",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": "WorldContextObject"
+          }
+        },
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:LoadObjectByPath",
+          "name": "LoadObjectByPath",
+          "returnType": {
+            "kind": "object",
+            "nativeName": "UObject*",
+            "typePath": "/Script/CoreUObject.Object",
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": "UObject/Object.h"
+          },
+          "parameters": [
+            {
+              "name": "WorldContextObject",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "ObjectPath",
+              "type": {
+                "kind": "string",
+                "nativeName": "FString",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": true,
+            "pure": false,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Load Object by Path",
+            "category": "UnifiedScript|Resources",
+            "tooltip": "Load Object by Path",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": "WorldContextObject"
+          }
+        },
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:SpawnActor",
+          "name": "SpawnActor",
+          "returnType": {
+            "kind": "object",
+            "nativeName": "AActor*",
+            "typePath": "/Script/Engine.Actor",
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": "GameFramework/Actor.h"
+          },
+          "parameters": [
+            {
+              "name": "WorldContextObject",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "ActorClass",
+              "type": {
+                "kind": "class",
+                "nativeName": "UClass*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "Transform",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FTransform",
+                "typePath": "/Script/CoreUObject.Transform",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/NoExportTypes.h"
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": true,
+            "pure": false,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Spawn Actor",
+            "category": "UnifiedScript|World",
+            "tooltip": "Spawn Actor",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": "WorldContextObject"
+          }
+        }
+      ],
+      "delegates": [],
+      "nodes": [
+        {
+          "id": "ue.call|UnifiedScriptWorldLibrary|DestroyActor",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:DestroyActor",
+          "memberId": "0x66FF01CF6D7A46C8",
+          "kind": "function",
+          "title": "Destroy Actor",
+          "category": "UnifiedScript|World",
+          "tooltip": "Destroy Actor",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Context",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "WorldContextObject",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Actor",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "AActor*",
+                "typePath": "/Script/Engine.Actor",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "GameFramework/Actor.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "bool",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
+        },
+        {
+          "id": "ue.call|UnifiedScriptWorldLibrary|FindComponentByClass",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:FindComponentByClass",
+          "memberId": "0xBA4ACD2C004A8252",
+          "kind": "function",
+          "title": "Find Component by Class",
+          "category": "UnifiedScript|Components",
+          "tooltip": "Find Component by Class",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Context",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "WorldContextObject",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Actor",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "AActor*",
+                "typePath": "/Script/Engine.Actor",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "GameFramework/Actor.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ComponentClass",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "class",
+                "nativeName": "UClass*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UActorComponent*",
+                "typePath": "/Script/Engine.ActorComponent",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Components/ActorComponent.h"
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
+        },
+        {
+          "id": "ue.call|UnifiedScriptWorldLibrary|GetWorldTimeSeconds",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:GetWorldTimeSeconds",
+          "memberId": "0x92FDC69B7C02B89F",
+          "kind": "function",
+          "title": "Get World Time Seconds",
+          "category": "UnifiedScript|World",
+          "tooltip": "Get World Time Seconds",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Context",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "WorldContextObject",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "float32",
+                "nativeName": "float",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
+        },
+        {
+          "id": "ue.call|UnifiedScriptWorldLibrary|IsInputKeyDown",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:IsInputKeyDown",
+          "memberId": "0x01831B170E603AC0",
+          "kind": "function",
+          "title": "Is Input Key Down",
+          "category": "UnifiedScript|Input",
+          "tooltip": "Is Input Key Down",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Context",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "WorldContextObject",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "PlayerController",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "APlayerController*",
+                "typePath": "/Script/Engine.PlayerController",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "GameFramework/PlayerController.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "KeyName",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "name",
+                "nativeName": "FName",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "bool",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
+        },
+        {
+          "id": "ue.call|UnifiedScriptWorldLibrary|LineTraceSingle",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:LineTraceSingle",
+          "memberId": "0xCCCCC22AEA7D18EA",
+          "kind": "function",
+          "title": "Line Trace Single",
+          "category": "UnifiedScript|World",
+          "tooltip": "Line Trace Single",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Context",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "WorldContextObject",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Start",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FVector",
+                "typePath": "/Script/CoreUObject.Vector",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/NoExportTypes.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "End",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FVector",
+                "typePath": "/Script/CoreUObject.Vector",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/NoExportTypes.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "IgnoreActor",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "AActor*",
+                "typePath": "/Script/Engine.Actor",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "GameFramework/Actor.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "OutHit",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FHitResult",
+                "typePath": "/Script/Engine.HitResult",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "Engine/HitResult.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "OutHitActor",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "AActor*",
+                "typePath": "/Script/Engine.Actor",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "GameFramework/Actor.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "bool",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
+        },
+        {
+          "id": "ue.call|UnifiedScriptWorldLibrary|LoadClassByPath",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:LoadClassByPath",
+          "memberId": "0x92951FEE685B277B",
+          "kind": "function",
+          "title": "Load Class by Path",
+          "category": "UnifiedScript|Resources",
+          "tooltip": "Load Class by Path",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Context",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "WorldContextObject",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ClassPath",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "string",
+                "nativeName": "FString",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "class",
+                "nativeName": "UClass*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
+        },
+        {
+          "id": "ue.call|UnifiedScriptWorldLibrary|LoadObjectByPath",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:LoadObjectByPath",
+          "memberId": "0x5388DBBA23474EEE",
+          "kind": "function",
+          "title": "Load Object by Path",
+          "category": "UnifiedScript|Resources",
+          "tooltip": "Load Object by Path",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Context",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "WorldContextObject",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ObjectPath",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "string",
+                "nativeName": "FString",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null
+        },
+        {
+          "id": "ue.call|UnifiedScriptWorldLibrary|SpawnActor",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:SpawnActor",
+          "memberId": "0x2B6E88013D019C97",
+          "kind": "function",
+          "title": "Spawn Actor",
+          "category": "UnifiedScript|World",
+          "tooltip": "Spawn Actor",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Context",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "WorldContextObject",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UObject*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ActorClass",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "class",
+                "nativeName": "UClass*",
+                "typePath": "/Script/CoreUObject.Object",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/Object.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Transform",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FTransform",
+                "typePath": "/Script/CoreUObject.Transform",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/NoExportTypes.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "AActor*",
+                "typePath": "/Script/Engine.Actor",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "GameFramework/Actor.h"
               },
               "defaultValue": null
             },
