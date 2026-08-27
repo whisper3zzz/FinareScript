@@ -11,6 +11,7 @@
 #include "UnifiedScriptObjectRegistry.h"
 #include "UnifiedScriptWorldSubsystem.h"
 #include "UObject/SoftObjectPath.h"
+#include "UObject/UnrealType.h"
 
 #include <atomic>
 
@@ -103,6 +104,42 @@ void UUnifiedScriptComponent::TickComponent(
     SetComponentTickEnabled(bTickAutomatically || bReloadRequested);
 }
 
+#if WITH_EDITOR
+void UUnifiedScriptComponent::PostEditChangeChainProperty(
+    FPropertyChangedChainEvent& PropertyChangedEvent)
+{
+    Super::PostEditChangeChainProperty(PropertyChangedEvent);
+
+    const FName ScriptStateName =
+        GET_MEMBER_NAME_CHECKED(UUnifiedScriptComponent, ScriptState);
+    if (PropertyChangedEvent.GetMemberPropertyName() != ScriptStateName)
+    {
+        return;
+    }
+
+    const FName ChangedName = PropertyChangedEvent.GetPropertyName();
+    if (ChangedName != ScriptStateName)
+    {
+        if (const FPropertyBagPropertyDesc* Desc =
+                ScriptState.FindPropertyDescByName(ChangedName))
+        {
+            MarkScriptStateOverridden(Desc->ID);
+            return;
+        }
+    }
+
+    // A whole-bag event does not identify the nested field. FixedLayout prevents
+    // structural edits, so conservatively retain all values as explicit overrides.
+    if (const UPropertyBag* BagStruct = ScriptState.GetPropertyBagStruct())
+    {
+        for (const FPropertyBagPropertyDesc& Desc : BagStruct->GetPropertyDescs())
+        {
+            MarkScriptStateOverridden(Desc.ID);
+        }
+    }
+}
+#endif
+
 bool UUnifiedScriptComponent::StartScript()
 {
     check(IsInGameThread());
@@ -144,11 +181,16 @@ bool UUnifiedScriptComponent::StartScript()
     }
 
     FInstancedPropertyBag CandidateScriptState;
+    TArray<FGuid> CandidateOverrideIds;
+    FUnifiedScriptStateMigrationReport CandidateMigration;
     FString CandidateDeclarationAssetPath;
     if (!BuildScriptState(
             ResolvedAsset,
             ScriptState,
+            GetEffectiveScriptStateOverrideIds(),
             CandidateScriptState,
+            CandidateOverrideIds,
+            CandidateMigration,
             CandidateDeclarationAssetPath,
             ResolutionError))
     {
@@ -181,7 +223,13 @@ bool UUnifiedScriptComponent::StartScript()
     const uint64 InstanceId =
         UE::UnifiedScript::Component::Private::AllocateScriptInstanceId();
     FInstancedPropertyBag PreviousScriptState = ScriptState;
+    TArray<FGuid> PreviousOverrideIds = ScriptStateOverrideIds;
+    const bool bPreviousOverrideBaselineInitialized =
+        bScriptStateOverrideBaselineInitialized;
+    const int32 PreviousOverrideCount = MaterializedStateOverrideCount;
     ScriptState = MoveTemp(CandidateScriptState);
+    ScriptStateOverrideIds = MoveTemp(CandidateOverrideIds);
+    bScriptStateOverrideBaselineInitialized = true;
     FString Error;
     if (!Host->CreateManagedScript(
             InstanceId,
@@ -192,6 +240,10 @@ bool UUnifiedScriptComponent::StartScript()
             Error))
     {
         ScriptState = MoveTemp(PreviousScriptState);
+        ScriptStateOverrideIds = MoveTemp(PreviousOverrideIds);
+        bScriptStateOverrideBaselineInitialized =
+            bPreviousOverrideBaselineInitialized;
+        MaterializedStateOverrideCount = PreviousOverrideCount;
         FUnifiedScriptObjectHandleResult ReleaseResult;
         if (TargetHandle != HostHandle)
         {
@@ -212,7 +264,7 @@ bool UUnifiedScriptComponent::StartScript()
         ? ResolvedAsset->GetPathName()
         : FString();
     ActiveDeclarationAssetPath = MoveTemp(CandidateDeclarationAssetPath);
-    MaterializedStateCount = ScriptState.GetNumPropertiesInBag();
+    ApplyStateMigrationDiagnostics(CandidateMigration);
     ActiveResolvedAssemblyPath = ResolvedAssemblyPath;
     ActiveResolvedTypeName = ResolvedTypeName;
     LastScriptError.Reset();
@@ -327,11 +379,16 @@ bool UUnifiedScriptComponent::ReloadScript()
     }
 
     FInstancedPropertyBag CandidateScriptState;
+    TArray<FGuid> CandidateOverrideIds;
+    FUnifiedScriptStateMigrationReport CandidateMigration;
     FString CandidateDeclarationAssetPath;
     if (!BuildScriptState(
             ResolvedAsset,
             ScriptState,
+            GetEffectiveScriptStateOverrideIds(),
             CandidateScriptState,
+            CandidateOverrideIds,
+            CandidateMigration,
             CandidateDeclarationAssetPath,
             Error))
     {
@@ -340,7 +397,13 @@ bool UUnifiedScriptComponent::ReloadScript()
     }
 
     FInstancedPropertyBag PreviousScriptState = ScriptState;
+    TArray<FGuid> PreviousOverrideIds = ScriptStateOverrideIds;
+    const bool bPreviousOverrideBaselineInitialized =
+        bScriptStateOverrideBaselineInitialized;
+    const int32 PreviousOverrideCount = MaterializedStateOverrideCount;
     ScriptState = MoveTemp(CandidateScriptState);
+    ScriptStateOverrideIds = MoveTemp(CandidateOverrideIds);
+    bScriptStateOverrideBaselineInitialized = true;
     int32 Generation = 0;
     if (!Host->ReloadManagedScript(
             ManagedScriptInstanceId,
@@ -350,6 +413,10 @@ bool UUnifiedScriptComponent::ReloadScript()
             Error))
     {
         ScriptState = MoveTemp(PreviousScriptState);
+        ScriptStateOverrideIds = MoveTemp(PreviousOverrideIds);
+        bScriptStateOverrideBaselineInitialized =
+            bPreviousOverrideBaselineInitialized;
+        MaterializedStateOverrideCount = PreviousOverrideCount;
         SetScriptFailure(MoveTemp(Error));
         return false;
     }
@@ -360,7 +427,7 @@ bool UUnifiedScriptComponent::ReloadScript()
         ? ResolvedAsset->GetPathName()
         : FString();
     ActiveDeclarationAssetPath = MoveTemp(CandidateDeclarationAssetPath);
-    MaterializedStateCount = ScriptState.GetNumPropertiesInBag();
+    ApplyStateMigrationDiagnostics(CandidateMigration);
     ActiveResolvedAssemblyPath = MoveTemp(ResolvedAssemblyPath);
     ActiveResolvedTypeName = MoveTemp(ResolvedTypeName);
     LastScriptError.Reset();
@@ -393,11 +460,16 @@ bool UUnifiedScriptComponent::RefreshScriptState()
     }
 
     FInstancedPropertyBag Candidate;
+    TArray<FGuid> CandidateOverrideIds;
+    FUnifiedScriptStateMigrationReport CandidateMigration;
     FString CandidateAssetPath;
     if (!BuildScriptState(
             ResolvedAsset,
             ScriptState,
+            GetEffectiveScriptStateOverrideIds(),
             Candidate,
+            CandidateOverrideIds,
+            CandidateMigration,
             CandidateAssetPath,
             Error))
     {
@@ -406,8 +478,10 @@ bool UUnifiedScriptComponent::RefreshScriptState()
     }
 
     ScriptState = MoveTemp(Candidate);
+    ScriptStateOverrideIds = MoveTemp(CandidateOverrideIds);
+    bScriptStateOverrideBaselineInitialized = true;
     ActiveDeclarationAssetPath = MoveTemp(CandidateAssetPath);
-    MaterializedStateCount = ScriptState.GetNumPropertiesInBag();
+    ApplyStateMigrationDiagnostics(CandidateMigration);
     LastScriptError.Reset();
     return true;
 }
@@ -424,8 +498,75 @@ bool UUnifiedScriptComponent::SetScriptStateInt32(
     const FString& Name,
     int32 Value)
 {
-    return !Name.IsEmpty() &&
-        ScriptState.SetValueInt32(FName(Name), Value) == EPropertyBagResult::Success;
+    if (Name.IsEmpty())
+    {
+        return false;
+    }
+
+    const FPropertyBagPropertyDesc* Desc =
+        ScriptState.FindPropertyDescByName(FName(Name));
+    if (Desc == nullptr ||
+        ScriptState.SetValueInt32(Desc->Name, Value) != EPropertyBagResult::Success)
+    {
+        return false;
+    }
+
+    MarkScriptStateOverridden(Desc->ID);
+    return true;
+}
+
+bool UUnifiedScriptComponent::IsScriptStateOverridden(const FString& Name) const
+{
+    const FPropertyBagPropertyDesc* Desc =
+        ScriptState.FindPropertyDescByName(FName(Name));
+    return Desc != nullptr && GetEffectiveScriptStateOverrideIds().Contains(Desc->ID);
+}
+
+bool UUnifiedScriptComponent::ResetScriptStateOverride(const FString& Name)
+{
+    const FPropertyBagPropertyDesc* Desc =
+        ScriptState.FindPropertyDescByName(FName(Name));
+    if (Desc == nullptr)
+    {
+        SetScriptFailure(FString::Printf(
+            TEXT("Script State does not contain '%s'."),
+            *Name));
+        return false;
+    }
+
+    const TArray<FGuid> PreviousOverrideIds = ScriptStateOverrideIds;
+    const bool bPreviousOverrideBaselineInitialized =
+        bScriptStateOverrideBaselineInitialized;
+    ScriptStateOverrideIds = GetEffectiveScriptStateOverrideIds();
+    bScriptStateOverrideBaselineInitialized = true;
+    ScriptStateOverrideIds.Remove(Desc->ID);
+    if (RefreshScriptState())
+    {
+        return true;
+    }
+
+    ScriptStateOverrideIds = PreviousOverrideIds;
+    bScriptStateOverrideBaselineInitialized =
+        bPreviousOverrideBaselineInitialized;
+    return false;
+}
+
+bool UUnifiedScriptComponent::ResetAllScriptStateOverrides()
+{
+    const TArray<FGuid> PreviousOverrideIds = ScriptStateOverrideIds;
+    const bool bPreviousOverrideBaselineInitialized =
+        bScriptStateOverrideBaselineInitialized;
+    ScriptStateOverrideIds.Reset();
+    bScriptStateOverrideBaselineInitialized = true;
+    if (RefreshScriptState())
+    {
+        return true;
+    }
+
+    ScriptStateOverrideIds = PreviousOverrideIds;
+    bScriptStateOverrideBaselineInitialized =
+        bPreviousOverrideBaselineInitialized;
+    return false;
 }
 
 UObject* UUnifiedScriptComponent::GetScriptTarget()
@@ -634,14 +775,20 @@ bool UUnifiedScriptComponent::ResolveScriptConfiguration(
 bool UUnifiedScriptComponent::BuildScriptState(
     const UUnifiedScriptAsset* ResolvedAsset,
     const FInstancedPropertyBag& ExistingState,
+    TConstArrayView<FGuid> ExistingOverrideIds,
     FInstancedPropertyBag& OutState,
+    TArray<FGuid>& OutOverrideIds,
+    FUnifiedScriptStateMigrationReport& OutMigration,
     FString& OutDeclarationAssetPath,
     FString& OutError) const
 {
     OutDeclarationAssetPath.Reset();
+    OutOverrideIds.Reset();
+    OutMigration = {};
     if (ResolvedAsset == nullptr)
     {
         OutState.Reset();
+        OutMigration.DroppedOverrideCount = ExistingOverrideIds.Num();
         OutError.Reset();
         return true;
     }
@@ -654,17 +801,71 @@ bool UUnifiedScriptComponent::BuildScriptState(
     if (DeclarationPath.IsEmpty())
     {
         OutState.Reset();
+        OutMigration.DroppedOverrideCount = ExistingOverrideIds.Num();
         OutError.Reset();
         return true;
     }
 
-    return FUnifiedScriptDeclarationMaterializer::MaterializeFile(
+    return FUnifiedScriptDeclarationMaterializer::MaterializeFileWithOverrides(
         ResolveConfiguredPath(DeclarationPath),
         RequestedAssetPath,
         ExistingState,
+        ExistingOverrideIds,
         OutState,
+        OutOverrideIds,
+        OutMigration,
         OutDeclarationAssetPath,
         OutError);
+}
+
+TArray<FGuid> UUnifiedScriptComponent::GetEffectiveScriptStateOverrideIds() const
+{
+    if (bScriptStateOverrideBaselineInitialized)
+    {
+        return ScriptStateOverrideIds;
+    }
+
+    // Components saved before explicit override tracking contained only one bag.
+    // Preserve every compatible legacy value once, then establish the new baseline.
+    TArray<FGuid> LegacyOverrideIds;
+    if (const UPropertyBag* BagStruct = ScriptState.GetPropertyBagStruct())
+    {
+        LegacyOverrideIds.Reserve(BagStruct->GetPropertyDescs().Num());
+        for (const FPropertyBagPropertyDesc& Desc : BagStruct->GetPropertyDescs())
+        {
+            LegacyOverrideIds.Add(Desc.ID);
+        }
+    }
+    return LegacyOverrideIds;
+}
+
+void UUnifiedScriptComponent::MarkScriptStateOverridden(const FGuid& PropertyId)
+{
+    if (!PropertyId.IsValid())
+    {
+        return;
+    }
+
+    if (!bScriptStateOverrideBaselineInitialized)
+    {
+        ScriptStateOverrideIds = GetEffectiveScriptStateOverrideIds();
+        bScriptStateOverrideBaselineInitialized = true;
+    }
+    ScriptStateOverrideIds.AddUnique(PropertyId);
+    MaterializedStateOverrideCount = ScriptStateOverrideIds.Num();
+}
+
+void UUnifiedScriptComponent::ApplyStateMigrationDiagnostics(
+    const FUnifiedScriptStateMigrationReport& Migration)
+{
+    MaterializedStateCount = ScriptState.GetNumPropertiesInBag();
+    MaterializedStateOverrideCount = ScriptStateOverrideIds.Num();
+    LastStateMigration = FString::Printf(
+        TEXT("Declared=%d PreservedOverrides=%d Defaults=%d DroppedOverrides=%d"),
+        Migration.DeclaredStateCount,
+        Migration.PreservedOverrideCount,
+        Migration.DefaultedStateCount,
+        Migration.DroppedOverrideCount);
 }
 
 FString UUnifiedScriptComponent::ResolveConfiguredPath(

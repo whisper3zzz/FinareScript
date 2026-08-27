@@ -49,7 +49,7 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-28**
 
 - Active milestone: **M8 — Visual/C# Authoring Beta**
-- Next slice: **M8.3 — instance overrides and semantic identity migration**
+- Next slice: **M8.4 — whole-game round-trip proof**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -60,12 +60,12 @@ machine-local unless an artifact explicitly says otherwise.
 
 | Gate | Verified result |
 | --- | --- |
-| Main source | `9121b9c` (`feat: add script declaration authoring`), plus this generated Palette metadata change set |
+| Main source | `5ba5bf8` (`feat: drive node palette from reflection metadata`), plus this instance-override migration change set |
 | Comparison source | `489ce9b` (`feat: complete full UnifiedScript migration`) |
-| Managed tests | 506 / 506 passed |
+| Managed tests | 507 / 507 passed |
 | Repository validator | 54 / 54 passed |
 | UE 5.8.1 native build | passed |
-| `UnifiedScript.Unreal` Automation | 13 / 13 passed at the M7.3 onboarding baseline; the migrated BlockBreaker Editor gate and focused M8.3 Authoring Surface gate also passed |
+| `UnifiedScript.Unreal` Automation | 13 / 13 passed with M8.3 declaration, Authoring Surface, override migration, and live World-host coverage |
 | BlockBreaker workload | 10,000 frames, three trials, one shot, one hit, two command completions per trial |
 | Gameplay boundary | 120,031 fast/CallFrame calls, zero legacy calls |
 | Matched local median | UnifiedScript 4,927.191 ms; Puerts 4,759.930 ms; ratio 1.035139; functional parity only, performance claim deferred to M10 |
@@ -832,7 +832,7 @@ M8.3 asset, state, event, and API authoring.
   reflected events, and API nodes without editing generated JSON
 - [x] drive palette categories, tooltips, defaults, latent markers, thread/World
   restrictions, and deprecation from generated reflection metadata
-- [ ] preserve instance overrides and compatible semantic identities across
+- [x] preserve instance overrides and compatible semantic identities across
   rename, reload, source edits, and graph edits
 
 The first M8.3 tranche added native create/update/remove workflows for Script
@@ -843,10 +843,17 @@ Blueprint metadata now deterministically drives title, category, tooltip,
 defaults, deprecation, latent, thread, and World-context policy in Slate. The
 checked-in Demo proves a real reflected default through `AddWithDefault`; latent
 and current void-statement actions remain visible with exact unavailable
-reasons instead of being silently dropped. The 506/506 managed suite, 54/54
-repository invariants, UE 5.8.1 Editor build, and focused native Authoring
-Surface Automation pass. The remaining M8.3 slice is instance override and
-semantic-identity preservation across rename/reload/edit paths.
+reasons instead of being silently dropped. The final tranche separates
+declaration defaults from a serialized set of explicit instance override IDs.
+Unreal now inherits edited defaults for untouched fields, preserves compatible
+overrides through state renames, removes stale or incompatible overrides, and
+restores the prior bag/override set on failed Reload. A managed execution test
+reuses the same state-ID override across a declaration graph rename, body graph
+edit, external C# rename, and four CoreCLR generations. The 507/507 managed
+suite, 54/54 repository invariants, UE 5.8.1 Editor build, and full 13/13 native
+Automation suite pass. M8.3 is complete and the cursor advances to M8.4
+whole-game round-trip proof. See
+[`STATE_OVERRIDE_MIGRATION.md`](STATE_OVERRIDE_MIGRATION.md).
 
 ### M8.4 — Whole-game round-trip proof
 

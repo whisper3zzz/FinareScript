@@ -61,14 +61,19 @@ bool FUnifiedScriptDeclarationMaterializerTest::RunTest(const FString& Parameter
 )JSON");
 
     FInstancedPropertyBag InitialState;
+    TArray<FGuid> InitialOverrideIds;
+    FUnifiedScriptStateMigrationReport InitialMigration;
     FString AssetPath;
     FString Error;
     const bool bInitialMaterialized =
-        FUnifiedScriptDeclarationMaterializer::MaterializeJson(
+        FUnifiedScriptDeclarationMaterializer::MaterializeJsonWithOverrides(
             InitialJson,
             TEXT("Tests/State"),
             FInstancedPropertyBag(),
+            {},
             InitialState,
+            InitialOverrideIds,
+            InitialMigration,
             AssetPath,
             Error);
     TestTrue(
@@ -80,6 +85,8 @@ bool FUnifiedScriptDeclarationMaterializerTest::RunTest(const FString& Parameter
     }
     TestEqual(TEXT("Selected declaration asset is reported"), AssetPath, FString(TEXT("Tests/State")));
     TestEqual(TEXT("Three states are materialized"), InitialState.GetNumPropertiesInBag(), 3);
+    TestEqual(TEXT("Initial values inherit declaration defaults"), InitialMigration.DefaultedStateCount, 3);
+    TestEqual(TEXT("Initial materialization has no overrides"), InitialOverrideIds.Num(), 0);
 
     const auto Damage = InitialState.GetValueInt32(TEXT("Damage"));
     const auto Scale = InitialState.GetValueFloat(TEXT("Scale"));
@@ -127,6 +134,12 @@ bool FUnifiedScriptDeclarationMaterializerTest::RunTest(const FString& Parameter
         TEXT("Instance override can be written"),
         InitialState.SetValueInt32(TEXT("Damage"), 77),
         EPropertyBagResult::Success);
+    TestNotNull(TEXT("Damage can be tracked as an explicit override"), DamageDesc);
+    if (DamageDesc == nullptr)
+    {
+        return false;
+    }
+    InitialOverrideIds.Add(DamageDesc->ID);
 
     const FString ReloadedJson = UTF8_TO_TCHAR(R"JSON(
 {
@@ -156,12 +169,17 @@ bool FUnifiedScriptDeclarationMaterializerTest::RunTest(const FString& Parameter
 )JSON");
 
     FInstancedPropertyBag ReloadedState;
+    TArray<FGuid> ReloadedOverrideIds;
+    FUnifiedScriptStateMigrationReport ReloadedMigration;
     const bool bReloadedMaterialized =
-        FUnifiedScriptDeclarationMaterializer::MaterializeJson(
+        FUnifiedScriptDeclarationMaterializer::MaterializeJsonWithOverrides(
             ReloadedJson,
             TEXT("Tests/State"),
             InitialState,
+            InitialOverrideIds,
             ReloadedState,
+            ReloadedOverrideIds,
+            ReloadedMigration,
             AssetPath,
             Error);
     TestTrue(
@@ -172,6 +190,10 @@ bool FUnifiedScriptDeclarationMaterializerTest::RunTest(const FString& Parameter
         return false;
     }
     TestEqual(TEXT("Removed states leave the bag"), ReloadedState.GetNumPropertiesInBag(), 2);
+    TestEqual(TEXT("One explicit override survives"), ReloadedMigration.PreservedOverrideCount, 1);
+    TestEqual(TEXT("New state inherits its default"), ReloadedMigration.DefaultedStateCount, 1);
+    TestEqual(TEXT("Removed non-overrides need no drop"), ReloadedMigration.DroppedOverrideCount, 0);
+    TestEqual(TEXT("Stable override identity remains explicit"), ReloadedOverrideIds.Num(), 1);
     const auto RenamedDamage = ReloadedState.GetValueInt32(TEXT("RenamedDamage"));
     const auto Enabled = ReloadedState.GetValueBool(TEXT("Enabled"));
     TestTrue(TEXT("Renamed state remains readable"), RenamedDamage.IsValid());
@@ -186,15 +208,114 @@ bool FUnifiedScriptDeclarationMaterializerTest::RunTest(const FString& Parameter
     }
     TestFalse(TEXT("Old state name is removed"), ReloadedState.GetValueInt32(TEXT("Damage")).IsValid());
 
+    const FString ChangedDefaultsJson = UTF8_TO_TCHAR(R"JSON(
+{
+  "schemaVersion": "unifiedscript.script-asset/v0.1",
+  "assets": [{
+    "assetPath": "Tests/State",
+    "states": [
+      {
+        "id": "us_11111111111111111111111111111111",
+        "name": "RenamedDamage",
+        "typeMetadataName": "System.Int32",
+        "typeKind": "integer",
+        "defaultValue": 123,
+        "exposure": { "instanceEditable": true }
+      },
+      {
+        "id": "us_44444444444444444444444444444444",
+        "name": "Enabled",
+        "typeMetadataName": "System.Boolean",
+        "typeKind": "boolean",
+        "defaultValue": false,
+        "exposure": { "instanceEditable": true }
+      }
+    ]
+  }]
+}
+)JSON");
+    FInstancedPropertyBag ChangedDefaultsState;
+    TArray<FGuid> ChangedDefaultsOverrideIds;
+    FUnifiedScriptStateMigrationReport ChangedDefaultsMigration;
+    TestTrue(
+        TEXT("Changed declaration defaults rematerialize"),
+        FUnifiedScriptDeclarationMaterializer::MaterializeJsonWithOverrides(
+            ChangedDefaultsJson,
+            TEXT("Tests/State"),
+            ReloadedState,
+            ReloadedOverrideIds,
+            ChangedDefaultsState,
+            ChangedDefaultsOverrideIds,
+            ChangedDefaultsMigration,
+            AssetPath,
+            Error));
+    const auto PreservedDamage = ChangedDefaultsState.GetValueInt32(TEXT("RenamedDamage"));
+    const auto ChangedEnabled = ChangedDefaultsState.GetValueBool(TEXT("Enabled"));
+    TestTrue(TEXT("Explicit override remains readable after a default edit"), PreservedDamage.IsValid());
+    TestTrue(TEXT("Inherited value remains readable after a default edit"), ChangedEnabled.IsValid());
+    if (PreservedDamage.IsValid())
+    {
+        TestEqual(TEXT("Explicit override ignores the new default"), PreservedDamage.GetValue(), 77);
+    }
+    if (ChangedEnabled.IsValid())
+    {
+        TestFalse(TEXT("Untouched instance adopts the new C# default"), ChangedEnabled.GetValue());
+    }
+
+    const FString IncompatibleTypeJson = UTF8_TO_TCHAR(R"JSON(
+{
+  "schemaVersion": "unifiedscript.script-asset/v0.1",
+  "assets": [{
+    "assetPath": "Tests/State",
+    "states": [{
+      "id": "us_11111111111111111111111111111111",
+      "name": "DamageAsFloat",
+      "typeMetadataName": "System.Single",
+      "typeKind": "floatingPoint",
+      "defaultValue": 1.25,
+      "exposure": { "instanceEditable": true }
+    }]
+  }]
+}
+)JSON");
+    FInstancedPropertyBag IncompatibleState;
+    TArray<FGuid> IncompatibleOverrideIds;
+    FUnifiedScriptStateMigrationReport IncompatibleMigration;
+    TestTrue(
+        TEXT("Incompatible declaration type rematerializes safely"),
+        FUnifiedScriptDeclarationMaterializer::MaterializeJsonWithOverrides(
+            IncompatibleTypeJson,
+            TEXT("Tests/State"),
+            ChangedDefaultsState,
+            ChangedDefaultsOverrideIds,
+            IncompatibleState,
+            IncompatibleOverrideIds,
+            IncompatibleMigration,
+            AssetPath,
+            Error));
+    const auto DamageAsFloat = IncompatibleState.GetValueFloat(TEXT("DamageAsFloat"));
+    TestTrue(TEXT("Changed type receives its new declaration value"), DamageAsFloat.IsValid());
+    if (DamageAsFloat.IsValid())
+    {
+        TestEqual(TEXT("Incompatible override falls back to the new default"), DamageAsFloat.GetValue(), 1.25f);
+    }
+    TestEqual(TEXT("Incompatible override is explicitly dropped"), IncompatibleMigration.DroppedOverrideCount, 1);
+    TestEqual(TEXT("Dropped override no longer remains active"), IncompatibleOverrideIds.Num(), 0);
+
     FInstancedPropertyBag FailedOutput = ReloadedState;
+    TArray<FGuid> FailedOverrideIds = ReloadedOverrideIds;
+    FUnifiedScriptStateMigrationReport FailedMigration = ReloadedMigration;
     const int32 BeforeFailure = RenamedDamage.IsValid() ? RenamedDamage.GetValue() : 0;
     TestFalse(
         TEXT("Invalid declaration is rejected"),
-        FUnifiedScriptDeclarationMaterializer::MaterializeJson(
+        FUnifiedScriptDeclarationMaterializer::MaterializeJsonWithOverrides(
             TEXT("{ not-json"),
             TEXT("Tests/State"),
             ReloadedState,
+            ReloadedOverrideIds,
             FailedOutput,
+            FailedOverrideIds,
+            FailedMigration,
             AssetPath,
             Error));
     const auto ValueAfterFailure = FailedOutput.GetValueInt32(TEXT("RenamedDamage"));
@@ -206,6 +327,8 @@ bool FUnifiedScriptDeclarationMaterializerTest::RunTest(const FString& Parameter
             ValueAfterFailure.GetValue(),
             BeforeFailure);
     }
+    TestEqual(TEXT("Failure keeps active override identities"), FailedOverrideIds.Num(), 1);
+    TestEqual(TEXT("Failure keeps the previous migration report"), FailedMigration.PreservedOverrideCount, 1);
     TestTrue(TEXT("Invalid JSON returns a useful error"), !Error.IsEmpty());
     return true;
 }

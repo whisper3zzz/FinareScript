@@ -735,6 +735,24 @@ try {
         }
     }
 
+    if ($ValidateOnly -and $sdkLayout -eq 'repository') {
+        Invoke-OnboardingPhase -Name 'managed-toolchain-validation' -Action {
+            Invoke-LoggedCommand `
+                -FilePath $resolved.dotnet `
+                -Arguments @(
+                    'build', $cliProject,
+                    '-c', $resolved.managedConfiguration,
+                    '--nologo') `
+                -LogPath (Join-Path $script:RunDirectory 'managed-toolchain-validation.log') `
+                -FailureCode 'USONB2101' `
+                -FailureMessage 'Current repository CLI build failed before validation.'
+            Assert-RequiredPath `
+                -Path $cliAssembly `
+                -Label 'Current repository CLI assembly' `
+                -Code 'USONB2101'
+        }
+    }
+
     if (-not $ValidateOnly) {
         Invoke-OnboardingPhase -Name 'managed-toolchain' -Action {
             New-Item -ItemType Directory -Force -Path $resolved.managedStage | Out-Null

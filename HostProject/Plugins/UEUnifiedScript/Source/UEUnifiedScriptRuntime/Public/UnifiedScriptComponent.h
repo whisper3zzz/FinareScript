@@ -7,6 +7,8 @@
 
 class UUnifiedScriptAsset;
 class AActor;
+struct FPropertyChangedChainEvent;
+struct FUnifiedScriptStateMigrationReport;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
     FUnifiedScriptManagedSignal,
@@ -64,6 +66,14 @@ public:
     UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category="UnifiedScript")
     int32 MaterializedStateCount = 0;
 
+    /** Number of state values explicitly overridden by this component instance. */
+    UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category="UnifiedScript|State")
+    int32 MaterializedStateOverrideCount = 0;
+
+    /** Summary of the last declaration/default/override reconciliation. */
+    UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category="UnifiedScript|State")
+    FString LastStateMigration;
+
     /** Script-controlled diagnostic state used by the first hosted demo. */
     UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Transient, Category="UnifiedScript|Runtime")
     FString ManagedState;
@@ -96,6 +106,17 @@ public:
     UFUNCTION(BlueprintCallable, Category="UnifiedScript|State")
     bool SetScriptStateInt32(const FString& Name, int32 Value);
 
+    UFUNCTION(BlueprintPure, Category="UnifiedScript|State")
+    bool IsScriptStateOverridden(const FString& Name) const;
+
+    /** Restores one state to the current C# declaration default. */
+    UFUNCTION(BlueprintCallable, CallInEditor, Category="UnifiedScript|State")
+    bool ResetScriptStateOverride(const FString& Name);
+
+    /** Restores every state to the current C# declaration defaults. */
+    UFUNCTION(BlueprintCallable, CallInEditor, Category="UnifiedScript|State")
+    bool ResetAllScriptStateOverrides();
+
     /** UObject whose behavior is implemented by the managed script. */
     UFUNCTION(BlueprintPure, Category="UnifiedScript")
     UObject* GetScriptTarget();
@@ -114,6 +135,10 @@ public:
         float DeltaTime,
         ELevelTick TickType,
         FActorComponentTickFunction* ThisTickFunction) override;
+#if WITH_EDITOR
+    virtual void PostEditChangeChainProperty(
+        FPropertyChangedChainEvent& PropertyChangedEvent) override;
+#endif
 
 private:
     UFUNCTION()
@@ -134,14 +159,29 @@ private:
     bool BuildScriptState(
         const UUnifiedScriptAsset* ResolvedAsset,
         const FInstancedPropertyBag& ExistingState,
+        TConstArrayView<FGuid> ExistingOverrideIds,
         FInstancedPropertyBag& OutState,
+        TArray<FGuid>& OutOverrideIds,
+        FUnifiedScriptStateMigrationReport& OutMigration,
         FString& OutDeclarationAssetPath,
         FString& OutError) const;
+    TArray<FGuid> GetEffectiveScriptStateOverrideIds() const;
+    void MarkScriptStateOverridden(const FGuid& PropertyId);
+    void ApplyStateMigrationDiagnostics(
+        const FUnifiedScriptStateMigrationReport& Migration);
     FString ResolveConfiguredPath(const FString& ConfiguredPath) const;
     void SetScriptFailure(FString Error);
 
     UPROPERTY(Transient)
     TObjectPtr<UUnifiedScriptAsset> ActiveScriptAsset;
+
+    /** Stable declaration IDs explicitly overridden on this component instance. */
+    UPROPERTY()
+    TArray<FGuid> ScriptStateOverrideIds;
+
+    /** Distinguishes new components from legacy bags that predate override tracking. */
+    UPROPERTY()
+    bool bScriptStateOverrideBaselineInitialized = false;
 
     FString ActiveResolvedAssemblyPath;
     FString ActiveResolvedTypeName;

@@ -9,10 +9,11 @@ M7.2 gameplay services/lifecycle productization, and M7.3 schema-generated
 gameplay data plane without adding UE dependencies to the compiler core. M7.4
 then completed the full BlockBreaker migration with exact inventory coverage
 and no Puerts/TypeScript payload in the target project or package. The active
-RoadMap cursor is the final M8.3 identity/override tranche after completing
-native Script Asset declaration editing and generated-reflection-driven API
-Palette metadata on top of the M8.2 Palette, Pin, Canvas, Advanced Details,
-diagnostics, exact Diff, safe quick-fix, and rollback-receipt tranches.
+RoadMap cursor is M8.4 whole-game round-trip proof after completing M8.3 native
+Script Asset declaration editing, generated-reflection-driven API Palette
+metadata, and stable-ID instance override migration on top of the M8.2 Palette,
+Pin, Canvas, Advanced Details, diagnostics, exact Diff, safe quick-fix, and
+rollback-receipt tranches.
 
 ## Product roadmap
 
@@ -443,9 +444,12 @@ member. The generated path performs direct typed access/calls without
 `FProperty`, parameter buffers, or `ProcessEvent`.
 Phase B.13 closes the first declaration-to-engine loop: a Script Asset can point
 at emitted `.asset.json`, and the component materializes `[Expose]` state into a
-fixed-layout `FInstancedPropertyBag` in Details. Stable declaration IDs preserve
-compatible instance overrides across field renames and Reload; invalid JSON or
-managed reload failure leaves the previous state and generation intact.
+fixed-layout `FInstancedPropertyBag` in Details. M8.3 completes that path with a
+serialized set of explicit override IDs: untouched instances adopt new C#
+defaults, compatible overrides survive field renames and Reload, and removed or
+incompatible overrides fall back safely. Invalid JSON or managed reload failure
+leaves the previous state, override set, and generation intact. See
+[Script State override migration](docs/STATE_OVERRIDE_MIGRATION.md).
 Phase B.14 adds the first native Slate authoring workspace. The Tools menu opens
 an Authoring Surface browser that can load the checked-in demo, a file, or
 the `AuthoringSurfacePath` of the selected Script Asset. It preserves semantic
@@ -623,7 +627,8 @@ Assign that asset to `UnifiedScriptComponent.Script Asset`. With automatic Start
 and Tick enabled, PIE drives managed `OnStart`, `OnTick`, reload generations,
 and `OnStop`. `Refresh Script State` makes C# defaults editable in the component
 Details panel; the verified demo overrides `InitialValue` to `37`, reads it from
-managed code through generated native thunks, and retains it on Reload. The
+managed code through generated native thunks, retains it on Reload, and can
+reset either one field or the whole instance to current C# defaults. The
 component's direct assembly/type fields remain an advanced compatibility fallback.
 
 The v0.2 profile accepts `[Visual]` methods containing local variables,

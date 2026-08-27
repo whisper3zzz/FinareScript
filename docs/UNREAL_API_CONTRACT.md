@@ -135,10 +135,10 @@ Functions with more than four parameters use the generic ABI v3 CallFrame
 path, including names and enums. Fixed signatures with zero to four parameters
 retain the specialized fast path.
 
-The current runtime product contract selects 98 members across seven generated
+The current runtime product contract selects 103 members across seven generated
 types. It includes the World static-service surface and a supported 17-field
-`FHitResult` projection, producing 24 direct thunks, 72 CallFrame members, two
-safe delegate fallbacks, 96 native paths, and zero rejected members. Operations
+`FHitResult` projection, producing 25 direct thunks, 76 CallFrame members, two
+safe delegate fallbacks, 101 native paths, and zero rejected members. Operations
 that suspend across frames use Async Service ABI v5 instead of pretending to be
 synchronous reflected calls.
 

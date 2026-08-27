@@ -150,6 +150,12 @@ same-shape matches allocate a new ID rather than guessing. State entries use
 `kind: "state"` and participate in the same tombstone rules as executable HIR
 nodes.
 
+Unreal uses the resulting state ID as the Property Bag descriptor GUID and
+stores instance override membership separately from the values. This lets an
+untouched instance inherit a changed declaration default while a compatible
+override survives a declaration/graph/source rename and CoreCLR Reload. See
+[STATE_OVERRIDE_MIGRATION.md](STATE_OVERRIDE_MIGRATION.md).
+
 ## CLI and prototype
 
 `analyze` and `analyze-files` write `<base>.asset.json` next to HIR, semantics,

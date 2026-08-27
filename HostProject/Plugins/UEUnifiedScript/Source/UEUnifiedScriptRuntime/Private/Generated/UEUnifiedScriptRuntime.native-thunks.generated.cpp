@@ -496,11 +496,19 @@ bool UE::UnifiedScript::Generated::DescribeReadResult(
         OutKind = EUnifiedScriptValueKind::String;
         OutTypeId = 0ull;
         return true;
+    case 0x2A42C838D1FD59F8ull:
+        OutKind = EUnifiedScriptValueKind::String;
+        OutTypeId = 0ull;
+        return true;
     case 0x31BC2AC640227065ull:
         OutKind = EUnifiedScriptValueKind::String;
         OutTypeId = 0ull;
         return true;
     case 0xB31F5AE7DDA6C984ull:
+        OutKind = EUnifiedScriptValueKind::Int32;
+        OutTypeId = 0ull;
+        return true;
+    case 0x3BDE2DA074EE0E4Cull:
         OutKind = EUnifiedScriptValueKind::Int32;
         OutTypeId = 0ull;
         return true;
@@ -645,6 +653,9 @@ bool UE::UnifiedScript::Generated::DescribeInvokeResultCount(
     case 0x4F4C123F422ED5A3ull:
         OutResultCount = 1;
         return true;
+    case 0x8FBE1F4174AB3EE9ull:
+        OutResultCount = 1;
+        return true;
     case 0xBF8089C66CEB80D6ull:
         OutResultCount = 1;
         return true;
@@ -653,6 +664,12 @@ bool UE::UnifiedScript::Generated::DescribeInvokeResultCount(
         return true;
     case 0x9FD30761744D70A1ull:
         OutResultCount = 0;
+        return true;
+    case 0xC347BF5BD20AACE0ull:
+        OutResultCount = 1;
+        return true;
+    case 0xE4D627E6665CDEA2ull:
+        OutResultCount = 1;
         return true;
     case 0xF83092B1E5E45D7Dull:
         OutResultCount = 1;
@@ -831,6 +848,16 @@ bool UE::UnifiedScript::Generated::DescribeInvokeResult(
         default:
             return false;
         }
+    case 0x8FBE1F4174AB3EE9ull:
+        switch (ResultIndex)
+        {
+        case 0:
+            OutKind = EUnifiedScriptValueKind::Boolean;
+            OutTypeId = 0ull;
+            return true;
+        default:
+            return false;
+        }
     case 0xBF8089C66CEB80D6ull:
         switch (ResultIndex)
         {
@@ -853,6 +880,26 @@ bool UE::UnifiedScript::Generated::DescribeInvokeResult(
         }
     case 0x9FD30761744D70A1ull:
         return false;
+    case 0xC347BF5BD20AACE0ull:
+        switch (ResultIndex)
+        {
+        case 0:
+            OutKind = EUnifiedScriptValueKind::Boolean;
+            OutTypeId = 0ull;
+            return true;
+        default:
+            return false;
+        }
+    case 0xE4D627E6665CDEA2ull:
+        switch (ResultIndex)
+        {
+        case 0:
+            OutKind = EUnifiedScriptValueKind::Boolean;
+            OutTypeId = 0ull;
+            return true;
+        default:
+            return false;
+        }
     case 0xF83092B1E5E45D7Dull:
         switch (ResultIndex)
         {
@@ -1268,6 +1315,17 @@ bool UE::UnifiedScript::Generated::ReadProperty(
         Succeed(OutResult);
         return true;
     }
+    case 0x2A42C838D1FD59F8ull:
+    {
+        UUnifiedScriptComponent* TypedTarget = ResolveTarget<UUnifiedScriptComponent>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutValue = FUnifiedScriptValue::FromString(TypedTarget->LastStateMigration);
+        Succeed(OutResult);
+        return true;
+    }
     case 0x31BC2AC640227065ull:
     {
         UUnifiedScriptComponent* TypedTarget = ResolveTarget<UUnifiedScriptComponent>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent"), OutResult);
@@ -1287,6 +1345,17 @@ bool UE::UnifiedScript::Generated::ReadProperty(
             return false;
         }
         OutValue = FUnifiedScriptValue::FromInt32(TypedTarget->MaterializedStateCount);
+        Succeed(OutResult);
+        return true;
+    }
+    case 0x3BDE2DA074EE0E4Cull:
+    {
+        UUnifiedScriptComponent* TypedTarget = ResolveTarget<UUnifiedScriptComponent>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutValue = FUnifiedScriptValue::FromInt32(TypedTarget->MaterializedStateOverrideCount);
         Succeed(OutResult);
         return true;
     }
@@ -1674,6 +1743,13 @@ bool UE::UnifiedScript::Generated::WriteProperty(
             EUnifiedScriptInvocationError::PropertyNotWritable,
             TEXT("Generated native property is read-only."));
     }
+    case 0x2A42C838D1FD59F8ull:
+    {
+        return Fail(
+            OutResult,
+            EUnifiedScriptInvocationError::PropertyNotWritable,
+            TEXT("Generated native property is read-only."));
+    }
     case 0x31BC2AC640227065ull:
     {
         UUnifiedScriptComponent* TypedTarget = ResolveTarget<UUnifiedScriptComponent>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent"), OutResult);
@@ -1694,6 +1770,13 @@ bool UE::UnifiedScript::Generated::WriteProperty(
         return true;
     }
     case 0xB31F5AE7DDA6C984ull:
+    {
+        return Fail(
+            OutResult,
+            EUnifiedScriptInvocationError::PropertyNotWritable,
+            TEXT("Generated native property is read-only."));
+    }
+    case 0x3BDE2DA074EE0E4Cull:
     {
         return Fail(
             OutResult,
@@ -2456,6 +2539,31 @@ bool UE::UnifiedScript::Generated::Invoke(
         Succeed(OutResult);
         return true;
     }
+    case 0x8FBE1F4174AB3EE9ull:
+    {
+        if (!RequireArgumentCount(Arguments, 1, OutResult))
+        {
+            return false;
+        }
+        UUnifiedScriptComponent* TypedTarget = ResolveTarget<UUnifiedScriptComponent>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        FString Argument0 = {};
+        if (!Arguments[0].TryGetString(Argument0))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:IsScriptStateOverridden' received an incompatible value."));
+        }
+        bool ReturnValue = TypedTarget->IsScriptStateOverridden(Argument0);
+        OutReturnValue = FUnifiedScriptValue::FromBoolean(ReturnValue);
+        Succeed(OutResult);
+        return true;
+    }
     case 0xBF8089C66CEB80D6ull:
     {
         if (!RequireArgumentCount(Arguments, 0, OutResult))
@@ -2504,6 +2612,48 @@ bool UE::UnifiedScript::Generated::Invoke(
         OutOutputValues.Reset();
         TypedTarget->RequestReload();
         OutReturnValue = {};
+        Succeed(OutResult);
+        return true;
+    }
+    case 0xC347BF5BD20AACE0ull:
+    {
+        if (!RequireArgumentCount(Arguments, 0, OutResult))
+        {
+            return false;
+        }
+        UUnifiedScriptComponent* TypedTarget = ResolveTarget<UUnifiedScriptComponent>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        bool ReturnValue = TypedTarget->ResetAllScriptStateOverrides();
+        OutReturnValue = FUnifiedScriptValue::FromBoolean(ReturnValue);
+        Succeed(OutResult);
+        return true;
+    }
+    case 0xE4D627E6665CDEA2ull:
+    {
+        if (!RequireArgumentCount(Arguments, 1, OutResult))
+        {
+            return false;
+        }
+        UUnifiedScriptComponent* TypedTarget = ResolveTarget<UUnifiedScriptComponent>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        FString Argument0 = {};
+        if (!Arguments[0].TryGetString(Argument0))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ResetScriptStateOverride' received an incompatible value."));
+        }
+        bool ReturnValue = TypedTarget->ResetScriptStateOverride(Argument0);
+        OutReturnValue = FUnifiedScriptValue::FromBoolean(ReturnValue);
         Succeed(OutResult);
         return true;
     }
@@ -3893,6 +4043,30 @@ bool UE::UnifiedScript::Generated::InvokeFixed(
                 TEXT("Generated fixed thunk result descriptor is incompatible."));
         }
         TypedTarget->RequestReload();
+        Succeed(OutResult);
+        return true;
+    }
+    case 0xC347BF5BD20AACE0ull:
+    {
+        if (Arguments.Num() != 0)
+        {
+            return Fail(OutResult, EUnifiedScriptInvocationError::ArgumentCountMismatch,
+                TEXT("Generated fixed thunk requires 0 arguments."));
+        }
+        UUnifiedScriptComponent* TypedTarget = ResolveTarget<UUnifiedScriptComponent>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        if (OutReturnValue == nullptr || OutReturnValue->Kind != EUnifiedScriptNativeValueKindV3::Boolean)
+        {
+            return Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated fixed thunk result descriptor is incompatible."));
+        }
+        bool ReturnValue = TypedTarget->ResetAllScriptStateOverrides();
+        (*OutReturnValue) = {};
+        (*OutReturnValue).Kind = EUnifiedScriptNativeValueKindV3::Boolean;
+        (*OutReturnValue).Payload0 = ReturnValue ? 1 : 0;
         Succeed(OutResult);
         return true;
     }

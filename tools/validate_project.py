@@ -61,6 +61,7 @@ DOCUMENTS = [
     ROOT / "docs" / "BREAKPOINT_RELOAD.md",
     ROOT / "docs" / "PROJECT_LOADING.md",
     ROOT / "docs" / "DECLARATION_IR.md",
+    ROOT / "docs" / "STATE_OVERRIDE_MIGRATION.md",
     ROOT / "docs" / "VISUAL_AUTHORING_MODEL.md",
     ROOT / "docs" / "AUTHORING_SURFACE.md",
     ROOT / "docs" / "NODE_PALETTE.md",
@@ -307,6 +308,8 @@ def main() -> int:
         and coverage_summary["deferredTypeCount"] == 0
         and "EngineAssociation" in onboarding_script
         and "ValidateOnly" in onboarding_script
+        and "managed-toolchain-validation" in onboarding_script
+        and "Current repository CLI build failed before validation" in onboarding_script
         and "unifiedscript.unreal-project-onboarding-report/v0.1" in onboarding_script
         and "Assert-GeneratedFileMatches" in onboarding_script
         and "UnifiedScriptSyncAssets" in onboarding_script
@@ -1675,6 +1678,9 @@ def main() -> int:
     unreal_declaration_materializer_test = (
         unreal_declaration_materializer_test_path.read_text(encoding="utf-8")
     )
+    managed_reload_domain_test = (
+        ROOT / "tests" / "UnifiedScript.Tests" / "CoreClrReloadDomainTests.cs"
+    ).read_text(encoding="utf-8")
     unreal_exporter = unreal_exporter_path.read_text(encoding="utf-8")
     unreal_bindings = unreal_bindings_path.read_text(encoding="utf-8")
     unreal_native_thunk_generator = unreal_native_thunk_generator_path.read_text(
@@ -1956,8 +1962,10 @@ def main() -> int:
             "ActiveDeclarationAssetPath",
             "ActiveScriptAssetPath",
             "LastScriptError",
+            "LastStateMigration",
             "ManagedState",
             "MaterializedStateCount",
+            "MaterializedStateOverrideCount",
             "ScriptAssemblyPath",
             "ScriptAssetPath",
             "ScriptTypeName",
@@ -1971,9 +1979,12 @@ def main() -> int:
             "BroadcastManagedSignal",
             "GetScriptStateInt32",
             "GetScriptTarget",
+            "IsScriptStateOverridden",
             "RefreshScriptState",
             "ReloadScript",
             "RequestReload",
+            "ResetAllScriptStateOverrides",
+            "ResetScriptStateOverride",
             "SetScriptStateInt32",
             "StartScript",
             "StopScript",
@@ -2558,8 +2569,7 @@ def main() -> int:
         and "puertsOrTypeScriptPackageFiles" in blockbreaker_package_runner
         and "### M7.4 — Full BlockBreaker runtime migration" in roadmap
         and "- [x] inventory all Puerts scripts" in roadmap
-        and "Next slice: **M8.3 — instance overrides and semantic identity migration**"
-        in roadmap,
+        and "### M8.3 — Asset, state, event, and API authoring" in roadmap,
         "M7.4 whole-project Puerts inventory, coverage, or migration gates are incomplete",
     )
     checks.append("M7.4 BlockBreaker migration has exact coverage and zero legacy payload gates")
@@ -2744,13 +2754,26 @@ def main() -> int:
         and "FixedLayout" in unreal_component
         and "RefreshScriptState" in unreal_component
         and "GetScriptStateInt32" in unreal_component
+        and "ScriptStateOverrideIds" in unreal_component
+        and "ResetScriptStateOverride" in unreal_component
+        and "ResetAllScriptStateOverrides" in unreal_component
+        and "MaterializedStateOverrideCount" in unreal_component
         and "MaterializeJson" in unreal_declaration_materializer_header
-        and "MigrateToNewBagInstance" in unreal_declaration_materializer_source
+        and "FUnifiedScriptStateMigrationReport"
+        in unreal_declaration_materializer_header
+        and "MigrateToNewBagInstanceWithOverrides"
+        in unreal_declaration_materializer_source
         and "ParseSemanticId" in unreal_declaration_materializer_source
         and "UnifiedScript.Unreal.Declaration.Materialization"
         in unreal_declaration_materializer_test
         and "Stable semantic ID preserves override across rename"
         in unreal_declaration_materializer_test
+        and "Untouched instance adopts the new C# default"
+        in unreal_declaration_materializer_test
+        and "Incompatible override falls back to the new default"
+        in unreal_declaration_materializer_test
+        and "Reload_PreservesInstanceOverrideIdentityAcrossGraphAndSourceEdits"
+        in managed_reload_domain_test
         and unreal_demo_declaration["schemaVersion"]
         == "unifiedscript.script-asset/v0.1"
         and unreal_demo_declaration["assets"][0]["assetPath"] == "Unreal/Demo"
@@ -2758,7 +2781,14 @@ def main() -> int:
         == "InitialValue"
         and "[ScriptAsset(\"Unreal/Demo\")]" in unreal_demo_source
         and "GetScriptStateInt32" in unreal_demo_source
-        and "DeclarationState=37" in unreal_world_host_test,
+        and "DeclarationState=37" in unreal_world_host_test
+        and "Reset restores the current declaration default"
+        in unreal_world_host_test
+        and "Dropped override is observable after asset replacement"
+        in unreal_world_host_test
+        and "- [x] preserve instance overrides and compatible semantic identities"
+        in roadmap
+        and "Next slice: **M8.4 — whole-game round-trip proof**" in roadmap,
         "Declaration IR state materialization or live component integration is missing",
     )
     checks.append("UE component materializes Declaration IR state with stable-ID migration")
@@ -3003,8 +3033,7 @@ def main() -> int:
         and "Failure explicitly confirms unchanged rollback" in unreal_authoring_test
         and "mismatched preview token" in authoring_diagnostics_doc
         and "- [x] provide compiler/contract diagnostics" in roadmap
-        and "Next slice: **M8.3 — instance overrides and semantic identity migration**"
-        in roadmap,
+        and "### M8.3 — Asset, state, event, and API authoring" in roadmap,
         "Native prepared Diff, structured diagnostics, safe fixes, or rollback receipt is incomplete",
     )
     checks.append(

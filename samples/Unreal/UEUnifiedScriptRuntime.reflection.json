@@ -469,6 +469,29 @@
 					}
 				},
 				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:LastStateMigration",
+					"name": "LastStateMigration",
+					"type":
+					{
+						"kind": "string",
+						"nativeName": "FString"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": false,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Last State Migration",
+						"category": "UnifiedScript|State",
+						"tooltip": "Summary of the last declaration/default/override reconciliation.",
+						"deprecated": false
+					}
+				},
+				{
 					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ManagedState",
 					"name": "ManagedState",
 					"type":
@@ -510,6 +533,29 @@
 					{
 						"displayName": "Materialized State Count",
 						"category": "UnifiedScript",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:MaterializedStateOverrideCount",
+					"name": "MaterializedStateOverrideCount",
+					"type":
+					{
+						"kind": "int32",
+						"nativeName": "int32"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": false,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Materialized State Override Count",
+						"category": "UnifiedScript|State",
+						"tooltip": "Number of state values explicitly overridden by this component instance.",
 						"deprecated": false
 					}
 				},
@@ -790,6 +836,40 @@
 					}
 				},
 				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:IsScriptStateOverridden",
+					"name": "IsScriptStateOverridden",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [
+						{
+							"name": "Name",
+							"type":
+							{
+								"kind": "string",
+								"nativeName": "FString"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Is Script State Overridden",
+						"category": "UnifiedScript|State",
+						"tooltip": "Is Script State Overridden",
+						"deprecated": false
+					}
+				},
+				{
 					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:RefreshScriptState",
 					"name": "RefreshScriptState",
 					"returnType":
@@ -858,6 +938,64 @@
 						"displayName": "Request Reload",
 						"category": "UnifiedScript",
 						"tooltip": "Request Reload",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ResetAllScriptStateOverrides",
+					"name": "ResetAllScriptStateOverrides",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Reset All Script State Overrides",
+						"category": "UnifiedScript|State",
+						"tooltip": "Restores every state to the current C# declaration defaults.",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ResetScriptStateOverride",
+					"name": "ResetScriptStateOverride",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [
+						{
+							"name": "Name",
+							"type":
+							{
+								"kind": "string",
+								"nativeName": "FString"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Reset Script State Override",
+						"category": "UnifiedScript|State",
+						"tooltip": "Restores one state to the current C# declaration default.",
 						"deprecated": false
 					}
 				},

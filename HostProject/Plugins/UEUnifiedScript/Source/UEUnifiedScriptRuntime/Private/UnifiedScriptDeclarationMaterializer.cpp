@@ -190,6 +190,20 @@ bool SelectAsset(
             *RequestedAssetPath);
     return false;
 }
+
+TArray<FGuid> CollectAllPropertyIds(const FInstancedPropertyBag& Bag)
+{
+    TArray<FGuid> Result;
+    if (const UPropertyBag* BagStruct = Bag.GetPropertyBagStruct())
+    {
+        Result.Reserve(BagStruct->GetPropertyDescs().Num());
+        for (const FPropertyBagPropertyDesc& Desc : BagStruct->GetPropertyDescs())
+        {
+            Result.Add(Desc.ID);
+        }
+    }
+    return Result;
+}
 }
 
 bool FUnifiedScriptDeclarationMaterializer::MaterializeFile(
@@ -218,11 +232,71 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeFile(
         OutError);
 }
 
+bool FUnifiedScriptDeclarationMaterializer::MaterializeFileWithOverrides(
+    const FString& DeclarationPath,
+    const FString& RequestedAssetPath,
+    const FInstancedPropertyBag& ExistingState,
+    TConstArrayView<FGuid> ExistingOverrideIds,
+    FInstancedPropertyBag& OutState,
+    TArray<FGuid>& OutOverrideIds,
+    FUnifiedScriptStateMigrationReport& OutMigration,
+    FString& OutAssetPath,
+    FString& OutError)
+{
+    FString Json;
+    if (!IFileManager::Get().FileExists(*DeclarationPath) ||
+        !FFileHelper::LoadFileToString(Json, *DeclarationPath))
+    {
+        OutError = FString::Printf(
+            TEXT("The Script Asset declaration does not exist or cannot be read: '%s'."),
+            *DeclarationPath);
+        return false;
+    }
+    return MaterializeJsonWithOverrides(
+        Json,
+        RequestedAssetPath,
+        ExistingState,
+        ExistingOverrideIds,
+        OutState,
+        OutOverrideIds,
+        OutMigration,
+        OutAssetPath,
+        OutError);
+}
+
 bool FUnifiedScriptDeclarationMaterializer::MaterializeJson(
     const FString& DeclarationJson,
     const FString& RequestedAssetPath,
     const FInstancedPropertyBag& ExistingState,
     FInstancedPropertyBag& OutState,
+    FString& OutAssetPath,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::Declaration::Private;
+
+    const TArray<FGuid> LegacyOverrideIds = CollectAllPropertyIds(ExistingState);
+    TArray<FGuid> MigratedOverrideIds;
+    FUnifiedScriptStateMigrationReport Migration;
+    return MaterializeJsonWithOverrides(
+        DeclarationJson,
+        RequestedAssetPath,
+        ExistingState,
+        LegacyOverrideIds,
+        OutState,
+        MigratedOverrideIds,
+        Migration,
+        OutAssetPath,
+        OutError);
+}
+
+bool FUnifiedScriptDeclarationMaterializer::MaterializeJsonWithOverrides(
+    const FString& DeclarationJson,
+    const FString& RequestedAssetPath,
+    const FInstancedPropertyBag& ExistingState,
+    TConstArrayView<FGuid> ExistingOverrideIds,
+    FInstancedPropertyBag& OutState,
+    TArray<FGuid>& OutOverrideIds,
+    FUnifiedScriptStateMigrationReport& OutMigration,
     FString& OutAssetPath,
     FString& OutError)
 {
@@ -388,6 +462,30 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeJson(
         }
     }
 
+    TSet<FGuid> RequestedOverrideIds;
+    RequestedOverrideIds.Reserve(ExistingOverrideIds.Num());
+    for (const FGuid& ExistingOverrideId : ExistingOverrideIds)
+    {
+        RequestedOverrideIds.Add(ExistingOverrideId);
+    }
+
+    TArray<FGuid> CompatibleOverrideIds;
+    CompatibleOverrideIds.Reserve(RequestedOverrideIds.Num());
+    for (const FPropertyBagPropertyDesc& TargetDesc : Descs)
+    {
+        if (!RequestedOverrideIds.Contains(TargetDesc.ID))
+        {
+            continue;
+        }
+
+        const FPropertyBagPropertyDesc* ExistingDesc =
+            ExistingState.FindPropertyDescByID(TargetDesc.ID);
+        if (ExistingDesc != nullptr && TargetDesc.CompatibleType(*ExistingDesc))
+        {
+            CompatibleOverrideIds.Add(TargetDesc.ID);
+        }
+    }
+
     FInstancedPropertyBag Candidate;
     if (Descs.IsEmpty())
     {
@@ -396,14 +494,25 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeJson(
     else if (ExistingState.IsValid())
     {
         Candidate = ExistingState;
-        Candidate.MigrateToNewBagInstance(DefaultsBag);
+        Candidate.MigrateToNewBagInstanceWithOverrides(
+            DefaultsBag,
+            CompatibleOverrideIds);
     }
     else
     {
         Candidate = MoveTemp(DefaultsBag);
     }
 
+    FUnifiedScriptStateMigrationReport Migration;
+    Migration.DeclaredStateCount = Descs.Num();
+    Migration.PreservedOverrideCount = CompatibleOverrideIds.Num();
+    Migration.DefaultedStateCount = Descs.Num() - CompatibleOverrideIds.Num();
+    Migration.DroppedOverrideCount = RequestedOverrideIds.Num() -
+        CompatibleOverrideIds.Num();
+
     OutState = MoveTemp(Candidate);
+    OutOverrideIds = MoveTemp(CompatibleOverrideIds);
+    OutMigration = Migration;
     OutAssetPath = MoveTemp(SelectedAssetPath);
     OutError.Reset();
     return true;

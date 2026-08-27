@@ -2016,6 +2016,33 @@
           }
         },
         {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:LastStateMigration",
+          "name": "LastStateMigration",
+          "type": {
+            "kind": "string",
+            "nativeName": "FString",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "access": {
+            "readable": true,
+            "writable": false,
+            "editorVisible": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Last State Migration",
+            "category": "UnifiedScript|State",
+            "tooltip": "Summary of the last declaration/default/override reconciliation.",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
           "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ManagedState",
           "name": "ManagedState",
           "type": {
@@ -2064,6 +2091,33 @@
             "displayName": "Materialized State Count",
             "category": "UnifiedScript",
             "tooltip": null,
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:MaterializedStateOverrideCount",
+          "name": "MaterializedStateOverrideCount",
+          "type": {
+            "kind": "int32",
+            "nativeName": "int32",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "access": {
+            "readable": true,
+            "writable": false,
+            "editorVisible": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Materialized State Override Count",
+            "category": "UnifiedScript|State",
+            "tooltip": "Number of state values explicitly overridden by this component instance.",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": null
@@ -2433,6 +2487,49 @@
           }
         },
         {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:IsScriptStateOverridden",
+          "name": "IsScriptStateOverridden",
+          "returnType": {
+            "kind": "boolean",
+            "nativeName": "bool",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [
+            {
+              "name": "Name",
+              "type": {
+                "kind": "string",
+                "nativeName": "FString",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": false,
+            "pure": true,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Is Script State Overridden",
+            "category": "UnifiedScript|State",
+            "tooltip": "Is Script State Overridden",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
           "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:RefreshScriptState",
           "name": "RefreshScriptState",
           "returnType": {
@@ -2511,6 +2608,77 @@
             "displayName": "Request Reload",
             "category": "UnifiedScript",
             "tooltip": "Request Reload",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ResetAllScriptStateOverrides",
+          "name": "ResetAllScriptStateOverrides",
+          "returnType": {
+            "kind": "boolean",
+            "nativeName": "bool",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [],
+          "traits": {
+            "static": false,
+            "pure": false,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Reset All Script State Overrides",
+            "category": "UnifiedScript|State",
+            "tooltip": "Restores every state to the current C# declaration defaults.",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ResetScriptStateOverride",
+          "name": "ResetScriptStateOverride",
+          "returnType": {
+            "kind": "boolean",
+            "nativeName": "bool",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [
+            {
+              "name": "Name",
+              "type": {
+                "kind": "string",
+                "nativeName": "FString",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": false,
+            "pure": false,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Reset Script State Override",
+            "category": "UnifiedScript|State",
+            "tooltip": "Restores one state to the current C# declaration default.",
             "deprecated": false,
             "deprecationMessage": null,
             "worldContextParameter": null
@@ -2982,6 +3150,71 @@
           "callableWithoutWorldContext": false
         },
         {
+          "id": "ue.call|UnifiedScriptComponent|IsScriptStateOverridden",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:IsScriptStateOverridden",
+          "memberId": "0x8FBE1F4174AB3EE9",
+          "kind": "function",
+          "title": "Is Script State Overridden",
+          "category": "UnifiedScript|State",
+          "tooltip": "Is Script State Overridden",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptComponent*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Name",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "string",
+                "nativeName": "FString",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "bool",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
           "id": "ue.call|UnifiedScriptComponent|RefreshScriptState",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:RefreshScriptState",
           "memberId": "0xBF8089C66CEB80D6",
@@ -3134,6 +3367,149 @@
                 "kind": "object",
                 "nativeName": "UUnifiedScriptComponent*",
                 "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|UnifiedScriptComponent|ResetAllScriptStateOverrides",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ResetAllScriptStateOverrides",
+          "memberId": "0xC347BF5BD20AACE0",
+          "kind": "function",
+          "title": "Reset All Script State Overrides",
+          "category": "UnifiedScript|State",
+          "tooltip": "Restores every state to the current C# declaration defaults.",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptComponent*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "bool",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|UnifiedScriptComponent|ResetScriptStateOverride",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ResetScriptStateOverride",
+          "memberId": "0xE4D627E6665CDEA2",
+          "kind": "function",
+          "title": "Reset Script State Override",
+          "category": "UnifiedScript|State",
+          "tooltip": "Restores one state to the current C# declaration default.",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptComponent*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Name",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "string",
+                "nativeName": "FString",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "boolean",
+                "nativeName": "bool",
+                "typePath": null,
                 "elementType": null,
                 "keyType": null,
                 "valueType": null,
@@ -3623,6 +3999,56 @@
           "callableWithoutWorldContext": false
         },
         {
+          "id": "ue.get|UnifiedScriptComponent|LastStateMigration",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:LastStateMigration",
+          "memberId": "0x2A42C838D1FD59F8",
+          "kind": "propertyRead",
+          "title": "Last State Migration",
+          "category": "Unreal API|UnifiedScriptComponent|Properties",
+          "tooltip": "Summary of the last declaration/default/override reconciliation.",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptComponent*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Value",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "string",
+                "nativeName": "FString",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
           "id": "ue.get|UnifiedScriptComponent|ManagedState",
           "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ManagedState",
           "memberId": "0x31BC2AC640227065",
@@ -3680,6 +4106,56 @@
           "title": "Materialized State Count",
           "category": "Unreal API|UnifiedScriptComponent|Properties",
           "tooltip": "Read UnifiedScriptComponent.MaterializedStateCount.",
+          "pure": true,
+          "pins": [
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptComponent*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Value",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "int32",
+                "nativeName": "int32",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.get|UnifiedScriptComponent|MaterializedStateOverrideCount",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:MaterializedStateOverrideCount",
+          "memberId": "0x3BDE2DA074EE0E4C",
+          "kind": "propertyRead",
+          "title": "Materialized State Override Count",
+          "category": "Unreal API|UnifiedScriptComponent|Properties",
+          "tooltip": "Number of state values explicitly overridden by this component instance.",
           "pure": true,
           "pins": [
             {

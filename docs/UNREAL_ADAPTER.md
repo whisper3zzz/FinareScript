@@ -355,12 +355,15 @@ fixed-layout `FInstancedPropertyBag`, and applies C# defaults plus Details
 metadata and Edit/SaveGame/Net flags. The C# declaration remains authoritative;
 Blueprint does not own duplicate field declarations.
 
-Each state semantic ID becomes the Property Bag descriptor GUID. A candidate
-layout therefore migrates compatible instance values by ID across renames,
-additions, removals, Start, and Reload. Parsing and managed generation swaps are
-transactional: a bad document or failed managed entry keeps the prior running
-generation and prior state bag. The generated primitive bridge exposes int32
-state access to gameplay C# without reflection lookup.
+Each state semantic ID becomes the Property Bag descriptor GUID. M8.3 now
+serializes the exact override GUID set separately from the value bag. A
+candidate layout inherits current declaration defaults and migrates only
+explicit, type-compatible overrides by ID across renames, additions, removals,
+Start, and Reload. Untouched values therefore follow source/graph default edits;
+incompatible overrides are dropped instead of being numerically coerced into a
+new contract. Parsing and managed generation swaps are transactional: a bad
+document or failed managed entry keeps the prior running generation, state bag,
+and override set. See [STATE_OVERRIDE_MIGRATION.md](STATE_OVERRIDE_MIGRATION.md).
 
 The checked-in UE 5.8 demo stages its emitted declaration beside the managed
 assembly, overrides `InitialValue` from 10 to 37, reads 37 in `OnStart`, retains

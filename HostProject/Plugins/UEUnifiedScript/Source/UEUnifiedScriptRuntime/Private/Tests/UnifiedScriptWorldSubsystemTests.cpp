@@ -139,8 +139,35 @@ bool FUnifiedScriptWorldSubsystemLifecycleTest::RunTest(const FString& Parameter
         TEXT("Declaration default reaches the component"),
         FirstComponent->GetScriptStateInt32(TEXT("InitialValue"), -1),
         10);
+    TestEqual(
+        TEXT("Fresh declaration values are inherited rather than overridden"),
+        FirstComponent->MaterializedStateOverrideCount,
+        0);
+    TestTrue(
+        TEXT("Default materialization is observable"),
+        FirstComponent->LastStateMigration.Contains(TEXT("Defaults=1")));
     TestTrue(
         TEXT("Instance state override is accepted"),
+        FirstComponent->SetScriptStateInt32(TEXT("InitialValue"), 37));
+    TestTrue(
+        TEXT("Instance state override is tracked by stable declaration ID"),
+        FirstComponent->IsScriptStateOverridden(TEXT("InitialValue")));
+    TestEqual(
+        TEXT("One instance override is observable"),
+        FirstComponent->MaterializedStateOverrideCount,
+        1);
+    TestTrue(
+        TEXT("Reset restores the current declaration default"),
+        FirstComponent->ResetScriptStateOverride(TEXT("InitialValue")));
+    TestEqual(
+        TEXT("Reset value inherits the C# default again"),
+        FirstComponent->GetScriptStateInt32(TEXT("InitialValue"), -1),
+        10);
+    TestFalse(
+        TEXT("Reset clears the stable override identity"),
+        FirstComponent->IsScriptStateOverridden(TEXT("InitialValue")));
+    TestTrue(
+        TEXT("Demo override can be re-applied after reset"),
         FirstComponent->SetScriptStateInt32(TEXT("InitialValue"), 37));
     FirstComponent->RegisterComponentWithWorld(FirstWorld);
     TestTrue(TEXT("Lifecycle demo component is registered"), FirstComponent->IsRegistered());
@@ -213,6 +240,10 @@ bool FUnifiedScriptWorldSubsystemLifecycleTest::RunTest(const FString& Parameter
         TEXT("Reloaded generation is visible"),
         FirstComponent->ActiveGeneration,
         FString(TEXT("2")));
+    TestEqual(
+        TEXT("Reload retains exactly one compatible instance override"),
+        FirstComponent->MaterializedStateOverrideCount,
+        1);
     FirstComponent->BroadcastManagedSignal(73, FirstComponent);
     TestEqual(
         TEXT("Reload rebinds one Event Entry and preserves compatible state"),
@@ -246,6 +277,10 @@ bool FUnifiedScriptWorldSubsystemLifecycleTest::RunTest(const FString& Parameter
         TEXT("Failed reload also preserves materialized state"),
         FirstComponent->GetScriptStateInt32(TEXT("InitialValue"), -1),
         37);
+    TestEqual(
+        TEXT("Failed reload preserves the previous override identity"),
+        FirstComponent->MaterializedStateOverrideCount,
+        1);
     TestTrue(
         TEXT("Failed Script Asset reload exposes the managed boundary and type"),
         FirstComponent->LastScriptError.Contains(TEXT("ReloadScript:")) &&
@@ -275,6 +310,13 @@ bool FUnifiedScriptWorldSubsystemLifecycleTest::RunTest(const FString& Parameter
         TEXT("A Script Asset without a declaration clears the old state layout"),
         FirstComponent->MaterializedStateCount,
         0);
+    TestEqual(
+        TEXT("Removed declaration drops stale instance override identities"),
+        FirstComponent->MaterializedStateOverrideCount,
+        0);
+    TestTrue(
+        TEXT("Dropped override is observable after asset replacement"),
+        FirstComponent->LastStateMigration.Contains(TEXT("DroppedOverrides=1")));
 
     FirstComponent->EndPlay(EEndPlayReason::Destroyed);
     TestFalse(TEXT("Component reports a stopped script"), FirstComponent->bScriptRunning);

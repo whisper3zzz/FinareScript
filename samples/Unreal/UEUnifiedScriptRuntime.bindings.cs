@@ -127,6 +127,12 @@ public sealed partial class UnifiedScriptComponent : global::UnifiedScript.Unrea
         get => ReadProperty<string>(0xEB91C292E1A34192UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:LastScriptError");
     }
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Last State Migration", Category = "UnifiedScript|State", Tooltip = "Summary of the last declaration/default/override reconciliation.")]
+    public string LastStateMigration
+    {
+        get => ReadProperty<string>(0x2A42C838D1FD59F8UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:LastStateMigration");
+    }
+
     [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Managed State", Category = "UnifiedScript|Runtime", Tooltip = "Script-controlled diagnostic state used by the first hosted demo.")]
     public string ManagedState
     {
@@ -138,6 +144,12 @@ public sealed partial class UnifiedScriptComponent : global::UnifiedScript.Unrea
     public int MaterializedStateCount
     {
         get => ReadProperty<int>(0xB31F5AE7DDA6C984UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:MaterializedStateCount");
+    }
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Materialized State Override Count", Category = "UnifiedScript|State", Tooltip = "Number of state values explicitly overridden by this component instance.")]
+    public int MaterializedStateOverrideCount
+    {
+        get => ReadProperty<int>(0x3BDE2DA074EE0E4CUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:MaterializedStateOverrideCount");
     }
 
     [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Script Assembly Path", Category = "UnifiedScript|Runtime", Tooltip = "Legacy direct configuration retained for existing components.")]
@@ -214,6 +226,10 @@ public sealed partial class UnifiedScriptComponent : global::UnifiedScript.Unrea
     public global::UnifiedScript.Unreal.UnrealObjectHandle GetScriptTarget()
         => Invoke<global::UnifiedScript.Unreal.UnrealObjectHandle>(0x4F4C123F422ED5A3UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:GetScriptTarget");
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Is Script State Overridden", Category = "UnifiedScript|State", Tooltip = "Is Script State Overridden")]
+    public bool IsScriptStateOverridden(string name)
+        => Invoke<bool, string>(0x8FBE1F4174AB3EE9UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:IsScriptStateOverridden", name);
+
     [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Refresh Script State", Category = "UnifiedScript|State", Tooltip = "Rebuilds Script State from the configured declaration while preserving compatible overrides.")]
     public bool RefreshScriptState()
         => Invoke<bool>(0xBF8089C66CEB80D6UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:RefreshScriptState");
@@ -225,6 +241,14 @@ public sealed partial class UnifiedScriptComponent : global::UnifiedScript.Unrea
     [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Request Reload", Category = "UnifiedScript", Tooltip = "Request Reload")]
     public void RequestReload()
         => Invoke(0x9FD30761744D70A1UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:RequestReload");
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Reset All Script State Overrides", Category = "UnifiedScript|State", Tooltip = "Restores every state to the current C# declaration defaults.")]
+    public bool ResetAllScriptStateOverrides()
+        => Invoke<bool>(0xC347BF5BD20AACE0UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ResetAllScriptStateOverrides");
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Reset Script State Override", Category = "UnifiedScript|State", Tooltip = "Restores one state to the current C# declaration default.")]
+    public bool ResetScriptStateOverride(string name)
+        => Invoke<bool, string>(0xE4D627E6665CDEA2UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ResetScriptStateOverride", name);
 
     [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Set Script State Int 32", Category = "UnifiedScript|State", Tooltip = "Set Script State Int 32")]
     public bool SetScriptStateInt32(string name, int value)

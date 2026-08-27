@@ -8,19 +8,19 @@
   },
   "summary": {
     "typeCount": 7,
-    "memberCount": 98,
-    "directThunkCount": 24,
-    "callFrameCount": 72,
+    "memberCount": 103,
+    "directThunkCount": 25,
+    "callFrameCount": 76,
     "dataPlaneOperationCount": 0,
     "reflectionFallbackCount": 2,
     "rejectedCount": 0,
-    "nativeThunkCount": 96,
+    "nativeThunkCount": 101,
     "deferredTypeCount": 0
   },
   "baseline": {
-    "minimumMemberCount": 98,
-    "minimumDirectThunkCount": 24,
-    "minimumCallFrameCount": 72,
+    "minimumMemberCount": 103,
+    "minimumDirectThunkCount": 25,
+    "minimumCallFrameCount": 76,
     "minimumDataPlaneOperationCount": 0,
     "minimumReflectionFallbackCount": 2,
     "maximumRejectedCount": 0
@@ -295,7 +295,23 @@
       "message": ""
     },
     {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:IsScriptStateOverridden",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:LastScriptError",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:LastStateMigration",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
       "kind": "property",
       "disposition": "callFrame",
@@ -312,6 +328,14 @@
     },
     {
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:MaterializedStateCount",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+      "kind": "property",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:MaterializedStateOverrideCount",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
       "kind": "property",
       "disposition": "callFrame",
@@ -349,6 +373,22 @@
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
       "kind": "function",
       "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ResetAllScriptStateOverrides",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ResetScriptStateOverride",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+      "kind": "function",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },

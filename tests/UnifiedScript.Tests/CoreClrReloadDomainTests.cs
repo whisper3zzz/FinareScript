@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using UnifiedScript.Core;
 using UnifiedScript.Core.Hir;
 using UnifiedScript.CSharp;
@@ -201,6 +202,134 @@ public sealed class CoreClrReloadDomainTests
     }
 
     [Fact]
+    public void Reload_PreservesInstanceOverrideIdentityAcrossGraphAndSourceEdits()
+    {
+        const string statePath = "Tests/Reload/StateRules.cs";
+        const string stateSource = """
+            using UnifiedScript;
+
+            namespace Tests.Reload;
+
+            [ScriptAsset("Tests/ReloadState")]
+            public sealed class StateRules
+            {
+                [Expose(InstanceEditable = true)]
+                public int Damage { get; set; } = 10;
+
+                [Visual]
+                public int ReadDamage()
+                {
+                    return Damage + 1;
+                }
+            }
+            """;
+        CSharpCompilationRequest persistentRequest = CreatePersistentRequest(
+            stateSource,
+            statePath);
+        var workspace = new CSharpAuthoringWorkspace(persistentRequest);
+        ScriptAssetDeclaration baselineAsset = Assert.Single(
+            workspace.Current.Analysis.ScriptAssets!.Assets);
+        ScriptStateDeclaration baselineState = Assert.Single(baselineAsset.States);
+        HirLiteralExpression increment = workspace.Current.Analysis.Hir!
+            .DescendantsAndSelf()
+            .OfType<HirLiteralExpression>()
+            .Single(static literal => literal.ValueText == "1");
+        var receiver = new ScriptAssetReceiver(
+            baselineAsset.Id,
+            [new ScriptStateOverride(baselineState.Id, "37")]);
+        using var domain = new CoreClrReloadDomain();
+
+        _ = domain.Reload(workspace.Current.Request);
+        SemanticId methodId = domain.ResolveVisualMethodId(
+            "Tests.Reload.StateRules.ReadDamage");
+        Assert.Equal(
+            "38",
+            domain.Execute(new ExecutionInvocation(methodId, receiver: receiver))
+                .ReturnValue!.Json);
+
+        DeclarationPatchDocument renamePatch = DeclarationPatchDocument.Create(
+            workspace.Current.Analysis.ScriptAssets.SourceCompilationId,
+            workspace.Current.Analysis.ScriptAssets.SemanticConfigurationId,
+            [new UpdateScriptStatePatchOperation(
+                baselineState.Id,
+                new ScriptStatePatchPrecondition(
+                    baselineState.Name,
+                    baselineState.TypeMetadataName,
+                    baselineState.TypeKind,
+                    baselineState.DefaultValue,
+                    baselineState.Exposure),
+                new ScriptStatePatchSpec(
+                    "DamagePerHit",
+                    "int",
+                    ScriptStateTypeKind.Integer,
+                    JsonSerializer.SerializeToElement(20),
+                    baselineState.Exposure))]);
+        CSharpAuthoringMutation renamedMutation = workspace.Prepare(renamePatch);
+        Assert.True(
+            renamedMutation.Succeeded,
+            string.Join(Environment.NewLine, renamedMutation.Diagnostics));
+        workspace.Commit(renamedMutation);
+        ScriptStateDeclaration renamedState = Assert.Single(
+            workspace.Current.Analysis.ScriptAssets!.Assets[0].States);
+        Assert.Equal(baselineAsset.Id, workspace.Current.Analysis.ScriptAssets.Assets[0].Id);
+        Assert.Equal(baselineState.Id, renamedState.Id);
+
+        _ = domain.Reload(workspace.Current.Request);
+        Assert.Equal(methodId, domain.ResolveVisualMethodId(
+            "Tests.Reload.StateRules.ReadDamage"));
+        Assert.Equal(
+            "38",
+            domain.Execute(new ExecutionInvocation(methodId, receiver: receiver))
+                .ReturnValue!.Json);
+
+        SemanticPatchDocument bodyPatch = SemanticPatchDocument.Create(
+            workspace.Current.Analysis.ScriptAssets.SourceCompilationId,
+            workspace.Current.Analysis.ScriptAssets.SemanticConfigurationId,
+            [new ReplaceLiteralPatchOperation(increment.Id, "1", "2")]);
+        CSharpAuthoringMutation bodyMutation = workspace.Prepare(bodyPatch);
+        Assert.True(
+            bodyMutation.Succeeded,
+            string.Join(Environment.NewLine, bodyMutation.Diagnostics));
+        workspace.Commit(bodyMutation);
+        Assert.Equal(
+            baselineState.Id,
+            Assert.Single(workspace.Current.Analysis.ScriptAssets!.Assets[0].States).Id);
+
+        _ = domain.Reload(workspace.Current.Request);
+        Assert.Equal(
+            "39",
+            domain.Execute(new ExecutionInvocation(methodId, receiver: receiver))
+                .ReturnValue!.Json);
+
+        CSharpSourceDocument currentDocument = Assert.Single(workspace.Current.Request.Sources);
+        string externallyRenamedSource = currentDocument.Source.Replace(
+            "DamagePerHit",
+            "DamagePerShot",
+            StringComparison.Ordinal);
+        CSharpCompilationRequest externalRequest = CSharpCompilationRequest.Single(
+            externallyRenamedSource,
+            statePath,
+            identitySidecar: currentDocument.IdentitySidecar);
+        CSharpAnalysisResult externalAnalysis = new CSharpSemanticPipeline().Analyze(externalRequest);
+        Assert.True(
+            externalAnalysis.Succeeded,
+            string.Join(Environment.NewLine, externalAnalysis.Diagnostics));
+        ScriptAssetDeclaration externalAsset = Assert.Single(externalAnalysis.ScriptAssets!.Assets);
+        ScriptStateDeclaration externalState = Assert.Single(externalAsset.States);
+        Assert.Equal(baselineAsset.Id, externalAsset.Id);
+        Assert.Equal(baselineState.Id, externalState.Id);
+        Assert.Equal("DamagePerShot", externalState.Name);
+
+        _ = domain.Reload(externalRequest);
+        Assert.Equal(methodId, domain.ResolveVisualMethodId(
+            "Tests.Reload.StateRules.ReadDamage"));
+        Assert.Equal(
+            "39",
+            domain.Execute(new ExecutionInvocation(methodId, receiver: receiver))
+                .ReturnValue!.Json);
+    }
+
+    [Fact]
     public void Dispose_RejectsFurtherReloadAndClearsActiveState()
     {
         CSharpCompilationRequest request = CreatePersistentRequest(Source);
@@ -242,15 +371,17 @@ public sealed class CoreClrReloadDomainTests
         return previous;
     }
 
-    private static CSharpCompilationRequest CreatePersistentRequest(string source)
+    private static CSharpCompilationRequest CreatePersistentRequest(
+        string source,
+        string path = Path)
     {
         var initializationRequest = new CSharpCompilationRequest(
             "UnifiedScript.Analysis",
-            [new CSharpSourceDocument(Path, source, IdentitySidecarDocument.CreateEmpty(Path))]);
+            [new CSharpSourceDocument(path, source, IdentitySidecarDocument.CreateEmpty(path))]);
         CSharpAnalysisResult initialized = new CSharpSemanticPipeline().Analyze(initializationRequest);
         Assert.True(initialized.Succeeded, string.Join(Environment.NewLine, initialized.Diagnostics));
         return new CSharpCompilationRequest(
             "UnifiedScript.Analysis",
-            [new CSharpSourceDocument(Path, source, Assert.Single(initialized.IdentitySidecars))]);
+            [new CSharpSourceDocument(path, source, Assert.Single(initialized.IdentitySidecars))]);
     }
 }

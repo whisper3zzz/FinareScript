@@ -58,6 +58,9 @@ powershell -ExecutionPolicy Bypass `
 
 `-ValidateOnly` requires one successful Apply baseline. It does not overwrite
 reflection, bindings, native thunks, node catalogs, coverage, or Script Assets.
+When it runs from this repository, it first builds the current Release CLI for
+validation only, so deterministic output checks cannot accidentally use a stale
+tool binary. The rebuilt CLI is not staged into the Unreal plugin.
 It validates the deployment manifest through the editor commandlet, regenerates
 contract outputs under `Saved` for byte comparison, verifies configured native
 coverage, and runs the optional managed-startup Automation gate. Logs and the
