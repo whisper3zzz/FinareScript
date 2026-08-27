@@ -261,10 +261,11 @@ Outcome: text and graph versions compile to and execute the same IL.
 - [x] monotonic collectible reload generations with transactional failure
 - [x] shared semantic breakpoint bind/migrate/hit identity protocols
 - [x] cooperative CoreCLR statement traps with real pause/resume
-- [x] live CLR stack, bounded graph-safe top-frame locals, and step-over
+- [x] live CLR stack, bounded graph-safe per-frame locals, step in/over/out, and
+  read-only snapshot evaluation
 - [x] generation-safe in-process loopback debug transport
-- [ ] native managed-debug traps, deeper-frame locals, expression evaluation,
-  and remote transport framing (scheduled in M9.1-M9.3)
+- [ ] native managed-debug traps and remote transport framing (scheduled in
+  M9.1-M9.3)
 - [x] async invocation and cancellation/time-budget contract (delivered in M7.2)
 
 ## M5.5 — Script asset and authoring experience
@@ -939,6 +940,13 @@ graph, World, generation, and bridge boundaries.
   watches, bounded expression evaluation, and breakpoint migration on reload
 - [ ] map exceptions and native bridge failures to source span, graph node,
   UObject handle, World, and script generation
+
+Progress (2026-08-28): the cooperative CoreCLR control plane and browser
+workbench now use debug-session v0.2 with non-blocking start/wait, cooperative
+Pause, Step In/Over/Out, semantic method/node stack identities, detached locals
+for every active Visual frame, and bounded read-only watch evaluation. Native
+Slate consumption and exception/bridge failure context remain the next M9.1
+slice, so this milestone is not yet marked complete.
 
 ### M9.2 — Hot-reload reliability
 

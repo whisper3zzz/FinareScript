@@ -13,6 +13,7 @@ internal sealed class CoreClrDebugCoordinator : ICoreClrDebugProbeSink
     private readonly CoreClrProgramGeneration generation;
     private readonly string programAssemblyName;
     private readonly IReadOnlyDictionary<SemanticId, SourceSpan> nodeSpans;
+    private readonly IReadOnlyDictionary<SemanticId, int> methodTokens;
     private readonly Channel<CoreClrDebugPause> pauses = Channel.CreateUnbounded<CoreClrDebugPause>(
         new UnboundedChannelOptions
         {
@@ -24,26 +25,29 @@ internal sealed class CoreClrDebugCoordinator : ICoreClrDebugProbeSink
     private PauseState? currentPause;
     private ManualResetEventSlim? resumeSignal;
     private bool pauseRequested;
-    private int? stepDepth;
+    private StepState? step;
     private bool aborted;
     private long pauseNumber;
 
     public CoreClrDebugCoordinator(
         CoreClrProgramGeneration generation,
         long executionId,
-        string programAssemblyName,
+        CSharpProgramSourceMap sourceMap,
         HirCompilationUnit hir,
         BreakpointBindingSnapshot bindings)
     {
         this.generation = generation ?? throw new ArgumentNullException(nameof(generation));
-        ArgumentException.ThrowIfNullOrWhiteSpace(programAssemblyName);
-        this.programAssemblyName = programAssemblyName;
+        ArgumentNullException.ThrowIfNull(sourceMap);
+        programAssemblyName = sourceMap.AssemblyName;
         ArgumentNullException.ThrowIfNull(hir);
         this.bindings = bindings ?? throw new ArgumentNullException(nameof(bindings));
         ExecutionId = executionId;
         nodeSpans = hir.DescendantsAndSelf()
             .GroupBy(static node => node.Id)
             .ToDictionary(static group => group.Key, static group => group.First().Span);
+        methodTokens = sourceMap.Methods.ToDictionary(
+            static method => method.MethodId,
+            static method => method.MetadataToken);
     }
 
     public long ExecutionId { get; }
@@ -81,6 +85,27 @@ internal sealed class CoreClrDebugCoordinator : ICoreClrDebugProbeSink
         }
     }
 
+    public CoreClrDebugEvaluation Evaluate(SemanticId pauseId, long frameId, string expression)
+    {
+        lock (gate)
+        {
+            PauseState pause = GetPause(pauseId);
+            IReadOnlyList<CoreClrDebugValue> locals = pause.Locals.TryGetValue(
+                frameId,
+                out IReadOnlyList<CoreClrDebugValue>? found)
+                ? found
+                : throw new BreakpointProtocolException(
+                    "UDB1007",
+                    $"Stack frame '{frameId}' is not available in pause '{pauseId}'.");
+            return CoreClrDebugExpressionEvaluator.Evaluate(
+                generation,
+                pauseId,
+                frameId,
+                expression,
+                locals);
+        }
+    }
+
     public void RequestPause()
     {
         lock (gate)
@@ -97,7 +122,7 @@ internal sealed class CoreClrDebugCoordinator : ICoreClrDebugProbeSink
         lock (gate)
         {
             _ = GetPause(pauseId);
-            stepDepth = null;
+            step = null;
             ResumeCore();
         }
     }
@@ -107,7 +132,34 @@ internal sealed class CoreClrDebugCoordinator : ICoreClrDebugProbeSink
         lock (gate)
         {
             PauseState pause = GetPause(pauseId);
-            stepDepth = pause.Frames.Count;
+            step = new StepState(CoreClrDebugStepKind.Over, pause.Frames.Count);
+            ResumeCore();
+        }
+    }
+
+    public void StepInto(SemanticId pauseId)
+    {
+        lock (gate)
+        {
+            PauseState pause = GetPause(pauseId);
+            step = new StepState(CoreClrDebugStepKind.Into, pause.Frames.Count);
+            ResumeCore();
+        }
+    }
+
+    public void StepOut(SemanticId pauseId)
+    {
+        lock (gate)
+        {
+            PauseState pause = GetPause(pauseId);
+            if (pause.Frames.Count <= 1)
+            {
+                throw new BreakpointProtocolException(
+                    "UDB1010",
+                    "Step Out requires a caller frame in the current Visual C# stack.");
+            }
+
+            step = new StepState(CoreClrDebugStepKind.Out, pause.Frames.Count);
             ResumeCore();
         }
     }
@@ -132,7 +184,8 @@ internal sealed class CoreClrDebugCoordinator : ICoreClrDebugProbeSink
     public void Hit(
         string methodIdText,
         string nodeIdText,
-        IReadOnlyList<CoreClrDebugValue> locals)
+        IReadOnlyList<CoreClrDebugValue> locals,
+        IReadOnlyList<CoreClrDebugFrameSnapshot> frameSnapshots)
     {
         if (!SemanticId.TryParse(methodIdText, out SemanticId methodId) ||
             !SemanticId.TryParse(nodeIdText, out SemanticId nodeId))
@@ -160,10 +213,13 @@ internal sealed class CoreClrDebugCoordinator : ICoreClrDebugProbeSink
                 : pauseRequested
                     ? CoreClrDebugPauseReason.Pause
                     : null;
-            StackSnapshot stack = CaptureStack(nodeId, locals);
-            if (reason is null && stepDepth is int depth && stack.Frames.Count <= depth)
+            StackSnapshot stack = CaptureStack(methodId, nodeId, locals, frameSnapshots);
+            CoreClrDebugStepKind? completedStep = null;
+            if (reason is null && step is StepState stepState &&
+                ShouldPauseForStep(stepState, stack.Frames.Count))
             {
                 reason = CoreClrDebugPauseReason.Step;
+                completedStep = stepState.Kind;
             }
 
             if (reason is null)
@@ -172,7 +228,7 @@ internal sealed class CoreClrDebugCoordinator : ICoreClrDebugProbeSink
             }
 
             pauseRequested = false;
-            stepDepth = null;
+            step = null;
             long number = checked(++pauseNumber);
             SemanticId pauseId = SemanticId.FromKey(
                 $"coreclr-debug-pause/v0.1|{generation.GenerationId}|{ExecutionId}|{number}");
@@ -182,6 +238,7 @@ internal sealed class CoreClrDebugCoordinator : ICoreClrDebugProbeSink
                 ExecutionId,
                 pauseId,
                 reason.Value,
+                completedStep,
                 methodId,
                 nodeId,
                 breakpointIds);
@@ -202,8 +259,10 @@ internal sealed class CoreClrDebugCoordinator : ICoreClrDebugProbeSink
     }
 
     private StackSnapshot CaptureStack(
+        SemanticId topMethodId,
         SemanticId topNodeId,
-        IReadOnlyList<CoreClrDebugValue> topLocals)
+        IReadOnlyList<CoreClrDebugValue> topLocals,
+        IReadOnlyList<CoreClrDebugFrameSnapshot> frameSnapshots)
     {
         StackFrame[] runtimeFrames = new StackTrace(fNeedFileInfo: true)
             .GetFrames()
@@ -215,6 +274,7 @@ internal sealed class CoreClrDebugCoordinator : ICoreClrDebugProbeSink
         long baseFrameId = checked((pauseNumber + 1) * 1_000_000L);
         var frames = new List<CoreClrDebugStackFrame>(runtimeFrames.Length);
         var locals = new Dictionary<long, IReadOnlyList<CoreClrDebugValue>>();
+        int snapshotIndex = 0;
         for (int index = 0; index < runtimeFrames.Length; index++)
         {
             StackFrame frame = runtimeFrames[index];
@@ -225,26 +285,57 @@ internal sealed class CoreClrDebugCoordinator : ICoreClrDebugProbeSink
             }
 
             long frameId = checked(baseFrameId + index + 1);
-            SourceSpan? span = index == 0 && nodeSpans.TryGetValue(topNodeId, out SourceSpan? found)
-                ? found
-                : null;
+            CoreClrDebugFrameSnapshot? snapshot = null;
+            if (frameSnapshots.Count > snapshotIndex &&
+                SemanticId.TryParse(frameSnapshots[snapshotIndex].MethodId, out SemanticId snapshotMethodId) &&
+                methodTokens.TryGetValue(snapshotMethodId, out int snapshotToken) &&
+                snapshotToken == method.MetadataToken)
+            {
+                snapshot = frameSnapshots[snapshotIndex++];
+            }
+
+            SemanticId frameMethodId = snapshot is not null &&
+                SemanticId.TryParse(snapshot.MethodId, out SemanticId snapshotMethodIdValue)
+                    ? snapshotMethodIdValue
+                    : index == 0 ? topMethodId : default;
+            SemanticId spanNodeId = snapshot is not null &&
+                SemanticId.TryParse(snapshot.NodeId, out SemanticId snapshotNodeId)
+                    ? snapshotNodeId
+                    : index == 0 ? topNodeId : default;
+            SourceSpan? span = !spanNodeId.IsEmpty &&
+                nodeSpans.TryGetValue(spanNodeId, out SourceSpan? found)
+                    ? found
+                    : null;
             string typeName = method.DeclaringType is null
                 ? "<global>"
                 : ExecutionValueCodec.GetMetadataName(method.DeclaringType);
-            bool hasLocals = index == 0;
+            bool hasLocals = snapshot is not null || index == 0;
             frames.Add(new CoreClrDebugStackFrame(
                 frameId,
                 index,
+                frameMethodId.IsEmpty ? null : frameMethodId,
+                spanNodeId.IsEmpty ? null : spanNodeId,
                 $"{typeName}.{method.Name}",
                 method.MetadataToken,
                 frame.GetILOffset(),
                 span,
                 hasLocals));
-            locals.Add(frameId, hasLocals ? topLocals.ToArray() : []);
+            locals.Add(
+                frameId,
+                snapshot?.Locals.ToArray() ?? (index == 0 ? topLocals.ToArray() : []));
         }
 
         return new StackSnapshot(frames, locals);
     }
+
+    private static bool ShouldPauseForStep(StepState stepState, int currentDepth) =>
+        stepState.Kind switch
+        {
+            CoreClrDebugStepKind.Into => true,
+            CoreClrDebugStepKind.Over => currentDepth <= stepState.Depth,
+            CoreClrDebugStepKind.Out => currentDepth < stepState.Depth,
+            _ => throw new ArgumentOutOfRangeException(nameof(stepState)),
+        };
 
     private PauseState GetPause(SemanticId pauseId)
     {
@@ -276,4 +367,6 @@ internal sealed class CoreClrDebugCoordinator : ICoreClrDebugProbeSink
     private sealed record StackSnapshot(
         IReadOnlyList<CoreClrDebugStackFrame> Frames,
         IReadOnlyDictionary<long, IReadOnlyList<CoreClrDebugValue>> Locals);
+
+    private sealed record StepState(CoreClrDebugStepKind Kind, int Depth);
 }

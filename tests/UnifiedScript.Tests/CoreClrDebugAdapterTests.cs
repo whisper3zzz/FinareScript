@@ -106,6 +106,7 @@ public sealed class CoreClrDebugAdapterTests
             timeout.Token);
 
         Assert.Equal(CoreClrDebugPauseReason.Step, second.Reason);
+        Assert.Equal(CoreClrDebugStepKind.Over, second.StepKind);
         Assert.Equal(returnStatement.Id, second.NodeId);
         CoreClrDebugStackFrame secondTop = Assert.Single(
             adapter.GetStackTrace(reload.Generation.GenerationId, second.PauseId));
@@ -306,8 +307,9 @@ public sealed class CoreClrDebugAdapterTests
                 .ReturnValue!.Json);
 
         Assert.True(adapter.RemoveBreakpoint(callerBreakpointId));
+        SemanticId calleeBreakpointId = SemanticId.FromKey("callee-result-breakpoint");
         _ = adapter.SetBreakpoint(new SemanticBreakpoint(
-            SemanticId.FromKey("callee-result-breakpoint"),
+            calleeBreakpointId,
             calleeResult.Id));
         CoreClrDebugExecution nestedExecution = adapter.Start(new ExecutionInvocation(
             methodId,
@@ -322,10 +324,66 @@ public sealed class CoreClrDebugAdapterTests
         Assert.Equal(2, frames.Count);
         Assert.Equal("Tests.Debug.NestedRules.Callee", frames[0].MethodMetadataName);
         Assert.Equal("Tests.Debug.NestedRules.Caller", frames[1].MethodMetadataName);
+        Assert.Equal(calleeResult.Id, frames[0].NodeId);
+        Assert.Equal(callerCall.Id, frames[1].NodeId);
+        Assert.Equal(callerCall.Span, frames[1].SourceSpan);
         Assert.True(frames[0].HasLocals);
-        Assert.False(frames[1].HasLocals);
+        Assert.True(frames[1].HasLocals);
+        IReadOnlyList<CoreClrDebugValue> callerLocals = adapter.GetLocals(
+            reload.Generation.GenerationId,
+            nestedPause.PauseId,
+            frames[1].FrameId);
+        Assert.Equal("1", callerLocals.Single(local => local.Name == "value").Display);
+        CoreClrDebugEvaluation evaluation = adapter.Evaluate(
+            reload.Generation.GenerationId,
+            nestedPause.PauseId,
+            frames[1].FrameId,
+            "value");
+        Assert.Equal(CoreClrDebugEvaluation.CurrentSchemaVersion, evaluation.SchemaVersion);
+        Assert.Equal("1", evaluation.Value.Display);
+        BreakpointProtocolException invalidWatch = Assert.Throws<BreakpointProtocolException>(() =>
+            adapter.Evaluate(
+                reload.Generation.GenerationId,
+                nestedPause.PauseId,
+                frames[1].FrameId,
+                "value + 1"));
+        Assert.Equal("UDB1009", invalidWatch.Code);
         adapter.Continue(reload.Generation.GenerationId, nestedPause.PauseId);
         _ = await adapter.WaitForCompletionAsync(nestedExecution.ExecutionId, timeout.Token);
+
+        Assert.True(adapter.RemoveBreakpoint(calleeBreakpointId));
+        _ = adapter.SetBreakpoint(new SemanticBreakpoint(callerBreakpointId, callerCall.Id));
+        CoreClrDebugExecution steppedExecution = adapter.Start(new ExecutionInvocation(
+            methodId,
+            [new ExecutionArgument("9")]));
+        CoreClrDebugPause beforeCall = await adapter.WaitForPauseAsync(
+            steppedExecution.ExecutionId,
+            timeout.Token);
+        adapter.StepInto(reload.Generation.GenerationId, beforeCall.PauseId);
+        CoreClrDebugPause inCallee = await adapter.WaitForPauseAsync(
+            steppedExecution.ExecutionId,
+            timeout.Token);
+        Assert.Equal(CoreClrDebugPauseReason.Step, inCallee.Reason);
+        Assert.Equal(CoreClrDebugStepKind.Into, inCallee.StepKind);
+        Assert.Equal(calleeResult.Id, inCallee.NodeId);
+        Assert.Equal(2, adapter.GetStackTrace(
+            reload.Generation.GenerationId,
+            inCallee.PauseId).Count);
+
+        adapter.StepOut(reload.Generation.GenerationId, inCallee.PauseId);
+        CoreClrDebugPause afterCallee = await adapter.WaitForPauseAsync(
+            steppedExecution.ExecutionId,
+            timeout.Token);
+        Assert.Equal(CoreClrDebugPauseReason.Step, afterCallee.Reason);
+        Assert.Equal(CoreClrDebugStepKind.Out, afterCallee.StepKind);
+        Assert.Equal(
+            Assert.IsType<HirReturnStatement>(caller.Body.Statements[1]).Id,
+            afterCallee.NodeId);
+        adapter.Continue(reload.Generation.GenerationId, afterCallee.PauseId);
+        Assert.Equal(
+            "10",
+            (await adapter.WaitForCompletionAsync(steppedExecution.ExecutionId, timeout.Token))
+                .ReturnValue!.Json);
     }
 
     [Fact]

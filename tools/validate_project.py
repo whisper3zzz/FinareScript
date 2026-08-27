@@ -747,15 +747,23 @@ def main() -> int:
         'args[0] == "debug-serve"' in cli_source
         and "CoreClrDebugHttpServer" in cli_source
         and '"/api/debug/start"' in debug_server_source
+        and '"/api/debug/wait"' in debug_server_source
+        and '"/api/debug/pause"' in debug_server_source
+        and '"/api/debug/step-in"' in debug_server_source
         and '"/api/debug/step-over"' in debug_server_source
+        and '"/api/debug/step-out"' in debug_server_source
         and '"/api/debug/continue"' in debug_server_source
+        and '"/api/debug/evaluate"' in debug_server_source
         and "ScriptAssetReceiver" in debug_server_source
         and "debugTimers" not in prototype_source
         and "CoreCLR debug experience simulation" not in prototype_source
-        and "unifiedscript.debug-session/v0.1" in prototype_source,
+        and "unifiedscript.debug-session/v0.2" in prototype_source
+        and "unifiedscript.debug-evaluation/v0.1" in prototype_source
+        and "debugFramePicker" in prototype_source
+        and "evaluateDebugWatch" in prototype_source,
         "Live CoreCLR visual debug bridge is not connected end to end",
     )
-    checks.append("visual Run, Step Over, Continue, and locals use the live CoreCLR bridge")
+    checks.append("visual pause, full step controls, per-frame locals, and watch use the live CoreCLR bridge")
     authoring_workspace_source = (
         ROOT / "src" / "UnifiedScript.CSharp" / "CSharpAuthoringWorkspace.cs"
     ).read_text(encoding="utf-8")

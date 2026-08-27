@@ -9,6 +9,13 @@ public enum CoreClrDebugPauseReason
     Step,
 }
 
+public enum CoreClrDebugStepKind
+{
+    Into,
+    Over,
+    Out,
+}
+
 public enum CoreClrDebugValueKind
 {
     Null,
@@ -30,6 +37,8 @@ public sealed record CoreClrDebugValue(
 public sealed record CoreClrDebugStackFrame(
     long FrameId,
     int Index,
+    SemanticId? MethodId,
+    SemanticId? NodeId,
     string MethodMetadataName,
     int MetadataToken,
     int IlOffset,
@@ -42,11 +51,23 @@ public sealed record CoreClrDebugPause(
     long ExecutionId,
     SemanticId PauseId,
     CoreClrDebugPauseReason Reason,
+    CoreClrDebugStepKind? StepKind,
     SemanticId MethodId,
     SemanticId NodeId,
     IReadOnlyList<SemanticId> BreakpointIds)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.debug-pause/v0.1";
+    public const string CurrentSchemaVersion = "unifiedscript.debug-pause/v0.2";
+}
+
+public sealed record CoreClrDebugEvaluation(
+    string SchemaVersion,
+    CoreClrProgramGeneration Generation,
+    SemanticId PauseId,
+    long FrameId,
+    string Expression,
+    CoreClrDebugValue Value)
+{
+    public const string CurrentSchemaVersion = "unifiedscript.debug-evaluation/v0.1";
 }
 
 public sealed record CoreClrDebugExecution(
@@ -83,11 +104,21 @@ public interface ICoreClrDebugTransport : IDisposable
         SemanticId pauseId,
         long frameId);
 
+    CoreClrDebugEvaluation Evaluate(
+        SemanticId generationId,
+        SemanticId pauseId,
+        long frameId,
+        string expression);
+
     void Pause(SemanticId generationId, long executionId);
 
     void Continue(SemanticId generationId, SemanticId pauseId);
 
     void StepOver(SemanticId generationId, SemanticId pauseId);
+
+    void StepInto(SemanticId generationId, SemanticId pauseId);
+
+    void StepOut(SemanticId generationId, SemanticId pauseId);
 
     Task<ExecutionResult> WaitForCompletionAsync(
         long executionId,

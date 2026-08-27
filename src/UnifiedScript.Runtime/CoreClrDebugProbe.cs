@@ -5,27 +5,63 @@ namespace UnifiedScript.Runtime;
 public static class CoreClrDebugProbe
 {
     private static readonly AsyncLocal<ICoreClrDebugProbeSink?> Current = new();
+    private static readonly AsyncLocal<ProbeFrame?> CurrentFrame = new();
 
     public static CoreClrDebugValue Capture<T>(string name, T value) =>
         DebugValueSnapshotter.Capture(name, value, typeof(T));
+
+    public static IDisposable Enter(string methodId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(methodId);
+        ProbeFrame? previous = CurrentFrame.Value;
+        var frame = new ProbeFrame(methodId, previous);
+        CurrentFrame.Value = frame;
+        return new FrameAttachment(frame, previous);
+    }
 
     public static void Hit(
         string methodId,
         string nodeId,
         params CoreClrDebugValue[] locals)
     {
-        Current.Value?.Hit(methodId, nodeId, locals ?? []);
+        IReadOnlyList<CoreClrDebugValue> capturedLocals = locals?.ToArray() ?? [];
+        ProbeFrame? frame = CurrentFrame.Value;
+        if (frame is not null && string.Equals(frame.MethodId, methodId, StringComparison.Ordinal))
+        {
+            frame.NodeId = nodeId;
+            frame.Locals = capturedLocals;
+        }
+
+        Current.Value?.Hit(methodId, nodeId, capturedLocals, SnapshotFrames(frame));
     }
 
     internal static IDisposable Attach(ICoreClrDebugProbeSink sink)
     {
         ArgumentNullException.ThrowIfNull(sink);
         ICoreClrDebugProbeSink? previous = Current.Value;
+        ProbeFrame? previousFrame = CurrentFrame.Value;
         Current.Value = sink;
-        return new Attachment(previous);
+        CurrentFrame.Value = null;
+        return new SinkAttachment(previous, previousFrame);
     }
 
-    private sealed class Attachment(ICoreClrDebugProbeSink? previous) : IDisposable
+    private static IReadOnlyList<CoreClrDebugFrameSnapshot> SnapshotFrames(ProbeFrame? frame)
+    {
+        var result = new List<CoreClrDebugFrameSnapshot>();
+        for (ProbeFrame? current = frame; current is not null; current = current.Parent)
+        {
+            result.Add(new CoreClrDebugFrameSnapshot(
+                current.MethodId,
+                current.NodeId,
+                current.Locals.ToArray()));
+        }
+
+        return result;
+    }
+
+    private sealed class SinkAttachment(
+        ICoreClrDebugProbeSink? previous,
+        ProbeFrame? previousFrame) : IDisposable
     {
         private bool disposed;
 
@@ -37,15 +73,56 @@ public static class CoreClrDebugProbe
             }
 
             Current.Value = previous;
+            CurrentFrame.Value = previousFrame;
             disposed = true;
         }
+    }
+
+    private sealed class FrameAttachment(ProbeFrame frame, ProbeFrame? previous) : IDisposable
+    {
+        private bool disposed;
+
+        public void Dispose()
+        {
+            if (disposed)
+            {
+                return;
+            }
+
+            if (ReferenceEquals(CurrentFrame.Value, frame))
+            {
+                CurrentFrame.Value = previous;
+            }
+
+            disposed = true;
+        }
+    }
+
+    private sealed class ProbeFrame(string methodId, ProbeFrame? parent)
+    {
+        public string MethodId { get; } = methodId;
+
+        public ProbeFrame? Parent { get; } = parent;
+
+        public string NodeId { get; set; } = string.Empty;
+
+        public IReadOnlyList<CoreClrDebugValue> Locals { get; set; } = [];
     }
 }
 
 internal interface ICoreClrDebugProbeSink
 {
-    void Hit(string methodId, string nodeId, IReadOnlyList<CoreClrDebugValue> locals);
+    void Hit(
+        string methodId,
+        string nodeId,
+        IReadOnlyList<CoreClrDebugValue> locals,
+        IReadOnlyList<CoreClrDebugFrameSnapshot> frames);
 }
+
+internal sealed record CoreClrDebugFrameSnapshot(
+    string MethodId,
+    string NodeId,
+    IReadOnlyList<CoreClrDebugValue> Locals);
 
 internal static class DebugValueSnapshotter
 {

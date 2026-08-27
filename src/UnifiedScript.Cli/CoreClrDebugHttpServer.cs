@@ -148,13 +148,42 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             return;
         }
 
+        if (path == "/api/debug/evaluate")
+        {
+            CoreClrDebugEvaluation evaluation = await session.EvaluateAsync(
+                await ReadJsonAsync<DebugEvaluateRequest>(context.Request, cancellationToken),
+                cancellationToken);
+            await WriteJsonAsync(context.Response, evaluation, cancellationToken);
+            return;
+        }
+
         DebugSessionResponse response = path switch
         {
             "/api/debug/start" => await session.StartAsync(
                 await ReadJsonAsync<DebugStartRequest>(context.Request, cancellationToken),
                 cancellationToken),
-            "/api/debug/continue" => await session.ResumeAsync(stepOver: false, cancellationToken),
-            "/api/debug/step-over" => await session.ResumeAsync(stepOver: true, cancellationToken),
+            "/api/debug/wait" => await session.WaitAsync(
+                await ReadJsonAsync<DebugExecutionRequest>(context.Request, cancellationToken),
+                cancellationToken),
+            "/api/debug/pause" => await session.PauseAsync(
+                await ReadJsonAsync<DebugExecutionRequest>(context.Request, cancellationToken),
+                cancellationToken),
+            "/api/debug/continue" => await session.ResumeAsync(
+                await ReadJsonAsync<DebugResumeRequest>(context.Request, cancellationToken),
+                stepKind: null,
+                cancellationToken),
+            "/api/debug/step-in" => await session.ResumeAsync(
+                await ReadJsonAsync<DebugResumeRequest>(context.Request, cancellationToken),
+                CoreClrDebugStepKind.Into,
+                cancellationToken),
+            "/api/debug/step-over" => await session.ResumeAsync(
+                await ReadJsonAsync<DebugResumeRequest>(context.Request, cancellationToken),
+                CoreClrDebugStepKind.Over,
+                cancellationToken),
+            "/api/debug/step-out" => await session.ResumeAsync(
+                await ReadJsonAsync<DebugResumeRequest>(context.Request, cancellationToken),
+                CoreClrDebugStepKind.Out,
+                cancellationToken),
             _ => throw new HttpProtocolException(HttpStatusCode.NotFound, "Unknown debug endpoint."),
         };
         await WriteJsonAsync(context.Response, response, cancellationToken);
@@ -544,6 +573,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         private CoreClrDebugReloadResult reload;
         private CoreClrDebugExecution? execution;
         private CoreClrDebugPause? pause;
+        private bool waitInProgress;
         private ActiveAuthoringGroup? activeGroup;
         private string? persistedIdentity;
         private string historyPersistenceState;
@@ -777,11 +807,11 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                         "UAW1009",
                         "Commit or cancel the active authoring group before starting debug execution.");
                 }
-                if (execution is not null && pause is not null)
+                if (execution is not null)
                 {
                     throw new BreakpointProtocolException(
                         "UDB1004",
-                        "The current debug execution is paused; continue it before starting again.");
+                        "The current debug execution is running or paused; finish it before starting again.");
                 }
 
                 foreach (SemanticId breakpointId in breakpointIds)
@@ -803,14 +833,6 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                             .Single(binding => binding.BreakpointId == breakpointId);
                     })
                     .ToArray();
-                if (bindings.Count == 0 || bindings.All(static binding =>
-                        binding.State != BreakpointBindingState.Bound))
-                {
-                    throw new BreakpointProtocolException(
-                        "UDB1007",
-                        "At least one enabled visual breakpoint must bind to a statement probe.");
-                }
-
                 ExecutionArgument[] arguments = (request.Arguments ?? [])
                     .Select(static argument => new ExecutionArgument(argument.GetRawText()))
                     .ToArray();
@@ -825,7 +847,101 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                     arguments,
                     receiver));
                 pause = null;
-                return await WaitForNextStateAsync(bindings, cancellationToken);
+                return DebugSessionResponse.Running(
+                    reload.Generation,
+                    execution.ExecutionId,
+                    bindings);
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
+
+        public async Task<DebugSessionResponse> WaitAsync(
+            DebugExecutionRequest request,
+            CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(request);
+            CoreClrDebugExecution currentExecution;
+            IReadOnlyList<SemanticBreakpointBinding> currentBindings;
+            await gate.WaitAsync(cancellationToken);
+            try
+            {
+                currentExecution = RequireExecution(request.GenerationId, request.ExecutionId);
+                if (waitInProgress)
+                {
+                    throw new BreakpointProtocolException(
+                        "UDB1011",
+                        "A wait request is already active for the current debug execution.");
+                }
+
+                waitInProgress = true;
+                currentBindings = bindings.ToArray();
+            }
+            finally
+            {
+                gate.Release();
+            }
+
+            DebugSessionResponse? response = null;
+            try
+            {
+                response = await WaitForNextStateAsync(
+                    currentExecution,
+                    currentBindings,
+                    cancellationToken);
+                return response;
+            }
+            finally
+            {
+                await gate.WaitAsync(CancellationToken.None);
+                try
+                {
+                    waitInProgress = false;
+                    if (response is not null && execution?.ExecutionId == currentExecution.ExecutionId)
+                    {
+                        if (response.State == "paused")
+                        {
+                            pause = response.Pause;
+                        }
+                        else if (response.State == "completed")
+                        {
+                            execution = null;
+                            pause = null;
+                        }
+                    }
+                }
+                finally
+                {
+                    gate.Release();
+                }
+            }
+        }
+
+        public async Task<DebugSessionResponse> PauseAsync(
+            DebugExecutionRequest request,
+            CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(request);
+            await gate.WaitAsync(cancellationToken);
+            try
+            {
+                CoreClrDebugExecution currentExecution = RequireExecution(
+                    request.GenerationId,
+                    request.ExecutionId);
+                if (pause is not null)
+                {
+                    throw new BreakpointProtocolException(
+                        "UDB1006",
+                        "The debug execution is already paused.");
+                }
+
+                transport.Pause(reload.Generation.GenerationId, currentExecution.ExecutionId);
+                return DebugSessionResponse.Running(
+                    reload.Generation,
+                    currentExecution.ExecutionId,
+                    bindings);
             }
             finally
             {
@@ -834,27 +950,63 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         }
 
         public async Task<DebugSessionResponse> ResumeAsync(
-            bool stepOver,
+            DebugResumeRequest request,
+            CoreClrDebugStepKind? stepKind,
             CancellationToken cancellationToken)
         {
+            ArgumentNullException.ThrowIfNull(request);
             await gate.WaitAsync(cancellationToken);
             try
             {
-                CoreClrDebugExecution currentExecution = execution ??
-                    throw new BreakpointProtocolException("UDB1005", "There is no active debug execution.");
-                CoreClrDebugPause currentPause = pause ??
-                    throw new BreakpointProtocolException("UDB1006", "The debug execution is not paused.");
-                if (stepOver)
+                CoreClrDebugExecution currentExecution = RequireExecution(
+                    request.GenerationId,
+                    request.ExecutionId);
+                CoreClrDebugPause currentPause = RequirePause(request.PauseId);
+                switch (stepKind)
                 {
-                    transport.StepOver(reload.Generation.GenerationId, currentPause.PauseId);
-                }
-                else
-                {
-                    transport.Continue(reload.Generation.GenerationId, currentPause.PauseId);
+                    case CoreClrDebugStepKind.Into:
+                        transport.StepInto(reload.Generation.GenerationId, currentPause.PauseId);
+                        break;
+                    case CoreClrDebugStepKind.Over:
+                        transport.StepOver(reload.Generation.GenerationId, currentPause.PauseId);
+                        break;
+                    case CoreClrDebugStepKind.Out:
+                        transport.StepOut(reload.Generation.GenerationId, currentPause.PauseId);
+                        break;
+                    case null:
+                        transport.Continue(reload.Generation.GenerationId, currentPause.PauseId);
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException(nameof(stepKind));
                 }
 
                 pause = null;
-                return await WaitForNextStateAsync(bindings, cancellationToken);
+                return DebugSessionResponse.Running(
+                    reload.Generation,
+                    currentExecution.ExecutionId,
+                    bindings);
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
+
+        public async Task<CoreClrDebugEvaluation> EvaluateAsync(
+            DebugEvaluateRequest request,
+            CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(request);
+            await gate.WaitAsync(cancellationToken);
+            try
+            {
+                _ = RequireExecution(request.GenerationId, request.ExecutionId);
+                CoreClrDebugPause currentPause = RequirePause(request.PauseId);
+                return transport.Evaluate(
+                    reload.Generation.GenerationId,
+                    currentPause.PauseId,
+                    request.FrameId,
+                    request.Expression);
             }
             finally
             {
@@ -1378,6 +1530,47 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             }
         }
 
+        private CoreClrDebugExecution RequireExecution(
+            SemanticId generationId,
+            long executionId)
+        {
+            if (generationId.IsEmpty || generationId != reload.Generation.GenerationId)
+            {
+                throw new BreakpointProtocolException(
+                    "UDB1002",
+                    "The debug command belongs to a stale or different CoreCLR program generation.");
+            }
+
+            CoreClrDebugExecution current = execution ??
+                throw new BreakpointProtocolException(
+                    "UDB1005",
+                    "There is no active debug execution.");
+            if (executionId <= 0 || current.ExecutionId != executionId)
+            {
+                throw new BreakpointProtocolException(
+                    "UDB1005",
+                    $"Debug execution '{executionId}' is stale or does not exist.");
+            }
+
+            return current;
+        }
+
+        private CoreClrDebugPause RequirePause(SemanticId pauseId)
+        {
+            CoreClrDebugPause current = pause ??
+                throw new BreakpointProtocolException(
+                    "UDB1006",
+                    "The debug execution is not paused.");
+            if (pauseId.IsEmpty || current.PauseId != pauseId)
+            {
+                throw new BreakpointProtocolException(
+                    "UDB1006",
+                    $"Pause '{pauseId}' is stale or is not the current suspended execution.");
+            }
+
+            return current;
+        }
+
         private void ValidateTransaction(AuthoringTransactionContext transaction)
         {
             if (activeGroup is not null)
@@ -1767,11 +1960,10 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         }
 
         private async Task<DebugSessionResponse> WaitForNextStateAsync(
+            CoreClrDebugExecution currentExecution,
             IReadOnlyList<SemanticBreakpointBinding> bindings,
             CancellationToken cancellationToken)
         {
-            CoreClrDebugExecution currentExecution = execution ??
-                throw new BreakpointProtocolException("UDB1005", "There is no active debug execution.");
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromSeconds(15));
             Task<CoreClrDebugPause> pauseTask = transport.WaitForPauseAsync(
@@ -1784,28 +1976,31 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             timeout.Cancel();
             if (completed == pauseTask && pauseTask.IsCompletedSuccessfully)
             {
-                pause = await pauseTask;
+                CoreClrDebugPause nextPause = await pauseTask;
                 IReadOnlyList<CoreClrDebugStackFrame> frames = transport.GetStackTrace(
                     reload.Generation.GenerationId,
-                    pause.PauseId);
-                IReadOnlyList<CoreClrDebugValue> locals = frames.Count > 0 && frames[0].HasLocals
-                    ? transport.GetLocals(
-                        reload.Generation.GenerationId,
-                        pause.PauseId,
-                        frames[0].FrameId)
-                    : [];
+                    nextPause.PauseId);
+                DebugFrameLocalsResponse[] frameLocals = frames
+                    .Where(static frame => frame.HasLocals)
+                    .Select(frame => new DebugFrameLocalsResponse(
+                        frame.FrameId,
+                        transport.GetLocals(
+                            reload.Generation.GenerationId,
+                            nextPause.PauseId,
+                            frame.FrameId)))
+                    .ToArray();
+                IReadOnlyList<CoreClrDebugValue> locals = frameLocals.FirstOrDefault()?.Locals ?? [];
                 return DebugSessionResponse.Paused(
                     reload.Generation,
                     currentExecution.ExecutionId,
-                    pause,
+                    nextPause,
                     frames,
                     locals,
+                    frameLocals,
                     bindings);
             }
 
             ExecutionResult result = await completionTask;
-            execution = null;
-            pause = null;
             return DebugSessionResponse.Completed(
                 reload.Generation,
                 currentExecution.ExecutionId,
@@ -1950,11 +2145,31 @@ internal sealed record DebugStartRequest(
     DebugReceiverRequest? Receiver,
     IReadOnlyList<SemanticId>? BreakpointNodeIds);
 
+internal sealed record DebugExecutionRequest(
+    SemanticId GenerationId,
+    long ExecutionId);
+
+internal sealed record DebugResumeRequest(
+    SemanticId GenerationId,
+    long ExecutionId,
+    SemanticId PauseId);
+
+internal sealed record DebugEvaluateRequest(
+    SemanticId GenerationId,
+    long ExecutionId,
+    SemanticId PauseId,
+    long FrameId,
+    string Expression);
+
 internal sealed record DebugReceiverRequest(
     SemanticId AssetId,
     IReadOnlyList<DebugStateOverrideRequest>? StateOverrides);
 
 internal sealed record DebugStateOverrideRequest(SemanticId StateId, JsonElement Value);
+
+internal sealed record DebugFrameLocalsResponse(
+    long FrameId,
+    IReadOnlyList<CoreClrDebugValue> Locals);
 
 internal sealed record DebugSessionResponse(
     string SchemaVersion,
@@ -1964,23 +2179,43 @@ internal sealed record DebugSessionResponse(
     CoreClrDebugPause? Pause,
     IReadOnlyList<CoreClrDebugStackFrame> Frames,
     IReadOnlyList<CoreClrDebugValue> Locals,
+    IReadOnlyList<DebugFrameLocalsResponse> FrameLocals,
     ExecutionResult? Result,
     IReadOnlyList<SemanticBreakpointBinding> Breakpoints)
 {
+    private const string CurrentSchemaVersion = "unifiedscript.debug-session/v0.2";
+
+    public static DebugSessionResponse Running(
+        CoreClrProgramGeneration generation,
+        long executionId,
+        IReadOnlyList<SemanticBreakpointBinding> breakpoints) => new(
+        CurrentSchemaVersion,
+        "running",
+        generation,
+        executionId,
+        null,
+        [],
+        [],
+        [],
+        null,
+        breakpoints);
+
     public static DebugSessionResponse Paused(
         CoreClrProgramGeneration generation,
         long executionId,
         CoreClrDebugPause pause,
         IReadOnlyList<CoreClrDebugStackFrame> frames,
         IReadOnlyList<CoreClrDebugValue> locals,
+        IReadOnlyList<DebugFrameLocalsResponse> frameLocals,
         IReadOnlyList<SemanticBreakpointBinding> breakpoints) => new(
-        "unifiedscript.debug-session/v0.1",
+        CurrentSchemaVersion,
         "paused",
         generation,
         executionId,
         pause,
         frames,
         locals,
+        frameLocals,
         null,
         breakpoints);
 
@@ -1989,11 +2224,12 @@ internal sealed record DebugSessionResponse(
         long executionId,
         ExecutionResult result,
         IReadOnlyList<SemanticBreakpointBinding> breakpoints) => new(
-        "unifiedscript.debug-session/v0.1",
+        CurrentSchemaVersion,
         "completed",
         generation,
         executionId,
         null,
+        [],
         [],
         [],
         result,

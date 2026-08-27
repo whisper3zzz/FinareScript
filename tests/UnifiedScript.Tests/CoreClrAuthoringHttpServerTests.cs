@@ -7,6 +7,7 @@ using UnifiedScript.Cli;
 using UnifiedScript.Core;
 using UnifiedScript.CSharp;
 using UnifiedScript.Graph;
+using UnifiedScript.Runtime;
 
 namespace UnifiedScript.Tests;
 
@@ -142,10 +143,40 @@ public sealed class CoreClrAuthoringHttpServerTests
                 "api/debug/start",
                 JsonContent(JsonSerializer.Serialize(startRequest, UnifiedJson.CreateOptions())));
             startResponse.EnsureSuccessStatusCode();
-            DebugSessionResponse paused = JsonSerializer.Deserialize<DebugSessionResponse>(
+            DebugSessionResponse running = JsonSerializer.Deserialize<DebugSessionResponse>(
                 await startResponse.Content.ReadAsStringAsync(),
                 UnifiedJson.CreateOptions())!;
+            Assert.Equal("unifiedscript.debug-session/v0.2", running.SchemaVersion);
+            Assert.Equal("running", running.State);
+            using HttpResponseMessage waitResponse = await client.PostAsync(
+                "api/debug/wait",
+                JsonContent(JsonSerializer.Serialize(
+                    new DebugExecutionRequest(
+                        running.Generation.GenerationId,
+                        running.ExecutionId),
+                    UnifiedJson.CreateOptions())));
+            waitResponse.EnsureSuccessStatusCode();
+            DebugSessionResponse paused = JsonSerializer.Deserialize<DebugSessionResponse>(
+                await waitResponse.Content.ReadAsStringAsync(),
+                UnifiedJson.CreateOptions())!;
             Assert.Equal("paused", paused.State);
+            DebugFrameLocalsResponse frameLocals = Assert.Single(paused.FrameLocals);
+            Assert.Equal(Assert.Single(paused.Frames).FrameId, frameLocals.FrameId);
+            using HttpResponseMessage evaluateResponse = await client.PostAsync(
+                "api/debug/evaluate",
+                JsonContent(JsonSerializer.Serialize(
+                    new DebugEvaluateRequest(
+                        paused.Generation.GenerationId,
+                        paused.ExecutionId,
+                        paused.Pause!.PauseId,
+                        frameLocals.FrameId,
+                        "scaled"),
+                    UnifiedJson.CreateOptions())));
+            evaluateResponse.EnsureSuccessStatusCode();
+            CoreClrDebugEvaluation evaluation = JsonSerializer.Deserialize<CoreClrDebugEvaluation>(
+                await evaluateResponse.Content.ReadAsStringAsync(),
+                UnifiedJson.CreateOptions())!;
+            Assert.Equal("240", evaluation.Value.Display);
             using HttpResponseMessage activeConflict = await client.PostAsync(
                 "api/authoring/declaration-patch",
                 JsonContent(DeclarationPatchJson.Serialize(declarationPatch)));
@@ -156,10 +187,27 @@ public sealed class CoreClrAuthoringHttpServerTests
                 StringComparison.Ordinal);
             using HttpResponseMessage continueResponse = await client.PostAsync(
                 "api/debug/continue",
-                JsonContent("{}"));
+                JsonContent(JsonSerializer.Serialize(
+                    new DebugResumeRequest(
+                        paused.Generation.GenerationId,
+                        paused.ExecutionId,
+                        paused.Pause.PauseId),
+                    UnifiedJson.CreateOptions())));
             continueResponse.EnsureSuccessStatusCode();
-            DebugSessionResponse completed = JsonSerializer.Deserialize<DebugSessionResponse>(
+            DebugSessionResponse resumed = JsonSerializer.Deserialize<DebugSessionResponse>(
                 await continueResponse.Content.ReadAsStringAsync(),
+                UnifiedJson.CreateOptions())!;
+            Assert.Equal("running", resumed.State);
+            using HttpResponseMessage completionWaitResponse = await client.PostAsync(
+                "api/debug/wait",
+                JsonContent(JsonSerializer.Serialize(
+                    new DebugExecutionRequest(
+                        resumed.Generation.GenerationId,
+                        resumed.ExecutionId),
+                    UnifiedJson.CreateOptions())));
+            completionWaitResponse.EnsureSuccessStatusCode();
+            DebugSessionResponse completed = JsonSerializer.Deserialize<DebugSessionResponse>(
+                await completionWaitResponse.Content.ReadAsStringAsync(),
                 UnifiedJson.CreateOptions())!;
             Assert.Equal("240", completed.Result!.ReturnValue!.Json);
 

@@ -147,7 +147,8 @@ the same.
 M5.3 supplies cache, reload lifetime, breakpoint migration, strict JSON, and
 hit identity resolution. M5.4 now consumes the same generation and semantic
 node identities in a cooperative CoreCLR adapter with real pause/resume,
-step-over, stack frames, bounded top-frame locals, and an in-process loopback
-transport. Native managed-debug traps, deeper-frame locals, expression
-evaluation, async state-machine locations, serialized remote transport, and UE
-editor UI remain later work. See [DEBUG_ADAPTER.md](DEBUG_ADAPTER.md).
+step-in/over/out, stack frames, bounded locals for every active Visual frame,
+bounded read-only snapshot evaluation, and an in-process loopback transport.
+Native managed-debug traps, async state-machine locations, serialized remote
+transport, and UE editor UI remain later work. See
+[DEBUG_ADAPTER.md](DEBUG_ADAPTER.md).

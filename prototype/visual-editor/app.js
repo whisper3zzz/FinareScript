@@ -10,6 +10,7 @@ const state = {
   authoringHistory: null, authoringGroup: null,
   generation: null, removedDeclarations: [], previewPatch: null,
   debugConnected: false, debugBusy: false, debugHealth: null, debugSession: null,
+  debugFrameId: null,
 };
 
 const editorBody = document.getElementById('editorBody');
@@ -977,19 +978,61 @@ function clearDebugVisuals(hideStrip = true) {
 
 function setDebugBusy(busy) {
   state.debugBusy = busy;
-  document.getElementById('runButton').disabled = busy || Boolean(state.authoringGroup) || state.debugSession?.state === 'paused';
-  document.getElementById('continueButton').disabled = busy || state.debugSession?.state !== 'paused';
-  document.getElementById('stepOverButton').disabled = busy || state.debugSession?.state !== 'paused';
+  const sessionState = state.debugSession?.state;
+  const paused = sessionState === 'paused';
+  document.getElementById('runButton').disabled = busy || Boolean(state.authoringGroup) || Boolean(sessionState);
+  document.getElementById('pauseButton').disabled = busy || sessionState !== 'running';
+  document.getElementById('continueButton').disabled = busy || !paused;
+  document.getElementById('stepInButton').disabled = busy || !paused;
+  document.getElementById('stepOverButton').disabled = busy || !paused;
+  document.getElementById('stepOutButton').disabled = busy || !paused || state.debugSession.frames.length < 2;
+  document.getElementById('debugFramePicker').disabled = busy || !paused;
+  document.getElementById('debugWatchInput').disabled = busy || !paused;
+  document.getElementById('evaluateWatchButton').disabled = busy || !paused || state.debugFrameId === null;
 }
 
-async function debugRequest(path, body = {}) {
+async function debugRequest(path, body = {}, schemaVersion = 'unifiedscript.debug-session/v0.2') {
   const response = await fetch(path, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload.error?.message || `Debug returned ${response.status}`);
-  if (payload.schemaVersion !== 'unifiedscript.debug-session/v0.1') throw new Error('Unsupported debug response');
+  if (payload.schemaVersion !== schemaVersion) throw new Error('Unsupported debug response');
   return payload;
+}
+
+function debugExecutionRequest(includePause = false) {
+  const session = state.debugSession;
+  if (!session) throw new Error('There is no active debug execution.');
+  const request = {
+    generationId: session.generation.generationId,
+    executionId: session.executionId,
+  };
+  if (includePause) request.pauseId = session.pause.pauseId;
+  return request;
+}
+
+function renderDebugFrame(frameId) {
+  const response = state.debugSession;
+  if (response?.state !== 'paused') return;
+  const frame = response.frames.find(candidate => candidate.frameId === Number(frameId)) || response.frames[0];
+  state.debugFrameId = frame?.frameId ?? null;
+  const locals = response.frameLocals.find(item => item.frameId === state.debugFrameId)?.locals || [];
+  document.getElementById('debugLocals').innerHTML = locals.map(local =>
+    `<span title="${escapeHtml(local.typeMetadataName)}">${escapeHtml(local.name)} <b>${escapeHtml(local.display)}</b></span>`).join('');
+  document.getElementById('debugWatchResult').textContent = frame
+    ? `${frame.methodMetadataName} · ${frame.sourceSpan?.file || 'generated IL'}:${frame.sourceSpan?.startLine || frame.ilOffset}`
+    : 'No managed stack frame';
+  const graphElement = frame?.nodeId && [...document.querySelectorAll('[data-debug-semantic-id]')]
+    .find(element => element.dataset.debugSemanticId === frame.nodeId);
+  if (graphElement) {
+    document.querySelectorAll('.executing').forEach(element => element.classList.remove('executing'));
+    graphElement.classList.add('executing');
+    if (frame.index === 0) graphElement.classList.add('paused');
+    graphElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    selectNode(graphElement.dataset.nodeId, false);
+  }
+  setDebugBusy(false);
 }
 
 function renderLiveDebugPause(response) {
@@ -1004,14 +1047,32 @@ function renderLiveDebugPause(response) {
   const frame = response.frames[0];
   document.getElementById('debugReason').textContent = `PAUSED · ${response.pause.reason.toUpperCase()}`;
   document.getElementById('debugLocation').textContent = `${frame.methodMetadataName} · IL ${frame.ilOffset} · generation ${response.generation.number}`;
-  document.getElementById('debugLocals').innerHTML = response.locals.map(local =>
-    `<span title="${escapeHtml(local.typeMetadataName)}">${escapeHtml(local.name)} <b>${escapeHtml(local.display)}</b></span>`).join('');
+  const picker = document.getElementById('debugFramePicker');
+  picker.innerHTML = response.frames.map(candidate => {
+    const location = candidate.sourceSpan ? `L${candidate.sourceSpan.startLine}` : `IL ${candidate.ilOffset}`;
+    return `<option value="${candidate.frameId}">#${candidate.index} ${escapeHtml(candidate.methodMetadataName)} · ${location}</option>`;
+  }).join('');
+  state.debugFrameId = frame?.frameId ?? null;
+  debugStrip.classList.add('visible');
+  renderDebugFrame(state.debugFrameId);
+}
+
+function renderDebugRunning(response, reason = 'RUNNING') {
+  state.debugSession = response;
+  state.debugFrameId = null;
+  clearDebugVisuals(false);
+  document.getElementById('debugReason').textContent = reason;
+  document.getElementById('debugLocation').textContent = `execution ${response.executionId} · generation ${response.generation.number}`;
+  document.getElementById('debugLocals').replaceChildren();
+  document.getElementById('debugFramePicker').replaceChildren();
+  document.getElementById('debugWatchResult').textContent = 'Waiting for the next managed safe point';
   debugStrip.classList.add('visible');
   setDebugBusy(false);
 }
 
 function renderDebugCompletion(response) {
   state.debugSession = null;
+  state.debugFrameId = null;
   clearDebugVisuals();
   document.querySelector('.target-label').textContent = `CLR GENERATION ${response.generation.number} · COMPLETED`;
   setDebugBusy(false);
@@ -1020,6 +1081,7 @@ function renderDebugCompletion(response) {
 
 function renderDebugError(error) {
   state.debugSession = null;
+  state.debugFrameId = null;
   clearDebugVisuals(false);
   document.getElementById('debugReason').textContent = 'DEBUG ERROR';
   document.getElementById('debugLocation').textContent = error.message;
@@ -1043,7 +1105,6 @@ async function runDebug() {
   if (!state.debugConnected) await connectDebugBridge();
   if (!state.debugConnected) return renderDebugError(new Error('Start debug-serve to enable live CoreCLR debugging.'));
   const breakpointNodeIds = activeBreakpointNodeIds();
-  if (!breakpointNodeIds.length) return renderDebugError(new Error('Enable at least one semantic action breakpoint.'));
   setDebugBusy(true);
   try {
     const func = state.functionSurface;
@@ -1060,20 +1121,62 @@ async function runDebug() {
       };
     }
     const response = await debugRequest('/api/debug/start', request);
-    response.state === 'paused' ? renderLiveDebugPause(response) : renderDebugCompletion(response);
+    renderDebugRunning(response);
+    await waitForDebugState();
   } catch (error) {
     renderDebugError(error);
   }
 }
 
-async function resumeDebug(stepOver) {
+async function waitForDebugState() {
+  const request = debugExecutionRequest();
+  const response = await debugRequest('/api/debug/wait', request);
+  response.state === 'paused' ? renderLiveDebugPause(response) : renderDebugCompletion(response);
+}
+
+async function pauseDebug() {
+  if (state.debugSession?.state !== 'running') return;
+  setDebugBusy(true);
+  try {
+    const request = debugExecutionRequest();
+    await debugRequest('/api/debug/pause', request);
+    document.getElementById('debugReason').textContent = 'PAUSE REQUESTED';
+    setDebugBusy(false);
+  } catch (error) {
+    setDebugBusy(false);
+    showToast('Pause failed', error.message);
+  }
+}
+
+async function resumeDebug(mode) {
   if (state.debugSession?.state !== 'paused') return;
   setDebugBusy(true);
   try {
-    const response = await debugRequest(stepOver ? '/api/debug/step-over' : '/api/debug/continue');
-    response.state === 'paused' ? renderLiveDebugPause(response) : renderDebugCompletion(response);
+    const request = debugExecutionRequest(true);
+    const response = await debugRequest(`/api/debug/${mode}`, request);
+    renderDebugRunning(response, mode === 'continue' ? 'RUNNING' : `STEPPING · ${mode.replace('-', ' ').toUpperCase()}`);
+    await waitForDebugState();
   } catch (error) {
-    renderDebugError(error);
+    setDebugBusy(false);
+    showToast('Debug command failed', error.message);
+  }
+}
+
+async function evaluateDebugWatch() {
+  if (state.debugSession?.state !== 'paused' || state.debugFrameId === null) return;
+  const expression = document.getElementById('debugWatchInput').value.trim();
+  if (!expression) return;
+  setDebugBusy(true);
+  try {
+    const request = { ...debugExecutionRequest(true), frameId: state.debugFrameId, expression };
+    const evaluation = await debugRequest(
+      '/api/debug/evaluate', request, 'unifiedscript.debug-evaluation/v0.1');
+    document.getElementById('debugWatchResult').textContent =
+      `${evaluation.expression} = ${evaluation.value.display} · ${evaluation.value.typeMetadataName}`;
+  } catch (error) {
+    document.getElementById('debugWatchResult').textContent = error.message;
+  } finally {
+    setDebugBusy(false);
   }
 }
 
@@ -1096,8 +1199,16 @@ document.getElementById('zoomInButton').addEventListener('click', () => setZoom(
 document.getElementById('zoomOutButton').addEventListener('click', () => setZoom(state.zoom - .1));
 document.getElementById('fitButton').addEventListener('click', () => setZoom(.9));
 document.getElementById('runButton').addEventListener('click', runDebug);
-document.getElementById('continueButton').addEventListener('click', () => resumeDebug(false));
-document.getElementById('stepOverButton').addEventListener('click', () => resumeDebug(true));
+document.getElementById('pauseButton').addEventListener('click', pauseDebug);
+document.getElementById('continueButton').addEventListener('click', () => resumeDebug('continue'));
+document.getElementById('stepInButton').addEventListener('click', () => resumeDebug('step-in'));
+document.getElementById('stepOverButton').addEventListener('click', () => resumeDebug('step-over'));
+document.getElementById('stepOutButton').addEventListener('click', () => resumeDebug('step-out'));
+document.getElementById('debugFramePicker').addEventListener('change', event => renderDebugFrame(event.target.value));
+document.getElementById('evaluateWatchButton').addEventListener('click', evaluateDebugWatch);
+document.getElementById('debugWatchInput').addEventListener('keydown', event => {
+  if (event.key === 'Enter') evaluateDebugWatch();
+});
 document.getElementById('closeInspectorButton').addEventListener('click', () =>
   document.querySelector('.inspector-panel').classList.remove('compact-visible'));
 document.getElementById('aiViewButton').addEventListener('click', () => {

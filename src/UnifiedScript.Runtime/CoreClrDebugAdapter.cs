@@ -178,7 +178,7 @@ public sealed class CoreClrDebugAdapter : IDisposable
             var nextCoordinator = new CoreClrDebugCoordinator(
                 currentGeneration,
                 executionId,
-                currentSession.SourceMap.AssemblyName,
+                currentSession.SourceMap,
                 currentSession.Hir,
                 currentBindings);
             coordinator = nextCoordinator;
@@ -232,6 +232,19 @@ public sealed class CoreClrDebugAdapter : IDisposable
         }
     }
 
+    public CoreClrDebugEvaluation Evaluate(
+        SemanticId generationId,
+        SemanticId pauseId,
+        long frameId,
+        string expression)
+    {
+        lock (gate)
+        {
+            ValidateGeneration(generationId);
+            return (coordinator ?? throw NoExecution()).Evaluate(pauseId, frameId, expression);
+        }
+    }
+
     public void Pause(SemanticId generationId, long executionId)
     {
         lock (gate)
@@ -256,6 +269,24 @@ public sealed class CoreClrDebugAdapter : IDisposable
         {
             ValidateGeneration(generationId);
             (coordinator ?? throw NoExecution()).StepOver(pauseId);
+        }
+    }
+
+    public void StepInto(SemanticId generationId, SemanticId pauseId)
+    {
+        lock (gate)
+        {
+            ValidateGeneration(generationId);
+            (coordinator ?? throw NoExecution()).StepInto(pauseId);
+        }
+    }
+
+    public void StepOut(SemanticId generationId, SemanticId pauseId)
+    {
+        lock (gate)
+        {
+            ValidateGeneration(generationId);
+            (coordinator ?? throw NoExecution()).StepOut(pauseId);
         }
     }
 
@@ -398,6 +429,12 @@ public sealed class CoreClrDebugLoopbackTransport : ICoreClrDebugTransport
         SemanticId pauseId,
         long frameId) => adapter.GetLocals(generationId, pauseId, frameId);
 
+    public CoreClrDebugEvaluation Evaluate(
+        SemanticId generationId,
+        SemanticId pauseId,
+        long frameId,
+        string expression) => adapter.Evaluate(generationId, pauseId, frameId, expression);
+
     public void Pause(SemanticId generationId, long executionId) =>
         adapter.Pause(generationId, executionId);
 
@@ -406,6 +443,12 @@ public sealed class CoreClrDebugLoopbackTransport : ICoreClrDebugTransport
 
     public void StepOver(SemanticId generationId, SemanticId pauseId) =>
         adapter.StepOver(generationId, pauseId);
+
+    public void StepInto(SemanticId generationId, SemanticId pauseId) =>
+        adapter.StepInto(generationId, pauseId);
+
+    public void StepOut(SemanticId generationId, SemanticId pauseId) =>
+        adapter.StepOut(generationId, pauseId);
 
     public Task<ExecutionResult> WaitForCompletionAsync(
         long executionId,

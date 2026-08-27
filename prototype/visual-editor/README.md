@@ -47,8 +47,10 @@ and receiver without any sample-specific frontend adapter.
 7. Switch among Behavior, Dual, and Source.
 8. Open AI Lens to see coordinate-free declarations/actions/identities and
    preview a real typed declaration patch.
-9. Enable any action breakpoint and run. The same CoreCLR method pauses on the
-   action's explicit debug target and exposes real locals.
+9. Enable action breakpoints and run, or run without one and request Pause. The
+   same CoreCLR method stops on explicit semantic targets. Inspect any active
+   Visual frame and its detached locals, evaluate a bounded read-only watch,
+   then continue or step in, over, and out.
 
 ## Data flow
 

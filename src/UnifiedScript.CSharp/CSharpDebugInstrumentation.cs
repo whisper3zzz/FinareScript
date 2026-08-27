@@ -49,6 +49,15 @@ internal sealed class CSharpDebugInstrumenter
                 static group => group.Key,
                 static group => group.ToDictionary(static probe => SpanKey.From(probe.Span)),
                 StringComparer.Ordinal);
+        var methodMaps = hir.Types
+            .SelectMany(static type => type.Methods)
+            .GroupBy(static method => NormalizePath(method.Span.FilePath), StringComparer.Ordinal)
+            .ToDictionary(
+                static group => group.Key,
+                static group => group.ToDictionary(
+                    static method => SpanKey.From(method.Span),
+                    static method => method.Id),
+                StringComparer.Ordinal);
 
         var rewritten = new SyntaxTree[syntaxTrees.Length];
         for (int index = 0; index < syntaxTrees.Length; index++)
@@ -64,7 +73,10 @@ internal sealed class CSharpDebugInstrumenter
             var rewriter = new ProbeRewriter(
                 compilation.GetSemanticModel(tree, ignoreAccessibility: false),
                 path,
-                probes);
+                probes,
+                methodMaps.TryGetValue(path, out Dictionary<SpanKey, SemanticId>? methods)
+                    ? methods
+                    : new Dictionary<SpanKey, SemanticId>());
             SyntaxNode root = tree.GetRoot();
             SyntaxNode instrumented = rewriter.Visit(root) ?? root;
             rewritten[index] = CSharpSyntaxTree.Create(
@@ -82,7 +94,8 @@ internal sealed class CSharpDebugInstrumenter
     private sealed class ProbeRewriter(
         SemanticModel semanticModel,
         string filePath,
-        IReadOnlyDictionary<SpanKey, StatementProbe> probes) : CSharpSyntaxRewriter
+        IReadOnlyDictionary<SpanKey, StatementProbe> probes,
+        IReadOnlyDictionary<SpanKey, SemanticId> methods) : CSharpSyntaxRewriter
     {
         public override SyntaxNode? Visit(SyntaxNode? node)
         {
@@ -118,6 +131,27 @@ internal sealed class CSharpDebugInstrumenter
             }
 
             return node.WithStatements(SyntaxFactory.List(statements));
+        }
+
+        public override SyntaxNode? VisitMethodDeclaration(MethodDeclarationSyntax node)
+        {
+            var rewritten = (MethodDeclarationSyntax)(base.VisitMethodDeclaration(node) ?? node);
+            if (rewritten.Body is null ||
+                !methods.TryGetValue(
+                    SpanKey.From(RoslynSourceSpan.FromNode(node, filePath)),
+                    out SemanticId methodId))
+            {
+                return rewritten;
+            }
+
+            UsingStatementSyntax scope = SyntaxFactory.UsingStatement(
+                declaration: null,
+                expression: SyntaxFactory.ParseExpression(
+                    $"{CSharpDebugInstrumentation.ProbeTypeName}.Enter(\"{methodId.Value}\")"),
+                statement: rewritten.Body.WithoutTrivia());
+            return rewritten.WithBody(
+                SyntaxFactory.Block(scope)
+                    .WithTriviaFrom(rewritten.Body));
         }
 
         private bool TryGetProbe(StatementSyntax statement, out StatementProbe? probe) =>

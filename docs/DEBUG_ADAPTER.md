@@ -47,8 +47,9 @@ performs the extra instrumented emission.
 - asynchronous execution start and completion;
 - wait-for-pause events;
 - cooperative pause at the next probe;
-- continue and step-over;
+- continue, step-in, step-over, and step-out;
 - stack-frame and per-frame local snapshot reads;
+- bounded read-only evaluation over detached local snapshots;
 - generation, execution, and pause identity validation.
 
 `ICoreClrDebugTransport` is the editor-facing boundary.
@@ -78,7 +79,13 @@ IReadOnlyList<CoreClrDebugValue> locals = debug.GetLocals(
     pause.PauseId,
     stack[0].FrameId);
 
-debug.StepOver(loaded.Generation.GenerationId, pause.PauseId);
+CoreClrDebugEvaluation evaluation = debug.Evaluate(
+    loaded.Generation.GenerationId,
+    pause.PauseId,
+    stack[0].FrameId,
+    "damage.Amounts[0]");
+
+debug.StepInto(loaded.Generation.GenerationId, pause.PauseId);
 ```
 
 ## Visual workbench loopback bridge
@@ -89,10 +96,22 @@ static workbench and a same-origin loopback JSON API from `127.0.0.1`:
 - `GET /api/debug/health` reports the loaded generation plus source and
   semantic-configuration IDs;
 - `POST /api/debug/start` installs statement breakpoints, materializes an
-  optional `ScriptAssetReceiver`, starts CoreCLR, and returns the first pause;
-- `POST /api/debug/step-over` resumes the exact pause and returns the next pause
-  or completion;
-- `POST /api/debug/continue` resumes and returns the next pause or completion.
+  optional `ScriptAssetReceiver`, starts CoreCLR, and immediately returns a
+  `running` session;
+- `POST /api/debug/wait` waits for the next pause or completion without blocking
+  pause requests from another client request;
+- `POST /api/debug/pause` requests suspension at the next managed probe;
+- `POST /api/debug/continue`, `/step-in`, `/step-over`, and `/step-out` resume
+  the exact pause and immediately return the `running` session;
+- `POST /api/debug/evaluate` reads a bounded expression from the exact paused
+  frame snapshot.
+
+Debug session responses use `unifiedscript.debug-session/v0.2`. Every wait,
+pause, resume, and evaluation request carries the current generation and
+execution identity; resume and evaluation additionally carry the pause
+identity, and evaluation carries the selected frame identity. The browser can
+therefore keep a wait request outstanding while still issuing Pause, and stale
+commands cannot affect a newer run.
 
 The same loopback process owns the authoring transaction boundary:
 
@@ -127,11 +146,11 @@ content root, and exposes the generation identities that the workbench checks
 against its loaded artifacts. It is loopback development plumbing, not the
 later remote or UE process transport.
 
-## Suspension and step-over semantics
+## Suspension and stepping semantics
 
 A hit publishes its immutable pause snapshot and then blocks the actual thread
 executing the emitted Visual method on a resume signal. The completion task
-therefore remains incomplete until `Continue` or `StepOver` releases that
+therefore remains incomplete until a continue or step command releases that
 pause. This is not a synthetic notification layered over already completed
 execution.
 
@@ -139,7 +158,10 @@ execution.
 records the current program-stack depth, releases execution, ignores probes in
 deeper called Visual methods, and stops at the next probe at the same or a
 shallower depth. An enabled breakpoint in a deeper call still wins and pauses,
-which matches normal debugger expectations.
+which matches normal debugger expectations. `StepInto` stops at the next probe
+at any depth. `StepOut` stops at the next probe in a shallower Visual frame and
+rejects a request from the outermost frame instead of silently behaving like
+continue.
 
 Reload is rejected with `UDB1004` while an execution is running or suspended.
 After completion, reload produces a new generation. Commands carrying the old
@@ -153,9 +175,12 @@ to strings, MethodDef tokens, IL offsets, and optional original semantic source
 spans. No `StackFrame`, `MethodBase`, `Type`, or source-defined object reference
 escapes the pause.
 
-The top instrumented frame exposes parameters and locals that Roslyn proves
-definitely assigned on entry to the probed statement. Values are copied into a
-bounded tree:
+Every active instrumented Visual frame retains the most recent parameters and
+locals that Roslyn proved definitely assigned at its latest probe. These
+snapshots are correlated to the live CoreCLR stack by assembly and MethodDef
+identity. Each frame also carries its Visual method ID, latest semantic node
+ID, and original source span when available. Values are copied into a bounded
+tree:
 
 - primitive, string, enum, and native-integer values use canonical displays;
 - arrays are capped at 32 children per level;
@@ -164,10 +189,12 @@ bounded tree:
 - reference cycles become explicit `<cycle>` leaves;
 - inaccessible values become `<unavailable>` without retaining the object.
 
-Deeper frames are reported but do not yet expose locals because cooperative
-statement probes do not retain past frame state. The snapshot model already
-supports per-frame lookup, so a native managed-debug backend can fill those
-frames later without changing consumers.
+Watch evaluation traverses only these detached snapshots. Its grammar is a
+local or parameter name followed by public-field access and constant,
+non-negative array indices, for example `damage.Amounts[0]`. Expressions are
+limited to 256 characters and 16 traversal segments. It cannot call methods or
+properties, perform operators, mutate state, or retain source-defined objects.
+Invalid or unavailable expressions fail with `UDB1009`.
 
 ## Deliberate limits
 
@@ -177,10 +204,9 @@ Expression-node breakpoint requests remain `Pending` with an explicit backend
 message instead of pretending that a nearby statement is exact. The current
 slice does not provide:
 
-- arbitrary expression evaluation, watches, mutation, or conditional/log
-  breakpoints;
-- deeper-frame locals;
-- instruction-level stepping, step-in, or step-out;
+- arbitrary code execution, property or method calls, operators, mutation, or
+  conditional/log breakpoints;
+- instruction-level stepping;
 - async state-machine suspension;
 - forced preemptive suspension between probes;
 - serialized remote/DAP framing or UE editor UI;
