@@ -178,7 +178,7 @@ public:
         FUnifiedScriptAuthoringSurfaceDocument& OutDocument,
         FString& OutError);
 
-    /** Builds the same semantic-patch v0.21 payload consumed by the shared authoring host. */
+    /** Builds the same semantic-patch v0.22 payload consumed by the shared authoring host. */
     static bool BuildSemanticPatch(
         const FUnifiedScriptAuthoringSurfaceDocument& Document,
         const FUnifiedScriptAuthoringEdit& Edit,
@@ -186,8 +186,18 @@ public:
         FString& OutPatchJson,
         FString& OutError);
 
-    /** Builds a preconditioned semantic-patch v0.21 data-edge rewire transaction. */
+    /** Builds a preconditioned semantic-patch v0.22 data-edge rewire transaction. */
     static bool BuildDataEdgeReconnectionPatch(
+        const FUnifiedScriptAuthoringSurfaceDocument& Document,
+        const FUnifiedScriptAuthoringFunction& Function,
+        const FUnifiedScriptAuthoringEdge& ExpectedEdge,
+        const FString& NewSourceNodeId,
+        const FString& NewSourcePort,
+        FString& OutPatchJson,
+        FString& OutError);
+
+    /** Maps a safe control-wire gesture to a region-aware statement move. */
+    static bool BuildControlEdgeReconnectionPatch(
         const FUnifiedScriptAuthoringSurfaceDocument& Document,
         const FUnifiedScriptAuthoringFunction& Function,
         const FUnifiedScriptAuthoringEdge& ExpectedEdge,

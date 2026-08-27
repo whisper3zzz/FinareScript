@@ -149,7 +149,7 @@ The repository currently implements:
 - lossless text-authored `for` loops across HIR v0.7 and Graph v0.12, with
   declaration/expression initializers, optional conditions, ordered incrementors,
   prefix/postfix mutation identity, and CFG-validated continue-to-increment routing;
-- dedicated bounded `for` construction through patch v0.21/plan v0.21, with
+- dedicated bounded `for` construction through patch v0.22/plan v0.21, with
   declaration or assignment initialization, scoped for-local references,
   ordered `++`/`--`, symbolic body/local handles, and atomic CFG revalidation;
 - exact editing of an existing `for` condition, declaration initializer,
@@ -170,6 +170,9 @@ The repository currently implements:
 - lossless `switch` and bounded C# patterns across HIR v0.8 and Graph v0.13,
   with evaluate-once governing values, typed pattern variables, guarded case
   routing, editable section-body ownership, and nearest-switch `break` facts;
+- region-aware same-block control reconnection through patch v0.22
+  `moveStatement`, with exact sibling preconditions, persistent identity,
+  local-order and terminal-transfer guards, and regenerated-CFG validation;
 - opt-in `.usids` sidecars that preserve node identity across formatting and edits;
 - backend-neutral Script Asset / Declaration IR v0.1 with scalar and enum
   state, canonical defaults, engine exposure metadata, Visual signatures, and
@@ -604,7 +607,7 @@ Declaration edit
   -> updated C# + asset JSON + optional .usids (only as one commit)
 
 Workbench authoring commit
-  -> declaration-patch v0.2 or semantic-patch v0.21
+  -> declaration-patch v0.2 or semantic-patch v0.22
   -> immutable candidate analysis + regenerated Graph
   -> same CoreCLR transport reload
   -> rollback-capable source + .usids transaction
@@ -632,7 +635,7 @@ Current Unreal adapter path:
   -> Declaration IR -> fixed-layout Details state + stable-ID migration
   -> stable generated Member ID -> ABI v3 call frame -> module-owned native thunk -> live UObject
   -> Authoring Surface v0.3 -> native Slate GraphEditor pins/wires + inspector
-  -> typed edit capability -> semantic-patch v0.21 Workbench transaction
+  -> typed edit capability -> semantic-patch v0.22 Workbench transaction
   -> atomic C#/identity/Declaration/Surface/DLL/PDB publication
   -> matching component transactional reload
   -> World Phase Scheduler -> caller-written Command Buffer -> next-frame Event Buffer
@@ -931,8 +934,8 @@ dotnet run --project src/UnifiedScript.Cli -- \
   --out-identity artifacts/patched/DamageRules.cs.usids
 ```
 
-`unifiedscript.patch/v0.21` binds every patch to both the source compilation ID
-and semantic configuration ID emitted in current Graph schema v0.12. A `replaceLiteral`
+`unifiedscript.patch/v0.22` binds every patch to both the source compilation ID
+and semantic configuration ID emitted in current Graph schema v0.13. A `replaceLiteral`
 operation also carries the expected old literal text. A stale source, changed
 reference/effect configuration, missing target, changed old value, non-literal
 replacement, or semantically invalid result rejects the entire patch and writes
@@ -1665,7 +1668,7 @@ dotnet run --project src/UnifiedScript.Cli -- \
 ```
 
 The result is `return value + (value * 3);`, and the sidecar advances from
-generation 1 to 4. The symbolic step becomes an ordinary patch v0.21
+generation 1 to 4. The symbolic step becomes an ordinary patch v0.22
 `replaceExpressionInput` at execution time, so type, purity, dominance, trivia,
 identity, tombstone, and Graph-edge behavior stay on one code path. See
 [PRODUCED_EXPRESSION_HANDLES.md](docs/PRODUCED_EXPRESSION_HANDLES.md).
@@ -1673,7 +1676,7 @@ identity, tombstone, and Graph-edge behavior stay on one code path. See
 ### Author and edit a conditional expression
 
 M4.12 adds `condition ? whenTrue : whenFalse` as a first-class expression in
-current HIR v0.7, Graph v0.12, patch v0.21, and patch-plan v0.21. Graph emits one
+current HIR v0.8, Graph v0.13, patch v0.22, and patch-plan v0.21. Graph emits one
 `conditional`/`Select` node with `condition`, `whenTrue`, and `whenFalse` data
 inputs, a `value` output, and `evaluation: lazyBranches`. Text lowering keeps
 the original expression shape; it does not turn the expression into a call or

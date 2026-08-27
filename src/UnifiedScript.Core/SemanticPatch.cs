@@ -24,6 +24,7 @@ namespace UnifiedScript.Core;
 [JsonDerivedType(typeof(ReplaceReturnValuePatchOperation), "replaceReturnValue")]
 [JsonDerivedType(typeof(InsertStatementPatchOperation), "insertStatement")]
 [JsonDerivedType(typeof(DeleteStatementPatchOperation), "deleteStatement")]
+[JsonDerivedType(typeof(MoveStatementPatchOperation), "moveStatement")]
 [JsonDerivedType(typeof(IntroduceTemporaryPatchOperation), "introduceTemporary")]
 [JsonDerivedType(typeof(ReconnectValuePatchOperation), "reconnectValue")]
 [JsonDerivedType(typeof(ReconnectDataEdgePatchOperation), "reconnectDataEdge")]
@@ -317,6 +318,15 @@ public sealed record DeleteStatementPatchOperation(
     SemanticId? ExpectedPreviousSiblingId,
     SemanticId? ExpectedNextSiblingId) : SemanticPatchOperation(TargetNodeId);
 
+public sealed record MoveStatementPatchOperation(
+    SemanticId TargetNodeId,
+    SemanticId ExpectedSourceParentBlockId,
+    SemanticId? ExpectedSourcePreviousSiblingId,
+    SemanticId? ExpectedSourceNextSiblingId,
+    SemanticId DestinationParentBlockId,
+    SemanticId? ExpectedDestinationPreviousSiblingId,
+    SemanticId? ExpectedDestinationNextSiblingId) : SemanticPatchOperation(TargetNodeId);
+
 public sealed record IntroduceTemporaryPatchOperation(
     SemanticId TargetNodeId,
     SemanticId ExpectedContainingStatementId,
@@ -361,7 +371,7 @@ public sealed record SemanticPatchDocument(
     SemanticId SemanticConfigurationId,
     IReadOnlyList<SemanticPatchOperation> Operations)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.21";
+    public const string CurrentSchemaVersion = "unifiedscript.patch/v0.22";
 
     public static SemanticPatchDocument Create(
         SemanticId sourceCompilationId,

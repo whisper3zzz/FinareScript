@@ -12,7 +12,7 @@ analysis:
 
 - Script Asset / Declaration IR v0.1 for asset paths, states, exposure policy,
   Visual signatures, and declaration identities;
-- Graph v0.12 for expression dataflow, direct region ownership, structured
+- Graph v0.13 for expression dataflow, direct region ownership, structured
   control flow, source spans, and debug-target identities.
 
 It emits one deterministic document containing all Script Assets and their
@@ -76,13 +76,13 @@ v0.3 retains two inline editor capabilities:
   compatible options, result type ID, left/operand type ID, and optional right
   operand type ID.
 
-The Workbench serializes those fields as Semantic Patch v0.21. The ordinary
+The Workbench serializes those fields as Semantic Patch v0.22. The ordinary
 Roslyn patch path still enforces operator families, type preconditions, source
 identity, semantic configuration, localized syntax replacement, complete
 reanalysis, and transactional CoreCLR reload. The Surface does not weaken or
 duplicate those checks.
 
-v0.21 also defines `reconnectDataEdge` for one exact existing data input. The
+The protocol also defines `reconnectDataEdge` for one exact existing data input. The
 operation carries the old edge ID, old and new endpoints, target port, and
 semantic type as preconditions. Its first implementation copies only a stable
 pure scalar expression through the existing safe expression-edit pipeline;
@@ -105,6 +105,16 @@ planning is byte-stable and distinct producers do not collide through a short
 prefix. The host exposes that transaction at
 `POST /api/authoring/semantic-patch-plan`.
 
+Semantic Patch v0.22 adds a bounded `moveStatement` operation for control-wire
+authoring. Dragging a sequential `then` pin onto an occupied statement `in` pin
+inside the same editable block moves the target after the source. The payload
+carries exact source and destination sibling gaps; the source applier requires
+persistent identity, preserves comments and nested IDs, rejects local
+use-before-declaration and non-terminal transfers, and validates the regenerated
+CFG. Cross-region gestures are rejected as explicit branch/loop/switch
+transforms rather than approximated as arbitrary edges. See
+[CONTROL_FLOW_RECONNECTION.md](CONTROL_FLOW_RECONNECTION.md).
+
 ## HTTP and CLI delivery
 
 `unifiedscript analyze ... --out <directory>` now writes
@@ -126,7 +136,9 @@ regions, or owning Blueprint declarations. Its transient `UEdGraph` allocates
 real execution/data pins and links directly from Surface v0.3. Dragging a
 compatible output onto an occupied data input submits a direct rewire or an
 automatic shared-value patch plan to the Workbench. Alt-click submits a typed
-default disconnection. Right-click creates structured statement nodes, and
+default disconnection. A sequential control-pin drag inside one block submits a
+statement move while retaining the old wire until the Workbench commits.
+Right-click creates structured statement nodes, and
 Delete removes only statement nodes with exact block/sibling preconditions. UE
 keeps compiler-owned nodes and wires unchanged until the server commits;
 success regenerates C#, Declaration IR, Graph, Surface, DLL, and PDB, then

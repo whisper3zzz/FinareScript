@@ -9,7 +9,7 @@ The current strict-reader contracts are:
 
 - HIR `unifiedscript.hir/v0.8`;
 - Graph `unifiedscript.graph/v0.13`;
-- standalone patch `unifiedscript.patch/v0.21`;
+- standalone patch `unifiedscript.patch/v0.22`;
 - patch plan `unifiedscript.patch-plan/v0.21`.
 
 ## HIR structure

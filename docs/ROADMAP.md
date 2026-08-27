@@ -60,12 +60,12 @@ machine-local unless an artifact explicitly says otherwise.
 
 | Gate | Verified result |
 | --- | --- |
-| Main source | `fe42c97` (`feat: complete M7.3 schema data plane`), plus this M7.4 change set |
+| Main source | `a475463` (`feat: add switch-aware authoring controls`), plus this M8.1 control-reconnection change set |
 | Comparison source | `489ce9b` (`feat: complete full UnifiedScript migration`) |
-| Managed tests | 455 / 455 passed |
+| Managed tests | 463 / 463 passed |
 | Repository validator | 48 / 48 passed |
 | UE 5.8.1 native build | passed |
-| `UnifiedScript.Unreal` Automation | 13 / 13 passed at the M7.3 onboarding baseline; the migrated BlockBreaker Editor gate also passed |
+| `UnifiedScript.Unreal` Automation | 13 / 13 passed at the M7.3 onboarding baseline; the migrated BlockBreaker Editor gate and focused M8.1 Authoring Surface gate also passed |
 | BlockBreaker workload | 10,000 frames, three trials, one shot, one hit, two command completions per trial |
 | Gameplay boundary | 120,031 fast/CallFrame calls, zero legacy calls |
 | Matched local median | UnifiedScript 4,927.191 ms; Puerts 4,759.930 ms; ratio 1.035139; functional parity only, performance claim deferred to M10 |
@@ -80,7 +80,7 @@ machine-local unless an artifact explicitly says otherwise.
 | R0 foundation | Deterministic language, graph, patch, CoreCLR, and UE adapter contracts | Complete |
 | R1 demonstrable alpha | A packaged sample runs meaningful gameplay without Puerts | Complete |
 | R2 adoptable alpha | A second UE project can install, generate, run, and package without repository-specific glue | Complete |
-| R3 product beta | Practical gameplay API coverage, complete visual/code loop, debugging, and migration workflow | Active — M7 |
+| R3 product beta | Practical gameplay API coverage, complete visual/code loop, debugging, and migration workflow | Active — M8 |
 | R4 release candidate | Broad performance, soak, packaging, upgrade, and CI evidence | Queued — M10 to M11 |
 | R5 1.0 | Versioned SDK and plugin distribution with supported compatibility and migration policy | Queued — M12 |
 
@@ -645,10 +645,17 @@ HIR body block and exclude case labels from statement order. The UE palette now
 authors `do/while`, bounded `for`, `break`, and `continue`; switch-section
 `break` is accepted while an unscoped `continue` is rejected. Automatic shared
 values use the complete producer semantic ID instead of a six-character prefix.
-The 459/459 managed suite, UE 5.8 editor build, and focused native Authoring
-Surface Automation pass. Visual switch-section construction/relabel/reorder,
-region-aware control reconnection, and the full edit transaction/undo contract
-remain open, so M8.1 is not yet complete.
+The first control-reconnection slice now maps a sequential control-pin drag to
+Semantic Patch v0.22 `moveStatement` instead of mutating raw edges. It supports
+same-block reordering with exact source/destination sibling preconditions,
+requires `.usids`, preserves nested identity and comments, rejects invalid local
+ordering or terminal transfers, and validates the regenerated CFG. The Slate
+client keeps the old compiler-owned wire until the Workbench commits. The
+463/463 managed suite, UE 5.8 editor build, focused native Authoring Surface
+Automation, and 48/48 repository validator pass. Visual switch-section
+construction/relabel/reorder, cross-region structured control transforms, and
+the full edit transaction/undo contract remain open, so M8.1 is not yet
+complete.
 
 ### M8.2 — Blueprint-grade Unreal experience
 

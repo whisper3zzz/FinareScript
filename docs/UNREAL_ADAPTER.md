@@ -378,7 +378,7 @@ The workspace presents Script Asset state and behavior as a semantic hierarchy:
 function regions retain structured ownership of promoted actions, while the
 inspector exposes kind/category, exact semantic ID, source span, source preview,
 and source navigation. Literal and operator edit capabilities accept a candidate
-value and export a preconditioned `unifiedscript.patch/v0.21` document to the
+value and export a preconditioned `unifiedscript.patch/v0.22` document to the
 clipboard. This preserves one compiler-owned edit contract across browser and
 Slate frontends.
 
@@ -392,7 +392,7 @@ persisted visual layout.
 ## Phase B.15 transactional Slate Apply and component reload
 
 Each promoted literal/operator editor now exposes `Apply & Reload`. The Slate
-client posts the exact `unifiedscript.patch/v0.21` payload to the configured
+client posts the exact `unifiedscript.patch/v0.22` payload to the configured
 loopback Workbench URL and accepts only a strict
 `unifiedscript.authoring-workspace/v0.2` response. The returned Surface replaces
 the view without UE-side C# or Graph reconstruction; protocol diagnostics such

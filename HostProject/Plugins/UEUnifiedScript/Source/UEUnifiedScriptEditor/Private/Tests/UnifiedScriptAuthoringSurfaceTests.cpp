@@ -161,8 +161,8 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
             TEXT("120"),
             PatchJson,
             Error));
-    TestTrue(TEXT("Patch uses semantic-patch v0.21"),
-        PatchJson.Contains(TEXT("\"unifiedscript.patch/v0.21\"")));
+    TestTrue(TEXT("Patch uses semantic-patch v0.22"),
+        PatchJson.Contains(TEXT("\"unifiedscript.patch/v0.22\"")));
     TestTrue(TEXT("Patch retains the exact target node"),
         PatchJson.Contains(LiteralEdit->TargetNodeId));
     TestTrue(TEXT("Patch carries the requested replacement"),
@@ -305,6 +305,45 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
             ForJson.Contains(TEXT("\"statement\": \"for\"")) &&
                 ForJson.Contains(TEXT("\"expression\": \"forLocalReference\"")) &&
                 ForJson.Contains(TEXT("\"isPostfix\": true")));
+
+        const FUnifiedScriptAuthoringAction* FirstStatement =
+            RewireBlock->DirectStatementIds.Num() > 0
+            ? RewireFunction.FindAction(RewireBlock->DirectStatementIds[0])
+            : nullptr;
+        const FUnifiedScriptAuthoringAction* SecondStatement =
+            RewireBlock->DirectStatementIds.Num() > 1
+            ? RewireFunction.FindAction(RewireBlock->DirectStatementIds[1])
+            : nullptr;
+        const FUnifiedScriptAuthoringEdge* FirstIncomingControl = FirstStatement != nullptr
+            ? RewireFunction.Edges.FindByPredicate(
+                [FirstStatement](const FUnifiedScriptAuthoringEdge& Edge)
+                {
+                    return Edge.Kind == TEXT("control") &&
+                        Edge.ToNode == FirstStatement->Id && Edge.ToPort == TEXT("in");
+                })
+            : nullptr;
+        TestNotNull(TEXT("Rewire demo exposes two sequential statement nodes"), SecondStatement);
+        TestNotNull(TEXT("First statement has one compiler-owned control predecessor"),
+            FirstIncomingControl);
+        if (FirstStatement != nullptr && SecondStatement != nullptr &&
+            FirstIncomingControl != nullptr)
+        {
+            FString ControlMoveJson;
+            TestTrue(TEXT("Control drag maps to one region-aware statement move"),
+                FUnifiedScriptAuthoringSurfaceReader::BuildControlEdgeReconnectionPatch(
+                    Document,
+                    RewireFunction,
+                    *FirstIncomingControl,
+                    SecondStatement->Id,
+                    TEXT("then"),
+                    ControlMoveJson,
+                    Error));
+            TestTrue(TEXT("Control move carries source and destination block preconditions"),
+                ControlMoveJson.Contains(TEXT("\"operation\": \"moveStatement\"")) &&
+                    ControlMoveJson.Contains(TEXT("\"expectedSourceParentBlockId\"")) &&
+                    ControlMoveJson.Contains(TEXT("\"destinationParentBlockId\"")) &&
+                    ControlMoveJson.Contains(RewireBlock->SourceNodeId));
+        }
 
         FString DeleteJson;
         TestTrue(TEXT("Delete key can build an exact statement deletion"),
@@ -486,6 +525,51 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
     RewireSchema->BreakPinLinks(*TargetInput, true);
     TestTrue(TEXT("Delete-only pin gestures cannot mutate compiler-owned wires"),
         TargetInput->LinkedTo.Contains(OldOutput));
+
+    UUnifiedScriptEdGraphNode* OldControlNode =
+        NewObject<UUnifiedScriptEdGraphNode>(TransactionGraph);
+    UUnifiedScriptEdGraphNode* NewControlNode =
+        NewObject<UUnifiedScriptEdGraphNode>(TransactionGraph);
+    UUnifiedScriptEdGraphNode* ControlTargetNode =
+        NewObject<UUnifiedScriptEdGraphNode>(TransactionGraph);
+    OldControlNode->NodeKind = TEXT("variable");
+    NewControlNode->NodeKind = TEXT("variable");
+    ControlTargetNode->NodeKind = TEXT("variable");
+    TransactionGraph->AddNode(OldControlNode, false, false);
+    TransactionGraph->AddNode(NewControlNode, false, false);
+    TransactionGraph->AddNode(ControlTargetNode, false, false);
+    FEdGraphPinType ControlPinType;
+    ControlPinType.PinCategory = TEXT("exec");
+    UEdGraphPin* OldControlOutput = OldControlNode->CreatePin(
+        EGPD_Output, ControlPinType, FName(TEXT("then")));
+    UEdGraphPin* NewControlOutput = NewControlNode->CreatePin(
+        EGPD_Output, ControlPinType, FName(TEXT("then")));
+    UEdGraphPin* ControlInput = ControlTargetNode->CreatePin(
+        EGPD_Input, ControlPinType, FName(TEXT("in")));
+    OldControlOutput->MakeLinkTo(ControlInput, false);
+    bool bControlRewireSubmitted = false;
+    TransactionGraph->OnControlRewireRequested =
+        FOnUnifiedScriptControlRewireRequested::CreateLambda(
+            [&bControlRewireSubmitted, NewControlOutput, ControlInput](
+                const UEdGraphPin* SubmittedOutput,
+                const UEdGraphPin* SubmittedInput)
+            {
+                bControlRewireSubmitted = SubmittedOutput == NewControlOutput &&
+                    SubmittedInput == ControlInput;
+            });
+    TestEqual(
+        TEXT("Sequential control output advertises a region-aware transform"),
+        RewireSchema->CanCreateConnection(NewControlOutput, ControlInput).Response,
+        CONNECT_RESPONSE_MAKE);
+    TestTrue(
+        TEXT("Schema forwards control drag without mutating compiler-owned links"),
+        RewireSchema->TryCreateConnection(NewControlOutput, ControlInput));
+    TestTrue(TEXT("Control transaction callback receives the endpoints"),
+        bControlRewireSubmitted);
+    TestTrue(TEXT("Old control wire remains until the statement move commits"),
+        ControlInput->LinkedTo.Contains(OldControlOutput));
+    TestFalse(TEXT("Proposed control wire is not drawn optimistically"),
+        ControlInput->LinkedTo.Contains(NewControlOutput));
 
     TestEqual(
         TEXT("Workbench endpoint is normalized"),

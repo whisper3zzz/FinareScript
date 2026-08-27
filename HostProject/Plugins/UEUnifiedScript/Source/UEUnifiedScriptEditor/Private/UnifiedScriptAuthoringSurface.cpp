@@ -895,7 +895,7 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildSemanticPatch(
     }
 
     const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
-    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.21"));
+    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.22"));
     Root->SetStringField(TEXT("sourceCompilationId"), Document.SourceCompilationId);
     Root->SetStringField(TEXT("semanticConfigurationId"), Document.SemanticConfigurationId);
     Root->SetArrayField(TEXT("operations"), {MakeShared<FJsonValueObject>(Operation)});
@@ -969,7 +969,7 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildDataEdgeReconnectionPatch(
     Operation->SetStringField(TEXT("expectedTypeId"), TargetInput->TypeId);
 
     const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
-    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.21"));
+    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.22"));
     Root->SetStringField(TEXT("sourceCompilationId"), Document.SourceCompilationId);
     Root->SetStringField(TEXT("semanticConfigurationId"), Document.SemanticConfigurationId);
     Root->SetArrayField(TEXT("operations"), {MakeShared<FJsonValueObject>(Operation)});
@@ -1011,7 +1011,7 @@ TSharedRef<FJsonObject> MakePatchRoot(
     const TSharedRef<FJsonObject>& Operation)
 {
     const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
-    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.21"));
+    Root->SetStringField(TEXT("schemaVersion"), TEXT("unifiedscript.patch/v0.22"));
     Root->SetStringField(TEXT("sourceCompilationId"), Document.SourceCompilationId);
     Root->SetStringField(TEXT("semanticConfigurationId"), Document.SemanticConfigurationId);
     Root->SetArrayField(TEXT("operations"), {MakeShared<FJsonValueObject>(Operation)});
@@ -1030,6 +1030,51 @@ const FUnifiedScriptAuthoringRegion* FindOwningBlock(
         }
     }
     return nullptr;
+}
+
+FString ResolveStatementId(const FUnifiedScriptAuthoringAction& Action)
+{
+    return Action.DebugTargetId.IsEmpty() ? Action.Id : Action.DebugTargetId;
+}
+
+TArray<FString> GetStructuralStatementIds(
+    const FUnifiedScriptAuthoringFunction& Function,
+    const FUnifiedScriptAuthoringRegion& Block)
+{
+    TArray<FString> Result;
+    for (const FString& ActionId : Block.DirectStatementIds)
+    {
+        const FUnifiedScriptAuthoringAction* Action = Function.FindAction(ActionId);
+        if (Action == nullptr)
+        {
+            continue;
+        }
+        const FString StatementId = ResolveStatementId(*Action);
+        if (!Result.Contains(StatementId))
+        {
+            Result.Add(StatementId);
+        }
+    }
+    return Result;
+}
+
+void GetStructuralSiblingPreconditions(
+    const TArray<FString>& StatementIds,
+    const FString& StatementId,
+    FString& OutPrevious,
+    FString& OutNext)
+{
+    OutPrevious.Reset();
+    OutNext.Reset();
+    const int32 Index = StatementIds.IndexOfByKey(StatementId);
+    if (Index > 0)
+    {
+        OutPrevious = StatementIds[Index - 1];
+    }
+    if (Index != INDEX_NONE && Index + 1 < StatementIds.Num())
+    {
+        OutNext = StatementIds[Index + 1];
+    }
 }
 
 const FUnifiedScriptAuthoringAction* FindContainingStatement(
@@ -1222,6 +1267,114 @@ bool FUnifiedScriptAuthoringSurfaceReader::BuildDataEdgeDisconnectionPatch(
     Operation->SetStringField(TEXT("expectedSourcePort"), ExpectedEdge.FromPort);
     Operation->SetStringField(TEXT("expectedTypeId"), TargetPort->TypeId);
     return SerializeRoot(MakePatchRoot(Document, Operation), OutPatchJson, OutError, TEXT("the data-edge disconnection patch"));
+}
+
+bool FUnifiedScriptAuthoringSurfaceReader::BuildControlEdgeReconnectionPatch(
+    const FUnifiedScriptAuthoringSurfaceDocument& Document,
+    const FUnifiedScriptAuthoringFunction& Function,
+    const FUnifiedScriptAuthoringEdge& ExpectedEdge,
+    const FString& NewSourceNodeId,
+    const FString& NewSourcePort,
+    FString& OutPatchJson,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::AuthoringSurface::Private;
+    using namespace UE::UnifiedScript::AuthoringSurface::Editing::Private;
+    const FUnifiedScriptAuthoringAction* ExpectedSource =
+        Function.FindAction(ExpectedEdge.FromNode);
+    const FUnifiedScriptAuthoringAction* NewSource = Function.FindAction(NewSourceNodeId);
+    const FUnifiedScriptAuthoringAction* Target = Function.FindAction(ExpectedEdge.ToNode);
+    const FUnifiedScriptAuthoringPort* ExpectedSourcePort = ExpectedSource != nullptr
+        ? ExpectedSource->FindPort(ExpectedEdge.FromPort, TEXT("output"))
+        : nullptr;
+    const FUnifiedScriptAuthoringPort* NewSourceOutput = NewSource != nullptr
+        ? NewSource->FindPort(NewSourcePort, TEXT("output"))
+        : nullptr;
+    const FUnifiedScriptAuthoringPort* TargetInput = Target != nullptr
+        ? Target->FindPort(ExpectedEdge.ToPort, TEXT("input"))
+        : nullptr;
+    if (!IsSemanticId(ExpectedEdge.Id) || ExpectedEdge.Kind != TEXT("control") ||
+        ExpectedSource == nullptr || NewSource == nullptr || Target == nullptr ||
+        ExpectedSourcePort == nullptr || NewSourceOutput == nullptr || TargetInput == nullptr ||
+        !ExpectedSourcePort->IsControl() || !NewSourceOutput->IsControl() ||
+        !TargetInput->IsControl() || ExpectedEdge.ToPort != TEXT("in") ||
+        NewSourcePort != TEXT("then") || NewSource->GraphKind == TEXT("entry") ||
+        NewSource->GraphKind == TEXT("branch") ||
+        NewSource->GraphKind == TEXT("switchCase") ||
+        NewSourceNodeId == ExpectedEdge.ToNode ||
+        (ExpectedEdge.FromNode == NewSourceNodeId && ExpectedEdge.FromPort == NewSourcePort))
+    {
+        OutError = TEXT("Control reconnection requires a distinct sequential 'then' output and an occupied 'in' input.");
+        return false;
+    }
+
+    const FUnifiedScriptAuthoringRegion* TargetBlock = FindOwningBlock(Function, Target->Id);
+    const FUnifiedScriptAuthoringRegion* SourceBlock = FindOwningBlock(Function, NewSource->Id);
+    if (TargetBlock == nullptr || SourceBlock == nullptr || TargetBlock->Id != SourceBlock->Id)
+    {
+        OutError = TEXT("This control wire crosses a branch, loop, or switch boundary. Use an explicit structured transform instead.");
+        return false;
+    }
+
+    const FString TargetStatementId = ResolveStatementId(*Target);
+    const FString NewSourceStatementId = ResolveStatementId(*NewSource);
+    if (TargetStatementId == NewSourceStatementId)
+    {
+        OutError = TEXT("A control edge cannot reorder a statement relative to itself.");
+        return false;
+    }
+
+    TArray<FString> StructuralIds = GetStructuralStatementIds(Function, *TargetBlock);
+    const int32 TargetIndex = StructuralIds.IndexOfByKey(TargetStatementId);
+    if (TargetIndex == INDEX_NONE || !StructuralIds.Contains(NewSourceStatementId))
+    {
+        OutError = TEXT("Both control endpoints must resolve to statements in the selected structured block.");
+        return false;
+    }
+    FString SourcePrevious;
+    FString SourceNext;
+    GetStructuralSiblingPreconditions(
+        StructuralIds,
+        TargetStatementId,
+        SourcePrevious,
+        SourceNext);
+    StructuralIds.RemoveAt(TargetIndex);
+    const int32 DestinationPreviousIndex = StructuralIds.IndexOfByKey(NewSourceStatementId);
+    if (DestinationPreviousIndex == INDEX_NONE)
+    {
+        OutError = TEXT("The new control predecessor disappeared from the structural statement order.");
+        return false;
+    }
+    const FString DestinationPrevious = StructuralIds[DestinationPreviousIndex];
+    const FString DestinationNext = DestinationPreviousIndex + 1 < StructuralIds.Num()
+        ? StructuralIds[DestinationPreviousIndex + 1]
+        : FString();
+    if (SourcePrevious == DestinationPrevious && SourceNext == DestinationNext)
+    {
+        OutError = TEXT("This control wire already represents the requested statement order.");
+        return false;
+    }
+
+    const TSharedRef<FJsonObject> Operation = MakeShared<FJsonObject>();
+    Operation->SetStringField(TEXT("operation"), TEXT("moveStatement"));
+    Operation->SetStringField(TEXT("targetNodeId"), TargetStatementId);
+    Operation->SetStringField(TEXT("expectedSourceParentBlockId"), TargetBlock->SourceNodeId);
+    SetOptionalId(Operation, TEXT("expectedSourcePreviousSiblingId"), SourcePrevious);
+    SetOptionalId(Operation, TEXT("expectedSourceNextSiblingId"), SourceNext);
+    Operation->SetStringField(TEXT("destinationParentBlockId"), TargetBlock->SourceNodeId);
+    SetOptionalId(
+        Operation,
+        TEXT("expectedDestinationPreviousSiblingId"),
+        DestinationPrevious);
+    SetOptionalId(
+        Operation,
+        TEXT("expectedDestinationNextSiblingId"),
+        DestinationNext);
+    return SerializeRoot(
+        MakePatchRoot(Document, Operation),
+        OutPatchJson,
+        OutError,
+        TEXT("the region-aware control-edge reconnection patch"));
 }
 
 bool FUnifiedScriptAuthoringSurfaceReader::BuildSharedDataEdgePatchPlan(

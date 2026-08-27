@@ -12,7 +12,7 @@ The strict-reader contracts for this slice are:
 - HIR `unifiedscript.hir/v0.8`;
 - semantics `unifiedscript.semantics/v0.2`;
 - Graph `unifiedscript.graph/v0.13`;
-- standalone patch `unifiedscript.patch/v0.21`;
+- standalone patch `unifiedscript.patch/v0.22`;
 - patch plan `unifiedscript.patch-plan/v0.21`.
 
 ## Supported collection boundary

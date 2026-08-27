@@ -400,6 +400,36 @@ public sealed class SemanticPatchJsonTests
     }
 
     [Fact]
+    public void SerializeAndDeserialize_PreserveRegionAwareStatementMove()
+    {
+        SemanticId blockId = SemanticId.FromKey("move-block");
+        var move = new MoveStatementPatchOperation(
+            SemanticId.FromKey("move-target"),
+            blockId,
+            SemanticId.FromKey("move-old-previous"),
+            SemanticId.FromKey("move-old-next"),
+            blockId,
+            SemanticId.FromKey("move-new-previous"),
+            SemanticId.FromKey("move-new-next"));
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            SemanticId.FromKey("move-compilation"),
+            SemanticId.FromKey("move-configuration"),
+            [move]);
+
+        string json = SemanticPatchJson.Serialize(patch);
+        SemanticPatchDocument roundTrip = SemanticPatchJson.Deserialize(json);
+
+        Assert.Equal(
+            "unifiedscript.patch/v0.22",
+            roundTrip.SchemaVersion);
+        Assert.Equal(
+            move,
+            Assert.IsType<MoveStatementPatchOperation>(Assert.Single(roundTrip.Operations)));
+        Assert.Contains("\"operation\": \"moveStatement\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"destinationParentBlockId\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SerializeAndDeserialize_PreserveTypedIfExpressionTree()
     {
         SemanticId intType = SemanticId.FromKey("System.Int32");

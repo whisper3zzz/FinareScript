@@ -312,6 +312,12 @@ public sealed class CSharpSourcePatchApplier
                     boundNodes,
                     methods,
                     documents),
+                MoveStatementPatchOperation moveStatement => PlanStatementMove(
+                    moveStatement,
+                    hirNodes,
+                    patchIndex,
+                    boundNodes,
+                    documents),
                 IntroduceTemporaryPatchOperation introduceTemporary => PlanTemporaryIntroduction(
                     introduceTemporary,
                     hirNodes,
@@ -391,6 +397,32 @@ public sealed class CSharpSourcePatchApplier
         if (!patchedAnalysis.Succeeded)
         {
             return Failure(patchedAnalysis.Diagnostics);
+        }
+
+        if (patch.Operations.Any(static operation => operation is MoveStatementPatchOperation))
+        {
+            try
+            {
+                GraphDocument patchedGraph = new HirGraphProjector().Project(
+                    patchedAnalysis.Hir!,
+                    patchedAnalysis.Semantics!,
+                    patchedAnalysis.DeclarationReferences);
+                _ = new GraphControlFlowAnalyzer().AnalyzeAndValidate(patchedGraph);
+            }
+            catch (InvalidOperationException exception)
+            {
+                MoveStatementPatchOperation move = patch.Operations
+                    .OfType<MoveStatementPatchOperation>()
+                    .First();
+                HirNode? target = hirNodes.GetValueOrDefault(move.TargetNodeId);
+                return Failure(new UnifiedDiagnostic(
+                    SemanticPatchDiagnosticCodes.InvalidControlFlowReconnection,
+                    UnifiedDiagnosticSeverity.Error,
+                    "The control-flow reconnection was rejected because its projected CFG is " +
+                    $"invalid or irreducible: {exception.Message}",
+                    target?.Span ?? SourceSpan.Unknown("<patch>"),
+                    move.TargetNodeId));
+            }
         }
 
         UnifiedDiagnostic? authoredExpressionFailure =
@@ -3454,6 +3486,166 @@ public sealed class CSharpSourcePatchApplier
             pins));
     }
 
+    private static OperationPlan PlanStatementMove(
+        MoveStatementPatchOperation operation,
+        IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
+        HirPatchIndex patchIndex,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes,
+        IReadOnlyDictionary<string, ParsedDocument> documents)
+    {
+        if (!hirNodes.TryGetValue(operation.TargetNodeId, out HirNode? target))
+        {
+            return MissingTarget(operation.TargetNodeId);
+        }
+
+        if (target is not HirStatement statement ||
+            !patchIndex.TryGetStatement(statement.Id, out HirPatchIndex.StatementLocation? location))
+        {
+            return KindMismatch(target, operation.TargetNodeId, "a movable statement");
+        }
+
+        if (location!.ParentBlock.Id != operation.ExpectedSourceParentBlockId ||
+            !StatementSiblingsMatch(
+                location,
+                operation.ExpectedSourcePreviousSiblingId,
+                operation.ExpectedSourceNextSiblingId))
+        {
+            return SiblingFailure(
+                statement,
+                operation.ExpectedSourcePreviousSiblingId,
+                operation.ExpectedSourceNextSiblingId,
+                operation.ExpectedSourceParentBlockId);
+        }
+
+        if (operation.DestinationParentBlockId != location.ParentBlock.Id)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidControlFlowReconnection,
+                "This control-wire gesture crosses structured region boundaries. Move the " +
+                "statement through an explicit branch/loop/switch transform instead.",
+                statement);
+        }
+
+        HirStatement[] remaining = location.ParentBlock.Statements
+            .Where(candidate => candidate.Id != statement.Id)
+            .ToArray();
+        if (!TryGetInsertionIndex(
+                remaining,
+                operation.ExpectedDestinationPreviousSiblingId,
+                operation.ExpectedDestinationNextSiblingId,
+                out int destinationIndex))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.SiblingPreconditionFailed,
+                "The control-flow destination gap changed after the Surface was generated. " +
+                "Refresh the graph before reconnecting the wire.",
+                statement);
+        }
+
+        var reordered = remaining.ToList();
+        reordered.Insert(destinationIndex, statement);
+        if (reordered.Select(static candidate => candidate.Id).SequenceEqual(
+                location.ParentBlock.Statements.Select(static candidate => candidate.Id)))
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidControlFlowReconnection,
+                "The selected control output already precedes this statement; the reconnection " +
+                "would not change structured control flow.",
+                statement);
+        }
+
+        int terminalIndex = reordered.FindIndex(static candidate =>
+            candidate is HirReturnStatement or HirBreakStatement or HirContinueStatement);
+        if (terminalIndex >= 0 && terminalIndex != reordered.Count - 1)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidControlFlowReconnection,
+                "A return, break, or continue must remain the final statement of its structured block.",
+                statement);
+        }
+
+        string? dependencyFailure = FindLocalOrderingFailure(reordered, boundNodes);
+        if (dependencyFailure is not null)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidControlFlowReconnection,
+                dependencyFailure,
+                statement);
+        }
+
+        HirBlockStatement parentBlock = location.ParentBlock;
+        if (!TryFindSyntax(
+                documents,
+                parentBlock,
+                out ParsedDocument? document,
+                out BlockSyntax? syntax) ||
+            syntax!.Statements.Count != parentBlock.Statements.Count)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.InvalidControlFlowReconnection,
+                "Statement movement requires an explicit C# block whose statement order still " +
+                "matches the analyzed HIR.",
+                statement);
+        }
+
+        if (document!.Source.IdentitySidecar is null)
+        {
+            return DiagnosticPlan(
+                SemanticPatchDiagnosticCodes.PlanRequiresPersistentIdentity,
+                "Control-flow reconnection requires a .usids identity sidecar so every moved " +
+                "statement and nested expression keeps its semantic identity.",
+                statement);
+        }
+
+        (List<StatementSyntax> annotatedStatements, List<PendingPin> pins) =
+            AnnotateStatementTrees(document, syntax, parentBlock.Statements);
+        StatementSyntax movedSyntax = annotatedStatements[location.Index];
+        annotatedStatements.RemoveAt(location.Index);
+        annotatedStatements.Insert(destinationIndex, movedSyntax);
+        var blockAnnotation = new SyntaxAnnotation(IdentityAnnotationKind, parentBlock.Id.Value);
+        BlockSyntax replacement = syntax
+            .WithStatements(SyntaxFactory.List(annotatedStatements))
+            .WithAdditionalAnnotations(blockAnnotation);
+        pins.Add(new PendingPin(parentBlock.Id, "block", blockAnnotation));
+        return SuccessPlan(document, new PendingReplacement(
+            document.Source.LogicalPath,
+            syntax,
+            replacement,
+            pins));
+    }
+
+    private static string? FindLocalOrderingFailure(
+        IReadOnlyList<HirStatement> statements,
+        IReadOnlyDictionary<SemanticId, BoundNodeInfo> boundNodes)
+    {
+        IReadOnlyDictionary<SemanticId, int> declarationIndices = statements
+            .Select((statement, index) => (statement, index))
+            .Where(static item => item.statement is HirVariableDeclarationStatement)
+            .ToDictionary(static item => item.statement.Id, static item => item.index);
+        for (int statementIndex = 0; statementIndex < statements.Count; statementIndex++)
+        {
+            foreach (HirExpression expression in statements[statementIndex]
+                         .DescendantsAndSelf()
+                         .OfType<HirExpression>())
+            {
+                if (!boundNodes.TryGetValue(expression.Id, out BoundNodeInfo? binding) ||
+                    binding.ReferencedSymbolId is not SemanticId definitionId ||
+                    !declarationIndices.TryGetValue(definitionId, out int declarationIndex) ||
+                    declarationIndex < statementIndex)
+                {
+                    continue;
+                }
+
+                HirVariableDeclarationStatement declaration =
+                    (HirVariableDeclarationStatement)statements[declarationIndex];
+                return $"Moving this statement would place use '{expression.Id}' before local " +
+                    $"'{declaration.Name}' is declared.";
+            }
+        }
+
+        return null;
+    }
+
     private static OperationPlan PlanValueReconnection(
         ReconnectValuePatchOperation operation,
         IReadOnlyDictionary<SemanticId, HirNode> hirNodes,
@@ -4048,27 +4240,37 @@ public sealed class CSharpSourcePatchApplier
         HirBlockStatement block,
         SemanticId? expectedPreviousSiblingId,
         SemanticId? expectedNextSiblingId,
+        out int index) => TryGetInsertionIndex(
+            block.Statements,
+            expectedPreviousSiblingId,
+            expectedNextSiblingId,
+            out index);
+
+    private static bool TryGetInsertionIndex(
+        IReadOnlyList<HirStatement> statements,
+        SemanticId? expectedPreviousSiblingId,
+        SemanticId? expectedNextSiblingId,
         out int index)
     {
         if (expectedPreviousSiblingId is null && expectedNextSiblingId is null)
         {
             index = 0;
-            return block.Statements.Count == 0;
+            return statements.Count == 0;
         }
 
         if (expectedPreviousSiblingId is null)
         {
             index = 0;
-            return block.Statements.Count > 0 && block.Statements[0].Id == expectedNextSiblingId;
+            return statements.Count > 0 && statements[0].Id == expectedNextSiblingId;
         }
 
         if (expectedNextSiblingId is null)
         {
-            index = block.Statements.Count;
-            return block.Statements.Count > 0 && block.Statements[^1].Id == expectedPreviousSiblingId;
+            index = statements.Count;
+            return statements.Count > 0 && statements[^1].Id == expectedPreviousSiblingId;
         }
 
-        int previousIndex = block.Statements
+        int previousIndex = statements
             .Select((statement, statementIndex) => (statement, statementIndex))
             .Where(item => item.statement.Id == expectedPreviousSiblingId)
             .Select(static item => item.statementIndex)
@@ -4076,8 +4278,8 @@ public sealed class CSharpSourcePatchApplier
             .Single();
         index = previousIndex + 1;
         return previousIndex >= 0 &&
-            index < block.Statements.Count &&
-            block.Statements[index].Id == expectedNextSiblingId;
+            index < statements.Count &&
+            statements[index].Id == expectedNextSiblingId;
     }
 
     private static bool StatementSiblingsMatch(

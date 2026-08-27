@@ -88,6 +88,9 @@ private:
     void HandleDataRewireRequested(
         const UEdGraphPin* OutputPin,
         const UEdGraphPin* InputPin);
+    void HandleControlRewireRequested(
+        const UEdGraphPin* OutputPin,
+        const UEdGraphPin* InputPin);
     void HandleDataDisconnectRequested(
         const UEdGraphPin* OutputPin,
         const UEdGraphPin* InputPin);

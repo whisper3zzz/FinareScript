@@ -122,6 +122,9 @@ public static class SemanticPatchJson
                 case DeleteStatementPatchOperation deleteStatement:
                     ValidateDeleteStatement(deleteStatement);
                     break;
+                case MoveStatementPatchOperation moveStatement:
+                    ValidateMoveStatement(moveStatement);
+                    break;
                 case IntroduceTemporaryPatchOperation introduceTemporary:
                     ValidateIntroduceTemporary(introduceTemporary);
                     break;
@@ -928,6 +931,33 @@ public static class SemanticPatchJson
             operation.ExpectedPreviousSiblingId,
             operation.ExpectedNextSiblingId,
             "containing statement");
+    }
+
+    private static void ValidateMoveStatement(MoveStatementPatchOperation operation)
+    {
+        if (operation.ExpectedSourceParentBlockId.IsEmpty ||
+            operation.DestinationParentBlockId.IsEmpty)
+        {
+            throw new JsonException(
+                "Statement movement requires non-empty source and destination block IDs.");
+        }
+
+        ValidateSiblingIds(
+            operation.ExpectedSourcePreviousSiblingId,
+            operation.ExpectedSourceNextSiblingId);
+        ValidateSiblingTarget(
+            operation.TargetNodeId,
+            operation.ExpectedSourcePreviousSiblingId,
+            operation.ExpectedSourceNextSiblingId,
+            "moved statement");
+        ValidateSiblingIds(
+            operation.ExpectedDestinationPreviousSiblingId,
+            operation.ExpectedDestinationNextSiblingId);
+        ValidateSiblingTarget(
+            operation.TargetNodeId,
+            operation.ExpectedDestinationPreviousSiblingId,
+            operation.ExpectedDestinationNextSiblingId,
+            "destination gap");
     }
 
     private static void ValidateReconnectValue(ReconnectValuePatchOperation operation)

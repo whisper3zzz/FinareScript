@@ -84,6 +84,10 @@ void SUnifiedScriptAuthoringSurface::Construct(const FArguments& InArgs)
         FOnUnifiedScriptDataRewireRequested::CreateSP(
             this,
             &SUnifiedScriptAuthoringSurface::HandleDataRewireRequested);
+    AuthoringGraph->OnControlRewireRequested =
+        FOnUnifiedScriptControlRewireRequested::CreateSP(
+            this,
+            &SUnifiedScriptAuthoringSurface::HandleControlRewireRequested);
     AuthoringGraph->OnDataDisconnectRequested =
         FOnUnifiedScriptDataDisconnectRequested::CreateSP(
             this,
@@ -601,7 +605,7 @@ FReply SUnifiedScriptAuthoringSurface::HandleCopyPatch(
         return FReply::Handled();
     }
     FPlatformApplicationMisc::ClipboardCopy(*Patch);
-    SetStatus(FString::Printf(TEXT("Copied semantic-patch v0.21 for %s"), *Edit.TargetNodeId), false);
+    SetStatus(FString::Printf(TEXT("Copied semantic-patch v0.22 for %s"), *Edit.TargetNodeId), false);
     return FReply::Handled();
 }
 
@@ -767,6 +771,58 @@ void SUnifiedScriptAuthoringSurface::HandleDataDisconnectRequested(
         return;
     }
     SubmitSemanticPatch(MoveTemp(Patch), TEXT("Replacing the disconnected input with typed default(...)"));
+}
+
+void SUnifiedScriptAuthoringSurface::HandleControlRewireRequested(
+    const UEdGraphPin* OutputPin,
+    const UEdGraphPin* InputPin)
+{
+    if (bPatchRequestPending || OutputPin == nullptr || InputPin == nullptr)
+    {
+        return;
+    }
+    const UUnifiedScriptEdGraphNode* SourceNode =
+        Cast<UUnifiedScriptEdGraphNode>(OutputPin->GetOwningNode());
+    const UUnifiedScriptEdGraphNode* TargetNode =
+        Cast<UUnifiedScriptEdGraphNode>(InputPin->GetOwningNode());
+    const FUnifiedScriptAuthoringFunction* Function = FindFunction(ActiveFunctionId);
+    if (SourceNode == nullptr || TargetNode == nullptr || Function == nullptr)
+    {
+        SetStatus(TEXT("The control endpoints no longer belong to the active Surface."), true);
+        return;
+    }
+    const FUnifiedScriptAuthoringEdge* ExpectedEdge = Function->Edges.FindByPredicate(
+        [TargetNode, InputPin](const FUnifiedScriptAuthoringEdge& Edge)
+        {
+            return Edge.Kind == TEXT("control") && Edge.ToNode == TargetNode->SemanticId &&
+                Edge.ToPort == InputPin->PinName.ToString();
+        });
+    if (ExpectedEdge == nullptr)
+    {
+        SetStatus(TEXT("The target has no unique compiler-owned control edge to transform."), true);
+        return;
+    }
+
+    FString Patch;
+    FString Error;
+    if (!FUnifiedScriptAuthoringSurfaceReader::BuildControlEdgeReconnectionPatch(
+            Document,
+            *Function,
+            *ExpectedEdge,
+            SourceNode->SemanticId,
+            OutputPin->PinName.ToString(),
+            Patch,
+            Error))
+    {
+        SetStatus(MoveTemp(Error), true);
+        return;
+    }
+    SubmitSemanticPatch(
+        MoveTemp(Patch),
+        FString::Printf(
+            TEXT("Moving %s after %s inside one structured block"),
+            *TargetNode->DisplayTitle,
+            *SourceNode->DisplayTitle));
 }
 
 void SUnifiedScriptAuthoringSurface::HandleNodeCreateRequested(
@@ -2380,7 +2436,7 @@ void SUnifiedScriptAuthoringSurface::RebuildInspector(
                         [
                             SNew(SButton)
                             .Text(LOCTEXT("CopyPatch", "Copy Patch"))
-                            .ToolTipText(LOCTEXT("CopyPatchTip", "Copy a typed semantic-patch v0.21 payload using this value."))
+                            .ToolTipText(LOCTEXT("CopyPatchTip", "Copy a typed semantic-patch v0.22 payload using this value."))
                             .OnClicked(this, &SUnifiedScriptAuthoringSurface::HandleCopyPatch, Edit, ValueEditor)
                         ]
                         + SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f, 0.0f, 0.0f)

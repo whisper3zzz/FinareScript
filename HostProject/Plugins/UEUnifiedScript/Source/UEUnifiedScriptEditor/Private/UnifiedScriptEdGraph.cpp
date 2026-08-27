@@ -154,12 +154,51 @@ const FPinConnectionResponse UUnifiedScriptEdGraphSchema::CanCreateConnection(
 
     const UEdGraphPin* OutputPin = A->Direction == EGPD_Output ? A : B;
     const UEdGraphPin* InputPin = A->Direction == EGPD_Input ? A : B;
-    if (OutputPin->PinType.PinCategory != TEXT("data") ||
-        InputPin->PinType.PinCategory != TEXT("data"))
+    const bool bData = OutputPin->PinType.PinCategory == TEXT("data") &&
+        InputPin->PinType.PinCategory == TEXT("data");
+    const bool bControl = OutputPin->PinType.PinCategory == TEXT("exec") &&
+        InputPin->PinType.PinCategory == TEXT("exec");
+    if (!bData && !bControl)
     {
         return FPinConnectionResponse(
             CONNECT_RESPONSE_DISALLOW,
-            LOCTEXT("ControlOwned", "Control-flow wires remain compiler-owned in this version."));
+            LOCTEXT("PinKindMismatch", "Connect data to data or control flow to control flow."));
+    }
+    if (bControl)
+    {
+        const UUnifiedScriptEdGraphNode* SourceNode =
+            Cast<UUnifiedScriptEdGraphNode>(OutputPin->GetOwningNode());
+        const bool bSequentialSource = OutputPin->PinName == TEXT("then") &&
+            SourceNode != nullptr && SourceNode->NodeKind != TEXT("entry") &&
+            SourceNode->NodeKind != TEXT("branch") &&
+            SourceNode->NodeKind != TEXT("switchCase");
+        if (!bSequentialSource || InputPin->PinName != TEXT("in"))
+        {
+            return FPinConnectionResponse(
+                CONNECT_RESPONSE_DISALLOW,
+                LOCTEXT(
+                    "StructuredControlOnly",
+                    "Only a sequential 'then' output can reorder a statement through its 'in' pin."));
+        }
+        if (InputPin->LinkedTo.Num() != 1)
+        {
+            return FPinConnectionResponse(
+                CONNECT_RESPONSE_DISALLOW,
+                LOCTEXT(
+                    "ExistingControlEdgeRequired",
+                    "The target must have one compiler-owned control predecessor."));
+        }
+        if (InputPin->LinkedTo.Contains(OutputPin))
+        {
+            return FPinConnectionResponse(
+                CONNECT_RESPONSE_DISALLOW,
+                LOCTEXT("NoOpControlConnection", "This control edge is already connected."));
+        }
+        return FPinConnectionResponse(
+            CONNECT_RESPONSE_MAKE,
+            LOCTEXT(
+                "ReconnectControlEdge",
+                "Reorder this statement inside its structured block through the Workbench."));
     }
     if (OutputPin->PinType.PinSubCategory != InputPin->PinType.PinSubCategory)
     {
@@ -194,13 +233,26 @@ bool UUnifiedScriptEdGraphSchema::TryCreateConnection(UEdGraphPin* A, UEdGraphPi
     }
 
     UUnifiedScriptEdGraph* Graph = Cast<UUnifiedScriptEdGraph>(A->GetOwningNode()->GetGraph());
-    if (Graph == nullptr || !Graph->OnDataRewireRequested.IsBound())
+    if (Graph == nullptr)
     {
         return false;
     }
 
     const UEdGraphPin* OutputPin = A->Direction == EGPD_Output ? A : B;
     const UEdGraphPin* InputPin = A->Direction == EGPD_Input ? A : B;
+    if (OutputPin->PinType.PinCategory == TEXT("exec"))
+    {
+        if (!Graph->OnControlRewireRequested.IsBound())
+        {
+            return false;
+        }
+        Graph->OnControlRewireRequested.Execute(OutputPin, InputPin);
+        return true;
+    }
+    if (!Graph->OnDataRewireRequested.IsBound())
+    {
+        return false;
+    }
     Graph->OnDataRewireRequested.Execute(OutputPin, InputPin);
     return true;
 }

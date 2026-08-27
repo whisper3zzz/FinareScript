@@ -2752,6 +2752,168 @@ public sealed class CSharpSourcePatchApplierTests
     }
 
     [Fact]
+    public void Apply_MovesStatementWithinOneBlockAndPreservesSemanticIdentity()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run()
+                {
+                    int first = 1;
+                    // move with second
+                    int second = 2;
+                    int third = 3;
+                    return first + second + third;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/MoveStatement.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement first = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirVariableDeclarationStatement second = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[1]);
+        HirVariableDeclarationStatement third = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[2]);
+        HirReturnStatement @return = Assert.IsType<HirReturnStatement>(method.Body.Statements[3]);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new MoveStatementPatchOperation(
+                second.Id,
+                method.Body.Id,
+                first.Id,
+                third.Id,
+                method.Body.Id,
+                third.Id,
+                @return.Id)]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        string patchedSource = Assert.Single(result.PatchedRequest!.Sources).Source;
+        Assert.True(
+            patchedSource.IndexOf("int third = 3;", StringComparison.Ordinal) <
+            patchedSource.IndexOf("// move with second", StringComparison.Ordinal));
+        HirMethodDeclaration changed = Assert.Single(Assert.Single(result.Analysis!.Hir!.Types).Methods);
+        Assert.Equal(
+            [first.Id, third.Id, second.Id, @return.Id],
+            changed.Body.Statements.Select(static statement => statement.Id));
+        Assert.Equal(
+            ["first", "third", "second"],
+            changed.Body.Statements
+                .OfType<HirVariableDeclarationStatement>()
+                .Select(static variable => variable.Name));
+        Assert.True(Assert.Single(new GraphControlFlowAnalyzer().AnalyzeAndValidate(
+            new HirGraphProjector().Project(
+                result.Analysis.Hir,
+                result.Analysis.Semantics)).Functions).IsReducible);
+    }
+
+    [Fact]
+    public void Apply_RejectsStatementMoveThatCrossesStructuredRegions()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run(bool ready)
+                {
+                    int outside = 1;
+                    if (ready)
+                    {
+                        int inside = 2;
+                    }
+
+                    return outside;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/RejectCrossRegionMove.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement outside = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirIfStatement branch = Assert.IsType<HirIfStatement>(method.Body.Statements[1]);
+        HirVariableDeclarationStatement inside = Assert.IsType<HirVariableDeclarationStatement>(
+            Assert.Single(branch.Then.Statements));
+        HirReturnStatement @return = Assert.IsType<HirReturnStatement>(method.Body.Statements[2]);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new MoveStatementPatchOperation(
+                inside.Id,
+                branch.Then.Id,
+                null,
+                null,
+                method.Body.Id,
+                outside.Id,
+                branch.Id)]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.False(result.Succeeded);
+        UnifiedDiagnostic diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(SemanticPatchDiagnosticCodes.InvalidControlFlowReconnection, diagnostic.Code);
+        Assert.Contains("crosses structured region", diagnostic.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(inside.Id, new[] { outside.Id, branch.Id, @return.Id });
+    }
+
+    [Fact]
+    public void Apply_RejectsStatementMoveThatBreaksLocalOrdering()
+    {
+        const string source = """
+            using UnifiedScript;
+
+            static class Script
+            {
+                [Visual]
+                static int Run()
+                {
+                    int first = 1;
+                    int second = first + 1;
+                    return second;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/RejectDependencyMove.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirVariableDeclarationStatement first = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[0]);
+        HirVariableDeclarationStatement second = Assert.IsType<HirVariableDeclarationStatement>(
+            method.Body.Statements[1]);
+        HirReturnStatement @return = Assert.IsType<HirReturnStatement>(method.Body.Statements[2]);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new MoveStatementPatchOperation(
+                first.Id,
+                method.Body.Id,
+                null,
+                second.Id,
+                method.Body.Id,
+                second.Id,
+                @return.Id)]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.False(result.Succeeded);
+        UnifiedDiagnostic diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(SemanticPatchDiagnosticCodes.InvalidControlFlowReconnection, diagnostic.Code);
+        Assert.Contains("before local 'first' is declared", diagnostic.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Apply_RejectsWhileInsertionAfterAnAllPathsReturnBranch()
     {
         const string source = """

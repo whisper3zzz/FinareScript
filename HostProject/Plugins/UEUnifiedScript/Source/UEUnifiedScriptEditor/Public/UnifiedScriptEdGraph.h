@@ -20,6 +20,10 @@ DECLARE_DELEGATE_TwoParams(
     const UEdGraphPin*,
     const UEdGraphPin*);
 DECLARE_DELEGATE_TwoParams(
+    FOnUnifiedScriptControlRewireRequested,
+    const UEdGraphPin*,
+    const UEdGraphPin*);
+DECLARE_DELEGATE_TwoParams(
     FOnUnifiedScriptNodeCreateRequested,
     const FString&,
     const FVector2D&);
@@ -47,6 +51,7 @@ class UEUNIFIEDSCRIPTEDITOR_API UUnifiedScriptEdGraph final : public UEdGraph
 
 public:
     FOnUnifiedScriptDataRewireRequested OnDataRewireRequested;
+    FOnUnifiedScriptControlRewireRequested OnControlRewireRequested;
     FOnUnifiedScriptNodeCreateRequested OnNodeCreateRequested;
     FOnUnifiedScriptStatementDeleteRequested OnStatementDeleteRequested;
     FOnUnifiedScriptDataDisconnectRequested OnDataDisconnectRequested;
