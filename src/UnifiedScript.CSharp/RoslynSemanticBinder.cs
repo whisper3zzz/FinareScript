@@ -266,6 +266,16 @@ public sealed class RoslynSemanticBinder
             ForEachStatementSyntax syntax = context.SyntaxIndex.Find<ForEachStatementSyntax>(forEach);
             ITypeSymbol? collectionType = context.SemanticModel.GetTypeInfo(syntax.Expression).Type;
             ILocalSymbol? iterationVariable = context.SemanticModel.GetDeclaredSymbol(syntax);
+            ForEachIterationKind iterationKind = forEach.IterationKind switch
+            {
+                HirForEachIterationKind.Value => ForEachIterationKind.Value,
+                HirForEachIterationKind.Ref => ForEachIterationKind.Ref,
+                HirForEachIterationKind.RefReadOnly => ForEachIterationKind.RefReadOnly,
+                _ => throw new ArgumentOutOfRangeException(
+                    nameof(forEach.IterationKind),
+                    forEach.IterationKind,
+                    "Unknown foreach iteration kind."),
+            };
             ITypeSymbol? indexedElementType = collectionType switch
             {
                 { SpecialType: SpecialType.System_String } =>
@@ -284,13 +294,16 @@ public sealed class RoslynSemanticBinder
                 SymbolEqualityComparer.IncludeNullability.Equals(
                     indexedElementType,
                     iterationVariable.Type);
-            if (isIndexedCollection && hasExactIndexedElementType)
+            if (isIndexedCollection &&
+                hasExactIndexedElementType &&
+                iterationKind == ForEachIterationKind.Value)
             {
                 TypeDescriptor collectionDescriptor = GetTypeDescriptor(collectionType!);
                 TypeDescriptor elementDescriptor = GetTypeDescriptor(indexedElementType!);
                 forEachLoops.Add(forEach.Id, new BoundForEachInfo(
                     forEach.Id,
                     ForEachIterationStrategy.Indexed,
+                    iterationKind,
                     collectionDescriptor.Id,
                     elementDescriptor.Id,
                     null,
@@ -298,7 +311,7 @@ public sealed class RoslynSemanticBinder
                     null,
                     null,
                     null,
-                    false));
+                    ForEachDisposalKind.None));
                 continue;
             }
 
@@ -309,11 +322,33 @@ public sealed class RoslynSemanticBinder
             TypeDescriptor? enumerableElement = statementInfo.ElementType is null
                 ? null
                 : GetTypeDescriptor(statementInfo.ElementType);
-            bool supportsDisposableEnumerator =
+            bool hasGraphSafeCollectionContract =
+                (enumerableCollection is
+                    {
+                        Kind: UnifiedTypeKind.Enumerable,
+                        IsGraphSafe: true,
+                    } && enumerableCollection.ElementTypeId == enumerableElement?.Id) ||
+                (enumerableCollection is
+                    {
+                        Kind: UnifiedTypeKind.BorrowedSequence,
+                    } && enumerableCollection.ElementTypeId == enumerableElement?.Id) ||
+                (enumerableCollection is
+                    {
+                        IsGraphSafe: true,
+                    } && enumerableCollection.Kind is not (
+                        UnifiedTypeKind.Enumerable or UnifiedTypeKind.BorrowedSequence));
+            bool hasCompatibleCurrentReference = iterationKind switch
+            {
+                ForEachIterationKind.Value => true,
+                ForEachIterationKind.RefReadOnly =>
+                    statementInfo.CurrentProperty is { ReturnsByRef: true } or
+                        { ReturnsByRefReadonly: true },
+                _ => false,
+            };
+            bool supportsEnumerator =
                 !statementInfo.IsAsynchronous &&
-                enumerableCollection is { Kind: UnifiedTypeKind.Enumerable, IsGraphSafe: true } &&
+                hasGraphSafeCollectionContract &&
                 enumerableElement is { IsGraphSafe: true } &&
-                enumerableCollection.ElementTypeId == enumerableElement.Id &&
                 iterationVariable is not null &&
                 SymbolEqualityComparer.IncludeNullability.Equals(
                     statementInfo.ElementType,
@@ -323,39 +358,76 @@ public sealed class RoslynSemanticBinder
                 statementInfo.GetEnumeratorMethod is not null &&
                 statementInfo.MoveNextMethod is not null &&
                 statementInfo.CurrentProperty?.GetMethod is not null &&
-                statementInfo.DisposeMethod is not null;
-            if (supportsDisposableEnumerator)
+                hasCompatibleCurrentReference;
+            if (supportsEnumerator)
             {
                 MethodDescriptor getEnumerator = GetMethodDescriptor(statementInfo.GetEnumeratorMethod!);
                 MethodDescriptor moveNext = GetMethodDescriptor(statementInfo.MoveNextMethod!);
                 MethodDescriptor getCurrent = GetMethodDescriptor(statementInfo.CurrentProperty!.GetMethod!);
-                MethodDescriptor dispose = GetMethodDescriptor(statementInfo.DisposeMethod!);
+                ForEachDisposalKind disposalKind = GetForEachDisposalKind(
+                    context.SemanticModel.Compilation,
+                    statementInfo);
+                MethodDescriptor? dispose = disposalKind == ForEachDisposalKind.None
+                    ? null
+                    : GetMethodDescriptor(statementInfo.DisposeMethod!);
                 TypeDescriptor enumerator = GetTypeDescriptor(
                     statementInfo.GetEnumeratorMethod!.ReturnType);
                 forEachLoops.Add(forEach.Id, new BoundForEachInfo(
                     forEach.Id,
                     ForEachIterationStrategy.Enumerator,
+                    iterationKind,
                     enumerableCollection!.Id,
                     enumerableElement!.Id,
                     enumerator.Id,
                     getEnumerator.Id,
                     moveNext.Id,
                     getCurrent.Id,
-                    dispose.Id,
-                    true));
+                    dispose?.Id,
+                    disposalKind));
                 continue;
             }
 
             diagnostics.Add(new UnifiedDiagnostic(
                 SemanticDiagnosticCodes.ForEachCollectionNotSupported,
                 UnifiedDiagnosticSeverity.Error,
-                "Foreach requires System.String, a one-dimensional zero-based array, or a " +
-                "synchronous IEnumerable<T>-backed collection with graph-safe T and a disposable " +
-                "enumerator. The iteration variable and Current value must use that exact element " +
-                "type without hidden conversions.",
+                "Foreach requires System.String, a one-dimensional zero-based array, a borrowed " +
+                "Span<T>/ReadOnlySpan<T>, or a graph-safe synchronous enumerable/pattern collection. " +
+                "The iteration variable and Current value must use the exact graph-safe element " +
+                "type without hidden conversions; borrowed references must be ref readonly.",
                 forEach.Collection.Span,
                 forEach.Collection.Id));
         }
+    }
+
+    private static ForEachDisposalKind GetForEachDisposalKind(
+        Compilation compilation,
+        ForEachStatementInfo statementInfo)
+    {
+        if (statementInfo.DisposeMethod is not IMethodSymbol disposeMethod ||
+            statementInfo.GetEnumeratorMethod?.ReturnType is not ITypeSymbol enumeratorType)
+        {
+            return ForEachDisposalKind.None;
+        }
+
+        INamedTypeSymbol? disposable = compilation.GetTypeByMetadataName("System.IDisposable");
+        if (disposable is null ||
+            !SymbolEqualityComparer.Default.Equals(
+                disposeMethod.ContainingType.OriginalDefinition,
+                disposable))
+        {
+            return ForEachDisposalKind.Required;
+        }
+
+        if (compilation is CSharpCompilation csharpCompilation &&
+            csharpCompilation.ClassifyConversion(enumeratorType, disposable).IsImplicit)
+        {
+            return ForEachDisposalKind.Required;
+        }
+
+        return enumeratorType.IsReferenceType &&
+            enumeratorType is not INamedTypeSymbol { IsSealed: true }
+                ? ForEachDisposalKind.Conditional
+                : ForEachDisposalKind.None;
     }
 
     private void BindExpressions(HirCompilationUnit hir)
@@ -664,8 +736,8 @@ public sealed class RoslynSemanticBinder
                 kind,
                 nullability,
                 isGraphSafe,
-                kind == UnifiedTypeKind.Enumerable &&
-                    TryGetEnumerableElementType(type, out ITypeSymbol? element)
+                kind is UnifiedTypeKind.Enumerable or UnifiedTypeKind.BorrowedSequence &&
+                    TryGetSequenceElementType(type, out ITypeSymbol? element)
                     ? GetTypeDescriptor(element!).Id
                     : null);
             types[id] = descriptor;
@@ -762,6 +834,11 @@ public sealed class RoslynSemanticBinder
                 GetTypeDescriptor(enumerableElement!).IsGraphSafe);
         }
 
+        if (TryGetBorrowedSequenceElementType(type, out _))
+        {
+            return (UnifiedTypeKind.BorrowedSequence, nullability, false);
+        }
+
         return type switch
         {
             IArrayTypeSymbol { Rank: 1, IsSZArray: true } array =>
@@ -837,6 +914,32 @@ public sealed class RoslynSemanticBinder
 
         elementType = elements[0];
         return true;
+    }
+
+    private static bool TryGetSequenceElementType(
+        ITypeSymbol type,
+        out ITypeSymbol? elementType) =>
+        TryGetEnumerableElementType(type, out elementType) ||
+        TryGetBorrowedSequenceElementType(type, out elementType);
+
+    private static bool TryGetBorrowedSequenceElementType(
+        ITypeSymbol type,
+        out ITypeSymbol? elementType)
+    {
+        if (type is INamedTypeSymbol
+            {
+                Arity: 1,
+                ContainingNamespace: { } containingNamespace,
+            } named &&
+            containingNamespace.ToDisplayString() == "System" &&
+            named.Name is "Span" or "ReadOnlySpan")
+        {
+            elementType = named.TypeArguments[0];
+            return true;
+        }
+
+        elementType = null;
+        return false;
     }
 
     private static (UnifiedTypeKind Kind, UnifiedNullability Nullability, bool IsGraphSafe)

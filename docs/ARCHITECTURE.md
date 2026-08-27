@@ -333,6 +333,10 @@ Accepted statement forms:
 - exact indexed `foreach` over `string` or a one-dimensional zero-based array
 - synchronous disposal-aware `foreach` backed by one graph-safe
   `IEnumerable<T>` element contract
+- synchronous graph-safe pattern `foreach`, including no-cleanup and
+  runtime-conditional cleanup protocols
+- borrowed `Span<T>`/`ReadOnlySpan<T>` iteration with explicit `ref readonly`
+  value semantics
 - `break` and `continue` inside an enclosing `while`, `do`, `for`, or supported
   `foreach`
 - `return`
@@ -351,8 +355,8 @@ Accepted expression forms:
 Explicitly rejected forms include dynamic binding, unsafe code, pointers, goto,
 yield, local functions, lambdas, exception control flow, locks, LINQ query
 syntax, stack allocation, ref/out/in parameters and arguments, generic visual
-methods, pattern-only/ambiguous/non-disposable enumerators, ref/async
-`foreach`, switch, and all other syntax
+methods, ambiguous enumerator element contracts, mutable ref/async `foreach`,
+switch, and all other syntax
 not listed above.
 
 ## Graph semantics

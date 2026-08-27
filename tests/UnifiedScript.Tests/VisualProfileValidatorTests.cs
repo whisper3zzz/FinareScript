@@ -118,4 +118,38 @@ public sealed class VisualProfileValidatorTests
         Assert.Contains(VisualProfileDiagnosticCodes.NamedArgumentNotSupported, codes);
         Assert.Contains(VisualProfileDiagnosticCodes.ExpressionNotSupported, codes);
     }
+
+    [Fact]
+    public void Validate_AllowsRefReadonlyForEachButRejectsMutableRefAndAwaitVariants()
+    {
+        const string source = """
+            using System;
+            using System.Collections.Generic;
+
+            class Example
+            {
+                [Visual]
+                void Run(Span<int> writable, ReadOnlySpan<int> borrowed, IAsyncEnumerable<int> asyncValues)
+                {
+                    foreach (ref readonly int value in borrowed) { }
+                    foreach (ref int value in writable) { }
+                    await foreach (int value in asyncValues) { }
+                }
+            }
+            """;
+
+        IReadOnlyList<UnifiedScript.Core.UnifiedDiagnostic> diagnostics =
+            new VisualProfileValidator().Validate(
+                CSharpSyntaxTree.ParseText(source, path: "ForEachProfile.cs"));
+        UnifiedScript.Core.UnifiedDiagnostic[] statements = diagnostics
+            .Where(static diagnostic =>
+                diagnostic.Code == VisualProfileDiagnosticCodes.StatementNotSupported)
+            .ToArray();
+
+        Assert.Equal(2, statements.Length);
+        Assert.Contains(statements, static diagnostic =>
+            diagnostic.Message.Contains("Mutable ref foreach", StringComparison.Ordinal));
+        Assert.Contains(statements, static diagnostic =>
+            diagnostic.Message.Contains("Await foreach", StringComparison.Ordinal));
+    }
 }

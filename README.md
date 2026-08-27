@@ -1592,9 +1592,11 @@ This produces `foreach (char value in fallback) { result = value; }` as
 ordinary C#. The equivalent checked-in `BuildEnumerableForEach.plan.json`
 produces `foreach (int value in fallback) { result = value; }` from
 `IEnumerable<int>` inputs and reprojects to explicit acquisition plus three
-cleanup transfers. Pattern-only/ambiguous enumerators, non-disposable
-enumerators, `ref foreach`, and `await foreach` remain rejected until the
-shared VM models their distinct lifetime rules. See
+cleanup transfers. M8.5 also accepts graph-safe pattern enumerators and
+borrowed `Span<T>`/`ReadOnlySpan<T>` with `ref readonly` iteration, distinguishing
+no cleanup, required cleanup, and runtime-conditional cleanup in Semantics and
+Graph. Ambiguous element contracts, mutable `ref foreach`, and `await foreach`
+remain rejected until the shared VM models their distinct alias/async rules. See
 [FOREACH_LOOPS.md](docs/FOREACH_LOOPS.md).
 
 ### Edit assignment values and loop conditions

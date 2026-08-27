@@ -2,42 +2,45 @@
 
 M4.20 added exact indexed `foreach`; M4.21 extends the same vertical slice to
 synchronous `IEnumerable<T>`-backed collections with explicit enumerator
-lifetime and `finally`-equivalent cleanup. Both cover C# text, HIR, semantic
-binding, Graph, derived CFG, persistent identity, exact source editing, and
-visual construction. Text and visual forms lower to the same contract; there
-is no editor-only expansion and no second VM.
+lifetime and `finally`-equivalent cleanup. M8.5 adds graph-safe pattern
+enumerators, exact conditional-disposal classification, and borrowed
+`Span<T>`/`ReadOnlySpan<T>` iteration including `ref readonly`. These forms
+cover C# text, HIR, semantic binding, Graph, derived CFG, persistent identity,
+and exact collection editing. Text and visual forms lower to the same contract;
+there is no editor-only expansion and no second VM.
 
 The strict-reader contracts for this slice are:
 
-- HIR `unifiedscript.hir/v0.8`;
-- semantics `unifiedscript.semantics/v0.3`;
+- HIR `unifiedscript.hir/v0.9`;
+- semantics `unifiedscript.semantics/v0.4`;
 - Graph `unifiedscript.graph/v0.13`;
 - standalone patch `unifiedscript.patch/v0.28`;
 - patch plan `unifiedscript.patch-plan/v0.21`.
 
 ## Supported collection boundary
 
-The current profile accepts two exact strategies:
+The current profile accepts two execution strategies and three lifetime modes:
 
 - indexed: `System.String`, producing `System.Char`, and one-dimensional,
   zero-based arrays whose element type is graph-safe;
-- enumerator: a synchronous collection backed by exactly one
-  `System.Collections.Generic.IEnumerable<T>` contract, where `T` is
-  graph-safe and Roslyn resolves identity conversions plus a disposable
-  enumerator protocol.
+- enumerator: a synchronous graph-safe `IEnumerable<T>` or pattern collection,
+  plus scoped `Span<T>`/`ReadOnlySpan<T>` borrowed sequences, where `T` is
+  graph-safe and Roslyn resolves identity element/current conversions.
 
 Both strategies evaluate the collection once, bind the read-only current value
 before each body entry, and advance before the next body entry. Indexed loops
 use `0 .. Length - 1`. Enumerator loops preserve Roslyn's resolved
-`GetEnumerator`, `MoveNext`, `Current`, and `Dispose` symbols and execute
-`Dispose` on exhaustion, nearest-loop `break`, `return`, and exceptional exit.
+`GetEnumerator`, `MoveNext`, and `Current` symbols. When Roslyn's enumerator
+requires cleanup, the binding also preserves the exact `Dispose` method and
+classifies it as required or runtime-conditional. Cleanup runs on exhaustion,
+nearest-loop `break`, `return`, and exceptional exit.
 
-Pattern-only enumerators, multiple or ambiguous generic enumerable element
-contracts, multidimensional or non-zero-based arrays, hidden element/current
-conversions, non-disposable enumerators, `ref`/`ref readonly foreach`, and
-`await foreach` remain rejected. Reporting `disposal: none` for indexed loops
-and `disposal: finally` for enumerator loops is an exact semantic distinction,
-not a presentation hint.
+Multiple or ambiguous generic enumerable element contracts, multidimensional
+or non-zero-based arrays, hidden element/current conversions, mutable `ref`
+iteration, and `await foreach` remain rejected. `ref readonly` is accepted only
+when Roslyn binds `Current` by reference. Reporting `disposal: none`,
+`disposal: finally`, or `disposal: conditionalFinally` is an exact semantic
+distinction, not a presentation hint.
 
 ## HIR and binding contract
 
@@ -45,6 +48,8 @@ HIR uses discriminator `forEach`:
 
 ```text
 HirForEachStatement
+├── IterationKind: value | ref | refReadOnly
+├── IsAsync
 ├── Variable
 │   ├── Name
 │   └── TypeName
@@ -56,10 +61,12 @@ The iteration variable has its own persistent semantic ID. Roslyn remains the
 authority for its declared symbol, collection type, element type, and every
 reference inside the body. The semantic binder requires the declared variable
 type to equal the supported collection element type and emits `UVS2008` when
-the collection does not meet either exact boundary. Semantics v0.2 adds
-`BoundForEachInfo`: strategy, collection/element/enumerator type IDs, the four
-protocol method IDs, and `RequiresDisposal`. Safe enumerable type descriptors
-publish `kind: enumerable` and their exact `elementTypeId`.
+the collection does not meet either exact boundary. Semantics v0.4 carries
+`BoundForEachInfo`: strategy, iteration kind, collection/element/enumerator
+type IDs, protocol method IDs, and `ForEachDisposalKind`. Safe enumerable type
+descriptors publish `kind: enumerable`; scoped spans publish
+`kind: borrowedSequence`. Both carry their exact `elementTypeId`, while a
+borrowed sequence remains illegal as a callable Graph signature value.
 
 Traversal, structural identity reconciliation, patch indexing, use/definition
 indexing, and expression enumeration all descend through the collection and
@@ -69,12 +76,15 @@ collection, body, and unaffected descendant identities through the normal
 
 ## Graph execution shape
 
-A foreach owns one `loop` region. Indexed loops have ordered `loopCollection`
-and `loopBody` children. Enumerator loops add a third `loopCleanup` child. The
+A foreach owns one `loop` region. Indexed and non-disposing enumerator loops
+have ordered `loopCollection` and `loopBody` children. Disposing enumerators
+add a third `loopCleanup` child. The
 collection child contains the expression, evaluate-once capture, and—when
 needed—enumerator acquisition. The body starts with the source-backed current
-binding. The cleanup child contains separate disposal nodes for normal/break,
-return, and exception transfers.
+binding and identifies whether the value is copied or borrowed read-only. The
+cleanup child contains separate disposal nodes for normal/break, return, and
+exception transfers; conditional cleanup nodes also publish
+`disposalCondition: runtimeInterface`.
 
 ```mermaid
 flowchart TD
@@ -84,7 +94,9 @@ flowchart TD
     Acquire -->|"no"| MoveNext["indexed move-next decision"]
     Acquire -->|"yes: GetEnumerator"| EnumMoveNext["MoveNext"]
     EnumMoveNext -->|"has value"| Current
-    EnumMoveNext -->|"complete"| DisposeNormal["Dispose: exhaustion"]
+    EnumMoveNext -->|"complete"| CleanupDecision{"cleanup required?"}
+    CleanupDecision -->|"no"| Exit
+    CleanupDecision -->|"yes"| DisposeNormal["Dispose: exhaustion"]
     MoveNext -->|"has value"| Current["bind current element"]
     Current --> Body["loop body"]
     Body --> MoveNext
@@ -110,6 +122,7 @@ The loop node publishes machine-readable semantics:
     "iterationAdvance": "beforeBody",
     "continueTarget": "moveNext",
     "disposal": "finally",
+    "iterationKind": "value",
     "cleanupOn": "exhaustion,break,return,exception",
     "evaluationOrder": "collection,getEnumerator,moveNext,current,body,dispose"
   }
@@ -117,19 +130,20 @@ The loop node publishes machine-readable semantics:
 ```
 
 `GraphJson` validates strategy-specific region order, collection capture,
-acquisition/current/disposal node cardinality, cleanup reasons, and loop
-properties. A malformed document is rejected instead of being interpreted
-with an implicit lifetime strategy.
+acquisition/current/disposal node cardinality, iteration/value semantics,
+cleanup condition/reasons, and loop properties. A malformed document is
+rejected instead of being interpreted with an implicit alias or lifetime
+strategy.
 
 ## Derived CFG facts
 
-`GraphControlFlowLoop` records `CollectionRegionId` and, for enumerators,
-`CleanupRegionId` plus normal/return/exception cleanup node IDs. Its effective
+`GraphControlFlowLoop` records `CollectionRegionId` and, for disposing
+enumerators, `CleanupRegionId` plus normal/return/exception cleanup node IDs. Its effective
 header and continue target are move-next; its body entry is current binding.
 Normal body fallthrough and `continue` return to move-next. Indexed exhaustion
-and `break` reach the exit directly; enumerator exhaustion and `break` first
-converge on normal disposal. Returns route through return disposal before the
-pending transfer continues.
+and `break` reach the exit directly for indexed/non-disposing loops; disposing
+enumerator exhaustion and `break` first converge on normal disposal. Returns
+route through return disposal before the pending transfer continues.
 
 Exceptional cleanup is represented by an explicit cleanup node together with
 protected `ExceptionalSourceNodeIds` and the next exceptional-cleanup target.
@@ -154,7 +168,8 @@ client-supplied edge target.
 Patch v0.20 exposes `replaceForEachCollection`. It identifies the existing loop,
 the exact current collection root, and the expected collection type. The new
 collection is a same-method local or parameter reference of exactly the same
-supported collection type, including graph-safe enumerable types. The rewriter
+supported collection type, including graph-safe enumerable and borrowed span
+types. The rewriter
 changes only the collection syntax, preserves the loop/body/iteration-variable
 identities, rejects meaningful
 discarded trivia, and reruns profile, compiler, semantic, Graph, and CFG gates.
@@ -238,10 +253,10 @@ cleanup transfer nodes.
 - Construction uses explicitly typed iteration variables and supported local
   or parameter collections; deconstruction and `var` authoring are deferred.
 - Body handles append bounded statements and do not move or delete source.
+- Mutable `ref` construction/editing requires writable alias ports and remains
+  rejected; accepted borrowed iteration is explicitly `ref readonly`.
+- `await foreach`/`DisposeAsync` still requires async move-next and cleanup
+  states in the shared semantic/Graph/VM contract before admission.
 - Collection mutation analysis, bounds-check optimization, full exception CFG,
   async state machines, SSA, serialized CFG caches, and automatic placement
-  remain outside M4.21.
-- Pattern-only enumerators and conditional disposal, `ref` iteration, and
-  `await foreach`/`DisposeAsync` remain independent future slices. They must
-  extend the shared semantic/Graph/VM contract before the profile accepts
-  those forms.
+  remain outside this slice.

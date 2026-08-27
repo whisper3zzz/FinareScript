@@ -60,10 +60,10 @@ machine-local unless an artifact explicitly says otherwise.
 
 | Gate | Verified result |
 | --- | --- |
-| Main source | `5b75aff` (`test: close BlockBreaker round trip milestone`), plus this M8.5 null-flow change set |
+| Main source | `9ad8d7d` (`feat: publish flow-sensitive nullability`), plus this M8.5 foreach change set |
 | Comparison source | `e62a46e` (`feat: adopt round-tripped gameplay tuning`) |
-| Managed tests | 511 / 511 passed |
-| Repository validator | 56 / 56 passed |
+| Managed tests | 517 / 517 passed |
+| Repository validator | 57 / 57 passed |
 | UE 5.8.1 native build | passed |
 | `UnifiedScript.Unreal` Automation | 13 / 13 passed with M8.3 declaration, Authoring Surface, override migration, and live World-host coverage |
 | BlockBreaker workload | 10,000 frames, three trials, one shot, one hit, two command completions per trial |
@@ -73,7 +73,7 @@ machine-local unless an artifact explicitly says otherwise.
 | Deliverable smoke | 300 frames, one shot, one hit, two command completions, 3,631 fast/CallFrame calls, zero legacy calls |
 | Deliverable report | `artifacts/demo/blockbreaker-20260827-165719/demo-delivery.json` |
 | Visual/C# round trip | semantic, MethodDef IL, execution cases, Script Assets, two live UE candidates, and two packaged candidates equivalent |
-| Round-trip report | `artifacts/roundtrip/blockbreaker-20260828-013349-7a30871b/roundtrip-report.json` |
+| Round-trip report | `artifacts/roundtrip/blockbreaker-20260828-021802-6305602d/roundtrip-report.json` |
 
 ## Release ladder
 
@@ -892,14 +892,23 @@ to M8.5. See [`BLOCKBREAKER_ROUND_TRIP.md`](BLOCKBREAKER_ROUND_TRIP.md).
 - [ ] publish the supported Visual C# profile, opaque-code escape boundary, and
   diagnostics for code that cannot be represented visually
 
-Progress (2026-08-28): semantics v0.3 now carries Roslyn's exact per-expression
+Progress (2026-08-28): semantics v0.4 carries Roslyn's exact per-expression
 `NullFlowState` independently from type nullability. Graph and Authoring Surface
 actions publish validated `typeNullability`/`nullFlowState` properties, and the
 round-trip semantic digest includes the flow result. Regression proves a
 nullable parameter is `notNull` after an early-return guard and returns to
-`maybeNull` after assignment. The remaining M8.5 language work is the scheduled
-real-gameplay `foreach` variants plus the published profile/opaque boundary.
-See [`NULLABILITY_FLOW.md`](NULLABILITY_FLOW.md).
+`maybeNull` after assignment.
+
+HIR v0.9 and semantics v0.4 now also preserve `value` versus `ref readonly`
+iteration, scoped `Span<T>`/`ReadOnlySpan<T>` borrowed sequences, graph-safe
+pattern enumerators, and exact `none`/`required`/`conditional` disposal. Graph
+publishes copied versus borrowed-read-only value semantics and creates cleanup
+regions only when C# actually owns disposal. Exact collection editing preserves
+the alias mode. The 517/517 managed suite, 57/57 repository validator, and full
+BlockBreaker managed round trip pass. Mutable `ref`, `await foreach`, and the
+published Visual C#/opaque-code boundary remain. See
+[`NULLABILITY_FLOW.md`](NULLABILITY_FLOW.md) and
+[`FOREACH_LOOPS.md`](FOREACH_LOOPS.md).
 
 Acceptance: Player and Rifle logic can be changed from either surface and hot
 reloaded into the same running scene without a second Blueprint behavior source.

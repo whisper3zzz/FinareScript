@@ -2714,7 +2714,7 @@ def main() -> int:
     graph_json_test = graph_json_test_path.read_text(encoding="utf-8")
     nullability_doc = nullability_doc_path.read_text(encoding="utf-8")
     require(
-        'CurrentSchemaVersion = "unifiedscript.semantics/v0.3"'
+        'CurrentSchemaVersion = "unifiedscript.semantics/v0.4"'
         in semantic_model_source
         and "UnifiedNullFlowState" in semantic_model_source
         and "NullFlowState" in semantic_model_source
@@ -2726,12 +2726,67 @@ def main() -> int:
         and "AnalyzeAndProject_PublishesFlowSensitiveNullStateAtEveryExpressionUse"
         in semantic_pipeline_test
         and "Serialize_RejectsInvalidNullFlowMetadata" in graph_json_test
-        and "unifiedscript.semantics/v0.3" in nullability_doc
-        and "unifiedscript.bound-method/v0.2" in roundtrip_runtime
+        and "unifiedscript.semantics/v0.4" in nullability_doc
+        and "unifiedscript.bound-method/v0.3" in roundtrip_runtime
         and "- [x] flow-sensitive nullability state" in roadmap,
         "M8.5 flow-sensitive nullability semantic, Graph, or documentation contract is incomplete",
     )
     checks.append("M8.5 nullability follows Roslyn flow state through Semantics and Graph")
+    hir_nodes_path = ROOT / "src" / "UnifiedScript.Core" / "HirNodes.cs"
+    profile_validator_path = (
+        ROOT / "src" / "UnifiedScript.CSharp" / "VisualProfileValidator.cs"
+    )
+    source_patch_path = (
+        ROOT / "src" / "UnifiedScript.CSharp" / "CSharpSourcePatchApplier.cs"
+    )
+    source_patch_test_path = (
+        ROOT / "tests" / "UnifiedScript.Tests" / "CSharpSourcePatchApplierTests.cs"
+    )
+    profile_test_path = (
+        ROOT / "tests" / "UnifiedScript.Tests" / "VisualProfileValidatorTests.cs"
+    )
+    foreach_doc_path = ROOT / "docs" / "FOREACH_LOOPS.md"
+    for path in [
+        hir_nodes_path,
+        profile_validator_path,
+        source_patch_path,
+        source_patch_test_path,
+        profile_test_path,
+        foreach_doc_path,
+    ]:
+        require(path.is_file(), f"Missing M8.5 foreach artifact: {path}")
+    hir_nodes_source = hir_nodes_path.read_text(encoding="utf-8")
+    profile_validator_source = profile_validator_path.read_text(encoding="utf-8")
+    source_patch_source = source_patch_path.read_text(encoding="utf-8")
+    source_patch_test = source_patch_test_path.read_text(encoding="utf-8")
+    profile_test = profile_test_path.read_text(encoding="utf-8")
+    foreach_doc = foreach_doc_path.read_text(encoding="utf-8")
+    require(
+        'CurrentSchemaVersion = "unifiedscript.hir/v0.9"'
+        in (ROOT / "src" / "UnifiedScript.Core" / "HirDocument.cs").read_text(encoding="utf-8")
+        and "HirForEachIterationKind" in hir_nodes_source
+        and "RefReadOnly" in hir_nodes_source
+        and "BorrowedSequence" in semantic_model_source
+        and "ForEachDisposalKind" in semantic_model_source
+        and "TryGetBorrowedSequenceElementType" in semantic_binder_source
+        and "GetForEachDisposalKind" in semantic_binder_source
+        and '"conditionalFinally"' in graph_projector_source
+        and '"borrowedReadOnly"' in graph_projector_source
+        and "isConditionalDisposalForEach" in graph_json_source
+        and "UnifiedTypeKind.BorrowedSequence" in source_patch_source
+        and "AnalyzeAndProject_PreservesBorrowedRefReadonlySpanWithoutCleanup"
+        in semantic_pipeline_test
+        and "AnalyzeAndProject_PreservesPatternEnumeratorConditionalDisposal"
+        in semantic_pipeline_test
+        and "Apply_ReplacesBorrowedRefReadonlyForEachCollectionWithoutLosingAliasMode"
+        in source_patch_test
+        and "Validate_AllowsRefReadonlyForEachButRejectsMutableRefAndAwaitVariants"
+        in profile_test
+        and "disposal: conditionalFinally" in foreach_doc
+        and "ref readonly" in foreach_doc,
+        "M8.5 borrowed/ref-readonly or conditional-disposal foreach contract is incomplete",
+    )
+    checks.append("M8.5 foreach preserves borrowed refs and exact conditional disposal")
     require(
         "UUnifiedScriptWorldSubsystem final" in unreal_world_host_header
         and "public UWorldSubsystem" in unreal_world_host_header
@@ -4531,11 +4586,11 @@ def main() -> int:
         golden_manifest["artifacts"]["graph"]["schemaVersion"]
         == "unifiedscript.graph/v0.13"
         and golden_manifest["artifacts"]["hir"]["schemaVersion"]
-        == "unifiedscript.hir/v0.8"
+        == "unifiedscript.hir/v0.9"
         and "if ((damage > threshold) && !disabled)" in region_source
         and "return true;" in region_source
         and "return false;" in region_source,
-        "HIR v0.7/Graph v0.12 Golden manifest or early-return region sample is inconsistent",
+        "Current HIR/Graph Golden manifest or early-return region sample is inconsistent",
     )
     require(
         "return enabled && ready;" in short_circuit_source

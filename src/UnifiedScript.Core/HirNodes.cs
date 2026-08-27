@@ -120,12 +120,25 @@ public sealed record HirForStatement(
     IReadOnlyList<HirExpression> Incrementors,
     HirBlockStatement Body) : HirStatement(Id, Span);
 
+public enum HirForEachIterationKind
+{
+    Value,
+    Ref,
+    RefReadOnly,
+}
+
 public sealed record HirForEachStatement(
     SemanticId Id,
     SourceSpan Span,
     HirForEachVariable Variable,
     HirExpression Collection,
-    HirBlockStatement Body) : HirStatement(Id, Span);
+    HirBlockStatement Body) : HirStatement(Id, Span)
+{
+    public HirForEachIterationKind IterationKind { get; init; } =
+        HirForEachIterationKind.Value;
+
+    public bool IsAsync { get; init; }
+}
 
 public sealed record HirForEachVariable(
     SemanticId Id,

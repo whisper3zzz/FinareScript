@@ -140,7 +140,7 @@ public sealed class CSharpToHirLowererTests
         Assert.Single(loop.Body.DescendantsAndSelf().OfType<HirBreakStatement>());
         Assert.IsType<HirReturnStatement>(method.Body.Statements[1]);
         string json = UnifiedScript.Core.HirJson.Serialize(
-            UnifiedScript.Core.HirDocument.Create(result.CompilationUnit));
+            UnifiedScript.Core.HirDocument.Create(result.CompilationUnit!));
         Assert.Contains(
             $"\"schemaVersion\": \"{UnifiedScript.Core.HirDocument.CurrentSchemaVersion}\"",
             json);
@@ -198,7 +198,7 @@ public sealed class CSharpToHirLowererTests
 
         string json = UnifiedScript.Core.HirJson.Serialize(
             UnifiedScript.Core.HirDocument.Create(result.CompilationUnit));
-        Assert.Contains("\"schemaVersion\": \"unifiedscript.hir/v0.8\"", json);
+        Assert.Contains("\"schemaVersion\": \"unifiedscript.hir/v0.9\"", json);
         Assert.Contains("\"kind\": \"for\"", json);
         Assert.Contains("\"isPostfix\": true", json);
     }
@@ -275,8 +275,45 @@ public sealed class CSharpToHirLowererTests
 
         string json = UnifiedScript.Core.HirJson.Serialize(
             UnifiedScript.Core.HirDocument.Create(result.CompilationUnit));
-        Assert.Contains("\"schemaVersion\": \"unifiedscript.hir/v0.8\"", json);
+        Assert.Contains("\"schemaVersion\": \"unifiedscript.hir/v0.9\"", json);
         Assert.Contains("\"kind\": \"forEach\"", json);
+    }
+
+    [Fact]
+    public void Lower_PreservesRefReadonlyForEachAsBorrowedIteration()
+    {
+        const string source = """
+            using System;
+
+            static class Rules
+            {
+                [Visual]
+                static int Sum(ReadOnlySpan<int> values)
+                {
+                    int total = 0;
+                    foreach (ref readonly int value in values)
+                    {
+                        total = total + value;
+                    }
+
+                    return total;
+                }
+            }
+            """;
+
+        CSharpLoweringResult result = new CSharpToHirLowerer().Lower(
+            source,
+            "RefReadOnlyForEachRules.cs");
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        HirForEachStatement loop = Assert.Single(
+            result.CompilationUnit!.DescendantsAndSelf().OfType<HirForEachStatement>());
+        Assert.Equal(HirForEachIterationKind.RefReadOnly, loop.IterationKind);
+        Assert.False(loop.IsAsync);
+        Assert.Equal("int", loop.Variable.TypeName);
+        string json = UnifiedScript.Core.HirJson.Serialize(
+            UnifiedScript.Core.HirDocument.Create(result.CompilationUnit!));
+        Assert.Contains("\"iterationKind\": \"refReadOnly\"", json, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -336,7 +373,7 @@ public sealed class CSharpToHirLowererTests
 
         string json = UnifiedScript.Core.HirJson.Serialize(
             UnifiedScript.Core.HirDocument.Create(result.CompilationUnit));
-        Assert.Contains("\"schemaVersion\": \"unifiedscript.hir/v0.8\"", json);
+        Assert.Contains("\"schemaVersion\": \"unifiedscript.hir/v0.9\"", json);
         Assert.Contains("\"kind\": \"conditional\"", json);
     }
 
@@ -376,7 +413,7 @@ public sealed class CSharpToHirLowererTests
 
         string json = UnifiedScript.Core.HirJson.Serialize(
             UnifiedScript.Core.HirDocument.Create(result.CompilationUnit));
-        Assert.Contains("\"schemaVersion\": \"unifiedscript.hir/v0.8\"", json);
+        Assert.Contains("\"schemaVersion\": \"unifiedscript.hir/v0.9\"", json);
         Assert.Contains("\"kind\": \"conditionalAccess\"", json);
         Assert.Contains("\"kind\": \"conditionalMemberBinding\"", json);
     }

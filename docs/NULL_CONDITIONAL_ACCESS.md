@@ -7,7 +7,7 @@ conditional, or an editor-only node.
 
 The current strict-reader contracts are:
 
-- HIR `unifiedscript.hir/v0.8`;
+- HIR `unifiedscript.hir/v0.9`;
 - Graph `unifiedscript.graph/v0.13`;
 - standalone patch `unifiedscript.patch/v0.28`;
 - patch plan `unifiedscript.patch-plan/v0.21`.

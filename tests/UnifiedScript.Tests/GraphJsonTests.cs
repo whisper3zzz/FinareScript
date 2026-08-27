@@ -190,7 +190,66 @@ public sealed class GraphJsonTests
         JsonException exception = Assert.Throws<JsonException>(() =>
             GraphJson.Serialize(graph with { Functions = [invalidFunction] }));
 
-        Assert.Contains("disposal-aware enumerator foreach", exception.Message);
+        Assert.Contains("synchronous enumerator foreach", exception.Message);
+    }
+
+    [Fact]
+    public void Serialize_AcceptsLegacyV013ValueEnumeratorMetadataDefaults()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int Sum(IEnumerable<int> values)
+                {
+                    int total = 0;
+                    foreach (int value in values)
+                    {
+                        total = total + value;
+                    }
+
+                    return total;
+                }
+            }
+            """;
+        CSharpAnalysisResult analysis = new CSharpSemanticPipeline().Analyze(
+            source,
+            "LegacyEnumerableForEachGraph.cs");
+        Assert.True(analysis.Succeeded, string.Join(Environment.NewLine, analysis.Diagnostics));
+        GraphDocument graph = new HirGraphProjector().Project(analysis.Hir!, analysis.Semantics!);
+        GraphFunction function = Assert.Single(graph.Functions);
+        GraphFunction legacy = function with
+        {
+            Nodes = function.Nodes.Select(node =>
+            {
+                Dictionary<string, string> properties = node.Properties.ToDictionary(
+                    static property => property.Key,
+                    static property => property.Value,
+                    StringComparer.Ordinal);
+                if (node.Kind == "loop")
+                {
+                    properties.Remove("iterationKind");
+                }
+                else if (node.Kind == "iterationVariable")
+                {
+                    properties.Remove("iterationKind");
+                    properties.Remove("valueSemantics");
+                }
+                else if (node.Kind == "enumeratorDispose")
+                {
+                    properties.Remove("disposalCondition");
+                }
+
+                return node with { Properties = properties };
+            }).ToArray(),
+        };
+
+        string json = GraphJson.Serialize(graph with { Functions = [legacy] });
+
+        Assert.Contains("unifiedscript.graph/v0.13", json, StringComparison.Ordinal);
     }
 
     [Fact]

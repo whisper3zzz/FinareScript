@@ -307,13 +307,25 @@ public sealed class VisualProfileValidator
 
         public override void VisitForEachStatement(ForEachStatementSyntax node)
         {
-            if (!node.AwaitKeyword.IsKind(SyntaxKind.None) || node.Type is RefTypeSyntax)
+            if (!node.AwaitKeyword.IsKind(SyntaxKind.None))
             {
                 Add(
                     diagnostics,
                     VisualProfileDiagnosticCodes.StatementNotSupported,
-                    "Indexed foreach does not support await, ref, ref readonly, or scoped " +
-                    "iteration variables in Visual C# profile v0.2.",
+                    "Await foreach is not yet represented in Visual C# profile v0.2.",
+                    node,
+                    filePath);
+                return;
+            }
+
+            if (node.Type is RefTypeSyntax refType &&
+                !refType.ReadOnlyKeyword.IsKind(SyntaxKind.ReadOnlyKeyword))
+            {
+                Add(
+                    diagnostics,
+                    VisualProfileDiagnosticCodes.StatementNotSupported,
+                    "Mutable ref foreach requires writable alias edges and is not yet represented " +
+                    "in Visual C# profile v0.2. Use ref readonly for borrowed iteration.",
                     node,
                     filePath);
                 return;

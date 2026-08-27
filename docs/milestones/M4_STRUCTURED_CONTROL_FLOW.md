@@ -1185,7 +1185,7 @@ its implicit receiver as an explicit shared-VM contract.
 
 ## M4.20 implemented vertical slice
 
-- strict HIR `unifiedscript.hir/v0.8`, Graph
+- strict HIR `unifiedscript.hir/v0.9`, Graph
   `unifiedscript.graph/v0.11`, patch `unifiedscript.patch/v0.18`, and plan
   `unifiedscript.patch-plan/v0.19` readers
 - first-class `HirForEachStatement` and `HirForEachVariable`, with collection,
@@ -1255,7 +1255,7 @@ its implicit receiver as an explicit shared-VM contract.
 
 ## M4.21 implemented vertical slice
 
-- semantics `unifiedscript.semantics/v0.3`, Graph
+- semantics `unifiedscript.semantics/v0.4`, Graph
   `unifiedscript.graph/v0.13`, patch `unifiedscript.patch/v0.19`, and plan
   `unifiedscript.patch-plan/v0.20` strict-reader contracts
 - `UnifiedTypeKind.Enumerable` plus exact element type identity and one

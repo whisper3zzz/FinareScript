@@ -51,7 +51,7 @@ public sealed class SwitchStructuredControlFlowTests
             Assert.Single(lowering.CompilationUnit!.Types).Methods);
         HirSwitchStatement @switch = Assert.IsType<HirSwitchStatement>(
             method.Body.Statements[1]);
-        Assert.Equal("unifiedscript.hir/v0.8", HirDocument.Create(lowering.CompilationUnit).SchemaVersion);
+        Assert.Equal("unifiedscript.hir/v0.9", HirDocument.Create(lowering.CompilationUnit).SchemaVersion);
         Assert.Equal(4, @switch.Sections.Count);
 
         HirPatternSwitchLabel declarationLabel = Assert.IsType<HirPatternSwitchLabel>(

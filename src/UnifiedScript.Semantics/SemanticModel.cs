@@ -19,6 +19,7 @@ public enum UnifiedTypeKind
     TypeParameter,
     TaskLike,
     Enumerable,
+    BorrowedSequence,
 }
 
 public enum UnifiedNullability
@@ -66,9 +67,24 @@ public enum ForEachIterationStrategy
     Enumerator,
 }
 
+public enum ForEachIterationKind
+{
+    Value,
+    Ref,
+    RefReadOnly,
+}
+
+public enum ForEachDisposalKind
+{
+    None,
+    Required,
+    Conditional,
+}
+
 public sealed record BoundForEachInfo(
     SemanticId NodeId,
     ForEachIterationStrategy Strategy,
+    ForEachIterationKind IterationKind,
     SemanticId CollectionTypeId,
     SemanticId ElementTypeId,
     SemanticId? EnumeratorTypeId,
@@ -76,7 +92,10 @@ public sealed record BoundForEachInfo(
     SemanticId? MoveNextMethodId,
     SemanticId? CurrentGetterMethodId,
     SemanticId? DisposeMethodId,
-    bool RequiresDisposal);
+    ForEachDisposalKind DisposalKind)
+{
+    public bool RequiresDisposal => DisposalKind != ForEachDisposalKind.None;
+}
 
 public sealed record ParameterDescriptor(
     string Name,
@@ -110,5 +129,5 @@ public sealed record BoundCompilation(
     IReadOnlyList<BoundNodeInfo> Nodes,
     IReadOnlyList<BoundForEachInfo> ForEachLoops)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.semantics/v0.3";
+    public const string CurrentSchemaVersion = "unifiedscript.semantics/v0.4";
 }

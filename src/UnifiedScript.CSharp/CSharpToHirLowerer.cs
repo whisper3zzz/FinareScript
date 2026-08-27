@@ -397,7 +397,16 @@ public sealed class CSharpToHirLowerer
     private static HirForEachStatement LowerForEach(
         ForEachStatementSyntax statement,
         string filePath,
-        string ownerKey) => new(
+        string ownerKey)
+    {
+        RefTypeSyntax? refType = statement.Type as RefTypeSyntax;
+        HirForEachIterationKind iterationKind = refType is null
+            ? HirForEachIterationKind.Value
+            : refType.ReadOnlyKeyword.IsKind(SyntaxKind.ReadOnlyKeyword)
+                ? HirForEachIterationKind.RefReadOnly
+                : HirForEachIterationKind.Ref;
+        TypeSyntax elementType = refType?.Type ?? statement.Type;
+        return new HirForEachStatement(
             CSharpSemanticIds.ForNode(filePath, ownerKey, statement),
             RoslynSourceSpan.FromNode(statement, filePath),
             new HirForEachVariable(
@@ -408,9 +417,14 @@ public sealed class CSharpToHirLowerer
                     $"foreachVariable:{statement.Identifier.ValueText}"),
                 RoslynSourceSpan.FromNode(statement.Type, filePath),
                 statement.Identifier.ValueText,
-                statement.Type.ToString()),
+                elementType.ToString()),
             LowerExpression(statement.Expression, filePath, ownerKey),
-            LowerAsBlock(statement.Statement, filePath, ownerKey));
+            LowerAsBlock(statement.Statement, filePath, ownerKey))
+        {
+            IterationKind = iterationKind,
+            IsAsync = !statement.AwaitKeyword.IsKind(SyntaxKind.None),
+        };
+    }
 
     private static HirForVariableDeclaration LowerForDeclaration(
         VariableDeclarationSyntax declaration,

@@ -5504,6 +5504,69 @@ public sealed class CSharpSourcePatchApplierTests
     }
 
     [Fact]
+    public void Apply_ReplacesBorrowedRefReadonlyForEachCollectionWithoutLosingAliasMode()
+    {
+        const string source = """
+            using System;
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int Count(int[] first, int[] second)
+                {
+                    ReadOnlySpan<int> primary = first;
+                    ReadOnlySpan<int> fallback = second;
+                    int total = 0;
+                    foreach (ref readonly int value in primary)
+                    {
+                        total = total + value;
+                    }
+
+                    return total;
+                }
+            }
+            """;
+        (CSharpCompilationRequest request, CSharpAnalysisResult original) = CreatePersistentRequest(
+            source,
+            "Game/BorrowedForEachCollectionEdit.cs");
+        HirMethodDeclaration method = Assert.Single(Assert.Single(original.Hir!.Types).Methods);
+        HirForEachStatement loop = Assert.Single(
+            method.Body.DescendantsAndSelf().OfType<HirForEachStatement>());
+        HirVariableDeclarationStatement fallback = method.Body.Statements
+            .OfType<HirVariableDeclarationStatement>()
+            .Single(static local => local.Name == "fallback");
+        SemanticId collectionType = GetTypeId(original, loop.Collection);
+        SemanticPatchDocument patch = SemanticPatchDocument.Create(
+            original.Hir.Id,
+            original.Semantics!.ConfigurationId,
+            [new ReplaceForEachCollectionPatchOperation(
+                loop.Id,
+                loop.Collection.Id,
+                collectionType,
+                new LocalReferencePatchExpression(
+                    fallback.Id,
+                    fallback.Name,
+                    collectionType))]);
+
+        CSharpPatchResult result = new CSharpSourcePatchApplier().Apply(request, patch);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Contains(
+            "foreach (ref readonly int value in fallback)",
+            Assert.Single(result.PatchedRequest!.Sources).Source,
+            StringComparison.Ordinal);
+        HirForEachStatement changedLoop = Assert.Single(
+            result.Analysis!.Hir!.DescendantsAndSelf().OfType<HirForEachStatement>());
+        Assert.Equal(loop.Id, changedLoop.Id);
+        Assert.Equal(loop.Variable.Id, changedLoop.Variable.Id);
+        Assert.Equal(HirForEachIterationKind.RefReadOnly, changedLoop.IterationKind);
+        BoundForEachInfo binding = Assert.Single(result.Analysis.Semantics!.ForEachLoops);
+        Assert.Equal(ForEachIterationKind.RefReadOnly, binding.IterationKind);
+        Assert.Equal(ForEachDisposalKind.None, binding.DisposalKind);
+    }
+
+    [Fact]
     public void Apply_InsertsStatementDirectlyIntoSwitchSectionBody()
     {
         const string source = """

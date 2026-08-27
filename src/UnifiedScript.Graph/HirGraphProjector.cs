@@ -1066,6 +1066,12 @@ public sealed class HirGraphProjector
                 return ProjectEnumeratorForEach(statement, binding, incoming, parentRegionId);
             }
 
+            if (binding.IterationKind != ForEachIterationKind.Value)
+            {
+                throw new InvalidOperationException(
+                    $"Indexed foreach '{statement.Id}' requires value iteration.");
+            }
+
             SemanticId loopRegionId = RegionId(statement.Id, GraphRegionKind.Loop);
             AddRegion(new RegionBuilder(
                 loopRegionId,
@@ -1132,6 +1138,7 @@ public sealed class HirGraphProjector
                 ["continueTarget"] = "moveNext",
                 ["disposal"] = "none",
                 ["evaluationOrder"] = "collection,moveNext,current,body",
+                ["iterationKind"] = GetForEachIterationKindName(binding.IterationKind),
             };
             semantics.ApplyNodeProperties(statement.Collection.Id, loopProperties);
             AddNode(new GraphNode(
@@ -1162,6 +1169,8 @@ public sealed class HirGraphProjector
                 ["type"] = statement.Variable.TypeName,
                 ["binding"] = "current",
                 ["readOnly"] = "true",
+                ["iterationKind"] = GetForEachIterationKindName(binding.IterationKind),
+                ["valueSemantics"] = "copy",
             };
             semantics.ApplyNodeProperties(statement.Variable.Id, variableProperties);
             AddNode(new GraphNode(
@@ -1205,21 +1214,33 @@ public sealed class HirGraphProjector
             return [new ControlEndpoint(statement.Id, "exit"), .. context.BreakExits];
         }
 
+        private static string GetForEachIterationKindName(ForEachIterationKind iterationKind) =>
+            iterationKind switch
+            {
+                ForEachIterationKind.Value => "value",
+                ForEachIterationKind.Ref => "ref",
+                ForEachIterationKind.RefReadOnly => "refReadOnly",
+                _ => throw new ArgumentOutOfRangeException(
+                    nameof(iterationKind),
+                    iterationKind,
+                    "Unknown foreach iteration kind."),
+            };
+
         private IReadOnlyList<ControlEndpoint> ProjectEnumeratorForEach(
             HirForEachStatement statement,
             BoundForEachInfo binding,
             IReadOnlyList<ControlEndpoint> incoming,
             SemanticId parentRegionId)
         {
-            if (!binding.RequiresDisposal ||
-                binding.EnumeratorTypeId is not SemanticId enumeratorTypeId ||
+            SemanticId? disposeMethodId = binding.DisposeMethodId;
+            if (binding.EnumeratorTypeId is not SemanticId enumeratorTypeId ||
                 binding.GetEnumeratorMethodId is not SemanticId getEnumeratorMethodId ||
                 binding.MoveNextMethodId is not SemanticId moveNextMethodId ||
                 binding.CurrentGetterMethodId is not SemanticId currentGetterMethodId ||
-                binding.DisposeMethodId is not SemanticId disposeMethodId)
+                binding.RequiresDisposal != disposeMethodId.HasValue)
             {
                 throw new InvalidOperationException(
-                    $"Enumerator foreach '{statement.Id}' requires a complete synchronous disposal protocol.");
+                    $"Enumerator foreach '{statement.Id}' has an incomplete synchronous protocol.");
             }
 
             SemanticId loopRegionId = RegionId(statement.Id, GraphRegionKind.Loop);
@@ -1248,14 +1269,18 @@ public sealed class HirGraphProjector
                 statement.Body.Id,
                 statement.Body.Span,
                 false));
-            SemanticId cleanupRegionId = RegionId(statement.Id, GraphRegionKind.LoopCleanup);
-            AddRegion(new RegionBuilder(
-                cleanupRegionId,
-                GraphRegionKind.LoopCleanup,
-                loopRegionId,
-                statement.Id,
-                statement.Span,
-                false));
+            SemanticId? cleanupRegionId = null;
+            if (binding.RequiresDisposal)
+            {
+                cleanupRegionId = RegionId(statement.Id, GraphRegionKind.LoopCleanup);
+                AddRegion(new RegionBuilder(
+                    cleanupRegionId.Value,
+                    GraphRegionKind.LoopCleanup,
+                    loopRegionId,
+                    statement.Id,
+                    statement.Span,
+                    false));
+            }
 
             ExpressionProjection collection = ProjectExpression(
                 statement.Collection,
@@ -1317,11 +1342,26 @@ public sealed class HirGraphProjector
                 ["collectionStrategy"] = "enumerator",
                 ["iterationAdvance"] = "beforeBody",
                 ["continueTarget"] = "moveNext",
-                ["disposal"] = "finally",
-                ["cleanupOn"] = "exhaustion,break,return,exception",
-                ["evaluationOrder"] = "collection,getEnumerator,moveNext,current,body,dispose",
+                ["disposal"] = binding.DisposalKind switch
+                {
+                    ForEachDisposalKind.None => "none",
+                    ForEachDisposalKind.Required => "finally",
+                    ForEachDisposalKind.Conditional => "conditionalFinally",
+                    _ => throw new ArgumentOutOfRangeException(
+                        nameof(binding.DisposalKind),
+                        binding.DisposalKind,
+                        "Unknown foreach disposal kind."),
+                },
+                ["evaluationOrder"] = binding.RequiresDisposal
+                    ? "collection,getEnumerator,moveNext,current,body,dispose"
+                    : "collection,getEnumerator,moveNext,current,body",
+                ["iterationKind"] = GetForEachIterationKindName(binding.IterationKind),
                 ["moveNextMethodId"] = moveNextMethodId.Value,
             };
+            if (binding.RequiresDisposal)
+            {
+                loopProperties["cleanupOn"] = "exhaustion,break,return,exception";
+            }
             semantics.ApplyNodeProperties(statement.Collection.Id, loopProperties);
             AddNode(new GraphNode(
                 statement.Id,
@@ -1349,6 +1389,10 @@ public sealed class HirGraphProjector
                 ["binding"] = "current",
                 ["readOnly"] = "true",
                 ["currentGetterMethodId"] = currentGetterMethodId.Value,
+                ["iterationKind"] = GetForEachIterationKindName(binding.IterationKind),
+                ["valueSemantics"] = binding.IterationKind == ForEachIterationKind.RefReadOnly
+                    ? "borrowedReadOnly"
+                    : "copy",
             };
             semantics.ApplyNodeProperties(statement.Variable.Id, variableProperties);
             AddNode(new GraphNode(
@@ -1373,43 +1417,52 @@ public sealed class HirGraphProjector
                 new ValueEndpoint(acquireId, "enumerator"),
                 new ValueEndpoint(statement.Variable.Id, "enumerator"));
 
-            SemanticId normalDisposeId = SemanticId.FromKey(
-                $"{statement.Id}:graph:foreach:dispose:normal");
-            SemanticId returnDisposeId = SemanticId.FromKey(
-                $"{statement.Id}:graph:foreach:dispose:return");
-            SemanticId exceptionDisposeId = SemanticId.FromKey(
-                $"{statement.Id}:graph:foreach:dispose:exception");
-            LoopContext? outerCleanup = FindCleanupContext();
-            AddEnumeratorDisposeNode(
-                normalDisposeId,
-                "Dispose Enumerator",
-                "exhaustionOrBreak",
-                "then",
-                disposeMethodId,
-                acquireId,
-                statement.Span,
-                cleanupRegionId,
-                nextExceptionalCleanupId: null);
-            AddEnumeratorDisposeNode(
-                returnDisposeId,
-                "Dispose Before Return",
-                "return",
-                "then",
-                disposeMethodId,
-                acquireId,
-                statement.Span,
-                cleanupRegionId,
-                nextExceptionalCleanupId: null);
-            AddEnumeratorDisposeNode(
-                exceptionDisposeId,
-                "Dispose Before Rethrow",
-                "exception",
-                "throw",
-                disposeMethodId,
-                acquireId,
-                statement.Span,
-                cleanupRegionId,
-                outerCleanup?.ExceptionCleanupNodeId);
+            SemanticId? normalDisposeId = null;
+            SemanticId? returnDisposeId = null;
+            SemanticId? exceptionDisposeId = null;
+            if (binding.RequiresDisposal)
+            {
+                normalDisposeId = SemanticId.FromKey(
+                    $"{statement.Id}:graph:foreach:dispose:normal");
+                returnDisposeId = SemanticId.FromKey(
+                    $"{statement.Id}:graph:foreach:dispose:return");
+                exceptionDisposeId = SemanticId.FromKey(
+                    $"{statement.Id}:graph:foreach:dispose:exception");
+                LoopContext? outerCleanup = FindCleanupContext();
+                AddEnumeratorDisposeNode(
+                    normalDisposeId.Value,
+                    "Dispose Enumerator",
+                    "exhaustionOrBreak",
+                    "then",
+                    disposeMethodId!.Value,
+                    acquireId,
+                    statement.Span,
+                    cleanupRegionId!.Value,
+                    binding.DisposalKind,
+                    nextExceptionalCleanupId: null);
+                AddEnumeratorDisposeNode(
+                    returnDisposeId.Value,
+                    "Dispose Before Return",
+                    "return",
+                    "then",
+                    disposeMethodId.Value,
+                    acquireId,
+                    statement.Span,
+                    cleanupRegionId.Value,
+                    binding.DisposalKind,
+                    nextExceptionalCleanupId: null);
+                AddEnumeratorDisposeNode(
+                    exceptionDisposeId.Value,
+                    "Dispose Before Rethrow",
+                    "exception",
+                    "throw",
+                    disposeMethodId.Value,
+                    acquireId,
+                    statement.Span,
+                    cleanupRegionId.Value,
+                    binding.DisposalKind,
+                    outerCleanup?.ExceptionCleanupNodeId);
+            }
 
             var context = new LoopContext(
                 new ControlTarget(statement.Id, "in"),
@@ -1430,14 +1483,19 @@ public sealed class HirGraphProjector
             }
 
             ConnectIncoming(bodyExits, statement.Id, "in");
+            if (!binding.RequiresDisposal)
+            {
+                return [new ControlEndpoint(statement.Id, "exit"), .. context.BreakExits];
+            }
+
             ConnectIncoming(
                 [new ControlEndpoint(statement.Id, "exit"), .. context.BreakExits],
-                normalDisposeId,
+                normalDisposeId!.Value,
                 "in");
-            ConnectIncoming(context.ReturnExits, returnDisposeId, "in");
+            ConnectIncoming(context.ReturnExits, returnDisposeId!.Value, "in");
             if (context.ReturnExits.Count > 0)
             {
-                ControlEndpoint returnAfterCleanup = new(returnDisposeId, "then");
+                ControlEndpoint returnAfterCleanup = new(returnDisposeId.Value, "then");
                 LoopContext? enclosingCleanup = FindCleanupContext();
                 if (enclosingCleanup is not null)
                 {
@@ -1445,7 +1503,7 @@ public sealed class HirGraphProjector
                 }
             }
 
-            return [new ControlEndpoint(normalDisposeId, "then")];
+            return [new ControlEndpoint(normalDisposeId.Value, "then")];
         }
 
         private void AddEnumeratorDisposeNode(
@@ -1457,12 +1515,16 @@ public sealed class HirGraphProjector
             SemanticId acquireId,
             SourceSpan span,
             SemanticId cleanupRegionId,
+            ForEachDisposalKind disposalKind,
             SemanticId? nextExceptionalCleanupId)
         {
             var properties = new SortedDictionary<string, string>(StringComparer.Ordinal)
             {
                 ["cleanupSemantics"] = "finally",
                 ["disposeMethodId"] = disposeMethodId.Value,
+                ["disposalCondition"] = disposalKind == ForEachDisposalKind.Conditional
+                    ? "runtimeInterface"
+                    : "always",
                 ["reason"] = reason,
                 ["preservesPendingTransfer"] = reason == "exhaustionOrBreak" ? "false" : "true",
             };

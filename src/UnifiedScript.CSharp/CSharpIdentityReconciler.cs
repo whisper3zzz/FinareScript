@@ -613,7 +613,8 @@ public sealed class CSharpIdentityReconciler
         HirForStatement forStatement =>
             $"for|{forStatement.Declaration is not null}|{forStatement.Initializers.Count}|" +
             $"{forStatement.Condition is not null}|{forStatement.Incrementors.Count}",
-        HirForEachStatement => "forEach",
+        HirForEachStatement statement =>
+            $"forEach|{statement.IterationKind}|{statement.IsAsync}",
         HirForEachVariable variable => $"forEachVariable|{variable.Name}|{variable.TypeName}",
         HirSwitchStatement statement => $"switch|{statement.Sections.Count}",
         HirSwitchSection section => $"switchSection|{section.Labels.Count}",

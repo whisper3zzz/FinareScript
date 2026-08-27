@@ -279,7 +279,7 @@ public sealed class RoundTripEquivalenceVerifier
             .ToDictionary(static item => item.Id, static item => item.index);
         HashSet<SemanticId> methodNodeIds = methodNodeIndexes.Keys.ToHashSet();
         var canonical = new StringBuilder()
-            .Append("unifiedscript.bound-method/v0.2|")
+            .Append("unifiedscript.bound-method/v0.3|")
             .Append(descriptor.MetadataName).Append('|')
             .Append(descriptor.ContainingTypeId.Value).Append('|')
             .Append(descriptor.ReturnTypeId.Value).Append('|')
@@ -308,6 +308,7 @@ public sealed class RoundTripEquivalenceVerifier
         {
             canonical.Append("|f:").Append(methodNodeIndexes[loop.NodeId])
                 .Append(':').Append((int)loop.Strategy)
+                .Append(':').Append((int)loop.IterationKind)
                 .Append(':').Append(loop.CollectionTypeId.Value)
                 .Append(':').Append(loop.ElementTypeId.Value)
                 .Append(':').Append(loop.EnumeratorTypeId?.Value)
@@ -315,7 +316,7 @@ public sealed class RoundTripEquivalenceVerifier
                 .Append(':').Append(loop.MoveNextMethodId?.Value)
                 .Append(':').Append(loop.CurrentGetterMethodId?.Value)
                 .Append(':').Append(loop.DisposeMethodId?.Value)
-                .Append(':').Append(loop.RequiresDisposal);
+                .Append(':').Append((int)loop.DisposalKind);
         }
         return Digest(canonical.ToString());
     }

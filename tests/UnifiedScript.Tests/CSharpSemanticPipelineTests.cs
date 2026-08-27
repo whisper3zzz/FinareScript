@@ -3,6 +3,7 @@ using UnifiedScript.Core;
 using UnifiedScript.Core.Hir;
 using UnifiedScript.Graph;
 using UnifiedScript.Semantics;
+using UnifiedScript.Unreal;
 
 namespace UnifiedScript.Tests;
 
@@ -512,7 +513,7 @@ public sealed class CSharpSemanticPipelineTests
 
         Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
         BoundCompilation semantics = Assert.IsType<BoundCompilation>(result.Semantics);
-        Assert.Equal("unifiedscript.semantics/v0.3", semantics.SchemaVersion);
+        Assert.Equal("unifiedscript.semantics/v0.4", semantics.SchemaVersion);
         HirMethodDeclaration method = Assert.Single(Assert.Single(result.Hir!.Types).Methods);
         HirIfStatement guard = Assert.IsType<HirIfStatement>(method.Body.Statements[0]);
         HirIdentifierExpression guardUse = Assert.IsType<HirIdentifierExpression>(
@@ -545,7 +546,7 @@ public sealed class CSharpSemanticPipelineTests
         Assert.Equal("maybeNull", optionalNode.Properties["nullFlowState"]);
         Assert.Equal("nullable", optionalNode.Properties["typeNullability"]);
         string semanticJson = SemanticJson.Serialize(semantics);
-        Assert.Contains("\"schemaVersion\": \"unifiedscript.semantics/v0.3\"", semanticJson);
+        Assert.Contains("\"schemaVersion\": \"unifiedscript.semantics/v0.4\"", semanticJson);
         Assert.Contains("\"nullFlowState\": \"maybeNull\"", semanticJson);
     }
 
@@ -1096,7 +1097,7 @@ public sealed class CSharpSemanticPipelineTests
         Assert.Contains(
             result.Diagnostics,
             diagnostic => diagnostic.Code == SemanticDiagnosticCodes.ForEachCollectionNotSupported &&
-                diagnostic.Message.Contains("exact element type", StringComparison.Ordinal));
+                diagnostic.Message.Contains("exact graph-safe element type", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -1154,7 +1155,184 @@ public sealed class CSharpSemanticPipelineTests
     }
 
     [Fact]
-    public void Analyze_RejectsPatternEnumeratorWithoutDisposableEnumerableContract()
+    public void AnalyzeAndProject_PreservesBorrowedRefReadonlySpanWithoutCleanup()
+    {
+        const string source = """
+            using System;
+            using UnifiedScript;
+
+            static class Rules
+            {
+                [Visual]
+                static int Sum(int[] source)
+                {
+                    ReadOnlySpan<int> values = source;
+                    int total = 0;
+                    foreach (ref readonly int value in values)
+                    {
+                        total = total + value;
+                    }
+
+                    return total;
+                }
+            }
+            """;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(
+            source,
+            "BorrowedRefReadonlyForEach.cs");
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Equal("unifiedscript.semantics/v0.4", result.Semantics!.SchemaVersion);
+        HirForEachStatement statement = Assert.Single(
+            result.Hir!.DescendantsAndSelf().OfType<HirForEachStatement>());
+        Assert.Equal(HirForEachIterationKind.RefReadOnly, statement.IterationKind);
+        Assert.Equal("int", statement.Variable.TypeName);
+        BoundForEachInfo binding = Assert.Single(result.Semantics.ForEachLoops);
+        Assert.Equal(ForEachIterationStrategy.Enumerator, binding.Strategy);
+        Assert.Equal(ForEachIterationKind.RefReadOnly, binding.IterationKind);
+        Assert.False(binding.RequiresDisposal);
+        Assert.Null(binding.DisposeMethodId);
+        TypeDescriptor collectionType = FindType(result.Semantics, binding.CollectionTypeId);
+        Assert.Equal(UnifiedTypeKind.BorrowedSequence, collectionType.Kind);
+        Assert.False(collectionType.IsGraphSafe);
+        Assert.Equal(binding.ElementTypeId, collectionType.ElementTypeId);
+
+        GraphDocument graph = new HirGraphProjector().Project(result.Hir!, result.Semantics);
+        GraphFunction function = Assert.Single(graph.Functions);
+        GraphNode loop = function.Nodes.Single(node => node.Id == statement.Id);
+        GraphNode variable = function.Nodes.Single(node => node.Id == statement.Variable.Id);
+        Assert.Equal("enumerator", loop.Properties["collectionStrategy"]);
+        Assert.Equal("none", loop.Properties["disposal"]);
+        Assert.Equal("refReadOnly", loop.Properties["iterationKind"]);
+        Assert.Equal("refReadOnly", variable.Properties["iterationKind"]);
+        Assert.Equal("borrowedReadOnly", variable.Properties["valueSemantics"]);
+        Assert.DoesNotContain(function.Nodes, static node => node.Kind == "enumeratorDispose");
+        Assert.DoesNotContain(
+            function.Regions,
+            static region => region.Kind == GraphRegionKind.LoopCleanup);
+        string graphJson = GraphJson.Serialize(graph);
+        Assert.Equal(graphJson, GraphJson.Serialize(GraphJson.Deserialize(graphJson)));
+
+        GraphControlFlowLoop flow = Assert.Single(
+            Assert.Single(new GraphControlFlowAnalyzer().AnalyzeAndValidate(graph).Functions).Loops);
+        Assert.Null(flow.CleanupRegionId);
+        Assert.Null(flow.NormalCleanupNodeId);
+        Assert.Null(flow.ReturnCleanupNodeId);
+        Assert.Null(flow.ExceptionCleanupNodeId);
+    }
+
+    [Fact]
+    public void AnalyzeAndProject_PreservesPatternEnumeratorConditionalDisposal()
+    {
+        const string path = "PatternConditionalForEach.cs";
+        const string source = """
+            using UnifiedScript;
+            using UnifiedScript.Unreal;
+
+            [UnrealValue]
+            readonly struct NoCleanupSequence
+            {
+                public NoCleanupEnumerator GetEnumerator() => new NoCleanupEnumerator();
+            }
+
+            sealed class NoCleanupEnumerator
+            {
+                public int Current => 0;
+                public bool MoveNext() => false;
+            }
+
+            [UnrealValue]
+            readonly struct ConditionalSequence
+            {
+                public ConditionalEnumerator GetEnumerator() => new ConditionalEnumerator();
+            }
+
+            class ConditionalEnumerator
+            {
+                public int Current => 0;
+                public bool MoveNext() => false;
+            }
+
+            static class Rules
+            {
+                [Visual]
+                static int SumWithoutCleanup(NoCleanupSequence values)
+                {
+                    int total = 0;
+                    foreach (int value in values)
+                    {
+                        total = total + value;
+                    }
+
+                    return total;
+                }
+
+                [Visual]
+                static int SumWithConditionalCleanup(ConditionalSequence values)
+                {
+                    int total = 0;
+                    foreach (int value in values)
+                    {
+                        total = total + value;
+                    }
+
+                    return total;
+                }
+            }
+            """;
+        var request = new CSharpCompilationRequest(
+            "PatternConditionalForEachTests",
+            [new CSharpSourceDocument(path, source)],
+            [typeof(UnrealValueAttribute).Assembly.Location]);
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(request);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        BoundForEachInfo noCleanup = result.Semantics!.ForEachLoops.Single(binding =>
+            FindType(result.Semantics, binding.CollectionTypeId).MetadataName ==
+                "NoCleanupSequence");
+        BoundForEachInfo conditional = result.Semantics.ForEachLoops.Single(binding =>
+            FindType(result.Semantics, binding.CollectionTypeId).MetadataName ==
+                "ConditionalSequence");
+        Assert.Equal(ForEachDisposalKind.None, noCleanup.DisposalKind);
+        Assert.False(noCleanup.RequiresDisposal);
+        Assert.Null(noCleanup.DisposeMethodId);
+        Assert.Equal(ForEachDisposalKind.Conditional, conditional.DisposalKind);
+        Assert.True(conditional.RequiresDisposal);
+        Assert.NotNull(conditional.DisposeMethodId);
+
+        GraphDocument graph = new HirGraphProjector().Project(result.Hir!, result.Semantics);
+        GraphNode noCleanupLoop = graph.Functions
+            .SelectMany(static function => function.Nodes)
+            .Single(node => node.Id == noCleanup.NodeId);
+        GraphNode conditionalLoop = graph.Functions
+            .SelectMany(static function => function.Nodes)
+            .Single(node => node.Id == conditional.NodeId);
+        Assert.Equal("none", noCleanupLoop.Properties["disposal"]);
+        Assert.Equal("conditionalFinally", conditionalLoop.Properties["disposal"]);
+        GraphFunction conditionalFunction = graph.Functions.Single(function =>
+            function.Nodes.Any(node => node.Id == conditional.NodeId));
+        GraphNode[] cleanupNodes = conditionalFunction.Nodes
+            .Where(static node => node.Kind == "enumeratorDispose")
+            .ToArray();
+        Assert.Equal(3, cleanupNodes.Length);
+        Assert.All(cleanupNodes, static node =>
+            Assert.Equal("runtimeInterface", node.Properties["disposalCondition"]));
+        string graphJson = GraphJson.Serialize(graph);
+        Assert.Equal(graphJson, GraphJson.Serialize(GraphJson.Deserialize(graphJson)));
+        GraphControlFlowLoop conditionalFlow = new GraphControlFlowAnalyzer()
+            .AnalyzeAndValidate(graph)
+            .Functions.Single(function => function.FunctionId == conditionalFunction.Id)
+            .Loops.Single();
+        Assert.NotNull(conditionalFlow.CleanupRegionId);
+        Assert.NotNull(conditionalFlow.NormalCleanupNodeId);
+        Assert.NotNull(conditionalFlow.ReturnCleanupNodeId);
+        Assert.NotNull(conditionalFlow.ExceptionCleanupNodeId);
+    }
+
+    [Fact]
+    public void Analyze_RejectsPatternEnumeratorWithoutGraphSafeCollectionContract()
     {
         const string source = """
             using UnifiedScript;
@@ -1194,7 +1372,7 @@ public sealed class CSharpSemanticPipelineTests
         Assert.Contains(
             result.Diagnostics,
             diagnostic => diagnostic.Code == SemanticDiagnosticCodes.ForEachCollectionNotSupported &&
-                diagnostic.Message.Contains("disposable enumerator", StringComparison.Ordinal));
+                diagnostic.Message.Contains("graph-safe synchronous", StringComparison.Ordinal));
     }
 
     [Fact]
