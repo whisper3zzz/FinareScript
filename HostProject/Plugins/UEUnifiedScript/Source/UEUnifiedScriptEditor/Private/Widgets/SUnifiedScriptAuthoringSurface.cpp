@@ -41,6 +41,7 @@
 #include "Widgets/Input/SSearchBox.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
+#include "Widgets/Layout/SExpandableArea.h"
 #include "Widgets/SOverlay.h"
 #include "Widgets/Layout/SSplitter.h"
 #include "Widgets/Layout/SScrollBox.h"
@@ -3706,12 +3707,13 @@ UUnifiedScriptEdGraphNode* SUnifiedScriptAuthoringSurface::AddGraphNode(
     Node->CreateNewGuid();
     Node->SemanticId = Item->SemanticId;
     Node->DisplayTitle = FUnifiedScriptGraphPresentation::GetNodeTitle(Action);
-    Node->Summary = Item->Detail;
+    Node->Summary = FUnifiedScriptGraphPresentation::GetNodeSubtitle(Action);
     Node->NodeKind = Item->Kind == EUnifiedScriptSurfaceTreeItemKind::Region
         ? TEXT("region")
         : Item->GraphKind;
     Node->Category = Item->Category;
     Node->SourceDisplay = Item->Span.ToDisplayString();
+    Node->AdvancedTooltip = FUnifiedScriptGraphPresentation::GetNodeTooltip(Action);
     Node->bShowSummary = FUnifiedScriptGraphPresentation::ShouldShowSummary(Action);
     Node->bCompactPresentation = FUnifiedScriptGraphPresentation::IsCompactNode(Action);
     Node->bCanDelete = Action.GraphKind == TEXT("switchCase") ||
@@ -4681,6 +4683,161 @@ bool SUnifiedScriptAuthoringSurface::HasNodePaletteAction(const FString& ActionI
         });
 }
 
+TSharedRef<SWidget> SUnifiedScriptAuthoringSurface::BuildAdvancedNodeDetails(
+    const FUnifiedScriptSurfaceTreeItemPtr& Item,
+    const FUnifiedScriptAuthoringAction& Action)
+{
+    TSharedRef<SVerticalBox> Body = SNew(SVerticalBox);
+    Body->AddSlot().AutoHeight()
+    [
+        UE::UnifiedScript::AuthoringSurface::Slate::Private::MakeInspectorValue(
+            TEXT("NODE CONTRACT"),
+            Action.GraphKind + TEXT("  ·  ") + Action.Category)
+    ];
+    Body->AddSlot().AutoHeight()
+    [
+        SNew(SHorizontalBox)
+        + SHorizontalBox::Slot().FillWidth(1.0f)
+        [
+            UE::UnifiedScript::AuthoringSurface::Slate::Private::MakeInspectorValue(
+                TEXT("SEMANTIC ID"), Action.Id)
+        ]
+        + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+        [
+            SNew(SButton)
+            .Text(LOCTEXT("CopyAdvancedNodeId", "Copy ID"))
+            .OnClicked(this, &SUnifiedScriptAuthoringSurface::HandleCopyId, Action.Id)
+        ]
+    ];
+
+    const FString Effects = Action.Properties.FindRef(TEXT("effects"));
+    const FString GraphSafe = Action.Properties.FindRef(TEXT("graphSafe"));
+    const FString ResolvedType = Action.Properties.FindRef(TEXT("resolvedType"));
+    const FString TypeId = Action.Properties.FindRef(TEXT("typeId"));
+    Body->AddSlot().AutoHeight()
+    [
+        UE::UnifiedScript::AuthoringSurface::Slate::Private::MakeInspectorValue(
+            TEXT("EFFECT CONTRACT"),
+            (Effects.IsEmpty() ? TEXT("none") : Effects) +
+                (GraphSafe.IsEmpty() ? FString() : TEXT("  ·  graphSafe=") + GraphSafe))
+    ];
+    if (!ResolvedType.IsEmpty() || !TypeId.IsEmpty())
+    {
+        Body->AddSlot().AutoHeight()
+        [
+            UE::UnifiedScript::AuthoringSurface::Slate::Private::MakeInspectorValue(
+                TEXT("RESOLVED TYPE"),
+                ResolvedType + (TypeId.IsEmpty() ? FString() : TEXT("\n") + TypeId))
+        ];
+    }
+
+    if (!Action.Ports.IsEmpty())
+    {
+        Body->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 7.0f)
+        [
+            SNew(STextBlock)
+            .Text(LOCTEXT("AdvancedPortContract", "PORT CONTRACT"))
+            .Font(FAppStyle::GetFontStyle(TEXT("SmallFontBold")))
+        ];
+        for (const FUnifiedScriptAuthoringPort& Port : Action.Ports)
+        {
+            const FString PortValue = FString::Printf(
+                TEXT("%s  ·  %s\nIR name: %s%s"),
+                *Port.Direction,
+                Port.IsControl()
+                    ? TEXT("control flow")
+                    : (Port.TypeDisplayName.IsEmpty() ? TEXT("unknown data") : *Port.TypeDisplayName),
+                *Port.Name,
+                Port.TypeId.IsEmpty() ? TEXT("") : *FString::Printf(TEXT("\nType ID: %s"), *Port.TypeId));
+            Body->AddSlot().AutoHeight()
+            [
+                UE::UnifiedScript::AuthoringSurface::Slate::Private::MakeInspectorValue(
+                    Port.IsInput() ? TEXT("INPUT PIN") : TEXT("OUTPUT PIN"),
+                    PortValue)
+            ];
+        }
+    }
+
+    TArray<FString> PropertyKeys;
+    Action.Properties.GetKeys(PropertyKeys);
+    PropertyKeys.Sort();
+    if (!PropertyKeys.IsEmpty())
+    {
+        Body->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 7.0f)
+        [
+            SNew(STextBlock)
+            .Text(LOCTEXT(
+                "AdvancedGeneratedMetadata",
+                "COMPILER / GENERATED API METADATA"))
+            .Font(FAppStyle::GetFontStyle(TEXT("SmallFontBold")))
+        ];
+        for (const FString& Key : PropertyKeys)
+        {
+            Body->AddSlot().AutoHeight()
+            [
+                UE::UnifiedScript::AuthoringSurface::Slate::Private::MakeInspectorValue(
+                    Key,
+                    Action.Properties.FindRef(Key))
+            ];
+        }
+    }
+
+    if (!Action.DeclarationReferenceIds.IsEmpty())
+    {
+        Body->AddSlot().AutoHeight()
+        [
+            UE::UnifiedScript::AuthoringSurface::Slate::Private::MakeInspectorValue(
+                TEXT("DECLARATION REFERENCES"),
+                FString::Join(Action.DeclarationReferenceIds, TEXT("\n")))
+        ];
+    }
+    if (!Action.EditCapabilities.IsEmpty())
+    {
+        TArray<FString> EditContracts;
+        for (const FUnifiedScriptAuthoringEdit& Edit : Action.EditCapabilities)
+        {
+            EditContracts.Add(Edit.Kind + TEXT("  ·  ") + Edit.Operation);
+        }
+        Body->AddSlot().AutoHeight()
+        [
+            UE::UnifiedScript::AuthoringSurface::Slate::Private::MakeInspectorValue(
+                TEXT("SOURCE EDIT CAPABILITIES"),
+                FString::Join(EditContracts, TEXT("\n")))
+        ];
+    }
+
+    if (Item->Span.IsValid())
+    {
+        Body->AddSlot().AutoHeight()
+        [
+            SNew(SHorizontalBox)
+            + SHorizontalBox::Slot().FillWidth(1.0f)
+            [
+                UE::UnifiedScript::AuthoringSurface::Slate::Private::MakeInspectorValue(
+                    TEXT("SOURCE"), Item->Span.ToDisplayString())
+            ]
+            + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+            [
+                SNew(SButton)
+                .Text(LOCTEXT("OpenAdvancedNodeSource", "Open Source"))
+                .OnClicked(this, &SUnifiedScriptAuthoringSurface::HandleOpenSource, Item->Span)
+            ]
+        ];
+        Body->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 8.0f)
+        [
+            SNew(SBox)
+            .MinDesiredHeight(130.0f)
+            [
+                SNew(SMultiLineEditableTextBox)
+                .Text(FText::FromString(BuildSourcePreview(Item->Span)))
+                .IsReadOnly(true)
+                .Font(FAppStyle::GetFontStyle(TEXT("MonoFont")))
+            ]
+        ];
+    }
+    return Body;
+}
+
 void SUnifiedScriptAuthoringSurface::RebuildInspector(
     const FUnifiedScriptSurfaceTreeItemPtr& Item)
 {
@@ -4696,6 +4853,15 @@ void SUnifiedScriptAuthoringSurface::RebuildInspector(
         return;
     }
 
+    const FUnifiedScriptAuthoringFunction* ActiveFunction = FindFunction(ActiveFunctionId);
+    const FUnifiedScriptAuthoringAction* ActiveAction =
+        ActiveFunction != nullptr && Item->Kind == EUnifiedScriptSurfaceTreeItemKind::Action
+        ? ActiveFunction->FindAction(Item->SemanticId)
+        : nullptr;
+    const FString InspectorSummary = ActiveAction != nullptr
+        ? FUnifiedScriptGraphPresentation::GetNodeSubtitle(*ActiveAction)
+        : Item->Detail;
+
     InspectorBox->AddSlot().AutoHeight()
     [
         SNew(STextBlock)
@@ -4705,72 +4871,98 @@ void SUnifiedScriptAuthoringSurface::RebuildInspector(
     InspectorBox->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 14.0f)
     [
         SNew(STextBlock)
-        .Text(FText::FromString(Item->Detail))
+        .Text(FText::FromString(InspectorSummary))
+        .Visibility(InspectorSummary.IsEmpty() ? EVisibility::Collapsed : EVisibility::Visible)
         .AutoWrapText(true)
         .ColorAndOpacity(FLinearColor(0.68f, 0.7f, 0.74f))
     ];
 
-    InspectorBox->AddSlot().AutoHeight()
-    [
-        UE::UnifiedScript::AuthoringSurface::Slate::Private::MakeInspectorValue(
-            TEXT("KIND"),
-            GetKindLabel(Item->Kind) +
-                (Item->Category.IsEmpty() ? FString() : TEXT("  ·  ") + Item->Category) +
-                (Item->GraphKind.IsEmpty() ? FString() : TEXT("  ·  ") + Item->GraphKind))
-    ];
-    if (!Item->SemanticId.IsEmpty())
+    if (ActiveAction != nullptr)
     {
-        InspectorBox->AddSlot().AutoHeight()
+        InspectorBox->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 10.0f)
         [
-            SNew(SHorizontalBox)
-            + SHorizontalBox::Slot().FillWidth(1.0f)
+            SNew(STextBlock)
+            .Text(FText::FromString(
+                TEXT("Action") +
+                (ActiveAction->Category.IsEmpty()
+                    ? FString()
+                    : TEXT("  ·  ") + ActiveAction->Category)))
+            .Font(FAppStyle::GetFontStyle(TEXT("SmallFont")))
+            .ColorAndOpacity(FLinearColor(0.48f, 0.53f, 0.60f))
+        ];
+        InspectorBox->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 12.0f)
+        [
+            SNew(SExpandableArea)
+            .InitiallyCollapsed(true)
+            .AreaTitle(LOCTEXT(
+                "AdvancedNodeDetails",
+                "Advanced Node Details  ·  types, effects, source, IDs, API"))
+            .Padding(FMargin(8.0f, 6.0f))
+            .BodyContent()
             [
-                UE::UnifiedScript::AuthoringSurface::Slate::Private::MakeInspectorValue(
-                    TEXT("SEMANTIC ID"), Item->SemanticId)
-            ]
-            + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
-            [
-                SNew(SButton)
-                .Text(LOCTEXT("CopyId", "Copy ID"))
-                .OnClicked(this, &SUnifiedScriptAuthoringSurface::HandleCopyId, Item->SemanticId)
+                BuildAdvancedNodeDetails(Item, *ActiveAction)
             ]
         ];
     }
-    if (Item->Span.IsValid())
+    else
     {
         InspectorBox->AddSlot().AutoHeight()
         [
-            SNew(SHorizontalBox)
-            + SHorizontalBox::Slot().FillWidth(1.0f)
-            [
-                UE::UnifiedScript::AuthoringSurface::Slate::Private::MakeInspectorValue(
-                    TEXT("SOURCE"), Item->Span.ToDisplayString())
-            ]
-            + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
-            [
-                SNew(SButton)
-                .Text(LOCTEXT("OpenSource", "Open Source"))
-                .OnClicked(this, &SUnifiedScriptAuthoringSurface::HandleOpenSource, Item->Span)
-            ]
+            UE::UnifiedScript::AuthoringSurface::Slate::Private::MakeInspectorValue(
+                TEXT("KIND"),
+                GetKindLabel(Item->Kind) +
+                    (Item->Category.IsEmpty() ? FString() : TEXT("  ·  ") + Item->Category) +
+                    (Item->GraphKind.IsEmpty() ? FString() : TEXT("  ·  ") + Item->GraphKind))
         ];
-        InspectorBox->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 14.0f)
-        [
-            SNew(SBox)
-            .MinDesiredHeight(130.0f)
+        if (!Item->SemanticId.IsEmpty())
+        {
+            InspectorBox->AddSlot().AutoHeight()
             [
-                SNew(SMultiLineEditableTextBox)
-                .Text(FText::FromString(BuildSourcePreview(Item->Span)))
-                .IsReadOnly(true)
-                .Font(FAppStyle::GetFontStyle(TEXT("MonoFont")))
-            ]
-        ];
+                SNew(SHorizontalBox)
+                + SHorizontalBox::Slot().FillWidth(1.0f)
+                [
+                    UE::UnifiedScript::AuthoringSurface::Slate::Private::MakeInspectorValue(
+                        TEXT("SEMANTIC ID"), Item->SemanticId)
+                ]
+                + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+                [
+                    SNew(SButton)
+                    .Text(LOCTEXT("CopyId", "Copy ID"))
+                    .OnClicked(this, &SUnifiedScriptAuthoringSurface::HandleCopyId, Item->SemanticId)
+                ]
+            ];
+        }
+        if (Item->Span.IsValid())
+        {
+            InspectorBox->AddSlot().AutoHeight()
+            [
+                SNew(SHorizontalBox)
+                + SHorizontalBox::Slot().FillWidth(1.0f)
+                [
+                    UE::UnifiedScript::AuthoringSurface::Slate::Private::MakeInspectorValue(
+                        TEXT("SOURCE"), Item->Span.ToDisplayString())
+                ]
+                + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+                [
+                    SNew(SButton)
+                    .Text(LOCTEXT("OpenSource", "Open Source"))
+                    .OnClicked(this, &SUnifiedScriptAuthoringSurface::HandleOpenSource, Item->Span)
+                ]
+            ];
+            InspectorBox->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 14.0f)
+            [
+                SNew(SBox)
+                .MinDesiredHeight(130.0f)
+                [
+                    SNew(SMultiLineEditableTextBox)
+                    .Text(FText::FromString(BuildSourcePreview(Item->Span)))
+                    .IsReadOnly(true)
+                    .Font(FAppStyle::GetFontStyle(TEXT("MonoFont")))
+                ]
+            ];
+        }
     }
 
-    const FUnifiedScriptAuthoringFunction* ActiveFunction = FindFunction(ActiveFunctionId);
-    const FUnifiedScriptAuthoringAction* ActiveAction =
-        ActiveFunction != nullptr && Item->Kind == EUnifiedScriptSurfaceTreeItemKind::Action
-        ? ActiveFunction->FindAction(Item->SemanticId)
-        : nullptr;
     const FUnifiedScriptAuthoringRegion* ActiveRegion =
         ActiveFunction != nullptr && Item->Kind == EUnifiedScriptSurfaceTreeItemKind::Region
         ? ActiveFunction->FindRegion(Item->SemanticId)

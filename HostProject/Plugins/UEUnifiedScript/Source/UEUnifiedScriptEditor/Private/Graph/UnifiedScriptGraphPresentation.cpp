@@ -83,6 +83,15 @@ FString CompactInlineValue(const FString& Value)
     constexpr int32 MaxLength = 34;
     return Value.Len() <= MaxLength ? Value : Value.Left(MaxLength - 3) + TEXT("...");
 }
+
+FString CompactNodeText(FString Value)
+{
+    Value.ReplaceInline(TEXT("\r"), TEXT(""));
+    Value.ReplaceInline(TEXT("\n"), TEXT("  ·  "));
+    Value.TrimStartAndEndInline();
+    constexpr int32 MaxLength = 76;
+    return Value.Len() <= MaxLength ? Value : Value.Left(MaxLength - 3) + TEXT("...");
+}
 }
 
 bool FUnifiedScriptGraphPresentation::ShouldInlineAction(
@@ -132,6 +141,84 @@ FString FUnifiedScriptGraphPresentation::GetNodeTitle(
     const FUnifiedScriptAuthoringAction& Action)
 {
     return Action.Title;
+}
+
+FString FUnifiedScriptGraphPresentation::GetNodeSubtitle(
+    const FUnifiedScriptAuthoringAction& Action)
+{
+    using namespace UE::UnifiedScript::Editor::Presentation::Private;
+    if (Action.Summary.IsEmpty() || Action.Summary == Action.Title)
+    {
+        return FString();
+    }
+    if (Action.GraphKind == TEXT("unrealEventEntry"))
+    {
+        TArray<FString> Lines;
+        Action.Summary.ParseIntoArrayLines(Lines, true);
+        return Lines.IsEmpty() ? FString() : CompactNodeText(Lines.Last());
+    }
+    if (Action.GraphKind == TEXT("memberAccess"))
+    {
+        FString Member;
+        FString Receiver;
+        if (Action.Summary.Split(TEXT(" · "), &Member, &Receiver) && !Receiver.IsEmpty())
+        {
+            return CompactNodeText(TEXT("From ") + Receiver);
+        }
+    }
+    return CompactNodeText(Action.Summary);
+}
+
+FString FUnifiedScriptGraphPresentation::GetNodeTooltip(
+    const FUnifiedScriptAuthoringAction& Action)
+{
+    FString Tooltip = Action.Title;
+    if (!Action.Summary.IsEmpty() && Action.Summary != Action.Title)
+    {
+        Tooltip += TEXT("\n") + Action.Summary;
+    }
+    Tooltip += FString::Printf(
+        TEXT("\n\nContract\nKind: %s\nCategory: %s"),
+        *Action.GraphKind,
+        *Action.Category);
+    static const TArray<FString> ContractKeys = {
+        TEXT("effects"),
+        TEXT("graphSafe"),
+        TEXT("resolvedType"),
+        TEXT("typeId"),
+        TEXT("method"),
+        TEXT("methodId"),
+        TEXT("member"),
+        TEXT("unrealEventPath"),
+        TEXT("unrealEventSource"),
+        TEXT("unrealEventSourceType"),
+        TEXT("referencedSymbolId"),
+        TEXT("declaredSymbolId")};
+    for (const FString& Key : ContractKeys)
+    {
+        if (const FString* Value = Action.Properties.Find(Key); Value != nullptr)
+        {
+            Tooltip += FString::Printf(TEXT("\n%s: %s"), *Key, **Value);
+        }
+    }
+    if (!Action.Ports.IsEmpty())
+    {
+        Tooltip += TEXT("\n\nPorts");
+        for (const FUnifiedScriptAuthoringPort& Port : Action.Ports)
+        {
+            Tooltip += FString::Printf(
+                TEXT("\n%s %s: %s%s"),
+                *Port.Direction,
+                *Port.Name,
+                Port.IsControl() ? TEXT("control") : *Port.TypeDisplayName,
+                Port.TypeId.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" (%s)"), *Port.TypeId));
+        }
+    }
+    Tooltip += FString::Printf(
+        TEXT("\n\nSource\n%s\n\nSemantic ID\n%s"),
+        *Action.Span.ToDisplayString(),
+        *Action.Id);
+    return Tooltip;
 }
 
 bool FUnifiedScriptGraphPresentation::ShouldShowSummary(

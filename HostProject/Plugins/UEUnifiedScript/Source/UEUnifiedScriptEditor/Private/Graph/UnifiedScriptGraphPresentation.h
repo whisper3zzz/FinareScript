@@ -27,6 +27,8 @@ struct FUnifiedScriptGraphPresentation
     static int32 CountVisibleEdges(const FUnifiedScriptAuthoringFunction& Function);
 
     static FString GetNodeTitle(const FUnifiedScriptAuthoringAction& Action);
+    static FString GetNodeSubtitle(const FUnifiedScriptAuthoringAction& Action);
+    static FString GetNodeTooltip(const FUnifiedScriptAuthoringAction& Action);
     static bool ShouldShowSummary(const FUnifiedScriptAuthoringAction& Action);
     static bool IsCompactNode(const FUnifiedScriptAuthoringAction& Action);
 

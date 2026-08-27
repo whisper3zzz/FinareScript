@@ -89,6 +89,10 @@ FLinearColor UUnifiedScriptEdGraphNode::GetNodeTitleColor() const
 
 FText UUnifiedScriptEdGraphNode::GetTooltipText() const
 {
+    if (!AdvancedTooltip.IsEmpty())
+    {
+        return FText::FromString(AdvancedTooltip);
+    }
     return FText::FromString(FString::Printf(
         TEXT("%s\n%s\n\nSemantic ID\n%s"),
         *Summary,

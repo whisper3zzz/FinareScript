@@ -119,6 +119,38 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
             ValuePin != nullptr && ValuePin->TypeDisplayName == TEXT("int") &&
                 ContextPin != nullptr &&
                 ContextPin->TypeDisplayName == TEXT("UnrealObjectHandle"));
+        const FString EventSubtitle =
+            FUnifiedScriptGraphPresentation::GetNodeSubtitle(*EventEntry);
+        TestEqual(TEXT("Default Event Entry content keeps only the author-facing signature"),
+            EventSubtitle,
+            FString(TEXT("void OnManagedSignal(int value, UnrealObjectHandle signalContext)")));
+        TestFalse(TEXT("Default Event Entry content hides the generated API path"),
+            EventSubtitle.Contains(TEXT("/Script/")));
+        const FString EventTooltip =
+            FUnifiedScriptGraphPresentation::GetNodeTooltip(*EventEntry);
+        TestTrue(TEXT("On-demand Event Entry tooltip retains effects, API path, and exact types"),
+            EventTooltip.Contains(TEXT("effects: readsState|writesState")) &&
+                EventTooltip.Contains(TEXT("unrealEventPath: /Script/")) &&
+                EventTooltip.Contains(TEXT("UnrealObjectHandle")) &&
+                EventTooltip.Contains(EventEntry->Id));
+    }
+    const FUnifiedScriptAuthoringAction* MemberRead = EventFunction->Actions.FindByPredicate(
+        [](const FUnifiedScriptAuthoringAction& Action)
+        {
+            return Action.GraphKind == TEXT("memberAccess") &&
+                Action.Properties.FindRef(TEXT("member")) == TEXT("ManagedState");
+        });
+    TestNotNull(TEXT("Demo retains a generated member read for compact presentation"), MemberRead);
+    if (MemberRead != nullptr)
+    {
+        TestEqual(TEXT("Member read subtitle describes only its receiver"),
+            FUnifiedScriptGraphPresentation::GetNodeSubtitle(*MemberRead),
+            FString(TEXT("From _component")));
+        TestTrue(TEXT("Member read tooltip retains generated symbol and type identity"),
+            FUnifiedScriptGraphPresentation::GetNodeTooltip(*MemberRead).Contains(
+                TEXT("referencedSymbolId: us_")) &&
+            FUnifiedScriptGraphPresentation::GetNodeTooltip(*MemberRead).Contains(
+                TEXT("typeId: us_")));
     }
     FString EventPatchJson;
     TestTrue(TEXT("Event palette can build a declaration-level Event Entry patch"),

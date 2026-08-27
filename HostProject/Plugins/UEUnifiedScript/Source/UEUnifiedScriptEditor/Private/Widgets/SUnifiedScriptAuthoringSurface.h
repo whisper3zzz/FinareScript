@@ -221,6 +221,9 @@ private:
     FUnifiedScriptSurfaceTreeItemPtr FindSurfaceItem(const FString& SemanticId) const;
     FReply HandleFocusGraph();
     FReply HandleFocusSelection();
+    TSharedRef<SWidget> BuildAdvancedNodeDetails(
+        const FUnifiedScriptSurfaceTreeItemPtr& Item,
+        const FUnifiedScriptAuthoringAction& Action);
     void RebuildInspector(const FUnifiedScriptSurfaceTreeItemPtr& Item);
     void SetStatus(FString Message, bool bError);
     FString ResolveSourcePath(const FString& SourcePath) const;

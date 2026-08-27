@@ -138,6 +138,9 @@ public:
     FString SourceDisplay;
 
     UPROPERTY(Transient)
+    FString AdvancedTooltip;
+
+    UPROPERTY(Transient)
     bool bShowSummary = false;
 
     UPROPERTY(Transient)

@@ -255,6 +255,10 @@ renaming IR pins to author-facing labels, and deciding which complex actions
 need a short summary. Full kind/category/source/type/semantic-ID diagnostics
 remain available through tooltips and Details. Presentation compaction never
 changes IDs, source spans, edit targets, ports, edges, or patch payloads.
+M8.2 now renders short card subtitles and keeps the complete raw contract in
+hover text plus an initially collapsed **Advanced Node Details** area, so
+Pin Authoring stays visible without discarding compiler or generated API facts.
+See [NODE_DETAILS.md](NODE_DETAILS.md).
 
 For a concrete UE round trip, the checked-in Demo's `RewirePreview` function
 contains two pure parameter expressions. Dragging the `*` output to the

@@ -66,6 +66,7 @@ DOCUMENTS = [
     ROOT / "docs" / "NODE_PALETTE.md",
     ROOT / "docs" / "PIN_AUTHORING.md",
     ROOT / "docs" / "CANVAS_AUTHORING.md",
+    ROOT / "docs" / "NODE_DETAILS.md",
     ROOT / "docs" / "UNREAL_ADAPTER.md",
     ROOT / "docs" / "UNREAL_DEPLOYMENT.md",
     ROOT / "docs" / "UNREAL_ONBOARDING.md",
@@ -2535,7 +2536,7 @@ def main() -> int:
         and "puertsOrTypeScriptPackageFiles" in blockbreaker_package_runner
         and "### M7.4 — Full BlockBreaker runtime migration" in roadmap
         and "- [x] inventory all Puerts scripts" in roadmap
-        and "Next slice: **M8.2 — concise node content and advanced Details**"
+        and "Next slice: **M8.2 — diagnostics, quick fixes, diff preview, and rollback UX**"
         in roadmap,
         "M7.4 whole-project Puerts inventory, coverage, or migration gates are incomplete",
     )
@@ -2933,6 +2934,26 @@ def main() -> int:
     )
     checks.append(
         "UE Slate Canvas Authoring persists shared layout and personal viewport navigation"
+    )
+    require(
+        "GetNodeSubtitle" in unreal_graph_presentation
+        and "GetNodeTooltip" in unreal_graph_presentation
+        and "CompactNodeText" in unreal_graph_presentation
+        and "AdvancedTooltip" in unreal_ed_graph_header
+        and "SExpandableArea" in unreal_authoring_widget
+        and "BuildAdvancedNodeDetails" in unreal_authoring_widget
+        and "COMPILER / GENERATED API METADATA" in unreal_authoring_widget
+        and "SOURCE EDIT CAPABILITIES" in unreal_authoring_widget
+        and "Default Event Entry content hides the generated API path"
+        in unreal_authoring_test
+        and "On-demand Event Entry tooltip retains effects, API path, and exact types"
+        in unreal_authoring_test
+        and "Member read tooltip retains generated symbol and type identity"
+        in unreal_authoring_test,
+        "Compact semantic cards or on-demand exact Advanced Node Details are incomplete",
+    )
+    checks.append(
+        "UE Slate keeps author-facing cards compact and exact compiler/API facts on demand"
     )
     identity_reconciler_source = (
         ROOT / "src" / "UnifiedScript.CSharp" / "CSharpIdentityReconciler.cs"

@@ -49,7 +49,7 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-27**
 
 - Active milestone: **M8 — Visual/C# Authoring Beta**
-- Next slice: **M8.2 — concise node content and advanced Details**
+- Next slice: **M8.2 — diagnostics, quick fixes, diff preview, and rollback UX**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -60,10 +60,10 @@ machine-local unless an artifact explicitly says otherwise.
 
 | Gate | Verified result |
 | --- | --- |
-| Main source | `0773c31` (`feat: add canvas comments and wire reroutes`), plus this viewport/minimap change set |
+| Main source | `f6de727` (`feat: complete native canvas authoring`), plus this compact-node/Advanced-Details change set |
 | Comparison source | `489ce9b` (`feat: complete full UnifiedScript migration`) |
 | Managed tests | 501 / 501 passed |
-| Repository validator | 52 / 52 passed |
+| Repository validator | 53 / 53 passed |
 | UE 5.8.1 native build | passed |
 | `UnifiedScript.Unreal` Automation | 13 / 13 passed at the M7.3 onboarding baseline; the migrated BlockBreaker Editor gate and focused M8.2 Authoring Surface gate also passed |
 | BlockBreaker workload | 10,000 frames, three trials, one shot, one hit, two command completions per trial |
@@ -752,7 +752,7 @@ pass.
     editors
   - [x] comment/reroute authoring, minimap, viewport state, and common
     Blueprint keyboard parity
-- [ ] show concise author-facing node content by default while retaining exact
+- [x] show concise author-facing node content by default while retaining exact
   type, effect, source, semantic ID, and generated API information on demand
 - [ ] provide compiler/contract diagnostics, quick fixes, source navigation,
   diff preview, and failed-transaction rollback in the editor
@@ -767,7 +767,7 @@ config; Recent changes only after an accepted Workbench response. Function-level
 Event Entries remain visible without an editable block, while statement actions
 do not. The focused UE 5.8 Authoring Surface Automation and 50/50 repository
 invariants pass. Later M8.2 tranches completed pin defaults/promotion and canvas
-organization; M8.2 remains open for advanced node details and
+organization and compact/advanced node information; M8.2 remains open for
 diagnostics/diff/rollback UX.
 
 The second M8.2 tranche adds source-backed Pin Authoring. Every connected data
@@ -794,8 +794,21 @@ and function ID, so personal navigation never causes sidecar conflicts. `C`,
 `F`, and `Home` provide comment, focus-selection, and focus-all parity. See
 [`CANVAS_AUTHORING.md`](CANVAS_AUTHORING.md). The 501/501 managed suite, UE 5.8
 Editor build, focused native Authoring Surface Automation, and 52/52 repository
-invariants pass. M8.2 now advances to concise default node content with exact
-type/effect/source/API data available on demand.
+invariants pass.
+
+The fourth M8.2 tranche separates authoring content from compiler diagnostics.
+Cards now use bounded author-facing subtitles: Event Entries show their C#
+handler signature instead of the canonical `/Script/...` path, and member reads
+show their receiver without repeating the member name. Hover retains the exact
+kind, raw effects, graph-safety flag, resolved type/Type ID, port contract,
+generated method/member/event identity, source span, and semantic ID. Selecting
+an action keeps ordinary authoring controls visible and puts the complete sorted
+contract, declaration references, edit capabilities, and source preview inside
+an initially collapsed **Advanced Node Details** area. See
+[`NODE_DETAILS.md`](NODE_DETAILS.md). The 501/501 managed suite, UE 5.8 Editor
+build, focused native Authoring Surface Automation, and 53/53 repository
+invariants pass. M8.2 now advances to compiler diagnostics, safe quick fixes,
+diff preview, source navigation, and explicit failed-transaction rollback UX.
 
 ### M8.3 — Asset, state, event, and API authoring
 

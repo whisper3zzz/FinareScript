@@ -9,8 +9,8 @@ M7.2 gameplay services/lifecycle productization, and M7.3 schema-generated
 gameplay data plane without adding UE dependencies to the compiler core. M7.4
 then completed the full BlockBreaker migration with exact inventory coverage
 and no Puerts/TypeScript payload in the target project or package. The active
-RoadMap cursor is M8.2 concise node content and advanced Details after the
-native Palette, Pin Authoring, and Canvas Authoring tranches.
+RoadMap cursor is M8.2 diagnostics, quick fixes, diff preview, and rollback UX
+after the native Palette, Pin, Canvas, and Advanced Details tranches.
 
 ## Product roadmap
 
@@ -482,6 +482,11 @@ Focus Selection/All, and Blueprint-style `C`, `F`, and `Home` gestures. Shared
 canvas structure is persisted in `.usgraph`; personal navigation state remains
 in per-project editor user settings. See
 [`docs/CANVAS_AUTHORING.md`](docs/CANVAS_AUTHORING.md).
+
+The next experience tranche makes node cards compact by default and moves raw
+types, effects, source, semantic identity, ports, edit capabilities, and
+generated API metadata behind exact hover contracts and a collapsed **Advanced
+Node Details** section. See [`docs/NODE_DETAILS.md`](docs/NODE_DETAILS.md).
 
 The current runtime performance tranche activates ABI v3 for fixed scalars,
 enums, generation-safe object/class handles, vector/rotator, transform, UTF-8
