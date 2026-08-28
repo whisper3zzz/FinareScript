@@ -1,0 +1,169 @@
+{
+  "schemaVersion": "unifiedscript.performance-budgets/v0.1",
+  "budgetId": "m10.3-ue58-reviewed-v1",
+  "suiteId": "unifiedscript-puerts-representative",
+  "suiteVersion": "1.1.0",
+  "referenceSuiteVersion": "1.0.0",
+  "aggregation": "weighted-arithmetic-normalized",
+  "maximumWeightedRatio": 0.95,
+  "weightedMetrics": [
+    {
+      "workloadId": "scalar-property-calls",
+      "metricName": "bridgeTimeMilliseconds"
+    },
+    {
+      "workloadId": "struct-container-transfer",
+      "metricName": "bridgeTimeMilliseconds"
+    },
+    {
+      "workloadId": "delegate-storm",
+      "metricName": "bridgeTimeMilliseconds"
+    },
+    {
+      "workloadId": "per-frame-actor-logic",
+      "metricName": "frameTimeMedianMilliseconds"
+    },
+    {
+      "workloadId": "mass-entities",
+      "metricName": "frameTimeMedianMilliseconds"
+    },
+    {
+      "workloadId": "batch-queries",
+      "metricName": "bridgeTimeMilliseconds"
+    },
+    {
+      "workloadId": "resource-spawn-flow",
+      "metricName": "bridgeTimeMilliseconds"
+    },
+    {
+      "workloadId": "blockbreaker-complete",
+      "metricName": "frameTimeMedianMilliseconds"
+    }
+  ],
+  "excludedWorkloads": [
+    {
+      "workloadId": "hot-reload",
+      "reason": "Collectible CoreCLR generation replacement and Puerts module-cache reexecution are different mechanisms, so their latency is diagnostic rather than a broad gameplay ratio."
+    }
+  ],
+  "regressionGates": [
+    {
+      "id": "abi-scalar-latency",
+      "workloadId": "scalar-property-calls",
+      "metricName": "bridgeTimeMilliseconds",
+      "observation": "unifiedScriptMedian",
+      "maximum": 25.0,
+      "rationale": "Keeps the generated scalar ABI within a reviewed 48.8 percent ceiling above the M10.1 16.802 ms median while the stricter dedicated ABI ratio gate remains unchanged."
+    },
+    {
+      "id": "generated-container-allocation",
+      "workloadId": "struct-container-transfer",
+      "metricName": "allocatedBytes",
+      "observation": "unifiedScriptMedian",
+      "maximum": 0.0,
+      "rationale": "Borrowed fixed-value snapshots must remain allocation-free in the measured managed loop."
+    },
+    {
+      "id": "generated-container-latency",
+      "workloadId": "struct-container-transfer",
+      "metricName": "bridgeTimeMilliseconds",
+      "observation": "unifiedScriptMedian",
+      "maximum": 5.0,
+      "rationale": "One acquisition plus 16,384 borrowed rows must stay below five milliseconds on the frozen UE 5.8.1 host."
+    },
+    {
+      "id": "generated-event-allocation",
+      "workloadId": "delegate-storm",
+      "metricName": "allocatedBytes",
+      "observation": "unifiedScriptMedian",
+      "maximum": 0.0,
+      "rationale": "Buffered generated event iteration must remain allocation-free in the measured managed loop."
+    },
+    {
+      "id": "generated-event-latency",
+      "workloadId": "delegate-storm",
+      "metricName": "bridgeTimeMilliseconds",
+      "observation": "unifiedScriptMedian",
+      "maximum": 5.0,
+      "rationale": "One acquisition plus 65,536 buffered events must stay below five milliseconds on the frozen UE 5.8.1 host."
+    },
+    {
+      "id": "actor-frame-p50",
+      "workloadId": "per-frame-actor-logic",
+      "metricName": "frameTimeMedianMilliseconds",
+      "observation": "unifiedScriptMedian",
+      "maximum": 0.012,
+      "rationale": "Caps the existing M10.1 per-frame Actor path at twice its 0.006 ms reference median."
+    },
+    {
+      "id": "mass-frame-p50",
+      "workloadId": "mass-entities",
+      "metricName": "frameTimeMedianMilliseconds",
+      "observation": "unifiedScriptMedian",
+      "maximum": 0.45,
+      "rationale": "Caps the existing 1,000-entity path below twice its 0.229 ms M10.1 reference median."
+    },
+    {
+      "id": "batch-query-latency",
+      "workloadId": "batch-queries",
+      "metricName": "bridgeTimeMilliseconds",
+      "observation": "unifiedScriptMedian",
+      "maximum": 1.0,
+      "rationale": "Preserves the existing single-batch trace advantage with a reviewed ceiling above the 0.440 ms M10.1 reference."
+    },
+    {
+      "id": "resource-flow-latency",
+      "workloadId": "resource-spawn-flow",
+      "metricName": "bridgeTimeMilliseconds",
+      "observation": "unifiedScriptMedian",
+      "maximum": 12.5,
+      "rationale": "Prevents the existing load/spawn/destroy path from regressing more than 29.9 percent above its 9.621 ms M10.1 median."
+    },
+    {
+      "id": "blockbreaker-frame-p50",
+      "workloadId": "blockbreaker-complete",
+      "metricName": "frameTimeMedianMilliseconds",
+      "observation": "unifiedScriptMedian",
+      "maximum": 0.70,
+      "rationale": "Preserves the complete Demo median with a reviewed ceiling above the 0.582 ms M10.1 result."
+    },
+    {
+      "id": "blockbreaker-frame-p95",
+      "workloadId": "blockbreaker-complete",
+      "metricName": "frameTimeP95Milliseconds",
+      "observation": "unifiedScriptMedian",
+      "maximum": 1.25,
+      "rationale": "Preserves the complete Demo p95 tail with a reviewed ceiling above the 1.060 ms M10.1 result."
+    },
+    {
+      "id": "blockbreaker-frame-p99",
+      "workloadId": "blockbreaker-complete",
+      "metricName": "frameTimeP99Milliseconds",
+      "observation": "unifiedScriptMedian",
+      "maximum": 1.70,
+      "rationale": "Preserves the complete Demo p99 tail with a reviewed ceiling above the 1.403 ms M10.1 result."
+    },
+    {
+      "id": "blockbreaker-bridge-latency",
+      "workloadId": "blockbreaker-complete",
+      "metricName": "bridgeTimeMilliseconds",
+      "observation": "unifiedScriptMedian",
+      "maximum": 220.0,
+      "rationale": "Preserves the complete Demo bridge path with a reviewed ceiling above the 175.497 ms M10.1 result."
+    },
+    {
+      "id": "blockbreaker-package-ratio",
+      "workloadId": "blockbreaker-complete",
+      "metricName": "packageSizeBytes",
+      "observation": "unifiedScriptToPuertsRatio",
+      "maximum": 1.05,
+      "rationale": "Keeps the matched delivery-size overhead within five percent while runtime dependencies are hardened."
+    }
+  ],
+  "revisionNotes": [
+    "Suite 1.1.0 preserves the frozen 1.0.0 manifest and changes only the two high-volume stable data shapes selected by M10.2 profiling.",
+    "Delegate count changes from 100,000 to the generated channel's declared 65,536-entry bound on both runtimes.",
+    "Every absolute ceiling is derived from the published M10.1 reference and can move only through a reviewed version-control change.",
+    "A neutral or losing weighted result remains publishable; only a ratio at or below 0.95 qualifies the broad performance claim."
+  ]
+}

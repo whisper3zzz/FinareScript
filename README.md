@@ -630,8 +630,13 @@ World/publication/layout validation. The live-CoreCLR v0.3 profile measured
 1,024 direct Array+Map binding rows at 25,371.973 ns/row versus 1.270 ns/row for
 the generated snapshot (ratio 0.000050), plus 0.586 ns/row for buffered events,
 with zero managed allocation. Direct generated calls remain the fallback for
-low-volume or unstable shapes; M10.3 will rerun the complete matched suite
-before changing the broad product claim.
+low-volume or unstable shapes. M10.3 now freezes the original v1.0.0 evidence,
+adds suite v1.1.0 plus reviewed budgets, and routes only the representative
+high-volume fixed-container/event workloads through those channels. Their
+three-trial matched medians improved from losing ratios of 6.734380/3.800531 to
+0.002026/0.007390, with one acquisition, zero logical boundary copies, and zero
+managed allocation on every UnifiedScript trial. The complete 54-slot v1.1.0
+rerun is still required before changing the broad product claim.
 
 Build, archive, and smoke-test the self-contained Win64 Development and
 Shipping packages:

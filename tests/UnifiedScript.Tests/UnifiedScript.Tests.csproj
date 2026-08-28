@@ -50,6 +50,12 @@
     <None Include="../../benchmarks/unreal/workload-suite.v0.1.json"
           Link="UnrealPerformance/workload-suite.v0.1.json"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../benchmarks/unreal/workload-suite.v1.1.0.json"
+          Link="UnrealPerformance/workload-suite.v1.1.0.json"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../benchmarks/unreal/performance-budgets.v1.1.0.json"
+          Link="UnrealPerformance/performance-budgets.v1.1.0.json"
+          CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../samples/Unreal/UEUnifiedScriptRuntime.api-contract.json"
           Link="UnrealFixtures/UEUnifiedScriptRuntime.api-contract.json"
           CopyToOutputDirectory="PreserveNewest" />

@@ -49,6 +49,24 @@ stable, high-volume containers and events can use generated channels, while
 low-volume or changing contracts stay on direct generated binding. It does not
 replace the frozen matched Puerts suite or satisfy M10.3 by itself.
 
+M10.3 converts that route-level proof into suite v1.1.0 without rewriting the
+checked-in v1.0.0 manifest. The fixed-container recipe keeps 16,384 rows; the
+event recipe uses the declared 65,536-entry channel bound on both runtimes.
+Three alternating trials produced 0.1213 ms versus 59.870601 ms for containers
+(ratio 0.002026), and 0.2561 ms versus 34.6535 ms for events (ratio 0.007390).
+Every UnifiedScript trial reports one acquisition, zero logical boundary-copy
+bytes, and zero managed allocation. These are complete pair-level results, but
+the product verdict remains pending the other seven workloads.
+
+The reviewed policy lives in
+`benchmarks/unreal/performance-budgets.v1.1.0.json`. It selects one primary
+metric per comparable workload, excludes hot reload with an explicit mechanism
+reason, computes a normalized weighted arithmetic ratio, and requires a result
+at or below 0.95 for the broad claim. Absolute ABI, data-channel, BlockBreaker
+tail, bridge, and package ceilings are version-controlled regression gates.
+Neutral and losing results are written with `status: not-qualified`; they are
+not suppressed or converted into a passing claim.
+
 Pass `-SuiteMetricsPath <file>` to emit the scalar workload's complete M10.1
 metric map. Normalize that map with
 `comparison/write-workload-capture.ps1`; the capture path rejects a trial whose

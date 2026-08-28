@@ -768,6 +768,9 @@ public static class UnrealPerformanceSuiteJson
     public static UnrealPerformanceEngineResult DeserializeResult(string json) =>
         Deserialize<UnrealPerformanceEngineResult>(json, "engine result");
 
+    public static UnrealPerformanceComparisonReport DeserializeReport(string json) =>
+        Deserialize<UnrealPerformanceComparisonReport>(json, "comparison report");
+
     public static UnrealPerformanceTrialCapture DeserializeCapture(string json) =>
         Deserialize<UnrealPerformanceTrialCapture>(json, "trial capture");
 

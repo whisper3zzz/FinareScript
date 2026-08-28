@@ -24,8 +24,10 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $manifestPath = Join-Path $repoRoot `
-    'benchmarks\unreal\workload-suite.v0.1.json'
-$suiteRoot = Join-Path $repoRoot 'artifacts\comparison\suite'
+    'benchmarks\unreal\workload-suite.v1.1.0.json'
+$suiteRoot = Join-Path $repoRoot 'artifacts\comparison\suite\v1.1.0'
+$budgetPath = Join-Path $repoRoot `
+    'benchmarks\unreal\performance-budgets.v1.1.0.json'
 $scalarRunner = Join-Path $PSScriptRoot 'run-performance-comparison.ps1'
 $representativeRunner = Join-Path $PSScriptRoot `
     'run-representative-workload-comparison.ps1'
@@ -46,7 +48,7 @@ if ([string]::IsNullOrWhiteSpace($PackageMetricsPath)) {
 
 foreach ($required in @(
         $manifestPath, $scalarRunner, $representativeRunner, $gameplayRunner,
-        $identityScript, $dotnetExe, $cliProject, $engineBuildPath,
+        $identityScript, $dotnetExe, $cliProject, $engineBuildPath, $budgetPath,
         (Join-Path $puertsRoot 'Plugins\Puerts\Puerts.uplugin'))) {
     if (-not (Test-Path -LiteralPath $required)) {
         throw "Complete-suite dependency is missing: $required"
@@ -271,6 +273,7 @@ if ($LASTEXITCODE -ne 0) {
 $unifiedResult = Join-Path $suiteRoot 'unifiedscript.json'
 $puertsResult = Join-Path $suiteRoot 'puerts.json'
 $comparisonResult = Join-Path $suiteRoot 'comparison.json'
+$budgetResult = Join-Path $suiteRoot 'budget-report.json'
 foreach ($engine in @(
         [pscustomobject]@{ Id = 'unifiedScript'; Output = $unifiedResult },
         [pscustomobject]@{ Id = 'puerts'; Output = $puertsResult })) {
@@ -291,4 +294,16 @@ foreach ($engine in @(
 if ($LASTEXITCODE -ne 0) {
     throw "Matched workload comparison failed: $LASTEXITCODE."
 }
-Write-Output "Complete 54-slot workload suite: PASS ($comparisonResult)"
+& $dotnetExe $cliDll ue-workload-budget `
+    --manifest $manifestPath `
+    --comparison $comparisonResult `
+    --budgets $budgetPath `
+    --out $budgetResult
+if ($LASTEXITCODE -ne 0) {
+    throw "Workload budget evaluation failed: $LASTEXITCODE."
+}
+$budget = Get-Content -LiteralPath $budgetResult -Raw | ConvertFrom-Json
+Write-Output (
+    "Complete 54-slot workload suite: PASS; " +
+    "M10.3=$($budget.status), weightedRatio=$($budget.weightedRatio) " +
+    "($comparisonResult; $budgetResult)")

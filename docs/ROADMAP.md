@@ -1129,7 +1129,7 @@ tests, and all 16 `UnifiedScript.Unreal` Automation tests pass.
 
 ### M10.3 — Performance budgets
 
-- [ ] keep zero steady-state managed allocation on generated fixed-value fast
+- [x] keep zero steady-state managed allocation on generated fixed-value fast
   paths and published data-plane loops
 - [ ] prevent regressions in the existing ABI and BlockBreaker gates, with
   explicit reviewed threshold changes rather than silently moving targets
@@ -1138,6 +1138,20 @@ tests, and all 16 `UnifiedScript.Unreal` Automation tests pass.
 
 Acceptance: the performance report explains where UnifiedScript wins or loses,
 and the broad claim is derived from the versioned suite rather than one API.
+
+In progress (2026-08-28): the frozen v1.0.0 manifest remains unchanged and a
+v1.1.0 suite promotes only the profiled stable shapes. The 16,384-row
+fixed-container workload now uses one generated snapshot acquisition and the
+65,536-event workload uses one next-frame generated event acquisition. Three
+alternating matched trials measured UnifiedScript medians of 0.1213 ms and
+0.2561 ms against Puerts at 59.870601 ms and 34.6535 ms, ratios of 0.002026 and
+0.007390; all six UnifiedScript trials report one bridge acquisition, zero
+logical boundary copies, and zero managed allocation. The checked-in
+`performance-budgets.v1.1.0.json` records the unchanged 0.95 weighted claim
+threshold, explicit workload/metric selection, the hot-reload exclusion reason,
+and reviewed ABI/BlockBreaker ceilings. `ue-workload-budget` always publishes a
+`qualified` or `not-qualified` report. The broad claim remains unset until all
+54 v1.1.0 slots and the refreshed package evidence are complete.
 
 ## M11 — Production hardening and release candidate
 

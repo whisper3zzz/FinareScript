@@ -18,6 +18,7 @@
 #include "Serialization/JsonSerializer.h"
 #include "UnifiedScriptComponent.h"
 #include "UnifiedScriptCoreClrHost.h"
+#include "UnifiedScriptDataPlaneLayouts.gen.h"
 #include "UnifiedScriptAsset.h"
 #include "UnifiedScriptActor.h"
 #include "UObject/UObjectGlobals.h"
@@ -1458,16 +1459,16 @@ bool FUnifiedScriptRepresentativeWorkloadPerformanceTest::RunTest(
         : bDelegateStorm ? 4096 : 16;
     const int32 ExpectedIterations = bStructContainer
         ? 16384
-        : bDelegateStorm ? 100000 : 256;
+        : bDelegateStorm ? 65536 : 256;
     const int64 ExpectedCalls = bStructContainer
-        ? 49152
-        : bDelegateStorm ? 200000 : 768;
+        ? 1
+        : bDelegateStorm ? 1 : 768;
     const int64 ExpectedBytesCopied = bStructContainer
-        ? 3276800
-        : bDelegateStorm ? 1700000 : 40192;
+        ? 0
+        : bDelegateStorm ? 0 : 40192;
     const int64 ExpectedChecksum = bStructContainer
         ? 2424832
-        : bDelegateStorm ? 5000350000ll : 768;
+        : bDelegateStorm ? 2147713024ll : 768;
 
     UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
     TestNotNull(TEXT("Representative workload World exists"), World);
@@ -1481,6 +1482,74 @@ bool FUnifiedScriptRepresentativeWorkloadPerformanceTest::RunTest(
     TestNotNull(TEXT("Representative workload World host exists"), Host);
     UUnifiedScriptComponent* Component =
         NewObject<UUnifiedScriptComponent>(World);
+    if (bStructContainer)
+    {
+        TArray<FUnifiedScriptFixedValueCollectionSnapshotV1> Rows;
+        Rows.Reserve(ExpectedIterations);
+        for (int32 Index = 0; Index < ExpectedIterations; ++Index)
+        {
+            FUnifiedScriptFixedValueCollectionSnapshotV1& Row =
+                Rows.AddDefaulted_GetRef();
+            Row.SequenceId = static_cast<uint64>(Index + 1);
+            Row.VectorX = 2.0;
+            Row.VectorY = 3.0;
+            Row.VectorZ = 4.0;
+            Row.ValueCount = 8;
+            Row.PairCount = 4;
+            Row.Value0 = 1;
+            Row.Value1 = 2;
+            Row.Value2 = 3;
+            Row.Value3 = 4;
+            Row.Value4 = 5;
+            Row.Value5 = 6;
+            Row.Value6 = 7;
+            Row.Value7 = 8;
+            Row.Key0 = 1;
+            Row.Key1 = 2;
+            Row.Key2 = 3;
+            Row.Key3 = 4;
+            Row.MapValue0 = 10;
+            Row.MapValue1 = 20;
+            Row.MapValue2 = 30;
+            Row.MapValue3 = 40;
+        }
+        TestTrue(
+            TEXT("Representative fixed-value rows publish through one generated channel"),
+            Host->PublishGeneratedSnapshotRows(
+                UE::UnifiedScript::SharedData::FixedValueCollectionSchemaId,
+                TConstArrayView<FUnifiedScriptFixedValueCollectionSnapshotV1>(Rows)));
+    }
+    else if (bDelegateStorm)
+    {
+        FUnifiedScriptObjectHandleResult ContextHandleResult;
+        const FUnifiedScriptObjectHandle ContextHandle =
+            Host->RegisterObject(Component, ContextHandleResult);
+        TestTrue(
+            TEXT("Representative event context handle is registered"),
+            ContextHandleResult.IsSuccess());
+        TArray<FUnifiedScriptBufferedGameplayEventV1> Events;
+        Events.Reserve(ExpectedIterations);
+        for (int32 Index = 0; Index < ExpectedIterations; ++Index)
+        {
+            FUnifiedScriptBufferedGameplayEventV1& Event =
+                Events.AddDefaulted_GetRef();
+            Event.SequenceId = static_cast<uint64>(Index + 1);
+            Event.EventId = 0xB10C;
+            Event.Value = Index;
+            Event.Flags = 1;
+            Event.Weight = 2.0;
+            Event.Context = {
+                Host->GetWorldHostId(),
+                ContextHandle.Value,
+            };
+        }
+        TestTrue(
+            TEXT("Representative events queue through one generated channel"),
+            Host->QueueGeneratedEventRows(
+                UE::UnifiedScript::GameplayData::BufferedGameplayEventSchemaId,
+                TConstArrayView<FUnifiedScriptBufferedGameplayEventV1>(Events)));
+        Host->BeginManagedFrame();
+    }
     UUnifiedScriptAsset* Asset = NewObject<UUnifiedScriptAsset>(World);
     Asset->ScriptAssemblyPath =
         TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.dll");
@@ -1586,6 +1655,13 @@ bool FUnifiedScriptRepresentativeWorkloadPerformanceTest::RunTest(
         TEXT("Managed allocation and GC evidence is non-negative"),
         AllocatedBytes >= 0 && GcCollectionCount >= 0 &&
         GcPauseMilliseconds >= 0.0);
+    if (bStructContainer || bDelegateStorm)
+    {
+        TestEqual(
+            TEXT("Generated representative fast path has zero managed allocation"),
+            AllocatedBytes,
+            static_cast<int64>(0));
+    }
 
     const uint64 MemoryHighWaterBytes =
         FPlatformMemory::GetStats().PeakUsedPhysical;

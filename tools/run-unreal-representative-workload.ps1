@@ -20,7 +20,7 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $projectPath = Join-Path $repoRoot 'HostProject\UEUnifiedScriptHost.uproject'
 $managedProject = Join-Path $repoRoot `
     'samples\Unreal\UnifiedScript.Unreal.Demo\UnifiedScript.Unreal.Demo.csproj'
-$manifestPath = Join-Path $repoRoot 'benchmarks\unreal\workload-suite.v0.1.json'
+$manifestPath = Join-Path $repoRoot 'benchmarks\unreal\workload-suite.v1.1.0.json'
 $artifactRoot = Join-Path $repoRoot 'artifacts\ue\representative'
 $logPath = Join-Path $artifactRoot "$WorkloadId.log"
 $rawResultPath = Join-Path $artifactRoot "$WorkloadId-raw.json"
@@ -60,10 +60,10 @@ if ($null -eq $workload) {
 }
 $contracts = @{
     'struct-container-transfer' = [pscustomobject]@{
-        Calls = 49152; Bytes = 3276800; Checksum = 2424832
+        Calls = 1; Bytes = 0; Checksum = 2424832
     }
     'delegate-storm' = [pscustomobject]@{
-        Calls = 200000; Bytes = 1700000; Checksum = 5000350000
+        Calls = 1; Bytes = 0; Checksum = 2147713024
     }
     'per-frame-actor-logic' = [pscustomobject]@{
         Calls = 20000; Bytes = 440000; Checksum = 100015000
@@ -183,6 +183,10 @@ if ($result.schemaVersion -ne 'unifiedscript.representative-workload/v0.1' -or
     [int64]$result.checksum -ne $contract.Checksum -or
     -not $frameMetricsValid) {
     throw "UnifiedScript '$WorkloadId' evidence violates its frozen contract."
+}
+if ($WorkloadId -in @('struct-container-transfer', 'delegate-storm') -and
+    [int64]$result.allocatedBytes -ne 0) {
+    throw "UnifiedScript '$WorkloadId' generated channel allocated managed memory."
 }
 
 $report = [ordered]@{

@@ -3768,6 +3768,25 @@ def main() -> int:
         / "UnifiedScript.Tests"
         / "UnrealPerformanceWorkloadSuiteTests.cs"
     ).read_text(encoding="utf-8")
+    performance_budget_source = (
+        ROOT
+        / "src"
+        / "UnifiedScript.Unreal"
+        / "UnrealPerformanceBudgets.cs"
+    ).read_text(encoding="utf-8")
+    performance_budget_test = (
+        ROOT
+        / "tests"
+        / "UnifiedScript.Tests"
+        / "UnrealPerformanceBudgetTests.cs"
+    ).read_text(encoding="utf-8")
+    representative_workload_demo = (
+        ROOT
+        / "samples"
+        / "Unreal"
+        / "UnifiedScript.Unreal.Demo"
+        / "RepresentativeWorkloadBenchmarkScript.cs"
+    ).read_text(encoding="utf-8")
     performance_suite_doc = (
         ROOT / "docs" / "PERFORMANCE_WORKLOAD_SUITE.md"
     ).read_text(encoding="utf-8")
@@ -3788,6 +3807,16 @@ def main() -> int:
     )
     with performance_suite_manifest_path.open("r", encoding="utf-8") as handle:
         performance_suite_manifest = json.load(handle)
+    performance_current_manifest_path = (
+        ROOT / "benchmarks" / "unreal" / "workload-suite.v1.1.0.json"
+    )
+    performance_budget_manifest_path = (
+        ROOT / "benchmarks" / "unreal" / "performance-budgets.v1.1.0.json"
+    )
+    with performance_current_manifest_path.open("r", encoding="utf-8") as handle:
+        performance_current_manifest = json.load(handle)
+    with performance_budget_manifest_path.open("r", encoding="utf-8") as handle:
+        performance_budget_manifest = json.load(handle)
     expected_workload_categories = {
         "scalarPropertyCalls",
         "structContainerTransfer",
@@ -3899,6 +3928,79 @@ def main() -> int:
     )
     checks.append(
         "representative performance suite versions nine workloads and rejects unmatched evidence"
+    )
+    current_workloads = {
+        workload["id"]: workload
+        for workload in performance_current_manifest["workloads"]
+    }
+    frozen_workloads = {
+        workload["id"]: workload
+        for workload in performance_suite_manifest["workloads"]
+    }
+    require(
+        performance_suite_manifest["suiteVersion"] == "1.0.0"
+        and performance_current_manifest["suiteVersion"] == "1.1.0"
+        and set(current_workloads) == set(frozen_workloads)
+        and current_workloads["struct-container-transfer"]["version"] == "1.1.0"
+        and current_workloads["delegate-storm"]["version"] == "1.1.0"
+        and current_workloads["delegate-storm"]["measuredIterations"] == 65536
+        and all(
+            current_workloads[workload_id]["inputDigest"]
+            == frozen_workloads[workload_id]["inputDigest"]
+            for workload_id in current_workloads
+            if workload_id
+            not in {"struct-container-transfer", "delegate-storm"}
+        )
+        and performance_budget_manifest["schemaVersion"]
+        == "unifiedscript.performance-budgets/v0.1"
+        and performance_budget_manifest["suiteVersion"] == "1.1.0"
+        and performance_budget_manifest["referenceSuiteVersion"] == "1.0.0"
+        and performance_budget_manifest["aggregation"]
+        == "weighted-arithmetic-normalized"
+        and performance_budget_manifest["maximumWeightedRatio"] <= 0.95
+        and len(performance_budget_manifest["weightedMetrics"]) == 8
+        and {
+            item["workloadId"]
+            for item in performance_budget_manifest["excludedWorkloads"]
+        }
+        == {"hot-reload"}
+        and all(
+            gate["rationale"] and gate["maximum"] >= 0
+            for gate in performance_budget_manifest["regressionGates"]
+        )
+        and any(
+            gate["id"] == "generated-container-allocation"
+            and gate["maximum"] == 0
+            for gate in performance_budget_manifest["regressionGates"]
+        )
+        and any(
+            gate["id"] == "generated-event-allocation"
+            and gate["maximum"] == 0
+            for gate in performance_budget_manifest["regressionGates"]
+        )
+        and "WeightedArithmeticNormalized" in performance_budget_source
+        and "BroadClaimQualified" in performance_budget_source
+        and "RegressionGatesPassed" in performance_budget_source
+        and "cover the complete suite" in performance_budget_source
+        and "WeightedVerdictPublishesWinsAndLossesWithoutMovingThresholds"
+        in performance_budget_test
+        and "CheckedInM10Point3SuitePreservesFrozenWorkloadsAndReviewsBudgets"
+        in performance_budget_test
+        and 'args[0] == "ue-workload-budget"' in cli_source
+        and "ue-workload-budget" in performance_complete_runner
+        and "performance-budgets.v1.1.0.json" in performance_complete_runner
+        and "artifacts\\comparison\\suite\\v1.1.0"
+        in performance_complete_runner
+        and "AcquireGeneratedSnapshot" in representative_workload_demo
+        and "AcquireGeneratedEvents" in representative_workload_demo
+        and "allocatedBytes -ne 0" in (
+            ROOT / "tools" / "run-unreal-representative-workload.ps1"
+        ).read_text(encoding="utf-8")
+        and "- [x] keep zero steady-state managed allocation" in roadmap,
+        "M10.3 versioned generated workloads, reviewed budgets, or honest verdict are incomplete",
+    )
+    checks.append(
+        "M10.3 generated workloads preserve v1.0 evidence and publish reviewed weighted verdicts"
     )
     authoring_diagnostics_doc = (
         ROOT / "docs" / "AUTHORING_DIAGNOSTICS.md"

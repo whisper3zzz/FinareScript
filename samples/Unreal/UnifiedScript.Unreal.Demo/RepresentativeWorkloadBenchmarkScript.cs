@@ -1,12 +1,15 @@
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using UnifiedScript.Unreal.Generated;
 
 namespace UnifiedScript.Unreal.Demo;
 
-/// <summary>Frozen struct/container and delegate workloads used by M10.1.</summary>
+/// <summary>
+/// Versioned representative workloads used by M10. The M10.3 stable
+/// container/delegate shapes use schema-generated, borrowed World channels;
+/// dynamic and low-volume shapes keep the generated binding fallback.
+/// </summary>
 public sealed class RepresentativeWorkloadBenchmarkScript : IUnrealManagedScript
 {
     private const string StructContainerWorkload = "struct-container-transfer";
@@ -61,8 +64,8 @@ public sealed class RepresentativeWorkloadBenchmarkScript : IUnrealManagedScript
 
         component.ManagedState = workload switch
         {
-            StructContainerWorkload => RunStructContainer(component),
-            DelegateWorkload => RunDelegateStorm(component, context.Host),
+            StructContainerWorkload => RunStructContainer(context),
+            DelegateWorkload => RunDelegateStorm(context),
             _ => $"Representative:v1;Workload={workload};Error=unsupported",
         };
     }
@@ -207,31 +210,38 @@ public sealed class RepresentativeWorkloadBenchmarkScript : IUnrealManagedScript
             $"RepresentativeFrame:v1;Workload={_frameWorkload};Status=complete;WarmupIterations={warmupIterations};Iterations={measuredIterations};Calls={calls};BytesCopied={bytesCopied};AllocatedBytes={_allocatedBytes};GcCollectionCount={_collectionCount};GcPauseMilliseconds={_pauseMilliseconds:F6};Checksum={_checksum}");
     }
 
-    private static string RunStructContainer(UnifiedScriptComponent component)
+    private static string RunStructContainer(UnrealScriptContext context)
     {
         const int warmupIterations = 1_024;
         const int measuredIterations = 16_384;
-        const long calls = measuredIterations * 3L;
-        const long bytesCopied = measuredIterations * 200L;
-        var left = new UnrealVector(1.0, 2.0, 3.0);
-        var right = UnrealVector.One;
-        int[] array = [1, 2, 3, 4, 5, 6, 7, 8];
-        var map = new Dictionary<int, int>
+        const long calls = 1;
+        const long bytesCopied = 0;
+        if (!context.DataPlane.SupportsGeneratedSnapshots)
         {
-            [1] = 10,
-            [2] = 20,
-            [3] = 30,
-            [4] = 40,
-        };
+            throw new InvalidOperationException(
+                "The generated fixed-value snapshot channel is unavailable.");
+        }
 
-        _ = RunStructContainerLoop(
-            component, left, right, array, map, warmupIterations);
+        UnrealGeneratedDataSnapshot<UnrealFixedValueCollectionSnapshotV1> warmup =
+            context.DataPlane.AcquireGeneratedSnapshot<
+                UnrealFixedValueCollectionSnapshotV1>(
+                    UnrealSharedDataAbiV4.FixedValueCollectionSchemaId);
+        if (warmup.Entries.Length != measuredIterations)
+        {
+            throw new InvalidOperationException(
+                $"Expected {measuredIterations} fixed-value rows, got " +
+                $"{warmup.Entries.Length}.");
+        }
+        _ = ConsumeFixedValueRows(warmup.Entries[..warmupIterations]);
         int collectionsBefore = TotalCollectionCount();
         TimeSpan pauseBefore = GC.GetTotalPauseDuration();
         long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
         long started = Stopwatch.GetTimestamp();
-        long checksum = RunStructContainerLoop(
-            component, left, right, array, map, measuredIterations);
+        UnrealGeneratedDataSnapshot<UnrealFixedValueCollectionSnapshotV1> snapshot =
+            context.DataPlane.AcquireGeneratedSnapshot<
+                UnrealFixedValueCollectionSnapshotV1>(
+                    UnrealSharedDataAbiV4.FixedValueCollectionSchemaId);
+        long checksum = ConsumeFixedValueRows(snapshot.Entries);
         double bridgeMilliseconds = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         long allocatedBytes =
             GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
@@ -252,63 +262,54 @@ public sealed class RepresentativeWorkloadBenchmarkScript : IUnrealManagedScript
             checksum);
     }
 
-    private static long RunStructContainerLoop(
-        UnifiedScriptComponent component,
-        UnrealVector left,
-        UnrealVector right,
-        IReadOnlyList<int> array,
-        IReadOnlyDictionary<int, int> map,
-        int iterations)
+    private static long ConsumeFixedValueRows(
+        ReadOnlySpan<UnrealFixedValueCollectionSnapshotV1> rows)
     {
         long checksum = 0;
-        for (int index = 0; index < iterations; index++)
+        foreach (ref readonly UnrealFixedValueCollectionSnapshotV1 row in rows)
         {
-            UnrealVector vector = component.AddBenchmarkVector(left, right);
-            IReadOnlyList<int> echoedArray = component.EchoBenchmarkArray(array);
-            IReadOnlyDictionary<int, int> echoedMap = component.EchoBenchmarkMap(map);
-            checksum += (long)vector.X;
-            foreach (int value in echoedArray)
-            {
-                checksum += value;
-            }
-            foreach ((int key, int value) in echoedMap)
-            {
-                checksum += key + value;
-            }
+            checksum += (long)row.VectorX;
+            checksum += row.Value0 + row.Value1 + row.Value2 + row.Value3;
+            checksum += row.Value4 + row.Value5 + row.Value6 + row.Value7;
+            checksum += row.Key0 + row.Key1 + row.Key2 + row.Key3;
+            checksum += row.MapValue0 + row.MapValue1 +
+                row.MapValue2 + row.MapValue3;
         }
         return checksum;
     }
 
-    private static string RunDelegateStorm(
-        UnifiedScriptComponent component,
-        UnrealObjectHandle context)
+    private static string RunDelegateStorm(UnrealScriptContext context)
     {
         const int warmupIterations = 4_096;
-        const int measuredIterations = 100_000;
-        const long calls = measuredIterations * 2L;
-        const long bytesCopied = measuredIterations * 17L;
-        long checksum = 0;
-        using IUnrealEventSubscription subscription =
-            component.SubscribeOnBenchmarkSignal((value, weight, enabled, valueContext) =>
-            {
-                checksum += value + (long)weight;
-                checksum += enabled ? 1 : 0;
-                checksum += valueContext.IsNull ? 0 : 1;
-            });
-
-        for (int index = 0; index < warmupIterations; index++)
+        const int measuredIterations = 65_536;
+        const long calls = 1;
+        const long bytesCopied = 0;
+        if (!context.DataPlane.SupportsGeneratedEvents)
         {
-            component.BroadcastBenchmarkSignal(index, 2.0f, true, context);
+            throw new InvalidOperationException(
+                "The generated gameplay event channel is unavailable.");
         }
-        checksum = 0;
+
+        UnrealGeneratedDataSnapshot<UnrealBufferedGameplayEventV1> warmup =
+            context.DataPlane.AcquireGeneratedEvents<
+                UnrealBufferedGameplayEventV1>(
+                    UnrealGameplayDataAbiV4.BufferedGameplayEventSchemaId);
+        if (warmup.Entries.Length != measuredIterations)
+        {
+            throw new InvalidOperationException(
+                $"Expected {measuredIterations} buffered events, got " +
+                $"{warmup.Entries.Length}.");
+        }
+        _ = ConsumeBufferedEvents(warmup.Entries[..warmupIterations]);
         int collectionsBefore = TotalCollectionCount();
         TimeSpan pauseBefore = GC.GetTotalPauseDuration();
         long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
         long started = Stopwatch.GetTimestamp();
-        for (int index = 0; index < measuredIterations; index++)
-        {
-            component.BroadcastBenchmarkSignal(index, 2.0f, true, context);
-        }
+        UnrealGeneratedDataSnapshot<UnrealBufferedGameplayEventV1> events =
+            context.DataPlane.AcquireGeneratedEvents<
+                UnrealBufferedGameplayEventV1>(
+                    UnrealGameplayDataAbiV4.BufferedGameplayEventSchemaId);
+        long checksum = ConsumeBufferedEvents(events.Entries);
         double bridgeMilliseconds = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         long allocatedBytes =
             GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
@@ -327,6 +328,19 @@ public sealed class RepresentativeWorkloadBenchmarkScript : IUnrealManagedScript
             collectionCount,
             pauseMilliseconds,
             checksum);
+    }
+
+    private static long ConsumeBufferedEvents(
+        ReadOnlySpan<UnrealBufferedGameplayEventV1> events)
+    {
+        long checksum = 0;
+        foreach (ref readonly UnrealBufferedGameplayEventV1 gameplayEvent in events)
+        {
+            checksum += gameplayEvent.Value + (long)gameplayEvent.Weight;
+            checksum += (gameplayEvent.Flags & 1U) != 0 ? 1 : 0;
+            checksum += gameplayEvent.Context.IsWellFormed ? 1 : 0;
+        }
+        return checksum;
     }
 
     private static string RunResourceSpawn(

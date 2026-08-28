@@ -111,6 +111,11 @@ internal static class Program
             return RunUnrealWorkloadComparison(args);
         }
 
+        if (args.Count > 0 && args[0] == "ue-workload-budget")
+        {
+            return RunUnrealWorkloadBudget(args);
+        }
+
         if (args.Count > 0 && args[0] == "ue-workload-assemble")
         {
             return RunUnrealWorkloadAssembly(args);
@@ -1119,6 +1124,71 @@ internal static class Program
                 $"Performance comparison: MATCHED " +
                 $"(workloads={report.Workloads.Count}, " +
                 $"trials={manifest.TrialCount}, schedule={report.Schedule.Count})");
+            return 0;
+        }
+        catch (InvalidDataException exception)
+        {
+            Console.Error.WriteLine(exception.Message);
+            return 65;
+        }
+    }
+
+    private static int RunUnrealWorkloadBudget(IReadOnlyList<string> args)
+    {
+        const long MaximumPerformanceInputBytes = 32L * 1024 * 1024;
+        if (!TryParseUnrealWorkloadBudgetArguments(
+                args,
+                out UnrealWorkloadBudgetOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+        options = options ?? throw new InvalidOperationException(
+            "Argument parsing succeeded without workload budget options.");
+        foreach (string input in new[]
+        {
+            options.ManifestPath,
+            options.ComparisonPath,
+            options.BudgetPath,
+        })
+        {
+            if (!File.Exists(input))
+            {
+                Console.Error.WriteLine($"Performance budget input does not exist: {input}");
+                return 66;
+            }
+            if (new FileInfo(input).Length > MaximumPerformanceInputBytes)
+            {
+                Console.Error.WriteLine(
+                    $"Performance budget input exceeds 32 MiB: {input}");
+                return 65;
+            }
+        }
+        try
+        {
+            UnrealPerformanceSuiteManifest manifest =
+                UnrealPerformanceSuiteJson.DeserializeManifest(
+                    File.ReadAllText(options.ManifestPath));
+            UnrealPerformanceComparisonReport comparison =
+                UnrealPerformanceSuiteJson.DeserializeReport(
+                    File.ReadAllText(options.ComparisonPath));
+            UnrealPerformanceBudgetManifest budgets =
+                UnrealPerformanceBudgetJson.DeserializeManifest(
+                    File.ReadAllText(options.BudgetPath));
+            UnrealPerformanceBudgetReport report = UnrealPerformanceBudgets.Evaluate(
+                manifest,
+                comparison,
+                budgets);
+            string outputPath = Path.GetFullPath(options.OutputPath);
+            WriteAtomically(
+                outputPath,
+                UnrealPerformanceBudgetJson.SerializeReport(report) + "\n");
+            Console.WriteLine(outputPath);
+            Console.WriteLine(
+                $"Performance budget: {report.Status.ToUpperInvariant()} " +
+                $"(weightedRatio={report.WeightedRatio:F6}, " +
+                $"maximum={report.MaximumWeightedRatio:F6}, " +
+                $"regressions={(report.RegressionGatesPassed ? "passed" : "failed")})");
             return 0;
         }
         catch (InvalidDataException exception)
@@ -2502,6 +2572,55 @@ internal static class Program
         return true;
     }
 
+    private static bool TryParseUnrealWorkloadBudgetArguments(
+        IReadOnlyList<string> args,
+        out UnrealWorkloadBudgetOptions? options)
+    {
+        options = null;
+        if (args.Count != 9 || args[0] != "ue-workload-budget")
+        {
+            return false;
+        }
+        string? manifestPath = null;
+        string? comparisonPath = null;
+        string? budgetPath = null;
+        string? outputPath = null;
+        int index = 1;
+        while (index < args.Count)
+        {
+            string option = args[index++];
+            string value = args[index++];
+            switch (option)
+            {
+                case "--manifest" when manifestPath is null:
+                    manifestPath = value;
+                    break;
+                case "--comparison" when comparisonPath is null:
+                    comparisonPath = value;
+                    break;
+                case "--budgets" when budgetPath is null:
+                    budgetPath = value;
+                    break;
+                case "--out" when outputPath is null:
+                    outputPath = value;
+                    break;
+                default:
+                    return false;
+            }
+        }
+        if (manifestPath is null || comparisonPath is null ||
+            budgetPath is null || outputPath is null)
+        {
+            return false;
+        }
+        options = new UnrealWorkloadBudgetOptions(
+            manifestPath,
+            comparisonPath,
+            budgetPath,
+            outputPath);
+        return true;
+    }
+
     private static bool TryParseUnrealWorkloadAssemblyArguments(
         IReadOnlyList<string> args,
         out UnrealWorkloadAssemblyOptions? options)
@@ -3250,6 +3369,7 @@ internal static class Program
         "  unifiedscript ue-workload-capture --manifest <suite.json> --measurement <raw.json> --out <capture.json>\n" +
         "  unifiedscript ue-workload-assemble --manifest <suite.json> --captures <directory> --engine <unifiedScript|puerts> --out <result.json>\n" +
         "  unifiedscript ue-workload-compare --manifest <suite.json> --unified <result.json> --puerts <result.json> --out <report.json>\n" +
+        "  unifiedscript ue-workload-budget --manifest <suite.json> --comparison <report.json> --budgets <budgets.json> --out <budget-report.json>\n" +
         "  unifiedscript verify-roundtrip <visual.cs> <code.cs> --requirements <requirements.json> --report <report.json> [options]\n" +
         "Options:\n" +
         "  --out <path>            Artifact directory, initialized sidecar, or patched source output.\n" +
@@ -3367,6 +3487,12 @@ internal static class Program
         string ManifestPath,
         string UnifiedScriptResultPath,
         string PuertsResultPath,
+        string OutputPath);
+
+    private sealed record UnrealWorkloadBudgetOptions(
+        string ManifestPath,
+        string ComparisonPath,
+        string BudgetPath,
         string OutputPath);
 
     private sealed record UnrealWorkloadAssemblyOptions(

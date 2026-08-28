@@ -1,10 +1,13 @@
 # Representative performance workload suite
 
 M10 measures UnifiedScript and Puerts with one versioned end-to-end contract.
-The checked-in manifest is
-`benchmarks/unreal/workload-suite.v0.1.json`; changing a recipe, asset set,
+The frozen M10.1 manifest remains
+`benchmarks/unreal/workload-suite.v0.1.json`. M10.3 runs
+`benchmarks/unreal/workload-suite.v1.1.0.json`; changing a recipe, asset set,
 iteration count, build configuration, or required metric is a suite-version
-change and produces a different SHA-256 manifest digest.
+change and produces a different SHA-256 manifest digest. New captures live
+under `artifacts/comparison/suite/v1.1.0`, so they cannot overwrite the v1.0.0
+evidence.
 
 The first suite contains exactly one workload for each representative family:
 
@@ -104,17 +107,18 @@ interop pair builds both targets and later pairs reuse them, while the complete
 BlockBreaker path independently synchronizes and builds the current plugin. Use
 `-PlanOnly` to inspect the 27-pair plan, or narrow a resumable pass with
 `-WorkloadId <id> -Trial <1..3>`. Once all pairs are current, the command
-assembles both 27-capture results and publishes the matched comparison.
+assembles both 27-capture results, publishes the matched comparison, and runs
+the checked-in M10.3 budget evaluator.
 
 After all 27 captures for one runtime exist, assemble them with:
 
 ```powershell
 dotnet src/UnifiedScript.Cli/bin/Release/net10.0/UnifiedScript.Cli.dll `
   ue-workload-assemble `
-  --manifest benchmarks/unreal/workload-suite.v0.1.json `
-  --captures artifacts/comparison/suite/unifiedscript/captures `
+  --manifest benchmarks/unreal/workload-suite.v1.1.0.json `
+  --captures artifacts/comparison/suite/v1.1.0/unifiedscript/captures `
   --engine unifiedScript `
-  --out artifacts/comparison/suite/unifiedscript.json
+  --out artifacts/comparison/suite/v1.1.0/unifiedscript.json
 ```
 
 Assembly rejects mixed commits or environments as well as incomplete,
@@ -125,16 +129,35 @@ Compare two complete engine results with:
 
 ```powershell
 dotnet run --project src/UnifiedScript.Cli -- ue-workload-compare `
-  --manifest benchmarks/unreal/workload-suite.v0.1.json `
-  --unified artifacts/comparison/suite/unifiedscript.json `
-  --puerts artifacts/comparison/suite/puerts.json `
-  --out artifacts/comparison/suite/comparison.json
+  --manifest benchmarks/unreal/workload-suite.v1.1.0.json `
+  --unified artifacts/comparison/suite/v1.1.0/unifiedscript.json `
+  --puerts artifacts/comparison/suite/v1.1.0/puerts.json `
+  --out artifacts/comparison/suite/v1.1.0/comparison.json
 ```
 
 The command publishes ratios even when UnifiedScript is neutral or slower. It
 does not fail a losing performance ratio; M10.3 owns reviewed budgets and the
 weighted at-least-5% product gate. It does fail malformed or unmatched evidence
 with data error exit code 65.
+
+Evaluate the versioned policy independently with:
+
+```powershell
+dotnet run --project src/UnifiedScript.Cli -- ue-workload-budget `
+  --manifest benchmarks/unreal/workload-suite.v1.1.0.json `
+  --comparison artifacts/comparison/suite/v1.1.0/comparison.json `
+  --budgets benchmarks/unreal/performance-budgets.v1.1.0.json `
+  --out artifacts/comparison/suite/v1.1.0/budget-report.json
+```
+
+The evaluator uses one declared primary metric for each of eight comparable
+workloads, normalizes their weighted arithmetic ratio by the included 0.92
+weight, and excludes hot reload only because the two lifecycle mechanisms are
+not equivalent. A ratio at or below 0.95 qualifies the broad claim. Independent
+absolute gates protect generated-channel allocation/latency, the scalar ABI,
+BlockBreaker p50/p95/p99 and bridge time, resource flow, batch queries, and
+package ratio. Every limit and rationale is in the reviewed JSON file; a losing
+result is still emitted as `not-qualified`.
 
 ## Current integration boundary
 
@@ -188,3 +211,12 @@ samples in one UE 5.8.1 World. Matched direct Array+Map binding measured
 0.586 ns/row. The two borrowed-view loops allocated zero managed bytes. These
 numbers validate the new routing mechanism; they do not rewrite the historical
 M10.1 captures or establish the future M10.3 weighted product verdict.
+
+M10.3 now has matched evidence for the two changed v1.1.0 recipes. Across three
+alternating trials, the fixed-container medians are 0.1213 ms for UnifiedScript
+and 59.870601 ms for Puerts (ratio 0.002026); buffered events are 0.2561 ms and
+34.6535 ms (ratio 0.007390). UnifiedScript reports one acquisition, zero logical
+boundary-copy bytes, and zero managed allocation in all six trials. Reusing the
+unchanged v1.0.0 medians for a provisional calculation would produce 0.613204,
+but that is explicitly not the M10.3 verdict: the remaining v1.1.0 captures and
+fresh package measurement must be rerun under the new manifest first.

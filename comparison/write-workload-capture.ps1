@@ -25,7 +25,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 if ([string]::IsNullOrWhiteSpace($ManifestPath)) {
-    $ManifestPath = Join-Path $repoRoot 'benchmarks\unreal\workload-suite.v0.1.json'
+    $ManifestPath = Join-Path $repoRoot 'benchmarks\unreal\workload-suite.v1.1.0.json'
 }
 $dotnetExe = Join-Path `
     $EngineRoot 'Engine\Binaries\ThirdParty\DotNet\10.0\win-x64\dotnet.exe'

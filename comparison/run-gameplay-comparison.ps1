@@ -35,7 +35,7 @@ $migrationAudit = Join-Path $PSScriptRoot 'audit-blockbreaker-migration.ps1'
 $captureWriter = Join-Path $PSScriptRoot 'write-workload-capture.ps1'
 $runtimeIdentityScript = Join-Path $PSScriptRoot `
     'get-runtime-source-identity.ps1'
-$suiteManifestPath = Join-Path $repoRoot 'benchmarks\unreal\workload-suite.v0.1.json'
+$suiteManifestPath = Join-Path $repoRoot 'benchmarks\unreal\workload-suite.v1.1.0.json'
 $unifiedMap = '/Game/BlockBreaker/Maps/TutorialMap?game=/Script/BlockBreaker.UnifiedScriptBlockBreakerGameMode'
 $totalGameplayFrames = $WarmupFrames + $Frames
 # Boot CSV capture contributes one startup row before gameplay. The runtime stays
@@ -682,7 +682,7 @@ if ($WriteSuiteCaptures) {
         return [string]$descriptor.VersionName
     }
 
-    $suiteDirectory = Join-Path $repoRoot 'artifacts\comparison\suite'
+    $suiteDirectory = Join-Path $repoRoot 'artifacts\comparison\suite\v1.1.0'
     foreach ($runtime in @(
             [pscustomobject]@{
                 Id = 'puerts'

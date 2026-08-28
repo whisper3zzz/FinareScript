@@ -1,0 +1,164 @@
+{
+  "schemaVersion": "unifiedscript.performance-workload-suite/v0.1",
+  "suiteId": "unifiedscript-puerts-representative",
+  "suiteVersion": "1.1.0",
+  "trialCount": 3,
+  "build": {
+    "engineVersion": "5.8.1",
+    "platform": "WindowsEditor",
+    "configuration": "Development Editor",
+    "rhi": "NullRHI",
+    "fixedTimestepFramesPerSecond": 60.0,
+    "buildFingerprint": "sha256:a439309a31d8a6fa3177622bafefda429c3c0d10efb106baf0ee2bff38908d97"
+  },
+  "workloads": [
+    {
+      "id": "scalar-property-calls",
+      "version": "1.0.0",
+      "category": "scalarPropertyCalls",
+      "description": "Generated int32 calls and component scalar property reads/writes.",
+      "weight": 0.08,
+      "warmupIterations": 4096,
+      "measuredIterations": 100000,
+      "inputDigest": "sha256:18588cee9c8828292b7300b0f083dec7ae7fa9225cbbb05fcdb98257a91fa7c7",
+      "assetDigest": "sha256:140bedbf9c3f6d56a9846d2ba7088798683f4da0c248231336e6a05679e4fdfe",
+      "requiredMetrics": [
+        "bridgeTimeMilliseconds", "calls", "allocatedBytes",
+        "gcCollectionCount", "gcPauseMilliseconds",
+        "memoryHighWaterBytes", "startupMilliseconds"
+      ]
+    },
+    {
+      "id": "struct-container-transfer",
+      "version": "1.1.0",
+      "category": "structContainerTransfer",
+      "description": "16,384 fixed FVector/array/map rows consumed from one schema-generated borrowed World snapshot.",
+      "weight": 0.10,
+      "warmupIterations": 1024,
+      "measuredIterations": 16384,
+      "inputDigest": "sha256:d5c34791433deb2bf6a3accabd4a02fca15eec8045c1c7416ea316e2bd803bc7",
+      "assetDigest": "sha256:140bedbf9c3f6d56a9846d2ba7088798683f4da0c248231336e6a05679e4fdfe",
+      "requiredMetrics": [
+        "bridgeTimeMilliseconds", "calls", "bytesCopied", "allocatedBytes",
+        "gcCollectionCount", "gcPauseMilliseconds",
+        "memoryHighWaterBytes"
+      ]
+    },
+    {
+      "id": "delegate-storm",
+      "version": "1.1.0",
+      "category": "delegateStorm",
+      "description": "65,536 four-field native gameplay events consumed from one schema-generated next-frame World buffer.",
+      "weight": 0.08,
+      "warmupIterations": 4096,
+      "measuredIterations": 65536,
+      "inputDigest": "sha256:c3f564ff5bb41c06397d538e3413ffd2bcd89d974a86e8111bdb69406dc5a055",
+      "assetDigest": "sha256:140bedbf9c3f6d56a9846d2ba7088798683f4da0c248231336e6a05679e4fdfe",
+      "requiredMetrics": [
+        "bridgeTimeMilliseconds", "calls", "bytesCopied", "allocatedBytes",
+        "gcCollectionCount", "gcPauseMilliseconds",
+        "memoryHighWaterBytes"
+      ]
+    },
+    {
+      "id": "per-frame-actor-logic",
+      "version": "1.0.0",
+      "category": "perFrameActorLogic",
+      "description": "One Actor runs movement and look logic for 10,000 fixed frames.",
+      "weight": 0.12,
+      "warmupIterations": 300,
+      "measuredIterations": 10000,
+      "inputDigest": "sha256:ed0e68b453947283ff24c30c9e928ad98e832362f4b95c63fcce262d0a8fd721",
+      "assetDigest": "sha256:3e3feced8133e2643271d64a821df35fdf4a9173a5aff4b1742bb666647d367a",
+      "requiredMetrics": [
+        "frameTimeMedianMilliseconds", "frameTimeP95Milliseconds",
+        "frameTimeP99Milliseconds", "bridgeTimeMilliseconds", "calls",
+        "allocatedBytes", "gcCollectionCount", "gcPauseMilliseconds",
+        "memoryHighWaterBytes"
+      ]
+    },
+    {
+      "id": "mass-entities",
+      "version": "1.0.0",
+      "category": "massEntities",
+      "description": "1,000 independently owned entity states update for 1,000 fixed frames.",
+      "weight": 0.12,
+      "warmupIterations": 120,
+      "measuredIterations": 1000,
+      "inputDigest": "sha256:b0f8f203152e1737c373f4b9c20e78b5f82c3838896fc5f3918a28c7f1385994",
+      "assetDigest": "sha256:3e3feced8133e2643271d64a821df35fdf4a9173a5aff4b1742bb666647d367a",
+      "requiredMetrics": [
+        "frameTimeMedianMilliseconds", "frameTimeP95Milliseconds",
+        "frameTimeP99Milliseconds", "bridgeTimeMilliseconds", "calls",
+        "bytesCopied", "allocatedBytes", "gcCollectionCount",
+        "gcPauseMilliseconds", "memoryHighWaterBytes"
+      ]
+    },
+    {
+      "id": "batch-queries",
+      "version": "1.0.0",
+      "category": "batchQueries",
+      "description": "1,024 line traces compare per-call binding with one batch query.",
+      "weight": 0.12,
+      "warmupIterations": 128,
+      "measuredIterations": 1024,
+      "inputDigest": "sha256:87a957bf39db2aaea0cead1c275810c4bf82e97328dd5514de04fdea5e1fc69d",
+      "assetDigest": "sha256:8c683b028dd1a4f50a389412434a53a1df80963875c3daf895c379f41f8fddf4",
+      "requiredMetrics": [
+        "bridgeTimeMilliseconds", "calls", "bytesCopied", "allocatedBytes",
+        "gcCollectionCount", "gcPauseMilliseconds",
+        "memoryHighWaterBytes"
+      ]
+    },
+    {
+      "id": "resource-spawn-flow",
+      "version": "1.0.0",
+      "category": "resourceSpawnFlow",
+      "description": "Load a class, spawn an Actor, observe completion, and destroy it 256 times.",
+      "weight": 0.10,
+      "warmupIterations": 16,
+      "measuredIterations": 256,
+      "inputDigest": "sha256:f43547c3dd012af05f6ca508e831f8ce3af9e0644e12887c4d41477da894227b",
+      "assetDigest": "sha256:73274ca2e6a8c29562bebb8246a883117831d614bebf50d4855c468940a27bb7",
+      "requiredMetrics": [
+        "bridgeTimeMilliseconds", "calls", "bytesCopied", "allocatedBytes",
+        "gcCollectionCount", "gcPauseMilliseconds",
+        "memoryHighWaterBytes", "startupMilliseconds"
+      ]
+    },
+    {
+      "id": "hot-reload",
+      "version": "1.0.0",
+      "category": "hotReload",
+      "description": "Compile, activate, retire, and collect 100 gameplay generations.",
+      "weight": 0.08,
+      "warmupIterations": 2,
+      "measuredIterations": 100,
+      "inputDigest": "sha256:d499c4f00940391bc78e746aa3cab1ca6ff27659fff086b1886bec6e14f37781",
+      "assetDigest": "sha256:35ef308db03205aa0b4e870ae39a666d2774b1b05ee6217476f15dc3b7ddcb2b",
+      "requiredMetrics": [
+        "allocatedBytes", "gcCollectionCount", "gcPauseMilliseconds",
+        "memoryHighWaterBytes", "startupMilliseconds",
+        "reloadMilliseconds"
+      ]
+    },
+    {
+      "id": "blockbreaker-complete",
+      "version": "1.0.0",
+      "category": "blockBreaker",
+      "description": "Complete TutorialMap migration runs 10,000 fixed frames with movement, look, shot, hit, resource, and spawn behavior.",
+      "weight": 0.20,
+      "warmupIterations": 300,
+      "measuredIterations": 10000,
+      "inputDigest": "sha256:8b336943131d5895897d210d0b02040e8768621b2b14b40a8fa0dbbbb5e057b5",
+      "assetDigest": "sha256:dfdeb00415d929705ba1777f426775e2d84a5de27a43830e1dc35411e93d7570",
+      "requiredMetrics": [
+        "frameTimeMedianMilliseconds", "frameTimeP95Milliseconds",
+        "frameTimeP99Milliseconds", "bridgeTimeMilliseconds", "calls",
+        "bytesCopied", "allocatedBytes", "gcCollectionCount",
+        "gcPauseMilliseconds", "memoryHighWaterBytes",
+        "startupMilliseconds", "reloadMilliseconds", "packageSizeBytes"
+      ]
+    }
+  ]
+}

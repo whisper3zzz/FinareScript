@@ -30,8 +30,8 @@ $unifiedRunner = if ($WorkloadId -eq 'batch-queries') {
 $captureWriter = Join-Path $PSScriptRoot 'write-workload-capture.ps1'
 $identityScript = Join-Path $PSScriptRoot 'get-runtime-source-identity.ps1'
 $manifestPath = Join-Path $repoRoot `
-    'benchmarks\unreal\workload-suite.v0.1.json'
-$suiteRoot = Join-Path $repoRoot 'artifacts\comparison\suite'
+    'benchmarks\unreal\workload-suite.v1.1.0.json'
+$suiteRoot = Join-Path $repoRoot 'artifacts\comparison\suite\v1.1.0'
 $metricsRoot = Join-Path $repoRoot `
     'artifacts\comparison\representative-workloads'
 
