@@ -36,8 +36,8 @@ The archive has one top-level `UnifiedScript-SDK-<version>-win-x64` directory:
   managed dependencies;
 - `Tools`: the SDK installer and the same project onboarding entry point used
   by the source repository;
-- `Schemas`, `Templates`, and `Documentation`: versioned examples and adoption
-  material;
+- `Schemas`, `Templates`, and `Documentation`: the machine-readable
+  compatibility policy, versioned examples, upgrade guide, and adoption material;
 - `sdk-manifest.json`: compatibility and per-file integrity contract.
 
 Packaging fails with `USSDK10xx`/`USSDK11xx`/`USSDK12xx` before producing an
@@ -49,15 +49,21 @@ plugin, or generated text contains a machine-specific repository/user path.
 `unifiedscript.sdk-manifest/v0.1` records the SDK version, target platform,
 source revision, UE engine family, .NET target framework, every published ABI,
 every consumed schema version, and the sorted size/SHA-256 of every payload
-file. M6.3.2 publishes:
+file. The compatibility policy is also bundled beside the CLI so upgrade plans
+use the exact contract shipped by that SDK. The current package publishes:
 
 - Unreal Engine family `5.8` and target `win-x64`;
 - managed target `net10.0`;
 - bootstrap/fast-member ABI v2, call-frame ABI v3, and event/shared/gameplay
   data ABI v4;
-- onboarding v0.1, reflection v0.2, API Contract/node/coverage v0.1,
-  data-plane layout v0.1 (current compatible revision 3), and deployment v0.1
-  schemas.
+- compatibility policy v0.1, onboarding v0.1, reflection v0.4, API Contract
+  and node/coverage v0.2, data-plane layout v0.1, and deployment v0.1 schemas.
+
+Before replacing an SDK, run the packaged CLI's `upgrade-plan` command against
+project-owned contracts and persistent authoring data. Direct reflection and API
+Contract rewrites, generated-output rules, immutable chunk/ABI rebuild rules,
+and atomic apply behavior are documented in
+[Versioning and upgrades](VERSIONING_AND_UPGRADES.md).
 
 The installer verifies every hash and rejects missing, duplicate, unsafe, or
 unmanifested files. Packaged-mode onboarding independently checks the selected

@@ -86,6 +86,11 @@ internal static class Program
             return RunChunkInspect(args);
         }
 
+        if (args.Count > 0 && args[0] is "upgrade-plan" or "upgrade-apply")
+        {
+            return RunUpgrade(args, isPlan: args[0] == "upgrade-plan");
+        }
+
         if (args.Count > 0 && args[0] == "debug-serve")
         {
             return RunDebugServe(args);
@@ -148,6 +153,123 @@ internal static class Program
 
         return RunAnalyze(args);
     }
+
+    private static int RunUpgrade(IReadOnlyList<string> args, bool isPlan)
+    {
+        if (!TryParseUpgradeArguments(args, isPlan, out UpgradeOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+
+        options = options ?? throw new InvalidOperationException(
+            "Argument parsing succeeded without compatibility upgrade options.");
+        string inputPath = Path.GetFullPath(options.InputPath);
+        if (!File.Exists(inputPath) && !Directory.Exists(inputPath))
+        {
+            Console.Error.WriteLine($"Upgrade input does not exist: {inputPath}");
+            return 66;
+        }
+
+        string policyPath = Path.GetFullPath(options.PolicyPath ?? Path.Combine(
+            AppContext.BaseDirectory,
+            "unifiedscript.compatibility-policy.json"));
+        if (!File.Exists(policyPath))
+        {
+            Console.Error.WriteLine($"Compatibility policy does not exist: {policyPath}");
+            return 66;
+        }
+
+        UnifiedScriptCompatibilityPolicy policy =
+            UnifiedScriptCompatibilityJson.DeserializePolicy(File.ReadAllText(policyPath));
+        UnifiedScriptUpgradePlan plan = UnifiedScriptUpgradePlanner.CreatePlan(policy, inputPath);
+        if (isPlan)
+        {
+            string outputPath = Path.GetFullPath(options.OutputPath);
+            EnsureDifferentPath(
+                inputPath,
+                outputPath,
+                "Upgrade plan output cannot overwrite its input.");
+            WriteAtomically(outputPath, UnifiedScriptCompatibilityJson.SerializePlan(plan));
+            Console.WriteLine(outputPath);
+            PrintUpgradeSummary(plan);
+            return options.FailOnBlocked && plan.Summary.Blocked > 0 ? 65 : 0;
+        }
+
+        string outputDirectory = Path.GetFullPath(options.OutputPath);
+        string reportPath = Path.GetFullPath(options.ReportPath ??
+            Path.Combine(outputDirectory, "upgrade-report.json"));
+        if (File.Exists(inputPath))
+        {
+            EnsureDifferentPath(
+                inputPath,
+                reportPath,
+                "Upgrade report cannot overwrite its input.");
+        }
+        else
+        {
+            foreach (UnifiedScriptUpgradePlanItem item in plan.Items)
+            {
+                EnsureDifferentPath(
+                    Path.Combine(inputPath, item.Path.Replace('/', Path.DirectorySeparatorChar)),
+                    reportPath,
+                    "Upgrade report cannot overwrite a scanned input artifact.");
+            }
+        }
+        var outputs = new List<OutputFile>
+        {
+            new(reportPath, UnifiedScriptCompatibilityJson.SerializePlan(plan)),
+        };
+        UnifiedScriptUpgradePlanItem[] nonRewritable = plan.Items
+            .Where(static item => item.Disposition is
+                UnifiedScriptUpgradeDisposition.Regenerate or
+                UnifiedScriptUpgradeDisposition.Rebuild or
+                UnifiedScriptUpgradeDisposition.Blocked)
+            .ToArray();
+        if (nonRewritable.Length == 0)
+        {
+            bool inputIsFile = File.Exists(inputPath);
+            foreach (UnifiedScriptUpgradePlanItem item in plan.Items.Where(
+                static item => item.Disposition == UnifiedScriptUpgradeDisposition.Rewrite))
+            {
+                string sourcePath = inputIsFile
+                    ? inputPath
+                    : Path.Combine(inputPath, item.Path.Replace('/', Path.DirectorySeparatorChar));
+                string targetPath = inputIsFile
+                    ? Path.Combine(outputDirectory, Path.GetFileName(inputPath))
+                    : ResolveOutputPath(outputDirectory, item.Path);
+                EnsureDifferentPath(
+                    sourcePath,
+                    targetPath,
+                    "Compatibility upgrades must be written to a separate path.");
+                outputs.Add(new OutputFile(
+                    targetPath,
+                    UnifiedScriptUpgradePlanner.Rewrite(
+                        item.FamilyId,
+                        File.ReadAllText(sourcePath))));
+            }
+        }
+
+        WriteTransactionally(outputs);
+        foreach (OutputFile output in outputs)
+        {
+            Console.WriteLine(Path.GetFullPath(output.Path));
+        }
+        PrintUpgradeSummary(plan);
+        if (nonRewritable.Length > 0)
+        {
+            Console.Error.WriteLine(
+                "Upgrade apply made no artifact changes because the plan contains " +
+                "regenerate, rebuild, or blocked actions. Follow the report first.");
+            return 65;
+        }
+        return 0;
+    }
+
+    private static void PrintUpgradeSummary(UnifiedScriptUpgradePlan plan) => Console.WriteLine(
+        $"scanned={plan.Summary.Scanned}; current={plan.Summary.Current}; " +
+        $"rewrite={plan.Summary.Rewrite}; regenerate={plan.Summary.Regenerate}; " +
+        $"rebuild={plan.Summary.Rebuild}; blocked={plan.Summary.Blocked}");
 
     private static int RunRoundTripVerification(IReadOnlyList<string> args)
     {
@@ -2237,6 +2359,68 @@ internal static class Program
         return true;
     }
 
+    private static bool TryParseUpgradeArguments(
+        IReadOnlyList<string> args,
+        bool isPlan,
+        out UpgradeOptions? options)
+    {
+        options = null;
+        string expectedCommand = isPlan ? "upgrade-plan" : "upgrade-apply";
+        if (args.Count < 4 || args[0] != expectedCommand ||
+            args[1].StartsWith("--", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        string inputPath = args[1];
+        string? outputPath = null;
+        string? policyPath = null;
+        string? reportPath = null;
+        bool failOnBlocked = false;
+        int index = 2;
+        while (index < args.Count)
+        {
+            string option = args[index++];
+            if (option == "--fail-on-blocked" && !failOnBlocked)
+            {
+                failOnBlocked = true;
+                continue;
+            }
+            if (index >= args.Count)
+            {
+                return false;
+            }
+
+            string value = args[index++];
+            switch (option)
+            {
+                case "--out" when outputPath is null:
+                    outputPath = value;
+                    break;
+                case "--policy" when policyPath is null:
+                    policyPath = value;
+                    break;
+                case "--report" when !isPlan && reportPath is null:
+                    reportPath = value;
+                    break;
+                default:
+                    return false;
+            }
+        }
+
+        if (outputPath is null || isPlan && reportPath is not null)
+        {
+            return false;
+        }
+        options = new UpgradeOptions(
+            inputPath,
+            outputPath,
+            policyPath,
+            reportPath,
+            failOnBlocked);
+        return true;
+    }
+
     private static bool TryParseUnrealBindingArguments(
         IReadOnlyList<string> args,
         out UnrealBindingOptions? options)
@@ -3574,6 +3758,8 @@ internal static class Program
         "  unifiedscript emit-files <input.cs> <additional.cs>... --out <directory> [options]\n" +
         "  unifiedscript chunk-pack --out <program.uschunk> --runtime-manifest <file> --assembly <file.dll> --declaration <file> --bindings <file> --dependencies <file> [sidecars]\n" +
         "  unifiedscript chunk-inspect <program.uschunk>\n" +
+        "  unifiedscript upgrade-plan <file|directory> --out <report.json> [--policy <policy.json>] [--fail-on-blocked]\n" +
+        "  unifiedscript upgrade-apply <file|directory> --out <directory> [--report <report.json>] [--policy <policy.json>]\n" +
         "  unifiedscript identity-init <input.cs> --out <identity.usids> [options]\n" +
         "  unifiedscript layout-init <graph.json> --out <layout.usgraph>\n" +
         "  unifiedscript layout-sync <graph.json> --layout <layout.usgraph> --out <updated.usgraph>\n" +
@@ -3638,6 +3824,8 @@ internal static class Program
         "  --pdb <file>             Add an optional portable-PDB debug section.\n" +
         "  --source-map <file>      Add an optional source-map debug section.\n" +
         "  --authoring-surface <file> Add an optional editor-only authoring section.\n" +
+        "  --policy <file>          Override the bundled compatibility policy.\n" +
+        "  --fail-on-blocked       Return data-error status for unreadable known versions.\n" +
         "  --configuration <name>   Select the MSBuild configuration; defaults to Debug.\n" +
         "  --framework <tfm>        Select one framework from a multi-target .csproj.\n" +
         "  --no-restore             Do not restore the .csproj before loading.\n" +
@@ -3760,6 +3948,13 @@ internal static class Program
         string? PortablePdbPath,
         string? SourceMapPath,
         string? AuthoringSurfacePath);
+
+    private sealed record UpgradeOptions(
+        string InputPath,
+        string OutputPath,
+        string? PolicyPath,
+        string? ReportPath,
+        bool FailOnBlocked);
 
     private sealed record UnrealPuertsInventoryOptions(
         string ProjectRoot,

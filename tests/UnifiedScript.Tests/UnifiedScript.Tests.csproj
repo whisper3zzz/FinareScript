@@ -74,5 +74,8 @@
     <None Include="../../HostProject/Plugins/UEUnifiedScript/Source/UEUnifiedScriptRuntime/Private/Generated/UEUnifiedScriptRuntime.native-thunks.generated.cpp"
           Link="UnrealFixtures/UEUnifiedScriptRuntime.native-thunks.generated.cpp"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../schemas/unifiedscript.compatibility-policy.v0.1.json"
+          Link="unifiedscript.compatibility-policy.json"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

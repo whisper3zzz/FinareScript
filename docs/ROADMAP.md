@@ -49,7 +49,7 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-28**
 
 - Active milestone: **M11 — Production hardening and release candidate**
-- Next slice: **M11.3 — Versioning, upgrades, and CI**
+- Next slice: **M11.3 — clean CI lane matrix**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -63,8 +63,8 @@ machine-local unless an artifact explicitly says otherwise.
 | Runtime source baseline | `810913d` (`perf: remove benchmark world log pollution`) |
 | UnifiedScript comparison source | `5cf323e` (`perf: sync representative workload host`) |
 | Puerts comparison source | `be399cb` (`perf: register benchmark world context`) |
-| Managed tests | 561 / 561 passed |
-| Repository validator | 73 / 73 passed |
+| Managed tests | 566 / 566 passed |
+| Repository validator | 74 / 74 passed |
 | UE 5.8.1 native build | passed |
 | `UnifiedScript.Unreal` Automation | 17 / 17 passed, including bounded crash breadcrumbs, failure containment, deterministic World shutdown, workload collectors, gameplay-profiler attribution, Authoring Surface, live World semantic pause/step/reload/detach, and repeated success/failure hot-reload leak coverage |
 | M10.2 generated-channel profile | 1,024 rows x 3 median samples: container binding 25,371.973 ns/row, generated snapshot 1.270 ns/row (ratio 0.000050), buffered events 0.586 ns/row, zero managed allocation |
@@ -1265,12 +1265,26 @@ as `not-declared`. Evidence is
 
 ### M11.3 — Versioning, upgrades, and CI
 
-- [ ] publish compatibility policy and migrations for schemas, artifacts,
+- [x] publish compatibility policy and migrations for schemas, artifacts,
   bindings, Script Assets, ABI tables, saved graph layout, and generated code
 - [ ] add clean CI lanes for managed tests, deterministic generation, UE build,
   Automation, package smoke, workload performance, and SDK installation
 - [ ] support diagnostics bundles and reproducible reports without collecting
   project source or sensitive content by default
+
+M11.3 upgrade evidence (2026-08-28): the SDK now carries
+`unifiedscript.compatibility-policy/v0.1` across 16 persistent, derived,
+generated, compiled, and ABI families. `upgrade-plan` deterministically
+classifies current/rewrite/regenerate/rebuild/blocked inputs without embedding
+source, timestamps, or absolute paths. `upgrade-apply` performs atomic,
+idempotent read-old/write-current migrations for Unreal reflection v0.1-v0.3
+and API Contract v0.1, while refusing partial application when any other action
+remains. Five focused legacy/future/chunk/atomicity tests and
+`docs/VERSIONING_AND_UPGRADES.md` cover the contract. The checked Unreal sample
+scan reported 10/10 current artifacts, while two identical 174-file SDK builds
+produced SHA-256
+`9a6d3b92b6fccf924c669b23c7a33803552094de7f7fe8b41d0b9450bdb79133`.
+The next slice is the clean CI lane matrix.
 
 ### M11.4 — Compiled program image v2
 

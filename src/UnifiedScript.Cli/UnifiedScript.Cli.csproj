@@ -15,4 +15,10 @@
   <ItemGroup>
     <InternalsVisibleTo Include="UnifiedScript.Tests" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="../../schemas/unifiedscript.compatibility-policy.v0.1.json"
+          Link="unifiedscript.compatibility-policy.json"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

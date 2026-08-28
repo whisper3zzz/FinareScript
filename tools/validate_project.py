@@ -86,6 +86,7 @@ DOCUMENTS = [
     ROOT / "docs" / "UNREAL_SDK.md",
     ROOT / "docs" / "UNREAL_RELEASE.md",
     ROOT / "docs" / "UNREAL_COMPATIBILITY_MATRIX.md",
+    ROOT / "docs" / "VERSIONING_AND_UPGRADES.md",
     ROOT / "docs" / "UNREAL_FIRST_SCRIPT.md",
     ROOT / "docs" / "ALPHA_ACCEPTANCE.md",
     ROOT / "docs" / "UNREAL_API_CONTRACT.md",
@@ -458,6 +459,57 @@ def main() -> int:
         "Deterministic SDK packaging, compatibility, or verified installation is missing",
     )
     checks.append("SDK archive is deterministic, hashed, compatible, and installable")
+
+    compatibility_policy_path = (
+        ROOT / "schemas" / "unifiedscript.compatibility-policy.v0.1.json"
+    )
+    compatibility_source_path = (
+        ROOT / "src" / "UnifiedScript.Unreal" / "UnifiedScriptCompatibility.cs"
+    )
+    compatibility_tests_path = (
+        ROOT / "tests" / "UnifiedScript.Tests" / "UnifiedScriptCompatibilityTests.cs"
+    )
+    compatibility_guide_path = ROOT / "docs" / "VERSIONING_AND_UPGRADES.md"
+    with compatibility_policy_path.open("r", encoding="utf-8") as handle:
+        compatibility_policy = json.load(handle)
+    compatibility_families = {
+        family["id"]: family for family in compatibility_policy["families"]
+    }
+    compatibility_source = compatibility_source_path.read_text(encoding="utf-8")
+    compatibility_tests = compatibility_tests_path.read_text(encoding="utf-8")
+    compatibility_guide = compatibility_guide_path.read_text(encoding="utf-8")
+    require(
+        compatibility_policy["schemaVersion"]
+        == "unifiedscript.compatibility-policy/v0.1"
+        and len(compatibility_families) == 16
+        and compatibility_families["unreal-reflection"]["currentVersion"]
+        == "unifiedscript.unreal-reflection/v0.4"
+        and compatibility_families["unreal-api-contract"]["currentVersion"]
+        == "unifiedscript.unreal-api-contract/v0.2"
+        and compatibility_families["compiled-program-chunk"]["upgradeStrategy"]
+        == "rebuild"
+        and compatibility_families["generated-bindings"]["upgradeStrategy"]
+        == "regenerate"
+        and compatibility_families["unreal-abi-set"]["components"]
+        == {
+            "bootstrap": 2,
+            "callFrame": 3,
+            "event": 4,
+            "fastMember": 2,
+            "gameplayData": 4,
+            "sharedData": 4,
+        }
+        and 'args[0] is "upgrade-plan" or "upgrade-apply"' in cli_source
+        and "UnifiedScriptUpgradeDisposition" in compatibility_source
+        and "RewriteMigrationsReadLegacyAndEmitCanonicalCurrentDocuments"
+        in compatibility_tests
+        and "UpgradeApplyIsAtomicWhenPlanRequiresRegenerationOrIsBlocked"
+        in compatibility_tests
+        and "JSON remains the reviewable authoring" in compatibility_guide
+        and "compatibility-policy.v0.1.json" in sdk_package,
+        "Versioned compatibility policy, deterministic migration, SDK payload, or guide is missing",
+    )
+    checks.append("versioned artifacts plan deterministic rewrite, regeneration, and rebuild upgrades")
 
     scaffold_path = ROOT / "tools" / "new-unifiedscript-project.ps1"
     authoring_start_path = ROOT / "tools" / "start-unifiedscript-authoring.ps1"
