@@ -1,3 +1,4 @@
+using System.Text.Json;
 using UnifiedScript.Core;
 using UnifiedScript.CSharp;
 using UnifiedScript.Runtime;
@@ -451,6 +452,85 @@ public sealed class CompiledProgramChunkTests
         finally
         {
             File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void FirstTickProfileCommand_UsesTheGenerationPrewarmOperation()
+    {
+        const string source = """
+            using System.Runtime.CompilerServices;
+            using UnifiedScript.Unreal;
+
+            namespace Tests.Chunks;
+
+            public sealed class FirstTickScript : IUnrealManagedScript
+            {
+                public void OnStart(UnrealScriptContext context) { }
+
+                [MethodImpl(MethodImplOptions.NoInlining)]
+                public void OnTick(float deltaSeconds) => Step((int)deltaSeconds);
+
+                public void OnStop() { }
+
+                [MethodImpl(MethodImplOptions.NoInlining)]
+                private static int Step(int value) => value + 1;
+            }
+            """;
+        string unrealAssembly = typeof(IUnrealManagedScript).Assembly.Location;
+        CSharpProgramEmitResult emitted = new CSharpProgramEmitter().Emit(
+            new CSharpCompilationRequest(
+                "UnifiedScript.FirstTickProfileTest",
+                [new CSharpSourceDocument("FirstTickScript.cs", source)],
+                referencePaths: [unrealAssembly],
+                runtimeReferencePaths: [unrealAssembly]));
+        Assert.True(emitted.Succeeded, string.Join(Environment.NewLine, emitted.Diagnostics));
+        CSharpProgramChunkEmitResult chunk = new CSharpProgramChunkCompiler().Compile(
+            Assert.IsType<CSharpProgramImage>(emitted.Image),
+            new CSharpProgramChunkOptions(
+                RuntimeReferencePaths: [unrealAssembly],
+                EntryTypeNames: ["Tests.Chunks.FirstTickScript"]));
+        string directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            string chunkPath = Path.Combine(directory, "program.uschunk");
+            string reportPath = Path.Combine(directory, "profile.json");
+            File.WriteAllBytes(chunkPath, chunk.Content);
+
+            int exitCode = UnifiedScript.Cli.Program.Main([
+                "chunk-first-tick-profile",
+                chunkPath,
+                "--type",
+                "Tests.Chunks.FirstTickScript",
+                "--out",
+                reportPath,
+                "--frame-gap-ms",
+                "16",
+                "--reference",
+                unrealAssembly,
+            ]);
+
+            Assert.Equal(0, exitCode);
+            using JsonDocument report = JsonDocument.Parse(File.ReadAllText(reportPath));
+            JsonElement root = report.RootElement;
+            Assert.Equal(
+                "unifiedscript.generation-prewarm-trial/v0.1",
+                root.GetProperty("schemaVersion").GetString());
+            Assert.Equal("background", root.GetProperty("variant").GetString());
+            Assert.True(root.GetProperty("scheduled").GetBoolean());
+            Assert.True(
+                root.GetProperty("prewarmAtFirstTick")
+                    .GetProperty("firstTickObserved")
+                    .GetBoolean());
+            Assert.DoesNotContain(
+                directory,
+                File.ReadAllText(reportPath),
+                StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
         }
     }
 

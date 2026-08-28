@@ -245,7 +245,8 @@ try {
         'new-unifiedscript-project.ps1',
         'start-unifiedscript-authoring.ps1',
         'measure-compiled-chunk-load.ps1',
-        'measure-readytorun-chunk.ps1')) {
+        'measure-readytorun-chunk.ps1',
+        'measure-generation-prewarm.ps1')) {
         $source = Join-Path $repoRoot "tools\$tool"
         if (-not (Test-Path -LiteralPath $source)) {
             Throw-SdkError 'USSDK1001' "Required SDK tool is missing: $source"
@@ -272,6 +273,12 @@ try {
             -Destination (Join-Path $schemaDirectory $entry.Key) `
             -Force
     }
+    $benchmarkDirectory = Join-Path $sdkRoot 'benchmarks\unreal'
+    New-Item -ItemType Directory -Force -Path $benchmarkDirectory | Out-Null
+    Copy-Item `
+        -LiteralPath (Join-Path $repoRoot 'benchmarks\unreal\generation-prewarm-probe.cs') `
+        -Destination (Join-Path $benchmarkDirectory 'generation-prewarm-probe.cs') `
+        -Force
     Copy-Item `
         -LiteralPath (Join-Path $repoRoot 'HostProject\Config\UnifiedScript.onboarding.json') `
         -Destination (Join-Path $templateDirectory 'UnifiedScript.onboarding.json') `
@@ -314,10 +321,12 @@ try {
         'Tools\start-unifiedscript-authoring.ps1',
         'Tools\measure-compiled-chunk-load.ps1',
         'Tools\measure-readytorun-chunk.ps1',
+        'Tools\measure-generation-prewarm.ps1',
         'Tools\UnifiedScript.Cli\UnifiedScript.Cli.dll',
         'Tools\UnifiedScript.Cli\UnifiedScript.Cli.runtimeconfig.json',
         'Schemas\compatibility-policy.v0.1.json',
         'Schemas\diagnostics-policy.v0.1.json',
+        'benchmarks\unreal\generation-prewarm-probe.cs',
         'Managed\Runtime\UnifiedScript.Core.dll',
         'Managed\Runtime\UnifiedScript.Unreal.dll',
         'Managed\Runtime\UnifiedScript.Unreal.deps.json',

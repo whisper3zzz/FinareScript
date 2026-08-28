@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using UnifiedScript.Authoring;
 using UnifiedScript.CSharp;
@@ -90,6 +91,11 @@ internal static class Program
         if (args.Count > 0 && args[0] == "chunk-profile")
         {
             return RunChunkProfile(args);
+        }
+
+        if (args.Count > 0 && args[0] == "chunk-first-tick-profile")
+        {
+            return RunChunkFirstTickProfile(args);
         }
 
         if (args.Count > 0 && args[0] is "upgrade-plan" or "upgrade-apply")
@@ -1066,6 +1072,120 @@ internal static class Program
         return 0;
     }
 
+    private static int RunChunkFirstTickProfile(IReadOnlyList<string> args)
+    {
+        if (!TryParseChunkFirstTickProfileArguments(
+                args,
+                out ChunkFirstTickProfileOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+
+        options = options ?? throw new InvalidOperationException(
+            "Argument parsing succeeded without first-Tick profile options.");
+        string inputPath = Path.GetFullPath(options.InputPath);
+        if (!File.Exists(inputPath))
+        {
+            Console.Error.WriteLine($"Chunk input does not exist: {inputPath}");
+            return 66;
+        }
+        string outputPath = Path.GetFullPath(options.OutputPath);
+        EnsureDifferentPath(
+            inputPath,
+            outputPath,
+            "First-Tick profiling cannot overwrite its compiled input.");
+        string[] references = options.ReferencePaths
+            .Select(Path.GetFullPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        using var stream = new FileStream(
+            inputPath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete,
+            bufferSize: 64 * 1024,
+            FileOptions.SequentialScan);
+        CoreClrCompiledChunkSession session =
+            new CoreClrCompiledChunkHost().Load(stream, references);
+        CoreClrGenerationPrewarmOperation? prewarm = null;
+        try
+        {
+            object instance = session.CreateEntryInstance(options.TypeName);
+            if (instance is not IUnrealManagedScript script)
+            {
+                throw new InvalidDataException(
+                    $"First-Tick profile type '{options.TypeName}' does not implement " +
+                    $"{nameof(IUnrealManagedScript)}.");
+            }
+            prewarm = CoreClrGenerationPrewarmOperation.Create(
+                instance.GetType(),
+                options.DisablePrewarm
+                    ? CoreClrGenerationPrewarmOptions.Disabled
+                    : CoreClrGenerationPrewarmOptions.Default);
+
+            long scheduleStarted = Stopwatch.GetTimestamp();
+            bool scheduled = prewarm.Start();
+            long scheduleNanoseconds = ElapsedNanoseconds(scheduleStarted);
+            if (options.FrameGapMilliseconds > 0)
+            {
+                Thread.Sleep(options.FrameGapMilliseconds);
+            }
+
+            CoreClrGenerationPrewarmSnapshot atFirstTick = prewarm.ObserveFirstTick();
+            long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+            long firstTickStarted = Stopwatch.GetTimestamp();
+            script.OnTick(1.0f / 60.0f);
+            long firstTickNanoseconds = ElapsedNanoseconds(firstTickStarted);
+            long firstTickAllocatedBytes = Math.Max(
+                0,
+                GC.GetAllocatedBytesForCurrentThread() - allocatedBefore);
+
+            long teardownStarted = Stopwatch.GetTimestamp();
+            prewarm.Cancel();
+            session.Dispose();
+            long teardownNanoseconds = ElapsedNanoseconds(teardownStarted);
+            if (!prewarm.Completion.Wait(TimeSpan.FromSeconds(5)))
+            {
+                throw new InvalidOperationException(
+                    "Background generation prewarm did not stop within five seconds.");
+            }
+            CoreClrGenerationPrewarmSnapshot finalPrewarm = prewarm.GetSnapshot();
+
+            string json = JsonSerializer.Serialize(new
+            {
+                schemaVersion = "unifiedscript.generation-prewarm-trial/v0.1",
+                chunkFormatVersion = session.Chunk.FormatVersion,
+                contentDigest = session.Chunk.ContentDigest,
+                runtimeVersion = Environment.Version.ToString(),
+                typeName = options.TypeName,
+                variant = options.DisablePrewarm ? "disabled" : "background",
+                frameGapMilliseconds = options.FrameGapMilliseconds,
+                scheduled,
+                scheduleNanoseconds,
+                firstTickNanoseconds,
+                firstTickAllocatedBytes,
+                teardownNanoseconds,
+                prewarmAtFirstTick = atFirstTick,
+                finalPrewarm,
+            }, UnifiedJson.CreateOptions(writeIndented: true));
+            WriteTransactionally([new OutputFile(outputPath, json)]);
+            Console.WriteLine(outputPath);
+            Console.WriteLine(
+                $"variant={(options.DisablePrewarm ? "disabled" : "background")}; " +
+                $"firstTickNs={firstTickNanoseconds}; scheduleNs={scheduleNanoseconds}; " +
+                $"teardownNs={teardownNanoseconds}; " +
+                $"preparedBeforeFirstTick={atFirstTick.PreparedBeforeFirstTickCount}");
+            return 0;
+        }
+        finally
+        {
+            prewarm?.Cancel();
+            session.Dispose();
+        }
+    }
+
     private static UnifiedScriptChunkSection ReadChunkSection(
         UnifiedScriptChunkSectionKind kind,
         UnifiedScriptChunkSectionFlags flags,
@@ -1078,6 +1198,12 @@ internal static class Program
 
         return new UnifiedScriptChunkSection(kind, flags, File.ReadAllBytes(path));
     }
+
+    private static long ElapsedNanoseconds(long startedTimestamp) => checked(
+        (long)Math.Ceiling(
+            Math.Max(0, Stopwatch.GetTimestamp() - startedTimestamp) *
+            1_000_000_000d /
+            Stopwatch.Frequency));
 
     private static void AddOptionalChunkSection(
         ICollection<UnifiedScriptChunkSection> sections,
@@ -2520,6 +2646,72 @@ internal static class Program
             outputPath,
             trialCount,
             prepareEntryMethods,
+            referencePaths);
+        return true;
+    }
+
+    private static bool TryParseChunkFirstTickProfileArguments(
+        IReadOnlyList<string> args,
+        out ChunkFirstTickProfileOptions? options)
+    {
+        options = null;
+        if (args.Count < 6 || args[0] != "chunk-first-tick-profile" ||
+            args[1].StartsWith("--", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        string inputPath = args[1];
+        string? typeName = null;
+        string? outputPath = null;
+        int frameGapMilliseconds = 16;
+        bool frameGapSet = false;
+        bool disablePrewarm = false;
+        var referencePaths = new List<string>();
+        int index = 2;
+        while (index < args.Count)
+        {
+            string option = args[index++];
+            if (option == "--disable-prewarm" && !disablePrewarm)
+            {
+                disablePrewarm = true;
+                continue;
+            }
+            if (index >= args.Count)
+            {
+                return false;
+            }
+            string value = args[index++];
+            switch (option)
+            {
+                case "--type" when typeName is null && !string.IsNullOrWhiteSpace(value):
+                    typeName = value;
+                    break;
+                case "--out" when outputPath is null:
+                    outputPath = value;
+                    break;
+                case "--frame-gap-ms" when int.TryParse(value, out int parsedGap) &&
+                    parsedGap is >= 0 and <= 100 && !frameGapSet:
+                    frameGapMilliseconds = parsedGap;
+                    frameGapSet = true;
+                    break;
+                case "--reference":
+                    referencePaths.Add(value);
+                    break;
+                default:
+                    return false;
+            }
+        }
+        if (typeName is null || outputPath is null)
+        {
+            return false;
+        }
+        options = new ChunkFirstTickProfileOptions(
+            inputPath,
+            outputPath,
+            typeName,
+            frameGapMilliseconds,
+            disablePrewarm,
             referencePaths);
         return true;
     }
@@ -3967,6 +4159,7 @@ internal static class Program
         "  unifiedscript chunk-pack --out <program.uschunk> --runtime-manifest <file> --assembly <file.dll> --declaration <file> --bindings <file> --dependencies <file> [sidecars]\n" +
         "  unifiedscript chunk-inspect <program.uschunk>\n" +
         "  unifiedscript chunk-profile <program.uschunk> --out <profile.json> [--trials <1-50>] [--reference <assembly>] [--no-jit-prepare]\n" +
+        "  unifiedscript chunk-first-tick-profile <program.uschunk> --type <entry-type> --out <profile.json> [--frame-gap-ms <0-100>] [--reference <assembly>] [--disable-prewarm]\n" +
         "  unifiedscript upgrade-plan <file|directory> --out <report.json> [--policy <policy.json>] [--fail-on-blocked]\n" +
         "  unifiedscript upgrade-apply <file|directory> --out <directory> [--report <report.json>] [--policy <policy.json>]\n" +
         "  unifiedscript diagnostics-bundle <directory> --out <bundle.zip> [--policy <policy.json>]\n" +
@@ -4166,6 +4359,14 @@ internal static class Program
         string OutputPath,
         int TrialCount,
         bool PrepareEntryMethods,
+        IReadOnlyList<string> ReferencePaths);
+
+    private sealed record ChunkFirstTickProfileOptions(
+        string InputPath,
+        string OutputPath,
+        string TypeName,
+        int FrameGapMilliseconds,
+        bool DisablePrewarm,
         IReadOnlyList<string> ReferencePaths);
 
     private sealed record UpgradeOptions(

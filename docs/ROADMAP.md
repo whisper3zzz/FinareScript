@@ -49,7 +49,7 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-28**
 
 - Active milestone: **M11 — Production hardening and release candidate**
-- Next slice: **M11.4 — transactional background prewarm policy**
+- Next slice: **M11.4 — matched compiled-path cold-start closure**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -1329,10 +1329,10 @@ measured compiled program image v2 work.
 - [x] run a controlled ReadyToRun experiment against the same exact-identity
   chunk and reject promotion when cold startup, JIT preparation, or delivery
   size fails the materiality budgets
-- [ ] move bounded entry-method prewarming outside the activation critical path,
+- [x] move bounded entry-method prewarming outside the activation critical path,
   cancel it with its generation, and prove first Tick improves without delaying
   transactional reload or World teardown
-- [ ] retain deterministic CoreCLR PE/IL as executable code and JSON as the
+- [x] retain deterministic CoreCLR PE/IL as executable code and JSON as the
   readable authoring/import/export format; do not create a second custom VM
   whose semantics can drift from C# and the visual graph
 
@@ -1401,6 +1401,37 @@ manifest-listed payloads plus the manifest reproduced SHA-256
 the extracted packaged experiment tool passed a three-trial-per-variant smoke.
 Repository validation is 79 / 79; the cursor advances to bounded,
 generation-owned background prewarming.
+
+M11.4 background-prewarm evidence (2026-08-28): every collectible World
+generation now owns an optional operation that starts only after `OnStart` and
+event binding succeed. It defaults to 64 methods / 8 ms, enforces hard 1,024
+method / 100 ms limits, contains preparation failures, observes rather than
+waits at the first Tick, and is cancelled without joining during rollback,
+reload retirement, or World teardown. The live snapshot is an additive field
+on the existing managed reload transaction and the environment-disable path is
+reserved for controlled A/B evidence.
+
+`tools/measure-generation-prewarm.ps1` emitted one deterministic probe chunk
+and ran 15 alternating cold processes per variant with the same 16 ms frame
+gap. Disabled first Tick was 353,800 ns median versus 26,600 ns with background
+prewarm (ratio `0.075184`, 92.5% lower); all 15 runs completed 28 methods before
+Tick. Background scheduling was 1,145,300 ns median and cancel plus collectible
+session unload was 334,800 ns, below their 2 ms critical-path gates. Eight new
+focused tests cover explicit scheduling, count/time bounds, running and
+pre-activation cancellation, failure containment, non-blocking first-Tick
+observation, CLI evidence, and privacy-safe output. Evidence is
+`artifacts/chunk-profile/m11.4-background-prewarm/generation-prewarm-experiment.json`.
+The remaining M11.4 closure is the acceptance-level compiled-versus-loose cold
+startup gate; the product does not replace deterministic PE/IL with a second VM.
+The complete managed suite passes 583 / 583 and repository validation passes
+80 / 80. Installed UE 5.8.1 rebuilt both changed Automation translation units;
+WorldHost Lifecycle and LifecycleStress passed with the new
+`backgroundPrewarm` transaction assertion and zero retained collectible
+contexts. Two 182-payload SDK builds reproduced SHA-256
+`df0e40d1421f4ac8708746758f12e0137b3c15970f8cb72d07fa53f3f22f717c`,
+and the extracted packaged tool passed five trials per variant. A twice-built
+31-report diagnostics bundle performed 151 redactions and reproduced SHA-256
+`6b99087fe41ce7a7c015674573bf32a875556051d79e4fc3ba14eba658ebfa2c`.
 
 M11.4 acceptance: the compiled path performs no gameplay-authoring JSON parse,
 retains loose/chunk semantic equivalence and failure containment, and its

@@ -74,6 +74,11 @@ The packaged CLI also exposes `chunk-profile`, while
 reports I/O, copy, verification, binary decode, CoreCLR load, and entry-method
 JIT preparation separately. See [Compiled chunks](COMPILED_CHUNKS.md).
 
+`Tools/measure-generation-prewarm.ps1` emits the packaged deterministic probe
+from `benchmarks/unreal/generation-prewarm-probe.cs`, alternates disabled and
+background-prewarm processes, and gates first-Tick, scheduling, teardown, and
+completion-before-Tick behavior without requiring a source checkout.
+
 The installer verifies every hash and rejects missing, duplicate, unsafe, or
 unmanifested files. Packaged-mode onboarding independently checks the selected
 engine family, managed target, and ABI contract before invoking Unreal.

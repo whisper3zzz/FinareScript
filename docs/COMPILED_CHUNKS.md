@@ -295,10 +295,61 @@ the current immutable in-memory chunk and collectible-generation model; the
 .NET load-context design also limits reuse of precompiled code when one R2R
 location is loaded into multiple contexts. The next slice therefore keeps the
 portable deterministic IL chunk and evaluates bounded, cancellable prewarming
-before a generation becomes active.
+after activation and before the generation's first Tick.
 
 [CoreCLR stream load source]: https://github.com/dotnet/runtime/blob/main/src/coreclr/vm/assemblynative.cpp
 [.NET AssemblyLoadContext R2R constraint]: https://github.com/dotnet/runtime/blob/main/docs/design/features/assemblyloadcontext.md
+
+## M11.4 generation-owned background prewarm
+
+The World host now creates one prewarm operation with each collectible script
+generation, but does not schedule it until `OnStart` and reflected event
+binding have both succeeded. Activation and transactional rollback therefore
+do not wait for JIT preparation. The default operation prepares at most 64
+concrete methods and checks an 8 ms elapsed-time budget between methods; hard
+product limits reject more than 1,024 methods or more than 100 ms. A single
+`RuntimeHelpers.PrepareMethod` call is not interruptible, so cancellation is
+cooperative between methods and never waits on the GameThread.
+
+The first Tick observes, but never awaits, the generation's operation. Its
+snapshot reports candidate/prepared/skipped methods, terminal state, elapsed
+time, prepared coverage at the first Tick, and only a failure type. Optional
+optimization failures cannot fail script activation or Tick. Reload rejection,
+generation retirement, and World teardown cancel the operation before the
+generation bridge is released and the collectible load context is asked to
+unload. The existing managed reload-transaction v0.1 JSON exposes the live
+snapshot as an additive property that the native v0.1 reader safely ignores.
+`UNIFIEDSCRIPT_DISABLE_BACKGROUND_PREWARM=1` exists only for the controlled
+compatibility/A-B lane.
+
+`tools/measure-generation-prewarm.ps1` emits a deterministic no-native-bridge
+probe chunk and alternates disabled/background variants in new processes. Each
+variant receives the same 16 ms frame gap before its first Tick. The report
+contains no source or machine path and uses
+`unifiedscript.generation-prewarm-experiment/v0.1`:
+
+```powershell
+.\tools\measure-generation-prewarm.ps1 `
+  -EngineRoot D:\UE_5.8 `
+  -Trials 15
+```
+
+The 15-trial-per-variant run measured a 353,800 ns disabled first-Tick median
+and a 26,600 ns background-prewarm median (ratio `0.075184`, 92.5% lower).
+All 15 background trials completed before the first Tick and prepared 28
+methods. Scheduling took 1,145,300 ns median and cancellation plus collectible
+session unload took 334,800 ns, both below their 2 ms non-blocking gates.
+Evidence is
+`artifacts/chunk-profile/m11.4-background-prewarm/generation-prewarm-experiment.json`.
+Two SDK builds each contained 182 manifest-listed payloads plus the manifest
+and reproduced archive SHA-256
+`df0e40d1421f4ac8708746758f12e0137b3c15970f8cb72d07fa53f3f22f717c`.
+After extraction, the packaged tool emitted its own probe and passed five
+trials per variant without a source checkout: first-Tick ratio `0.058004`,
+1,156,200 ns schedule median, 344,900 ns teardown median, and 100% completion.
+A deterministic safe-default diagnostics bundle admitted 31 prewarm reports,
+performed 151 string redactions, and reproduced SHA-256
+`6b99087fe41ce7a7c015674573bf32a875556051d79e4fc3ba14eba658ebfa2c`.
 
 ## Measured BlockBreaker impact
 

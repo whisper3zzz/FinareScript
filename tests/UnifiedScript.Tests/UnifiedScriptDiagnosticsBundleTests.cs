@@ -152,6 +152,12 @@ public sealed class UnifiedScriptDiagnosticsBundleTests
     public void PolicyRejectsDuplicateOrNonUnifiedScriptSchemaSelectors()
     {
         UnifiedScriptDiagnosticsPolicy policy = LoadPolicy();
+        Assert.Contains(
+            "unifiedscript.generation-prewarm-trial/v0.1",
+            policy.AllowedSchemas);
+        Assert.Contains(
+            "unifiedscript.generation-prewarm-experiment/v0.1",
+            policy.AllowedSchemas);
         Assert.Throws<JsonException>(() => UnifiedScriptDiagnosticsPolicyJson.Deserialize(
             UnifiedScriptDiagnosticsPolicyJson.Serialize(policy with
             {

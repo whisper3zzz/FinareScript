@@ -171,6 +171,18 @@ def main() -> int:
     readytorun_profiler = (
         ROOT / "tools" / "measure-readytorun-chunk.ps1"
     ).read_text(encoding="utf-8")
+    generation_prewarm_source = (
+        ROOT / "src" / "UnifiedScript.Runtime" / "CoreClrGenerationPrewarm.cs"
+    ).read_text(encoding="utf-8")
+    generation_prewarm_profiler = (
+        ROOT / "tools" / "measure-generation-prewarm.ps1"
+    ).read_text(encoding="utf-8")
+    generation_prewarm_probe = (
+        ROOT / "benchmarks" / "unreal" / "generation-prewarm-probe.cs"
+    ).read_text(encoding="utf-8")
+    generation_prewarm_tests = (
+        ROOT / "tests" / "UnifiedScript.Tests" / "CoreClrGenerationPrewarmTests.cs"
+    ).read_text(encoding="utf-8")
     compiled_program_tests = (
         ROOT / "tests" / "UnifiedScript.Tests" / "CompiledProgramChunkTests.cs"
     ).read_text(encoding="utf-8")
@@ -337,6 +349,39 @@ def main() -> int:
     )
     checks.append(
         "M11.4 rejects ReadyToRun when exact-identity cold load, JIT, or size budgets fail"
+    )
+    require(
+        "DefaultMaximumMethodCount = 64" in generation_prewarm_source
+        and "DefaultTimeBudgetMilliseconds = 8" in generation_prewarm_source
+        and "MaximumSupportedMethodCount = 1024" in generation_prewarm_source
+        and "MaximumSupportedTimeBudgetMilliseconds = 100"
+        in generation_prewarm_source
+        and "Task.Run(Run)" in generation_prewarm_source
+        and "ObserveFirstTick" in generation_prewarm_source
+        and "RuntimeHelpers.PrepareMethod" in generation_prewarm_source
+        and "Prewarm.Cancel()" in unreal_world_entry
+        and '"backgroundPrewarm"' in unreal_world_entry
+        and "UNIFIEDSCRIPT_DISABLE_BACKGROUND_PREWARM" in unreal_world_entry
+        and 'args[0] == "chunk-first-tick-profile"' in cli_source
+        and "unifiedscript.generation-prewarm-trial/v0.1" in cli_source
+        and "unifiedscript.generation-prewarm-experiment/v0.1"
+        in generation_prewarm_profiler
+        and "$maximumFirstTickRatio = 0.80" in generation_prewarm_profiler
+        and "$maximumScheduleNanoseconds = 2000000" in generation_prewarm_profiler
+        and "$maximumTeardownNanoseconds = 2000000" in generation_prewarm_profiler
+        and "@('disabled', 'background')" in generation_prewarm_profiler
+        and "MethodImplOptions.NoInlining" in generation_prewarm_probe
+        and "Cancellation_IsNonBlockingAndGenerationWorkFinishesCooperatively"
+        in generation_prewarm_tests
+        and "CandidateCancellationBeforeActivation_DoesNotScheduleWork"
+        in generation_prewarm_tests
+        and "FirstTickProfileCommand_UsesTheGenerationPrewarmOperation"
+        in compiled_program_tests
+        and "generation-owned background prewarm" in compiled_chunk_document,
+        "M11.4 background prewarm bounds, ownership, cancellation, first-Tick evidence, or documentation are incomplete",
+    )
+    checks.append(
+        "M11.4 moves bounded cancellable JIT prewarm outside activation and first Tick"
     )
 
     deployment_sample_path = (
@@ -549,6 +594,8 @@ def main() -> int:
         and "Tools\\UnifiedScript.Cli" in sdk_package
         and "measure-compiled-chunk-load.ps1" in sdk_package
         and "measure-readytorun-chunk.ps1" in sdk_package
+        and "measure-generation-prewarm.ps1" in sdk_package
+        and "generation-prewarm-probe.cs" in sdk_package
         and "COMPILED_CHUNKS.md" in sdk_package
         and "Engine-version-specific plugin Binaries leaked" in sdk_package
         and "Assert-NoMachinePathLeak" in sdk_package
@@ -699,8 +746,8 @@ def main() -> int:
     require(
         diagnostics_policy["schemaVersion"]
         == "unifiedscript.diagnostics-policy/v0.1"
-        and len(diagnostics_policy["allowedSchemas"]) == 29
-        and len(set(diagnostics_policy["allowedSchemas"])) == 29
+        and len(diagnostics_policy["allowedSchemas"]) == 31
+        and len(set(diagnostics_policy["allowedSchemas"])) == 31
         and diagnostics_policy["maximumReportCount"] == 256
         and diagnostics_policy["maximumReportBytes"] == 16 * 1024 * 1024
         and diagnostics_policy["maximumBundleBytes"] == 64 * 1024 * 1024
@@ -713,6 +760,10 @@ def main() -> int:
         and "unifiedscript.compiled-chunk-process-profile/v0.1"
         in diagnostics_policy["allowedSchemas"]
         and "unifiedscript.readytorun-experiment/v0.1"
+        in diagnostics_policy["allowedSchemas"]
+        and "unifiedscript.generation-prewarm-trial/v0.1"
+        in diagnostics_policy["allowedSchemas"]
+        and "unifiedscript.generation-prewarm-experiment/v0.1"
         in diagnostics_policy["allowedSchemas"]
         and all(
             source_schema not in diagnostics_policy["allowedSchemas"]

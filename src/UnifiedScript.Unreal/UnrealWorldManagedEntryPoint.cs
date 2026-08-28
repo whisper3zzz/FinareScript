@@ -63,7 +63,8 @@ internal sealed record UnrealManagedReloadTransaction(
     int CandidateGeneration,
     int ActiveGeneration,
     IReadOnlyList<UnrealManagedReloadPhase> Phases,
-    string? Failure);
+    string? Failure,
+    CoreClrGenerationPrewarmSnapshot? Prewarm);
 
 public static class UnrealWorldManagedEntryPoint
 {
@@ -1005,7 +1006,8 @@ public static class UnrealWorldManagedEntryPoint
         private ScriptGeneration _current;
         private readonly UnrealWorldDebugController _debug;
         private readonly UnrealGameplayProfiler _profiler;
-        private string _lastReloadTransactionJson = string.Empty;
+        private UnrealManagedReloadTransaction? _lastReloadTransaction;
+        private CoreClrGenerationPrewarmOperation? _lastReloadPrewarm;
         private bool _started;
 
         private ManagedScriptInstance(
@@ -1054,9 +1056,11 @@ public static class UnrealWorldManagedEntryPoint
             {
                 throw new InvalidOperationException("The managed script is not started.");
             }
+            ScriptGeneration current = _current;
+            _ = current.Prewarm.ObserveFirstTick();
             _profiler.ExecuteTick(
-                _current.Script,
-                _current.Generation,
+                current.Script,
+                current.Generation,
                 _typeName,
                 deltaSeconds);
         }
@@ -1100,7 +1104,17 @@ public static class UnrealWorldManagedEntryPoint
 
         public string GetDebugState() => _debug.GetSnapshotJson();
 
-        public string GetReloadState() => _lastReloadTransactionJson;
+        public string GetReloadState()
+        {
+            UnrealManagedReloadTransaction? transaction = _lastReloadTransaction;
+            if (transaction is null)
+            {
+                return string.Empty;
+            }
+            return JsonSerializer.Serialize(
+                transaction with { Prewarm = _lastReloadPrewarm?.GetSnapshot() },
+                UnifiedJson.CreateOptions(writeIndented: false));
+        }
 
         public void ControlDebug(UnrealWorldDebugControl control, string? pauseId) =>
             _debug.Control(control, pauseId);
@@ -1204,6 +1218,18 @@ public static class UnrealWorldManagedEntryPoint
                     phaseStart,
                     "succeeded",
                     $"Bound {subscriptions.Count} reflected event subscription(s)."));
+                activePhase = "backgroundPrewarm";
+                phaseStart = Stopwatch.GetTimestamp();
+                bool prewarmStarted = next.Prewarm.Start();
+                CoreClrGenerationPrewarmSnapshot prewarm = next.Prewarm.GetSnapshot();
+                phases.Add(CompletePhase(
+                    "backgroundPrewarm",
+                    phaseStart,
+                    prewarmStarted ? "scheduled" : "disabled",
+                    prewarmStarted
+                        ? $"Scheduled at most {prewarm.MaximumMethodCount} method(s) with a " +
+                            $"{prewarm.TimeBudgetNanoseconds / 1_000_000d:0.###} ms budget."
+                        : "Background prewarm is disabled for the controlled compatibility lane."));
                 _started = true;
             }
             catch (Exception exception)
@@ -1273,7 +1299,8 @@ public static class UnrealWorldManagedEntryPoint
                         candidateGeneration,
                         previous.Generation,
                         phases,
-                        aggregate);
+                        aggregate,
+                        next.Prewarm);
                     throw aggregate;
                 }
 
@@ -1286,7 +1313,8 @@ public static class UnrealWorldManagedEntryPoint
                     candidateGeneration,
                     previous.Generation,
                     phases,
-                    reported);
+                    reported,
+                    next.Prewarm);
                 throw reported;
             }
 
@@ -1313,7 +1341,8 @@ public static class UnrealWorldManagedEntryPoint
                 candidateGeneration,
                 next.Generation,
                 phases,
-                failure: null);
+                failure: null,
+                next.Prewarm);
             return next.Generation;
         }
 
@@ -1349,6 +1378,7 @@ public static class UnrealWorldManagedEntryPoint
             UnrealScriptContext context = CreateContext(generation);
             generation.Script.OnStart(context);
             _ = UnrealEventBinder.BindAttributedEvents(generation.Script, context);
+            _ = generation.Prewarm.Start();
         }
 
         private static void StopGeneration(ScriptGeneration generation)
@@ -1398,18 +1428,19 @@ public static class UnrealWorldManagedEntryPoint
             int candidateGeneration,
             int activeGeneration,
             IReadOnlyList<UnrealManagedReloadPhase> phases,
-            Exception? failure)
+            Exception? failure,
+            CoreClrGenerationPrewarmOperation? prewarm = null)
         {
-            _lastReloadTransactionJson = JsonSerializer.Serialize(
-                new UnrealManagedReloadTransaction(
-                    "unifiedscript.managed-reload-transaction/v0.1",
-                    state,
-                    fromGeneration,
-                    candidateGeneration,
-                    activeGeneration,
-                    phases,
-                    failure?.Message),
-                UnifiedJson.CreateOptions(writeIndented: false));
+            _lastReloadPrewarm = prewarm;
+            _lastReloadTransaction = new UnrealManagedReloadTransaction(
+                "unifiedscript.managed-reload-transaction/v0.1",
+                state,
+                fromGeneration,
+                candidateGeneration,
+                activeGeneration,
+                phases,
+                failure?.Message,
+                Prewarm: null);
         }
 
         private ScriptGeneration LoadGeneration(
@@ -1432,11 +1463,17 @@ public static class UnrealWorldManagedEntryPoint
                     throw new InvalidOperationException(
                         $"Managed script type '{typeName}' does not implement {nameof(IUnrealManagedScript)}.");
                 }
+                var generationBridge = new UnrealGenerationInvocationBridge(_bridge);
+                CoreClrGenerationPrewarmOperation prewarm =
+                    CoreClrGenerationPrewarmOperation.Create(
+                        type,
+                        ResolvePrewarmOptions());
                 return new ScriptGeneration(
                     generation,
                     loadContext,
                     script,
-                    new UnrealGenerationInvocationBridge(_bridge));
+                    generationBridge,
+                    prewarm);
             }
             catch
             {
@@ -1444,13 +1481,23 @@ public static class UnrealWorldManagedEntryPoint
                 throw;
             }
         }
+
+        private static CoreClrGenerationPrewarmOptions ResolvePrewarmOptions() =>
+            string.Equals(
+                Environment.GetEnvironmentVariable(
+                    "UNIFIEDSCRIPT_DISABLE_BACKGROUND_PREWARM"),
+                "1",
+                StringComparison.Ordinal)
+                ? CoreClrGenerationPrewarmOptions.Disabled
+                : CoreClrGenerationPrewarmOptions.Default;
     }
 
     private sealed record ScriptGeneration(
         int Generation,
         ScriptAssemblyLoadContext LoadContext,
         IUnrealManagedScript Script,
-        UnrealGenerationInvocationBridge Bridge) : IDisposable
+        UnrealGenerationInvocationBridge Bridge,
+        CoreClrGenerationPrewarmOperation Prewarm) : IDisposable
     {
         private bool _disposed;
 
@@ -1461,6 +1508,7 @@ public static class UnrealWorldManagedEntryPoint
                 return;
             }
             _disposed = true;
+            Prewarm.Cancel();
             Bridge.Dispose();
             RetireLoadContext(LoadContext);
         }
