@@ -1148,7 +1148,7 @@ the losing scalar ratio (1.030885), resource-flow ratio (1.198520), and excluded
 hot-reload diagnostic (4.959958) rather than hiding them. BlockBreaker medians
 are 0.4340/0.8549/1.2585 ms at p50/p95/p99 versus Puerts at
 0.4740/0.9416/1.3735 ms, and package ratio is 1.023121. Full validation is
-546/546 managed tests, 68/68 repository invariants, UE 5.8.1 native build, and
+559/559 managed tests, 69/69 repository invariants, UE 5.8.1 native build, and
 16/16 `UnifiedScript.Unreal` Automation tests.
 
 ## M11 — Production hardening and release candidate
@@ -1161,7 +1161,7 @@ long sessions, and supported build configurations.
 - [x] define `.uschunk` v0.1 as a deterministic, bounds-checked section
   container for the existing CoreCLR PE/IL program and runtime contracts, not a
   second bytecode VM
-- [ ] compile canonical authoring inputs into runtime PE, declaration, binding,
+- [x] compile canonical authoring inputs into runtime PE, declaration, binding,
   dependency, and identity sections while moving source maps and editor data to
   an optional sidecar
 - [ ] load and reload chunks transactionally with format/version/hash checks,
@@ -1174,12 +1174,14 @@ Acceptance: a packaged Script Asset can point at one verified `.uschunk`, load
 the same collectible CoreCLR generation as loose artifacts, and start without
 runtime JSON parsing on the product path.
 
-In progress (2026-08-28): the v0.1 envelope, strict program profile,
-whole-file/per-section SHA-256 validation, deterministic `chunk-pack`,
-`chunk-inspect`, corruption tests, and runtime/debug/editor section separation
-are implemented. Runtime payload codecs and World-host integration are the next
-slice; the existing loose-file route remains the active product path until that
-vertical slice is verified.
+In progress (2026-08-28): deterministic binary runtime payload codecs and the
+compiler are implemented on top of the strict v0.1 envelope. Managed CoreCLR
+and Unreal World hosts verify and load PE/PDB directly from `.uschunk`; native
+UE verifies the same envelope and materializes Script State from its binary
+declaration section. UE 5.8 Lifecycle Automation starts the demo from the chunk
+with no loose declaration path, while loose assembly/JSON loading remains the
+migration fallback. Cook/package scripts now stage the chunk; packaged
+BlockBreaker smoke plus startup/package measurements remain before M11.0 closes.
 
 ### M11.1 — Reliability and scale
 

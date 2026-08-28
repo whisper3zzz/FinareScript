@@ -28,15 +28,24 @@ if (!(Test-Path $buildBat) -or !(Test-Path $editorCmd)) {
 $dotnetExe = if (Test-Path $bundledDotNet) { $bundledDotNet } else { 'dotnet' }
 
 if (!$SkipManagedBuild) {
-    Write-Host '[1/3] Building and staging the managed demo...'
+    Write-Host '[1/4] Building and staging the managed demo...'
     & $dotnetExe build $managedProject --nologo
     if ($LASTEXITCODE -ne 0) {
         throw "Managed demo build failed with exit code $LASTEXITCODE."
     }
 }
 
+Write-Host '[2/4] Compiling and verifying the deterministic demo chunk...'
+& (Join-Path $PSScriptRoot 'emit-unreal-demo-chunk.ps1') `
+    -EngineRoot $EngineRoot `
+    -Configuration Debug `
+    -SkipManagedBuild
+if ($LASTEXITCODE -ne 0) {
+    throw "Managed demo chunk emission failed with exit code $LASTEXITCODE."
+}
+
 if (!$SkipNativeBuild) {
-    Write-Host '[2/3] Building the Unreal host...'
+    Write-Host '[3/4] Building the Unreal host...'
     & $buildBat UEUnifiedScriptHostEditor Win64 Development $projectPath -WaitMutex -NoHotReloadFromIDE
     if ($LASTEXITCODE -ne 0) {
         throw "Unreal host build failed with exit code $LASTEXITCODE."
@@ -59,7 +68,7 @@ $defaultInputBytes = if (Test-Path $defaultInputPath) {
     $null
 }
 
-Write-Host '[3/3] Running managed C# -> generated wrapper -> live UObject demo...'
+Write-Host '[4/4] Running .uschunk -> managed C# -> generated wrapper -> live UObject demo...'
 try {
     $editorArguments = @(
         $projectPath,

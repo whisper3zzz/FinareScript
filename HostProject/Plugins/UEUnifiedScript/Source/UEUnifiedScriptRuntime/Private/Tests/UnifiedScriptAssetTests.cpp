@@ -48,6 +48,20 @@ bool FUnifiedScriptAssetConfigurationTest::RunTest(const FString& Parameters)
         TypeName,
         FString(TEXT("UnifiedScript.Unreal.Demo.DemoScript")));
 
+    Asset->CompiledChunkPath =
+        TEXT("  {PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.uschunk  ");
+    TestTrue(
+        TEXT("Compiled chunk takes precedence over loose assembly fallback"),
+        Asset->ResolveConfiguration(AssemblyPath, TypeName, Error));
+    TestEqual(
+        TEXT("Compiled chunk path is normalized"),
+        AssemblyPath,
+        FString(TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.uschunk")));
+    TestEqual(
+        TEXT("Compiled chunk accessor is normalized"),
+        Asset->ResolveCompiledChunkPath(),
+        FString(TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.uschunk")));
+
     FString DeclarationPath;
     FString DeclarationAssetPath;
     Asset->ResolveDeclarationConfiguration(DeclarationPath, DeclarationAssetPath);

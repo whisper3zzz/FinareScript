@@ -19,6 +19,10 @@ public:
     UPROPERTY(VisibleAnywhere, Category="UnifiedScript")
     int32 SchemaVersion = 1;
 
+    /** Preferred verified .uschunk program. Falls back to ScriptAssemblyPath during migration. */
+    UPROPERTY(EditAnywhere, Category="UnifiedScript|Runtime")
+    FString CompiledChunkPath;
+
     UPROPERTY(EditAnywhere, Category="UnifiedScript|Runtime")
     FString ScriptAssemblyPath;
 
@@ -61,6 +65,8 @@ public:
     bool ValidateTarget(const UObject* Target, FString& OutError) const;
 
     FString ResolveRequiredTargetClassPath() const;
+
+    FString ResolveCompiledChunkPath() const;
 
     void ResolveDeclarationConfiguration(
         FString& OutDeclarationPath,

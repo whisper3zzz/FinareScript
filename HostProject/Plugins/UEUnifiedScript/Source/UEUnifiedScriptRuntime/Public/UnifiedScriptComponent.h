@@ -143,6 +143,9 @@ public:
     /** Returns the exact live World/instance/generation/handle debug identity. */
     bool GetRuntimeDebugContext(FUnifiedScriptRuntimeDebugContext& OutContext) const;
 
+    /** Resolved loose assembly or verified .uschunk currently owned by the live generation. */
+    const FString& GetActiveProgramPath() const { return ActiveResolvedAssemblyPath; }
+
     /** Pauses automatic managed ticks without blocking the UE Game Thread. */
     bool PauseAtDebugFrameBoundary();
     bool ContinueFromDebugFrameBoundary();

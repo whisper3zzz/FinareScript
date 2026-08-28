@@ -1,5 +1,4 @@
 using System.Reflection;
-using System.Runtime.Loader;
 using UnifiedScript.CSharp;
 using UnifiedScript.Core;
 
@@ -50,7 +49,7 @@ public sealed class CoreClrExecutionHost
                 nameof(image));
         }
 
-        var loadContext = new CollectibleProgramLoadContext(referencePaths ?? []);
+        var loadContext = new CoreClrProgramLoadContext(referencePaths ?? []);
         try
         {
             using var portableExecutable = new MemoryStream(image.PortableExecutable, writable: false);
@@ -65,36 +64,4 @@ public sealed class CoreClrExecutionHost
         }
     }
 
-    private sealed class CollectibleProgramLoadContext : AssemblyLoadContext
-    {
-        private readonly IReadOnlyDictionary<string, string> referencePaths;
-
-        public CollectibleProgramLoadContext(IEnumerable<string> references)
-            : base(isCollectible: true)
-        {
-            referencePaths = references
-                .Select(Path.GetFullPath)
-                .ToDictionary(
-                    static path => AssemblyName.GetAssemblyName(path).Name ??
-                        throw new InvalidOperationException(
-                            $"Reference '{path}' has no assembly name."),
-                    static path => path,
-                    StringComparer.OrdinalIgnoreCase);
-        }
-
-        protected override Assembly? Load(AssemblyName assemblyName)
-        {
-            Assembly? shared = Default.Assemblies.FirstOrDefault(assembly =>
-                AssemblyName.ReferenceMatchesDefinition(assembly.GetName(), assemblyName));
-            if (shared is not null)
-            {
-                return shared;
-            }
-
-            return assemblyName.Name is not null &&
-                referencePaths.TryGetValue(assemblyName.Name, out string? referencePath)
-                    ? LoadFromAssemblyPath(referencePath)
-                    : null;
-        }
-    }
 }

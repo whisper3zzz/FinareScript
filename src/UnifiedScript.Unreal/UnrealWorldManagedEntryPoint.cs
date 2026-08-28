@@ -7,6 +7,7 @@ using System.Runtime.Loader;
 using System.Text;
 using System.Text.Json;
 using UnifiedScript.Core;
+using UnifiedScript.Runtime;
 
 namespace UnifiedScript.Unreal;
 
@@ -1422,6 +1423,7 @@ public static class UnrealWorldManagedEntryPoint
             try
             {
                 Assembly assembly = loadContext.LoadMainAssembly();
+                loadContext.ValidateEntryType(assembly, typeName);
                 Type type = assembly.GetType(typeName, throwOnError: true)!;
                 if (Activator.CreateInstance(type) is not IUnrealManagedScript script)
                 {
@@ -1462,19 +1464,97 @@ public static class UnrealWorldManagedEntryPoint
         }
     }
 
-    private sealed class ScriptAssemblyLoadContext(
-        ulong worldId,
-        ulong instanceId,
-        int generation,
-        string assemblyPath)
-        : AssemblyLoadContext(
-            $"UnifiedScript.Unreal.World.{worldId}.Script.{instanceId}.Generation.{generation}",
-            isCollectible: true)
+    private sealed class ScriptAssemblyLoadContext : AssemblyLoadContext
     {
-        private readonly AssemblyDependencyResolver _resolver = new(assemblyPath);
-        private readonly string _assemblyPath = assemblyPath;
+        private readonly AssemblyDependencyResolver? _resolver;
+        private readonly string _programPath;
+        private readonly string _programDirectory;
+        private readonly UnifiedScriptChunk? _chunk;
+        private readonly UnifiedScriptRuntimeManifest? _manifest;
+        private readonly UnifiedScriptRuntimeDependencyManifest? _dependencies;
 
-        public Assembly LoadMainAssembly() => LoadAssemblyFile(_assemblyPath);
+        public ScriptAssemblyLoadContext(
+            ulong worldId,
+            ulong instanceId,
+            int generation,
+            string programPath)
+            : base(
+                $"UnifiedScript.Unreal.World.{worldId}.Script.{instanceId}.Generation.{generation}",
+                isCollectible: true)
+        {
+            _programPath = programPath;
+            _programDirectory = Path.GetDirectoryName(programPath) ?? Environment.CurrentDirectory;
+            if (!string.Equals(
+                Path.GetExtension(programPath),
+                ".uschunk",
+                StringComparison.OrdinalIgnoreCase))
+            {
+                _resolver = new AssemblyDependencyResolver(programPath);
+                return;
+            }
+
+            using FileStream stream = OpenSharedRead(programPath);
+            _chunk = UnifiedScriptProgramChunk.Read(stream);
+            _manifest = UnifiedScriptRuntimeManifestBinary.Decode(_chunk.GetRequiredSection(
+                UnifiedScriptChunkSectionKind.RuntimeManifest).Data.Span);
+            UnifiedScriptRuntimeDeclarationDocument declarations =
+                UnifiedScriptRuntimeDeclarationBinary.Decode(_chunk.GetRequiredSection(
+                    UnifiedScriptChunkSectionKind.DeclarationData).Data.Span);
+            _ = UnifiedScriptRuntimeBindingManifestBinary.Decode(_chunk.GetRequiredSection(
+                UnifiedScriptChunkSectionKind.BindingManifest).Data.Span);
+            _dependencies = UnifiedScriptRuntimeDependencyManifestBinary.Decode(
+                _chunk.GetRequiredSection(
+                    UnifiedScriptChunkSectionKind.DependencyManifest).Data.Span);
+            if (_manifest.SourceCompilationId != declarations.SourceCompilationId ||
+                _manifest.SemanticConfigurationId != declarations.SemanticConfigurationId)
+            {
+                throw new InvalidDataException(
+                    "Compiled chunk runtime manifest and declarations have different identities.");
+            }
+        }
+
+        public Assembly LoadMainAssembly()
+        {
+            if (_chunk is null)
+            {
+                return LoadAssemblyFile(_programPath);
+            }
+
+            using var assemblyStream = new MemoryStream(_chunk.GetRequiredSection(
+                UnifiedScriptChunkSectionKind.ManagedAssembly).Data.ToArray(), writable: false);
+            if (!_chunk.TryGetSection(
+                UnifiedScriptChunkSectionKind.PortablePdb,
+                out UnifiedScriptChunkSection? pdbSection) || pdbSection is null)
+            {
+                return LoadFromStream(assemblyStream);
+            }
+
+            using var pdbStream = new MemoryStream(pdbSection.Data.ToArray(), writable: false);
+            return LoadFromStream(assemblyStream, pdbStream);
+        }
+
+        public void ValidateEntryType(Assembly assembly, string typeName)
+        {
+            if (_manifest is null)
+            {
+                return;
+            }
+
+            if (!string.Equals(
+                assembly.GetName().Name,
+                _manifest.AssemblyName,
+                StringComparison.Ordinal))
+            {
+                throw new InvalidDataException(
+                    $"Chunk assembly '{assembly.GetName().Name}' does not match manifest " +
+                    $"'{_manifest.AssemblyName}'.");
+            }
+            if (!_manifest.EntryTypeNames.Contains(typeName, StringComparer.Ordinal))
+            {
+                throw new InvalidDataException(
+                    $"Managed script type '{typeName}' is not a declared chunk entry type.");
+            }
+        }
 
         protected override Assembly? Load(AssemblyName assemblyName)
         {
@@ -1490,11 +1570,64 @@ public static class UnrealWorldManagedEntryPoint
                     assemblyName));
             if (sharedContract is not null)
             {
+                if (_dependencies is not null &&
+                    string.IsNullOrWhiteSpace(sharedContract.Location))
+                {
+                    throw new InvalidDataException(
+                        $"Chunk dependency '{assemblyName.Name}' has no verifiable location.");
+                }
+                if (_dependencies is not null)
+                {
+                    ValidateDependency(sharedContract.Location, assemblyName);
+                }
                 return sharedContract;
             }
 
-            string? dependencyPath = _resolver.ResolveAssemblyToPath(assemblyName);
+            string? dependencyPath = _resolver?.ResolveAssemblyToPath(assemblyName);
+            if (dependencyPath is null && assemblyName.Name is not null)
+            {
+                string adjacentPath = Path.Combine(_programDirectory, assemblyName.Name + ".dll");
+                if (File.Exists(adjacentPath))
+                {
+                    dependencyPath = adjacentPath;
+                }
+            }
+            if (dependencyPath is not null)
+            {
+                ValidateDependency(dependencyPath, assemblyName);
+            }
             return dependencyPath is null ? null : LoadAssemblyFile(dependencyPath);
+        }
+
+        private void ValidateDependency(string path, AssemblyName requestedName)
+        {
+            if (_dependencies is null || requestedName.Name is null)
+            {
+                return;
+            }
+
+            UnifiedScriptRuntimeDependency? dependency = _dependencies.Dependencies
+                .SingleOrDefault(candidate =>
+                    candidate.Kind == UnifiedScriptRuntimeDependencyKind.ManagedAssembly &&
+                    string.Equals(candidate.Name, requestedName.Name, StringComparison.OrdinalIgnoreCase));
+            if (dependency is null)
+            {
+                throw new InvalidDataException(
+                    $"Chunk dependency '{requestedName.Name}' is not declared.");
+            }
+
+            AssemblyName actualName = AssemblyName.GetAssemblyName(path);
+            string actualVersion = actualName.Version?.ToString() ?? "0.0.0.0";
+            using FileStream stream = OpenSharedRead(path);
+            string actualDigest = "sha256:" +
+                Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream))
+                    .ToLowerInvariant();
+            if (!string.Equals(dependency.Version, actualVersion, StringComparison.Ordinal) ||
+                !string.Equals(dependency.ContentDigest, actualDigest, StringComparison.Ordinal))
+            {
+                throw new InvalidDataException(
+                    $"Chunk dependency '{requestedName.Name}' version or digest differs.");
+            }
         }
 
         private Assembly LoadAssemblyFile(string path)
@@ -1525,5 +1658,22 @@ public static class UnrealWorldManagedEntryPoint
             RetiredLoadContexts.Add(new WeakReference(loadContext));
         }
         loadContext.Unload();
+    }
+
+    internal static string ValidateCompiledProgramForTests(
+        string programPath,
+        string typeName)
+    {
+        var loadContext = new ScriptAssemblyLoadContext(1, 1, 1, programPath);
+        try
+        {
+            Assembly assembly = loadContext.LoadMainAssembly();
+            loadContext.ValidateEntryType(assembly, typeName);
+            return assembly.GetType(typeName, throwOnError: true)!.FullName!;
+        }
+        finally
+        {
+            RetireLoadContext(loadContext);
+        }
     }
 }

@@ -1708,6 +1708,20 @@ bool UUnifiedScriptComponent::BuildScriptState(
     ResolvedAsset->ResolveDeclarationConfiguration(
         DeclarationPath,
         RequestedAssetPath);
+    const FString CompiledChunkPath = ResolvedAsset->ResolveCompiledChunkPath();
+    if (!CompiledChunkPath.IsEmpty())
+    {
+        return FUnifiedScriptDeclarationMaterializer::MaterializeChunkFileWithOverrides(
+            ResolveConfiguredPath(CompiledChunkPath),
+            RequestedAssetPath,
+            ExistingState,
+            ExistingOverrideIds,
+            OutState,
+            OutOverrideIds,
+            OutMigration,
+            OutDeclarationAssetPath,
+            OutError);
+    }
     if (DeclarationPath.IsEmpty())
     {
         OutState.Reset();

@@ -145,6 +145,33 @@ def main() -> int:
     compiled_chunk_document = (
         ROOT / "docs" / "COMPILED_CHUNKS.md"
     ).read_text(encoding="utf-8")
+    compiled_program_source = (
+        ROOT / "src" / "UnifiedScript.Runtime" / "CompiledProgramChunk.cs"
+    ).read_text(encoding="utf-8")
+    compiled_program_host = (
+        ROOT / "src" / "UnifiedScript.Runtime" / "CoreClrCompiledChunkHost.cs"
+    ).read_text(encoding="utf-8")
+    compiled_program_tests = (
+        ROOT / "tests" / "UnifiedScript.Tests" / "CompiledProgramChunkTests.cs"
+    ).read_text(encoding="utf-8")
+    unreal_world_entry = (
+        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealWorldManagedEntryPoint.cs"
+    ).read_text(encoding="utf-8")
+    unreal_chunk_reader = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+        / "UEUnifiedScriptRuntime" / "Private" / "UnifiedScriptCompiledChunk.cpp"
+    ).read_text(encoding="utf-8")
+    unreal_component = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+        / "UEUnifiedScriptRuntime" / "Private" / "UnifiedScriptComponent.cpp"
+    ).read_text(encoding="utf-8")
+    unreal_asset = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+        / "UEUnifiedScriptRuntime" / "Public" / "UnifiedScriptAsset.h"
+    ).read_text(encoding="utf-8")
+    unreal_chunk_stage = (
+        ROOT / "tools" / "emit-unreal-demo-chunk.ps1"
+    ).read_text(encoding="utf-8")
     require(
         '"USCHUNK\\0"u8' in compiled_chunk_source
         and "FormatMajorVersion = 1" in compiled_chunk_source
@@ -157,10 +184,21 @@ def main() -> int:
         in compiled_chunk_tests
         and "Read_RejectsCorruptedPayloadBeforeItCanBeLoaded"
         in compiled_chunk_tests
+        and "UnifiedScriptRuntimeDeclarationBinary" in compiled_program_source
+        and "CSharpProgramChunkCompiler" in compiled_program_source
+        and "CoreClrCompiledChunkHost" in compiled_program_host
+        and "CoreClrHost_LoadsAssemblyDirectlyFromVerifiedChunk" in compiled_program_tests
+        and '".uschunk"' in unreal_world_entry
+        and "FUnifiedScriptCompiledChunk::LoadSection" in unreal_chunk_reader
+        and "MaterializeChunkFileWithOverrides" in unreal_component
+        and "CompiledChunkPath" in unreal_asset
+        and "UnifiedScript.Unreal.Demo.uschunk" in unreal_chunk_stage
         and "does **not** introduce another interpreter" in compiled_chunk_document,
-        "Compiled chunk envelope, strict reader, CLI, tests, and contract are disconnected",
+        "Compiled chunk compiler, hosts, strict readers, staging, tests, or contract are disconnected",
     )
-    checks.append("compiled chunks are deterministic, integrity-checked, and not a second VM")
+    checks.append(
+        "compiled chunks are deterministic, integrity-checked, and loaded end to end"
+    )
 
     deployment_sample_path = (
         ROOT / "samples" / "Unreal" / "UnifiedScript.Unreal.Demo.deployment.json"

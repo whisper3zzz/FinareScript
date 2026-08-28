@@ -60,11 +60,12 @@ debug/editor section kinds and cannot also be marked runtime-required. Shipping
 will normally place those payloads in an optional `.uschunk.debug` sidecar or
 omit them.
 
-The v0.1 envelope deliberately treats section contents as opaque bytes. The
-next vertical slice assigns deterministic binary codecs to the five runtime
-sections, then connects the managed and native World hosts. JSON remains the
-canonical readable authoring/import/export format, but the product loader will
-consume the compiled binary payloads.
+The envelope keeps section framing independent from payload schemas. The four
+metadata payloads now use deterministic versioned binary codecs, while the PE
+section contains the deterministic managed assembly directly. JSON remains the
+canonical readable authoring/import/export format; the World runtime consumes
+the compiled binary payloads and does not parse declaration JSON when a chunk
+is configured.
 
 ## Current tooling
 
@@ -93,21 +94,38 @@ input order produces byte-for-byte identical output and the same content
 digest. `chunk-inspect` applies the strict runtime-program profile and only then
 emits a JSON tooling report; that report is not consumed by the game runtime.
 
+The normal compiler path does not require manually preparing those payloads.
+`unifiedscript emit` writes the loose migration artifacts and a sibling
+`.uschunk` from the same semantic program. The Unreal demo helper builds and
+stages that product artifact:
+
+```powershell
+.\tools\emit-unreal-demo-chunk.ps1 -EngineRoot D:\UE_5.8 -Configuration Release
+```
+
+Managed hosts verify the complete candidate and load PE/PDB streams directly
+into a collectible `AssemblyLoadContext`; no temporary DLL extraction occurs.
+The native World host independently verifies the envelope and declaration
+section before materializing the Unreal PropertyBag. Script Assets prefer
+`CompiledChunkPath` and retain `ScriptAssemblyPath` plus `DeclarationPath` as a
+migration fallback.
+
 ## Integration sequence
 
-1. Define deterministic binary codecs for runtime manifest, declarations,
+1. **Complete:** define deterministic binary codecs for runtime manifest, declarations,
    bindings, and dependencies, plus a compiler command that consumes the same
    semantic program used by C# and the visual graph.
-2. Add managed chunk loading directly from verified PE/PDB slices and native
+2. **Complete:** add managed chunk loading directly from verified PE/PDB slices and native
    Unreal section access without extracting temporary loose files.
-3. Add `ChunkPath` to Script Assets while retaining loose `AssemblyPath` and
+3. **Complete:** add `CompiledChunkPath` to Script Assets while retaining loose `ScriptAssemblyPath` and
    declaration fallback for migration.
-4. Make reload verify a complete candidate chunk, construct the next
+4. **Complete:** make reload verify a complete candidate chunk, construct the next
    collectible generation, and swap only after declaration and ABI validation;
    failures keep the previous generation.
-5. Stage runtime chunks in cook/package, keep debug/editor sidecars optional,
+5. **In progress:** stage runtime chunks in cook/package, keep debug/editor sidecars optional,
    and measure startup, reload, package size, and deterministic cache hits.
 
-The envelope is complete only as a foundation. M11.0 is complete when the UE
-Script Asset and packaged BlockBreaker path load this container end to end with
-no runtime JSON parsing and loose-file fallback remains covered.
+The editor/World vertical slice is complete: UE 5.8 Automation starts and
+reloads the demo from one chunk while materializing state with no loose
+declaration path. M11.0 closes after packaged BlockBreaker smoke and measured
+startup/package impact; loose-file fallback remains covered during migration.

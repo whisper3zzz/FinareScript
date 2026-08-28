@@ -58,6 +58,13 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw "Managed release build failed with exit code $LASTEXITCODE."
     }
+    & (Join-Path $PSScriptRoot 'emit-unreal-demo-chunk.ps1') `
+        -EngineRoot $EngineRoot `
+        -Configuration Release `
+        -SkipManagedBuild
+    if ($LASTEXITCODE -ne 0) {
+        throw "Managed release chunk emission failed with exit code $LASTEXITCODE."
+    }
 
     foreach ($configuration in $Configurations) {
         $archiveDirectory = Join-Path $runDirectory $configuration
@@ -83,8 +90,9 @@ try {
         $executable = $executableItem.FullName
         $managedAssembly = Join-Path $packageRoot 'Plugins\UEUnifiedScript\Binaries\Managed\UnifiedScript.Unreal.dll'
         $demoAssembly = Join-Path $packageRoot 'Plugins\UEUnifiedScript\Binaries\Managed\Demo\UnifiedScript.Unreal.Demo.dll'
+        $demoChunk = Join-Path $packageRoot 'Plugins\UEUnifiedScript\Binaries\Managed\Demo\UnifiedScript.Unreal.Demo.uschunk'
         $runtimeConfig = Join-Path $packageRoot 'Plugins\UEUnifiedScript\Resources\Managed\UnifiedScript.Unreal.runtimeconfig.json'
-        foreach ($requiredPackageFile in @($executable, $managedAssembly, $demoAssembly, $runtimeConfig)) {
+        foreach ($requiredPackageFile in @($executable, $managedAssembly, $demoAssembly, $demoChunk, $runtimeConfig)) {
             if (!(Test-Path -LiteralPath $requiredPackageFile)) {
                 throw "$configuration package is incomplete: $requiredPackageFile"
             }

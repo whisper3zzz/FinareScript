@@ -11,10 +11,12 @@
 #include "HAL/PlatformProcess.h"
 #include "HAL/PlatformProperties.h"
 #include "HAL/PlatformTime.h"
+#include "Interfaces/IPluginManager.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/CommandLine.h"
 #include "Misc/EngineVersion.h"
 #include "Misc/Parse.h"
+#include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "UnifiedScriptComponent.h"
@@ -194,11 +196,28 @@ bool FUnifiedScriptWorldSubsystemLifecycleTest::RunTest(const FString& Parameter
         NewObject<UUnifiedScriptComponent>(SecondWorld);
     UUnifiedScriptAsset* InitialScriptAsset =
         NewObject<UUnifiedScriptAsset>(FirstWorld);
+    const TSharedPtr<IPlugin> UnifiedScriptPlugin =
+        IPluginManager::Get().FindPlugin(TEXT("UEUnifiedScript"));
+    const FString DemoChunkPath = UnifiedScriptPlugin.IsValid()
+        ? FPaths::Combine(
+            UnifiedScriptPlugin->GetBaseDir(),
+            TEXT("Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.uschunk"))
+        : FString();
+    const bool bDemoChunkAvailable = !DemoChunkPath.IsEmpty() &&
+        FPaths::FileExists(DemoChunkPath);
+    if (bDemoChunkAvailable)
+    {
+        InitialScriptAsset->CompiledChunkPath =
+            TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.uschunk");
+    }
     InitialScriptAsset->ScriptAssemblyPath =
         TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.dll");
     InitialScriptAsset->ScriptTypeName = TEXT("UnifiedScript.Unreal.Demo.DemoScript");
-    InitialScriptAsset->DeclarationPath =
-        TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.asset.json");
+    if (!bDemoChunkAvailable)
+    {
+        InitialScriptAsset->DeclarationPath =
+            TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.asset.json");
+    }
     InitialScriptAsset->DeclarationAssetPath = TEXT("Unreal/Demo");
     InitialScriptAsset->AuthoringSurfacePath =
         TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.surface.json");
@@ -211,9 +230,15 @@ bool FUnifiedScriptWorldSubsystemLifecycleTest::RunTest(const FString& Parameter
         FirstComponent->ScriptAssemblyPath.IsEmpty() && FirstComponent->ScriptTypeName.IsEmpty());
     TestTrue(
         *FString::Printf(
-            TEXT("Declaration IR materializes before play: %s"),
+            TEXT("Compiled or compatibility declaration materializes before play: %s"),
             *FirstComponent->LastScriptError),
         FirstComponent->RefreshScriptState());
+    if (bDemoChunkAvailable)
+    {
+        TestTrue(
+            TEXT("Compiled declaration materializes without a loose JSON path"),
+            InitialScriptAsset->DeclarationPath.IsEmpty());
+    }
     TestEqual(
         TEXT("C# [Expose] creates one editable Unreal state"),
         FirstComponent->MaterializedStateCount,
@@ -267,6 +292,12 @@ bool FUnifiedScriptWorldSubsystemLifecycleTest::RunTest(const FString& Parameter
             *FirstComponent->LastScriptError),
         bScriptStarted);
     TestTrue(TEXT("Component reports a running script"), FirstComponent->bScriptRunning);
+    if (bDemoChunkAvailable)
+    {
+        TestTrue(
+            TEXT("World host starts the managed generation directly from .uschunk"),
+            FirstComponent->GetActiveProgramPath().EndsWith(TEXT(".uschunk")));
+    }
     TestEqual(
         TEXT("Managed World owns the component script instance"),
         FirstHost->GetManagedScriptCount(),

@@ -49,6 +49,18 @@ public:
         FString& OutAssetPath,
         FString& OutError);
 
+    /** Materializes the binary DeclarationData section from a verified .uschunk. */
+    static bool MaterializeChunkFileWithOverrides(
+        const FString& ChunkPath,
+        const FString& RequestedAssetPath,
+        const FInstancedPropertyBag& ExistingState,
+        TConstArrayView<FGuid> ExistingOverrideIds,
+        FInstancedPropertyBag& OutState,
+        TArray<FGuid>& OutOverrideIds,
+        FUnifiedScriptStateMigrationReport& OutMigration,
+        FString& OutAssetPath,
+        FString& OutError);
+
     static bool MaterializeJson(
         const FString& DeclarationJson,
         const FString& RequestedAssetPath,

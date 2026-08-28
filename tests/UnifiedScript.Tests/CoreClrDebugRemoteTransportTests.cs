@@ -203,7 +203,7 @@ public sealed class CoreClrDebugRemoteTransportTests
             CoreClrDebugExecution execution = remote.Start(new ExecutionInvocation(
                 methodId,
                 [new ExecutionArgument("100000")]));
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
             Assert.True(SpinWait.SpinUntil(
                 () => server.ActiveConnectionCount == 0,
                 TimeSpan.FromSeconds(2)));

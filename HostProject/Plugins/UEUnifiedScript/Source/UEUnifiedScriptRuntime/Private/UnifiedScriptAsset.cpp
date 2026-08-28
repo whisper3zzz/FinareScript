@@ -5,7 +5,12 @@ bool UUnifiedScriptAsset::ResolveConfiguration(
     FString& OutTypeName,
     FString& OutError) const
 {
-    OutAssemblyPath = ScriptAssemblyPath;
+    OutAssemblyPath = CompiledChunkPath;
+    OutAssemblyPath.TrimStartAndEndInline();
+    if (OutAssemblyPath.IsEmpty())
+    {
+        OutAssemblyPath = ScriptAssemblyPath;
+    }
     OutTypeName = ScriptTypeName;
     OutAssemblyPath.TrimStartAndEndInline();
     OutTypeName.TrimStartAndEndInline();
@@ -21,7 +26,7 @@ bool UUnifiedScriptAsset::ResolveConfiguration(
     if (OutAssemblyPath.IsEmpty() || OutTypeName.IsEmpty())
     {
         OutError = FString::Printf(
-            TEXT("UnifiedScript Asset '%s' requires ScriptAssemblyPath and ScriptTypeName."),
+            TEXT("UnifiedScript Asset '%s' requires CompiledChunkPath or ScriptAssemblyPath, and ScriptTypeName."),
             *GetPathName());
         return false;
     }
@@ -68,6 +73,13 @@ FString UUnifiedScriptAsset::ResolveRequiredTargetClassPath() const
     return RequiredTargetClass.IsNull()
         ? FString()
         : RequiredTargetClass.ToSoftObjectPath().ToString();
+}
+
+FString UUnifiedScriptAsset::ResolveCompiledChunkPath() const
+{
+    FString Result = CompiledChunkPath;
+    Result.TrimStartAndEndInline();
+    return Result;
 }
 
 void UUnifiedScriptAsset::ResolveDeclarationConfiguration(

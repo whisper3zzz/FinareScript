@@ -9,6 +9,7 @@ public class UEUnifiedScriptRuntime : ModuleRules
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
         PublicDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine" });
         PrivateDependencyModuleNames.AddRange(new[] { "InputCore", "Json", "Projects" });
+        AddEngineThirdPartyPrivateStaticDependencies(Target, "OpenSSL");
 
         RuntimeDependencies.Add("$(PluginDir)/Binaries/Managed/...", StagedFileType.NonUFS);
         RuntimeDependencies.Add("$(PluginDir)/Resources/Managed/...", StagedFileType.NonUFS);

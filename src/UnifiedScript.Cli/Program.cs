@@ -709,6 +709,10 @@ internal static class Program
         string pdbPath = Path.Combine(outputDirectory, $"{baseName}.pdb");
         string sourceMapPath = Path.Combine(outputDirectory, $"{baseName}.sourcemap.json");
         string assetPath = Path.Combine(outputDirectory, $"{baseName}.asset.json");
+        string chunkPath = Path.Combine(outputDirectory, $"{baseName}.uschunk");
+        CSharpProgramChunkEmitResult chunk = new CSharpProgramChunkCompiler().Compile(
+            result.Image,
+            new CSharpProgramChunkOptions(RuntimeReferencePaths: request.RuntimeReferencePaths));
         var outputs = new List<OutputFile>
         {
             new OutputFile(assemblyPath, result.Image.PortableExecutable),
@@ -719,6 +723,7 @@ internal static class Program
             new OutputFile(
                 assetPath,
                 ScriptAssetJson.Serialize(result.Image.ScriptAssets) + "\n"),
+            new OutputFile(chunkPath, chunk.Content),
         };
         foreach (IdentitySidecarDocument sidecar in result.Image.IdentitySidecars)
         {
