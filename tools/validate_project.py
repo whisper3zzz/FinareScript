@@ -2053,6 +2053,8 @@ def main() -> int:
             "ActiveGeneration",
             "ActiveDeclarationAssetPath",
             "ActiveScriptAssetPath",
+            "LastGameplayProfileTrace",
+            "LastReloadTransaction",
             "LastScriptError",
             "LastStateMigration",
             "ManagedState",
@@ -2062,13 +2064,19 @@ def main() -> int:
             "ScriptAssetPath",
             "ScriptTypeName",
             "bScriptRunning",
+            "bGameplayProfilerEnabled",
             "bStartAutomatically",
             "bTickAutomatically",
         }
         and {item["name"] for item in unreal_component_manifest["functions"]}
         == {
             "Add",
+            "AddBenchmarkVector",
+            "ApplyBenchmarkActorInput",
+            "BroadcastBenchmarkSignal",
             "BroadcastManagedSignal",
+            "EchoBenchmarkArray",
+            "EchoBenchmarkMap",
             "GetScriptStateInt32",
             "GetScriptTarget",
             "IsScriptStateOverridden",
@@ -2076,6 +2084,7 @@ def main() -> int:
             "ReloadScript",
             "RequestReload",
             "ResetAllScriptStateOverrides",
+            "ResetBenchmarkActorState",
             "ResetScriptStateOverride",
             "SetScriptStateInt32",
             "StartScript",
@@ -2162,17 +2171,39 @@ def main() -> int:
             for item in reflected_type["delegates"]
         }
         == {
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:OnBenchmarkSignal",
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:OnManagedSignal",
             "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:OnInteropChanged",
         }
         and all(
             item["traits"]["kind"] == "multicast"
             and item["traits"]["blueprintAssignable"] is True
-            and [parameter["type"]["kind"] for parameter in item["parameters"]]
-            == ["int32", "object"]
             for reflected_type in unreal_manifest["types"]
             for item in reflected_type["delegates"]
         )
+        and {
+            item["path"]: [
+                parameter["type"]["kind"] for parameter in item["parameters"]
+            ]
+            for reflected_type in unreal_manifest["types"]
+            for item in reflected_type["delegates"]
+        }
+        == {
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:OnBenchmarkSignal": [
+                "int32",
+                "float32",
+                "boolean",
+                "object",
+            ],
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:OnManagedSignal": [
+                "int32",
+                "object",
+            ],
+            "/Script/UEUnifiedScriptRuntime.UnifiedScriptInteropFixture:OnInteropChanged": [
+                "int32",
+                "object",
+            ],
+        }
         and {module["Name"] for module in unreal_plugin["Modules"]}
         == {"UEUnifiedScriptRuntime", "UEUnifiedScriptEditor"}
         and "UUnifiedScriptComponent : public UActorComponent" in unreal_component
@@ -3691,6 +3722,9 @@ def main() -> int:
     performance_pair_runner = (
         ROOT / "comparison" / "run-performance-comparison.ps1"
     ).read_text(encoding="utf-8")
+    performance_runtime_identity = (
+        ROOT / "comparison" / "get-runtime-source-identity.ps1"
+    ).read_text(encoding="utf-8")
     performance_suite_manifest_path = (
         ROOT / "benchmarks" / "unreal" / "workload-suite.v0.1.json"
     )
@@ -3771,7 +3805,10 @@ def main() -> int:
         and "Engine\\Build\\Build.version" in performance_capture_writer
         and "executionOrdinal" in performance_capture_writer
         and "SuiteTrial" in performance_pair_runner
-        and "Get-GitRuntimeCommit" in performance_pair_runner
+        and "Get-RuntimeSourceIdentity" in performance_pair_runner
+        and "unifiedscript.runtime-source-identity/v0.1"
+        in performance_runtime_identity
+        and "Get-FileHash" in performance_runtime_identity
         and "Get-PluginVersion" in performance_pair_runner
         and "ReportOnly" in performance_pair_runner
         and "if ($unifiedFirst)" in performance_pair_runner

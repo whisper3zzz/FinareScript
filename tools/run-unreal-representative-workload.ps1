@@ -2,7 +2,11 @@
 param(
     [string]$EngineRoot = $env:UNIFIEDSCRIPT_UE_ROOT,
     [Parameter(Mandatory)]
-    [ValidateSet('struct-container-transfer', 'delegate-storm')]
+    [ValidateSet(
+        'struct-container-transfer',
+        'delegate-storm',
+        'per-frame-actor-logic',
+        'mass-entities')]
     [string]$WorkloadId,
     [string]$OutputPath,
     [string]$SuiteMetricsPath,
@@ -17,6 +21,7 @@ $managedProject = Join-Path $repoRoot `
 $manifestPath = Join-Path $repoRoot 'benchmarks\unreal\workload-suite.v0.1.json'
 $artifactRoot = Join-Path $repoRoot 'artifacts\ue\representative'
 $logPath = Join-Path $artifactRoot "$WorkloadId.log"
+$rawResultPath = Join-Path $artifactRoot "$WorkloadId-raw.json"
 if ([string]::IsNullOrWhiteSpace($OutputPath)) {
     $OutputPath = Join-Path $artifactRoot "$WorkloadId.json"
 }
@@ -58,11 +63,22 @@ $contracts = @{
     'delegate-storm' = [pscustomobject]@{
         Calls = 200000; Bytes = 1700000; Checksum = 5000350000
     }
+    'per-frame-actor-logic' = [pscustomobject]@{
+        Calls = 20000; Bytes = 440000; Checksum = 100015000
+    }
+    'mass-entities' = [pscustomobject]@{
+        Calls = 1001000; Bytes = 72004000; Checksum = 1501500000
+    }
 }
 $contract = $contracts[$WorkloadId]
+$isFrameWorkload = $WorkloadId -in @(
+    'per-frame-actor-logic',
+    'mass-entities')
 
 New-Item -ItemType Directory -Force -Path `
     $artifactRoot, (Split-Path -Parent $OutputPath) | Out-Null
+Remove-Item -LiteralPath $rawResultPath, $logPath `
+    -Force -ErrorAction SilentlyContinue
 if (-not $SkipBuild) {
     & $dotnetExe build $managedProject -c Release --nologo
     if ($LASTEXITCODE -ne 0) {
@@ -84,12 +100,22 @@ $defaultInputBytes = if (Test-Path -LiteralPath $defaultInputPath) {
     [IO.File]::ReadAllBytes($defaultInputPath)
 } else { $null }
 try {
-    & $editorCmd $projectPath `
-        -unattended -nop4 -NullRHI -nosplash `
-        "-UnifiedScriptRepresentativeWorkload=$WorkloadId" `
-        '-ExecCmds=Automation RunTests UnifiedScript.Unreal.Performance.RepresentativeWorkload' `
-        '-TestExit=Automation Test Queue Empty' `
-        "-abslog=$logPath" -log
+    if ($isFrameWorkload) {
+        & $editorCmd $projectPath `
+            -unattended -nop4 -NullRHI -nosplash `
+            -UseFixedTimeStep -FixedSeed `
+            -UnifiedScriptFrameWorkload `
+            "-UnifiedScriptRepresentativeWorkload=$WorkloadId" `
+            "-UnifiedScriptRepresentativeResult=$rawResultPath" `
+            "-abslog=$logPath" -log
+    } else {
+        & $editorCmd $projectPath `
+            -unattended -nop4 -NullRHI -nosplash `
+            "-UnifiedScriptRepresentativeWorkload=$WorkloadId" `
+            '-ExecCmds=Automation RunTests UnifiedScript.Unreal.Performance.RepresentativeWorkload' `
+            '-TestExit=Automation Test Queue Empty' `
+            "-abslog=$logPath" -log
+    }
     $editorExitCode = $LASTEXITCODE
 } finally {
     if ($null -ne $defaultEngineBytes) {
@@ -103,20 +129,33 @@ if ($editorExitCode -ne 0) {
     throw "UnifiedScript '$WorkloadId' process failed: $editorExitCode."
 }
 
-$successPattern =
-    'Test Completed. Result={Success} Name={RepresentativeWorkload} Path={UnifiedScript.Unreal.Performance.RepresentativeWorkload}'
-if (-not (Select-String -LiteralPath $logPath `
-        -SimpleMatch $successPattern -Quiet)) {
-    throw "UnifiedScript '$WorkloadId' Automation failed. Log: $logPath"
+$result = if ($isFrameWorkload) {
+    if (-not (Test-Path -LiteralPath $rawResultPath -PathType Leaf)) {
+        throw "UnifiedScript '$WorkloadId' raw result is missing. Log: $logPath"
+    }
+    Get-Content -LiteralPath $rawResultPath -Raw | ConvertFrom-Json
+} else {
+    $successPattern =
+        'Test Completed. Result={Success} Name={RepresentativeWorkload} Path={UnifiedScript.Unreal.Performance.RepresentativeWorkload}'
+    if (-not (Select-String -LiteralPath $logPath `
+            -SimpleMatch $successPattern -Quiet)) {
+        throw "UnifiedScript '$WorkloadId' Automation failed. Log: $logPath"
+    }
+    $marker = 'UNIFIEDSCRIPT_REPRESENTATIVE_WORKLOAD_JSON '
+    $line = Select-String -LiteralPath $logPath -SimpleMatch $marker |
+        Select-Object -Last 1
+    if ($null -eq $line) {
+        throw "UnifiedScript '$WorkloadId' result marker is missing."
+    }
+    $line.Line.Substring(
+        $line.Line.IndexOf($marker) + $marker.Length) | ConvertFrom-Json
 }
-$marker = 'UNIFIEDSCRIPT_REPRESENTATIVE_WORKLOAD_JSON '
-$line = Select-String -LiteralPath $logPath -SimpleMatch $marker |
-    Select-Object -Last 1
-if ($null -eq $line) {
-    throw "UnifiedScript '$WorkloadId' result marker is missing."
-}
-$result = $line.Line.Substring(
-    $line.Line.IndexOf($marker) + $marker.Length) | ConvertFrom-Json
+$frameMetricsValid = -not $isFrameWorkload -or (
+    [double]$result.frameTimeMedianMilliseconds -gt 0 -and
+    [double]$result.frameTimeP95Milliseconds -ge
+        [double]$result.frameTimeMedianMilliseconds -and
+    [double]$result.frameTimeP99Milliseconds -ge
+        [double]$result.frameTimeP95Milliseconds)
 if ($result.schemaVersion -ne 'unifiedscript.representative-workload/v0.1' -or
     $result.workloadId -ne $WorkloadId -or
     [int]$result.warmupIterations -ne [int]$workload.warmupIterations -or
@@ -128,7 +167,8 @@ if ($result.schemaVersion -ne 'unifiedscript.representative-workload/v0.1' -or
     [int]$result.gcCollectionCount -lt 0 -or
     [double]$result.gcPauseMilliseconds -lt 0 -or
     [uint64]$result.memoryHighWaterBytes -le 0 -or
-    [int64]$result.checksum -ne $contract.Checksum) {
+    [int64]$result.checksum -ne $contract.Checksum -or
+    -not $frameMetricsValid) {
     throw "UnifiedScript '$WorkloadId' evidence violates its frozen contract."
 }
 
@@ -146,9 +186,15 @@ $report | ConvertTo-Json -Depth 6 |
 if (-not [string]::IsNullOrWhiteSpace($SuiteMetricsPath)) {
     $metrics = [ordered]@{
         values = [ordered]@{
-            frameTimeMedianMilliseconds = $null
-            frameTimeP95Milliseconds = $null
-            frameTimeP99Milliseconds = $null
+            frameTimeMedianMilliseconds = if ($isFrameWorkload) {
+                [double]$result.frameTimeMedianMilliseconds
+            } else { $null }
+            frameTimeP95Milliseconds = if ($isFrameWorkload) {
+                [double]$result.frameTimeP95Milliseconds
+            } else { $null }
+            frameTimeP99Milliseconds = if ($isFrameWorkload) {
+                [double]$result.frameTimeP99Milliseconds
+            } else { $null }
             bridgeTimeMilliseconds = [double]$result.bridgeTimeMilliseconds
             calls = [int64]$result.calls
             bytesCopied = [int64]$result.bytesCopied
@@ -156,7 +202,9 @@ if (-not [string]::IsNullOrWhiteSpace($SuiteMetricsPath)) {
             gcCollectionCount = [int]$result.gcCollectionCount
             gcPauseMilliseconds = [double]$result.gcPauseMilliseconds
             memoryHighWaterBytes = [uint64]$result.memoryHighWaterBytes
-            startupMilliseconds = $null
+            startupMilliseconds = if ($isFrameWorkload) {
+                [double]$result.startupMilliseconds
+            } else { $null }
             reloadMilliseconds = $null
             packageSizeBytes = $null
         }

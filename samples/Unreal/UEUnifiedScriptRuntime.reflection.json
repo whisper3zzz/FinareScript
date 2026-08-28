@@ -905,6 +905,69 @@
 					}
 				},
 				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ApplyBenchmarkActorInput",
+					"name": "ApplyBenchmarkActorInput",
+					"returnType":
+					{
+						"kind": "struct",
+						"nativeName": "FVector",
+						"typePath": "/Script/CoreUObject.Vector",
+						"headerPath": "UObject/NoExportTypes.h"
+					},
+					"parameters": [
+						{
+							"name": "MoveForward",
+							"type":
+							{
+								"kind": "float32",
+								"nativeName": "float"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "MoveRight",
+							"type":
+							{
+								"kind": "float32",
+								"nativeName": "float"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "LookHorizontal",
+							"type":
+							{
+								"kind": "float32",
+								"nativeName": "float"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "LookVertical",
+							"type":
+							{
+								"kind": "float32",
+								"nativeName": "float"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Apply Benchmark Actor Input",
+						"category": "UnifiedScript|Verification",
+						"tooltip": "Applies one movement/look step and returns X/Y/Yaw as one value payload.",
+						"deprecated": false
+					}
+				},
+				{
 					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:BroadcastBenchmarkSignal",
 					"name": "BroadcastBenchmarkSignal",
 					"returnType":
@@ -1306,6 +1369,30 @@
 						"displayName": "Reset All Script State Overrides",
 						"category": "UnifiedScript|State",
 						"tooltip": "Restores every state to the current C# declaration defaults.",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ResetBenchmarkActorState",
+					"name": "ResetBenchmarkActorState",
+					"returnType":
+					{
+						"kind": "void",
+						"nativeName": "void"
+					},
+					"parameters": [],
+					"traits":
+					{
+						"static": false,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Reset Benchmark Actor State",
+						"category": "UnifiedScript|Verification",
+						"tooltip": "Resets the deterministic native Actor state used by frame workloads.",
 						"deprecated": false
 					}
 				},

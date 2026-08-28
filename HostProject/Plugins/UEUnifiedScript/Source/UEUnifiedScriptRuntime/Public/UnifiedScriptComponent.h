@@ -189,6 +189,18 @@ public:
     TMap<int32, int32> EchoBenchmarkMap(
         const TMap<int32, int32>& Values) const;
 
+    /** Resets the deterministic native Actor state used by frame workloads. */
+    UFUNCTION(BlueprintCallable, Category="UnifiedScript|Verification")
+    void ResetBenchmarkActorState();
+
+    /** Applies one movement/look step and returns X/Y/Yaw as one value payload. */
+    UFUNCTION(BlueprintCallable, Category="UnifiedScript|Verification")
+    FVector ApplyBenchmarkActorInput(
+        float MoveForward,
+        float MoveRight,
+        float LookHorizontal,
+        float LookVertical);
+
     UFUNCTION(BlueprintCallable, Category="UnifiedScript|Verification")
     void BroadcastManagedSignal(int32 Value, UObject* Context);
 
@@ -271,4 +283,6 @@ private:
     bool bSemanticDebugTickActive = false;
     bool bSemanticDebugPaused = false;
     FString SemanticDebugStateJson;
+    FVector BenchmarkActorLocation = FVector::ZeroVector;
+    FRotator BenchmarkActorRotation = FRotator::ZeroRotator;
 };

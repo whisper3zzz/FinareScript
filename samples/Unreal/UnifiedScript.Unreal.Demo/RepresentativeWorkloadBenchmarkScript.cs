@@ -11,6 +11,24 @@ public sealed class RepresentativeWorkloadBenchmarkScript : IUnrealManagedScript
 {
     private const string StructContainerWorkload = "struct-container-transfer";
     private const string DelegateWorkload = "delegate-storm";
+    private const string PerFrameActorWorkload = "per-frame-actor-logic";
+    private const string MassEntitiesWorkload = "mass-entities";
+    private const int EntityCount = 1_000;
+
+    private UnifiedScriptComponent? _component;
+    private string _frameWorkload = string.Empty;
+    private UnrealVector[]? _entityPositions;
+    private UnrealVector[]? _entityVelocities;
+    private int _frameIndex;
+    private int _collectionsBefore;
+    private TimeSpan _pauseBefore;
+    private long _allocatedBefore;
+    private long _checksum;
+    private long _allocatedBytes;
+    private int _collectionCount;
+    private double _pauseMilliseconds;
+    private bool _publishPending;
+    private bool _completed;
 
     public void OnStart(UnrealScriptContext context)
     {
@@ -19,6 +37,12 @@ public sealed class RepresentativeWorkloadBenchmarkScript : IUnrealManagedScript
             "Run=", StringComparison.Ordinal)
             ? component.ManagedState[4..]
             : string.Empty;
+        if (workload is PerFrameActorWorkload or MassEntitiesWorkload)
+        {
+            InitializeFrameWorkload(component, workload);
+            return;
+        }
+
         component.ManagedState = workload switch
         {
             StructContainerWorkload => RunStructContainer(component),
@@ -29,10 +53,132 @@ public sealed class RepresentativeWorkloadBenchmarkScript : IUnrealManagedScript
 
     public void OnTick(float deltaSeconds)
     {
+        if (_component is null || _completed)
+        {
+            return;
+        }
+        if (_publishPending)
+        {
+            _component.ManagedState = FormatFrameResult();
+            _publishPending = false;
+            _completed = true;
+            return;
+        }
+
+        int warmupIterations = _frameWorkload == PerFrameActorWorkload ? 300 : 120;
+        int measuredIterations = _frameWorkload == PerFrameActorWorkload ? 10_000 : 1_000;
+        bool measured = _frameIndex >= warmupIterations;
+        int measuredFrame = _frameIndex - warmupIterations;
+        long frameChecksum = _frameWorkload == PerFrameActorWorkload
+            ? RunActorFrame(_component, measured ? measuredFrame : _frameIndex)
+            : RunMassEntityFrame(_component);
+        if (measured)
+        {
+            _checksum += frameChecksum;
+        }
+        _frameIndex++;
+
+        if (_frameIndex == warmupIterations)
+        {
+            ResetFrameState(_component);
+            _collectionsBefore = TotalCollectionCount();
+            _pauseBefore = GC.GetTotalPauseDuration();
+            _allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        }
+        else if (_frameIndex == warmupIterations + measuredIterations)
+        {
+            _allocatedBytes =
+                GC.GetAllocatedBytesForCurrentThread() - _allocatedBefore;
+            _collectionCount = TotalCollectionCount() - _collectionsBefore;
+            _pauseMilliseconds =
+                (GC.GetTotalPauseDuration() - _pauseBefore).TotalMilliseconds;
+            _publishPending = true;
+        }
     }
 
     public void OnStop()
     {
+        _component = null;
+        _entityPositions = null;
+        _entityVelocities = null;
+    }
+
+    private void InitializeFrameWorkload(
+        UnifiedScriptComponent component,
+        string workload)
+    {
+        _component = component;
+        _frameWorkload = workload;
+        if (workload == MassEntitiesWorkload)
+        {
+            _entityPositions = new UnrealVector[EntityCount];
+            _entityVelocities = new UnrealVector[EntityCount];
+            for (int entity = 0; entity < EntityCount; entity++)
+            {
+                _entityVelocities[entity] = new UnrealVector(
+                    entity % 5 + 1,
+                    1.0,
+                    0.0);
+            }
+        }
+        ResetFrameState(component);
+        component.ManagedState =
+            $"RepresentativeFrame:v1;Workload={workload};Status=ready";
+    }
+
+    private void ResetFrameState(UnifiedScriptComponent component)
+    {
+        _checksum = 0;
+        if (_frameWorkload == PerFrameActorWorkload)
+        {
+            component.ResetBenchmarkActorState();
+            return;
+        }
+        Array.Clear(_entityPositions!);
+    }
+
+    private static long RunActorFrame(
+        UnifiedScriptComponent component,
+        int frame)
+    {
+        float moveRight = (frame & 1) == 0 ? 1.0f : -1.0f;
+        UnrealVector state = component.ApplyBenchmarkActorInput(
+            1.0f,
+            moveRight,
+            1.0f,
+            0.0f);
+        return checked((long)(state.X + state.Y + state.Z));
+    }
+
+    private long RunMassEntityFrame(UnifiedScriptComponent component)
+    {
+        UnrealVector[] positions = _entityPositions!;
+        UnrealVector[] velocities = _entityVelocities!;
+        long checksum = 0;
+        for (int entity = 0; entity < EntityCount; entity++)
+        {
+            UnrealVector position = component.AddBenchmarkVector(
+                positions[entity],
+                velocities[entity]);
+            positions[entity] = position;
+            checksum += (long)position.X;
+        }
+        return checksum;
+    }
+
+    private string FormatFrameResult()
+    {
+        int warmupIterations = _frameWorkload == PerFrameActorWorkload ? 300 : 120;
+        int measuredIterations = _frameWorkload == PerFrameActorWorkload ? 10_000 : 1_000;
+        long calls = _frameWorkload == PerFrameActorWorkload
+            ? 20_000L
+            : 1_001_000L;
+        long bytesCopied = _frameWorkload == PerFrameActorWorkload
+            ? 440_000L
+            : 72_004_000L;
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"RepresentativeFrame:v1;Workload={_frameWorkload};Status=complete;WarmupIterations={warmupIterations};Iterations={measuredIterations};Calls={calls};BytesCopied={bytesCopied};AllocatedBytes={_allocatedBytes};GcCollectionCount={_collectionCount};GcPauseMilliseconds={_pauseMilliseconds:F6};Checksum={_checksum}");
     }
 
     private static string RunStructContainer(UnifiedScriptComponent component)

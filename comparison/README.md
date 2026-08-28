@@ -93,6 +93,22 @@ The allocation-free fixed lane also covers supported zero-to-four-argument
 int, float, bool, object-handle, and FVector families; broader signatures use
 the complete ABI v3 CallFrame marshaller.
 
+Run one matched representative pair and write its scheduled normalized
+captures with:
+
+```powershell
+.\comparison\run-representative-workload-comparison.ps1 `
+  -WorkloadId per-frame-actor-logic -SuiteTrial 1
+
+.\comparison\run-representative-workload-comparison.ps1 `
+  -WorkloadId mass-entities -SuiteTrial 1 -SkipBuild
+```
+
+The same runner currently accepts `struct-container-transfer`,
+`delegate-storm`, and `batch-queries`. Odd trials execute UnifiedScript first;
+even trials reverse the engine order. `-SkipBuild` is only valid after both
+worktrees have been rebuilt from the current sources.
+
 ## Visual/C# whole-game round trip
 
 M8.4 edits the actual migrated Player and Rifle gameplay from one pinned Visual

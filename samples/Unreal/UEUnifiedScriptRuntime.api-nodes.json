@@ -2402,6 +2402,91 @@
           }
         },
         {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ApplyBenchmarkActorInput",
+          "name": "ApplyBenchmarkActorInput",
+          "returnType": {
+            "kind": "struct",
+            "nativeName": "FVector",
+            "typePath": "/Script/CoreUObject.Vector",
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": "UObject/NoExportTypes.h"
+          },
+          "parameters": [
+            {
+              "name": "MoveForward",
+              "type": {
+                "kind": "float32",
+                "nativeName": "float",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "MoveRight",
+              "type": {
+                "kind": "float32",
+                "nativeName": "float",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "LookHorizontal",
+              "type": {
+                "kind": "float32",
+                "nativeName": "float",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            },
+            {
+              "name": "LookVertical",
+              "type": {
+                "kind": "float32",
+                "nativeName": "float",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "direction": "input",
+              "defaultValue": null
+            }
+          ],
+          "traits": {
+            "static": false,
+            "pure": false,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Apply Benchmark Actor Input",
+            "category": "UnifiedScript|Verification",
+            "tooltip": "Applies one movement/look step and returns X/Y/Yaw as one value payload.",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
           "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:BroadcastBenchmarkSignal",
           "name": "BroadcastBenchmarkSignal",
           "returnType": {
@@ -2918,6 +3003,34 @@
           }
         },
         {
+          "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ResetBenchmarkActorState",
+          "name": "ResetBenchmarkActorState",
+          "returnType": {
+            "kind": "void",
+            "nativeName": "void",
+            "typePath": null,
+            "elementType": null,
+            "keyType": null,
+            "valueType": null,
+            "headerPath": null
+          },
+          "parameters": [],
+          "traits": {
+            "static": false,
+            "pure": false,
+            "callable": true,
+            "nativeAccess": "public"
+          },
+          "metadata": {
+            "displayName": "Reset Benchmark Actor State",
+            "category": "UnifiedScript|Verification",
+            "tooltip": "Resets the deterministic native Actor state used by frame workloads.",
+            "deprecated": false,
+            "deprecationMessage": null,
+            "worldContextParameter": null
+          }
+        },
+        {
           "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ResetScriptStateOverride",
           "name": "ResetScriptStateOverride",
           "returnType": {
@@ -3371,6 +3484,130 @@
                 "valueType": null,
                 "headerPath": "UObject/NoExportTypes.h"
               },
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|UnifiedScriptComponent|ApplyBenchmarkActorInput",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ApplyBenchmarkActorInput",
+          "memberId": "0x769517D414F686CB",
+          "kind": "function",
+          "title": "Apply Benchmark Actor Input",
+          "category": "UnifiedScript|Verification",
+          "tooltip": "Applies one movement/look step and returns X/Y/Yaw as one value payload.",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptComponent*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "MoveForward",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "float32",
+                "nativeName": "float",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "MoveRight",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "float32",
+                "nativeName": "float",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "LookHorizontal",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "float32",
+                "nativeName": "float",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "LookVertical",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "float32",
+                "nativeName": "float",
+                "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "ReturnValue",
+              "direction": "output",
+              "kind": "data",
+              "type": {
+                "kind": "struct",
+                "nativeName": "FVector",
+                "typePath": "/Script/CoreUObject.Vector",
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": "UObject/NoExportTypes.h"
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
               "defaultValue": null
             }
           ],
@@ -4161,6 +4398,55 @@
                 "kind": "boolean",
                 "nativeName": "bool",
                 "typePath": null,
+                "elementType": null,
+                "keyType": null,
+                "valueType": null,
+                "headerPath": null
+              },
+              "defaultValue": null
+            },
+            {
+              "name": "Out",
+              "direction": "output",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            }
+          ],
+          "deprecated": false,
+          "deprecationMessage": null,
+          "latent": false,
+          "latentInfoParameter": null,
+          "threadRequirement": "gameThread",
+          "worldRequirement": "none",
+          "worldContextParameter": null,
+          "callableWithoutWorldContext": false
+        },
+        {
+          "id": "ue.call|UnifiedScriptComponent|ResetBenchmarkActorState",
+          "memberPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ResetBenchmarkActorState",
+          "memberId": "0xBAFA94D3AA91251B",
+          "kind": "function",
+          "title": "Reset Benchmark Actor State",
+          "category": "UnifiedScript|Verification",
+          "tooltip": "Resets the deterministic native Actor state used by frame workloads.",
+          "pure": false,
+          "pins": [
+            {
+              "name": "In",
+              "direction": "input",
+              "kind": "control",
+              "type": null,
+              "defaultValue": null
+            },
+            {
+              "name": "Target",
+              "direction": "input",
+              "kind": "data",
+              "type": {
+                "kind": "object",
+                "nativeName": "UUnifiedScriptComponent*",
+                "typePath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
                 "elementType": null,
                 "keyType": null,
                 "valueType": null,

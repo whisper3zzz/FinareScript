@@ -6,7 +6,9 @@ param(
     [ValidateSet(
         'struct-container-transfer',
         'delegate-storm',
-        'batch-queries')]
+        'batch-queries',
+        'per-frame-actor-logic',
+        'mass-entities')]
     [string]$WorkloadId,
     [ValidateRange(1, 3)]
     [int]$SuiteTrial = 1,

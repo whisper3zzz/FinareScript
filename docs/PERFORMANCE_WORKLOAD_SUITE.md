@@ -123,15 +123,24 @@ with data error exit code 65.
 
 ## Current integration boundary
 
-The live UnifiedScript scalar and Batch Trace benchmarks now emit complete
-metric maps and have passed the raw-measurement/capture path. All three matched
+The live scalar, struct/container, four-argument delegate, per-frame Actor,
+1,000-entity, and Batch Trace benchmarks now emit complete metric maps and have
+passed the raw-measurement/capture path on both runtimes. All three matched
 scalar trials followed the alternating schedule. Their median bridge times for
 100,000 calls were 14.3025 ms for UnifiedScript and 13.8434 ms for Puerts, a
 losing UnifiedScript ratio of 1.0332 that remains published without moving the
 future product gate. The Batch Trace trial-1 collector recorded 1,024 queries
-through two boundary calls in 0.3950 ms with 360,448 transferred bytes and zero
-measured allocation/GC. These are machine-local collector proofs, not a
-complete suite comparison.
+through two UnifiedScript boundary calls in 0.3950 ms with 360,448 transferred
+bytes and zero measured allocation/GC.
+
+The frame driver uses an actual UE ticker and keeps the result-publication tick
+outside the measured window. Its first machine-local 10,000-frame Actor proof
+recorded 0.0048/0.0090/0.0143 ms p50/p95/p99 and 55.8038 ms total for
+UnifiedScript, versus 0.0152/0.0237/0.0388 ms and 165.4386 ms for Puerts. The
+1,000-entity by 1,000-frame proof issued 1,001,000 boundary calls and transferred
+72,004,000 logical bytes; UnifiedScript recorded 222.7079 ms with zero managed
+allocation/GC, while Puerts recorded 727.1043 ms and 41 V8 collections. These
+are collector proofs, not a complete suite comparison.
 
 The BlockBreaker runner now consumes a separately produced, commit-matched
 Win64 Development package-size report, captures exact UE CSV frame/memory/GC
@@ -143,6 +152,7 @@ and 53/54. The 10,000-frame medians were 4,599.308 ms for UnifiedScript and
 0.884789 expose run variance. The matched UnifiedScript package is 2.08% larger.
 This is complete-game evidence, not a broad suite result.
 
-The next M10.1 slices adapt the remaining struct/container, delegate, per-frame,
-mass-entity, resource/spawn, and hot-reload collectors. Until both runtimes
-complete 27 trials under the 54-slot schedule, no broad performance result is published.
+The next M10.1 slices adapt the remaining resource/spawn and hot-reload
+collectors, then recapture all nine workloads from one frozen runtime source
+identity. Until both runtimes complete 27 trials under the 54-slot schedule,
+no broad performance result is published.

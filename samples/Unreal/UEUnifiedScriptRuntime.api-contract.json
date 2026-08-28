@@ -49,6 +49,7 @@
         "ActiveScriptAssetPath",
         "Add",
         "AddBenchmarkVector",
+        "ApplyBenchmarkActorInput",
         "BroadcastBenchmarkSignal",
         "BroadcastManagedSignal",
         "EchoBenchmarkArray",
@@ -67,6 +68,7 @@
         "ReloadScript",
         "RequestReload",
         "ResetAllScriptStateOverrides",
+        "ResetBenchmarkActorState",
         "ResetScriptStateOverride",
         "ScriptAssemblyPath",
         "ScriptAssetPath",
@@ -144,7 +146,7 @@
     "rules": []
   },
   "coverageBaseline": {
-    "minimumMemberCount": 103,
+    "minimumMemberCount": 105,
     "minimumDirectThunkCount": 25,
     "minimumCallFrameCount": 76,
     "minimumDataPlaneOperationCount": 0,

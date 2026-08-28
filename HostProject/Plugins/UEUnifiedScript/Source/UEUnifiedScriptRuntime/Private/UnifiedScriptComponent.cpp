@@ -1550,6 +1550,46 @@ TMap<int32, int32> UUnifiedScriptComponent::EchoBenchmarkMap(
     return Values;
 }
 
+void UUnifiedScriptComponent::ResetBenchmarkActorState()
+{
+    BenchmarkActorLocation = FVector::ZeroVector;
+    BenchmarkActorRotation = FRotator::ZeroRotator;
+    if (AActor* Owner = GetOwner())
+    {
+        Owner->SetActorLocationAndRotation(
+            BenchmarkActorLocation,
+            BenchmarkActorRotation,
+            false,
+            nullptr,
+            ETeleportType::TeleportPhysics);
+    }
+}
+
+FVector UUnifiedScriptComponent::ApplyBenchmarkActorInput(
+    float MoveForward,
+    float MoveRight,
+    float LookHorizontal,
+    float LookVertical)
+{
+    BenchmarkActorLocation.X += static_cast<double>(MoveForward);
+    BenchmarkActorLocation.Y += static_cast<double>(MoveRight);
+    BenchmarkActorRotation.Yaw += static_cast<double>(LookHorizontal);
+    BenchmarkActorRotation.Pitch += static_cast<double>(LookVertical);
+    if (AActor* Owner = GetOwner())
+    {
+        Owner->SetActorLocationAndRotation(
+            BenchmarkActorLocation,
+            BenchmarkActorRotation,
+            false,
+            nullptr,
+            ETeleportType::TeleportPhysics);
+    }
+    return FVector(
+        BenchmarkActorLocation.X,
+        BenchmarkActorLocation.Y,
+        BenchmarkActorRotation.Yaw);
+}
+
 void UUnifiedScriptComponent::BroadcastManagedSignal(int32 Value, UObject* Context)
 {
     OnManagedSignal.Broadcast(Value, Context);

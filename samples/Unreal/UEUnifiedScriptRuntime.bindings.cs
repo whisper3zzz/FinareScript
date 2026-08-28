@@ -237,6 +237,10 @@ public sealed partial class UnifiedScriptComponent : global::UnifiedScript.Unrea
     public global::UnifiedScript.Unreal.UnrealVector AddBenchmarkVector(global::UnifiedScript.Unreal.UnrealVector left, global::UnifiedScript.Unreal.UnrealVector right)
         => Invoke<global::UnifiedScript.Unreal.UnrealVector, global::UnifiedScript.Unreal.UnrealVector, global::UnifiedScript.Unreal.UnrealVector>(0x77CFB076C1B341BAUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:AddBenchmarkVector", left, right);
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Apply Benchmark Actor Input", Category = "UnifiedScript|Verification", Tooltip = "Applies one movement/look step and returns X/Y/Yaw as one value payload.")]
+    public global::UnifiedScript.Unreal.UnrealVector ApplyBenchmarkActorInput(float moveForward, float moveRight, float lookHorizontal, float lookVertical)
+        => Invoke<global::UnifiedScript.Unreal.UnrealVector, float, float, float, float>(0x769517D414F686CBUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ApplyBenchmarkActorInput", moveForward, moveRight, lookHorizontal, lookVertical);
+
     [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Broadcast Benchmark Signal", Category = "UnifiedScript|Verification", Tooltip = "Broadcast Benchmark Signal")]
     public void BroadcastBenchmarkSignal(int value, float weight, bool bEnabled, global::UnifiedScript.Unreal.UnrealObjectHandle context)
         => Invoke<int, float, bool, global::UnifiedScript.Unreal.UnrealObjectHandle>(0xA0B8BE8C8E099CB5UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:BroadcastBenchmarkSignal", value, weight, bEnabled, context);
@@ -280,6 +284,10 @@ public sealed partial class UnifiedScriptComponent : global::UnifiedScript.Unrea
     [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Reset All Script State Overrides", Category = "UnifiedScript|State", Tooltip = "Restores every state to the current C# declaration defaults.")]
     public bool ResetAllScriptStateOverrides()
         => Invoke<bool>(0xC347BF5BD20AACE0UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ResetAllScriptStateOverrides");
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Reset Benchmark Actor State", Category = "UnifiedScript|Verification", Tooltip = "Resets the deterministic native Actor state used by frame workloads.")]
+    public void ResetBenchmarkActorState()
+        => Invoke(0xBAFA94D3AA91251BUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ResetBenchmarkActorState");
 
     [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Reset Script State Override", Category = "UnifiedScript|State", Tooltip = "Restores one state to the current C# declaration default.")]
     public bool ResetScriptStateOverride(string name)
