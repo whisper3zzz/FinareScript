@@ -33,6 +33,8 @@ $unifiedProject = Join-Path $unifiedRoot 'BlockBreaker.uproject'
 $unifiedRunner = Join-Path $unifiedRoot 'Tools\run_unifiedscript_demo.ps1'
 $migrationAudit = Join-Path $PSScriptRoot 'audit-blockbreaker-migration.ps1'
 $captureWriter = Join-Path $PSScriptRoot 'write-workload-capture.ps1'
+$runtimeIdentityScript = Join-Path $PSScriptRoot `
+    'get-runtime-source-identity.ps1'
 $suiteManifestPath = Join-Path $repoRoot 'benchmarks\unreal\workload-suite.v0.1.json'
 $unifiedMap = '/Game/BlockBreaker/Maps/TutorialMap?game=/Script/BlockBreaker.UnifiedScriptBlockBreakerGameMode'
 $totalGameplayFrames = $WarmupFrames + $Frames
@@ -47,6 +49,7 @@ if ([string]::IsNullOrWhiteSpace($PackageMetricsPath)) {
 foreach ($required in @(
     $buildBat, $editorCmd, $puertsRoot, $unifiedRoot, $puertsProject,
     $unifiedProject, $unifiedRunner, $migrationAudit, $captureWriter,
+    $runtimeIdentityScript,
     $suiteManifestPath, $PackageMetricsPath)) {
     if (-not (Test-Path -LiteralPath $required)) {
         throw "Required gameplay comparison path does not exist: $required"
@@ -76,6 +79,23 @@ if ($packageMetrics.schemaVersion -ne
 }
 $puertsPackageSizeBytes = [uint64]$packageMetrics.puerts.packageSizeBytes
 $unifiedPackageSizeBytes = [uint64]$packageMetrics.unifiedScript.packageSizeBytes
+
+function Get-RuntimeSourceIdentity(
+    [string]$EngineId,
+    [string]$Root) {
+    $output = @(& $runtimeIdentityScript `
+        -EngineId $EngineId `
+        -RepositoryRoot $Root)
+    if ($LASTEXITCODE -ne 0 -or $output.Count -ne 1 -or
+        -not $output[0].StartsWith('sha256:')) {
+        throw "Cannot resolve $EngineId runtime source identity under $Root."
+    }
+    return $output[0]
+}
+
+$puertsRuntimeSourceIdentity = Get-RuntimeSourceIdentity 'puerts' $puertsRoot
+$unifiedRuntimeSourceIdentity = Get-RuntimeSourceIdentity `
+    'unifiedScript' $repoRoot
 
 $suiteManifest = Get-Content -LiteralPath $suiteManifestPath -Raw |
     ConvertFrom-Json
@@ -297,6 +317,7 @@ if ($Trials -gt 1) {
         workload = $first.workload
         puerts = [ordered]@{
             commit = $first.puerts.commit
+            runtimeSourceIdentity = $first.puerts.runtimeSourceIdentity
             elapsedMilliseconds = $puertsElapsed
             framesPerSecond = $Frames * 1000.0 / $puertsElapsed
             scriptMovementFrames = $Frames
@@ -329,6 +350,7 @@ if ($Trials -gt 1) {
         }
         unifiedScript = [ordered]@{
             commit = $first.unifiedScript.commit
+            runtimeSourceIdentity = $first.unifiedScript.runtimeSourceIdentity
             elapsedMilliseconds = $unifiedElapsed
             framesPerSecond = $Frames * 1000.0 / $unifiedElapsed
             shots = 1
@@ -569,6 +591,7 @@ $result = [ordered]@{
     }
     puerts = [ordered]@{
         commit = $puertsCommit
+        runtimeSourceIdentity = $puertsRuntimeSourceIdentity
         elapsedMilliseconds = $puertsElapsed
         framesPerSecond = [double]$puertsMatch.Groups[5].Value
         scriptMovementFrames = [int]$puertsScriptMatch.Groups[1].Value
@@ -601,6 +624,7 @@ $result = [ordered]@{
     }
     unifiedScript = [ordered]@{
         commit = $unifiedCommit
+        runtimeSourceIdentity = $unifiedRuntimeSourceIdentity
         elapsedMilliseconds = $unifiedElapsed
         framesPerSecond = [double]$unifiedMatch.Groups[5].Value
         shots = [int]$metricsMatch.Groups[2].Value
@@ -706,7 +730,7 @@ if ($WriteSuiteCaptures) {
         & $captureWriter `
             -EngineId $runtime.Id `
             -RuntimeVersion (Get-PluginVersion $runtime.Descriptor) `
-            -RuntimeCommit $runtime.Result.commit `
+            -RuntimeCommit $runtime.Result.runtimeSourceIdentity `
             -WorkloadId 'blockbreaker-complete' `
             -Trial $SuiteTrial `
             -MetricsPath $metricsPath `

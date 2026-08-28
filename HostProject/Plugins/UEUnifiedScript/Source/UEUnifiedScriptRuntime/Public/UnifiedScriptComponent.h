@@ -18,6 +18,17 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
     UObject*,
     Context);
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(
+    FUnifiedScriptBenchmarkSignal,
+    int32,
+    Value,
+    float,
+    Weight,
+    bool,
+    bEnabled,
+    UObject*,
+    Context);
+
 UCLASS(BlueprintType, Blueprintable, ClassGroup=(UnifiedScript), meta=(BlueprintSpawnableComponent))
 class UEUNIFIEDSCRIPTRUNTIME_API UUnifiedScriptComponent : public UActorComponent
 {
@@ -29,6 +40,10 @@ public:
     /** General reflected event used by the end-to-end managed subscription demo. */
     UPROPERTY(BlueprintAssignable, Category="UnifiedScript|Events")
     FUnifiedScriptManagedSignal OnManagedSignal;
+
+    /** Four-value event used by the versioned representative delegate workload. */
+    UPROPERTY(BlueprintAssignable, Category="UnifiedScript|Verification")
+    FUnifiedScriptBenchmarkSignal OnBenchmarkSignal;
 
     /** Preferred project asset selected from the Content Browser. */
     UPROPERTY(EditAnywhere, Category="UnifiedScript", meta=(DisplayName="Script Asset"))
@@ -164,8 +179,25 @@ public:
     UFUNCTION(BlueprintPure, Category="UnifiedScript|Verification")
     int32 Add(int32 Left, int32 Right) const;
 
+    UFUNCTION(BlueprintPure, Category="UnifiedScript|Verification")
+    FVector AddBenchmarkVector(FVector Left, FVector Right) const;
+
+    UFUNCTION(BlueprintPure, Category="UnifiedScript|Verification")
+    TArray<int32> EchoBenchmarkArray(const TArray<int32>& Values) const;
+
+    UFUNCTION(BlueprintPure, Category="UnifiedScript|Verification")
+    TMap<int32, int32> EchoBenchmarkMap(
+        const TMap<int32, int32>& Values) const;
+
     UFUNCTION(BlueprintCallable, Category="UnifiedScript|Verification")
     void BroadcastManagedSignal(int32 Value, UObject* Context);
+
+    UFUNCTION(BlueprintCallable, Category="UnifiedScript|Verification")
+    void BroadcastBenchmarkSignal(
+        int32 Value,
+        float Weight,
+        bool bEnabled,
+        UObject* Context);
 
     bool ConsumeReloadRequest();
 

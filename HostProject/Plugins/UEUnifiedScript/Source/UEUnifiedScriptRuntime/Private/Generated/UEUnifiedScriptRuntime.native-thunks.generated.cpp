@@ -644,8 +644,20 @@ bool UE::UnifiedScript::Generated::DescribeInvokeResultCount(
     case 0xB324FB910D9CED26ull:
         OutResultCount = 1;
         return true;
+    case 0x77CFB076C1B341BAull:
+        OutResultCount = 1;
+        return true;
+    case 0xA0B8BE8C8E099CB5ull:
+        OutResultCount = 0;
+        return true;
     case 0x5792FF1D76148D17ull:
         OutResultCount = 0;
+        return true;
+    case 0xBE44D2D4997B0D6Aull:
+        OutResultCount = 1;
+        return true;
+    case 0xDD3A900D2156CB5Dull:
+        OutResultCount = 1;
         return true;
     case 0x5B7CEF7BDAF29749ull:
         OutResultCount = 1;
@@ -826,8 +838,40 @@ bool UE::UnifiedScript::Generated::DescribeInvokeResult(
         default:
             return false;
         }
+    case 0x77CFB076C1B341BAull:
+        switch (ResultIndex)
+        {
+        case 0:
+            OutKind = EUnifiedScriptValueKind::Vector;
+            OutTypeId = 0ull;
+            return true;
+        default:
+            return false;
+        }
+    case 0xA0B8BE8C8E099CB5ull:
+        return false;
     case 0x5792FF1D76148D17ull:
         return false;
+    case 0xBE44D2D4997B0D6Aull:
+        switch (ResultIndex)
+        {
+        case 0:
+            OutKind = EUnifiedScriptValueKind::Array;
+            OutTypeId = 0x8741EF3A9173905Aull;
+            return true;
+        default:
+            return false;
+        }
+    case 0xDD3A900D2156CB5Dull:
+        switch (ResultIndex)
+        {
+        case 0:
+            OutKind = EUnifiedScriptValueKind::Map;
+            OutTypeId = 0x3E306C6279FBDED7ull;
+            return true;
+        default:
+            return false;
+        }
     case 0x5B7CEF7BDAF29749ull:
         switch (ResultIndex)
         {
@@ -2456,6 +2500,85 @@ bool UE::UnifiedScript::Generated::Invoke(
         Succeed(OutResult);
         return true;
     }
+    case 0x77CFB076C1B341BAull:
+    {
+        if (!RequireArgumentCount(Arguments, 2, OutResult))
+        {
+            return false;
+        }
+        UUnifiedScriptComponent* TypedTarget = ResolveTarget<UUnifiedScriptComponent>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        FVector Argument0 = {};
+        if (!Arguments[0].TryGetVector(Argument0))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:AddBenchmarkVector' received an incompatible value."));
+        }
+        FVector Argument1 = {};
+        if (!Arguments[1].TryGetVector(Argument1))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:AddBenchmarkVector' received an incompatible value."));
+        }
+        FVector ReturnValue = TypedTarget->AddBenchmarkVector(Argument0, Argument1);
+        OutReturnValue = FUnifiedScriptValue::FromVector(ReturnValue);
+        Succeed(OutResult);
+        return true;
+    }
+    case 0xA0B8BE8C8E099CB5ull:
+    {
+        if (!RequireArgumentCount(Arguments, 4, OutResult))
+        {
+            return false;
+        }
+        UUnifiedScriptComponent* TypedTarget = ResolveTarget<UUnifiedScriptComponent>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        int32 Argument0 = 0;
+        if (!Arguments[0].TryGetInt32(Argument0))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:BroadcastBenchmarkSignal' received an incompatible value."));
+        }
+        float Argument1 = 0.0f;
+        if (!Arguments[1].TryGetFloat32(Argument1))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:BroadcastBenchmarkSignal' received an incompatible value."));
+        }
+        bool Argument2 = false;
+        if (!Arguments[2].TryGetBoolean(Argument2))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:BroadcastBenchmarkSignal' received an incompatible value."));
+        }
+        UObject* Argument3 = nullptr;
+        if (!DecodeObject(Registry, Arguments[3], false, Argument3, OutResult))
+        {
+            return false;
+        }
+        TypedTarget->BroadcastBenchmarkSignal(Argument0, Argument1, Argument2, Argument3);
+        OutReturnValue = {};
+        Succeed(OutResult);
+        return true;
+    }
     case 0x5792FF1D76148D17ull:
     {
         if (!RequireArgumentCount(Arguments, 2, OutResult))
@@ -2483,6 +2606,111 @@ bool UE::UnifiedScript::Generated::Invoke(
         }
         TypedTarget->BroadcastManagedSignal(Argument0, Argument1);
         OutReturnValue = {};
+        Succeed(OutResult);
+        return true;
+    }
+    case 0xBE44D2D4997B0D6Aull:
+    {
+        if (!RequireArgumentCount(Arguments, 1, OutResult))
+        {
+            return false;
+        }
+        UUnifiedScriptComponent* TypedTarget = ResolveTarget<UUnifiedScriptComponent>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        TConstArrayView<FUnifiedScriptValue> Argument0Values;
+        if (!Arguments[0].TryGetArray(0x8741EF3A9173905Aull, Argument0Values))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:EchoBenchmarkArray' received an incompatible container value."));
+        }
+        TArray<int32> Argument0;
+        Argument0.Reserve(Argument0Values.Num());
+        for (const FUnifiedScriptValue& Argument0Cell : Argument0Values)
+        {
+            int32 Argument0Element = 0;
+            if (!Argument0Cell.TryGetInt32(Argument0Element))
+            {
+                return Fail(
+                    OutResult,
+                    EUnifiedScriptInvocationError::ValueTypeMismatch,
+                    TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:EchoBenchmarkArray' received an incompatible value."));
+            }
+            Argument0.Add(MoveTemp(Argument0Element));
+        }
+        TArray<int32> ReturnValue = TypedTarget->EchoBenchmarkArray(Argument0);
+        TArray<FUnifiedScriptValue> OutReturnValueCells;
+        OutReturnValueCells.Reserve(ReturnValue.Num());
+        for (const auto& OutReturnValueElement : ReturnValue)
+        {
+            FUnifiedScriptValue EncodedElement;
+            EncodedElement = FUnifiedScriptValue::FromInt32(OutReturnValueElement);
+            OutReturnValueCells.Add(MoveTemp(EncodedElement));
+        }
+        OutReturnValue = FUnifiedScriptValue::FromArray(MoveTemp(OutReturnValueCells), 0x8741EF3A9173905Aull);
+        Succeed(OutResult);
+        return true;
+    }
+    case 0xDD3A900D2156CB5Dull:
+    {
+        if (!RequireArgumentCount(Arguments, 1, OutResult))
+        {
+            return false;
+        }
+        UUnifiedScriptComponent* TypedTarget = ResolveTarget<UUnifiedScriptComponent>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        OutOutputValues.Reset();
+        TConstArrayView<FUnifiedScriptValue> Argument0Values;
+        if (!Arguments[0].TryGetMap(0x3E306C6279FBDED7ull, Argument0Values))
+        {
+            return Fail(
+                OutResult,
+                EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:EchoBenchmarkMap' received an incompatible container value."));
+        }
+        TMap<int32,int32> Argument0;
+        Argument0.Reserve(Argument0Values.Num() / 2);
+        for (int32 Argument0Index = 0; Argument0Index < Argument0Values.Num(); Argument0Index += 2)
+        {
+            int32 Argument0Key = 0;
+            if (!Argument0Values[Argument0Index].TryGetInt32(Argument0Key))
+            {
+                return Fail(
+                    OutResult,
+                    EUnifiedScriptInvocationError::ValueTypeMismatch,
+                    TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:EchoBenchmarkMap' received an incompatible value."));
+            }
+            int32 Argument0MappedValue = 0;
+            if (!Argument0Values[Argument0Index + 1].TryGetInt32(Argument0MappedValue))
+            {
+                return Fail(
+                    OutResult,
+                    EUnifiedScriptInvocationError::ValueTypeMismatch,
+                    TEXT("Generated native member '/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:EchoBenchmarkMap' received an incompatible value."));
+            }
+            Argument0.Add(MoveTemp(Argument0Key), MoveTemp(Argument0MappedValue));
+        }
+        TMap<int32,int32> ReturnValue = TypedTarget->EchoBenchmarkMap(Argument0);
+        TArray<FUnifiedScriptValue> OutReturnValueCells;
+        OutReturnValueCells.Reserve(ReturnValue.Num() * 2);
+        for (const auto& OutReturnValueEntry : ReturnValue)
+        {
+            FUnifiedScriptValue EncodedKey;
+            EncodedKey = FUnifiedScriptValue::FromInt32(OutReturnValueEntry.Key);
+            FUnifiedScriptValue EncodedMappedValue;
+            EncodedMappedValue = FUnifiedScriptValue::FromInt32(OutReturnValueEntry.Value);
+            OutReturnValueCells.Add(MoveTemp(EncodedKey));
+            OutReturnValueCells.Add(MoveTemp(EncodedMappedValue));
+        }
+        OutReturnValue = FUnifiedScriptValue::FromMap(MoveTemp(OutReturnValueCells), 0x3E306C6279FBDED7ull);
         Succeed(OutResult);
         return true;
     }
@@ -3912,6 +4140,110 @@ bool UE::UnifiedScript::Generated::InvokeFixed(
         (*OutReturnValue) = {};
         (*OutReturnValue).Kind = EUnifiedScriptNativeValueKindV3::Int32;
         (*OutReturnValue).Payload0 = static_cast<uint64>(ReturnValue);
+        Succeed(OutResult);
+        return true;
+    }
+    case 0x77CFB076C1B341BAull:
+    {
+        if (Arguments.Num() != 2)
+        {
+            return Fail(OutResult, EUnifiedScriptInvocationError::ArgumentCountMismatch,
+                TEXT("Generated fixed thunk requires 2 arguments."));
+        }
+        UUnifiedScriptComponent* TypedTarget = ResolveTarget<UUnifiedScriptComponent>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        if (OutReturnValue == nullptr || OutReturnValue->Kind != EUnifiedScriptNativeValueKindV3::Vector3)
+        {
+            return Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated fixed thunk result descriptor is incompatible."));
+        }
+        if (Arguments[0].Kind != EUnifiedScriptNativeValueKindV3::Vector3)
+        {
+            return Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated fixed argument has an incompatible value kind."));
+        }
+        double Argument0Component0 = 0.0;
+        FMemory::Memcpy(&Argument0Component0, &Arguments[0].Payload0, sizeof(double));
+        double Argument0Component1 = 0.0;
+        FMemory::Memcpy(&Argument0Component1, &Arguments[0].Payload1, sizeof(double));
+        double Argument0Component2 = 0.0;
+        FMemory::Memcpy(&Argument0Component2, &Arguments[0].Payload2, sizeof(double));
+        FVector Argument0(Argument0Component0, Argument0Component1, Argument0Component2);
+        if (Arguments[1].Kind != EUnifiedScriptNativeValueKindV3::Vector3)
+        {
+            return Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated fixed argument has an incompatible value kind."));
+        }
+        double Argument1Component0 = 0.0;
+        FMemory::Memcpy(&Argument1Component0, &Arguments[1].Payload0, sizeof(double));
+        double Argument1Component1 = 0.0;
+        FMemory::Memcpy(&Argument1Component1, &Arguments[1].Payload1, sizeof(double));
+        double Argument1Component2 = 0.0;
+        FMemory::Memcpy(&Argument1Component2, &Arguments[1].Payload2, sizeof(double));
+        FVector Argument1(Argument1Component0, Argument1Component1, Argument1Component2);
+        FVector ReturnValue = TypedTarget->AddBenchmarkVector(Argument0, Argument1);
+        (*OutReturnValue) = {};
+        (*OutReturnValue).Kind = EUnifiedScriptNativeValueKindV3::Vector3;
+        const double ReturnComponent0 = ReturnValue.X;
+        FMemory::Memcpy(&(*OutReturnValue).Payload0, &ReturnComponent0, sizeof(double));
+        const double ReturnComponent1 = ReturnValue.Y;
+        FMemory::Memcpy(&(*OutReturnValue).Payload1, &ReturnComponent1, sizeof(double));
+        const double ReturnComponent2 = ReturnValue.Z;
+        FMemory::Memcpy(&(*OutReturnValue).Payload2, &ReturnComponent2, sizeof(double));
+        Succeed(OutResult);
+        return true;
+    }
+    case 0xA0B8BE8C8E099CB5ull:
+    {
+        if (Arguments.Num() != 4)
+        {
+            return Fail(OutResult, EUnifiedScriptInvocationError::ArgumentCountMismatch,
+                TEXT("Generated fixed thunk requires 4 arguments."));
+        }
+        UUnifiedScriptComponent* TypedTarget = ResolveTarget<UUnifiedScriptComponent>(Target, TEXT("/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent"), OutResult);
+        if (TypedTarget == nullptr)
+        {
+            return false;
+        }
+        if (OutReturnValue != nullptr)
+        {
+            return Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated fixed thunk result descriptor is incompatible."));
+        }
+        if (Arguments[0].Kind != EUnifiedScriptNativeValueKindV3::Int32)
+        {
+            return Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated fixed argument has an incompatible value kind."));
+        }
+        int32 Argument0 = static_cast<int32>(Arguments[0].Payload0);
+        if (Arguments[1].Kind != EUnifiedScriptNativeValueKindV3::Float32)
+        {
+            return Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated fixed argument has an incompatible value kind."));
+        }
+        const uint32 Argument1Bits = static_cast<uint32>(Arguments[1].Payload0);
+        float Argument1 = 0.0f;
+        FMemory::Memcpy(&Argument1, &Argument1Bits, sizeof(float));
+        if (Arguments[2].Kind != EUnifiedScriptNativeValueKindV3::Boolean)
+        {
+            return Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated fixed argument has an incompatible value kind."));
+        }
+        bool Argument2 = Arguments[2].Payload0 != 0;
+        if (Arguments[3].Kind != EUnifiedScriptNativeValueKindV3::Object)
+        {
+            return Fail(OutResult, EUnifiedScriptInvocationError::ValueTypeMismatch,
+                TEXT("Generated fixed argument has an incompatible value kind."));
+        }
+        UObject* Argument3 = nullptr;
+        if (!DecodeFixedObject(Registry, Arguments[3], Argument3, OutResult))
+        {
+            return false;
+        }
+        TypedTarget->BroadcastBenchmarkSignal(Argument0, Argument1, Argument2, Argument3);
         Succeed(OutResult);
         return true;
     }

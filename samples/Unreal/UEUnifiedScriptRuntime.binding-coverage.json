@@ -8,13 +8,13 @@
   },
   "summary": {
     "typeCount": 7,
-    "memberCount": 103,
-    "directThunkCount": 25,
-    "callFrameCount": 76,
+    "memberCount": 108,
+    "directThunkCount": 27,
+    "callFrameCount": 78,
     "dataPlaneOperationCount": 0,
-    "reflectionFallbackCount": 2,
+    "reflectionFallbackCount": 3,
     "rejectedCount": 0,
-    "nativeThunkCount": 101,
+    "nativeThunkCount": 105,
     "deferredTypeCount": 0
   },
   "baseline": {
@@ -271,10 +271,42 @@
       "message": ""
     },
     {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:AddBenchmarkVector",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:BroadcastBenchmarkSignal",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+      "kind": "function",
+      "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:BroadcastManagedSignal",
       "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
       "kind": "function",
       "disposition": "directThunk",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:EchoBenchmarkArray",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+      "kind": "function",
+      "disposition": "callFrame",
+      "diagnosticCodes": [],
+      "message": ""
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:EchoBenchmarkMap",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+      "kind": "function",
+      "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
     },
@@ -341,6 +373,16 @@
       "disposition": "callFrame",
       "diagnosticCodes": [],
       "message": ""
+    },
+    {
+      "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:OnBenchmarkSignal",
+      "ownerPath": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent",
+      "kind": "delegate",
+      "disposition": "reflectionFallback",
+      "diagnosticCodes": [
+        "USUE4101"
+      ],
+      "message": "Delegate delivery uses the generation-safe native event proxy and reflected signature."
     },
     {
       "path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:OnManagedSignal",

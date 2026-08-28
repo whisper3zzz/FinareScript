@@ -1531,9 +1531,37 @@ int32 UUnifiedScriptComponent::Add(int32 Left, int32 Right) const
     return Left + Right;
 }
 
+FVector UUnifiedScriptComponent::AddBenchmarkVector(
+    FVector Left,
+    FVector Right) const
+{
+    return Left + Right;
+}
+
+TArray<int32> UUnifiedScriptComponent::EchoBenchmarkArray(
+    const TArray<int32>& Values) const
+{
+    return Values;
+}
+
+TMap<int32, int32> UUnifiedScriptComponent::EchoBenchmarkMap(
+    const TMap<int32, int32>& Values) const
+{
+    return Values;
+}
+
 void UUnifiedScriptComponent::BroadcastManagedSignal(int32 Value, UObject* Context)
 {
     OnManagedSignal.Broadcast(Value, Context);
+}
+
+void UUnifiedScriptComponent::BroadcastBenchmarkSignal(
+    int32 Value,
+    float Weight,
+    bool bEnabled,
+    UObject* Context)
+{
+    OnBenchmarkSignal.Broadcast(Value, Weight, bEnabled, Context);
 }
 
 bool UUnifiedScriptComponent::ConsumeReloadRequest()

@@ -193,6 +193,25 @@ public sealed partial class UnifiedScriptComponent : global::UnifiedScript.Unrea
         set => WriteProperty(0x23071804223C4DFFUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:bTickAutomatically", value);
     }
 
+    public delegate void OnBenchmarkSignalHandler(int value, float weight, bool bEnabled, global::UnifiedScript.Unreal.UnrealObjectHandle context);
+
+    public static global::UnifiedScript.Unreal.UnrealEventDescriptor OnBenchmarkSignalEvent { get; } = new(
+        0xEC7B966FD7045ED9UL,
+        "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:OnBenchmarkSignal",
+        "/Script/UEUnifiedScriptRuntime.UnifiedScriptBenchmarkSignal__DelegateSignature",
+        typeof(void),
+        global::UnifiedScript.Unreal.UnrealDelegateKind.Multicast,
+        [
+            new("Value", typeof(int), global::UnifiedScript.Unreal.UnrealParameterDirection.Input),
+            new("Weight", typeof(float), global::UnifiedScript.Unreal.UnrealParameterDirection.Input),
+            new("bEnabled", typeof(bool), global::UnifiedScript.Unreal.UnrealParameterDirection.Input),
+            new("Context", typeof(global::UnifiedScript.Unreal.UnrealObjectHandle), global::UnifiedScript.Unreal.UnrealParameterDirection.Input),
+        ]);
+
+    [global::UnifiedScript.Unreal.UnrealEventEndpointAttribute("/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:OnBenchmarkSignal")]
+    public global::UnifiedScript.Unreal.IUnrealEventSubscription SubscribeOnBenchmarkSignal(OnBenchmarkSignalHandler handler)
+        => SubscribeEvent(OnBenchmarkSignalEvent, handler);
+
     public delegate void OnManagedSignalHandler(int value, global::UnifiedScript.Unreal.UnrealObjectHandle context);
 
     public static global::UnifiedScript.Unreal.UnrealEventDescriptor OnManagedSignalEvent { get; } = new(
@@ -214,9 +233,25 @@ public sealed partial class UnifiedScriptComponent : global::UnifiedScript.Unrea
     public int Add(int left, int right)
         => Invoke<int, int, int>(0xB324FB910D9CED26UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:Add", left, right);
 
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Add Benchmark Vector", Category = "UnifiedScript|Verification", Tooltip = "Add Benchmark Vector")]
+    public global::UnifiedScript.Unreal.UnrealVector AddBenchmarkVector(global::UnifiedScript.Unreal.UnrealVector left, global::UnifiedScript.Unreal.UnrealVector right)
+        => Invoke<global::UnifiedScript.Unreal.UnrealVector, global::UnifiedScript.Unreal.UnrealVector, global::UnifiedScript.Unreal.UnrealVector>(0x77CFB076C1B341BAUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:AddBenchmarkVector", left, right);
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Broadcast Benchmark Signal", Category = "UnifiedScript|Verification", Tooltip = "Broadcast Benchmark Signal")]
+    public void BroadcastBenchmarkSignal(int value, float weight, bool bEnabled, global::UnifiedScript.Unreal.UnrealObjectHandle context)
+        => Invoke<int, float, bool, global::UnifiedScript.Unreal.UnrealObjectHandle>(0xA0B8BE8C8E099CB5UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:BroadcastBenchmarkSignal", value, weight, bEnabled, context);
+
     [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Broadcast Managed Signal", Category = "UnifiedScript|Verification", Tooltip = "Broadcast Managed Signal")]
     public void BroadcastManagedSignal(int value, global::UnifiedScript.Unreal.UnrealObjectHandle context)
         => Invoke<int, global::UnifiedScript.Unreal.UnrealObjectHandle>(0x5792FF1D76148D17UL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:BroadcastManagedSignal", value, context);
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Echo Benchmark Array", Category = "UnifiedScript|Verification", Tooltip = "Echo Benchmark Array")]
+    public global::System.Collections.Generic.IReadOnlyList<int> EchoBenchmarkArray(global::System.Collections.Generic.IReadOnlyList<int> values)
+        => Invoke<global::System.Collections.Generic.IReadOnlyList<int>, global::System.Collections.Generic.IReadOnlyList<int>>(0xBE44D2D4997B0D6AUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:EchoBenchmarkArray", values);
+
+    [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Echo Benchmark Map", Category = "UnifiedScript|Verification", Tooltip = "Echo Benchmark Map")]
+    public global::System.Collections.Generic.IReadOnlyDictionary<int, int> EchoBenchmarkMap(global::System.Collections.Generic.IReadOnlyDictionary<int, int> values)
+        => Invoke<global::System.Collections.Generic.IReadOnlyDictionary<int, int>, global::System.Collections.Generic.IReadOnlyDictionary<int, int>>(0xDD3A900D2156CB5DUL, "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:EchoBenchmarkMap", values);
 
     [global::UnifiedScript.Unreal.UnrealBlueprintMetadataAttribute(DisplayName = "Get Script State Int 32", Category = "UnifiedScript|State", Tooltip = "Get Script State Int 32")]
     public int GetScriptStateInt32(string name, int fallback)

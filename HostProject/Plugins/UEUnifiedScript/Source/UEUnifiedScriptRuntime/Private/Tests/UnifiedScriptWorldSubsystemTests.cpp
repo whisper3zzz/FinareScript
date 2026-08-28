@@ -11,7 +11,9 @@
 #include "HAL/PlatformProperties.h"
 #include "HAL/PlatformTime.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/CommandLine.h"
 #include "Misc/EngineVersion.h"
+#include "Misc/Parse.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "UnifiedScriptComponent.h"
@@ -1203,6 +1205,172 @@ bool FUnifiedScriptManagedInteropPerformanceTest::RunTest(const FString& Paramet
         GcPauseMilliseconds,
         static_cast<unsigned long long>(MemoryHighWaterBytes),
         StartupMilliseconds);
+
+    Component->EndPlay(EEndPlayReason::Destroyed);
+    Component->UnregisterComponent();
+    World->RemoveFromRoot();
+    World->DestroyWorld(false);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FUnifiedScriptRepresentativeWorkloadPerformanceTest,
+    "UnifiedScript.Unreal.Performance.RepresentativeWorkload",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUnifiedScriptRepresentativeWorkloadPerformanceTest::RunTest(
+    const FString& Parameters)
+{
+    FString WorkloadId;
+    FParse::Value(
+        FCommandLine::Get(),
+        TEXT("UnifiedScriptRepresentativeWorkload="),
+        WorkloadId);
+    WorkloadId.TrimQuotesInline();
+    if (WorkloadId.IsEmpty())
+    {
+        AddInfo(TEXT(
+            "Representative workload is skipped without "
+            "-UnifiedScriptRepresentativeWorkload=<id>."));
+        return true;
+    }
+    const bool bStructContainer =
+        WorkloadId == TEXT("struct-container-transfer");
+    const bool bDelegateStorm = WorkloadId == TEXT("delegate-storm");
+    TestTrue(
+        *FString::Printf(TEXT("Representative workload is supported: %s"), *WorkloadId),
+        bStructContainer || bDelegateStorm);
+    if (!bStructContainer && !bDelegateStorm)
+    {
+        return false;
+    }
+
+    const int32 ExpectedWarmupIterations = bStructContainer ? 1024 : 4096;
+    const int32 ExpectedIterations = bStructContainer ? 16384 : 100000;
+    const int64 ExpectedCalls = bStructContainer ? 49152 : 200000;
+    const int64 ExpectedBytesCopied = bStructContainer ? 3276800 : 1700000;
+    const int64 ExpectedChecksum = bStructContainer ? 2424832 : 5000350000ll;
+
+    UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+    TestNotNull(TEXT("Representative workload World exists"), World);
+    if (World == nullptr)
+    {
+        return false;
+    }
+    World->AddToRoot();
+    UUnifiedScriptWorldSubsystem* Host =
+        World->GetSubsystem<UUnifiedScriptWorldSubsystem>();
+    TestNotNull(TEXT("Representative workload World host exists"), Host);
+    UUnifiedScriptComponent* Component =
+        NewObject<UUnifiedScriptComponent>(World);
+    UUnifiedScriptAsset* Asset = NewObject<UUnifiedScriptAsset>(World);
+    Asset->ScriptAssemblyPath =
+        TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.dll");
+    Asset->ScriptTypeName =
+        TEXT("UnifiedScript.Unreal.Demo.RepresentativeWorkloadBenchmarkScript");
+    Component->ScriptAsset = Asset;
+    Component->ManagedState = FString::Printf(TEXT("Run=%s"), *WorkloadId);
+    Component->RegisterComponentWithWorld(World);
+    Component->BeginPlay();
+    TestTrue(
+        *FString::Printf(
+            TEXT("Managed representative workload starts: %s"),
+            *Component->LastScriptError),
+        Component->bScriptRunning);
+
+    auto ReadField = [](const FString& State, const TCHAR* Name, FString& OutValue)
+    {
+        TArray<FString> Fields;
+        State.ParseIntoArray(Fields, TEXT(";"), true);
+        const FString Prefix = FString(Name) + TEXT("=");
+        for (const FString& Field : Fields)
+        {
+            if (Field.StartsWith(Prefix))
+            {
+                OutValue = Field.Mid(Prefix.Len());
+                return true;
+            }
+        }
+        return false;
+    };
+
+    FString ActualWorkload;
+    FString WarmupText;
+    FString IterationsText;
+    FString BridgeText;
+    FString CallsText;
+    FString BytesText;
+    FString AllocatedText;
+    FString GcCountText;
+    FString GcPauseText;
+    FString ChecksumText;
+    int32 WarmupIterations = 0;
+    int32 Iterations = 0;
+    double BridgeMilliseconds = 0.0;
+    int64 Calls = 0;
+    int64 BytesCopied = 0;
+    int64 AllocatedBytes = -1;
+    int32 GcCollectionCount = -1;
+    double GcPauseMilliseconds = -1.0;
+    int64 Checksum = 0;
+    const bool bParsed =
+        Component->ManagedState.StartsWith(TEXT("Representative:v1;")) &&
+        ReadField(Component->ManagedState, TEXT("Workload"), ActualWorkload) &&
+        ReadField(Component->ManagedState, TEXT("WarmupIterations"), WarmupText) &&
+        ReadField(Component->ManagedState, TEXT("Iterations"), IterationsText) &&
+        ReadField(Component->ManagedState, TEXT("BridgeTimeMilliseconds"), BridgeText) &&
+        ReadField(Component->ManagedState, TEXT("Calls"), CallsText) &&
+        ReadField(Component->ManagedState, TEXT("BytesCopied"), BytesText) &&
+        ReadField(Component->ManagedState, TEXT("AllocatedBytes"), AllocatedText) &&
+        ReadField(Component->ManagedState, TEXT("GcCollectionCount"), GcCountText) &&
+        ReadField(Component->ManagedState, TEXT("GcPauseMilliseconds"), GcPauseText) &&
+        ReadField(Component->ManagedState, TEXT("Checksum"), ChecksumText) &&
+        LexTryParseString(WarmupIterations, *WarmupText) &&
+        LexTryParseString(Iterations, *IterationsText) &&
+        LexTryParseString(BridgeMilliseconds, *BridgeText) &&
+        LexTryParseString(Calls, *CallsText) &&
+        LexTryParseString(BytesCopied, *BytesText) &&
+        LexTryParseString(AllocatedBytes, *AllocatedText) &&
+        LexTryParseString(GcCollectionCount, *GcCountText) &&
+        LexTryParseString(GcPauseMilliseconds, *GcPauseText) &&
+        LexTryParseString(Checksum, *ChecksumText);
+    TestTrue(
+        *FString::Printf(
+            TEXT("Representative workload result is parseable: %s"),
+            *Component->ManagedState),
+        bParsed);
+    TestEqual(TEXT("Workload identity is preserved"), ActualWorkload, WorkloadId);
+    TestEqual(
+        TEXT("Warm-up iteration count is frozen"),
+        WarmupIterations,
+        ExpectedWarmupIterations);
+    TestEqual(TEXT("Measured iteration count is frozen"), Iterations, ExpectedIterations);
+    TestEqual(TEXT("Bridge call count is frozen"), Calls, ExpectedCalls);
+    TestEqual(TEXT("Logical payload byte count is frozen"), BytesCopied, ExpectedBytesCopied);
+    TestEqual(TEXT("Workload checksum is stable"), Checksum, ExpectedChecksum);
+    TestTrue(TEXT("Bridge time is measurable"), BridgeMilliseconds > 0.0);
+    TestTrue(
+        TEXT("Managed allocation and GC evidence is non-negative"),
+        AllocatedBytes >= 0 && GcCollectionCount >= 0 &&
+        GcPauseMilliseconds >= 0.0);
+
+    const uint64 MemoryHighWaterBytes =
+        FPlatformMemory::GetStats().PeakUsedPhysical;
+    UE_LOG(
+        LogTemp,
+        Display,
+        TEXT("UNIFIEDSCRIPT_REPRESENTATIVE_WORKLOAD_JSON {\"schemaVersion\":\"unifiedscript.representative-workload/v0.1\",\"workloadId\":\"%s\",\"warmupIterations\":%d,\"iterations\":%d,\"bridgeTimeMilliseconds\":%.6f,\"calls\":%lld,\"bytesCopied\":%lld,\"allocatedBytes\":%lld,\"gcCollectionCount\":%d,\"gcPauseMilliseconds\":%.6f,\"memoryHighWaterBytes\":%llu,\"checksum\":%lld}"),
+        *WorkloadId,
+        WarmupIterations,
+        Iterations,
+        BridgeMilliseconds,
+        static_cast<long long>(Calls),
+        static_cast<long long>(BytesCopied),
+        static_cast<long long>(AllocatedBytes),
+        GcCollectionCount,
+        GcPauseMilliseconds,
+        static_cast<unsigned long long>(MemoryHighWaterBytes),
+        static_cast<long long>(Checksum));
 
     Component->EndPlay(EEndPlayReason::Destroyed);
     Component->UnregisterComponent();
