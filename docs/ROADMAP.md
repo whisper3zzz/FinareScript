@@ -64,7 +64,7 @@ machine-local unless an artifact explicitly says otherwise.
 | UnifiedScript comparison source | `5cf323e` (`perf: sync representative workload host`) |
 | Puerts comparison source | `be399cb` (`perf: register benchmark world context`) |
 | Managed tests | 566 / 566 passed |
-| Repository validator | 74 / 74 passed |
+| Repository validator | 75 / 75 passed |
 | UE 5.8.1 native build | passed |
 | `UnifiedScript.Unreal` Automation | 17 / 17 passed, including bounded crash breadcrumbs, failure containment, deterministic World shutdown, workload collectors, gameplay-profiler attribution, Authoring Surface, live World semantic pause/step/reload/detach, and repeated success/failure hot-reload leak coverage |
 | M10.2 generated-channel profile | 1,024 rows x 3 median samples: container binding 25,371.973 ns/row, generated snapshot 1.270 ns/row (ratio 0.000050), buffered events 0.586 ns/row, zero managed allocation |
@@ -1267,7 +1267,7 @@ as `not-declared`. Evidence is
 
 - [x] publish compatibility policy and migrations for schemas, artifacts,
   bindings, Script Assets, ABI tables, saved graph layout, and generated code
-- [ ] add clean CI lanes for managed tests, deterministic generation, UE build,
+- [x] add clean CI lanes for managed tests, deterministic generation, UE build,
   Automation, package smoke, workload performance, and SDK installation
 - [ ] support diagnostics bundles and reproducible reports without collecting
   project source or sensitive content by default
@@ -1284,7 +1284,19 @@ remains. Five focused legacy/future/chunk/atomicity tests and
 scan reported 10/10 current artifacts, while two identical 174-file SDK builds
 produced SHA-256
 `9a6d3b92b6fccf924c669b23c7a33803552094de7f7fe8b41d0b9450bdb79133`.
-The next slice is the clean CI lane matrix.
+
+M11.3 CI evidence (2026-08-28): `.github/workflows/ci.yml` and
+`tools/run-ci-lane.ps1` define seven isolated lanes with clean-tree and empty
+output preflight, per-phase logs, failure-safe `unifiedscript.ci-lane/v0.1`
+reports, PR-safe hosted lanes, and exact UE 5.8.1 self-hosted lanes. Local
+execution passed clean Debug managed tests plus repository validation, and the
+generation lane reproduced all six C#/C++/node/coverage/data-plane files twice
+with hashes equal to the checked-in outputs. A detached clean worktree at
+`b0c67ad` kept `sourceDirty=false` through managed (27,811 ms), deterministic
+generation (10,387 ms), and a from-zero 208-action UE Editor build (68,665 ms);
+reports are under `artifacts/ci-clean/20260828-174511`. `docs/CI.md` owns runner
+labels, environment contracts, triggers, retry isolation, and failure routing.
+The remaining M11.3 slice is the privacy-safe diagnostics bundle.
 
 ### M11.4 — Compiled program image v2
 

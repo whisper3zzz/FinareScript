@@ -87,6 +87,7 @@ DOCUMENTS = [
     ROOT / "docs" / "UNREAL_RELEASE.md",
     ROOT / "docs" / "UNREAL_COMPATIBILITY_MATRIX.md",
     ROOT / "docs" / "VERSIONING_AND_UPGRADES.md",
+    ROOT / "docs" / "CI.md",
     ROOT / "docs" / "UNREAL_FIRST_SCRIPT.md",
     ROOT / "docs" / "ALPHA_ACCEPTANCE.md",
     ROOT / "docs" / "UNREAL_API_CONTRACT.md",
@@ -510,6 +511,65 @@ def main() -> int:
         "Versioned compatibility policy, deterministic migration, SDK payload, or guide is missing",
     )
     checks.append("versioned artifacts plan deterministic rewrite, regeneration, and rebuild upgrades")
+
+    ci_workflow_path = ROOT / ".github" / "workflows" / "ci.yml"
+    ci_lane_path = ROOT / "tools" / "run-ci-lane.ps1"
+    deterministic_gate_path = (
+        ROOT / "tools" / "run-deterministic-generation-gate.ps1"
+    )
+    ci_guide_path = ROOT / "docs" / "CI.md"
+    ci_workflow = ci_workflow_path.read_text(encoding="utf-8")
+    ci_lane = ci_lane_path.read_text(encoding="utf-8")
+    deterministic_gate = deterministic_gate_path.read_text(encoding="utf-8")
+    ci_guide = ci_guide_path.read_text(encoding="utf-8")
+    ci_lanes = {
+        "managed-tests",
+        "deterministic-generation",
+        "ue-build",
+        "unreal-automation",
+        "package-smoke",
+        "workload-performance",
+        "sdk-installation",
+    }
+    require(
+        ci_workflow_path.is_file()
+        and ci_lane_path.is_file()
+        and deterministic_gate_path.is_file()
+        and all(f"'{lane}'" in ci_lane for lane in ci_lanes)
+        and all(f"- {lane}" in ci_workflow for lane in ci_lanes - {
+            "managed-tests", "deterministic-generation"
+        })
+        and "-Lane managed-tests" in ci_workflow
+        and "-Lane deterministic-generation" in ci_workflow
+        and "-RequireCleanTree" in ci_workflow
+        and "runs-on: [self-hosted, Windows, X64, ue-5.8.1]" in ci_workflow
+        and "github.event_name != 'pull_request'" in ci_workflow
+        and "actions/checkout@v7" in ci_workflow
+        and "actions/setup-dotnet@v6" in ci_workflow
+        and "actions/setup-python@v7" in ci_workflow
+        and "actions/upload-artifact@v7" in ci_workflow
+        and "unifiedscript.ci-lane/v0.1" in ci_lane
+        and "'-c', 'Debug'" in ci_lane
+        and "sourceDirty" in ci_lane
+        and "CI lane output directory must be empty" in ci_lane
+        and "run-complete-workload-suite.ps1" in ci_lane
+        and "-RequireComplete" in ci_lane
+        and "status -ne 'qualified'" in ci_lane
+        and "run-unreal-compatibility-matrix.ps1" in ci_lane
+        and "[switch]$RequireComplete" in (
+            ROOT / "comparison" / "run-complete-workload-suite.ps1"
+        ).read_text(encoding="utf-8")
+        and "**/*.json" in ci_workflow
+        and "**/*.zip" not in ci_workflow
+        and "unifiedscript.deterministic-generation-gate/v0.1"
+        in deterministic_gate
+        and "matchesSecondRun" in deterministic_gate
+        and "matchesCheckedIn" in deterministic_gate
+        and "seven independent release-candidate lanes" in ci_guide
+        and "2.327.1" in ci_guide,
+        "Clean CI lane matrix, deterministic gate, workflow isolation, or runner guide is missing",
+    )
+    checks.append("seven clean CI lanes isolate managed, generated, UE, package, performance, and SDK gates")
 
     scaffold_path = ROOT / "tools" / "new-unifiedscript-project.ps1"
     authoring_start_path = ROOT / "tools" / "start-unifiedscript-authoring.ps1"

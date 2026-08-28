@@ -1,0 +1,112 @@
+name: UnifiedScript CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: "0 18 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: unifiedscript-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  managed-tests:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          clean: true
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.201
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Run managed tests and repository validator
+        shell: powershell
+        run: >-
+          ./tools/run-ci-lane.ps1
+          -Lane managed-tests
+          -OutputDirectory artifacts/ci/managed-tests
+          -RequireCleanTree
+      - name: Upload managed lane report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-managed-tests
+          path: |
+            artifacts/ci/managed-tests/**/*.json
+            artifacts/ci/managed-tests/**/*.log
+            artifacts/ci/managed-tests/**/*.trx
+          if-no-files-found: error
+
+  deterministic-generation:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          clean: true
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.201
+      - name: Run generation twice and compare checked artifacts
+        shell: powershell
+        run: >-
+          ./tools/run-ci-lane.ps1
+          -Lane deterministic-generation
+          -OutputDirectory artifacts/ci/deterministic-generation
+          -RequireCleanTree
+      - name: Upload generation lane report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-deterministic-generation
+          path: |
+            artifacts/ci/deterministic-generation/**/*.json
+            artifacts/ci/deterministic-generation/**/*.log
+          if-no-files-found: error
+
+  unreal:
+    if: github.event_name != 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        lane:
+          - ue-build
+          - unreal-automation
+          - package-smoke
+          - workload-performance
+          - sdk-installation
+    runs-on: [self-hosted, Windows, X64, ue-5.8.1]
+    timeout-minutes: 480
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          clean: true
+      - name: Run UE release-candidate lane
+        shell: powershell
+        run: >-
+          ./tools/run-ci-lane.ps1
+          -Lane '${{ matrix.lane }}'
+          -OutputDirectory 'artifacts/ci/${{ matrix.lane }}'
+          -RequireCleanTree
+      - name: Upload UE lane report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-${{ matrix.lane }}
+          path: |
+            artifacts/ci/${{ matrix.lane }}/**/*.json
+            artifacts/ci/${{ matrix.lane }}/**/*.md
+            artifacts/ci/${{ matrix.lane }}/**/*.log
+            artifacts/ci/${{ matrix.lane }}/**/*.trx
+            artifacts/ci/${{ matrix.lane }}/**/*.txt
+          if-no-files-found: error

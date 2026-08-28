@@ -18,6 +18,7 @@ param(
     [string]$PackageMetricsPath,
     [switch]$Force,
     [switch]$PlanOnly,
+    [switch]$RequireComplete,
     [switch]$SkipBuild
 )
 
@@ -260,9 +261,13 @@ for ($suiteTrial = 1; $suiteTrial -le [int]$manifest.trialCount; ++$suiteTrial) 
     }
 }
 if ($missing.Count -gt 0) {
-    Write-Output (
+    $message = (
         "Suite remains resumable with $($missing.Count) pair(s) missing or stale: " +
         ($missing -join ', '))
+    if ($RequireComplete) {
+        throw $message
+    }
+    Write-Output $message
     return
 }
 
