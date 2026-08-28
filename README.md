@@ -618,6 +618,11 @@ See `docs/UNREAL_PERFORMANCE.md` for the fixed scenario and competitive gate.
 M10's representative nine-workload contract, strict matched-environment rules,
 and alternating trial schedule are documented in
 [`docs/PERFORMANCE_WORKLOAD_SUITE.md`](docs/PERFORMANCE_WORKLOAD_SUITE.md).
+The current UE 5.8.1 run completed all 54 scheduled captures. UnifiedScript's
+complete BlockBreaker p50/p95/p99 frame ratios are 0.898835/0.955283/0.959456
+and its bridge-time ratio is 0.336019, while direct scalar, container, delegate,
+and resource-flow workloads still lose. M10.2 therefore targets generated
+shared snapshots and buffered events before M10.3 evaluates any broad claim.
 
 Build, archive, and smoke-test the self-contained Win64 Development and
 Shipping packages:

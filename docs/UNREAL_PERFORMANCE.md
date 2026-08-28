@@ -48,11 +48,12 @@ powershell -ExecutionPolicy Bypass -File comparison/run-performance-comparison.p
 
 The latest local `artifacts/comparison/performance/comparison.json` uses the
 same machine, UE 5.8.1 Development Editor configuration, 4,096 warm-up calls,
-and five 100,000-call samples. Its current median is 128.113 ns per
-UnifiedScript call versus 143.811 ns per Puerts call, with zero managed
-allocation and all matched-workload gates passing. This claim applies only to
-the generated `int32 Add(int32, int32)` boundary; artifacts are regenerated
-locally and are not treated as portable cross-machine evidence.
+and five 100,000-call samples. The current formal three-trial suite median is
+168.016 ns per UnifiedScript call versus 138.69699 ns per Puerts call, a losing
+ratio of 1.211389. UnifiedScript still records zero managed allocation in the
+measured loop. This result applies only to the generated
+`int32 Add(int32, int32)` boundary; it is published as a loss and the artifacts
+are not treated as portable cross-machine evidence.
 
 ## BlockBreaker gameplay workload
 
@@ -74,10 +75,11 @@ completion events on the next managed frame. The runner prepares both runtimes
 once, performs only runtime work inside measured trials, alternates which
 runtime executes first to reduce build heat and ordering bias, and now runs the
 full 74-item migration audit before measurement. The latest local three-trial
-result reports zero legacy calls and a median of 4,599.308 ms for UnifiedScript
-versus 4,957.016 ms for Puerts (`UnifiedScript/Puerts = 0.927838`). Median frame
-time is 0.4222 ms versus 0.44745 ms. Every trial completed exactly one shot and
-one hit. The three elapsed ratios (0.962756, 0.921757, 0.884789) remain visible
-because this is machine-local evidence with real variance. All 13 M10.1 metrics
-are present, but allocation and reload retain runtime-specific collector
-semantics. This is a complete-game workload result, not a broad-suite claim.
+result reports zero legacy calls and p50/p95/p99 frame medians of
+0.5824/1.0596/1.4033 ms for UnifiedScript versus
+0.64795/1.1092/1.4626 ms for Puerts. The ratios are
+0.898835/0.955283/0.959456. Bridge time is 175.4974 ms versus 522.2836 ms
+(ratio 0.336019), and every trial completed exactly one shot and one hit. All
+13 M10.1 metrics are present, but allocation and reload retain runtime-specific
+collector semantics. The full 54-slot suite is published; its mixed workload
+results remain separate from the future M10.3 weighted claim.

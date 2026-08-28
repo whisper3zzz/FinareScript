@@ -49,7 +49,7 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-28**
 
 - Active milestone: **M10 — Performance architecture and honest Puerts comparison**
-- Next slice: **M10.1 — versioned representative workload suite and metrics**
+- Next slice: **M10.2 — generated shared container snapshots and buffered events**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -60,17 +60,19 @@ machine-local unless an artifact explicitly says otherwise.
 
 | Gate | Verified result |
 | --- | --- |
-| Main source | `3b6c2d0` (`fix: alternate scalar workload trial order`), plus the current complete-game collector slice |
-| UnifiedScript comparison source | `ec2989f` (`feat: complete unified gameplay metric capture`) |
-| Puerts comparison source | `e34e8b6` (`feat: complete puerts gameplay metric capture`) |
+| Runtime source baseline | `9f9f026` (`feat: complete representative workload collectors`) |
+| UnifiedScript comparison source | `e0c7110` (`feat: sync current unifiedscript runtime into demo`) |
+| Puerts comparison source | `5612b59` (`feat: benchmark puerts reload generations`) |
 | Managed tests | 542 / 542 passed |
 | Repository validator | 66 / 66 passed |
 | UE 5.8.1 native build | passed |
-| `UnifiedScript.Unreal` Automation | 15 / 15 passed, including full gameplay-profiler attribution, Authoring Surface, live World semantic pause/step/reload/detach, and repeated success/failure hot-reload leak coverage |
+| `UnifiedScript.Unreal` Automation | 16 / 16 passed, including workload collectors, gameplay-profiler attribution, Authoring Surface, live World semantic pause/step/reload/detach, and repeated success/failure hot-reload leak coverage |
+| Representative workload suite | 54 / 54 scheduled captures; nine workloads, three trials, two runtimes, matched machine/build identity, alternating runtime order |
 | BlockBreaker workload | 10,000 frames, three trials, one shot, one hit, two command completions per trial |
 | Gameplay boundary | generated ABI v3 fast/CallFrame path, zero legacy calls |
-| Matched local median | UnifiedScript 4,599.308 ms; Puerts 4,957.016 ms; ratio 0.927838; all three trials won, but scope is complete-game evidence only |
-| Matched package size | UnifiedScript 1,030,446,530 bytes; Puerts 1,009,484,249 bytes; ratio 1.020765 |
+| Matched BlockBreaker frame median | UnifiedScript 0.5824 ms; Puerts 0.64795 ms; ratio 0.898835; p95/p99 ratios 0.955283 / 0.959456 |
+| Matched BlockBreaker bridge median | UnifiedScript 175.4974 ms; Puerts 522.2836 ms; ratio 0.336019; calls and logical bytes are both 20% of Puerts |
+| Matched package size | UnifiedScript 1,032,716,821 bytes; Puerts 1,009,698,201 bytes; ratio 1.022798 |
 | Full migration audit | 74 / 74 inventory items, 19 / 19 shared assets, 40 / 40 generated thunks, zero legacy targets |
 | Deliverable smoke | 300 frames, one shot, one hit, two command completions, 3,631 fast/CallFrame calls, zero legacy calls |
 | Deliverable report | `artifacts/demo/blockbreaker-20260827-165719/demo-delivery.json` |
@@ -1070,64 +1072,37 @@ only on a selected scalar call.
 - [x] version workloads for scalar/property calls, struct/container transfer,
   delegate storms, per-frame Actor logic, mass entities, batch queries,
   resource/spawn flows, hot reload, and the complete BlockBreaker project
-- [ ] capture median, p95/p99 frame time, bridge time, calls, bytes copied,
+- [x] capture median, p95/p99 frame time, bridge time, calls, bytes copied,
   allocations, GC, memory high-water mark, startup, reload, and package size
-- [ ] alternate engines and trials, freeze inputs/assets/build configuration,
+- [x] alternate engines and trials, freeze inputs/assets/build configuration,
   record machine fingerprints, and reject unmatched comparisons
 
-Progress (2026-08-28): the checked-in v0.1 suite now pins one recipe for each of
-the nine required workload families, UE 5.8.1/WindowsEditor/Development Editor/
-NullRHI/fixed-60-Hz build inputs, per-workload recipe and asset digests, three
-trials, and the complete required-metric applicability matrix. Versioned engine
-result and comparison schemas require explicit null for inapplicable values and
-reject missing required values, failed/duplicate trials, invalid percentiles,
-manifest drift, unverifiable machine descriptors, different engine/build
-environments, and execution ordinals outside the deterministic 54-slot
-alternating schedule. `ue-workload-compare` publishes matched neutral or losing
-ratios without moving the future M10.3 gate. Raw measurements are now normalized
-against the manifest into resumable per-slot captures, stamped with live
-OS/CPU/memory/GPU and engine-build identities, and assembled only when all 27
-trials share one runtime commit and environment. The matched scalar runner now
-writes both scheduled trial captures automatically, actually reverses engine
-order on even trials, and can publish a losing sample without making
-`gates.fasterThanPuerts` pass. All three local UE 5.8.1 scalar trials now exist
-at ordinals 1/2, 19/20, and 37/38 under one machine/build fingerprint. The
-100,000-call medians were 14.3025 ms for UnifiedScript and 13.8434 ms for Puerts
-(ratio 1.0332); this is intentionally recorded as a loss, not presented as a
-product win. CLR cumulative allocation and V8 used-heap growth are retained as
-raw medians but receive no cross-runtime ratio. Batch Trace separately recorded
-1,024 queries through two boundary calls in 0.3950 ms with 360,448 transferred
-bytes and zero measured allocation/GC. The complete BlockBreaker runner now
-captures all 13 required metrics after an exact 300-frame warm-up, consumes a
-commit-matched package-size report, and writes normalized captures at ordinals
-17/18, 35/36, and 53/54. Its 10,000-frame medians were 4,599.308 ms for
-UnifiedScript and 4,957.016 ms for Puerts (ratio 0.927838); median frame time was
-0.4222 ms versus 0.44745 ms (ratio 0.943569). Individual elapsed ratios were
-0.962756, 0.921757, and 0.884789, and the UnifiedScript package was 2.08% larger.
-Reload values are retained as diagnostics because Puerts module-cache
-reexecution and a full UnifiedScript generation reload are not equivalent.
-The struct/container, four-argument delegate, per-frame Actor, 1,000-entity,
-batch-query, resource/spawn, and 100-generation hot-reload collectors now run
-through the same normalized two-runtime path. The live frame driver keeps its publication tick outside the measured
-window and records exact p50/p95/p99 samples. The resource collector calls the
-product WorldLibrary generated binding for 256 actual load/spawn/destroy rounds;
-trial 1 took 6.7588 ms versus Puerts at 13.702597 ms and produced scheduled
-captures at ordinals 13/14. In the first machine-local frame proofs,
-the matched 10,000-frame Actor envelope took 55.8038 ms in UnifiedScript versus
-165.4386 ms in Puerts; the 1,001,000-boundary entity workload took 222.7079 ms
-versus 727.1043 ms. UnifiedScript reported zero managed allocation/GC in both
-windows. The hot-reload proof recorded 1,549.0686 ms for 100 collectible
-assembly generations and reclamation versus 67.245603 ms for 100 Puerts module
-reexecutions plus V8 collection. It is retained as a mechanism-qualified
-diagnostic rather than a direct latency claim. These are collector proofs, not
-formal three-trial results. The
-542/542 managed suite, 66/66 repository invariants, UE 5.8.1 onboarding, and
-16/16 Unreal Automation tests pass. Every collector is now implemented. The
-complete-suite orchestrator can plan, resume, and validate all 27 matched pairs,
-rejecting stale runtime/machine/build identities before it skips a capture and
-assembling/comparing only a complete 54-slot schedule. Its current plan reports
-one current pair and 26 stale or missing pairs. M10.1 remains active while those
-pairs are recaptured under one runtime source identity and the final result is assembled.
+Completed (2026-08-28): suite v1.0.0 produced all 54 scheduled captures under
+one UE 5.8.1 machine/build fingerprint and the frozen runtime identities
+`sha256:73607b...a7a76b` (UnifiedScript) and
+`sha256:4e5f66...76cf0d` (Puerts). Each runtime assembled exactly 27 trials; the
+comparison verified all nine workload definitions, three-trial medians, and the
+odd/even alternating order. The checked-in schema rejects missing, duplicate,
+stale, dirty-mislabeled, mismatched-environment, or misordered evidence.
+
+The formal result is deliberately mixed. UnifiedScript wins the per-frame Actor
+(p50 ratio 0.342857), 1,000-entity (0.346390), Batch Trace (bridge ratio
+0.330878), and complete BlockBreaker workload (p50/p95/p99 ratios
+0.898835/0.955283/0.959456). In BlockBreaker, generated batching reduces bridge
+time to 33.60%, calls to 20%, and logical copied bytes to 20% of Puerts, with
+zero measured runtime GC collections in the window. It loses scalar calls
+(1.211389), struct/container transfer (6.734380), four-argument delegate
+dispatch (3.800531), and resource load/spawn/destroy (1.642611). UnifiedScript's
+matched package is 2.28% larger and startup is 5.13% slower in the complete
+workload. Allocation values stay ratio-free because CLR cumulative thread
+allocation and V8 used-heap growth are different collectors. Reload remains a
+mechanism-qualified diagnostic because collectible assembly generation reload
+and Puerts module-cache reexecution are not equivalent.
+
+This closes M10.1 without making the M10.3 broad-product claim. The measured
+losses make generated container snapshots and buffered delegate/event ingress
+the first M10.2 optimization slice; direct generated calls remain the safe
+fallback while data-plane schemas preserve World/generation ownership.
 
 ### M10.2 — Shared data and batching optimization
 

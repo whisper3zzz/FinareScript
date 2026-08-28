@@ -138,56 +138,44 @@ with data error exit code 65.
 
 ## Current integration boundary
 
-The live scalar, struct/container, four-argument delegate, per-frame Actor,
-1,000-entity, Batch Trace, resource/spawn, and hot-reload benchmarks now emit
-complete metric maps and have passed the raw-measurement/capture path on both runtimes.
-All three matched
-scalar trials followed the alternating schedule. Their median bridge times for
-100,000 calls were 14.3025 ms for UnifiedScript and 13.8434 ms for Puerts, a
-losing UnifiedScript ratio of 1.0332 that remains published without moving the
-future product gate. The Batch Trace trial-1 collector recorded 1,024 queries
-through two UnifiedScript boundary calls in 0.3950 ms with 360,448 transferred
-bytes and zero measured allocation/GC.
+The current local UE 5.8.1 run completed the full contract: nine workloads,
+three trials, two runtimes, and all 54 execution ordinals. Both 27-trial engine
+results use machine fingerprint
+`sha256:fc848657...2c96512`, engine build fingerprint
+`sha256:d35d3d5f...f7a2997`, and the frozen runtime source identities
+`sha256:73607b...a7a76b` (UnifiedScript) and
+`sha256:4e5f66...76cf0d` (Puerts). The final comparison reports matched
+environment, matched workloads, and alternating schedule.
 
-The frame driver uses an actual UE ticker and keeps the result-publication tick
-outside the measured window. Its first machine-local 10,000-frame Actor proof
-recorded 0.0048/0.0090/0.0143 ms p50/p95/p99 and 55.8038 ms total for
-UnifiedScript, versus 0.0152/0.0237/0.0388 ms and 165.4386 ms for Puerts. The
-1,000-entity by 1,000-frame proof issued 1,001,000 boundary calls and transferred
-72,004,000 logical bytes; UnifiedScript recorded 222.7079 ms with zero managed
-allocation/GC, while Puerts recorded 727.1043 ms and 41 V8 collections. These
-are collector proofs, not a complete suite comparison.
+Representative three-trial medians are:
 
-The resource/spawn collector calls the product `UnifiedScriptWorldLibrary`
-generated binding rather than a gameplay-specific facade. Each measured round
-loads `/Script/Engine.Actor`, spawns it with an identity transform, observes the
-returned handle, and destroys it. Trial 1 completed all 256 rounds and 768
-boundary calls in 6.7588 ms for UnifiedScript and 13.702597 ms for Puerts, with
-the same 40,192-byte logical payload and checksum. The captures occupy schedule
-ordinals 13/14.
+| Workload | Comparison metric | UnifiedScript | Puerts | U/P ratio |
+| --- | --- | ---: | ---: | ---: |
+| Scalar/property, 100,000 calls | bridge ms | 16.8016 | 13.869699 | 1.211389 |
+| Struct/container, 16,384 calls | bridge ms | 448.6599 | 66.622298 | 6.734380 |
+| Four-argument delegate, 100,000 dispatches | bridge ms | 220.2320 | 57.947699 | 3.800531 |
+| Per-frame Actor, 10,000 frames | frame p50 ms | 0.0060 | 0.0175 | 0.342857 |
+| 1,000 entities x 1,000 frames | frame p50 ms | 0.2286 | 0.65995 | 0.346390 |
+| Batch Trace, 1,024 queries | bridge ms | 0.440400 | 1.331002 | 0.330878 |
+| Resource load/spawn/destroy, 256 rounds | bridge ms | 9.6211 | 5.857199 | 1.642611 |
+| Hot reload, 100 generations | reload ms | 450.698502 | 77.618301 | 5.806601* |
+| Complete BlockBreaker, 10,000 frames | frame p50 ms | 0.5824 | 0.64795 | 0.898835 |
 
-The hot-reload collector executes 2 warm-ups followed by 100 complete runtime
-generation lifecycles. UnifiedScript loads and activates a collectible assembly
-generation, stops and retires the previous generation, then forces reclamation;
-Puerts reparses/reexecutes the gameplay module, retires its previous exports,
-and synchronously asks V8 to collect. Trial 1 recorded 1,549.0686 ms,
-20,404,944 allocated bytes, 1,212 CLR collection-count increments, and
-47.070 ms GC pause for UnifiedScript. Puerts recorded 67.245603 ms, 19,744 bytes,
-200 V8 GC callbacks, and 46.427611 ms GC pause. These values remain diagnostic:
-collectible assembly reload and JavaScript module-cache reexecution are not the
-same mechanism, so the suite does not publish bridge/call/byte ratios for this
-workload. The captures occupy ordinals 15/16.
+`*` Hot reload is retained as a diagnostic, not a latency claim: collectible
+CLR assembly generations and Puerts module-cache reexecution do not implement
+the same lifecycle mechanism.
 
-The BlockBreaker runner now consumes a separately produced, commit-matched
-Win64 Development package-size report, captures exact UE CSV frame/memory/GC
-windows after 300 warm-up frames, records both runtime envelopes, and publishes
-all 13 required metrics. Its three local captures occupy ordinals 17/18, 35/36,
-and 53/54. The 10,000-frame medians were 4,599.308 ms for UnifiedScript and
-4,957.016 ms for Puerts (ratio 0.927838); frame-time medians were 0.4222 ms and
-0.44745 ms (ratio 0.943569). Per-trial elapsed ratios of 0.962756, 0.921757, and
-0.884789 expose run variance. The matched UnifiedScript package is 2.08% larger.
-This is complete-game evidence, not a broad suite result.
+Complete BlockBreaker also records p95/p99 ratios of 0.955283/0.959456 and a
+bridge-time ratio of 0.336019. Its generated data plane uses 10,000 calls and
+40,000 logical copied bytes versus Puerts at 50,000 and 200,000. UnifiedScript
+records zero runtime GC collections in the measured window, while Puerts records
+eight. Memory high-water marks are effectively equal (ratio 0.998727).
+UnifiedScript startup is 5.13% slower and its commit-matched Development package
+is 1,032,716,821 bytes versus 1,009,698,201 bytes (ratio 1.022798).
 
-All nine collectors are now executable. The next M10.1 slice recaptures all
-nine workloads from one frozen runtime source identity. Until both runtimes
-complete 27 trials under the 54-slot schedule, no broad performance result is published.
+Allocation medians remain published without a ratio because the CLR and V8
+collectors have different semantics. These mixed results close M10.1 while
+keeping the M10.3 weighted-product claim unset. The largest actionable direct
+boundary losses are struct/container and delegate traffic, so M10.2 starts with
+generated shared container snapshots and buffered event ingress while retaining
+the direct generated ABI as a safe fallback.

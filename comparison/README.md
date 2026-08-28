@@ -60,13 +60,13 @@ The migrated shot is no longer a native Gun-facade shortcut. Resource/class
 loading and Actor spawn remain on the generated Binding control plane. The hot
 shot path uses one Gameplay Data Batch Trace, commits emitter and damage rows in
 one command reservation, and consumes their completion events on the next
-managed frame. The latest local three-trial median is 4,599.308 ms for
-UnifiedScript and 4,957.016 ms for Puerts, a ratio of 0.927838. Median frame time
-is 0.4222 ms versus 0.44745 ms (ratio 0.943569). The individual elapsed ratios
-are 0.962756, 0.921757, and 0.884789, so the raw variance remains visible rather
-than being hidden behind the median. Every run requires one shot/hit and zero
-legacy calls. The matched packages are 1,030,446,530 and 1,009,484,249 bytes
-respectively, making the current UnifiedScript delivery 2.08% larger.
+managed frame. The current formal three-trial medians are 0.5824/1.0596/1.4033
+ms p50/p95/p99 for UnifiedScript and 0.64795/1.1092/1.4626 ms for Puerts,
+ratios of 0.898835/0.955283/0.959456. UnifiedScript bridge time is 175.4974 ms
+versus 522.2836 ms (ratio 0.336019), using 10,000 calls and 40,000 logical bytes
+instead of 50,000 and 200,000. Every run requires one shot/hit and zero legacy
+calls. The matched packages are 1,032,716,821 and 1,009,698,201 bytes
+respectively, making the current UnifiedScript delivery 2.28% larger.
 
 All 13 complete-workload metrics are present. Allocation remains diagnostic
 only because CLR cumulative allocation and V8 used-heap growth are different
@@ -75,7 +75,8 @@ cache reexecution, while UnifiedScript measures a full ScriptComponent
 generation reload. Bridge values similarly name their envelope: five native
 ProcessEvent callbacks per Puerts frame versus one managed Actor `OnTick`
 callback per UnifiedScript frame. The complete-game result is a real M10.1
-workload win, but it is not yet a broad-suite claim.
+workload win. The full M10.1 matrix is now published and mixed; M10.3 still owns
+the weighted broad-product claim.
 
 Run the matched generated `int32(int32, int32)` performance gate with:
 
@@ -131,6 +132,14 @@ The runner skips only capture pairs whose runtime source, machine, engine build,
 trial, and execution ordinal still match. It automatically assembles the two
 27-capture engine results and publishes `artifacts/comparison/suite/comparison.json`
 after the final pair succeeds.
+
+The current UE 5.8.1 evidence contains all 54 scheduled captures under one
+machine/build fingerprint. Complete BlockBreaker frame p50/p95/p99 ratios are
+0.898835/0.955283/0.959456 and its bridge-time ratio is 0.336019. The same report
+retains losing scalar (1.211389), struct/container (6.734380), delegate
+(3.800531), and resource-flow (1.642611) ratios rather than filtering them out.
+Reload and allocation remain mechanism-qualified diagnostics as described in
+the suite contract.
 
 ## Visual/C# whole-game round trip
 

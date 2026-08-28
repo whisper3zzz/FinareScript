@@ -3829,7 +3829,11 @@ def main() -> int:
         and "null ratio" in performance_suite_doc
         and "54 slots" in performance_suite_doc
         and "all 27 captures" in performance_suite_doc
-        and "no broad performance result is published" in performance_suite_doc,
+        and "all 54 execution ordinals" in performance_suite_doc
+        and "mixed results close M10.1" in performance_suite_doc
+        and "- Next slice: **M10.2" in roadmap
+        and "- [x] capture median, p95/p99 frame time" in roadmap
+        and "- [x] alternate engines and trials" in roadmap,
         "M10.1 workload manifest, metrics, alternating schedule, or strict comparison is incomplete",
     )
     checks.append(
