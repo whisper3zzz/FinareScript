@@ -91,6 +91,11 @@ internal static class Program
             return RunUpgrade(args, isPlan: args[0] == "upgrade-plan");
         }
 
+        if (args.Count > 0 && args[0] == "diagnostics-bundle")
+        {
+            return RunDiagnosticsBundle(args);
+        }
+
         if (args.Count > 0 && args[0] == "debug-serve")
         {
             return RunDebugServe(args);
@@ -152,6 +157,49 @@ internal static class Program
         }
 
         return RunAnalyze(args);
+    }
+
+    private static int RunDiagnosticsBundle(IReadOnlyList<string> args)
+    {
+        if (!TryParseDiagnosticsBundleArguments(
+                args,
+                out DiagnosticsBundleOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+
+        options = options ?? throw new InvalidOperationException(
+            "Argument parsing succeeded without diagnostics bundle options.");
+        string inputDirectory = Path.GetFullPath(options.InputDirectory);
+        if (!Directory.Exists(inputDirectory))
+        {
+            Console.Error.WriteLine(
+                $"Diagnostics input directory does not exist: {inputDirectory}");
+            return 66;
+        }
+        string policyPath = Path.GetFullPath(options.PolicyPath ?? Path.Combine(
+            AppContext.BaseDirectory,
+            "unifiedscript.diagnostics-policy.json"));
+        if (!File.Exists(policyPath))
+        {
+            Console.Error.WriteLine($"Diagnostics policy does not exist: {policyPath}");
+            return 66;
+        }
+
+        UnifiedScriptDiagnosticsPolicy policy =
+            UnifiedScriptDiagnosticsPolicyJson.Deserialize(File.ReadAllText(policyPath));
+        UnifiedScriptDiagnosticsBundleResult result =
+            new UnifiedScriptDiagnosticsBundleBuilder().Build(inputDirectory, policy);
+        string outputPath = Path.GetFullPath(options.OutputPath);
+        WriteTransactionally([new OutputFile(outputPath, result.Archive)]);
+        Console.WriteLine(outputPath);
+        Console.WriteLine(result.Sha256);
+        Console.WriteLine(
+            $"reports={result.Manifest.ReportCount}; " +
+            $"redactions={result.Manifest.Reports.Sum(static report => report.RedactionCount)}; " +
+            $"privacy={result.Manifest.PrivacyMode}");
+        return 0;
     }
 
     private static int RunUpgrade(IReadOnlyList<string> args, bool isPlan)
@@ -2421,6 +2469,49 @@ internal static class Program
         return true;
     }
 
+    private static bool TryParseDiagnosticsBundleArguments(
+        IReadOnlyList<string> args,
+        out DiagnosticsBundleOptions? options)
+    {
+        options = null;
+        if (args.Count < 4 || args[0] != "diagnostics-bundle" ||
+            args[1].StartsWith("--", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        string inputDirectory = args[1];
+        string? outputPath = null;
+        string? policyPath = null;
+        int index = 2;
+        while (index < args.Count)
+        {
+            string option = args[index++];
+            if (index >= args.Count)
+            {
+                return false;
+            }
+            string value = args[index++];
+            switch (option)
+            {
+                case "--out" when outputPath is null:
+                    outputPath = value;
+                    break;
+                case "--policy" when policyPath is null:
+                    policyPath = value;
+                    break;
+                default:
+                    return false;
+            }
+        }
+        if (outputPath is null)
+        {
+            return false;
+        }
+        options = new DiagnosticsBundleOptions(inputDirectory, outputPath, policyPath);
+        return true;
+    }
+
     private static bool TryParseUnrealBindingArguments(
         IReadOnlyList<string> args,
         out UnrealBindingOptions? options)
@@ -3760,6 +3851,7 @@ internal static class Program
         "  unifiedscript chunk-inspect <program.uschunk>\n" +
         "  unifiedscript upgrade-plan <file|directory> --out <report.json> [--policy <policy.json>] [--fail-on-blocked]\n" +
         "  unifiedscript upgrade-apply <file|directory> --out <directory> [--report <report.json>] [--policy <policy.json>]\n" +
+        "  unifiedscript diagnostics-bundle <directory> --out <bundle.zip> [--policy <policy.json>]\n" +
         "  unifiedscript identity-init <input.cs> --out <identity.usids> [options]\n" +
         "  unifiedscript layout-init <graph.json> --out <layout.usgraph>\n" +
         "  unifiedscript layout-sync <graph.json> --layout <layout.usgraph> --out <updated.usgraph>\n" +
@@ -3955,6 +4047,11 @@ internal static class Program
         string? PolicyPath,
         string? ReportPath,
         bool FailOnBlocked);
+
+    private sealed record DiagnosticsBundleOptions(
+        string InputDirectory,
+        string OutputPath,
+        string? PolicyPath);
 
     private sealed record UnrealPuertsInventoryOptions(
         string ProjectRoot,

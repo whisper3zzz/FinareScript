@@ -20,5 +20,9 @@
           Link="unifiedscript.compatibility-policy.json"
           CopyToOutputDirectory="PreserveNewest"
           CopyToPublishDirectory="PreserveNewest" />
+    <None Include="../../schemas/unifiedscript.diagnostics-policy.v0.1.json"
+          Link="unifiedscript.diagnostics-policy.json"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

@@ -65,6 +65,10 @@ Contract rewrites, generated-output rules, immutable chunk/ABI rebuild rules,
 and atomic apply behavior are documented in
 [Versioning and upgrades](VERSIONING_AND_UPGRADES.md).
 
+For support evidence, the packaged `diagnostics-bundle` command admits only
+declared report schemas and emits a deterministic, redacted ZIP without source
+or raw logs. See [Privacy-safe diagnostics bundles](DIAGNOSTICS_BUNDLES.md).
+
 The installer verifies every hash and rejects missing, duplicate, unsafe, or
 unmanifested files. Packaged-mode onboarding independently checks the selected
 engine family, managed target, and ABI contract before invoking Unreal.

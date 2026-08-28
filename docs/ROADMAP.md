@@ -49,7 +49,7 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-28**
 
 - Active milestone: **M11 — Production hardening and release candidate**
-- Next slice: **M11.3 — clean CI lane matrix**
+- Next slice: **M11.4 — compiled program image v2 profiling**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -63,8 +63,8 @@ machine-local unless an artifact explicitly says otherwise.
 | Runtime source baseline | `810913d` (`perf: remove benchmark world log pollution`) |
 | UnifiedScript comparison source | `5cf323e` (`perf: sync representative workload host`) |
 | Puerts comparison source | `be399cb` (`perf: register benchmark world context`) |
-| Managed tests | 566 / 566 passed |
-| Repository validator | 75 / 75 passed |
+| Managed tests | 570 / 570 passed |
+| Repository validator | 76 / 76 passed |
 | UE 5.8.1 native build | passed |
 | `UnifiedScript.Unreal` Automation | 17 / 17 passed, including bounded crash breadcrumbs, failure containment, deterministic World shutdown, workload collectors, gameplay-profiler attribution, Authoring Surface, live World semantic pause/step/reload/detach, and repeated success/failure hot-reload leak coverage |
 | M10.2 generated-channel profile | 1,024 rows x 3 median samples: container binding 25,371.973 ns/row, generated snapshot 1.270 ns/row (ratio 0.000050), buffered events 0.586 ns/row, zero managed allocation |
@@ -1269,7 +1269,7 @@ as `not-declared`. Evidence is
   bindings, Script Assets, ABI tables, saved graph layout, and generated code
 - [x] add clean CI lanes for managed tests, deterministic generation, UE build,
   Automation, package smoke, workload performance, and SDK installation
-- [ ] support diagnostics bundles and reproducible reports without collecting
+- [x] support diagnostics bundles and reproducible reports without collecting
   project source or sensitive content by default
 
 M11.3 upgrade evidence (2026-08-28): the SDK now carries
@@ -1297,6 +1297,24 @@ generation (10,387 ms), and a from-zero 208-action UE Editor build (68,665 ms);
 reports are under `artifacts/ci-clean/20260828-174511`. `docs/CI.md` owns runner
 labels, environment contracts, triggers, retry isolation, and failure routing.
 The remaining M11.3 slice is the privacy-safe diagnostics bundle.
+
+M11.3 diagnostics evidence (2026-08-28): `diagnostics-bundle` and the bundled
+`unifiedscript.diagnostics-policy/v0.1` admit only 26 exact report schemas,
+enforce report/count/bundle bounds, exclude source-derived schemas and raw logs,
+redact path/environment/credential/identity/source/message fields, anonymize
+entry names, and emit fixed-order/fixed-time ZIPs plus sanitized-entry hashes.
+Four focused tests prove byte-identical repeat builds, allowlist exclusion,
+redaction, bounded overflow, and CLI use of the bundled policy.
+`docs/DIAGNOSTICS_BUNDLES.md` documents the support/review boundary. M11.3 is
+complete. A real bundle over the detached clean-CI evidence admitted 6 of 22
+files, performed 692 redactions across 59,339 sanitized bytes, and reproduced
+SHA-256 `35fffcfc42737510955f7cc59dd4f88b2d7d1d78d9a333dc46fe9d358f927838`
+without paths, credentials, source, or raw-log entries. Two 178-payload SDK
+archives reproduced SHA-256
+`23c4f0665449f6840be679e2ee7cd0667b48660fd5755cd31e33ac15185ba9cf`
+and carried the policy, guide, and CLI default copy. Final validation is 570 / 570
+managed tests and 76 / 76 repository invariants; the cursor advances to
+measured compiled program image v2 work.
 
 ### M11.4 — Compiled program image v2
 

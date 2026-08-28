@@ -88,6 +88,7 @@ DOCUMENTS = [
     ROOT / "docs" / "UNREAL_COMPATIBILITY_MATRIX.md",
     ROOT / "docs" / "VERSIONING_AND_UPGRADES.md",
     ROOT / "docs" / "CI.md",
+    ROOT / "docs" / "DIAGNOSTICS_BUNDLES.md",
     ROOT / "docs" / "UNREAL_FIRST_SCRIPT.md",
     ROOT / "docs" / "ALPHA_ACCEPTANCE.md",
     ROOT / "docs" / "UNREAL_API_CONTRACT.md",
@@ -570,6 +571,78 @@ def main() -> int:
         "Clean CI lane matrix, deterministic gate, workflow isolation, or runner guide is missing",
     )
     checks.append("seven clean CI lanes isolate managed, generated, UE, package, performance, and SDK gates")
+
+    diagnostics_policy_path = (
+        ROOT / "schemas" / "unifiedscript.diagnostics-policy.v0.1.json"
+    )
+    diagnostics_source_path = (
+        ROOT
+        / "src"
+        / "UnifiedScript.Unreal"
+        / "UnifiedScriptDiagnosticsBundle.cs"
+    )
+    diagnostics_tests_path = (
+        ROOT
+        / "tests"
+        / "UnifiedScript.Tests"
+        / "UnifiedScriptDiagnosticsBundleTests.cs"
+    )
+    diagnostics_guide_path = ROOT / "docs" / "DIAGNOSTICS_BUNDLES.md"
+    cli_project_path = ROOT / "src" / "UnifiedScript.Cli" / "UnifiedScript.Cli.csproj"
+    with diagnostics_policy_path.open("r", encoding="utf-8") as handle:
+        diagnostics_policy = json.load(handle)
+    diagnostics_source = diagnostics_source_path.read_text(encoding="utf-8")
+    diagnostics_tests = diagnostics_tests_path.read_text(encoding="utf-8")
+    diagnostics_guide = diagnostics_guide_path.read_text(encoding="utf-8")
+    cli_project = cli_project_path.read_text(encoding="utf-8")
+    require(
+        diagnostics_policy["schemaVersion"]
+        == "unifiedscript.diagnostics-policy/v0.1"
+        and len(diagnostics_policy["allowedSchemas"]) == 26
+        and len(set(diagnostics_policy["allowedSchemas"])) == 26
+        and diagnostics_policy["maximumReportCount"] == 256
+        and diagnostics_policy["maximumReportBytes"] == 16 * 1024 * 1024
+        and diagnostics_policy["maximumBundleBytes"] == 64 * 1024 * 1024
+        and "unifiedscript.ci-lane/v0.1"
+        in diagnostics_policy["allowedSchemas"]
+        and "unifiedscript.unreal-release-gate/v0.2"
+        in diagnostics_policy["allowedSchemas"]
+        and all(
+            source_schema not in diagnostics_policy["allowedSchemas"]
+            for source_schema in {
+                "unifiedscript.hir/v0.9",
+                "unifiedscript.authoring-surface/v0.1",
+                "unifiedscript.unreal-reflection/v0.4",
+            }
+        )
+        and {"schemaVersion", "status", "phase", "metric", "sha256"}.issubset(
+            set(diagnostics_policy["safeStringPropertyNames"])
+        )
+        and {"source", "sourceText", "token", "message", "stackTrace"}.issubset(
+            set(diagnostics_policy["sensitivePropertyNames"])
+        )
+        and 'args[0] == "diagnostics-bundle"' in cli_source
+        and "unifiedscript.diagnostics-policy.json" in cli_project
+        and "unifiedscript.diagnostics-bundle/v0.1" in diagnostics_source
+        and '"safe-default"' in diagnostics_source
+        and "EnumerateFilesWithoutFollowingReparsePoints" in diagnostics_source
+        and "TryReadBounded" in diagnostics_source
+        and '"<redacted-string>"' in diagnostics_source
+        and "ArchiveTimestamp" in diagnostics_source
+        and 'reports/{envelopes.Count + 1:D4}-report.json' in diagnostics_source
+        and "SafeDefaultBundleIsDeterministicAllowlistedBoundedAndRedacted"
+        in diagnostics_tests
+        and "ordinary but proprietary" in diagnostics_tests
+        and "CliUsesBundledPolicyAndWritesTheSameArchiveTwice" in diagnostics_tests
+        and "diagnostics-policy.v0.1.json" in sdk_package
+        and "DIAGNOSTICS_BUNDLES.md" in sdk_package
+        and "redacted by default" in diagnostics_guide
+        and "v0.1 has no flag" in diagnostics_guide,
+        "Privacy-safe diagnostics policy, bounded collector, deterministic archive, SDK payload, or guide is missing",
+    )
+    checks.append(
+        "diagnostics bundles are allowlisted, bounded, deterministic, and string-redacted by default"
+    )
 
     scaffold_path = ROOT / "tools" / "new-unifiedscript-project.ps1"
     authoring_start_path = ROOT / "tools" / "start-unifiedscript-authoring.ps1"
@@ -4009,7 +4082,7 @@ def main() -> int:
         and "4,096 accepted" in large_project_scale_doc
         and "updated exactly one" in large_project_scale_doc
         and "- [x] test large contracts and script sets" in roadmap
-        and "- Next slice: **M11.3" in roadmap,
+        and "- Next slice: **M11.4" in roadmap,
         "M11.1 large Contract, script-set, incremental, or asset-churn scale gate is incomplete",
     )
     checks.append(
@@ -4310,7 +4383,7 @@ def main() -> int:
         and "all 27 captures" in performance_suite_doc
         and "all 54 execution ordinals" in performance_suite_doc
         and "mixed results close M10.1" in performance_suite_doc
-        and "- Next slice: **M11.3" in roadmap
+        and "- Next slice: **M11.4" in roadmap
         and "- [x] use profiler evidence to promote only high-volume stable data"
         in roadmap
         and "- [x] preserve World ownership, generation checks, bounds"

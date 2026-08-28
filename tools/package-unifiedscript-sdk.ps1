@@ -256,6 +256,7 @@ try {
         Out-Null
     $schemaSources = [ordered]@{
         'compatibility-policy.v0.1.json' = 'schemas\unifiedscript.compatibility-policy.v0.1.json'
+        'diagnostics-policy.v0.1.json' = 'schemas\unifiedscript.diagnostics-policy.v0.1.json'
         'unreal-reflection.v0.4.example.json' = 'samples\Unreal\UEUnifiedScriptRuntime.reflection.json'
         'unreal-api-contract.v0.2.example.json' = 'samples\Unreal\UEUnifiedScriptRuntime.api-contract.json'
         'unreal-api-nodes.v0.2.example.json' = 'samples\Unreal\UEUnifiedScriptRuntime.api-nodes.json'
@@ -295,7 +296,8 @@ try {
         'UNREAL_ONBOARDING.md',
         'UNREAL_API_CONTRACT.md',
         'UNREAL_DEPLOYMENT.md',
-        'VERSIONING_AND_UPGRADES.md')) {
+        'VERSIONING_AND_UPGRADES.md',
+        'DIAGNOSTICS_BUNDLES.md')) {
         $source = Join-Path $repoRoot "docs\$document"
         if (Test-Path -LiteralPath $source) {
             Copy-Item -LiteralPath $source -Destination $documentationDirectory -Force
@@ -310,6 +312,7 @@ try {
         'Tools\UnifiedScript.Cli\UnifiedScript.Cli.dll',
         'Tools\UnifiedScript.Cli\UnifiedScript.Cli.runtimeconfig.json',
         'Schemas\compatibility-policy.v0.1.json',
+        'Schemas\diagnostics-policy.v0.1.json',
         'Managed\Runtime\UnifiedScript.Core.dll',
         'Managed\Runtime\UnifiedScript.Unreal.dll',
         'Managed\Runtime\UnifiedScript.Unreal.deps.json',
@@ -366,6 +369,7 @@ try {
             }
             schemas = [ordered]@{
                 compatibilityPolicy = 'unifiedscript.compatibility-policy/v0.1'
+                diagnosticsPolicy = 'unifiedscript.diagnostics-policy/v0.1'
                 onboarding = 'unifiedscript.unreal-project-onboarding/v0.1'
                 reflection = 'unifiedscript.unreal-reflection/v0.4'
                 apiContract = 'unifiedscript.unreal-api-contract/v0.2'
