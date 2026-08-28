@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.Loader;
-using System.Security.Cryptography;
 using UnifiedScript.Core;
 
 namespace UnifiedScript.Runtime;
@@ -16,6 +15,9 @@ public sealed record CoreClrCompiledChunkLoadProfile(
     long DependencyDecodeStopwatchTicks,
     long IdentityValidationStopwatchTicks,
     long DependencyValidationStopwatchTicks,
+    int DependencyCacheHitCount,
+    int DependencyCacheMissCount,
+    long DependencySnapshotCopyBytes,
     long LoadContextCreationStopwatchTicks,
     long ManagedAssemblyCopyBytes,
     long ManagedAssemblyMaterializationStopwatchTicks,
@@ -28,6 +30,7 @@ public sealed record CoreClrCompiledChunkLoadProfile(
 {
     public long TotalCopyBytes => checked(
         ChunkRead.WholeFileCopyBytes +
+        DependencySnapshotCopyBytes +
         ManagedAssemblyCopyBytes +
         PortablePdbCopyBytes);
 }
@@ -44,6 +47,15 @@ public sealed record CoreClrCompiledChunkPrewarmProfile(
 
 public sealed class CoreClrCompiledChunkHost
 {
+    private readonly UnifiedScriptManagedDependencyCache dependencyCache;
+
+    public CoreClrCompiledChunkHost(
+        UnifiedScriptManagedDependencyCache? dependencyCache = null)
+    {
+        this.dependencyCache = dependencyCache ??
+            UnifiedScriptManagedDependencyCache.Shared;
+    }
+
     public CoreClrCompiledChunkSession Load(
         ReadOnlySpan<byte> content,
         IEnumerable<string>? referencePaths = null) =>
@@ -91,7 +103,7 @@ public sealed class CoreClrCompiledChunkHost
         return new CoreClrCompiledChunkLoadResult(session, profile.Build());
     }
 
-    private static CoreClrCompiledChunkSession LoadCore(
+    private CoreClrCompiledChunkSession LoadCore(
         UnifiedScriptChunk chunk,
         IEnumerable<string>? referencePaths,
         CompiledChunkLoadProfileBuilder? profile)
@@ -134,10 +146,16 @@ public sealed class CoreClrCompiledChunkHost
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Order(StringComparer.Ordinal)
             .ToArray();
-        ValidateDependencies(dependencies, references);
+        VerifiedDependencySet verifiedDependencies =
+            ValidateDependencies(dependencies, references);
         profile?.SetDependencyValidation(ElapsedStopwatchTicks(phaseStarted));
+        profile?.SetDependencyCache(
+            verifiedDependencies.CacheHitCount,
+            verifiedDependencies.CacheMissCount,
+            verifiedDependencies.SnapshotCopyBytes);
         phaseStarted = StartProfilePhase(profile);
-        var loadContext = new CoreClrProgramLoadContext(references);
+        var loadContext = new CoreClrProgramLoadContext(
+            verifiedDependencies.Dependencies);
         profile?.SetLoadContextCreation(ElapsedStopwatchTicks(phaseStarted));
         try
         {
@@ -216,15 +234,26 @@ public sealed class CoreClrCompiledChunkHost
         }
     }
 
-    private static void ValidateDependencies(
+    private VerifiedDependencySet ValidateDependencies(
         UnifiedScriptRuntimeDependencyManifest manifest,
         IReadOnlyList<string> referencePaths)
     {
-        IReadOnlyDictionary<string, string> references = referencePaths.ToDictionary(
-            static path => AssemblyName.GetAssemblyName(path).Name ??
-                throw new InvalidDataException($"Runtime reference '{path}' has no assembly name."),
-            static path => path,
-            StringComparer.OrdinalIgnoreCase);
+        var references = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string referencePath in referencePaths)
+        {
+            string fileName = Path.GetFileNameWithoutExtension(referencePath);
+            if (!references.TryAdd(fileName, referencePath))
+            {
+                throw new InvalidDataException(
+                    $"Runtime references contain duplicate file name '{fileName}'.");
+            }
+        }
+        var verifiedDependencies =
+            new Dictionary<string, UnifiedScriptVerifiedManagedDependency>(
+                StringComparer.OrdinalIgnoreCase);
+        int cacheHits = 0;
+        int cacheMisses = 0;
+        long snapshotCopyBytes = 0;
         foreach (UnifiedScriptRuntimeDependency dependency in manifest.Dependencies)
         {
             if (dependency.Kind != UnifiedScriptRuntimeDependencyKind.ManagedAssembly)
@@ -239,26 +268,48 @@ public sealed class CoreClrCompiledChunkHost
 
             if (!references.TryGetValue(dependency.Name, out string? path))
             {
-                if (dependency.Optional)
+                path = referencePaths.FirstOrDefault(candidate => string.Equals(
+                    AssemblyName.GetAssemblyName(candidate).Name,
+                    dependency.Name,
+                    StringComparison.OrdinalIgnoreCase));
+                if (path is null && dependency.Optional)
                 {
                     continue;
                 }
-                throw new FileNotFoundException(
-                    $"Compiled chunk requires managed dependency '{dependency.Name}'.");
+                if (path is null)
+                {
+                    throw new FileNotFoundException(
+                        $"Compiled chunk requires managed dependency '{dependency.Name}'.");
+                }
             }
 
-            AssemblyName assemblyName = AssemblyName.GetAssemblyName(path);
-            string actualVersion = assemblyName.Version?.ToString() ?? "0.0.0.0";
-            using FileStream stream = File.OpenRead(path);
-            string actualDigest = "sha256:" +
-                Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
-            if (!string.Equals(actualVersion, dependency.Version, StringComparison.Ordinal) ||
-                !string.Equals(actualDigest, dependency.ContentDigest, StringComparison.Ordinal))
+            Assembly? sharedAssembly = AssemblyLoadContext.Default.Assemblies
+                .FirstOrDefault(candidate => string.Equals(
+                    candidate.GetName().Name,
+                    dependency.Name,
+                    StringComparison.OrdinalIgnoreCase));
+            UnifiedScriptManagedDependencyVerification verification =
+                dependencyCache.Verify(path, dependency, sharedAssembly);
+            if (!verifiedDependencies.TryAdd(
+                dependency.Name,
+                verification.Dependency))
             {
                 throw new InvalidDataException(
-                    $"Compiled chunk dependency '{dependency.Name}' version or digest differs.");
+                    $"Compiled chunk dependency '{dependency.Name}' is duplicated.");
+            }
+            cacheHits += verification.CacheHit ? 1 : 0;
+            cacheMisses += verification.CacheHit ? 0 : 1;
+            if (!verification.CacheHit)
+            {
+                snapshotCopyBytes = checked(
+                    snapshotCopyBytes + verification.Dependency.Content.LongLength);
             }
         }
+        return new VerifiedDependencySet(
+            verifiedDependencies,
+            cacheHits,
+            cacheMisses,
+            snapshotCopyBytes);
     }
 
     private static long StartProfilePhase(CompiledChunkLoadProfileBuilder? profile) =>
@@ -266,6 +317,12 @@ public sealed class CoreClrCompiledChunkHost
 
     private static long ElapsedStopwatchTicks(long started) =>
         Math.Max(0, Stopwatch.GetTimestamp() - started);
+
+    private sealed record VerifiedDependencySet(
+        IReadOnlyDictionary<string, UnifiedScriptVerifiedManagedDependency> Dependencies,
+        int CacheHitCount,
+        int CacheMissCount,
+        long SnapshotCopyBytes);
 
     private sealed class CompiledChunkLoadProfileBuilder
     {
@@ -289,6 +346,12 @@ public sealed class CoreClrCompiledChunkHost
         public long IdentityValidationStopwatchTicks { get; private set; }
 
         public long DependencyValidationStopwatchTicks { get; private set; }
+
+        public int DependencyCacheHitCount { get; private set; }
+
+        public int DependencyCacheMissCount { get; private set; }
+
+        public long DependencySnapshotCopyBytes { get; private set; }
 
         public long LoadContextCreationStopwatchTicks { get; private set; }
 
@@ -329,6 +392,16 @@ public sealed class CoreClrCompiledChunkHost
         public void SetDependencyValidation(long ticks) =>
             DependencyValidationStopwatchTicks = ticks;
 
+        public void SetDependencyCache(
+            int hitCount,
+            int missCount,
+            long snapshotCopyBytes)
+        {
+            DependencyCacheHitCount = hitCount;
+            DependencyCacheMissCount = missCount;
+            DependencySnapshotCopyBytes = snapshotCopyBytes;
+        }
+
         public void SetLoadContextCreation(long ticks) =>
             LoadContextCreationStopwatchTicks = ticks;
 
@@ -346,6 +419,9 @@ public sealed class CoreClrCompiledChunkHost
             DependencyDecodeStopwatchTicks,
             IdentityValidationStopwatchTicks,
             DependencyValidationStopwatchTicks,
+            DependencyCacheHitCount,
+            DependencyCacheMissCount,
+            DependencySnapshotCopyBytes,
             LoadContextCreationStopwatchTicks,
             ManagedAssemblyCopyBytes,
             ManagedAssemblyMaterializationStopwatchTicks,
@@ -470,6 +546,8 @@ public sealed class CoreClrCompiledChunkSession : IDisposable
 internal sealed class CoreClrProgramLoadContext : AssemblyLoadContext
 {
     private readonly IReadOnlyDictionary<string, string> referencePaths;
+    private readonly IReadOnlyDictionary<string, UnifiedScriptVerifiedManagedDependency>
+        dependencies;
 
     public CoreClrProgramLoadContext(IEnumerable<string> references)
         : base(isCollectible: true)
@@ -482,6 +560,17 @@ internal sealed class CoreClrProgramLoadContext : AssemblyLoadContext
                         $"Reference '{path}' has no assembly name."),
                 static path => path,
                 StringComparer.OrdinalIgnoreCase);
+        dependencies =
+            new Dictionary<string, UnifiedScriptVerifiedManagedDependency>(
+                StringComparer.OrdinalIgnoreCase);
+    }
+
+    public CoreClrProgramLoadContext(
+        IReadOnlyDictionary<string, UnifiedScriptVerifiedManagedDependency> dependencies)
+        : base(isCollectible: true)
+    {
+        this.dependencies = dependencies;
+        referencePaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     }
 
     protected override Assembly? Load(AssemblyName assemblyName)
@@ -493,9 +582,24 @@ internal sealed class CoreClrProgramLoadContext : AssemblyLoadContext
             return shared;
         }
 
-        return assemblyName.Name is not null &&
-            referencePaths.TryGetValue(assemblyName.Name, out string? referencePath)
-                ? LoadFromAssemblyPath(referencePath)
-                : null;
+        if (assemblyName.Name is null ||
+            !dependencies.TryGetValue(assemblyName.Name, out var dependency))
+        {
+            return assemblyName.Name is not null &&
+                referencePaths.TryGetValue(assemblyName.Name, out string? referencePath)
+                    ? LoadFromAssemblyPath(referencePath)
+                    : null;
+        }
+        if (assemblyName.Version is not null &&
+            !string.Equals(
+                assemblyName.Version.ToString(),
+                dependency.Version,
+                StringComparison.Ordinal))
+        {
+            throw new InvalidDataException(
+                $"Requested dependency '{assemblyName.Name}' version differs from the verified snapshot.");
+        }
+        using var stream = new MemoryStream(dependency.Content, writable: false);
+        return LoadFromStream(stream);
     }
 }

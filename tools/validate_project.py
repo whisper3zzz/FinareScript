@@ -158,6 +158,10 @@ def main() -> int:
     compiled_program_host = (
         ROOT / "src" / "UnifiedScript.Runtime" / "CoreClrCompiledChunkHost.cs"
     ).read_text(encoding="utf-8")
+    managed_dependency_cache = (
+        ROOT / "src" / "UnifiedScript.Runtime"
+        / "UnifiedScriptManagedDependencyCache.cs"
+    ).read_text(encoding="utf-8")
     compiled_chunk_profiler = (
         ROOT / "src" / "UnifiedScript.Runtime" / "CompiledChunkLoadProfiler.cs"
     ).read_text(encoding="utf-8")
@@ -286,6 +290,33 @@ def main() -> int:
     )
     checks.append(
         "M11.4 profiles chunk I/O, copies, verification, decode, CoreCLR load, and JIT preparation"
+    )
+    require(
+        "DefaultMaximumEntryCount = 128" in managed_dependency_cache
+        and "DefaultMaximumByteCount = 256L * 1024 * 1024"
+        in managed_dependency_cache
+        and "FileShare.Read" in managed_dependency_cache
+        and "PEReader" in managed_dependency_cache
+        and "ModuleVersionId" in managed_dependency_cache
+        and "sharedAssemblyDigests" in managed_dependency_cache
+        and "leastRecentlyUsed" in managed_dependency_cache
+        and "DependencyCacheHitCount" in compiled_program_host
+        and "DependencySnapshotCopyBytes" in compiled_program_host
+        and "LoadFromStream(stream)" in compiled_program_host
+        and "DependencyCacheHitCount" in compiled_chunk_profiler
+        and "dependencyCacheHitCount" in compiled_chunk_process_profiler
+        and "UnifiedScriptManagedDependencyCache.Shared" in unreal_world_entry
+        and "LoadAssemblySnapshot" in unreal_world_entry
+        and "CoreClrHost_ReusesVerifiedDependencySnapshotsAcrossCollectibleContexts"
+        in compiled_program_tests
+        and "DependencyCache_UsesImmutableContentThenRejectsChangedDiskEvidence"
+        in compiled_program_tests
+        and "DependencyCache_IsSingleFlightAndBounded" in compiled_program_tests
+        and "verified dependency snapshot cache" in compiled_chunk_document,
+        "M11.4 verified dependency cache, immutable ALC snapshots, metrics, tests, or documentation are incomplete",
+    )
+    checks.append(
+        "M11.4 caches bounded verified dependency snapshots across World generations"
     )
 
     deployment_sample_path = (

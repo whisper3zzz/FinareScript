@@ -71,6 +71,8 @@ public static class UnrealWorldManagedEntryPoint
     private static readonly ConcurrentDictionary<ulong, string> BoundaryErrors = new();
     private static readonly object LifecycleDiagnosticsGate = new();
     private static readonly List<WeakReference> RetiredLoadContexts = [];
+    private static readonly UnifiedScriptManagedDependencyCache DependencyCache =
+        UnifiedScriptManagedDependencyCache.Shared;
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int CreateWorld(ulong worldId, nint context, nint transportTable)
@@ -1472,16 +1474,19 @@ public static class UnrealWorldManagedEntryPoint
         private readonly UnifiedScriptChunk? _chunk;
         private readonly UnifiedScriptRuntimeManifest? _manifest;
         private readonly UnifiedScriptRuntimeDependencyManifest? _dependencies;
+        private readonly UnifiedScriptManagedDependencyCache _dependencyCache;
 
         public ScriptAssemblyLoadContext(
             ulong worldId,
             ulong instanceId,
             int generation,
-            string programPath)
+            string programPath,
+            UnifiedScriptManagedDependencyCache? dependencyCache = null)
             : base(
                 $"UnifiedScript.Unreal.World.{worldId}.Script.{instanceId}.Generation.{generation}",
                 isCollectible: true)
         {
+            _dependencyCache = dependencyCache ?? DependencyCache;
             _programPath = programPath;
             _programDirectory = Path.GetDirectoryName(programPath) ?? Environment.CurrentDirectory;
             if (!string.Equals(
@@ -1578,7 +1583,10 @@ public static class UnrealWorldManagedEntryPoint
                 }
                 if (_dependencies is not null)
                 {
-                    ValidateDependency(sharedContract.Location, assemblyName);
+                    _ = ValidateDependency(
+                        sharedContract.Location,
+                        assemblyName,
+                        sharedContract);
                 }
                 return sharedContract;
             }
@@ -1592,18 +1600,25 @@ public static class UnrealWorldManagedEntryPoint
                     dependencyPath = adjacentPath;
                 }
             }
-            if (dependencyPath is not null)
+            if (dependencyPath is null)
             {
-                ValidateDependency(dependencyPath, assemblyName);
+                return null;
             }
-            return dependencyPath is null ? null : LoadAssemblyFile(dependencyPath);
+            UnifiedScriptManagedDependencyVerification? verification =
+                ValidateDependency(dependencyPath, assemblyName);
+            return verification is null
+                ? LoadAssemblyFile(dependencyPath)
+                : LoadAssemblySnapshot(verification.Dependency);
         }
 
-        private void ValidateDependency(string path, AssemblyName requestedName)
+        private UnifiedScriptManagedDependencyVerification? ValidateDependency(
+            string path,
+            AssemblyName requestedName,
+            Assembly? sharedAssembly = null)
         {
             if (_dependencies is null || requestedName.Name is null)
             {
-                return;
+                return null;
             }
 
             UnifiedScriptRuntimeDependency? dependency = _dependencies.Dependencies
@@ -1616,18 +1631,14 @@ public static class UnrealWorldManagedEntryPoint
                     $"Chunk dependency '{requestedName.Name}' is not declared.");
             }
 
-            AssemblyName actualName = AssemblyName.GetAssemblyName(path);
-            string actualVersion = actualName.Version?.ToString() ?? "0.0.0.0";
-            using FileStream stream = OpenSharedRead(path);
-            string actualDigest = "sha256:" +
-                Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream))
-                    .ToLowerInvariant();
-            if (!string.Equals(dependency.Version, actualVersion, StringComparison.Ordinal) ||
-                !string.Equals(dependency.ContentDigest, actualDigest, StringComparison.Ordinal))
-            {
-                throw new InvalidDataException(
-                    $"Chunk dependency '{requestedName.Name}' version or digest differs.");
-            }
+            return _dependencyCache.Verify(path, dependency, sharedAssembly);
+        }
+
+        private Assembly LoadAssemblySnapshot(
+            UnifiedScriptVerifiedManagedDependency dependency)
+        {
+            using var stream = new MemoryStream(dependency.Content, writable: false);
+            return LoadFromStream(stream);
         }
 
         private Assembly LoadAssemblyFile(string path)
@@ -1662,9 +1673,15 @@ public static class UnrealWorldManagedEntryPoint
 
     internal static string ValidateCompiledProgramForTests(
         string programPath,
-        string typeName)
+        string typeName,
+        UnifiedScriptManagedDependencyCache? dependencyCache = null)
     {
-        var loadContext = new ScriptAssemblyLoadContext(1, 1, 1, programPath);
+        var loadContext = new ScriptAssemblyLoadContext(
+            1,
+            1,
+            1,
+            programPath,
+            dependencyCache);
         try
         {
             Assembly assembly = loadContext.LoadMainAssembly();

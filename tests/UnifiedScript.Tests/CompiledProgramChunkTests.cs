@@ -283,6 +283,121 @@ public sealed class CompiledProgramChunkTests
     }
 
     [Fact]
+    public void CoreClrHost_ReusesVerifiedDependencySnapshotsAcrossCollectibleContexts()
+    {
+        string runtimeReference = typeof(SemanticId).Assembly.Location;
+        CSharpProgramChunkEmitResult result = new CSharpProgramChunkCompiler().Compile(
+            EmitImage(),
+            new CSharpProgramChunkOptions(RuntimeReferencePaths: [runtimeReference]));
+        var cache = new UnifiedScriptManagedDependencyCache();
+        var host = new CoreClrCompiledChunkHost(cache);
+
+        CoreClrCompiledChunkLoadResult first = host.LoadProfiled(
+            result.Content,
+            [runtimeReference]);
+        first.Session.Dispose();
+        CoreClrCompiledChunkLoadResult second = host.LoadProfiled(
+            result.Content,
+            [runtimeReference]);
+        second.Session.Dispose();
+
+        Assert.Equal(0, first.Profile.DependencyCacheHitCount);
+        Assert.Equal(1, first.Profile.DependencyCacheMissCount);
+        Assert.Equal(new FileInfo(runtimeReference).Length,
+            first.Profile.DependencySnapshotCopyBytes);
+        Assert.Equal(1, second.Profile.DependencyCacheHitCount);
+        Assert.Equal(0, second.Profile.DependencyCacheMissCount);
+        Assert.Equal(0, second.Profile.DependencySnapshotCopyBytes);
+        UnifiedScriptManagedDependencyCacheSnapshot snapshot = cache.GetSnapshot();
+        Assert.Equal(1, snapshot.EntryCount);
+        Assert.Equal(1, snapshot.HitCount);
+        Assert.Equal(1, snapshot.MissCount);
+        Assert.True(snapshot.CachedBytes > 0);
+    }
+
+    [Fact]
+    public void DependencyCache_UsesImmutableContentThenRejectsChangedDiskEvidence()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        string referencePath = Path.Combine(directory, "UnifiedScript.Core.dll");
+        File.Copy(typeof(SemanticId).Assembly.Location, referencePath);
+        try
+        {
+            CSharpProgramChunkEmitResult result = new CSharpProgramChunkCompiler().Compile(
+                EmitImage(),
+                new CSharpProgramChunkOptions(RuntimeReferencePaths: [referencePath]));
+            var cache = new UnifiedScriptManagedDependencyCache();
+            var host = new CoreClrCompiledChunkHost(cache);
+            using (host.Load(result.Content, [referencePath]))
+            {
+            }
+
+            using (var stream = new FileStream(referencePath, FileMode.Append, FileAccess.Write))
+            {
+                stream.WriteByte(0);
+            }
+
+            using (host.Load(result.Content, [referencePath]))
+            {
+            }
+            Assert.Equal(1, cache.GetSnapshot().HitCount);
+
+            cache.ClearCachedContent();
+            InvalidDataException changed = Assert.Throws<InvalidDataException>(() =>
+                host.Load(result.Content, [referencePath]));
+            Assert.Contains("version or digest differs", changed.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task DependencyCache_IsSingleFlightAndBounded()
+    {
+        string coreReference = typeof(SemanticId).Assembly.Location;
+        CSharpProgramChunkEmitResult singleDependency =
+            new CSharpProgramChunkCompiler().Compile(
+                EmitImage(),
+                new CSharpProgramChunkOptions(RuntimeReferencePaths: [coreReference]));
+        var concurrentCache = new UnifiedScriptManagedDependencyCache();
+
+        await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => Task.Run(() =>
+        {
+            using CoreClrCompiledChunkSession session =
+                new CoreClrCompiledChunkHost(concurrentCache).Load(
+                    singleDependency.Content,
+                    [coreReference]);
+        })));
+
+        UnifiedScriptManagedDependencyCacheSnapshot concurrentSnapshot =
+            concurrentCache.GetSnapshot();
+        Assert.Equal(1, concurrentSnapshot.MissCount);
+        Assert.Equal(7, concurrentSnapshot.HitCount);
+
+        string csharpReference = typeof(CSharpProgramEmitter).Assembly.Location;
+        CSharpProgramChunkEmitResult twoDependencies =
+            new CSharpProgramChunkCompiler().Compile(
+                EmitImage(),
+                new CSharpProgramChunkOptions(
+                    RuntimeReferencePaths: [coreReference, csharpReference]));
+        var boundedCache = new UnifiedScriptManagedDependencyCache(maximumEntryCount: 1);
+        using (new CoreClrCompiledChunkHost(boundedCache).Load(
+            twoDependencies.Content,
+            [coreReference, csharpReference]))
+        {
+        }
+
+        UnifiedScriptManagedDependencyCacheSnapshot boundedSnapshot =
+            boundedCache.GetSnapshot();
+        Assert.Equal(1, boundedSnapshot.EntryCount);
+        Assert.Equal(2, boundedSnapshot.MissCount);
+        Assert.Equal(1, boundedSnapshot.EvictionCount);
+    }
+
+    [Fact]
     public void UnrealWorldLoader_LoadsDeclaredScriptTypeFromChunkPath()
     {
         const string source = """
@@ -316,12 +431,22 @@ public sealed class CompiledProgramChunkTests
         try
         {
             File.WriteAllBytes(path, chunk.Content);
+            var cache = new UnifiedScriptManagedDependencyCache();
 
-            string loadedType = UnrealWorldManagedEntryPoint.ValidateCompiledProgramForTests(
+            string firstLoadedType = UnrealWorldManagedEntryPoint.ValidateCompiledProgramForTests(
                 path,
-                "Tests.Chunks.ChunkWorldScript");
+                "Tests.Chunks.ChunkWorldScript",
+                cache);
+            string secondLoadedType = UnrealWorldManagedEntryPoint.ValidateCompiledProgramForTests(
+                path,
+                "Tests.Chunks.ChunkWorldScript",
+                cache);
 
-            Assert.Equal("Tests.Chunks.ChunkWorldScript", loadedType);
+            Assert.Equal("Tests.Chunks.ChunkWorldScript", firstLoadedType);
+            Assert.Equal(firstLoadedType, secondLoadedType);
+            UnifiedScriptManagedDependencyCacheSnapshot snapshot = cache.GetSnapshot();
+            Assert.Equal(1, snapshot.MissCount);
+            Assert.Equal(1, snapshot.HitCount);
         }
         finally
         {

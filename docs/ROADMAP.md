@@ -49,7 +49,7 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-28**
 
 - Active milestone: **M11 — Production hardening and release candidate**
-- Next slice: **M11.4 — verified dependency cache and ReadyToRun experiment**
+- Next slice: **M11.4 — controlled ReadyToRun/prewarming experiment**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -63,8 +63,8 @@ machine-local unless an artifact explicitly says otherwise.
 | Runtime source baseline | `810913d` (`perf: remove benchmark world log pollution`) |
 | UnifiedScript comparison source | `5cf323e` (`perf: sync representative workload host`) |
 | Puerts comparison source | `be399cb` (`perf: register benchmark world context`) |
-| Managed tests | 572 / 572 passed |
-| Repository validator | 77 / 77 passed |
+| Managed tests | 575 / 575 passed |
+| Repository validator | 78 / 78 passed |
 | UE 5.8.1 native build | passed |
 | `UnifiedScript.Unreal` Automation | 17 / 17 passed, including bounded crash breadcrumbs, failure containment, deterministic World shutdown, workload collectors, gameplay-profiler attribution, Authoring Surface, live World semantic pause/step/reload/detach, and repeated success/failure hot-reload leak coverage |
 | M10.2 generated-channel profile | 1,024 rows x 3 median samples: container binding 25,371.973 ns/row, generated snapshot 1.270 ns/row (ratio 0.000050), buffered events 0.586 ns/row, zero managed allocation |
@@ -1320,12 +1320,15 @@ measured compiled program image v2 work.
 
 - [x] profile `.uschunk` cold load by file I/O, whole-file/section copies,
   digest verification, binary decode, CoreCLR generation load, and first-use JIT
-- [ ] replace eager whole-file copies with bounded zero-copy or memory-mapped
-  section views, and introduce versioned interned string/type/member tables
-  where measurements prove a material win
-- [ ] split editor/debug payloads from the Shipping program image and cache
+- [x] measure eager whole-file/section copies and promote bounded zero-copy,
+  memory mapping, or interned tables only where results prove a material win;
+  current copy time is too small to prioritize this over code generation
+- [x] split editor/debug payloads from the Shipping program image and cache
   verified content identities without weakening transactional reload or
   tamper/corruption detection
+- [ ] run a controlled ReadyToRun/prewarming experiment against the same chunk
+  and World workload, retain it only if cold startup improves without breaking
+  deterministic SDK packaging or collectible generation unload
 - [ ] retain deterministic CoreCLR PE/IL as executable code and JSON as the
   readable authoring/import/export format; do not create a second custom VM
   whose semantics can drift from C# and the visual graph
@@ -1352,6 +1355,33 @@ Two deterministic 180-payload SDK archives reproduced SHA-256
 `f5fb0a649fed106c73462a6cf24f44d90c3c914e39d57120f6a78531a4788403`;
 the extracted SDK's packaged runner then passed three process-first trials
 against the same chunk without relying on a source-tree CLI.
+
+M11.4 dependency-cache evidence (2026-08-28): CoreCLR and Unreal World hosts
+now reuse bounded, content-digest-keyed immutable dependency snapshots across
+collectible generations. Misses verify SHA-256 plus CLR name/version/MVID under
+a write-excluding file handle; default-context assemblies are permanently bound
+to the first accepted digest, and ALCs load the verified bytes rather than
+reopening a path. The cache defaults to 128 entries / 256 MiB, uses LRU
+eviction, and is single-flight under concurrent loads. Three focused cache
+tests plus the existing Unreal loader test cover cold/warm counters, changed
+disk evidence, clearing, eight-way concurrency, bounds/eviction, and two World
+ALC generations.
+
+For the six-dependency Release Demo chunk, warm dependency validation fell from
+3.0522 ms to 0.1338 ms median and complete warm load from 4.3903 ms to 1.0748 ms
+across 14 warm trials (75.5% lower total load). Five independent processes
+still performed six misses each and reported 45.5446 ms cold load versus the
+previous 49.4572 ms, so process-first integrity work was not bypassed. The cold
+report explicitly accounts for 2,507,264 dependency snapshot bytes and
+2,757,986 total copied bytes. Evidence is
+`artifacts/chunk-profile/m11.4-dependency-cache-warm-v3.json` and
+`artifacts/chunk-profile/m11.4-dependency-cache-process-v2/process-profile.json`.
+The 575 / 575 managed suite, 78 / 78 repository invariants, and installed UE
+5.8.1 WorldHost Lifecycle Automation pass. Two SDK archives with 179
+manifest-listed payloads plus the manifest reproduced SHA-256
+`0e969ad5a81f591de21ab4d4fc9f8f6555dd6563d755b95ad3ff0f95eb2c6c92`;
+the extracted SDK profiler then passed three independent process-first trials.
+The cursor advances to the controlled ReadyToRun/prewarming experiment.
 
 M11.4 acceptance: the compiled path performs no gameplay-authoring JSON parse,
 retains loose/chunk semantic equivalence and failure containment, and its

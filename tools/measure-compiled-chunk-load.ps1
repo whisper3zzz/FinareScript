@@ -151,6 +151,8 @@ for ($trial = 1; $trial -le $Trials; ++$trial) {
         totalProfileNanoseconds = [long]$measurement.totalProfileNanoseconds
         currentThreadAllocatedBytes = [long]$measurement.currentThreadAllocatedBytes
         totalCopyBytes = [long]$measurement.totalCopyBytes
+        dependencyCacheHitCount = [int]$measurement.dependencyCacheHitCount
+        dependencyCacheMissCount = [int]$measurement.dependencyCacheMissCount
         phases = @($measurement.phases)
     })
 }
@@ -195,6 +197,10 @@ $report = [ordered]@{
             $measurements | ForEach-Object { [long]$_.currentThreadAllocatedBytes })
         totalCopyBytes = Get-Int64Median @(
             $measurements | ForEach-Object { [long]$_.totalCopyBytes })
+        dependencyCacheHitCount = Get-Int64Median @(
+            $measurements | ForEach-Object { [long]$_.dependencyCacheHitCount })
+        dependencyCacheMissCount = Get-Int64Median @(
+            $measurements | ForEach-Object { [long]$_.dependencyCacheMissCount })
         phases = $medianPhases
     }
     trials = @($measurements)

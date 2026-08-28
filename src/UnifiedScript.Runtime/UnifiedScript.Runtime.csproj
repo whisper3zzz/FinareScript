@@ -6,6 +6,7 @@
     <ProjectReference Include="../UnifiedScript.Core/UnifiedScript.Core.csproj" />
     <ProjectReference Include="../UnifiedScript.CSharp/UnifiedScript.CSharp.csproj" />
     <ProjectReference Include="../UnifiedScript.Semantics/UnifiedScript.Semantics.csproj" />
+    <InternalsVisibleTo Include="UnifiedScript.Tests" />
     <InternalsVisibleTo Include="UnifiedScript.Unreal" />
   </ItemGroup>
 </Project>

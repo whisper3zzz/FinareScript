@@ -155,6 +155,9 @@ dependency checks, load-context construction, PE/PDB materialization, CoreCLR
 assembly load, entry-type validation, JIT preparation, and unload request.
 Every phase carries nanoseconds plus any bytes read, bytes copied, or methods
 prepared, and the report includes per-phase medians without hiding trial data.
+Dependency validation additionally reports exact cache hit/miss counts and
+miss-side snapshot bytes read/copied per trial, so warm results cannot be
+confused with a process-first integrity check or hide retained cache memory.
 
 JIT preparation uses `RuntimeHelpers.PrepareMethod` over concrete methods
 declared by chunk entry types. It is a controlled first-code-generation probe,
@@ -199,6 +202,55 @@ Two 180-payload M11.4 SDK archives reproduced SHA-256
 `f5fb0a649fed106c73462a6cf24f44d90c3c914e39d57120f6a78531a4788403`;
 the extracted SDK's packaged runner then completed three isolated trials using
 the packaged CLI, not a source checkout.
+
+## M11.4 verified dependency snapshot cache
+
+CoreCLR and Unreal World hosts now share one content-addressed managed
+dependency cache across collectible script generations. A miss opens the file
+with writes excluded, reads it once into a bounded byte array, verifies the
+exact SHA-256 identity, and reads assembly name, version, and module MVID from
+CLR metadata. A dependency already loaded in the default context must also
+match that verified MVID; the process permanently binds that shared assembly
+instance to its first accepted content digest. This prevents a later reload
+from claiming different bytes for an assembly that CoreCLR cannot replace.
+
+The verified immutable byte snapshot, rather than the path that was checked,
+is passed to a collectible `AssemblyLoadContext`. Consequently there is no
+check-file/load-file race. A later request for the same manifest digest may be
+satisfied from the cached snapshot even if the path changed after the first
+load; clearing cached content forces disk evidence to be read again, while the
+non-replaceable shared-assembly binding remains enforced.
+
+The process cache defaults to 128 entries and 256 MiB, uses deterministic LRU
+eviction, and refuses an individual dependency larger than 512 MiB. An image
+larger than the configured cache budget is still fully verified and used for
+that load but is not retained. Verification is single-flight under concurrent
+World loads, so one digest produces one miss and subsequent consumers reuse the
+same immutable snapshot. The profiler exposes hit/miss counts alongside the
+dependency phase.
+
+On the same six-dependency 84,145-byte Release Demo chunk, 15 trials produced
+six misses in the first trial and six hits in every later trial. The 14 warm
+trials reduced dependency-validation median from the earlier 3.0522 ms baseline
+to 0.1338 ms, while complete warm load fell from 4.3903 ms to 1.0748 ms. Five
+independent processes still performed six misses each and reported a 45.5446 ms
+cold-load median versus the earlier 49.4572 ms baseline, confirming that a new
+process continues to perform full integrity and identity verification. Each
+cold trial now explicitly accounts for 2,507,264 dependency snapshot bytes and
+2,757,986 total copied bytes. Evidence is
+`artifacts/chunk-profile/m11.4-dependency-cache-warm-v3.json` and
+`artifacts/chunk-profile/m11.4-dependency-cache-process-v2/process-profile.json`.
+The next measured experiment is ReadyToRun/prewarming; the current copy timings
+still do not justify promoting memory mapping ahead of first-code-generation
+cost.
+
+The installed UE 5.8.1 WorldHost Lifecycle Automation also passed the compiled
+chunk Start/Tick/reload/Stop path with generation 3 and zero legacy calls. Two
+SDK builds each contained 179 manifest-listed payloads plus the manifest and
+reproduced archive SHA-256
+`0e969ad5a81f591de21ab4d4fc9f8f6555dd6563d755b95ad3ff0f95eb2c6c92`.
+After extraction, the packaged profiler completed three independent cold
+process trials against the same chunk without a source checkout.
 
 ## Measured BlockBreaker impact
 

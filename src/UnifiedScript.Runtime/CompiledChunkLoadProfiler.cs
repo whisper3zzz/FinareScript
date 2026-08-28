@@ -19,6 +19,8 @@ public sealed record UnifiedScriptCompiledChunkProfileTrial(
     long TotalProfileNanoseconds,
     long CurrentThreadAllocatedBytes,
     long TotalCopyBytes,
+    int DependencyCacheHitCount,
+    int DependencyCacheMissCount,
     IReadOnlyList<UnifiedScriptCompiledChunkProfilePhase> Phases);
 
 public sealed record UnifiedScriptCompiledChunkLoadProfileReport(
@@ -173,6 +175,8 @@ public sealed class UnifiedScriptCompiledChunkLoadProfiler
                     load.Profile.CurrentThreadAllocatedBytes +
                     prewarm.CurrentThreadAllocatedBytes),
                 load.Profile.TotalCopyBytes,
+                load.Profile.DependencyCacheHitCount,
+                load.Profile.DependencyCacheMissCount,
                 phases));
         }
 
@@ -236,7 +240,13 @@ public sealed class UnifiedScriptCompiledChunkLoadProfiler
             Phase("bindingDecode", load.BindingDecodeStopwatchTicks),
             Phase("dependencyDecode", load.DependencyDecodeStopwatchTicks),
             Phase("identityValidation", load.IdentityValidationStopwatchTicks),
-            Phase("dependencyValidation", load.DependencyValidationStopwatchTicks),
+            Phase(
+                "dependencyValidation",
+                load.DependencyValidationStopwatchTicks,
+                bytesRead: load.DependencySnapshotCopyBytes,
+                bytesCopied: load.DependencySnapshotCopyBytes,
+                workItems: checked(
+                    load.DependencyCacheHitCount + load.DependencyCacheMissCount)),
             Phase("loadContextCreation", load.LoadContextCreationStopwatchTicks),
             Phase(
                 "managedAssemblyMaterialization",
