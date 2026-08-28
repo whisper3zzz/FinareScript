@@ -244,7 +244,8 @@ try {
         'install-unifiedscript-sdk.ps1',
         'new-unifiedscript-project.ps1',
         'start-unifiedscript-authoring.ps1',
-        'measure-compiled-chunk-load.ps1')) {
+        'measure-compiled-chunk-load.ps1',
+        'measure-readytorun-chunk.ps1')) {
         $source = Join-Path $repoRoot "tools\$tool"
         if (-not (Test-Path -LiteralPath $source)) {
             Throw-SdkError 'USSDK1001' "Required SDK tool is missing: $source"
@@ -312,6 +313,7 @@ try {
         'Tools\new-unifiedscript-project.ps1',
         'Tools\start-unifiedscript-authoring.ps1',
         'Tools\measure-compiled-chunk-load.ps1',
+        'Tools\measure-readytorun-chunk.ps1',
         'Tools\UnifiedScript.Cli\UnifiedScript.Cli.dll',
         'Tools\UnifiedScript.Cli\UnifiedScript.Cli.runtimeconfig.json',
         'Schemas\compatibility-policy.v0.1.json',

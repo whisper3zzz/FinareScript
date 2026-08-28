@@ -49,7 +49,7 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-28**
 
 - Active milestone: **M11 — Production hardening and release candidate**
-- Next slice: **M11.4 — controlled ReadyToRun/prewarming experiment**
+- Next slice: **M11.4 — transactional background prewarm policy**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -64,7 +64,7 @@ machine-local unless an artifact explicitly says otherwise.
 | UnifiedScript comparison source | `5cf323e` (`perf: sync representative workload host`) |
 | Puerts comparison source | `be399cb` (`perf: register benchmark world context`) |
 | Managed tests | 575 / 575 passed |
-| Repository validator | 78 / 78 passed |
+| Repository validator | 79 / 79 passed |
 | UE 5.8.1 native build | passed |
 | `UnifiedScript.Unreal` Automation | 17 / 17 passed, including bounded crash breadcrumbs, failure containment, deterministic World shutdown, workload collectors, gameplay-profiler attribution, Authoring Surface, live World semantic pause/step/reload/detach, and repeated success/failure hot-reload leak coverage |
 | M10.2 generated-channel profile | 1,024 rows x 3 median samples: container binding 25,371.973 ns/row, generated snapshot 1.270 ns/row (ratio 0.000050), buffered events 0.586 ns/row, zero managed allocation |
@@ -1326,9 +1326,12 @@ measured compiled program image v2 work.
 - [x] split editor/debug payloads from the Shipping program image and cache
   verified content identities without weakening transactional reload or
   tamper/corruption detection
-- [ ] run a controlled ReadyToRun/prewarming experiment against the same chunk
-  and World workload, retain it only if cold startup improves without breaking
-  deterministic SDK packaging or collectible generation unload
+- [x] run a controlled ReadyToRun experiment against the same exact-identity
+  chunk and reject promotion when cold startup, JIT preparation, or delivery
+  size fails the materiality budgets
+- [ ] move bounded entry-method prewarming outside the activation critical path,
+  cancel it with its generation, and prove first Tick improves without delaying
+  transactional reload or World teardown
 - [ ] retain deterministic CoreCLR PE/IL as executable code and JSON as the
   readable authoring/import/export format; do not create a second custom VM
   whose semantics can drift from C# and the visual graph
@@ -1382,6 +1385,22 @@ manifest-listed payloads plus the manifest reproduced SHA-256
 `0e969ad5a81f591de21ab4d4fc9f8f6555dd6563d755b95ad3ff0f95eb2c6c92`;
 the extracted SDK profiler then passed three independent process-first trials.
 The cursor advances to the controlled ReadyToRun/prewarming experiment.
+
+M11.4 ReadyToRun evidence (2026-08-28):
+`tools/measure-readytorun-chunk.ps1` extracts the exact chunk IL, requires
+matching .NET/Crossgen2 versions, verifies assembly name/version/MVID after
+Crossgen2, repacks only the managed section, and emits the privacy-allowlisted
+`unifiedscript.readytorun-experiment/v0.1` report. Nine process-first trials per
+variant measured the 84,145-byte IL chunk at 51.0447 ms load / 6.9704 ms method
+preparation and the 173,745-byte R2R chunk at 52.2050 ms / 6.7121 ms. R2R-to-IL
+ratios were 1.022731 cold load, 0.962943 preparation, and 2.064829 bytes, failing
+the 0.95 / 0.95 / 1.50 promotion gates. R2R is therefore explicitly rejected
+for the collectible memory-stream delivery path. Two SDK archives with 180
+manifest-listed payloads plus the manifest reproduced SHA-256
+`a401a8c45f6b2c6a235db5e879bc022d84dafff4b203d20cd4631b332c73be38`;
+the extracted packaged experiment tool passed a three-trial-per-variant smoke.
+Repository validation is 79 / 79; the cursor advances to bounded,
+generation-owned background prewarming.
 
 M11.4 acceptance: the compiled path performs no gameplay-authoring JSON parse,
 retains loose/chunk semantic equivalence and failure containment, and its

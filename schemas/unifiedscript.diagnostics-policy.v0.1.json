@@ -19,6 +19,7 @@
     "unifiedscript.project-scaffold-report/v0.1",
     "unifiedscript.puerts-migration-report/v0.1",
     "unifiedscript.puerts-smoke-comparison/v0.1",
+    "unifiedscript.readytorun-experiment/v0.1",
     "unifiedscript.representative-workload-report/v0.1",
     "unifiedscript.runtime-diagnostic/v0.1",
     "unifiedscript.sdk-install-report/v0.1",

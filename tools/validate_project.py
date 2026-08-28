@@ -168,6 +168,9 @@ def main() -> int:
     compiled_chunk_process_profiler = (
         ROOT / "tools" / "measure-compiled-chunk-load.ps1"
     ).read_text(encoding="utf-8")
+    readytorun_profiler = (
+        ROOT / "tools" / "measure-readytorun-chunk.ps1"
+    ).read_text(encoding="utf-8")
     compiled_program_tests = (
         ROOT / "tests" / "UnifiedScript.Tests" / "CompiledProgramChunkTests.cs"
     ).read_text(encoding="utf-8")
@@ -317,6 +320,23 @@ def main() -> int:
     )
     checks.append(
         "M11.4 caches bounded verified dependency snapshots across World generations"
+    )
+    require(
+        "unifiedscript.readytorun-experiment/v0.1" in readytorun_profiler
+        and "Crossgen2 output does not preserve the exact IL identity"
+        in readytorun_profiler
+        and "managedNativeHeaderBytes" in readytorun_profiler
+        and "collectible-memory-stream" in readytorun_profiler
+        and "maximumLoadRatio = 0.95" in readytorun_profiler
+        and "maximumJitPreparationRatio = 0.95" in readytorun_profiler
+        and "maximumChunkSizeRatio = 1.5" in readytorun_profiler
+        and "promoteReadyToRun = $promote" in readytorun_profiler
+        and "M11.4 ReadyToRun decision" in compiled_chunk_document
+        and "R2R failed all three promotion gates" in compiled_chunk_document,
+        "M11.4 exact-identity ReadyToRun experiment, promotion budgets, SDK tool, or decision record is incomplete",
+    )
+    checks.append(
+        "M11.4 rejects ReadyToRun when exact-identity cold load, JIT, or size budgets fail"
     )
 
     deployment_sample_path = (
@@ -528,6 +548,7 @@ def main() -> int:
         and "Managed\\Runtime" in sdk_package
         and "Tools\\UnifiedScript.Cli" in sdk_package
         and "measure-compiled-chunk-load.ps1" in sdk_package
+        and "measure-readytorun-chunk.ps1" in sdk_package
         and "COMPILED_CHUNKS.md" in sdk_package
         and "Engine-version-specific plugin Binaries leaked" in sdk_package
         and "Assert-NoMachinePathLeak" in sdk_package
@@ -678,8 +699,8 @@ def main() -> int:
     require(
         diagnostics_policy["schemaVersion"]
         == "unifiedscript.diagnostics-policy/v0.1"
-        and len(diagnostics_policy["allowedSchemas"]) == 28
-        and len(set(diagnostics_policy["allowedSchemas"])) == 28
+        and len(diagnostics_policy["allowedSchemas"]) == 29
+        and len(set(diagnostics_policy["allowedSchemas"])) == 29
         and diagnostics_policy["maximumReportCount"] == 256
         and diagnostics_policy["maximumReportBytes"] == 16 * 1024 * 1024
         and diagnostics_policy["maximumBundleBytes"] == 64 * 1024 * 1024
@@ -690,6 +711,8 @@ def main() -> int:
         and "unifiedscript.compiled-chunk-load-profile/v0.1"
         in diagnostics_policy["allowedSchemas"]
         and "unifiedscript.compiled-chunk-process-profile/v0.1"
+        in diagnostics_policy["allowedSchemas"]
+        and "unifiedscript.readytorun-experiment/v0.1"
         in diagnostics_policy["allowedSchemas"]
         and all(
             source_schema not in diagnostics_policy["allowedSchemas"]

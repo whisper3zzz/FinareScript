@@ -240,9 +240,9 @@ cold trial now explicitly accounts for 2,507,264 dependency snapshot bytes and
 2,757,986 total copied bytes. Evidence is
 `artifacts/chunk-profile/m11.4-dependency-cache-warm-v3.json` and
 `artifacts/chunk-profile/m11.4-dependency-cache-process-v2/process-profile.json`.
-The next measured experiment is ReadyToRun/prewarming; the current copy timings
-still do not justify promoting memory mapping ahead of first-code-generation
-cost.
+The current copy timings still do not justify promoting memory mapping ahead
+of first-code-generation cost; the following ReadyToRun experiment tests that
+cost directly.
 
 The installed UE 5.8.1 WorldHost Lifecycle Automation also passed the compiled
 chunk Start/Tick/reload/Stop path with generation 3 and zero legacy calls. Two
@@ -251,6 +251,54 @@ reproduced archive SHA-256
 `0e969ad5a81f591de21ab4d4fc9f8f6555dd6563d755b95ad3ff0f95eb2c6c92`.
 After extraction, the packaged profiler completed three independent cold
 process trials against the same chunk without a source checkout.
+
+## M11.4 ReadyToRun decision
+
+`tools/measure-readytorun-chunk.ps1` extracts the exact IL assembly from a
+verified Release chunk, runs the Crossgen2 version matching the installed UE
+.NET runtime, and requires the R2R output to preserve assembly name, version,
+and MVID. It then repacks only the managed assembly section, launches matched
+independent process distributions for IL and R2R, and publishes
+`unifiedscript.readytorun-experiment/v0.1`. The decision gate requires at least
+5% lower cold load, at least 5% lower entry-method preparation, and no more than
+1.5x chunk growth; completing a valid experiment is a pass even when evidence
+rejects promotion.
+
+```powershell
+.\tools\measure-readytorun-chunk.ps1 `
+  -ChunkPath Game.uschunk `
+  -Crossgen2Path $crossgen2 `
+  -ReferencePath $managedReferences `
+  -Trials 9 `
+  -EngineRoot D:\UE_5.8
+```
+
+The exact-identity Demo experiment used .NET/Crossgen2 10.0.7 and nine cold
+processes per variant. IL was 84,145 bytes with a 51.0447 ms load median and
+6.9704 ms entry-method preparation. R2R was 173,745 bytes with a 52.2050 ms
+load median and 6.7121 ms preparation. The ratios were therefore 1.022731 load,
+0.962943 preparation, and 2.064829 size. R2R failed all three promotion gates
+and is not part of the product delivery path. Evidence is
+`artifacts/chunk-profile/m11.4-r2r-controlled/readytorun-experiment.json`.
+
+Two SDK archives with 180 manifest-listed payloads plus the manifest reproduced
+SHA-256
+`a401a8c45f6b2c6a235db5e879bc022d84dafff4b203d20cd4631b332c73be38`.
+The extracted SDK's packaged R2R tool then completed a three-trial-per-variant
+smoke using the packaged CLI. Its first attempt correctly rejected a stale
+chunk dependency digest before the current Release chunk was emitted.
+
+This outcome matches CoreCLR's stream-loading implementation: the official
+runtime source describes a stream-based image as being passed onward as IL.
+Switching to path-backed R2R solely for this optimization would conflict with
+the current immutable in-memory chunk and collectible-generation model; the
+.NET load-context design also limits reuse of precompiled code when one R2R
+location is loaded into multiple contexts. The next slice therefore keeps the
+portable deterministic IL chunk and evaluates bounded, cancellable prewarming
+before a generation becomes active.
+
+[CoreCLR stream load source]: https://github.com/dotnet/runtime/blob/main/src/coreclr/vm/assemblynative.cpp
+[.NET AssemblyLoadContext R2R constraint]: https://github.com/dotnet/runtime/blob/main/docs/design/features/assemblyloadcontext.md
 
 ## Measured BlockBreaker impact
 
