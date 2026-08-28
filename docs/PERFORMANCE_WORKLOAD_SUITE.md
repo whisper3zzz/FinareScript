@@ -212,11 +212,13 @@ samples in one UE 5.8.1 World. Matched direct Array+Map binding measured
 numbers validate the new routing mechanism; they do not rewrite the historical
 M10.1 captures or establish the future M10.3 weighted product verdict.
 
-M10.3 now has matched evidence for the two changed v1.1.0 recipes. Across three
-alternating trials, the fixed-container medians are 0.1213 ms for UnifiedScript
-and 59.870601 ms for Puerts (ratio 0.002026); buffered events are 0.2561 ms and
-34.6535 ms (ratio 0.007390). UnifiedScript reports one acquisition, zero logical
-boundary-copy bytes, and zero managed allocation in all six trials. Reusing the
-unchanged v1.0.0 medians for a provisional calculation would produce 0.613204,
-but that is explicitly not the M10.3 verdict: the remaining v1.1.0 captures and
-fresh package measurement must be rerun under the new manifest first.
+M10.3 completed all 54 v1.1.0 slots with three alternating trials per runtime
+and workload, plus refreshed package evidence. The checked-in budget evaluates
+to `qualified`: weighted ratio 0.555769 against the 0.95 maximum, with all 14
+regression gates passing. The fixed-container median is 0.1118 ms versus
+64.0493 ms and the buffered-event median is 0.2813 ms versus 36.2080 ms; both
+UnifiedScript paths retain one acquisition, zero logical boundary-copy bytes,
+and zero managed allocation. The report also preserves losses: scalar calls
+are 14.7766 ms versus 14.3339 ms (ratio 1.030885), resource/spawn is 4.7966 ms
+versus 4.002102 ms (ratio 1.198520), and the mechanism-mismatched hot-reload
+latency remains explicitly excluded from the weighted product claim.

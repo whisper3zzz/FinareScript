@@ -52,11 +52,12 @@ replace the frozen matched Puerts suite or satisfy M10.3 by itself.
 M10.3 converts that route-level proof into suite v1.1.0 without rewriting the
 checked-in v1.0.0 manifest. The fixed-container recipe keeps 16,384 rows; the
 event recipe uses the declared 65,536-entry channel bound on both runtimes.
-Three alternating trials produced 0.1213 ms versus 59.870601 ms for containers
-(ratio 0.002026), and 0.2561 ms versus 34.6535 ms for events (ratio 0.007390).
+Three alternating trials produced 0.1118 ms versus 64.0493 ms for containers
+(ratio 0.001746), and 0.2813 ms versus 36.2080 ms for events (ratio 0.007769).
 Every UnifiedScript trial reports one acquisition, zero logical boundary-copy
-bytes, and zero managed allocation. These are complete pair-level results, but
-the product verdict remains pending the other seven workloads.
+bytes, and zero managed allocation. The complete 54-slot suite qualifies at a
+weighted ratio of 0.555769 versus the 0.95 maximum, with every absolute
+regression gate passing.
 
 The reviewed policy lives in
 `benchmarks/unreal/performance-budgets.v1.1.0.json`. It selects one primary
@@ -84,8 +85,8 @@ powershell -ExecutionPolicy Bypass -File comparison/run-performance-comparison.p
 The latest local `artifacts/comparison/performance/comparison.json` uses the
 same machine, UE 5.8.1 Development Editor configuration, 4,096 warm-up calls,
 and five 100,000-call samples. The current formal three-trial suite median is
-168.016 ns per UnifiedScript call versus 138.69699 ns per Puerts call, a losing
-ratio of 1.211389. UnifiedScript still records zero managed allocation in the
+147.766 ns per UnifiedScript call versus 143.339 ns per Puerts call, a losing
+ratio of 1.030885. UnifiedScript still records zero managed allocation in the
 measured loop. This result applies only to the generated
 `int32 Add(int32, int32)` boundary; it is published as a loss and the artifacts
 are not treated as portable cross-machine evidence.
@@ -111,10 +112,10 @@ once, performs only runtime work inside measured trials, alternates which
 runtime executes first to reduce build heat and ordering bias, and now runs the
 full 74-item migration audit before measurement. The latest local three-trial
 result reports zero legacy calls and p50/p95/p99 frame medians of
-0.5824/1.0596/1.4033 ms for UnifiedScript versus
-0.64795/1.1092/1.4626 ms for Puerts. The ratios are
-0.898835/0.955283/0.959456. Bridge time is 175.4974 ms versus 522.2836 ms
-(ratio 0.336019), and every trial completed exactly one shot and one hit. All
+0.4340/0.8549/1.2585 ms for UnifiedScript versus
+0.4740/0.9416/1.3735 ms for Puerts. The ratios are
+0.915612/0.907923/0.916272. Bridge time is 122.1483 ms versus 328.9069 ms
+(ratio 0.371377), and every trial completed exactly one shot and one hit. All
 13 M10.1 metrics are present, but allocation and reload retain runtime-specific
-collector semantics. The full 54-slot suite is published; its mixed workload
-results remain separate from the future M10.3 weighted claim.
+collector semantics. Together with the other matched workloads and refreshed
+package sizes, this is the qualified M10.3 broad-suite verdict.

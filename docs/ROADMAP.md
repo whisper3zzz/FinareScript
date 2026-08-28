@@ -48,8 +48,8 @@ current cursor, validate it, and advance this document.
 
 Last refreshed: **2026-08-28**
 
-- Active milestone: **M10 — Performance architecture and honest Puerts comparison**
-- Next slice: **M10.3 — performance budgets and refreshed matched suite**
+- Active milestone: **M11 — Production hardening and release candidate**
+- Next slice: **M11.0 — deterministic compiled delivery chunks**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -60,20 +60,21 @@ machine-local unless an artifact explicitly says otherwise.
 
 | Gate | Verified result |
 | --- | --- |
-| Runtime source baseline | `9f9f026` (`feat: complete representative workload collectors`) |
-| UnifiedScript comparison source | `e0c7110` (`feat: sync current unifiedscript runtime into demo`) |
-| Puerts comparison source | `5612b59` (`feat: benchmark puerts reload generations`) |
-| Managed tests | 543 / 543 passed |
-| Repository validator | 66 / 66 passed |
+| Runtime source baseline | `810913d` (`perf: remove benchmark world log pollution`) |
+| UnifiedScript comparison source | `5cf323e` (`perf: sync representative workload host`) |
+| Puerts comparison source | `be399cb` (`perf: register benchmark world context`) |
+| Managed tests | 546 / 546 passed |
+| Repository validator | 68 / 68 passed |
 | UE 5.8.1 native build | passed |
 | `UnifiedScript.Unreal` Automation | 16 / 16 passed, including workload collectors, gameplay-profiler attribution, Authoring Surface, live World semantic pause/step/reload/detach, and repeated success/failure hot-reload leak coverage |
 | M10.2 generated-channel profile | 1,024 rows x 3 median samples: container binding 25,371.973 ns/row, generated snapshot 1.270 ns/row (ratio 0.000050), buffered events 0.586 ns/row, zero managed allocation |
 | Representative workload suite | 54 / 54 scheduled captures; nine workloads, three trials, two runtimes, matched machine/build identity, alternating runtime order |
 | BlockBreaker workload | 10,000 frames, three trials, one shot, one hit, two command completions per trial |
 | Gameplay boundary | generated ABI v3 fast/CallFrame path, zero legacy calls |
-| Matched BlockBreaker frame median | UnifiedScript 0.5824 ms; Puerts 0.64795 ms; ratio 0.898835; p95/p99 ratios 0.955283 / 0.959456 |
-| Matched BlockBreaker bridge median | UnifiedScript 175.4974 ms; Puerts 522.2836 ms; ratio 0.336019; calls and logical bytes are both 20% of Puerts |
-| Matched package size | UnifiedScript 1,032,716,821 bytes; Puerts 1,009,698,201 bytes; ratio 1.022798 |
+| M10.3 weighted suite | qualified at 0.555769 versus the 0.95 maximum; all 14 regression gates passed |
+| Matched BlockBreaker frame median | UnifiedScript 0.4340 ms; Puerts 0.4740 ms; ratio 0.915612; p95/p99 ratios 0.907923 / 0.916272 |
+| Matched BlockBreaker bridge median | UnifiedScript 122.1483 ms; Puerts 328.9069 ms; ratio 0.371377; calls and logical bytes are both 20% of Puerts |
+| Matched package size | UnifiedScript 1,033,027,093 bytes; Puerts 1,009,681,817 bytes; ratio 1.023121 |
 | Full migration audit | 74 / 74 inventory items, 19 / 19 shared assets, 40 / 40 generated thunks, zero legacy targets |
 | Deliverable smoke | 300 frames, one shot, one hit, two command completions, 3,631 fast/CallFrame calls, zero legacy calls |
 | Deliverable report | `artifacts/demo/blockbreaker-20260827-165719/demo-delivery.json` |
@@ -1131,32 +1132,47 @@ tests, and all 16 `UnifiedScript.Unreal` Automation tests pass.
 
 - [x] keep zero steady-state managed allocation on generated fixed-value fast
   paths and published data-plane loops
-- [ ] prevent regressions in the existing ABI and BlockBreaker gates, with
+- [x] prevent regressions in the existing ABI and BlockBreaker gates, with
   explicit reviewed threshold changes rather than silently moving targets
-- [ ] require the weighted matched gameplay suite to beat Puerts by at least 5%
+- [x] require the weighted matched gameplay suite to beat Puerts by at least 5%
   before making the broad product claim; publish neutral or losing results too
 
 Acceptance: the performance report explains where UnifiedScript wins or loses,
 and the broad claim is derived from the versioned suite rather than one API.
 
-In progress (2026-08-28): the frozen v1.0.0 manifest remains unchanged and a
-v1.1.0 suite promotes only the profiled stable shapes. The 16,384-row
-fixed-container workload now uses one generated snapshot acquisition and the
-65,536-event workload uses one next-frame generated event acquisition. Three
-alternating matched trials measured UnifiedScript medians of 0.1213 ms and
-0.2561 ms against Puerts at 59.870601 ms and 34.6535 ms, ratios of 0.002026 and
-0.007390; all six UnifiedScript trials report one bridge acquisition, zero
-logical boundary copies, and zero managed allocation. The checked-in
-`performance-budgets.v1.1.0.json` records the unchanged 0.95 weighted claim
-threshold, explicit workload/metric selection, the hot-reload exclusion reason,
-and reviewed ABI/BlockBreaker ceilings. `ue-workload-budget` always publishes a
-`qualified` or `not-qualified` report. The broad claim remains unset until all
-54 v1.1.0 slots and the refreshed package evidence are complete.
+Completed (2026-08-28): suite v1.1.0 completed all 54 alternating slots on the
+same UE 5.8.1 machine/build identity and refreshed both packages. The reviewed
+weighted result is 0.555769 against the 0.95 maximum, so the broad suite claim
+qualifies; all 14 absolute regression gates pass. The result still publishes
+the losing scalar ratio (1.030885), resource-flow ratio (1.198520), and excluded
+hot-reload diagnostic (4.959958) rather than hiding them. BlockBreaker medians
+are 0.4340/0.8549/1.2585 ms at p50/p95/p99 versus Puerts at
+0.4740/0.9416/1.3735 ms, and package ratio is 1.023121. Full validation is
+546/546 managed tests, 68/68 repository invariants, UE 5.8.1 native build, and
+16/16 `UnifiedScript.Unreal` Automation tests.
 
 ## M11 — Production hardening and release candidate
 
 Outcome: the same versioned product survives real project scale, upgrades,
 long sessions, and supported build configurations.
+
+### M11.0 — Deterministic compiled delivery chunks
+
+- [ ] define `.uschunk` v0.1 as a deterministic, bounds-checked section
+  container for the existing CoreCLR PE/IL program and runtime contracts, not a
+  second bytecode VM
+- [ ] compile canonical authoring inputs into runtime PE, declaration, binding,
+  dependency, and identity sections while moving source maps and editor data to
+  an optional sidecar
+- [ ] load and reload chunks transactionally with format/version/hash checks,
+  retain loose-file compatibility during migration, and stage chunks in cooked
+  packages
+- [ ] prove byte-for-byte deterministic output, corruption rejection, semantic
+  equivalence, reload rollback, and measured startup/package impact
+
+Acceptance: a packaged Script Asset can point at one verified `.uschunk`, load
+the same collectible CoreCLR generation as loose artifacts, and start without
+runtime JSON parsing on the product path.
 
 ### M11.1 — Reliability and scale
 
