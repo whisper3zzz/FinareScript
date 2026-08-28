@@ -65,6 +65,7 @@ DOCUMENTS = [
     ROOT / "docs" / "HOT_RELOAD_RELIABILITY.md",
     ROOT / "docs" / "GAMEPLAY_PROFILER.md",
     ROOT / "docs" / "PERFORMANCE_WORKLOAD_SUITE.md",
+    ROOT / "docs" / "COMPILED_CHUNKS.md",
     ROOT / "docs" / "PROJECT_LOADING.md",
     ROOT / "docs" / "DECLARATION_IR.md",
     ROOT / "docs" / "STATE_OVERRIDE_MIGRATION.md",
@@ -131,6 +132,35 @@ def main() -> int:
     for document in DOCUMENTS:
         require(document.is_file(), f"Missing document: {document}")
     checks.append("architecture and milestone documents exist")
+
+    compiled_chunk_source = (
+        ROOT / "src" / "UnifiedScript.Core" / "CompiledChunk.cs"
+    ).read_text(encoding="utf-8")
+    compiled_chunk_tests = (
+        ROOT / "tests" / "UnifiedScript.Tests" / "CompiledChunkTests.cs"
+    ).read_text(encoding="utf-8")
+    cli_source = (
+        ROOT / "src" / "UnifiedScript.Cli" / "Program.cs"
+    ).read_text(encoding="utf-8")
+    compiled_chunk_document = (
+        ROOT / "docs" / "COMPILED_CHUNKS.md"
+    ).read_text(encoding="utf-8")
+    require(
+        '"USCHUNK\\0"u8' in compiled_chunk_source
+        and "FormatMajorVersion = 1" in compiled_chunk_source
+        and "ComputeContentDigest" in compiled_chunk_source
+        and "FixedTimeEquals" in compiled_chunk_source
+        and "UnifiedScriptProgramChunk" in compiled_chunk_source
+        and 'args[0] == "chunk-pack"' in cli_source
+        and 'args[0] == "chunk-inspect"' in cli_source
+        and "Write_IsDeterministicAndCanonicalAcrossInputOrder"
+        in compiled_chunk_tests
+        and "Read_RejectsCorruptedPayloadBeforeItCanBeLoaded"
+        in compiled_chunk_tests
+        and "does **not** introduce another interpreter" in compiled_chunk_document,
+        "Compiled chunk envelope, strict reader, CLI, tests, and contract are disconnected",
+    )
+    checks.append("compiled chunks are deterministic, integrity-checked, and not a second VM")
 
     deployment_sample_path = (
         ROOT / "samples" / "Unreal" / "UnifiedScript.Unreal.Demo.deployment.json"
@@ -3915,7 +3945,7 @@ def main() -> int:
         and "all 27 captures" in performance_suite_doc
         and "all 54 execution ordinals" in performance_suite_doc
         and "mixed results close M10.1" in performance_suite_doc
-        and "- Next slice: **M10.3" in roadmap
+        and "- Next slice: **M11.0" in roadmap
         and "- [x] use profiler evidence to promote only high-volume stable data"
         in roadmap
         and "- [x] preserve World ownership, generation checks, bounds"
@@ -3996,7 +4026,10 @@ def main() -> int:
         and "allocatedBytes -ne 0" in (
             ROOT / "tools" / "run-unreal-representative-workload.ps1"
         ).read_text(encoding="utf-8")
-        and "- [x] keep zero steady-state managed allocation" in roadmap,
+        and "- [x] keep zero steady-state managed allocation" in roadmap
+        and "- [x] prevent regressions in the existing ABI" in roadmap
+        and "- [x] require the weighted matched gameplay suite" in roadmap
+        and "weighted result is 0.555769" in roadmap,
         "M10.3 versioned generated workloads, reviewed budgets, or honest verdict are incomplete",
     )
     checks.append(

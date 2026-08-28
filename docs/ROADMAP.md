@@ -1158,7 +1158,7 @@ long sessions, and supported build configurations.
 
 ### M11.0 — Deterministic compiled delivery chunks
 
-- [ ] define `.uschunk` v0.1 as a deterministic, bounds-checked section
+- [x] define `.uschunk` v0.1 as a deterministic, bounds-checked section
   container for the existing CoreCLR PE/IL program and runtime contracts, not a
   second bytecode VM
 - [ ] compile canonical authoring inputs into runtime PE, declaration, binding,
@@ -1173,6 +1173,13 @@ long sessions, and supported build configurations.
 Acceptance: a packaged Script Asset can point at one verified `.uschunk`, load
 the same collectible CoreCLR generation as loose artifacts, and start without
 runtime JSON parsing on the product path.
+
+In progress (2026-08-28): the v0.1 envelope, strict program profile,
+whole-file/per-section SHA-256 validation, deterministic `chunk-pack`,
+`chunk-inspect`, corruption tests, and runtime/debug/editor section separation
+are implemented. Runtime payload codecs and World-host integration are the next
+slice; the existing loose-file route remains the active product path until that
+vertical slice is verified.
 
 ### M11.1 — Reliability and scale
 

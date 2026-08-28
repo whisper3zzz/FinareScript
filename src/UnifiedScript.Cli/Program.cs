@@ -76,6 +76,16 @@ internal static class Program
             return RunExecute(args);
         }
 
+        if (args.Count > 0 && args[0] == "chunk-pack")
+        {
+            return RunChunkPack(args);
+        }
+
+        if (args.Count > 0 && args[0] == "chunk-inspect")
+        {
+            return RunChunkInspect(args);
+        }
+
         if (args.Count > 0 && args[0] == "debug-serve")
         {
             return RunDebugServe(args);
@@ -724,6 +734,125 @@ internal static class Program
         }
 
         return 0;
+    }
+
+    private static int RunChunkPack(IReadOnlyList<string> args)
+    {
+        if (!TryParseChunkPackArguments(args, out ChunkPackOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+
+        options = options ?? throw new InvalidOperationException(
+            "Argument parsing succeeded without chunk-pack options.");
+        var sections = new List<UnifiedScriptChunkSection>
+        {
+            ReadChunkSection(
+                UnifiedScriptChunkSectionKind.RuntimeManifest,
+                UnifiedScriptChunkSectionFlags.RuntimeRequired,
+                options.RuntimeManifestPath),
+            ReadChunkSection(
+                UnifiedScriptChunkSectionKind.ManagedAssembly,
+                UnifiedScriptChunkSectionFlags.RuntimeRequired,
+                options.AssemblyPath),
+            ReadChunkSection(
+                UnifiedScriptChunkSectionKind.DeclarationData,
+                UnifiedScriptChunkSectionFlags.RuntimeRequired,
+                options.DeclarationPath),
+            ReadChunkSection(
+                UnifiedScriptChunkSectionKind.BindingManifest,
+                UnifiedScriptChunkSectionFlags.RuntimeRequired,
+                options.BindingManifestPath),
+            ReadChunkSection(
+                UnifiedScriptChunkSectionKind.DependencyManifest,
+                UnifiedScriptChunkSectionFlags.RuntimeRequired,
+                options.DependencyManifestPath),
+        };
+        AddOptionalChunkSection(
+            sections,
+            UnifiedScriptChunkSectionKind.PortablePdb,
+            UnifiedScriptChunkSectionFlags.Debug,
+            options.PortablePdbPath);
+        AddOptionalChunkSection(
+            sections,
+            UnifiedScriptChunkSectionKind.SourceMap,
+            UnifiedScriptChunkSectionFlags.Debug,
+            options.SourceMapPath);
+        AddOptionalChunkSection(
+            sections,
+            UnifiedScriptChunkSectionKind.AuthoringSurface,
+            UnifiedScriptChunkSectionFlags.Editor,
+            options.AuthoringSurfacePath);
+
+        byte[] content = UnifiedScriptChunkCodec.Write(sections);
+        UnifiedScriptChunk chunk = UnifiedScriptProgramChunk.Read(content);
+        string outputPath = Path.GetFullPath(options.OutputPath);
+        WriteTransactionally([new OutputFile(outputPath, content)]);
+        Console.WriteLine(outputPath);
+        Console.WriteLine(chunk.ContentDigest);
+        return 0;
+    }
+
+    private static int RunChunkInspect(IReadOnlyList<string> args)
+    {
+        if (args.Count != 2 || args[0] != "chunk-inspect" ||
+            args[1].StartsWith("--", StringComparison.Ordinal))
+        {
+            PrintUsage();
+            return 64;
+        }
+
+        string inputPath = Path.GetFullPath(args[1]);
+        if (!File.Exists(inputPath))
+        {
+            Console.Error.WriteLine($"Chunk input does not exist: {inputPath}");
+            return 66;
+        }
+
+        using FileStream stream = File.OpenRead(inputPath);
+        UnifiedScriptChunk chunk = UnifiedScriptProgramChunk.Read(stream);
+        Console.WriteLine(JsonSerializer.Serialize(new
+        {
+            schemaVersion = "unifiedscript.chunk-inspection/v0.1",
+            path = inputPath,
+            formatVersion = chunk.FormatVersion,
+            byteLength = chunk.ByteLength,
+            contentDigest = chunk.ContentDigest,
+            sections = chunk.Sections.Select(static section => new
+            {
+                kind = section.Kind.ToString(),
+                kindId = $"0x{(uint)section.Kind:x8}",
+                flags = section.Flags.ToString(),
+                byteLength = section.Data.Length,
+            }),
+        }, UnifiedJson.CreateOptions()));
+        return 0;
+    }
+
+    private static UnifiedScriptChunkSection ReadChunkSection(
+        UnifiedScriptChunkSectionKind kind,
+        UnifiedScriptChunkSectionFlags flags,
+        string path)
+    {
+        if (!File.Exists(path))
+        {
+            throw new FileNotFoundException($"Chunk section '{kind}' does not exist.", path);
+        }
+
+        return new UnifiedScriptChunkSection(kind, flags, File.ReadAllBytes(path));
+    }
+
+    private static void AddOptionalChunkSection(
+        ICollection<UnifiedScriptChunkSection> sections,
+        UnifiedScriptChunkSectionKind kind,
+        UnifiedScriptChunkSectionFlags flags,
+        string? path)
+    {
+        if (path is not null)
+        {
+            sections.Add(ReadChunkSection(kind, flags, path));
+        }
     }
 
     private static int RunExecute(IReadOnlyList<string> args)
@@ -2012,6 +2141,89 @@ internal static class Program
             targetFramework,
             restore,
             build);
+        return true;
+    }
+
+    private static bool TryParseChunkPackArguments(
+        IReadOnlyList<string> args,
+        out ChunkPackOptions? options)
+    {
+        options = null;
+        if (args.Count < 13 || args[0] != "chunk-pack")
+        {
+            return false;
+        }
+
+        string? outputPath = null;
+        string? runtimeManifestPath = null;
+        string? assemblyPath = null;
+        string? declarationPath = null;
+        string? bindingManifestPath = null;
+        string? dependencyManifestPath = null;
+        string? portablePdbPath = null;
+        string? sourceMapPath = null;
+        string? authoringSurfacePath = null;
+        int index = 1;
+        while (index < args.Count)
+        {
+            string option = args[index++];
+            if (index >= args.Count)
+            {
+                return false;
+            }
+
+            string value = args[index++];
+            switch (option)
+            {
+                case "--out" when outputPath is null:
+                    outputPath = value;
+                    break;
+                case "--runtime-manifest" when runtimeManifestPath is null:
+                    runtimeManifestPath = value;
+                    break;
+                case "--assembly" when assemblyPath is null:
+                    assemblyPath = value;
+                    break;
+                case "--declaration" when declarationPath is null:
+                    declarationPath = value;
+                    break;
+                case "--bindings" when bindingManifestPath is null:
+                    bindingManifestPath = value;
+                    break;
+                case "--dependencies" when dependencyManifestPath is null:
+                    dependencyManifestPath = value;
+                    break;
+                case "--pdb" when portablePdbPath is null:
+                    portablePdbPath = value;
+                    break;
+                case "--source-map" when sourceMapPath is null:
+                    sourceMapPath = value;
+                    break;
+                case "--authoring-surface" when authoringSurfacePath is null:
+                    authoringSurfacePath = value;
+                    break;
+                default:
+                    return false;
+            }
+        }
+
+        if (outputPath is null || runtimeManifestPath is null || assemblyPath is null ||
+            declarationPath is null || bindingManifestPath is null ||
+            dependencyManifestPath is null)
+        {
+            return false;
+        }
+
+        options = new ChunkPackOptions(
+            outputPath,
+            runtimeManifestPath,
+            assemblyPath,
+            declarationPath,
+            bindingManifestPath,
+            dependencyManifestPath,
+            portablePdbPath,
+            sourceMapPath,
+            authoringSurfacePath);
         return true;
     }
 
@@ -3350,6 +3562,8 @@ internal static class Program
         "  unifiedscript analyze-files <input.cs> <additional.cs>... [options]\n" +
         "  unifiedscript emit <input.cs|project.csproj> --out <directory> [options]\n" +
         "  unifiedscript emit-files <input.cs> <additional.cs>... --out <directory> [options]\n" +
+        "  unifiedscript chunk-pack --out <program.uschunk> --runtime-manifest <file> --assembly <file.dll> --declaration <file> --bindings <file> --dependencies <file> [sidecars]\n" +
+        "  unifiedscript chunk-inspect <program.uschunk>\n" +
         "  unifiedscript identity-init <input.cs> --out <identity.usids> [options]\n" +
         "  unifiedscript layout-init <graph.json> --out <layout.usgraph>\n" +
         "  unifiedscript layout-sync <graph.json> --layout <layout.usgraph> --out <updated.usgraph>\n" +
@@ -3411,6 +3625,9 @@ internal static class Program
         "  --assembly <name>        Set the analysis assembly name.\n" +
         "  --effects <catalog.json> Apply effect catalog overrides.\n" +
         "  --reference <assembly>   Add a metadata reference; may be repeated.\n" +
+        "  --pdb <file>             Add an optional portable-PDB debug section.\n" +
+        "  --source-map <file>      Add an optional source-map debug section.\n" +
+        "  --authoring-surface <file> Add an optional editor-only authoring section.\n" +
         "  --configuration <name>   Select the MSBuild configuration; defaults to Debug.\n" +
         "  --framework <tfm>        Select one framework from a multi-target .csproj.\n" +
         "  --no-restore             Do not restore the .csproj before loading.\n" +
@@ -3522,6 +3739,17 @@ internal static class Program
         string SchemaPath,
         string ManagedOutputPath,
         string NativeOutputPath);
+
+    private sealed record ChunkPackOptions(
+        string OutputPath,
+        string RuntimeManifestPath,
+        string AssemblyPath,
+        string DeclarationPath,
+        string BindingManifestPath,
+        string DependencyManifestPath,
+        string? PortablePdbPath,
+        string? SourceMapPath,
+        string? AuthoringSurfacePath);
 
     private sealed record UnrealPuertsInventoryOptions(
         string ProjectRoot,
