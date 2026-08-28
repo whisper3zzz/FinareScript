@@ -62,18 +62,22 @@ midpoint shot. Run the paired, three-trial median comparison with:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File comparison/run-gameplay-comparison.ps1 `
-  -EngineRoot D:\UE_5.8 -Frames 10000 -Trials 3
+  -EngineRoot D:\UE_5.8 -Frames 10000 -WarmupFrames 300 -Trials 3 `
+  -WriteSuiteCaptures
 ```
 
-The current working-tree UnifiedScript player routes that shot through one
+Run `comparison/measure-blockbreaker-package-size.ps1` first; the gameplay
+runner rejects a missing, stale, or commit-mismatched package report. The
+current UnifiedScript player routes that shot through one
 Batch Trace plus an emitter/damage command reservation and consumes both
 completion events on the next managed frame. The runner prepares both runtimes
 once, performs only runtime work inside measured trials, alternates which
 runtime executes first to reduce build heat and ordering bias, and now runs the
 full 74-item migration audit before measurement. The latest local three-trial
-result reports 120,031 generated ABI v3 fast/CallFrame calls, zero legacy calls,
-and a median of 4,927.191 ms for UnifiedScript versus 4,759.930 ms for Puerts
-(`UnifiedScript/Puerts = 1.035139`). Every trial completed exactly one shot and
-one hit, and UnifiedScript observed both command events. This is functional
-parity evidence, not a performance claim, and remains a machine-local UE 5.8.1
-result. M10 owns the at-least-5%-faster accepted-workload gate.
+result reports zero legacy calls and a median of 4,599.308 ms for UnifiedScript
+versus 4,957.016 ms for Puerts (`UnifiedScript/Puerts = 0.927838`). Median frame
+time is 0.4222 ms versus 0.44745 ms. Every trial completed exactly one shot and
+one hit. The three elapsed ratios (0.962756, 0.921757, 0.884789) remain visible
+because this is machine-local evidence with real variance. All 13 M10.1 metrics
+are present, but allocation and reload retain runtime-specific collector
+semantics. This is a complete-game workload result, not a broad-suite claim.

@@ -1,7 +1,7 @@
 {
   "schemaVersion": "unifiedscript.puerts-project-inventory/v0.1",
   "projectName": "BlockBreaker-UnifiedScript",
-  "sourceFingerprint": "33b2311bb09af63594b411026cb293c62dc54299171642ab43f940780d10c4fe",
+  "sourceFingerprint": "bd82b1739d2c8f44ee7f6722c2ffe66a3a7c7e8cf09187cbf9c3461edfc20167",
   "items": [
     {
       "kind": "asyncPattern",
@@ -227,7 +227,7 @@
       "locations": [
         {
           "sourcePath": "Source/BlockBreaker/UnifiedScriptBlockBreakerCharacter.h",
-          "line": 69
+          "line": 75
         }
       ]
     },

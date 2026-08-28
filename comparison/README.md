@@ -30,11 +30,19 @@ The audit discovers 74 Puerts-project behaviors and requires exact coverage,
 19 byte-identical non-map gameplay assets, exactly two UnifiedScript Script
 Assets, 40 generated native thunks, and no Puerts/TypeScript legacy target.
 
-Run the complete migrated gameplay flow with three exact 10,000-frame trials
-and median aggregation:
+First produce the matched Win64 Development delivery-size evidence. The report
+is commit-bound and reused by the editor workload instead of mixing packaging
+into a timed trial:
 
 ```powershell
-.\comparison\run-gameplay-comparison.ps1
+.\comparison\measure-blockbreaker-package-size.ps1
+```
+
+Then run the complete migrated gameplay flow with 300 warm-up frames, three
+exact 10,000-frame trials, median aggregation, and normalized M10.1 captures:
+
+```powershell
+.\comparison\run-gameplay-comparison.ps1 -WriteSuiteCaptures
 ```
 
 The gameplay runner first builds both runtimes and synchronizes the BlockBreaker
@@ -43,19 +51,31 @@ deployment manifest into target-class-checked Player and Rifle
 scripts must start through those assets, all 19 non-map business assets must be
 byte-identical, the midpoint shot must hit exactly once, and UnifiedScript must
 report zero legacy calls. Per-trial logs and the aggregate report are written
-under `artifacts/comparison/gameplay`. Compilation and generation are outside
-the measured trials, and even-numbered trials run UnifiedScript first to reduce
-thermal and fixed-order bias.
+under `artifacts/comparison/gameplay`. Compilation, generation, packaging, and
+warm-up are outside the measured window. Odd trials run UnifiedScript first and
+even trials run Puerts first. Standardized complete-game captures occupy
+ordinals 17/18, 35/36, and 53/54 in the 54-slot representative suite.
 
 The migrated shot is no longer a native Gun-facade shortcut. Resource/class
 loading and Actor spawn remain on the generated Binding control plane. The hot
 shot path uses one Gameplay Data Batch Trace, commits emitter and damage rows in
 one command reservation, and consumes their completion events on the next
-managed frame. The latest local three-trial median is 4,927.191 ms for
-UnifiedScript and 4,759.930 ms for Puerts, a ratio of 1.035139. Each result also
-requires exactly one shot/hit, both command events, 120,031 fast/CallFrame calls,
-and zero legacy calls. This result proves functional parity but is not a
-performance win; the at-least-5%-faster workload gate remains an M10 target.
+managed frame. The latest local three-trial median is 4,599.308 ms for
+UnifiedScript and 4,957.016 ms for Puerts, a ratio of 0.927838. Median frame time
+is 0.4222 ms versus 0.44745 ms (ratio 0.943569). The individual elapsed ratios
+are 0.962756, 0.921757, and 0.884789, so the raw variance remains visible rather
+than being hidden behind the median. Every run requires one shot/hit and zero
+legacy calls. The matched packages are 1,030,446,530 and 1,009,484,249 bytes
+respectively, making the current UnifiedScript delivery 2.08% larger.
+
+All 13 complete-workload metrics are present. Allocation remains diagnostic
+only because CLR cumulative allocation and V8 used-heap growth are different
+collectors. Reload also remains diagnostic: Puerts measures synchronous module
+cache reexecution, while UnifiedScript measures a full ScriptComponent
+generation reload. Bridge values similarly name their envelope: five native
+ProcessEvent callbacks per Puerts frame versus one managed Actor `OnTick`
+callback per UnifiedScript frame. The complete-game result is a real M10.1
+workload win, but it is not yet a broad-suite claim.
 
 Run the matched generated `int32(int32, int32)` performance gate with:
 

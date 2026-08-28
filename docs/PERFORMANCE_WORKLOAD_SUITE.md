@@ -50,6 +50,13 @@ a null ratio and excludes this metric from performance claims until both
 runtimes expose the same cumulative-allocation method. GC count and pause time
 are observed directly on both runtimes and remain comparable.
 
+The complete BlockBreaker reload values also have different scopes. Puerts
+measures synchronous module-cache reexecution through `forceReload`; its full
+source/HMR path is not used because it is not shutdown-safe in this UE 5.8.1
+fixture. UnifiedScript measures a full ScriptComponent generation reload. Both
+values prove the collectors execute, but their ratio is not a reload-performance
+claim until one matched lifecycle recipe is available.
+
 ## Matched execution
 
 The schedule is deterministic and contains 54 slots: nine workloads times
@@ -126,7 +133,16 @@ through two boundary calls in 0.3950 ms with 360,448 transferred bytes and zero
 measured allocation/GC. These are machine-local collector proofs, not a
 complete suite comparison.
 
-The pre-existing BlockBreaker three-trial runner remains valid narrow evidence
-but predates the complete metric contract. The next M10.1 slice adds collectors
-for the remaining workloads and adapts the Puerts and complete-game runners.
-Until both runtimes complete 27 trials under the 54-slot schedule, no broad performance result is published.
+The BlockBreaker runner now consumes a separately produced, commit-matched
+Win64 Development package-size report, captures exact UE CSV frame/memory/GC
+windows after 300 warm-up frames, records both runtime envelopes, and publishes
+all 13 required metrics. Its three local captures occupy ordinals 17/18, 35/36,
+and 53/54. The 10,000-frame medians were 4,599.308 ms for UnifiedScript and
+4,957.016 ms for Puerts (ratio 0.927838); frame-time medians were 0.4222 ms and
+0.44745 ms (ratio 0.943569). Per-trial elapsed ratios of 0.962756, 0.921757, and
+0.884789 expose run variance. The matched UnifiedScript package is 2.08% larger.
+This is complete-game evidence, not a broad suite result.
+
+The next M10.1 slices adapt the remaining struct/container, delegate, per-frame,
+mass-entity, resource/spawn, and hot-reload collectors. Until both runtimes
+complete 27 trials under the 54-slot schedule, no broad performance result is published.

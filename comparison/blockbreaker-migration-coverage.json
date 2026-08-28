@@ -1,7 +1,7 @@
 {
   "schemaVersion": "unifiedscript.puerts-migration-coverage/v0.1",
   "projectName": "BlockBreaker-UnifiedScript",
-  "inventoryFingerprint": "33b2311bb09af63594b411026cb293c62dc54299171642ab43f940780d10c4fe",
+  "inventoryFingerprint": "bd82b1739d2c8f44ee7f6722c2ffe66a3a7c7e8cf09187cbf9c3461edfc20167",
   "entries": [
     { "kind": "asyncPattern", "key": "async:TS_Player.AShoot", "route": "managed-script", "evidence": "Managed/BlockBreakerPlayerScript.cs:FireOnceAsync" },
     { "kind": "asyncPattern", "key": "await", "route": "core-runtime", "evidence": "UnrealActorScript.DelayAsync" },

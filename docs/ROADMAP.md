@@ -60,16 +60,17 @@ machine-local unless an artifact explicitly says otherwise.
 
 | Gate | Verified result |
 | --- | --- |
-| Main source | `ffce0de` (`feat: automate matched scalar trial captures`), plus the current true-alternation fix |
-| UnifiedScript comparison source | `e62a46e` (`feat: adopt round-tripped gameplay tuning`) |
-| Puerts comparison source | `f452241` (`test: capture puerts runtime performance metrics`) |
+| Main source | `3b6c2d0` (`fix: alternate scalar workload trial order`), plus the current complete-game collector slice |
+| UnifiedScript comparison source | `ec2989f` (`feat: complete unified gameplay metric capture`) |
+| Puerts comparison source | `e34e8b6` (`feat: complete puerts gameplay metric capture`) |
 | Managed tests | 542 / 542 passed |
 | Repository validator | 66 / 66 passed |
 | UE 5.8.1 native build | passed |
 | `UnifiedScript.Unreal` Automation | 15 / 15 passed, including full gameplay-profiler attribution, Authoring Surface, live World semantic pause/step/reload/detach, and repeated success/failure hot-reload leak coverage |
 | BlockBreaker workload | 10,000 frames, three trials, one shot, one hit, two command completions per trial |
-| Gameplay boundary | 120,031 fast/CallFrame calls, zero legacy calls |
-| Matched local median | UnifiedScript 4,927.191 ms; Puerts 4,759.930 ms; ratio 1.035139; functional parity only, performance claim deferred to M10 |
+| Gameplay boundary | generated ABI v3 fast/CallFrame path, zero legacy calls |
+| Matched local median | UnifiedScript 4,599.308 ms; Puerts 4,957.016 ms; ratio 0.927838; all three trials won, but scope is complete-game evidence only |
+| Matched package size | UnifiedScript 1,030,446,530 bytes; Puerts 1,009,484,249 bytes; ratio 1.020765 |
 | Full migration audit | 74 / 74 inventory items, 19 / 19 shared assets, 40 / 40 generated thunks, zero legacy targets |
 | Deliverable smoke | 300 frames, one shot, one hit, two command completions, 3,631 fast/CallFrame calls, zero legacy calls |
 | Deliverable report | `artifacts/demo/blockbreaker-20260827-165719/demo-delivery.json` |
@@ -1096,9 +1097,18 @@ at ordinals 1/2, 19/20, and 37/38 under one machine/build fingerprint. The
 product win. CLR cumulative allocation and V8 used-heap growth are retained as
 raw medians but receive no cross-runtime ratio. Batch Trace separately recorded
 1,024 queries through two boundary calls in 0.3950 ms with 360,448 transferred
-bytes and zero measured allocation/GC. The 542/542 managed suite and 66/66
-repository invariants pass. M10.1 remains active while the other workload
-collectors and the complete-game runners are adapted.
+bytes and zero measured allocation/GC. The complete BlockBreaker runner now
+captures all 13 required metrics after an exact 300-frame warm-up, consumes a
+commit-matched package-size report, and writes normalized captures at ordinals
+17/18, 35/36, and 53/54. Its 10,000-frame medians were 4,599.308 ms for
+UnifiedScript and 4,957.016 ms for Puerts (ratio 0.927838); median frame time was
+0.4222 ms versus 0.44745 ms (ratio 0.943569). Individual elapsed ratios were
+0.962756, 0.921757, and 0.884789, and the UnifiedScript package was 2.08% larger.
+Reload values are retained as diagnostics because Puerts module-cache
+reexecution and a full UnifiedScript generation reload are not equivalent.
+The 542/542 managed suite and 66/66 repository invariants pass. M10.1 remains
+active while the remaining six workload-family collectors are adapted and the
+complete 54-slot result is assembled.
 
 ### M10.2 — Shared data and batching optimization
 
