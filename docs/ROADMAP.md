@@ -49,7 +49,7 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-28**
 
 - Active milestone: **M11 — Production hardening and release candidate**
-- Next slice: **M11.0 — deterministic compiled delivery chunks**
+- Next slice: **M11.1 — reliability and scale**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -63,8 +63,8 @@ machine-local unless an artifact explicitly says otherwise.
 | Runtime source baseline | `810913d` (`perf: remove benchmark world log pollution`) |
 | UnifiedScript comparison source | `5cf323e` (`perf: sync representative workload host`) |
 | Puerts comparison source | `be399cb` (`perf: register benchmark world context`) |
-| Managed tests | 546 / 546 passed |
-| Repository validator | 68 / 68 passed |
+| Managed tests | 560 / 560 passed |
+| Repository validator | 69 / 69 passed |
 | UE 5.8.1 native build | passed |
 | `UnifiedScript.Unreal` Automation | 16 / 16 passed, including workload collectors, gameplay-profiler attribution, Authoring Surface, live World semantic pause/step/reload/detach, and repeated success/failure hot-reload leak coverage |
 | M10.2 generated-channel profile | 1,024 rows x 3 median samples: container binding 25,371.973 ns/row, generated snapshot 1.270 ns/row (ratio 0.000050), buffered events 0.586 ns/row, zero managed allocation |
@@ -77,7 +77,8 @@ machine-local unless an artifact explicitly says otherwise.
 | Matched package size | UnifiedScript 1,033,027,093 bytes; Puerts 1,009,681,817 bytes; ratio 1.023121 |
 | Full migration audit | 74 / 74 inventory items, 19 / 19 shared assets, 40 / 40 generated thunks, zero legacy targets |
 | Deliverable smoke | 300 frames, one shot, one hit, two command completions, 3,631 fast/CallFrame calls, zero legacy calls |
-| Deliverable report | `artifacts/demo/blockbreaker-20260827-165719/demo-delivery.json` |
+| Deliverable report | `artifacts/demo/blockbreaker-20260828-152605/demo-delivery.json` |
+| Compiled delivery comparison | 3 alternating trials: chunk startup 162.0194 ms vs loose 110.3650 ms (1.468032); reload 75.6999 ms vs 79.1182 ms (0.956795); one 44,886-byte chunk vs two 43,992-byte loose runtime files (1.020322) |
 | Visual/C# round trip | semantic, MethodDef IL, execution cases, Script Assets, two live UE candidates, and two packaged candidates equivalent |
 | Round-trip report | `artifacts/roundtrip/blockbreaker-20260828-021802-6305602d/roundtrip-report.json` |
 
@@ -1164,24 +1165,36 @@ long sessions, and supported build configurations.
 - [x] compile canonical authoring inputs into runtime PE, declaration, binding,
   dependency, and identity sections while moving source maps and editor data to
   an optional sidecar
-- [ ] load and reload chunks transactionally with format/version/hash checks,
+- [x] load and reload chunks transactionally with format/version/hash checks,
   retain loose-file compatibility during migration, and stage chunks in cooked
   packages
-- [ ] prove byte-for-byte deterministic output, corruption rejection, semantic
+- [x] prove byte-for-byte deterministic output, corruption rejection, semantic
   equivalence, reload rollback, and measured startup/package impact
 
 Acceptance: a packaged Script Asset can point at one verified `.uschunk`, load
 the same collectible CoreCLR generation as loose artifacts, and start without
 runtime JSON parsing on the product path.
 
-In progress (2026-08-28): deterministic binary runtime payload codecs and the
+Completed (2026-08-28): deterministic binary runtime payload codecs and the
 compiler are implemented on top of the strict v0.1 envelope. Managed CoreCLR
-and Unreal World hosts verify and load PE/PDB directly from `.uschunk`; native
-UE verifies the same envelope and materializes Script State from its binary
-declaration section. UE 5.8 Lifecycle Automation starts the demo from the chunk
-with no loose declaration path, while loose assembly/JSON loading remains the
-migration fallback. Cook/package scripts now stage the chunk; packaged
-BlockBreaker smoke plus startup/package measurements remain before M11.0 closes.
+and Unreal World hosts verify and load PE/PDB streams directly from `.uschunk`;
+native UE verifies the same envelope and materializes Script State from its
+binary declaration section. Script Assets are synchronized through a strict
+chunk-deployment commandlet, prefer chunks at runtime, and retain an explicit
+loose DLL/JSON compatibility switch. Release emission strips the optional PDB
+section while keeping loose debug artifacts.
+
+The BlockBreaker proof executes Player and Rifle from one packaged chunk for
+300 frames with one shot, one hit, two command completions, 3,631 ABI v3 calls,
+and zero legacy calls. Three alternating editor trials preserve the same
+gameplay result on both delivery paths: chunk cold startup is 162.0194 ms versus
+110.3650 ms loose (1.468032, retained as an M11.1 warmup/ReadyToRun target),
+while transactional reload is 75.6999 ms versus 79.1182 ms (0.956795). The
+Release chunk is one 44,886-byte file versus two required loose runtime files at
+43,992 bytes total (1.020322); the five-file loose migration/debug bundle is
+69,749 bytes. Reports are under
+`artifacts/comparison/chunk-delivery/20260828-152425` and
+`artifacts/demo/blockbreaker-20260828-152605`.
 
 ### M11.1 — Reliability and scale
 

@@ -7,6 +7,8 @@
 #include "Dom/JsonObject.h"
 #include "GameFramework/Actor.h"
 #include "Interfaces/IPluginManager.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
@@ -24,6 +26,13 @@ namespace UE::UnifiedScript::Component::Private
 {
 constexpr int32 ActorBeginOverlapEvent = 1;
 constexpr int32 ActorEndOverlapEvent = 2;
+
+bool ShouldPreferCompiledChunks()
+{
+    return !FParse::Param(
+        FCommandLine::Get(),
+        TEXT("UnifiedScriptDisableCompiledChunks"));
+}
 
 FString GetAbsoluteProjectDir()
 {
@@ -392,6 +401,8 @@ bool UUnifiedScriptComponent::StartScript()
     {
         return true;
     }
+    const double StartSeconds = FPlatformTime::Seconds();
+    LastStartMilliseconds = 0.0;
 
     UWorld* World = GetWorld();
     UUnifiedScriptWorldSubsystem* Host =
@@ -524,13 +535,17 @@ bool UUnifiedScriptComponent::StartScript()
     LastGameplayProfileTrace.Reset();
     BindManagedActorEvents();
     SetComponentTickEnabled(bTickAutomatically || bReloadRequested);
+    LastStartMilliseconds = FMath::Max(
+        0.001,
+        (FPlatformTime::Seconds() - StartSeconds) * 1000.0);
     UE_LOG(
         LogTemp,
         Display,
-        TEXT("UnifiedScript started '%s' from '%s' (asset='%s')."),
+        TEXT("UnifiedScript started '%s' from '%s' (asset='%s', startupMs=%.6f)."),
         *ResolvedTypeName,
         *ResolvedAssemblyPath,
-        ActiveScriptAssetPath.IsEmpty() ? TEXT("legacy-direct") : *ActiveScriptAssetPath);
+        ActiveScriptAssetPath.IsEmpty() ? TEXT("legacy-direct") : *ActiveScriptAssetPath,
+        LastStartMilliseconds);
     return true;
 }
 
@@ -1648,6 +1663,7 @@ bool UUnifiedScriptComponent::ResolveScriptConfiguration(
     if (OutAsset != nullptr)
     {
         if (!OutAsset->ResolveConfiguration(
+                UE::UnifiedScript::Component::Private::ShouldPreferCompiledChunks(),
                 ConfiguredAssemblyPath,
                 OutTypeName,
                 OutError))
@@ -1709,7 +1725,8 @@ bool UUnifiedScriptComponent::BuildScriptState(
         DeclarationPath,
         RequestedAssetPath);
     const FString CompiledChunkPath = ResolvedAsset->ResolveCompiledChunkPath();
-    if (!CompiledChunkPath.IsEmpty())
+    if (UE::UnifiedScript::Component::Private::ShouldPreferCompiledChunks() &&
+        !CompiledChunkPath.IsEmpty())
     {
         return FUnifiedScriptDeclarationMaterializer::MaterializeChunkFileWithOverrides(
             ResolveConfiguredPath(CompiledChunkPath),

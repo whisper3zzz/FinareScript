@@ -97,6 +97,10 @@ public:
     UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category="UnifiedScript")
     FString LastScriptError;
 
+    /** End-to-end configuration, verification, state materialization, and managed start latency. */
+    UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category="UnifiedScript|Profiler")
+    double LastStartMilliseconds = 0.0;
+
     /** Last compile-to-World reload transaction, including rollback and resource evidence. */
     UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category="UnifiedScript|Reload")
     FString LastReloadTransaction;

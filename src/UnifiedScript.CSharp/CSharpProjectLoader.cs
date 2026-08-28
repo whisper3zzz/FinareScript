@@ -164,7 +164,15 @@ public sealed class CSharpProjectLoader
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Order(StringComparer.Ordinal)
             .ToArray();
-        string[] runtimeReferencePaths = ReadRuntimeReferences(items);
+        string[] runtimeReferencePaths = ReadRuntimeReferences(items)
+            .Concat(references
+                .Where(static reference => reference.Kind is
+                    CSharpProjectReferenceKind.Project or
+                    CSharpProjectReferenceKind.Assembly)
+                .Select(static reference => reference.Path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
         CSharpCompilationSettings settings = ReadSettings(properties, targetFramework, fullProjectPath);
         var request = new CSharpCompilationRequest(
             assemblyName,

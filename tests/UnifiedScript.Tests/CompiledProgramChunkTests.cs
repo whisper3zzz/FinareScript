@@ -61,6 +61,22 @@ public sealed class CompiledProgramChunkTests
     }
 
     [Fact]
+    public void Compiler_CanStripPortablePdbFromRuntimeDeliveryChunk()
+    {
+        CSharpProgramChunkEmitResult result = new CSharpProgramChunkCompiler().Compile(
+            EmitImage(),
+            new CSharpProgramChunkOptions(IncludePortablePdb: false));
+
+        Assert.False(result.Chunk.TryGetSection(
+            UnifiedScriptChunkSectionKind.PortablePdb,
+            out _));
+        Assert.Equal(
+            Enum.GetValues<UnifiedScriptChunkSectionKind>()
+                .Count(static kind => (uint)kind < 0x00001000),
+            result.Chunk.Sections.Count);
+    }
+
+    [Fact]
     public void DeclarationBinary_PreservesTypedDefaultsWithoutTextJson()
     {
         CSharpProgramChunkEmitResult result = new CSharpProgramChunkCompiler().Compile(EmitImage());

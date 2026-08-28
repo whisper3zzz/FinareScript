@@ -53,7 +53,7 @@ void RunSmoke()
 
     UUnifiedScriptComponent* Component = NewObject<UUnifiedScriptComponent>(World);
     Component->ScriptAssemblyPath =
-        TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.dll");
+        TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.uschunk");
     Component->ScriptTypeName = TEXT("UnifiedScript.Unreal.Demo.DemoScript");
     Component->RegisterComponentWithWorld(World);
     Component->BeginPlay();
@@ -65,13 +65,19 @@ void RunSmoke()
         Component->TickComponent(0.016f, LEVELTICK_All, nullptr);
     }
     const bool bTicked = bStarted && Component->ManagedState == TEXT("Ticked");
+    const FString ProgramPath = Component->GetActiveProgramPath();
+    const double StartupMilliseconds = Component->LastStartMilliseconds;
+    const bool bUsesCompiledChunk =
+        ProgramPath.EndsWith(TEXT(".uschunk"));
     const FString HostFxrPath = FUnifiedScriptCoreClrHost::Get().GetHostFxrPath();
     const bool bUsesPackagedRuntime =
         HostFxrPath.Contains(TEXT("UEUnifiedScript/Binaries/ThirdParty/DotNet/10.0"));
     const FString Failure = !bStarted
-        ? Component->LastScriptError
+            ? Component->LastScriptError
         : !bTicked
             ? TEXT("Managed OnTick did not update the component state.")
+            : !bUsesCompiledChunk
+                ? TEXT("Packaged smoke did not start from a compiled chunk.")
             : !bUsesPackagedRuntime
                 ? FString::Printf(TEXT("CoreCLR used a non-packaged hostfxr: %s"), *HostFxrPath)
                 : FString();
@@ -84,7 +90,11 @@ void RunSmoke()
     FinishSmoke(
         Failure.IsEmpty(),
         Failure.IsEmpty()
-            ? FString::Printf(TEXT("Managed Start/Tick/Stop succeeded; hostfxr=%s"), *HostFxrPath)
+            ? FString::Printf(
+                TEXT("Managed Start/Tick/Stop succeeded; program=%s; startupMs=%.6f; hostfxr=%s"),
+                *ProgramPath,
+                StartupMilliseconds,
+                *HostFxrPath)
             : Failure);
 }
 }

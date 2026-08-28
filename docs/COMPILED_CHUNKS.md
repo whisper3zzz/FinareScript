@@ -96,8 +96,10 @@ emits a JSON tooling report; that report is not consumed by the game runtime.
 
 The normal compiler path does not require manually preparing those payloads.
 `unifiedscript emit` writes the loose migration artifacts and a sibling
-`.uschunk` from the same semantic program. The Unreal demo helper builds and
-stages that product artifact:
+`.uschunk` from the same semantic program. Debug emission embeds the portable
+PDB section; Release emission omits it from the runtime chunk while retaining
+the sibling loose PDB for diagnostics. The Unreal demo helper builds and stages
+that product artifact:
 
 ```powershell
 .\tools\emit-unreal-demo-chunk.ps1 -EngineRoot D:\UE_5.8 -Configuration Release
@@ -122,10 +124,32 @@ migration fallback.
 4. **Complete:** make reload verify a complete candidate chunk, construct the next
    collectible generation, and swap only after declaration and ABI validation;
    failures keep the previous generation.
-5. **In progress:** stage runtime chunks in cook/package, keep debug/editor sidecars optional,
-   and measure startup, reload, package size, and deterministic cache hits.
+5. **Complete:** stage runtime chunks in cook/package, keep debug/editor payloads optional,
+   and measure startup, reload, package size, and loose-path equivalence.
 
 The editor/World vertical slice is complete: UE 5.8 Automation starts and
 reloads the demo from one chunk while materializing state with no loose
-declaration path. M11.0 closes after packaged BlockBreaker smoke and measured
-startup/package impact; loose-file fallback remains covered during migration.
+declaration path. A strict deployment commandlet validates all runtime sections
+before updating Script Assets, and `-UnifiedScriptDisableCompiledChunks`
+selects the loose DLL/JSON compatibility path for migration and A/B evidence.
+
+## Measured BlockBreaker impact
+
+`comparison/measure-blockbreaker-chunk-delivery.ps1` runs alternating cold
+processes and requires the same 100 measured frames, 30 warmup frames, shot,
+hit, command completions, ABI v3 calls, zero legacy calls, and committed reload
+on both paths. The 2026-08-28 three-trial median is:
+
+| Metric | Release chunk | Loose compatibility | Chunk / loose |
+| --- | ---: | ---: | ---: |
+| Actor-tree cold startup | 162.0194 ms | 110.3650 ms | 1.468032 |
+| Transactional reload | 75.6999 ms | 79.1182 ms | 0.956795 |
+| Managed generation load inside reload | 2.4490 ms | 1.6900 ms | 1.449112 |
+| Runtime program delivery | 1 file / 44,886 B | 2 files / 43,992 B | 1.020322 bytes |
+
+The chunk removes runtime declaration JSON and consolidates delivery, but its
+first-use verification and binary-codec JIT currently add cold startup cost.
+That cost is reported rather than hidden and is routed to M11.1 for prewarming
+or ReadyToRun work; it is not a frame-time cost. The packaged BlockBreaker gate
+proves both Player and Rifle start from the staged chunk for 300 frames, and the
+generic Development release gate independently proves packaged chunk startup.

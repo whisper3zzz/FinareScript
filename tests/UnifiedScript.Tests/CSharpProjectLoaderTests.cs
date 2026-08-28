@@ -38,7 +38,11 @@ public sealed class CSharpProjectLoaderTests
                 reference.SourceProjectPath.EndsWith(
                     "UnifiedScript.Core.csproj",
                     StringComparison.OrdinalIgnoreCase));
-        Assert.NotEmpty(result.Request.RuntimeReferencePaths);
+        Assert.Contains(
+            result.Request.RuntimeReferencePaths,
+            static path => path.EndsWith(
+                "UnifiedScript.Core.dll",
+                StringComparison.OrdinalIgnoreCase));
 
         CSharpAnalysisResult analysis = new CSharpSemanticPipeline().Analyze(result.Request);
         Assert.True(

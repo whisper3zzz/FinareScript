@@ -5,7 +5,16 @@ bool UUnifiedScriptAsset::ResolveConfiguration(
     FString& OutTypeName,
     FString& OutError) const
 {
-    OutAssemblyPath = CompiledChunkPath;
+    return ResolveConfiguration(true, OutAssemblyPath, OutTypeName, OutError);
+}
+
+bool UUnifiedScriptAsset::ResolveConfiguration(
+    bool bPreferCompiledChunk,
+    FString& OutAssemblyPath,
+    FString& OutTypeName,
+    FString& OutError) const
+{
+    OutAssemblyPath = bPreferCompiledChunk ? CompiledChunkPath : FString();
     OutAssemblyPath.TrimStartAndEndInline();
     if (OutAssemblyPath.IsEmpty())
     {

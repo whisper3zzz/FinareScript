@@ -61,6 +61,13 @@ bool FUnifiedScriptAssetConfigurationTest::RunTest(const FString& Parameters)
         TEXT("Compiled chunk accessor is normalized"),
         Asset->ResolveCompiledChunkPath(),
         FString(TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.uschunk")));
+    TestTrue(
+        TEXT("Loose compatibility configuration remains explicitly selectable"),
+        Asset->ResolveConfiguration(false, AssemblyPath, TypeName, Error));
+    TestEqual(
+        TEXT("Loose compatibility selection resolves the assembly"),
+        AssemblyPath,
+        FString(TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.dll")));
 
     FString DeclarationPath;
     FString DeclarationAssetPath;

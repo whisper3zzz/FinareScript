@@ -134,6 +134,12 @@ try {
         if (!$smokeText.StartsWith("PASS`n") -and !$smokeText.StartsWith("PASS`r`n")) {
             throw "$configuration packaged smoke failed: $smokeText"
         }
+        $chunkSmoke = [regex]::Match(
+            $smokeText,
+            'program=([^;\r\n]+\.uschunk); startupMs=([0-9.]+)')
+        if (!$chunkSmoke.Success -or [double]$chunkSmoke.Groups[2].Value -le 0) {
+            throw "$configuration packaged smoke did not prove compiled-chunk startup: $smokeText"
+        }
 
         $packageFiles = Get-ChildItem -LiteralPath $archiveDirectory -Recurse -File
         $configurationReports += [ordered]@{
@@ -147,6 +153,8 @@ try {
             coreClr = $coreClr.FullName
             managedAssembly = $managedAssembly
             demoAssembly = $demoAssembly
+            demoChunk = $demoChunk
+            compiledChunkStartupMilliseconds = [double]$chunkSmoke.Groups[2].Value
             smokeResult = $smokeText.Trim()
             smokeExitCode = $process.ExitCode
             smokeLog = if (Test-Path -LiteralPath $smokeLog) { $smokeLog } else { $null }

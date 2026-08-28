@@ -172,6 +172,27 @@ def main() -> int:
     unreal_chunk_stage = (
         ROOT / "tools" / "emit-unreal-demo-chunk.ps1"
     ).read_text(encoding="utf-8")
+    chunk_deployment_commandlet = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+        / "UEUnifiedScriptEditor" / "Private"
+        / "UnifiedScriptSyncChunksCommandlet.cpp"
+    ).read_text(encoding="utf-8")
+    chunk_deployment_sample = (
+        ROOT / "samples" / "Unreal"
+        / "UnifiedScript.Unreal.Demo.chunk-deployment.json"
+    ).read_text(encoding="utf-8")
+    chunk_delivery_measurement = (
+        ROOT / "comparison" / "measure-blockbreaker-chunk-delivery.ps1"
+    ).read_text(encoding="utf-8")
+    blockbreaker_package = (
+        ROOT / "comparison" / "package-blockbreaker-demo.ps1"
+    ).read_text(encoding="utf-8")
+    release_package = (
+        ROOT / "tools" / "package-unreal-release.ps1"
+    ).read_text(encoding="utf-8")
+    project_loader = (
+        ROOT / "src" / "UnifiedScript.CSharp" / "CSharpProjectLoader.cs"
+    ).read_text(encoding="utf-8")
     require(
         '"USCHUNK\\0"u8' in compiled_chunk_source
         and "FormatMajorVersion = 1" in compiled_chunk_source
@@ -193,6 +214,19 @@ def main() -> int:
         and "MaterializeChunkFileWithOverrides" in unreal_component
         and "CompiledChunkPath" in unreal_asset
         and "UnifiedScript.Unreal.Demo.uschunk" in unreal_chunk_stage
+        and "CSharpProjectReferenceKind.Assembly" in project_loader
+        and "IncludePortablePdb: !string.Equals" in cli_source
+        and "unifiedscript.unreal-chunk-deployment/v0.1" in chunk_deployment_commandlet
+        and "ValidateChunk" in chunk_deployment_commandlet
+        and "UPackage::SavePackage" in chunk_deployment_commandlet
+        and "CompiledChunkPath" in chunk_deployment_commandlet
+        and "chunkPath" in chunk_deployment_sample
+        and "UnifiedScriptDisableCompiledChunks" in unreal_component
+        and "unifiedscript.blockbreaker-chunk-delivery/v0.1"
+        in chunk_delivery_measurement
+        and "BlockBreakerBenchmarkReload" in chunk_delivery_measurement
+        and "compiledChunkPrograms" in blockbreaker_package
+        and "compiledChunkStartupMilliseconds" in release_package
         and "does **not** introduce another interpreter" in compiled_chunk_document,
         "Compiled chunk compiler, hosts, strict readers, staging, tests, or contract are disconnected",
     )
@@ -3983,7 +4017,7 @@ def main() -> int:
         and "all 27 captures" in performance_suite_doc
         and "all 54 execution ordinals" in performance_suite_doc
         and "mixed results close M10.1" in performance_suite_doc
-        and "- Next slice: **M11.0" in roadmap
+        and "- Next slice: **M11.1" in roadmap
         and "- [x] use profiler evidence to promote only high-volume stable data"
         in roadmap
         and "- [x] preserve World ownership, generation checks, bounds"

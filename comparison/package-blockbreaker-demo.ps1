@@ -19,6 +19,7 @@ $prepareScript = Join-Path $projectRoot 'Tools\run_unifiedscript_demo.ps1'
 $runUat = Join-Path $EngineRoot 'Engine\Build\BatchFiles\RunUAT.bat'
 $gameAssembly = Join-Path $projectRoot 'Managed\BlockBreaker.UnifiedScript.dll'
 $gameDeps = Join-Path $projectRoot 'Managed\BlockBreaker.UnifiedScript.deps.json'
+$gameChunk = Join-Path $projectRoot 'Managed\BlockBreaker.UnifiedScript.uschunk'
 $migrationAudit = Join-Path $PSScriptRoot 'audit-blockbreaker-migration.ps1'
 $map = '/Game/BlockBreaker/Maps/TutorialMap'
 $gameMode = '/Script/BlockBreaker.UnifiedScriptBlockBreakerGameMode'
@@ -61,7 +62,7 @@ if (-not $SkipPrepare) {
     }
 }
 
-foreach ($required in @($gameAssembly, $gameDeps)) {
+foreach ($required in @($gameAssembly, $gameDeps, $gameChunk)) {
     if (-not (Test-Path -LiteralPath $required)) {
         throw "Prepared managed gameplay output is missing: $required"
     }
@@ -92,6 +93,12 @@ $packagedGameAssembly = Get-ChildItem -LiteralPath $archiveDirectory -Recurse -F
 if ($null -eq $packagedGameAssembly -or
     $packagedGameAssembly.Directory.Name -ne 'Managed') {
     throw 'The packaged demo does not contain Managed/BlockBreaker.UnifiedScript.dll.'
+}
+$packagedGameChunk = Get-ChildItem -LiteralPath $archiveDirectory -Recurse -File `
+    -Filter 'BlockBreaker.UnifiedScript.uschunk' | Select-Object -First 1
+if ($null -eq $packagedGameChunk -or
+    $packagedGameChunk.Directory.FullName -ne $packagedGameAssembly.Directory.FullName) {
+    throw 'The packaged demo does not contain its compiled BlockBreaker program chunk.'
 }
 $packageRoot = $packagedGameAssembly.Directory.Parent.FullName
 $deliveryRoot = Split-Path -Parent $packageRoot
@@ -154,6 +161,7 @@ This package demonstrates:
   - World-owned CoreCLR hosting and managed Actor lifecycle
   - generated type-safe Unreal C# bindings
   - Script Asset deployment without a developer checkout
+  - one verified compiled chunk for both managed gameplay entry points
   - zero-copy World data discovery
   - Batch Trace plus Command/Event Buffer damage and impact effects
   - zero legacy facade calls in the automated gameplay gate
@@ -225,6 +233,15 @@ if (-not $smokeText.Contains(
         'UnifiedScript BlockBreaker gameplay data completed: Commands=2')) {
     $gateFailures += 'gameplayCommands'
 }
+$playerProgram = [regex]::Match(
+    $smokeText,
+    "UnifiedScript started 'BlockBreaker\.UnifiedScript\.BlockBreakerPlayerScript' from '([^']+BlockBreaker\.UnifiedScript\.uschunk)'")
+$gunProgram = [regex]::Match(
+    $smokeText,
+    "UnifiedScript started 'BlockBreaker\.UnifiedScript\.BlockBreakerRifleScript' from '([^']+BlockBreaker\.UnifiedScript\.uschunk)'")
+if (-not $playerProgram.Success -or -not $gunProgram.Success) {
+    $gateFailures += 'compiledChunkPrograms'
+}
 if ($gateFailures.Count -ne 0) {
     throw (
         "Packaged BlockBreaker gameplay gate failed ($($gateFailures -join ', ')). " +
@@ -266,6 +283,9 @@ $reportPath = Join-Path $runDirectory 'demo-delivery.json'
     launcher = $launcherPath
     readme = $readmePath
     managedGameplayAssembly = $packagedGameAssembly.FullName
+    managedGameplayChunk = $packagedGameChunk.FullName
+    managedGameplayChunkSha256 = (Get-FileHash -LiteralPath $packagedGameChunk.FullName `
+        -Algorithm SHA256).Hash
     managedRuntimeAssembly = $pluginManaged
     hostFxr = $hostFxr.FullName
     coreClr = $coreClr.FullName
@@ -277,6 +297,8 @@ $reportPath = Join-Path $runDirectory 'demo-delivery.json'
         callFrameCalls = [uint64]$summary.Groups[6].Value
         legacyCalls = [uint64]$summary.Groups[7].Value
         gameplayCommands = 2
+        playerProgram = $playerProgram.Groups[1].Value
+        gunProgram = $gunProgram.Groups[1].Value
         exitCode = $smokeExitCode
         log = $smokeLog
         stdout = $smokeStdout

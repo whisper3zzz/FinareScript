@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "unifiedscript.unreal-chunk-deployment/v0.1",
+  "chunks": [
+    {
+      "assetPath": "/Game/UnifiedScript/Demo/SA_UnifiedScriptDemo",
+      "chunkPath": "{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.uschunk",
+      "declarationAssetPath": "Unreal/Demo"
+    }
+  ]
+}

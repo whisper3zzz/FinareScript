@@ -61,6 +61,13 @@ public:
         FString& OutTypeName,
         FString& OutError) const;
 
+    /** Resolves either the preferred chunk or the retained loose assembly explicitly. */
+    bool ResolveConfiguration(
+        bool bPreferCompiledChunk,
+        FString& OutAssemblyPath,
+        FString& OutTypeName,
+        FString& OutError) const;
+
     /** Validates the concrete component target against RequiredTargetClass without starting CoreCLR. */
     bool ValidateTarget(const UObject* Target, FString& OutError) const;
 

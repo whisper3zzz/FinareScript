@@ -712,7 +712,12 @@ internal static class Program
         string chunkPath = Path.Combine(outputDirectory, $"{baseName}.uschunk");
         CSharpProgramChunkEmitResult chunk = new CSharpProgramChunkCompiler().Compile(
             result.Image,
-            new CSharpProgramChunkOptions(RuntimeReferencePaths: request.RuntimeReferencePaths));
+            new CSharpProgramChunkOptions(
+                RuntimeReferencePaths: request.RuntimeReferencePaths,
+                IncludePortablePdb: !string.Equals(
+                    options.Configuration,
+                    "Release",
+                    StringComparison.OrdinalIgnoreCase)));
         var outputs = new List<OutputFile>
         {
             new OutputFile(assemblyPath, result.Image.PortableExecutable),
