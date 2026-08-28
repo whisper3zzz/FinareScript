@@ -9,6 +9,9 @@ namespace UnifiedScript.Unreal;
 
 public sealed record UnrealDataPlaneLayoutLimits(
     uint TransformSnapshots,
+    uint GeneratedSnapshotEntries,
+    uint GeneratedEventEntries,
+    uint GeneratedChannelBytes,
     uint Commands,
     uint Events,
     uint TraceRequests,
@@ -282,6 +285,10 @@ public sealed class UnrealDataPlaneLayoutGenerator
         {
             source.AppendLine(
                 $"    public const uint MaximumTransformSnapshotCount = {schema.Limits.TransformSnapshots}U;");
+            source.AppendLine(
+                $"    public const uint MaximumGeneratedSnapshotCount = {schema.Limits.GeneratedSnapshotEntries}U;");
+            source.AppendLine(
+                $"    public const uint MaximumGeneratedChannelBytes = {schema.Limits.GeneratedChannelBytes}U;");
         }
         else
         {
@@ -289,6 +296,10 @@ public sealed class UnrealDataPlaneLayoutGenerator
             source.AppendLine($"    public const uint MaximumEventCount = {schema.Limits.Events}U;");
             source.AppendLine($"    public const uint MaximumTraceCount = {schema.Limits.TraceRequests}U;");
             source.AppendLine($"    public const uint MaximumOverlapCount = {schema.Limits.OverlapRequests}U;");
+            source.AppendLine(
+                $"    public const uint MaximumGeneratedEventCount = {schema.Limits.GeneratedEventEntries}U;");
+            source.AppendLine(
+                $"    public const uint MaximumGeneratedChannelBytes = {schema.Limits.GeneratedChannelBytes}U;");
         }
         foreach (UnrealDataPlaneStruct item in structs.Where(item => item.Domain == domain))
         {
@@ -391,6 +402,10 @@ public sealed class UnrealDataPlaneLayoutGenerator
         {
             source.AppendLine(
                 $"inline constexpr uint32 MaximumTransformSnapshotCount = {schema.Limits.TransformSnapshots}u;");
+            source.AppendLine(
+                $"inline constexpr uint32 MaximumGeneratedSnapshotCount = {schema.Limits.GeneratedSnapshotEntries}u;");
+            source.AppendLine(
+                $"inline constexpr uint32 MaximumGeneratedChannelBytes = {schema.Limits.GeneratedChannelBytes}u;");
         }
         else
         {
@@ -398,6 +413,10 @@ public sealed class UnrealDataPlaneLayoutGenerator
             source.AppendLine($"inline constexpr uint32 MaximumEventCount = {schema.Limits.Events}u;");
             source.AppendLine($"inline constexpr uint32 MaximumTraceCount = {schema.Limits.TraceRequests}u;");
             source.AppendLine($"inline constexpr uint32 MaximumOverlapCount = {schema.Limits.OverlapRequests}u;");
+            source.AppendLine(
+                $"inline constexpr uint32 MaximumGeneratedEventCount = {schema.Limits.GeneratedEventEntries}u;");
+            source.AppendLine(
+                $"inline constexpr uint32 MaximumGeneratedChannelBytes = {schema.Limits.GeneratedChannelBytes}u;");
         }
         foreach (UnrealDataPlaneStruct item in structs.Where(item => item.Domain == domain))
         {
@@ -628,10 +647,17 @@ internal static class UnrealDataPlaneLayoutValidator
         _ = UnrealDataPlaneLayoutGenerator.ParseHexId(
             schema.CompatibilityId,
             "compatibilityId");
-        if (schema.Limits.TransformSnapshots == 0 || schema.Limits.Commands == 0 ||
+        if (schema.Limits.TransformSnapshots == 0 ||
+            schema.Limits.GeneratedSnapshotEntries == 0 ||
+            schema.Limits.GeneratedEventEntries == 0 ||
+            schema.Limits.GeneratedChannelBytes == 0 ||
+            schema.Limits.Commands == 0 ||
             schema.Limits.Events == 0 || schema.Limits.TraceRequests == 0 ||
             schema.Limits.OverlapRequests == 0 ||
             schema.Limits.TransformSnapshots > int.MaxValue ||
+            schema.Limits.GeneratedSnapshotEntries > int.MaxValue ||
+            schema.Limits.GeneratedEventEntries > int.MaxValue ||
+            schema.Limits.GeneratedChannelBytes > int.MaxValue ||
             schema.Limits.Commands > int.MaxValue ||
             schema.Limits.Events > int.MaxValue ||
             schema.Limits.TraceRequests > int.MaxValue ||

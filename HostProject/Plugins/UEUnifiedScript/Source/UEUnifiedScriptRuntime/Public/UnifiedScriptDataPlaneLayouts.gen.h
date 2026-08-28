@@ -4,15 +4,17 @@
 
 namespace UE::UnifiedScript::DataPlaneSchema
 {
-inline constexpr uint32 Revision = 3u;
+inline constexpr uint32 Revision = 4u;
 inline constexpr uint64 CompatibilityId = 0x555344504C415901ull;
-inline constexpr uint64 SchemaFingerprint = 0x754A31DCE3A25636ull;
+inline constexpr uint64 SchemaFingerprint = 0x253D72D369326A99ull;
 }
 
 namespace UE::UnifiedScript::SharedData
 {
 inline constexpr uint32 AbiVersion = 4u;
 inline constexpr uint32 MaximumTransformSnapshotCount = 65536u;
+inline constexpr uint32 MaximumGeneratedSnapshotCount = 65536u;
+inline constexpr uint32 MaximumGeneratedChannelBytes = 16777216u;
 inline constexpr uint64 TransformSnapshotSchemaId = 0x55535452414E5334ull;
 }
 
@@ -23,6 +25,8 @@ inline constexpr uint32 MaximumCommandCount = 65536u;
 inline constexpr uint32 MaximumEventCount = 4096u;
 inline constexpr uint32 MaximumTraceCount = 65536u;
 inline constexpr uint32 MaximumOverlapCount = 65536u;
+inline constexpr uint32 MaximumGeneratedEventCount = 65536u;
+inline constexpr uint32 MaximumGeneratedChannelBytes = 16777216u;
 inline constexpr uint64 CommandSchemaId = 0x5553434D44423401ull;
 inline constexpr uint64 EventSchemaId = 0x555345564E543401ull;
 inline constexpr uint64 OverlapRequestSchemaId = 0x55534F5652455101ull;

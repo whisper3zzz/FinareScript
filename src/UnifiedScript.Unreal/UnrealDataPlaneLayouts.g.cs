@@ -6,15 +6,17 @@ namespace UnifiedScript.Unreal;
 
 public static class UnrealDataPlaneLayoutV1
 {
-    public const uint Revision = 3U;
+    public const uint Revision = 4U;
     public const ulong CompatibilityId = 0x555344504C415901UL;
-    public const ulong SchemaFingerprint = 0x754A31DCE3A25636UL;
+    public const ulong SchemaFingerprint = 0x253D72D369326A99UL;
 }
 
 public static partial class UnrealSharedDataAbiV4
 {
     public const uint Version = 4U;
     public const uint MaximumTransformSnapshotCount = 65536U;
+    public const uint MaximumGeneratedSnapshotCount = 65536U;
+    public const uint MaximumGeneratedChannelBytes = 16777216U;
     public const int TelemetrySize = 56;
     public const ulong TransformSnapshotSchemaId = 0x55535452414E5334UL;
     public const int TransformEntrySize = 96;
@@ -28,6 +30,8 @@ public static partial class UnrealGameplayDataAbiV4
     public const uint MaximumEventCount = 4096U;
     public const uint MaximumTraceCount = 65536U;
     public const uint MaximumOverlapCount = 65536U;
+    public const uint MaximumGeneratedEventCount = 65536U;
+    public const uint MaximumGeneratedChannelBytes = 16777216U;
     public const ulong CommandSchemaId = 0x5553434D44423401UL;
     public const int CommandEntrySize = 224;
     public const int CommandBatchViewSize = 72;
