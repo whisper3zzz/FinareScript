@@ -5,6 +5,7 @@ param(
     [string]$SuiteMetricsPath,
     [switch]$RequirePuerts,
     [switch]$AllowLosingComparison,
+    [switch]$ReportOnly,
     [switch]$SkipBuild
 )
 
@@ -45,36 +46,38 @@ $defaultInputBytes = if (Test-Path -LiteralPath $defaultInputPath) {
     [IO.File]::ReadAllBytes($defaultInputPath)
 } else { $null }
 
-try {
-    if (!$SkipBuild) {
-        & $dotnetExe build $managedProject -c Release --nologo
-        if ($LASTEXITCODE -ne 0) {
-            throw "Managed benchmark build failed with exit code $LASTEXITCODE."
+if (-not $ReportOnly) {
+    try {
+        if (!$SkipBuild) {
+            & $dotnetExe build $managedProject -c Release --nologo
+            if ($LASTEXITCODE -ne 0) {
+                throw "Managed benchmark build failed with exit code $LASTEXITCODE."
+            }
+            & $buildBat UEUnifiedScriptHostEditor Win64 Development $projectPath `
+                -WaitMutex -NoHotReloadFromIDE -NoUBA -MaxParallelActions=4
+            if ($LASTEXITCODE -ne 0) {
+                throw "Unreal benchmark build failed with exit code $LASTEXITCODE."
+            }
         }
-        & $buildBat UEUnifiedScriptHostEditor Win64 Development $projectPath `
-            -WaitMutex -NoHotReloadFromIDE -NoUBA -MaxParallelActions=4
-        if ($LASTEXITCODE -ne 0) {
-            throw "Unreal benchmark build failed with exit code $LASTEXITCODE."
+
+        & $editorCmd $projectPath `
+            -unattended -nop4 -NullRHI -nosplash `
+            '-ExecCmds=Automation RunTests UnifiedScript.Unreal.Performance.ManagedInterop' `
+            '-TestExit=Automation Test Queue Empty' `
+            "-abslog=$logPath" -log
+        $editorExitCode = $LASTEXITCODE
+    } finally {
+        if ($null -ne $defaultEngineBytes) {
+            [IO.File]::WriteAllBytes($defaultEnginePath, $defaultEngineBytes)
+        }
+        if ($null -ne $defaultInputBytes) {
+            [IO.File]::WriteAllBytes($defaultInputPath, $defaultInputBytes)
         }
     }
 
-    & $editorCmd $projectPath `
-        -unattended -nop4 -NullRHI -nosplash `
-        '-ExecCmds=Automation RunTests UnifiedScript.Unreal.Performance.ManagedInterop' `
-        '-TestExit=Automation Test Queue Empty' `
-        "-abslog=$logPath" -log
-    $editorExitCode = $LASTEXITCODE
-} finally {
-    if ($null -ne $defaultEngineBytes) {
-        [IO.File]::WriteAllBytes($defaultEnginePath, $defaultEngineBytes)
+    if ($editorExitCode -ne 0) {
+        throw "Unreal benchmark process failed with exit code $editorExitCode."
     }
-    if ($null -ne $defaultInputBytes) {
-        [IO.File]::WriteAllBytes($defaultInputPath, $defaultInputBytes)
-    }
-}
-
-if ($editorExitCode -ne 0) {
-    throw "Unreal benchmark process failed with exit code $editorExitCode."
 }
 $successPattern =
     'Test Completed. Result={Success} Name={ManagedInterop} Path={UnifiedScript.Unreal.Performance.ManagedInterop}'

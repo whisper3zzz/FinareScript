@@ -72,25 +72,49 @@ $puertsArguments = @{
 }
 $unifiedScriptArguments = @{
     EngineRoot = $EngineRoot
-    PuertsResult = $puertsResult
-    RequirePuerts = $true
     SuiteMetricsPath = $unifiedScriptSuiteMetrics
-}
-if (-not $RequireWin) {
-    $unifiedScriptArguments.AllowLosingComparison = $true
 }
 if ($SkipBuild) {
     $puertsArguments.SkipBuild = $true
     $unifiedScriptArguments.SkipBuild = $true
 }
 
-& $puertsRunner @puertsArguments
-if ($LASTEXITCODE -ne 0) {
-    throw "Puerts performance benchmark failed with exit code $LASTEXITCODE."
+function Invoke-PuertsMeasurement {
+    & $puertsRunner @puertsArguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "Puerts performance benchmark failed with exit code $LASTEXITCODE."
+    }
 }
-& $unifiedScriptRunner @unifiedScriptArguments
-if ($LASTEXITCODE -ne 0) {
-    throw "UnifiedScript performance benchmark failed with exit code $LASTEXITCODE."
+
+function Invoke-UnifiedScriptMeasurement([bool]$CompareExistingMeasurement) {
+    $arguments = @{} + $unifiedScriptArguments
+    if ($CompareExistingMeasurement) {
+        $arguments.PuertsResult = $puertsResult
+        $arguments.RequirePuerts = $true
+        $arguments.ReportOnly = $true
+        if (-not $RequireWin) {
+            $arguments.AllowLosingComparison = $true
+        }
+    }
+    & $unifiedScriptRunner @arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "UnifiedScript performance benchmark failed with exit code $LASTEXITCODE."
+    }
+}
+
+$unifiedFirst = ($SuiteTrial % 2) -eq 1
+if ($unifiedFirst) {
+    Invoke-UnifiedScriptMeasurement $false
+    Invoke-PuertsMeasurement
+    Invoke-UnifiedScriptMeasurement $true
+} else {
+    Invoke-PuertsMeasurement
+    $unifiedScriptArguments.PuertsResult = $puertsResult
+    $unifiedScriptArguments.RequirePuerts = $true
+    if (-not $RequireWin) {
+        $unifiedScriptArguments.AllowLosingComparison = $true
+    }
+    Invoke-UnifiedScriptMeasurement $false
 }
 
 Copy-Item -LiteralPath $unifiedScriptResult -Destination $finalResult -Force
@@ -104,7 +128,6 @@ if ($workloadIndex -lt 0) {
 }
 $pairBase = ($SuiteTrial - 1) * @($manifest.workloads).Count * 2 +
     $workloadIndex * 2
-$unifiedFirst = ($SuiteTrial % 2) -eq 1
 $unifiedScriptOrdinal = $pairBase + $(if ($unifiedFirst) { 1 } else { 2 })
 $puertsOrdinal = $pairBase + $(if ($unifiedFirst) { 2 } else { 1 })
 $unifiedScriptRaw = Join-Path $suiteDirectory `

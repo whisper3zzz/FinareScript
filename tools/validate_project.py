@@ -3773,6 +3773,8 @@ def main() -> int:
         and "SuiteTrial" in performance_pair_runner
         and "Get-GitRuntimeCommit" in performance_pair_runner
         and "Get-PluginVersion" in performance_pair_runner
+        and "ReportOnly" in performance_pair_runner
+        and "if ($unifiedFirst)" in performance_pair_runner
         and "unifiedscript\\captures" in performance_pair_runner
         and "puerts\\captures" in performance_pair_runner
         and "AllowLosingComparison" in performance_pair_runner

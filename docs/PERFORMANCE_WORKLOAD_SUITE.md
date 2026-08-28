@@ -78,6 +78,9 @@ to repeat them and emits one independently verifiable
 scalar pair and immediately writes both normalized captures. Its default mode
 publishes neutral or losing evidence while leaving `gates.fasterThanPuerts`
 truthful; pass `-RequireWin` when the narrow scalar threshold must fail the run.
+Odd trials measure UnifiedScript before Puerts, then reuse the saved
+UnifiedScript measurement to merge the comparison report without a third engine
+run; even trials measure Puerts before UnifiedScript.
 Tracked dirty runtime sources are included in `runtimeCommit` as a stable
 worktree fingerprint rather than being mislabeled as a clean commit.
 
@@ -114,13 +117,14 @@ with data error exit code 65.
 ## Current integration boundary
 
 The live UnifiedScript scalar and Batch Trace benchmarks now emit complete
-metric maps and have passed the raw-measurement/capture path for their trial-1
-slots. A matched local scalar pair recorded 100,000 UnifiedScript calls in
-14.3309 ms and 100,000 Puerts calls in 13.7189 ms, a losing UnifiedScript ratio
-of 1.0446 that remains published without moving the future product gate. The
-Batch Trace collector recorded 1,024 queries through two boundary calls in
-0.3950 ms with 360,448 transferred bytes and zero measured allocation/GC. These
-are machine-local collector proofs, not a complete suite comparison.
+metric maps and have passed the raw-measurement/capture path. All three matched
+scalar trials followed the alternating schedule. Their median bridge times for
+100,000 calls were 14.3025 ms for UnifiedScript and 13.8434 ms for Puerts, a
+losing UnifiedScript ratio of 1.0332 that remains published without moving the
+future product gate. The Batch Trace trial-1 collector recorded 1,024 queries
+through two boundary calls in 0.3950 ms with 360,448 transferred bytes and zero
+measured allocation/GC. These are machine-local collector proofs, not a
+complete suite comparison.
 
 The pre-existing BlockBreaker three-trial runner remains valid narrow evidence
 but predates the complete metric contract. The next M10.1 slice adds collectors

@@ -60,7 +60,7 @@ machine-local unless an artifact explicitly says otherwise.
 
 | Gate | Verified result |
 | --- | --- |
-| Main source | `cfb07e6` (`feat: capture neutral puerts comparison samples`), plus the current M10.1 paired-capture change set |
+| Main source | `ffce0de` (`feat: automate matched scalar trial captures`), plus the current true-alternation fix |
 | UnifiedScript comparison source | `e62a46e` (`feat: adopt round-tripped gameplay tuning`) |
 | Puerts comparison source | `f452241` (`test: capture puerts runtime performance metrics`) |
 | Managed tests | 542 / 542 passed |
@@ -1087,16 +1087,18 @@ ratios without moving the future M10.3 gate. Raw measurements are now normalized
 against the manifest into resumable per-slot captures, stamped with live
 OS/CPU/memory/GPU and engine-build identities, and assembled only when all 27
 trials share one runtime commit and environment. The matched scalar runner now
-writes both scheduled trial captures automatically and can publish a losing
-sample without making `gates.fasterThanPuerts` pass. A local UE 5.8.1 trial-1
-pair measured UnifiedScript at 14.3309 ms and Puerts at 13.7189 ms for 100,000
-calls (ratio 1.0446); this is intentionally recorded as a loss, not presented as
-a product win. CLR cumulative allocation and V8 used-heap growth are retained as
+writes both scheduled trial captures automatically, actually reverses engine
+order on even trials, and can publish a losing sample without making
+`gates.fasterThanPuerts` pass. All three local UE 5.8.1 scalar trials now exist
+at ordinals 1/2, 19/20, and 37/38 under one machine/build fingerprint. The
+100,000-call medians were 14.3025 ms for UnifiedScript and 13.8434 ms for Puerts
+(ratio 1.0332); this is intentionally recorded as a loss, not presented as a
+product win. CLR cumulative allocation and V8 used-heap growth are retained as
 raw medians but receive no cross-runtime ratio. Batch Trace separately recorded
 1,024 queries through two boundary calls in 0.3950 ms with 360,448 transferred
 bytes and zero measured allocation/GC. The 542/542 managed suite and 66/66
-repository invariants passed the preceding capture slice. M10.1 remains active
-while the other workload collectors and the complete-game runners are adapted.
+repository invariants pass. M10.1 remains active while the other workload
+collectors and the complete-game runners are adapted.
 
 ### M10.2 — Shared data and batching optimization
 
