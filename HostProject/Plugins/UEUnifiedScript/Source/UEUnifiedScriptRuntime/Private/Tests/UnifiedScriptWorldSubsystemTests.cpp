@@ -4,6 +4,7 @@
 
 #include "Containers/StringConv.h"
 #include "Dom/JsonObject.h"
+#include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "HAL/PlatformMemory.h"
@@ -1476,6 +1477,13 @@ bool FUnifiedScriptRepresentativeWorkloadPerformanceTest::RunTest(
     {
         return false;
     }
+    const bool bOwnsBenchmarkWorldContext = bResourceSpawn && GEngine != nullptr;
+    if (bOwnsBenchmarkWorldContext)
+    {
+        FWorldContext& WorldContext =
+            GEngine->CreateNewWorldContext(EWorldType::Game);
+        WorldContext.SetCurrentWorld(World);
+    }
     World->AddToRoot();
     UUnifiedScriptWorldSubsystem* Host =
         World->GetSubsystem<UUnifiedScriptWorldSubsystem>();
@@ -1684,6 +1692,10 @@ bool FUnifiedScriptRepresentativeWorkloadPerformanceTest::RunTest(
 
     Component->EndPlay(EEndPlayReason::Destroyed);
     Component->UnregisterComponent();
+    if (bOwnsBenchmarkWorldContext)
+    {
+        GEngine->DestroyWorldContext(World);
+    }
     World->RemoveFromRoot();
     World->DestroyWorld(false);
     return true;
