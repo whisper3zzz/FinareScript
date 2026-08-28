@@ -149,10 +149,13 @@ on both paths. The 2026-08-28 three-trial median is:
 
 The chunk removes runtime declaration JSON and consolidates delivery, but its
 first-use verification and binary-codec JIT currently add cold startup cost.
-That cost is reported rather than hidden and is routed to M11.1 for prewarming
-or ReadyToRun work; it is not a frame-time cost. The packaged BlockBreaker gate
-proves both Player and Rifle start from the staged chunk for 300 frames, and the
-generic Development release gate independently proves packaged chunk startup.
+That cost is reported rather than hidden and is routed to M11.4 for measured
+zero-copy section access, verification caching, and prewarming/ReadyToRun
+evaluation; it is not a frame-time cost. M11.4 keeps CoreCLR PE/IL as executable
+code instead of adding a second custom bytecode VM. The packaged BlockBreaker
+gate proves both Player and Rifle start from the staged chunk for 300 frames,
+and the generic Development release gate independently proves packaged chunk
+startup.
 
 The M11.1 large-project gate also compiles 256 independent Script Assets into
 one 141,249-byte Release chunk. Its verified cold emit is 5,398.7625 ms and a

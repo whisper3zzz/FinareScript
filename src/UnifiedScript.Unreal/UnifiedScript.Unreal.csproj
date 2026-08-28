@@ -21,7 +21,6 @@
     </ItemGroup>
     <MakeDir Directories="$(UnifiedScriptManagedStageDir)" />
     <Copy SourceFiles="@(_UnifiedScriptManagedHostFile)"
-          DestinationFolder="$(UnifiedScriptManagedStageDir)"
-          SkipUnchangedFiles="true" />
+          DestinationFolder="$(UnifiedScriptManagedStageDir)" />
   </Target>
 </Project>

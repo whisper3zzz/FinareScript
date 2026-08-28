@@ -84,6 +84,8 @@ DOCUMENTS = [
     ROOT / "docs" / "UNREAL_DEPLOYMENT.md",
     ROOT / "docs" / "UNREAL_ONBOARDING.md",
     ROOT / "docs" / "UNREAL_SDK.md",
+    ROOT / "docs" / "UNREAL_RELEASE.md",
+    ROOT / "docs" / "UNREAL_COMPATIBILITY_MATRIX.md",
     ROOT / "docs" / "UNREAL_FIRST_SCRIPT.md",
     ROOT / "docs" / "ALPHA_ACCEPTANCE.md",
     ROOT / "docs" / "UNREAL_API_CONTRACT.md",
@@ -1731,6 +1733,12 @@ def main() -> int:
     unreal_authoring_helper_path = ROOT / "tools" / "run-unreal-authoring.ps1"
     unreal_release_helper_path = ROOT / "tools" / "package-unreal-release.ps1"
     unreal_release_doc_path = ROOT / "docs" / "UNREAL_RELEASE.md"
+    unreal_compatibility_helper_path = (
+        ROOT / "tools" / "run-unreal-compatibility-matrix.ps1"
+    )
+    unreal_compatibility_doc_path = (
+        ROOT / "docs" / "UNREAL_COMPATIBILITY_MATRIX.md"
+    )
     helper_is_executable = sys.platform == "win32" or (
         unreal_helper_path.stat().st_mode & 0o111
     ) != 0
@@ -1779,6 +1787,8 @@ def main() -> int:
         and unreal_world_host_test_path.is_file()
         and unreal_lifecycle_stress_test_path.is_file()
         and unreal_runtime_breadcrumb_test_path.is_file()
+        and unreal_compatibility_helper_path.is_file()
+        and unreal_compatibility_doc_path.is_file()
         and unreal_coreclr_host_header_path.is_file()
         and unreal_coreclr_host_source_path.is_file()
         and unreal_coreclr_runtime_config_path.is_file()
@@ -2127,6 +2137,12 @@ def main() -> int:
     unreal_authoring_helper = unreal_authoring_helper_path.read_text(encoding="utf-8")
     unreal_release_helper = unreal_release_helper_path.read_text(encoding="utf-8")
     unreal_release_doc = unreal_release_doc_path.read_text(encoding="utf-8")
+    unreal_compatibility_helper = unreal_compatibility_helper_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_compatibility_doc = unreal_compatibility_doc_path.read_text(
+        encoding="utf-8"
+    )
     unreal_test_project = unreal_test_project_path.read_text(encoding="utf-8")
     unreal_game_target = unreal_game_target_path.read_text(encoding="utf-8")
     unreal_editor_target = unreal_editor_target_path.read_text(encoding="utf-8")
@@ -3173,12 +3189,48 @@ def main() -> int:
         and "Development', 'Shipping" in unreal_release_helper
         and "-SkipZenStore" in unreal_release_helper
         and "hostfxr.dll" in unreal_release_helper
+        and "hostpolicy.dll" in unreal_release_helper
         and "coreclr.dll" in unreal_release_helper
-        and "unifiedscript.unreal-release-gate/v0.1" in unreal_release_helper
+        and "System.Private.CoreLib.dll" in unreal_release_helper
+        and "poisonedExternalDotNetRoots" in unreal_release_helper
+        and "ExpectedEngineVersion = '5.8.1'" in unreal_release_helper
+        and "unifiedscript.unreal-release-gate/v0.2" in unreal_release_helper
         and "self-contained" in unreal_release_doc,
         "Win64 self-contained staging, packaged smoke, or release gate is missing",
     )
     checks.append("Win64 packages stage CoreCLR and run managed lifecycle smoke in Development/Shipping")
+    unreal_managed_project = (
+        ROOT / "src" / "UnifiedScript.Unreal" / "UnifiedScript.Unreal.csproj"
+    ).read_text(encoding="utf-8")
+    require(
+        "unifiedscript.unreal-compatibility-matrix/v0.1"
+        in unreal_compatibility_helper
+        and "editor-development-build" in unreal_compatibility_helper
+        and "editor-automation" in unreal_compatibility_helper
+        and "source-development-shipping-package" in unreal_compatibility_helper
+        and "clean-project-sdk-install" in unreal_compatibility_helper
+        and "clean-project-managed-chunk" in unreal_compatibility_helper
+        and "clean-project-development-package" in unreal_compatibility_helper
+        and "@('Development', 'Shipping')" in unreal_compatibility_helper
+        and "package-unifiedscript-sdk.ps1" in unreal_compatibility_helper
+        and "archiveSha256 -ne" in unreal_compatibility_helper
+        and "git -C $repoRoot archive" in unreal_compatibility_helper
+        and "DOTNET_ROOT" in unreal_release_helper
+        and "UNIFIEDSCRIPT_DOTNET_ROOT" in unreal_release_helper
+        and "not-declared" in unreal_compatibility_helper
+        and "four declared UE 5.8.1 Win64 rows" in unreal_compatibility_doc
+        and "171 payload files" in unreal_compatibility_doc
+        and re.search(
+            r"-c Release `\n\s+--no-build `\n\s+-- `",
+            unreal_chunk_stage,
+        )
+        and 'SkipUnchangedFiles="true"' not in unreal_managed_project
+        and 'SkipUnchangedFiles="true"' not in unreal_demo_project,
+        "M11.2 exact-engine, package, SDK-consumer, or staging-determinism matrix is incomplete",
+    )
+    checks.append(
+        "M11.2 declares only four proven UE 5.8.1 Win64 build/package/runtime rows"
+    )
     require(
         "UnrealWorldManagedEntryPoint" in unreal_world_managed_entry
         and "UnmanagedCallersOnly" in unreal_world_managed_entry
@@ -3845,7 +3897,7 @@ def main() -> int:
         and "4,096 accepted" in large_project_scale_doc
         and "updated exactly one" in large_project_scale_doc
         and "- [x] test large contracts and script sets" in roadmap
-        and "- Next slice: **M11.2" in roadmap,
+        and "- Next slice: **M11.3" in roadmap,
         "M11.1 large Contract, script-set, incremental, or asset-churn scale gate is incomplete",
     )
     checks.append(
@@ -4146,7 +4198,7 @@ def main() -> int:
         and "all 27 captures" in performance_suite_doc
         and "all 54 execution ordinals" in performance_suite_doc
         and "mixed results close M10.1" in performance_suite_doc
-        and "- Next slice: **M11.2" in roadmap
+        and "- Next slice: **M11.3" in roadmap
         and "- [x] use profiler evidence to promote only high-volume stable data"
         in roadmap
         and "- [x] preserve World ownership, generation checks, bounds"

@@ -12,6 +12,9 @@ $managedProject = Join-Path `
     $repoRoot `
     'samples\Unreal\UnifiedScript.Unreal.Demo\UnifiedScript.Unreal.Demo.csproj'
 $cliProject = Join-Path $repoRoot 'src\UnifiedScript.Cli\UnifiedScript.Cli.csproj'
+$cliAssembly = Join-Path `
+    $repoRoot `
+    'src\UnifiedScript.Cli\bin\Release\net10.0\UnifiedScript.Cli.dll'
 $stageDirectory = Join-Path `
     $repoRoot `
     'HostProject\Plugins\UEUnifiedScript\Binaries\Managed\Demo'
@@ -42,16 +45,35 @@ foreach ($requiredPath in @($dotnetExe, $managedProject, $cliProject)) {
 }
 
 if (!$SkipManagedBuild) {
+    & $dotnetExe build $cliProject -c Release --nologo
+    if ($LASTEXITCODE -ne 0) {
+        throw "UnifiedScript CLI build failed with exit code $LASTEXITCODE."
+    }
     & $dotnetExe build $managedProject -c $Configuration --nologo
     if ($LASTEXITCODE -ne 0) {
         throw "Managed demo build failed with exit code $LASTEXITCODE."
     }
+    $configuredHostAssembly = Join-Path `
+        $repoRoot `
+        "src\UnifiedScript.Unreal\bin\$Configuration\net10.0\UnifiedScript.Unreal.dll"
+    $stagedHostAssembly = Join-Path `
+        $repoRoot `
+        'HostProject\Plugins\UEUnifiedScript\Binaries\Managed\UnifiedScript.Unreal.dll'
+    if (!(Test-Path -LiteralPath $configuredHostAssembly) -or
+        !(Test-Path -LiteralPath $stagedHostAssembly) -or
+        (Get-FileHash -Algorithm SHA256 -LiteralPath $configuredHostAssembly).Hash -ne
+            (Get-FileHash -Algorithm SHA256 -LiteralPath $stagedHostAssembly).Hash) {
+        throw "Managed $Configuration host staging does not match its compiled dependency."
+    }
+} elseif (!(Test-Path -LiteralPath $cliAssembly)) {
+    throw "-SkipManagedBuild requires an existing Release CLI assembly: $cliAssembly"
 }
 
 New-Item -ItemType Directory -Force -Path $outputDirectory | Out-Null
 & $dotnetExe run `
     --project $cliProject `
     -c Release `
+    --no-build `
     -- `
     emit $managedProject `
     --out $outputDirectory `

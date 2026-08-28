@@ -49,7 +49,7 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-28**
 
 - Active milestone: **M11 — Production hardening and release candidate**
-- Next slice: **M11.2 — UE 5.8.1 configuration and packaging matrix**
+- Next slice: **M11.3 — Versioning, upgrades, and CI**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -64,7 +64,7 @@ machine-local unless an artifact explicitly says otherwise.
 | UnifiedScript comparison source | `5cf323e` (`perf: sync representative workload host`) |
 | Puerts comparison source | `be399cb` (`perf: register benchmark world context`) |
 | Managed tests | 561 / 561 passed |
-| Repository validator | 72 / 72 passed |
+| Repository validator | 73 / 73 passed |
 | UE 5.8.1 native build | passed |
 | `UnifiedScript.Unreal` Automation | 17 / 17 passed, including bounded crash breadcrumbs, failure containment, deterministic World shutdown, workload collectors, gameplay-profiler attribution, Authoring Surface, live World semantic pause/step/reload/detach, and repeated success/failure hot-reload leak coverage |
 | M10.2 generated-channel profile | 1,024 rows x 3 median samples: container binding 25,371.973 ns/row, generated snapshot 1.270 ns/row (ratio 0.000050), buffered events 0.586 ns/row, zero managed allocation |
@@ -1237,17 +1237,31 @@ validation/create/churn processes were 12,023.0525/12,539.5622/12,443.4847 ms;
 all explicit budgets passed and cleanup left no scale assets. The workload also
 found and fixed cross-type Roslyn property-reference ID collisions. Evidence is
 `artifacts/ue/scale/20260828_163657/scale-gate.json` and
-`docs/LARGE_PROJECT_SCALE.md`. M11.1 is complete; packaged `WindowsServer` and
-the configuration/cook/stage matrix remain in M11.2.
+`docs/LARGE_PROJECT_SCALE.md`. M11.1 is complete; M11.2 subsequently declared
+the real Win64 matrix and retained packaged `WindowsServer` as unsupported.
 
 ### M11.2 — Compatibility and packaging matrix
 
-- [ ] keep UE 5.8.1 as the primary gate and validate each additionally supported
+- [x] keep UE 5.8.1 as the primary gate and validate each additionally supported
   engine/platform/configuration explicitly
-- [ ] gate Editor, Development, Shipping, cook, stage, pak, archive, installed
+- [x] gate Editor, Development, Shipping, cook, stage, pak, archive, installed
   SDK, and clean-machine runtime dependency closure
-- [ ] add Linux dedicated server and other platforms only when their CoreCLR,
+- [x] add Linux dedicated server and other platforms only when their CoreCLR,
   ABI, cook, and lifecycle gates are real; do not imply support from compilation
+
+Completed (2026-08-28): `tools/run-unreal-compatibility-matrix.ps1` produced
+four declared UE 5.8.1 Win64 rows: Editor Development with 17 / 17 Automation,
+source Game Development and Shipping with Build/Cook/Stage/Pak/Archive and
+packaged `.uschunk` smoke, and an SDK-installed Game Development row built from
+a Git-exported project that initially contained no plugin. Both external .NET
+root variables were poisoned while each package selected its plugin-local
+CoreCLR. The 171-file SDK was generated twice with identical SHA-256
+`5ac04abf3edc4c48048e220ade2127034930fbf72172e478967475d3f3b52a8a`.
+The gate found and fixed Debug/Release managed staging drift before passing all
+nine phases. WindowsServer, Linux, and all other unproved platforms are emitted
+as `not-declared`. Evidence is
+`artifacts/ue/matrix/20260828-171222/compatibility-matrix.json` and
+`docs/UNREAL_COMPATIBILITY_MATRIX.md`.
 
 ### M11.3 — Versioning, upgrades, and CI
 
@@ -1257,6 +1271,24 @@ the configuration/cook/stage matrix remain in M11.2.
   Automation, package smoke, workload performance, and SDK installation
 - [ ] support diagnostics bundles and reproducible reports without collecting
   project source or sensitive content by default
+
+### M11.4 — Compiled program image v2
+
+- [ ] profile `.uschunk` cold load by file I/O, whole-file/section copies,
+  digest verification, binary decode, CoreCLR generation load, and first-use JIT
+- [ ] replace eager whole-file copies with bounded zero-copy or memory-mapped
+  section views, and introduce versioned interned string/type/member tables
+  where measurements prove a material win
+- [ ] split editor/debug payloads from the Shipping program image and cache
+  verified content identities without weakening transactional reload or
+  tamper/corruption detection
+- [ ] retain deterministic CoreCLR PE/IL as executable code and JSON as the
+  readable authoring/import/export format; do not create a second custom VM
+  whose semantics can drift from C# and the visual graph
+
+M11.4 acceptance: the compiled path performs no gameplay-authoring JSON parse,
+retains loose/chunk semantic equivalence and failure containment, and its
+matched cold-start median is no slower than the loose compatibility path.
 
 Acceptance: an RC archive installs and upgrades in clean project copies, passes
 the declared matrix, and survives the soak budget with no unresolved blocker.

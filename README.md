@@ -650,6 +650,18 @@ The gate verifies packaged hostfxr/CoreCLR and managed dependency closure, then
 runs managed Start/Tick/Stop from each packaged executable. See
 `docs/UNREAL_RELEASE.md` for the artifact and platform contract.
 
+Run the complete declared UE 5.8.1 matrix, including Editor Automation,
+Development/Shipping packages, deterministic SDK packaging, installation into
+a plugin-free project export, and an installed-project package smoke:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/run-unreal-compatibility-matrix.ps1 `
+  -EngineRoot D:\UE_5.8
+```
+
+The supported and explicitly unsupported rows are documented in
+`docs/UNREAL_COMPATIBILITY_MATRIX.md`.
+
 Start the transactional authoring host in a second terminal while the Editor is
 open:
 
