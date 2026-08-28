@@ -3,6 +3,7 @@
 #include "Engine/World.h"
 #include "Subsystems/SubsystemCollection.h"
 #include "UnifiedScriptCoreClrHost.h"
+#include "UnifiedScriptRuntimeDiagnostic.h"
 
 #include <atomic>
 
@@ -72,6 +73,10 @@ void UUnifiedScriptWorldSubsystem::Initialize(FSubsystemCollectionBase& Collecti
         this,
         &UUnifiedScriptWorldSubsystem::HandleWorldPostActorTick);
     HostState = EUnifiedScriptWorldHostState::NativeReady;
+    FUnifiedScriptRuntimeBreadcrumbs::RecordLifecycle(
+        TEXT("WorldInitialize.NativeReady"),
+        WorldHostId,
+        World->GetName());
     FUnifiedScriptCoreClrHost& CoreClrHost = FUnifiedScriptCoreClrHost::Get();
     if (CoreClrHost.Initialize())
     {
@@ -83,11 +88,30 @@ void UUnifiedScriptWorldSubsystem::Initialize(FSubsystemCollectionBase& Collecti
                 Error))
         {
             HostState = EUnifiedScriptWorldHostState::ManagedReady;
+            FUnifiedScriptRuntimeBreadcrumbs::RecordLifecycle(
+                TEXT("WorldInitialize.ManagedReady"),
+                WorldHostId,
+                World->GetName());
         }
         else
         {
+            FUnifiedScriptRuntimeBreadcrumbs::RecordFailure(
+                TEXT("WorldInitialize.CreateManagedWorld"),
+                Error,
+                WorldHostId,
+                0,
+                0);
             UE_LOG(LogTemp, Error, TEXT("%s"), *Error);
         }
+    }
+    else
+    {
+        FUnifiedScriptRuntimeBreadcrumbs::RecordFailure(
+            TEXT("WorldInitialize.CoreClr"),
+            TEXT("The process CoreCLR host failed to initialize."),
+            WorldHostId,
+            0,
+            0);
     }
 }
 
@@ -602,23 +626,51 @@ void UUnifiedScriptWorldSubsystem::ShutdownNativeRuntime()
     }
 
     const bool bManagedWorldWasReady = IsManagedWorldReady();
+    const uint64 ShuttingDownWorldHostId = WorldHostId;
     HostState = EUnifiedScriptWorldHostState::ShuttingDown;
+    FUnifiedScriptRuntimeBreadcrumbs::RecordLifecycle(
+        TEXT("WorldShutdown.Begin"),
+        ShuttingDownWorldHostId);
     if (NativeContext != nullptr)
     {
         NativeContext->SuspendWorkerDispatch();
     }
+    FUnifiedScriptRuntimeBreadcrumbs::RecordLifecycle(
+        TEXT("WorldShutdown.WorkerDispatchSuspended"),
+        ShuttingDownWorldHostId);
     if (bManagedWorldWasReady)
     {
         FString Error;
-        ensureMsgf(
-            FUnifiedScriptCoreClrHost::Get().DestroyManagedWorld(WorldHostId, Error),
-            TEXT("%s"),
-            *Error);
+        if (FUnifiedScriptCoreClrHost::Get().DestroyManagedWorld(WorldHostId, Error))
+        {
+            FUnifiedScriptRuntimeBreadcrumbs::RecordLifecycle(
+                TEXT("WorldShutdown.ManagedWorldDestroyed"),
+                ShuttingDownWorldHostId);
+        }
+        else
+        {
+            FUnifiedScriptRuntimeBreadcrumbs::RecordFailure(
+                TEXT("WorldShutdown.DestroyManagedWorld"),
+                Error,
+                ShuttingDownWorldHostId,
+                0,
+                0);
+            ensureMsgf(false, TEXT("%s"), *Error);
+        }
+    }
+    else
+    {
+        FUnifiedScriptRuntimeBreadcrumbs::RecordLifecycle(
+            TEXT("WorldShutdown.ManagedWorldSkipped"),
+            ShuttingDownWorldHostId);
     }
     if (NativeContext != nullptr)
     {
         NativeContext->Detach();
     }
+    FUnifiedScriptRuntimeBreadcrumbs::RecordLifecycle(
+        TEXT("WorldShutdown.NativeContextDetached"),
+        ShuttingDownWorldHostId);
 
     if (SharedDataPlane != nullptr)
     {
@@ -635,6 +687,9 @@ void UUnifiedScriptWorldSubsystem::ShutdownNativeRuntime()
         AsyncService->Shutdown();
         AsyncService.Reset();
     }
+    FUnifiedScriptRuntimeBreadcrumbs::RecordLifecycle(
+        TEXT("WorldShutdown.ServicesStopped"),
+        ShuttingDownWorldHostId);
 
     if (ObjectRegistry != nullptr)
     {
@@ -645,6 +700,9 @@ void UUnifiedScriptWorldSubsystem::ShutdownNativeRuntime()
             TEXT("UnifiedScript failed to invalidate world handles: %s"),
             *Result.Message);
     }
+    FUnifiedScriptRuntimeBreadcrumbs::RecordLifecycle(
+        TEXT("WorldShutdown.HandlesInvalidated"),
+        ShuttingDownWorldHostId);
 
     InvocationBridge.Reset();
     ObjectRegistry.Reset();
@@ -656,4 +714,7 @@ void UUnifiedScriptWorldSubsystem::ShutdownNativeRuntime()
     WorldHostId = 0;
     LoadedResources.Reset();
     HostState = EUnifiedScriptWorldHostState::Stopped;
+    FUnifiedScriptRuntimeBreadcrumbs::RecordLifecycle(
+        TEXT("WorldShutdown.Complete"),
+        ShuttingDownWorldHostId);
 }

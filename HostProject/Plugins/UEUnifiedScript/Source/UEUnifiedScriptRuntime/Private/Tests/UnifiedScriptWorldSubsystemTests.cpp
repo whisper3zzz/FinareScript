@@ -602,6 +602,18 @@ bool FUnifiedScriptWorldSubsystemLifecycleTest::RunTest(const FString& Parameter
     TestFalse(
         TEXT("A live native bridge failure stops only the failing component"),
         FailureComponent->bScriptRunning);
+    TestTrue(
+        TEXT("A native bridge failure leaves the healthy sibling running"),
+        FirstComponent->bScriptRunning);
+    TestEqual(
+        TEXT("Failure containment removes only the faulted managed instance"),
+        FirstHost->GetManagedScriptCount(),
+        1);
+    FirstComponent->TickComponent(0.016f, LEVELTICK_All, nullptr);
+    TestEqual(
+        TEXT("The healthy sibling continues managed Tick after peer failure"),
+        FirstComponent->ManagedState,
+        FString(TEXT("AlternateTicked")));
     FUnifiedScriptRuntimeDebugContext BridgeFailureContext;
     TestTrue(
         TEXT("Stopped bridge failure retains its live World debug identity"),

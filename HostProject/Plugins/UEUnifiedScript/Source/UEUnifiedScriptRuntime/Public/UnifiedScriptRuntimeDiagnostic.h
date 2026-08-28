@@ -57,6 +57,66 @@ struct UEUNIFIEDSCRIPTRUNTIME_API FUnifiedScriptRuntimeDiagnostic
         FString& OutError);
 };
 
+/**
+ * Detached, size-bounded process breadcrumb retained independently of any
+ * UWorld or collectible managed generation.
+ */
+struct UEUNIFIEDSCRIPTRUNTIME_API FUnifiedScriptRuntimeBreadcrumb
+{
+    uint64 Sequence = 0;
+    FString TimestampUtc;
+    FString Kind;
+    FString Operation;
+    FString Message;
+    uint64 WorldHostId = 0;
+    uint64 InstanceId = 0;
+    int32 Generation = 0;
+};
+
+struct UEUNIFIEDSCRIPTRUNTIME_API FUnifiedScriptRuntimeBreadcrumbSnapshot
+{
+    uint64 DroppedCount = 0;
+    TArray<FUnifiedScriptRuntimeBreadcrumb> Entries;
+
+    FString ToJson() const;
+};
+
+/**
+ * Process-wide crash breadcrumbs. Entries retain no UObject, managed object,
+ * source text, or raw pointer and are safe after World teardown.
+ */
+class UEUNIFIEDSCRIPTRUNTIME_API FUnifiedScriptRuntimeBreadcrumbs final
+{
+public:
+    static constexpr int32 MaximumEntryCount = 64;
+    static constexpr int32 MaximumKindLength = 64;
+    static constexpr int32 MaximumOperationLength = 96;
+    static constexpr int32 MaximumMessageLength = 512;
+    static constexpr int32 MaximumCrashContextEntryCount = 8;
+
+    static void RecordDiagnostic(const FUnifiedScriptRuntimeDiagnostic& Diagnostic);
+    static void RecordLifecycle(
+        const FString& Operation,
+        uint64 WorldHostId,
+        const FString& Message = FString());
+    static void RecordFailure(
+        const FString& Operation,
+        const FString& Message,
+        uint64 WorldHostId,
+        uint64 InstanceId,
+        int32 Generation);
+
+    static FUnifiedScriptRuntimeBreadcrumbSnapshot Capture();
+    static FString ExportJson();
+
+#if WITH_DEV_AUTOMATION_TESTS
+    static void ResetForTests();
+#endif
+
+private:
+    static void Record(FUnifiedScriptRuntimeBreadcrumb Breadcrumb);
+};
+
 enum class EUnifiedScriptSemanticDebugControl : uint8
 {
     Pause = 1,

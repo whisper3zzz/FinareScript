@@ -132,7 +132,7 @@ $result = $line.Line.Substring($line.Line.IndexOf($marker) + $marker.Length) |
     ConvertFrom-Json
 
 $matrixPass =
-    $result.schemaVersion -eq 'unifiedscript.unreal-lifecycle-stress/v0.3' -and
+    $result.schemaVersion -eq 'unifiedscript.unreal-lifecycle-stress/v0.4' -and
     [bool]$result.dedicatedServer -eq [bool]$DedicatedServer -and
     [int]$result.travelCycles -ge $TravelCycles -and
     [int]$result.pieCycles -ge $PieCycles -and
@@ -161,6 +161,12 @@ $memoryPass =
     [uint64]$result.memoryGrowthBytes -le [uint64]$result.memoryGrowthBudgetBytes -and
     [uint64]$result.memoryGrowthBudgetBytes -eq (
         [uint64]$MemoryGrowthBudgetMB * 1024L * 1024L)
+$shutdownPass =
+    [int]$result.shutdownSequencesVerified -gt 0 -and
+    [int]$result.shutdownSequenceFailures -eq 0 -and
+    [int]$result.breadcrumbCapacity -eq 64 -and
+    [int]$result.breadcrumbCount -eq 64 -and
+    [uint64]$result.breadcrumbDroppedCount -gt 0
 $zeroLeakPass =
     [int]$result.staleCompletions -eq 0 -and
     [int]$result.pendingRequestsDelta -eq 0 -and
@@ -175,8 +181,13 @@ $zeroLeakPass =
     [int]$result.retiredLoadContextsAlive -eq 0
 
 $report = [ordered]@{
-    schemaVersion = 'unifiedscript.unreal-lifecycle-stress-report/v0.2'
-    status = if ($matrixPass -and $capacityPass -and $memoryPass -and $zeroLeakPass) {
+    schemaVersion = 'unifiedscript.unreal-lifecycle-stress-report/v0.3'
+    status = if (
+        $matrixPass -and
+        $capacityPass -and
+        $memoryPass -and
+        $shutdownPass -and
+        $zeroLeakPass) {
         'passed'
     } else { 'failed' }
     engineRoot = [IO.Path]::GetFullPath($EngineRoot)
@@ -186,13 +197,19 @@ $report = [ordered]@{
         completeMatrix = $matrixPass
         boundedCapacity = $capacityPass
         memoryBudget = $memoryPass
+        deterministicShutdown = $shutdownPass
         zeroLeak = $zeroLeakPass
     }
     logPath = [IO.Path]::GetFullPath($logPath)
 }
 $report | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $reportPath -Encoding utf8
 
-if (!$matrixPass -or !$capacityPass -or !$memoryPass -or !$zeroLeakPass) {
+if (
+    !$matrixPass -or
+    !$capacityPass -or
+    !$memoryPass -or
+    !$shutdownPass -or
+    !$zeroLeakPass) {
     throw "One or more lifecycle stress gates failed. Report: $reportPath"
 }
 
@@ -202,5 +219,7 @@ Write-Host (
     "Worlds=$($result.concurrentWorlds), Generations=$($result.generationRollovers), " +
     "FailedReloads=$($result.failedReloadCycles), Objects=$($result.objectRegistrations), " +
     "Commands=$([uint64]$result.publishedSaturationEvents), " +
+    "Shutdowns=$([int]$result.shutdownSequencesVerified), " +
+    "BreadcrumbDrops=$([uint64]$result.breadcrumbDroppedCount), " +
     "MemoryGrowth=$([uint64]$result.memoryGrowthBytes), " +
     "RetiredALC=$($result.retiredLoadContextsAlive), Server=$([bool]$result.dedicatedServer)")

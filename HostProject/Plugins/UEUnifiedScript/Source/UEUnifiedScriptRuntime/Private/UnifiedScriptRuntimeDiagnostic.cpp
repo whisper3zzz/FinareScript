@@ -1,12 +1,101 @@
 #include "UnifiedScriptRuntimeDiagnostic.h"
 
 #include "Dom/JsonObject.h"
+#include "GenericPlatform/GenericPlatformCrashContext.h"
+#include "HAL/CriticalSection.h"
+#include "Misc/DateTime.h"
+#include "Misc/ScopeLock.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+
+#include <atomic>
 
 namespace UE::UnifiedScript::RuntimeDiagnostic::Private
 {
 constexpr const TCHAR* SchemaVersion = TEXT("unifiedscript.runtime-diagnostic/v0.1");
+constexpr const TCHAR* BreadcrumbSchemaVersion =
+    TEXT("unifiedscript.runtime-breadcrumbs/v0.1");
+constexpr const TCHAR* CrashSchemaKey = TEXT("UnifiedScriptBreadcrumbSchema");
+constexpr const TCHAR* CrashSequenceKey = TEXT("UnifiedScriptBreadcrumbSequence");
+constexpr const TCHAR* CrashKindKey = TEXT("UnifiedScriptBreadcrumbKind");
+constexpr const TCHAR* CrashOperationKey = TEXT("UnifiedScriptBreadcrumbOperation");
+constexpr const TCHAR* CrashWorldKey = TEXT("UnifiedScriptBreadcrumbWorldHostId");
+constexpr const TCHAR* CrashInstanceKey = TEXT("UnifiedScriptBreadcrumbInstanceId");
+constexpr const TCHAR* CrashGenerationKey = TEXT("UnifiedScriptBreadcrumbGeneration");
+constexpr const TCHAR* CrashMessageKey = TEXT("UnifiedScriptBreadcrumbMessage");
+constexpr const TCHAR* CrashRingKey = TEXT("UnifiedScriptBreadcrumbs");
+
+FCriticalSection GBreadcrumbLock;
+TArray<FUnifiedScriptRuntimeBreadcrumb> GBreadcrumbs;
+uint64 GDroppedBreadcrumbCount = 0;
+std::atomic<uint64> GNextBreadcrumbSequence{1};
+
+TSharedRef<FJsonObject> MakeBreadcrumbJson(
+    const FUnifiedScriptRuntimeBreadcrumb& Breadcrumb)
+{
+    const TSharedRef<FJsonObject> Object = MakeShared<FJsonObject>();
+    Object->SetStringField(TEXT("sequence"), LexToString(Breadcrumb.Sequence));
+    Object->SetStringField(TEXT("timestampUtc"), Breadcrumb.TimestampUtc);
+    Object->SetStringField(TEXT("kind"), Breadcrumb.Kind);
+    Object->SetStringField(TEXT("operation"), Breadcrumb.Operation);
+    Object->SetStringField(TEXT("message"), Breadcrumb.Message);
+    Object->SetStringField(TEXT("worldHostId"), LexToString(Breadcrumb.WorldHostId));
+    Object->SetStringField(TEXT("instanceId"), LexToString(Breadcrumb.InstanceId));
+    Object->SetNumberField(TEXT("generation"), Breadcrumb.Generation);
+    return Object;
+}
+
+FString SerializeBreadcrumbSnapshot(
+    const FUnifiedScriptRuntimeBreadcrumbSnapshot& Snapshot)
+{
+    const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
+    Root->SetStringField(TEXT("schemaVersion"), BreadcrumbSchemaVersion);
+    Root->SetNumberField(
+        TEXT("capacity"),
+        FUnifiedScriptRuntimeBreadcrumbs::MaximumEntryCount);
+    Root->SetStringField(TEXT("droppedCount"), LexToString(Snapshot.DroppedCount));
+    TArray<TSharedPtr<FJsonValue>> Entries;
+    Entries.Reserve(Snapshot.Entries.Num());
+    for (const FUnifiedScriptRuntimeBreadcrumb& Breadcrumb : Snapshot.Entries)
+    {
+        Entries.Add(MakeShared<FJsonValueObject>(MakeBreadcrumbJson(Breadcrumb)));
+    }
+    Root->SetArrayField(TEXT("entries"), MoveTemp(Entries));
+
+    FString Json;
+    const TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
+        TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Json);
+    return FJsonSerializer::Serialize(Root, Writer) ? Json : FString();
+}
+
+void PublishCrashContext(
+    const FUnifiedScriptRuntimeBreadcrumb& Breadcrumb,
+    const FUnifiedScriptRuntimeBreadcrumbSnapshot& Snapshot)
+{
+    if (!IsInGameThread())
+    {
+        return;
+    }
+    FGenericCrashContext::SetGameData(CrashSchemaKey, BreadcrumbSchemaVersion);
+    FGenericCrashContext::SetGameData(
+        CrashSequenceKey,
+        LexToString(Breadcrumb.Sequence));
+    FGenericCrashContext::SetGameData(CrashKindKey, Breadcrumb.Kind);
+    FGenericCrashContext::SetGameData(CrashOperationKey, Breadcrumb.Operation);
+    FGenericCrashContext::SetGameData(
+        CrashWorldKey,
+        LexToString(Breadcrumb.WorldHostId));
+    FGenericCrashContext::SetGameData(
+        CrashInstanceKey,
+        LexToString(Breadcrumb.InstanceId));
+    FGenericCrashContext::SetGameData(
+        CrashGenerationKey,
+        LexToString(Breadcrumb.Generation));
+    FGenericCrashContext::SetGameData(CrashMessageKey, Breadcrumb.Message);
+    FGenericCrashContext::SetGameData(
+        CrashRingKey,
+        SerializeBreadcrumbSnapshot(Snapshot));
+}
 
 bool ReadRequiredString(
     const TSharedPtr<FJsonObject>& Object,
@@ -88,6 +177,131 @@ bool ParseSource(
     return true;
 }
 }
+
+FString FUnifiedScriptRuntimeBreadcrumbSnapshot::ToJson() const
+{
+    return UE::UnifiedScript::RuntimeDiagnostic::Private::
+        SerializeBreadcrumbSnapshot(*this);
+}
+
+void FUnifiedScriptRuntimeBreadcrumbs::RecordDiagnostic(
+    const FUnifiedScriptRuntimeDiagnostic& Diagnostic)
+{
+    FUnifiedScriptRuntimeBreadcrumb Breadcrumb;
+    Breadcrumb.Kind = Diagnostic.Kind;
+    Breadcrumb.Operation = Diagnostic.Operation;
+    Breadcrumb.Message = Diagnostic.Message;
+    Breadcrumb.WorldHostId = Diagnostic.WorldHostId;
+    Breadcrumb.InstanceId = Diagnostic.InstanceId;
+    Breadcrumb.Generation = Diagnostic.Generation;
+    Record(MoveTemp(Breadcrumb));
+}
+
+void FUnifiedScriptRuntimeBreadcrumbs::RecordLifecycle(
+    const FString& Operation,
+    uint64 WorldHostId,
+    const FString& Message)
+{
+    FUnifiedScriptRuntimeBreadcrumb Breadcrumb;
+    Breadcrumb.Kind = TEXT("lifecycle");
+    Breadcrumb.Operation = Operation;
+    Breadcrumb.Message = Message;
+    Breadcrumb.WorldHostId = WorldHostId;
+    Record(MoveTemp(Breadcrumb));
+}
+
+void FUnifiedScriptRuntimeBreadcrumbs::RecordFailure(
+    const FString& Operation,
+    const FString& Message,
+    uint64 WorldHostId,
+    uint64 InstanceId,
+    int32 Generation)
+{
+    FUnifiedScriptRuntimeBreadcrumb Breadcrumb;
+    Breadcrumb.Kind = TEXT("nativeFailure");
+    Breadcrumb.Operation = Operation;
+    Breadcrumb.Message = Message;
+    Breadcrumb.WorldHostId = WorldHostId;
+    Breadcrumb.InstanceId = InstanceId;
+    Breadcrumb.Generation = Generation;
+    Record(MoveTemp(Breadcrumb));
+}
+
+FUnifiedScriptRuntimeBreadcrumbSnapshot FUnifiedScriptRuntimeBreadcrumbs::Capture()
+{
+    using namespace UE::UnifiedScript::RuntimeDiagnostic::Private;
+    FScopeLock Lock(&GBreadcrumbLock);
+    FUnifiedScriptRuntimeBreadcrumbSnapshot Snapshot;
+    Snapshot.DroppedCount = GDroppedBreadcrumbCount;
+    Snapshot.Entries = GBreadcrumbs;
+    return Snapshot;
+}
+
+FString FUnifiedScriptRuntimeBreadcrumbs::ExportJson()
+{
+    return Capture().ToJson();
+}
+
+void FUnifiedScriptRuntimeBreadcrumbs::Record(
+    FUnifiedScriptRuntimeBreadcrumb Breadcrumb)
+{
+    using namespace UE::UnifiedScript::RuntimeDiagnostic::Private;
+    do
+    {
+        Breadcrumb.Sequence = GNextBreadcrumbSequence.fetch_add(
+            1,
+            std::memory_order_relaxed);
+    }
+    while (Breadcrumb.Sequence == 0);
+    Breadcrumb.TimestampUtc = FDateTime::UtcNow().ToIso8601();
+    Breadcrumb.Kind.LeftInline(MaximumKindLength, EAllowShrinking::No);
+    Breadcrumb.Operation.LeftInline(MaximumOperationLength, EAllowShrinking::No);
+    Breadcrumb.Message.LeftInline(MaximumMessageLength, EAllowShrinking::No);
+
+    FUnifiedScriptRuntimeBreadcrumbSnapshot CrashSnapshot;
+    {
+        FScopeLock Lock(&GBreadcrumbLock);
+        if (GBreadcrumbs.Num() == MaximumEntryCount)
+        {
+            GBreadcrumbs.RemoveAt(0, 1, EAllowShrinking::No);
+            ++GDroppedBreadcrumbCount;
+        }
+        GBreadcrumbs.Add(Breadcrumb);
+        CrashSnapshot.DroppedCount = GDroppedBreadcrumbCount;
+        const int32 CrashEntryCount = FMath::Min(
+            MaximumCrashContextEntryCount,
+            GBreadcrumbs.Num());
+        CrashSnapshot.Entries.Append(
+            GBreadcrumbs.GetData() + GBreadcrumbs.Num() - CrashEntryCount,
+            CrashEntryCount);
+    }
+    PublishCrashContext(Breadcrumb, CrashSnapshot);
+}
+
+#if WITH_DEV_AUTOMATION_TESTS
+void FUnifiedScriptRuntimeBreadcrumbs::ResetForTests()
+{
+    using namespace UE::UnifiedScript::RuntimeDiagnostic::Private;
+    {
+        FScopeLock Lock(&GBreadcrumbLock);
+        GBreadcrumbs.Reset();
+        GDroppedBreadcrumbCount = 0;
+        GNextBreadcrumbSequence.store(1, std::memory_order_relaxed);
+    }
+    if (IsInGameThread())
+    {
+        FGenericCrashContext::SetGameData(CrashSchemaKey, FString());
+        FGenericCrashContext::SetGameData(CrashSequenceKey, FString());
+        FGenericCrashContext::SetGameData(CrashKindKey, FString());
+        FGenericCrashContext::SetGameData(CrashOperationKey, FString());
+        FGenericCrashContext::SetGameData(CrashWorldKey, FString());
+        FGenericCrashContext::SetGameData(CrashInstanceKey, FString());
+        FGenericCrashContext::SetGameData(CrashGenerationKey, FString());
+        FGenericCrashContext::SetGameData(CrashMessageKey, FString());
+        FGenericCrashContext::SetGameData(CrashRingKey, FString());
+    }
+}
+#endif
 
 FString FUnifiedScriptRuntimeSourceLocation::ToDisplayString() const
 {

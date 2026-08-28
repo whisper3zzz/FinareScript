@@ -16,6 +16,7 @@
 #include "UnifiedScriptCoreClrHost.h"
 #include "UnifiedScriptDeclarationMaterializer.h"
 #include "UnifiedScriptObjectRegistry.h"
+#include "UnifiedScriptRuntimeDiagnostic.h"
 #include "UnifiedScriptWorldSubsystem.h"
 #include "UObject/SoftObjectPath.h"
 #include "UObject/UnrealType.h"
@@ -1850,10 +1851,21 @@ void UUnifiedScriptComponent::SetScriptFailure(FString Error)
     {
         LastRuntimeDiagnostic = MoveTemp(Diagnostic);
         LastScriptError = LastRuntimeDiagnostic.ToDisplayString();
+        FUnifiedScriptRuntimeBreadcrumbs::RecordDiagnostic(LastRuntimeDiagnostic);
     }
     else
     {
         LastScriptError = MoveTemp(Error);
+        UUnifiedScriptWorldSubsystem* Host =
+            GetWorld() != nullptr
+            ? GetWorld()->GetSubsystem<UUnifiedScriptWorldSubsystem>()
+            : nullptr;
+        FUnifiedScriptRuntimeBreadcrumbs::RecordFailure(
+            TEXT("ComponentBoundary"),
+            LastScriptError,
+            Host != nullptr ? Host->GetWorldHostId() : 0,
+            ManagedScriptInstanceId,
+            FCString::Atoi(*ActiveGeneration));
     }
     UE_LOG(LogTemp, Error, TEXT("UnifiedScript component: %s"), *LastScriptError);
 }

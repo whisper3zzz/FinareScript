@@ -77,7 +77,7 @@ $passed =
 
 $sourceCommit = (& git -C $repoRoot rev-parse HEAD).Trim()
 $report = [ordered]@{
-    schemaVersion = 'unifiedscript.unreal-reliability-soak/v0.1'
+    schemaVersion = 'unifiedscript.unreal-reliability-soak/v0.2'
     status = if ($passed) { 'passed' } else { 'failed' }
     createdUtc = [DateTime]::UtcNow.ToString('O')
     sourceCommit = $sourceCommit
@@ -123,6 +123,15 @@ $report = [ordered]@{
         asyncPayloadRejections =
             [uint64]$editorReport.result.asyncPayloadRejections +
             [uint64]$serverReport.result.asyncPayloadRejections
+        shutdownSequencesVerified =
+            [int]$editorReport.result.shutdownSequencesVerified +
+            [int]$serverReport.result.shutdownSequencesVerified
+        shutdownSequenceFailures =
+            [int]$editorReport.result.shutdownSequenceFailures +
+            [int]$serverReport.result.shutdownSequenceFailures
+        breadcrumbDroppedCount =
+            [uint64]$editorReport.result.breadcrumbDroppedCount +
+            [uint64]$serverReport.result.breadcrumbDroppedCount
     }
 }
 $reportPath = Join-Path $runDirectory 'reliability-soak.json'
@@ -140,4 +149,6 @@ Write-Host (
     "FailedReloads=$($report.totals.failedReloadCycles), " +
     "Objects=$($report.totals.objectRegistrations), " +
     "Commands=$($report.totals.executedCommands), " +
-    "DroppedEvents=$($report.totals.droppedEvents)")
+    "DroppedEvents=$($report.totals.droppedEvents), " +
+    "Shutdowns=$($report.totals.shutdownSequencesVerified), " +
+    "BreadcrumbDrops=$($report.totals.breadcrumbDroppedCount)")

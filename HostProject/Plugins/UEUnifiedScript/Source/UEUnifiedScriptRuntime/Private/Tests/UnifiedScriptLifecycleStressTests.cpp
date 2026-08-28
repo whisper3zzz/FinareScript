@@ -2,6 +2,7 @@
 
 #include "UnifiedScriptAsyncService.h"
 #include "UnifiedScriptNativeTransport.h"
+#include "UnifiedScriptRuntimeDiagnostic.h"
 #include "UnifiedScriptWorldSubsystem.h"
 
 #include "Containers/StringConv.h"
@@ -30,6 +31,35 @@ struct FWorldFixture
     const FUnifiedScriptAsyncTransportV5* Async = nullptr;
 };
 
+int32 GVerifiedShutdownSequenceCount = 0;
+int32 GShutdownSequenceFailureCount = 0;
+
+bool HasDeterministicShutdownSequence(uint64 WorldHostId)
+{
+    static const TArray<FString> ExpectedOperations = {
+        TEXT("WorldShutdown.Begin"),
+        TEXT("WorldShutdown.WorkerDispatchSuspended"),
+        TEXT("WorldShutdown.ManagedWorldDestroyed"),
+        TEXT("WorldShutdown.NativeContextDetached"),
+        TEXT("WorldShutdown.ServicesStopped"),
+        TEXT("WorldShutdown.HandlesInvalidated"),
+        TEXT("WorldShutdown.Complete"),
+    };
+    const FUnifiedScriptRuntimeBreadcrumbSnapshot Snapshot =
+        FUnifiedScriptRuntimeBreadcrumbs::Capture();
+    int32 ExpectedIndex = 0;
+    for (const FUnifiedScriptRuntimeBreadcrumb& Breadcrumb : Snapshot.Entries)
+    {
+        if (Breadcrumb.WorldHostId == WorldHostId &&
+            ExpectedIndex < ExpectedOperations.Num() &&
+            Breadcrumb.Operation == ExpectedOperations[ExpectedIndex])
+        {
+            ++ExpectedIndex;
+        }
+    }
+    return ExpectedIndex == ExpectedOperations.Num();
+}
+
 FWorldFixture CreateWorld(EWorldType::Type WorldType)
 {
     FWorldFixture Fixture;
@@ -53,12 +83,22 @@ FWorldFixture CreateWorld(EWorldType::Type WorldType)
 
 void DestroyWorld(FWorldFixture& Fixture)
 {
+    const uint64 WorldHostId =
+        Fixture.Host != nullptr ? Fixture.Host->GetWorldHostId() : 0;
     if (Fixture.World != nullptr)
     {
         Fixture.World->RemoveFromRoot();
         Fixture.World->DestroyWorld(false);
     }
     Fixture = {};
+    if (WorldHostId != 0)
+    {
+        ++GVerifiedShutdownSequenceCount;
+        if (!HasDeterministicShutdownSequence(WorldHostId))
+        {
+            ++GShutdownSequenceFailureCount;
+        }
+    }
 }
 
 bool IsReady(const FWorldFixture& Fixture)
@@ -120,6 +160,10 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 bool FUnifiedScriptLifecycleStressTest::RunTest(const FString& Parameters)
 {
     using namespace UE::UnifiedScript::LifecycleStress::Tests;
+
+    FUnifiedScriptRuntimeBreadcrumbs::ResetForTests();
+    GVerifiedShutdownSequenceCount = 0;
+    GShutdownSequenceFailureCount = 0;
 
     const int32 TravelCycles = ReadBoundedOption(
         TEXT("UnifiedScriptSoakTravelCycles="), 8, 1, 256);
@@ -870,6 +914,23 @@ bool FUnifiedScriptLifecycleStressTest::RunTest(const FString& Parameters)
         TEXT("Lifecycle matrix does not overflow worker dispatch capacity"),
         FUnifiedScriptNativeBridgeContext::GetGlobalRejectedWorkerDispatchCount(),
         InitialRejectedWorkerDispatch);
+    TestTrue(
+        TEXT("Lifecycle matrix verifies at least one complete shutdown sequence"),
+        GVerifiedShutdownSequenceCount > 0);
+    TestEqual(
+        TEXT("Every World follows the deterministic shutdown sequence"),
+        GShutdownSequenceFailureCount,
+        0);
+
+    const FUnifiedScriptRuntimeBreadcrumbSnapshot BreadcrumbSnapshot =
+        FUnifiedScriptRuntimeBreadcrumbs::Capture();
+    TestEqual(
+        TEXT("Lifecycle pressure keeps the process breadcrumb ring bounded"),
+        BreadcrumbSnapshot.Entries.Num(),
+        FUnifiedScriptRuntimeBreadcrumbs::MaximumEntryCount);
+    TestTrue(
+        TEXT("Lifecycle pressure counts overwritten crash breadcrumbs"),
+        BreadcrumbSnapshot.DroppedCount > 0);
 
     const uint64 AsyncCapacityRejections =
         FUnifiedScriptAsyncService::GetGlobalCapacityRejectionCount() -
@@ -900,7 +961,7 @@ bool FUnifiedScriptLifecycleStressTest::RunTest(const FString& Parameters)
     UE_LOG(
         LogTemp,
         Display,
-        TEXT("UNIFIEDSCRIPT_LIFECYCLE_STRESS_JSON {\"schemaVersion\":\"unifiedscript.unreal-lifecycle-stress/v0.3\",\"platform\":\"%s\",\"dedicatedServer\":%s,\"engineMajor\":%d,\"engineMinor\":%d,\"enginePatch\":%d,\"travelCycles\":%d,\"pieCycles\":%d,\"concurrentWorlds\":%d,\"collidingRequestsPerWorld\":%d,\"generationRollovers\":%d,\"failedReloadCycles\":%d,\"objectChurnCycles\":%d,\"objectsPerChurnCycle\":%d,\"objectRegistrations\":%d,\"garbageCollectionCycles\":%d,\"commandSaturationCycles\":%d,\"commandsPerSaturationCycle\":%d,\"publishedSaturationEvents\":%llu,\"commandOverflowCount\":%llu,\"eventOverflowCount\":%llu,\"traceOverflowCount\":%llu,\"overlapOverflowCount\":%llu,\"asyncCapacityRejections\":%llu,\"asyncPayloadRejections\":%llu,\"maximumAsyncInFlightRequests\":%u,\"maximumAsyncPayloadBytes\":%u,\"memoryBeforeBytes\":%llu,\"memoryPeakBytes\":%llu,\"memoryAfterBytes\":%llu,\"memoryGrowthBytes\":%llu,\"memoryGrowthBudgetBytes\":%llu,\"staleCompletions\":0,\"pendingRequestsDelta\":0,\"managedWorldsDelta\":0,\"nativeContextsDelta\":0,\"pendingWorkerDispatchDelta\":0,\"rejectedWorkerDispatchDelta\":0,\"registeredObjectsDelta\":0,\"eventSubscriptionsDelta\":0,\"ownedResourcesDelta\":0,\"staleDebugSessions\":0,\"retiredLoadContextsAlive\":%d}"),
+        TEXT("UNIFIEDSCRIPT_LIFECYCLE_STRESS_JSON {\"schemaVersion\":\"unifiedscript.unreal-lifecycle-stress/v0.4\",\"platform\":\"%s\",\"dedicatedServer\":%s,\"engineMajor\":%d,\"engineMinor\":%d,\"enginePatch\":%d,\"travelCycles\":%d,\"pieCycles\":%d,\"concurrentWorlds\":%d,\"collidingRequestsPerWorld\":%d,\"generationRollovers\":%d,\"failedReloadCycles\":%d,\"objectChurnCycles\":%d,\"objectsPerChurnCycle\":%d,\"objectRegistrations\":%d,\"garbageCollectionCycles\":%d,\"commandSaturationCycles\":%d,\"commandsPerSaturationCycle\":%d,\"publishedSaturationEvents\":%llu,\"commandOverflowCount\":%llu,\"eventOverflowCount\":%llu,\"traceOverflowCount\":%llu,\"overlapOverflowCount\":%llu,\"asyncCapacityRejections\":%llu,\"asyncPayloadRejections\":%llu,\"maximumAsyncInFlightRequests\":%u,\"maximumAsyncPayloadBytes\":%u,\"shutdownSequencesVerified\":%d,\"shutdownSequenceFailures\":%d,\"breadcrumbCapacity\":%d,\"breadcrumbCount\":%d,\"breadcrumbDroppedCount\":%llu,\"memoryBeforeBytes\":%llu,\"memoryPeakBytes\":%llu,\"memoryAfterBytes\":%llu,\"memoryGrowthBytes\":%llu,\"memoryGrowthBudgetBytes\":%llu,\"staleCompletions\":0,\"pendingRequestsDelta\":0,\"managedWorldsDelta\":0,\"nativeContextsDelta\":0,\"pendingWorkerDispatchDelta\":0,\"rejectedWorkerDispatchDelta\":0,\"registeredObjectsDelta\":0,\"eventSubscriptionsDelta\":0,\"ownedResourcesDelta\":0,\"staleDebugSessions\":0,\"retiredLoadContextsAlive\":%d}"),
         ANSI_TO_TCHAR(FPlatformProperties::PlatformName()),
         IsRunningDedicatedServer() ? TEXT("true") : TEXT("false"),
         FEngineVersion::Current().GetMajor(),
@@ -927,6 +988,11 @@ bool FUnifiedScriptLifecycleStressTest::RunTest(const FString& Parameters)
         static_cast<unsigned long long>(AsyncPayloadRejections),
         UE::UnifiedScript::AsyncService::MaximumInFlightRequestCount,
         UE::UnifiedScript::AsyncService::MaximumPayloadByteCount,
+        GVerifiedShutdownSequenceCount,
+        GShutdownSequenceFailureCount,
+        FUnifiedScriptRuntimeBreadcrumbs::MaximumEntryCount,
+        BreadcrumbSnapshot.Entries.Num(),
+        static_cast<unsigned long long>(BreadcrumbSnapshot.DroppedCount),
         static_cast<unsigned long long>(InitialUsedPhysicalBytes),
         static_cast<unsigned long long>(PeakUsedPhysicalBytes),
         static_cast<unsigned long long>(FinalUsedPhysicalBytes),

@@ -33,6 +33,30 @@ record contains no source text, locals, managed object references, or raw UE
 pointers. Native consumers validate the schema and copy every value before the
 managed boundary error is cleared.
 
+## Crash breadcrumbs
+
+`unifiedscript.runtime-breadcrumbs/v0.1` retains the last 64 detached managed
+failures, native failures, and World lifecycle phases in a process-wide,
+thread-safe oldest-first ring. It records a monotonic sequence, UTC timestamp,
+kind, operation, bounded message, World host ID, instance ID, and generation.
+Kind, operation, and message are capped at 64, 96, and 512 characters, and an
+explicit dropped count reports every overwritten entry.
+
+After each GameThread record, the newest breadcrumb plus the most recent eight
+entries are copied into Unreal `FGenericCrashContext` game data. This makes the
+last managed boundary and teardown phase available to the platform crash
+pipeline even after its UWorld, UObject handles, and collectible load context
+have been destroyed. The crash tail is valid bounded JSON and contains no
+stack, source text, locals, UObject pointers, or managed references; the full
+runtime diagnostic remains available through the component/editor path.
+
+World teardown emits and tests the ordered phases `Begin`,
+`WorkerDispatchSuspended`, `ManagedWorldDestroyed`, `NativeContextDetached`,
+`ServicesStopped`, `HandlesInvalidated`, and `Complete`. A managed World
+destruction failure is recorded before native cleanup continues. This order
+prevents a suspended worker, managed callback, async completion, or retained
+handle from outliving its native owner.
+
 ## Live World controls
 
 The Slate debugger automatically discovers the best matching PIE/Game
@@ -82,3 +106,10 @@ method and `DebugTargetId`. The semantic World Automation additionally proves
 statement breakpoint suspension, Step In/Out, deeper-frame locals, unique
 frame identities, worker-to-GameThread generated bridge calls, generation-two
 breakpoint rebinding, and detach while suspended.
+
+Native Automation additionally fills and overwrites the 64-entry ring, checks
+field bounds and exact 64-bit identities, parses the eight-entry CrashContext
+tail, and clears only UnifiedScript-owned crash keys. The lifecycle soak checks
+every created World's shutdown sequence immediately after destruction and the
+component test proves a faulted script stops without interrupting a healthy
+sibling in the same World.

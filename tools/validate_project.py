@@ -1305,6 +1305,17 @@ def main() -> int:
         / "Tests"
         / "UnifiedScriptLifecycleStressTests.cpp"
     )
+    unreal_runtime_breadcrumb_test_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Private"
+        / "Tests"
+        / "UnifiedScriptRuntimeBreadcrumbTests.cpp"
+    )
     unreal_coreclr_host_header_path = (
         ROOT
         / "HostProject"
@@ -1766,6 +1777,7 @@ def main() -> int:
         and unreal_world_host_source_path.is_file()
         and unreal_world_host_test_path.is_file()
         and unreal_lifecycle_stress_test_path.is_file()
+        and unreal_runtime_breadcrumb_test_path.is_file()
         and unreal_coreclr_host_header_path.is_file()
         and unreal_coreclr_host_source_path.is_file()
         and unreal_coreclr_runtime_config_path.is_file()
@@ -1924,6 +1936,9 @@ def main() -> int:
     unreal_world_host_source = unreal_world_host_source_path.read_text(encoding="utf-8")
     unreal_world_host_test = unreal_world_host_test_path.read_text(encoding="utf-8")
     unreal_lifecycle_stress_test = unreal_lifecycle_stress_test_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_runtime_breadcrumb_test = unreal_runtime_breadcrumb_test_path.read_text(
         encoding="utf-8"
     )
     unreal_coreclr_host_header = unreal_coreclr_host_header_path.read_text(
@@ -2691,7 +2706,7 @@ def main() -> int:
         and "CollectRetiredLoadContexts" in unreal_world_managed_entry
         and "CollectRetiredManagedLoadContexts" in unreal_coreclr_host_source
         and "LifecycleStressScript" in unreal_lifecycle_stress_demo_source
-        and "unifiedscript.unreal-lifecycle-stress-report/v0.2"
+        and "unifiedscript.unreal-lifecycle-stress-report/v0.3"
         in unreal_lifecycle_stress_helper
         and "retiredLoadContextsAlive" in unreal_lifecycle_stress_helper
         and "zeroLeak" in unreal_lifecycle_stress_helper,
@@ -3711,13 +3726,13 @@ def main() -> int:
         and "oldContextCollection" in runtime_component_source
         and "retiredLoadContextsAlive" in runtime_component_source
         and "worldFromGeneration" in runtime_component_source
-        and "unifiedscript.unreal-lifecycle-stress/v0.3"
+        and "unifiedscript.unreal-lifecycle-stress/v0.4"
         in unreal_lifecycle_stress_test
         and "FailedReloadCycles" in unreal_lifecycle_stress_test
         and "GetEventSubscriptionCount" in unreal_lifecycle_stress_test
         and "staleDebugSessions" in unreal_lifecycle_stress_test
         and "failedReloadCycles" in unreal_lifecycle_stress_helper
-        and "unifiedscript.unreal-lifecycle-stress-report/v0.2"
+        and "unifiedscript.unreal-lifecycle-stress-report/v0.3"
         in unreal_lifecycle_stress_helper
         and "eventSubscriptionsDelta" in unreal_lifecycle_stress_helper
         and "staleDebugSessions" in unreal_lifecycle_stress_helper
@@ -3741,7 +3756,7 @@ def main() -> int:
     ).read_text(encoding="utf-8")
     require(
         unreal_reliability_soak_helper_path.is_file()
-        and "unifiedscript.unreal-reliability-soak/v0.1"
+        and "unifiedscript.unreal-reliability-soak/v0.2"
         in unreal_reliability_soak_helper
         and "DedicatedServer" in unreal_lifecycle_stress_helper
         and "-server" in unreal_lifecycle_stress_helper
@@ -3765,6 +3780,39 @@ def main() -> int:
     )
     checks.append(
         "M11.1 soaks editor and server-mode Worlds against explicit memory and queue bounds"
+    )
+    require(
+        "FUnifiedScriptRuntimeBreadcrumbSnapshot"
+        in unreal_runtime_diagnostic_header
+        and "MaximumEntryCount = 64" in unreal_runtime_diagnostic_header
+        and "MaximumCrashContextEntryCount = 8"
+        in unreal_runtime_diagnostic_header
+        and "unifiedscript.runtime-breadcrumbs/v0.1"
+        in unreal_runtime_diagnostic_source
+        and "GBreadcrumbs.RemoveAt(0" in unreal_runtime_diagnostic_source
+        and "FGenericCrashContext::SetGameData"
+        in unreal_runtime_diagnostic_source
+        and "RecordDiagnostic(LastRuntimeDiagnostic)" in runtime_component_source
+        and "WorldShutdown.WorkerDispatchSuspended" in unreal_world_host_source
+        and "WorldShutdown.ManagedWorldDestroyed" in unreal_world_host_source
+        and "WorldShutdown.NativeContextDetached" in unreal_world_host_source
+        and "WorldShutdown.ServicesStopped" in unreal_world_host_source
+        and "WorldShutdown.HandlesInvalidated" in unreal_world_host_source
+        and "WorldShutdown.Complete" in unreal_world_host_source
+        and "healthy sibling continues managed Tick" in unreal_world_host_test
+        and "HasDeterministicShutdownSequence" in unreal_lifecycle_stress_test
+        and "shutdownSequenceFailures" in unreal_lifecycle_stress_test
+        and "MaximumEntryCount + 6" in unreal_runtime_breadcrumb_test
+        and "CrashContext" in unreal_runtime_breadcrumb_test
+        and "deterministicShutdown" in unreal_lifecycle_stress_helper
+        and "last 64 detached managed" in runtime_diagnostic_doc
+        and "All 152 World shutdowns" in reliability_soak_doc
+        and "- [x] enforce bounded memory/queues, deterministic shutdown"
+        in roadmap,
+        "M11.1 deterministic shutdown, failure isolation, or crash breadcrumbs are incomplete",
+    )
+    checks.append(
+        "M11.1 contains script faults and preserves bounded crash-ready shutdown breadcrumbs"
     )
     gameplay_profiler_doc = (
         ROOT / "docs" / "GAMEPLAY_PROFILER.md"
