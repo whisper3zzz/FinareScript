@@ -1237,19 +1237,31 @@ bool FUnifiedScriptRepresentativeWorkloadPerformanceTest::RunTest(
     const bool bStructContainer =
         WorkloadId == TEXT("struct-container-transfer");
     const bool bDelegateStorm = WorkloadId == TEXT("delegate-storm");
+    const bool bResourceSpawn =
+        WorkloadId == TEXT("resource-spawn-flow");
     TestTrue(
         *FString::Printf(TEXT("Representative workload is supported: %s"), *WorkloadId),
-        bStructContainer || bDelegateStorm);
-    if (!bStructContainer && !bDelegateStorm)
+        bStructContainer || bDelegateStorm || bResourceSpawn);
+    if (!bStructContainer && !bDelegateStorm && !bResourceSpawn)
     {
         return false;
     }
 
-    const int32 ExpectedWarmupIterations = bStructContainer ? 1024 : 4096;
-    const int32 ExpectedIterations = bStructContainer ? 16384 : 100000;
-    const int64 ExpectedCalls = bStructContainer ? 49152 : 200000;
-    const int64 ExpectedBytesCopied = bStructContainer ? 3276800 : 1700000;
-    const int64 ExpectedChecksum = bStructContainer ? 2424832 : 5000350000ll;
+    const int32 ExpectedWarmupIterations = bStructContainer
+        ? 1024
+        : bDelegateStorm ? 4096 : 16;
+    const int32 ExpectedIterations = bStructContainer
+        ? 16384
+        : bDelegateStorm ? 100000 : 256;
+    const int64 ExpectedCalls = bStructContainer
+        ? 49152
+        : bDelegateStorm ? 200000 : 768;
+    const int64 ExpectedBytesCopied = bStructContainer
+        ? 3276800
+        : bDelegateStorm ? 1700000 : 40192;
+    const int64 ExpectedChecksum = bStructContainer
+        ? 2424832
+        : bDelegateStorm ? 5000350000ll : 768;
 
     UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
     TestNotNull(TEXT("Representative workload World exists"), World);
@@ -1271,12 +1283,23 @@ bool FUnifiedScriptRepresentativeWorkloadPerformanceTest::RunTest(
     Component->ScriptAsset = Asset;
     Component->ManagedState = FString::Printf(TEXT("Run=%s"), *WorkloadId);
     Component->RegisterComponentWithWorld(World);
+    const double StartupStarted = FPlatformTime::Seconds();
     Component->BeginPlay();
+    const double StartupMilliseconds = FMath::Max(
+        0.001,
+        (FPlatformTime::Seconds() - StartupStarted) * 1000.0);
     TestTrue(
         *FString::Printf(
             TEXT("Managed representative workload starts: %s"),
             *Component->LastScriptError),
         Component->bScriptRunning);
+    if (bResourceSpawn && Component->bScriptRunning)
+    {
+        TestTrue(
+            TEXT("Resource/spawn workload publishes a ready startup boundary"),
+            Component->ManagedState.Contains(TEXT("Status=ready")));
+        Component->TickComponent(1.0f / 60.0f, LEVELTICK_All, nullptr);
+    }
 
     auto ReadField = [](const FString& State, const TCHAR* Name, FString& OutValue)
     {
@@ -1349,6 +1372,10 @@ bool FUnifiedScriptRepresentativeWorkloadPerformanceTest::RunTest(
     TestEqual(TEXT("Logical payload byte count is frozen"), BytesCopied, ExpectedBytesCopied);
     TestEqual(TEXT("Workload checksum is stable"), Checksum, ExpectedChecksum);
     TestTrue(TEXT("Bridge time is measurable"), BridgeMilliseconds > 0.0);
+    if (bResourceSpawn)
+    {
+        TestTrue(TEXT("Resource/spawn startup is measurable"), StartupMilliseconds > 0.0);
+    }
     TestTrue(
         TEXT("Managed allocation and GC evidence is non-negative"),
         AllocatedBytes >= 0 && GcCollectionCount >= 0 &&
@@ -1359,7 +1386,7 @@ bool FUnifiedScriptRepresentativeWorkloadPerformanceTest::RunTest(
     UE_LOG(
         LogTemp,
         Display,
-        TEXT("UNIFIEDSCRIPT_REPRESENTATIVE_WORKLOAD_JSON {\"schemaVersion\":\"unifiedscript.representative-workload/v0.1\",\"workloadId\":\"%s\",\"warmupIterations\":%d,\"iterations\":%d,\"bridgeTimeMilliseconds\":%.6f,\"calls\":%lld,\"bytesCopied\":%lld,\"allocatedBytes\":%lld,\"gcCollectionCount\":%d,\"gcPauseMilliseconds\":%.6f,\"memoryHighWaterBytes\":%llu,\"checksum\":%lld}"),
+        TEXT("UNIFIEDSCRIPT_REPRESENTATIVE_WORKLOAD_JSON {\"schemaVersion\":\"unifiedscript.representative-workload/v0.1\",\"workloadId\":\"%s\",\"warmupIterations\":%d,\"iterations\":%d,\"bridgeTimeMilliseconds\":%.6f,\"calls\":%lld,\"bytesCopied\":%lld,\"allocatedBytes\":%lld,\"gcCollectionCount\":%d,\"gcPauseMilliseconds\":%.6f,\"memoryHighWaterBytes\":%llu,\"startupMilliseconds\":%.6f,\"checksum\":%lld}"),
         *WorkloadId,
         WarmupIterations,
         Iterations,
@@ -1370,6 +1397,7 @@ bool FUnifiedScriptRepresentativeWorkloadPerformanceTest::RunTest(
         GcCollectionCount,
         GcPauseMilliseconds,
         static_cast<unsigned long long>(MemoryHighWaterBytes),
+        StartupMilliseconds,
         static_cast<long long>(Checksum));
 
     Component->EndPlay(EEndPlayReason::Destroyed);

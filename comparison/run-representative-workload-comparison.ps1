@@ -8,7 +8,8 @@ param(
         'delegate-storm',
         'batch-queries',
         'per-frame-actor-logic',
-        'mass-entities')]
+        'mass-entities',
+        'resource-spawn-flow')]
     [string]$WorkloadId,
     [ValidateRange(1, 3)]
     [int]$SuiteTrial = 1,

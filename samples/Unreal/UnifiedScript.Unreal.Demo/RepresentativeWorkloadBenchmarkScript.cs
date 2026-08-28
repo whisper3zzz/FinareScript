@@ -13,9 +13,13 @@ public sealed class RepresentativeWorkloadBenchmarkScript : IUnrealManagedScript
     private const string DelegateWorkload = "delegate-storm";
     private const string PerFrameActorWorkload = "per-frame-actor-logic";
     private const string MassEntitiesWorkload = "mass-entities";
+    private const string ResourceSpawnWorkload = "resource-spawn-flow";
+    private const string BenchmarkActorClassPath = "/Script/Engine.Actor";
     private const int EntityCount = 1_000;
 
     private UnifiedScriptComponent? _component;
+    private UnifiedScriptWorldLibrary? _worldServices;
+    private UnrealObjectHandle _worldContext;
     private string _frameWorkload = string.Empty;
     private UnrealVector[]? _entityPositions;
     private UnrealVector[]? _entityVelocities;
@@ -42,6 +46,18 @@ public sealed class RepresentativeWorkloadBenchmarkScript : IUnrealManagedScript
             InitializeFrameWorkload(component, workload);
             return;
         }
+        if (workload == ResourceSpawnWorkload)
+        {
+            _component = component;
+            _frameWorkload = workload;
+            _worldContext = context.Target;
+            _worldServices = new UnifiedScriptWorldLibrary(
+                context.Target,
+                context.Bridge);
+            component.ManagedState =
+                $"Representative:v1;Workload={workload};Status=ready";
+            return;
+        }
 
         component.ManagedState = workload switch
         {
@@ -55,6 +71,14 @@ public sealed class RepresentativeWorkloadBenchmarkScript : IUnrealManagedScript
     {
         if (_component is null || _completed)
         {
+            return;
+        }
+        if (_frameWorkload == ResourceSpawnWorkload)
+        {
+            _component.ManagedState = RunResourceSpawn(
+                _worldServices!,
+                _worldContext);
+            _completed = true;
             return;
         }
         if (_publishPending)
@@ -99,6 +123,8 @@ public sealed class RepresentativeWorkloadBenchmarkScript : IUnrealManagedScript
     public void OnStop()
     {
         _component = null;
+        _worldServices = null;
+        _worldContext = default;
         _entityPositions = null;
         _entityVelocities = null;
     }
@@ -301,6 +327,84 @@ public sealed class RepresentativeWorkloadBenchmarkScript : IUnrealManagedScript
             collectionCount,
             pauseMilliseconds,
             checksum);
+    }
+
+    private static string RunResourceSpawn(
+        UnifiedScriptWorldLibrary world,
+        UnrealObjectHandle worldContext)
+    {
+        const int warmupIterations = 16;
+        const int measuredIterations = 256;
+        const long calls = measuredIterations * 3L;
+        const long bytesCopied = measuredIterations * 157L;
+
+        _ = RunResourceSpawnLoop(world, worldContext, warmupIterations);
+        int collectionsBefore = TotalCollectionCount();
+        TimeSpan pauseBefore = GC.GetTotalPauseDuration();
+        long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        long started = Stopwatch.GetTimestamp();
+        long checksum = RunResourceSpawnLoop(
+            world,
+            worldContext,
+            measuredIterations);
+        double bridgeMilliseconds =
+            Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        long allocatedBytes =
+            GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+        int collectionCount = TotalCollectionCount() - collectionsBefore;
+        double pauseMilliseconds =
+            (GC.GetTotalPauseDuration() - pauseBefore).TotalMilliseconds;
+
+        return FormatResult(
+            ResourceSpawnWorkload,
+            warmupIterations,
+            measuredIterations,
+            bridgeMilliseconds,
+            calls,
+            bytesCopied,
+            allocatedBytes,
+            collectionCount,
+            pauseMilliseconds,
+            checksum);
+    }
+
+    private static long RunResourceSpawnLoop(
+        UnifiedScriptWorldLibrary world,
+        UnrealObjectHandle worldContext,
+        int iterations)
+    {
+        long checksum = 0;
+        for (int index = 0; index < iterations; index++)
+        {
+            UnrealClassHandle actorClass = world.LoadClassByPath(
+                worldContext,
+                BenchmarkActorClassPath);
+            if (actorClass.IsNull)
+            {
+                throw new InvalidOperationException(
+                    "The benchmark Actor class could not be loaded.");
+            }
+            checksum++;
+
+            UnrealObjectHandle actor = world.SpawnActor(
+                worldContext,
+                actorClass,
+                UnrealTransform.Identity);
+            if (actor.IsNull)
+            {
+                throw new InvalidOperationException(
+                    "The benchmark Actor could not be spawned.");
+            }
+            checksum++;
+
+            if (!world.DestroyActor(worldContext, actor))
+            {
+                throw new InvalidOperationException(
+                    "The benchmark Actor could not be destroyed.");
+            }
+            checksum++;
+        }
+        return checksum;
     }
 
     private static int TotalCollectionCount() =>

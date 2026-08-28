@@ -102,12 +102,16 @@ captures with:
 
 .\comparison\run-representative-workload-comparison.ps1 `
   -WorkloadId mass-entities -SuiteTrial 1 -SkipBuild
+
+.\comparison\run-representative-workload-comparison.ps1 `
+  -WorkloadId resource-spawn-flow -SuiteTrial 1 -SkipBuild
 ```
 
 The same runner currently accepts `struct-container-transfer`,
-`delegate-storm`, and `batch-queries`. Odd trials execute UnifiedScript first;
-even trials reverse the engine order. `-SkipBuild` is only valid after both
-worktrees have been rebuilt from the current sources.
+`delegate-storm`, and `batch-queries`. The resource workload executes 256
+matched class-load, Actor-spawn, and Actor-destroy rounds. Odd trials execute
+UnifiedScript first; even trials reverse the engine order. `-SkipBuild` is only
+valid after both worktrees have been rebuilt from the current sources.
 
 ## Visual/C# whole-game round trip
 

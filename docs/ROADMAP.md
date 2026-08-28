@@ -1107,17 +1107,19 @@ UnifiedScript and 4,957.016 ms for Puerts (ratio 0.927838); median frame time wa
 Reload values are retained as diagnostics because Puerts module-cache
 reexecution and a full UnifiedScript generation reload are not equivalent.
 The struct/container, four-argument delegate, per-frame Actor, 1,000-entity,
-and batch-query collectors now run through the same normalized two-runtime
+batch-query, and resource/spawn collectors now run through the same normalized two-runtime
 path. The live frame driver keeps its publication tick outside the measured
-window and records exact p50/p95/p99 samples. In the first machine-local proofs,
+window and records exact p50/p95/p99 samples. The resource collector calls the
+product WorldLibrary generated binding for 256 actual load/spawn/destroy rounds;
+trial 1 took 6.7588 ms versus Puerts at 13.702597 ms and produced scheduled
+captures at ordinals 13/14. In the first machine-local frame proofs,
 the matched 10,000-frame Actor envelope took 55.8038 ms in UnifiedScript versus
 165.4386 ms in Puerts; the 1,001,000-boundary entity workload took 222.7079 ms
 versus 727.1043 ms. UnifiedScript reported zero managed allocation/GC in both
 windows. These are collector proofs, not formal three-trial results. The
 542/542 managed suite, 66/66 repository invariants, UE 5.8.1 onboarding, and
-16/16 Unreal Automation tests pass. M10.1 remains active while the resource/
-spawn and hot-reload collectors are adapted and the complete 54-slot result is
-assembled.
+16/16 Unreal Automation tests pass. M10.1 remains active while the hot-reload
+collector is adapted and the complete 54-slot result is assembled.
 
 ### M10.2 — Shared data and batching optimization
 

@@ -6,7 +6,8 @@ param(
         'struct-container-transfer',
         'delegate-storm',
         'per-frame-actor-logic',
-        'mass-entities')]
+        'mass-entities',
+        'resource-spawn-flow')]
     [string]$WorkloadId,
     [string]$OutputPath,
     [string]$SuiteMetricsPath,
@@ -69,11 +70,16 @@ $contracts = @{
     'mass-entities' = [pscustomobject]@{
         Calls = 1001000; Bytes = 72004000; Checksum = 1501500000
     }
+    'resource-spawn-flow' = [pscustomobject]@{
+        Calls = 768; Bytes = 40192; Checksum = 768
+    }
 }
 $contract = $contracts[$WorkloadId]
 $isFrameWorkload = $WorkloadId -in @(
     'per-frame-actor-logic',
     'mass-entities')
+$hasStartupMetric = $isFrameWorkload -or
+    $WorkloadId -eq 'resource-spawn-flow'
 
 New-Item -ItemType Directory -Force -Path `
     $artifactRoot, (Split-Path -Parent $OutputPath) | Out-Null
@@ -167,6 +173,7 @@ if ($result.schemaVersion -ne 'unifiedscript.representative-workload/v0.1' -or
     [int]$result.gcCollectionCount -lt 0 -or
     [double]$result.gcPauseMilliseconds -lt 0 -or
     [uint64]$result.memoryHighWaterBytes -le 0 -or
+    ($hasStartupMetric -and [double]$result.startupMilliseconds -le 0) -or
     [int64]$result.checksum -ne $contract.Checksum -or
     -not $frameMetricsValid) {
     throw "UnifiedScript '$WorkloadId' evidence violates its frozen contract."
@@ -202,7 +209,7 @@ if (-not [string]::IsNullOrWhiteSpace($SuiteMetricsPath)) {
             gcCollectionCount = [int]$result.gcCollectionCount
             gcPauseMilliseconds = [double]$result.gcPauseMilliseconds
             memoryHighWaterBytes = [uint64]$result.memoryHighWaterBytes
-            startupMilliseconds = if ($isFrameWorkload) {
+            startupMilliseconds = if ($hasStartupMetric) {
                 [double]$result.startupMilliseconds
             } else { $null }
             reloadMilliseconds = $null

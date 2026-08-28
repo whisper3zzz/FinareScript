@@ -124,8 +124,9 @@ with data error exit code 65.
 ## Current integration boundary
 
 The live scalar, struct/container, four-argument delegate, per-frame Actor,
-1,000-entity, and Batch Trace benchmarks now emit complete metric maps and have
-passed the raw-measurement/capture path on both runtimes. All three matched
+1,000-entity, Batch Trace, and resource/spawn benchmarks now emit complete
+metric maps and have passed the raw-measurement/capture path on both runtimes.
+All three matched
 scalar trials followed the alternating schedule. Their median bridge times for
 100,000 calls were 14.3025 ms for UnifiedScript and 13.8434 ms for Puerts, a
 losing UnifiedScript ratio of 1.0332 that remains published without moving the
@@ -142,6 +143,14 @@ UnifiedScript, versus 0.0152/0.0237/0.0388 ms and 165.4386 ms for Puerts. The
 allocation/GC, while Puerts recorded 727.1043 ms and 41 V8 collections. These
 are collector proofs, not a complete suite comparison.
 
+The resource/spawn collector calls the product `UnifiedScriptWorldLibrary`
+generated binding rather than a gameplay-specific facade. Each measured round
+loads `/Script/Engine.Actor`, spawns it with an identity transform, observes the
+returned handle, and destroys it. Trial 1 completed all 256 rounds and 768
+boundary calls in 6.7588 ms for UnifiedScript and 13.702597 ms for Puerts, with
+the same 40,192-byte logical payload and checksum. The captures occupy schedule
+ordinals 13/14.
+
 The BlockBreaker runner now consumes a separately produced, commit-matched
 Win64 Development package-size report, captures exact UE CSV frame/memory/GC
 windows after 300 warm-up frames, records both runtime envelopes, and publishes
@@ -152,7 +161,6 @@ and 53/54. The 10,000-frame medians were 4,599.308 ms for UnifiedScript and
 0.884789 expose run variance. The matched UnifiedScript package is 2.08% larger.
 This is complete-game evidence, not a broad suite result.
 
-The next M10.1 slices adapt the remaining resource/spawn and hot-reload
-collectors, then recapture all nine workloads from one frozen runtime source
-identity. Until both runtimes complete 27 trials under the 54-slot schedule,
-no broad performance result is published.
+The next M10.1 slice adapts the remaining hot-reload collector, then recaptures
+all nine workloads from one frozen runtime source identity. Until both runtimes
+complete 27 trials under the 54-slot schedule, no broad performance result is published.
