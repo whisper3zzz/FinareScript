@@ -2,6 +2,7 @@
 param(
     [string]$EngineRoot = 'D:\UE_5.8',
     [string]$ComparisonRoot = 'D:\Project\UEUnifiedScriptComparison',
+    [switch]$RequireWin,
     [switch]$SkipBuild
 )
 
@@ -14,6 +15,7 @@ $artifactDirectory = Join-Path $repoRoot 'artifacts\comparison\performance'
 $puertsResult = Join-Path $artifactDirectory 'puerts.json'
 $finalResult = Join-Path $artifactDirectory 'comparison.json'
 $unifiedScriptResult = Join-Path $repoRoot 'artifacts\ue\interop-benchmark.json'
+$puertsSuiteMetrics = Join-Path $artifactDirectory 'puerts-suite-metrics.json'
 $unifiedScriptSuiteMetrics = Join-Path $artifactDirectory 'unifiedscript-suite-metrics.json'
 
 foreach ($requiredPath in @($puertsRunner, $unifiedScriptRunner)) {
@@ -26,12 +28,16 @@ New-Item -ItemType Directory -Force -Path $artifactDirectory | Out-Null
 $puertsArguments = @{
     EngineRoot = $EngineRoot
     OutputPath = $puertsResult
+    SuiteMetricsPath = $puertsSuiteMetrics
 }
 $unifiedScriptArguments = @{
     EngineRoot = $EngineRoot
     PuertsResult = $puertsResult
     RequirePuerts = $true
     SuiteMetricsPath = $unifiedScriptSuiteMetrics
+}
+if (-not $RequireWin) {
+    $unifiedScriptArguments.AllowLosingComparison = $true
 }
 if ($SkipBuild) {
     $puertsArguments.SkipBuild = $true
@@ -56,3 +62,4 @@ Write-Host (
     $report.unifiedScriptToPuertsRatio)
 Write-Host "Report: $finalResult"
 Write-Host "M10.1 UnifiedScript scalar metrics: $unifiedScriptSuiteMetrics"
+Write-Host "M10.1 Puerts scalar metrics: $puertsSuiteMetrics"

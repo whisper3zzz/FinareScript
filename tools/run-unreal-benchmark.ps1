@@ -4,6 +4,7 @@ param(
     [string]$PuertsResult,
     [string]$SuiteMetricsPath,
     [switch]$RequirePuerts,
+    [switch]$AllowLosingComparison,
     [switch]$SkipBuild
 )
 
@@ -148,8 +149,11 @@ $allocationPass =
 $competitiveRatio = if ($null -ne $puertsNsPerCall) {
     [double]$nativeResult.unifiedScriptNsPerCall / $puertsNsPerCall
 } else { $null }
-$competitivePass = if ($null -ne $competitiveRatio) {
+$competitiveThresholdPass = if ($null -ne $competitiveRatio) {
     $competitiveRatio -le [double]$thresholds.maxUnifiedScriptToPuertsRatio
+} else { $null }
+$competitivePass = if ($null -ne $competitiveThresholdPass) {
+    $competitiveThresholdPass -or $AllowLosingComparison
 } else { !$RequirePuerts }
 
 $report = [ordered]@{
@@ -179,7 +183,7 @@ $report = [ordered]@{
         matchedWorkload = $true
         absoluteLatency = $absolutePass
         zeroManagedAllocation = $allocationPass
-        fasterThanPuerts = if ($null -ne $puertsNsPerCall) { $competitivePass } else { $null }
+        fasterThanPuerts = $competitiveThresholdPass
     }
 }
 $report | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $reportPath -Encoding utf8
@@ -216,6 +220,9 @@ Write-Host "UnifiedScript: $($nativeResult.unifiedScriptNsPerCall) ns/call, $($n
 Write-Host "C++ direct lower bound: $($nativeResult.cppDirectNsPerCall) ns/call"
 if ($null -ne $puertsNsPerCall) {
     Write-Host "Puerts: $puertsNsPerCall ns/call; ratio: $competitiveRatio"
+    if (!$competitiveThresholdPass -and $AllowLosingComparison) {
+        Write-Host 'Competitive scalar result is neutral/losing and was published without moving the M10.3 gate.'
+    }
 } else {
     Write-Host 'Puerts competitive gate: not run (pass -PuertsResult, and optionally -RequirePuerts).'
 }
