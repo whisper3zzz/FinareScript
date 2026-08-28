@@ -1222,6 +1222,64 @@ bool FUnifiedScriptSharedTransformSnapshotTest::RunTest(const FString& Parameter
         return false;
     }
 
+    TestEqual(
+        TEXT("Generated shared view layout is published"),
+        Transport->GeneratedChannelViewSize,
+        static_cast<uint32>(sizeof(FUnifiedScriptGeneratedDataViewV1)));
+    TestNotNull(
+        TEXT("Generated snapshot acquisition is discoverable"),
+        Transport->AcquireGeneratedSnapshot);
+    TArray<FUnifiedScriptFixedValueCollectionSnapshotV1> GeneratedRows;
+    FUnifiedScriptFixedValueCollectionSnapshotV1& GeneratedRow =
+        GeneratedRows.AddDefaulted_GetRef();
+    GeneratedRow.SequenceId = 11;
+    GeneratedRow.VectorX = 1.0;
+    GeneratedRow.VectorY = 2.0;
+    GeneratedRow.VectorZ = 3.0;
+    GeneratedRow.ValueCount = 2;
+    GeneratedRow.Value0 = 10;
+    GeneratedRow.Value1 = 20;
+    TestTrue(
+        TEXT("World host publishes a generated fixed-container snapshot"),
+        Host->PublishGeneratedSnapshotRows(
+            UE::UnifiedScript::SharedData::FixedValueCollectionSchemaId,
+            TConstArrayView<FUnifiedScriptFixedValueCollectionSnapshotV1>(
+                GeneratedRows)));
+    FUnifiedScriptGeneratedDataViewV1 GeneratedView;
+    TestTrue(
+        TEXT("Generated fixed-container snapshot is acquired through the ABI"),
+        Transport->AcquireGeneratedSnapshot(
+            Context,
+            UE::UnifiedScript::SharedData::FixedValueCollectionSchemaId,
+            sizeof(FUnifiedScriptFixedValueCollectionSnapshotV1),
+            &GeneratedView) != 0);
+    TestTrue(
+        TEXT("Generated snapshot keeps schema, World, generation, and row contents"),
+        GeneratedView.SchemaId ==
+                UE::UnifiedScript::SharedData::FixedValueCollectionSchemaId &&
+            GeneratedView.WorldHostId == Host->GetWorldHostId() &&
+            GeneratedView.PublicationId != 0 &&
+            GeneratedView.EntryCount == 1 &&
+            GeneratedView.EntrySize ==
+                sizeof(FUnifiedScriptFixedValueCollectionSnapshotV1) &&
+            reinterpret_cast<const FUnifiedScriptFixedValueCollectionSnapshotV1*>(
+                GeneratedView.Entries)->Value1 == 20);
+    FUnifiedScriptGeneratedDataViewV1 WrongGeneratedView;
+    TestFalse(
+        TEXT("Generated snapshot acquisition rejects row-size drift"),
+        Transport->AcquireGeneratedSnapshot(
+            Context,
+            UE::UnifiedScript::SharedData::FixedValueCollectionSchemaId,
+            sizeof(FUnifiedScriptFixedValueCollectionSnapshotV1) - 8,
+            &WrongGeneratedView) != 0);
+    TestFalse(
+        TEXT("Generated snapshot publication rejects the schema entry bound"),
+        Host->PublishGeneratedSnapshotRows(
+            UE::UnifiedScript::SharedData::FixedValueCollectionSchemaId,
+            sizeof(FUnifiedScriptFixedValueCollectionSnapshotV1),
+            GeneratedRows.GetData(),
+            UE::UnifiedScript::SharedData::MaximumGeneratedSnapshotCount + 1));
+
     FUnifiedScriptSharedSnapshotViewV4 FirstView;
     TestTrue(
         TEXT("First Transform snapshot is acquired"),
@@ -1316,6 +1374,14 @@ bool FUnifiedScriptSharedTransformSnapshotTest::RunTest(const FString& Parameter
     TestFalse(
         TEXT("World teardown invalidates the shared-memory view"),
         Transport->AcquireTransformSnapshot(Context, &DetachedView) != 0);
+    FUnifiedScriptGeneratedDataViewV1 DetachedGeneratedView;
+    TestFalse(
+        TEXT("World teardown invalidates generated snapshot channels"),
+        Transport->AcquireGeneratedSnapshot(
+            Context,
+            UE::UnifiedScript::SharedData::FixedValueCollectionSchemaId,
+            sizeof(FUnifiedScriptFixedValueCollectionSnapshotV1),
+            &DetachedGeneratedView) != 0);
     Transport->ReleaseContext(Context);
     return true;
 }
@@ -1403,6 +1469,27 @@ bool FUnifiedScriptGameplayDataPlaneTest::RunTest(const FString& Parameters)
         Transport->MaximumOverlapCount,
         UE::UnifiedScript::GameplayData::MaximumOverlapCount);
     TestNotNull(TEXT("Batch overlap reservation is discoverable"), Transport->BeginOverlapBatch);
+    TestEqual(
+        TEXT("Generated event view layout is published"),
+        Transport->GeneratedChannelViewSize,
+        static_cast<uint32>(sizeof(FUnifiedScriptGeneratedDataViewV1)));
+    TestNotNull(
+        TEXT("Generated event acquisition is discoverable"),
+        Transport->AcquireGeneratedEvents);
+
+    TArray<FUnifiedScriptBufferedGameplayEventV1> GeneratedEvents;
+    FUnifiedScriptBufferedGameplayEventV1& GeneratedEvent =
+        GeneratedEvents.AddDefaulted_GetRef();
+    GeneratedEvent.SequenceId = 71;
+    GeneratedEvent.EventId = 0xB10C;
+    GeneratedEvent.Value = 42;
+    GeneratedEvent.Weight = 1.5;
+    GeneratedEvent.Context = {Host->GetWorldHostId(), TargetHandle.Value};
+    TestTrue(
+        TEXT("World host queues a schema-generated gameplay event"),
+        Host->QueueGeneratedEventRows(
+            UE::UnifiedScript::GameplayData::BufferedGameplayEventSchemaId,
+            TConstArrayView<FUnifiedScriptBufferedGameplayEventV1>(GeneratedEvents)));
 
     FUnifiedScriptCommandBatchViewV4 RejectedCommandView;
     TestFalse(
@@ -1471,6 +1558,39 @@ bool FUnifiedScriptGameplayDataPlaneTest::RunTest(const FString& Parameters)
             EventView.Events[1].Kind == EUnifiedScriptGameplayEventKindV4::ActorSpawned &&
             EventView.Events[1].Argument.WorldHostId == Host->GetWorldHostId() &&
             EventView.Events[1].Argument.ObjectHandle != 0);
+
+    FUnifiedScriptGeneratedDataViewV1 GeneratedEventView;
+    TestTrue(
+        TEXT("Next frame publishes the generated gameplay event buffer"),
+        Transport->AcquireGeneratedEvents(
+            Context,
+            UE::UnifiedScript::GameplayData::BufferedGameplayEventSchemaId,
+            sizeof(FUnifiedScriptBufferedGameplayEventV1),
+            &GeneratedEventView) != 0);
+    TestTrue(
+        TEXT("Generated events preserve World, publication, and typed payload"),
+        GeneratedEventView.WorldHostId == Host->GetWorldHostId() &&
+            GeneratedEventView.PublicationId != 0 &&
+            GeneratedEventView.EntryCount == 1 &&
+            GeneratedEventView.EntrySize ==
+                sizeof(FUnifiedScriptBufferedGameplayEventV1) &&
+            reinterpret_cast<const FUnifiedScriptBufferedGameplayEventV1*>(
+                GeneratedEventView.Entries)->Value == 42);
+    FUnifiedScriptGeneratedDataViewV1 WrongGeneratedEventView;
+    TestFalse(
+        TEXT("Generated event acquisition rejects row-size drift"),
+        Transport->AcquireGeneratedEvents(
+            Context,
+            UE::UnifiedScript::GameplayData::BufferedGameplayEventSchemaId,
+            sizeof(FUnifiedScriptBufferedGameplayEventV1) - 8,
+            &WrongGeneratedEventView) != 0);
+    TestFalse(
+        TEXT("Generated event queue rejects the schema entry bound"),
+        Host->QueueGeneratedEventRows(
+            UE::UnifiedScript::GameplayData::BufferedGameplayEventSchemaId,
+            sizeof(FUnifiedScriptBufferedGameplayEventV1),
+            GeneratedEvents.GetData(),
+            UE::UnifiedScript::GameplayData::MaximumGeneratedEventCount + 1));
 
     FUnifiedScriptTraceRequestViewV4 TraceView;
     TestTrue(
@@ -1621,6 +1741,21 @@ bool FUnifiedScriptGameplayDataPlaneTest::RunTest(const FString& Parameters)
         TEXT("Command execution preserves monotonically assigned order"),
         Telemetry.LastExecutedSequenceId,
         Telemetry.LastCommittedSequenceId);
+    Host->BeginManagedFrame();
+    FUnifiedScriptGeneratedDataViewV1 EmptyGeneratedEventView;
+    TestTrue(
+        TEXT("Generated event channel remains queryable on the next frame"),
+        Transport->AcquireGeneratedEvents(
+            Context,
+            UE::UnifiedScript::GameplayData::BufferedGameplayEventSchemaId,
+            sizeof(FUnifiedScriptBufferedGameplayEventV1),
+            &EmptyGeneratedEventView) != 0);
+    TestTrue(
+        TEXT("Generated event visibility is one-frame and overflow is observable"),
+        EmptyGeneratedEventView.PublicationId > GeneratedEventView.PublicationId &&
+            EmptyGeneratedEventView.EntryCount == 0 &&
+            EmptyGeneratedEventView.DroppedEntryCount ==
+                UE::UnifiedScript::GameplayData::MaximumGeneratedEventCount + 1ull);
     World->RemoveFromRoot();
     World->DestroyWorld(false);
     return true;

@@ -9,6 +9,7 @@
     "transformSnapshots": 65536,
     "generatedSnapshotEntries": 65536,
     "generatedEventEntries": 65536,
+    "generatedChannels": 256,
     "generatedChannelBytes": 16777216,
     "commands": 65536,
     "events": 4096,
@@ -37,6 +38,19 @@
       ]
     },
     {
+      "name": "GeneratedDataFlagsV1",
+      "nativeName": "EUnifiedScriptGeneratedDataFlagsV1",
+      "managedName": "UnrealGeneratedDataFlagsV1",
+      "underlyingType": "u32",
+      "flags": true,
+      "values": [
+        { "name": "None", "value": 0 },
+        { "name": "BorrowedUntilNextPublish", "value": 1 },
+        { "name": "Snapshot", "value": 2 },
+        { "name": "Events", "value": 4 }
+      ]
+    },
+    {
       "name": "SharedDataCapabilitiesV4",
       "nativeName": "EUnifiedScriptSharedDataCapabilitiesV4",
       "managedName": "UnrealSharedDataCapabilitiesV4",
@@ -48,7 +62,8 @@
         { "name": "DoubleBuffered", "value": 2 },
         { "name": "WorldScopedHandles", "value": 4 },
         { "name": "SchemaGeneratedLayouts", "value": 8 },
-        { "name": "CapacityTelemetry", "value": 16 }
+        { "name": "CapacityTelemetry", "value": 16 },
+        { "name": "GeneratedSnapshotChannels", "value": 32 }
       ]
     },
     {
@@ -179,7 +194,8 @@
         { "name": "SchemaGeneratedLayouts", "value": 64 },
         { "name": "CapacityTelemetry", "value": 128 },
         { "name": "BatchSphereOverlap", "value": 256 },
-        { "name": "BatchBoxOverlap", "value": 512 }
+        { "name": "BatchBoxOverlap", "value": 512 },
+        { "name": "GeneratedEventChannels", "value": 1024 }
       ]
     }
   ],
@@ -253,6 +269,67 @@
         { "name": "DroppedSnapshotEntryCount", "type": "u64" },
         { "name": "PublishedEntryCount", "type": "u32" },
         { "name": "MaximumEntryCount", "type": "u32" }
+      ]
+    },
+    {
+      "name": "GeneratedDataViewV1",
+      "nativeName": "FUnifiedScriptGeneratedDataViewV1",
+      "managedName": "UnrealGeneratedDataViewV1",
+      "managedVisibility": "internal",
+      "managedReadonly": false,
+      "domain": "shared",
+      "role": "borrowed-view",
+      "expectedSize": 64,
+      "sizeConstant": "GeneratedChannelViewSize",
+      "fields": [
+        { "name": "AbiVersion", "type": "u32", "nativeDefault": "4" },
+        { "name": "ViewSize", "type": "u32" },
+        { "name": "SchemaId", "type": "u64" },
+        { "name": "WorldHostId", "type": "u64" },
+        { "name": "PublicationId", "type": "u64" },
+        { "name": "Entries", "type": "const-ptr<u8>" },
+        { "name": "EntryCount", "type": "u32" },
+        { "name": "EntryCapacity", "type": "u32" },
+        { "name": "EntrySize", "type": "u32" },
+        { "name": "Flags", "type": "GeneratedDataFlagsV1" },
+        { "name": "DroppedEntryCount", "type": "u64" }
+      ]
+    },
+    {
+      "name": "FixedValueCollectionSnapshotV1",
+      "nativeName": "FUnifiedScriptFixedValueCollectionSnapshotV1",
+      "managedName": "UnrealFixedValueCollectionSnapshotV1",
+      "managedVisibility": "public",
+      "managedReadonly": true,
+      "domain": "shared",
+      "role": "snapshot-row",
+      "expectedSize": 104,
+      "schemaId": "0x5553464958434F01",
+      "schemaConstant": "FixedValueCollectionSchemaId",
+      "sizeConstant": "FixedValueCollectionEntrySize",
+      "fields": [
+        { "name": "SequenceId", "type": "u64" },
+        { "name": "VectorX", "type": "f64" },
+        { "name": "VectorY", "type": "f64" },
+        { "name": "VectorZ", "type": "f64" },
+        { "name": "ValueCount", "type": "u32" },
+        { "name": "PairCount", "type": "u32" },
+        { "name": "Value0", "type": "i32" },
+        { "name": "Value1", "type": "i32" },
+        { "name": "Value2", "type": "i32" },
+        { "name": "Value3", "type": "i32" },
+        { "name": "Value4", "type": "i32" },
+        { "name": "Value5", "type": "i32" },
+        { "name": "Value6", "type": "i32" },
+        { "name": "Value7", "type": "i32" },
+        { "name": "Key0", "type": "i32" },
+        { "name": "Key1", "type": "i32" },
+        { "name": "Key2", "type": "i32" },
+        { "name": "Key3", "type": "i32" },
+        { "name": "MapValue0", "type": "i32" },
+        { "name": "MapValue1", "type": "i32" },
+        { "name": "MapValue2", "type": "i32" },
+        { "name": "MapValue3", "type": "i32" }
       ]
     },
     {
@@ -370,6 +447,27 @@
         { "name": "EventEntrySize", "type": "u32" },
         { "name": "Flags", "type": "u32" },
         { "name": "DroppedEventCount", "type": "u64" }
+      ]
+    },
+    {
+      "name": "BufferedGameplayEventV1",
+      "nativeName": "FUnifiedScriptBufferedGameplayEventV1",
+      "managedName": "UnrealBufferedGameplayEventV1",
+      "managedVisibility": "public",
+      "managedReadonly": true,
+      "domain": "gameplay",
+      "role": "event-row",
+      "expectedSize": 48,
+      "schemaId": "0x5553425546455601",
+      "schemaConstant": "BufferedGameplayEventSchemaId",
+      "sizeConstant": "BufferedGameplayEventEntrySize",
+      "fields": [
+        { "name": "SequenceId", "type": "u64" },
+        { "name": "EventId", "type": "u64" },
+        { "name": "Value", "type": "i32" },
+        { "name": "Flags", "type": "u32" },
+        { "name": "Weight", "type": "f64" },
+        { "name": "Context", "type": "SharedObjectHandleV4" }
       ]
     },
     {

@@ -153,6 +153,98 @@ bool FUnifiedScriptSharedDataPlane::AcquireTransformSnapshot(
     return true;
 }
 
+bool FUnifiedScriptSharedDataPlane::PublishGeneratedSnapshot(
+    uint64 SchemaId,
+    uint32 EntrySize,
+    const void* Entries,
+    uint32 EntryCount)
+{
+    check(IsInGameThread());
+    FWriteScopeLock Lock(SnapshotLock);
+    if (bShutdown || WorldHostId == 0 || SchemaId == 0 || EntrySize == 0)
+    {
+        return false;
+    }
+
+    FGeneratedSnapshotChannel* Channel = GeneratedSnapshotChannels.Find(SchemaId);
+    const uint64 ByteCount = static_cast<uint64>(EntrySize) * EntryCount;
+    if (EntryCount > UE::UnifiedScript::SharedData::MaximumGeneratedSnapshotCount ||
+        ByteCount > UE::UnifiedScript::SharedData::MaximumGeneratedChannelBytes ||
+        (EntryCount > 0 && Entries == nullptr))
+    {
+        if (Channel != nullptr)
+        {
+            Channel->DroppedEntryCount =
+                EntryCount > MAX_uint64 - Channel->DroppedEntryCount
+                    ? MAX_uint64
+                    : Channel->DroppedEntryCount + EntryCount;
+        }
+        return false;
+    }
+    if (Channel == nullptr)
+    {
+        if (GeneratedSnapshotChannels.Num() >= static_cast<int32>(
+                UE::UnifiedScript::SharedData::MaximumGeneratedChannelCount))
+        {
+            return false;
+        }
+        Channel = &GeneratedSnapshotChannels.Add(SchemaId);
+        Channel->EntrySize = EntrySize;
+    }
+    else if (Channel->EntrySize != EntrySize)
+    {
+        return false;
+    }
+
+    const int32 WriteIndex = 1 - Channel->ActiveBufferIndex;
+    TArray<uint8>& WriteBuffer = Channel->Buffers[WriteIndex];
+    WriteBuffer.SetNumUninitialized(static_cast<int32>(ByteCount));
+    if (ByteCount > 0)
+    {
+        FMemory::Memcpy(WriteBuffer.GetData(), Entries, static_cast<SIZE_T>(ByteCount));
+    }
+    Channel->EntryCounts[WriteIndex] = EntryCount;
+    Channel->ActiveBufferIndex = WriteIndex;
+    ++Channel->PublicationId;
+    if (Channel->PublicationId == 0)
+    {
+        ++Channel->PublicationId;
+    }
+    return true;
+}
+
+bool FUnifiedScriptSharedDataPlane::AcquireGeneratedSnapshot(
+    uint64 SchemaId,
+    uint32 EntrySize,
+    FUnifiedScriptGeneratedDataViewV1& OutView) const
+{
+    FReadScopeLock Lock(SnapshotLock);
+    const FGeneratedSnapshotChannel* Channel = GeneratedSnapshotChannels.Find(SchemaId);
+    if (bShutdown || WorldHostId == 0 || SchemaId == 0 || EntrySize == 0 ||
+        Channel == nullptr || Channel->EntrySize != EntrySize ||
+        Channel->PublicationId == 0)
+    {
+        OutView = {};
+        return false;
+    }
+
+    const TArray<uint8>& ActiveBuffer = Channel->Buffers[Channel->ActiveBufferIndex];
+    OutView = {
+        UE::UnifiedScript::SharedData::AbiVersion,
+        sizeof(FUnifiedScriptGeneratedDataViewV1),
+        SchemaId,
+        WorldHostId,
+        Channel->PublicationId,
+        ActiveBuffer.GetData(),
+        Channel->EntryCounts[Channel->ActiveBufferIndex],
+        Channel->EntryCounts[Channel->ActiveBufferIndex],
+        EntrySize,
+        static_cast<EUnifiedScriptGeneratedDataFlagsV1>(3u),
+        Channel->DroppedEntryCount,
+    };
+    return true;
+}
+
 bool FUnifiedScriptSharedDataPlane::GetTelemetry(
     FUnifiedScriptSharedDataTelemetryV1& OutTelemetry) const
 {
@@ -205,6 +297,7 @@ void FUnifiedScriptSharedDataPlane::Shutdown()
     SeenActors.Reset();
     Buffers[0].Reset();
     Buffers[1].Reset();
+    GeneratedSnapshotChannels.Reset();
     World.Reset();
     ObjectRegistry = nullptr;
     WorldHostId = 0;

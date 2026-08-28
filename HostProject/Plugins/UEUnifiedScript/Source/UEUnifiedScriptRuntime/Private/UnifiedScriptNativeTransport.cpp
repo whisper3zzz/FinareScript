@@ -263,6 +263,21 @@ bool FUnifiedScriptNativeBridgeContext::AcquireTransformSnapshot(
         SharedDataPlane->AcquireTransformSnapshot(OutView);
 }
 
+bool FUnifiedScriptNativeBridgeContext::AcquireGeneratedSnapshot(
+    uint64 SchemaId,
+    uint32 EntrySize,
+    FUnifiedScriptGeneratedDataViewV1& OutView)
+{
+    if (!IsInGameThread())
+    {
+        OutView = {};
+        return false;
+    }
+    FScopeLock Lock(&BridgeLock);
+    return Bridge != nullptr && SharedDataPlane != nullptr &&
+        SharedDataPlane->AcquireGeneratedSnapshot(SchemaId, EntrySize, OutView);
+}
+
 bool FUnifiedScriptNativeBridgeContext::GetSharedDataTelemetry(
     FUnifiedScriptSharedDataTelemetryV1& OutTelemetry)
 {
@@ -2031,6 +2046,22 @@ uint8 AcquireTransformSnapshot(
         : 0;
 }
 
+uint8 AcquireGeneratedSnapshot(
+    void* Context,
+    uint64 SchemaId,
+    uint32 EntrySize,
+    FUnifiedScriptGeneratedDataViewV1* OutView)
+{
+    if (Context == nullptr || OutView == nullptr)
+    {
+        return 0;
+    }
+    return static_cast<FUnifiedScriptNativeBridgeContext*>(Context)
+        ->AcquireGeneratedSnapshot(SchemaId, EntrySize, *OutView)
+        ? 1
+        : 0;
+}
+
 uint8 GetSharedDataTelemetry(
     void* Context,
     FUnifiedScriptSharedDataTelemetryV1* OutTelemetry,
@@ -2095,6 +2126,23 @@ uint8 AcquireGameplayEvents(
         ->ExecuteGameplayData([&](FUnifiedScriptGameplayDataPlane& DataPlane)
         {
             return DataPlane.AcquireEvents(*OutView);
+        }) ? 1 : 0;
+}
+
+uint8 AcquireGeneratedEvents(
+    void* Context,
+    uint64 SchemaId,
+    uint32 EntrySize,
+    FUnifiedScriptGeneratedDataViewV1* OutView)
+{
+    if (Context == nullptr || OutView == nullptr)
+    {
+        return 0;
+    }
+    return static_cast<FUnifiedScriptNativeBridgeContext*>(Context)
+        ->ExecuteGameplayData([&](FUnifiedScriptGameplayDataPlane& DataPlane)
+        {
+            return DataPlane.AcquireGeneratedEvents(SchemaId, EntrySize, *OutView);
         }) ? 1 : 0;
 }
 
@@ -2752,7 +2800,8 @@ UEUnifiedScript_GetGameplayDataTransportV4()
             EUnifiedScriptGameplayDataCapabilitiesV4::SchemaGeneratedLayouts) |
         static_cast<uint64>(EUnifiedScriptGameplayDataCapabilitiesV4::CapacityTelemetry) |
         static_cast<uint64>(EUnifiedScriptGameplayDataCapabilitiesV4::BatchSphereOverlap) |
-        static_cast<uint64>(EUnifiedScriptGameplayDataCapabilitiesV4::BatchBoxOverlap);
+        static_cast<uint64>(EUnifiedScriptGameplayDataCapabilitiesV4::BatchBoxOverlap) |
+        static_cast<uint64>(EUnifiedScriptGameplayDataCapabilitiesV4::GeneratedEventChannels);
     static const FUnifiedScriptGameplayDataTransportV4 Transport = {
         UE::UnifiedScript::GameplayData::AbiVersion,
         sizeof(FUnifiedScriptGameplayDataTransportV4),
@@ -2783,6 +2832,10 @@ UEUnifiedScript_GetGameplayDataTransportV4()
         &BeginOverlapBatch,
         &ExecuteOverlapBatch,
         &CancelOverlapBatch,
+        sizeof(FUnifiedScriptGeneratedDataViewV1),
+        UE::UnifiedScript::GameplayData::MaximumGeneratedEventCount,
+        UE::UnifiedScript::GameplayData::MaximumGeneratedChannelBytes,
+        &AcquireGeneratedEvents,
     };
     return &Transport;
 }
@@ -2796,7 +2849,9 @@ UEUnifiedScript_GetSharedDataTransportV4()
         static_cast<uint64>(EUnifiedScriptSharedDataCapabilitiesV4::DoubleBuffered) |
         static_cast<uint64>(EUnifiedScriptSharedDataCapabilitiesV4::WorldScopedHandles) |
         static_cast<uint64>(EUnifiedScriptSharedDataCapabilitiesV4::SchemaGeneratedLayouts) |
-        static_cast<uint64>(EUnifiedScriptSharedDataCapabilitiesV4::CapacityTelemetry);
+        static_cast<uint64>(EUnifiedScriptSharedDataCapabilitiesV4::CapacityTelemetry) |
+        static_cast<uint64>(
+            EUnifiedScriptSharedDataCapabilitiesV4::GeneratedSnapshotChannels);
     static const FUnifiedScriptSharedDataTransportV4 Transport = {
         UE::UnifiedScript::SharedData::AbiVersion,
         sizeof(FUnifiedScriptSharedDataTransportV4),
@@ -2811,6 +2866,10 @@ UEUnifiedScript_GetSharedDataTransportV4()
         UE::UnifiedScript::DataPlaneSchema::Revision,
         UE::UnifiedScript::SharedData::MaximumTransformSnapshotCount,
         &GetSharedDataTelemetry,
+        sizeof(FUnifiedScriptGeneratedDataViewV1),
+        UE::UnifiedScript::SharedData::MaximumGeneratedSnapshotCount,
+        UE::UnifiedScript::SharedData::MaximumGeneratedChannelBytes,
+        &AcquireGeneratedSnapshot,
     };
     return &Transport;
 }

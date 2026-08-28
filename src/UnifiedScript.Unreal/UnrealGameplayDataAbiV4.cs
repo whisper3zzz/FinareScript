@@ -364,11 +364,50 @@ internal struct UnrealGameplayDataTransportTableV4OverlapExtended
     public nint CancelOverlapBatch;
 }
 
+[StructLayout(LayoutKind.Sequential, Pack = 8)]
+internal struct UnrealGameplayDataTransportTableV4ChannelsExtended
+{
+    public uint AbiVersion;
+    public uint TableSize;
+    public uint CommandEntrySize;
+    public uint EventEntrySize;
+    public uint TraceRequestEntrySize;
+    public uint TraceResultEntrySize;
+    public UnrealGameplayDataCapabilitiesV4 Capabilities;
+    public nint RetainContext;
+    public nint ReleaseContext;
+    public nint BeginCommandBatch;
+    public nint CommitCommandBatch;
+    public nint AcquireEvents;
+    public nint BeginTraceBatch;
+    public nint ExecuteTraceBatch;
+    public nint CancelTraceBatch;
+    public nint GetPhase;
+    public ulong LayoutCompatibilityId;
+    public uint LayoutRevision;
+    public uint MaximumCommandCount;
+    public uint MaximumEventCount;
+    public uint MaximumTraceCount;
+    public nint GetTelemetry;
+    public uint OverlapRequestEntrySize;
+    public uint OverlapResultEntrySize;
+    public uint MaximumOverlapCount;
+    public uint Reserved;
+    public nint BeginOverlapBatch;
+    public nint ExecuteOverlapBatch;
+    public nint CancelOverlapBatch;
+    public uint GeneratedChannelViewSize;
+    public uint MaximumGeneratedEventCount;
+    public ulong MaximumGeneratedChannelBytes;
+    public nint AcquireGeneratedEvents;
+}
+
 public static partial class UnrealGameplayDataAbiV4
 {
     public const int TransportTableSize = 104;
     public const int ExtendedTransportTableSize = 136;
     public const int OverlapTransportTableSize = 176;
+    public const int ChannelsExtendedTransportTableSize = 200;
 }
 
 internal interface IUnrealGameplayDataTransport

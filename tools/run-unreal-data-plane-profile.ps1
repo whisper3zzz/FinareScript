@@ -99,8 +99,9 @@ $result = $line.Line.Substring($line.Line.IndexOf($marker) + $marker.Length) |
     ConvertFrom-Json
 $movementRatio = [double]$result.commandSubmitNs / [double]$result.bindingScalarNs
 $queryRatio = [double]$result.batchTraceNs / [double]$result.bindingTraceNs
+$containerRatio = [double]$result.generatedSnapshotNs / [double]$result.bindingContainerNs
 $schemaPass =
-    $result.schemaVersion -eq 'unifiedscript.unreal-data-plane-profile/v0.2' -and
+    $result.schemaVersion -eq 'unifiedscript.unreal-data-plane-profile/v0.3' -and
     [int]$result.iterations -ge 1024 -and
     [int]$result.sampleCount -ge 3
 $measurementPass =
@@ -109,9 +110,16 @@ $measurementPass =
     [double]$result.bindingTraceNs -gt 0 -and
     [double]$result.batchTraceNs -gt 0 -and
     [double]$result.attributeReadNs -gt 0 -and
+    [double]$result.bindingContainerNs -gt 0 -and
+    [double]$result.generatedSnapshotNs -gt 0 -and
+    [double]$result.generatedEventNs -gt 0 -and
     $movementRatio -lt 1.0 -and
     $queryRatio -lt 1.0 -and
+    $containerRatio -lt 1.0 -and
     [long]$result.dataPlaneAllocatedBytes -eq 0 -and
+    [long]$result.generatedDataAllocatedBytes -eq 0 -and
+    [int]$result.generatedSnapshotEntries -eq [int]$result.iterations -and
+    [int]$result.generatedEventEntries -eq [int]$result.iterations -and
     [long]$result.batchTraceAllocatedBytes -eq 0 -and
     [long]$result.batchTraceBytes -gt 0 -and
     [int]$result.batchTraceGcCollectionCount -ge 0 -and
@@ -122,10 +130,12 @@ $routingPass =
     $result.overlap -eq 'data-plane' -and
     $result.attribute -eq 'binding' -and
     $result.spawn -eq 'hybrid' -and
-    $result.query -eq 'data-plane'
+    $result.query -eq 'data-plane' -and
+    $result.container -eq 'generated-snapshot' -and
+    $result.delegate -eq 'generated-events'
 
 $report = [ordered]@{
-    schemaVersion = 'unifiedscript.unreal-data-plane-profile-report/v0.2'
+    schemaVersion = 'unifiedscript.unreal-data-plane-profile-report/v0.3'
     status = if ($schemaPass -and $measurementPass -and $routingPass) {
         'passed'
     } else { 'failed' }
@@ -135,11 +145,14 @@ $report = [ordered]@{
     ratios = [ordered]@{
         commandSubmitToScalarBinding = $movementRatio
         batchTraceToPerCallBinding = $queryRatio
+        generatedSnapshotToContainerBinding = $containerRatio
     }
     gates = [ordered]@{
         matchedSchema = $schemaPass
         measuredAdvantage = $measurementPass
         zeroManagedAllocation = [long]$result.dataPlaneAllocatedBytes -eq 0
+        generatedChannelsZeroManagedAllocation =
+            [long]$result.generatedDataAllocatedBytes -eq 0
         evidenceBackedRouting = $routingPass
     }
     logPath = [IO.Path]::GetFullPath($logPath)
@@ -184,4 +197,5 @@ Write-Host "Data-plane workload profile: PASS ($reportPath)"
 Write-Host (
     "Movement ratio=$([Math]::Round($movementRatio, 3)); " +
     "Trace ratio=$([Math]::Round($queryRatio, 3)); " +
+    "Container ratio=$([Math]::Round($containerRatio, 3)); " +
     "managed allocation=$($result.dataPlaneAllocatedBytes) B")

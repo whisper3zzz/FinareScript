@@ -67,3 +67,13 @@ powershell -ExecutionPolicy Bypass `
 M7.3 closes the generic data-plane foundation. The RoadMap cursor advances to
 M7.4, where the complete BlockBreaker runtime is inventoried and migrated with
 no unexplained manual bridge.
+
+## M10.2 extension
+
+Schema revision 4 keeps this foundation append-only and adds generic generated
+snapshot/event channels. Shared discovery extends from 80 to 104 bytes and
+Gameplay discovery from 176 to 200 bytes; old prefixes remain fixed. Native
+modules publish any schema-ID trivially-copyable row set through the World
+subsystem, while managed code receives stack-only checked `ReadOnlySpan<T>`
+views. The v0.3 profile adds matched Array+Map binding, fixed-container snapshot,
+and buffered-event workloads without changing the frozen M7.3 evidence above.

@@ -32,6 +32,23 @@ UnifiedScript is at least 5% faster. Without that file the report deliberately
 leaves the Puerts result and competitive verdict empty; no performance claim
 should be made from an unmatched or cross-machine number.
 
+## Generated channel optimization proof
+
+`tools/run-unreal-data-plane-profile.ps1` now emits
+`unifiedscript.unreal-data-plane-profile-report/v0.3`. In addition to command
+and query batches, it publishes 1,024 schema-generated fixed-container rows and
+1,024 buffered gameplay-event rows before the live CoreCLR workload starts.
+The managed script compares the snapshot against direct generated Array+Map
+binding, consumes both channels through borrowed `ReadOnlySpan<T>` views, and
+requires zero managed allocation.
+
+The 2026-08-28 UE 5.8.1 run measured direct container binding at 25,371.973
+ns/row, generated snapshot iteration at 1.270 ns/row (ratio 0.000050), and
+generated event iteration at 0.586 ns/row. This is a route-specific M10.2 result:
+stable, high-volume containers and events can use generated channels, while
+low-volume or changing contracts stay on direct generated binding. It does not
+replace the frozen matched Puerts suite or satisfy M10.3 by itself.
+
 Pass `-SuiteMetricsPath <file>` to emit the scalar workload's complete M10.1
 metric map. Normalize that map with
 `comparison/write-workload-capture.ps1`; the capture path rejects a trial whose

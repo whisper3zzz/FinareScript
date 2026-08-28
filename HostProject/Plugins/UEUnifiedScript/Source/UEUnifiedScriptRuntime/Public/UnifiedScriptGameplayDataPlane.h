@@ -25,6 +25,8 @@ using FUnifiedScriptBeginOverlapBatchV1 = uint8 (*)(
 using FUnifiedScriptExecuteOverlapBatchV1 = uint8 (*)(
     void*, uint64, uint32, FUnifiedScriptOverlapResultViewV1*);
 using FUnifiedScriptCancelOverlapBatchV1 = void (*)(void*, uint64);
+using FUnifiedScriptAcquireGeneratedEventsV1 = uint8 (*)(
+    void*, uint64, uint32, FUnifiedScriptGeneratedDataViewV1*);
 
 struct alignas(8) FUnifiedScriptGameplayDataTransportV4
 {
@@ -57,6 +59,10 @@ struct alignas(8) FUnifiedScriptGameplayDataTransportV4
     FUnifiedScriptBeginOverlapBatchV1 BeginOverlapBatch = nullptr;
     FUnifiedScriptExecuteOverlapBatchV1 ExecuteOverlapBatch = nullptr;
     FUnifiedScriptCancelOverlapBatchV1 CancelOverlapBatch = nullptr;
+    uint32 GeneratedChannelViewSize = 0;
+    uint32 MaximumGeneratedEventCount = 0;
+    uint64 MaximumGeneratedChannelBytes = 0;
+    FUnifiedScriptAcquireGeneratedEventsV1 AcquireGeneratedEvents = nullptr;
 };
 
 class UEUNIFIEDSCRIPTRUNTIME_API FUnifiedScriptGameplayDataPlane final
@@ -75,6 +81,15 @@ public:
     bool BeginCommandBatch(uint32 Capacity, FUnifiedScriptCommandBatchViewV4& OutView);
     bool CommitCommandBatch(uint64 BatchToken, uint32 CommandCount);
     bool AcquireEvents(FUnifiedScriptGameplayEventViewV4& OutView) const;
+    bool QueueGeneratedEvents(
+        uint64 SchemaId,
+        uint32 EntrySize,
+        const void* Entries,
+        uint32 EntryCount);
+    bool AcquireGeneratedEvents(
+        uint64 SchemaId,
+        uint32 EntrySize,
+        FUnifiedScriptGeneratedDataViewV1& OutView) const;
     bool BeginTraceBatch(uint32 Capacity, FUnifiedScriptTraceRequestViewV4& OutView);
     bool ExecuteTraceBatch(
         uint64 BatchToken,
@@ -105,8 +120,21 @@ private:
         bool bCommitted = false;
     };
 
+    struct FGeneratedEventChannel
+    {
+        uint32 EntrySize = 0;
+        uint64 PublicationId = 0;
+        uint64 DroppedEntryCount = 0;
+        int32 ActiveBufferIndex = 0;
+        TArray<uint8> Buffers[2];
+        uint32 EntryCounts[2] = {0, 0};
+        TArray<uint8> PendingBytes;
+        uint32 PendingEntryCount = 0;
+    };
+
     bool IsManagedPhase() const;
     void PublishPendingEvents();
+    void PublishPendingGeneratedEvents();
     void ExecuteCommittedCommands();
     FUnifiedScriptGameplayEventV4 ExecuteCommand(FUnifiedScriptCommandV4& Command);
     void QueueEvent(
@@ -162,6 +190,7 @@ private:
     TArray<FUnifiedScriptGameplayEventV4> PendingEvents;
     TArray<FUnifiedScriptObjectHandle> PendingEventOwnedHandles;
     uint64 DroppedEventCount = 0;
+    TMap<uint64, FGeneratedEventChannel> GeneratedEventChannels;
 
     TArray<FUnifiedScriptTraceRequestV4> TraceRequests;
     TArray<FUnifiedScriptTraceResultV4> TraceResults;
@@ -174,7 +203,7 @@ private:
     bool bShutdown = false;
 };
 
-static_assert(sizeof(FUnifiedScriptGameplayDataTransportV4) == 176);
+static_assert(sizeof(FUnifiedScriptGameplayDataTransportV4) == 200);
 
 extern "C" UEUNIFIEDSCRIPTRUNTIME_API const FUnifiedScriptGameplayDataTransportV4*
 UEUnifiedScript_GetGameplayDataTransportV4();

@@ -16,7 +16,10 @@ generated function calls:
 - line, sphere, and box traces are submitted and returned in one synchronous
   boundary call;
 - sphere and box overlap queries use a second fixed-row batch without exposing
-  `FOverlapResult` or engine container memory.
+  `FOverlapResult` or engine container memory;
+- generated gameplay modules publish stable fixed-container snapshots and
+  queue typed event rows through generic schema-ID channels instead of adding
+  another handwritten bridge facade.
 
 The Binding control plane remains authoritative for resource discovery,
 arbitrary reflected functions, properties, delegates, and uncommon signatures.
@@ -30,7 +33,7 @@ Each `UUnifiedScriptWorldSubsystem` owns one
 ```text
 OnWorldPreActorTick
   -> NativePreActorTick
-  -> publish Transform snapshot and prior command events
+  -> publish Transform snapshot, prior command events, and queued generated events
   -> ManagedTick: scripts may reserve/commit commands and execute trace/overlap batches
 
 OnWorldPostActorTick
@@ -97,6 +100,41 @@ The current event capacity is 4,096 rows per World frame. Overflow increments
 `DroppedEventCount` and immediately releases any handle owned by the dropped
 row.
 
+## Generated snapshot and event channels
+
+Schema revision 4 appends one generic 64-byte `GeneratedDataViewV1` contract.
+Native gameplay modules call the World subsystem with a schema ID, trivially
+copyable row size, and typed `TConstArrayView<T>`:
+
+- `PublishGeneratedSnapshotRows` copies into the inactive per-schema buffer and
+  publishes immediately;
+- `QueueGeneratedEventRows` appends to a bounded pending buffer; `BeginFrame`
+  flips it into visibility and publishes an empty buffer on the following frame
+  when no new events arrive.
+
+Both paths are double-buffered, World-owned, limited to 256 channels, 65,536
+rows per channel, and 16 MiB per published channel. A schema ID fixes its row
+size for the lifetime of that World host. A 64-bit non-zero publication ID,
+cumulative dropped-row count, schema ID, World host ID, row count/size, and
+borrow-kind flags make each view inspectable without exposing Unreal allocator
+or container layouts. Teardown clears every channel before the object registry
+is invalidated.
+
+Managed code uses
+`AcquireGeneratedSnapshot<T>(schemaId)` or
+`AcquireGeneratedEvents<T>(schemaId)`. Both return a stack-only
+`UnrealGeneratedDataSnapshot<T>` backed by `ReadOnlySpan<T>`. The row must be
+`unmanaged`; ABI version, schema, row size, World, publication, capacity, byte
+bound, pointer, and snapshot/event flag are checked before the span is created.
+The span must not survive the next native publish. Direct generated binding is
+the fallback for low-volume, mutable, or unsupported shapes.
+
+The checked-in revision-4 examples are a 104-byte
+`FixedValueCollectionSnapshotV1` and a 48-byte
+`BufferedGameplayEventV1`. They exercise the Array/Map and delegate/event
+families that lost in the M10.1 matched suite, while the channel implementation
+remains independent of either row.
+
 ## Batch Trace
 
 One trace batch contains up to 65,536 fixed 184-byte requests. Every request
@@ -130,10 +168,11 @@ script may run both during one managed phase.
 ## Bounds, order, and telemetry
 
 The versioned schema fixes logical maximums at 65,536 commands, 4,096 events,
-65,536 traces, and 65,536 overlaps. Reservations exceeding a limit fail before
-memory exposure and increment their cumulative overflow counter. Event
-production beyond its bound drops only the excess row and increments the event
-overflow counter.
+65,536 traces, 65,536 overlaps, 65,536 generated snapshot/event rows, 256
+generated channels, and 16 MiB per generated channel. Reservations exceeding a
+limit fail before memory exposure and increment their cumulative overflow
+counter. Event production beyond its bound drops only the excess row and
+increments the event overflow counter.
 
 The first 120 bytes of the telemetry row remain the revision-1 prefix. Revision
 2 appends overlap counters/capacity and rounds the row to 144 bytes without
@@ -166,7 +205,9 @@ layout crosses CoreCLR.
 The append-only `FUnifiedScriptNativeTransportV2` suffix points to an
 independent `FUnifiedScriptGameplayDataTransportV4` table. The original 104-byte
 prefix remains readable, revision 1 telemetry/capacity extends it to 136 bytes,
-and schema revision 2 appends overlap discovery at 176 bytes. Managed code
+schema revision 2 appends overlap discovery at 176 bytes, and revision 4 appends
+generated event discovery at 200 bytes. The Shared Data table similarly grows
+from 80 to 104 bytes for generated snapshots. Managed code
 requires the stable compatibility ID, accepts a revision at least as new as its
 schema, validates each present size-guarded suffix, and ignores unknown future
 bytes. Telemetry getters receive the caller's destination size and copy only the
@@ -181,6 +222,8 @@ managed structure.
 | trace result | `0x5553545245533401` | 168 / 64 |
 | overlap request | `0x55534F5652455101` | 160 / 64 |
 | overlap result | `0x55534F5652455301` | 48 / 64 |
+| fixed-value collection snapshot | `0x5553464958434F01` | 104 / 64 |
+| buffered gameplay event | `0x5553425546455601` | 48 / 64 |
 
 The checked-in `samples/Unreal/UEUnifiedScriptRuntime.data-plane.json` is the
 single source for these rows, views, enums, capacities, offsets, defaults,
@@ -204,6 +247,13 @@ using UnrealOverlapBatch overlaps = data.BeginOverlapBatch(1);
 overlaps.Requests[0] = UnrealOverlapRequestV1.Sphere(center, 100.0, 3);
 ReadOnlySpan<UnrealOverlapResultV1> nearby = overlaps.Execute();
 
+UnrealGeneratedDataSnapshot<UnrealFixedValueCollectionSnapshotV1> attributes =
+    data.AcquireGeneratedSnapshot<UnrealFixedValueCollectionSnapshotV1>(
+        UnrealSharedDataAbiV4.FixedValueCollectionSchemaId);
+UnrealGeneratedDataSnapshot<UnrealBufferedGameplayEventV1> gameplayEvents =
+    data.AcquireGeneratedEvents<UnrealBufferedGameplayEventV1>(
+        UnrealGameplayDataAbiV4.BufferedGameplayEventSchemaId);
+
 if (hits[0].IsSuccess && hits[0].BlockingHit)
 {
     using UnrealCommandBatch commands = data.BeginCommands(1);
@@ -217,13 +267,14 @@ if (hits[0].IsSuccess && hits[0].BlockingHit)
 
 The matched live-CoreCLR profile (`tools/run-unreal-data-plane-profile.ps1`)
 measures 1,024 operations across three median samples in the same World. On the
-2026-08-27 UE 5.8.1 run, fixed movement submission was 0.200x the scalar-binding
-cost and Batch Trace was 0.0076x the matched per-call trace cost, with zero
-managed allocation in the data-plane loops. This evidence routes movement,
-overlap, and high-volume queries through the data plane; generic attributes
-remain generated type-safe bindings because Unreal provides no universal
-attribute semantics; spawn remains hybrid (binding for discovery, command row
-for repeated execution).
+2026-08-28 UE 5.8.1 run, movement submission was 0.186x scalar binding, Batch
+Trace was 0.010x matched per-call trace, and a generated fixed-container
+snapshot was 0.000050x matched direct Array+Map binding (1.270 versus
+25,371.973 ns/row). Generated event iteration measured 0.586 ns/row. All
+published data-plane loops reported zero managed allocation. This evidence
+routes stable high-volume containers and events through generated channels;
+ordinary attributes and uncommon calls remain type-safe bindings, and spawn
+remains hybrid (binding for discovery, command row for repeated execution).
 
 The BlockBreaker comparison demo uses this architecture for its shot trace,
 impact emitter, and damage while keeping resource/class discovery on the

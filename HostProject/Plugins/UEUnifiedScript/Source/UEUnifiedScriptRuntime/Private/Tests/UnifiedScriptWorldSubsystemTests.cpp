@@ -1643,6 +1643,68 @@ bool FUnifiedScriptDataPlaneWorkloadProfileTest::RunTest(
         return false;
     }
 
+    FUnifiedScriptObjectHandleResult ProfileHandleResult;
+    const FUnifiedScriptObjectHandle ProfileActorHandle =
+        Host->RegisterObject(Actor, ProfileHandleResult);
+    TestTrue(
+        TEXT("Data-plane profile Actor handle is registered"),
+        ProfileHandleResult.IsSuccess());
+    TArray<FUnifiedScriptFixedValueCollectionSnapshotV1> SnapshotRows;
+    TArray<FUnifiedScriptBufferedGameplayEventV1> BufferedEvents;
+    SnapshotRows.Reserve(Iterations);
+    BufferedEvents.Reserve(Iterations);
+    for (int32 Index = 0; Index < Iterations; ++Index)
+    {
+        FUnifiedScriptFixedValueCollectionSnapshotV1& SnapshotRow =
+            SnapshotRows.AddDefaulted_GetRef();
+        SnapshotRow.SequenceId = static_cast<uint64>(Index + 1);
+        SnapshotRow.VectorX = Index;
+        SnapshotRow.VectorY = Index + 1;
+        SnapshotRow.VectorZ = Index + 2;
+        SnapshotRow.ValueCount = 8;
+        SnapshotRow.PairCount = 4;
+        SnapshotRow.Value0 = 1;
+        SnapshotRow.Value1 = 2;
+        SnapshotRow.Value2 = 3;
+        SnapshotRow.Value3 = 4;
+        SnapshotRow.Value4 = 5;
+        SnapshotRow.Value5 = 6;
+        SnapshotRow.Value6 = 7;
+        SnapshotRow.Value7 = 8;
+        SnapshotRow.Key0 = 1;
+        SnapshotRow.Key1 = 2;
+        SnapshotRow.Key2 = 3;
+        SnapshotRow.Key3 = 4;
+        SnapshotRow.MapValue0 = 10;
+        SnapshotRow.MapValue1 = 20;
+        SnapshotRow.MapValue2 = 30;
+        SnapshotRow.MapValue3 = 40;
+
+        FUnifiedScriptBufferedGameplayEventV1& BufferedEvent =
+            BufferedEvents.AddDefaulted_GetRef();
+        BufferedEvent.SequenceId = static_cast<uint64>(Index + 1);
+        BufferedEvent.EventId = 0xB10C;
+        BufferedEvent.Value = Index;
+        BufferedEvent.Weight = 0.5;
+        BufferedEvent.Context = {
+            Host->GetWorldHostId(),
+            ProfileActorHandle.Value,
+        };
+    }
+    TestTrue(
+        TEXT("Profile publishes the generated fixed-container snapshot"),
+        Host->PublishGeneratedSnapshotRows(
+            UE::UnifiedScript::SharedData::FixedValueCollectionSchemaId,
+            TConstArrayView<FUnifiedScriptFixedValueCollectionSnapshotV1>(
+                SnapshotRows)));
+    TestTrue(
+        TEXT("Profile queues the generated gameplay event buffer"),
+        Host->QueueGeneratedEventRows(
+            UE::UnifiedScript::GameplayData::BufferedGameplayEventSchemaId,
+            TConstArrayView<FUnifiedScriptBufferedGameplayEventV1>(
+                BufferedEvents)));
+    Host->BeginManagedFrame();
+
     UUnifiedScriptComponent* Component =
         NewObject<UUnifiedScriptComponent>(Actor);
     Actor->AddInstanceComponent(Component);
@@ -1683,6 +1745,12 @@ bool FUnifiedScriptDataPlaneWorkloadProfileTest::RunTest(
     FString BindingTraceText;
     FString BatchTraceText;
     FString AttributeReadText;
+    FString BindingContainerText;
+    FString GeneratedSnapshotText;
+    FString GeneratedEventText;
+    FString GeneratedAllocatedBytesText;
+    FString GeneratedSnapshotEntriesText;
+    FString GeneratedEventEntriesText;
     FString AllocatedBytesText;
     FString BatchTraceAllocatedBytesText;
     FString BatchTraceBytesText;
@@ -1693,6 +1761,8 @@ bool FUnifiedScriptDataPlaneWorkloadProfileTest::RunTest(
     FString AttributeRoute;
     FString SpawnRoute;
     FString QueryRoute;
+    FString ContainerRoute;
+    FString DelegateRoute;
     int32 ManagedIterations = 0;
     int32 ManagedSampleCount = 0;
     double BindingScalarNs = 0.0;
@@ -1700,13 +1770,19 @@ bool FUnifiedScriptDataPlaneWorkloadProfileTest::RunTest(
     double BindingTraceNs = 0.0;
     double BatchTraceNs = 0.0;
     double AttributeReadNs = 0.0;
+    double BindingContainerNs = 0.0;
+    double GeneratedSnapshotNs = 0.0;
+    double GeneratedEventNs = 0.0;
+    int64 GeneratedDataAllocatedBytes = -1;
+    int32 GeneratedSnapshotEntries = 0;
+    int32 GeneratedEventEntries = 0;
     int64 DataPlaneAllocatedBytes = -1;
     int64 BatchTraceAllocatedBytes = -1;
     int64 BatchTraceBytes = -1;
     int32 BatchTraceGcCollectionCount = -1;
     double BatchTraceGcPauseMilliseconds = -1.0;
     const bool bParsed =
-        Component->ManagedState.StartsWith(TEXT("DataPlaneProfile:v2;")) &&
+        Component->ManagedState.StartsWith(TEXT("DataPlaneProfile:v3;")) &&
         ReadField(Component->ManagedState, TEXT("Iterations"), IterationsText) &&
         ReadField(Component->ManagedState, TEXT("SampleCount"), SampleCountText) &&
         ReadField(Component->ManagedState, TEXT("BindingScalarNs"), BindingScalarText) &&
@@ -1714,6 +1790,12 @@ bool FUnifiedScriptDataPlaneWorkloadProfileTest::RunTest(
         ReadField(Component->ManagedState, TEXT("BindingTraceNs"), BindingTraceText) &&
         ReadField(Component->ManagedState, TEXT("BatchTraceNs"), BatchTraceText) &&
         ReadField(Component->ManagedState, TEXT("AttributeReadNs"), AttributeReadText) &&
+        ReadField(Component->ManagedState, TEXT("BindingContainerNs"), BindingContainerText) &&
+        ReadField(Component->ManagedState, TEXT("GeneratedSnapshotNs"), GeneratedSnapshotText) &&
+        ReadField(Component->ManagedState, TEXT("GeneratedEventNs"), GeneratedEventText) &&
+        ReadField(Component->ManagedState, TEXT("GeneratedDataAllocatedBytes"), GeneratedAllocatedBytesText) &&
+        ReadField(Component->ManagedState, TEXT("GeneratedSnapshotEntries"), GeneratedSnapshotEntriesText) &&
+        ReadField(Component->ManagedState, TEXT("GeneratedEventEntries"), GeneratedEventEntriesText) &&
         ReadField(Component->ManagedState, TEXT("DataPlaneAllocatedBytes"), AllocatedBytesText) &&
         ReadField(Component->ManagedState, TEXT("BatchTraceAllocatedBytes"), BatchTraceAllocatedBytesText) &&
         ReadField(Component->ManagedState, TEXT("BatchTraceBytes"), BatchTraceBytesText) &&
@@ -1724,6 +1806,8 @@ bool FUnifiedScriptDataPlaneWorkloadProfileTest::RunTest(
         ReadField(Component->ManagedState, TEXT("Attribute"), AttributeRoute) &&
         ReadField(Component->ManagedState, TEXT("Spawn"), SpawnRoute) &&
         ReadField(Component->ManagedState, TEXT("Query"), QueryRoute) &&
+        ReadField(Component->ManagedState, TEXT("Container"), ContainerRoute) &&
+        ReadField(Component->ManagedState, TEXT("Delegate"), DelegateRoute) &&
         LexTryParseString(ManagedIterations, *IterationsText) &&
         LexTryParseString(ManagedSampleCount, *SampleCountText) &&
         LexTryParseString(BindingScalarNs, *BindingScalarText) &&
@@ -1731,6 +1815,12 @@ bool FUnifiedScriptDataPlaneWorkloadProfileTest::RunTest(
         LexTryParseString(BindingTraceNs, *BindingTraceText) &&
         LexTryParseString(BatchTraceNs, *BatchTraceText) &&
         LexTryParseString(AttributeReadNs, *AttributeReadText) &&
+        LexTryParseString(BindingContainerNs, *BindingContainerText) &&
+        LexTryParseString(GeneratedSnapshotNs, *GeneratedSnapshotText) &&
+        LexTryParseString(GeneratedEventNs, *GeneratedEventText) &&
+        LexTryParseString(GeneratedDataAllocatedBytes, *GeneratedAllocatedBytesText) &&
+        LexTryParseString(GeneratedSnapshotEntries, *GeneratedSnapshotEntriesText) &&
+        LexTryParseString(GeneratedEventEntries, *GeneratedEventEntriesText) &&
         LexTryParseString(DataPlaneAllocatedBytes, *AllocatedBytesText) &&
         LexTryParseString(BatchTraceAllocatedBytes, *BatchTraceAllocatedBytesText) &&
         LexTryParseString(BatchTraceBytes, *BatchTraceBytesText) &&
@@ -1750,6 +1840,25 @@ bool FUnifiedScriptDataPlaneWorkloadProfileTest::RunTest(
         TEXT("Batch Trace beats the matched per-call binding workload"),
         BatchTraceNs > 0.0 && BatchTraceNs < BindingTraceNs);
     TestTrue(TEXT("Attribute binding remains measurable"), AttributeReadNs > 0.0);
+    TestTrue(
+        TEXT("Generated snapshot iteration beats matched direct container calls"),
+        GeneratedSnapshotNs > 0.0 &&
+            BindingContainerNs > GeneratedSnapshotNs);
+    TestTrue(
+        TEXT("Generated event iteration remains measurable"),
+        GeneratedEventNs > 0.0);
+    TestEqual(
+        TEXT("Generated snapshot loop covers the frozen row count"),
+        GeneratedSnapshotEntries,
+        Iterations);
+    TestEqual(
+        TEXT("Generated event loop covers the frozen row count"),
+        GeneratedEventEntries,
+        Iterations);
+    TestEqual(
+        TEXT("Generated borrowed views allocate no managed memory"),
+        GeneratedDataAllocatedBytes,
+        int64{0});
     TestEqual(
         TEXT("Fixed-row data-plane loops allocate no managed memory"),
         DataPlaneAllocatedBytes,
@@ -1770,11 +1879,19 @@ bool FUnifiedScriptDataPlaneWorkloadProfileTest::RunTest(
     TestEqual(TEXT("Attribute route remains generated binding"), AttributeRoute, TEXT("binding"));
     TestEqual(TEXT("Spawn route stays hybrid"), SpawnRoute, TEXT("hybrid"));
     TestEqual(TEXT("Query route uses the data plane"), QueryRoute, TEXT("data-plane"));
+    TestEqual(
+        TEXT("Stable container route uses generated snapshots"),
+        ContainerRoute,
+        TEXT("generated-snapshot"));
+    TestEqual(
+        TEXT("High-volume delegate route uses generated events"),
+        DelegateRoute,
+        TEXT("generated-events"));
 
     UE_LOG(
         LogTemp,
         Display,
-        TEXT("UNIFIEDSCRIPT_DATA_PLANE_PROFILE_JSON {\"schemaVersion\":\"unifiedscript.unreal-data-plane-profile/v0.2\",\"iterations\":%d,\"sampleCount\":%d,\"bindingScalarNs\":%.3f,\"commandSubmitNs\":%.3f,\"bindingTraceNs\":%.3f,\"batchTraceNs\":%.3f,\"attributeReadNs\":%.3f,\"dataPlaneAllocatedBytes\":%lld,\"batchTraceAllocatedBytes\":%lld,\"batchTraceBytes\":%lld,\"batchTraceGcCollectionCount\":%d,\"batchTraceGcPauseMilliseconds\":%.6f,\"memoryHighWaterBytes\":%llu,\"movement\":\"%s\",\"overlap\":\"%s\",\"attribute\":\"%s\",\"spawn\":\"%s\",\"query\":\"%s\"}"),
+        TEXT("UNIFIEDSCRIPT_DATA_PLANE_PROFILE_JSON {\"schemaVersion\":\"unifiedscript.unreal-data-plane-profile/v0.3\",\"iterations\":%d,\"sampleCount\":%d,\"bindingScalarNs\":%.3f,\"commandSubmitNs\":%.3f,\"bindingTraceNs\":%.3f,\"batchTraceNs\":%.3f,\"attributeReadNs\":%.3f,\"bindingContainerNs\":%.3f,\"generatedSnapshotNs\":%.3f,\"generatedEventNs\":%.3f,\"generatedDataAllocatedBytes\":%lld,\"generatedSnapshotEntries\":%d,\"generatedEventEntries\":%d,\"dataPlaneAllocatedBytes\":%lld,\"batchTraceAllocatedBytes\":%lld,\"batchTraceBytes\":%lld,\"batchTraceGcCollectionCount\":%d,\"batchTraceGcPauseMilliseconds\":%.6f,\"memoryHighWaterBytes\":%llu,\"movement\":\"%s\",\"overlap\":\"%s\",\"attribute\":\"%s\",\"spawn\":\"%s\",\"query\":\"%s\",\"container\":\"%s\",\"delegate\":\"%s\"}"),
         ManagedIterations,
         ManagedSampleCount,
         BindingScalarNs,
@@ -1782,6 +1899,12 @@ bool FUnifiedScriptDataPlaneWorkloadProfileTest::RunTest(
         BindingTraceNs,
         BatchTraceNs,
         AttributeReadNs,
+        BindingContainerNs,
+        GeneratedSnapshotNs,
+        GeneratedEventNs,
+        static_cast<long long>(GeneratedDataAllocatedBytes),
+        GeneratedSnapshotEntries,
+        GeneratedEventEntries,
         static_cast<long long>(DataPlaneAllocatedBytes),
         static_cast<long long>(BatchTraceAllocatedBytes),
         static_cast<long long>(BatchTraceBytes),
@@ -1792,7 +1915,9 @@ bool FUnifiedScriptDataPlaneWorkloadProfileTest::RunTest(
         *OverlapRoute,
         *AttributeRoute,
         *SpawnRoute,
-        *QueryRoute);
+        *QueryRoute,
+        *ContainerRoute,
+        *DelegateRoute);
 
     Host->EndManagedFrame();
     Component->EndPlay(EEndPlayReason::Destroyed);

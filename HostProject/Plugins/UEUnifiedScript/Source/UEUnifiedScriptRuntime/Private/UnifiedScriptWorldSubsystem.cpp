@@ -156,6 +156,36 @@ uint64 UUnifiedScriptWorldSubsystem::GetGameplayFrameNumber() const
         : 0;
 }
 
+bool UUnifiedScriptWorldSubsystem::PublishGeneratedSnapshotRows(
+    uint64 SchemaId,
+    uint32 EntrySize,
+    const void* Entries,
+    uint32 EntryCount)
+{
+    check(IsInGameThread());
+    return IsNativeRuntimeReady() && SharedDataPlane != nullptr &&
+        SharedDataPlane->PublishGeneratedSnapshot(
+            SchemaId,
+            EntrySize,
+            Entries,
+            EntryCount);
+}
+
+bool UUnifiedScriptWorldSubsystem::QueueGeneratedEventRows(
+    uint64 SchemaId,
+    uint32 EntrySize,
+    const void* Entries,
+    uint32 EntryCount)
+{
+    check(IsInGameThread());
+    return IsNativeRuntimeReady() && GameplayDataPlane != nullptr &&
+        GameplayDataPlane->QueueGeneratedEvents(
+            SchemaId,
+            EntrySize,
+            Entries,
+            EntryCount);
+}
+
 void UUnifiedScriptWorldSubsystem::HandleWorldPreActorTick(
     UWorld* World,
     ELevelTick TickType,

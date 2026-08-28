@@ -54,6 +54,12 @@ public sealed class UnrealGameplayDataAbiV4Tests
             UnrealGameplayDataAbiV4.OverlapTransportTableSize,
             Marshal.SizeOf<UnrealGameplayDataTransportTableV4OverlapExtended>());
         Assert.Equal(
+            UnrealGameplayDataAbiV4.ChannelsExtendedTransportTableSize,
+            Marshal.SizeOf<UnrealGameplayDataTransportTableV4ChannelsExtended>());
+        Assert.Equal(
+            UnrealGameplayDataAbiV4.BufferedGameplayEventEntrySize,
+            Marshal.SizeOf<UnrealBufferedGameplayEventV1>());
+        Assert.Equal(
             UnrealGameplayDataAbiV4.TelemetrySize,
             Marshal.SizeOf<UnrealGameplayDataTelemetryV1>());
         Assert.Equal(
@@ -202,11 +208,47 @@ public sealed class UnrealGameplayDataAbiV4Tests
         Assert.Equal(16UL, gameplay.LastExecutedSequenceId);
     }
 
+    [Fact]
+    public void ReadsGeneratedSnapshotAndBufferedEventsWithoutCopying()
+    {
+        using var transport = new FixtureGameplayTransport(worldHostId: 127);
+        var plane = new UnrealWorldDataPlane(transport, expectedWorldHostId: 127);
+
+        UnrealGeneratedDataSnapshot<UnrealFixedValueCollectionSnapshotV1> snapshot =
+            plane.AcquireGeneratedSnapshot<UnrealFixedValueCollectionSnapshotV1>(
+                UnrealSharedDataAbiV4.FixedValueCollectionSchemaId);
+        UnrealGeneratedDataSnapshot<UnrealBufferedGameplayEventV1> events =
+            plane.AcquireGeneratedEvents<UnrealBufferedGameplayEventV1>(
+                UnrealGameplayDataAbiV4.BufferedGameplayEventSchemaId);
+
+        Assert.True(plane.SupportsGeneratedSnapshots);
+        Assert.True(plane.SupportsGeneratedEvents);
+        Assert.Equal(21UL, snapshot.PublicationId);
+        Assert.Equal(2, snapshot.Entries.Length);
+        Assert.Equal(new UnrealVector(1.0, 2.0, 3.0), snapshot.Entries[0].Vector);
+        Assert.Equal(4U, snapshot.Entries[0].ValueCount);
+        Assert.Equal(31UL, events.PublicationId);
+        Assert.Equal(2, events.Entries.Length);
+        Assert.Equal(101UL, events.Entries[0].EventId);
+        Assert.Equal(1.5, events.Entries[0].Weight);
+
+        transport.SetFirstSnapshotSequence(99);
+        Assert.Equal(99UL, snapshot.Entries[0].SequenceId);
+        Assert.Throws<InvalidOperationException>(() => AcquireWrongRow(plane));
+
+        static void AcquireWrongRow(UnrealWorldDataPlane dataPlane)
+        {
+            _ = dataPlane.AcquireGeneratedSnapshot<UnrealBufferedGameplayEventV1>(
+                UnrealSharedDataAbiV4.FixedValueCollectionSchemaId).PublicationId;
+        }
+    }
+
     private sealed unsafe class FixtureGameplayTransport :
         IUnrealSharedSnapshotTransport,
         IUnrealGameplayDataTransport,
         IUnrealOverlapDataTransport,
         IUnrealDataPlaneTelemetryTransport,
+        IUnrealGeneratedDataTransport,
         IDisposable
     {
         private readonly ulong _worldHostId;
@@ -215,6 +257,8 @@ public sealed class UnrealGameplayDataAbiV4Tests
         private readonly nint _results;
         private readonly nint _overlapRequests;
         private readonly nint _overlapResults;
+        private readonly nint _generatedSnapshots;
+        private readonly nint _generatedEvents;
         private ulong _nextToken = 1;
 
         public FixtureGameplayTransport(ulong worldHostId)
@@ -225,11 +269,32 @@ public sealed class UnrealGameplayDataAbiV4Tests
             _results = Allocate<UnrealTraceResultV4>(4);
             _overlapRequests = Allocate<UnrealOverlapRequestV1>(4);
             _overlapResults = Allocate<UnrealOverlapResultV1>(4);
+            _generatedSnapshots = Allocate<UnrealFixedValueCollectionSnapshotV1>(2);
+            _generatedEvents = Allocate<UnrealBufferedGameplayEventV1>(2);
+            ((UnrealFixedValueCollectionSnapshotV1*)_generatedSnapshots)[0] = new(
+                1,
+                new UnrealVector(1.0, 2.0, 3.0),
+                new[] { 10, 20, 30, 40 },
+                new[] { new KeyValuePair<int, int>(7, 70) });
+            ((UnrealFixedValueCollectionSnapshotV1*)_generatedSnapshots)[1] = new(
+                2,
+                new UnrealVector(4.0, 5.0, 6.0),
+                new[] { 50, 60 },
+                ReadOnlySpan<KeyValuePair<int, int>>.Empty);
+            var context = new UnrealSharedObjectHandleV4(
+                worldHostId,
+                UnrealObjectHandle.Create(2, 3).Value);
+            ((UnrealBufferedGameplayEventV1*)_generatedEvents)[0] =
+                new(10, 101, 5, 1, 1.5, context);
+            ((UnrealBufferedGameplayEventV1*)_generatedEvents)[1] =
+                new(11, 102, 6, 0, 2.5, context);
         }
 
         public bool SupportsSharedData => false;
         public bool SupportsGameplayData => true;
         public bool SupportsOverlapData => true;
+        public bool SupportsGeneratedSnapshots => true;
+        public bool SupportsGeneratedEvents => true;
         public uint LastCommittedCount { get; private set; }
         public uint LastTraceCount { get; private set; }
         public uint LastOverlapCount { get; private set; }
@@ -242,6 +307,57 @@ public sealed class UnrealGameplayDataAbiV4Tests
         {
             view = default;
             return false;
+        }
+
+        public bool TryAcquireGeneratedSnapshot(
+            ulong schemaId,
+            uint entrySize,
+            out UnrealGeneratedDataViewV1 view)
+        {
+            view = new UnrealGeneratedDataViewV1
+            {
+                AbiVersion = UnrealSharedDataAbiV4.Version,
+                ViewSize = UnrealSharedDataAbiV4.GeneratedChannelViewSize,
+                SchemaId = schemaId,
+                WorldHostId = _worldHostId,
+                PublicationId = 21,
+                Entries = _generatedSnapshots,
+                EntryCount = 2,
+                EntryCapacity = 2,
+                EntrySize = entrySize,
+                Flags = UnrealGeneratedDataFlagsV1.BorrowedUntilNextPublish |
+                    UnrealGeneratedDataFlagsV1.Snapshot,
+            };
+            return schemaId == UnrealSharedDataAbiV4.FixedValueCollectionSchemaId &&
+                entrySize == UnrealSharedDataAbiV4.FixedValueCollectionEntrySize;
+        }
+
+        public bool TryAcquireGeneratedEvents(
+            ulong schemaId,
+            uint entrySize,
+            out UnrealGeneratedDataViewV1 view)
+        {
+            view = new UnrealGeneratedDataViewV1
+            {
+                AbiVersion = UnrealSharedDataAbiV4.Version,
+                ViewSize = UnrealSharedDataAbiV4.GeneratedChannelViewSize,
+                SchemaId = schemaId,
+                WorldHostId = _worldHostId,
+                PublicationId = 31,
+                Entries = _generatedEvents,
+                EntryCount = 2,
+                EntryCapacity = 2,
+                EntrySize = entrySize,
+                Flags = UnrealGeneratedDataFlagsV1.BorrowedUntilNextPublish |
+                    UnrealGeneratedDataFlagsV1.Events,
+            };
+            return schemaId == UnrealGameplayDataAbiV4.BufferedGameplayEventSchemaId &&
+                entrySize == UnrealGameplayDataAbiV4.BufferedGameplayEventEntrySize;
+        }
+
+        public void SetFirstSnapshotSequence(ulong sequenceId)
+        {
+            ((ulong*)_generatedSnapshots)[0] = sequenceId;
         }
 
         public bool TryGetSharedDataTelemetry(
@@ -436,6 +552,8 @@ public sealed class UnrealGameplayDataAbiV4Tests
             NativeMemory.AlignedFree((void*)_results);
             NativeMemory.AlignedFree((void*)_overlapRequests);
             NativeMemory.AlignedFree((void*)_overlapResults);
+            NativeMemory.AlignedFree((void*)_generatedSnapshots);
+            NativeMemory.AlignedFree((void*)_generatedEvents);
         }
 
         private static nint Allocate<T>(nuint count) where T : unmanaged

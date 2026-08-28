@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Runtime.CompilerServices;
 
 namespace UnifiedScript.Unreal;
 
@@ -42,6 +43,68 @@ public readonly partial struct UnrealTransformSnapshotEntryV4
         new UnrealVector(ScaleX, ScaleY, ScaleZ));
 }
 
+public readonly partial struct UnrealFixedValueCollectionSnapshotV1
+{
+    public UnrealFixedValueCollectionSnapshotV1(
+        ulong sequenceId,
+        UnrealVector vector,
+        ReadOnlySpan<int> values,
+        ReadOnlySpan<KeyValuePair<int, int>> pairs)
+    {
+        if (values.Length > 8)
+        {
+            throw new ArgumentOutOfRangeException(nameof(values));
+        }
+        if (pairs.Length > 4)
+        {
+            throw new ArgumentOutOfRangeException(nameof(pairs));
+        }
+        SequenceId = sequenceId;
+        VectorX = vector.X;
+        VectorY = vector.Y;
+        VectorZ = vector.Z;
+        ValueCount = checked((uint)values.Length);
+        PairCount = checked((uint)pairs.Length);
+        Value0 = values.Length > 0 ? values[0] : 0;
+        Value1 = values.Length > 1 ? values[1] : 0;
+        Value2 = values.Length > 2 ? values[2] : 0;
+        Value3 = values.Length > 3 ? values[3] : 0;
+        Value4 = values.Length > 4 ? values[4] : 0;
+        Value5 = values.Length > 5 ? values[5] : 0;
+        Value6 = values.Length > 6 ? values[6] : 0;
+        Value7 = values.Length > 7 ? values[7] : 0;
+        Key0 = pairs.Length > 0 ? pairs[0].Key : 0;
+        Key1 = pairs.Length > 1 ? pairs[1].Key : 0;
+        Key2 = pairs.Length > 2 ? pairs[2].Key : 0;
+        Key3 = pairs.Length > 3 ? pairs[3].Key : 0;
+        MapValue0 = pairs.Length > 0 ? pairs[0].Value : 0;
+        MapValue1 = pairs.Length > 1 ? pairs[1].Value : 0;
+        MapValue2 = pairs.Length > 2 ? pairs[2].Value : 0;
+        MapValue3 = pairs.Length > 3 ? pairs[3].Value : 0;
+    }
+
+    public UnrealVector Vector => new(VectorX, VectorY, VectorZ);
+}
+
+public readonly partial struct UnrealBufferedGameplayEventV1
+{
+    public UnrealBufferedGameplayEventV1(
+        ulong sequenceId,
+        ulong eventId,
+        int value,
+        uint flags,
+        double weight,
+        UnrealSharedObjectHandleV4 context)
+    {
+        SequenceId = sequenceId;
+        EventId = eventId;
+        Value = value;
+        Flags = flags;
+        Weight = weight;
+        Context = context;
+    }
+}
+
 [StructLayout(LayoutKind.Sequential, Pack = 8)]
 internal struct UnrealSharedDataTransportTableV4
 {
@@ -74,10 +137,33 @@ internal struct UnrealSharedDataTransportTableV4Extended
     public nint GetTelemetry;
 }
 
+[StructLayout(LayoutKind.Sequential, Pack = 8)]
+internal struct UnrealSharedDataTransportTableV4ChannelsExtended
+{
+    public uint AbiVersion;
+    public uint TableSize;
+    public uint SnapshotViewSize;
+    public uint TransformEntrySize;
+    public ulong TransformSchemaId;
+    public UnrealSharedDataCapabilitiesV4 Capabilities;
+    public nint RetainContext;
+    public nint ReleaseContext;
+    public nint AcquireTransformSnapshot;
+    public ulong LayoutCompatibilityId;
+    public uint LayoutRevision;
+    public uint MaximumTransformSnapshotCount;
+    public nint GetTelemetry;
+    public uint GeneratedChannelViewSize;
+    public uint MaximumGeneratedSnapshotCount;
+    public ulong MaximumGeneratedChannelBytes;
+    public nint AcquireGeneratedSnapshot;
+}
+
 public static partial class UnrealSharedDataAbiV4
 {
     public const int TransportTableSize = 56;
     public const int ExtendedTransportTableSize = 80;
+    public const int ChannelsExtendedTransportTableSize = 104;
 }
 
 internal interface IUnrealSharedSnapshotTransport
@@ -92,6 +178,23 @@ internal interface IUnrealDataPlaneTelemetryTransport
     bool TryGetSharedDataTelemetry(out UnrealSharedDataTelemetryV1 telemetry);
 
     bool TryGetGameplayDataTelemetry(out UnrealGameplayDataTelemetryV1 telemetry);
+}
+
+internal interface IUnrealGeneratedDataTransport
+{
+    bool SupportsGeneratedSnapshots { get; }
+
+    bool SupportsGeneratedEvents { get; }
+
+    bool TryAcquireGeneratedSnapshot(
+        ulong schemaId,
+        uint entrySize,
+        out UnrealGeneratedDataViewV1 view);
+
+    bool TryAcquireGeneratedEvents(
+        ulong schemaId,
+        uint entrySize,
+        out UnrealGeneratedDataViewV1 view);
 }
 
 internal interface IUnrealWorldDataPlaneProvider
@@ -110,6 +213,7 @@ public sealed class UnrealWorldDataPlane
     private readonly IUnrealSharedSnapshotTransport? _transport;
     private readonly IUnrealGameplayDataTransport? _gameplayTransport;
     private readonly IUnrealOverlapDataTransport? _overlapTransport;
+    private readonly IUnrealGeneratedDataTransport? _generatedTransport;
     private readonly ulong _expectedWorldHostId;
 
     internal UnrealWorldDataPlane(
@@ -119,6 +223,7 @@ public sealed class UnrealWorldDataPlane
         _transport = transport;
         _gameplayTransport = transport as IUnrealGameplayDataTransport;
         _overlapTransport = transport as IUnrealOverlapDataTransport;
+        _generatedTransport = transport as IUnrealGeneratedDataTransport;
         _expectedWorldHostId = expectedWorldHostId;
     }
 
@@ -129,6 +234,12 @@ public sealed class UnrealWorldDataPlane
 
     public bool SupportsOverlapQueries =>
         _overlapTransport?.SupportsOverlapData == true;
+
+    public bool SupportsGeneratedSnapshots =>
+        _generatedTransport?.SupportsGeneratedSnapshots == true;
+
+    public bool SupportsGeneratedEvents =>
+        _generatedTransport?.SupportsGeneratedEvents == true;
 
     public UnrealSharedDataTelemetryV1 GetSharedDataTelemetry()
     {
@@ -365,6 +476,97 @@ public sealed class UnrealWorldDataPlane
             entries);
     }
 
+    public unsafe UnrealGeneratedDataSnapshot<T> AcquireGeneratedSnapshot<T>(
+        ulong schemaId)
+        where T : unmanaged
+    {
+        IUnrealGeneratedDataTransport transport =
+            _generatedTransport is { SupportsGeneratedSnapshots: true } available
+                ? available
+                : throw new NotSupportedException(
+                    "The native World does not advertise generated snapshot channels.");
+        uint entrySize = checked((uint)Unsafe.SizeOf<T>());
+        if (schemaId == 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(schemaId));
+        }
+        if (!transport.TryAcquireGeneratedSnapshot(schemaId, entrySize, out var view))
+        {
+            throw new InvalidOperationException(
+                "The generated snapshot channel is unavailable or has a different row layout.");
+        }
+        ValidateGeneratedDataView(
+            view,
+            schemaId,
+            entrySize,
+            UnrealSharedDataAbiV4.MaximumGeneratedSnapshotCount,
+            UnrealGeneratedDataFlagsV1.Snapshot);
+        return new UnrealGeneratedDataSnapshot<T>(
+            view.WorldHostId,
+            view.PublicationId,
+            view.DroppedEntryCount,
+            new ReadOnlySpan<T>((void*)view.Entries, checked((int)view.EntryCount)));
+    }
+
+    public unsafe UnrealGeneratedDataSnapshot<T> AcquireGeneratedEvents<T>(
+        ulong schemaId)
+        where T : unmanaged
+    {
+        IUnrealGeneratedDataTransport transport =
+            _generatedTransport is { SupportsGeneratedEvents: true } available
+                ? available
+                : throw new NotSupportedException(
+                    "The native World does not advertise generated event channels.");
+        uint entrySize = checked((uint)Unsafe.SizeOf<T>());
+        if (schemaId == 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(schemaId));
+        }
+        if (!transport.TryAcquireGeneratedEvents(schemaId, entrySize, out var view))
+        {
+            throw new InvalidOperationException(
+                "The generated event channel is unavailable or has a different row layout.");
+        }
+        ValidateGeneratedDataView(
+            view,
+            schemaId,
+            entrySize,
+            UnrealGameplayDataAbiV4.MaximumGeneratedEventCount,
+            UnrealGeneratedDataFlagsV1.Events);
+        return new UnrealGeneratedDataSnapshot<T>(
+            view.WorldHostId,
+            view.PublicationId,
+            view.DroppedEntryCount,
+            new ReadOnlySpan<T>((void*)view.Entries, checked((int)view.EntryCount)));
+    }
+
+    private void ValidateGeneratedDataView(
+        UnrealGeneratedDataViewV1 view,
+        ulong schemaId,
+        uint entrySize,
+        uint maximumEntryCount,
+        UnrealGeneratedDataFlagsV1 requiredKind)
+    {
+        ulong byteCount = (ulong)view.EntryCount * view.EntrySize;
+        if (view.AbiVersion != UnrealSharedDataAbiV4.Version ||
+            view.ViewSize != UnrealSharedDataAbiV4.GeneratedChannelViewSize ||
+            view.SchemaId != schemaId ||
+            view.WorldHostId == 0 ||
+            (_expectedWorldHostId != 0 && view.WorldHostId != _expectedWorldHostId) ||
+            view.PublicationId == 0 ||
+            view.EntrySize != entrySize ||
+            view.EntryCount > view.EntryCapacity ||
+            view.EntryCount > maximumEntryCount ||
+            byteCount > UnrealSharedDataAbiV4.MaximumGeneratedChannelBytes ||
+            (view.EntryCount != 0 && view.Entries == nint.Zero) ||
+            (view.Flags & UnrealGeneratedDataFlagsV1.BorrowedUntilNextPublish) == 0 ||
+            (view.Flags & requiredKind) == 0)
+        {
+            throw new InvalidOperationException(
+                "The generated data channel has an incompatible schema, World, or bounds.");
+        }
+    }
+
     private void Validate(UnrealSharedSnapshotViewV4 view)
     {
         if (view.AbiVersion != UnrealSharedDataAbiV4.Version ||
@@ -478,4 +680,34 @@ public readonly ref struct UnrealTransformSnapshot
         transform = default;
         return false;
     }
+}
+
+/// <summary>
+/// Stack-only, allocation-free view over one schema-generated snapshot or event buffer.
+/// The view is valid only until the native channel publishes again.
+/// </summary>
+public readonly ref struct UnrealGeneratedDataSnapshot<T>
+    where T : unmanaged
+{
+    private readonly ReadOnlySpan<T> _entries;
+
+    internal UnrealGeneratedDataSnapshot(
+        ulong worldHostId,
+        ulong publicationId,
+        ulong droppedEntryCount,
+        ReadOnlySpan<T> entries)
+    {
+        WorldHostId = worldHostId;
+        PublicationId = publicationId;
+        DroppedEntryCount = droppedEntryCount;
+        _entries = entries;
+    }
+
+    public ulong WorldHostId { get; }
+
+    public ulong PublicationId { get; }
+
+    public ulong DroppedEntryCount { get; }
+
+    public ReadOnlySpan<T> Entries => _entries;
 }

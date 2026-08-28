@@ -623,6 +623,15 @@ complete BlockBreaker p50/p95/p99 frame ratios are 0.898835/0.955283/0.959456
 and its bridge-time ratio is 0.336019, while direct scalar, container, delegate,
 and resource-flow workloads still lose. M10.2 therefore targets generated
 shared snapshots and buffered events before M10.3 evaluates any broad claim.
+That slice is now live through append-only Shared/Gameplay transport suffixes:
+native modules publish schema-ID fixed rows into bounded per-World double
+buffers, and managed code consumes stack-only `ReadOnlySpan<T>` views with
+World/publication/layout validation. The live-CoreCLR v0.3 profile measured
+1,024 direct Array+Map binding rows at 25,371.973 ns/row versus 1.270 ns/row for
+the generated snapshot (ratio 0.000050), plus 0.586 ns/row for buffered events,
+with zero managed allocation. Direct generated calls remain the fallback for
+low-volume or unstable shapes; M10.3 will rerun the complete matched suite
+before changing the broad product claim.
 
 Build, archive, and smoke-test the self-contained Win64 Development and
 Shipping packages:

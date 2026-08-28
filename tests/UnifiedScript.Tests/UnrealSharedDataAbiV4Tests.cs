@@ -22,6 +22,15 @@ public sealed class UnrealSharedDataAbiV4Tests
             UnrealSharedDataAbiV4.ExtendedTransportTableSize,
             Marshal.SizeOf<UnrealSharedDataTransportTableV4Extended>());
         Assert.Equal(
+            UnrealSharedDataAbiV4.ChannelsExtendedTransportTableSize,
+            Marshal.SizeOf<UnrealSharedDataTransportTableV4ChannelsExtended>());
+        Assert.Equal(
+            UnrealSharedDataAbiV4.GeneratedChannelViewSize,
+            Marshal.SizeOf<UnrealGeneratedDataViewV1>());
+        Assert.Equal(
+            UnrealSharedDataAbiV4.FixedValueCollectionEntrySize,
+            Marshal.SizeOf<UnrealFixedValueCollectionSnapshotV1>());
+        Assert.Equal(
             UnrealSharedDataAbiV4.TelemetrySize,
             Marshal.SizeOf<UnrealSharedDataTelemetryV1>());
     }

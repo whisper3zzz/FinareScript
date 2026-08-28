@@ -19,7 +19,7 @@ public sealed class UnrealDataPlaneLayoutGeneratorTests
         UnrealDataPlaneLayoutGenerationResult first = generator.Generate(schema);
         UnrealDataPlaneLayoutGenerationResult second = generator.Generate(schema);
 
-        Assert.Equal(0x253D72D369326A99UL, first.SchemaFingerprint);
+        Assert.Equal(0xF781EFEC4399B3ABUL, first.SchemaFingerprint);
         Assert.Equal(first, second);
         Assert.Equal(
             File.ReadAllText(Path.Combine(
@@ -55,6 +55,18 @@ public sealed class UnrealDataPlaneLayoutGeneratorTests
             StringComparison.Ordinal);
         Assert.Contains(
             "MaximumGeneratedChannelBytes = 16777216u",
+            first.NativeSource,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "static_assert(sizeof(FUnifiedScriptGeneratedDataViewV1) == 64);",
+            first.NativeSource,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "static_assert(sizeof(FUnifiedScriptFixedValueCollectionSnapshotV1) == 104);",
+            first.NativeSource,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "static_assert(sizeof(FUnifiedScriptBufferedGameplayEventV1) == 48);",
             first.NativeSource,
             StringComparison.Ordinal);
         Assert.Contains(

@@ -6,7 +6,7 @@ namespace UE::UnifiedScript::DataPlaneSchema
 {
 inline constexpr uint32 Revision = 4u;
 inline constexpr uint64 CompatibilityId = 0x555344504C415901ull;
-inline constexpr uint64 SchemaFingerprint = 0x253D72D369326A99ull;
+inline constexpr uint64 SchemaFingerprint = 0xF781EFEC4399B3ABull;
 }
 
 namespace UE::UnifiedScript::SharedData
@@ -14,7 +14,9 @@ namespace UE::UnifiedScript::SharedData
 inline constexpr uint32 AbiVersion = 4u;
 inline constexpr uint32 MaximumTransformSnapshotCount = 65536u;
 inline constexpr uint32 MaximumGeneratedSnapshotCount = 65536u;
+inline constexpr uint32 MaximumGeneratedChannelCount = 256u;
 inline constexpr uint32 MaximumGeneratedChannelBytes = 16777216u;
+inline constexpr uint64 FixedValueCollectionSchemaId = 0x5553464958434F01ull;
 inline constexpr uint64 TransformSnapshotSchemaId = 0x55535452414E5334ull;
 }
 
@@ -26,7 +28,9 @@ inline constexpr uint32 MaximumEventCount = 4096u;
 inline constexpr uint32 MaximumTraceCount = 65536u;
 inline constexpr uint32 MaximumOverlapCount = 65536u;
 inline constexpr uint32 MaximumGeneratedEventCount = 65536u;
+inline constexpr uint32 MaximumGeneratedChannelCount = 256u;
 inline constexpr uint32 MaximumGeneratedChannelBytes = 16777216u;
+inline constexpr uint64 BufferedGameplayEventSchemaId = 0x5553425546455601ull;
 inline constexpr uint64 CommandSchemaId = 0x5553434D44423401ull;
 inline constexpr uint64 EventSchemaId = 0x555345564E543401ull;
 inline constexpr uint64 OverlapRequestSchemaId = 0x55534F5652455101ull;
@@ -41,6 +45,14 @@ enum class EUnifiedScriptSharedSnapshotFlagsV4 : uint32
     BorrowedUntilNextPublish = 1u,
 };
 
+enum class EUnifiedScriptGeneratedDataFlagsV1 : uint32
+{
+    None = 0u,
+    BorrowedUntilNextPublish = 1u,
+    Snapshot = 2u,
+    Events = 4u,
+};
+
 enum class EUnifiedScriptSharedDataCapabilitiesV4 : uint64
 {
     None = 0ull,
@@ -49,6 +61,7 @@ enum class EUnifiedScriptSharedDataCapabilitiesV4 : uint64
     WorldScopedHandles = 4ull,
     SchemaGeneratedLayouts = 8ull,
     CapacityTelemetry = 16ull,
+    GeneratedSnapshotChannels = 32ull,
 };
 
 enum class EUnifiedScriptGameplayDataPhaseV4 : uint8
@@ -135,6 +148,17 @@ enum class EUnifiedScriptGameplayDataCapabilitiesV4 : uint64
     CapacityTelemetry = 128ull,
     BatchSphereOverlap = 256ull,
     BatchBoxOverlap = 512ull,
+    GeneratedEventChannels = 1024ull,
+};
+
+struct alignas(8) FUnifiedScriptBufferedGameplayEventV1
+{
+    uint64 SequenceId = 0;
+    uint64 EventId = 0;
+    int32 Value = 0;
+    uint32 Flags = 0;
+    double Weight = 0.0;
+    FUnifiedScriptSharedObjectHandleV4 Context = {};
 };
 
 struct alignas(8) FUnifiedScriptCommandV4
@@ -181,6 +205,32 @@ struct alignas(8) FUnifiedScriptCommandBatchViewV4
     uint32 CommandEntrySize = 0;
     uint32 Flags = 0;
     uint32 Reserved = 0;
+};
+
+struct alignas(8) FUnifiedScriptFixedValueCollectionSnapshotV1
+{
+    uint64 SequenceId = 0;
+    double VectorX = 0.0;
+    double VectorY = 0.0;
+    double VectorZ = 0.0;
+    uint32 ValueCount = 0;
+    uint32 PairCount = 0;
+    int32 Value0 = 0;
+    int32 Value1 = 0;
+    int32 Value2 = 0;
+    int32 Value3 = 0;
+    int32 Value4 = 0;
+    int32 Value5 = 0;
+    int32 Value6 = 0;
+    int32 Value7 = 0;
+    int32 Key0 = 0;
+    int32 Key1 = 0;
+    int32 Key2 = 0;
+    int32 Key3 = 0;
+    int32 MapValue0 = 0;
+    int32 MapValue1 = 0;
+    int32 MapValue2 = 0;
+    int32 MapValue3 = 0;
 };
 
 struct alignas(8) FUnifiedScriptGameplayDataTelemetryV1
@@ -243,6 +293,21 @@ struct alignas(8) FUnifiedScriptGameplayEventViewV4
     uint32 EventEntrySize = 0;
     uint32 Flags = 0;
     uint64 DroppedEventCount = 0;
+};
+
+struct alignas(8) FUnifiedScriptGeneratedDataViewV1
+{
+    uint32 AbiVersion = 4;
+    uint32 ViewSize = 0;
+    uint64 SchemaId = 0;
+    uint64 WorldHostId = 0;
+    uint64 PublicationId = 0;
+    const uint8* Entries = nullptr;
+    uint32 EntryCount = 0;
+    uint32 EntryCapacity = 0;
+    uint32 EntrySize = 0;
+    EUnifiedScriptGeneratedDataFlagsV1 Flags = EUnifiedScriptGeneratedDataFlagsV1::None;
+    uint64 DroppedEntryCount = 0;
 };
 
 struct alignas(8) FUnifiedScriptOverlapRequestV1
@@ -433,6 +498,16 @@ struct alignas(8) FUnifiedScriptTraceResultViewV4
     uint32 Flags = 0;
 };
 
+static_assert(std::is_standard_layout_v<FUnifiedScriptBufferedGameplayEventV1>);
+static_assert(std::is_trivially_copyable_v<FUnifiedScriptBufferedGameplayEventV1>);
+static_assert(sizeof(FUnifiedScriptBufferedGameplayEventV1) == 48);
+static_assert(STRUCT_OFFSET(FUnifiedScriptBufferedGameplayEventV1, SequenceId) == 0);
+static_assert(STRUCT_OFFSET(FUnifiedScriptBufferedGameplayEventV1, EventId) == 8);
+static_assert(STRUCT_OFFSET(FUnifiedScriptBufferedGameplayEventV1, Value) == 16);
+static_assert(STRUCT_OFFSET(FUnifiedScriptBufferedGameplayEventV1, Flags) == 20);
+static_assert(STRUCT_OFFSET(FUnifiedScriptBufferedGameplayEventV1, Weight) == 24);
+static_assert(STRUCT_OFFSET(FUnifiedScriptBufferedGameplayEventV1, Context) == 32);
+
 static_assert(std::is_standard_layout_v<FUnifiedScriptCommandV4>);
 static_assert(std::is_trivially_copyable_v<FUnifiedScriptCommandV4>);
 static_assert(sizeof(FUnifiedScriptCommandV4) == 224);
@@ -478,6 +553,32 @@ static_assert(STRUCT_OFFSET(FUnifiedScriptCommandBatchViewV4, CommandCapacity) =
 static_assert(STRUCT_OFFSET(FUnifiedScriptCommandBatchViewV4, CommandEntrySize) == 60);
 static_assert(STRUCT_OFFSET(FUnifiedScriptCommandBatchViewV4, Flags) == 64);
 static_assert(STRUCT_OFFSET(FUnifiedScriptCommandBatchViewV4, Reserved) == 68);
+
+static_assert(std::is_standard_layout_v<FUnifiedScriptFixedValueCollectionSnapshotV1>);
+static_assert(std::is_trivially_copyable_v<FUnifiedScriptFixedValueCollectionSnapshotV1>);
+static_assert(sizeof(FUnifiedScriptFixedValueCollectionSnapshotV1) == 104);
+static_assert(STRUCT_OFFSET(FUnifiedScriptFixedValueCollectionSnapshotV1, SequenceId) == 0);
+static_assert(STRUCT_OFFSET(FUnifiedScriptFixedValueCollectionSnapshotV1, VectorX) == 8);
+static_assert(STRUCT_OFFSET(FUnifiedScriptFixedValueCollectionSnapshotV1, VectorY) == 16);
+static_assert(STRUCT_OFFSET(FUnifiedScriptFixedValueCollectionSnapshotV1, VectorZ) == 24);
+static_assert(STRUCT_OFFSET(FUnifiedScriptFixedValueCollectionSnapshotV1, ValueCount) == 32);
+static_assert(STRUCT_OFFSET(FUnifiedScriptFixedValueCollectionSnapshotV1, PairCount) == 36);
+static_assert(STRUCT_OFFSET(FUnifiedScriptFixedValueCollectionSnapshotV1, Value0) == 40);
+static_assert(STRUCT_OFFSET(FUnifiedScriptFixedValueCollectionSnapshotV1, Value1) == 44);
+static_assert(STRUCT_OFFSET(FUnifiedScriptFixedValueCollectionSnapshotV1, Value2) == 48);
+static_assert(STRUCT_OFFSET(FUnifiedScriptFixedValueCollectionSnapshotV1, Value3) == 52);
+static_assert(STRUCT_OFFSET(FUnifiedScriptFixedValueCollectionSnapshotV1, Value4) == 56);
+static_assert(STRUCT_OFFSET(FUnifiedScriptFixedValueCollectionSnapshotV1, Value5) == 60);
+static_assert(STRUCT_OFFSET(FUnifiedScriptFixedValueCollectionSnapshotV1, Value6) == 64);
+static_assert(STRUCT_OFFSET(FUnifiedScriptFixedValueCollectionSnapshotV1, Value7) == 68);
+static_assert(STRUCT_OFFSET(FUnifiedScriptFixedValueCollectionSnapshotV1, Key0) == 72);
+static_assert(STRUCT_OFFSET(FUnifiedScriptFixedValueCollectionSnapshotV1, Key1) == 76);
+static_assert(STRUCT_OFFSET(FUnifiedScriptFixedValueCollectionSnapshotV1, Key2) == 80);
+static_assert(STRUCT_OFFSET(FUnifiedScriptFixedValueCollectionSnapshotV1, Key3) == 84);
+static_assert(STRUCT_OFFSET(FUnifiedScriptFixedValueCollectionSnapshotV1, MapValue0) == 88);
+static_assert(STRUCT_OFFSET(FUnifiedScriptFixedValueCollectionSnapshotV1, MapValue1) == 92);
+static_assert(STRUCT_OFFSET(FUnifiedScriptFixedValueCollectionSnapshotV1, MapValue2) == 96);
+static_assert(STRUCT_OFFSET(FUnifiedScriptFixedValueCollectionSnapshotV1, MapValue3) == 100);
 
 static_assert(std::is_standard_layout_v<FUnifiedScriptGameplayDataTelemetryV1>);
 static_assert(std::is_trivially_copyable_v<FUnifiedScriptGameplayDataTelemetryV1>);
@@ -540,6 +641,21 @@ static_assert(STRUCT_OFFSET(FUnifiedScriptGameplayEventViewV4, EventCapacity) ==
 static_assert(STRUCT_OFFSET(FUnifiedScriptGameplayEventViewV4, EventEntrySize) == 48);
 static_assert(STRUCT_OFFSET(FUnifiedScriptGameplayEventViewV4, Flags) == 52);
 static_assert(STRUCT_OFFSET(FUnifiedScriptGameplayEventViewV4, DroppedEventCount) == 56);
+
+static_assert(std::is_standard_layout_v<FUnifiedScriptGeneratedDataViewV1>);
+static_assert(std::is_trivially_copyable_v<FUnifiedScriptGeneratedDataViewV1>);
+static_assert(sizeof(FUnifiedScriptGeneratedDataViewV1) == 64);
+static_assert(STRUCT_OFFSET(FUnifiedScriptGeneratedDataViewV1, AbiVersion) == 0);
+static_assert(STRUCT_OFFSET(FUnifiedScriptGeneratedDataViewV1, ViewSize) == 4);
+static_assert(STRUCT_OFFSET(FUnifiedScriptGeneratedDataViewV1, SchemaId) == 8);
+static_assert(STRUCT_OFFSET(FUnifiedScriptGeneratedDataViewV1, WorldHostId) == 16);
+static_assert(STRUCT_OFFSET(FUnifiedScriptGeneratedDataViewV1, PublicationId) == 24);
+static_assert(STRUCT_OFFSET(FUnifiedScriptGeneratedDataViewV1, Entries) == 32);
+static_assert(STRUCT_OFFSET(FUnifiedScriptGeneratedDataViewV1, EntryCount) == 40);
+static_assert(STRUCT_OFFSET(FUnifiedScriptGeneratedDataViewV1, EntryCapacity) == 44);
+static_assert(STRUCT_OFFSET(FUnifiedScriptGeneratedDataViewV1, EntrySize) == 48);
+static_assert(STRUCT_OFFSET(FUnifiedScriptGeneratedDataViewV1, Flags) == 52);
+static_assert(STRUCT_OFFSET(FUnifiedScriptGeneratedDataViewV1, DroppedEntryCount) == 56);
 
 static_assert(std::is_standard_layout_v<FUnifiedScriptOverlapRequestV1>);
 static_assert(std::is_trivially_copyable_v<FUnifiedScriptOverlapRequestV1>);

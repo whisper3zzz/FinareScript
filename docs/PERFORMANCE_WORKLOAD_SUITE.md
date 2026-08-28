@@ -179,3 +179,12 @@ keeping the M10.3 weighted-product claim unset. The largest actionable direct
 boundary losses are struct/container and delegate traffic, so M10.2 starts with
 generated shared container snapshots and buffered event ingress while retaining
 the direct generated ABI as a safe fallback.
+
+M10.2 follow-up evidence is deliberately separate from the frozen v1.0.0 suite.
+The live-CoreCLR data-plane profile v0.3 runs 1,024 rows with three median
+samples in one UE 5.8.1 World. Matched direct Array+Map binding measured
+25,371.973 ns/row; the schema-generated fixed-container snapshot measured
+1.270 ns/row (ratio 0.000050), and generated event-buffer iteration measured
+0.586 ns/row. The two borrowed-view loops allocated zero managed bytes. These
+numbers validate the new routing mechanism; they do not rewrite the historical
+M10.1 captures or establish the future M10.3 weighted product verdict.

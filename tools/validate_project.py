@@ -2381,11 +2381,15 @@ def main() -> int:
     require(
         unreal_data_plane_schema["schemaVersion"]
         == "unifiedscript.unreal-data-plane-layout/v0.1"
-        and unreal_data_plane_schema["revision"] == 3
+        and unreal_data_plane_schema["revision"] == 4
         and unreal_data_plane_schema["compatibilityId"] == "0x555344504C415901"
         and unreal_data_plane_schema["limits"]
         == {
             "transformSnapshots": 65536,
+            "generatedSnapshotEntries": 65536,
+            "generatedEventEntries": 65536,
+            "generatedChannels": 256,
+            "generatedChannelBytes": 16777216,
             "commands": 65536,
             "events": 4096,
             "traceRequests": 65536,
@@ -2400,6 +2404,7 @@ def main() -> int:
             "telemetry",
             "command-row",
             "completion-event",
+            "event-row",
             "query-request",
             "query-result",
         }
@@ -2482,20 +2487,70 @@ def main() -> int:
         and "MeasureMovementCommands" in unreal_data_plane_profile_demo
         and "MeasureBatchTrace" in unreal_data_plane_profile_demo
         and "MeasureAttributeBinding" in unreal_data_plane_profile_demo
+        and "MeasureBindingContainers" in unreal_data_plane_profile_demo
+        and "MeasureGeneratedSnapshot" in unreal_data_plane_profile_demo
+        and "MeasureGeneratedEvents" in unreal_data_plane_profile_demo
         and "DataPlaneAllocatedBytes" in unreal_data_plane_profile_demo
         and "BatchTraceGcPauseMilliseconds" in unreal_data_plane_profile_demo
         and "DataPlaneWorkloadProfile" in unreal_world_host_test
         and "UNIFIEDSCRIPT_DATA_PLANE_PROFILE_JSON" in unreal_world_host_test
-        and "unifiedscript.unreal-data-plane-profile-report/v0.2"
+        and "unifiedscript.unreal-data-plane-profile-report/v0.3"
         in unreal_data_plane_profile_helper
         and "commandSubmitToScalarBinding" in unreal_data_plane_profile_helper
         and "batchTraceToPerCallBinding" in unreal_data_plane_profile_helper
+        and "generatedSnapshotToContainerBinding"
+        in unreal_data_plane_profile_helper
+        and "generatedChannelsZeroManagedAllocation"
+        in unreal_data_plane_profile_helper
         and "SuiteMetricsPath" in unreal_data_plane_profile_helper
         and "batchTraceBytes" in unreal_data_plane_profile_helper
         and "evidenceBackedRouting" in unreal_data_plane_profile_helper,
         "Matched CoreCLR data-plane workload profile or routing gate is missing",
     )
     checks.append("UE data-plane routing is backed by matched live-CoreCLR profiling")
+    require(
+        any(
+            item["name"] == "GeneratedDataViewV1"
+            and item["expectedSize"] == 64
+            for item in unreal_data_plane_schema["structs"]
+        )
+        and any(
+            item["name"] == "FixedValueCollectionSnapshotV1"
+            and item["expectedSize"] == 104
+            for item in unreal_data_plane_schema["structs"]
+        )
+        and any(
+            item["name"] == "BufferedGameplayEventV1"
+            and item["expectedSize"] == 48
+            for item in unreal_data_plane_schema["structs"]
+        )
+        and "PublishGeneratedSnapshot" in unreal_shared_data_header
+        and "AcquireGeneratedSnapshot" in unreal_shared_data_source
+        and "QueueGeneratedEvents" in unreal_gameplay_data_header
+        and "PublishPendingGeneratedEvents" in unreal_gameplay_data_source
+        and "PublishGeneratedSnapshotRows" in unreal_world_host_header
+        and "QueueGeneratedEventRows" in unreal_world_host_header
+        and "GeneratedSnapshotChannels" in unreal_native_transport_source
+        and "GeneratedEventChannels" in unreal_native_transport_source
+        and "ChannelsExtendedTransportTableSize = 104"
+        in unreal_shared_data_abi_v4
+        and "ChannelsExtendedTransportTableSize = 200"
+        in unreal_gameplay_data_abi_v4
+        and "AcquireGeneratedSnapshot<T>" in unreal_shared_data_abi_v4
+        and "AcquireGeneratedEvents<T>" in unreal_shared_data_abi_v4
+        and "UnrealGeneratedDataSnapshot<T>" in unreal_shared_data_abi_v4
+        and "ReadsGeneratedSnapshotAndBufferedEventsWithoutCopying"
+        in unreal_gameplay_data_abi_v4_test
+        and "Generated event visibility is one-frame and overflow is observable"
+        in unreal_native_transport_test
+        and "Generated snapshot publication rejects the schema entry bound"
+        in unreal_native_transport_test
+        and "Generated snapshot and event channels" in unreal_gameplay_data_doc,
+        "M10.2 generated snapshot/event channels or their lifecycle gates are missing",
+    )
+    checks.append(
+        "generated snapshot and event channels are schema-owned, bounded, World-safe, and zero-copy"
+    )
     require(
         "FUnifiedScriptAsyncTransportV5" in unreal_async_service_header
         and "GenerationOwnership" in unreal_async_service_header
@@ -3831,7 +3886,13 @@ def main() -> int:
         and "all 27 captures" in performance_suite_doc
         and "all 54 execution ordinals" in performance_suite_doc
         and "mixed results close M10.1" in performance_suite_doc
-        and "- Next slice: **M10.2" in roadmap
+        and "- Next slice: **M10.3" in roadmap
+        and "- [x] use profiler evidence to promote only high-volume stable data"
+        in roadmap
+        and "- [x] preserve World ownership, generation checks, bounds"
+        in roadmap
+        and "- [x] make schemas generated, extensible, measurable, and debuggable"
+        in roadmap
         and "- [x] capture median, p95/p99 frame time" in roadmap
         and "- [x] alternate engines and trials" in roadmap,
         "M10.1 workload manifest, metrics, alternating schedule, or strict comparison is incomplete",

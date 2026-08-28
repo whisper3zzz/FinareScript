@@ -11,6 +11,7 @@ public sealed record UnrealDataPlaneLayoutLimits(
     uint TransformSnapshots,
     uint GeneratedSnapshotEntries,
     uint GeneratedEventEntries,
+    uint GeneratedChannels,
     uint GeneratedChannelBytes,
     uint Commands,
     uint Events,
@@ -288,6 +289,8 @@ public sealed class UnrealDataPlaneLayoutGenerator
             source.AppendLine(
                 $"    public const uint MaximumGeneratedSnapshotCount = {schema.Limits.GeneratedSnapshotEntries}U;");
             source.AppendLine(
+                $"    public const uint MaximumGeneratedChannelCount = {schema.Limits.GeneratedChannels}U;");
+            source.AppendLine(
                 $"    public const uint MaximumGeneratedChannelBytes = {schema.Limits.GeneratedChannelBytes}U;");
         }
         else
@@ -298,6 +301,8 @@ public sealed class UnrealDataPlaneLayoutGenerator
             source.AppendLine($"    public const uint MaximumOverlapCount = {schema.Limits.OverlapRequests}U;");
             source.AppendLine(
                 $"    public const uint MaximumGeneratedEventCount = {schema.Limits.GeneratedEventEntries}U;");
+            source.AppendLine(
+                $"    public const uint MaximumGeneratedChannelCount = {schema.Limits.GeneratedChannels}U;");
             source.AppendLine(
                 $"    public const uint MaximumGeneratedChannelBytes = {schema.Limits.GeneratedChannelBytes}U;");
         }
@@ -405,6 +410,8 @@ public sealed class UnrealDataPlaneLayoutGenerator
             source.AppendLine(
                 $"inline constexpr uint32 MaximumGeneratedSnapshotCount = {schema.Limits.GeneratedSnapshotEntries}u;");
             source.AppendLine(
+                $"inline constexpr uint32 MaximumGeneratedChannelCount = {schema.Limits.GeneratedChannels}u;");
+            source.AppendLine(
                 $"inline constexpr uint32 MaximumGeneratedChannelBytes = {schema.Limits.GeneratedChannelBytes}u;");
         }
         else
@@ -415,6 +422,8 @@ public sealed class UnrealDataPlaneLayoutGenerator
             source.AppendLine($"inline constexpr uint32 MaximumOverlapCount = {schema.Limits.OverlapRequests}u;");
             source.AppendLine(
                 $"inline constexpr uint32 MaximumGeneratedEventCount = {schema.Limits.GeneratedEventEntries}u;");
+            source.AppendLine(
+                $"inline constexpr uint32 MaximumGeneratedChannelCount = {schema.Limits.GeneratedChannels}u;");
             source.AppendLine(
                 $"inline constexpr uint32 MaximumGeneratedChannelBytes = {schema.Limits.GeneratedChannelBytes}u;");
         }
@@ -650,6 +659,7 @@ internal static class UnrealDataPlaneLayoutValidator
         if (schema.Limits.TransformSnapshots == 0 ||
             schema.Limits.GeneratedSnapshotEntries == 0 ||
             schema.Limits.GeneratedEventEntries == 0 ||
+            schema.Limits.GeneratedChannels == 0 ||
             schema.Limits.GeneratedChannelBytes == 0 ||
             schema.Limits.Commands == 0 ||
             schema.Limits.Events == 0 || schema.Limits.TraceRequests == 0 ||
@@ -657,6 +667,7 @@ internal static class UnrealDataPlaneLayoutValidator
             schema.Limits.TransformSnapshots > int.MaxValue ||
             schema.Limits.GeneratedSnapshotEntries > int.MaxValue ||
             schema.Limits.GeneratedEventEntries > int.MaxValue ||
+            schema.Limits.GeneratedChannels > int.MaxValue ||
             schema.Limits.GeneratedChannelBytes > int.MaxValue ||
             schema.Limits.Commands > int.MaxValue ||
             schema.Limits.Events > int.MaxValue ||
@@ -784,7 +795,8 @@ internal static class UnrealDataPlaneLayoutValidator
 
     private static bool IsRole(string value) => value is
         "snapshot-row" or "borrowed-view" or "command-row" or
-        "completion-event" or "query-request" or "query-result" or "telemetry";
+        "completion-event" or "event-row" or "query-request" or
+        "query-result" or "telemetry";
 
     private static bool TryGetPointerTarget(string value, out string target)
     {

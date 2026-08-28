@@ -49,7 +49,7 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-28**
 
 - Active milestone: **M10 — Performance architecture and honest Puerts comparison**
-- Next slice: **M10.2 — generated shared container snapshots and buffered events**
+- Next slice: **M10.3 — performance budgets and refreshed matched suite**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -63,10 +63,11 @@ machine-local unless an artifact explicitly says otherwise.
 | Runtime source baseline | `9f9f026` (`feat: complete representative workload collectors`) |
 | UnifiedScript comparison source | `e0c7110` (`feat: sync current unifiedscript runtime into demo`) |
 | Puerts comparison source | `5612b59` (`feat: benchmark puerts reload generations`) |
-| Managed tests | 542 / 542 passed |
+| Managed tests | 543 / 543 passed |
 | Repository validator | 66 / 66 passed |
 | UE 5.8.1 native build | passed |
 | `UnifiedScript.Unreal` Automation | 16 / 16 passed, including workload collectors, gameplay-profiler attribution, Authoring Surface, live World semantic pause/step/reload/detach, and repeated success/failure hot-reload leak coverage |
+| M10.2 generated-channel profile | 1,024 rows x 3 median samples: container binding 25,371.973 ns/row, generated snapshot 1.270 ns/row (ratio 0.000050), buffered events 0.586 ns/row, zero managed allocation |
 | Representative workload suite | 54 / 54 scheduled captures; nine workloads, three trials, two runtimes, matched machine/build identity, alternating runtime order |
 | BlockBreaker workload | 10,000 frames, three trials, one shot, one hit, two command completions per trial |
 | Gameplay boundary | generated ABI v3 fast/CallFrame path, zero legacy calls |
@@ -1106,12 +1107,25 @@ fallback while data-plane schemas preserve World/generation ownership.
 
 ### M10.2 — Shared data and batching optimization
 
-- [ ] use profiler evidence to promote only high-volume stable data into
+- [x] use profiler evidence to promote only high-volume stable data into
   versioned shared snapshots, command/event buffers, or batch APIs
-- [ ] preserve World ownership, generation checks, bounds, deterministic phase
+- [x] preserve World ownership, generation checks, bounds, deterministic phase
   visibility, and fallback semantics; managed code never retains raw UE pointers
-- [ ] make schemas generated, extensible, measurable, and debuggable rather than
+- [x] make schemas generated, extensible, measurable, and debuggable rather than
   accumulating one-off shared-memory structs
+
+Evidence (2026-08-28): schema revision 4 adds a generic 64-byte borrowed view,
+bounded per-World channel maps, fixed-container and gameplay-event example rows,
+and append-only 104/200-byte Shared/Gameplay transport suffixes. Native
+producers publish snapshots immediately and queue events for the next
+`BeginFrame`; managed consumers receive `ref struct` `ReadOnlySpan<T>` views and
+validate schema ID, row size, World host, publication ID, count/byte bounds, and
+borrow kind. The live-CoreCLR v0.3 profile measures 1,024 rows over three median
+samples: direct Array+Map binding costs 25,371.973 ns/row, the generated
+snapshot costs 1.270 ns/row (ratio 0.000050), and buffered-event iteration costs
+0.586 ns/row, with zero managed allocation. Direct generated binding remains
+the fallback for low-volume or unstable shapes. The UE 5.8.1 build, 543 managed
+tests, and all 16 `UnifiedScript.Unreal` Automation tests pass.
 
 ### M10.3 — Performance budgets
 

@@ -8,7 +8,7 @@ public static class UnrealDataPlaneLayoutV1
 {
     public const uint Revision = 4U;
     public const ulong CompatibilityId = 0x555344504C415901UL;
-    public const ulong SchemaFingerprint = 0x253D72D369326A99UL;
+    public const ulong SchemaFingerprint = 0xF781EFEC4399B3ABUL;
 }
 
 public static partial class UnrealSharedDataAbiV4
@@ -16,7 +16,11 @@ public static partial class UnrealSharedDataAbiV4
     public const uint Version = 4U;
     public const uint MaximumTransformSnapshotCount = 65536U;
     public const uint MaximumGeneratedSnapshotCount = 65536U;
+    public const uint MaximumGeneratedChannelCount = 256U;
     public const uint MaximumGeneratedChannelBytes = 16777216U;
+    public const ulong FixedValueCollectionSchemaId = 0x5553464958434F01UL;
+    public const int FixedValueCollectionEntrySize = 104;
+    public const int GeneratedChannelViewSize = 64;
     public const int TelemetrySize = 56;
     public const ulong TransformSnapshotSchemaId = 0x55535452414E5334UL;
     public const int TransformEntrySize = 96;
@@ -31,7 +35,10 @@ public static partial class UnrealGameplayDataAbiV4
     public const uint MaximumTraceCount = 65536U;
     public const uint MaximumOverlapCount = 65536U;
     public const uint MaximumGeneratedEventCount = 65536U;
+    public const uint MaximumGeneratedChannelCount = 256U;
     public const uint MaximumGeneratedChannelBytes = 16777216U;
+    public const ulong BufferedGameplayEventSchemaId = 0x5553425546455601UL;
+    public const int BufferedGameplayEventEntrySize = 48;
     public const ulong CommandSchemaId = 0x5553434D44423401UL;
     public const int CommandEntrySize = 224;
     public const int CommandBatchViewSize = 72;
@@ -61,6 +68,15 @@ public enum UnrealSharedSnapshotFlagsV4 : uint
 }
 
 [Flags]
+public enum UnrealGeneratedDataFlagsV1 : uint
+{
+    None = 0U,
+    BorrowedUntilNextPublish = 1U,
+    Snapshot = 2U,
+    Events = 4U,
+}
+
+[Flags]
 public enum UnrealSharedDataCapabilitiesV4 : ulong
 {
     None = 0UL,
@@ -69,6 +85,7 @@ public enum UnrealSharedDataCapabilitiesV4 : ulong
     WorldScopedHandles = 4UL,
     SchemaGeneratedLayouts = 8UL,
     CapacityTelemetry = 16UL,
+    GeneratedSnapshotChannels = 32UL,
 }
 
 public enum UnrealGameplayDataPhaseV4 : byte
@@ -158,6 +175,18 @@ public enum UnrealGameplayDataCapabilitiesV4 : ulong
     CapacityTelemetry = 128UL,
     BatchSphereOverlap = 256UL,
     BatchBoxOverlap = 512UL,
+    GeneratedEventChannels = 1024UL,
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 8)]
+public readonly partial struct UnrealBufferedGameplayEventV1
+{
+    public readonly ulong SequenceId;
+    public readonly ulong EventId;
+    public readonly int Value;
+    public readonly uint Flags;
+    public readonly double Weight;
+    public readonly UnrealSharedObjectHandleV4 Context;
 }
 
 [StructLayout(LayoutKind.Sequential, Pack = 8)]
@@ -206,6 +235,33 @@ internal partial struct UnrealCommandBatchViewV4
     public uint CommandEntrySize;
     public uint Flags;
     public uint Reserved;
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 8)]
+public readonly partial struct UnrealFixedValueCollectionSnapshotV1
+{
+    public readonly ulong SequenceId;
+    public readonly double VectorX;
+    public readonly double VectorY;
+    public readonly double VectorZ;
+    public readonly uint ValueCount;
+    public readonly uint PairCount;
+    public readonly int Value0;
+    public readonly int Value1;
+    public readonly int Value2;
+    public readonly int Value3;
+    public readonly int Value4;
+    public readonly int Value5;
+    public readonly int Value6;
+    public readonly int Value7;
+    public readonly int Key0;
+    public readonly int Key1;
+    public readonly int Key2;
+    public readonly int Key3;
+    public readonly int MapValue0;
+    public readonly int MapValue1;
+    public readonly int MapValue2;
+    public readonly int MapValue3;
 }
 
 [StructLayout(LayoutKind.Sequential, Pack = 8)]
@@ -271,6 +327,22 @@ internal partial struct UnrealGameplayEventViewV4
     public uint EventEntrySize;
     public uint Flags;
     public ulong DroppedEventCount;
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 8)]
+internal partial struct UnrealGeneratedDataViewV1
+{
+    public uint AbiVersion;
+    public uint ViewSize;
+    public ulong SchemaId;
+    public ulong WorldHostId;
+    public ulong PublicationId;
+    public nint Entries;
+    public uint EntryCount;
+    public uint EntryCapacity;
+    public uint EntrySize;
+    public UnrealGeneratedDataFlagsV1 Flags;
+    public ulong DroppedEntryCount;
 }
 
 [StructLayout(LayoutKind.Sequential, Pack = 8)]

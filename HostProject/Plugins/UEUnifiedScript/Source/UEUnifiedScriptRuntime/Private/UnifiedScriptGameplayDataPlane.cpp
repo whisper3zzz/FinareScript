@@ -141,6 +141,7 @@ void FUnifiedScriptGameplayDataPlane::BeginFrame()
         ++FrameNumber;
     }
     PublishPendingEvents();
+    PublishPendingGeneratedEvents();
     Commands.Reset();
     CommandReservations.Reset();
     ReservationIndices.Reset();
@@ -293,6 +294,89 @@ bool FUnifiedScriptGameplayDataPlane::AcquireEvents(
         sizeof(FUnifiedScriptGameplayEventV4),
         0,
         DroppedEventCount,
+    };
+    return true;
+}
+
+bool FUnifiedScriptGameplayDataPlane::QueueGeneratedEvents(
+    uint64 SchemaId,
+    uint32 EntrySize,
+    const void* Entries,
+    uint32 EntryCount)
+{
+    check(IsInGameThread());
+    if (bShutdown || WorldHostId == 0 || SchemaId == 0 || EntrySize == 0)
+    {
+        return false;
+    }
+
+    FGeneratedEventChannel* Channel = GeneratedEventChannels.Find(SchemaId);
+    if (Channel == nullptr)
+    {
+        if (GeneratedEventChannels.Num() >= static_cast<int32>(
+                UE::UnifiedScript::GameplayData::MaximumGeneratedChannelCount))
+        {
+            return false;
+        }
+        Channel = &GeneratedEventChannels.Add(SchemaId);
+        Channel->EntrySize = EntrySize;
+    }
+    else if (Channel->EntrySize != EntrySize)
+    {
+        return false;
+    }
+
+    const uint64 CombinedEntryCount =
+        static_cast<uint64>(Channel->PendingEntryCount) + EntryCount;
+    const uint64 CombinedByteCount = CombinedEntryCount * EntrySize;
+    if (CombinedEntryCount > UE::UnifiedScript::GameplayData::MaximumGeneratedEventCount ||
+        CombinedByteCount > UE::UnifiedScript::GameplayData::MaximumGeneratedChannelBytes ||
+        (EntryCount > 0 && Entries == nullptr))
+    {
+        Channel->DroppedEntryCount = EntryCount > MAX_uint64 - Channel->DroppedEntryCount
+            ? MAX_uint64
+            : Channel->DroppedEntryCount + EntryCount;
+        return false;
+    }
+    if (EntryCount > 0)
+    {
+        const uint64 AddedByteCount = static_cast<uint64>(EntrySize) * EntryCount;
+        Channel->PendingBytes.Append(
+            static_cast<const uint8*>(Entries),
+            static_cast<int32>(AddedByteCount));
+        Channel->PendingEntryCount += EntryCount;
+    }
+    return true;
+}
+
+bool FUnifiedScriptGameplayDataPlane::AcquireGeneratedEvents(
+    uint64 SchemaId,
+    uint32 EntrySize,
+    FUnifiedScriptGeneratedDataViewV1& OutView) const
+{
+    check(IsInGameThread());
+    const FGeneratedEventChannel* Channel = GeneratedEventChannels.Find(SchemaId);
+    if (bShutdown || WorldHostId == 0 || SchemaId == 0 || EntrySize == 0 ||
+        Channel == nullptr || Channel->EntrySize != EntrySize ||
+        Channel->PublicationId == 0)
+    {
+        OutView = {};
+        return false;
+    }
+
+    const TArray<uint8>& ActiveBuffer = Channel->Buffers[Channel->ActiveBufferIndex];
+    OutView = {
+        UE::UnifiedScript::GameplayData::AbiVersion,
+        sizeof(FUnifiedScriptGeneratedDataViewV1),
+        SchemaId,
+        WorldHostId,
+        Channel->PublicationId,
+        ActiveBuffer.GetData(),
+        Channel->EntryCounts[Channel->ActiveBufferIndex],
+        Channel->EntryCounts[Channel->ActiveBufferIndex],
+        EntrySize,
+        static_cast<EUnifiedScriptGeneratedDataFlagsV1>(5u),
+        Channel->DroppedEntryCount,
     };
     return true;
 }
@@ -567,6 +651,26 @@ void FUnifiedScriptGameplayDataPlane::PublishPendingEvents()
     PendingEvents.Reset();
     ActiveEventBufferIndex = WriteIndex;
     LastPublishedEventFrame = FrameNumber;
+}
+
+void FUnifiedScriptGameplayDataPlane::PublishPendingGeneratedEvents()
+{
+    for (TPair<uint64, FGeneratedEventChannel>& Pair : GeneratedEventChannels)
+    {
+        FGeneratedEventChannel& Channel = Pair.Value;
+        const int32 WriteIndex = 1 - Channel.ActiveBufferIndex;
+        Channel.Buffers[WriteIndex].Reset();
+        Channel.Buffers[WriteIndex].Append(Channel.PendingBytes);
+        Channel.EntryCounts[WriteIndex] = Channel.PendingEntryCount;
+        Channel.PendingBytes.Reset();
+        Channel.PendingEntryCount = 0;
+        Channel.ActiveBufferIndex = WriteIndex;
+        ++Channel.PublicationId;
+        if (Channel.PublicationId == 0)
+        {
+            ++Channel.PublicationId;
+        }
+    }
 }
 
 void FUnifiedScriptGameplayDataPlane::ExecuteCommittedCommands()
@@ -1128,6 +1232,7 @@ void FUnifiedScriptGameplayDataPlane::Shutdown()
     EventBuffers[0].Reset();
     EventBuffers[1].Reset();
     PendingEvents.Reset();
+    GeneratedEventChannels.Reset();
     TraceRequests.Reset();
     TraceResults.Reset();
     OverlapRequests.Reset();

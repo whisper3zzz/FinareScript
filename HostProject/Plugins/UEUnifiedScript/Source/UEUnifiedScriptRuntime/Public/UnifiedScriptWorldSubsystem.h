@@ -4,6 +4,9 @@
 #include "Subsystems/WorldSubsystem.h"
 #include "UnifiedScriptNativeTransport.h"
 #include "UnifiedScriptObjectRegistry.h"
+
+#include <type_traits>
+
 #include "UnifiedScriptWorldSubsystem.generated.h"
 
 enum class EUnifiedScriptWorldHostState : uint8
@@ -39,6 +42,42 @@ public:
 
     EUnifiedScriptGameplayDataPhaseV4 GetGameplayDataPhase() const;
     uint64 GetGameplayFrameNumber() const;
+
+    bool PublishGeneratedSnapshotRows(
+        uint64 SchemaId,
+        uint32 EntrySize,
+        const void* Entries,
+        uint32 EntryCount);
+
+    bool QueueGeneratedEventRows(
+        uint64 SchemaId,
+        uint32 EntrySize,
+        const void* Entries,
+        uint32 EntryCount);
+
+    template <typename T>
+    bool PublishGeneratedSnapshotRows(uint64 SchemaId, TConstArrayView<T> Entries)
+    {
+        static_assert(std::is_trivially_copyable_v<T>);
+        static_assert(std::is_standard_layout_v<T>);
+        return PublishGeneratedSnapshotRows(
+            SchemaId,
+            sizeof(T),
+            Entries.GetData(),
+            static_cast<uint32>(Entries.Num()));
+    }
+
+    template <typename T>
+    bool QueueGeneratedEventRows(uint64 SchemaId, TConstArrayView<T> Entries)
+    {
+        static_assert(std::is_trivially_copyable_v<T>);
+        static_assert(std::is_standard_layout_v<T>);
+        return QueueGeneratedEventRows(
+            SchemaId,
+            sizeof(T),
+            Entries.GetData(),
+            static_cast<uint32>(Entries.Num()));
+    }
 
     EUnifiedScriptWorldHostState GetHostState() const;
     bool IsNativeRuntimeReady() const;
