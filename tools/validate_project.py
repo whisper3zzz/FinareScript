@@ -3725,6 +3725,9 @@ def main() -> int:
     performance_runtime_identity = (
         ROOT / "comparison" / "get-runtime-source-identity.ps1"
     ).read_text(encoding="utf-8")
+    performance_complete_runner = (
+        ROOT / "comparison" / "run-complete-workload-suite.ps1"
+    ).read_text(encoding="utf-8")
     performance_suite_manifest_path = (
         ROOT / "benchmarks" / "unreal" / "workload-suite.v0.1.json"
     )
@@ -3815,6 +3818,12 @@ def main() -> int:
         and "unifiedscript\\captures" in performance_pair_runner
         and "puerts\\captures" in performance_pair_runner
         and "AllowLosingComparison" in performance_pair_runner
+        and "Test-CurrentPair" in performance_complete_runner
+        and "run-representative-workload-comparison.ps1"
+        in performance_complete_runner
+        and "run-gameplay-comparison.ps1" in performance_complete_runner
+        and "ue-workload-assemble" in performance_complete_runner
+        and "ue-workload-compare" in performance_complete_runner
         and "GetAllocatedBytesForCurrentThread" in performance_suite_doc
         and "V8 used heap" in performance_suite_doc
         and "null ratio" in performance_suite_doc

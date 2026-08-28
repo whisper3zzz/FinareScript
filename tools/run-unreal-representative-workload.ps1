@@ -7,7 +7,8 @@ param(
         'delegate-storm',
         'per-frame-actor-logic',
         'mass-entities',
-        'resource-spawn-flow')]
+        'resource-spawn-flow',
+        'hot-reload')]
     [string]$WorkloadId,
     [string]$OutputPath,
     [string]$SuiteMetricsPath,
@@ -73,13 +74,17 @@ $contracts = @{
     'resource-spawn-flow' = [pscustomobject]@{
         Calls = 768; Bytes = 40192; Checksum = 768
     }
+    'hot-reload' = [pscustomobject]@{
+        Calls = 100; Bytes = 0; Checksum = 100
+    }
 }
 $contract = $contracts[$WorkloadId]
 $isFrameWorkload = $WorkloadId -in @(
     'per-frame-actor-logic',
     'mass-entities')
 $hasStartupMetric = $isFrameWorkload -or
-    $WorkloadId -eq 'resource-spawn-flow'
+    $WorkloadId -in @('resource-spawn-flow', 'hot-reload')
+$isHotReload = $WorkloadId -eq 'hot-reload'
 
 New-Item -ItemType Directory -Force -Path `
     $artifactRoot, (Split-Path -Parent $OutputPath) | Out-Null
@@ -174,6 +179,7 @@ if ($result.schemaVersion -ne 'unifiedscript.representative-workload/v0.1' -or
     [double]$result.gcPauseMilliseconds -lt 0 -or
     [uint64]$result.memoryHighWaterBytes -le 0 -or
     ($hasStartupMetric -and [double]$result.startupMilliseconds -le 0) -or
+    ($isHotReload -and [double]$result.reloadMilliseconds -le 0) -or
     [int64]$result.checksum -ne $contract.Checksum -or
     -not $frameMetricsValid) {
     throw "UnifiedScript '$WorkloadId' evidence violates its frozen contract."
@@ -202,9 +208,15 @@ if (-not [string]::IsNullOrWhiteSpace($SuiteMetricsPath)) {
             frameTimeP99Milliseconds = if ($isFrameWorkload) {
                 [double]$result.frameTimeP99Milliseconds
             } else { $null }
-            bridgeTimeMilliseconds = [double]$result.bridgeTimeMilliseconds
-            calls = [int64]$result.calls
-            bytesCopied = [int64]$result.bytesCopied
+            bridgeTimeMilliseconds = if ($isHotReload) {
+                $null
+            } else { [double]$result.bridgeTimeMilliseconds }
+            calls = if ($isHotReload) {
+                $null
+            } else { [int64]$result.calls }
+            bytesCopied = if ($isHotReload) {
+                $null
+            } else { [int64]$result.bytesCopied }
             allocatedBytes = [int64]$result.allocatedBytes
             gcCollectionCount = [int]$result.gcCollectionCount
             gcPauseMilliseconds = [double]$result.gcPauseMilliseconds
@@ -212,7 +224,9 @@ if (-not [string]::IsNullOrWhiteSpace($SuiteMetricsPath)) {
             startupMilliseconds = if ($hasStartupMetric) {
                 [double]$result.startupMilliseconds
             } else { $null }
-            reloadMilliseconds = $null
+            reloadMilliseconds = if ($isHotReload) {
+                [double]$result.reloadMilliseconds
+            } else { $null }
             packageSizeBytes = $null
         }
     }

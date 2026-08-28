@@ -9,7 +9,8 @@ param(
         'batch-queries',
         'per-frame-actor-logic',
         'mass-entities',
-        'resource-spawn-flow')]
+        'resource-spawn-flow',
+        'hot-reload')]
     [string]$WorkloadId,
     [ValidateRange(1, 3)]
     [int]$SuiteTrial = 1,

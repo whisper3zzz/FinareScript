@@ -1239,12 +1239,218 @@ bool FUnifiedScriptRepresentativeWorkloadPerformanceTest::RunTest(
     const bool bDelegateStorm = WorkloadId == TEXT("delegate-storm");
     const bool bResourceSpawn =
         WorkloadId == TEXT("resource-spawn-flow");
+    const bool bHotReload = WorkloadId == TEXT("hot-reload");
     TestTrue(
         *FString::Printf(TEXT("Representative workload is supported: %s"), *WorkloadId),
-        bStructContainer || bDelegateStorm || bResourceSpawn);
-    if (!bStructContainer && !bDelegateStorm && !bResourceSpawn)
+        bStructContainer || bDelegateStorm || bResourceSpawn || bHotReload);
+    if (!bStructContainer && !bDelegateStorm && !bResourceSpawn && !bHotReload)
     {
         return false;
+    }
+
+    if (bHotReload)
+    {
+        constexpr int32 WarmupIterations = 2;
+        constexpr int32 Iterations = 100;
+        UWorld* ReloadWorld = UWorld::CreateWorld(EWorldType::Game, false);
+        TestNotNull(TEXT("Hot-reload workload World exists"), ReloadWorld);
+        if (ReloadWorld == nullptr)
+        {
+            return false;
+        }
+        ReloadWorld->AddToRoot();
+        UUnifiedScriptComponent* ReloadComponent =
+            NewObject<UUnifiedScriptComponent>(ReloadWorld);
+        UUnifiedScriptAsset* ReloadAsset =
+            NewObject<UUnifiedScriptAsset>(ReloadWorld);
+        ReloadAsset->ScriptAssemblyPath =
+            TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.dll");
+        ReloadAsset->ScriptTypeName =
+            TEXT("UnifiedScript.Unreal.Demo.HotReloadBenchmarkScript");
+        ReloadComponent->ScriptAsset = ReloadAsset;
+        ReloadComponent->RegisterComponentWithWorld(ReloadWorld);
+
+        const double StartupStarted = FPlatformTime::Seconds();
+        ReloadComponent->BeginPlay();
+        const double StartupMilliseconds = FMath::Max(
+            0.001,
+            (FPlatformTime::Seconds() - StartupStarted) * 1000.0);
+        TestTrue(
+            *FString::Printf(
+                TEXT("Hot-reload benchmark script starts: %s"),
+                *ReloadComponent->LastScriptError),
+            ReloadComponent->bScriptRunning);
+        if (!ReloadComponent->bScriptRunning)
+        {
+            ReloadComponent->UnregisterComponent();
+            ReloadWorld->RemoveFromRoot();
+            ReloadWorld->DestroyWorld(false);
+            return false;
+        }
+
+        auto ReadSnapshot = [](
+            const FString& State,
+            int32& OutGeneration,
+            int64& OutAllocatedTotal,
+            int32& OutGcCollectionCount,
+            double& OutGcPauseMilliseconds)
+        {
+            TMap<FString, FString> Fields;
+            TArray<FString> Parts;
+            State.ParseIntoArray(Parts, TEXT(";"), true);
+            for (const FString& Part : Parts)
+            {
+                FString Name;
+                FString Value;
+                if (Part.Split(TEXT("="), &Name, &Value))
+                {
+                    Fields.Add(MoveTemp(Name), MoveTemp(Value));
+                }
+            }
+            const FString* Generation = Fields.Find(TEXT("Generation"));
+            const FString* Allocated = Fields.Find(TEXT("AllocatedTotal"));
+            const FString* GcCount = Fields.Find(TEXT("GcCollectionCount"));
+            const FString* GcPause = Fields.Find(TEXT("GcPauseMilliseconds"));
+            return State.StartsWith(TEXT("HotReload:v1;")) &&
+                Generation != nullptr && Allocated != nullptr &&
+                GcCount != nullptr && GcPause != nullptr &&
+                LexTryParseString(OutGeneration, **Generation) &&
+                LexTryParseString(OutAllocatedTotal, **Allocated) &&
+                LexTryParseString(OutGcCollectionCount, **GcCount) &&
+                LexTryParseString(OutGcPauseMilliseconds, **GcPause);
+        };
+
+        bool bReloadsSucceeded = true;
+        int32 FailedReload = INDEX_NONE;
+        for (int32 Index = 0; Index < WarmupIterations; ++Index)
+        {
+            if (!ReloadComponent->ReloadScript())
+            {
+                bReloadsSucceeded = false;
+                FailedReload = Index;
+                break;
+            }
+        }
+        if (bReloadsSucceeded)
+        {
+            ReloadComponent->TickComponent(
+                1.0f / 60.0f,
+                LEVELTICK_All,
+                nullptr);
+        }
+
+        int32 BaselineGeneration = 0;
+        int64 BaselineAllocatedTotal = 0;
+        int32 BaselineGcCollectionCount = 0;
+        double BaselineGcPauseMilliseconds = 0.0;
+        const bool bBaselineParsed = bReloadsSucceeded && ReadSnapshot(
+            ReloadComponent->ManagedState,
+            BaselineGeneration,
+            BaselineAllocatedTotal,
+            BaselineGcCollectionCount,
+            BaselineGcPauseMilliseconds);
+        TestTrue(
+            *FString::Printf(
+                TEXT("Two hot-reload warmups complete: failure=%d state=%s"),
+                FailedReload,
+                *ReloadComponent->ManagedState),
+            bBaselineParsed);
+        if (!bBaselineParsed)
+        {
+            ReloadComponent->EndPlay(EEndPlayReason::Destroyed);
+            ReloadComponent->UnregisterComponent();
+            ReloadWorld->RemoveFromRoot();
+            ReloadWorld->DestroyWorld(false);
+            return false;
+        }
+
+        const double ReloadStarted = FPlatformTime::Seconds();
+        int32 CompletedReloads = 0;
+        for (int32 Index = 0; Index < Iterations; ++Index)
+        {
+            if (!ReloadComponent->ReloadScript())
+            {
+                FailedReload = Index;
+                break;
+            }
+            ++CompletedReloads;
+        }
+        const double ReloadMilliseconds = FMath::Max(
+            0.001,
+            (FPlatformTime::Seconds() - ReloadStarted) * 1000.0);
+        const int32 RetiredLoadContextsAlive =
+            FUnifiedScriptCoreClrHost::Get().CollectRetiredManagedLoadContexts();
+        ReloadComponent->TickComponent(
+            1.0f / 60.0f,
+            LEVELTICK_All,
+            nullptr);
+
+        int32 FinalGeneration = 0;
+        int64 FinalAllocatedTotal = 0;
+        int32 FinalGcCollectionCount = 0;
+        double FinalGcPauseMilliseconds = 0.0;
+        const bool bFinalParsed = ReadSnapshot(
+            ReloadComponent->ManagedState,
+            FinalGeneration,
+            FinalAllocatedTotal,
+            FinalGcCollectionCount,
+            FinalGcPauseMilliseconds);
+        const int64 AllocatedBytes = FMath::Max<int64>(
+            0,
+            FinalAllocatedTotal - BaselineAllocatedTotal);
+        const int32 GcCollectionCount = FMath::Max(
+            0,
+            FinalGcCollectionCount - BaselineGcCollectionCount);
+        const double GcPauseMilliseconds = FMath::Max(
+            0.0,
+            FinalGcPauseMilliseconds - BaselineGcPauseMilliseconds);
+
+        TestEqual(
+            TEXT("All measured hot-reload generations commit"),
+            CompletedReloads,
+            Iterations);
+        TestTrue(
+            *FString::Printf(
+                TEXT("Final hot-reload snapshot is parseable: %s"),
+                *ReloadComponent->ManagedState),
+            bFinalParsed);
+        TestEqual(
+            TEXT("Hot-reload generation advances exactly"),
+            FinalGeneration,
+            BaselineGeneration + Iterations);
+        TestEqual(
+            TEXT("Every retired collectible context is reclaimed"),
+            RetiredLoadContextsAlive,
+            0);
+        TestTrue(
+            TEXT("Hot-reload metrics are measurable"),
+            ReloadMilliseconds > 0.0 && StartupMilliseconds > 0.0 &&
+            AllocatedBytes >= 0 && GcCollectionCount >= 0 &&
+            GcPauseMilliseconds >= 0.0);
+
+        UE_LOG(
+            LogTemp,
+            Display,
+            TEXT("UNIFIEDSCRIPT_REPRESENTATIVE_WORKLOAD_JSON {\"schemaVersion\":\"unifiedscript.representative-workload/v0.1\",\"workloadId\":\"hot-reload\",\"warmupIterations\":%d,\"iterations\":%d,\"bridgeTimeMilliseconds\":%.6f,\"calls\":%d,\"bytesCopied\":0,\"allocatedBytes\":%lld,\"gcCollectionCount\":%d,\"gcPauseMilliseconds\":%.6f,\"memoryHighWaterBytes\":%llu,\"startupMilliseconds\":%.6f,\"reloadMilliseconds\":%.6f,\"checksum\":%d}"),
+            WarmupIterations,
+            Iterations,
+            ReloadMilliseconds,
+            CompletedReloads,
+            static_cast<long long>(AllocatedBytes),
+            GcCollectionCount,
+            GcPauseMilliseconds,
+            static_cast<unsigned long long>(
+                FPlatformMemory::GetStats().PeakUsedPhysical),
+            StartupMilliseconds,
+            ReloadMilliseconds,
+            CompletedReloads);
+
+        ReloadComponent->EndPlay(EEndPlayReason::Destroyed);
+        ReloadComponent->UnregisterComponent();
+        ReloadWorld->RemoveFromRoot();
+        ReloadWorld->DestroyWorld(false);
+        return CompletedReloads == Iterations && bFinalParsed &&
+            RetiredLoadContextsAlive == 0;
     }
 
     const int32 ExpectedWarmupIterations = bStructContainer

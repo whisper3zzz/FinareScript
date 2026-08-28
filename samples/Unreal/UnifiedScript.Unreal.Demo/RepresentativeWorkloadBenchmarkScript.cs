@@ -425,3 +425,39 @@ public sealed class RepresentativeWorkloadBenchmarkScript : IUnrealManagedScript
             CultureInfo.InvariantCulture,
             $"Representative:v1;Workload={workload};WarmupIterations={warmupIterations};Iterations={measuredIterations};BridgeTimeMilliseconds={bridgeMilliseconds:F6};Calls={calls};BytesCopied={bytesCopied};AllocatedBytes={allocatedBytes};GcCollectionCount={collectionCount};GcPauseMilliseconds={pauseMilliseconds:F6};Checksum={checksum}");
 }
+
+/// <summary>
+/// Publishes cumulative runtime counters from every collectible generation so
+/// the native M10.1 driver can measure a real reload/retire/collect window.
+/// </summary>
+public sealed class HotReloadBenchmarkScript : IUnrealManagedScript
+{
+    private UnifiedScriptComponent? _component;
+    private int _generation;
+
+    public void OnStart(UnrealScriptContext context)
+    {
+        _component = new UnifiedScriptComponent(context.Host, context.Bridge);
+        _generation = context.Generation;
+        PublishSnapshot();
+    }
+
+    public void OnTick(float deltaSeconds) => PublishSnapshot();
+
+    public void OnStop() => _component = null;
+
+    private void PublishSnapshot()
+    {
+        if (_component is null)
+        {
+            return;
+        }
+        long allocatedTotal = GC.GetTotalAllocatedBytes(precise: false);
+        int collectionCount =
+            GC.CollectionCount(0) + GC.CollectionCount(1) + GC.CollectionCount(2);
+        double pauseMilliseconds = GC.GetTotalPauseDuration().TotalMilliseconds;
+        _component.ManagedState = string.Create(
+            CultureInfo.InvariantCulture,
+            $"HotReload:v1;Generation={_generation};AllocatedTotal={allocatedTotal};GcCollectionCount={collectionCount};GcPauseMilliseconds={pauseMilliseconds:F6}");
+    }
+}

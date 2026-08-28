@@ -91,6 +91,21 @@ run; even trials measure Puerts before UnifiedScript.
 Tracked dirty runtime sources are included in `runtimeCommit` as a stable
 worktree fingerprint rather than being mislabeled as a clean commit.
 
+Run or resume the entire manifest with one command:
+
+```powershell
+.\comparison\run-complete-workload-suite.ps1
+```
+
+The orchestrator checks both captures against the current product-source
+identity, machine/engine descriptors, exact trial, and scheduled ordinal before
+skipping a pair. Stale or missing pairs are rerun in manifest order; the first
+interop pair builds both targets and later pairs reuse them, while the complete
+BlockBreaker path independently synchronizes and builds the current plugin. Use
+`-PlanOnly` to inspect the 27-pair plan, or narrow a resumable pass with
+`-WorkloadId <id> -Trial <1..3>`. Once all pairs are current, the command
+assembles both 27-capture results and publishes the matched comparison.
+
 After all 27 captures for one runtime exist, assemble them with:
 
 ```powershell
@@ -124,8 +139,8 @@ with data error exit code 65.
 ## Current integration boundary
 
 The live scalar, struct/container, four-argument delegate, per-frame Actor,
-1,000-entity, Batch Trace, and resource/spawn benchmarks now emit complete
-metric maps and have passed the raw-measurement/capture path on both runtimes.
+1,000-entity, Batch Trace, resource/spawn, and hot-reload benchmarks now emit
+complete metric maps and have passed the raw-measurement/capture path on both runtimes.
 All three matched
 scalar trials followed the alternating schedule. Their median bridge times for
 100,000 calls were 14.3025 ms for UnifiedScript and 13.8434 ms for Puerts, a
@@ -151,6 +166,18 @@ boundary calls in 6.7588 ms for UnifiedScript and 13.702597 ms for Puerts, with
 the same 40,192-byte logical payload and checksum. The captures occupy schedule
 ordinals 13/14.
 
+The hot-reload collector executes 2 warm-ups followed by 100 complete runtime
+generation lifecycles. UnifiedScript loads and activates a collectible assembly
+generation, stops and retires the previous generation, then forces reclamation;
+Puerts reparses/reexecutes the gameplay module, retires its previous exports,
+and synchronously asks V8 to collect. Trial 1 recorded 1,549.0686 ms,
+20,404,944 allocated bytes, 1,212 CLR collection-count increments, and
+47.070 ms GC pause for UnifiedScript. Puerts recorded 67.245603 ms, 19,744 bytes,
+200 V8 GC callbacks, and 46.427611 ms GC pause. These values remain diagnostic:
+collectible assembly reload and JavaScript module-cache reexecution are not the
+same mechanism, so the suite does not publish bridge/call/byte ratios for this
+workload. The captures occupy ordinals 15/16.
+
 The BlockBreaker runner now consumes a separately produced, commit-matched
 Win64 Development package-size report, captures exact UE CSV frame/memory/GC
 windows after 300 warm-up frames, records both runtime envelopes, and publishes
@@ -161,6 +188,6 @@ and 53/54. The 10,000-frame medians were 4,599.308 ms for UnifiedScript and
 0.884789 expose run variance. The matched UnifiedScript package is 2.08% larger.
 This is complete-game evidence, not a broad suite result.
 
-The next M10.1 slice adapts the remaining hot-reload collector, then recaptures
-all nine workloads from one frozen runtime source identity. Until both runtimes
+All nine collectors are now executable. The next M10.1 slice recaptures all
+nine workloads from one frozen runtime source identity. Until both runtimes
 complete 27 trials under the 54-slot schedule, no broad performance result is published.

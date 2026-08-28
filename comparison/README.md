@@ -105,6 +105,9 @@ captures with:
 
 .\comparison\run-representative-workload-comparison.ps1 `
   -WorkloadId resource-spawn-flow -SuiteTrial 1 -SkipBuild
+
+.\comparison\run-representative-workload-comparison.ps1 `
+  -WorkloadId hot-reload -SuiteTrial 1 -SkipBuild
 ```
 
 The same runner currently accepts `struct-container-transfer`,
@@ -112,6 +115,22 @@ The same runner currently accepts `struct-container-transfer`,
 matched class-load, Actor-spawn, and Actor-destroy rounds. Odd trials execute
 UnifiedScript first; even trials reverse the engine order. `-SkipBuild` is only
 valid after both worktrees have been rebuilt from the current sources.
+The hot-reload pair performs 100 activation/retirement/collection cycles and
+publishes reload, allocation, GC, memory, and startup diagnostics; it does not
+treat collectible CLR generations and Puerts module reexecution as identical
+latency semantics.
+
+Plan or resume the complete 54-slot suite with:
+
+```powershell
+.\comparison\run-complete-workload-suite.ps1 -PlanOnly
+.\comparison\run-complete-workload-suite.ps1
+```
+
+The runner skips only capture pairs whose runtime source, machine, engine build,
+trial, and execution ordinal still match. It automatically assembles the two
+27-capture engine results and publishes `artifacts/comparison/suite/comparison.json`
+after the final pair succeeds.
 
 ## Visual/C# whole-game round trip
 
