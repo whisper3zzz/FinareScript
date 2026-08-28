@@ -49,7 +49,7 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-28**
 
 - Active milestone: **M11 — Production hardening and release candidate**
-- Next slice: **M11.1 — large Contract and script-set scale**
+- Next slice: **M11.2 — UE 5.8.1 configuration and packaging matrix**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -63,8 +63,8 @@ machine-local unless an artifact explicitly says otherwise.
 | Runtime source baseline | `810913d` (`perf: remove benchmark world log pollution`) |
 | UnifiedScript comparison source | `5cf323e` (`perf: sync representative workload host`) |
 | Puerts comparison source | `be399cb` (`perf: register benchmark world context`) |
-| Managed tests | 560 / 560 passed |
-| Repository validator | 71 / 71 passed |
+| Managed tests | 561 / 561 passed |
+| Repository validator | 72 / 72 passed |
 | UE 5.8.1 native build | passed |
 | `UnifiedScript.Unreal` Automation | 17 / 17 passed, including bounded crash breadcrumbs, failure containment, deterministic World shutdown, workload collectors, gameplay-profiler attribution, Authoring Surface, live World semantic pause/step/reload/detach, and repeated success/failure hot-reload leak coverage |
 | M10.2 generated-channel profile | 1,024 rows x 3 median samples: container binding 25,371.973 ns/row, generated snapshot 1.270 ns/row (ratio 0.000050), buffered events 0.586 ns/row, zero managed allocation |
@@ -81,6 +81,8 @@ machine-local unless an artifact explicitly says otherwise.
 | Compiled delivery comparison | 3 alternating trials: chunk startup 162.0194 ms vs loose 110.3650 ms (1.468032); reload 75.6999 ms vs 79.1182 ms (0.956795); one 44,886-byte chunk vs two 43,992-byte loose runtime files (1.020322) |
 | M11.1 reliability soak | editor + dedicated-server process lanes passed: 64 travel, 64 PIE, 128 successful + 128 rolled-back reloads, 8,192 object registrations, 34 GC cycles, 131,072 commands, 152 ordered World shutdowns, zero ownership/leak deltas |
 | Reliability report | `artifacts/ue/reliability-soak/20260828-160743/reliability-soak.json` |
+| M11.1 scale gate | 256 Contract types / 4,096 members, 256 compiled Script Assets, deterministic generation, localized Contract rebuild and one-asset churn, all budgets passed |
+| Scale report | `artifacts/ue/scale/20260828_163657/scale-gate.json` |
 | Visual/C# round trip | semantic, MethodDef IL, execution cases, Script Assets, two live UE candidates, and two packaged candidates equivalent |
 | Round-trip report | `artifacts/roundtrip/blockbreaker-20260828-021802-6305602d/roundtrip-report.json` |
 
@@ -1204,7 +1206,7 @@ Release chunk is one 44,886-byte file versus two required loose runtime files at
   churn, delegate, command-buffer saturation, and fault-injection soaks
 - [x] enforce bounded memory/queues, deterministic shutdown, failure containment,
   and useful crash breadcrumbs
-- [ ] test large contracts and script sets for generation time, editor startup,
+- [x] test large contracts and script sets for generation time, editor startup,
   incremental rebuild, and asset churn
 
 Progress (2026-08-28): the versioned two-lane reliability gate runs the same
@@ -1223,9 +1225,20 @@ and counted 1,368 oldest-entry evictions. Automation additionally proved that
 a bridge-faulted component stops while a healthy sibling keeps ticking. Final
 physical-memory growth was 20,193,280 bytes in editor and 31,555,584 bytes in
 dedicated-server process mode, both below the 256 MiB budget. This closes the
-bounded runtime, shutdown, containment, and crash-breadcrumb slice. Packaged
-`WindowsServer` targets remain in M11.2; the remaining M11.1 work is
-large-contract and editor/script-set scale testing.
+bounded runtime, shutdown, containment, and crash-breadcrumb slice.
+
+Completed (2026-08-28): the v0.1 large-project gate generated 256 synthetic
+Contract types with 4,096 accepted members three times, compiled 256 real C#
+Script Assets into one Release `.uschunk`, cold-started UE for validation,
+created 256 `.uasset` files, and then updated exactly one through a one-entry
+manifest. Median Contract generation was 1,141.3522 ms, one-member rebuild was
+965.5414 ms, cold/single-script emits were 5,398.7625/5,123.4274 ms, and UE
+validation/create/churn processes were 12,023.0525/12,539.5622/12,443.4847 ms;
+all explicit budgets passed and cleanup left no scale assets. The workload also
+found and fixed cross-type Roslyn property-reference ID collisions. Evidence is
+`artifacts/ue/scale/20260828_163657/scale-gate.json` and
+`docs/LARGE_PROJECT_SCALE.md`. M11.1 is complete; packaged `WindowsServer` and
+the configuration/cook/stage matrix remain in M11.2.
 
 ### M11.2 — Compatibility and packaging matrix
 

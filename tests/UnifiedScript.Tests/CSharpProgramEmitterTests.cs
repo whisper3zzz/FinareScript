@@ -164,4 +164,51 @@ public sealed class CSharpProgramEmitterTests
         Assert.NotEmpty(method.SequencePoints);
         Assert.NotEmpty(method.Nodes);
     }
+
+    [Fact]
+    public void Emit_SupportsMultipleScriptAssetsWithIdenticalMethodShapes()
+    {
+        static string CreateSource(int index) => $$"""
+            using UnifiedScript;
+
+            namespace Tests.Scale;
+
+            [ScriptAsset("Scale/ScaleScript{{index:D4}}")]
+            public sealed class ScaleScript{{index:D4}}
+            {
+                [Expose]
+                public int Value { get; set; } = {{index}};
+
+                [Visual]
+                public int Compute(int input)
+                {
+                    int result = input + Value;
+                    return result;
+                }
+            }
+            """;
+
+        var request = new CSharpCompilationRequest(
+            "Tests.ScaleScripts",
+            Enumerable.Range(0, 2).Select(index => new CSharpSourceDocument(
+                $"Tests/Scale/ScaleScript{index:D4}.cs",
+                CreateSource(index))));
+
+        CSharpAnalysisResult analysis = new CSharpSemanticPipeline().Analyze(request);
+        CSharpProgramEmitResult result = new CSharpProgramEmitter().Emit(request);
+
+        Assert.True(analysis.Succeeded, string.Join(Environment.NewLine, analysis.Diagnostics));
+        Assert.Equal(2, analysis.DeclarationReferences.Count);
+        Assert.Equal(
+            analysis.ScriptAssets!.Assets.SelectMany(static asset => asset.States).Select(static state => state.Id)
+                .OrderBy(static id => id.Value),
+            analysis.DeclarationReferences.Values.OrderBy(static id => id.Value));
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        CSharpProgramImage image = Assert.IsType<CSharpProgramImage>(result.Image);
+        Assert.Equal(2, image.Hir.Types.Count);
+        Assert.Equal(2, image.SourceMap.Methods.Count);
+        Assert.Equal(2, image.ScriptAssets.Assets.Count);
+        HirNode[] nodes = image.Hir.DescendantsAndSelf().ToArray();
+        Assert.Equal(nodes.Length, nodes.Select(static node => node.Id).Distinct().Count());
+    }
 }

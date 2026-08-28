@@ -12,10 +12,16 @@ internal static class CSharpSemanticIds
     {
         ArgumentNullException.ThrowIfNull(symbol);
         string assemblyName = symbol.ContainingAssembly?.Identity.Name ?? "source";
-        string displayName = symbol
-            .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
-            .Replace("global::", string.Empty, StringComparison.Ordinal);
-        return SemanticId.FromKey($"roslyn-symbol|{assemblyName}|{symbol.Kind}|{displayName}");
+        string identity = DocumentationCommentId.CreateDeclarationId(symbol.OriginalDefinition) ??
+            string.Join(
+                '|',
+                symbol.ContainingSymbol?
+                    .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                    .Replace("global::", string.Empty, StringComparison.Ordinal) ?? string.Empty,
+                symbol
+                    .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                    .Replace("global::", string.Empty, StringComparison.Ordinal));
+        return SemanticId.FromKey($"roslyn-symbol/v0.2|{assemblyName}|{symbol.Kind}|{identity}");
     }
 
     public static SemanticId ForNode(string filePath, string ownerKey, SyntaxNode node, string? role = null)

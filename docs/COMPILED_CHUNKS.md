@@ -153,3 +153,9 @@ That cost is reported rather than hidden and is routed to M11.1 for prewarming
 or ReadyToRun work; it is not a frame-time cost. The packaged BlockBreaker gate
 proves both Player and Rifle start from the staged chunk for 300 frames, and the
 generic Development release gate independently proves packaged chunk startup.
+
+The M11.1 large-project gate also compiles 256 independent Script Assets into
+one 141,249-byte Release chunk. Its verified cold emit is 5,398.7625 ms and a
+single-source default edit rebuilds the assembly and chunk in 5,123.4274 ms;
+the resulting 256-entry deployment validates in a cold UE 5.8.1 process. See
+`docs/LARGE_PROJECT_SCALE.md` for the workload, budgets, and artifact path.

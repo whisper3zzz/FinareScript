@@ -64,6 +64,7 @@ DOCUMENTS = [
     ROOT / "docs" / "RUNTIME_DIAGNOSTICS.md",
     ROOT / "docs" / "HOT_RELOAD_RELIABILITY.md",
     ROOT / "docs" / "RELIABILITY_SOAK.md",
+    ROOT / "docs" / "LARGE_PROJECT_SCALE.md",
     ROOT / "docs" / "GAMEPLAY_PROFILER.md",
     ROOT / "docs" / "PERFORMANCE_WORKLOAD_SUITE.md",
     ROOT / "docs" / "COMPILED_CHUNKS.md",
@@ -3814,6 +3815,42 @@ def main() -> int:
     checks.append(
         "M11.1 contains script faults and preserves bounded crash-ready shutdown breadcrumbs"
     )
+    unreal_scale_runner = (
+        ROOT / "tools" / "run-unreal-scale-gate.ps1"
+    ).read_text(encoding="utf-8")
+    large_project_scale_doc = (
+        ROOT / "docs" / "LARGE_PROJECT_SCALE.md"
+    ).read_text(encoding="utf-8")
+    csharp_semantic_ids = (
+        ROOT / "src" / "UnifiedScript.CSharp" / "CSharpSemanticIds.cs"
+    ).read_text(encoding="utf-8")
+    csharp_program_emitter_tests = (
+        ROOT / "tests" / "UnifiedScript.Tests" / "CSharpProgramEmitterTests.cs"
+    ).read_text(encoding="utf-8")
+    require(
+        "unifiedscript.unreal-scale-gate/v0.1" in unreal_scale_runner
+        and "[int]$TypeCount = 256" in unreal_scale_runner
+        and "[int]$MembersPerType = 16" in unreal_scale_runner
+        and "[int]$ScriptCount = 256" in unreal_scale_runner
+        and "$contractDeterministic" in unreal_scale_runner
+        and "$contractManagedChanged" in unreal_scale_runner
+        and "$contractNativeStable" in unreal_scale_runner
+        and "$scriptChunkChanged" in unreal_scale_runner
+        and "Scripts=1, Created=0, Updated=1" in unreal_scale_runner
+        and "$cleanupPass" in unreal_scale_runner
+        and "DocumentationCommentId.CreateDeclarationId" in csharp_semantic_ids
+        and "Emit_SupportsMultipleScriptAssetsWithIdenticalMethodShapes"
+        in csharp_program_emitter_tests
+        and "256 reflected Unreal types" in large_project_scale_doc
+        and "4,096 accepted" in large_project_scale_doc
+        and "updated exactly one" in large_project_scale_doc
+        and "- [x] test large contracts and script sets" in roadmap
+        and "- Next slice: **M11.2" in roadmap,
+        "M11.1 large Contract, script-set, incremental, or asset-churn scale gate is incomplete",
+    )
+    checks.append(
+        "M11.1 gates 4096 Contract members and 256 compiled scripts through localized UE churn"
+    )
     gameplay_profiler_doc = (
         ROOT / "docs" / "GAMEPLAY_PROFILER.md"
     ).read_text(encoding="utf-8")
@@ -4109,7 +4146,7 @@ def main() -> int:
         and "all 27 captures" in performance_suite_doc
         and "all 54 execution ordinals" in performance_suite_doc
         and "mixed results close M10.1" in performance_suite_doc
-        and "- Next slice: **M11.1" in roadmap
+        and "- Next slice: **M11.2" in roadmap
         and "- [x] use profiler evidence to promote only high-volume stable data"
         in roadmap
         and "- [x] preserve World ownership, generation checks, bounds"
