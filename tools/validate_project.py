@@ -158,6 +158,12 @@ def main() -> int:
     compiled_program_host = (
         ROOT / "src" / "UnifiedScript.Runtime" / "CoreClrCompiledChunkHost.cs"
     ).read_text(encoding="utf-8")
+    compiled_chunk_profiler = (
+        ROOT / "src" / "UnifiedScript.Runtime" / "CompiledChunkLoadProfiler.cs"
+    ).read_text(encoding="utf-8")
+    compiled_chunk_process_profiler = (
+        ROOT / "tools" / "measure-compiled-chunk-load.ps1"
+    ).read_text(encoding="utf-8")
     compiled_program_tests = (
         ROOT / "tests" / "UnifiedScript.Tests" / "CompiledProgramChunkTests.cs"
     ).read_text(encoding="utf-8")
@@ -239,6 +245,47 @@ def main() -> int:
     )
     checks.append(
         "compiled chunks are deterministic, integrity-checked, and loaded end to end"
+    )
+    require(
+        "UnifiedScriptChunkReadProfile" in compiled_chunk_source
+        and "ReadProfiled(Stream source)" in compiled_chunk_source
+        and "WholeFileCopyCount" in compiled_chunk_source
+        and "SectionDigestStopwatchTicks" in compiled_chunk_source
+        and "CoreClrCompiledChunkLoadProfile" in compiled_program_host
+        and "ManagedAssemblyMaterializationStopwatchTicks"
+        in compiled_program_host
+        and "RuntimeHelpers.PrepareMethod" in compiled_program_host
+        and "unifiedscript.compiled-chunk-load-profile/v0.1"
+        in compiled_chunk_profiler
+        and all(
+            phase in compiled_chunk_profiler
+            for phase in {
+                '"streamRead"',
+                '"wholeFileDigest"',
+                '"sectionDigests"',
+                '"declarationDecode"',
+                '"assemblyLoad"',
+                '"entryMethodJitPreparation"',
+            }
+        )
+        and 'args[0] == "chunk-profile"' in cli_source
+        and "unifiedscript.compiled-chunk-process-profile/v0.1"
+        in compiled_chunk_process_profiler
+        and "Get-Int64Median" in compiled_chunk_process_profiler
+        and "processFirstLoad" in compiled_chunk_process_profiler
+        and "output directory must be empty" in compiled_chunk_process_profiler
+        and "ProfiledStreamReadAccountsForEveryCurrentWholeFileCopyAndDigest"
+        in compiled_chunk_tests
+        and "ChunkProfilerMeasuresCopiesDecodeLoadAndEntryMethodJitPreparation"
+        in compiled_program_tests
+        and "M11.4 phased load profiling" in compiled_chunk_document
+        and "two current whole-file" in compiled_chunk_document
+        and "does not flush the operating-system file cache"
+        in compiled_chunk_document,
+        "M11.4 chunk copy, digest, decode, CoreCLR load, or JIT profiling is incomplete",
+    )
+    checks.append(
+        "M11.4 profiles chunk I/O, copies, verification, decode, CoreCLR load, and JIT preparation"
     )
 
     deployment_sample_path = (
@@ -449,6 +496,8 @@ def main() -> int:
         and "LastWriteTime" in sdk_package
         and "Managed\\Runtime" in sdk_package
         and "Tools\\UnifiedScript.Cli" in sdk_package
+        and "measure-compiled-chunk-load.ps1" in sdk_package
+        and "COMPILED_CHUNKS.md" in sdk_package
         and "Engine-version-specific plugin Binaries leaked" in sdk_package
         and "Assert-NoMachinePathLeak" in sdk_package
         and "unifiedscript.sdk-manifest/v0.1" in sdk_install
@@ -598,14 +647,18 @@ def main() -> int:
     require(
         diagnostics_policy["schemaVersion"]
         == "unifiedscript.diagnostics-policy/v0.1"
-        and len(diagnostics_policy["allowedSchemas"]) == 26
-        and len(set(diagnostics_policy["allowedSchemas"])) == 26
+        and len(diagnostics_policy["allowedSchemas"]) == 28
+        and len(set(diagnostics_policy["allowedSchemas"])) == 28
         and diagnostics_policy["maximumReportCount"] == 256
         and diagnostics_policy["maximumReportBytes"] == 16 * 1024 * 1024
         and diagnostics_policy["maximumBundleBytes"] == 64 * 1024 * 1024
         and "unifiedscript.ci-lane/v0.1"
         in diagnostics_policy["allowedSchemas"]
         and "unifiedscript.unreal-release-gate/v0.2"
+        in diagnostics_policy["allowedSchemas"]
+        and "unifiedscript.compiled-chunk-load-profile/v0.1"
+        in diagnostics_policy["allowedSchemas"]
+        and "unifiedscript.compiled-chunk-process-profile/v0.1"
         in diagnostics_policy["allowedSchemas"]
         and all(
             source_schema not in diagnostics_policy["allowedSchemas"]

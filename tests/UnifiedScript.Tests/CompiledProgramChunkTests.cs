@@ -196,6 +196,75 @@ public sealed class CompiledProgramChunkTests
     }
 
     [Fact]
+    public void ChunkProfilerMeasuresCopiesDecodeLoadAndEntryMethodJitPreparation()
+    {
+        CSharpProgramChunkEmitResult result = new CSharpProgramChunkCompiler().Compile(EmitImage());
+        string directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        string chunkPath = Path.Combine(directory, "ChunkPolicy.uschunk");
+        string reportPath = Path.Combine(directory, "profile.json");
+        try
+        {
+            File.WriteAllBytes(chunkPath, result.Content);
+
+            UnifiedScriptCompiledChunkLoadProfileReport report =
+                new UnifiedScriptCompiledChunkLoadProfiler().Profile(
+                    chunkPath,
+                    trialCount: 3,
+                    prepareEntryMethods: true);
+
+            Assert.Equal(
+                UnifiedScriptCompiledChunkLoadProfileReport.CurrentSchemaVersion,
+                report.SchemaVersion);
+            Assert.Equal(result.Chunk.ContentDigest, report.ContentDigest);
+            Assert.Equal(3, report.Trials.Count);
+            Assert.True(report.Trials[0].ProcessFirstLoad);
+            Assert.All(report.Trials.Skip(1), static trial =>
+                Assert.False(trial.ProcessFirstLoad));
+            Assert.All(report.Trials, trial =>
+            {
+                Assert.Equal(result.Content.Length * 2L,
+                    trial.Phases.Single(static phase =>
+                        phase.Phase == "inputMaterialization").BytesCopied +
+                    trial.Phases.Single(static phase =>
+                        phase.Phase == "storageMaterialization").BytesCopied);
+                Assert.Equal(
+                    result.Chunk.GetRequiredSection(
+                        UnifiedScriptChunkSectionKind.ManagedAssembly).Data.Length,
+                    trial.Phases.Single(static phase =>
+                        phase.Phase == "managedAssemblyMaterialization").BytesCopied);
+                Assert.True(trial.Phases.Single(static phase =>
+                    phase.Phase == "entryMethodJitPreparation").WorkItems > 0);
+                Assert.True(trial.TotalLoadNanoseconds >= 0);
+                Assert.True(trial.CurrentThreadAllocatedBytes > 0);
+            });
+            string json = UnifiedScriptCompiledChunkLoadProfileJson.Serialize(report);
+            Assert.Equal(
+                json,
+                UnifiedScriptCompiledChunkLoadProfileJson.Serialize(
+                    UnifiedScriptCompiledChunkLoadProfileJson.Deserialize(json)));
+
+            int exitCode = UnifiedScript.Cli.Program.Main([
+                "chunk-profile",
+                chunkPath,
+                "--out",
+                reportPath,
+                "--trials",
+                "2",
+            ]);
+            Assert.Equal(0, exitCode);
+            Assert.Equal(
+                2,
+                UnifiedScriptCompiledChunkLoadProfileJson.Deserialize(
+                    File.ReadAllText(reportPath)).TrialCount);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public void CoreClrHost_RequiresExactDeclaredDependencyEvidence()
     {
         string runtimeReference = typeof(SemanticId).Assembly.Location;

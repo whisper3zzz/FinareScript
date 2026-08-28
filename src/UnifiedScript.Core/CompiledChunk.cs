@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Diagnostics;
 using System.Security.Cryptography;
 
 namespace UnifiedScript.Core;
@@ -32,6 +33,40 @@ public sealed record UnifiedScriptChunkSection(
     UnifiedScriptChunkSectionKind Kind,
     UnifiedScriptChunkSectionFlags Flags,
     ReadOnlyMemory<byte> Data);
+
+public sealed record UnifiedScriptChunkReadProfile(
+    int ByteLength,
+    long StreamReadBytes,
+    long StreamReadStopwatchTicks,
+    long InputMaterializationBytes,
+    long InputMaterializationStopwatchTicks,
+    long HeaderValidationStopwatchTicks,
+    long WholeFileDigestStopwatchTicks,
+    long StorageMaterializationBytes,
+    long StorageMaterializationStopwatchTicks,
+    long DirectoryValidationStopwatchTicks,
+    long SectionDigestStopwatchTicks)
+{
+    public long WholeFileCopyBytes => checked(
+        InputMaterializationBytes + StorageMaterializationBytes);
+
+    public int WholeFileCopyCount =>
+        (InputMaterializationBytes > 0 ? 1 : 0) +
+        (StorageMaterializationBytes > 0 ? 1 : 0);
+
+    public long TotalStopwatchTicks => checked(
+        StreamReadStopwatchTicks +
+        InputMaterializationStopwatchTicks +
+        HeaderValidationStopwatchTicks +
+        WholeFileDigestStopwatchTicks +
+        StorageMaterializationStopwatchTicks +
+        DirectoryValidationStopwatchTicks +
+        SectionDigestStopwatchTicks);
+}
+
+public sealed record UnifiedScriptChunkReadResult(
+    UnifiedScriptChunk Chunk,
+    UnifiedScriptChunkReadProfile Profile);
 
 public sealed class UnifiedScriptChunk
 {
@@ -166,8 +201,47 @@ public static class UnifiedScriptChunkCodec
         return Read(buffer.ToArray());
     }
 
-    public static UnifiedScriptChunk Read(ReadOnlySpan<byte> source)
+    public static UnifiedScriptChunkReadResult ReadProfiled(Stream source)
     {
+        ArgumentNullException.ThrowIfNull(source);
+        if (!source.CanRead)
+        {
+            throw new ArgumentException("The chunk source stream must be readable.", nameof(source));
+        }
+        if (source.CanSeek && source.Length - source.Position > int.MaxValue)
+        {
+            throw new InvalidDataException("UnifiedScript chunk exceeds the supported 2 GiB limit.");
+        }
+
+        var profile = new ChunkReadProfileBuilder();
+        using var buffer = new MemoryStream();
+        long started = Stopwatch.GetTimestamp();
+        source.CopyTo(buffer);
+        profile.StreamReadStopwatchTicks = ElapsedStopwatchTicks(started);
+        profile.StreamReadBytes = buffer.Length;
+
+        started = Stopwatch.GetTimestamp();
+        byte[] content = buffer.ToArray();
+        profile.InputMaterializationStopwatchTicks = ElapsedStopwatchTicks(started);
+        profile.InputMaterializationBytes = content.Length;
+        UnifiedScriptChunk chunk = ReadCore(content, profile);
+        return new UnifiedScriptChunkReadResult(chunk, profile.Build(content.Length));
+    }
+
+    public static UnifiedScriptChunk Read(ReadOnlySpan<byte> source) => ReadCore(source, null);
+
+    public static UnifiedScriptChunkReadResult ReadProfiled(ReadOnlySpan<byte> source)
+    {
+        var profile = new ChunkReadProfileBuilder();
+        UnifiedScriptChunk chunk = ReadCore(source, profile);
+        return new UnifiedScriptChunkReadResult(chunk, profile.Build(source.Length));
+    }
+
+    private static UnifiedScriptChunk ReadCore(
+        ReadOnlySpan<byte> source,
+        ChunkReadProfileBuilder? profile)
+    {
+        long headerStarted = StartProfilePhase(profile);
         if (source.Length < HeaderSize)
         {
             throw new InvalidDataException("UnifiedScript chunk header is truncated.");
@@ -218,14 +292,18 @@ public static class UnifiedScriptChunkCodec
         {
             throw new InvalidDataException("UnifiedScript chunk payload offset is not canonical.");
         }
+        profile?.AddHeaderValidation(ElapsedStopwatchTicks(headerStarted));
 
         ReadOnlySpan<byte> expectedContentDigest = source.Slice(DigestOffset, DigestSize);
+        long digestStarted = StartProfilePhase(profile);
         byte[] actualContentDigest = ComputeContentDigest(source);
+        profile?.AddWholeFileDigest(ElapsedStopwatchTicks(digestStarted));
         if (!CryptographicOperations.FixedTimeEquals(expectedContentDigest, actualContentDigest))
         {
             throw new InvalidDataException("UnifiedScript chunk content digest does not match.");
         }
 
+        long directoryStarted = StartProfilePhase(profile);
         ValidateZeroPadding(source.Slice(DigestOffset + DigestSize, HeaderSize -
             (DigestOffset + DigestSize)));
         ValidateZeroPadding(source.Slice(
@@ -234,12 +312,21 @@ public static class UnifiedScriptChunkCodec
                 (HeaderSize + checked((int)sectionCount) * DirectoryEntrySize)));
 
         int sectionCountValue = checked((int)sectionCount);
+        profile?.AddDirectoryValidation(ElapsedStopwatchTicks(directoryStarted));
+        long storageStarted = StartProfilePhase(profile);
         byte[] storage = source.ToArray();
+        if (profile is not null)
+        {
+            profile.StorageMaterializationBytes = storage.Length;
+            profile.StorageMaterializationStopwatchTicks =
+                ElapsedStopwatchTicks(storageStarted);
+        }
         var sections = new List<UnifiedScriptChunkSection>(sectionCountValue);
         uint previousKind = 0;
         int expectedSectionOffset = expectedPayloadOffset;
         for (int index = 0; index < sectionCountValue; index++)
         {
+            directoryStarted = StartProfilePhase(profile);
             ReadOnlySpan<byte> entry = source.Slice(
                 HeaderSize + (index * DirectoryEntrySize),
                 DirectoryEntrySize);
@@ -278,12 +365,17 @@ public static class UnifiedScriptChunkCodec
             }
 
             ReadOnlySpan<byte> payload = source.Slice(offset, storedLength);
-            if (!CryptographicOperations.FixedTimeEquals(entry[32..], SHA256.HashData(payload)))
+            profile?.AddDirectoryValidation(ElapsedStopwatchTicks(directoryStarted));
+            long sectionDigestStarted = StartProfilePhase(profile);
+            byte[] actualSectionDigest = SHA256.HashData(payload);
+            profile?.AddSectionDigest(ElapsedStopwatchTicks(sectionDigestStarted));
+            if (!CryptographicOperations.FixedTimeEquals(entry[32..], actualSectionDigest))
             {
                 throw new InvalidDataException(
                     $"UnifiedScript chunk section 0x{rawKind:x8} digest does not match.");
             }
 
+            directoryStarted = StartProfilePhase(profile);
             sections.Add(new UnifiedScriptChunkSection(
                 (UnifiedScriptChunkSectionKind)rawKind,
                 flags,
@@ -298,12 +390,15 @@ public static class UnifiedScriptChunkCodec
                     expectedSectionOffset,
                     alignedNext - expectedSectionOffset));
             }
+            profile?.AddDirectoryValidation(ElapsedStopwatchTicks(directoryStarted));
         }
 
+        directoryStarted = StartProfilePhase(profile);
         if (expectedSectionOffset != source.Length)
         {
             throw new InvalidDataException("UnifiedScript chunk contains trailing bytes.");
         }
+        profile?.AddDirectoryValidation(ElapsedStopwatchTicks(directoryStarted));
 
         return new UnifiedScriptChunk(
             sections,
@@ -362,12 +457,66 @@ public static class UnifiedScriptChunkCodec
 
     private static int Align(int value) => checked((value + (Alignment - 1)) & ~(Alignment - 1));
 
+    private static long StartProfilePhase(ChunkReadProfileBuilder? profile) =>
+        profile is null ? 0 : Stopwatch.GetTimestamp();
+
+    private static long ElapsedStopwatchTicks(long started) =>
+        Math.Max(0, Stopwatch.GetTimestamp() - started);
+
     private static void ValidateZeroPadding(ReadOnlySpan<byte> padding)
     {
         if (padding.ContainsAnyExcept((byte)0))
         {
             throw new InvalidDataException("UnifiedScript chunk padding must be zero-filled.");
         }
+    }
+
+    private sealed class ChunkReadProfileBuilder
+    {
+        public long StreamReadBytes { get; set; }
+
+        public long StreamReadStopwatchTicks { get; set; }
+
+        public long InputMaterializationBytes { get; set; }
+
+        public long InputMaterializationStopwatchTicks { get; set; }
+
+        public long HeaderValidationStopwatchTicks { get; private set; }
+
+        public long WholeFileDigestStopwatchTicks { get; private set; }
+
+        public long StorageMaterializationBytes { get; set; }
+
+        public long StorageMaterializationStopwatchTicks { get; set; }
+
+        public long DirectoryValidationStopwatchTicks { get; private set; }
+
+        public long SectionDigestStopwatchTicks { get; private set; }
+
+        public void AddHeaderValidation(long ticks) =>
+            HeaderValidationStopwatchTicks = checked(HeaderValidationStopwatchTicks + ticks);
+
+        public void AddWholeFileDigest(long ticks) =>
+            WholeFileDigestStopwatchTicks = checked(WholeFileDigestStopwatchTicks + ticks);
+
+        public void AddDirectoryValidation(long ticks) =>
+            DirectoryValidationStopwatchTicks = checked(DirectoryValidationStopwatchTicks + ticks);
+
+        public void AddSectionDigest(long ticks) =>
+            SectionDigestStopwatchTicks = checked(SectionDigestStopwatchTicks + ticks);
+
+        public UnifiedScriptChunkReadProfile Build(int byteLength) => new(
+            byteLength,
+            StreamReadBytes,
+            StreamReadStopwatchTicks,
+            InputMaterializationBytes,
+            InputMaterializationStopwatchTicks,
+            HeaderValidationStopwatchTicks,
+            WholeFileDigestStopwatchTicks,
+            StorageMaterializationBytes,
+            StorageMaterializationStopwatchTicks,
+            DirectoryValidationStopwatchTicks,
+            SectionDigestStopwatchTicks);
     }
 }
 

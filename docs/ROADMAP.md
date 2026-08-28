@@ -49,7 +49,7 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-28**
 
 - Active milestone: **M11 — Production hardening and release candidate**
-- Next slice: **M11.4 — compiled program image v2 profiling**
+- Next slice: **M11.4 — verified dependency cache and ReadyToRun experiment**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -63,8 +63,8 @@ machine-local unless an artifact explicitly says otherwise.
 | Runtime source baseline | `810913d` (`perf: remove benchmark world log pollution`) |
 | UnifiedScript comparison source | `5cf323e` (`perf: sync representative workload host`) |
 | Puerts comparison source | `be399cb` (`perf: register benchmark world context`) |
-| Managed tests | 570 / 570 passed |
-| Repository validator | 76 / 76 passed |
+| Managed tests | 572 / 572 passed |
+| Repository validator | 77 / 77 passed |
 | UE 5.8.1 native build | passed |
 | `UnifiedScript.Unreal` Automation | 17 / 17 passed, including bounded crash breadcrumbs, failure containment, deterministic World shutdown, workload collectors, gameplay-profiler attribution, Authoring Surface, live World semantic pause/step/reload/detach, and repeated success/failure hot-reload leak coverage |
 | M10.2 generated-channel profile | 1,024 rows x 3 median samples: container binding 25,371.973 ns/row, generated snapshot 1.270 ns/row (ratio 0.000050), buffered events 0.586 ns/row, zero managed allocation |
@@ -1299,7 +1299,7 @@ labels, environment contracts, triggers, retry isolation, and failure routing.
 The remaining M11.3 slice is the privacy-safe diagnostics bundle.
 
 M11.3 diagnostics evidence (2026-08-28): `diagnostics-bundle` and the bundled
-`unifiedscript.diagnostics-policy/v0.1` admit only 26 exact report schemas,
+`unifiedscript.diagnostics-policy/v0.1` initially admitted 26 exact report schemas,
 enforce report/count/bundle bounds, exclude source-derived schemas and raw logs,
 redact path/environment/credential/identity/source/message fields, anonymize
 entry names, and emit fixed-order/fixed-time ZIPs plus sanitized-entry hashes.
@@ -1318,7 +1318,7 @@ measured compiled program image v2 work.
 
 ### M11.4 — Compiled program image v2
 
-- [ ] profile `.uschunk` cold load by file I/O, whole-file/section copies,
+- [x] profile `.uschunk` cold load by file I/O, whole-file/section copies,
   digest verification, binary decode, CoreCLR generation load, and first-use JIT
 - [ ] replace eager whole-file copies with bounded zero-copy or memory-mapped
   section views, and introduce versioned interned string/type/member tables
@@ -1329,6 +1329,29 @@ measured compiled program image v2 work.
 - [ ] retain deterministic CoreCLR PE/IL as executable code and JSON as the
   readable authoring/import/export format; do not create a second custom VM
   whose semantics can drift from C# and the visual graph
+
+M11.4 profiling evidence (2026-08-28): `chunk-profile` publishes the versioned
+22-phase `unifiedscript.compiled-chunk-load-profile/v0.1` report, and
+`tools/measure-compiled-chunk-load.ps1` aggregates isolated process-first
+trials without storing the input path. Two focused tests account for the
+current stream path's two whole-file copies, every digest/decode/load phase,
+PE/PDB materialization, and explicit `RuntimeHelpers.PrepareMethod` work. The
+safe diagnostics policy now admits these two profile schemas as 27th and 28th
+allowlisted report families without admitting source-derived artifacts.
+
+Five independent .NET 10.0.203 processes loaded a freshly emitted 84,145-byte
+Release Demo chunk at a 49.4572 ms median; load plus 12-method JIT preparation
+was 59.4990 ms. Dependency validation/hash (10.5419 ms), manifest decode and
+first-use code (8.1901 ms), entry-type validation (7.3501 ms), whole-file SHA
+(6.3039 ms), and entry-method JIT preparation (6.2841 ms) dominate. The two
+whole-file copies plus one 82,432-byte PE copy moved 250,722 bytes but consumed
+only 0.1024 ms median, so measurement routes the next slice to verified
+dependency caching and ReadyToRun/prewarming before memory mapping. Evidence is
+`artifacts/chunk-profile/m11.4-demo-process-v2/process-profile.json`.
+Two deterministic 180-payload SDK archives reproduced SHA-256
+`f5fb0a649fed106c73462a6cf24f44d90c3c914e39d57120f6a78531a4788403`;
+the extracted SDK's packaged runner then passed three process-first trials
+against the same chunk without relying on a source-tree CLI.
 
 M11.4 acceptance: the compiled path performs no gameplay-authoring JSON parse,
 retains loose/chunk semantic equivalence and failure containment, and its

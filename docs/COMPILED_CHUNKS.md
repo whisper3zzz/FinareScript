@@ -133,6 +133,73 @@ declaration path. A strict deployment commandlet validates all runtime sections
 before updating Script Assets, and `-UnifiedScriptDisableCompiledChunks`
 selects the loose DLL/JSON compatibility path for migration and A/B evidence.
 
+## M11.4 phased load profiling
+
+`chunk-profile` measures the current loader before v2 changes its storage
+model. It writes a versioned report without embedding the input path or a wall
+clock timestamp:
+
+```powershell
+dotnet UnifiedScript.Cli.dll chunk-profile Game.uschunk `
+  --out Game.chunk-profile.json `
+  --trials 5 `
+  --reference UnifiedScript.Unreal.dll
+```
+
+Each trial opens a fresh stream and collectible load context. Trial one is
+marked as the process-first load; later trials expose the same-process warm
+baseline. The report separates file open/read, the two current whole-file
+materializations, header and directory validation, whole-file and per-section
+SHA-256, program-profile checks, four binary metadata decoders, identity and
+dependency checks, load-context construction, PE/PDB materialization, CoreCLR
+assembly load, entry-type validation, JIT preparation, and unload request.
+Every phase carries nanoseconds plus any bytes read, bytes copied, or methods
+prepared, and the report includes per-phase medians without hiding trial data.
+
+JIT preparation uses `RuntimeHelpers.PrepareMethod` over concrete methods
+declared by chunk entry types. It is a controlled first-code-generation probe,
+not a substitute for the later matched World-level first Tick measurement. Use
+`--no-jit-prepare` when profiling loader-only cost. The current profile
+intentionally accounts for both whole-file copies and PE/PDB copies so the v2
+memory-mapped reader must demonstrate that it actually removes them.
+
+For a cold-process distribution, use the repository runner. It launches a new
+CLI process for every one-trial report, requires a stable chunk identity, and
+publishes the individual reports plus one median suite:
+
+```powershell
+.\tools\measure-compiled-chunk-load.ps1 `
+  -ChunkPath Game.uschunk `
+  -ReferencePath UnifiedScript.Unreal.dll `
+  -Trials 5
+```
+
+The runner does not flush the operating-system file cache, so it describes
+process-cold CoreCLR and loader behavior under normal repeated development or
+server startup conditions, not worst-case physical-disk latency.
+
+The first M11.4 baseline profiled a freshly emitted 84,145-byte Release Demo
+chunk in five independent .NET 10.0.203 processes. Median load was 49.4572 ms;
+load plus explicit entry-method JIT preparation was 59.4990 ms. The largest
+median phases were dependency validation/hash at 10.5419 ms, runtime-manifest
+decode and first-use code at 8.1901 ms, entry-type validation at 7.3501 ms,
+whole-file SHA-256 at 6.3039 ms, and 12-method JIT preparation at 6.2841 ms.
+
+The same report accounts for 250,722 copied bytes per trial: two 84,145-byte
+whole-file materializations plus the 82,432-byte PE image. Their three median
+materialization times total only 0.1024 ms. For this representative image,
+memory mapping cannot close the startup gap by itself. The measured next
+priority is a content-identity keyed dependency-verification cache followed by
+a controlled ReadyToRun/prewarming experiment. Zero-copy section views remain
+valuable for memory scaling and larger chunks, but will be promoted only when
+the large-project profile demonstrates a material latency or allocation win.
+Evidence is
+`artifacts/chunk-profile/m11.4-demo-process-v2/process-profile.json`.
+Two 180-payload M11.4 SDK archives reproduced SHA-256
+`f5fb0a649fed106c73462a6cf24f44d90c3c914e39d57120f6a78531a4788403`;
+the extracted SDK's packaged runner then completed three isolated trials using
+the packaged CLI, not a source checkout.
+
 ## Measured BlockBreaker impact
 
 `comparison/measure-blockbreaker-chunk-delivery.ps1` runs alternating cold

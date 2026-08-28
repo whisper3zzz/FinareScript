@@ -69,6 +69,11 @@ For support evidence, the packaged `diagnostics-bundle` command admits only
 declared report schemas and emits a deterministic, redacted ZIP without source
 or raw logs. See [Privacy-safe diagnostics bundles](DIAGNOSTICS_BUNDLES.md).
 
+The packaged CLI also exposes `chunk-profile`, while
+`Tools/measure-compiled-chunk-load.ps1` runs isolated process-first trials and
+reports I/O, copy, verification, binary decode, CoreCLR load, and entry-method
+JIT preparation separately. See [Compiled chunks](COMPILED_CHUNKS.md).
+
 The installer verifies every hash and rejects missing, duplicate, unsafe, or
 unmanifested files. Packaged-mode onboarding independently checks the selected
 engine family, managed target, and ABI contract before invoking Unreal.

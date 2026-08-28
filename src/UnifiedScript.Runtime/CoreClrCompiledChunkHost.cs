@@ -1,9 +1,46 @@
+using System.Diagnostics;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.Loader;
 using System.Security.Cryptography;
 using UnifiedScript.Core;
 
 namespace UnifiedScript.Runtime;
+
+public sealed record CoreClrCompiledChunkLoadProfile(
+    UnifiedScriptChunkReadProfile ChunkRead,
+    long ProgramValidationStopwatchTicks,
+    long RuntimeManifestDecodeStopwatchTicks,
+    long DeclarationDecodeStopwatchTicks,
+    long BindingDecodeStopwatchTicks,
+    long DependencyDecodeStopwatchTicks,
+    long IdentityValidationStopwatchTicks,
+    long DependencyValidationStopwatchTicks,
+    long LoadContextCreationStopwatchTicks,
+    long ManagedAssemblyCopyBytes,
+    long ManagedAssemblyMaterializationStopwatchTicks,
+    long PortablePdbCopyBytes,
+    long PortablePdbMaterializationStopwatchTicks,
+    long AssemblyLoadStopwatchTicks,
+    long EntryTypeValidationStopwatchTicks,
+    long TotalStopwatchTicks,
+    long CurrentThreadAllocatedBytes)
+{
+    public long TotalCopyBytes => checked(
+        ChunkRead.WholeFileCopyBytes +
+        ManagedAssemblyCopyBytes +
+        PortablePdbCopyBytes);
+}
+
+public sealed record CoreClrCompiledChunkLoadResult(
+    CoreClrCompiledChunkSession Session,
+    CoreClrCompiledChunkLoadProfile Profile);
+
+public sealed record CoreClrCompiledChunkPrewarmProfile(
+    int PreparedMethodCount,
+    int SkippedMethodCount,
+    long StopwatchTicks,
+    long CurrentThreadAllocatedBytes);
 
 public sealed class CoreClrCompiledChunkHost
 {
@@ -19,55 +56,130 @@ public sealed class CoreClrCompiledChunkHost
 
     public CoreClrCompiledChunkSession Load(
         UnifiedScriptChunk chunk,
+        IEnumerable<string>? referencePaths = null) =>
+        LoadCore(chunk, referencePaths, profile: null);
+
+    public CoreClrCompiledChunkLoadResult LoadProfiled(
+        ReadOnlySpan<byte> content,
         IEnumerable<string>? referencePaths = null)
     {
+        long started = Stopwatch.GetTimestamp();
+        long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        UnifiedScriptChunkReadResult read = UnifiedScriptChunkCodec.ReadProfiled(content);
+        var profile = new CompiledChunkLoadProfileBuilder(read.Profile);
+        CoreClrCompiledChunkSession session = LoadCore(read.Chunk, referencePaths, profile);
+        profile.TotalStopwatchTicks = ElapsedStopwatchTicks(started);
+        profile.CurrentThreadAllocatedBytes = Math.Max(
+            0,
+            GC.GetAllocatedBytesForCurrentThread() - allocatedBefore);
+        return new CoreClrCompiledChunkLoadResult(session, profile.Build());
+    }
+
+    public CoreClrCompiledChunkLoadResult LoadProfiled(
+        Stream content,
+        IEnumerable<string>? referencePaths = null)
+    {
+        long started = Stopwatch.GetTimestamp();
+        long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        UnifiedScriptChunkReadResult read = UnifiedScriptChunkCodec.ReadProfiled(content);
+        var profile = new CompiledChunkLoadProfileBuilder(read.Profile);
+        CoreClrCompiledChunkSession session = LoadCore(read.Chunk, referencePaths, profile);
+        profile.TotalStopwatchTicks = ElapsedStopwatchTicks(started);
+        profile.CurrentThreadAllocatedBytes = Math.Max(
+            0,
+            GC.GetAllocatedBytesForCurrentThread() - allocatedBefore);
+        return new CoreClrCompiledChunkLoadResult(session, profile.Build());
+    }
+
+    private static CoreClrCompiledChunkSession LoadCore(
+        UnifiedScriptChunk chunk,
+        IEnumerable<string>? referencePaths,
+        CompiledChunkLoadProfileBuilder? profile)
+    {
         ArgumentNullException.ThrowIfNull(chunk);
+        long phaseStarted = StartProfilePhase(profile);
         UnifiedScriptProgramChunk.Validate(chunk);
+        profile?.SetProgramValidation(ElapsedStopwatchTicks(phaseStarted));
+        phaseStarted = StartProfilePhase(profile);
         UnifiedScriptRuntimeManifest manifest = UnifiedScriptRuntimeManifestBinary.Decode(
             chunk.GetRequiredSection(UnifiedScriptChunkSectionKind.RuntimeManifest).Data.Span);
+        profile?.SetRuntimeManifestDecode(ElapsedStopwatchTicks(phaseStarted));
+        phaseStarted = StartProfilePhase(profile);
         UnifiedScriptRuntimeDeclarationDocument declarations =
             UnifiedScriptRuntimeDeclarationBinary.Decode(chunk.GetRequiredSection(
                 UnifiedScriptChunkSectionKind.DeclarationData).Data.Span);
+        profile?.SetDeclarationDecode(ElapsedStopwatchTicks(phaseStarted));
+        phaseStarted = StartProfilePhase(profile);
         UnifiedScriptRuntimeBindingManifest bindings =
             UnifiedScriptRuntimeBindingManifestBinary.Decode(chunk.GetRequiredSection(
                 UnifiedScriptChunkSectionKind.BindingManifest).Data.Span);
+        profile?.SetBindingDecode(ElapsedStopwatchTicks(phaseStarted));
+        phaseStarted = StartProfilePhase(profile);
         UnifiedScriptRuntimeDependencyManifest dependencies =
             UnifiedScriptRuntimeDependencyManifestBinary.Decode(chunk.GetRequiredSection(
                 UnifiedScriptChunkSectionKind.DependencyManifest).Data.Span);
+        profile?.SetDependencyDecode(ElapsedStopwatchTicks(phaseStarted));
+        phaseStarted = StartProfilePhase(profile);
         if (manifest.SourceCompilationId != declarations.SourceCompilationId ||
             manifest.SemanticConfigurationId != declarations.SemanticConfigurationId)
         {
             throw new InvalidDataException(
                 "Compiled chunk runtime manifest and declarations have different identities.");
         }
+        profile?.SetIdentityValidation(ElapsedStopwatchTicks(phaseStarted));
 
+        phaseStarted = StartProfilePhase(profile);
         string[] references = (referencePaths ?? [])
             .Select(Path.GetFullPath)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Order(StringComparer.Ordinal)
             .ToArray();
         ValidateDependencies(dependencies, references);
+        profile?.SetDependencyValidation(ElapsedStopwatchTicks(phaseStarted));
+        phaseStarted = StartProfilePhase(profile);
         var loadContext = new CoreClrProgramLoadContext(references);
+        profile?.SetLoadContextCreation(ElapsedStopwatchTicks(phaseStarted));
         try
         {
             ReadOnlyMemory<byte> assemblyBytes = chunk.GetRequiredSection(
                 UnifiedScriptChunkSectionKind.ManagedAssembly).Data;
+            phaseStarted = StartProfilePhase(profile);
+            byte[] assemblyContent = assemblyBytes.ToArray();
+            if (profile is not null)
+            {
+                profile.ManagedAssemblyCopyBytes = assemblyContent.Length;
+                profile.ManagedAssemblyMaterializationStopwatchTicks =
+                    ElapsedStopwatchTicks(phaseStarted);
+            }
             using var assemblyStream = new MemoryStream(
-                assemblyBytes.ToArray(),
+                assemblyContent,
                 writable: false);
             Assembly assembly;
             if (chunk.TryGetSection(
                 UnifiedScriptChunkSectionKind.PortablePdb,
                 out UnifiedScriptChunkSection? pdbSection) && pdbSection is not null)
             {
-                using var pdbStream = new MemoryStream(pdbSection.Data.ToArray(), writable: false);
+                phaseStarted = StartProfilePhase(profile);
+                byte[] pdbContent = pdbSection.Data.ToArray();
+                if (profile is not null)
+                {
+                    profile.PortablePdbCopyBytes = pdbContent.Length;
+                    profile.PortablePdbMaterializationStopwatchTicks =
+                        ElapsedStopwatchTicks(phaseStarted);
+                }
+                using var pdbStream = new MemoryStream(pdbContent, writable: false);
+                phaseStarted = StartProfilePhase(profile);
                 assembly = loadContext.LoadFromStream(assemblyStream, pdbStream);
+                profile?.SetAssemblyLoad(ElapsedStopwatchTicks(phaseStarted));
             }
             else
             {
+                phaseStarted = StartProfilePhase(profile);
                 assembly = loadContext.LoadFromStream(assemblyStream);
+                profile?.SetAssemblyLoad(ElapsedStopwatchTicks(phaseStarted));
             }
 
+            phaseStarted = StartProfilePhase(profile);
             if (!string.Equals(
                 assembly.GetName().Name,
                 manifest.AssemblyName,
@@ -86,6 +198,7 @@ public sealed class CoreClrCompiledChunkHost
                         $"Compiled chunk entry type '{entryTypeName}' is missing from the assembly.");
                 }
             }
+            profile?.SetEntryTypeValidation(ElapsedStopwatchTicks(phaseStarted));
 
             return new CoreClrCompiledChunkSession(
                 loadContext,
@@ -147,6 +260,102 @@ public sealed class CoreClrCompiledChunkHost
             }
         }
     }
+
+    private static long StartProfilePhase(CompiledChunkLoadProfileBuilder? profile) =>
+        profile is null ? 0 : Stopwatch.GetTimestamp();
+
+    private static long ElapsedStopwatchTicks(long started) =>
+        Math.Max(0, Stopwatch.GetTimestamp() - started);
+
+    private sealed class CompiledChunkLoadProfileBuilder
+    {
+        public CompiledChunkLoadProfileBuilder(UnifiedScriptChunkReadProfile chunkRead)
+        {
+            ChunkRead = chunkRead;
+        }
+
+        public UnifiedScriptChunkReadProfile ChunkRead { get; }
+
+        public long ProgramValidationStopwatchTicks { get; private set; }
+
+        public long RuntimeManifestDecodeStopwatchTicks { get; private set; }
+
+        public long DeclarationDecodeStopwatchTicks { get; private set; }
+
+        public long BindingDecodeStopwatchTicks { get; private set; }
+
+        public long DependencyDecodeStopwatchTicks { get; private set; }
+
+        public long IdentityValidationStopwatchTicks { get; private set; }
+
+        public long DependencyValidationStopwatchTicks { get; private set; }
+
+        public long LoadContextCreationStopwatchTicks { get; private set; }
+
+        public long ManagedAssemblyCopyBytes { get; set; }
+
+        public long ManagedAssemblyMaterializationStopwatchTicks { get; set; }
+
+        public long PortablePdbCopyBytes { get; set; }
+
+        public long PortablePdbMaterializationStopwatchTicks { get; set; }
+
+        public long AssemblyLoadStopwatchTicks { get; private set; }
+
+        public long EntryTypeValidationStopwatchTicks { get; private set; }
+
+        public long TotalStopwatchTicks { get; set; }
+
+        public long CurrentThreadAllocatedBytes { get; set; }
+
+        public void SetProgramValidation(long ticks) =>
+            ProgramValidationStopwatchTicks = ticks;
+
+        public void SetRuntimeManifestDecode(long ticks) =>
+            RuntimeManifestDecodeStopwatchTicks = ticks;
+
+        public void SetDeclarationDecode(long ticks) =>
+            DeclarationDecodeStopwatchTicks = ticks;
+
+        public void SetBindingDecode(long ticks) =>
+            BindingDecodeStopwatchTicks = ticks;
+
+        public void SetDependencyDecode(long ticks) =>
+            DependencyDecodeStopwatchTicks = ticks;
+
+        public void SetIdentityValidation(long ticks) =>
+            IdentityValidationStopwatchTicks = ticks;
+
+        public void SetDependencyValidation(long ticks) =>
+            DependencyValidationStopwatchTicks = ticks;
+
+        public void SetLoadContextCreation(long ticks) =>
+            LoadContextCreationStopwatchTicks = ticks;
+
+        public void SetAssemblyLoad(long ticks) => AssemblyLoadStopwatchTicks = ticks;
+
+        public void SetEntryTypeValidation(long ticks) =>
+            EntryTypeValidationStopwatchTicks = ticks;
+
+        public CoreClrCompiledChunkLoadProfile Build() => new(
+            ChunkRead,
+            ProgramValidationStopwatchTicks,
+            RuntimeManifestDecodeStopwatchTicks,
+            DeclarationDecodeStopwatchTicks,
+            BindingDecodeStopwatchTicks,
+            DependencyDecodeStopwatchTicks,
+            IdentityValidationStopwatchTicks,
+            DependencyValidationStopwatchTicks,
+            LoadContextCreationStopwatchTicks,
+            ManagedAssemblyCopyBytes,
+            ManagedAssemblyMaterializationStopwatchTicks,
+            PortablePdbCopyBytes,
+            PortablePdbMaterializationStopwatchTicks,
+            AssemblyLoadStopwatchTicks,
+            EntryTypeValidationStopwatchTicks,
+            TotalStopwatchTicks,
+            CurrentThreadAllocatedBytes);
+    }
 }
 
 public sealed class CoreClrCompiledChunkSession : IDisposable
@@ -203,6 +412,46 @@ public sealed class CoreClrCompiledChunkSession : IDisposable
             return Activator.CreateInstance(runtimeType) ??
                 throw new InvalidOperationException(
                     $"Compiled chunk entry type '{entryTypeName}' could not be constructed.");
+        }
+    }
+
+    public CoreClrCompiledChunkPrewarmProfile PrewarmEntryMethods()
+    {
+        lock (gate)
+        {
+            Assembly loadedAssembly = assembly ??
+                throw new ObjectDisposedException(GetType().FullName);
+            long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+            long started = Stopwatch.GetTimestamp();
+            int prepared = 0;
+            int skipped = 0;
+            foreach (string entryTypeName in Manifest.EntryTypeNames)
+            {
+                Type entryType = loadedAssembly.GetType(entryTypeName, throwOnError: true)!;
+                foreach (MethodInfo method in entryType.GetMethods(
+                    BindingFlags.Public |
+                    BindingFlags.NonPublic |
+                    BindingFlags.Instance |
+                    BindingFlags.Static |
+                    BindingFlags.DeclaredOnly).OrderBy(static method => method.MetadataToken))
+                {
+                    if (method.IsAbstract ||
+                        method.ContainsGenericParameters ||
+                        method.GetMethodBody() is null)
+                    {
+                        skipped++;
+                        continue;
+                    }
+                    RuntimeHelpers.PrepareMethod(method.MethodHandle);
+                    prepared++;
+                }
+            }
+
+            return new CoreClrCompiledChunkPrewarmProfile(
+                prepared,
+                skipped,
+                Math.Max(0, Stopwatch.GetTimestamp() - started),
+                Math.Max(0, GC.GetAllocatedBytesForCurrentThread() - allocatedBefore));
         }
     }
 

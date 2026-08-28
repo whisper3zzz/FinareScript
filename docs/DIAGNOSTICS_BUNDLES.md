@@ -18,10 +18,11 @@ upload.
 
 ## Safe-default boundary
 
-The v0.1 policy only admits 26 exact report schemas such as CI lanes, release
+The v0.1 policy only admits 28 exact report schemas such as CI lanes, release
 and compatibility gates, runtime diagnostics, reliability/scale results,
-performance budgets, binding coverage, onboarding, SDK install/package, and
-round-trip reports. It excludes by construction:
+performance budgets, compiled-chunk load profiles, binding coverage,
+onboarding, SDK install/package, and round-trip reports. It excludes by
+construction:
 
 - `.cs`, `.cpp`, `.h`, Blueprint/uasset, binary, log, dump, trace, and profiler
   capture files;

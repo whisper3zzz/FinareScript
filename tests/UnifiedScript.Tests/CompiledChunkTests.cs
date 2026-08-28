@@ -66,6 +66,28 @@ public sealed class CompiledChunkTests
     }
 
     [Fact]
+    public void ProfiledStreamReadAccountsForEveryCurrentWholeFileCopyAndDigest()
+    {
+        byte[] bytes = UnifiedScriptChunkCodec.Write(CreateProgramSections());
+
+        UnifiedScriptChunkReadResult streamResult = UnifiedScriptChunkCodec.ReadProfiled(
+            new MemoryStream(bytes, writable: false));
+        UnifiedScriptChunkReadResult spanResult = UnifiedScriptChunkCodec.ReadProfiled(bytes);
+
+        Assert.Equal(streamResult.Chunk.ContentDigest, spanResult.Chunk.ContentDigest);
+        Assert.Equal(bytes.Length, streamResult.Profile.ByteLength);
+        Assert.Equal(bytes.Length, streamResult.Profile.StreamReadBytes);
+        Assert.Equal(bytes.Length * 2L, streamResult.Profile.WholeFileCopyBytes);
+        Assert.Equal(2, streamResult.Profile.WholeFileCopyCount);
+        Assert.Equal(bytes.Length, spanResult.Profile.WholeFileCopyBytes);
+        Assert.Equal(1, spanResult.Profile.WholeFileCopyCount);
+        Assert.True(streamResult.Profile.WholeFileDigestStopwatchTicks >= 0);
+        Assert.True(streamResult.Profile.SectionDigestStopwatchTicks >= 0);
+        Assert.True(streamResult.Profile.TotalStopwatchTicks >=
+            streamResult.Profile.WholeFileDigestStopwatchTicks);
+    }
+
+    [Fact]
     public void Write_RejectsDuplicateSectionKinds()
     {
         UnifiedScriptChunkSection section = Section(

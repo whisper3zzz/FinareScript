@@ -22,7 +22,8 @@ internal static class Program
             Console.Error.WriteLine(exception.Message);
             return 66;
         }
-        catch (Exception exception) when (exception is JsonException or ArgumentException)
+        catch (Exception exception) when (exception is
+            JsonException or ArgumentException or InvalidDataException)
         {
             Console.Error.WriteLine(exception.Message);
             return 65;
@@ -84,6 +85,11 @@ internal static class Program
         if (args.Count > 0 && args[0] == "chunk-inspect")
         {
             return RunChunkInspect(args);
+        }
+
+        if (args.Count > 0 && args[0] == "chunk-profile")
+        {
+            return RunChunkProfile(args);
         }
 
         if (args.Count > 0 && args[0] is "upgrade-plan" or "upgrade-apply")
@@ -1007,6 +1013,56 @@ internal static class Program
                 byteLength = section.Data.Length,
             }),
         }, UnifiedJson.CreateOptions()));
+        return 0;
+    }
+
+    private static int RunChunkProfile(IReadOnlyList<string> args)
+    {
+        if (!TryParseChunkProfileArguments(args, out ChunkProfileOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+
+        options = options ?? throw new InvalidOperationException(
+            "Argument parsing succeeded without chunk profile options.");
+        string inputPath = Path.GetFullPath(options.InputPath);
+        if (!File.Exists(inputPath))
+        {
+            Console.Error.WriteLine($"Chunk input does not exist: {inputPath}");
+            return 66;
+        }
+        string outputPath = Path.GetFullPath(options.OutputPath);
+        EnsureDifferentPath(
+            inputPath,
+            outputPath,
+            "Chunk profiling cannot overwrite its compiled input.");
+        UnifiedScriptCompiledChunkLoadProfileReport report =
+            new UnifiedScriptCompiledChunkLoadProfiler().Profile(
+                inputPath,
+                options.ReferencePaths,
+                options.TrialCount,
+                options.PrepareEntryMethods);
+        WriteTransactionally([
+            new OutputFile(
+                outputPath,
+                UnifiedScriptCompiledChunkLoadProfileJson.Serialize(report)),
+        ]);
+        long[] totalLoads = report.Trials
+            .Select(static trial => trial.TotalLoadNanoseconds)
+            .Order()
+            .ToArray();
+        int middle = totalLoads.Length / 2;
+        long medianLoad = totalLoads.Length % 2 == 1
+            ? totalLoads[middle]
+            : checked((totalLoads[middle - 1] + totalLoads[middle]) / 2);
+        Console.WriteLine(outputPath);
+        Console.WriteLine(report.ContentDigest);
+        Console.WriteLine(
+            $"trials={report.TrialCount}; " +
+            $"medianLoadNs={medianLoad}; " +
+            $"firstLoadNs={report.Trials[0].TotalLoadNanoseconds}; " +
+            $"jitPrepare={report.EntryMethodJitPreparation}");
         return 0;
     }
 
@@ -2404,6 +2460,67 @@ internal static class Program
             portablePdbPath,
             sourceMapPath,
             authoringSurfacePath);
+        return true;
+    }
+
+    private static bool TryParseChunkProfileArguments(
+        IReadOnlyList<string> args,
+        out ChunkProfileOptions? options)
+    {
+        options = null;
+        if (args.Count < 4 || args[0] != "chunk-profile" ||
+            args[1].StartsWith("--", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        string inputPath = args[1];
+        string? outputPath = null;
+        int trialCount = 3;
+        bool trialCountSet = false;
+        bool prepareEntryMethods = true;
+        var referencePaths = new List<string>();
+        int index = 2;
+        while (index < args.Count)
+        {
+            string option = args[index++];
+            if (option == "--no-jit-prepare" && prepareEntryMethods)
+            {
+                prepareEntryMethods = false;
+                continue;
+            }
+            if (index >= args.Count)
+            {
+                return false;
+            }
+            string value = args[index++];
+            switch (option)
+            {
+                case "--out" when outputPath is null:
+                    outputPath = value;
+                    break;
+                case "--trials" when int.TryParse(value, out int parsedTrials) &&
+                    parsedTrials is >= 1 and <= 50 && !trialCountSet:
+                    trialCount = parsedTrials;
+                    trialCountSet = true;
+                    break;
+                case "--reference":
+                    referencePaths.Add(value);
+                    break;
+                default:
+                    return false;
+            }
+        }
+        if (outputPath is null)
+        {
+            return false;
+        }
+        options = new ChunkProfileOptions(
+            inputPath,
+            outputPath,
+            trialCount,
+            prepareEntryMethods,
+            referencePaths);
         return true;
     }
 
@@ -3849,6 +3966,7 @@ internal static class Program
         "  unifiedscript emit-files <input.cs> <additional.cs>... --out <directory> [options]\n" +
         "  unifiedscript chunk-pack --out <program.uschunk> --runtime-manifest <file> --assembly <file.dll> --declaration <file> --bindings <file> --dependencies <file> [sidecars]\n" +
         "  unifiedscript chunk-inspect <program.uschunk>\n" +
+        "  unifiedscript chunk-profile <program.uschunk> --out <profile.json> [--trials <1-50>] [--reference <assembly>] [--no-jit-prepare]\n" +
         "  unifiedscript upgrade-plan <file|directory> --out <report.json> [--policy <policy.json>] [--fail-on-blocked]\n" +
         "  unifiedscript upgrade-apply <file|directory> --out <directory> [--report <report.json>] [--policy <policy.json>]\n" +
         "  unifiedscript diagnostics-bundle <directory> --out <bundle.zip> [--policy <policy.json>]\n" +
@@ -3916,6 +4034,8 @@ internal static class Program
         "  --pdb <file>             Add an optional portable-PDB debug section.\n" +
         "  --source-map <file>      Add an optional source-map debug section.\n" +
         "  --authoring-surface <file> Add an optional editor-only authoring section.\n" +
+        "  --trials <1-50>        Chunk load profiling trials; defaults to 3.\n" +
+        "  --no-jit-prepare       Skip RuntimeHelpers entry-method JIT preparation.\n" +
         "  --policy <file>          Override the bundled compatibility policy.\n" +
         "  --fail-on-blocked       Return data-error status for unreadable known versions.\n" +
         "  --configuration <name>   Select the MSBuild configuration; defaults to Debug.\n" +
@@ -4040,6 +4160,13 @@ internal static class Program
         string? PortablePdbPath,
         string? SourceMapPath,
         string? AuthoringSurfacePath);
+
+    private sealed record ChunkProfileOptions(
+        string InputPath,
+        string OutputPath,
+        int TrialCount,
+        bool PrepareEntryMethods,
+        IReadOnlyList<string> ReferencePaths);
 
     private sealed record UpgradeOptions(
         string InputPath,
