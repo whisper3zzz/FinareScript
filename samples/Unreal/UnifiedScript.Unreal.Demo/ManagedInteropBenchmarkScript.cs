@@ -22,6 +22,9 @@ public sealed class ManagedInteropBenchmarkScript : IUnrealManagedScript
         }
 
         var samples = new double[SampleCount];
+        int collectionsBefore = GC.CollectionCount(0) +
+            GC.CollectionCount(1) + GC.CollectionCount(2);
+        TimeSpan pauseBefore = GC.GetTotalPauseDuration();
         long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
         for (int sample = 0; sample < samples.Length; sample++)
         {
@@ -34,11 +37,15 @@ public sealed class ManagedInteropBenchmarkScript : IUnrealManagedScript
             samples[sample] = elapsed.TotalNanoseconds / MeasuredIterations;
         }
         long allocatedBytes = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+        int collectionCount = GC.CollectionCount(0) +
+            GC.CollectionCount(1) + GC.CollectionCount(2) - collectionsBefore;
+        double pauseMilliseconds =
+            (GC.GetTotalPauseDuration() - pauseBefore).TotalMilliseconds;
         Array.Sort(samples);
         double nanosecondsPerCall = samples[samples.Length / 2];
         component.ManagedState = string.Create(
             CultureInfo.InvariantCulture,
-            $"Benchmark:v2;Iterations={MeasuredIterations};SampleCount={SampleCount};NanosecondsPerCall={nanosecondsPerCall:F3};AllocatedBytes={allocatedBytes};Checksum={checksum}");
+            $"Benchmark:v3;Iterations={MeasuredIterations};SampleCount={SampleCount};NanosecondsPerCall={nanosecondsPerCall:F3};AllocatedBytes={allocatedBytes};GcCollectionCount={collectionCount};GcPauseMilliseconds={pauseMilliseconds:F6};Checksum={checksum}");
     }
 
     public void OnTick(float deltaSeconds)

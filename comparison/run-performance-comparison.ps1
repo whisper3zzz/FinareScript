@@ -14,6 +14,7 @@ $artifactDirectory = Join-Path $repoRoot 'artifacts\comparison\performance'
 $puertsResult = Join-Path $artifactDirectory 'puerts.json'
 $finalResult = Join-Path $artifactDirectory 'comparison.json'
 $unifiedScriptResult = Join-Path $repoRoot 'artifacts\ue\interop-benchmark.json'
+$unifiedScriptSuiteMetrics = Join-Path $artifactDirectory 'unifiedscript-suite-metrics.json'
 
 foreach ($requiredPath in @($puertsRunner, $unifiedScriptRunner)) {
     if (!(Test-Path -LiteralPath $requiredPath)) {
@@ -30,6 +31,7 @@ $unifiedScriptArguments = @{
     EngineRoot = $EngineRoot
     PuertsResult = $puertsResult
     RequirePuerts = $true
+    SuiteMetricsPath = $unifiedScriptSuiteMetrics
 }
 if ($SkipBuild) {
     $puertsArguments.SkipBuild = $true
@@ -53,3 +55,4 @@ Write-Host (
     $report.puertsNsPerCall,
     $report.unifiedScriptToPuertsRatio)
 Write-Host "Report: $finalResult"
+Write-Host "M10.1 UnifiedScript scalar metrics: $unifiedScriptSuiteMetrics"

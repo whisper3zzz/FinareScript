@@ -48,9 +48,8 @@ public static class UnrealPerformanceMetricName
     public const string Calls = "calls";
     public const string BytesCopied = "bytesCopied";
     public const string AllocatedBytes = "allocatedBytes";
-    public const string Gen0Collections = "gen0Collections";
-    public const string Gen1Collections = "gen1Collections";
-    public const string Gen2Collections = "gen2Collections";
+    public const string GcCollectionCount = "gcCollectionCount";
+    public const string GcPauseMilliseconds = "gcPauseMilliseconds";
     public const string MemoryHighWaterBytes = "memoryHighWaterBytes";
     public const string StartupMilliseconds = "startupMilliseconds";
     public const string ReloadMilliseconds = "reloadMilliseconds";
@@ -65,9 +64,8 @@ public static class UnrealPerformanceMetricName
         Calls,
         BytesCopied,
         AllocatedBytes,
-        Gen0Collections,
-        Gen1Collections,
-        Gen2Collections,
+        GcCollectionCount,
+        GcPauseMilliseconds,
         MemoryHighWaterBytes,
         StartupMilliseconds,
         ReloadMilliseconds,
@@ -146,6 +144,42 @@ public sealed record UnrealPerformanceEngineResult(
 {
     public const string CurrentSchemaVersion =
         "unifiedscript.performance-engine-result/v0.1";
+}
+
+public sealed record UnrealPerformanceTrialCapture(
+    string SchemaVersion,
+    string ManifestDigest,
+    string SuiteId,
+    string SuiteVersion,
+    string EngineId,
+    string RuntimeVersion,
+    string RuntimeCommit,
+    UnrealPerformanceEnvironment Environment,
+    UnrealPerformanceTrial Trial)
+{
+    public const string CurrentSchemaVersion =
+        "unifiedscript.performance-trial-capture/v0.1";
+}
+
+public sealed record UnrealPerformanceRawMeasurement(
+    string SchemaVersion,
+    string EngineId,
+    string RuntimeVersion,
+    string RuntimeCommit,
+    string OperatingSystem,
+    string CpuModel,
+    int LogicalProcessorCount,
+    long PhysicalMemoryBytes,
+    string GpuModel,
+    string EngineBuildId,
+    string WorkloadId,
+    int Trial,
+    int ExecutionOrdinal,
+    string Status,
+    UnrealPerformanceMetrics Metrics)
+{
+    public const string CurrentSchemaVersion =
+        "unifiedscript.performance-raw-measurement/v0.1";
 }
 
 public sealed record UnrealPerformanceRunSlot(
@@ -322,6 +356,144 @@ public static class UnrealPerformanceWorkloadSuite
             AlternatingSchedule: true,
             schedule,
             comparisons);
+    }
+
+    public static UnrealPerformanceEngineResult AssembleResult(
+        UnrealPerformanceSuiteManifest manifest,
+        string engineId,
+        IReadOnlyList<UnrealPerformanceTrialCapture> captures)
+    {
+        ValidateManifest(manifest);
+        if (!UnrealPerformanceEngineId.All.Contains(engineId, StringComparer.Ordinal) ||
+            captures is null || captures.Count == 0)
+        {
+            throw new InvalidDataException(
+                "Performance assembly requires one supported engine and trial captures.");
+        }
+        string manifestDigest = ComputeManifestDigest(manifest);
+        UnrealPerformanceTrialCapture first = captures[0] ??
+            throw new InvalidDataException("Performance capture cannot be null.");
+        foreach (UnrealPerformanceTrialCapture capture in captures)
+        {
+            if (capture is null ||
+                capture.SchemaVersion != UnrealPerformanceTrialCapture.CurrentSchemaVersion ||
+                capture.ManifestDigest != manifestDigest ||
+                capture.SuiteId != manifest.SuiteId ||
+                capture.SuiteVersion != manifest.SuiteVersion ||
+                capture.EngineId != engineId ||
+                capture.RuntimeVersion != first.RuntimeVersion ||
+                capture.RuntimeCommit != first.RuntimeCommit ||
+                capture.Environment != first.Environment)
+            {
+                throw new InvalidDataException(
+                    "Performance captures mix schemas, suites, runtimes, or environments.");
+            }
+        }
+        var result = new UnrealPerformanceEngineResult(
+            UnrealPerformanceEngineResult.CurrentSchemaVersion,
+            manifestDigest,
+            manifest.SuiteId,
+            manifest.SuiteVersion,
+            engineId,
+            first.RuntimeVersion,
+            first.RuntimeCommit,
+            first.Environment,
+            captures.Select(static capture => capture.Trial).ToArray());
+        ValidateEngineResult(manifest, result);
+        return result;
+    }
+
+    public static UnrealPerformanceTrialCapture CreateCapture(
+        UnrealPerformanceSuiteManifest manifest,
+        UnrealPerformanceRawMeasurement measurement)
+    {
+        ValidateManifest(manifest);
+        ArgumentNullException.ThrowIfNull(measurement);
+        if (measurement.SchemaVersion !=
+                UnrealPerformanceRawMeasurement.CurrentSchemaVersion ||
+            !UnrealPerformanceEngineId.All.Contains(
+                measurement.EngineId,
+                StringComparer.Ordinal) ||
+            string.IsNullOrWhiteSpace(measurement.RuntimeVersion) ||
+            string.IsNullOrWhiteSpace(measurement.RuntimeCommit) ||
+            string.IsNullOrWhiteSpace(measurement.EngineBuildId) ||
+            measurement.Status != PassedStatus)
+        {
+            throw new InvalidDataException(
+                "Raw performance measurement has an unsupported schema, runtime, or status.");
+        }
+        UnrealPerformanceWorkload workload = manifest.Workloads.SingleOrDefault(
+            workload => workload.Id == measurement.WorkloadId) ??
+            throw new InvalidDataException(
+                "Raw performance measurement targets an unknown workload.");
+        UnrealPerformanceRunSlot expectedSlot = CreateAlternatingSchedule(manifest)
+            .SingleOrDefault(slot =>
+                slot.EngineId == measurement.EngineId &&
+                slot.WorkloadId == measurement.WorkloadId &&
+                slot.Trial == measurement.Trial) ??
+            throw new InvalidDataException(
+                "Raw performance measurement targets an unknown trial slot.");
+        if (measurement.ExecutionOrdinal != expectedSlot.ExecutionOrdinal)
+        {
+            throw new InvalidDataException(
+                "Raw performance measurement does not match the alternating execution ordinal.");
+        }
+        ValidateMetrics(workload, measurement.Metrics);
+        var environment = new UnrealPerformanceEnvironment(
+            ComputeMachineFingerprint(
+                measurement.OperatingSystem,
+                measurement.CpuModel,
+                measurement.LogicalProcessorCount,
+                measurement.PhysicalMemoryBytes,
+                measurement.GpuModel),
+            measurement.OperatingSystem.Trim(),
+            measurement.CpuModel.Trim(),
+            measurement.LogicalProcessorCount,
+            measurement.PhysicalMemoryBytes,
+            measurement.GpuModel.Trim(),
+            manifest.Build.EngineVersion,
+            measurement.EngineBuildId.Trim(),
+            manifest.Build.Platform,
+            manifest.Build.Configuration,
+            manifest.Build.Rhi,
+            manifest.Build.BuildFingerprint);
+        return new UnrealPerformanceTrialCapture(
+            UnrealPerformanceTrialCapture.CurrentSchemaVersion,
+            ComputeManifestDigest(manifest),
+            manifest.SuiteId,
+            manifest.SuiteVersion,
+            measurement.EngineId,
+            measurement.RuntimeVersion,
+            measurement.RuntimeCommit,
+            environment,
+            new UnrealPerformanceTrial(
+                workload.Id,
+                measurement.Trial,
+                measurement.ExecutionOrdinal,
+                measurement.Status,
+                workload.InputDigest,
+                workload.AssetDigest,
+                measurement.Metrics));
+    }
+
+    public static void ValidateEngineResult(
+        UnrealPerformanceSuiteManifest manifest,
+        UnrealPerformanceEngineResult result)
+    {
+        ValidateManifest(manifest);
+        ArgumentNullException.ThrowIfNull(result);
+        if (!UnrealPerformanceEngineId.All.Contains(
+                result.EngineId,
+                StringComparer.Ordinal))
+        {
+            throw new InvalidDataException(
+                "Performance result has an unsupported engine ID.");
+        }
+        ValidateResult(
+            manifest,
+            ComputeManifestDigest(manifest),
+            result,
+            result.EngineId);
     }
 
     public static void ValidateManifest(UnrealPerformanceSuiteManifest manifest)
@@ -572,11 +744,33 @@ public static class UnrealPerformanceSuiteJson
         return JsonSerializer.Serialize(report, UnifiedJson.CreateOptions(writeIndented));
     }
 
+    public static string SerializeCapture(
+        UnrealPerformanceTrialCapture capture,
+        bool writeIndented = true)
+    {
+        ArgumentNullException.ThrowIfNull(capture);
+        return JsonSerializer.Serialize(capture, UnifiedJson.CreateOptions(writeIndented));
+    }
+
+    public static string SerializeRawMeasurement(
+        UnrealPerformanceRawMeasurement measurement,
+        bool writeIndented = true)
+    {
+        ArgumentNullException.ThrowIfNull(measurement);
+        return JsonSerializer.Serialize(measurement, UnifiedJson.CreateOptions(writeIndented));
+    }
+
     public static UnrealPerformanceSuiteManifest DeserializeManifest(string json) =>
         Deserialize<UnrealPerformanceSuiteManifest>(json, "workload manifest");
 
     public static UnrealPerformanceEngineResult DeserializeResult(string json) =>
         Deserialize<UnrealPerformanceEngineResult>(json, "engine result");
+
+    public static UnrealPerformanceTrialCapture DeserializeCapture(string json) =>
+        Deserialize<UnrealPerformanceTrialCapture>(json, "trial capture");
+
+    public static UnrealPerformanceRawMeasurement DeserializeRawMeasurement(string json) =>
+        Deserialize<UnrealPerformanceRawMeasurement>(json, "raw measurement");
 
     private static T Deserialize<T>(string json, string description)
     {

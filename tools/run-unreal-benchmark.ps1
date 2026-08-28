@@ -2,6 +2,7 @@
 param(
     [string]$EngineRoot = $env:UNIFIEDSCRIPT_UE_ROOT,
     [string]$PuertsResult,
+    [string]$SuiteMetricsPath,
     [switch]$RequirePuerts,
     [switch]$SkipBuild
 )
@@ -89,11 +90,16 @@ $nativeResult = ($line.Line.Substring($line.Line.IndexOf($marker) + $marker.Leng
     ConvertFrom-Json)
 $thresholds = Get-Content -Raw -LiteralPath $thresholdPath | ConvertFrom-Json
 if ($thresholds.schemaVersion -ne 'unifiedscript.unreal-benchmark-thresholds/v0.2' -or
-    $nativeResult.schemaVersion -ne 'unifiedscript.unreal-benchmark/v0.2' -or
+    $nativeResult.schemaVersion -ne 'unifiedscript.unreal-benchmark/v0.3' -or
     $nativeResult.scenario -ne $thresholds.scenario -or
     [int]$nativeResult.warmupIterations -lt [int]$thresholds.minimumWarmupIterations -or
     [int]$nativeResult.iterations -lt [int]$thresholds.minimumIterations -or
-    [int]$nativeResult.sampleCount -lt [int]$thresholds.minimumSampleCount) {
+    [int]$nativeResult.sampleCount -lt [int]$thresholds.minimumSampleCount -or
+    [double]$nativeResult.unifiedScriptBridgeTimeMilliseconds -le 0 -or
+    [int]$nativeResult.gcCollectionCount -lt 0 -or
+    [double]$nativeResult.gcPauseMilliseconds -lt 0 -or
+    [uint64]$nativeResult.memoryHighWaterBytes -le 0 -or
+    [double]$nativeResult.startupMilliseconds -le 0) {
     throw 'The benchmark result does not match the checked-in schema/scenario.'
 }
 
@@ -115,7 +121,9 @@ $machineFingerprint = $machineFingerprint.Substring(0, 16)
 $puertsNsPerCall = $null
 if (![string]::IsNullOrWhiteSpace($PuertsResult)) {
     $puerts = Get-Content -Raw -LiteralPath $PuertsResult | ConvertFrom-Json
-    if ($puerts.schemaVersion -ne 'unifiedscript.unreal-benchmark/v0.2' -or
+    if ($puerts.schemaVersion -notin @(
+            'unifiedscript.unreal-benchmark/v0.2',
+            'unifiedscript.unreal-benchmark/v0.3') -or
         $puerts.scenario -ne $nativeResult.scenario -or
         $puerts.configuration -ne $nativeResult.configuration -or
         $puerts.platform -ne $nativeResult.platform -or
@@ -145,7 +153,7 @@ $competitivePass = if ($null -ne $competitiveRatio) {
 } else { !$RequirePuerts }
 
 $report = [ordered]@{
-    schemaVersion = 'unifiedscript.unreal-benchmark-report/v0.2'
+    schemaVersion = 'unifiedscript.unreal-benchmark-report/v0.3'
     scenario = $nativeResult.scenario
     configuration = $nativeResult.configuration
     platform = $nativeResult.platform
@@ -158,7 +166,13 @@ $report = [ordered]@{
     sampleCount = [int]$nativeResult.sampleCount
     cppDirectNsPerCall = [double]$nativeResult.cppDirectNsPerCall
     unifiedScriptNsPerCall = [double]$nativeResult.unifiedScriptNsPerCall
+    unifiedScriptBridgeTimeMilliseconds =
+        [double]$nativeResult.unifiedScriptBridgeTimeMilliseconds
     unifiedScriptAllocatedBytes = [long]$nativeResult.unifiedScriptAllocatedBytes
+    gcCollectionCount = [int]$nativeResult.gcCollectionCount
+    gcPauseMilliseconds = [double]$nativeResult.gcPauseMilliseconds
+    memoryHighWaterBytes = [uint64]$nativeResult.memoryHighWaterBytes
+    startupMilliseconds = [double]$nativeResult.startupMilliseconds
     puertsNsPerCall = $puertsNsPerCall
     unifiedScriptToPuertsRatio = $competitiveRatio
     gates = [ordered]@{
@@ -169,6 +183,34 @@ $report = [ordered]@{
     }
 }
 $report | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $reportPath -Encoding utf8
+
+if (![string]::IsNullOrWhiteSpace($SuiteMetricsPath)) {
+    $suiteMetrics = [ordered]@{
+        values = [ordered]@{
+            frameTimeMedianMilliseconds = $null
+            frameTimeP95Milliseconds = $null
+            frameTimeP99Milliseconds = $null
+            bridgeTimeMilliseconds =
+                [double]$nativeResult.unifiedScriptBridgeTimeMilliseconds
+            calls = [int64]$nativeResult.iterations
+            bytesCopied = $null
+            allocatedBytes = [int64]$nativeResult.unifiedScriptAllocatedBytes
+            gcCollectionCount = [int]$nativeResult.gcCollectionCount
+            gcPauseMilliseconds = [double]$nativeResult.gcPauseMilliseconds
+            memoryHighWaterBytes = [uint64]$nativeResult.memoryHighWaterBytes
+            startupMilliseconds = [double]$nativeResult.startupMilliseconds
+            reloadMilliseconds = $null
+            packageSizeBytes = $null
+        }
+    }
+    $suiteMetricsDirectory = Split-Path -Parent `
+        ([IO.Path]::GetFullPath($SuiteMetricsPath))
+    if (-not [string]::IsNullOrWhiteSpace($suiteMetricsDirectory)) {
+        New-Item -ItemType Directory -Force -Path $suiteMetricsDirectory | Out-Null
+    }
+    $suiteMetrics | ConvertTo-Json -Depth 5 |
+        Set-Content -LiteralPath $SuiteMetricsPath -Encoding utf8
+}
 
 Write-Host "UnifiedScript: $($nativeResult.unifiedScriptNsPerCall) ns/call, $($nativeResult.unifiedScriptAllocatedBytes) B"
 Write-Host "C++ direct lower bound: $($nativeResult.cppDirectNsPerCall) ns/call"

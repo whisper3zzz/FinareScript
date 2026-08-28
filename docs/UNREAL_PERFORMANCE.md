@@ -10,7 +10,9 @@ generation-safe World handle resolution, and generated C++ thunk.
 The same process also records a direct C++ loop. That number is an optimized
 lower bound, not a substitute for a competing runtime measurement. The gate
 requires zero managed bytes in the measured loop and checks the absolute
-latency ceiling in `benchmarks/unreal/performance-thresholds.json`.
+latency ceiling in `benchmarks/unreal/performance-thresholds.json`. Result v0.3
+also records bridge-equivalent time, runtime GC collections/pause, process
+memory high-water mark, and managed component startup time for M10.1.
 
 Run the reproducible local gate:
 
@@ -21,13 +23,19 @@ powershell -ExecutionPolicy Bypass -File tools/run-unreal-benchmark.ps1 `
 
 The report is written to `artifacts/ue/interop-benchmark.json`. The reported
 latency is the median of five samples. A Puerts result must use
-`unifiedscript.unreal-benchmark/v0.2`, the same `generated-int32-add` scenario,
+`unifiedscript.unreal-benchmark/v0.2` or v0.3 during the suite migration, the
+same `generated-int32-add` scenario,
 machine fingerprint, UE engine version, platform, build configuration, warm-up,
 iteration count, and sample count, with a positive `puertsNsPerCall`. Supply it with
 `-PuertsResult <file> -RequirePuerts`. The competitive gate only passes when
 UnifiedScript is at least 5% faster. Without that file the report deliberately
 leaves the Puerts result and competitive verdict empty; no performance claim
 should be made from an unmatched or cross-machine number.
+
+Pass `-SuiteMetricsPath <file>` to emit the scalar workload's complete M10.1
+metric map. Normalize that map with
+`comparison/write-workload-capture.ps1`; the capture path rejects a trial whose
+manifest slot, runtime identity, or machine/build evidence does not match.
 
 ## Matched microbenchmark status
 

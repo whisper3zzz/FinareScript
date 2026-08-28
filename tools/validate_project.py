@@ -2452,12 +2452,15 @@ def main() -> int:
         and "MeasureBatchTrace" in unreal_data_plane_profile_demo
         and "MeasureAttributeBinding" in unreal_data_plane_profile_demo
         and "DataPlaneAllocatedBytes" in unreal_data_plane_profile_demo
+        and "BatchTraceGcPauseMilliseconds" in unreal_data_plane_profile_demo
         and "DataPlaneWorkloadProfile" in unreal_world_host_test
         and "UNIFIEDSCRIPT_DATA_PLANE_PROFILE_JSON" in unreal_world_host_test
-        and "unifiedscript.unreal-data-plane-profile-report/v0.1"
+        and "unifiedscript.unreal-data-plane-profile-report/v0.2"
         in unreal_data_plane_profile_helper
         and "commandSubmitToScalarBinding" in unreal_data_plane_profile_helper
         and "batchTraceToPerCallBinding" in unreal_data_plane_profile_helper
+        and "SuiteMetricsPath" in unreal_data_plane_profile_helper
+        and "batchTraceBytes" in unreal_data_plane_profile_helper
         and "evidenceBackedRouting" in unreal_data_plane_profile_helper,
         "Matched CoreCLR data-plane workload profile or routing gate is missing",
     )
@@ -2508,15 +2511,20 @@ def main() -> int:
         and unreal_benchmark_thresholds["maxUnifiedScriptAllocatedBytes"] == 0
         and unreal_benchmark_thresholds["maxUnifiedScriptToPuertsRatio"] <= 0.95
         and "SampleCount = 5" in unreal_benchmark_demo_source
-        and "Benchmark:v2" in unreal_benchmark_demo_source
+        and "Benchmark:v3" in unreal_benchmark_demo_source
+        and "GC.GetTotalPauseDuration" in unreal_benchmark_demo_source
         and "Array.Sort(samples)" in unreal_benchmark_demo_source
-        and "unifiedscript.unreal-benchmark/v0.2" in unreal_world_host_test
+        and "unifiedscript.unreal-benchmark/v0.3" in unreal_world_host_test
+        and "memoryHighWaterBytes" in unreal_world_host_test
+        and "startupMilliseconds" in unreal_world_host_test
         and "NativeSamples.Sort()" in unreal_world_host_test
         and "machineFingerprint" in unreal_benchmark_helper
         and "$puerts.configuration -ne $nativeResult.configuration"
         in unreal_benchmark_helper
         and "$puerts.engineMinor -ne" in unreal_benchmark_helper
         and "$puerts.sampleCount -ne" in unreal_benchmark_helper
+        and "SuiteMetricsPath" in unreal_benchmark_helper
+        and "gcPauseMilliseconds" in unreal_benchmark_helper
         and "-RequirePuerts" in unreal_performance_doc
         and "no performance claim" in unreal_performance_doc,
         "Reproducible Unreal/Puerts performance comparison gate is incomplete",
@@ -3677,6 +3685,9 @@ def main() -> int:
     performance_suite_doc = (
         ROOT / "docs" / "PERFORMANCE_WORKLOAD_SUITE.md"
     ).read_text(encoding="utf-8")
+    performance_capture_writer = (
+        ROOT / "comparison" / "write-workload-capture.ps1"
+    ).read_text(encoding="utf-8")
     performance_suite_manifest_path = (
         ROOT / "benchmarks" / "unreal" / "workload-suite.v0.1.json"
     )
@@ -3701,9 +3712,8 @@ def main() -> int:
         "calls",
         "bytesCopied",
         "allocatedBytes",
-        "gen0Collections",
-        "gen1Collections",
-        "gen2Collections",
+        "gcCollectionCount",
+        "gcPauseMilliseconds",
         "memoryHighWaterBytes",
         "startupMilliseconds",
         "reloadMilliseconds",
@@ -3734,15 +3744,31 @@ def main() -> int:
         )
         and "unifiedscript.performance-engine-result/v0.1"
         in performance_suite_source
+        and "unifiedscript.performance-raw-measurement/v0.1"
+        in performance_suite_source
+        and "unifiedscript.performance-trial-capture/v0.1"
+        in performance_suite_source
         and "CreateAlternatingSchedule" in performance_suite_source
+        and "CreateCapture" in performance_suite_source
+        and "AssembleResult" in performance_suite_source
         and "ComputeMachineFingerprint" in performance_suite_source
         and "environment differs" in performance_suite_source
         and "CheckedInManifestCoversM10WorkloadsMetricsAndAlternatingOrder"
         in performance_suite_test
         and "ComparisonRejectsAValidButDifferentMachineFingerprint"
         in performance_suite_test
+        and "RawMeasurementIsNormalizedAgainstManifestAndScheduledSlot"
+        in performance_suite_test
+        and "IndependentTrialCapturesAssembleOnlyOneRuntimeAndEnvironment"
+        in performance_suite_test
+        and 'args[0] == "ue-workload-capture"' in cli_source
+        and 'args[0] == "ue-workload-assemble"' in cli_source
         and 'args[0] == "ue-workload-compare"' in cli_source
+        and "Get-CimInstance Win32_Processor" in performance_capture_writer
+        and "Engine\\Build\\Build.version" in performance_capture_writer
+        and "executionOrdinal" in performance_capture_writer
         and "54 slots" in performance_suite_doc
+        and "all 27 captures" in performance_suite_doc
         and "no broad performance result is published" in performance_suite_doc,
         "M10.1 workload manifest, metrics, alternating schedule, or strict comparison is incomplete",
     )

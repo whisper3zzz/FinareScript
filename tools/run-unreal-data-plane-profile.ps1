@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$EngineRoot = $env:UNIFIEDSCRIPT_UE_ROOT,
+    [string]$SuiteMetricsPath,
     [switch]$SkipBuild
 )
 
@@ -99,7 +100,7 @@ $result = $line.Line.Substring($line.Line.IndexOf($marker) + $marker.Length) |
 $movementRatio = [double]$result.commandSubmitNs / [double]$result.bindingScalarNs
 $queryRatio = [double]$result.batchTraceNs / [double]$result.bindingTraceNs
 $schemaPass =
-    $result.schemaVersion -eq 'unifiedscript.unreal-data-plane-profile/v0.1' -and
+    $result.schemaVersion -eq 'unifiedscript.unreal-data-plane-profile/v0.2' -and
     [int]$result.iterations -ge 1024 -and
     [int]$result.sampleCount -ge 3
 $measurementPass =
@@ -110,7 +111,12 @@ $measurementPass =
     [double]$result.attributeReadNs -gt 0 -and
     $movementRatio -lt 1.0 -and
     $queryRatio -lt 1.0 -and
-    [long]$result.dataPlaneAllocatedBytes -eq 0
+    [long]$result.dataPlaneAllocatedBytes -eq 0 -and
+    [long]$result.batchTraceAllocatedBytes -eq 0 -and
+    [long]$result.batchTraceBytes -gt 0 -and
+    [int]$result.batchTraceGcCollectionCount -ge 0 -and
+    [double]$result.batchTraceGcPauseMilliseconds -ge 0 -and
+    [uint64]$result.memoryHighWaterBytes -gt 0
 $routingPass =
     $result.movement -eq 'data-plane' -and
     $result.overlap -eq 'data-plane' -and
@@ -119,7 +125,7 @@ $routingPass =
     $result.query -eq 'data-plane'
 
 $report = [ordered]@{
-    schemaVersion = 'unifiedscript.unreal-data-plane-profile-report/v0.1'
+    schemaVersion = 'unifiedscript.unreal-data-plane-profile-report/v0.2'
     status = if ($schemaPass -and $measurementPass -and $routingPass) {
         'passed'
     } else { 'failed' }
@@ -140,6 +146,35 @@ $report = [ordered]@{
 }
 $report | ConvertTo-Json -Depth 8 |
     Set-Content -LiteralPath $reportPath -Encoding utf8
+
+if (![string]::IsNullOrWhiteSpace($SuiteMetricsPath)) {
+    $suiteMetrics = [ordered]@{
+        values = [ordered]@{
+            frameTimeMedianMilliseconds = $null
+            frameTimeP95Milliseconds = $null
+            frameTimeP99Milliseconds = $null
+            bridgeTimeMilliseconds =
+                [double]$result.batchTraceNs * [int]$result.iterations / 1000000.0
+            calls = 2
+            bytesCopied = [int64]$result.batchTraceBytes
+            allocatedBytes = [int64]$result.batchTraceAllocatedBytes
+            gcCollectionCount = [int]$result.batchTraceGcCollectionCount
+            gcPauseMilliseconds =
+                [double]$result.batchTraceGcPauseMilliseconds
+            memoryHighWaterBytes = [uint64]$result.memoryHighWaterBytes
+            startupMilliseconds = $null
+            reloadMilliseconds = $null
+            packageSizeBytes = $null
+        }
+    }
+    $suiteMetricsDirectory = Split-Path -Parent `
+        ([IO.Path]::GetFullPath($SuiteMetricsPath))
+    if (-not [string]::IsNullOrWhiteSpace($suiteMetricsDirectory)) {
+        New-Item -ItemType Directory -Force -Path $suiteMetricsDirectory | Out-Null
+    }
+    $suiteMetrics | ConvertTo-Json -Depth 5 |
+        Set-Content -LiteralPath $SuiteMetricsPath -Encoding utf8
+}
 
 if (!$schemaPass -or !$measurementPass -or !$routingPass) {
     throw "One or more data-plane profile gates failed. Report: $reportPath"

@@ -60,9 +60,9 @@ machine-local unless an artifact explicitly says otherwise.
 
 | Gate | Verified result |
 | --- | --- |
-| Main source | `c8d2000` (`feat: complete remote debugging and gameplay diagnosis`), plus the current M10.1 workload-contract change set |
+| Main source | `d379a9e` (`feat: establish representative performance suite contract`), plus the current M10.1 capture-pipeline change set |
 | Comparison source | `e62a46e` (`feat: adopt round-tripped gameplay tuning`) |
-| Managed tests | 540 / 540 passed |
+| Managed tests | 542 / 542 passed |
 | Repository validator | 66 / 66 passed |
 | UE 5.8.1 native build | passed |
 | `UnifiedScript.Unreal` Automation | 15 / 15 passed, including full gameplay-profiler attribution, Authoring Surface, live World semantic pause/step/reload/detach, and repeated success/failure hot-reload leak coverage |
@@ -1082,10 +1082,15 @@ reject missing required values, failed/duplicate trials, invalid percentiles,
 manifest drift, unverifiable machine descriptors, different engine/build
 environments, and execution ordinals outside the deterministic 54-slot
 alternating schedule. `ue-workload-compare` publishes matched neutral or losing
-ratios without moving the future M10.3 gate. The 540/540 managed suite and 66/66
-repository invariants pass. M10.1 remains active while real collectors and both
-runtime runners are adapted to emit every required metric across all 27 trials
-per engine.
+ratios without moving the future M10.3 gate. Raw measurements are now normalized
+against the manifest into resumable per-slot captures, stamped with live
+OS/CPU/memory/GPU and engine-build identities, and assembled only when all 27
+trials share one runtime commit and environment. The 542/542 managed suite and
+66/66 repository invariants pass. Live UE 5.8.1 trial-1 captures now prove the
+pipeline for scalar/property calls (100,000 calls, 14.4818 ms bridge time, zero
+allocation/GC) and Batch Trace (1,024 queries through two boundary calls,
+0.3950 ms, 360,448 bytes, zero allocation/GC). M10.1 remains active while the
+other workload collectors and the Puerts/complete-game runners are adapted.
 
 ### M10.2 — Shared data and batching optimization
 

@@ -195,6 +195,69 @@ public sealed class UnrealPerformanceWorkloadSuiteTests
     }
 
     [Fact]
+    public void IndependentTrialCapturesAssembleOnlyOneRuntimeAndEnvironment()
+    {
+        UnrealPerformanceSuiteManifest manifest = LoadManifest();
+        UnrealPerformanceEngineResult expected = CreateResult(
+            manifest,
+            UnrealPerformanceEngineId.UnifiedScript,
+            scale: 1.0);
+        UnrealPerformanceTrialCapture[] captures = CreateCaptures(expected);
+
+        UnrealPerformanceEngineResult actual =
+            UnrealPerformanceWorkloadSuite.AssembleResult(
+                manifest,
+                UnrealPerformanceEngineId.UnifiedScript,
+                captures.Reverse().ToArray());
+
+        Assert.Equal(expected.ManifestDigest, actual.ManifestDigest);
+        Assert.Equal(expected.Environment, actual.Environment);
+        Assert.Equal(
+            expected.Trials.Select(static trial => trial.ExecutionOrdinal).Order(),
+            actual.Trials.Select(static trial => trial.ExecutionOrdinal).Order());
+        UnrealPerformanceEnvironment otherEnvironment = expected.Environment with
+        {
+            CpuModel = "Mixed capture CPU",
+            MachineFingerprint = UnrealPerformanceWorkloadSuite.ComputeMachineFingerprint(
+                expected.Environment.OperatingSystem,
+                "Mixed capture CPU",
+                expected.Environment.LogicalProcessorCount,
+                expected.Environment.PhysicalMemoryBytes,
+                expected.Environment.GpuModel),
+        };
+        captures[0] = captures[0] with { Environment = otherEnvironment };
+        Assert.Throws<InvalidDataException>(() =>
+            UnrealPerformanceWorkloadSuite.AssembleResult(
+                manifest,
+                UnrealPerformanceEngineId.UnifiedScript,
+                captures));
+    }
+
+    [Fact]
+    public void RawMeasurementIsNormalizedAgainstManifestAndScheduledSlot()
+    {
+        UnrealPerformanceSuiteManifest manifest = LoadManifest();
+        UnrealPerformanceEngineResult expected = CreateResult(
+            manifest,
+            UnrealPerformanceEngineId.Puerts,
+            scale: 1.0);
+        UnrealPerformanceRawMeasurement raw = CreateRawMeasurement(
+            expected,
+            expected.Trials[0]);
+
+        UnrealPerformanceTrialCapture capture =
+            UnrealPerformanceWorkloadSuite.CreateCapture(manifest, raw);
+
+        Assert.Equal(expected.ManifestDigest, capture.ManifestDigest);
+        Assert.Equal(expected.Environment, capture.Environment);
+        Assert.Equal(expected.Trials[0], capture.Trial);
+        Assert.Throws<InvalidDataException>(() =>
+            UnrealPerformanceWorkloadSuite.CreateCapture(
+                manifest,
+                raw with { ExecutionOrdinal = raw.ExecutionOrdinal + 1 }));
+    }
+
+    [Fact]
     public void CliWritesMatchedReportAndRejectsAnUnmatchedResult()
     {
         UnrealPerformanceSuiteManifest manifest = LoadManifest();
@@ -214,15 +277,45 @@ public sealed class UnrealPerformanceWorkloadSuiteTests
             string unifiedPath = System.IO.Path.Combine(directory, "unified.json");
             string puertsPath = System.IO.Path.Combine(directory, "puerts.json");
             string reportPath = System.IO.Path.Combine(directory, "report.json");
+            string captureDirectory = System.IO.Path.Combine(directory, "captures");
+            string rawDirectory = System.IO.Path.Combine(directory, "raw");
+            Directory.CreateDirectory(captureDirectory);
+            Directory.CreateDirectory(rawDirectory);
             File.WriteAllText(
                 manifestPath,
                 UnrealPerformanceSuiteJson.SerializeManifest(manifest));
-            File.WriteAllText(
-                unifiedPath,
-                UnrealPerformanceSuiteJson.SerializeResult(unified));
+            foreach (UnrealPerformanceTrial trial in unified.Trials)
+            {
+                string rawPath = System.IO.Path.Combine(
+                    rawDirectory,
+                    $"{trial.ExecutionOrdinal:D4}.json");
+                string capturePath = System.IO.Path.Combine(
+                    captureDirectory,
+                    $"{trial.ExecutionOrdinal:D4}.json");
+                File.WriteAllText(
+                    rawPath,
+                    UnrealPerformanceSuiteJson.SerializeRawMeasurement(
+                        CreateRawMeasurement(unified, trial)));
+                Assert.Equal(0, UnifiedScript.Cli.Program.Main(
+                [
+                    "ue-workload-capture",
+                    "--manifest", manifestPath,
+                    "--measurement", rawPath,
+                    "--out", capturePath,
+                ]));
+            }
             File.WriteAllText(
                 puertsPath,
                 UnrealPerformanceSuiteJson.SerializeResult(puerts));
+
+            Assert.Equal(0, UnifiedScript.Cli.Program.Main(
+            [
+                "ue-workload-assemble",
+                "--manifest", manifestPath,
+                "--captures", captureDirectory,
+                "--engine", UnrealPerformanceEngineId.UnifiedScript,
+                "--out", unifiedPath,
+            ]));
 
             int exitCode = UnifiedScript.Cli.Program.Main(
             [
@@ -350,4 +443,37 @@ public sealed class UnrealPerformanceWorkloadSuiteTests
             environment,
             trials);
     }
+
+    private static UnrealPerformanceTrialCapture[] CreateCaptures(
+        UnrealPerformanceEngineResult result) => result.Trials
+        .Select(trial => new UnrealPerformanceTrialCapture(
+            UnrealPerformanceTrialCapture.CurrentSchemaVersion,
+            result.ManifestDigest,
+            result.SuiteId,
+            result.SuiteVersion,
+            result.EngineId,
+            result.RuntimeVersion,
+            result.RuntimeCommit,
+            result.Environment,
+            trial))
+        .ToArray();
+
+    private static UnrealPerformanceRawMeasurement CreateRawMeasurement(
+        UnrealPerformanceEngineResult result,
+        UnrealPerformanceTrial trial) => new(
+            UnrealPerformanceRawMeasurement.CurrentSchemaVersion,
+            result.EngineId,
+            result.RuntimeVersion,
+            result.RuntimeCommit,
+            result.Environment.OperatingSystem,
+            result.Environment.CpuModel,
+            result.Environment.LogicalProcessorCount,
+            result.Environment.PhysicalMemoryBytes,
+            result.Environment.GpuModel,
+            result.Environment.EngineBuildId,
+            trial.WorkloadId,
+            trial.Trial,
+            trial.ExecutionOrdinal,
+            trial.Status,
+            trial.Metrics);
 }

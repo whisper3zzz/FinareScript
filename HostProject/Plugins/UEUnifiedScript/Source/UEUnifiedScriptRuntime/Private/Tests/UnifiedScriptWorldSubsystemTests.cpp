@@ -6,6 +6,7 @@
 #include "Dom/JsonObject.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
+#include "HAL/PlatformMemory.h"
 #include "HAL/PlatformProcess.h"
 #include "HAL/PlatformProperties.h"
 #include "HAL/PlatformTime.h"
@@ -1070,7 +1071,11 @@ bool FUnifiedScriptManagedInteropPerformanceTest::RunTest(const FString& Paramet
         TEXT("UnifiedScript.Unreal.Demo.ManagedInteropBenchmarkScript");
     Component->ScriptAsset = Asset;
     Component->RegisterComponentWithWorld(World);
+    const double StartupStartedSeconds = FPlatformTime::Seconds();
     Component->BeginPlay();
+    const double StartupMilliseconds = FMath::Max(
+        0.0,
+        (FPlatformTime::Seconds() - StartupStartedSeconds) * 1000.0);
     TestTrue(
         *FString::Printf(
             TEXT("Managed benchmark starts: %s"),
@@ -1097,11 +1102,15 @@ bool FUnifiedScriptManagedInteropPerformanceTest::RunTest(const FString& Paramet
     FString AllocatedBytesText;
     FString ManagedIterationsText;
     FString ManagedSampleCountText;
+    FString GcCollectionCountText;
+    FString GcPauseMillisecondsText;
     double ManagedNanosecondsPerCall = 0.0;
     int64 AllocatedBytes = -1;
     int32 ManagedIterations = 0;
     int32 ManagedSampleCount = 0;
-    const bool bParsed = Component->ManagedState.StartsWith(TEXT("Benchmark:v2;")) &&
+    int32 GcCollectionCount = -1;
+    double GcPauseMilliseconds = -1.0;
+    const bool bParsed = Component->ManagedState.StartsWith(TEXT("Benchmark:v3;")) &&
         ReadField(
             Component->ManagedState,
             TEXT("NanosecondsPerCall"),
@@ -1118,10 +1127,20 @@ bool FUnifiedScriptManagedInteropPerformanceTest::RunTest(const FString& Paramet
             Component->ManagedState,
             TEXT("SampleCount"),
             ManagedSampleCountText) &&
+        ReadField(
+            Component->ManagedState,
+            TEXT("GcCollectionCount"),
+            GcCollectionCountText) &&
+        ReadField(
+            Component->ManagedState,
+            TEXT("GcPauseMilliseconds"),
+            GcPauseMillisecondsText) &&
         LexTryParseString(ManagedNanosecondsPerCall, *ManagedNanosecondsText) &&
         LexTryParseString(AllocatedBytes, *AllocatedBytesText) &&
         LexTryParseString(ManagedIterations, *ManagedIterationsText) &&
-        LexTryParseString(ManagedSampleCount, *ManagedSampleCountText);
+        LexTryParseString(ManagedSampleCount, *ManagedSampleCountText) &&
+        LexTryParseString(GcCollectionCount, *GcCollectionCountText) &&
+        LexTryParseString(GcPauseMilliseconds, *GcPauseMillisecondsText);
     TestTrue(
         *FString::Printf(
             TEXT("Managed benchmark result is parseable: %s"),
@@ -1152,16 +1171,23 @@ bool FUnifiedScriptManagedInteropPerformanceTest::RunTest(const FString& Paramet
     TestEqual(TEXT("Managed benchmark sample count is stable"), ManagedSampleCount, SampleCount);
     TestEqual(TEXT("Managed fixed-call loop allocates no managed bytes"), AllocatedBytes, int64{0});
     TestTrue(
+        TEXT("Managed benchmark reports non-negative GC evidence"),
+        GcCollectionCount >= 0 && GcPauseMilliseconds >= 0.0);
+    TestTrue(
         TEXT("Managed result remains inside the initial regression ceiling"),
         ManagedNanosecondsPerCall > 0.0 && ManagedNanosecondsPerCall <= 20000.0);
     TestTrue(
         TEXT("Native benchmark is measurable"),
         NativeNanosecondsPerCall > 0.0 && NativeChecksum != 0);
+    const uint64 MemoryHighWaterBytes =
+        FPlatformMemory::GetStats().PeakUsedPhysical;
+    const double BridgeTimeMilliseconds =
+        ManagedNanosecondsPerCall * static_cast<double>(ManagedIterations) / 1000000.0;
 
     UE_LOG(
         LogTemp,
         Display,
-        TEXT("UNIFIEDSCRIPT_BENCHMARK_JSON {\"schemaVersion\":\"unifiedscript.unreal-benchmark/v0.2\",\"scenario\":\"generated-int32-add\",\"configuration\":\"Development Editor\",\"platform\":\"%s\",\"engineMajor\":%d,\"engineMinor\":%d,\"enginePatch\":%d,\"warmupIterations\":%d,\"iterations\":%d,\"sampleCount\":%d,\"cppDirectNsPerCall\":%.3f,\"unifiedScriptNsPerCall\":%.3f,\"unifiedScriptAllocatedBytes\":%lld,\"puertsNsPerCall\":null}"),
+        TEXT("UNIFIEDSCRIPT_BENCHMARK_JSON {\"schemaVersion\":\"unifiedscript.unreal-benchmark/v0.3\",\"scenario\":\"generated-int32-add\",\"configuration\":\"Development Editor\",\"platform\":\"%s\",\"engineMajor\":%d,\"engineMinor\":%d,\"enginePatch\":%d,\"warmupIterations\":%d,\"iterations\":%d,\"sampleCount\":%d,\"cppDirectNsPerCall\":%.3f,\"unifiedScriptNsPerCall\":%.3f,\"unifiedScriptBridgeTimeMilliseconds\":%.6f,\"unifiedScriptAllocatedBytes\":%lld,\"gcCollectionCount\":%d,\"gcPauseMilliseconds\":%.6f,\"memoryHighWaterBytes\":%llu,\"startupMilliseconds\":%.6f,\"puertsNsPerCall\":null}"),
         ANSI_TO_TCHAR(FPlatformProperties::PlatformName()),
         FEngineVersion::Current().GetMajor(),
         FEngineVersion::Current().GetMinor(),
@@ -1171,7 +1197,12 @@ bool FUnifiedScriptManagedInteropPerformanceTest::RunTest(const FString& Paramet
         SampleCount,
         NativeNanosecondsPerCall,
         ManagedNanosecondsPerCall,
-        static_cast<long long>(AllocatedBytes));
+        BridgeTimeMilliseconds,
+        static_cast<long long>(AllocatedBytes),
+        GcCollectionCount,
+        GcPauseMilliseconds,
+        static_cast<unsigned long long>(MemoryHighWaterBytes),
+        StartupMilliseconds);
 
     Component->EndPlay(EEndPlayReason::Destroyed);
     Component->UnregisterComponent();
@@ -1251,6 +1282,10 @@ bool FUnifiedScriptDataPlaneWorkloadProfileTest::RunTest(
     FString BatchTraceText;
     FString AttributeReadText;
     FString AllocatedBytesText;
+    FString BatchTraceAllocatedBytesText;
+    FString BatchTraceBytesText;
+    FString BatchTraceGcCollectionCountText;
+    FString BatchTraceGcPauseMillisecondsText;
     FString MovementRoute;
     FString OverlapRoute;
     FString AttributeRoute;
@@ -1264,8 +1299,12 @@ bool FUnifiedScriptDataPlaneWorkloadProfileTest::RunTest(
     double BatchTraceNs = 0.0;
     double AttributeReadNs = 0.0;
     int64 DataPlaneAllocatedBytes = -1;
+    int64 BatchTraceAllocatedBytes = -1;
+    int64 BatchTraceBytes = -1;
+    int32 BatchTraceGcCollectionCount = -1;
+    double BatchTraceGcPauseMilliseconds = -1.0;
     const bool bParsed =
-        Component->ManagedState.StartsWith(TEXT("DataPlaneProfile:v1;")) &&
+        Component->ManagedState.StartsWith(TEXT("DataPlaneProfile:v2;")) &&
         ReadField(Component->ManagedState, TEXT("Iterations"), IterationsText) &&
         ReadField(Component->ManagedState, TEXT("SampleCount"), SampleCountText) &&
         ReadField(Component->ManagedState, TEXT("BindingScalarNs"), BindingScalarText) &&
@@ -1274,6 +1313,10 @@ bool FUnifiedScriptDataPlaneWorkloadProfileTest::RunTest(
         ReadField(Component->ManagedState, TEXT("BatchTraceNs"), BatchTraceText) &&
         ReadField(Component->ManagedState, TEXT("AttributeReadNs"), AttributeReadText) &&
         ReadField(Component->ManagedState, TEXT("DataPlaneAllocatedBytes"), AllocatedBytesText) &&
+        ReadField(Component->ManagedState, TEXT("BatchTraceAllocatedBytes"), BatchTraceAllocatedBytesText) &&
+        ReadField(Component->ManagedState, TEXT("BatchTraceBytes"), BatchTraceBytesText) &&
+        ReadField(Component->ManagedState, TEXT("BatchTraceGcCollectionCount"), BatchTraceGcCollectionCountText) &&
+        ReadField(Component->ManagedState, TEXT("BatchTraceGcPauseMilliseconds"), BatchTraceGcPauseMillisecondsText) &&
         ReadField(Component->ManagedState, TEXT("Movement"), MovementRoute) &&
         ReadField(Component->ManagedState, TEXT("Overlap"), OverlapRoute) &&
         ReadField(Component->ManagedState, TEXT("Attribute"), AttributeRoute) &&
@@ -1286,7 +1329,11 @@ bool FUnifiedScriptDataPlaneWorkloadProfileTest::RunTest(
         LexTryParseString(BindingTraceNs, *BindingTraceText) &&
         LexTryParseString(BatchTraceNs, *BatchTraceText) &&
         LexTryParseString(AttributeReadNs, *AttributeReadText) &&
-        LexTryParseString(DataPlaneAllocatedBytes, *AllocatedBytesText);
+        LexTryParseString(DataPlaneAllocatedBytes, *AllocatedBytesText) &&
+        LexTryParseString(BatchTraceAllocatedBytes, *BatchTraceAllocatedBytesText) &&
+        LexTryParseString(BatchTraceBytes, *BatchTraceBytesText) &&
+        LexTryParseString(BatchTraceGcCollectionCount, *BatchTraceGcCollectionCountText) &&
+        LexTryParseString(BatchTraceGcPauseMilliseconds, *BatchTraceGcPauseMillisecondsText);
     TestTrue(
         *FString::Printf(
             TEXT("Data-plane workload profile is parseable: %s"),
@@ -1305,6 +1352,17 @@ bool FUnifiedScriptDataPlaneWorkloadProfileTest::RunTest(
         TEXT("Fixed-row data-plane loops allocate no managed memory"),
         DataPlaneAllocatedBytes,
         int64{0});
+    TestEqual(
+        TEXT("Batch Trace allocates no managed memory"),
+        BatchTraceAllocatedBytes,
+        int64{0});
+    TestEqual(
+        TEXT("Batch Trace transfers the frozen request/result byte count"),
+        BatchTraceBytes,
+        int64{360448});
+    TestTrue(
+        TEXT("Batch Trace reports non-negative GC evidence"),
+        BatchTraceGcCollectionCount >= 0 && BatchTraceGcPauseMilliseconds >= 0.0);
     TestEqual(TEXT("Movement route is evidence-backed"), MovementRoute, TEXT("data-plane"));
     TestEqual(TEXT("Overlap route is evidence-backed"), OverlapRoute, TEXT("data-plane"));
     TestEqual(TEXT("Attribute route remains generated binding"), AttributeRoute, TEXT("binding"));
@@ -1314,7 +1372,7 @@ bool FUnifiedScriptDataPlaneWorkloadProfileTest::RunTest(
     UE_LOG(
         LogTemp,
         Display,
-        TEXT("UNIFIEDSCRIPT_DATA_PLANE_PROFILE_JSON {\"schemaVersion\":\"unifiedscript.unreal-data-plane-profile/v0.1\",\"iterations\":%d,\"sampleCount\":%d,\"bindingScalarNs\":%.3f,\"commandSubmitNs\":%.3f,\"bindingTraceNs\":%.3f,\"batchTraceNs\":%.3f,\"attributeReadNs\":%.3f,\"dataPlaneAllocatedBytes\":%lld,\"movement\":\"%s\",\"overlap\":\"%s\",\"attribute\":\"%s\",\"spawn\":\"%s\",\"query\":\"%s\"}"),
+        TEXT("UNIFIEDSCRIPT_DATA_PLANE_PROFILE_JSON {\"schemaVersion\":\"unifiedscript.unreal-data-plane-profile/v0.2\",\"iterations\":%d,\"sampleCount\":%d,\"bindingScalarNs\":%.3f,\"commandSubmitNs\":%.3f,\"bindingTraceNs\":%.3f,\"batchTraceNs\":%.3f,\"attributeReadNs\":%.3f,\"dataPlaneAllocatedBytes\":%lld,\"batchTraceAllocatedBytes\":%lld,\"batchTraceBytes\":%lld,\"batchTraceGcCollectionCount\":%d,\"batchTraceGcPauseMilliseconds\":%.6f,\"memoryHighWaterBytes\":%llu,\"movement\":\"%s\",\"overlap\":\"%s\",\"attribute\":\"%s\",\"spawn\":\"%s\",\"query\":\"%s\"}"),
         ManagedIterations,
         ManagedSampleCount,
         BindingScalarNs,
@@ -1323,6 +1381,11 @@ bool FUnifiedScriptDataPlaneWorkloadProfileTest::RunTest(
         BatchTraceNs,
         AttributeReadNs,
         static_cast<long long>(DataPlaneAllocatedBytes),
+        static_cast<long long>(BatchTraceAllocatedBytes),
+        static_cast<long long>(BatchTraceBytes),
+        BatchTraceGcCollectionCount,
+        BatchTraceGcPauseMilliseconds,
+        static_cast<unsigned long long>(FPlatformMemory::GetStats().PeakUsedPhysical),
         *MovementRoute,
         *OverlapRoute,
         *AttributeRoute,

@@ -54,12 +54,22 @@ public sealed class DataPlaneWorkloadProfileScript : IUnrealManagedScript
             target,
             commandSamples,
             ref checksum);
+        int batchCollectionsBefore = GC.CollectionCount(0) +
+            GC.CollectionCount(1) + GC.CollectionCount(2);
+        TimeSpan batchPauseBefore = GC.GetTotalPauseDuration();
+        long batchAllocatedBefore = GC.GetAllocatedBytesForCurrentThread();
         MeasureBatchTrace(
             context,
             missStart,
             missEnd,
             batchTraceSamples,
             ref checksum);
+        long batchAllocatedBytes =
+            GC.GetAllocatedBytesForCurrentThread() - batchAllocatedBefore;
+        int batchGcCollectionCount = GC.CollectionCount(0) +
+            GC.CollectionCount(1) + GC.CollectionCount(2) - batchCollectionsBefore;
+        double batchGcPauseMilliseconds =
+            (GC.GetTotalPauseDuration() - batchPauseBefore).TotalMilliseconds;
         long dataPlaneAllocatedBytes =
             GC.GetAllocatedBytesForCurrentThread() - dataPlaneAllocatedBefore;
         MeasureBindingTrace(
@@ -77,12 +87,18 @@ public sealed class DataPlaneWorkloadProfileScript : IUnrealManagedScript
         double bindingTraceNs = Median(bindingTraceSamples);
         double batchTraceNs = Median(batchTraceSamples);
         double attributeReadNs = Median(attributeSamples);
+        long batchTraceBytes = checked((long)(
+            UnrealGameplayDataAbiV4.TraceRequestEntrySize +
+            UnrealGameplayDataAbiV4.TraceResultEntrySize) * MeasuredIterations);
         component.ManagedState = string.Create(
             CultureInfo.InvariantCulture,
-            $"DataPlaneProfile:v1;Iterations={MeasuredIterations};SampleCount={SampleCount};" +
+            $"DataPlaneProfile:v2;Iterations={MeasuredIterations};SampleCount={SampleCount};" +
             $"BindingScalarNs={bindingScalarNs:F3};CommandSubmitNs={commandSubmitNs:F3};" +
             $"BindingTraceNs={bindingTraceNs:F3};BatchTraceNs={batchTraceNs:F3};" +
             $"AttributeReadNs={attributeReadNs:F3};DataPlaneAllocatedBytes={dataPlaneAllocatedBytes};" +
+            $"BatchTraceAllocatedBytes={batchAllocatedBytes};BatchTraceBytes={batchTraceBytes};" +
+            $"BatchTraceGcCollectionCount={batchGcCollectionCount};" +
+            $"BatchTraceGcPauseMilliseconds={batchGcPauseMilliseconds:F6};" +
             $"Movement=data-plane;Overlap=data-plane;Attribute=binding;" +
             $"Spawn=hybrid;Query=data-plane;Checksum={checksum:F3}");
     }

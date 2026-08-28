@@ -111,6 +111,16 @@ internal static class Program
             return RunUnrealWorkloadComparison(args);
         }
 
+        if (args.Count > 0 && args[0] == "ue-workload-assemble")
+        {
+            return RunUnrealWorkloadAssembly(args);
+        }
+
+        if (args.Count > 0 && args[0] == "ue-workload-capture")
+        {
+            return RunUnrealWorkloadCapture(args);
+        }
+
         if (args.Count > 0 && args[0] == "verify-roundtrip")
         {
             return RunRoundTripVerification(args);
@@ -1109,6 +1119,135 @@ internal static class Program
                 $"Performance comparison: MATCHED " +
                 $"(workloads={report.Workloads.Count}, " +
                 $"trials={manifest.TrialCount}, schedule={report.Schedule.Count})");
+            return 0;
+        }
+        catch (InvalidDataException exception)
+        {
+            Console.Error.WriteLine(exception.Message);
+            return 65;
+        }
+    }
+
+    private static int RunUnrealWorkloadAssembly(IReadOnlyList<string> args)
+    {
+        const long MaximumCaptureBytes = 4L * 1024 * 1024;
+        if (!TryParseUnrealWorkloadAssemblyArguments(
+                args,
+                out UnrealWorkloadAssemblyOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+        options = options ?? throw new InvalidOperationException(
+            "Argument parsing succeeded without workload assembly options.");
+        if (!File.Exists(options.ManifestPath))
+        {
+            Console.Error.WriteLine(
+                $"Performance manifest does not exist: {options.ManifestPath}");
+            return 66;
+        }
+        if (!Directory.Exists(options.CaptureDirectory))
+        {
+            Console.Error.WriteLine(
+                $"Performance capture directory does not exist: {options.CaptureDirectory}");
+            return 66;
+        }
+        string[] capturePaths = Directory.GetFiles(
+            options.CaptureDirectory,
+            "*.json",
+            SearchOption.TopDirectoryOnly);
+        if (capturePaths.Length == 0 || capturePaths.Length > 4096)
+        {
+            Console.Error.WriteLine(
+                "Performance capture directory must contain 1-4096 JSON files.");
+            return 65;
+        }
+        try
+        {
+            UnrealPerformanceSuiteManifest manifest =
+                UnrealPerformanceSuiteJson.DeserializeManifest(
+                    File.ReadAllText(options.ManifestPath));
+            var captures = new List<UnrealPerformanceTrialCapture>(capturePaths.Length);
+            foreach (string path in capturePaths.Order(StringComparer.Ordinal))
+            {
+                if (new FileInfo(path).Length > MaximumCaptureBytes)
+                {
+                    throw new InvalidDataException(
+                        $"Performance trial capture exceeds 4 MiB: {path}");
+                }
+                captures.Add(UnrealPerformanceSuiteJson.DeserializeCapture(
+                    File.ReadAllText(path)));
+            }
+            UnrealPerformanceEngineResult result =
+                UnrealPerformanceWorkloadSuite.AssembleResult(
+                    manifest,
+                    options.EngineId,
+                    captures);
+            string outputPath = Path.GetFullPath(options.OutputPath);
+            WriteAtomically(
+                outputPath,
+                UnrealPerformanceSuiteJson.SerializeResult(result) + "\n");
+            Console.WriteLine(outputPath);
+            Console.WriteLine(
+                $"Performance result: ASSEMBLED " +
+                $"(engine={result.EngineId}, trials={result.Trials.Count})");
+            return 0;
+        }
+        catch (InvalidDataException exception)
+        {
+            Console.Error.WriteLine(exception.Message);
+            return 65;
+        }
+    }
+
+    private static int RunUnrealWorkloadCapture(IReadOnlyList<string> args)
+    {
+        const long MaximumMeasurementBytes = 4L * 1024 * 1024;
+        if (!TryParseUnrealWorkloadCaptureArguments(
+                args,
+                out UnrealWorkloadCaptureOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+        options = options ?? throw new InvalidOperationException(
+            "Argument parsing succeeded without workload capture options.");
+        foreach (string input in new[] { options.ManifestPath, options.MeasurementPath })
+        {
+            if (!File.Exists(input))
+            {
+                Console.Error.WriteLine(
+                    $"Performance capture input does not exist: {input}");
+                return 66;
+            }
+            if (new FileInfo(input).Length > MaximumMeasurementBytes)
+            {
+                Console.Error.WriteLine(
+                    $"Performance capture input exceeds 4 MiB: {input}");
+                return 65;
+            }
+        }
+        try
+        {
+            UnrealPerformanceSuiteManifest manifest =
+                UnrealPerformanceSuiteJson.DeserializeManifest(
+                    File.ReadAllText(options.ManifestPath));
+            UnrealPerformanceRawMeasurement measurement =
+                UnrealPerformanceSuiteJson.DeserializeRawMeasurement(
+                    File.ReadAllText(options.MeasurementPath));
+            UnrealPerformanceTrialCapture capture =
+                UnrealPerformanceWorkloadSuite.CreateCapture(manifest, measurement);
+            string outputPath = Path.GetFullPath(options.OutputPath);
+            WriteAtomically(
+                outputPath,
+                UnrealPerformanceSuiteJson.SerializeCapture(capture) + "\n");
+            Console.WriteLine(outputPath);
+            Console.WriteLine(
+                $"Performance trial: CAPTURED " +
+                $"(engine={capture.EngineId}, " +
+                $"workload={capture.Trial.WorkloadId}, " +
+                $"trial={capture.Trial.Trial}, " +
+                $"ordinal={capture.Trial.ExecutionOrdinal})");
             return 0;
         }
         catch (InvalidDataException exception)
@@ -2363,6 +2502,98 @@ internal static class Program
         return true;
     }
 
+    private static bool TryParseUnrealWorkloadAssemblyArguments(
+        IReadOnlyList<string> args,
+        out UnrealWorkloadAssemblyOptions? options)
+    {
+        options = null;
+        if (args.Count != 9 || args[0] != "ue-workload-assemble")
+        {
+            return false;
+        }
+        string? manifestPath = null;
+        string? captureDirectory = null;
+        string? engineId = null;
+        string? outputPath = null;
+        int index = 1;
+        while (index < args.Count)
+        {
+            string option = args[index++];
+            string value = args[index++];
+            switch (option)
+            {
+                case "--manifest" when manifestPath is null:
+                    manifestPath = value;
+                    break;
+                case "--captures" when captureDirectory is null:
+                    captureDirectory = value;
+                    break;
+                case "--engine" when engineId is null:
+                    engineId = value;
+                    break;
+                case "--out" when outputPath is null:
+                    outputPath = value;
+                    break;
+                default:
+                    return false;
+            }
+        }
+        if (manifestPath is null || captureDirectory is null ||
+            engineId is null || outputPath is null)
+        {
+            return false;
+        }
+        options = new UnrealWorkloadAssemblyOptions(
+            manifestPath,
+            captureDirectory,
+            engineId,
+            outputPath);
+        return true;
+    }
+
+    private static bool TryParseUnrealWorkloadCaptureArguments(
+        IReadOnlyList<string> args,
+        out UnrealWorkloadCaptureOptions? options)
+    {
+        options = null;
+        if (args.Count != 7 || args[0] != "ue-workload-capture")
+        {
+            return false;
+        }
+        string? manifestPath = null;
+        string? measurementPath = null;
+        string? outputPath = null;
+        int index = 1;
+        while (index < args.Count)
+        {
+            string option = args[index++];
+            string value = args[index++];
+            switch (option)
+            {
+                case "--manifest" when manifestPath is null:
+                    manifestPath = value;
+                    break;
+                case "--measurement" when measurementPath is null:
+                    measurementPath = value;
+                    break;
+                case "--out" when outputPath is null:
+                    outputPath = value;
+                    break;
+                default:
+                    return false;
+            }
+        }
+        if (manifestPath is null || measurementPath is null || outputPath is null)
+        {
+            return false;
+        }
+        options = new UnrealWorkloadCaptureOptions(
+            manifestPath,
+            measurementPath,
+            outputPath);
+        return true;
+    }
+
     private static ExecutionArgument[] ParseExecutionArguments(string argumentsJson)
     {
         using JsonDocument document = JsonDocument.Parse(argumentsJson);
@@ -3016,6 +3247,8 @@ internal static class Program
         "  unifiedscript ue-data-plane <schema.json> --managed-out <layouts.g.cs> --native-out <layouts.gen.h>\n" +
         "  unifiedscript ue-puerts-inventory <puerts-project> --out <inventory.json> [--native-project <target-project>] [--project-name <name>] [--coverage <coverage.json> --report <report.json> --fail-on-uncovered]\n" +
         "  unifiedscript ue-profile-diagnose --baseline <profile.json> --current <profile.json> --evidence <evidence.json> --out <report.json>\n" +
+        "  unifiedscript ue-workload-capture --manifest <suite.json> --measurement <raw.json> --out <capture.json>\n" +
+        "  unifiedscript ue-workload-assemble --manifest <suite.json> --captures <directory> --engine <unifiedScript|puerts> --out <result.json>\n" +
         "  unifiedscript ue-workload-compare --manifest <suite.json> --unified <result.json> --puerts <result.json> --out <report.json>\n" +
         "  unifiedscript verify-roundtrip <visual.cs> <code.cs> --requirements <requirements.json> --report <report.json> [options]\n" +
         "Options:\n" +
@@ -3134,6 +3367,17 @@ internal static class Program
         string ManifestPath,
         string UnifiedScriptResultPath,
         string PuertsResultPath,
+        string OutputPath);
+
+    private sealed record UnrealWorkloadAssemblyOptions(
+        string ManifestPath,
+        string CaptureDirectory,
+        string EngineId,
+        string OutputPath);
+
+    private sealed record UnrealWorkloadCaptureOptions(
+        string ManifestPath,
+        string MeasurementPath,
         string OutputPath);
 
     private sealed record UnrealBindingOptions(

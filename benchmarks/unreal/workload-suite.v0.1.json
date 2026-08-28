@@ -24,7 +24,7 @@
       "assetDigest": "sha256:140bedbf9c3f6d56a9846d2ba7088798683f4da0c248231336e6a05679e4fdfe",
       "requiredMetrics": [
         "bridgeTimeMilliseconds", "calls", "allocatedBytes",
-        "gen0Collections", "gen1Collections", "gen2Collections",
+        "gcCollectionCount", "gcPauseMilliseconds",
         "memoryHighWaterBytes", "startupMilliseconds"
       ]
     },
@@ -40,7 +40,7 @@
       "assetDigest": "sha256:140bedbf9c3f6d56a9846d2ba7088798683f4da0c248231336e6a05679e4fdfe",
       "requiredMetrics": [
         "bridgeTimeMilliseconds", "calls", "bytesCopied", "allocatedBytes",
-        "gen0Collections", "gen1Collections", "gen2Collections",
+        "gcCollectionCount", "gcPauseMilliseconds",
         "memoryHighWaterBytes"
       ]
     },
@@ -56,7 +56,7 @@
       "assetDigest": "sha256:140bedbf9c3f6d56a9846d2ba7088798683f4da0c248231336e6a05679e4fdfe",
       "requiredMetrics": [
         "bridgeTimeMilliseconds", "calls", "bytesCopied", "allocatedBytes",
-        "gen0Collections", "gen1Collections", "gen2Collections",
+        "gcCollectionCount", "gcPauseMilliseconds",
         "memoryHighWaterBytes"
       ]
     },
@@ -73,8 +73,8 @@
       "requiredMetrics": [
         "frameTimeMedianMilliseconds", "frameTimeP95Milliseconds",
         "frameTimeP99Milliseconds", "bridgeTimeMilliseconds", "calls",
-        "allocatedBytes", "gen0Collections", "gen1Collections",
-        "gen2Collections", "memoryHighWaterBytes"
+        "allocatedBytes", "gcCollectionCount", "gcPauseMilliseconds",
+        "memoryHighWaterBytes"
       ]
     },
     {
@@ -90,8 +90,8 @@
       "requiredMetrics": [
         "frameTimeMedianMilliseconds", "frameTimeP95Milliseconds",
         "frameTimeP99Milliseconds", "bridgeTimeMilliseconds", "calls",
-        "bytesCopied", "allocatedBytes", "gen0Collections",
-        "gen1Collections", "gen2Collections", "memoryHighWaterBytes"
+        "bytesCopied", "allocatedBytes", "gcCollectionCount",
+        "gcPauseMilliseconds", "memoryHighWaterBytes"
       ]
     },
     {
@@ -106,7 +106,7 @@
       "assetDigest": "sha256:8c683b028dd1a4f50a389412434a53a1df80963875c3daf895c379f41f8fddf4",
       "requiredMetrics": [
         "bridgeTimeMilliseconds", "calls", "bytesCopied", "allocatedBytes",
-        "gen0Collections", "gen1Collections", "gen2Collections",
+        "gcCollectionCount", "gcPauseMilliseconds",
         "memoryHighWaterBytes"
       ]
     },
@@ -122,7 +122,7 @@
       "assetDigest": "sha256:73274ca2e6a8c29562bebb8246a883117831d614bebf50d4855c468940a27bb7",
       "requiredMetrics": [
         "bridgeTimeMilliseconds", "calls", "bytesCopied", "allocatedBytes",
-        "gen0Collections", "gen1Collections", "gen2Collections",
+        "gcCollectionCount", "gcPauseMilliseconds",
         "memoryHighWaterBytes", "startupMilliseconds"
       ]
     },
@@ -137,8 +137,8 @@
       "inputDigest": "sha256:d499c4f00940391bc78e746aa3cab1ca6ff27659fff086b1886bec6e14f37781",
       "assetDigest": "sha256:35ef308db03205aa0b4e870ae39a666d2774b1b05ee6217476f15dc3b7ddcb2b",
       "requiredMetrics": [
-        "allocatedBytes", "gen0Collections", "gen1Collections",
-        "gen2Collections", "memoryHighWaterBytes", "startupMilliseconds",
+        "allocatedBytes", "gcCollectionCount", "gcPauseMilliseconds",
+        "memoryHighWaterBytes", "startupMilliseconds",
         "reloadMilliseconds"
       ]
     },
@@ -155,8 +155,8 @@
       "requiredMetrics": [
         "frameTimeMedianMilliseconds", "frameTimeP95Milliseconds",
         "frameTimeP99Milliseconds", "bridgeTimeMilliseconds", "calls",
-        "bytesCopied", "allocatedBytes", "gen0Collections",
-        "gen1Collections", "gen2Collections", "memoryHighWaterBytes",
+        "bytesCopied", "allocatedBytes", "gcCollectionCount",
+        "gcPauseMilliseconds", "memoryHighWaterBytes",
         "startupMilliseconds", "reloadMilliseconds", "packageSizeBytes"
       ]
     }
