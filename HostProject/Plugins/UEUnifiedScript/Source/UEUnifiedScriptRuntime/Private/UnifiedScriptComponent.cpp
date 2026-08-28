@@ -180,6 +180,16 @@ public:
         {
             Root->SetStringField(TEXT("managedState"), ManagedState);
         }
+        const TSharedPtr<FJsonObject>* ProgramLoaderPrewarm = nullptr;
+        if (Managed->TryGetObjectField(
+                TEXT("programLoaderPrewarm"),
+                ProgramLoaderPrewarm) &&
+            ProgramLoaderPrewarm != nullptr && ProgramLoaderPrewarm->IsValid())
+        {
+            Root->SetObjectField(
+                TEXT("programLoaderPrewarm"),
+                *ProgramLoaderPrewarm);
+        }
     }
 
     FString Finish(
@@ -415,7 +425,10 @@ bool UUnifiedScriptComponent::StartScript()
         SetScriptFailure(TEXT("The UnifiedScript managed World host is unavailable."));
         return false;
     }
+    const double HostValidationMilliseconds =
+        (FPlatformTime::Seconds() - StartSeconds) * 1000.0;
 
+    double PhaseStartSeconds = FPlatformTime::Seconds();
     FString ResolvedAssemblyPath;
     FString ResolvedTypeName;
     UUnifiedScriptAsset* ResolvedAsset = nullptr;
@@ -436,7 +449,10 @@ bool UUnifiedScriptComponent::StartScript()
             *ResolvedAssemblyPath));
         return false;
     }
+    const double ConfigurationMilliseconds =
+        (FPlatformTime::Seconds() - PhaseStartSeconds) * 1000.0;
 
+    PhaseStartSeconds = FPlatformTime::Seconds();
     FInstancedPropertyBag CandidateScriptState;
     TArray<FGuid> CandidateOverrideIds;
     FUnifiedScriptStateMigrationReport CandidateMigration;
@@ -454,7 +470,10 @@ bool UUnifiedScriptComponent::StartScript()
         SetScriptFailure(MoveTemp(ResolutionError));
         return false;
     }
+    const double StateMaterializationMilliseconds =
+        (FPlatformTime::Seconds() - PhaseStartSeconds) * 1000.0;
 
+    PhaseStartSeconds = FPlatformTime::Seconds();
     FUnifiedScriptObjectHandleResult HandleResult;
     const FUnifiedScriptObjectHandle HostHandle = Host->RegisterObject(this, HandleResult);
     if (!HandleResult.IsSuccess())
@@ -476,6 +495,8 @@ bool UUnifiedScriptComponent::StartScript()
             return false;
         }
     }
+    const double HandleRegistrationMilliseconds =
+        (FPlatformTime::Seconds() - PhaseStartSeconds) * 1000.0;
 
     const uint64 InstanceId =
         UE::UnifiedScript::Component::Private::AllocateScriptInstanceId();
@@ -488,6 +509,7 @@ bool UUnifiedScriptComponent::StartScript()
     ScriptStateOverrideIds = MoveTemp(CandidateOverrideIds);
     bScriptStateOverrideBaselineInitialized = true;
     FString Error;
+    PhaseStartSeconds = FPlatformTime::Seconds();
     if (!Host->CreateManagedScript(
             InstanceId,
             HostHandle,
@@ -510,7 +532,10 @@ bool UUnifiedScriptComponent::StartScript()
         SetScriptFailure(MoveTemp(Error));
         return false;
     }
+    const double ManagedActivationMilliseconds =
+        (FPlatformTime::Seconds() - PhaseStartSeconds) * 1000.0;
 
+    PhaseStartSeconds = FPlatformTime::Seconds();
     ManagedScriptInstanceId = InstanceId;
     ManagedHostHandle = HostHandle.Value;
     ManagedTargetHandle = TargetHandle.Value;
@@ -536,6 +561,8 @@ bool UUnifiedScriptComponent::StartScript()
     LastGameplayProfileTrace.Reset();
     BindManagedActorEvents();
     SetComponentTickEnabled(bTickAutomatically || bReloadRequested);
+    const double FinalizationMilliseconds =
+        (FPlatformTime::Seconds() - PhaseStartSeconds) * 1000.0;
     LastStartMilliseconds = FMath::Max(
         0.001,
         (FPlatformTime::Seconds() - StartSeconds) * 1000.0);
@@ -547,6 +574,20 @@ bool UUnifiedScriptComponent::StartScript()
         *ResolvedAssemblyPath,
         ActiveScriptAssetPath.IsEmpty() ? TEXT("legacy-direct") : *ActiveScriptAssetPath,
         LastStartMilliseconds);
+    UE_LOG(
+        LogTemp,
+        Display,
+        TEXT("UnifiedScript startup phases: Type=%s, Mode=%s, HostMs=%.6f, ConfigurationMs=%.6f, StateMs=%.6f, HandlesMs=%.6f, ManagedMs=%.6f, FinalizationMs=%.6f"),
+        *ResolvedTypeName,
+        ResolvedAssemblyPath.EndsWith(TEXT(".uschunk"), ESearchCase::IgnoreCase)
+            ? TEXT("chunk")
+            : TEXT("loose"),
+        HostValidationMilliseconds,
+        ConfigurationMilliseconds,
+        StateMaterializationMilliseconds,
+        HandleRegistrationMilliseconds,
+        ManagedActivationMilliseconds,
+        FinalizationMilliseconds);
     return true;
 }
 

@@ -224,7 +224,7 @@ public sealed class CompiledProgramChunkTests
                 Assert.False(trial.ProcessFirstLoad));
             Assert.All(report.Trials, trial =>
             {
-                Assert.Equal(result.Content.Length * 2L,
+                Assert.Equal(result.Content.Length,
                     trial.Phases.Single(static phase =>
                         phase.Phase == "inputMaterialization").BytesCopied +
                     trial.Phases.Single(static phase =>

@@ -48,8 +48,8 @@ current cursor, validate it, and advance this document.
 
 Last refreshed: **2026-08-28**
 
-- Active milestone: **M11 — Production hardening and release candidate**
-- Next slice: **M11.4 — matched compiled-path cold-start closure**
+- Active milestone: **M12 — Migration ecosystem and UnifiedScript 1.0**
+- Next slice: **M12.1 — generalized Puerts project scanner**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -63,8 +63,8 @@ machine-local unless an artifact explicitly says otherwise.
 | Runtime source baseline | `810913d` (`perf: remove benchmark world log pollution`) |
 | UnifiedScript comparison source | `5cf323e` (`perf: sync representative workload host`) |
 | Puerts comparison source | `be399cb` (`perf: register benchmark world context`) |
-| Managed tests | 575 / 575 passed |
-| Repository validator | 79 / 79 passed |
+| Managed tests | 588 / 588 passed |
+| Repository validator | 81 / 81 passed |
 | UE 5.8.1 native build | passed |
 | `UnifiedScript.Unreal` Automation | 17 / 17 passed, including bounded crash breadcrumbs, failure containment, deterministic World shutdown, workload collectors, gameplay-profiler attribution, Authoring Surface, live World semantic pause/step/reload/detach, and repeated success/failure hot-reload leak coverage |
 | M10.2 generated-channel profile | 1,024 rows x 3 median samples: container binding 25,371.973 ns/row, generated snapshot 1.270 ns/row (ratio 0.000050), buffered events 0.586 ns/row, zero managed allocation |
@@ -78,7 +78,7 @@ machine-local unless an artifact explicitly says otherwise.
 | Full migration audit | 74 / 74 inventory items, 19 / 19 shared assets, 40 / 40 generated thunks, zero legacy targets |
 | Deliverable smoke | 300 frames, one shot, one hit, two command completions, 3,631 fast/CallFrame calls, zero legacy calls |
 | Deliverable report | `artifacts/demo/blockbreaker-20260828-152605/demo-delivery.json` |
-| Compiled delivery comparison | 3 alternating trials: chunk startup 162.0194 ms vs loose 110.3650 ms (1.468032); reload 75.6999 ms vs 79.1182 ms (0.956795); one 44,886-byte chunk vs two 43,992-byte loose runtime files (1.020322) |
+| Compiled delivery comparison | 5 alternating trials: chunk startup 75.8024 ms vs loose 78.1151 ms (0.970394); reload 75.2471 ms vs 75.6904 ms (0.994143); generation load ratio 0.728196; one 44,886-byte chunk vs two 43,992-byte loose runtime files |
 | M11.1 reliability soak | editor + dedicated-server process lanes passed: 64 travel, 64 PIE, 128 successful + 128 rolled-back reloads, 8,192 object registrations, 34 GC cycles, 131,072 commands, 152 ordered World shutdowns, zero ownership/leak deltas |
 | Reliability report | `artifacts/ue/reliability-soak/20260828-160743/reliability-soak.json` |
 | M11.1 scale gate | 256 Contract types / 4,096 members, 256 compiled Script Assets, deterministic generation, localized Contract rebuild and one-asset churn, all budgets passed |
@@ -93,9 +93,9 @@ machine-local unless an artifact explicitly says otherwise.
 | R0 foundation | Deterministic language, graph, patch, CoreCLR, and UE adapter contracts | Complete |
 | R1 demonstrable alpha | A packaged sample runs meaningful gameplay without Puerts | Complete |
 | R2 adoptable alpha | A second UE project can install, generate, run, and package without repository-specific glue | Complete |
-| R3 product beta | Practical gameplay API coverage, complete visual/code loop, debugging, and migration workflow | Active — M8 |
-| R4 release candidate | Broad performance, soak, packaging, upgrade, and CI evidence | Queued — M10 to M11 |
-| R5 1.0 | Versioned SDK and plugin distribution with supported compatibility and migration policy | Queued — M12 |
+| R3 product beta | Practical gameplay API coverage, complete visual/code loop, debugging, and migration workflow | Complete |
+| R4 release candidate | Broad performance, soak, packaging, upgrade, and CI evidence | Complete |
+| R5 1.0 | Versioned SDK and plugin distribution with supported compatibility and migration policy | Active — M12 |
 
 ## Evidence-backed foundation
 
@@ -1329,9 +1329,9 @@ measured compiled program image v2 work.
 - [x] run a controlled ReadyToRun experiment against the same exact-identity
   chunk and reject promotion when cold startup, JIT preparation, or delivery
   size fails the materiality budgets
-- [x] move bounded entry-method prewarming outside the activation critical path,
-  cancel it with its generation, and prove first Tick improves without delaying
-  transactional reload or World teardown
+- [x] move bounded entry-method prewarming outside actor-tree activation,
+  cancel it with its generation, and schedule initial work after first Tick so
+  it cannot delay sibling activation, transactional reload, or World teardown
 - [x] retain deterministic CoreCLR PE/IL as executable code and JSON as the
   readable authoring/import/export format; do not create a second custom VM
   whose semantics can drift from C# and the visual graph
@@ -1340,7 +1340,7 @@ M11.4 profiling evidence (2026-08-28): `chunk-profile` publishes the versioned
 22-phase `unifiedscript.compiled-chunk-load-profile/v0.1` report, and
 `tools/measure-compiled-chunk-load.ps1` aggregates isolated process-first
 trials without storing the input path. Two focused tests account for the
-current stream path's two whole-file copies, every digest/decode/load phase,
+baseline stream path's two whole-file copies, every digest/decode/load phase,
 PE/PDB materialization, and explicit `RuntimeHelpers.PrepareMethod` work. The
 safe diagnostics policy now admits these two profile schemas as 27th and 28th
 allowlisted report families without admitting source-derived artifacts.
@@ -1365,7 +1365,8 @@ collectible generations. Misses verify SHA-256 plus CLR name/version/MVID under
 a write-excluding file handle; default-context assemblies are permanently bound
 to the first accepted digest, and ALCs load the verified bytes rather than
 reopening a path. The cache defaults to 128 entries / 256 MiB, uses LRU
-eviction, and is single-flight under concurrent loads. Three focused cache
+eviction, performs file/hash work outside the global cache lock, and atomically
+publishes one snapshot under concurrent loads. Three focused cache
 tests plus the existing Unreal loader test cover cold/warm counters, changed
 disk evidence, clearing, eight-way concurrency, bounds/eviction, and two World
 ALC generations.
@@ -1403,13 +1404,14 @@ Repository validation is 79 / 79; the cursor advances to bounded,
 generation-owned background prewarming.
 
 M11.4 background-prewarm evidence (2026-08-28): every collectible World
-generation now owns an optional operation that starts only after `OnStart` and
-event binding succeed. It defaults to 64 methods / 8 ms, enforces hard 1,024
-method / 100 ms limits, contains preparation failures, observes rather than
-waits at the first Tick, and is cancelled without joining during rollback,
-reload retirement, or World teardown. The live snapshot is an additive field
-on the existing managed reload transaction and the environment-disable path is
-reserved for controlled A/B evidence.
+generation now owns an optional operation. Reload candidates start it after
+`OnStart` and event binding succeed; initial generations start it after first
+Tick so sibling actor-tree activation cannot compete with their JIT work. It
+defaults to 64 methods / 8 ms, enforces hard 1,024 method / 100 ms limits,
+contains preparation failures, never waits at Tick, and is cancelled without
+joining during rollback, reload retirement, or World teardown. The live
+snapshot is an additive field on the existing managed reload transaction and
+the environment-disable path is reserved for controlled A/B evidence.
 
 `tools/measure-generation-prewarm.ps1` emitted one deterministic probe chunk
 and ran 15 alternating cold processes per variant with the same 16 ms frame
@@ -1421,8 +1423,13 @@ focused tests cover explicit scheduling, count/time bounds, running and
 pre-activation cancellation, failure containment, non-blocking first-Tick
 observation, CLI evidence, and privacy-safe output. Evidence is
 `artifacts/chunk-profile/m11.4-background-prewarm/generation-prewarm-experiment.json`.
-The remaining M11.4 closure is the acceptance-level compiled-versus-loose cold
-startup gate; the product does not replace deterministic PE/IL with a second VM.
+The standalone probe proved the operation can finish before a controlled first
+Tick, while matched BlockBreaker evidence showed that starting one operation
+per component during actor-tree activation creates cross-component contention.
+The product policy therefore preserves the bounded operation but starts initial
+generation work after first Tick. The remaining M11.4 closure was the
+acceptance-level compiled-versus-loose cold-start gate; the product does not
+replace deterministic PE/IL with a second VM.
 The complete managed suite passes 583 / 583 and repository validation passes
 80 / 80. Installed UE 5.8.1 rebuilt both changed Automation translation units;
 WorldHost Lifecycle and LifecycleStress passed with the new
@@ -1432,6 +1439,38 @@ contexts. Two 182-payload SDK builds reproduced SHA-256
 and the extracted packaged tool passed five trials per variant. A twice-built
 31-report diagnostics bundle performed 151 redactions and reproduced SHA-256
 `6b99087fe41ce7a7c015674573bf32a875556051d79e4fc3ba14eba658ebfa2c`.
+
+M11.4 cold-start closure evidence (2026-08-28): the seekable chunk reader owns
+one exact-length whole-file buffer instead of copying through an intermediate
+stream. One process-level bounded loader prewarm prepares dependency snapshots
+before binary-codec JIT, never blocks script activation, reports a safe live
+snapshot through reload transactions, and contains all failures. The default
+limits are 32 dependencies / 64 MiB / 50 ms cooperative active work with hard
+256 / 512 MiB / 500 ms caps. A zero-copy section stream was rejected after a
+1.737637 BlockBreaker regression. Loader R2R improved an isolated CLI run to
+0.820809 of IL but regressed the real five-trial BlockBreaker gate to 1.052608,
+so deterministic IL remains the product path.
+
+The strict `unifiedscript.blockbreaker-chunk-delivery/v0.2` gate ran five
+alternating cold processes per mode and now exits nonzero above a `1.0` startup
+ratio. Chunk startup was 75.8024 ms versus 78.1151 ms loose (`0.970394`), reload
+was 75.2471 ms versus 75.6904 ms (`0.994143`), and reload generation load was
+1.2190 ms versus 1.6740 ms (`0.728196`). All trials executed the same gameplay,
+ABI v3 fast/CallFrame calls, zero legacy calls, committed reload, prepared codec,
+and zero prewarm failures. Evidence is
+`artifacts/comparison/chunk-delivery/20260828-203527/chunk-delivery.json`.
+M11.4 is complete and the cursor advances to M12.1.
+
+Final validation rebuilt the changed UE 5.8.1 native component and both
+Automation translation units. WorldHost Lifecycle passed the compiled
+Start/Tick/reload/Stop demo, and LifecycleStress passed 8 travel cycles, 8 PIE
+cycles, 16 successful plus 16 rolled-back reloads, 256 object registrations,
+4,096 commands, 24 ordered shutdowns, and zero retained collectible contexts.
+The complete managed suite passes 588 / 588 and repository validation passes
+81 / 81. Two 182-payload SDK archives reproduced SHA-256
+`3351ad754c7f3d1b7978454d31f500fd4ea7aa27802875dfafb35ce5b70eb507`;
+the extracted archive then passed payload verification and transactional install
+into an isolated project fixture.
 
 M11.4 acceptance: the compiled path performs no gameplay-authoring JSON parse,
 retains loose/chunk semantic equivalence and failure containment, and its

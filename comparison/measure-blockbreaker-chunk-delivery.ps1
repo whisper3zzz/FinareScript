@@ -8,6 +8,8 @@ param(
     [int]$WarmupFrames = 30,
     [ValidateRange(1, 9)]
     [int]$Trials = 3,
+    [ValidateRange(0.1, 2.0)]
+    [double]$MaximumStartupRatio = 1.0,
     [ValidateRange(30, 300)]
     [int]$TimeoutSeconds = 120
 )
@@ -134,6 +136,19 @@ function Invoke-DeliveryTrial([string]$Mode, [int]$Trial, [int]$ExecutionOrdinal
         $stateMigration.Count -ne 1) {
         throw "$Mode trial $Trial reload transaction is missing measured phases. Log: $logPath"
     }
+    $programLoaderPrewarm = $reloadTransaction.programLoaderPrewarm
+    $terminalPrewarmStates = @(
+        'completed',
+        'dependencyLimitReached',
+        'byteBudgetReached',
+        'timeBudgetReached')
+    if ($Mode -eq 'chunk' -and
+        ($null -eq $programLoaderPrewarm -or
+        [string]$programLoaderPrewarm.state -notin $terminalPrewarmStates -or
+        -not [bool]$programLoaderPrewarm.codecPrepared -or
+        [int]$programLoaderPrewarm.failureCount -ne 0)) {
+        throw "$Mode trial $Trial did not complete a safe program-loader prewarm. Log: $logPath"
+    }
 
     $expectedExtension = if ($Mode -eq 'chunk') { '.uschunk' } else { '.dll' }
     $programPaths = @(
@@ -180,6 +195,7 @@ function Invoke-DeliveryTrial([string]$Mode, [int]$Trial, [int]$ExecutionOrdinal
         legacyCalls = [uint64]$summary.Groups[7].Value
         playerProgram = $summary.Groups[8].Value.Trim()
         gunProgram = $summary.Groups[9].Value.Trim()
+        programLoaderPrewarm = $programLoaderPrewarm
         log = $logPath
     }
 }
@@ -213,8 +229,9 @@ $looseMigrationArtifacts = Get-ArtifactSet @(
     (Join-Path $managedRoot 'BlockBreaker.UnifiedScript.asset.json'),
     (Join-Path $managedRoot 'BlockBreaker.UnifiedScript.sourcemap.json'))
 
+$startupRatio = $chunkStartup / $looseStartup
 $report = [ordered]@{
-    schemaVersion = 'unifiedscript.blockbreaker-chunk-delivery/v0.1'
+    schemaVersion = 'unifiedscript.blockbreaker-chunk-delivery/v0.2'
     generatedAtUtc = [DateTime]::UtcNow.ToString('O')
     engineVersion = '5.8.1'
     engineRoot = $EngineRoot
@@ -242,7 +259,7 @@ $report = [ordered]@{
             reloadGenerationLoadMedianMilliseconds = $looseGenerationLoad
         }
         ratios = [ordered]@{
-            chunkToLooseStartup = $chunkStartup / $looseStartup
+            chunkToLooseStartup = $startupRatio
             chunkToLooseReload = $chunkReload / $looseReload
             chunkToLooseReloadGenerationLoad =
                 $chunkGenerationLoad / $looseGenerationLoad
@@ -256,10 +273,23 @@ $report = [ordered]@{
     }
     trials = @($results)
     equivalentGameplayPassed = $true
+    acceptance = [ordered]@{
+        maximumStartupRatio = $MaximumStartupRatio
+        startupPassed = $startupRatio -le $MaximumStartupRatio
+        programLoaderPrewarmPassed = $true
+        passed = $startupRatio -le $MaximumStartupRatio
+    }
 }
 $report | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $reportPath -Encoding utf8
 $latestPath = Join-Path (Split-Path -Parent $artifactRoot) 'latest.json'
 $report | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $latestPath -Encoding utf8
+
+if (-not $report.acceptance.passed) {
+    throw (
+        'BlockBreaker chunk delivery: FAIL ' +
+        "(startup ratio=$([Math]::Round($startupRatio, 6)), " +
+        "maximum=$([Math]::Round($MaximumStartupRatio, 6))). Report: $reportPath")
+}
 
 Write-Output (
     'BlockBreaker chunk delivery: PASS ' +

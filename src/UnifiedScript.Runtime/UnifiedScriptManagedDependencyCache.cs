@@ -148,6 +148,55 @@ public sealed class UnifiedScriptManagedDependencyCache
         }
     }
 
+    internal UnifiedScriptManagedDependencyVerification Preload(
+        string path,
+        Assembly? sharedAssembly = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        string fullPath = Path.GetFullPath(path);
+        byte[] content = ReadDependencyContent(fullPath);
+        string actualDigest = "sha256:" +
+            Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
+        ManagedAssemblyIdentity identity = ReadAssemblyIdentity(content);
+        var dependency = new UnifiedScriptRuntimeDependency(
+            UnifiedScriptRuntimeDependencyKind.ManagedAssembly,
+            identity.Name,
+            identity.Version,
+            actualDigest,
+            Optional: false);
+        lock (gate)
+        {
+            ValidateSharedBinding(sharedAssembly, dependency);
+            if (entries.TryGetValue(
+                actualDigest,
+                out LinkedListNode<CacheEntry>? existing))
+            {
+                ValidateIdentity(existing.Value.Dependency, dependency, sharedAssembly);
+                BindSharedAssembly(sharedAssembly, actualDigest);
+                leastRecentlyUsed.Remove(existing);
+                leastRecentlyUsed.AddLast(existing);
+                hitCount++;
+                return new UnifiedScriptManagedDependencyVerification(
+                    existing.Value.Dependency,
+                    CacheHit: true);
+            }
+
+            missCount++;
+            var verified = new UnifiedScriptVerifiedManagedDependency(
+                identity.Name,
+                identity.Version,
+                actualDigest,
+                identity.ModuleVersionId,
+                content);
+            ValidateIdentity(verified, dependency, sharedAssembly);
+            BindSharedAssembly(sharedAssembly, actualDigest);
+            AddToCache(verified);
+            return new UnifiedScriptManagedDependencyVerification(
+                verified,
+                CacheHit: false);
+        }
+    }
+
     private static byte[] ReadDependencyContent(string path)
     {
         using var stream = new FileStream(

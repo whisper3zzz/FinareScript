@@ -152,6 +152,9 @@ def main() -> int:
     compiled_chunk_document = (
         ROOT / "docs" / "COMPILED_CHUNKS.md"
     ).read_text(encoding="utf-8")
+    roadmap_document = (
+        ROOT / "docs" / "ROADMAP.md"
+    ).read_text(encoding="utf-8")
     compiled_program_source = (
         ROOT / "src" / "UnifiedScript.Runtime" / "CompiledProgramChunk.cs"
     ).read_text(encoding="utf-8")
@@ -182,6 +185,13 @@ def main() -> int:
     ).read_text(encoding="utf-8")
     generation_prewarm_tests = (
         ROOT / "tests" / "UnifiedScript.Tests" / "CoreClrGenerationPrewarmTests.cs"
+    ).read_text(encoding="utf-8")
+    program_loader_prewarm_source = (
+        ROOT / "src" / "UnifiedScript.Runtime" / "CoreClrProgramLoaderPrewarm.cs"
+    ).read_text(encoding="utf-8")
+    program_loader_prewarm_tests = (
+        ROOT / "tests" / "UnifiedScript.Tests"
+        / "CoreClrProgramLoaderPrewarmTests.cs"
     ).read_text(encoding="utf-8")
     compiled_program_tests = (
         ROOT / "tests" / "UnifiedScript.Tests" / "CompiledProgramChunkTests.cs"
@@ -254,7 +264,7 @@ def main() -> int:
         and "CompiledChunkPath" in chunk_deployment_commandlet
         and "chunkPath" in chunk_deployment_sample
         and "UnifiedScriptDisableCompiledChunks" in unreal_component
-        and "unifiedscript.blockbreaker-chunk-delivery/v0.1"
+        and "unifiedscript.blockbreaker-chunk-delivery/v0.2"
         in chunk_delivery_measurement
         and "BlockBreakerBenchmarkReload" in chunk_delivery_measurement
         and "compiledChunkPrograms" in blockbreaker_package
@@ -293,12 +303,12 @@ def main() -> int:
         and "Get-Int64Median" in compiled_chunk_process_profiler
         and "processFirstLoad" in compiled_chunk_process_profiler
         and "output directory must be empty" in compiled_chunk_process_profiler
-        and "ProfiledStreamReadAccountsForEveryCurrentWholeFileCopyAndDigest"
+        and "ProfiledStreamReadOwnsOneWholeFileCopyAndDigest"
         in compiled_chunk_tests
         and "ChunkProfilerMeasuresCopiesDecodeLoadAndEntryMethodJitPreparation"
         in compiled_program_tests
         and "M11.4 phased load profiling" in compiled_chunk_document
-        and "two current whole-file" in compiled_chunk_document
+        and "one exact-length whole-file" in compiled_chunk_document
         and "does not flush the operating-system file cache"
         in compiled_chunk_document,
         "M11.4 chunk copy, digest, decode, CoreCLR load, or JIT profiling is incomplete",
@@ -331,7 +341,7 @@ def main() -> int:
         "M11.4 verified dependency cache, immutable ALC snapshots, metrics, tests, or documentation are incomplete",
     )
     checks.append(
-        "M11.4 caches bounded verified dependency snapshots across World generations"
+        "M11.4 atomically caches bounded verified dependency snapshots across World generations"
     )
     require(
         "unifiedscript.readytorun-experiment/v0.1" in readytorun_profiler
@@ -382,6 +392,49 @@ def main() -> int:
     )
     checks.append(
         "M11.4 moves bounded cancellable JIT prewarm outside activation and first Tick"
+    )
+    require(
+        "DefaultMaximumDependencyCount = 32" in program_loader_prewarm_source
+        and "DefaultMaximumDependencyBytes = 64L * 1024 * 1024"
+        in program_loader_prewarm_source
+        and "DefaultTimeBudgetMilliseconds = 50"
+        in program_loader_prewarm_source
+        and "HardMaximumDependencyCount = 256" in program_loader_prewarm_source
+        and "HardMaximumDependencyBytes = 512L * 1024 * 1024"
+        in program_loader_prewarm_source
+        and "HardMaximumTimeBudgetMilliseconds = 500"
+        in program_loader_prewarm_source
+        and "Task.Run(ExecuteAsync)" in program_loader_prewarm_source
+        and "StartDependencyPreparation" in program_loader_prewarm_source
+        and "StartCodecPreparation" in program_loader_prewarm_source
+        and "WarmBinaryCodec" in program_loader_prewarm_source
+        and "dependencyCache.Preload" in program_loader_prewarm_source
+        and "ReadOwnedContent" in compiled_chunk_source
+        and "ReadCore(content, profile: null, content)" in compiled_chunk_source
+        and "ProgramLoaderPrewarm.Start()" in unreal_world_entry
+        and "current.Prewarm.Start()" in unreal_world_entry
+        and "UNIFIEDSCRIPT_DISABLE_PROGRAM_LOADER_PREWARM" in unreal_world_entry
+        and "ProgramLoaderPrewarm = ProgramLoaderPrewarm.GetSnapshot()"
+        in unreal_world_entry
+        and "Prewarm_CanPrepareDependenciesBeforeCodecWorkIsReleased"
+        in program_loader_prewarm_tests
+        and "Options_EnforceHardBoundsAndZeroDisables"
+        in program_loader_prewarm_tests
+        and "MaximumStartupRatio = 1.0" in chunk_delivery_measurement
+        and "programLoaderPrewarm.codecPrepared" in chunk_delivery_measurement
+        and "programLoaderPrewarm.failureCount" in chunk_delivery_measurement
+        and "if (-not $report.acceptance.passed)" in chunk_delivery_measurement
+        and 'TEXT("programLoaderPrewarm")' in unreal_component
+        and "UnifiedScript startup phases:" in unreal_component
+        and "process loader prewarm and cold-start closure"
+        in compiled_chunk_document
+        and "0.970394" in compiled_chunk_document
+        and "M11.4 is complete and the cursor advances to M12.1"
+        in roadmap_document,
+        "M11.4 process loader prewarm, one-copy reader, hard gate, evidence, or cursor closure is incomplete",
+    )
+    checks.append(
+        "M11.4 closes matched chunk cold start with bounded loader prewarm and a hard gate"
     )
 
     deployment_sample_path = (
@@ -4240,7 +4293,7 @@ def main() -> int:
         and "4,096 accepted" in large_project_scale_doc
         and "updated exactly one" in large_project_scale_doc
         and "- [x] test large contracts and script sets" in roadmap
-        and "- Next slice: **M11.4" in roadmap,
+        and "- Next slice: **M12.1" in roadmap,
         "M11.1 large Contract, script-set, incremental, or asset-churn scale gate is incomplete",
     )
     checks.append(
@@ -4541,7 +4594,7 @@ def main() -> int:
         and "all 27 captures" in performance_suite_doc
         and "all 54 execution ordinals" in performance_suite_doc
         and "mixed results close M10.1" in performance_suite_doc
-        and "- Next slice: **M11.4" in roadmap
+        and "- Next slice: **M12.1" in roadmap
         and "- [x] use profiler evidence to promote only high-volume stable data"
         in roadmap
         and "- [x] preserve World ownership, generation checks, bounds"

@@ -64,7 +64,8 @@ internal sealed record UnrealManagedReloadTransaction(
     int ActiveGeneration,
     IReadOnlyList<UnrealManagedReloadPhase> Phases,
     string? Failure,
-    CoreClrGenerationPrewarmSnapshot? Prewarm);
+    CoreClrGenerationPrewarmSnapshot? Prewarm,
+    CoreClrProgramLoaderPrewarmSnapshot? ProgramLoaderPrewarm);
 
 public static class UnrealWorldManagedEntryPoint
 {
@@ -74,10 +75,21 @@ public static class UnrealWorldManagedEntryPoint
     private static readonly List<WeakReference> RetiredLoadContexts = [];
     private static readonly UnifiedScriptManagedDependencyCache DependencyCache =
         UnifiedScriptManagedDependencyCache.Shared;
+    private static readonly CoreClrProgramLoaderPrewarmOperation ProgramLoaderPrewarm =
+        CoreClrProgramLoaderPrewarmOperation.Create(
+            Path.GetDirectoryName(typeof(UnrealWorldManagedEntryPoint).Assembly.Location) ??
+                Environment.CurrentDirectory,
+            DependencyCache,
+            ResolveProgramLoaderPrewarmOptions());
+    private static readonly bool TraceProgramLoadPhases = string.Equals(
+        Environment.GetEnvironmentVariable("UNIFIEDSCRIPT_TRACE_PROGRAM_LOAD_PHASES"),
+        "1",
+        StringComparison.Ordinal);
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int CreateWorld(ulong worldId, nint context, nint transportTable)
     {
+        _ = ProgramLoaderPrewarm.Start();
         ClearBoundaryFailure(worldId);
         if (worldId == 0 || context == nint.Zero || transportTable == nint.Zero)
         {
@@ -1063,6 +1075,7 @@ public static class UnrealWorldManagedEntryPoint
                 current.Generation,
                 _typeName,
                 deltaSeconds);
+            _ = current.Prewarm.Start();
         }
 
         public bool IsProfilerEnabled => _profiler.Enabled;
@@ -1112,7 +1125,11 @@ public static class UnrealWorldManagedEntryPoint
                 return string.Empty;
             }
             return JsonSerializer.Serialize(
-                transaction with { Prewarm = _lastReloadPrewarm?.GetSnapshot() },
+                transaction with
+                {
+                    Prewarm = _lastReloadPrewarm?.GetSnapshot(),
+                    ProgramLoaderPrewarm = ProgramLoaderPrewarm.GetSnapshot(),
+                },
                 UnifiedJson.CreateOptions(writeIndented: false));
         }
 
@@ -1378,7 +1395,6 @@ public static class UnrealWorldManagedEntryPoint
             UnrealScriptContext context = CreateContext(generation);
             generation.Script.OnStart(context);
             _ = UnrealEventBinder.BindAttributedEvents(generation.Script, context);
-            _ = generation.Prewarm.Start();
         }
 
         private static void StopGeneration(ScriptGeneration generation)
@@ -1440,7 +1456,8 @@ public static class UnrealWorldManagedEntryPoint
                 activeGeneration,
                 phases,
                 failure?.Message,
-                Prewarm: null);
+                Prewarm: null,
+                ProgramLoaderPrewarm: null);
         }
 
         private ScriptGeneration LoadGeneration(
@@ -1448,26 +1465,47 @@ public static class UnrealWorldManagedEntryPoint
             string assemblyPath,
             string typeName)
         {
+            long phaseStarted = Stopwatch.GetTimestamp();
             var loadContext = new ScriptAssemblyLoadContext(
                 _worldId,
                 _instanceId,
                 generation,
                 assemblyPath);
+            long contextTicks = Stopwatch.GetTimestamp() - phaseStarted;
             try
             {
+                phaseStarted = Stopwatch.GetTimestamp();
                 Assembly assembly = loadContext.LoadMainAssembly();
+                long assemblyTicks = Stopwatch.GetTimestamp() - phaseStarted;
+                phaseStarted = Stopwatch.GetTimestamp();
                 loadContext.ValidateEntryType(assembly, typeName);
                 Type type = assembly.GetType(typeName, throwOnError: true)!;
+                long typeTicks = Stopwatch.GetTimestamp() - phaseStarted;
+                phaseStarted = Stopwatch.GetTimestamp();
                 if (Activator.CreateInstance(type) is not IUnrealManagedScript script)
                 {
                     throw new InvalidOperationException(
                         $"Managed script type '{typeName}' does not implement {nameof(IUnrealManagedScript)}.");
                 }
+                long activationTicks = Stopwatch.GetTimestamp() - phaseStarted;
+                phaseStarted = Stopwatch.GetTimestamp();
                 var generationBridge = new UnrealGenerationInvocationBridge(_bridge);
                 CoreClrGenerationPrewarmOperation prewarm =
                     CoreClrGenerationPrewarmOperation.Create(
                         type,
                         ResolvePrewarmOptions());
+                long preparationTicks = Stopwatch.GetTimestamp() - phaseStarted;
+                if (TraceProgramLoadPhases)
+                {
+                    Console.Error.WriteLine(
+                        $"UnifiedScript managed load phases: Type={typeName}, " +
+                        $"Mode={(assemblyPath.EndsWith(".uschunk", StringComparison.OrdinalIgnoreCase) ? "chunk" : "loose")}, " +
+                        $"ContextMs={StopwatchTicksToMilliseconds(contextTicks):0.######}, " +
+                        $"AssemblyMs={StopwatchTicksToMilliseconds(assemblyTicks):0.######}, " +
+                        $"TypeMs={StopwatchTicksToMilliseconds(typeTicks):0.######}, " +
+                        $"ActivationMs={StopwatchTicksToMilliseconds(activationTicks):0.######}, " +
+                        $"PreparationMs={StopwatchTicksToMilliseconds(preparationTicks):0.######}");
+                }
                 return new ScriptGeneration(
                     generation,
                     loadContext,
@@ -1481,6 +1519,9 @@ public static class UnrealWorldManagedEntryPoint
                 throw;
             }
         }
+
+        private static double StopwatchTicksToMilliseconds(long ticks) =>
+            Math.Max(0, ticks) * 1000d / Stopwatch.Frequency;
 
         private static CoreClrGenerationPrewarmOptions ResolvePrewarmOptions() =>
             string.Equals(
@@ -1718,6 +1759,18 @@ public static class UnrealWorldManagedEntryPoint
         }
         loadContext.Unload();
     }
+
+    private static CoreClrProgramLoaderPrewarmOptions ResolveProgramLoaderPrewarmOptions() =>
+        string.Equals(
+            Environment.GetEnvironmentVariable(
+                "UNIFIEDSCRIPT_DISABLE_PROGRAM_LOADER_PREWARM"),
+            "1",
+            StringComparison.Ordinal)
+            ? CoreClrProgramLoaderPrewarmOptions.Disabled
+            : CoreClrProgramLoaderPrewarmOptions.Default;
+
+    internal static CoreClrProgramLoaderPrewarmSnapshot
+        GetProgramLoaderPrewarmSnapshotForTests() => ProgramLoaderPrewarm.GetSnapshot();
 
     internal static string ValidateCompiledProgramForTests(
         string programPath,

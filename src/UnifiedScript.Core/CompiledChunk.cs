@@ -185,20 +185,8 @@ public static class UnifiedScriptChunkCodec
 
     public static UnifiedScriptChunk Read(Stream source)
     {
-        ArgumentNullException.ThrowIfNull(source);
-        if (!source.CanRead)
-        {
-            throw new ArgumentException("The chunk source stream must be readable.", nameof(source));
-        }
-
-        if (source.CanSeek && source.Length - source.Position > int.MaxValue)
-        {
-            throw new InvalidDataException("UnifiedScript chunk exceeds the supported 2 GiB limit.");
-        }
-
-        using var buffer = new MemoryStream();
-        source.CopyTo(buffer);
-        return Read(buffer.ToArray());
+        byte[] content = ReadOwnedContent(source, profile: null);
+        return ReadCore(content, profile: null, content);
     }
 
     public static UnifiedScriptChunkReadResult ReadProfiled(Stream source)
@@ -208,38 +196,26 @@ public static class UnifiedScriptChunkCodec
         {
             throw new ArgumentException("The chunk source stream must be readable.", nameof(source));
         }
-        if (source.CanSeek && source.Length - source.Position > int.MaxValue)
-        {
-            throw new InvalidDataException("UnifiedScript chunk exceeds the supported 2 GiB limit.");
-        }
-
         var profile = new ChunkReadProfileBuilder();
-        using var buffer = new MemoryStream();
-        long started = Stopwatch.GetTimestamp();
-        source.CopyTo(buffer);
-        profile.StreamReadStopwatchTicks = ElapsedStopwatchTicks(started);
-        profile.StreamReadBytes = buffer.Length;
-
-        started = Stopwatch.GetTimestamp();
-        byte[] content = buffer.ToArray();
-        profile.InputMaterializationStopwatchTicks = ElapsedStopwatchTicks(started);
-        profile.InputMaterializationBytes = content.Length;
-        UnifiedScriptChunk chunk = ReadCore(content, profile);
+        byte[] content = ReadOwnedContent(source, profile);
+        UnifiedScriptChunk chunk = ReadCore(content, profile, content);
         return new UnifiedScriptChunkReadResult(chunk, profile.Build(content.Length));
     }
 
-    public static UnifiedScriptChunk Read(ReadOnlySpan<byte> source) => ReadCore(source, null);
+    public static UnifiedScriptChunk Read(ReadOnlySpan<byte> source) =>
+        ReadCore(source, profile: null, ownedStorage: null);
 
     public static UnifiedScriptChunkReadResult ReadProfiled(ReadOnlySpan<byte> source)
     {
         var profile = new ChunkReadProfileBuilder();
-        UnifiedScriptChunk chunk = ReadCore(source, profile);
+        UnifiedScriptChunk chunk = ReadCore(source, profile, ownedStorage: null);
         return new UnifiedScriptChunkReadResult(chunk, profile.Build(source.Length));
     }
 
     private static UnifiedScriptChunk ReadCore(
         ReadOnlySpan<byte> source,
-        ChunkReadProfileBuilder? profile)
+        ChunkReadProfileBuilder? profile,
+        byte[]? ownedStorage)
     {
         long headerStarted = StartProfilePhase(profile);
         if (source.Length < HeaderSize)
@@ -314,10 +290,10 @@ public static class UnifiedScriptChunkCodec
         int sectionCountValue = checked((int)sectionCount);
         profile?.AddDirectoryValidation(ElapsedStopwatchTicks(directoryStarted));
         long storageStarted = StartProfilePhase(profile);
-        byte[] storage = source.ToArray();
+        byte[] storage = ownedStorage ?? source.ToArray();
         if (profile is not null)
         {
-            profile.StorageMaterializationBytes = storage.Length;
+            profile.StorageMaterializationBytes = ownedStorage is null ? storage.Length : 0;
             profile.StorageMaterializationStopwatchTicks =
                 ElapsedStopwatchTicks(storageStarted);
         }
@@ -404,6 +380,53 @@ public static class UnifiedScriptChunkCodec
             sections,
             "sha256:" + Convert.ToHexString(expectedContentDigest).ToLowerInvariant(),
             source.Length);
+    }
+
+    private static byte[] ReadOwnedContent(
+        Stream source,
+        ChunkReadProfileBuilder? profile)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        if (!source.CanRead)
+        {
+            throw new ArgumentException("The chunk source stream must be readable.", nameof(source));
+        }
+        if (!source.CanSeek)
+        {
+            using var buffer = new MemoryStream();
+            long nonSeekableStarted = StartProfilePhase(profile);
+            source.CopyTo(buffer);
+            profile?.SetStreamRead(buffer.Length, ElapsedStopwatchTicks(nonSeekableStarted));
+            if (buffer.Length > int.MaxValue)
+            {
+                throw new InvalidDataException(
+                    "UnifiedScript chunk exceeds the supported 2 GiB limit.");
+            }
+            long materializationStarted = StartProfilePhase(profile);
+            byte[] bufferedContent = buffer.ToArray();
+            profile?.SetInputMaterialization(
+                bufferedContent.Length * 2L,
+                ElapsedStopwatchTicks(materializationStarted));
+            return bufferedContent;
+        }
+
+        long remaining = source.Length - source.Position;
+        if (remaining < 0 || remaining > int.MaxValue)
+        {
+            throw new InvalidDataException(
+                "UnifiedScript chunk exceeds the supported 2 GiB limit.");
+        }
+        long started = StartProfilePhase(profile);
+        byte[] content = new byte[checked((int)remaining)];
+        source.ReadExactly(content);
+        if (source.ReadByte() >= 0)
+        {
+            throw new InvalidDataException(
+                "UnifiedScript chunk changed while it was being read.");
+        }
+        profile?.SetStreamRead(content.Length, ElapsedStopwatchTicks(started));
+        profile?.SetInputMaterialization(content.Length, 0);
+        return content;
     }
 
     private static void ValidateForWrite(IReadOnlyList<UnifiedScriptChunkSection> sections)
@@ -504,6 +527,18 @@ public static class UnifiedScriptChunkCodec
 
         public void AddSectionDigest(long ticks) =>
             SectionDigestStopwatchTicks = checked(SectionDigestStopwatchTicks + ticks);
+
+        public void SetStreamRead(long bytes, long ticks)
+        {
+            StreamReadBytes = bytes;
+            StreamReadStopwatchTicks = ticks;
+        }
+
+        public void SetInputMaterialization(long bytes, long ticks)
+        {
+            InputMaterializationBytes = bytes;
+            InputMaterializationStopwatchTicks = ticks;
+        }
 
         public UnifiedScriptChunkReadProfile Build(int byteLength) => new(
             byteLength,

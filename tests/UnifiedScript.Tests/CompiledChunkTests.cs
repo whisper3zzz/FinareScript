@@ -66,7 +66,7 @@ public sealed class CompiledChunkTests
     }
 
     [Fact]
-    public void ProfiledStreamReadAccountsForEveryCurrentWholeFileCopyAndDigest()
+    public void ProfiledStreamReadOwnsOneWholeFileCopyAndDigest()
     {
         byte[] bytes = UnifiedScriptChunkCodec.Write(CreateProgramSections());
 
@@ -77,8 +77,9 @@ public sealed class CompiledChunkTests
         Assert.Equal(streamResult.Chunk.ContentDigest, spanResult.Chunk.ContentDigest);
         Assert.Equal(bytes.Length, streamResult.Profile.ByteLength);
         Assert.Equal(bytes.Length, streamResult.Profile.StreamReadBytes);
-        Assert.Equal(bytes.Length * 2L, streamResult.Profile.WholeFileCopyBytes);
-        Assert.Equal(2, streamResult.Profile.WholeFileCopyCount);
+        Assert.Equal(bytes.Length, streamResult.Profile.WholeFileCopyBytes);
+        Assert.Equal(1, streamResult.Profile.WholeFileCopyCount);
+        Assert.Equal(0, streamResult.Profile.StorageMaterializationBytes);
         Assert.Equal(bytes.Length, spanResult.Profile.WholeFileCopyBytes);
         Assert.Equal(1, spanResult.Profile.WholeFileCopyCount);
         Assert.True(streamResult.Profile.WholeFileDigestStopwatchTicks >= 0);

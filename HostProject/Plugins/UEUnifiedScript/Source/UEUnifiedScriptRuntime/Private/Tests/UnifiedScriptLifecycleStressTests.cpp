@@ -787,6 +787,7 @@ bool FUnifiedScriptLifecycleStressTest::RunTest(const FString& Parameters)
                     Component->LastReloadTransaction.Contains(TEXT("\"candidateStart\"")) &&
                     Component->LastReloadTransaction.Contains(TEXT("\"eventRebinding\"")) &&
                     Component->LastReloadTransaction.Contains(TEXT("\"backgroundPrewarm\"")) &&
+                    Component->LastReloadTransaction.Contains(TEXT("\"programLoaderPrewarm\"")) &&
                     Component->LastReloadTransaction.Contains(TEXT("\"generationSwap\"")) &&
                     Component->LastReloadTransaction.Contains(TEXT("\"oldContextRetirement\"")) &&
                     Component->LastReloadTransaction.Contains(TEXT("\"oldContextCollection\"")) &&

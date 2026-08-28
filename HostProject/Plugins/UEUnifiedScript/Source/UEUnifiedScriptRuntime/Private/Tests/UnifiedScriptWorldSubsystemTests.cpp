@@ -1050,9 +1050,10 @@ bool FUnifiedScriptWorldSemanticDebugTest::RunTest(const FString& Parameters)
         ReloadContext.bSemanticDebugEnabled || ReloadContext.bSemanticDebugActive ||
             ReloadContext.bSemanticDebugPaused);
     TestTrue(
-        TEXT("Reload transaction exposes debug drain, prewarm, and old-context collection"),
+        TEXT("Reload transaction exposes loader/debug prewarm and old-context collection"),
         Component->LastReloadTransaction.Contains(TEXT("\"debugDrain\"")) &&
             Component->LastReloadTransaction.Contains(TEXT("\"backgroundPrewarm\"")) &&
+            Component->LastReloadTransaction.Contains(TEXT("\"programLoaderPrewarm\"")) &&
             Component->LastReloadTransaction.Contains(TEXT("\"oldContextCollection\"")) &&
             Component->LastReloadTransaction.Contains(
                 TEXT("\"retiredLoadContextsAlive\":0")));

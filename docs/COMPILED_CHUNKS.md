@@ -148,8 +148,10 @@ dotnet UnifiedScript.Cli.dll chunk-profile Game.uschunk `
 
 Each trial opens a fresh stream and collectible load context. Trial one is
 marked as the process-first load; later trials expose the same-process warm
-baseline. The report separates file open/read, the two current whole-file
-materializations, header and directory validation, whole-file and per-section
+baseline. The current seekable-stream reader owns one exact-length whole-file
+materialization instead of copying through an intermediate `MemoryStream`.
+The report separates file open/read, that owned materialization, header and
+directory validation, whole-file and per-section
 SHA-256, program-profile checks, four binary metadata decoders, identity and
 dependency checks, load-context construction, PE/PDB materialization, CoreCLR
 assembly load, entry-type validation, JIT preparation, and unload request.
@@ -163,8 +165,8 @@ JIT preparation uses `RuntimeHelpers.PrepareMethod` over concrete methods
 declared by chunk entry types. It is a controlled first-code-generation probe,
 not a substitute for the later matched World-level first Tick measurement. Use
 `--no-jit-prepare` when profiling loader-only cost. The current profile
-intentionally accounts for both whole-file copies and PE/PDB copies so the v2
-memory-mapped reader must demonstrate that it actually removes them.
+intentionally accounts for the owned whole-file copy and PE/PDB copies so any
+future memory-mapped reader must demonstrate that it actually removes them.
 
 For a cold-process distribution, use the repository runner. It launches a new
 CLI process for every one-trial report, requires a stable chunk identity, and
@@ -224,10 +226,11 @@ non-replaceable shared-assembly binding remains enforced.
 The process cache defaults to 128 entries and 256 MiB, uses deterministic LRU
 eviction, and refuses an individual dependency larger than 512 MiB. An image
 larger than the configured cache budget is still fully verified and used for
-that load but is not retained. Verification is single-flight under concurrent
-World loads, so one digest produces one miss and subsequent consumers reuse the
-same immutable snapshot. The profiler exposes hit/miss counts alongside the
-dependency phase.
+that load but is not retained. Published cache updates are atomic under
+concurrent World loads. File read, hash, and PE identity work occurs outside
+the cache lock, so background prewarm cannot block activation on its I/O;
+concurrent contenders converge on one immutable snapshot and one published
+miss. The profiler exposes hit/miss counts alongside the dependency phase.
 
 On the same six-dependency 84,145-byte Release Demo chunk, 15 trials produced
 six misses in the first trial and six hits in every later trial. The 14 warm
@@ -303,17 +306,21 @@ after activation and before the generation's first Tick.
 ## M11.4 generation-owned background prewarm
 
 The World host now creates one prewarm operation with each collectible script
-generation, but does not schedule it until `OnStart` and reflected event
-binding have both succeeded. Activation and transactional rollback therefore
-do not wait for JIT preparation. The default operation prepares at most 64
+generation. Reload candidates schedule it only after `OnStart` and reflected
+event binding succeed; initial actor-tree generations schedule it after their
+first Tick so one component's JIT work cannot contend with another component's
+cold activation. Activation, first Tick, and transactional rollback therefore
+never await JIT preparation. The default operation prepares at most 64
 concrete methods and checks an 8 ms elapsed-time budget between methods; hard
 product limits reject more than 1,024 methods or more than 100 ms. A single
 `RuntimeHelpers.PrepareMethod` call is not interruptible, so cancellation is
 cooperative between methods and never waits on the GameThread.
 
-The first Tick observes, but never awaits, the generation's operation. Its
-snapshot reports candidate/prepared/skipped methods, terminal state, elapsed
-time, prepared coverage at the first Tick, and only a failure type. Optional
+The first Tick observes, but never awaits, the generation's operation. Initial
+generations start the operation after that observation and gameplay callback;
+reload generations may already have prepared methods before their first Tick.
+Its snapshot reports candidate/prepared/skipped methods, terminal state,
+elapsed time, prepared coverage at the first Tick, and only a failure type. Optional
 optimization failures cannot fail script activation or Tick. Reload rejection,
 generation retirement, and World teardown cancel the operation before the
 generation bridge is released and the collectible load context is asked to
@@ -351,26 +358,65 @@ A deterministic safe-default diagnostics bundle admitted 31 prewarm reports,
 performed 151 string redactions, and reproduced SHA-256
 `6b99087fe41ce7a7c015674573bf32a875556051d79e4fc3ba14eba658ebfa2c`.
 
+## M11.4 process loader prewarm and cold-start closure
+
+The process loader now starts one bounded operation when the managed World host
+is created. It prepares verified dependency snapshots before warming the strict
+binary codec, so chunk dependency integrity work can overlap host setup while
+the first chunk does not pay binary decoder JIT. Script activation never waits
+for the operation. Defaults are 32 dependencies, 64 MiB, and a cooperative
+50 ms active-work budget; hard limits are 256 dependencies, 512 MiB, and
+500 ms. The budget is checked between dependency operations, while the fixed
+1,729-byte codec probe is finite but not interruptible. Failures are contained
+as type-only diagnostics, the live snapshot is copied into reload transactions,
+and `UNIFIEDSCRIPT_DISABLE_PROGRAM_LOADER_PREWARM=1` is reserved for controlled
+A/B runs.
+
+The seekable chunk reader also removed one redundant whole-file copy. A proposed
+zero-copy `MemoryStream` view over a section was rejected after the matched
+BlockBreaker gate regressed to a 1.737637 chunk/loose startup ratio. Loader R2R
+was also rejected: an isolated CLI experiment improved to 0.820809 of IL, but
+the actual five-trial BlockBreaker startup ratio was 1.052608. Product delivery
+therefore remains deterministic CoreCLR IL with owned section materialization.
+
+`comparison/measure-blockbreaker-chunk-delivery.ps1` now emits
+`unifiedscript.blockbreaker-chunk-delivery/v0.2`, requires terminal safe loader
+prewarm with a prepared codec and zero failures, and exits nonzero when the
+matched startup ratio exceeds `1.0`. The final five alternating cold-process
+trials passed: chunk startup was 75.8024 ms versus 78.1151 ms loose
+(`0.970394`), reload was 75.2471 ms versus 75.6904 ms (`0.994143`), and reload
+generation load was 1.2190 ms versus 1.6740 ms (`0.728196`). Both paths ran the
+same 100 measured plus 30 warmup frames, one shot, one hit, two command
+completions, ABI v3 fast/CallFrame calls, zero legacy calls, and committed
+reload. Evidence is
+`artifacts/comparison/chunk-delivery/20260828-203527/chunk-delivery.json`.
+The full managed suite passes 588 / 588 and repository validation passes
+81 / 81. Installed UE 5.8.1 rebuilt the component plus Lifecycle and
+LifecycleStress tests; the stress lane completed 8 travel, 8 PIE, 16 successful
+and 16 rolled-back reloads with zero retained collectible contexts. Two
+182-payload SDK archives reproduced SHA-256
+`3351ad754c7f3d1b7978454d31f500fd4ea7aa27802875dfafb35ce5b70eb507`,
+and the extracted SDK passed isolated transactional installation.
+
 ## Measured BlockBreaker impact
 
 `comparison/measure-blockbreaker-chunk-delivery.ps1` runs alternating cold
 processes and requires the same 100 measured frames, 30 warmup frames, shot,
-hit, command completions, ABI v3 calls, zero legacy calls, and committed reload
-on both paths. The 2026-08-28 three-trial median is:
+hit, command completions, ABI v3 calls, zero legacy calls, committed reload,
+safe process-loader prewarm, and a chunk/loose startup ratio no greater than
+`1.0`. The final 2026-08-28 five-trial median is:
 
 | Metric | Release chunk | Loose compatibility | Chunk / loose |
 | --- | ---: | ---: | ---: |
-| Actor-tree cold startup | 162.0194 ms | 110.3650 ms | 1.468032 |
-| Transactional reload | 75.6999 ms | 79.1182 ms | 0.956795 |
-| Managed generation load inside reload | 2.4490 ms | 1.6900 ms | 1.449112 |
+| Actor-tree cold startup | 75.8024 ms | 78.1151 ms | 0.970394 |
+| Transactional reload | 75.2471 ms | 75.6904 ms | 0.994143 |
+| Managed generation load inside reload | 1.2190 ms | 1.6740 ms | 0.728196 |
 | Runtime program delivery | 1 file / 44,886 B | 2 files / 43,992 B | 1.020322 bytes |
 
-The chunk removes runtime declaration JSON and consolidates delivery, but its
-first-use verification and binary-codec JIT currently add cold startup cost.
-That cost is reported rather than hidden and is routed to M11.4 for measured
-zero-copy section access, verification caching, and prewarming/ReadyToRun
-evaluation; it is not a frame-time cost. M11.4 keeps CoreCLR PE/IL as executable
-code instead of adding a second custom bytecode VM. The packaged BlockBreaker
+The chunk removes runtime declaration JSON, consolidates delivery, and now
+passes the matched cold-start gate without weakening verification. M11.4 keeps
+CoreCLR PE/IL as executable code instead of adding a second custom bytecode VM.
+The packaged BlockBreaker
 gate proves both Player and Rifle start from the staged chunk for 300 frames,
 and the generic Development release gate independently proves packaged chunk
 startup.
