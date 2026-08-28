@@ -145,6 +145,7 @@ struct alignas(8) FUnifiedScriptNativeEventTransportV4
 class UEUNIFIEDSCRIPTRUNTIME_API FUnifiedScriptNativeBridgeContext final
 {
 public:
+    static constexpr int32 MaximumPendingWorkerDispatchCount = 1024;
     struct FPendingCallFrameResult
     {
         bool bValid = false;
@@ -172,6 +173,8 @@ public:
     /** Process-wide diagnostics used by lifecycle soak gates. */
     static int32 GetLiveContextCount();
     static int32 GetAttachedContextCount();
+    static int32 GetGlobalPendingWorkerDispatchCount();
+    static uint64 GetGlobalRejectedWorkerDispatchCount();
 
     int32 GetEventSubscriptionCount();
 

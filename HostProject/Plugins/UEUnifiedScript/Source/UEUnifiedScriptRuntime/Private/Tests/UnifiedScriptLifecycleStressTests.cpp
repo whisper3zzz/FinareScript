@@ -5,14 +5,19 @@
 #include "UnifiedScriptWorldSubsystem.h"
 
 #include "Containers/StringConv.h"
+#include "Components/SceneComponent.h"
 #include "Engine/World.h"
+#include "HAL/PlatformMemory.h"
 #include "HAL/PlatformProperties.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/CommandLine.h"
 #include "Misc/EngineVersion.h"
+#include "Misc/Parse.h"
 #include "UnifiedScriptActor.h"
 #include "UnifiedScriptAsset.h"
 #include "UnifiedScriptComponent.h"
 #include "UnifiedScriptCoreClrHost.h"
+#include "UObject/GarbageCollection.h"
 
 namespace UE::UnifiedScript::LifecycleStress::Tests
 {
@@ -21,6 +26,7 @@ struct FWorldFixture
     UWorld* World = nullptr;
     UUnifiedScriptWorldSubsystem* Host = nullptr;
     FUnifiedScriptNativeBridgeContext* Context = nullptr;
+    const FUnifiedScriptGameplayDataTransportV4* Gameplay = nullptr;
     const FUnifiedScriptAsyncTransportV5* Async = nullptr;
 };
 
@@ -40,6 +46,7 @@ FWorldFixture CreateWorld(EWorldType::Type WorldType)
     }
     Fixture.Context = Fixture.Host->GetNativeInvocationContext();
     const FUnifiedScriptNativeTransportV2* Bootstrap = Fixture.Host->GetNativeTransport();
+    Fixture.Gameplay = Bootstrap != nullptr ? Bootstrap->GameplayDataTransport : nullptr;
     Fixture.Async = Bootstrap != nullptr ? Bootstrap->AsyncTransport : nullptr;
     return Fixture;
 }
@@ -57,8 +64,27 @@ void DestroyWorld(FWorldFixture& Fixture)
 bool IsReady(const FWorldFixture& Fixture)
 {
     return Fixture.World != nullptr && Fixture.Host != nullptr &&
-        Fixture.Context != nullptr && Fixture.Async != nullptr &&
+        Fixture.Context != nullptr && Fixture.Gameplay != nullptr &&
+        Fixture.Async != nullptr &&
         Fixture.Host->IsManagedWorldReady();
+}
+
+int32 ReadBoundedOption(
+    const TCHAR* Key,
+    int32 DefaultValue,
+    int32 MinimumValue,
+    int32 MaximumValue)
+{
+    int32 Value = DefaultValue;
+    FParse::Value(FCommandLine::Get(), Key, Value);
+    return FMath::Clamp(Value, MinimumValue, MaximumValue);
+}
+
+uint64 SampleUsedPhysicalBytes(uint64& InOutPeak)
+{
+    const uint64 UsedPhysical = FPlatformMemory::GetStats().UsedPhysical;
+    InOutPeak = FMath::Max(InOutPeak, UsedPhysical);
+    return UsedPhysical;
 }
 
 bool Submit(
@@ -87,18 +113,40 @@ bool Submit(
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
     FUnifiedScriptLifecycleStressTest,
     "UnifiedScript.Unreal.WorldHost.LifecycleStress",
-    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+    EAutomationTestFlags::EditorContext |
+        EAutomationTestFlags::ServerContext |
+        EAutomationTestFlags::EngineFilter)
 
 bool FUnifiedScriptLifecycleStressTest::RunTest(const FString& Parameters)
 {
     using namespace UE::UnifiedScript::LifecycleStress::Tests;
 
-    constexpr int32 TravelCycles = 8;
-    constexpr int32 PieCycles = 8;
-    constexpr int32 ConcurrentWorlds = 4;
-    constexpr int32 CollidingRequestsPerWorld = 8;
-    constexpr int32 GenerationRollovers = 16;
-    constexpr int32 FailedReloadCycles = GenerationRollovers;
+    const int32 TravelCycles = ReadBoundedOption(
+        TEXT("UnifiedScriptSoakTravelCycles="), 8, 1, 256);
+    const int32 PieCycles = ReadBoundedOption(
+        TEXT("UnifiedScriptSoakPieCycles="), 8, 1, 256);
+    const int32 ConcurrentWorlds = ReadBoundedOption(
+        TEXT("UnifiedScriptSoakConcurrentWorlds="), 4, 2, 32);
+    const int32 CollidingRequestsPerWorld = ReadBoundedOption(
+        TEXT("UnifiedScriptSoakRequestsPerWorld="), 8, 1, 1024);
+    const int32 GenerationRollovers = ReadBoundedOption(
+        TEXT("UnifiedScriptSoakGenerationRollovers="), 16, 1, 512);
+    const int32 FailedReloadCycles = GenerationRollovers;
+    const int32 ObjectChurnCycles = ReadBoundedOption(
+        TEXT("UnifiedScriptSoakObjectChurnCycles="), 2, 1, 128);
+    const int32 ObjectsPerChurnCycle = ReadBoundedOption(
+        TEXT("UnifiedScriptSoakObjectsPerChurnCycle="), 128, 1, 4096);
+    const int32 CommandSaturationCycles = ReadBoundedOption(
+        TEXT("UnifiedScriptSoakCommandSaturationCycles="), 1, 1, 64);
+    const int32 CommandsPerSaturationCycle = ReadBoundedOption(
+        TEXT("UnifiedScriptSoakCommandsPerSaturationCycle="),
+        static_cast<int32>(UE::UnifiedScript::GameplayData::MaximumEventCount + 1024),
+        static_cast<int32>(UE::UnifiedScript::GameplayData::MaximumEventCount + 1),
+        static_cast<int32>(UE::UnifiedScript::GameplayData::MaximumCommandCount));
+    const int32 MemoryGrowthBudgetMegabytes = ReadBoundedOption(
+        TEXT("UnifiedScriptSoakMemoryGrowthBudgetMB="), 512, 64, 4096);
+    const uint64 MemoryGrowthBudgetBytes =
+        static_cast<uint64>(MemoryGrowthBudgetMegabytes) * 1024ull * 1024ull;
     constexpr uint64 OwnerInstanceId = 9001;
     constexpr uint32 OwnerGeneration = 17;
 
@@ -115,6 +163,18 @@ bool FUnifiedScriptLifecycleStressTest::RunTest(const FString& Parameters)
         FUnifiedScriptAsyncService::GetGlobalQueuedCompletionCount();
     const int32 InitialOwnedResources =
         FUnifiedScriptAsyncService::GetGlobalOwnedResourceCount();
+    const uint64 InitialAsyncCapacityRejections =
+        FUnifiedScriptAsyncService::GetGlobalCapacityRejectionCount();
+    const uint64 InitialAsyncPayloadRejections =
+        FUnifiedScriptAsyncService::GetGlobalPayloadRejectionCount();
+    const int32 InitialPendingWorkerDispatch =
+        FUnifiedScriptNativeBridgeContext::GetGlobalPendingWorkerDispatchCount();
+    const uint64 InitialRejectedWorkerDispatch =
+        FUnifiedScriptNativeBridgeContext::GetGlobalRejectedWorkerDispatchCount();
+    uint64 PeakUsedPhysicalBytes = 0;
+    const uint64 InitialUsedPhysicalBytes =
+        SampleUsedPhysicalBytes(PeakUsedPhysicalBytes);
+    int32 GarbageCollectionCycles = 0;
 
     const FString ClassPath = UUnifiedScriptComponent::StaticClass()->GetPathName();
     uint64 PreviousTravelWorldId = 0;
@@ -232,6 +292,136 @@ bool FUnifiedScriptLifecycleStressTest::RunTest(const FString& Parameters)
             FUnifiedScriptAsyncService::GetLiveServiceCount(),
             InitialLiveServices);
     }
+    SampleUsedPhysicalBytes(PeakUsedPhysicalBytes);
+
+    // Repeated weak-handle registration and UE GC prove that registry slots do
+    // not retain transient UObject graphs or revive a recycled generation.
+    int32 ObjectRegistrationCount = 0;
+    FWorldFixture ChurnFixture = CreateWorld(EWorldType::Game);
+    TestTrue(TEXT("Object churn World fixture is ready"), IsReady(ChurnFixture));
+    if (!IsReady(ChurnFixture))
+    {
+        DestroyWorld(ChurnFixture);
+        return false;
+    }
+    for (int32 Cycle = 0; Cycle < ObjectChurnCycles; ++Cycle)
+    {
+        TArray<TWeakObjectPtr<USceneComponent>> WeakObjects;
+        TArray<FUnifiedScriptObjectHandle> Handles;
+        WeakObjects.Reserve(ObjectsPerChurnCycle);
+        Handles.Reserve(ObjectsPerChurnCycle);
+        bool bRegisteredEveryObject = true;
+        for (int32 ObjectIndex = 0;
+             ObjectIndex < ObjectsPerChurnCycle;
+             ++ObjectIndex)
+        {
+            USceneComponent* Object = NewObject<USceneComponent>(ChurnFixture.World);
+            FUnifiedScriptObjectHandleResult Result;
+            const FUnifiedScriptObjectHandle Handle =
+                ChurnFixture.Host->RegisterObject(Object, Result);
+            bRegisteredEveryObject &= Result.IsSuccess() && !Handle.IsNull();
+            WeakObjects.Add(Object);
+            Handles.Add(Handle);
+        }
+        TestTrue(
+            TEXT("Object churn registers every transient World object"),
+            bRegisteredEveryObject);
+        ObjectRegistrationCount += Handles.Num();
+
+        bool bReleasedEveryObject = true;
+        for (const FUnifiedScriptObjectHandle Handle : Handles)
+        {
+            FUnifiedScriptObjectHandleResult Result;
+            bReleasedEveryObject &=
+                ChurnFixture.Host->ReleaseObject(Handle, Result) &&
+                Result.IsSuccess();
+        }
+        TestTrue(
+            TEXT("Object churn releases every transient handle"),
+            bReleasedEveryObject);
+        TestEqual(
+            TEXT("Object churn returns the registry to zero before GC"),
+            ChurnFixture.Host->NumRegisteredObjects(),
+            0);
+        Handles.Reset();
+        CollectGarbage(RF_NoFlags);
+        ++GarbageCollectionCycles;
+        TestFalse(
+            TEXT("UE GC reclaims the first released churn object"),
+            WeakObjects.IsEmpty() || WeakObjects[0].IsValid());
+        SampleUsedPhysicalBytes(PeakUsedPhysicalBytes);
+    }
+    DestroyWorld(ChurnFixture);
+
+    // The async service accepts exactly its declared in-flight capacity,
+    // rejects one more request and an oversized payload, then drains without
+    // leaving work owned by the World.
+    FWorldFixture AsyncCapacityFixture = CreateWorld(EWorldType::Game);
+    TestTrue(
+        TEXT("Async saturation World fixture is ready"),
+        IsReady(AsyncCapacityFixture));
+    if (!IsReady(AsyncCapacityFixture))
+    {
+        DestroyWorld(AsyncCapacityFixture);
+        return false;
+    }
+    bool bAcceptedAsyncCapacity = true;
+    for (uint32 Index = 0;
+         Index < UE::UnifiedScript::AsyncService::MaximumInFlightRequestCount;
+         ++Index)
+    {
+        bAcceptedAsyncCapacity &= Submit(
+            AsyncCapacityFixture,
+            static_cast<uint64>(Index + 1),
+            OwnerInstanceId,
+            OwnerGeneration,
+            EUnifiedScriptAsyncOperationV5::Delay,
+            600.0f);
+    }
+    TestTrue(
+        TEXT("Async saturation reaches the declared capacity"),
+        bAcceptedAsyncCapacity);
+    TestEqual(
+        TEXT("Async pending storage remains at the declared capacity"),
+        AsyncCapacityFixture.Host->GetPendingAsyncRequestCount(),
+        static_cast<int32>(
+            UE::UnifiedScript::AsyncService::MaximumInFlightRequestCount));
+    TestFalse(
+        TEXT("Async saturation rejects capacity plus one"),
+        Submit(
+            AsyncCapacityFixture,
+            UE::UnifiedScript::AsyncService::MaximumInFlightRequestCount + 1ull,
+            OwnerInstanceId,
+            OwnerGeneration,
+            EUnifiedScriptAsyncOperationV5::Delay,
+            600.0f));
+    TestEqual(
+        TEXT("Async saturation drains deterministically"),
+        AsyncCapacityFixture.Async->CancelOwner(
+            AsyncCapacityFixture.Context,
+            OwnerInstanceId,
+            OwnerGeneration),
+        UE::UnifiedScript::AsyncService::MaximumInFlightRequestCount);
+    const uint8 OversizedPayloadSentinel = 'x';
+    FUnifiedScriptAsyncRequestV5 OversizedPayloadRequest;
+    OversizedPayloadRequest.RequestId = 1;
+    OversizedPayloadRequest.OwnerInstanceId = OwnerInstanceId;
+    OversizedPayloadRequest.OwnerGeneration = OwnerGeneration;
+    OversizedPayloadRequest.Operation = EUnifiedScriptAsyncOperationV5::LoadObject;
+    OversizedPayloadRequest.PayloadData = &OversizedPayloadSentinel;
+    OversizedPayloadRequest.PayloadLength =
+        UE::UnifiedScript::AsyncService::MaximumPayloadByteCount + 1;
+    TestFalse(
+        TEXT("Async saturation rejects an oversized payload"),
+        AsyncCapacityFixture.Async->SubmitRequest(
+            AsyncCapacityFixture.Context,
+            &OversizedPayloadRequest) != 0);
+    TestEqual(
+        TEXT("Async saturation leaves no pending request"),
+        AsyncCapacityFixture.Host->GetPendingAsyncRequestCount(),
+        0);
+    DestroyWorld(AsyncCapacityFixture);
+    SampleUsedPhysicalBytes(PeakUsedPhysicalBytes);
 
     // Multiple Worlds deliberately reuse every owner and request identifier.
     // Completion/poll buffers must remain isolated by the native context.
@@ -321,6 +511,117 @@ bool FUnifiedScriptLifecycleStressTest::RunTest(const FString& Parameters)
         DestroyWorld(Fixtures[WorldIndex]);
     }
     Fixtures.Reset();
+    SampleUsedPhysicalBytes(PeakUsedPhysicalBytes);
+
+    // Saturate command completion events and every oversized reservation path.
+    // The frame scheduler must publish at most the declared event capacity and
+    // remain usable on every following frame.
+    FWorldFixture SaturationFixture = CreateWorld(EWorldType::Game);
+    TestTrue(
+        TEXT("Gameplay saturation World fixture is ready"),
+        IsReady(SaturationFixture));
+    if (!IsReady(SaturationFixture))
+    {
+        DestroyWorld(SaturationFixture);
+        return false;
+    }
+    SaturationFixture.Host->BeginManagedFrame();
+    FUnifiedScriptCommandBatchViewV4 OversizedCommandView;
+    TestFalse(
+        TEXT("Command buffer rejects capacity plus one"),
+        SaturationFixture.Gameplay->BeginCommandBatch(
+            SaturationFixture.Context,
+            UE::UnifiedScript::GameplayData::MaximumCommandCount + 1,
+            &OversizedCommandView) != 0);
+    FUnifiedScriptTraceRequestViewV4 OversizedTraceView;
+    TestFalse(
+        TEXT("Trace buffer rejects capacity plus one"),
+        SaturationFixture.Gameplay->BeginTraceBatch(
+            SaturationFixture.Context,
+            UE::UnifiedScript::GameplayData::MaximumTraceCount + 1,
+            &OversizedTraceView) != 0);
+    FUnifiedScriptOverlapRequestViewV1 OversizedOverlapView;
+    TestFalse(
+        TEXT("Overlap buffer rejects capacity plus one"),
+        SaturationFixture.Gameplay->BeginOverlapBatch(
+            SaturationFixture.Context,
+            UE::UnifiedScript::GameplayData::MaximumOverlapCount + 1,
+            &OversizedOverlapView) != 0);
+    SaturationFixture.Host->EndManagedFrame();
+
+    uint64 PublishedSaturationEventCount = 0;
+    for (int32 Cycle = 0; Cycle < CommandSaturationCycles; ++Cycle)
+    {
+        SaturationFixture.Host->BeginManagedFrame();
+        FUnifiedScriptCommandBatchViewV4 CommandView;
+        TestTrue(
+            TEXT("Saturation command batch reservation succeeds"),
+            SaturationFixture.Gameplay->BeginCommandBatch(
+                SaturationFixture.Context,
+                static_cast<uint32>(CommandsPerSaturationCycle),
+                &CommandView) != 0);
+        TestTrue(
+            TEXT("Saturation command batch commit succeeds"),
+            SaturationFixture.Gameplay->CommitCommandBatch(
+                SaturationFixture.Context,
+                CommandView.BatchToken,
+                static_cast<uint32>(CommandsPerSaturationCycle)) != 0);
+        SaturationFixture.Host->EndManagedFrame();
+
+        SaturationFixture.Host->BeginManagedFrame();
+        FUnifiedScriptGameplayEventViewV4 EventView;
+        TestTrue(
+            TEXT("Saturation completion events remain readable"),
+            SaturationFixture.Gameplay->AcquireEvents(
+                SaturationFixture.Context,
+                &EventView) != 0);
+        TestEqual(
+            TEXT("Saturation publishes exactly the bounded event capacity"),
+            EventView.EventCount,
+            UE::UnifiedScript::GameplayData::MaximumEventCount);
+        TestTrue(
+            TEXT("Published event storage never exceeds its declared capacity"),
+            EventView.EventCount <= EventView.EventCapacity &&
+                EventView.EventCapacity <=
+                    UE::UnifiedScript::GameplayData::MaximumEventCount);
+        PublishedSaturationEventCount += EventView.EventCount;
+        SaturationFixture.Host->EndManagedFrame();
+        SampleUsedPhysicalBytes(PeakUsedPhysicalBytes);
+    }
+
+    FUnifiedScriptGameplayDataTelemetryV1 SaturationTelemetry;
+    TestTrue(
+        TEXT("Gameplay saturation telemetry is readable"),
+        SaturationFixture.Gameplay->GetTelemetry(
+            SaturationFixture.Context,
+            &SaturationTelemetry,
+            sizeof(SaturationTelemetry)) != 0);
+    const uint64 ExpectedDroppedEvents = static_cast<uint64>(
+        CommandsPerSaturationCycle -
+        static_cast<int32>(UE::UnifiedScript::GameplayData::MaximumEventCount)) *
+        static_cast<uint64>(CommandSaturationCycles);
+    TestEqual(
+        TEXT("Command capacity rejection is counted exactly once"),
+        SaturationTelemetry.CommandOverflowCount,
+        1ull);
+    TestEqual(
+        TEXT("Trace capacity rejection is counted exactly once"),
+        SaturationTelemetry.TraceOverflowCount,
+        1ull);
+    TestEqual(
+        TEXT("Overlap capacity rejection is counted exactly once"),
+        SaturationTelemetry.OverlapOverflowCount,
+        1ull);
+    TestEqual(
+        TEXT("Every event beyond the bounded buffer is counted"),
+        SaturationTelemetry.EventOverflowCount,
+        ExpectedDroppedEvents);
+    TestEqual(
+        TEXT("Every saturated command is executed exactly once"),
+        SaturationTelemetry.TotalExecutedCommandCount,
+        static_cast<uint64>(CommandsPerSaturationCycle) *
+            static_cast<uint64>(CommandSaturationCycles));
+    DestroyWorld(SaturationFixture);
 
     // A real managed Actor generation owns both async operations. Repeated
     // reload proves old completions/resources are removed before the next ALC.
@@ -484,6 +785,10 @@ bool FUnifiedScriptLifecycleStressTest::RunTest(const FString& Parameters)
             TEXT("Collectible reload does not accumulate registered objects"),
             ManagedFixture.Host->NumRegisteredObjects(),
             3);
+        if ((Rollover + 1) % 8 == 0)
+        {
+            SampleUsedPhysicalBytes(PeakUsedPhysicalBytes);
+        }
     }
 
     Component->EndPlay(EEndPlayReason::Destroyed);
@@ -520,6 +825,8 @@ bool FUnifiedScriptLifecycleStressTest::RunTest(const FString& Parameters)
     Actor = nullptr;
     TestFalse(TEXT("Deleted request target is no longer valid"), DeletedActor.IsValid());
     DestroyWorld(ManagedFixture);
+    CollectGarbage(RF_NoFlags);
+    ++GarbageCollectionCycles;
 
     const int32 RetiredLoadContextsAlive =
         CoreClr.CollectRetiredManagedLoadContexts();
@@ -555,12 +862,47 @@ bool FUnifiedScriptLifecycleStressTest::RunTest(const FString& Parameters)
         TEXT("Lifecycle matrix leaves no generation-owned resource"),
         FUnifiedScriptAsyncService::GetGlobalOwnedResourceCount(),
         InitialOwnedResources);
+    TestEqual(
+        TEXT("Lifecycle matrix leaves no queued worker dispatch"),
+        FUnifiedScriptNativeBridgeContext::GetGlobalPendingWorkerDispatchCount(),
+        InitialPendingWorkerDispatch);
+    TestEqual(
+        TEXT("Lifecycle matrix does not overflow worker dispatch capacity"),
+        FUnifiedScriptNativeBridgeContext::GetGlobalRejectedWorkerDispatchCount(),
+        InitialRejectedWorkerDispatch);
+
+    const uint64 AsyncCapacityRejections =
+        FUnifiedScriptAsyncService::GetGlobalCapacityRejectionCount() -
+        InitialAsyncCapacityRejections;
+    const uint64 AsyncPayloadRejections =
+        FUnifiedScriptAsyncService::GetGlobalPayloadRejectionCount() -
+        InitialAsyncPayloadRejections;
+    TestEqual(
+        TEXT("Soak observes exactly one async capacity rejection"),
+        AsyncCapacityRejections,
+        1ull);
+    TestEqual(
+        TEXT("Soak observes exactly one async payload rejection"),
+        AsyncPayloadRejections,
+        1ull);
+
+    const uint64 FinalUsedPhysicalBytes =
+        SampleUsedPhysicalBytes(PeakUsedPhysicalBytes);
+    const uint64 MemoryGrowthBytes = FinalUsedPhysicalBytes > InitialUsedPhysicalBytes
+        ? FinalUsedPhysicalBytes - InitialUsedPhysicalBytes
+        : 0;
+    TestTrue(
+        *FString::Printf(
+            TEXT("Final physical-memory growth stays within %d MiB"),
+            MemoryGrowthBudgetMegabytes),
+        MemoryGrowthBytes <= MemoryGrowthBudgetBytes);
 
     UE_LOG(
         LogTemp,
         Display,
-        TEXT("UNIFIEDSCRIPT_LIFECYCLE_STRESS_JSON {\"schemaVersion\":\"unifiedscript.unreal-lifecycle-stress/v0.2\",\"platform\":\"%s\",\"engineMajor\":%d,\"engineMinor\":%d,\"enginePatch\":%d,\"travelCycles\":%d,\"pieCycles\":%d,\"concurrentWorlds\":%d,\"collidingRequestsPerWorld\":%d,\"generationRollovers\":%d,\"failedReloadCycles\":%d,\"staleCompletions\":0,\"pendingRequestsDelta\":0,\"managedWorldsDelta\":0,\"nativeContextsDelta\":0,\"registeredObjectsDelta\":0,\"eventSubscriptionsDelta\":0,\"ownedResourcesDelta\":0,\"staleDebugSessions\":0,\"retiredLoadContextsAlive\":%d}"),
+        TEXT("UNIFIEDSCRIPT_LIFECYCLE_STRESS_JSON {\"schemaVersion\":\"unifiedscript.unreal-lifecycle-stress/v0.3\",\"platform\":\"%s\",\"dedicatedServer\":%s,\"engineMajor\":%d,\"engineMinor\":%d,\"enginePatch\":%d,\"travelCycles\":%d,\"pieCycles\":%d,\"concurrentWorlds\":%d,\"collidingRequestsPerWorld\":%d,\"generationRollovers\":%d,\"failedReloadCycles\":%d,\"objectChurnCycles\":%d,\"objectsPerChurnCycle\":%d,\"objectRegistrations\":%d,\"garbageCollectionCycles\":%d,\"commandSaturationCycles\":%d,\"commandsPerSaturationCycle\":%d,\"publishedSaturationEvents\":%llu,\"commandOverflowCount\":%llu,\"eventOverflowCount\":%llu,\"traceOverflowCount\":%llu,\"overlapOverflowCount\":%llu,\"asyncCapacityRejections\":%llu,\"asyncPayloadRejections\":%llu,\"maximumAsyncInFlightRequests\":%u,\"maximumAsyncPayloadBytes\":%u,\"memoryBeforeBytes\":%llu,\"memoryPeakBytes\":%llu,\"memoryAfterBytes\":%llu,\"memoryGrowthBytes\":%llu,\"memoryGrowthBudgetBytes\":%llu,\"staleCompletions\":0,\"pendingRequestsDelta\":0,\"managedWorldsDelta\":0,\"nativeContextsDelta\":0,\"pendingWorkerDispatchDelta\":0,\"rejectedWorkerDispatchDelta\":0,\"registeredObjectsDelta\":0,\"eventSubscriptionsDelta\":0,\"ownedResourcesDelta\":0,\"staleDebugSessions\":0,\"retiredLoadContextsAlive\":%d}"),
         ANSI_TO_TCHAR(FPlatformProperties::PlatformName()),
+        IsRunningDedicatedServer() ? TEXT("true") : TEXT("false"),
         FEngineVersion::Current().GetMajor(),
         FEngineVersion::Current().GetMinor(),
         FEngineVersion::Current().GetPatch(),
@@ -570,6 +912,26 @@ bool FUnifiedScriptLifecycleStressTest::RunTest(const FString& Parameters)
         CollidingRequestsPerWorld,
         GenerationRollovers,
         FailedReloadCycles,
+        ObjectChurnCycles,
+        ObjectsPerChurnCycle,
+        ObjectRegistrationCount,
+        GarbageCollectionCycles,
+        CommandSaturationCycles,
+        CommandsPerSaturationCycle,
+        static_cast<unsigned long long>(PublishedSaturationEventCount),
+        static_cast<unsigned long long>(SaturationTelemetry.CommandOverflowCount),
+        static_cast<unsigned long long>(SaturationTelemetry.EventOverflowCount),
+        static_cast<unsigned long long>(SaturationTelemetry.TraceOverflowCount),
+        static_cast<unsigned long long>(SaturationTelemetry.OverlapOverflowCount),
+        static_cast<unsigned long long>(AsyncCapacityRejections),
+        static_cast<unsigned long long>(AsyncPayloadRejections),
+        UE::UnifiedScript::AsyncService::MaximumInFlightRequestCount,
+        UE::UnifiedScript::AsyncService::MaximumPayloadByteCount,
+        static_cast<unsigned long long>(InitialUsedPhysicalBytes),
+        static_cast<unsigned long long>(PeakUsedPhysicalBytes),
+        static_cast<unsigned long long>(FinalUsedPhysicalBytes),
+        static_cast<unsigned long long>(MemoryGrowthBytes),
+        static_cast<unsigned long long>(MemoryGrowthBudgetBytes),
         RetiredLoadContextsAlive);
     return true;
 }

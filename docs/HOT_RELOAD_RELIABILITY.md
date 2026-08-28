@@ -55,17 +55,25 @@ powershell -ExecutionPolicy Bypass `
   -File tools/run-unreal-lifecycle-stress.ps1 -EngineRoot D:\UE_5.8
 ```
 
-The `unifiedscript.unreal-lifecycle-stress/v0.2` payload covers eight travel
+The `unifiedscript.unreal-lifecycle-stress/v0.3` payload defaults to eight travel
 cycles, eight PIE cycles, four concurrent Worlds, 16 successful reloads, and
 16 intentionally failed reloads. Each failed attempt proves that the old
 generation, migrated state, timer, and one reflected Host event subscription
 remain active. Each successful attempt broadcasts the same event and proves
 that only the current generation receives it.
 
+The same test accepts bounded command-line scale inputs. The M11.1 two-process
+runner in `tools/run-unreal-reliability-soak.ps1` executes the larger matrix in
+both editor and dedicated-server process modes and adds UObject/GC churn,
+async/command/event/trace/overlap saturation, memory budgets, and worker-queue
+shutdown invariants. See `docs/RELIABILITY_SOAK.md`.
+
 The gate accepts the report only when registered-object, delegate, pending-work,
-managed-World, native-context, owned-resource, and stale-debug-session deltas
-are zero and `retiredLoadContextsAlive` is zero. The intentionally missing type
-diagnostics during the failed half of the soak are expected test evidence.
+managed-World, native-context, worker-dispatch, owned-resource, and
+stale-debug-session deltas are zero and `retiredLoadContextsAlive` is zero. It
+also requires exact capacity rejection telemetry and final physical-memory
+growth within the selected budget. The intentionally missing type diagnostics
+during the failed half of the soak are expected test evidence.
 
 ## Current boundary
 

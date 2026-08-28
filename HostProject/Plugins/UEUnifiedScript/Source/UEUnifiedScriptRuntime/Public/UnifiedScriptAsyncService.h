@@ -11,6 +11,11 @@ class UWorld;
 namespace UE::UnifiedScript::AsyncService
 {
 inline constexpr uint32 AbiVersion = 5;
+inline constexpr uint32 MaximumInFlightRequestCount = 4096;
+inline constexpr uint32 MaximumGlobalInFlightRequestCount = 65536;
+inline constexpr uint32 MaximumOwnedResourceCount = 4096;
+inline constexpr uint32 MaximumGlobalOwnedResourceCount = 16384;
+inline constexpr uint32 MaximumPayloadByteCount = 1024 * 1024;
 }
 
 enum class EUnifiedScriptAsyncOperationV5 : uint8
@@ -160,6 +165,8 @@ public:
     static int32 GetGlobalPendingRequestCount();
     static int32 GetGlobalQueuedCompletionCount();
     static int32 GetGlobalOwnedResourceCount();
+    static uint64 GetGlobalCapacityRejectionCount();
+    static uint64 GetGlobalPayloadRejectionCount();
 
 private:
     struct FImpl;

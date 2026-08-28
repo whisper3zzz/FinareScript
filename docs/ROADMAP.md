@@ -49,7 +49,7 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-28**
 
 - Active milestone: **M11 — Production hardening and release candidate**
-- Next slice: **M11.1 — reliability and scale**
+- Next slice: **M11.1 — bounded dispatch, failure containment, and scale**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -64,7 +64,7 @@ machine-local unless an artifact explicitly says otherwise.
 | UnifiedScript comparison source | `5cf323e` (`perf: sync representative workload host`) |
 | Puerts comparison source | `be399cb` (`perf: register benchmark world context`) |
 | Managed tests | 560 / 560 passed |
-| Repository validator | 69 / 69 passed |
+| Repository validator | 70 / 70 passed |
 | UE 5.8.1 native build | passed |
 | `UnifiedScript.Unreal` Automation | 16 / 16 passed, including workload collectors, gameplay-profiler attribution, Authoring Surface, live World semantic pause/step/reload/detach, and repeated success/failure hot-reload leak coverage |
 | M10.2 generated-channel profile | 1,024 rows x 3 median samples: container binding 25,371.973 ns/row, generated snapshot 1.270 ns/row (ratio 0.000050), buffered events 0.586 ns/row, zero managed allocation |
@@ -79,6 +79,8 @@ machine-local unless an artifact explicitly says otherwise.
 | Deliverable smoke | 300 frames, one shot, one hit, two command completions, 3,631 fast/CallFrame calls, zero legacy calls |
 | Deliverable report | `artifacts/demo/blockbreaker-20260828-152605/demo-delivery.json` |
 | Compiled delivery comparison | 3 alternating trials: chunk startup 162.0194 ms vs loose 110.3650 ms (1.468032); reload 75.6999 ms vs 79.1182 ms (0.956795); one 44,886-byte chunk vs two 43,992-byte loose runtime files (1.020322) |
+| M11.1 reliability soak | editor + dedicated-server process lanes passed: 64 travel, 64 PIE, 128 successful + 128 rolled-back reloads, 8,192 object registrations, 34 GC cycles, 131,072 commands, zero ownership/leak deltas |
+| Reliability report | `artifacts/ue/reliability-soak/20260828-155029/reliability-soak.json` |
 | Visual/C# round trip | semantic, MethodDef IL, execution cases, Script Assets, two live UE candidates, and two packaged candidates equivalent |
 | Round-trip report | `artifacts/roundtrip/blockbreaker-20260828-021802-6305602d/roundtrip-report.json` |
 
@@ -1198,12 +1200,26 @@ Release chunk is one 44,886-byte file versus two required loose runtime files at
 
 ### M11.1 — Reliability and scale
 
-- [ ] run long PIE, travel, multi-World, dedicated-server, reload, GC, object
+- [x] run long PIE, travel, multi-World, dedicated-server, reload, GC, object
   churn, delegate, command-buffer saturation, and fault-injection soaks
 - [ ] enforce bounded memory/queues, deterministic shutdown, failure containment,
   and useful crash breadcrumbs
 - [ ] test large contracts and script sets for generation time, editor startup,
   incremental rebuild, and asset churn
+
+Progress (2026-08-28): the versioned two-lane reliability gate runs the same
+configurable v0.3 lifecycle workload in normal editor and `-server` processes.
+The verified run completed 64 travel and 64 PIE cycles, 128 successful reloads,
+128 missing-type rollback failures, 8,192 registered/released UObject instances,
+34 UE GC cycles, and 131,072 commands. It deliberately dropped and counted
+65,536 events beyond the fixed buffers, rejected capacity-plus-one async,
+command, trace, and overlap requests, and ended with zero managed-World,
+native-context, worker-dispatch, async, object, delegate, debug-session, owned
+resource, or retired-load-context deltas. Final physical-memory growth was
+39,723,008 bytes in editor and 31,969,280 bytes in dedicated-server process
+mode, both below the 256 MiB budget. This closes the soak matrix; packaged `WindowsServer` targets remain in
+M11.2, while the remaining M11.1 work is broader failure containment/crash
+breadcrumbs and large-contract/editor-scale testing.
 
 ### M11.2 — Compatibility and packaging matrix
 

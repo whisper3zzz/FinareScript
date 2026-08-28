@@ -15,6 +15,8 @@ std::atomic<int32> GLiveServiceCount{0};
 std::atomic<int32> GPendingRequestCount{0};
 std::atomic<int32> GQueuedCompletionCount{0};
 std::atomic<int32> GOwnedResourceCount{0};
+std::atomic<uint64> GCapacityRejectionCount{0};
+std::atomic<uint64> GPayloadRejectionCount{0};
 
 bool TryDecodeUtf8(const uint8* Data, uint32 Length, FString& OutValue)
 {
@@ -83,6 +85,31 @@ struct FUnifiedScriptAsyncService::FImpl
     bool Submit(const FUnifiedScriptAsyncRequestV5& Request)
     {
         check(IsInGameThread());
+        const int32 InFlightRequestCount =
+            PendingRequests.Num() + CompletedRequests.Num();
+        const int32 GlobalInFlightRequestCount =
+            UE::UnifiedScript::AsyncService::Private::GPendingRequestCount.load(
+                std::memory_order_relaxed) +
+            UE::UnifiedScript::AsyncService::Private::GQueuedCompletionCount.load(
+                std::memory_order_relaxed);
+        if (InFlightRequestCount >= static_cast<int32>(
+                UE::UnifiedScript::AsyncService::MaximumInFlightRequestCount) ||
+            GlobalInFlightRequestCount >= static_cast<int32>(
+                UE::UnifiedScript::AsyncService::MaximumGlobalInFlightRequestCount))
+        {
+            UE::UnifiedScript::AsyncService::Private::GCapacityRejectionCount.fetch_add(
+                1,
+                std::memory_order_relaxed);
+            return false;
+        }
+        if (Request.PayloadLength >
+            UE::UnifiedScript::AsyncService::MaximumPayloadByteCount)
+        {
+            UE::UnifiedScript::AsyncService::Private::GPayloadRejectionCount.fetch_add(
+                1,
+                std::memory_order_relaxed);
+            return false;
+        }
         if (bShutdown || World == nullptr || Registry == nullptr ||
             Request.AbiVersion != UE::UnifiedScript::AsyncService::AbiVersion ||
             Request.StructSize < sizeof(FUnifiedScriptAsyncRequestV5) ||
@@ -411,6 +438,23 @@ struct FUnifiedScriptAsyncService::FImpl
             return;
         }
 
+        if (OwnedResources.Num() >= static_cast<int32>(
+                UE::UnifiedScript::AsyncService::MaximumOwnedResourceCount) ||
+            UE::UnifiedScript::AsyncService::Private::GOwnedResourceCount.load(
+                std::memory_order_relaxed) >= static_cast<int32>(
+                UE::UnifiedScript::AsyncService::MaximumGlobalOwnedResourceCount))
+        {
+            UE::UnifiedScript::AsyncService::Private::GCapacityRejectionCount.fetch_add(
+                1,
+                std::memory_order_relaxed);
+            Complete(
+                RequestId,
+                EUnifiedScriptAsyncCompletionStatusV5::Failed,
+                nullptr,
+                5);
+            return;
+        }
+
         FUnifiedScriptObjectHandleResult HandleResult;
         const FUnifiedScriptObjectHandle Handle =
             Registry->RegisterObject(Resource, HandleResult);
@@ -635,5 +679,17 @@ int32 FUnifiedScriptAsyncService::GetGlobalQueuedCompletionCount()
 int32 FUnifiedScriptAsyncService::GetGlobalOwnedResourceCount()
 {
     return UE::UnifiedScript::AsyncService::Private::GOwnedResourceCount.load(
+        std::memory_order_relaxed);
+}
+
+uint64 FUnifiedScriptAsyncService::GetGlobalCapacityRejectionCount()
+{
+    return UE::UnifiedScript::AsyncService::Private::GCapacityRejectionCount.load(
+        std::memory_order_relaxed);
+}
+
+uint64 FUnifiedScriptAsyncService::GetGlobalPayloadRejectionCount()
+{
+    return UE::UnifiedScript::AsyncService::Private::GPayloadRejectionCount.load(
         std::memory_order_relaxed);
 }

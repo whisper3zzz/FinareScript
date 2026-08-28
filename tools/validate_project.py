@@ -63,6 +63,7 @@ DOCUMENTS = [
     ROOT / "docs" / "REMOTE_DEBUG_FRAMING.md",
     ROOT / "docs" / "RUNTIME_DIAGNOSTICS.md",
     ROOT / "docs" / "HOT_RELOAD_RELIABILITY.md",
+    ROOT / "docs" / "RELIABILITY_SOAK.md",
     ROOT / "docs" / "GAMEPLAY_PROFILER.md",
     ROOT / "docs" / "PERFORMANCE_WORKLOAD_SUITE.md",
     ROOT / "docs" / "COMPILED_CHUNKS.md",
@@ -1485,6 +1486,9 @@ def main() -> int:
     unreal_lifecycle_stress_helper_path = (
         ROOT / "tools" / "run-unreal-lifecycle-stress.ps1"
     )
+    unreal_reliability_soak_helper_path = (
+        ROOT / "tools" / "run-unreal-reliability-soak.ps1"
+    )
     unreal_benchmark_thresholds_path = (
         ROOT / "benchmarks" / "unreal" / "performance-thresholds.json"
     )
@@ -2042,6 +2046,9 @@ def main() -> int:
         encoding="utf-8"
     )
     unreal_lifecycle_stress_helper = unreal_lifecycle_stress_helper_path.read_text(
+        encoding="utf-8"
+    )
+    unreal_reliability_soak_helper = unreal_reliability_soak_helper_path.read_text(
         encoding="utf-8"
     )
     with unreal_benchmark_thresholds_path.open("r", encoding="utf-8") as handle:
@@ -2672,17 +2679,19 @@ def main() -> int:
     checks.append("UE async services are World-scoped, timeout-aware, and generation-owned")
     require(
         "WorldHost.LifecycleStress" in unreal_lifecycle_stress_test
-        and "TravelCycles = 8" in unreal_lifecycle_stress_test
-        and "PieCycles = 8" in unreal_lifecycle_stress_test
-        and "ConcurrentWorlds = 4" in unreal_lifecycle_stress_test
-        and "GenerationRollovers = 16" in unreal_lifecycle_stress_test
+        and 'TEXT("UnifiedScriptSoakTravelCycles="), 8' in unreal_lifecycle_stress_test
+        and 'TEXT("UnifiedScriptSoakPieCycles="), 8' in unreal_lifecycle_stress_test
+        and 'TEXT("UnifiedScriptSoakConcurrentWorlds="), 4'
+        in unreal_lifecycle_stress_test
+        and 'TEXT("UnifiedScriptSoakGenerationRollovers="), 16'
+        in unreal_lifecycle_stress_test
         and "GetGlobalOwnedResourceCount" in unreal_async_service_header
         and "ReleaseOwnerResources" in unreal_async_service_source
         and "GetLiveContextCount" in unreal_native_transport_header
         and "CollectRetiredLoadContexts" in unreal_world_managed_entry
         and "CollectRetiredManagedLoadContexts" in unreal_coreclr_host_source
         and "LifecycleStressScript" in unreal_lifecycle_stress_demo_source
-        and "unifiedscript.unreal-lifecycle-stress-report/v0.1"
+        and "unifiedscript.unreal-lifecycle-stress-report/v0.2"
         in unreal_lifecycle_stress_helper
         and "retiredLoadContextsAlive" in unreal_lifecycle_stress_helper
         and "zeroLeak" in unreal_lifecycle_stress_helper,
@@ -3702,12 +3711,14 @@ def main() -> int:
         and "oldContextCollection" in runtime_component_source
         and "retiredLoadContextsAlive" in runtime_component_source
         and "worldFromGeneration" in runtime_component_source
-        and "unifiedscript.unreal-lifecycle-stress/v0.2"
+        and "unifiedscript.unreal-lifecycle-stress/v0.3"
         in unreal_lifecycle_stress_test
         and "FailedReloadCycles" in unreal_lifecycle_stress_test
         and "GetEventSubscriptionCount" in unreal_lifecycle_stress_test
         and "staleDebugSessions" in unreal_lifecycle_stress_test
         and "failedReloadCycles" in unreal_lifecycle_stress_helper
+        and "unifiedscript.unreal-lifecycle-stress-report/v0.2"
+        in unreal_lifecycle_stress_helper
         and "eventSubscriptionsDelta" in unreal_lifecycle_stress_helper
         and "staleDebugSessions" in unreal_lifecycle_stress_helper
         and "ParseReloadTransaction" in unreal_authoring_workbench_source
@@ -3721,6 +3732,39 @@ def main() -> int:
     )
     checks.append(
         "UE hot reload is one observable rollback-safe transaction with zero-leak soak"
+    )
+    reliability_soak_doc = (ROOT / "docs" / "RELIABILITY_SOAK.md").read_text(
+        encoding="utf-8"
+    )
+    coreclr_debug_coordinator = (
+        ROOT / "src" / "UnifiedScript.Runtime" / "CoreClrDebugCoordinator.cs"
+    ).read_text(encoding="utf-8")
+    require(
+        unreal_reliability_soak_helper_path.is_file()
+        and "unifiedscript.unreal-reliability-soak/v0.1"
+        in unreal_reliability_soak_helper
+        and "DedicatedServer" in unreal_lifecycle_stress_helper
+        and "-server" in unreal_lifecycle_stress_helper
+        and "boundedCapacity" in unreal_lifecycle_stress_helper
+        and "memoryBudget" in unreal_lifecycle_stress_helper
+        and "ServerContext" in unreal_lifecycle_stress_test
+        and "ObjectChurnCycles" in unreal_lifecycle_stress_test
+        and "CommandSaturationCycles" in unreal_lifecycle_stress_test
+        and "MaximumInFlightRequestCount = 4096" in unreal_async_service_header
+        and "MaximumPayloadByteCount = 1024 * 1024" in unreal_async_service_header
+        and "GCapacityRejectionCount" in unreal_async_service_source
+        and "MaximumPendingWorkerDispatchCount = 1024"
+        in unreal_native_transport_header
+        and "GRejectedWorkerDispatchCount" in unreal_native_transport_source
+        and "Channel.CreateBounded<CoreClrDebugPause>" in coreclr_debug_coordinator
+        and "dedicated-server **process mode**" in reliability_soak_doc
+        and "131,072 commands" in reliability_soak_doc
+        and "- [x] run long PIE, travel, multi-World, dedicated-server"
+        in roadmap,
+        "M11.1 two-lane reliability soak or bounded runtime queues are incomplete",
+    )
+    checks.append(
+        "M11.1 soaks editor and server-mode Worlds against explicit memory and queue bounds"
     )
     gameplay_profiler_doc = (
         ROOT / "docs" / "GAMEPLAY_PROFILER.md"

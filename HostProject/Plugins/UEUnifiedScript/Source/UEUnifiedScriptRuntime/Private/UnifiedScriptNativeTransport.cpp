@@ -16,6 +16,27 @@ namespace UE::UnifiedScript::NativeTransport::LifecycleDiagnostics
 {
 std::atomic<int32> GLiveContextCount{0};
 std::atomic<int32> GAttachedContextCount{0};
+std::atomic<int32> GPendingWorkerDispatchCount{0};
+std::atomic<uint64> GRejectedWorkerDispatchCount{0};
+
+bool TryReserveWorkerDispatch()
+{
+    int32 Count = GPendingWorkerDispatchCount.load(std::memory_order_relaxed);
+    while (Count <
+           FUnifiedScriptNativeBridgeContext::MaximumPendingWorkerDispatchCount)
+    {
+        if (GPendingWorkerDispatchCount.compare_exchange_weak(
+                Count,
+                Count + 1,
+                std::memory_order_acq_rel,
+                std::memory_order_relaxed))
+        {
+            return true;
+        }
+    }
+    GRejectedWorkerDispatchCount.fetch_add(1, std::memory_order_relaxed);
+    return false;
+}
 }
 
 struct FUnifiedScriptNativeBridgeContext::FPendingGameThreadCall
@@ -67,6 +88,18 @@ int32 FUnifiedScriptNativeBridgeContext::GetAttachedContextCount()
 {
     return UE::UnifiedScript::NativeTransport::LifecycleDiagnostics::GAttachedContextCount.load(
         std::memory_order_relaxed);
+}
+
+int32 FUnifiedScriptNativeBridgeContext::GetGlobalPendingWorkerDispatchCount()
+{
+    return UE::UnifiedScript::NativeTransport::LifecycleDiagnostics::
+        GPendingWorkerDispatchCount.load(std::memory_order_relaxed);
+}
+
+uint64 FUnifiedScriptNativeBridgeContext::GetGlobalRejectedWorkerDispatchCount()
+{
+    return UE::UnifiedScript::NativeTransport::LifecycleDiagnostics::
+        GRejectedWorkerDispatchCount.load(std::memory_order_relaxed);
 }
 
 int32 FUnifiedScriptNativeBridgeContext::GetEventSubscriptionCount()
@@ -181,6 +214,11 @@ bool FUnifiedScriptNativeBridgeContext::Execute(
         {
             return false;
         }
+        if (!UE::UnifiedScript::NativeTransport::LifecycleDiagnostics::
+                TryReserveWorkerDispatch())
+        {
+            return false;
+        }
         ReferenceCount.fetch_add(1, std::memory_order_relaxed);
         PendingGameThreadCalls.Enqueue(Pending);
     }
@@ -226,6 +264,8 @@ void FUnifiedScriptNativeBridgeContext::PumpGameThreadCalls()
     TSharedPtr<FPendingGameThreadCall> Pending;
     while (PendingGameThreadCalls.Dequeue(Pending))
     {
+        UE::UnifiedScript::NativeTransport::LifecycleDiagnostics::
+            GPendingWorkerDispatchCount.fetch_sub(1, std::memory_order_relaxed);
         {
             FScopeLock Lock(&BridgeLock);
             if (Bridge != nullptr &&
@@ -246,6 +286,8 @@ void FUnifiedScriptNativeBridgeContext::SuspendWorkerDispatch()
     TSharedPtr<FPendingGameThreadCall> Pending;
     while (PendingGameThreadCalls.Dequeue(Pending))
     {
+        UE::UnifiedScript::NativeTransport::LifecycleDiagnostics::
+            GPendingWorkerDispatchCount.fetch_sub(1, std::memory_order_relaxed);
         Pending->Completion->Trigger();
     }
 }

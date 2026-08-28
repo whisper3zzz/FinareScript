@@ -14,12 +14,13 @@ internal sealed class CoreClrDebugCoordinator : ICoreClrDebugProbeSink
     private readonly string programAssemblyName;
     private readonly IReadOnlyDictionary<SemanticId, SourceSpan> nodeSpans;
     private readonly IReadOnlyDictionary<SemanticId, int> methodTokens;
-    private readonly Channel<CoreClrDebugPause> pauses = Channel.CreateUnbounded<CoreClrDebugPause>(
-        new UnboundedChannelOptions
+    private readonly Channel<CoreClrDebugPause> pauses = Channel.CreateBounded<CoreClrDebugPause>(
+        new BoundedChannelOptions(1)
         {
             SingleReader = false,
             SingleWriter = true,
             AllowSynchronousContinuations = false,
+            FullMode = BoundedChannelFullMode.Wait,
         });
     private BreakpointBindingSnapshot bindings;
     private PauseState? currentPause;

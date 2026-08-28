@@ -1912,6 +1912,62 @@ bool FUnifiedScriptAsyncServiceTest::RunTest(const FString& Parameters)
         Host->GetPendingAsyncRequestCount(),
         0);
 
+    const uint64 CapacityRejectionsBefore =
+        FUnifiedScriptAsyncService::GetGlobalCapacityRejectionCount();
+    bool bAcceptedEveryBoundedRequest = true;
+    for (uint32 Index = 0;
+         Index < UE::UnifiedScript::AsyncService::MaximumInFlightRequestCount;
+         ++Index)
+    {
+        bAcceptedEveryBoundedRequest &= Submit(
+            1000 + Index,
+            EUnifiedScriptAsyncOperationV5::Delay,
+            60.0f,
+            0.0f);
+    }
+    TestTrue(
+        TEXT("Async service accepts requests through its declared capacity"),
+        bAcceptedEveryBoundedRequest);
+    TestEqual(
+        TEXT("Async service retains exactly its bounded pending capacity"),
+        Host->GetPendingAsyncRequestCount(),
+        static_cast<int32>(
+            UE::UnifiedScript::AsyncService::MaximumInFlightRequestCount));
+    TestFalse(
+        TEXT("Async service rejects one request beyond its bounded capacity"),
+        Submit(
+            1000 + UE::UnifiedScript::AsyncService::MaximumInFlightRequestCount,
+            EUnifiedScriptAsyncOperationV5::Delay,
+            60.0f,
+            0.0f));
+    TestEqual(
+        TEXT("Async capacity rejection is observable"),
+        FUnifiedScriptAsyncService::GetGlobalCapacityRejectionCount(),
+        CapacityRejectionsBefore + 1);
+    TestEqual(
+        TEXT("Capacity saturation can be canceled deterministically"),
+        Transport->CancelOwner(Context, 101, 7),
+        UE::UnifiedScript::AsyncService::MaximumInFlightRequestCount);
+
+    const uint64 PayloadRejectionsBefore =
+        FUnifiedScriptAsyncService::GetGlobalPayloadRejectionCount();
+    const uint8 OversizedPayloadSentinel = 'x';
+    FUnifiedScriptAsyncRequestV5 OversizedPayloadRequest;
+    OversizedPayloadRequest.RequestId = 9000;
+    OversizedPayloadRequest.OwnerInstanceId = 101;
+    OversizedPayloadRequest.OwnerGeneration = 7;
+    OversizedPayloadRequest.Operation = EUnifiedScriptAsyncOperationV5::LoadObject;
+    OversizedPayloadRequest.PayloadData = &OversizedPayloadSentinel;
+    OversizedPayloadRequest.PayloadLength =
+        UE::UnifiedScript::AsyncService::MaximumPayloadByteCount + 1;
+    TestFalse(
+        TEXT("Async service rejects payloads beyond its declared byte capacity"),
+        Transport->SubmitRequest(Context, &OversizedPayloadRequest) != 0);
+    TestEqual(
+        TEXT("Async payload rejection is observable"),
+        FUnifiedScriptAsyncService::GetGlobalPayloadRejectionCount(),
+        PayloadRejectionsBefore + 1);
+
     TestTrue(
         TEXT("Managed ownership can retain the async context"),
         Transport->RetainContext(Context) != 0);
