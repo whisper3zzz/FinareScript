@@ -41,6 +41,15 @@ This distinction prevents a scalar-call benchmark from inventing a frame time,
 while requiring the complete BlockBreaker workload to publish every M10.1
 metric.
 
+`allocatedBytes` currently has different collector semantics: UnifiedScript
+uses `GC.GetAllocatedBytesForCurrentThread()` around the measured interval,
+while the Puerts/V8 collector reports the non-negative change in V8 used heap.
+Both raw values remain useful diagnostics, but they are not equivalent
+allocation measurements. The comparison therefore publishes both medians with
+a null ratio and excludes this metric from performance claims until both
+runtimes expose the same cumulative-allocation method. GC count and pause time
+are observed directly on both runtimes and remain comparable.
+
 ## Matched execution
 
 The schedule is deterministic and contains 54 slots: nine workloads times
@@ -64,6 +73,13 @@ from the manifest, and sends the raw v0.1 measurement through the CLI. The CLI
 copies recipe/asset/build facts from the manifest instead of trusting a runner
 to repeat them and emits one independently verifiable
 `unifiedscript.performance-trial-capture/v0.1` file.
+
+`comparison/run-performance-comparison.ps1 -SuiteTrial <1..3>` runs the matched
+scalar pair and immediately writes both normalized captures. Its default mode
+publishes neutral or losing evidence while leaving `gates.fasterThanPuerts`
+truthful; pass `-RequireWin` when the narrow scalar threshold must fail the run.
+Tracked dirty runtime sources are included in `runtimeCommit` as a stable
+worktree fingerprint rather than being mislabeled as a clean commit.
 
 After all 27 captures for one runtime exist, assemble them with:
 
@@ -99,10 +115,12 @@ with data error exit code 65.
 
 The live UnifiedScript scalar and Batch Trace benchmarks now emit complete
 metric maps and have passed the raw-measurement/capture path for their trial-1
-slots. The first local samples recorded 100,000 scalar calls in 14.4818 ms with
-zero measured allocation/GC, and 1,024 queries through two batch-boundary calls
-in 0.3950 ms with 360,448 transferred bytes and zero measured allocation/GC.
-These are machine-local collector proofs, not a suite comparison.
+slots. A matched local scalar pair recorded 100,000 UnifiedScript calls in
+14.3309 ms and 100,000 Puerts calls in 13.7189 ms, a losing UnifiedScript ratio
+of 1.0446 that remains published without moving the future product gate. The
+Batch Trace collector recorded 1,024 queries through two boundary calls in
+0.3950 ms with 360,448 transferred bytes and zero measured allocation/GC. These
+are machine-local collector proofs, not a complete suite comparison.
 
 The pre-existing BlockBreaker three-trial runner remains valid narrow evidence
 but predates the complete metric contract. The next M10.1 slice adds collectors

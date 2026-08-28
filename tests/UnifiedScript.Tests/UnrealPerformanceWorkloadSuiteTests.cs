@@ -77,6 +77,13 @@ public sealed class UnrealPerformanceWorkloadSuiteTests
         Assert.Equal(1.05, blockBreakerFrame.UnifiedScriptToPuertsRatio!.Value, 10);
         Assert.True(blockBreakerFrame.UnifiedScriptMedian!.Value >
             blockBreakerFrame.PuertsMedian!.Value);
+        UnrealPerformanceMetricComparison allocation = report.Workloads
+            .Single(static workload => workload.Category ==
+                UnrealPerformanceWorkloadCategory.BlockBreaker)
+            .Metrics[UnrealPerformanceMetricName.AllocatedBytes];
+        Assert.NotNull(allocation.UnifiedScriptMedian);
+        Assert.NotNull(allocation.PuertsMedian);
+        Assert.Null(allocation.UnifiedScriptToPuertsRatio);
 
         JsonNode json = JsonNode.Parse(
             UnrealPerformanceSuiteJson.SerializeReport(report))!;

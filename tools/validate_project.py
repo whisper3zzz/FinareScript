@@ -3688,6 +3688,9 @@ def main() -> int:
     performance_capture_writer = (
         ROOT / "comparison" / "write-workload-capture.ps1"
     ).read_text(encoding="utf-8")
+    performance_pair_runner = (
+        ROOT / "comparison" / "run-performance-comparison.ps1"
+    ).read_text(encoding="utf-8")
     performance_suite_manifest_path = (
         ROOT / "benchmarks" / "unreal" / "workload-suite.v0.1.json"
     )
@@ -3767,6 +3770,15 @@ def main() -> int:
         and "Get-CimInstance Win32_Processor" in performance_capture_writer
         and "Engine\\Build\\Build.version" in performance_capture_writer
         and "executionOrdinal" in performance_capture_writer
+        and "SuiteTrial" in performance_pair_runner
+        and "Get-GitRuntimeCommit" in performance_pair_runner
+        and "Get-PluginVersion" in performance_pair_runner
+        and "unifiedscript\\captures" in performance_pair_runner
+        and "puerts\\captures" in performance_pair_runner
+        and "AllowLosingComparison" in performance_pair_runner
+        and "GetAllocatedBytesForCurrentThread" in performance_suite_doc
+        and "V8 used heap" in performance_suite_doc
+        and "null ratio" in performance_suite_doc
         and "54 slots" in performance_suite_doc
         and "all 27 captures" in performance_suite_doc
         and "no broad performance result is published" in performance_suite_doc,

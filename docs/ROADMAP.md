@@ -60,8 +60,9 @@ machine-local unless an artifact explicitly says otherwise.
 
 | Gate | Verified result |
 | --- | --- |
-| Main source | `d379a9e` (`feat: establish representative performance suite contract`), plus the current M10.1 capture-pipeline change set |
-| Comparison source | `e62a46e` (`feat: adopt round-tripped gameplay tuning`) |
+| Main source | `cfb07e6` (`feat: capture neutral puerts comparison samples`), plus the current M10.1 paired-capture change set |
+| UnifiedScript comparison source | `e62a46e` (`feat: adopt round-tripped gameplay tuning`) |
+| Puerts comparison source | `f452241` (`test: capture puerts runtime performance metrics`) |
 | Managed tests | 542 / 542 passed |
 | Repository validator | 66 / 66 passed |
 | UE 5.8.1 native build | passed |
@@ -1085,12 +1086,17 @@ alternating schedule. `ue-workload-compare` publishes matched neutral or losing
 ratios without moving the future M10.3 gate. Raw measurements are now normalized
 against the manifest into resumable per-slot captures, stamped with live
 OS/CPU/memory/GPU and engine-build identities, and assembled only when all 27
-trials share one runtime commit and environment. The 542/542 managed suite and
-66/66 repository invariants pass. Live UE 5.8.1 trial-1 captures now prove the
-pipeline for scalar/property calls (100,000 calls, 14.4818 ms bridge time, zero
-allocation/GC) and Batch Trace (1,024 queries through two boundary calls,
-0.3950 ms, 360,448 bytes, zero allocation/GC). M10.1 remains active while the
-other workload collectors and the Puerts/complete-game runners are adapted.
+trials share one runtime commit and environment. The matched scalar runner now
+writes both scheduled trial captures automatically and can publish a losing
+sample without making `gates.fasterThanPuerts` pass. A local UE 5.8.1 trial-1
+pair measured UnifiedScript at 14.3309 ms and Puerts at 13.7189 ms for 100,000
+calls (ratio 1.0446); this is intentionally recorded as a loss, not presented as
+a product win. CLR cumulative allocation and V8 used-heap growth are retained as
+raw medians but receive no cross-runtime ratio. Batch Trace separately recorded
+1,024 queries through two boundary calls in 0.3950 ms with 360,448 transferred
+bytes and zero measured allocation/GC. The 542/542 managed suite and 66/66
+repository invariants passed the preceding capture slice. M10.1 remains active
+while the other workload collectors and the complete-game runners are adapted.
 
 ### M10.2 — Shared data and batching optimization
 

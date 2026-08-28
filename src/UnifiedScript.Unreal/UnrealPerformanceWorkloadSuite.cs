@@ -337,7 +337,9 @@ public static class UnrealPerformanceWorkloadSuite
                     new UnrealPerformanceMetricComparison(
                         unifiedMedian,
                         puertsMedian,
-                        Ratio(unifiedMedian, puertsMedian)));
+                        metric == UnrealPerformanceMetricName.AllocatedBytes
+                            ? null
+                            : Ratio(unifiedMedian, puertsMedian)));
             }
             comparisons.Add(new UnrealPerformanceWorkloadComparison(
                 workload.Id,
