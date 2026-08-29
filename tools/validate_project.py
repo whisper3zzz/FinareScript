@@ -751,6 +751,8 @@ def main() -> int:
         and "does not match release manifest" in sdk_package
         and "1.0.0-rc.1" in compatibility_matrix_runner
         and "$ExpectedAutomationTests = 18" in compatibility_matrix_runner
+        and "$automationExitCode = $LASTEXITCODE" in compatibility_matrix_runner
+        and "$ErrorActionPreference = 'Continue'" in compatibility_matrix_runner
         and "releaseStatus -ne 'releaseCandidate'" in compatibility_matrix_runner
         and "Start here" in product_documentation
         and "Authoring and API" in product_documentation

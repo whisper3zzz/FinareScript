@@ -166,19 +166,32 @@ try {
 
     $automationLog = Join-Path $runDirectory 'automation.log'
     Invoke-MatrixPhase -Name 'editor-automation' -Action {
-        & $editorCmd @(
-            $projectPath,
-            '-unattended',
-            '-nop4',
-            '-NullRHI',
-            '-nosplash',
-            '-NoSound',
-            '-ExecCmds=Automation RunTests UnifiedScript.Unreal',
-            '-TestExit=Automation Test Queue Empty',
-            "-abslog=$automationLog",
-            '-log')
-        if ($LASTEXITCODE -ne 0) {
-            throw "Editor Automation failed with exit code $LASTEXITCODE."
+        $previousErrorActionPreference = $ErrorActionPreference
+        $automationExitCode = -1
+        try {
+            # Expected failure-containment tests emit structured diagnostics on
+            # native stderr. Keep those diagnostics in the phase log without
+            # letting Windows PowerShell promote them to a terminating error;
+            # the process exit code and exact Automation assertions below own
+            # the verdict.
+            $ErrorActionPreference = 'Continue'
+            & $editorCmd @(
+                $projectPath,
+                '-unattended',
+                '-nop4',
+                '-NullRHI',
+                '-nosplash',
+                '-NoSound',
+                '-ExecCmds=Automation RunTests UnifiedScript.Unreal',
+                '-TestExit=Automation Test Queue Empty',
+                "-abslog=$automationLog",
+                '-log')
+            $automationExitCode = $LASTEXITCODE
+        } finally {
+            $ErrorActionPreference = $previousErrorActionPreference
+        }
+        if ($automationExitCode -ne 0) {
+            throw "Editor Automation failed with exit code $automationExitCode."
         }
         $automationText = Get-Content -LiteralPath $automationLog -Raw
         $script:automationPassed = [regex]::Matches(
