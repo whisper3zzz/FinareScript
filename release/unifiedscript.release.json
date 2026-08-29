@@ -121,6 +121,12 @@
       "path": "docs/GAMEPLAY_PROFILER.md"
     },
     {
+      "id": "data-plane-extensions",
+      "category": "api",
+      "title": "Generated data-plane extensions",
+      "path": "docs/DATA_PLANE_EXTENSIONS.md"
+    },
+    {
       "id": "integrated-runtime-insights",
       "category": "debugging",
       "title": "Integrated runtime insights",
@@ -182,9 +188,9 @@
     }
   ],
   "acceptance": {
-    "managedTests": 616,
-    "repositoryInvariants": 90,
-    "unrealAutomationTests": 18,
+    "managedTests": 619,
+    "repositoryInvariants": 91,
+    "unrealAutomationTests": 19,
     "requiredGates": [
       "managed-tests",
       "repository-validator",
@@ -197,6 +203,7 @@
       "semantic-diff-merge",
       "ai-semantic-proposals",
       "integrated-runtime-insights",
+      "generated-data-plane-extensions",
       "clean-project-sdk-install",
       "clean-project-development-package"
     ]

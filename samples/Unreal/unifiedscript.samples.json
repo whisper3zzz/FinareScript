@@ -55,7 +55,7 @@
         {
           "path": "metrics.automationTestsPassed",
           "operator": "minimum",
-          "expected": 18
+          "expected": 19
         },
         {
           "path": "metrics.packageSmokeExitCode",
@@ -267,6 +267,14 @@
         {
           "scope": "repository",
           "path": "samples/Unreal/UEUnifiedScriptRuntime.data-plane.json"
+        },
+        {
+          "scope": "repository",
+          "path": "samples/Unreal/BlockBreaker.data-plane-extension.json"
+        },
+        {
+          "scope": "repository",
+          "path": "samples/Unreal/BlockBreaker.data-plane-extension.catalog.json"
         }
       ],
       "execution": {
@@ -306,6 +314,11 @@
           "expected": true
         },
         {
+          "path": "gates.generatedExtensionCompatible",
+          "operator": "equals",
+          "expected": true
+        },
+        {
           "path": "gates.evidenceBackedRouting",
           "operator": "equals",
           "expected": true
@@ -315,6 +328,7 @@
         "movement and overlap use buffered data-plane routes",
         "query uses batch trace",
         "containers use generated snapshots",
+        "project workload channels use generated typed extension descriptors",
         "measured generated channels allocate zero managed bytes"
       ],
       "nonClaims": [

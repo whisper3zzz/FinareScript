@@ -62,6 +62,11 @@ use the exact contract shipped by that SDK. The current package publishes:
 - compatibility policy v0.1, onboarding v0.1, reflection v0.4, API Contract
   and node/coverage v0.2, data-plane layout v0.1, and deployment v0.1 schemas.
 
+The SDK also bundles the data-plane extension v0.1 schema/catalog examples and
+`generate-unreal-data-plane-extension.ps1`. A consumer can therefore generate
+matched C++/C# workload rows and an authoring catalog without a UnifiedScript
+source checkout; see [Generated data-plane extensions](DATA_PLANE_EXTENSIONS.md).
+
 Before replacing an SDK, run the packaged CLI's `upgrade-plan` command against
 project-owned contracts and persistent authoring data. Direct reflection and API
 Contract rewrites, generated-output rules, immutable chunk/ABI rebuild rules,

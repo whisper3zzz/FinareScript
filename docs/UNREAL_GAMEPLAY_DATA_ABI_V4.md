@@ -135,6 +135,15 @@ The checked-in revision-4 examples are a 104-byte
 families that lost in the M10.1 matched suite, while the channel implementation
 remains independent of either row.
 
+Project workloads can replace raw schema-ID calls with a generated extension
+descriptor. The extension generator freezes the extension key, core ABI and
+compatibility requirement, schema fingerprint, row layouts, channel kind,
+publication phase, and tighter per-channel row/byte limits into matched C++ and
+C# outputs. The World-owned registry rejects collisions and incompatible
+publication before the existing generic ABI is reached, then clears all
+registration state during World shutdown. See
+[Generated data-plane extensions](DATA_PLANE_EXTENSIONS.md).
+
 ## Batch Trace
 
 One trace batch contains up to 65,536 fixed 184-byte requests. Every request
@@ -231,8 +240,8 @@ schema revision, compatibility ID, and fingerprint. `ue-data-plane` emits the
 C++ and C# layouts deterministically; native `static_assert`s, managed
 `Marshal.SizeOf`, exact-output tests, and
 `tools/generate-unreal-data-plane.ps1 -Check` reject drift. Extensions use new
-schema IDs or an appended size-checked suffix rather than mutating a frozen
-row.
+schema IDs and the separate `ue-data-plane-extension` contract rather than
+mutating a frozen row or transport table.
 
 ## Managed example
 

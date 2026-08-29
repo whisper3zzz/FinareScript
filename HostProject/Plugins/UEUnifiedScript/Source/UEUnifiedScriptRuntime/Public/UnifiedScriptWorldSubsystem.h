@@ -4,6 +4,7 @@
 #include "Subsystems/WorldSubsystem.h"
 #include "UnifiedScriptNativeTransport.h"
 #include "UnifiedScriptObjectRegistry.h"
+#include "UnifiedScriptDataPlaneExtension.h"
 #include "UObject/ObjectKey.h"
 
 #include <type_traits>
@@ -89,6 +90,28 @@ public:
         const void* Entries,
         uint32 EntryCount);
 
+    bool RegisterGeneratedDataPlaneExtension(
+        const FUnifiedScriptDataPlaneExtensionDescriptor& Extension,
+        FString& OutError);
+
+    bool UnregisterGeneratedDataPlaneExtension(
+        uint64 ExtensionKey,
+        uint64 SchemaFingerprint);
+
+    bool PublishGeneratedSnapshotRows(
+        const FUnifiedScriptDataPlaneExtensionDescriptor& Extension,
+        const FUnifiedScriptDataPlaneExtensionChannelDescriptor& Channel,
+        uint32 EntrySize,
+        const void* Entries,
+        uint32 EntryCount);
+
+    bool QueueGeneratedEventRows(
+        const FUnifiedScriptDataPlaneExtensionDescriptor& Extension,
+        const FUnifiedScriptDataPlaneExtensionChannelDescriptor& Channel,
+        uint32 EntrySize,
+        const void* Entries,
+        uint32 EntryCount);
+
     template <typename T>
     bool PublishGeneratedSnapshotRows(uint64 SchemaId, TConstArrayView<T> Entries)
     {
@@ -108,6 +131,38 @@ public:
         static_assert(std::is_standard_layout_v<T>);
         return QueueGeneratedEventRows(
             SchemaId,
+            sizeof(T),
+            Entries.GetData(),
+            static_cast<uint32>(Entries.Num()));
+    }
+
+    template <typename T>
+    bool PublishGeneratedSnapshotRows(
+        const FUnifiedScriptDataPlaneExtensionDescriptor& Extension,
+        const FUnifiedScriptDataPlaneExtensionChannelDescriptor& Channel,
+        TConstArrayView<T> Entries)
+    {
+        static_assert(std::is_trivially_copyable_v<T>);
+        static_assert(std::is_standard_layout_v<T>);
+        return PublishGeneratedSnapshotRows(
+            Extension,
+            Channel,
+            sizeof(T),
+            Entries.GetData(),
+            static_cast<uint32>(Entries.Num()));
+    }
+
+    template <typename T>
+    bool QueueGeneratedEventRows(
+        const FUnifiedScriptDataPlaneExtensionDescriptor& Extension,
+        const FUnifiedScriptDataPlaneExtensionChannelDescriptor& Channel,
+        TConstArrayView<T> Entries)
+    {
+        static_assert(std::is_trivially_copyable_v<T>);
+        static_assert(std::is_standard_layout_v<T>);
+        return QueueGeneratedEventRows(
+            Extension,
+            Channel,
             sizeof(T),
             Entries.GetData(),
             static_cast<uint32>(Entries.Num()));
@@ -248,6 +303,7 @@ private:
     TUniquePtr<FUnifiedScriptInvocationBridge> InvocationBridge;
     TUniquePtr<FUnifiedScriptSharedDataPlane> SharedDataPlane;
     TUniquePtr<FUnifiedScriptGameplayDataPlane> GameplayDataPlane;
+    FUnifiedScriptDataPlaneExtensionRegistry DataPlaneExtensionRegistry;
     TUniquePtr<FUnifiedScriptAsyncService> AsyncService;
     FUnifiedScriptNativeBridgeContext* NativeContext = nullptr;
     uint64 WorldHostId = 0;

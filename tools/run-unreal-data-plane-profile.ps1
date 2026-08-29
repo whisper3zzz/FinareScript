@@ -129,6 +129,9 @@ $measurementPass =
     [long]$result.generatedDataAllocatedBytes -eq 0 -and
     [int]$result.generatedSnapshotEntries -eq [int]$result.iterations -and
     [int]$result.generatedEventEntries -eq [int]$result.iterations -and
+    [int]$result.extensionSnapshotEntries -eq [int]$result.iterations -and
+    [int]$result.extensionEventEntries -eq [int]$result.iterations -and
+    $result.extensionFingerprint -eq '0xDE4BA9E28216D610' -and
     [long]$result.batchTraceAllocatedBytes -eq 0 -and
     [long]$result.batchTraceBytes -gt 0 -and
     [int]$result.batchTraceGcCollectionCount -ge 0 -and
@@ -162,6 +165,10 @@ $report = [ordered]@{
         zeroManagedAllocation = [long]$result.dataPlaneAllocatedBytes -eq 0
         generatedChannelsZeroManagedAllocation =
             [long]$result.generatedDataAllocatedBytes -eq 0
+        generatedExtensionCompatible =
+            [int]$result.extensionSnapshotEntries -eq [int]$result.iterations -and
+            [int]$result.extensionEventEntries -eq [int]$result.iterations -and
+            $result.extensionFingerprint -eq '0xDE4BA9E28216D610'
         evidenceBackedRouting = $routingPass
     }
     logPath = [IO.Path]::GetFullPath($logPath)

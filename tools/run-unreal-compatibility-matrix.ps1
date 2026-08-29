@@ -7,7 +7,7 @@ param(
     [ValidateRange(10, 300)]
     [int]$SmokeTimeoutSeconds = 90,
     [ValidateRange(1, 256)]
-    [int]$ExpectedAutomationTests = 18
+    [int]$ExpectedAutomationTests = 19
 )
 
 $ErrorActionPreference = 'Stop'

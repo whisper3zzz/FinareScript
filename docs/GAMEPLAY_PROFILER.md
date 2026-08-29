@@ -74,6 +74,12 @@ tooling. M10 owns statistical baselines, machine fingerprints, percentile
 budgets, and matched Puerts reports; a single trace is diagnostic evidence, not
 a broad performance claim.
 
+The data-plane workload profile also exercises the generated BlockBreaker
+extension with 1,024 target snapshots and 1,024 impact events. Its report
+exports both row counts and the generated schema fingerprint, so an apparently
+fast run cannot pass with a stale native/managed descriptor pair. See
+[Generated data-plane extensions](DATA_PLANE_EXTENSIONS.md).
+
 The browser Workbench can import the same JSON and ask the loopback host to
 join it with the current Surface and generated API route catalog. See
 [INTEGRATED_RUNTIME_INSIGHTS.md](INTEGRATED_RUNTIME_INSIGHTS.md). The catalog

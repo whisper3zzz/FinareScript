@@ -758,7 +758,7 @@ def main() -> int:
         and product_release["artifacts"]["pluginVersion"] == 1000001
         and product_plugin["Version"] == 1000001
         and product_plugin["VersionName"] == "1.0.0-rc.1"
-        and len(release_documents) == 27
+        and len(release_documents) == 28
         and len(set(release_document_ids)) == len(release_document_ids)
         and len(set(release_document_paths)) == len(release_document_paths)
         and required_release_categories <= release_document_categories
@@ -769,15 +769,15 @@ def main() -> int:
             for path in release_document_paths
         )
         and product_release["releaseNotes"] in release_document_paths
-        and product_release["acceptance"]["managedTests"] == 616
-        and product_release["acceptance"]["repositoryInvariants"] == 90
-        and product_release["acceptance"]["unrealAutomationTests"] == 18
+        and product_release["acceptance"]["managedTests"] == 619
+        and product_release["acceptance"]["repositoryInvariants"] == 91
+        and product_release["acceptance"]["unrealAutomationTests"] == 19
         and "release-manifest.json" in sdk_package
         and "$releaseDocumentation" in sdk_package
         and "documentationEntryCount" in sdk_package
         and "does not match release manifest" in sdk_package
         and "1.0.0-rc.1" in compatibility_matrix_runner
-        and "$ExpectedAutomationTests = 18" in compatibility_matrix_runner
+        and "$ExpectedAutomationTests = 19" in compatibility_matrix_runner
         and "$automationExitCode = $LASTEXITCODE" in compatibility_matrix_runner
         and "$ErrorActionPreference = 'Continue'" in compatibility_matrix_runner
         and "releaseStatus -ne 'releaseCandidate'" in compatibility_matrix_runner
@@ -885,7 +885,7 @@ def main() -> int:
     require(
         compatibility_policy["schemaVersion"]
         == "unifiedscript.compatibility-policy/v0.1"
-        and len(compatibility_families) == 16
+        and len(compatibility_families) == 18
         and compatibility_families["unreal-reflection"]["currentVersion"]
         == "unifiedscript.unreal-reflection/v0.4"
         and compatibility_families["unreal-api-contract"]["currentVersion"]
@@ -893,6 +893,14 @@ def main() -> int:
         and compatibility_families["compiled-program-chunk"]["upgradeStrategy"]
         == "rebuild"
         and compatibility_families["generated-bindings"]["upgradeStrategy"]
+        == "regenerate"
+        and compatibility_families["unreal-data-plane-extension"]["currentVersion"]
+        == "unifiedscript.unreal-data-plane-extension/v0.1"
+        and compatibility_families["unreal-data-plane-extension"]["upgradeStrategy"]
+        == "regenerate"
+        and compatibility_families["unreal-data-plane-extension-catalog"]["currentVersion"]
+        == "unifiedscript.unreal-data-plane-extension-catalog/v0.1"
+        and compatibility_families["unreal-data-plane-extension-catalog"]["upgradeStrategy"]
         == "regenerate"
         and compatibility_families["unreal-abi-set"]["components"]
         == {
@@ -1944,6 +1952,84 @@ def main() -> int:
     unreal_data_plane_generator_helper_path = (
         ROOT / "tools" / "generate-unreal-data-plane.ps1"
     )
+    unreal_data_plane_extension_schema_path = (
+        ROOT / "samples" / "Unreal" / "BlockBreaker.data-plane-extension.json"
+    )
+    unreal_data_plane_extension_catalog_path = (
+        ROOT
+        / "samples"
+        / "Unreal"
+        / "BlockBreaker.data-plane-extension.catalog.json"
+    )
+    unreal_data_plane_extension_generator_path = (
+        ROOT
+        / "src"
+        / "UnifiedScript.Unreal"
+        / "UnrealDataPlaneExtensionGenerator.cs"
+    )
+    unreal_data_plane_extension_managed_path = (
+        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealDataPlaneExtensions.cs"
+    )
+    unreal_data_plane_extension_generated_managed_path = (
+        ROOT
+        / "samples"
+        / "Unreal"
+        / "UnifiedScript.Unreal.Demo"
+        / "BlockBreakerDataPlaneExtension.g.cs"
+    )
+    unreal_data_plane_extension_generated_native_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Private"
+        / "Tests"
+        / "Generated"
+        / "UnifiedScriptBlockBreakerDataPlaneExtension.gen.h"
+    )
+    unreal_data_plane_extension_registry_header_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Public"
+        / "UnifiedScriptDataPlaneExtension.h"
+    )
+    unreal_data_plane_extension_registry_source_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Private"
+        / "UnifiedScriptDataPlaneExtension.cpp"
+    )
+    unreal_data_plane_extension_generator_test_path = (
+        ROOT
+        / "tests"
+        / "UnifiedScript.Tests"
+        / "UnrealDataPlaneExtensionGeneratorTests.cs"
+    )
+    unreal_data_plane_extension_registry_test_path = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Private"
+        / "Tests"
+        / "UnifiedScriptDataPlaneExtensionTests.cpp"
+    )
+    unreal_data_plane_extension_helper_path = (
+        ROOT / "tools" / "generate-unreal-data-plane-extension.ps1"
+    )
+    unreal_data_plane_extension_doc_path = ROOT / "docs" / "DATA_PLANE_EXTENSIONS.md"
     unreal_data_plane_profile_demo_path = (
         ROOT
         / "samples"
@@ -2644,6 +2730,40 @@ def main() -> int:
     )
     unreal_data_plane_generator_helper = (
         unreal_data_plane_generator_helper_path.read_text(encoding="utf-8")
+    )
+    with unreal_data_plane_extension_schema_path.open("r", encoding="utf-8") as handle:
+        unreal_data_plane_extension_schema = json.load(handle)
+    with unreal_data_plane_extension_catalog_path.open("r", encoding="utf-8") as handle:
+        unreal_data_plane_extension_catalog = json.load(handle)
+    unreal_data_plane_extension_generator = (
+        unreal_data_plane_extension_generator_path.read_text(encoding="utf-8")
+    )
+    unreal_data_plane_extension_managed = (
+        unreal_data_plane_extension_managed_path.read_text(encoding="utf-8")
+    )
+    unreal_data_plane_extension_generated_managed = (
+        unreal_data_plane_extension_generated_managed_path.read_text(encoding="utf-8")
+    )
+    unreal_data_plane_extension_generated_native = (
+        unreal_data_plane_extension_generated_native_path.read_text(encoding="utf-8")
+    )
+    unreal_data_plane_extension_registry_header = (
+        unreal_data_plane_extension_registry_header_path.read_text(encoding="utf-8")
+    )
+    unreal_data_plane_extension_registry_source = (
+        unreal_data_plane_extension_registry_source_path.read_text(encoding="utf-8")
+    )
+    unreal_data_plane_extension_generator_test = (
+        unreal_data_plane_extension_generator_test_path.read_text(encoding="utf-8")
+    )
+    unreal_data_plane_extension_registry_test = (
+        unreal_data_plane_extension_registry_test_path.read_text(encoding="utf-8")
+    )
+    unreal_data_plane_extension_helper = (
+        unreal_data_plane_extension_helper_path.read_text(encoding="utf-8")
+    )
+    unreal_data_plane_extension_doc = (
+        unreal_data_plane_extension_doc_path.read_text(encoding="utf-8")
     )
     unreal_data_plane_profile_demo = unreal_data_plane_profile_demo_path.read_text(
         encoding="utf-8"
@@ -5354,6 +5474,58 @@ def main() -> int:
     )
     checks.append(
         "M12.3 joins semantic Graph/source hotspots with measured Unreal boundary and generated route context"
+    )
+    require(
+        unreal_data_plane_extension_schema["schemaVersion"]
+        == "unifiedscript.unreal-data-plane-extension/v0.1"
+        and unreal_data_plane_extension_schema["requiredAbiVersion"] == 4
+        and unreal_data_plane_extension_schema["requiredLayoutCompatibilityId"]
+        == unreal_data_plane_schema["compatibilityId"]
+        and unreal_data_plane_extension_catalog["schemaVersion"]
+        == "unifiedscript.unreal-data-plane-extension-catalog/v0.1"
+        and unreal_data_plane_extension_catalog["schemaFingerprint"]
+        == "0xDE4BA9E28216D610"
+        and len(unreal_data_plane_extension_catalog["channels"]) == 2
+        and "class UnrealDataPlaneExtensionGenerator"
+        in unreal_data_plane_extension_generator
+        and "JsonUnmappedMemberHandling.Disallow"
+        in unreal_data_plane_extension_generator
+        and "UnrealDataPlaneExtensionChannel<T>"
+        in unreal_data_plane_extension_managed
+        and 'args[0] == "ue-data-plane-extension"' in cli_source
+        and "BlockBreakerDataPlaneExtension"
+        in unreal_data_plane_extension_generated_managed
+        and "FBlockBreakerTargetSnapshotV1) == 88)"
+        in unreal_data_plane_extension_generated_native
+        and "FUnifiedScriptDataPlaneExtensionRegistry"
+        in unreal_data_plane_extension_registry_header
+        and "ValidateRows" in unreal_data_plane_extension_registry_source
+        and "DataPlaneExtensionRegistry.Reset()" in unreal_world_host_source
+        and "RegisterGeneratedDataPlaneExtension" in unreal_world_host_header
+        and "AcquireGeneratedSnapshot(" in unreal_data_plane_profile_demo
+        and "BlockBreakerDataPlaneExtension.TargetSnapshots"
+        in unreal_data_plane_profile_demo
+        and "ExtensionFingerprint" in unreal_world_host_test
+        and "BlockBreakerExtensionGeneratesTypedManagedNativeAndCatalogOutputs"
+        in unreal_data_plane_extension_generator_test
+        and "GeneratedExtensionRegistry" in unreal_data_plane_extension_registry_test
+        and "Generated data-plane extension artifact is stale"
+        in unreal_data_plane_extension_helper
+        and "BlockBreaker.data-plane-extension.catalog.json"
+        in deterministic_gate
+        and "generate-unreal-data-plane-extension.ps1" in sdk_package
+        and "project-owned workload schema" in unreal_data_plane_extension_doc
+        and "docs/DATA_PLANE_EXTENSIONS.md" in release_document_paths
+        and "generated-data-plane-extensions"
+        in product_release["acceptance"]["requiredGates"]
+        and "- [x] keep the generated data-plane architecture open"
+        in roadmap_document
+        and "M12.3 generated data-plane extension evidence"
+        in roadmap_document,
+        "M12.3 generated workload schema, typed descriptors, World registry, profiling, or release gate is incomplete",
+    )
+    checks.append(
+        "M12.3 generates typed workload extensions without mutating the frozen core data-plane ABI"
     )
     identity_reconciler_source = (
         ROOT / "src" / "UnifiedScript.CSharp" / "CSharpIdentityReconciler.cs"

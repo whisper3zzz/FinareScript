@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "unifiedscript.unreal-data-plane-extension-catalog/v0.1",
+  "extensionId": "BlockBreaker.SpatialCombat",
+  "extensionKey": "0x5553424245585401",
+  "revision": 1,
+  "requiredAbiVersion": 4,
+  "requiredLayoutCompatibilityId": "0x555344504C415901",
+  "schemaFingerprint": "0xDE4BA9E28216D610",
+  "channels": [
+    {
+      "name": "ImpactEvents",
+      "kind": "event",
+      "schemaId": "0x55534242494D5001",
+      "nativeRowName": "FBlockBreakerImpactEventV1",
+      "managedRowName": "BlockBreakerImpactEventV1",
+      "entrySize": 104,
+      "maximumEntries": 4096,
+      "maximumBytes": 524288,
+      "publicationPhase": "native",
+      "profileBoundary": "extension.blockbreaker.impactEvents"
+    },
+    {
+      "name": "TargetSnapshots",
+      "kind": "snapshot",
+      "schemaId": "0x5553424254415201",
+      "nativeRowName": "FBlockBreakerTargetSnapshotV1",
+      "managedRowName": "BlockBreakerTargetSnapshotV1",
+      "entrySize": 88,
+      "maximumEntries": 2048,
+      "maximumBytes": 262144,
+      "publicationPhase": "native",
+      "profileBoundary": "extension.blockbreaker.targetSnapshot"
+    }
+  ]
+}

@@ -479,6 +479,27 @@ public sealed class UnrealWorldDataPlane
     public unsafe UnrealGeneratedDataSnapshot<T> AcquireGeneratedSnapshot<T>(
         ulong schemaId)
         where T : unmanaged
+        => AcquireGeneratedSnapshot<T>(
+            schemaId,
+            UnrealSharedDataAbiV4.MaximumGeneratedSnapshotCount,
+            UnrealSharedDataAbiV4.MaximumGeneratedChannelBytes);
+
+    public UnrealGeneratedDataSnapshot<T> AcquireGeneratedSnapshot<T>(
+        UnrealDataPlaneExtensionChannel<T> channel)
+        where T : unmanaged
+    {
+        channel.RequireCompatible(UnrealDataPlaneExtensionChannelKind.Snapshot);
+        return AcquireGeneratedSnapshot<T>(
+            channel.SchemaId,
+            channel.MaximumEntryCount,
+            channel.MaximumByteCount);
+    }
+
+    private unsafe UnrealGeneratedDataSnapshot<T> AcquireGeneratedSnapshot<T>(
+        ulong schemaId,
+        uint maximumEntryCount,
+        ulong maximumByteCount)
+        where T : unmanaged
     {
         IUnrealGeneratedDataTransport transport =
             _generatedTransport is { SupportsGeneratedSnapshots: true } available
@@ -499,7 +520,8 @@ public sealed class UnrealWorldDataPlane
             view,
             schemaId,
             entrySize,
-            UnrealSharedDataAbiV4.MaximumGeneratedSnapshotCount,
+            maximumEntryCount,
+            maximumByteCount,
             UnrealGeneratedDataFlagsV1.Snapshot);
         return new UnrealGeneratedDataSnapshot<T>(
             view.WorldHostId,
@@ -510,6 +532,27 @@ public sealed class UnrealWorldDataPlane
 
     public unsafe UnrealGeneratedDataSnapshot<T> AcquireGeneratedEvents<T>(
         ulong schemaId)
+        where T : unmanaged
+        => AcquireGeneratedEvents<T>(
+            schemaId,
+            UnrealGameplayDataAbiV4.MaximumGeneratedEventCount,
+            UnrealGameplayDataAbiV4.MaximumGeneratedChannelBytes);
+
+    public UnrealGeneratedDataSnapshot<T> AcquireGeneratedEvents<T>(
+        UnrealDataPlaneExtensionChannel<T> channel)
+        where T : unmanaged
+    {
+        channel.RequireCompatible(UnrealDataPlaneExtensionChannelKind.Event);
+        return AcquireGeneratedEvents<T>(
+            channel.SchemaId,
+            channel.MaximumEntryCount,
+            channel.MaximumByteCount);
+    }
+
+    private unsafe UnrealGeneratedDataSnapshot<T> AcquireGeneratedEvents<T>(
+        ulong schemaId,
+        uint maximumEntryCount,
+        ulong maximumByteCount)
         where T : unmanaged
     {
         IUnrealGeneratedDataTransport transport =
@@ -531,7 +574,8 @@ public sealed class UnrealWorldDataPlane
             view,
             schemaId,
             entrySize,
-            UnrealGameplayDataAbiV4.MaximumGeneratedEventCount,
+            maximumEntryCount,
+            maximumByteCount,
             UnrealGeneratedDataFlagsV1.Events);
         return new UnrealGeneratedDataSnapshot<T>(
             view.WorldHostId,
@@ -545,6 +589,7 @@ public sealed class UnrealWorldDataPlane
         ulong schemaId,
         uint entrySize,
         uint maximumEntryCount,
+        ulong maximumByteCount,
         UnrealGeneratedDataFlagsV1 requiredKind)
     {
         ulong byteCount = (ulong)view.EntryCount * view.EntrySize;
@@ -557,7 +602,7 @@ public sealed class UnrealWorldDataPlane
             view.EntrySize != entrySize ||
             view.EntryCount > view.EntryCapacity ||
             view.EntryCount > maximumEntryCount ||
-            byteCount > UnrealSharedDataAbiV4.MaximumGeneratedChannelBytes ||
+            byteCount > maximumByteCount ||
             (view.EntryCount != 0 && view.Entries == nint.Zero) ||
             (view.Flags & UnrealGeneratedDataFlagsV1.BorrowedUntilNextPublish) == 0 ||
             (view.Flags & requiredKind) == 0)

@@ -22,6 +22,7 @@
 #include "UnifiedScriptComponent.h"
 #include "UnifiedScriptCoreClrHost.h"
 #include "UnifiedScriptDataPlaneLayouts.gen.h"
+#include "Generated/UnifiedScriptBlockBreakerDataPlaneExtension.gen.h"
 #include "UnifiedScriptAsset.h"
 #include "UnifiedScriptActor.h"
 #include "UObject/UObjectGlobals.h"
@@ -1784,8 +1785,14 @@ bool FUnifiedScriptDataPlaneWorkloadProfileTest::RunTest(
         ProfileHandleResult.IsSuccess());
     TArray<FUnifiedScriptFixedValueCollectionSnapshotV1> SnapshotRows;
     TArray<FUnifiedScriptBufferedGameplayEventV1> BufferedEvents;
+    TArray<UE::UnifiedScript::Extensions::BlockBreaker::FBlockBreakerTargetSnapshotV1>
+        TargetSnapshots;
+    TArray<UE::UnifiedScript::Extensions::BlockBreaker::FBlockBreakerImpactEventV1>
+        ImpactEvents;
     SnapshotRows.Reserve(Iterations);
     BufferedEvents.Reserve(Iterations);
+    TargetSnapshots.Reserve(Iterations);
+    ImpactEvents.Reserve(Iterations);
     for (int32 Index = 0; Index < Iterations; ++Index)
     {
         FUnifiedScriptFixedValueCollectionSnapshotV1& SnapshotRow =
@@ -1823,7 +1830,40 @@ bool FUnifiedScriptDataPlaneWorkloadProfileTest::RunTest(
             Host->GetWorldHostId(),
             ProfileActorHandle.Value,
         };
+
+        auto& TargetSnapshot = TargetSnapshots.AddDefaulted_GetRef();
+        TargetSnapshot.Actor = {
+            Host->GetWorldHostId(),
+            ProfileActorHandle.Value,
+        };
+        TargetSnapshot.LocationX = Index;
+        TargetSnapshot.LocationY = Index + 1;
+        TargetSnapshot.LocationZ = Index + 2;
+        TargetSnapshot.Threat = 0.75;
+        TargetSnapshot.TeamId = Index & 1;
+        TargetSnapshot.FrameNumber = static_cast<uint64>(Index + 1);
+
+        auto& ImpactEvent = ImpactEvents.AddDefaulted_GetRef();
+        ImpactEvent.SequenceId = static_cast<uint64>(Index + 1);
+        ImpactEvent.Source = TargetSnapshot.Actor;
+        ImpactEvent.Target = TargetSnapshot.Actor;
+        ImpactEvent.ImpactX = Index;
+        ImpactEvent.ImpulseZ = 100.0;
+        ImpactEvent.Damage = 32.0;
+        ImpactEvent.SurfaceType = 1;
     }
+    // World initialization opens an initial managed phase. Close it so this
+    // project-owned producer publishes through the same native phase fence as
+    // OnWorldPreActorTick, then reopen the managed view below.
+    Host->EndManagedFrame();
+    FString ExtensionError;
+    TestTrue(
+        *FString::Printf(
+            TEXT("Profile registers the generated extension: %s"),
+            *ExtensionError),
+        Host->RegisterGeneratedDataPlaneExtension(
+            UE::UnifiedScript::Extensions::BlockBreaker::Descriptor,
+            ExtensionError));
     TestTrue(
         TEXT("Profile publishes the generated fixed-container snapshot"),
         Host->PublishGeneratedSnapshotRows(
@@ -1836,6 +1876,22 @@ bool FUnifiedScriptDataPlaneWorkloadProfileTest::RunTest(
             UE::UnifiedScript::GameplayData::BufferedGameplayEventSchemaId,
             TConstArrayView<FUnifiedScriptBufferedGameplayEventV1>(
                 BufferedEvents)));
+    TestTrue(
+        TEXT("Profile publishes the extension target snapshot"),
+        Host->PublishGeneratedSnapshotRows(
+            UE::UnifiedScript::Extensions::BlockBreaker::Descriptor,
+            UE::UnifiedScript::Extensions::BlockBreaker::TargetSnapshots,
+            TConstArrayView<
+                UE::UnifiedScript::Extensions::BlockBreaker::FBlockBreakerTargetSnapshotV1>(
+                TargetSnapshots)));
+    TestTrue(
+        TEXT("Profile queues the extension impact event buffer"),
+        Host->QueueGeneratedEventRows(
+            UE::UnifiedScript::Extensions::BlockBreaker::Descriptor,
+            UE::UnifiedScript::Extensions::BlockBreaker::ImpactEvents,
+            TConstArrayView<
+                UE::UnifiedScript::Extensions::BlockBreaker::FBlockBreakerImpactEventV1>(
+                ImpactEvents)));
     Host->BeginManagedFrame();
 
     UUnifiedScriptComponent* Component =
@@ -1884,6 +1940,9 @@ bool FUnifiedScriptDataPlaneWorkloadProfileTest::RunTest(
     FString GeneratedAllocatedBytesText;
     FString GeneratedSnapshotEntriesText;
     FString GeneratedEventEntriesText;
+    FString ExtensionSnapshotEntriesText;
+    FString ExtensionEventEntriesText;
+    FString ExtensionFingerprint;
     FString AllocatedBytesText;
     FString BatchTraceAllocatedBytesText;
     FString BatchTraceBytesText;
@@ -1909,6 +1968,8 @@ bool FUnifiedScriptDataPlaneWorkloadProfileTest::RunTest(
     int64 GeneratedDataAllocatedBytes = -1;
     int32 GeneratedSnapshotEntries = 0;
     int32 GeneratedEventEntries = 0;
+    int32 ExtensionSnapshotEntries = 0;
+    int32 ExtensionEventEntries = 0;
     int64 DataPlaneAllocatedBytes = -1;
     int64 BatchTraceAllocatedBytes = -1;
     int64 BatchTraceBytes = -1;
@@ -1929,6 +1990,9 @@ bool FUnifiedScriptDataPlaneWorkloadProfileTest::RunTest(
         ReadField(Component->ManagedState, TEXT("GeneratedDataAllocatedBytes"), GeneratedAllocatedBytesText) &&
         ReadField(Component->ManagedState, TEXT("GeneratedSnapshotEntries"), GeneratedSnapshotEntriesText) &&
         ReadField(Component->ManagedState, TEXT("GeneratedEventEntries"), GeneratedEventEntriesText) &&
+        ReadField(Component->ManagedState, TEXT("ExtensionSnapshotEntries"), ExtensionSnapshotEntriesText) &&
+        ReadField(Component->ManagedState, TEXT("ExtensionEventEntries"), ExtensionEventEntriesText) &&
+        ReadField(Component->ManagedState, TEXT("ExtensionFingerprint"), ExtensionFingerprint) &&
         ReadField(Component->ManagedState, TEXT("DataPlaneAllocatedBytes"), AllocatedBytesText) &&
         ReadField(Component->ManagedState, TEXT("BatchTraceAllocatedBytes"), BatchTraceAllocatedBytesText) &&
         ReadField(Component->ManagedState, TEXT("BatchTraceBytes"), BatchTraceBytesText) &&
@@ -1954,6 +2018,8 @@ bool FUnifiedScriptDataPlaneWorkloadProfileTest::RunTest(
         LexTryParseString(GeneratedDataAllocatedBytes, *GeneratedAllocatedBytesText) &&
         LexTryParseString(GeneratedSnapshotEntries, *GeneratedSnapshotEntriesText) &&
         LexTryParseString(GeneratedEventEntries, *GeneratedEventEntriesText) &&
+        LexTryParseString(ExtensionSnapshotEntries, *ExtensionSnapshotEntriesText) &&
+        LexTryParseString(ExtensionEventEntries, *ExtensionEventEntriesText) &&
         LexTryParseString(DataPlaneAllocatedBytes, *AllocatedBytesText) &&
         LexTryParseString(BatchTraceAllocatedBytes, *BatchTraceAllocatedBytesText) &&
         LexTryParseString(BatchTraceBytes, *BatchTraceBytesText) &&
@@ -1988,6 +2054,21 @@ bool FUnifiedScriptDataPlaneWorkloadProfileTest::RunTest(
         TEXT("Generated event loop covers the frozen row count"),
         GeneratedEventEntries,
         Iterations);
+    TestEqual(
+        TEXT("Generated extension snapshot covers its bounded workload"),
+        ExtensionSnapshotEntries,
+        Iterations);
+    TestEqual(
+        TEXT("Generated extension event covers its bounded workload"),
+        ExtensionEventEntries,
+        Iterations);
+    TestEqual(
+        TEXT("Managed extension fingerprint matches the generated native descriptor"),
+        ExtensionFingerprint,
+        FString::Printf(
+            TEXT("0x%016llX"),
+            static_cast<unsigned long long>(
+                UE::UnifiedScript::Extensions::BlockBreaker::Descriptor.SchemaFingerprint)));
     TestEqual(
         TEXT("Generated borrowed views allocate no managed memory"),
         GeneratedDataAllocatedBytes,
@@ -2024,7 +2105,7 @@ bool FUnifiedScriptDataPlaneWorkloadProfileTest::RunTest(
     UE_LOG(
         LogTemp,
         Display,
-        TEXT("UNIFIEDSCRIPT_DATA_PLANE_PROFILE_JSON {\"schemaVersion\":\"unifiedscript.unreal-data-plane-profile/v0.3\",\"iterations\":%d,\"sampleCount\":%d,\"bindingScalarNs\":%.3f,\"commandSubmitNs\":%.3f,\"bindingTraceNs\":%.3f,\"batchTraceNs\":%.3f,\"attributeReadNs\":%.3f,\"bindingContainerNs\":%.3f,\"generatedSnapshotNs\":%.3f,\"generatedEventNs\":%.3f,\"generatedDataAllocatedBytes\":%lld,\"generatedSnapshotEntries\":%d,\"generatedEventEntries\":%d,\"dataPlaneAllocatedBytes\":%lld,\"batchTraceAllocatedBytes\":%lld,\"batchTraceBytes\":%lld,\"batchTraceGcCollectionCount\":%d,\"batchTraceGcPauseMilliseconds\":%.6f,\"memoryHighWaterBytes\":%llu,\"movement\":\"%s\",\"overlap\":\"%s\",\"attribute\":\"%s\",\"spawn\":\"%s\",\"query\":\"%s\",\"container\":\"%s\",\"delegate\":\"%s\"}"),
+        TEXT("UNIFIEDSCRIPT_DATA_PLANE_PROFILE_JSON {\"schemaVersion\":\"unifiedscript.unreal-data-plane-profile/v0.3\",\"iterations\":%d,\"sampleCount\":%d,\"bindingScalarNs\":%.3f,\"commandSubmitNs\":%.3f,\"bindingTraceNs\":%.3f,\"batchTraceNs\":%.3f,\"attributeReadNs\":%.3f,\"bindingContainerNs\":%.3f,\"generatedSnapshotNs\":%.3f,\"generatedEventNs\":%.3f,\"generatedDataAllocatedBytes\":%lld,\"generatedSnapshotEntries\":%d,\"generatedEventEntries\":%d,\"extensionSnapshotEntries\":%d,\"extensionEventEntries\":%d,\"extensionFingerprint\":\"%s\",\"dataPlaneAllocatedBytes\":%lld,\"batchTraceAllocatedBytes\":%lld,\"batchTraceBytes\":%lld,\"batchTraceGcCollectionCount\":%d,\"batchTraceGcPauseMilliseconds\":%.6f,\"memoryHighWaterBytes\":%llu,\"movement\":\"%s\",\"overlap\":\"%s\",\"attribute\":\"%s\",\"spawn\":\"%s\",\"query\":\"%s\",\"container\":\"%s\",\"delegate\":\"%s\"}"),
         ManagedIterations,
         ManagedSampleCount,
         BindingScalarNs,
@@ -2038,6 +2119,9 @@ bool FUnifiedScriptDataPlaneWorkloadProfileTest::RunTest(
         static_cast<long long>(GeneratedDataAllocatedBytes),
         GeneratedSnapshotEntries,
         GeneratedEventEntries,
+        ExtensionSnapshotEntries,
+        ExtensionEventEntries,
+        *ExtensionFingerprint,
         static_cast<long long>(DataPlaneAllocatedBytes),
         static_cast<long long>(BatchTraceAllocatedBytes),
         static_cast<long long>(BatchTraceBytes),

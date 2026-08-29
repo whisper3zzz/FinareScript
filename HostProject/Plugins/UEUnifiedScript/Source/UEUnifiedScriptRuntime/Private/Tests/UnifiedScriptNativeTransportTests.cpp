@@ -8,6 +8,7 @@
 #include "Engine/StaticMeshActor.h"
 #include "Misc/AutomationTest.h"
 #include "UnifiedScriptComponent.h"
+#include "Generated/UnifiedScriptBlockBreakerDataPlaneExtension.gen.h"
 #include "UnifiedScriptInteropFixture.h"
 #include "UnifiedScriptWorldSubsystem.h"
 #include "UObject/UObjectGlobals.h"
@@ -1229,6 +1230,53 @@ bool FUnifiedScriptSharedTransformSnapshotTest::RunTest(const FString& Parameter
     TestNotNull(
         TEXT("Generated snapshot acquisition is discoverable"),
         Transport->AcquireGeneratedSnapshot);
+    Host->EndManagedFrame();
+    FString ExtensionError;
+    TestTrue(
+        *FString::Printf(
+            TEXT("Generated BlockBreaker extension registers: %s"),
+            *ExtensionError),
+        Host->RegisterGeneratedDataPlaneExtension(
+            UE::UnifiedScript::Extensions::BlockBreaker::Descriptor,
+            ExtensionError));
+    TArray<UE::UnifiedScript::Extensions::BlockBreaker::FBlockBreakerTargetSnapshotV1>
+        TargetRows;
+    auto& TargetRow = TargetRows.AddDefaulted_GetRef();
+    TargetRow.LocationX = 101.0;
+    TargetRow.Threat = 0.75;
+    TargetRow.FrameNumber = 9;
+    TestTrue(
+        TEXT("Registered extension publishes a typed target snapshot"),
+        Host->PublishGeneratedSnapshotRows(
+            UE::UnifiedScript::Extensions::BlockBreaker::Descriptor,
+            UE::UnifiedScript::Extensions::BlockBreaker::TargetSnapshots,
+            TConstArrayView<
+                UE::UnifiedScript::Extensions::BlockBreaker::FBlockBreakerTargetSnapshotV1>(
+                TargetRows)));
+    FUnifiedScriptGeneratedDataViewV1 TargetView;
+    TestTrue(
+        TEXT("Extension target snapshot crosses the existing ABI"),
+        Transport->AcquireGeneratedSnapshot(
+            Context,
+            UE::UnifiedScript::Extensions::BlockBreaker::TargetSnapshots.SchemaId,
+            sizeof(UE::UnifiedScript::Extensions::BlockBreaker::FBlockBreakerTargetSnapshotV1),
+            &TargetView) != 0);
+    TestTrue(
+        TEXT("Extension snapshot preserves its generated identity and row"),
+        TargetView.EntryCount == 1 &&
+            TargetView.EntrySize ==
+                UE::UnifiedScript::Extensions::BlockBreaker::TargetSnapshots.EntrySize &&
+            reinterpret_cast<const UE::UnifiedScript::Extensions::BlockBreaker::
+                FBlockBreakerTargetSnapshotV1*>(TargetView.Entries)->Threat == 0.75);
+    Host->BeginManagedFrame();
+    TestFalse(
+        TEXT("Extension publication rejects the managed borrowed-view phase"),
+        Host->PublishGeneratedSnapshotRows(
+            UE::UnifiedScript::Extensions::BlockBreaker::Descriptor,
+            UE::UnifiedScript::Extensions::BlockBreaker::TargetSnapshots,
+            TConstArrayView<
+                UE::UnifiedScript::Extensions::BlockBreaker::FBlockBreakerTargetSnapshotV1>(
+                TargetRows)));
     TArray<FUnifiedScriptFixedValueCollectionSnapshotV1> GeneratedRows;
     FUnifiedScriptFixedValueCollectionSnapshotV1& GeneratedRow =
         GeneratedRows.AddDefaulted_GetRef();
@@ -1476,6 +1524,55 @@ bool FUnifiedScriptGameplayDataPlaneTest::RunTest(const FString& Parameters)
     TestNotNull(
         TEXT("Generated event acquisition is discoverable"),
         Transport->AcquireGeneratedEvents);
+
+    Host->EndManagedFrame();
+    FString ExtensionError;
+    TestTrue(
+        *FString::Printf(
+            TEXT("Generated BlockBreaker event extension registers: %s"),
+            *ExtensionError),
+        Host->RegisterGeneratedDataPlaneExtension(
+            UE::UnifiedScript::Extensions::BlockBreaker::Descriptor,
+            ExtensionError));
+    TArray<UE::UnifiedScript::Extensions::BlockBreaker::FBlockBreakerImpactEventV1>
+        ImpactEvents;
+    auto& ImpactEvent = ImpactEvents.AddDefaulted_GetRef();
+    ImpactEvent.SequenceId = 70;
+    ImpactEvent.Target = {Host->GetWorldHostId(), TargetHandle.Value};
+    ImpactEvent.ImpactX = 15.0;
+    ImpactEvent.Damage = 32.0;
+    TestTrue(
+        TEXT("Registered extension queues a typed impact event"),
+        Host->QueueGeneratedEventRows(
+            UE::UnifiedScript::Extensions::BlockBreaker::Descriptor,
+            UE::UnifiedScript::Extensions::BlockBreaker::ImpactEvents,
+            TConstArrayView<
+                UE::UnifiedScript::Extensions::BlockBreaker::FBlockBreakerImpactEventV1>(
+                ImpactEvents)));
+    Host->BeginManagedFrame();
+    FUnifiedScriptGeneratedDataViewV1 ImpactView;
+    TestTrue(
+        TEXT("Extension impact event crosses the existing ABI"),
+        Transport->AcquireGeneratedEvents(
+            Context,
+            UE::UnifiedScript::Extensions::BlockBreaker::ImpactEvents.SchemaId,
+            sizeof(UE::UnifiedScript::Extensions::BlockBreaker::FBlockBreakerImpactEventV1),
+            &ImpactView) != 0);
+    TestTrue(
+        TEXT("Extension event preserves its generated identity and row"),
+        ImpactView.EntryCount == 1 &&
+            ImpactView.EntrySize ==
+                UE::UnifiedScript::Extensions::BlockBreaker::ImpactEvents.EntrySize &&
+            reinterpret_cast<const UE::UnifiedScript::Extensions::BlockBreaker::
+                FBlockBreakerImpactEventV1*>(ImpactView.Entries)->Damage == 32.0);
+    TestFalse(
+        TEXT("Extension event queue rejects the managed borrowed-view phase"),
+        Host->QueueGeneratedEventRows(
+            UE::UnifiedScript::Extensions::BlockBreaker::Descriptor,
+            UE::UnifiedScript::Extensions::BlockBreaker::ImpactEvents,
+            TConstArrayView<
+                UE::UnifiedScript::Extensions::BlockBreaker::FBlockBreakerImpactEventV1>(
+                ImpactEvents)));
 
     TArray<FUnifiedScriptBufferedGameplayEventV1> GeneratedEvents;
     FUnifiedScriptBufferedGameplayEventV1& GeneratedEvent =

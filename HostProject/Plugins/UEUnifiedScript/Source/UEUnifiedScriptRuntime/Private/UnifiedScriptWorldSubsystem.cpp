@@ -220,6 +220,79 @@ bool UUnifiedScriptWorldSubsystem::QueueGeneratedEventRows(
             EntryCount);
 }
 
+bool UUnifiedScriptWorldSubsystem::RegisterGeneratedDataPlaneExtension(
+    const FUnifiedScriptDataPlaneExtensionDescriptor& Extension,
+    FString& OutError)
+{
+    check(IsInGameThread());
+    if (!IsNativeRuntimeReady())
+    {
+        OutError = TEXT("The World runtime is not ready for data-plane extensions.");
+        return false;
+    }
+    return DataPlaneExtensionRegistry.Register(Extension, OutError);
+}
+
+bool UUnifiedScriptWorldSubsystem::UnregisterGeneratedDataPlaneExtension(
+    uint64 ExtensionKey,
+    uint64 SchemaFingerprint)
+{
+    check(IsInGameThread());
+    return DataPlaneExtensionRegistry.Unregister(ExtensionKey, SchemaFingerprint);
+}
+
+bool UUnifiedScriptWorldSubsystem::PublishGeneratedSnapshotRows(
+    const FUnifiedScriptDataPlaneExtensionDescriptor& Extension,
+    const FUnifiedScriptDataPlaneExtensionChannelDescriptor& Channel,
+    uint32 EntrySize,
+    const void* Entries,
+    uint32 EntryCount)
+{
+    check(IsInGameThread());
+    FString Error;
+    return IsNativeRuntimeReady() && SharedDataPlane != nullptr &&
+        DataPlaneExtensionRegistry.ValidateRows(
+            Extension,
+            Channel,
+            EUnifiedScriptDataPlaneExtensionChannelKind::Snapshot,
+            GetGameplayDataPhase(),
+            EntrySize,
+            Entries,
+            EntryCount,
+            Error) &&
+        SharedDataPlane->PublishGeneratedSnapshot(
+            Channel.SchemaId,
+            EntrySize,
+            Entries,
+            EntryCount);
+}
+
+bool UUnifiedScriptWorldSubsystem::QueueGeneratedEventRows(
+    const FUnifiedScriptDataPlaneExtensionDescriptor& Extension,
+    const FUnifiedScriptDataPlaneExtensionChannelDescriptor& Channel,
+    uint32 EntrySize,
+    const void* Entries,
+    uint32 EntryCount)
+{
+    check(IsInGameThread());
+    FString Error;
+    return IsNativeRuntimeReady() && GameplayDataPlane != nullptr &&
+        DataPlaneExtensionRegistry.ValidateRows(
+            Extension,
+            Channel,
+            EUnifiedScriptDataPlaneExtensionChannelKind::Event,
+            GetGameplayDataPhase(),
+            EntrySize,
+            Entries,
+            EntryCount,
+            Error) &&
+        GameplayDataPlane->QueueGeneratedEvents(
+            Channel.SchemaId,
+            EntrySize,
+            Entries,
+            EntryCount);
+}
+
 void UUnifiedScriptWorldSubsystem::HandleWorldPreActorTick(
     UWorld* World,
     ELevelTick TickType,
@@ -840,6 +913,7 @@ void UUnifiedScriptWorldSubsystem::ShutdownNativeRuntime()
     const uint64 ShuttingDownWorldHostId = WorldHostId;
     HostState = EUnifiedScriptWorldHostState::ShuttingDown;
     GameplayLifecycleClaims.Reset();
+    DataPlaneExtensionRegistry.Reset();
     FUnifiedScriptRuntimeBreadcrumbs::RecordLifecycle(
         TEXT("WorldShutdown.Begin"),
         ShuttingDownWorldHostId);

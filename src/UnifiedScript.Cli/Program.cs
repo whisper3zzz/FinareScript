@@ -143,6 +143,11 @@ internal static class Program
             return RunUnrealDataPlane(args);
         }
 
+        if (args.Count > 0 && args[0] == "ue-data-plane-extension")
+        {
+            return RunUnrealDataPlaneExtension(args);
+        }
+
         if (args.Count > 0 && args[0] == "ue-puerts-inventory")
         {
             return RunUnrealPuertsInventory(args);
@@ -1084,6 +1089,58 @@ internal static class Program
         Console.WriteLine(fullManagedOutputPath);
         Console.WriteLine(fullNativeOutputPath);
         Console.WriteLine($"schema-fingerprint=0x{result.SchemaFingerprint:X16}");
+        return 0;
+    }
+
+    private static int RunUnrealDataPlaneExtension(IReadOnlyList<string> args)
+    {
+        if (!TryParseUnrealDataPlaneExtensionArguments(
+                args,
+                out UnrealDataPlaneExtensionOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+        options = options ?? throw new InvalidOperationException(
+            "Argument parsing succeeded without Unreal data-plane extension options.");
+        if (!File.Exists(options.SchemaPath))
+        {
+            Console.Error.WriteLine(
+                $"Unreal data-plane extension schema does not exist: {options.SchemaPath}");
+            return 66;
+        }
+
+        string fullSchemaPath = Path.GetFullPath(options.SchemaPath);
+        string fullManagedOutputPath = Path.GetFullPath(options.ManagedOutputPath);
+        string fullNativeOutputPath = Path.GetFullPath(options.NativeOutputPath);
+        string fullCatalogOutputPath = Path.GetFullPath(options.CatalogOutputPath);
+        string[] paths =
+        [
+            fullSchemaPath,
+            fullManagedOutputPath,
+            fullNativeOutputPath,
+            fullCatalogOutputPath,
+        ];
+        if (paths.Distinct(StringComparer.OrdinalIgnoreCase).Count() != paths.Length)
+        {
+            throw new ArgumentException(
+                "Unreal data-plane extension inputs and outputs must use distinct paths.");
+        }
+
+        UnrealDataPlaneExtensionSchema schema = UnrealDataPlaneExtensionJson.Deserialize(
+            File.ReadAllText(fullSchemaPath));
+        UnrealDataPlaneExtensionGenerationResult result =
+            new UnrealDataPlaneExtensionGenerator().Generate(schema);
+        WriteTransactionally(
+        [
+            new(fullManagedOutputPath, result.ManagedSource),
+            new(fullNativeOutputPath, result.NativeSource),
+            new(fullCatalogOutputPath, result.CatalogJson),
+        ]);
+        Console.WriteLine(fullManagedOutputPath);
+        Console.WriteLine(fullNativeOutputPath);
+        Console.WriteLine(fullCatalogOutputPath);
+        Console.WriteLine($"extension-fingerprint=0x{result.SchemaFingerprint:X16}");
         return 0;
     }
 
@@ -3556,6 +3613,58 @@ internal static class Program
         return true;
     }
 
+    private static bool TryParseUnrealDataPlaneExtensionArguments(
+        IReadOnlyList<string> args,
+        out UnrealDataPlaneExtensionOptions? options)
+    {
+        options = null;
+        if (args.Count < 8 || args[0] != "ue-data-plane-extension" ||
+            args[1].StartsWith("--", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        string schemaPath = args[1];
+        string? managedOutputPath = null;
+        string? nativeOutputPath = null;
+        string? catalogOutputPath = null;
+        int index = 2;
+        while (index < args.Count)
+        {
+            string option = args[index++];
+            if (index >= args.Count)
+            {
+                return false;
+            }
+            string value = args[index++];
+            switch (option)
+            {
+                case "--managed-out" when managedOutputPath is null:
+                    managedOutputPath = value;
+                    break;
+                case "--native-out" when nativeOutputPath is null:
+                    nativeOutputPath = value;
+                    break;
+                case "--catalog-out" when catalogOutputPath is null:
+                    catalogOutputPath = value;
+                    break;
+                default:
+                    return false;
+            }
+        }
+        if (managedOutputPath is null || nativeOutputPath is null ||
+            catalogOutputPath is null)
+        {
+            return false;
+        }
+        options = new UnrealDataPlaneExtensionOptions(
+            schemaPath,
+            managedOutputPath,
+            nativeOutputPath,
+            catalogOutputPath);
+        return true;
+    }
+
     private static bool TryParseUnrealPuertsInventoryArguments(
         IReadOnlyList<string> args,
         out UnrealPuertsInventoryOptions? options)
@@ -5029,6 +5138,7 @@ internal static class Program
         "  unifiedscript debug-frame-serve <input.cs> [--port <number>] [--max-connections <count>] [options]\n" +
         "  unifiedscript ue-bindings <reflection.json> --out <bindings.cs> [--contract <api-contract.json>] [--native-out <thunks.cpp>] [--nodes-out <nodes.json>] [--browser-out <api-browser.json>] [--report <coverage.json>] [--fail-on-rejected] [--namespace <name>]\n" +
         "  unifiedscript ue-data-plane <schema.json> --managed-out <layouts.g.cs> --native-out <layouts.gen.h>\n" +
+        "  unifiedscript ue-data-plane-extension <schema.json> --managed-out <extension.g.cs> --native-out <extension.gen.h> --catalog-out <catalog.json>\n" +
         "  unifiedscript ue-puerts-inventory <puerts-project> --out <inventory.json> [--native-project <target-project>] [--project-name <name>] [--coverage <coverage.json> --report <report.json> --fail-on-uncovered]\n" +
         "  unifiedscript ue-puerts-scan <puerts-project> --out <scan.json> [--native-project <project>] [--project-name <name>] [--script-root <directory>]... [--native-root <directory>]... [--fail-on-blockers]\n" +
         "  unifiedscript ue-puerts-plan <scan.json> --out <directory> [--contract <api-contract.json>] [--namespace <name>] [--fail-on-blockers]\n" +
@@ -5200,6 +5310,12 @@ internal static class Program
         string SchemaPath,
         string ManagedOutputPath,
         string NativeOutputPath);
+
+    private sealed record UnrealDataPlaneExtensionOptions(
+        string SchemaPath,
+        string ManagedOutputPath,
+        string NativeOutputPath,
+        string CatalogOutputPath);
 
     private sealed record ChunkPackOptions(
         string OutputPath,

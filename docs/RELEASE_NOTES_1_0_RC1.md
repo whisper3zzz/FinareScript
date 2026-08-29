@@ -16,6 +16,14 @@ DirectThunk/CallFrame/data-plane/reflection attribution in the same authoring
 workflow. Route catalog examples remain explicitly distinct from measured
 per-member calls.
 
+Project-owned high-volume workloads can now generate matched C++ rows, C# rows,
+typed snapshot/event descriptors, and an authoring catalog without changing
+the frozen Gameplay/Shared Data ABI v4. A per-World native registry enforces
+extension identity, fingerprint, kind, publication phase, row/byte limits, and
+lifecycle reset before using the existing zero-copy channels. BlockBreaker now
+proves the route with target snapshots and impact events in the live CoreCLR
+profile.
+
 Version: `1.0.0-rc.1`
 Channel: release candidate
 Verified target: Unreal Engine 5.8.1, Win64, .NET 10
@@ -54,6 +62,8 @@ Verified target: Unreal Engine 5.8.1, Win64, .NET 10
 - The same Workbenches expose graph/source runtime hotspots and Unreal boundary
   cost through the versioned, read-only Runtime Insight contract; stale
   semantic nodes remain visible without unsafe navigation.
+- Generated data-plane extensions let projects add bounded typed snapshot and
+  event workloads while preserving the core ABI v4 compatibility identity.
 
 ## Compatibility and packaging
 

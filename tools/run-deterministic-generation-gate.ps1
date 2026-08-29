@@ -22,6 +22,8 @@ $cliAssembly = Join-Path $repoRoot 'src\UnifiedScript.Cli\bin\Release\net10.0\Un
 $reflection = Join-Path $repoRoot 'samples\Unreal\UEUnifiedScriptRuntime.reflection.json'
 $contract = Join-Path $repoRoot 'samples\Unreal\UEUnifiedScriptRuntime.api-contract.json'
 $dataPlane = Join-Path $repoRoot 'samples\Unreal\UEUnifiedScriptRuntime.data-plane.json'
+$dataPlaneExtension = Join-Path $repoRoot `
+    'samples\Unreal\BlockBreaker.data-plane-extension.json'
 $expected = [ordered]@{
     'bindings.cs' = Join-Path $repoRoot 'samples\Unreal\UEUnifiedScriptRuntime.bindings.cs'
     'native-thunks.cpp' = Join-Path $repoRoot (
@@ -33,9 +35,18 @@ $expected = [ordered]@{
     'data-plane.gen.h' = Join-Path $repoRoot (
         'HostProject\Plugins\UEUnifiedScript\Source\UEUnifiedScriptRuntime\' +
         'Public\UnifiedScriptDataPlaneLayouts.gen.h')
+    'data-plane-extension.g.cs' = Join-Path $repoRoot (
+        'samples\Unreal\UnifiedScript.Unreal.Demo\' +
+        'BlockBreakerDataPlaneExtension.g.cs')
+    'data-plane-extension.gen.h' = Join-Path $repoRoot (
+        'HostProject\Plugins\UEUnifiedScript\Source\UEUnifiedScriptRuntime\' +
+        'Private\Tests\Generated\UnifiedScriptBlockBreakerDataPlaneExtension.gen.h')
+    'data-plane-extension.catalog.json' = Join-Path $repoRoot `
+        'samples\Unreal\BlockBreaker.data-plane-extension.catalog.json'
 }
 foreach ($required in @(
-        $DotNet, $cliProject, $reflection, $contract, $dataPlane) +
+        $DotNet, $cliProject, $reflection, $contract, $dataPlane,
+        $dataPlaneExtension) +
         @($expected.Values)) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
         throw "Deterministic-generation dependency is missing: $required"
@@ -73,6 +84,12 @@ function Invoke-Generation {
         'ue-data-plane', $dataPlane,
         '--managed-out', (Join-Path $Destination 'data-plane.g.cs'),
         '--native-out', (Join-Path $Destination 'data-plane.gen.h'))
+    Invoke-Checked -FilePath $DotNet -Label 'Data-plane extension generation' -Arguments @(
+        $cliAssembly,
+        'ue-data-plane-extension', $dataPlaneExtension,
+        '--managed-out', (Join-Path $Destination 'data-plane-extension.g.cs'),
+        '--native-out', (Join-Path $Destination 'data-plane-extension.gen.h'),
+        '--catalog-out', (Join-Path $Destination 'data-plane-extension.catalog.json'))
 }
 
 if (Test-Path -LiteralPath $runDirectory) {

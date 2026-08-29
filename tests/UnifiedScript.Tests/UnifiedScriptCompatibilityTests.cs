@@ -15,7 +15,7 @@ public sealed class UnifiedScriptCompatibilityTests
         UnifiedScriptCompatibilityPolicy policy = LoadPolicy();
 
         Assert.Equal(UnifiedScriptCompatibilityPolicy.CurrentSchemaVersion, policy.SchemaVersion);
-        Assert.Equal(16, policy.Families.Count);
+        Assert.Equal(18, policy.Families.Count);
         Assert.Equal(HirDocument.CurrentSchemaVersion, Family(policy, "hir").CurrentVersion);
         Assert.Equal(BoundCompilation.CurrentSchemaVersion, Family(policy, "semantics").CurrentVersion);
         Assert.Equal(GraphDocument.CurrentSchemaVersion, Family(policy, "graph").CurrentVersion);
@@ -40,6 +40,15 @@ public sealed class UnifiedScriptCompatibilityTests
         Assert.Equal(
             UnifiedScriptUpgradeStrategy.Regenerate,
             Family(policy, "generated-bindings").UpgradeStrategy);
+        Assert.Equal(
+            UnrealDataPlaneExtensionSchema.CurrentSchemaVersion,
+            Family(policy, "unreal-data-plane-extension").CurrentVersion);
+        Assert.Equal(
+            UnifiedScriptUpgradeStrategy.Regenerate,
+            Family(policy, "unreal-data-plane-extension").UpgradeStrategy);
+        Assert.Equal(
+            UnrealDataPlaneExtensionCatalog.CurrentSchemaVersion,
+            Family(policy, "unreal-data-plane-extension-catalog").CurrentVersion);
 
         IReadOnlyDictionary<string, int> abi =
             Assert.IsAssignableFrom<IReadOnlyDictionary<string, int>>(

@@ -137,6 +137,26 @@
       "consumer": "managed and native shared-data hosts"
     },
     {
+      "id": "unreal-data-plane-extension",
+      "category": "persistentContract",
+      "currentVersion": "unifiedscript.unreal-data-plane-extension/v0.1",
+      "readableVersions": [],
+      "upgradeStrategy": "regenerate",
+      "sourceOfTruth": "project-owned workload extension schema",
+      "producer": "project authoring",
+      "consumer": "unifiedscript ue-data-plane-extension"
+    },
+    {
+      "id": "unreal-data-plane-extension-catalog",
+      "category": "derivedArtifact",
+      "currentVersion": "unifiedscript.unreal-data-plane-extension-catalog/v0.1",
+      "readableVersions": [],
+      "upgradeStrategy": "regenerate",
+      "sourceOfTruth": "project-owned workload extension schema",
+      "producer": "unifiedscript ue-data-plane-extension",
+      "consumer": "authoring tools, generated runtime descriptors, and release gates"
+    },
+    {
       "id": "unreal-reflection",
       "category": "persistentContract",
       "currentVersion": "unifiedscript.unreal-reflection/v0.4",

@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Globalization;
 using UnifiedScript.Unreal.Generated;
+using UnifiedScript.Unreal.Extensions.BlockBreaker;
 
 namespace UnifiedScript.Unreal.Demo;
 
@@ -54,6 +55,20 @@ public sealed class DataPlaneWorkloadProfileScript : IUnrealManagedScript
         checksum += context.DataPlane.AcquireGeneratedEvents<
             UnrealBufferedGameplayEventV1>(
                 UnrealGameplayDataAbiV4.BufferedGameplayEventSchemaId).Entries[0].Value;
+        UnrealGeneratedDataSnapshot<BlockBreakerTargetSnapshotV1> targetSnapshots =
+            context.DataPlane.AcquireGeneratedSnapshot(
+                BlockBreakerDataPlaneExtension.TargetSnapshots);
+        UnrealGeneratedDataSnapshot<BlockBreakerImpactEventV1> impactEvents =
+            context.DataPlane.AcquireGeneratedEvents(
+                BlockBreakerDataPlaneExtension.ImpactEvents);
+        if (targetSnapshots.Entries.Length != MeasuredIterations ||
+            impactEvents.Entries.Length != MeasuredIterations)
+        {
+            throw new InvalidOperationException(
+                "The generated BlockBreaker extension did not publish its bounded workload.");
+        }
+        checksum += targetSnapshots.Entries[0].Threat;
+        checksum += impactEvents.Entries[0].Damage;
 
         var bindingScalarSamples = new double[SampleCount];
         var commandSamples = new double[SampleCount];
@@ -146,6 +161,9 @@ public sealed class DataPlaneWorkloadProfileScript : IUnrealManagedScript
             $"GeneratedDataAllocatedBytes={generatedDataAllocatedBytes};" +
             $"GeneratedSnapshotEntries={MeasuredIterations};" +
             $"GeneratedEventEntries={MeasuredIterations};" +
+            $"ExtensionSnapshotEntries={targetSnapshots.Entries.Length};" +
+            $"ExtensionEventEntries={impactEvents.Entries.Length};" +
+            $"ExtensionFingerprint=0x{BlockBreakerDataPlaneExtension.Identity.SchemaFingerprint:X16};" +
             $"Movement=data-plane;Overlap=data-plane;Attribute=binding;" +
             $"Spawn=hybrid;Query=data-plane;Container=generated-snapshot;" +
             $"Delegate=generated-events;Checksum={checksum:F3}");

@@ -49,7 +49,7 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-29**
 
 - Active milestone: **M12 — Migration ecosystem and UnifiedScript 1.0**
-- Next slice: **M12.3 — generated data-plane extension point**
+- Next slice: **M12 acceptance closure and 1.0 release-readiness audit**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -1625,7 +1625,7 @@ graph/C# diff surface.
   and transaction gates as human graph edits
 - [x] integrate graph/source debugging and profiling so authoring, runtime cost,
   and Unreal API boundaries are visible in one place
-- [ ] keep the generated data-plane architecture open to new workloads without
+- [x] keep the generated data-plane architecture open to new workloads without
   weakening safety or ABI compatibility
 
 M12.3 semantic review evidence (2026-08-29): Graph v0.13 now has strict,
@@ -1707,6 +1707,38 @@ are byte-identical at 206 payload entries, 27 documentation entries, and
 8,638,577 bytes with SHA-256
 `98f90840b0b6f71c55217e26fe617757c0460d4c83a21e52bc8bdf594b36734d`.
 The cursor advances to M12.3's generated data-plane extension point.
+
+M12.3 generated data-plane extension evidence (2026-08-29): the core
+Gameplay/Shared Data ABI v4 remains unchanged while strict
+`unifiedscript.unreal-data-plane-extension/v0.1` project contracts generate
+matched native POD rows/descriptors, managed POD rows/typed channels, and a
+machine-readable v0.1 catalog. BlockBreaker's `SpatialCombat` fixture adds a
+bounded 88-byte target snapshot and 104-byte impact event without adding a
+transport-table suffix or handwritten facade; all generated consumers share
+fingerprint `0xDE4BA9E28216D610`.
+
+Each World now owns a descriptor registry that copies metadata, rejects ABI or
+compatibility drift, identity/schema collisions, wrong channel kind or native
+publication phase, row/byte overflow, and mismatched fingerprints, then clears
+before shared buffers and handles during shutdown. Managed acquisition accepts
+the generated typed descriptor and applies its tighter bounds before exposing
+the existing borrowed zero-copy span. The live data-plane profile publishes
+and reads 1,024 rows on both extension channels, reports the exact fingerprint,
+and records zero managed allocation; its report is
+`artifacts/ue/data-plane-profile.json`.
+
+Managed regression passes 619/619. Nine checked-in Contract/data-plane outputs
+regenerate byte-identically, including all three extension artifacts. Full
+Apply onboarding rebuilt both UE 5.8.1 native passes, redeployed the compiled
+Demo chunk, verified generation, and passed 19/19 `UnifiedScript.Unreal`
+Automation tests in 71,265 ms; the report is
+`artifacts/onboarding/m12-3-data-plane-extension-full.json`. Two final SDK
+archives are byte-identical at 214 payload entries, 28 documentation entries,
+and 8,543,382 bytes with SHA-256
+`bf1446c29cd9909604d9d58f97d8034b9caea912102b2c23cd630cfd6d6b3c30`.
+The extracted SDK independently regenerated the sample extension with its
+packaged CLI. M12.3 is complete and the cursor advances to M12 acceptance
+closure and the 1.0 release-readiness audit.
 
 Acceptance: the 1.0 release has an installable SDK, supported compatibility
 matrix, end-to-end migration guide, complete samples, published workload report,

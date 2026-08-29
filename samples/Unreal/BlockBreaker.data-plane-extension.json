@@ -1,0 +1,74 @@
+{
+  "schemaVersion": "unifiedscript.unreal-data-plane-extension/v0.1",
+  "extensionId": "BlockBreaker.SpatialCombat",
+  "extensionKey": "0x5553424245585401",
+  "catalogName": "BlockBreakerDataPlaneExtension",
+  "revision": 1,
+  "requiredAbiVersion": 4,
+  "requiredLayoutCompatibilityId": "0x555344504C415901",
+  "alignment": 8,
+  "nativeNamespace": "UE::UnifiedScript::Extensions::BlockBreaker",
+  "managedNamespace": "UnifiedScript.Unreal.Extensions.BlockBreaker",
+  "externalTypes": [
+    {
+      "name": "SharedObjectHandleV4",
+      "nativeType": "FUnifiedScriptSharedObjectHandleV4",
+      "managedType": "UnrealSharedObjectHandleV4",
+      "size": 16,
+      "alignment": 8
+    }
+  ],
+  "channels": [
+    {
+      "name": "TargetSnapshots",
+      "kind": "snapshot",
+      "schemaId": "0x5553424254415201",
+      "nativeRowName": "FBlockBreakerTargetSnapshotV1",
+      "managedRowName": "BlockBreakerTargetSnapshotV1",
+      "expectedSize": 88,
+      "maximumEntries": 2048,
+      "maximumBytes": 262144,
+      "publicationPhase": "native",
+      "profileBoundary": "extension.blockbreaker.targetSnapshot",
+      "fields": [
+        { "name": "Actor", "type": "SharedObjectHandleV4" },
+        { "name": "LocationX", "type": "f64" },
+        { "name": "LocationY", "type": "f64" },
+        { "name": "LocationZ", "type": "f64" },
+        { "name": "VelocityX", "type": "f64" },
+        { "name": "VelocityY", "type": "f64" },
+        { "name": "VelocityZ", "type": "f64" },
+        { "name": "Threat", "type": "f64" },
+        { "name": "TeamId", "type": "i32" },
+        { "name": "Flags", "type": "u32" },
+        { "name": "FrameNumber", "type": "u64" }
+      ]
+    },
+    {
+      "name": "ImpactEvents",
+      "kind": "event",
+      "schemaId": "0x55534242494D5001",
+      "nativeRowName": "FBlockBreakerImpactEventV1",
+      "managedRowName": "BlockBreakerImpactEventV1",
+      "expectedSize": 104,
+      "maximumEntries": 4096,
+      "maximumBytes": 524288,
+      "publicationPhase": "native",
+      "profileBoundary": "extension.blockbreaker.impactEvents",
+      "fields": [
+        { "name": "SequenceId", "type": "u64" },
+        { "name": "Source", "type": "SharedObjectHandleV4" },
+        { "name": "Target", "type": "SharedObjectHandleV4" },
+        { "name": "ImpactX", "type": "f64" },
+        { "name": "ImpactY", "type": "f64" },
+        { "name": "ImpactZ", "type": "f64" },
+        { "name": "ImpulseX", "type": "f64" },
+        { "name": "ImpulseY", "type": "f64" },
+        { "name": "ImpulseZ", "type": "f64" },
+        { "name": "Damage", "type": "f64" },
+        { "name": "SurfaceType", "type": "i32" },
+        { "name": "Flags", "type": "u32" }
+      ]
+    }
+  ]
+}

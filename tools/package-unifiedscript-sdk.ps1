@@ -326,6 +326,7 @@ try {
         'install-unifiedscript-sdk.ps1',
         'new-unifiedscript-project.ps1',
         'start-unifiedscript-authoring.ps1',
+        'generate-unreal-data-plane-extension.ps1',
         'measure-compiled-chunk-load.ps1',
         'measure-readytorun-chunk.ps1',
         'measure-generation-prewarm.ps1')) {
@@ -347,6 +348,8 @@ try {
         'unreal-api-nodes.v0.2.example.json' = 'samples\Unreal\UEUnifiedScriptRuntime.api-nodes.json'
         'unreal-binding-coverage.v0.2.example.json' = 'samples\Unreal\UEUnifiedScriptRuntime.binding-coverage.json'
         'unreal-data-plane-layout.v0.1.example.json' = 'samples\Unreal\UEUnifiedScriptRuntime.data-plane.json'
+        'unreal-data-plane-extension.v0.1.example.json' = 'samples\Unreal\BlockBreaker.data-plane-extension.json'
+        'unreal-data-plane-extension-catalog.v0.1.example.json' = 'samples\Unreal\BlockBreaker.data-plane-extension.catalog.json'
         'unreal-script-deployment.v0.1.example.json' = 'samples\Unreal\UnifiedScript.Unreal.Demo.deployment.json'
     }
     foreach ($entry in $schemaSources.GetEnumerator()) {
@@ -395,6 +398,7 @@ try {
         'Tools\install-unifiedscript-sdk.ps1',
         'Tools\new-unifiedscript-project.ps1',
         'Tools\start-unifiedscript-authoring.ps1',
+        'Tools\generate-unreal-data-plane-extension.ps1',
         'Tools\measure-compiled-chunk-load.ps1',
         'Tools\measure-readytorun-chunk.ps1',
         'Tools\measure-generation-prewarm.ps1',
@@ -477,6 +481,8 @@ try {
                 apiNodeCatalog = 'unifiedscript.unreal-api-node-catalog/v0.2'
                 bindingCoverage = 'unifiedscript.unreal-binding-coverage/v0.2'
                 dataPlaneLayout = 'unifiedscript.unreal-data-plane-layout/v0.1'
+                dataPlaneExtension = 'unifiedscript.unreal-data-plane-extension/v0.1'
+                dataPlaneExtensionCatalog = 'unifiedscript.unreal-data-plane-extension-catalog/v0.1'
                 deployment = 'unifiedscript.unreal-script-deployment/v0.1'
             }
         }

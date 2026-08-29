@@ -23,6 +23,7 @@ unsafe, or outside `docs`.
 - [Typed AI semantic patch proposals](AI_SEMANTIC_PROPOSALS.md)
 - [Unreal API Contract](UNREAL_API_CONTRACT.md)
 - [Project templates and generated API browser](PROJECT_TEMPLATES_AND_API_BROWSER.md)
+- [Generated data-plane extensions](DATA_PLANE_EXTENSIONS.md)
 
 ## Debugging and profiling
 
