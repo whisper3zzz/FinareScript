@@ -54,13 +54,17 @@ public sealed class CoreClrGenerationPrewarmTests
     [Fact]
     public async Task Operation_StopsBetweenMethodsWhenTimeBudgetExpires()
     {
+        long timestamp = 0;
         CoreClrGenerationPrewarmOperation operation =
             CoreClrGenerationPrewarmOperation.CreateForTests(
                 typeof(PrewarmFixture),
                 new CoreClrGenerationPrewarmOptions(
                     maximumMethodCount: 64,
                     timeBudget: TimeSpan.FromMilliseconds(2)),
-                _ => Thread.Sleep(20));
+                _ => Interlocked.Exchange(
+                    ref timestamp,
+                    Stopwatch.Frequency / 50),
+                () => Interlocked.Read(ref timestamp));
 
         Assert.True(operation.Start());
         await operation.Completion.WaitAsync(TimeSpan.FromSeconds(5));

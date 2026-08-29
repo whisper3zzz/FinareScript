@@ -83,6 +83,7 @@ public sealed class CoreClrGenerationPrewarmOperation
     private readonly Type[] _entryTypes;
     private readonly CoreClrGenerationPrewarmOptions _options;
     private readonly Action<MethodInfo> _prepareMethod;
+    private readonly Func<long> _getTimestamp;
     private readonly CancellationTokenSource _cancellation = new();
     private readonly TaskCompletionSource _completion = new(
         TaskCreationOptions.RunContinuationsAsynchronously);
@@ -99,7 +100,8 @@ public sealed class CoreClrGenerationPrewarmOperation
     private CoreClrGenerationPrewarmOperation(
         IEnumerable<Type> entryTypes,
         CoreClrGenerationPrewarmOptions options,
-        Action<MethodInfo> prepareMethod)
+        Action<MethodInfo> prepareMethod,
+        Func<long>? getTimestamp = null)
     {
         _entryTypes = entryTypes
             .Select(type => type ?? throw new ArgumentException(
@@ -116,6 +118,7 @@ public sealed class CoreClrGenerationPrewarmOperation
         }
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _prepareMethod = prepareMethod ?? throw new ArgumentNullException(nameof(prepareMethod));
+        _getTimestamp = getTimestamp ?? Stopwatch.GetTimestamp;
         _state = options.MaximumMethodCount == 0
             ? CoreClrGenerationPrewarmState.Disabled
             : CoreClrGenerationPrewarmState.Scheduled;
@@ -143,8 +146,9 @@ public sealed class CoreClrGenerationPrewarmOperation
     internal static CoreClrGenerationPrewarmOperation CreateForTests(
         Type entryType,
         CoreClrGenerationPrewarmOptions options,
-        Action<MethodInfo> prepareMethod) =>
-        new([entryType], options, prepareMethod);
+        Action<MethodInfo> prepareMethod,
+        Func<long>? getTimestamp = null) =>
+        new([entryType], options, prepareMethod, getTimestamp);
 
     public bool Start()
     {
@@ -208,7 +212,7 @@ public sealed class CoreClrGenerationPrewarmOperation
 
     private void Run()
     {
-        long started = Stopwatch.GetTimestamp();
+        long started = _getTimestamp();
         try
         {
             CancellationToken cancellationToken = _cancellation.Token;
@@ -317,12 +321,12 @@ public sealed class CoreClrGenerationPrewarmOperation
             CoreClrGenerationPrewarmState.MethodLimitReached or
             CoreClrGenerationPrewarmState.TimeBudgetReached;
 
-    private static TimeSpan Elapsed(long started) =>
-        Stopwatch.GetElapsedTime(started);
+    private TimeSpan Elapsed(long started) =>
+        Stopwatch.GetElapsedTime(started, _getTimestamp());
 
-    private static long DurationNanoseconds(long started) => checked(
+    private long DurationNanoseconds(long started) => checked(
         (long)Math.Ceiling(
-            Math.Max(0, Stopwatch.GetTimestamp() - started) *
+            Math.Max(0, _getTimestamp() - started) *
             1_000_000_000d /
             Stopwatch.Frequency));
 }
