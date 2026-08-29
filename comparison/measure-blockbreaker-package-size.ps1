@@ -87,6 +87,37 @@ function Build-UnifiedScriptManagedProgram {
     }
 }
 
+function Get-ArchivedFiles {
+    param([Parameter(Mandatory)][string]$ArchiveDirectory)
+
+    $resolvedArchive = [IO.Path]::GetFullPath($ArchiveDirectory)
+    $enumerationRoot = if ($env:OS -eq 'Windows_NT') {
+        if ($resolvedArchive.StartsWith('\\')) {
+            '\\?\UNC\' + $resolvedArchive.TrimStart('\')
+        } else {
+            '\\?\' + $resolvedArchive
+        }
+    } else {
+        $resolvedArchive
+    }
+
+    for ($attempt = 1; $attempt -le 3; ++$attempt) {
+        try {
+            return @(
+                [IO.Directory]::EnumerateFiles(
+                    $enumerationRoot,
+                    '*',
+                    [IO.SearchOption]::AllDirectories) |
+                    ForEach-Object { [IO.FileInfo]::new($_) })
+        } catch [IO.DirectoryNotFoundException] {
+            if ($attempt -eq 3) {
+                throw
+            }
+            Start-Sleep -Milliseconds 200
+        }
+    }
+}
+
 $measurements = [ordered]@{}
 foreach ($runtime in $runtimeDefinitions) {
     $projectPath = Join-Path $runtime.Root 'BlockBreaker.uproject'
@@ -162,7 +193,7 @@ foreach ($runtime in $runtimeDefinitions) {
         }
     }
 
-    $files = @(Get-ChildItem -LiteralPath $archiveDirectory -Recurse -File)
+    $files = @(Get-ArchivedFiles -ArchiveDirectory $archiveDirectory)
     if ($files.Count -eq 0) {
         throw "$($runtime.Id) package archive is empty: $archiveDirectory"
     }
@@ -173,7 +204,7 @@ foreach ($runtime in $runtimeDefinitions) {
     }
     $manifestFiles = @($files | Where-Object Name -like 'Manifest_*.txt')
     $manifestText = @($manifestFiles | ForEach-Object {
-        Get-Content -LiteralPath $_.FullName -Raw
+        [IO.File]::ReadAllText($_.FullName)
     }) -join [Environment]::NewLine
     if ($runtime.Id -eq 'puerts') {
         if ($manifestText -notmatch '(?i)(^|[/\\])Puerts([/\\]|\.)' -or
