@@ -26,11 +26,13 @@ $runtimeDefinitions = @(
         Id = 'puerts'
         Root = Join-Path $ComparisonRoot 'BlockBreaker-Puerts'
         ExtraCookDirectory = 'Content\Blueprints\TypeScript'
+        PluginIntermediate = 'Plugins\Puerts\Intermediate'
     },
     [pscustomobject]@{
         Id = 'unifiedScript'
         Root = Join-Path $ComparisonRoot 'BlockBreaker-UnifiedScript'
         ExtraCookDirectory = 'Content\UnifiedScript'
+        PluginIntermediate = 'Plugins\UEUnifiedScript\Intermediate'
     }
 )
 
@@ -69,6 +71,18 @@ foreach ($runtime in $runtimeDefinitions) {
     )
     if (-not $SkipBuild) {
         $uatArguments += '-build'
+        $runtimeRoot = [IO.Path]::GetFullPath($runtime.Root).TrimEnd('\', '/') +
+            [IO.Path]::DirectorySeparatorChar
+        $pluginIntermediate = [IO.Path]::GetFullPath((Join-Path `
+            $runtime.Root $runtime.PluginIntermediate))
+        if (-not $pluginIntermediate.StartsWith(
+                $runtimeRoot,
+                [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Unsafe plugin Intermediate path: $pluginIntermediate"
+        }
+        if (Test-Path -LiteralPath $pluginIntermediate -PathType Container) {
+            Remove-Item -LiteralPath $pluginIntermediate -Recurse -Force
+        }
     }
     $orderLogSnapshots = @(
         'Build\Windows\FileOpenOrder\CookerOpenOrder.log',
