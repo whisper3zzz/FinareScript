@@ -1,0 +1,421 @@
+{
+  "schemaVersion": "unifiedscript.sample-catalog/v0.1",
+  "productVersion": "1.0.0-rc.1",
+  "categories": [
+    "minimal",
+    "gameplay",
+    "networking-server",
+    "data-plane",
+    "visual-code"
+  ],
+  "samples": [
+    {
+      "id": "minimal-first-script",
+      "category": "minimal",
+      "title": "Minimal first script",
+      "description": "Creates, builds, runs, and packages the project-agnostic first-script path through the public onboarding gate.",
+      "sources": [
+        {
+          "scope": "repository",
+          "path": "templates/UnrealProject/Managed/FirstScript.cs.template"
+        },
+        {
+          "scope": "repository",
+          "path": "tools/run-unifiedscript-alpha-acceptance.ps1"
+        }
+      ],
+      "execution": {
+        "runner": "tools/run-unifiedscript-alpha-acceptance.ps1",
+        "arguments": [
+          "-EngineRoot",
+          "{EngineRoot}",
+          "-OutputDirectory",
+          "{SampleOutput}"
+        ],
+        "reportPath": "{SampleOutput}/alpha-acceptance.json",
+        "reportSchema": "unifiedscript.alpha-acceptance/v0.1",
+        "producesReusableHostBuild": true
+      },
+      "assertions": [
+        {
+          "path": "status",
+          "operator": "equals",
+          "expected": "passed"
+        },
+        {
+          "path": "metrics.managedTestsPassed",
+          "operator": "minimum",
+          "expected": 600
+        },
+        {
+          "path": "metrics.repositoryInvariants",
+          "operator": "minimum",
+          "expected": 86
+        },
+        {
+          "path": "metrics.automationTestsPassed",
+          "operator": "minimum",
+          "expected": 18
+        },
+        {
+          "path": "metrics.packageSmokeExitCode",
+          "operator": "equals",
+          "expected": 0
+        }
+      ],
+      "guarantees": [
+        "public onboarding succeeds",
+        "managed and repository gates pass",
+        "UE Automation passes",
+        "a Development Win64 package starts from the staged output"
+      ],
+      "nonClaims": [
+        "game-specific API coverage",
+        "multiplayer replication"
+      ]
+    },
+    {
+      "id": "blockbreaker-gameplay",
+      "category": "gameplay",
+      "title": "BlockBreaker packaged gameplay",
+      "description": "Migrated Character and Gun scripts execute a packaged 300-frame gameplay smoke through generated bindings and compiled chunks.",
+      "sources": [
+        {
+          "scope": "comparison",
+          "path": "BlockBreaker-UnifiedScript/Managed/BlockBreakerPlayerScript.cs"
+        },
+        {
+          "scope": "comparison",
+          "path": "BlockBreaker-UnifiedScript/Managed/BlockBreakerGunScripts.cs"
+        }
+      ],
+      "execution": {
+        "runner": "comparison/package-blockbreaker-demo.ps1",
+        "arguments": [
+          "-EngineRoot",
+          "{EngineRoot}",
+          "-ComparisonRoot",
+          "{ComparisonRoot}",
+          "-Configuration",
+          "Development",
+          "-SmokeFrames",
+          "300"
+        ],
+        "reportMarker": "Report: ",
+        "reportSchema": "unifiedscript.blockbreaker-demo-delivery/v0.2"
+      },
+      "assertions": [
+        {
+          "path": "smoke.frames",
+          "operator": "equals",
+          "expected": 300
+        },
+        {
+          "path": "smoke.shots",
+          "operator": "equals",
+          "expected": 1
+        },
+        {
+          "path": "smoke.hits",
+          "operator": "equals",
+          "expected": 1
+        },
+        {
+          "path": "smoke.gameplayCommands",
+          "operator": "equals",
+          "expected": 2
+        },
+        {
+          "path": "smoke.legacyCalls",
+          "operator": "equals",
+          "expected": 0
+        },
+        {
+          "path": "smoke.exitCode",
+          "operator": "equals",
+          "expected": 0
+        },
+        {
+          "path": "puertsOrTypeScriptPackageFiles",
+          "operator": "equals",
+          "expected": 0
+        }
+      ],
+      "guarantees": [
+        "Character and Gun managed gameplay both execute",
+        "generated fast and CallFrame paths are used",
+        "the staged game contains no Puerts or TypeScript payload",
+        "the packaged smoke completes without legacy bridge calls"
+      ],
+      "nonClaims": [
+        "feature parity with every Puerts demo",
+        "multiplayer replication"
+      ]
+    },
+    {
+      "id": "dedicated-server-lifecycle",
+      "category": "networking-server",
+      "title": "Dedicated-server World lifecycle",
+      "description": "Runs the real World host lifecycle, reload, capacity, object churn, and shutdown Automation workload in Unreal's dedicated-server mode.",
+      "sources": [
+        {
+          "scope": "repository",
+          "path": "samples/Unreal/UnifiedScript.Unreal.Demo/LifecycleStressScript.cs"
+        },
+        {
+          "scope": "repository",
+          "path": "tools/run-unreal-lifecycle-stress.ps1"
+        }
+      ],
+      "execution": {
+        "runner": "tools/run-unreal-lifecycle-stress.ps1",
+        "arguments": [
+          "-EngineRoot",
+          "{EngineRoot}",
+          "-DedicatedServer",
+          "-ReportName",
+          "{ReportName}",
+          "-TravelCycles",
+          "2",
+          "-PieCycles",
+          "2",
+          "-ConcurrentWorlds",
+          "2",
+          "-RequestsPerWorld",
+          "4",
+          "-GenerationRollovers",
+          "4",
+          "-ObjectChurnCycles",
+          "1",
+          "-ObjectsPerChurnCycle",
+          "64",
+          "-CommandSaturationCycles",
+          "1",
+          "-CommandsPerSaturationCycle",
+          "5120"
+        ],
+        "reportPath": "{RepoRoot}/artifacts/ue/{ReportName}.json",
+        "reportSchema": "unifiedscript.unreal-lifecycle-stress-report/v0.3",
+        "reuseHostBuild": true
+      },
+      "assertions": [
+        {
+          "path": "status",
+          "operator": "equals",
+          "expected": "passed"
+        },
+        {
+          "path": "result.dedicatedServer",
+          "operator": "equals",
+          "expected": true
+        },
+        {
+          "path": "gates.completeMatrix",
+          "operator": "equals",
+          "expected": true
+        },
+        {
+          "path": "gates.boundedCapacity",
+          "operator": "equals",
+          "expected": true
+        },
+        {
+          "path": "gates.memoryBudget",
+          "operator": "equals",
+          "expected": true
+        },
+        {
+          "path": "gates.deterministicShutdown",
+          "operator": "equals",
+          "expected": true
+        },
+        {
+          "path": "gates.zeroLeak",
+          "operator": "equals",
+          "expected": true
+        }
+      ],
+      "guarantees": [
+        "the managed World host runs with -server",
+        "reload and failed-reload generations are isolated",
+        "command and async capacities remain bounded",
+        "dedicated-server shutdown leaves no tracked runtime resources"
+      ],
+      "nonClaims": [
+        "client/server replication gameplay",
+        "a packaged WindowsServer target"
+      ]
+    },
+    {
+      "id": "gameplay-data-plane",
+      "category": "data-plane",
+      "title": "Gameplay data-plane profile",
+      "description": "Profiles scalar binding, command buffer, batch trace, generated snapshots, and generated events in a live UE/CoreCLR World.",
+      "sources": [
+        {
+          "scope": "repository",
+          "path": "samples/Unreal/UnifiedScript.Unreal.Demo/DataPlaneWorkloadProfileScript.cs"
+        },
+        {
+          "scope": "repository",
+          "path": "samples/Unreal/UEUnifiedScriptRuntime.data-plane.json"
+        }
+      ],
+      "execution": {
+        "runner": "tools/run-unreal-data-plane-profile.ps1",
+        "arguments": [
+          "-EngineRoot",
+          "{EngineRoot}"
+        ],
+        "reportPath": "{RepoRoot}/artifacts/ue/data-plane-profile.json",
+        "reportSchema": "unifiedscript.unreal-data-plane-profile-report/v0.3",
+        "reuseHostBuild": true
+      },
+      "assertions": [
+        {
+          "path": "status",
+          "operator": "equals",
+          "expected": "passed"
+        },
+        {
+          "path": "gates.matchedSchema",
+          "operator": "equals",
+          "expected": true
+        },
+        {
+          "path": "gates.measuredAdvantage",
+          "operator": "equals",
+          "expected": true
+        },
+        {
+          "path": "gates.zeroManagedAllocation",
+          "operator": "equals",
+          "expected": true
+        },
+        {
+          "path": "gates.generatedChannelsZeroManagedAllocation",
+          "operator": "equals",
+          "expected": true
+        },
+        {
+          "path": "gates.evidenceBackedRouting",
+          "operator": "equals",
+          "expected": true
+        }
+      ],
+      "guarantees": [
+        "movement and overlap use buffered data-plane routes",
+        "query uses batch trace",
+        "containers use generated snapshots",
+        "measured generated channels allocate zero managed bytes"
+      ],
+      "nonClaims": [
+        "universal speedup for every API shape",
+        "cross-machine benchmark comparability"
+      ]
+    },
+    {
+      "id": "blockbreaker-visual-code",
+      "category": "visual-code",
+      "title": "BlockBreaker Visual and C# round trip",
+      "description": "Applies the same typed semantic edit visually and in C#, reopens both graphs, then proves equivalent UE gameplay and packaged outputs.",
+      "sources": [
+        {
+          "scope": "repository",
+          "path": "comparison/blockbreaker-roundtrip.json"
+        },
+        {
+          "scope": "repository",
+          "path": "comparison/verify-blockbreaker-roundtrip.ps1"
+        }
+      ],
+      "execution": {
+        "runner": "comparison/verify-blockbreaker-roundtrip.ps1",
+        "arguments": [
+          "-EngineRoot",
+          "{EngineRoot}",
+          "-ComparisonRoot",
+          "{ComparisonRoot}",
+          "-ReportPath",
+          "{ReportPath}",
+          "-RunUnreal",
+          "-Package"
+        ],
+        "reportPath": "{ReportPath}",
+        "reportSchema": "unifiedscript.blockbreaker-round-trip-report/v0.1"
+      },
+      "assertions": [
+        {
+          "path": "passed",
+          "operator": "equals",
+          "expected": true
+        },
+        {
+          "path": "visualProjectPatchApplied",
+          "operator": "equals",
+          "expected": true
+        },
+        {
+          "path": "codeGraphsReopened",
+          "operator": "equals",
+          "expected": true
+        },
+        {
+          "path": "semanticEquivalent",
+          "operator": "equals",
+          "expected": true
+        },
+        {
+          "path": "ilEquivalent",
+          "operator": "equals",
+          "expected": true
+        },
+        {
+          "path": "executionEquivalent",
+          "operator": "equals",
+          "expected": true
+        },
+        {
+          "path": "assetDeclarationsEquivalent",
+          "operator": "equals",
+          "expected": true
+        },
+        {
+          "path": "unrealRan",
+          "operator": "equals",
+          "expected": true
+        },
+        {
+          "path": "packageRan",
+          "operator": "equals",
+          "expected": true
+        },
+        {
+          "path": "gameplayEquivalent",
+          "operator": "equals",
+          "expected": true
+        },
+        {
+          "path": "scriptAssetsEquivalent",
+          "operator": "equals",
+          "expected": true
+        },
+        {
+          "path": "packagedBuildEquivalent",
+          "operator": "equals",
+          "expected": true
+        }
+      ],
+      "guarantees": [
+        "the visual patch and direct C# edit converge semantically",
+        "compiled IL and execution traces are equivalent",
+        "both candidates reopen as graphs",
+        "both candidates produce equivalent Script Assets, UE gameplay, and packaged smoke"
+      ],
+      "nonClaims": [
+        "arbitrary C# round-trip support",
+        "merge conflict resolution for simultaneous edits"
+      ]
+    }
+  ]
+}

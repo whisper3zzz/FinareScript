@@ -98,8 +98,17 @@ try {
     if ($DedicatedServer) {
         $editorArguments += '-server'
     }
-    & $editorCmd @editorArguments
-    $editorExitCode = $LASTEXITCODE
+    $previousPreference = $ErrorActionPreference
+    try {
+        # Automation can intentionally write diagnostics to native stderr.
+        # Windows PowerShell must use the process exit code and report gates as
+        # the verdict instead of promoting those lines to terminating errors.
+        $ErrorActionPreference = 'Continue'
+        & $editorCmd @editorArguments
+        $editorExitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousPreference
+    }
 } finally {
     if ($defaultEngineExisted) {
         [IO.File]::WriteAllBytes($defaultEnginePath, $defaultEngineBytes)

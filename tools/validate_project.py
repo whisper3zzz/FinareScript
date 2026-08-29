@@ -714,6 +714,7 @@ def main() -> int:
         "upgrades",
         "migration",
         "support",
+        "samples",
         "releaseNotes",
     }
     require(
@@ -734,7 +735,7 @@ def main() -> int:
         and product_release["artifacts"]["pluginVersion"] == 1000001
         and product_plugin["Version"] == 1000001
         and product_plugin["VersionName"] == "1.0.0-rc.1"
-        and len(release_documents) == 22
+        and len(release_documents) == 23
         and len(set(release_document_ids)) == len(release_document_ids)
         and len(set(release_document_paths)) == len(release_document_paths)
         and required_release_categories <= release_document_categories
@@ -746,7 +747,7 @@ def main() -> int:
         )
         and product_release["releaseNotes"] in release_document_paths
         and product_release["acceptance"]["managedTests"] == 600
-        and product_release["acceptance"]["repositoryInvariants"] == 85
+        and product_release["acceptance"]["repositoryInvariants"] == 86
         and product_release["acceptance"]["unrealAutomationTests"] == 18
         and "release-manifest.json" in sdk_package
         and "$releaseDocumentation" in sdk_package
@@ -771,6 +772,64 @@ def main() -> int:
     )
     checks.append(
         "M12.2 binds the 1.0 RC1 plugin, SDK, release notes, and complete documentation catalog"
+    )
+
+    sample_catalog_path = ROOT / "samples" / "Unreal" / "unifiedscript.samples.json"
+    sample_matrix_runner_path = ROOT / "tools" / "run-unifiedscript-sample-matrix.ps1"
+    sample_document_path = ROOT / "docs" / "UNREAL_SAMPLES.md"
+    for path in [sample_catalog_path, sample_matrix_runner_path, sample_document_path]:
+        require(path.is_file(), f"Missing M12.2 sample-matrix artifact: {path}")
+    with sample_catalog_path.open("r", encoding="utf-8") as handle:
+        sample_catalog = json.load(handle)
+    sample_matrix_runner = sample_matrix_runner_path.read_text(encoding="utf-8")
+    sample_document = sample_document_path.read_text(encoding="utf-8")
+    sample_categories = [sample["category"] for sample in sample_catalog["samples"]]
+    sample_ids = [sample["id"] for sample in sample_catalog["samples"]]
+    sample_runners = {
+        sample["execution"]["runner"] for sample in sample_catalog["samples"]
+    }
+    required_sample_categories = {
+        "minimal",
+        "gameplay",
+        "networking-server",
+        "data-plane",
+        "visual-code",
+    }
+    require(
+        sample_catalog["schemaVersion"] == "unifiedscript.sample-catalog/v0.1"
+        and sample_catalog["productVersion"] == product_release["productVersion"]
+        and set(sample_catalog["categories"]) == required_sample_categories
+        and len(sample_catalog["samples"]) == 5
+        and len(set(sample_categories)) == 5
+        and len(set(sample_ids)) == 5
+        and set(sample_categories) == required_sample_categories
+        and all(sample["sources"] for sample in sample_catalog["samples"])
+        and all(sample["assertions"] for sample in sample_catalog["samples"])
+        and all(sample["guarantees"] for sample in sample_catalog["samples"])
+        and all(sample["nonClaims"] for sample in sample_catalog["samples"])
+        and all(
+            sample["execution"]["reportSchema"].startswith("unifiedscript.")
+            for sample in sample_catalog["samples"]
+        )
+        and "unifiedscript.sample-matrix-report/v0.1" in sample_matrix_runner
+        and "Test-SampleAssertion" in sample_matrix_runner
+        and "Get-GitState" in sample_matrix_runner
+        and sample_runners
+        == {
+            "tools/run-unifiedscript-alpha-acceptance.ps1",
+            "comparison/package-blockbreaker-demo.ps1",
+            "tools/run-unreal-lifecycle-stress.ps1",
+            "tools/run-unreal-data-plane-profile.ps1",
+            "comparison/verify-blockbreaker-roundtrip.ps1",
+        }
+        and "client/server gameplay replication" in sample_document
+        and "complete acceptance corpus" in sample_document
+        and "docs/UNREAL_SAMPLES.md" in release_document_paths
+        and "sample-matrix" in product_release["acceptance"]["requiredGates"],
+        "M12.2 five-category sample catalog, declarative assertions, aggregate runner, or support boundary is incomplete",
+    )
+    checks.append(
+        "M12.2 executes five versioned Unreal sample categories through one evidence matrix"
     )
 
     compatibility_policy_path = (

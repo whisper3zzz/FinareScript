@@ -12,6 +12,7 @@ unsafe, or outside `docs`.
 - [First script walkthrough](UNREAL_FIRST_SCRIPT.md)
 - [Project onboarding](UNREAL_ONBOARDING.md)
 - [Script deployment](UNREAL_DEPLOYMENT.md)
+- [Executable sample matrix](UNREAL_SAMPLES.md)
 
 ## Authoring and API
 

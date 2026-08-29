@@ -49,6 +49,12 @@
       "path": "docs/UNREAL_DEPLOYMENT.md"
     },
     {
+      "id": "samples",
+      "category": "samples",
+      "title": "Executable sample matrix",
+      "path": "docs/UNREAL_SAMPLES.md"
+    },
+    {
       "id": "authoring-model",
       "category": "authoring",
       "title": "Visual and C# authoring model",
@@ -153,7 +159,7 @@
   ],
   "acceptance": {
     "managedTests": 600,
-    "repositoryInvariants": 85,
+    "repositoryInvariants": 86,
     "unrealAutomationTests": 18,
     "requiredGates": [
       "managed-tests",
@@ -162,12 +168,14 @@
       "editor-automation",
       "source-development-shipping-package",
       "deterministic-sdk-package",
+      "sample-matrix",
       "clean-project-sdk-install",
       "clean-project-development-package"
     ]
   },
   "knownLimitations": [
     "The declared packaged runtime target is Win64 on Unreal Engine 5.8.1.",
+    "The dedicated-server sample does not yet prove client/server replication or a packaged WindowsServer target.",
     "Puerts migration manifests do not rewrite project spawn or asset routing.",
     "Visual authoring supports the documented restricted C# profile rather than arbitrary C# syntax."
   ]
