@@ -76,10 +76,10 @@ function Find-ReleaseFileWithRetry {
         if (Test-Path -LiteralPath $Directory -PathType Container) {
             $candidate = Get-ChildItem `
                 -LiteralPath $Directory `
-                -Filter $Filter `
                 -Recurse `
                 -File `
                 -ErrorAction SilentlyContinue |
+                Where-Object Name -EQ $Filter |
                 Select-Object -First 1
             if ($null -ne $candidate) {
                 return $candidate

@@ -67,9 +67,11 @@ package with both external .NET-root environment variables pointing at missing
 directories. A pass therefore proves that startup selected the plugin-local
 runtime instead of silently using developer-machine state.
 
-Archive materialization can finish a fraction of a second after AutomationTool
-returns on Windows. The verifier polls for each exact runtime file for at most
-15 seconds; it still fails if the closure never becomes complete.
+The verifier recursively enumerates files before applying the exact filename
+match. This is deliberate: Windows PowerShell 5.1 applies `Get-ChildItem
+-Filter` before recursive descent and would otherwise skip the version
+directory. It polls for at most 15 seconds to tolerate archive materialization,
+but still fails if the closure never becomes complete.
 
 The runtime resolves the packaged plugin-local .NET root first, then explicit
 environment roots, and finally the engine development root. A packaged build
