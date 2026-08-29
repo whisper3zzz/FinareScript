@@ -131,9 +131,13 @@ try {
 } finally {
     if ($null -ne $defaultEngineBytes) {
         [IO.File]::WriteAllBytes($defaultEnginePath, $defaultEngineBytes)
+    } elseif (Test-Path -LiteralPath $defaultEnginePath -PathType Leaf) {
+        Remove-Item -LiteralPath $defaultEnginePath -Force
     }
     if ($null -ne $defaultInputBytes) {
         [IO.File]::WriteAllBytes($defaultInputPath, $defaultInputBytes)
+    } elseif (Test-Path -LiteralPath $defaultInputPath -PathType Leaf) {
+        Remove-Item -LiteralPath $defaultInputPath -Force
     }
 }
 if ($editorExitCode -ne 0) {
