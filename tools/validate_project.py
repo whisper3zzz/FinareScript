@@ -645,6 +645,9 @@ def main() -> int:
         and "unifiedscript.sdk-manifest/v0.1" in sdk_package
         and "Write-DeterministicArchive" in sdk_package
         and "LastWriteTime" in sdk_package
+        and "GetTempPath" in sdk_package
+        and '"us-sdk-$(' in sdk_package
+        and "outside the SDK temp boundary" in sdk_package
         and "Managed\\Runtime" in sdk_package
         and "Tools\\UnifiedScript.Cli" in sdk_package
         and "measure-compiled-chunk-load.ps1" in sdk_package

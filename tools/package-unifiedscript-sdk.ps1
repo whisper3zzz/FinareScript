@@ -98,7 +98,10 @@ $outputRoot = if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
 $archiveBaseName = "UnifiedScript-SDK-$Version-win-x64"
 $archivePath = Join-Path $outputRoot "$archiveBaseName.zip"
 $reportPath = Join-Path $outputRoot "$archiveBaseName.package-report.json"
-$stagingParent = Join-Path $outputRoot ".staging-$([Guid]::NewGuid().ToString('N'))"
+$stagingRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
+$stagingParent = Join-Path `
+    $stagingRoot `
+    "us-sdk-$([Guid]::NewGuid().ToString('N').Substring(0, 12))"
 $sdkRoot = Join-Path $stagingParent $archiveBaseName
 $startedAt = [DateTime]::UtcNow
 
@@ -522,10 +525,15 @@ try {
 } finally {
     if (Test-Path -LiteralPath $stagingParent) {
         $resolvedStage = [IO.Path]::GetFullPath($stagingParent)
-        $resolvedOutput = [IO.Path]::GetFullPath($outputRoot).TrimEnd('\', '/') +
+        $resolvedStagingRoot = [IO.Path]::GetFullPath($stagingRoot).TrimEnd('\', '/') +
             [IO.Path]::DirectorySeparatorChar
-        if (-not $resolvedStage.StartsWith($resolvedOutput, [StringComparison]::OrdinalIgnoreCase)) {
-            throw "Refusing to remove staging directory outside SDK output: $resolvedStage"
+        if (-not $resolvedStage.StartsWith(
+                $resolvedStagingRoot,
+                [StringComparison]::OrdinalIgnoreCase) -or
+            -not (Split-Path -Leaf $resolvedStage).StartsWith(
+                'us-sdk-',
+                [StringComparison]::Ordinal)) {
+            throw "Refusing to remove staging directory outside the SDK temp boundary: $resolvedStage"
         }
         Remove-Item -LiteralPath $resolvedStage -Recurse -Force
     }
