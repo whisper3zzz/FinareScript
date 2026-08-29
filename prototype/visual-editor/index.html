@@ -38,6 +38,9 @@
         <button id="apiBrowserButton" class="button secondary" type="button" data-testid="api-browser-button" disabled>
           <span class="button-icon">⌕</span> API + DIAGNOSTICS
         </button>
+        <button id="insightButton" class="button secondary" type="button" data-testid="insight-button" disabled title="Import a bounded UE gameplay profile">
+          <span class="button-icon">◫</span> RUNTIME INSIGHTS
+        </button>
         <button id="groupButton" class="button secondary history-button" type="button" data-testid="group-button" title="Begin grouped authoring transaction">
           GROUP EDITS
         </button>
@@ -251,6 +254,31 @@
       <section class="api-browser-results"><div id="apiBrowserResults" class="api-browser-result-list"><div class="surface-loading">LOADING CONTRACT INDEX…</div></div></section>
       <section id="apiBrowserDetail" class="api-browser-detail"><div class="surface-loading">SELECT AN API MEMBER</div></section>
       <section class="api-browser-diagnostics"><div class="api-browser-section-title"><span>DIAGNOSTIC CATALOG</span><em id="apiDiagnosticCount">0</em></div><div id="apiDiagnosticList"></div></section>
+    </div>
+  </div>
+
+  <div id="insightDrawer" class="insight-drawer" aria-hidden="true" data-testid="insight-drawer">
+    <div class="insight-header">
+      <div>
+        <span class="insight-sigil">ms</span>
+        <div><div class="eyebrow">Graph + source + Unreal boundary attribution</div><h2>Runtime Insight Workbench</h2></div>
+      </div>
+      <div class="insight-import">
+        <input id="insightFile" type="file" accept=".json,application/json" hidden>
+        <button id="importInsightButton" class="button primary" type="button">IMPORT UE PROFILE</button>
+        <small>Capture or save a bounded trace from the live UE World profiler.</small>
+      </div>
+      <button id="closeInsight" class="square-button" type="button" aria-label="关闭运行洞察">×</button>
+    </div>
+    <div id="insightMetrics" class="insight-metrics">
+      <div><strong>—</strong><span>AVG FRAME</span></div><div><strong>—</strong><span>ALLOCATED</span></div>
+      <div><strong>—</strong><span>OVERFLOW</span></div><div><strong>—</strong><span>LOCATED NODES</span></div>
+    </div>
+    <div class="insight-context"><strong id="insightTrace">NO PROFILE LOADED</strong><span id="insightIdentity">The server validates semantic IDs against the current authoring generation.</span></div>
+    <div class="insight-body">
+      <section class="insight-boundary-panel"><div class="insight-section-title"><span>UNREAL BOUNDARIES</span><em>exact runtime attribution</em></div><div id="insightBoundaries" class="insight-boundaries"><div class="surface-loading">IMPORT A UE PROFILE TRACE</div></div></section>
+      <section class="insight-hotspot-panel"><div class="insight-section-title"><span>SEMANTIC HOTSPOTS</span><em>graph + source</em></div><div id="insightNodes" class="insight-node-list"><div class="surface-loading">NO RUNTIME NODES</div></div></section>
+      <section id="insightDetail" class="insight-detail"><div class="surface-loading">SELECT A HOTSPOT</div></section>
     </div>
   </div>
 

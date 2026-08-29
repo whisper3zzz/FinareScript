@@ -50,6 +50,7 @@ private:
 
     using FDebugFrameItem = TSharedPtr<FUnifiedScriptDebugStackFrame>;
     using FDebugValueItem = TSharedPtr<FUnifiedScriptDebugValue>;
+    using FProfileNodeItem = TSharedPtr<FUnifiedScriptGameplayProfileNode>;
 
     FReply HandleRun();
     FReply HandlePause();
@@ -75,6 +76,12 @@ private:
     TSharedRef<ITableRow> GenerateValueRow(
         FDebugValueItem Item,
         const TSharedRef<STableViewBase>& OwnerTable) const;
+    TSharedRef<ITableRow> GenerateProfileNodeRow(
+        FProfileNodeItem Item,
+        const TSharedRef<STableViewBase>& OwnerTable) const;
+    void HandleProfileNodeSelectionChanged(
+        FProfileNodeItem Item,
+        ESelectInfo::Type SelectInfo);
 
     void DispatchSessionRequest(ERequestKind Kind, const FString& Url, const FString& Json);
     void DispatchWait();
@@ -93,6 +100,7 @@ private:
     void AdoptSession(FUnifiedScriptDebugSession NewSession);
     void SelectFrame(int64 FrameId);
     void RebuildFrameAndLocalViews();
+    void RebuildProfileNodeView();
     void SetDebugStatus(FString Message, bool bError = false);
     FString GetServerUrl() const;
     bool HasActiveSession() const;
@@ -152,8 +160,10 @@ private:
 
     TArray<FDebugFrameItem> FrameItems;
     TArray<FDebugValueItem> LocalItems;
+    TArray<FProfileNodeItem> ProfileNodeItems;
     TSharedPtr<SListView<FDebugFrameItem>> FrameListView;
     TSharedPtr<SListView<FDebugValueItem>> LocalListView;
+    TSharedPtr<SListView<FProfileNodeItem>> ProfileNodeListView;
     TSharedPtr<SEditableTextBox> WatchTextBox;
     TSharedPtr<STextBlock> DebugStatusText;
     TSharedPtr<STextBlock> EvaluationTextBlock;

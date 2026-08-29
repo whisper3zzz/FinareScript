@@ -66,6 +66,7 @@ DOCUMENTS = [
     ROOT / "docs" / "RELIABILITY_SOAK.md",
     ROOT / "docs" / "LARGE_PROJECT_SCALE.md",
     ROOT / "docs" / "GAMEPLAY_PROFILER.md",
+    ROOT / "docs" / "INTEGRATED_RUNTIME_INSIGHTS.md",
     ROOT / "docs" / "PERFORMANCE_WORKLOAD_SUITE.md",
     ROOT / "docs" / "COMPILED_CHUNKS.md",
     ROOT / "docs" / "PROJECT_LOADING.md",
@@ -757,7 +758,7 @@ def main() -> int:
         and product_release["artifacts"]["pluginVersion"] == 1000001
         and product_plugin["Version"] == 1000001
         and product_plugin["VersionName"] == "1.0.0-rc.1"
-        and len(release_documents) == 26
+        and len(release_documents) == 27
         and len(set(release_document_ids)) == len(release_document_ids)
         and len(set(release_document_paths)) == len(release_document_paths)
         and required_release_categories <= release_document_categories
@@ -768,8 +769,8 @@ def main() -> int:
             for path in release_document_paths
         )
         and product_release["releaseNotes"] in release_document_paths
-        and product_release["acceptance"]["managedTests"] == 614
-        and product_release["acceptance"]["repositoryInvariants"] == 89
+        and product_release["acceptance"]["managedTests"] == 616
+        and product_release["acceptance"]["repositoryInvariants"] == 90
         and product_release["acceptance"]["unrealAutomationTests"] == 18
         and "release-manifest.json" in sdk_package
         and "$releaseDocumentation" in sdk_package
@@ -5309,12 +5310,50 @@ def main() -> int:
         in product_release["acceptance"]["requiredGates"]
         and "- [x] let AI tools propose typed semantic patch plans"
         in roadmap_document
-        and "Next slice: **M12.3 — integrated graph/source debugging and profiling**"
+        and "The cursor advances to M12.3's integrated graph/source debugging and profiling."
         in roadmap_document,
         "M12.3 typed AI proposal identity, compiler/transaction binding, dual review, or release gate is incomplete",
     )
     checks.append(
         "M12.3 binds typed AI proposal identity to compiler-reviewed transactional commits"
+    )
+    authoring_insight_source = (
+        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealAuthoringInsight.cs"
+    ).read_text(encoding="utf-8")
+    authoring_insight_tests = (
+        ROOT / "tests" / "UnifiedScript.Tests" / "UnrealAuthoringInsightTests.cs"
+    ).read_text(encoding="utf-8")
+    authoring_insight_document = (
+        ROOT / "docs" / "INTEGRATED_RUNTIME_INSIGHTS.md"
+    ).read_text(encoding="utf-8")
+    require(
+        "unifiedscript.authoring-insight/v0.1" in authoring_insight_source
+        and "unifiedscript.authoring-insight-request/v0.1"
+        in authoring_insight_source
+        and "managedCode" in authoring_insight_source
+        and "RuntimeRoutes" in authoring_insight_source
+        and "/api/unreal/authoring-insight" in debug_server_source
+        and 'id="insightDrawer"' in workbench_index
+        and "importGameplayProfile" in workbench_script
+        and "focusInsightNode" in workbench_script
+        and "SEMANTIC HOTSPOTS" in unreal_debug_panel
+        and "RebuildProfileNodeView" in unreal_debug_panel
+        and "SnapshotJoinsSemanticSourceCostAndGeneratedApiRoutes"
+        in authoring_insight_tests
+        and "SnapshotKeepsStaleRuntimeNodeVisibleAsUnresolved"
+        in authoring_insight_tests
+        and "route-level" in authoring_insight_document
+        and "docs/INTEGRATED_RUNTIME_INSIGHTS.md" in release_document_paths
+        and "integrated-runtime-insights"
+        in product_release["acceptance"]["requiredGates"]
+        and "- [x] integrate graph/source debugging and profiling"
+        in roadmap_document
+        and "M12.3 integrated runtime insight evidence"
+        in roadmap_document,
+        "M12.3 integrated Graph/source profile join, dual Workbench UX, or route honesty is incomplete",
+    )
+    checks.append(
+        "M12.3 joins semantic Graph/source hotspots with measured Unreal boundary and generated route context"
     )
     identity_reconciler_source = (
         ROOT / "src" / "UnifiedScript.CSharp" / "CSharpIdentityReconciler.cs"

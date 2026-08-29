@@ -13,6 +13,7 @@ const state = {
   debugHealth: null, debugSession: null,
   debugFrameId: null,
   apiBrowser: null, apiBrowserMembers: [], selectedApiMemberId: null,
+  authoringInsight: null, selectedInsightNodeId: null,
 };
 
 const editorBody = document.getElementById('editorBody');
@@ -24,6 +25,7 @@ const declarationSearch = document.getElementById('declarationSearch');
 const debugStrip = document.getElementById('debugStrip');
 const aiDrawer = document.getElementById('aiDrawer');
 const apiBrowserDrawer = document.getElementById('apiBrowserDrawer');
+const insightDrawer = document.getElementById('insightDrawer');
 const variableDialog = document.getElementById('variableDialog');
 const semanticReviewDialog = document.getElementById('semanticReviewDialog');
 const toast = document.getElementById('toast');
@@ -264,6 +266,158 @@ function renderApiDiagnostics() {
     <article class="api-diagnostic severity-${item.severity}"><header><strong>${escapeHtml(item.code)}</strong><em>${escapeHtml(item.severity)}</em></header><p>${escapeHtml(item.message)}</p><small>${item.memberPaths.length} CONTRACT PATH${item.memberPaths.length === 1 ? '' : 'S'}</small></article>`).join('') || '<div class="api-browser-empty">NO DIAGNOSTIC MATCHES THIS FILTER</div>';
 }
 
+function validateGameplayProfileTrace(trace) {
+  assertArtifact(trace?.schemaVersion === 'unifiedscript.gameplay-profile/v0.3', 'Unsupported UE gameplay profile');
+  assertArtifact(Array.isArray(trace.frames) && trace.aggregate?.frameCount === trace.frames.length,
+    'Gameplay profile frame aggregate is malformed');
+  assertArtifact(Array.isArray(trace.aggregate?.nodes) && Array.isArray(trace.aggregate?.boundaries),
+    'Gameplay profile has no semantic-node or boundary aggregate');
+  assertArtifact(trace.aggregate.frameCount > 0, 'Gameplay profile contains no captured frames');
+  return trace;
+}
+
+function validateAuthoringInsight(snapshot) {
+  assertArtifact(snapshot?.schemaVersion === 'unifiedscript.authoring-insight/v0.1', 'Unsupported authoring insight snapshot');
+  assertArtifact(snapshot.sourceCompilationId === state.sourceCompilationId,
+    'Profile was resolved against a different source compilation');
+  assertArtifact(snapshot.semanticConfigurationId === state.semanticConfigurationId,
+    'Profile was resolved against a different semantic configuration');
+  assertArtifact(Array.isArray(snapshot.nodes) && Array.isArray(snapshot.boundaries) && Array.isArray(snapshot.apiRoutes),
+    'Malformed authoring insight snapshot');
+  return snapshot;
+}
+
+function currentInsightFocus() {
+  const pause = state.debugSession?.state === 'paused' ? state.debugSession.pause : null;
+  if (pause?.methodId && pause?.nodeId) return { methodId: pause.methodId, nodeId: pause.nodeId };
+  if (state.selected?.kind !== 'action') return { methodId: null, nodeId: null };
+  const action = state.nodes.get(state.selected.id);
+  return action?.debugTargetId
+    ? { methodId: state.functionSurface.id, nodeId: action.debugTargetId }
+    : { methodId: null, nodeId: null };
+}
+
+async function importGameplayProfile(file) {
+  if (!file) return;
+  try {
+    const trace = validateGameplayProfileTrace(JSON.parse(await file.text()));
+    const focus = currentInsightFocus();
+    const response = await fetch('/api/unreal/authoring-insight', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        schemaVersion: 'unifiedscript.authoring-insight-request/v0.1',
+        trace,
+        focusedMethodId: focus.methodId,
+        focusedNodeId: focus.nodeId,
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error?.message || `Profile insight returned ${response.status}`);
+    state.authoringInsight = validateAuthoringInsight(payload);
+    state.selectedInsightNodeId = payload.nodes.find(node => node.focused)?.nodeId || payload.nodes[0]?.nodeId || null;
+    renderAuthoringInsight();
+    showToast(`Profile ${payload.traceId} loaded`, `${payload.summary.resolvedNodeCount}/${payload.nodes.length} semantic hotspots located`);
+  } catch (error) {
+    showToast('Profile import rejected', error.message);
+  } finally {
+    document.getElementById('insightFile').value = '';
+  }
+}
+
+function formatInsightTime(nanoseconds) {
+  if (nanoseconds >= 1_000_000) return `${(nanoseconds / 1_000_000).toFixed(3)} ms`;
+  if (nanoseconds >= 1_000) return `${(nanoseconds / 1_000).toFixed(1)} µs`;
+  return `${nanoseconds} ns`;
+}
+
+function renderAuthoringInsight() {
+  const snapshot = state.authoringInsight;
+  if (!snapshot) return;
+  const summary = snapshot.summary;
+  const values = [formatInsightTime(summary.averageFrameNanoseconds),
+    `${(summary.allocatedBytes / 1024).toFixed(1)} KiB`, String(summary.bufferOverflowCount),
+    `${summary.resolvedNodeCount}/${summary.resolvedNodeCount + summary.unresolvedNodeCount}`];
+  document.querySelectorAll('#insightMetrics strong').forEach((element, index) => {
+    element.textContent = values[index];
+  });
+  document.getElementById('insightTrace').textContent =
+    `${snapshot.traceId} · ${summary.frameCount} FRAME${summary.frameCount === 1 ? '' : 'S'} · WORLD ${snapshot.worldHostId}`;
+  document.getElementById('insightIdentity').textContent =
+    `${semanticShort(snapshot.sourceCompilationId)} · ${snapshot.apiRoutes.reduce((total, route) => total + route.catalogMemberCount, 0)} generated API route entries`;
+  document.getElementById('insightBoundaries').innerHTML = snapshot.boundaries.map(boundary => `
+    <article class="insight-boundary"><header><strong>${escapeHtml(boundary.name)}</strong><span>${boundary.percentOfOwner.toFixed(1)}%</span></header>
+      <p>${escapeHtml(boundary.contractRoute)} · ${boundary.count} calls · ${formatInsightTime(boundary.totalNanoseconds)}${boundary.catalogMemberCount ? ` · ${boundary.catalogMemberCount} APIs use route` : ''}</p>
+      <div class="insight-bar"><i style="width:${Math.min(100, boundary.percentOfOwner)}%"></i></div></article>`).join('') || '<div class="api-browser-empty">NO ATTRIBUTED BOUNDARY COST</div>';
+  document.getElementById('insightNodes').innerHTML = snapshot.nodes.map(node => `
+    <button class="insight-node${node.nodeId === state.selectedInsightNodeId ? ' active' : ''}" type="button" data-insight-node="${escapeHtml(node.nodeId)}">
+      <em>#${node.rank}</em><span><strong>${escapeHtml(node.title)}</strong><small>${node.sourceSpan ? `${escapeHtml(node.sourceSpan.filePath)}:${node.sourceSpan.start.line}` : 'UNRESOLVED IN CURRENT SURFACE'} · ${node.hitCount} hits</small></span><span>${formatInsightTime(node.totalNanoseconds)}</span>
+    </button>`).join('') || '<div class="api-browser-empty">PROFILE CONTAINS NO SEMANTIC NODES</div>';
+  document.querySelectorAll('[data-insight-node]').forEach(button =>
+    button.addEventListener('click', () => selectInsightNode(button.dataset.insightNode)));
+  renderInsightDetail();
+}
+
+function selectInsightNode(nodeId) {
+  state.selectedInsightNodeId = nodeId;
+  document.querySelectorAll('[data-insight-node]').forEach(button =>
+    button.classList.toggle('active', button.dataset.insightNode === nodeId));
+  renderInsightDetail();
+}
+
+function focusInsightNode() {
+  const node = state.authoringInsight?.nodes.find(item => item.nodeId === state.selectedInsightNodeId);
+  if (!node?.actionId) return;
+  const asset = state.surface.assets.find(candidate => candidate.functions.some(func => func.id === node.methodId));
+  const func = asset?.functions.find(candidate => candidate.id === node.methodId);
+  if (!asset || !func) return;
+  insightDrawer.classList.remove('visible');
+  insightDrawer.setAttribute('aria-hidden', 'true');
+  selectAsset(asset.id, false, func.id, { kind: 'action', id: node.actionId });
+  selectFunction(func.id, false, { kind: 'action', id: node.actionId });
+  selectNode(node.actionId, false);
+  changeView('split');
+  document.querySelectorAll('.profile-hot').forEach(element => element.classList.remove('profile-hot'));
+  const element = [...document.querySelectorAll('[data-debug-semantic-id]')]
+    .find(candidate => candidate.dataset.debugSemanticId === node.nodeId);
+  element?.classList.add('profile-hot');
+  element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function openInsightApiRoute() {
+  const node = state.authoringInsight?.nodes.find(item => item.nodeId === state.selectedInsightNodeId);
+  const boundary = node?.boundaries.find(item => item.catalogMemberCount > 0);
+  if (!boundary || !state.apiBrowser) return;
+  const route = boundary.contractRoute.charAt(0).toLowerCase() + boundary.contractRoute.slice(1);
+  document.getElementById('apiBrowserRoute').value = route;
+  document.getElementById('apiBrowserSearch').value = '';
+  insightDrawer.classList.remove('visible');
+  insightDrawer.setAttribute('aria-hidden', 'true');
+  renderApiBrowser();
+  apiBrowserDrawer.classList.add('visible');
+  apiBrowserDrawer.setAttribute('aria-hidden', 'false');
+}
+
+function renderInsightDetail() {
+  const node = state.authoringInsight?.nodes.find(item => item.nodeId === state.selectedInsightNodeId);
+  const detail = document.getElementById('insightDetail');
+  if (!node) {
+    detail.innerHTML = '<div class="surface-loading">SELECT A HOTSPOT</div>';
+    return;
+  }
+  const source = node.sourceSpan
+    ? `${node.sourceSpan.filePath}:${node.sourceSpan.start.line}:${node.sourceSpan.start.column}`
+    : 'Not present in the current authoring Surface';
+  detail.innerHTML = `<div class="eyebrow">#${node.rank} · ${escapeHtml(node.category)} · ${node.percentOfTrace.toFixed(1)}% OF TRACE</div>
+    <h3>${escapeHtml(node.title)}</h3><p>${escapeHtml(node.summary)}</p>
+    <dl class="insight-detail-meta"><dt>Source</dt><dd>${escapeHtml(source)}</dd><dt>Semantic node</dt><dd>${escapeHtml(node.nodeId)}</dd><dt>Runtime</dt><dd>${formatInsightTime(node.totalNanoseconds)} · ${formatInsightTime(node.averageHitNanoseconds)}/hit</dd><dt>Debug state</dt><dd>${node.focused ? 'CURRENT DEBUG FOCUS' : 'captured profile node'}</dd></dl>
+    <div class="insight-section-title"><span>NODE COST BREAKDOWN</span><em>boundary / route / cost</em></div>
+    <div>${node.boundaries.map(boundary => `<div class="insight-node-boundary"><strong>${escapeHtml(boundary.name)}</strong><span>${escapeHtml(boundary.contractRoute)}</span><em>${boundary.percentOfOwner.toFixed(1)}% · ${formatInsightTime(boundary.totalNanoseconds)}</em></div>`).join('') || '<div class="api-browser-empty">NO NODE BOUNDARY COST</div>'}</div>
+    <div class="insight-detail-actions"><button id="focusInsightNode" class="button primary" type="button"${node.actionId ? '' : ' disabled'}>FOCUS GRAPH + SOURCE</button><button id="openInsightApiRoute" class="button secondary" type="button"${node.boundaries.some(boundary => boundary.catalogMemberCount > 0) && state.apiBrowser ? '' : ' disabled'}>OPEN API ROUTE</button></div>`;
+  document.getElementById('focusInsightNode').addEventListener('click', focusInsightNode);
+  document.getElementById('openInsightApiRoute').addEventListener('click', openInsightApiRoute);
+}
+
 function validateVisualProfile(report) {
   assertArtifact(report?.schemaVersion === 'unifiedscript.visual-csharp-profile-report/v0.1', 'Unsupported Visual C# profile report');
   assertArtifact(report.profile?.schemaVersion === 'unifiedscript.visual-csharp-profile/v0.3', 'Unsupported Visual C# profile contract');
@@ -287,6 +441,12 @@ function validateVisualProfile(report) {
 function applyWorkspaceArtifacts(artifact, graph, surface, sourceText, workspace = null) {
   validateWorkspaceArtifacts(artifact, graph, surface);
   const remembered = rememberSelection();
+  if (state.authoringInsight &&
+      (state.authoringInsight.sourceCompilationId !== artifact.sourceCompilationId ||
+       state.authoringInsight.semanticConfigurationId !== artifact.semanticConfigurationId)) {
+    state.authoringInsight = null;
+    state.selectedInsightNodeId = null;
+  }
   Object.assign(state, {
     sourceCompilationId: artifact.sourceCompilationId,
     semanticConfigurationId: artifact.semanticConfigurationId,
@@ -324,6 +484,7 @@ function applyWorkspaceArtifacts(artifact, graph, surface, sourceText, workspace
     : 'AUTHORING SURFACE v0.1 · GRAPH v0.12';
   document.getElementById('opaqueMethodCount').textContent = String(
     workspace?.profile?.methods?.filter(method => method.representation === 'opaqueCode').length ?? 0);
+  document.getElementById('insightButton').disabled = !workspace;
 }
 
 function renderAssetPicker() {
@@ -1527,6 +1688,19 @@ document.getElementById('apiBrowserButton').addEventListener('click', () => {
   apiBrowserDrawer.setAttribute('aria-hidden', 'false');
   setTimeout(() => document.getElementById('apiBrowserSearch').focus(), 30);
 });
+document.getElementById('insightButton').addEventListener('click', () => {
+  if (state.authoringInsight) renderAuthoringInsight();
+  insightDrawer.classList.add('visible');
+  insightDrawer.setAttribute('aria-hidden', 'false');
+});
+document.getElementById('closeInsight').addEventListener('click', () => {
+  insightDrawer.classList.remove('visible');
+  insightDrawer.setAttribute('aria-hidden', 'true');
+});
+document.getElementById('importInsightButton').addEventListener('click', () =>
+  document.getElementById('insightFile').click());
+document.getElementById('insightFile').addEventListener('change', event =>
+  importGameplayProfile(event.target.files?.[0]));
 document.getElementById('closeApiBrowser').addEventListener('click', () => {
   apiBrowserDrawer.classList.remove('visible');
   apiBrowserDrawer.setAttribute('aria-hidden', 'true');
@@ -1598,6 +1772,9 @@ document.addEventListener('keydown', event => {
   }
   if (event.key === 'Escape' && apiBrowserDrawer.classList.contains('visible')) {
     document.getElementById('closeApiBrowser').click();
+  }
+  if (event.key === 'Escape' && insightDrawer.classList.contains('visible')) {
+    document.getElementById('closeInsight').click();
   }
 });
 document.getElementById('copyCodeButton').addEventListener('click', () =>

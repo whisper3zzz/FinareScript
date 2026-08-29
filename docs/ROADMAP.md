@@ -49,7 +49,7 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-29**
 
 - Active milestone: **M12 — Migration ecosystem and UnifiedScript 1.0**
-- Next slice: **M12.3 — integrated graph/source debugging and profiling**
+- Next slice: **M12.3 — generated data-plane extension point**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -1623,7 +1623,7 @@ graph/C# diff surface.
   Blueprint graph noise
 - [x] let AI tools propose typed semantic patch plans that pass the same compiler
   and transaction gates as human graph edits
-- [ ] integrate graph/source debugging and profiling so authoring, runtime cost,
+- [x] integrate graph/source debugging and profiling so authoring, runtime cost,
   and Unreal API boundaries are visible in one place
 - [ ] keep the generated data-plane architecture open to new workloads without
   weakening safety or ABI compatibility
@@ -1679,6 +1679,34 @@ byte-identical at 205 payload entries, 26 documentation entries, and 8,604,380
 bytes with SHA-256
 `0fe681258dfbc96ee87c69b7ce3205b17046e3a1247e1804e582745c499cca65`.
 The cursor advances to M12.3's integrated graph/source debugging and profiling.
+
+M12.3 integrated runtime insight evidence (2026-08-29): Unreal now publishes
+strict `unifiedscript.authoring-insight-request/v0.1` and
+`unifiedscript.authoring-insight/v0.1` contracts that join a bounded gameplay
+profile with compiler-owned method/node IDs, graph action intent, exact C#
+spans, and the generated API Contract route catalog. Ranked nodes retain exact
+hit/time totals, residual `managedCode`, per-node DirectThunk, CallFrame,
+reflection, command/event, Trace, and Overlap attribution, current debugger
+focus, and explicit unresolved state for stale semantic identities. API catalog
+examples are labeled as route context rather than fabricated per-member timing.
+
+The loopback host validates a saved UE trace against its current Surface at
+`POST /api/unreal/authoring-insight`. The browser Workbench adds a three-column
+Runtime Insight view with aggregate boundaries, semantic hotspots, exact
+Graph/Source focus, and generated API route navigation. A live 1280x648 browser
+check found no horizontal overflow or console warning/error. Native Slate now
+shows the same ranked semantic hotspot, source, residual managed cost, and
+dominant Unreal boundary directly below the live World controls; selecting any
+row uses the existing semantic debugger navigation. Managed regression passes
+616/616 and repository validation passes 90/90. Full Apply onboarding rebuilt
+both UE 5.8.1 native passes, regenerated and redeployed the compiled Demo chunk,
+verified deterministic outputs, and passed 18/18 `UnifiedScript.Unreal`
+Automation tests in 100,980 ms; the report is
+`artifacts/onboarding/m12-3-runtime-insight-full.json`. Two final SDK archives
+are byte-identical at 206 payload entries, 27 documentation entries, and
+8,638,577 bytes with SHA-256
+`98f90840b0b6f71c55217e26fe617757c0460d4c83a21e52bc8bdf594b36734d`.
+The cursor advances to M12.3's generated data-plane extension point.
 
 Acceptance: the 1.0 release has an installable SDK, supported compatibility
 matrix, end-to-end migration guide, complete samples, published workload report,

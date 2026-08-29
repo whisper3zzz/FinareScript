@@ -9,6 +9,13 @@ token. The CLI, loopback host, browser Workbench, and native Slate review path
 share the versioned envelope; no model runtime is bundled or trusted as a
 commit authority.
 
+Runtime Insight now joins a bounded UE gameplay profile with the current
+Authoring Surface and generated API route catalog. Browser and native Slate
+show ranked semantic hotspots, exact C# spans, residual managed cost, and
+DirectThunk/CallFrame/data-plane/reflection attribution in the same authoring
+workflow. Route catalog examples remain explicitly distinct from measured
+per-member calls.
+
 Version: `1.0.0-rc.1`
 Channel: release candidate
 Verified target: Unreal Engine 5.8.1, Win64, .NET 10
@@ -44,6 +51,9 @@ Verified target: Unreal Engine 5.8.1, Win64, .NET 10
   and three-way merge disjoint Visual-function changes without Blueprint
   serialization or layout noise, while conflicting same-function edits remain
   explicit and non-writing.
+- The same Workbenches expose graph/source runtime hotspots and Unreal boundary
+  cost through the versioned, read-only Runtime Insight contract; stale
+  semantic nodes remain visible without unsafe navigation.
 
 ## Compatibility and packaging
 

@@ -121,6 +121,12 @@
       "path": "docs/GAMEPLAY_PROFILER.md"
     },
     {
+      "id": "integrated-runtime-insights",
+      "category": "debugging",
+      "title": "Integrated runtime insights",
+      "path": "docs/INTEGRATED_RUNTIME_INSIGHTS.md"
+    },
+    {
       "id": "performance-suite",
       "category": "performance",
       "title": "Matched performance workload suite",
@@ -176,8 +182,8 @@
     }
   ],
   "acceptance": {
-    "managedTests": 614,
-    "repositoryInvariants": 89,
+    "managedTests": 616,
+    "repositoryInvariants": 90,
     "unrealAutomationTests": 18,
     "requiredGates": [
       "managed-tests",
@@ -190,6 +196,7 @@
       "project-template-and-api-browser",
       "semantic-diff-merge",
       "ai-semantic-proposals",
+      "integrated-runtime-insights",
       "clean-project-sdk-install",
       "clean-project-development-package"
     ]

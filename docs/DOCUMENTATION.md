@@ -30,6 +30,7 @@ unsafe, or outside `docs`.
 - [Native debug workbench](NATIVE_DEBUG_WORKBENCH.md)
 - [Hot reload reliability](HOT_RELOAD_RELIABILITY.md)
 - [Gameplay and bridge profiler](GAMEPLAY_PROFILER.md)
+- [Integrated runtime insights](INTEGRATED_RUNTIME_INSIGHTS.md)
 - [Matched performance workload suite](PERFORMANCE_WORKLOAD_SUITE.md)
 - [Unreal performance gates](UNREAL_PERFORMANCE.md)
 

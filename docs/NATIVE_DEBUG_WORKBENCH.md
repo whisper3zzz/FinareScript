@@ -76,6 +76,15 @@ Portable-PDB frames are resolved against Authoring Surface spans; **Focus
 Node** navigates to and highlights the exact `DebugTargetId` when one matches.
 See [RUNTIME_DIAGNOSTICS.md](RUNTIME_DIAGNOSTICS.md).
 
+The live gameplay profiler now exposes a ranked Semantic Hotspots list in this
+same panel. Every row joins total/hit cost and residual managed time with the
+dominant direct-thunk, CallFrame, reflection, or data-plane boundary, then
+resolves the same method/node IDs to a graph action and C# span. Selecting a row
+uses the debugger's normal semantic navigation; stale rows remain visible but
+cannot focus an unrelated node. The portable browser join and route-catalog
+boundary are documented in
+[INTEGRATED_RUNTIME_INSIGHTS.md](INTEGRATED_RUNTIME_INSIGHTS.md).
+
 ## Safety and current boundary
 
 - The client never accepts a response from another source compilation,

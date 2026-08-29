@@ -196,6 +196,41 @@ void SUnifiedScriptDebugPanel::Construct(const FArguments& InArgs)
             ]
             + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 5.0f)
             [
+                SNew(SBox)
+                .HeightOverride(104.0f)
+                .Visibility_Lambda([this]()
+                {
+                    return GameplayProfile.IsSet() && !ProfileNodeItems.IsEmpty()
+                        ? EVisibility::Visible
+                        : EVisibility::Collapsed;
+                })
+                [
+                    SNew(SVerticalBox)
+                    + SVerticalBox::Slot().AutoHeight().Padding(3.0f, 2.0f)
+                    [
+                        SNew(STextBlock)
+                        .Text(LOCTEXT(
+                            "SemanticProfileHotspots",
+                            "SEMANTIC HOTSPOTS  ·  GRAPH / SOURCE / UNREAL BOUNDARY"))
+                        .Font(FAppStyle::GetFontStyle(TEXT("SmallFontBold")))
+                        .ColorAndOpacity(FLinearColor(0.50f, 0.82f, 0.42f))
+                    ]
+                    + SVerticalBox::Slot().FillHeight(1.0f)
+                    [
+                        SAssignNew(ProfileNodeListView, SListView<FProfileNodeItem>)
+                        .ListItemsSource(&ProfileNodeItems)
+                        .OnGenerateRow(
+                            this,
+                            &SUnifiedScriptDebugPanel::GenerateProfileNodeRow)
+                        .OnSelectionChanged(
+                            this,
+                            &SUnifiedScriptDebugPanel::HandleProfileNodeSelectionChanged)
+                        .SelectionMode(ESelectionMode::Single)
+                    ]
+                ]
+            ]
+            + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 5.0f)
+            [
                 SNew(SHorizontalBox)
                 .Visibility_Lambda([this]()
                 {
@@ -411,6 +446,7 @@ void SUnifiedScriptDebugPanel::SetExecutionContext(
             break;
         }
     }
+    RebuildProfileNodeView();
     if (!HasActiveSession())
     {
         SetDebugStatus(
@@ -557,6 +593,7 @@ FReply SUnifiedScriptDebugPanel::HandleToggleGameplayProfiler()
         }
         GameplayProfile = MoveTemp(Captured);
         GameplayProfileJson = MoveTemp(Json);
+        RebuildProfileNodeView();
         if (!Component->SetGameplayProfilerEnabled(false, Error))
         {
             GameplayProfileStatus = MoveTemp(Error);
@@ -573,6 +610,7 @@ FReply SUnifiedScriptDebugPanel::HandleToggleGameplayProfiler()
         }
         GameplayProfile.Reset();
         GameplayProfileJson.Reset();
+        RebuildProfileNodeView();
         GameplayProfileStatus = TEXT("Collecting up to 120 live World frames ...");
     }
     RefreshLiveWorldTargetNow();
@@ -603,6 +641,7 @@ FReply SUnifiedScriptDebugPanel::HandleCaptureGameplayProfile()
     }
     GameplayProfile = MoveTemp(Captured);
     GameplayProfileJson = MoveTemp(Json);
+    RebuildProfileNodeView();
     GameplayProfileStatus = TEXT("Captured the current bounded timeline without stopping collection.");
     return FReply::Handled();
 }
@@ -1506,6 +1545,149 @@ TSharedRef<ITableRow> SUnifiedScriptDebugPanel::GenerateValueRow(
         .Font(FAppStyle::GetFontStyle(TEXT("SmallFont")))
         .ToolTipText(FText::FromString(Item.IsValid() ? Item->TypeMetadataName : FString()))
     ];
+}
+
+TSharedRef<ITableRow> SUnifiedScriptDebugPanel::GenerateProfileNodeRow(
+    FProfileNodeItem Item,
+    const TSharedRef<STableViewBase>& OwnerTable) const
+{
+    if (!Item.IsValid())
+    {
+        return SNew(STableRow<FProfileNodeItem>, OwnerTable)
+        [
+            SNew(STextBlock).Text(FText::GetEmpty())
+        ];
+    }
+
+    FString Label = Item->NodeId;
+    FString Source = TEXT("unresolved in current Surface");
+    if (ActiveAsset.IsSet())
+    {
+        if (const FUnifiedScriptAuthoringFunction* Function =
+                ActiveAsset->Functions.FindByPredicate(
+                    [Item](const FUnifiedScriptAuthoringFunction& Candidate)
+                    {
+                        return Candidate.Id == Item->MethodId;
+                    }))
+        {
+            if (const FUnifiedScriptAuthoringAction* Action =
+                    Function->Actions.FindByPredicate(
+                        [Item](const FUnifiedScriptAuthoringAction& Candidate)
+                        {
+                            return Candidate.DebugTargetId == Item->NodeId;
+                        }))
+            {
+                Label = Action->Title;
+                Source = Action->Span.ToDisplayString();
+            }
+        }
+    }
+
+    const FUnifiedScriptGameplayProfileBoundary* Dominant = nullptr;
+    int64 AttributedNanoseconds = 0;
+    FString BoundaryTooltip;
+    for (const FUnifiedScriptGameplayProfileBoundary& Boundary : Item->Boundaries)
+    {
+        AttributedNanoseconds = Boundary.TotalNanoseconds > MAX_int64 - AttributedNanoseconds
+            ? MAX_int64
+            : AttributedNanoseconds + Boundary.TotalNanoseconds;
+        if (Dominant == nullptr ||
+            Boundary.TotalNanoseconds > Dominant->TotalNanoseconds)
+        {
+            Dominant = &Boundary;
+        }
+        if (!BoundaryTooltip.IsEmpty())
+        {
+            BoundaryTooltip += TEXT("\n");
+        }
+        BoundaryTooltip += FString::Printf(
+            TEXT("%s: %.3f ms / %lld call%s"),
+            *Boundary.Name,
+            static_cast<double>(Boundary.TotalNanoseconds) / 1000000.0,
+            static_cast<long long>(Boundary.Count),
+            Boundary.Count == 1 ? TEXT("") : TEXT("s"));
+    }
+    const int64 ManagedNanoseconds = FMath::Max<int64>(
+        0,
+        Item->TotalNanoseconds - AttributedNanoseconds);
+    const bool bManagedDominates =
+        Dominant == nullptr || ManagedNanoseconds > Dominant->TotalNanoseconds;
+    const FString DominantLabel = bManagedDominates
+        ? FString::Printf(
+            TEXT("managedCode %.3f ms"),
+            static_cast<double>(ManagedNanoseconds) / 1000000.0)
+        : FString::Printf(
+            TEXT("%s %.3f ms / %lld"),
+            *Dominant->Name,
+            static_cast<double>(Dominant->TotalNanoseconds) / 1000000.0,
+            static_cast<long long>(Dominant->Count));
+    if (!BoundaryTooltip.IsEmpty())
+    {
+        BoundaryTooltip += TEXT("\n");
+    }
+    BoundaryTooltip += FString::Printf(
+        TEXT("managedCode: %.3f ms\n%s"),
+        static_cast<double>(ManagedNanoseconds) / 1000000.0,
+        *Source);
+    const int32 Rank = ProfileNodeItems.IndexOfByKey(Item) + 1;
+    return SNew(STableRow<FProfileNodeItem>, OwnerTable)
+    [
+        SNew(STextBlock)
+        .Text(FText::FromString(FString::Printf(
+            TEXT("#%d  %s  ·  %.3f ms / %lld hit%s  ·  %s  ·  %s"),
+            Rank,
+            *Label,
+            static_cast<double>(Item->TotalNanoseconds) / 1000000.0,
+            static_cast<long long>(Item->HitCount),
+            Item->HitCount == 1 ? TEXT("") : TEXT("s"),
+            *DominantLabel,
+            *Source)))
+        .Font(FAppStyle::GetFontStyle(TEXT("SmallFont")))
+        .ToolTipText(FText::FromString(BoundaryTooltip))
+    ];
+}
+
+void SUnifiedScriptDebugPanel::HandleProfileNodeSelectionChanged(
+    FProfileNodeItem Item,
+    ESelectInfo::Type SelectInfo)
+{
+    if (Item.IsValid() && SelectInfo != ESelectInfo::Direct)
+    {
+        OnNodeFocused.ExecuteIfBound(Item->MethodId, Item->NodeId);
+    }
+}
+
+void SUnifiedScriptDebugPanel::RebuildProfileNodeView()
+{
+    ProfileNodeItems.Reset();
+    if (GameplayProfile.IsSet())
+    {
+        for (const FUnifiedScriptGameplayProfileNode& Node : GameplayProfile->Nodes)
+        {
+            ProfileNodeItems.Add(MakeShared<FUnifiedScriptGameplayProfileNode>(Node));
+        }
+        ProfileNodeItems.StableSort(
+            [](const FProfileNodeItem& Left, const FProfileNodeItem& Right)
+            {
+                if (Left->TotalNanoseconds != Right->TotalNanoseconds)
+                {
+                    return Left->TotalNanoseconds > Right->TotalNanoseconds;
+                }
+                if (Left->HitCount != Right->HitCount)
+                {
+                    return Left->HitCount > Right->HitCount;
+                }
+                if (Left->MethodId != Right->MethodId)
+                {
+                    return Left->MethodId < Right->MethodId;
+                }
+                return Left->NodeId < Right->NodeId;
+            });
+    }
+    if (ProfileNodeListView.IsValid())
+    {
+        ProfileNodeListView->RequestListRefresh();
+    }
 }
 
 void SUnifiedScriptDebugPanel::SetDebugStatus(FString Message, bool bError)

@@ -145,10 +145,44 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         string path,
         CancellationToken cancellationToken)
     {
+        if (context.Request.HttpMethod == "POST" &&
+            path == "/api/unreal/authoring-insight")
+        {
+            UnrealAuthoringInsightRequest request =
+                await ReadJsonAsync<UnrealAuthoringInsightRequest>(
+                    context.Request,
+                    cancellationToken);
+            AuthoringSurfaceDocument surface = session.Workspace.Surface;
+            UnrealAuthoringInsightLocation[] locations = surface.Assets
+                .SelectMany(static asset => asset.Functions)
+                .SelectMany(function => function.Actions
+                    .Where(static action => action.DebugTargetId is not null)
+                    .Select(action => new UnrealAuthoringInsightLocation(
+                        function.Id.Value,
+                        action.DebugTargetId!.Value.Value,
+                        action.Id.Value,
+                        action.Title,
+                        action.Summary,
+                        action.Category.ToString(),
+                        action.Span)))
+                .GroupBy(static location => (location.MethodId, location.NodeId))
+                .Where(static group => group.Count() == 1)
+                .Select(static group => group.Single())
+                .ToArray();
+            UnrealAuthoringInsightSnapshot snapshot = UnrealAuthoringInsight.Create(
+                surface.SourceCompilationId,
+                surface.SemanticConfigurationId,
+                locations,
+                request,
+                apiBrowser);
+            await WriteJsonAsync(context.Response, snapshot, cancellationToken);
+            return;
+        }
         if (context.Request.HttpMethod != "GET")
         {
             context.Response.StatusCode = (int)HttpStatusCode.MethodNotAllowed;
-            context.Response.Headers[HttpResponseHeader.Allow] = "GET";
+            context.Response.Headers[HttpResponseHeader.Allow] =
+                path == "/api/unreal/authoring-insight" ? "POST" : "GET";
             return;
         }
         if (path != "/api/unreal/browser")
@@ -573,7 +607,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         {
             AuthoringProtocolException authoring => authoring.Status,
             HttpProtocolException protocol => protocol.Status,
-            JsonException or ArgumentException or ExecutionInvocationException => HttpStatusCode.BadRequest,
+            JsonException or ArgumentException or InvalidDataException or
+                ExecutionInvocationException => HttpStatusCode.BadRequest,
             BreakpointProtocolException => HttpStatusCode.Conflict,
             _ => HttpStatusCode.InternalServerError,
         };

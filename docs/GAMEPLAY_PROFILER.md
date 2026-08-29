@@ -34,9 +34,10 @@ Select a running component in the UnifiedScript Debug panel, then:
 2. reproduce the gameplay frame or interval;
 3. choose **Capture Profile** for a non-destructive snapshot, or **Stop
    Profile** to retain the final snapshot;
-4. inspect the aggregate summary and latest frame;
-5. choose **Focus Hot Node** to jump to the hottest node that still resolves in
-   the active authoring surface;
+4. inspect the aggregate summary, latest frame, and ranked **Semantic
+   Hotspots** with graph/source locations and dominant Unreal boundaries;
+5. select any hotspot, or choose **Focus Hot Node**, to jump to the matching
+   node in the active authoring surface;
 6. choose **Save JSON** to persist the exact portable trace under
    `Saved/UnifiedScript/Profiles`.
 
@@ -72,6 +73,12 @@ The JSON is suitable for checked-in regression fixtures or later comparison
 tooling. M10 owns statistical baselines, machine fingerprints, percentile
 budgets, and matched Puerts reports; a single trace is diagnostic evidence, not
 a broad performance claim.
+
+The browser Workbench can import the same JSON and ask the loopback host to
+join it with the current Surface and generated API route catalog. See
+[INTEGRATED_RUNTIME_INSIGHTS.md](INTEGRATED_RUNTIME_INSIGHTS.md). The catalog
+join describes which generated APIs use a route; it is not fabricated
+per-member timing.
 
 ## Defect and regression diagnosis
 

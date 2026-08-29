@@ -94,6 +94,65 @@ public sealed class CoreClrAuthoringHttpServerTests
             string json = await client.GetStringAsync("api/unreal/browser");
             UnrealApiBrowserDocument served = UnrealApiBrowserJson.Deserialize(json);
             Assert.Equal(browser.ContractName, served.ContractName);
+            AuthoringWorkspaceResponse workspace = await GetWorkspaceAsync(client);
+            AuthoringFunctionSurface function = workspace.Surface.Assets
+                .SelectMany(static asset => asset.Functions)
+                .Single();
+            AuthoringActionSurface action = function.Actions.First(static candidate =>
+                candidate.DebugTargetId is not null);
+            var pressure = new UnrealGameplayProfileBufferPressure(0, 0, 0, 0);
+            var profileNode = new UnrealGameplayProfileNode(
+                function.Id.Value,
+                action.DebugTargetId!.Value.Value,
+                1,
+                20_000,
+                [new UnrealGameplayProfileBoundary("directThunk", 1, 5_000)]);
+            var profileFrame = new UnrealGameplayProfileFrame(
+                1,
+                "1",
+                1,
+                "Tests.HttpAuthoring.DamagePolicy",
+                0.016f,
+                "ManagedTick",
+                [],
+                20_000,
+                0,
+                profileNode.Boundaries,
+                [profileNode],
+                pressure);
+            var trace = new UnrealGameplayProfileTrace(
+                UnrealGameplayProfileTrace.CurrentSchemaVersion,
+                "http-insight",
+                DateTimeOffset.UnixEpoch,
+                "world-test",
+                "script-test",
+                1,
+                0,
+                [profileFrame],
+                new UnrealGameplayProfileAggregate(
+                    1,
+                    20_000,
+                    0,
+                    [],
+                    profileNode.Boundaries,
+                    [profileNode],
+                    pressure));
+            using HttpResponseMessage insightResponse = await client.PostAsync(
+                "api/unreal/authoring-insight",
+                JsonContent(JsonSerializer.Serialize(
+                    new UnrealAuthoringInsightRequest(
+                        UnrealAuthoringInsightRequest.CurrentSchemaVersion,
+                        trace,
+                        function.Id.Value,
+                        action.DebugTargetId.Value.Value),
+                    UnifiedJson.CreateOptions(writeIndented: false))));
+            insightResponse.EnsureSuccessStatusCode();
+            UnrealAuthoringInsightSnapshot insight = UnrealAuthoringInsightJson.Deserialize(
+                await insightResponse.Content.ReadAsStringAsync());
+            UnrealAuthoringInsightNode insightNode = Assert.Single(insight.Nodes);
+            Assert.Equal(action.Id.Value, insightNode.ActionId);
+            Assert.Equal(action.Span, insightNode.SourceSpan);
+            Assert.True(insightNode.Focused);
             using HttpResponseMessage rejected = await client.PostAsync(
                 "api/unreal/browser",
                 JsonContent("{}"));
