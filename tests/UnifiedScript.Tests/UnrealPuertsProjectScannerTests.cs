@@ -26,10 +26,16 @@ public sealed class UnrealPuertsProjectScannerTests
             import * as RuntimeUE from 'ue';
             import * as PuertsRuntime from 'puerts';
 
-            class PlayerScript extends RuntimeUE.Character {
+            class PlayerScript extends RuntimeUE.Character
+            {
+                FpsCamera: RuntimeUE.CameraComponent;
+
                 async ReceiveBeginPlay(): Promise<void> {
                     RuntimeUE.KismetSystemLibrary.LineTraceSingle(this);
                     RuntimeUE.StaticMesh.Load('/Game/Test/SM_Test');
+                    this.AddMovementInput(this.GetActorForwardVector(), 1, false);
+                    this.FpsCamera.bUsePawnControlRotation = true;
+                    this.FpsCamera.GetForwardVector();
                     this.OnDamaged.Add(() => {});
                     const reflected = RuntimeUE[typeName];
                     const module = require(moduleName);
@@ -76,6 +82,14 @@ public sealed class UnrealPuertsProjectScannerTests
         AssertFinding(first, "scriptType", "PlayerScript extends RuntimeUE.Character");
         AssertFinding(first, "lifecycleHook", "PlayerScript.ReceiveBeginPlay");
         AssertFinding(first, "unrealApi", "UE.KismetSystemLibrary.LineTraceSingle");
+        AssertFinding(first, "unrealApi", "UE.Character.AddMovementInput");
+        AssertFinding(first, "unrealApi", "UE.Character.GetActorForwardVector");
+        AssertFinding(first, "unrealApi", "UE.CameraComponent.GetForwardVector");
+        AssertFinding(first, "unrealApi", "UE.CameraComponent.bUsePawnControlRotation:set");
+        Assert.DoesNotContain(
+            first.Findings,
+            static finding => finding.Category == "unrealApi" &&
+                finding.Key == "UE.Character.OnDamaged");
         AssertFinding(first, "puertsApi", "puerts.makeUClass");
         AssertFinding(first, "assetReference", "/Game/Test/SM_Test");
         AssertFinding(first, "delegatePattern", "this.OnDamaged.Add");

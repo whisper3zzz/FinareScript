@@ -46,10 +46,10 @@ current cursor, validate it, and advance this document.
 
 ## Current execution cursor
 
-Last refreshed: **2026-08-28**
+Last refreshed: **2026-08-29**
 
 - Active milestone: **M12 — Migration ecosystem and UnifiedScript 1.0**
-- Next slice: **M12.1 — generated migration plan and coverage scaffold**
+- Next slice: **M12.1 — incremental coexistence and lifecycle ownership**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -63,8 +63,8 @@ machine-local unless an artifact explicitly says otherwise.
 | Runtime source baseline | `810913d` (`perf: remove benchmark world log pollution`) |
 | UnifiedScript comparison source | `5cf323e` (`perf: sync representative workload host`) |
 | Puerts comparison source | `be399cb` (`perf: register benchmark world context`) |
-| Managed tests | 593 / 593 passed |
-| Repository validator | 82 / 82 passed |
+| Managed tests | 597 / 597 passed |
+| Repository validator | 83 / 83 passed |
 | UE 5.8.1 native build | passed |
 | `UnifiedScript.Unreal` Automation | 17 / 17 passed, including bounded crash breadcrumbs, failure containment, deterministic World shutdown, workload collectors, gameplay-profiler attribution, Authoring Surface, live World semantic pause/step/reload/detach, and repeated success/failure hot-reload leak coverage |
 | M10.2 generated-channel profile | 1,024 rows x 3 median samples: container binding 25,371.973 ns/row, generated snapshot 1.270 ns/row (ratio 0.000050), buffered events 0.586 ns/row, zero managed allocation |
@@ -1488,7 +1488,7 @@ requiring repository authors to operate their project.
 
 - [x] scan a Puerts project into an inventory of modules, APIs, lifecycle hooks,
   assets, delegates, async patterns, and unsupported dynamic behavior
-- [ ] generate a migration plan, API coverage report, stubs/contracts, and
+- [x] generate a migration plan, API coverage report, stubs/contracts, and
   side-by-side verification harness; do not promise blind one-click conversion
 - [ ] support incremental coexistence during migration while preventing both
   runtimes from owning the same gameplay lifecycle accidentally
@@ -1505,14 +1505,30 @@ risk. The scan is bounded, reports incomplete traversal instead of dropping
 inputs silently, and `--fail-on-blockers` is suitable for automation.
 
 The real BlockBreaker source reproduced as four authored scripts, five target
-native headers, three relevant config files, and 51 findings with zero blockers.
-Its two dynamic review items are the known `ue` module augmentation and
-`UE.Object.prototype` extension. Five scanner tests cover custom roots, alias
-normalization, all required categories, deterministic JSON/fingerprints,
-source-over-deployment ownership, pure-JS fallback, excluded dependencies,
-bounded failure, strict round trip, and CLI blocker exit behavior. See
-`docs/PUERTS_MIGRATION.md`. The next M12.1 slice consumes this artifact to
-generate a plan, coverage scaffold, contracts/stubs, and side-by-side harness.
+native headers, three relevant config files, and 66 findings: all 29 Unreal
+member APIs from the older exact inventory plus nine newly exposed type
+dependencies, 18 review items, and zero blockers. Its two dynamic review items
+are the known `ue` module augmentation and `UE.Object.prototype` extension.
+Five scanner tests cover custom roots, alias and instance/type inference, all
+required categories, deterministic JSON/fingerprints, source-over-deployment
+ownership, pure-JS fallback, excluded dependencies, bounded failure, strict
+round trip, and CLI blocker exit behavior.
+
+M12.1 planner evidence (2026-08-29): `ue-puerts-plan` transactionally emits an
+eight-file, hash-manifested migration package with a five-phase/66-item plan,
+API coverage, grouped Contract/service requests, compile-safe managed TODO
+stubs, an exactly-one-runtime World ownership policy, a 64-case side-by-side
+harness, and pending evidence templates. The plan has 48 planned, 18 review,
+and zero blocked items. Against the current BlockBreaker API Contract, 22 of 38
+API/type dependencies are covered: exact/unique-owner bindings, five existing
+World/resource service routes, and one property-setter adapter; 15 remain
+explicit requests and the prototype extension remains manual. `ue-puerts-verify`
+strictly rejects stale metadata, duplicates, missing/pending evidence, and exact
+observable mismatches. The pending templates correctly return exit 65, so this
+slice does not claim new live runtime equivalence. Four focused planner/verifier
+tests plus the five scanner tests pass. See `docs/PUERTS_MIGRATION.md`. The next
+M12.1 slice adds incremental Puerts/UnifiedScript coexistence without allowing
+both runtimes to own the same World gameplay lifecycle.
 
 ### M12.2 — SDK, documentation, and samples
 

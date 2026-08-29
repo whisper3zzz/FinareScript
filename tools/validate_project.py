@@ -3350,11 +3350,88 @@ def main() -> int:
         and "blind source translation" in puerts_migration_document
         and "exactly four authored TypeScript files" in puerts_migration_document
         and "- [x] scan a Puerts project into an inventory" in roadmap
-        and "generated migration plan and coverage scaffold" in roadmap,
+        and "incremental coexistence and lifecycle ownership" in roadmap,
         "M12.1 generalized Puerts source ownership, risk scan, CLI, tests, or documentation is incomplete",
     )
     checks.append(
         "M12.1 scans generalized Puerts projects with bounded ownership and dynamic-risk evidence"
+    )
+    puerts_migration_planner_path = (
+        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealPuertsMigrationPlanner.cs"
+    )
+    puerts_verification_harness_path = (
+        ROOT
+        / "src"
+        / "UnifiedScript.Unreal"
+        / "UnrealPuertsVerificationHarness.cs"
+    )
+    puerts_migration_planner_test_path = (
+        ROOT
+        / "tests"
+        / "UnifiedScript.Tests"
+        / "UnrealPuertsMigrationPlannerTests.cs"
+    )
+    for path in [
+        puerts_migration_planner_path,
+        puerts_verification_harness_path,
+        puerts_migration_planner_test_path,
+    ]:
+        require(path.is_file(), f"Missing M12.1 Puerts migration package artifact: {path}")
+    puerts_migration_planner = puerts_migration_planner_path.read_text(
+        encoding="utf-8"
+    )
+    puerts_verification_harness = puerts_verification_harness_path.read_text(
+        encoding="utf-8"
+    )
+    puerts_migration_planner_test = puerts_migration_planner_test_path.read_text(
+        encoding="utf-8"
+    )
+    require(
+        "unifiedscript.puerts-migration-plan/v0.1" in puerts_migration_planner
+        and "unifiedscript.puerts-api-coverage/v0.1" in puerts_migration_planner
+        and "unifiedscript.puerts-contract-requests/v0.1" in puerts_migration_planner
+        and "unifiedscript.puerts-verification-harness/v0.1"
+        in puerts_migration_planner
+        and "unifiedscript.puerts-migration-package/v0.1"
+        in puerts_migration_planner
+        and 'CreateFile("migration-plan.json"' in puerts_migration_planner
+        and 'CreateFile("api-coverage.json"' in puerts_migration_planner
+        and 'CreateFile("contract-requests.json"' in puerts_migration_planner
+        and 'CreateFile("MigrationStubs.cs"' in puerts_migration_planner
+        and '"covered-adapter"' in puerts_migration_planner
+        and '"covered-route"' in puerts_migration_planner
+        and '"data-plane"' in puerts_migration_planner
+        and '"world-service"' in puerts_migration_planner
+        and '"resource-loader"' in puerts_migration_planner
+        and "exactly-one-runtime-owns-each-world-lifecycle"
+        in puerts_migration_planner
+        and "PlanBlocked" in puerts_migration_planner
+        and "unifiedscript.puerts-verification-report/v0.1"
+        in puerts_verification_harness
+        and '"blocked-plan"' in puerts_verification_harness
+        and '"duplicate-case"' in puerts_verification_harness
+        and '"observable-mismatch"' in puerts_verification_harness
+        and 'args[0] == "ue-puerts-plan"' in cli_source
+        and 'args[0] == "ue-puerts-verify"' in cli_source
+        and "--fail-on-mismatch" in cli_source
+        and "GeneratesDeterministicPlanCoverageRequestsStubsAndHarness"
+        in puerts_migration_planner_test
+        and "VerificationRequiresMatchedPassedEvidenceAndExactObservables"
+        in puerts_migration_planner_test
+        and "CliWritesPackageAndRunsSideBySideVerification"
+        in puerts_migration_planner_test
+        and "BlockedScanStillWritesDiagnosablePackageBeforeFailingGate"
+        in puerts_migration_planner_test
+        and "eight deterministic files" in puerts_migration_document
+        and "Both evidence templates intentionally fail this gate"
+        in puerts_migration_document
+        and "- [x] generate a migration plan, API coverage report"
+        in roadmap
+        and "22 of 38" in roadmap,
+        "M12.1 migration plan, coverage, Contract requests, stubs, verification harness, CLI, tests, or documentation is incomplete",
+    )
+    checks.append(
+        "M12.1 emits deterministic Puerts migration packages and strict side-by-side evidence gates"
     )
     roundtrip_manifest_path = (
         ROOT / "comparison" / "blockbreaker-roundtrip.json"

@@ -138,6 +138,16 @@ internal static class Program
             return RunUnrealPuertsScan(args);
         }
 
+        if (args.Count > 0 && args[0] == "ue-puerts-plan")
+        {
+            return RunUnrealPuertsPlan(args);
+        }
+
+        if (args.Count > 0 && args[0] == "ue-puerts-verify")
+        {
+            return RunUnrealPuertsVerify(args);
+        }
+
         if (args.Count > 0 && args[0] == "ue-profile-diagnose")
         {
             return RunUnrealProfileDiagnosis(args);
@@ -898,6 +908,144 @@ internal static class Program
         return options.FailOnBlockers && (!scan.Complete || scan.Summary.BlockerCount > 0)
             ? 65
             : 0;
+    }
+
+    private static int RunUnrealPuertsPlan(IReadOnlyList<string> args)
+    {
+        if (!TryParseUnrealPuertsPlanArguments(args, out UnrealPuertsPlanOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+
+        options = options ?? throw new InvalidOperationException(
+            "Argument parsing succeeded without Puerts migration plan options.");
+        if (!File.Exists(options.ScanPath))
+        {
+            Console.Error.WriteLine($"Puerts project scan does not exist: {options.ScanPath}");
+            return 66;
+        }
+        if (options.ContractPath is not null && !File.Exists(options.ContractPath))
+        {
+            Console.Error.WriteLine($"Unreal API Contract does not exist: {options.ContractPath}");
+            return 66;
+        }
+
+        string fullScanPath = Path.GetFullPath(options.ScanPath);
+        string? fullContractPath = options.ContractPath is null
+            ? null
+            : Path.GetFullPath(options.ContractPath);
+        UnrealPuertsProjectScan scan = UnrealPuertsProjectScanJson.Deserialize(
+            File.ReadAllText(fullScanPath));
+        UnrealApiContract? contract = fullContractPath is null
+            ? null
+            : UnrealApiContractJson.Deserialize(File.ReadAllText(fullContractPath));
+        UnrealPuertsMigrationPackage package = new UnrealPuertsMigrationPlanner().Generate(
+            scan,
+            contract,
+            options.ManagedNamespace);
+        string fullOutputDirectory = Path.GetFullPath(options.OutputDirectory);
+        OutputFile[] outputs = package.Files.Select(file => new OutputFile(
+                ResolveOutputPath(fullOutputDirectory, file.RelativePath),
+                file.Content))
+            .ToArray();
+        foreach (OutputFile output in outputs)
+        {
+            EnsureDifferentPath(
+                fullScanPath,
+                output.Path,
+                "Puerts migration package cannot overwrite its scan input.");
+            if (fullContractPath is not null)
+            {
+                EnsureDifferentPath(
+                    fullContractPath,
+                    output.Path,
+                    "Puerts migration package cannot overwrite its Contract input.");
+            }
+        }
+        WriteTransactionally(outputs);
+        foreach (OutputFile output in outputs)
+        {
+            Console.WriteLine(Path.GetFullPath(output.Path));
+        }
+        Console.WriteLine(
+            $"plan={package.Plan.PlanId}; " +
+            $"work-items={package.Plan.Summary.WorkItemCount}; " +
+            $"api-covered={package.ApiCoverage.Summary.CoveredCount + package.ApiCoverage.Summary.TypeCoveredCount}; " +
+            $"api-missing={package.ApiCoverage.Summary.MissingCount}; " +
+            $"contract-requests={package.ContractRequests.Requests.Count}; " +
+            $"verification-cases={package.VerificationHarness.Cases.Count}; " +
+            $"blocked={package.Plan.Blocked.ToString().ToLowerInvariant()}");
+        return options.FailOnBlockers && package.Plan.Blocked ? 65 : 0;
+    }
+
+    private static int RunUnrealPuertsVerify(IReadOnlyList<string> args)
+    {
+        if (!TryParseUnrealPuertsVerifyArguments(args, out UnrealPuertsVerifyOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+
+        options = options ?? throw new InvalidOperationException(
+            "Argument parsing succeeded without Puerts verification options.");
+        foreach ((string description, string path) in new[]
+                 {
+                     ("Puerts verification harness", options.HarnessPath),
+                     ("Puerts runtime evidence", options.PuertsEvidencePath),
+                     ("UnifiedScript runtime evidence", options.UnifiedScriptEvidencePath),
+                 })
+        {
+            if (!File.Exists(path))
+            {
+                Console.Error.WriteLine($"{description} does not exist: {path}");
+                return 66;
+            }
+        }
+
+        string fullHarnessPath = Path.GetFullPath(options.HarnessPath);
+        string fullPuertsPath = Path.GetFullPath(options.PuertsEvidencePath);
+        string fullUnifiedPath = Path.GetFullPath(options.UnifiedScriptEvidencePath);
+        string fullOutputPath = Path.GetFullPath(options.OutputPath);
+        foreach (string inputPath in new[] { fullHarnessPath, fullPuertsPath, fullUnifiedPath })
+        {
+            EnsureDifferentPath(
+                inputPath,
+                fullOutputPath,
+                "Puerts verification report cannot overwrite an input artifact.");
+        }
+        UnrealPuertsVerificationHarness harness =
+            UnrealPuertsMigrationPackageJson.DeserializeHarness(
+                File.ReadAllText(fullHarnessPath));
+        UnrealPuertsVerificationEvidence puerts =
+            UnrealPuertsMigrationPackageJson.DeserializeEvidence(
+                File.ReadAllText(fullPuertsPath));
+        UnrealPuertsVerificationEvidence unified =
+            UnrealPuertsMigrationPackageJson.DeserializeEvidence(
+                File.ReadAllText(fullUnifiedPath));
+        UnrealPuertsVerificationReport report = UnrealPuertsVerificationHarnessRunner.Compare(
+            harness,
+            puerts,
+            unified);
+        WriteTransactionally(
+        [
+            new OutputFile(fullOutputPath, UnrealPuertsVerificationReportJson.Serialize(report)),
+        ]);
+        Console.WriteLine(fullOutputPath);
+        foreach (string diagnostic in report.Diagnostics)
+        {
+            Console.Error.WriteLine(diagnostic);
+        }
+        foreach (UnrealPuertsVerificationIssue issue in report.Issues)
+        {
+            Console.Error.WriteLine($"{issue.CaseId} {issue.Kind}: {issue.Message}");
+        }
+        Console.WriteLine(
+            $"verification-passed={report.Passed.ToString().ToLowerInvariant()}; " +
+            $"cases={report.Summary.RequiredCaseCount}; " +
+            $"matched={report.Summary.PassedCaseCount}; " +
+            $"issues={report.Summary.IssueCount}");
+        return options.FailOnMismatch && !report.Passed ? 65 : 0;
     }
 
     private static int RunEmit(IReadOnlyList<string> args)
@@ -3150,6 +3298,123 @@ internal static class Program
         return true;
     }
 
+    private static bool TryParseUnrealPuertsPlanArguments(
+        IReadOnlyList<string> args,
+        out UnrealPuertsPlanOptions? options)
+    {
+        options = null;
+        if (args.Count < 4 || args[0] != "ue-puerts-plan" ||
+            args[1].StartsWith("--", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        string scanPath = args[1];
+        string? outputDirectory = null;
+        string? contractPath = null;
+        string? managedNamespace = null;
+        bool failOnBlockers = false;
+        int index = 2;
+        while (index < args.Count)
+        {
+            string option = args[index++];
+            if (option == "--fail-on-blockers" && !failOnBlockers)
+            {
+                failOnBlockers = true;
+                continue;
+            }
+            if (index >= args.Count)
+            {
+                return false;
+            }
+            string value = args[index++];
+            switch (option)
+            {
+                case "--out" when outputDirectory is null:
+                    outputDirectory = value;
+                    break;
+                case "--contract" when contractPath is null:
+                    contractPath = value;
+                    break;
+                case "--namespace" when managedNamespace is null:
+                    managedNamespace = value;
+                    break;
+                default:
+                    return false;
+            }
+        }
+        if (outputDirectory is null)
+        {
+            return false;
+        }
+        options = new UnrealPuertsPlanOptions(
+            scanPath,
+            outputDirectory,
+            contractPath,
+            managedNamespace,
+            failOnBlockers);
+        return true;
+    }
+
+    private static bool TryParseUnrealPuertsVerifyArguments(
+        IReadOnlyList<string> args,
+        out UnrealPuertsVerifyOptions? options)
+    {
+        options = null;
+        if (args.Count < 8 || args[0] != "ue-puerts-verify" ||
+            args[1].StartsWith("--", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        string harnessPath = args[1];
+        string? puertsEvidencePath = null;
+        string? unifiedScriptEvidencePath = null;
+        string? outputPath = null;
+        bool failOnMismatch = false;
+        int index = 2;
+        while (index < args.Count)
+        {
+            string option = args[index++];
+            if (option == "--fail-on-mismatch" && !failOnMismatch)
+            {
+                failOnMismatch = true;
+                continue;
+            }
+            if (index >= args.Count)
+            {
+                return false;
+            }
+            string value = args[index++];
+            switch (option)
+            {
+                case "--puerts" when puertsEvidencePath is null:
+                    puertsEvidencePath = value;
+                    break;
+                case "--unified" when unifiedScriptEvidencePath is null:
+                    unifiedScriptEvidencePath = value;
+                    break;
+                case "--out" when outputPath is null:
+                    outputPath = value;
+                    break;
+                default:
+                    return false;
+            }
+        }
+        if (puertsEvidencePath is null || unifiedScriptEvidencePath is null ||
+            outputPath is null)
+        {
+            return false;
+        }
+        options = new UnrealPuertsVerifyOptions(
+            harnessPath,
+            puertsEvidencePath,
+            unifiedScriptEvidencePath,
+            outputPath,
+            failOnMismatch);
+        return true;
+    }
+
     private static bool TryParseExecuteArguments(
         IReadOnlyList<string> args,
         out ExecuteOptions? options)
@@ -4304,6 +4569,8 @@ internal static class Program
         "  unifiedscript ue-data-plane <schema.json> --managed-out <layouts.g.cs> --native-out <layouts.gen.h>\n" +
         "  unifiedscript ue-puerts-inventory <puerts-project> --out <inventory.json> [--native-project <target-project>] [--project-name <name>] [--coverage <coverage.json> --report <report.json> --fail-on-uncovered]\n" +
         "  unifiedscript ue-puerts-scan <puerts-project> --out <scan.json> [--native-project <project>] [--project-name <name>] [--script-root <directory>]... [--native-root <directory>]... [--fail-on-blockers]\n" +
+        "  unifiedscript ue-puerts-plan <scan.json> --out <directory> [--contract <api-contract.json>] [--namespace <name>] [--fail-on-blockers]\n" +
+        "  unifiedscript ue-puerts-verify <harness.json> --puerts <evidence.json> --unified <evidence.json> --out <report.json> [--fail-on-mismatch]\n" +
         "  unifiedscript ue-profile-diagnose --baseline <profile.json> --current <profile.json> --evidence <evidence.json> --out <report.json>\n" +
         "  unifiedscript ue-workload-capture --manifest <suite.json> --measurement <raw.json> --out <capture.json>\n" +
         "  unifiedscript ue-workload-assemble --manifest <suite.json> --captures <directory> --engine <unifiedScript|puerts> --out <result.json>\n" +
@@ -4524,6 +4791,20 @@ internal static class Program
         IReadOnlyList<string> ScriptRoots,
         IReadOnlyList<string> NativeRoots,
         bool FailOnBlockers);
+
+    private sealed record UnrealPuertsPlanOptions(
+        string ScanPath,
+        string OutputDirectory,
+        string? ContractPath,
+        string? ManagedNamespace,
+        bool FailOnBlockers);
+
+    private sealed record UnrealPuertsVerifyOptions(
+        string HarnessPath,
+        string PuertsEvidencePath,
+        string UnifiedScriptEvidencePath,
+        string OutputPath,
+        bool FailOnMismatch);
 
     private sealed record IdentityOptions(
         string InputPath,

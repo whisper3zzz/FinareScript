@@ -14,7 +14,8 @@ IL, execution, Script Asset, UE gameplay, and dual packaged-build equivalence.
 M9-M11 complete observable hot reload, gameplay profiling, matched performance,
 reliability, packaging, compatibility, and compiled-chunk delivery. M12 now
 turns the proven runtime into a migration ecosystem and UnifiedScript 1.0; its
-first slice is a generalized, bounded Puerts project scanner.
+current workflow scans a Puerts project and generates an auditable migration
+package instead of guessing at a one-click source translation.
 
 ## Product roadmap
 
@@ -93,6 +94,21 @@ dotnet run --project src/UnifiedScript.Cli -c Release -- `
   --out artifacts\migration\my-game.scan.json `
   --fail-on-blockers
 ```
+
+Turn that scan into a deterministic migration plan, API coverage/Contract
+request set, compile-safe managed stubs, and a two-lane verification harness:
+
+```powershell
+dotnet run --project src/UnifiedScript.Cli -c Release -- `
+  ue-puerts-plan artifacts\migration\my-game.scan.json `
+  --contract Contracts\MyGame.unreal-api-contract.json `
+  --out artifacts\migration\my-game `
+  --fail-on-blockers
+```
+
+After both runtimes have filled their evidence files, compare exact observable
+values with `ue-puerts-verify ... --fail-on-mismatch`. Generated templates are
+intentionally `pending`; they cannot be presented as runtime proof.
 
 See [Puerts project migration](docs/PUERTS_MIGRATION.md).
 

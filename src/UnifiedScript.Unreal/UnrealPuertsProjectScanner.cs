@@ -146,11 +146,38 @@ public sealed class UnrealPuertsProjectScanner
     private static readonly Regex TypeRegex = new(
         @"\bclass\s+(?<name>[A-Za-z_$][\w$]*)\s+extends\s+(?<base>[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)",
         RegexOptions.CultureInvariant);
+    private static readonly Regex FieldRegex = new(
+        @"^\s*(?<name>[A-Za-z_$][\w$]*)\??\s*:\s*(?<type>[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)?)\s*(?:;|=)",
+        RegexOptions.CultureInvariant);
+    private static readonly Regex MethodDefinitionRegex = new(
+        @"^\s*(?:public\s+|private\s+|protected\s+|static\s+|override\s+|async\s+)*(?<name>[A-Za-z_$][\w$]*)\s*\(",
+        RegexOptions.CultureInvariant);
     private static readonly Regex LifecycleMethodRegex = new(
         @"\b(?<name>Constructor|ReceiveBeginPlay|ReceiveEndPlay|ReceiveTick|BeginPlay|EndPlay|Tick|OnInit|OnStart|OnStop|OnDestroy)\s*\(",
         RegexOptions.CultureInvariant);
     private static readonly Regex MemberChainRegex = new(
         @"\b(?<root>[A-Za-z_$][\w$]*)(?<chain>(?:\.[A-Za-z_$][\w$]*)+)",
+        RegexOptions.CultureInvariant);
+    private static readonly Regex ThisCallRegex = new(
+        @"\bthis(?<chain>(?:\.[A-Za-z_$][\w$]*)+)(?=\s*\()",
+        RegexOptions.CultureInvariant);
+    private static readonly Regex ThisPropertyWriteRegex = new(
+        @"\bthis\.(?<field>[A-Za-z_$][\w$]*)\.(?<member>[A-Za-z_$][\w$]*)\s*=",
+        RegexOptions.CultureInvariant);
+    private static readonly Regex TypedLocalRegex = new(
+        @"\b(?:let|const|var)\s+(?<name>[A-Za-z_$][\w$]*)\s*:\s*(?<type>[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)?)",
+        RegexOptions.CultureInvariant);
+    private static readonly Regex RefLocalRegex = new(
+        @"\b(?:let|const|var)\s+(?<name>[A-Za-z_$][\w$]*)\s*=\s*\$ref<(?<type>[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)?)>",
+        RegexOptions.CultureInvariant);
+    private static readonly Regex UnrefLocalRegex = new(
+        @"\b(?:let|const|var)\s+(?<name>[A-Za-z_$][\w$]*)\s*=\s*\$unref\((?<source>[A-Za-z_$][\w$]*)\)",
+        RegexOptions.CultureInvariant);
+    private static readonly Regex ReceiverCallRegex = new(
+        @"\b(?<receiver>[A-Za-z_$][\w$]*)\.(?<member>[A-Za-z_$][\w$]*)\s*\(",
+        RegexOptions.CultureInvariant);
+    private static readonly Regex ChainedResultCallRegex = new(
+        @"\)\.(?<member>op_[A-Za-z_$][\w$]*)\s*\(",
         RegexOptions.CultureInvariant);
     private static readonly Regex PuertsGlobalApiRegex = new(
         @"\$(?<name>ref|unref|generic|typeof|extension|promise|callback)\b",
@@ -191,6 +218,18 @@ public sealed class UnrealPuertsProjectScanner
     private static readonly Regex NativeFunctionRegex = new(
         @"\b(?<name>[A-Za-z_$][\w$]*)\s*\([^;{}]*\)\s*(?:const\s*)?;",
         RegexOptions.CultureInvariant | RegexOptions.Singleline);
+    private static readonly HashSet<string> IgnoredReceivers = new(
+        [
+            "Array",
+            "console",
+            "JSON",
+            "Math",
+            "Object",
+            "Promise",
+            "super",
+            "uproperty",
+        ],
+        StringComparer.Ordinal);
 
     public UnrealPuertsProjectScan Scan(UnrealPuertsProjectScanOptions options)
     {
@@ -249,6 +288,7 @@ public sealed class UnrealPuertsProjectScanner
             .ToArray();
         var findings = new Dictionary<(string Category, string Key), FindingAccumulator>();
         var analyzedFiles = new List<(string Identity, string Text)>();
+        var scriptSources = new List<(string Path, string Text)>();
         var configurationFiles = new List<string>();
         long analyzedBytes = 0;
         int analyzedFileCount = 0;
@@ -308,7 +348,7 @@ public sealed class UnrealPuertsProjectScanner
             {
                 case "script":
                     scriptFileCount++;
-                    AnalyzeScript(candidate.RelativePath, text, findings);
+                    scriptSources.Add((candidate.RelativePath, text));
                     break;
                 case "native":
                     nativeHeaderCount++;
@@ -319,6 +359,12 @@ public sealed class UnrealPuertsProjectScanner
                     AnalyzeConfiguration(candidate.RelativePath, text, findings);
                     break;
             }
+        }
+
+        ScriptMetadata metadata = CollectScriptMetadata(scriptSources);
+        foreach ((string path, string text) in scriptSources)
+        {
+            AnalyzeScript(path, text, metadata, findings);
         }
 
         if (scriptFileCount == 0)
@@ -377,9 +423,66 @@ public sealed class UnrealPuertsProjectScanner
             diagnostics.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray());
     }
 
+    private static ScriptMetadata CollectScriptMetadata(
+        IReadOnlyList<(string Path, string Text)> scripts)
+    {
+        var classBases = new Dictionary<string, string>(StringComparer.Ordinal);
+        var fields = new Dictionary<(string Class, string Field), string>();
+        var classMethods = new HashSet<(string Class, string Method)>();
+        foreach ((_, string text) in scripts)
+        {
+            string normalized = RemoveCommentsPreservingStrings(Normalize(text));
+            string[] lines = normalized.Split('\n');
+            string[] codeLines = MaskStrings(normalized).Split('\n');
+            var unrealAliases = new HashSet<string>(["UE"], StringComparer.Ordinal);
+            var puertsAliases = new HashSet<string>(["puerts"], StringComparer.Ordinal);
+            CollectAliases(normalized, unrealAliases, puertsAliases);
+            string? currentClass = null;
+            int depth = 0;
+            int classDepth = -1;
+            for (int index = 0; index < codeLines.Length; index++)
+            {
+                string codeLine = codeLines[index];
+                Match typeMatch = TypeRegex.Match(codeLine);
+                if (typeMatch.Success)
+                {
+                    currentClass = typeMatch.Groups["name"].Value;
+                    classBases[currentClass] = NormalizeType(
+                        typeMatch.Groups["base"].Value,
+                        unrealAliases);
+                    classDepth = depth + 1;
+                }
+                if (currentClass is not null && depth == classDepth)
+                {
+                    Match fieldMatch = FieldRegex.Match(codeLine);
+                    if (fieldMatch.Success)
+                    {
+                        fields[(currentClass, fieldMatch.Groups["name"].Value)] = NormalizeType(
+                            fieldMatch.Groups["type"].Value,
+                            unrealAliases);
+                    }
+                    Match methodMatch = MethodDefinitionRegex.Match(codeLine);
+                    if (methodMatch.Success && methodMatch.Groups["name"].Value is not
+                        ("if" or "for" or "while" or "switch" or "catch" or "using" or "lock"))
+                    {
+                        classMethods.Add((currentClass, methodMatch.Groups["name"].Value));
+                    }
+                }
+                depth += CountChar(lines[index], '{') - CountChar(lines[index], '}');
+                if (currentClass is not null && !typeMatch.Success && depth < classDepth)
+                {
+                    currentClass = null;
+                    classDepth = -1;
+                }
+            }
+        }
+        return new ScriptMetadata(classBases, fields, classMethods);
+    }
+
     private static void AnalyzeScript(
         string sourcePath,
         string text,
+        ScriptMetadata metadata,
         Dictionary<(string Category, string Key), FindingAccumulator> findings)
     {
         string normalized = RemoveCommentsPreservingStrings(Normalize(text));
@@ -388,6 +491,7 @@ public sealed class UnrealPuertsProjectScanner
         var unrealAliases = new HashSet<string>(["UE"], StringComparer.Ordinal);
         var puertsAliases = new HashSet<string>(["puerts"], StringComparer.Ordinal);
         CollectAliases(normalized, unrealAliases, puertsAliases);
+        var locals = new Dictionary<string, string>(StringComparer.Ordinal);
         string? currentClass = null;
         int depth = 0;
         int classDepth = -1;
@@ -400,7 +504,7 @@ public sealed class UnrealPuertsProjectScanner
             if (typeMatch.Success)
             {
                 currentClass = typeMatch.Groups["name"].Value;
-                classDepth = depth + CountChar(line, '{');
+                classDepth = depth + 1;
                 Add(
                     findings,
                     "scriptType",
@@ -486,6 +590,147 @@ public sealed class UnrealPuertsProjectScanner
                         lineNumber);
                 }
             }
+            foreach (Match match in TypedLocalRegex.Matches(codeLine))
+            {
+                locals[match.Groups["name"].Value] = NormalizeType(
+                    match.Groups["type"].Value,
+                    unrealAliases);
+            }
+            foreach (Match match in RefLocalRegex.Matches(codeLine))
+            {
+                locals[match.Groups["name"].Value] = NormalizeType(
+                    match.Groups["type"].Value,
+                    unrealAliases);
+            }
+            Match unrefMatch = UnrefLocalRegex.Match(codeLine);
+            if (unrefMatch.Success &&
+                locals.TryGetValue(unrefMatch.Groups["source"].Value, out string? unrefType))
+            {
+                locals[unrefMatch.Groups["name"].Value] = unrefType;
+            }
+            if (currentClass is not null)
+            {
+                foreach (Match match in ThisCallRegex.Matches(codeLine))
+                {
+                    string[] chain = match.Groups["chain"].Value.Split(
+                        '.',
+                        StringSplitOptions.RemoveEmptyEntries);
+                    if (chain.Length == 0 || IsScriptMethod(currentClass, chain[0], metadata))
+                    {
+                        continue;
+                    }
+                    string? ownerType;
+                    string member;
+                    if (chain.Length >= 2 && TryResolveFieldType(
+                            currentClass,
+                            chain[0],
+                            metadata.ClassBases,
+                            metadata.Fields,
+                            out string? fieldType))
+                    {
+                        if (IsScriptMethod(fieldType, chain[^1], metadata))
+                        {
+                            continue;
+                        }
+                        ownerType = ResolveUnrealBase(fieldType, metadata.ClassBases);
+                        member = chain[^1];
+                    }
+                    else if (chain.Length >= 2)
+                    {
+                        continue;
+                    }
+                    else
+                    {
+                        ownerType = ResolveUnrealBase(currentClass, metadata.ClassBases);
+                        member = chain[0];
+                    }
+                    if (ownerType is not null)
+                    {
+                        Add(
+                            findings,
+                            "unrealApi",
+                            $"{ownerType}.{member}",
+                            "info",
+                            "generate-api-contract-binding",
+                            sourcePath,
+                            lineNumber);
+                    }
+                }
+                foreach (Match match in ThisPropertyWriteRegex.Matches(codeLine))
+                {
+                    if (TryResolveFieldType(
+                            currentClass,
+                            match.Groups["field"].Value,
+                            metadata.ClassBases,
+                            metadata.Fields,
+                            out string? fieldType))
+                    {
+                        string? ownerType = ResolveUnrealBase(fieldType, metadata.ClassBases);
+                        if (ownerType is not null)
+                        {
+                            Add(
+                                findings,
+                                "unrealApi",
+                                $"{ownerType}.{match.Groups["member"].Value}:set",
+                                "info",
+                                "generate-api-contract-binding",
+                                sourcePath,
+                                lineNumber);
+                        }
+                    }
+                }
+            }
+            foreach (Match match in ReceiverCallRegex.Matches(codeLine))
+            {
+                string receiver = match.Groups["receiver"].Value;
+                string member = match.Groups["member"].Value;
+                string prefix = codeLine[..match.Index];
+                if (receiver == "this" || unrealAliases.Contains(receiver) ||
+                    puertsAliases.Contains(receiver) || IgnoredReceivers.Contains(receiver) ||
+                    unrealAliases.Any(alias => prefix.EndsWith(alias + ".", StringComparison.Ordinal)) ||
+                    codeLine.Contains($"this.{receiver}.", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+                if (locals.TryGetValue(receiver, out string? localType))
+                {
+                    string? ownerType = ResolveUnrealBase(localType, metadata.ClassBases) ??
+                        (localType.StartsWith("UE.", StringComparison.Ordinal) ? localType : null);
+                    if (ownerType is not null)
+                    {
+                        Add(
+                            findings,
+                            "unrealApi",
+                            $"{ownerType}.{member}",
+                            "info",
+                            "generate-api-contract-binding",
+                            sourcePath,
+                            lineNumber);
+                    }
+                }
+                else if (member.StartsWith("op_", StringComparison.Ordinal))
+                {
+                    Add(
+                        findings,
+                        "unrealApi",
+                        $"UE.Vector.{member}",
+                        "info",
+                        "generate-api-contract-binding",
+                        sourcePath,
+                        lineNumber);
+                }
+            }
+            foreach (Match match in ChainedResultCallRegex.Matches(codeLine))
+            {
+                Add(
+                    findings,
+                    "unrealApi",
+                    $"UE.Vector.{match.Groups["member"].Value}",
+                    "info",
+                    "generate-api-contract-binding",
+                    sourcePath,
+                    lineNumber);
+            }
             foreach (Match match in AssetReferenceRegex.Matches(line))
             {
                 Add(
@@ -517,7 +762,7 @@ public sealed class UnrealPuertsProjectScanner
                 findings);
 
             depth += CountChar(line, '{') - CountChar(line, '}');
-            if (currentClass is not null && depth < classDepth)
+            if (currentClass is not null && !typeMatch.Success && depth < classDepth)
             {
                 currentClass = null;
                 classDepth = -1;
@@ -540,6 +785,75 @@ public sealed class UnrealPuertsProjectScanner
                 target.Add(match.Groups["alias"].Value);
             }
         }
+    }
+
+    private static string NormalizeType(string type, IReadOnlySet<string> unrealAliases)
+    {
+        int separator = type.IndexOf('.');
+        return separator > 0 && unrealAliases.Contains(type[..separator])
+            ? "UE" + type[separator..]
+            : type;
+    }
+
+    private static bool TryResolveFieldType(
+        string ownerClass,
+        string field,
+        IReadOnlyDictionary<string, string> classBases,
+        IReadOnlyDictionary<(string Class, string Field), string> fields,
+        out string fieldType)
+    {
+        string current = ownerClass;
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        while (visited.Add(current))
+        {
+            if (fields.TryGetValue((current, field), out fieldType!))
+            {
+                return true;
+            }
+            if (!classBases.TryGetValue(current, out current!))
+            {
+                break;
+            }
+        }
+        fieldType = string.Empty;
+        return false;
+    }
+
+    private static string? ResolveUnrealBase(
+        string type,
+        IReadOnlyDictionary<string, string> classBases)
+    {
+        string current = type;
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        while (!current.StartsWith("UE.", StringComparison.Ordinal))
+        {
+            if (!visited.Add(current) || !classBases.TryGetValue(current, out current!))
+            {
+                return null;
+            }
+        }
+        return current;
+    }
+
+    private static bool IsScriptMethod(
+        string type,
+        string method,
+        ScriptMetadata metadata)
+    {
+        string current = type;
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        while (!current.StartsWith("UE.", StringComparison.Ordinal) && visited.Add(current))
+        {
+            if (metadata.ClassMethods.Contains((current, method)))
+            {
+                return true;
+            }
+            if (!metadata.ClassBases.TryGetValue(current, out current!))
+            {
+                break;
+            }
+        }
+        return false;
     }
 
     private static void AddModuleFindings(
@@ -1292,6 +1606,11 @@ public sealed class UnrealPuertsProjectScanner
         OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 
     private sealed record SourceCandidate(string FullPath, string RelativePath, string Kind);
+
+    private sealed record ScriptMetadata(
+        IReadOnlyDictionary<string, string> ClassBases,
+        IReadOnlyDictionary<(string Class, string Field), string> Fields,
+        IReadOnlySet<(string Class, string Method)> ClassMethods);
 
     private sealed class FindingAccumulator(
         string category,
