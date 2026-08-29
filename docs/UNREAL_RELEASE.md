@@ -70,8 +70,11 @@ runtime instead of silently using developer-machine state.
 The verifier recursively enumerates files before applying the exact filename
 match. This is deliberate: Windows PowerShell 5.1 applies `Get-ChildItem
 -Filter` before recursive descent and would otherwise skip the version
-directory. It polls for at most 15 seconds to tolerate archive materialization,
-but still fails if the closure never becomes complete.
+directory. The enumerator also uses Windows extended-length paths so deeply
+nested release-evidence directories do not turn a present runtime into a false
+negative at the legacy 260-character boundary. It polls for at most 15 seconds
+to tolerate archive materialization, but still fails if the closure never
+becomes complete.
 
 The runtime resolves the packaged plugin-local .NET root first, then explicit
 environment roots, and finally the engine development root. A packaged build

@@ -64,6 +64,54 @@ $runDirectory = if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
 }
 New-Item -ItemType Directory -Force -Path $runDirectory | Out-Null
 
+function Convert-ToExtendedLengthPath {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $absolutePath = [IO.Path]::GetFullPath($Path)
+    if ($env:OS -ne 'Windows_NT' -or $absolutePath.StartsWith('\\?\')) {
+        return $absolutePath
+    }
+    if ($absolutePath.StartsWith('\\')) {
+        return '\\?\UNC\' + $absolutePath.Substring(2)
+    }
+
+    return '\\?\' + $absolutePath
+}
+
+function Convert-FromExtendedLengthPath {
+    param([Parameter(Mandatory)][string]$Path)
+
+    if ($Path.StartsWith('\\?\UNC\')) {
+        return '\\' + $Path.Substring(8)
+    }
+    if ($Path.StartsWith('\\?\')) {
+        return $Path.Substring(4)
+    }
+
+    return $Path
+}
+
+function Get-ReleaseFiles {
+    param([Parameter(Mandatory)][string]$Directory)
+
+    $enumerationRoot = Convert-ToExtendedLengthPath -Path $Directory
+    try {
+        foreach ($filePath in [IO.Directory]::EnumerateFiles(
+                $enumerationRoot,
+                '*',
+                [IO.SearchOption]::AllDirectories)) {
+            $file = [IO.FileInfo]::new($filePath)
+            [pscustomobject]@{
+                Name = $file.Name
+                FullName = Convert-FromExtendedLengthPath -Path $file.FullName
+                Length = [long]$file.Length
+            }
+        }
+    } catch [IO.DirectoryNotFoundException] {
+        return
+    }
+}
+
 function Find-ReleaseFileWithRetry {
     param(
         [Parameter(Mandatory)][string]$Directory,
@@ -73,17 +121,11 @@ function Find-ReleaseFileWithRetry {
 
     $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
     do {
-        if (Test-Path -LiteralPath $Directory -PathType Container) {
-            $candidate = Get-ChildItem `
-                -LiteralPath $Directory `
-                -Recurse `
-                -File `
-                -ErrorAction SilentlyContinue |
+        $candidate = Get-ReleaseFiles -Directory $Directory |
                 Where-Object Name -EQ $Filter |
                 Select-Object -First 1
-            if ($null -ne $candidate) {
-                return $candidate
-            }
+        if ($null -ne $candidate) {
+            return $candidate
         }
         Start-Sleep -Milliseconds 100
     } while ([DateTime]::UtcNow -lt $deadline)
@@ -182,9 +224,11 @@ try {
             $null -eq $systemRuntime) {
             throw "$configuration package does not contain the self-contained CoreCLR runtime."
         }
-        $pakFiles = @(Get-ChildItem -LiteralPath $packageRoot -Filter '*.pak' -Recurse -File)
-        $utocFiles = @(Get-ChildItem -LiteralPath $packageRoot -Filter '*.utoc' -Recurse -File)
-        $ucasFiles = @(Get-ChildItem -LiteralPath $packageRoot -Filter '*.ucas' -Recurse -File)
+        $packageFiles = @(Get-ReleaseFiles -Directory $archiveDirectory)
+        $runtimeFiles = @(Get-ReleaseFiles -Directory $runtimeRoot)
+        $pakFiles = @($packageFiles | Where-Object Name -Like '*.pak')
+        $utocFiles = @($packageFiles | Where-Object Name -Like '*.utoc')
+        $ucasFiles = @($packageFiles | Where-Object Name -Like '*.ucas')
         if ($pakFiles.Count -eq 0 -or $utocFiles.Count -eq 0 -or $ucasFiles.Count -eq 0) {
             throw "$configuration package is missing Pak/IoStore outputs."
         }
@@ -242,8 +286,6 @@ try {
             throw "$configuration packaged smoke did not use the plugin-local CoreCLR runtime: $smokeText"
         }
 
-        $packageFiles = Get-ChildItem -LiteralPath $archiveDirectory -Recurse -File
-        $runtimeFiles = @(Get-ChildItem -LiteralPath $runtimeRoot -Recurse -File)
         $configurationReports += [ordered]@{
             configuration = $configuration
             targetType = 'Game'
