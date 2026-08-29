@@ -157,6 +157,12 @@
       "path": "docs/UNREAL_COMPATIBILITY_MATRIX.md"
     },
     {
+      "id": "release-readiness",
+      "category": "packaging",
+      "title": "UnifiedScript 1.0 release readiness",
+      "path": "docs/RELEASE_READINESS.md"
+    },
+    {
       "id": "compiled-chunks",
       "category": "packaging",
       "title": "Compiled program chunks",
@@ -189,7 +195,7 @@
   ],
   "acceptance": {
     "managedTests": 619,
-    "repositoryInvariants": 91,
+    "repositoryInvariants": 92,
     "unrealAutomationTests": 19,
     "requiredGates": [
       "managed-tests",
@@ -205,7 +211,8 @@
       "integrated-runtime-insights",
       "generated-data-plane-extensions",
       "clean-project-sdk-install",
-      "clean-project-development-package"
+      "clean-project-development-package",
+      "matched-performance-workload"
     ]
   },
   "knownLimitations": [

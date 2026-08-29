@@ -39,6 +39,7 @@ unsafe, or outside `docs`.
 
 - [Win64 release packaging](UNREAL_RELEASE.md)
 - [Compatibility matrix](UNREAL_COMPATIBILITY_MATRIX.md)
+- [UnifiedScript 1.0 release readiness](RELEASE_READINESS.md)
 - [Compiled program chunks](COMPILED_CHUNKS.md)
 - [Versioning and upgrades](VERSIONING_AND_UPGRADES.md)
 - [Puerts migration](PUERTS_MIGRATION.md)

@@ -1744,6 +1744,20 @@ Acceptance: the 1.0 release has an installable SDK, supported compatibility
 matrix, end-to-end migration guide, complete samples, published workload report,
 and no critical acceptance failure.
 
+- [x] bind every release-manifest gate to one versioned release-readiness
+  provider, including the complete matched performance workload
+- [ ] run the full gate from one clean Git revision and publish a strict 15/15
+  `unifiedscript.release-readiness/v0.1` verdict
+- [ ] audit the final report for unsupported claims and critical failures, then
+  promote or hold `1.0.0-rc.1` without weakening a gate
+
+M12 acceptance-closure progress (2026-08-29): the new release-readiness runner
+turns the release manifest into an executable 15-gate contract. It rejects
+missing, duplicate, or unowned gates before expensive work, binds child reports
+to one source revision, verifies source/comparison preservation, and reserves
+the exact `passed` status for clean evidence. Plan and dirty modes remain
+non-promotable diagnostics. The full clean-revision run is the next cursor.
+
 ## Global release gates
 
 Every active milestone inherits these gates when relevant:

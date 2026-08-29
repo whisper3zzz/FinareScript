@@ -36,6 +36,12 @@ Only JSON/Markdown/text logs and TRX evidence are uploaded. Cooked content,
 archives, SDK ZIPs, native binaries, and other large executable payloads stay on
 the runner; their release reports retain the required sizes and hashes.
 
+The managed job also runs the release-readiness command with `-PlanOnly`. This
+does not claim product acceptance; it fails quickly when the release manifest
+adds, removes, duplicates, or renames a required gate without updating the
+versioned provider contract. A strict 1.0 verdict still requires the complete
+clean-checkout command documented in `RELEASE_READINESS.md`.
+
 ## Hosted runner requirements
 
 The two lightweight jobs install the exact SDK from `global.json` (`10.0.201`)

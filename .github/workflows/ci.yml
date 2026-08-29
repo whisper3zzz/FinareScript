@@ -36,6 +36,12 @@ jobs:
           -Lane managed-tests
           -OutputDirectory artifacts/ci/managed-tests
           -RequireCleanTree
+      - name: Validate the release-readiness provider contract
+        shell: powershell
+        run: >-
+          ./tools/run-unifiedscript-release-readiness.ps1
+          -PlanOnly
+          -OutputDirectory artifacts/ci/managed-tests/release-readiness-plan
       - name: Upload managed lane report
         if: always()
         uses: actions/upload-artifact@v7
@@ -44,6 +50,7 @@ jobs:
           path: |
             artifacts/ci/managed-tests/**/*.json
             artifacts/ci/managed-tests/**/*.log
+            artifacts/ci/managed-tests/**/*.md
             artifacts/ci/managed-tests/**/*.trx
           if-no-files-found: error
 

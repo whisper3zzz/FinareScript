@@ -28,6 +28,15 @@ Version: `1.0.0-rc.1`
 Channel: release candidate
 Verified target: Unreal Engine 5.8.1, Win64, .NET 10
 
+## Release acceptance
+
+One release-readiness command now binds every manifest-declared gate to an
+exact provider and produces a single `unifiedscript.release-readiness/v0.1`
+verdict from one clean Git revision. It includes the complete matched
+UnifiedScript/Puerts workload budget; microbenchmarks and stale child reports
+cannot substitute for the release performance gate. Dirty-source modes are
+diagnostic-only and cannot emit the strict `passed` verdict.
+
 ## What is ready
 
 - A source-distributed Unreal plugin, managed runtime, CLI, schemas, templates,

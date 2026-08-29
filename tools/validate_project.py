@@ -91,6 +91,7 @@ DOCUMENTS = [
     ROOT / "docs" / "RELEASE_NOTES_1_0_RC1.md",
     ROOT / "docs" / "UNREAL_RELEASE.md",
     ROOT / "docs" / "UNREAL_COMPATIBILITY_MATRIX.md",
+    ROOT / "docs" / "RELEASE_READINESS.md",
     ROOT / "docs" / "VERSIONING_AND_UPGRADES.md",
     ROOT / "docs" / "CI.md",
     ROOT / "docs" / "DIAGNOSTICS_BUNDLES.md",
@@ -702,12 +703,20 @@ def main() -> int:
     compatibility_matrix_runner_path = (
         ROOT / "tools" / "run-unreal-compatibility-matrix.ps1"
     )
+    release_readiness_runner_path = (
+        ROOT / "tools" / "run-unifiedscript-release-readiness.ps1"
+    )
+    release_readiness_document_path = ROOT / "docs" / "RELEASE_READINESS.md"
+    ci_workflow_path = ROOT / ".github" / "workflows" / "ci.yml"
     for path in [
         product_release_path,
         product_documentation_path,
         product_release_notes_path,
         product_plugin_path,
         compatibility_matrix_runner_path,
+        release_readiness_runner_path,
+        release_readiness_document_path,
+        ci_workflow_path,
     ]:
         require(path.is_file(), f"Missing M12.2 release-surface artifact: {path}")
     with product_release_path.open("r", encoding="utf-8") as handle:
@@ -719,6 +728,13 @@ def main() -> int:
     compatibility_matrix_runner = compatibility_matrix_runner_path.read_text(
         encoding="utf-8"
     )
+    release_readiness_runner = release_readiness_runner_path.read_text(
+        encoding="utf-8"
+    )
+    release_readiness_document = release_readiness_document_path.read_text(
+        encoding="utf-8"
+    )
+    ci_workflow = ci_workflow_path.read_text(encoding="utf-8")
     release_documents = product_release["documentation"]
     release_document_ids = [document["id"] for document in release_documents]
     release_document_paths = [document["path"] for document in release_documents]
@@ -758,7 +774,7 @@ def main() -> int:
         and product_release["artifacts"]["pluginVersion"] == 1000001
         and product_plugin["Version"] == 1000001
         and product_plugin["VersionName"] == "1.0.0-rc.1"
-        and len(release_documents) == 28
+        and len(release_documents) == 29
         and len(set(release_document_ids)) == len(release_document_ids)
         and len(set(release_document_paths)) == len(release_document_paths)
         and required_release_categories <= release_document_categories
@@ -770,7 +786,7 @@ def main() -> int:
         )
         and product_release["releaseNotes"] in release_document_paths
         and product_release["acceptance"]["managedTests"] == 619
-        and product_release["acceptance"]["repositoryInvariants"] == 91
+        and product_release["acceptance"]["repositoryInvariants"] == 92
         and product_release["acceptance"]["unrealAutomationTests"] == 19
         and "release-manifest.json" in sdk_package
         and "$releaseDocumentation" in sdk_package
@@ -795,6 +811,54 @@ def main() -> int:
     )
     checks.append(
         "M12.2 binds the 1.0 RC1 plugin, SDK, release notes, and complete documentation catalog"
+    )
+
+    release_required_gates = {
+        "managed-tests",
+        "repository-validator",
+        "editor-development-build",
+        "editor-automation",
+        "source-development-shipping-package",
+        "deterministic-sdk-package",
+        "sample-matrix",
+        "project-template-and-api-browser",
+        "semantic-diff-merge",
+        "ai-semantic-proposals",
+        "integrated-runtime-insights",
+        "generated-data-plane-extensions",
+        "clean-project-sdk-install",
+        "clean-project-development-package",
+        "matched-performance-workload",
+    }
+    require(
+        set(product_release["acceptance"]["requiredGates"])
+        == release_required_gates
+        and len(product_release["acceptance"]["requiredGates"]) == 15
+        and all(
+            f"'{gate}' =" in release_readiness_runner
+            for gate in release_required_gates
+        )
+        and "unifiedscript.release-readiness/v0.1"
+        in release_readiness_runner
+        and "passed-local-diagnostics" in release_readiness_runner
+        and "Every release requiredGate must have exactly one"
+        in release_readiness_runner
+        and "Test-GitStatePreserved" in release_readiness_runner
+        and "unifiedscript.performance-budget-report/v0.1"
+        in release_readiness_runner
+        and "GeneratedExtensionRegistry" in release_readiness_runner
+        and "status=planned" in release_readiness_document
+        and "status=passed" in release_readiness_document
+        and "passed-local-diagnostics" in release_readiness_document
+        and "docs/RELEASE_READINESS.md" in release_document_paths
+        and "run-unifiedscript-release-readiness.ps1" in ci_workflow
+        and "-PlanOnly" in ci_workflow
+        and "15-gate contract" in roadmap_document
+        and "One release-readiness command" in product_release_notes,
+        "M12 release-readiness providers, strict evidence boundary, CI plan, or performance gate is incomplete",
+    )
+    checks.append(
+        "M12 binds every 1.0 required gate to one clean-revision release-readiness verdict"
     )
 
     sample_catalog_path = ROOT / "samples" / "Unreal" / "unifiedscript.samples.json"
