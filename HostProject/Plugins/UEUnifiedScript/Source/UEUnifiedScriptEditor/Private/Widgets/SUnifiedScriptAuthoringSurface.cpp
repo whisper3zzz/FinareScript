@@ -3670,7 +3670,7 @@ bool SUnifiedScriptAuthoringSurface::ShowDiffPreview(
     const TSharedRef<SWindow> Window = SNew(SWindow)
         .Title(FText::FromString(FString::Printf(
             TEXT("UnifiedScript Diff Preview - %s"),
-            *Preview.Description)))
+            Preview.ProposalTitle.IsEmpty() ? *Preview.Description : *Preview.ProposalTitle)))
         .ClientSize(FVector2D(1180.0f, 720.0f))
         .SupportsMaximize(true)
         .SupportsMinimize(false);
@@ -3686,8 +3686,9 @@ bool SUnifiedScriptAuthoringSurface::ShowDiffPreview(
             [
                 SNew(STextBlock)
                 .Text(FText::FromString(FString::Printf(
-                    TEXT("%s  |  revision %lld -> %lld  |  %s"),
-                    *Preview.Description,
+                    TEXT("%s%s  |  revision %lld -> %lld  |  %s"),
+                    Preview.ProposalId.IsEmpty() ? TEXT("") : TEXT("AI PROPOSAL  |  "),
+                    Preview.ProposalId.IsEmpty() ? *Preview.Description : *Preview.ProposalId,
                     Preview.BaselineRevision,
                     Preview.CandidateRevision,
                     Preview.bPublishesRuntime

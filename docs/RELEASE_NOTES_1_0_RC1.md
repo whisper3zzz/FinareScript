@@ -1,5 +1,14 @@
 # UnifiedScript 1.0 RC1 release notes
 
+## Typed AI semantic proposals
+
+AI tools can now package Patch Plan v0.21 as a strict, content-identified
+proposal, preview it through the same Roslyn and stable-ID semantic diff used by
+human edits, and commit only the exact proposal bound to the accepted preview
+token. The CLI, loopback host, browser Workbench, and native Slate review path
+share the versioned envelope; no model runtime is bundled or trusted as a
+commit authority.
+
 Version: `1.0.0-rc.1`
 Channel: release candidate
 Verified target: Unreal Engine 5.8.1, Win64, .NET 10

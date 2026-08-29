@@ -49,7 +49,7 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-29**
 
 - Active milestone: **M12 — Migration ecosystem and UnifiedScript 1.0**
-- Next slice: **M12.3 — typed AI semantic patch proposals**
+- Next slice: **M12.3 — integrated graph/source debugging and profiling**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -1621,7 +1621,7 @@ graph/C# diff surface.
 
 - [x] make semantic graph/C# diffs reviewable and mergeable without serialized
   Blueprint graph noise
-- [ ] let AI tools propose typed semantic patch plans that pass the same compiler
+- [x] let AI tools propose typed semantic patch plans that pass the same compiler
   and transaction gates as human graph edits
 - [ ] integrate graph/source debugging and profiling so authoring, runtime cost,
   and Unreal API boundaries are visible in one place
@@ -1653,6 +1653,32 @@ deployment, determinism, and managed startup completed in 72,376 ms. Two final
 SDK archives are byte-identical at 205 entries and 8,454,033 bytes with SHA-256
 `5d56c9391ccb6b14a95531262879dae0497e76b9831bc00c3b9ac3f18258f2aa`.
 The cursor advances to M12.3's typed AI semantic patch proposals.
+
+M12.3 typed AI proposal evidence (2026-08-29): Core now publishes strict
+`unifiedscript.ai-semantic-patch-proposal-draft/v0.1` and
+`unifiedscript.ai-semantic-patch-proposal/v0.1` contracts. A length-delimited
+content identity covers bounded human intent, producer/model identity, and the
+canonical Patch Plan v0.21; unknown fields, tampering, stale semantic targets,
+and invalid polymorphic steps are rejected. `ai-proposal-pack` turns an existing
+typed plan into byte-deterministic proposal JSON for external tools.
+
+The loopback host validates drafts, previews the complete proposal through the
+existing Roslyn/Graph compiler path, and binds `proposalId` into the same
+prepared-candidate SHA-256 token used by human graph edits. Commit must resend
+the identical proposal, revision, transaction/group context, and token; a
+different valid proposal is rejected with `UAW1012` before source, history,
+artifacts, or runtime state changes. The browser Workbench now demonstrates a
+real Surface-capability-to-Patch-Plan proposal and opens the normal semantic/C#
+review, while native Slate unwraps and labels the same versioned preview and
+commit envelopes. The full managed suite passes 614/614 and repository
+validation passes 89/89. UE 5.8.1 completed both native builds, deterministic
+five-artifact generation, deployment, managed startup, and 18/18 Automation
+tests in 99,103 ms; the report is
+`artifacts/onboarding/m12-3-ai-proposal-full.json`. Two SDK archives are
+byte-identical at 205 payload entries, 26 documentation entries, and 8,604,380
+bytes with SHA-256
+`0fe681258dfbc96ee87c69b7ce3205b17046e3a1247e1804e582745c499cca65`.
+The cursor advances to M12.3's integrated graph/source debugging and profiling.
 
 Acceptance: the 1.0 release has an installable SDK, supported compatibility
 matrix, end-to-end migration guide, complete samples, published workload report,

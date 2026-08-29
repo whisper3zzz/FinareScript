@@ -146,6 +146,8 @@ struct FUnifiedScriptAuthoringPreviewResult
     int64 CandidateRevision = 0;
     FString TransactionId;
     FString Description;
+    FString ProposalId;
+    FString ProposalTitle;
     bool bPublishesRuntime = false;
     FString PreviewToken;
     FUnifiedScriptAuthoringSemanticDiffSummary SemanticSummary;
@@ -177,6 +179,8 @@ public:
     static FString BuildDeclarationPatchUrl(const FString& ServerUrl);
 
     static FString BuildSemanticPatchPlanUrl(const FString& ServerUrl);
+
+    static FString BuildAiSemanticProposalUrl(const FString& ServerUrl);
 
     static FString BuildPreviewUrl(const FString& TransactionUrl);
 

@@ -8,7 +8,7 @@ const state = {
   declarations: [], nodes: new Map(), selected: null,
   authoringConnected: false, authoringBusy: false, authoringRevision: null,
   authoringHistory: null, authoringGroup: null,
-  generation: null, removedDeclarations: [], previewPatch: null,
+  generation: null, removedDeclarations: [], aiProposal: null,
   debugConnected: false, debugBusy: false, debugCommandPending: false,
   debugHealth: null, debugSession: null,
   debugFrameId: null,
@@ -299,7 +299,7 @@ function applyWorkspaceArtifacts(artifact, graph, surface, sourceText, workspace
     authoringHistory: workspace?.history ?? null,
     authoringGroup: workspace?.group ?? null,
     generation: workspace?.generation ?? null,
-    artifactLoaded: true, graphDirty: false, removedDeclarations: [], previewPatch: null,
+    artifactLoaded: true, graphDirty: false, removedDeclarations: [], aiProposal: null,
   });
   if (workspace) {
     state.debugConnected = true;
@@ -811,17 +811,8 @@ function declarationChanged(item) {
   }) !== JSON.stringify(item.original);
 }
 
-function aiSuggestedDeclaration(declarations) {
-  const target = declarations.find(item => !item.editable) || declarations[0];
-  if (!target) return null;
-  target.editable = true;
-  target.category ||= 'Gameplay';
-  return target;
-}
-
-function buildDeclarationPatch(includeAiSuggestion = false) {
+function buildDeclarationPatch() {
   const declarations = state.declarations.map(item => ({ ...item }));
-  if (includeAiSuggestion) aiSuggestedDeclaration(declarations);
   const operations = declarations.flatMap(item => {
     if (!item.original) return [{ operation: 'addState', targetAssetId: state.selectedAssetId, state: replacementContract(item) }];
     if (!declarationChanged(item)) return [];
@@ -837,21 +828,82 @@ function buildDeclarationPatch(includeAiSuggestion = false) {
   };
 }
 
-function showDeclarationPatchPreview() {
+function nextAiEditValue(edit) {
+  if (edit.kind === 'operator') {
+    const options = edit.options || [];
+    const current = options.indexOf(edit.currentValue);
+    const next = options[(current + 1) % options.length];
+    if (!next || next === edit.currentValue) throw new Error('Selected operator has no alternative');
+    return next;
+  }
+  if (edit.currentValue === 'true' || edit.currentValue === 'false') {
+    return edit.currentValue === 'true' ? 'false' : 'true';
+  }
+  const numeric = /^(-?(?:\d+|\d*\.\d+))([fFdDmM]?)$/.exec(edit.currentValue);
+  if (!numeric) throw new Error(`No deterministic suggestion is available for ${edit.currentValue}`);
+  return `${Number(numeric[1]) + 1}${numeric[2]}`;
+}
+
+function buildAiProposalDraft() {
+  const selectedNode = state.selected?.kind === 'action' ? state.nodes.get(state.selected.id) : null;
+  const node = selectedNode?.editCapabilities?.length ? selectedNode
+    : state.functionSurface?.actions.find(action => action.editCapabilities.length);
+  if (!node) throw new Error('Select a behavior node with a typed edit capability');
+  const edit = node.editCapabilities.find(candidate => ['literal', 'operator'].includes(candidate.kind));
+  if (!edit) throw new Error('This behavior node has no supported typed AI edit');
+  const nextValue = nextAiEditValue(edit);
+  const step = edit.kind === 'literal' ? {
+    step: 'replaceLiteral', stepId: `ai-${edit.id}`, targetNodeId: edit.targetNodeId,
+    expectedValueText: edit.expectedValueText, newValueText: nextValue,
+  } : {
+    step: 'changeOperator', stepId: `ai-${edit.id}`, targetNodeId: edit.targetNodeId,
+    expectedOperator: edit.expectedOperator, newOperator: nextValue,
+    expectedResultTypeId: edit.expectedResultTypeId,
+    expectedOperandTypeId: edit.expectedOperandTypeId,
+    ...(edit.expectedRightOperandTypeId ? { expectedRightOperandTypeId: edit.expectedRightOperandTypeId } : {}),
+  };
+  const intent = document.getElementById('aiPrompt').value.trim();
+  if (!intent) throw new Error('Describe the intended behavior change first');
+  return {
+    summary: `${node.title}: ${edit.currentValue} → ${nextValue}`,
+    draft: {
+      schemaVersion: 'unifiedscript.ai-semantic-patch-proposal-draft/v0.1',
+      title: `Edit ${node.title}`.slice(0, 160), intent,
+      producer: { tool: 'unifiedscript-workbench', version: '0.1', model: 'deterministic-demo' },
+      plan: {
+        schemaVersion: 'unifiedscript.patch-plan/v0.21',
+        sourceCompilationId: state.sourceCompilationId,
+        semanticConfigurationId: state.semanticConfigurationId,
+        steps: [step],
+      },
+    },
+  };
+}
+
+async function showAiProposalPreview() {
   const preview = document.getElementById('patchPreview');
   const summary = document.getElementById('patchPreviewSummary');
   const json = document.getElementById('patchPreviewJson');
   const applyButton = document.getElementById('applyPreviewPatchButton');
   try {
-    const patch = buildDeclarationPatch(true);
-    state.previewPatch = patch;
-    const suggested = aiSuggestedDeclaration(state.declarations.map(item => ({ ...item })));
-    summary.textContent = suggested
-      ? `${suggested.name}: Instance Editable / ${suggested.category}` : 'No state is available';
-    json.textContent = JSON.stringify(patch, null, 2);
-    applyButton.disabled = !state.authoringConnected || patch.operations.length === 0;
+    if (!state.authoringConnected) throw new Error('Start debug-serve to validate AI proposals');
+    applyButton.disabled = true;
+    summary.textContent = 'Validating typed proposal…';
+    const candidate = buildAiProposalDraft();
+    const response = await fetch('/api/authoring/ai-semantic-proposal/draft', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(candidate.draft),
+    });
+    const proposal = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(proposal.error?.message || `Proposal validation returned ${response.status}`);
+    assertArtifact(proposal.schemaVersion === 'unifiedscript.ai-semantic-patch-proposal/v0.1', 'Unsupported AI proposal contract');
+    assertArtifact(/^us_[0-9a-f]{32}$/i.test(proposal.proposalId), 'AI proposal has no deterministic content identity');
+    state.aiProposal = proposal;
+    summary.textContent = `${candidate.summary} · ${semanticShort(proposal.proposalId)}`;
+    json.textContent = JSON.stringify(proposal, null, 2);
+    applyButton.disabled = false;
   } catch (error) {
-    state.previewPatch = null;
+    state.aiProposal = null;
     summary.textContent = error.message;
     json.textContent = '';
     applyButton.disabled = true;
@@ -937,9 +989,14 @@ async function authoringRequest(path, patch, label = 'Visual authoring edit', op
     error.code = payload.error?.code;
     throw error;
   }
-  if (payload.schemaVersion !== 'unifiedscript.authoring-workspace/v0.5') throw new Error('Unsupported authoring response');
-  validateVisualProfile(payload.profile);
-  return payload;
+  const workspace = payload.schemaVersion === 'unifiedscript.ai-semantic-proposal-commit/v0.1'
+    ? payload.workspace : payload;
+  if (payload.schemaVersion === 'unifiedscript.ai-semantic-proposal-commit/v0.1') {
+    assertArtifact(payload.proposalId === patch.proposalId, 'Committed AI proposal identity changed');
+  }
+  if (workspace.schemaVersion !== 'unifiedscript.authoring-workspace/v0.5') throw new Error('Unsupported authoring response');
+  validateVisualProfile(workspace.profile);
+  return workspace;
 }
 
 function validateAuthoringPreview(preview) {
@@ -967,6 +1024,12 @@ async function previewAuthoringRequest(path, patch, label, transactionId, groupI
     error.code = payload.error?.code;
     throw error;
   }
+  if (payload.schemaVersion === 'unifiedscript.ai-semantic-proposal-preview/v0.1') {
+    assertArtifact(payload.proposal?.proposalId === patch.proposalId, 'Previewed AI proposal identity changed');
+    const preview = validateAuthoringPreview(payload.preview);
+    preview.aiProposal = payload.proposal;
+    return preview;
+  }
   return validateAuthoringPreview(payload);
 }
 
@@ -978,7 +1041,9 @@ function previewSideText(files, side) {
 function showSemanticReview(preview) {
   const diff = preview.semanticDiff;
   const summary = diff.summary;
-  document.getElementById('semanticReviewTitle').textContent = preview.description;
+  document.getElementById('semanticReviewTitle').textContent = preview.aiProposal
+    ? `AI · ${preview.aiProposal.title} · ${semanticShort(preview.aiProposal.proposalId)}`
+    : preview.description;
   document.getElementById('semanticReviewSummary').innerHTML = [
     [summary.addedFunctions, 'FUNCTIONS ADDED'], [summary.removedFunctions, 'FUNCTIONS REMOVED'],
     [summary.modifiedFunctions, 'FUNCTIONS MODIFIED'], [summary.changeCount, 'STABLE-ID CHANGES'],
@@ -1086,6 +1151,28 @@ async function saveSemanticPatch(patch) {
   } catch (error) {
     document.querySelector('.sync-status strong').textContent = error.code === 'UAW1002' ? 'EXTERNAL CONFLICT' : 'PATCH REJECTED';
     showToast(error.code || 'Behavior patch failed', error.message);
+    setAuthoringBusy(false);
+  }
+}
+
+async function applyAiSemanticProposal() {
+  const proposal = state.aiProposal;
+  if (!proposal || !state.authoringConnected) return;
+  try {
+    setAuthoringBusy(true);
+    const workspace = await reviewAndCommitAuthoring(
+      '/api/authoring/ai-semantic-proposal', proposal, `AI · ${proposal.title}`);
+    if (!workspace) {
+      setAuthoringBusy(false);
+      return showToast('AI proposal cancelled', 'Preview performed no source, history, artifact, or runtime write');
+    }
+    applyWorkspaceArtifacts(workspace.scriptAssets, workspace.graph, workspace.surface, workspace.sourceText, workspace);
+    showToast(
+      workspace.group ? `Staged AI proposal ${semanticShort(proposal.proposalId)}` : `AI proposal committed · R${workspace.revision}`,
+      workspace.group ? 'Source and CoreCLR are unchanged until group commit' : `Compiler and transaction gates passed · generation ${workspace.generation.number}`);
+  } catch (error) {
+    document.querySelector('.sync-status strong').textContent = error.code === 'UAW1002' ? 'EXTERNAL CONFLICT' : 'AI PROPOSAL REJECTED';
+    showToast(error.code || 'AI proposal failed', error.message);
     setAuthoringBusy(false);
   }
 }
@@ -1450,9 +1537,8 @@ document.getElementById('closeAiDrawer').addEventListener('click', () => {
   aiDrawer.classList.remove('visible');
   aiDrawer.setAttribute('aria-hidden', 'true');
 });
-document.getElementById('previewPatchButton').addEventListener('click', showDeclarationPatchPreview);
-document.getElementById('applyPreviewPatchButton').addEventListener('click', () =>
-  state.previewPatch && saveDeclarationChanges(state.previewPatch));
+document.getElementById('previewPatchButton').addEventListener('click', showAiProposalPreview);
+document.getElementById('applyPreviewPatchButton').addEventListener('click', applyAiSemanticProposal);
 document.getElementById('saveButton').addEventListener('click', () => saveDeclarationChanges());
 document.getElementById('groupButton').addEventListener('click', toggleAuthoringGroup);
 document.getElementById('cancelGroupButton').addEventListener('click', cancelAuthoringGroup);

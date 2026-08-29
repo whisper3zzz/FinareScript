@@ -63,6 +63,11 @@ internal static class Program
             return RunSemanticMerge(args);
         }
 
+        if (args.Count > 0 && args[0] == "ai-proposal-pack")
+        {
+            return RunAiProposalPack(args);
+        }
+
         if (args.Count > 0 && args[0] == "apply-patch")
         {
             return RunApply(args, isPlan: false);
@@ -352,6 +357,103 @@ internal static class Program
             return false;
         }
         options = new SemanticDiffOptions(args[1], args[2], output, failOnChange);
+        return true;
+    }
+
+    private static int RunAiProposalPack(IReadOnlyList<string> args)
+    {
+        if (!TryParseAiProposalPackArguments(args, out AiProposalPackOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+
+        options = options ?? throw new InvalidOperationException(
+            "Argument parsing succeeded without AI proposal options.");
+        string planPath = Path.GetFullPath(options.PlanPath);
+        if (!File.Exists(planPath))
+        {
+            Console.Error.WriteLine($"Semantic patch plan does not exist: {planPath}");
+            return 66;
+        }
+        string outputPath = Path.GetFullPath(options.OutputPath);
+        EnsureDifferentPath(planPath, outputPath, "AI proposal output");
+        SemanticPatchPlanDocument plan = SemanticPatchPlanJson.Deserialize(
+            File.ReadAllText(planPath));
+        AiSemanticPatchProposalDocument proposal = AiSemanticPatchProposalDocument.Create(
+            AiSemanticPatchProposalDraft.Create(
+                options.Title,
+                options.Intent,
+                new AiSemanticPatchProposalProducer(
+                    options.Producer,
+                    options.ProducerVersion,
+                    options.Model),
+                plan));
+        WriteAtomically(outputPath, AiSemanticPatchProposalJson.Serialize(proposal) + "\n");
+        Console.WriteLine(outputPath);
+        Console.WriteLine(proposal.ProposalId);
+        Console.WriteLine($"typedSteps={proposal.Plan.Steps.Count}");
+        return 0;
+    }
+
+    private static bool TryParseAiProposalPackArguments(
+        IReadOnlyList<string> args,
+        out AiProposalPackOptions? options)
+    {
+        options = null;
+        if (args.Count < 12 || args[0] != "ai-proposal-pack" ||
+            args[1].StartsWith("--", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        string? title = null;
+        string? intent = null;
+        string? producer = null;
+        string? producerVersion = null;
+        string? model = null;
+        string? output = null;
+        for (int index = 2; index < args.Count; index++)
+        {
+            string option = args[index];
+            if (index + 1 >= args.Count)
+            {
+                return false;
+            }
+            string value = args[++index];
+            switch (option)
+            {
+                case "--title" when title is null:
+                    title = value;
+                    break;
+                case "--intent" when intent is null:
+                    intent = value;
+                    break;
+                case "--producer" when producer is null:
+                    producer = value;
+                    break;
+                case "--producer-version" when producerVersion is null:
+                    producerVersion = value;
+                    break;
+                case "--model" when model is null:
+                    model = value;
+                    break;
+                case "--out" when output is null:
+                    output = value;
+                    break;
+                default:
+                    return false;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(intent) ||
+            string.IsNullOrWhiteSpace(producer) || string.IsNullOrWhiteSpace(producerVersion) ||
+            string.IsNullOrWhiteSpace(output))
+        {
+            return false;
+        }
+        options = new AiProposalPackOptions(
+            args[1], title, intent, producer, producerVersion, model, output);
         return true;
     }
 
@@ -4915,6 +5017,7 @@ internal static class Program
         "  unifiedscript layout-sync <graph.json> --layout <layout.usgraph> --out <updated.usgraph>\n" +
         "  unifiedscript semantic-diff <baseline.graph.json> <target.graph.json> --out <diff.json> [--fail-on-change]\n" +
         "  unifiedscript semantic-merge <baseline.graph.json> <ours.graph.json> <theirs.graph.json> --report <merge.json> --out <merged.graph.json>\n" +
+        "  unifiedscript ai-proposal-pack <plan.json> --title <text> --intent <text> --producer <id> --producer-version <version> [--model <id>] --out <proposal.json>\n" +
         "  unifiedscript apply-patch <input.cs> --patch <patch.json> --out <output.cs> [options]\n" +
         "  unifiedscript apply-plan <input.cs> --plan <plan.json> --out <output.cs> [options]\n" +
         "  unifiedscript apply-project-patch <project.csproj> --patch <patch.json> --out <directory> [options]\n" +
@@ -5220,6 +5323,15 @@ internal static class Program
         string OursPath,
         string TheirsPath,
         string ReportPath,
+        string OutputPath);
+
+    private sealed record AiProposalPackOptions(
+        string PlanPath,
+        string Title,
+        string Intent,
+        string Producer,
+        string ProducerVersion,
+        string? Model,
         string OutputPath);
 
     private sealed record PatchOptions(

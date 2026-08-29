@@ -20,6 +20,9 @@ constexpr TCHAR WorkspaceSchema[] = TEXT("unifiedscript.authoring-workspace/v0.5
 constexpr TCHAR ProfileReportSchema[] = TEXT("unifiedscript.visual-csharp-profile-report/v0.1");
 constexpr TCHAR VisualProfileSchema[] = TEXT("unifiedscript.visual-csharp-profile/v0.3");
 constexpr TCHAR PreviewSchema[] = TEXT("unifiedscript.authoring-preview/v0.2");
+constexpr TCHAR AiProposalSchema[] = TEXT("unifiedscript.ai-semantic-patch-proposal/v0.1");
+constexpr TCHAR AiPreviewSchema[] = TEXT("unifiedscript.ai-semantic-proposal-preview/v0.1");
+constexpr TCHAR AiCommitSchema[] = TEXT("unifiedscript.ai-semantic-proposal-commit/v0.1");
 constexpr TCHAR SemanticDiffSchema[] = TEXT("unifiedscript.semantic-graph-diff/v0.1");
 constexpr TCHAR GraphSchema[] = TEXT("unifiedscript.graph/v0.13");
 
@@ -286,6 +289,14 @@ FString FUnifiedScriptAuthoringWorkbench::BuildSemanticPatchPlanUrl(const FStrin
         : Normalized + TEXT("/api/authoring/semantic-patch-plan");
 }
 
+FString FUnifiedScriptAuthoringWorkbench::BuildAiSemanticProposalUrl(const FString& ServerUrl)
+{
+    const FString Normalized = NormalizeServerUrl(ServerUrl);
+    return Normalized.IsEmpty()
+        ? FString()
+        : Normalized + TEXT("/api/authoring/ai-semantic-proposal");
+}
+
 FString FUnifiedScriptAuthoringWorkbench::BuildPreviewUrl(const FString& TransactionUrl)
 {
     const FString Normalized = NormalizeServerUrl(TransactionUrl);
@@ -293,6 +304,7 @@ FString FUnifiedScriptAuthoringWorkbench::BuildPreviewUrl(const FString& Transac
         {TEXT("/api/authoring/declaration-patch"), TEXT("/api/authoring/preview/declaration-patch")},
         {TEXT("/api/authoring/semantic-patch"), TEXT("/api/authoring/preview/semantic-patch")},
         {TEXT("/api/authoring/semantic-patch-plan"), TEXT("/api/authoring/preview/semantic-patch-plan")},
+        {TEXT("/api/authoring/ai-semantic-proposal"), TEXT("/api/authoring/preview/ai-semantic-proposal")},
         {TEXT("/api/authoring/group/commit"), TEXT("/api/authoring/preview/group/commit")},
         {TEXT("/api/authoring/undo"), TEXT("/api/authoring/preview/undo")},
         {TEXT("/api/authoring/redo"), TEXT("/api/authoring/preview/redo")},
@@ -369,6 +381,25 @@ bool FUnifiedScriptAuthoringWorkbench::ParseWorkspaceResponse(
     }
 
     FString Schema;
+    if (Root->TryGetStringField(TEXT("schemaVersion"), Schema) &&
+        Schema == UE::UnifiedScript::AuthoringWorkbench::Private::AiCommitSchema)
+    {
+        FString ProposalId;
+        const TSharedPtr<FJsonObject>* Workspace = nullptr;
+        if (!UE::UnifiedScript::AuthoringWorkbench::Private::ReadRequiredString(
+                Root, TEXT("proposalId"), ProposalId, OutError) ||
+            !Root->TryGetObjectField(TEXT("workspace"), Workspace) ||
+            Workspace == nullptr || !Workspace->IsValid())
+        {
+            if (OutError.IsEmpty())
+            {
+                OutError = TEXT("The AI proposal commit has invalid identity or workspace data.");
+            }
+            return false;
+        }
+        Root = *Workspace;
+        Schema.Reset();
+    }
     if (!Root->TryGetStringField(TEXT("schemaVersion"), Schema) ||
         Schema != UE::UnifiedScript::AuthoringWorkbench::Private::WorkspaceSchema)
     {
@@ -603,8 +634,34 @@ bool FUnifiedScriptAuthoringWorkbench::ParsePreviewResponse(
         return false;
     }
 
-    FString Schema;
     FUnifiedScriptAuthoringPreviewResult Candidate;
+    FString Schema;
+    if (Root->TryGetStringField(TEXT("schemaVersion"), Schema) &&
+        Schema == UE::UnifiedScript::AuthoringWorkbench::Private::AiPreviewSchema)
+    {
+        const TSharedPtr<FJsonObject>* Proposal = nullptr;
+        const TSharedPtr<FJsonObject>* Preview = nullptr;
+        FString ProposalSchema;
+        if (!Root->TryGetObjectField(TEXT("proposal"), Proposal) || Proposal == nullptr ||
+            !Proposal->IsValid() ||
+            !(*Proposal)->TryGetStringField(TEXT("schemaVersion"), ProposalSchema) ||
+            ProposalSchema != UE::UnifiedScript::AuthoringWorkbench::Private::AiProposalSchema ||
+            !UE::UnifiedScript::AuthoringWorkbench::Private::ReadRequiredString(
+                *Proposal, TEXT("proposalId"), Candidate.ProposalId, OutError) ||
+            !UE::UnifiedScript::AuthoringWorkbench::Private::ReadRequiredString(
+                *Proposal, TEXT("title"), Candidate.ProposalTitle, OutError) ||
+            !Root->TryGetObjectField(TEXT("preview"), Preview) || Preview == nullptr ||
+            !Preview->IsValid())
+        {
+            if (OutError.IsEmpty())
+            {
+                OutError = TEXT("The AI proposal preview has invalid identity or preview data.");
+            }
+            return false;
+        }
+        Root = *Preview;
+        Schema.Reset();
+    }
     if (!Root->TryGetStringField(TEXT("schemaVersion"), Schema) ||
         Schema != UE::UnifiedScript::AuthoringWorkbench::Private::PreviewSchema ||
         !UE::UnifiedScript::AuthoringWorkbench::Private::ReadPositiveInteger(

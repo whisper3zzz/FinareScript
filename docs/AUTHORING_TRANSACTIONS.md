@@ -29,6 +29,7 @@ The write endpoints are:
 - `POST /api/authoring/declaration-patch`;
 - `POST /api/authoring/semantic-patch`;
 - `POST /api/authoring/semantic-patch-plan`;
+- `POST /api/authoring/ai-semantic-proposal`;
 - `POST /api/authoring/group/begin`;
 - `POST /api/authoring/group/commit`;
 - `POST /api/authoring/group/cancel`;
@@ -52,7 +53,9 @@ the draft against the published workspace.
 
 The preview response includes a SHA-256 token over revisions, transaction/group
 metadata, complete candidate source, reconciled identity sidecars, Declaration
-IR, and Graph. The server keeps that immutable prepared snapshot in a bounded
+IR, and Graph. AI proposal previews additionally bind the deterministic
+`proposalId`, so a different valid proposal cannot reuse an accepted diff. The
+server keeps that immutable prepared snapshot in a bounded
 cache. An accepted native request sends its token as
 `X-UnifiedScript-Preview-Token` and commits that exact candidate; `UAW1012`
 rejects missing/expired tokens or transaction-context drift. Older clients may
@@ -63,6 +66,8 @@ arrays and a rollback receipt. See
 The standalone review/merge schemas and conservative function-level merge
 boundary are documented in
 [SEMANTIC_DIFF_AND_MERGE.md](SEMANTIC_DIFF_AND_MERGE.md).
+The AI envelope, offline pack command, and proposal-specific endpoints are
+documented in [AI_SEMANTIC_PROPOSALS.md](AI_SEMANTIC_PROPOSALS.md).
 
 ## User-grouped transactions
 

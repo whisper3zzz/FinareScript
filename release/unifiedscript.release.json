@@ -79,6 +79,12 @@
       "path": "docs/SEMANTIC_DIFF_AND_MERGE.md"
     },
     {
+      "id": "ai-semantic-proposals",
+      "category": "authoring",
+      "title": "Typed AI semantic patch proposals",
+      "path": "docs/AI_SEMANTIC_PROPOSALS.md"
+    },
+    {
       "id": "api-contract",
       "category": "api",
       "title": "Unreal API Contract",
@@ -170,8 +176,8 @@
     }
   ],
   "acceptance": {
-    "managedTests": 610,
-    "repositoryInvariants": 88,
+    "managedTests": 614,
+    "repositoryInvariants": 89,
     "unrealAutomationTests": 18,
     "requiredGates": [
       "managed-tests",
@@ -183,6 +189,7 @@
       "sample-matrix",
       "project-template-and-api-browser",
       "semantic-diff-merge",
+      "ai-semantic-proposals",
       "clean-project-sdk-install",
       "clean-project-development-package"
     ]

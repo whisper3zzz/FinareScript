@@ -81,6 +81,7 @@ DOCUMENTS = [
     ROOT / "docs" / "NODE_DETAILS.md",
     ROOT / "docs" / "AUTHORING_DIAGNOSTICS.md",
     ROOT / "docs" / "SEMANTIC_DIFF_AND_MERGE.md",
+    ROOT / "docs" / "AI_SEMANTIC_PROPOSALS.md",
     ROOT / "docs" / "UNREAL_ADAPTER.md",
     ROOT / "docs" / "UNREAL_DEPLOYMENT.md",
     ROOT / "docs" / "UNREAL_ONBOARDING.md",
@@ -756,7 +757,7 @@ def main() -> int:
         and product_release["artifacts"]["pluginVersion"] == 1000001
         and product_plugin["Version"] == 1000001
         and product_plugin["VersionName"] == "1.0.0-rc.1"
-        and len(release_documents) == 25
+        and len(release_documents) == 26
         and len(set(release_document_ids)) == len(release_document_ids)
         and len(set(release_document_paths)) == len(release_document_paths)
         and required_release_categories <= release_document_categories
@@ -767,8 +768,8 @@ def main() -> int:
             for path in release_document_paths
         )
         and product_release["releaseNotes"] in release_document_paths
-        and product_release["acceptance"]["managedTests"] == 610
-        and product_release["acceptance"]["repositoryInvariants"] == 88
+        and product_release["acceptance"]["managedTests"] == 614
+        and product_release["acceptance"]["repositoryInvariants"] == 89
         and product_release["acceptance"]["unrealAutomationTests"] == 18
         and "release-manifest.json" in sdk_package
         and "$releaseDocumentation" in sdk_package
@@ -5269,12 +5270,51 @@ def main() -> int:
         and "- [x] make semantic graph/C# diffs reviewable and mergeable"
         in roadmap_document
         and "M12.3 semantic review evidence" in roadmap_document
-        and "Next slice: **M12.3 — typed AI semantic patch proposals**"
+        and "The cursor advances to M12.3's typed AI semantic patch proposals."
         in roadmap_document,
         "M12.3 stable-ID semantic diff, conservative merge, dual Workbench review, or release gate is incomplete",
     )
     checks.append(
         "M12.3 reviews stable-ID Graph/C# changes and conservatively merges disjoint functions"
+    )
+    ai_proposal_source = (
+        ROOT / "src" / "UnifiedScript.Core" / "AiSemanticPatchProposal.cs"
+    ).read_text(encoding="utf-8")
+    ai_proposal_tests = (
+        ROOT / "tests" / "UnifiedScript.Tests" / "AiSemanticPatchProposalTests.cs"
+    ).read_text(encoding="utf-8")
+    ai_proposal_document = (
+        ROOT / "docs" / "AI_SEMANTIC_PROPOSALS.md"
+    ).read_text(encoding="utf-8")
+    require(
+        "unifiedscript.ai-semantic-patch-proposal/v0.1" in ai_proposal_source
+        and "unifiedscript.ai-semantic-patch-proposal-draft/v0.1"
+        in ai_proposal_source
+        and "JsonUnmappedMemberHandling.Disallow" in ai_proposal_source
+        and "AppendIdentityPart" in ai_proposal_source
+        and 'args[0] == "ai-proposal-pack"' in cli_source
+        and "/api/authoring/ai-semantic-proposal/draft" in debug_server_source
+        and "/api/authoring/preview/ai-semantic-proposal" in debug_server_source
+        and "BoundPayloadId" in debug_server_source
+        and "showAiProposalPreview" in workbench_script
+        and "applyAiSemanticProposal" in workbench_script
+        and "BuildAiSemanticProposalUrl" in unreal_authoring_workbench_source
+        and "AiPreviewSchema" in unreal_authoring_workbench_source
+        and "DraftCreatesDeterministicStrictProposal" in ai_proposal_tests
+        and "CliPacksTheSameTypedPlanDeterministically" in ai_proposal_tests
+        and "proposalId" in ai_proposal_document
+        and "UAW1012" in ai_proposal_document
+        and "docs/AI_SEMANTIC_PROPOSALS.md" in release_document_paths
+        and "ai-semantic-proposals"
+        in product_release["acceptance"]["requiredGates"]
+        and "- [x] let AI tools propose typed semantic patch plans"
+        in roadmap_document
+        and "Next slice: **M12.3 — integrated graph/source debugging and profiling**"
+        in roadmap_document,
+        "M12.3 typed AI proposal identity, compiler/transaction binding, dual review, or release gate is incomplete",
+    )
+    checks.append(
+        "M12.3 binds typed AI proposal identity to compiler-reviewed transactional commits"
     )
     identity_reconciler_source = (
         ROOT / "src" / "UnifiedScript.CSharp" / "CSharpIdentityReconciler.cs"

@@ -488,13 +488,117 @@ public sealed class CoreClrAuthoringHttpServerTests
                     plannedMinimum.Id,
                     "10f",
                     "12f")]);
-            AuthoringWorkspaceResponse planned = await PostAsync(
-                client,
-                "api/authoring/semantic-patch-plan",
-                SemanticPatchPlanJson.Serialize(plan),
+            AiSemanticPatchProposalDraft proposalDraft = AiSemanticPatchProposalDraft.Create(
+                "Raise clamp minimum",
+                "Replace the selected stable-ID literal with a typed patch-plan step.",
+                new AiSemanticPatchProposalProducer("http-test-agent", "1.0", "fixture-model"),
+                plan);
+            AiSemanticPatchProposalDocument proposal;
+            using (HttpRequestMessage draftRequest = AuthoringRequest(
+                "api/authoring/ai-semantic-proposal/draft",
+                AiSemanticPatchProposalJson.SerializeDraft(proposalDraft),
                 behavior.Revision,
                 "txn-plan",
-                "Apply clamp plan");
+                "Apply AI clamp plan"))
+            using (HttpResponseMessage draftResponse = await client.SendAsync(draftRequest))
+            {
+                draftResponse.EnsureSuccessStatusCode();
+                proposal = AiSemanticPatchProposalJson.Deserialize(
+                    await draftResponse.Content.ReadAsStringAsync());
+            }
+            Assert.Contains(
+                "Math.Clamp(scaled, 10f, MaxDamage)",
+                await File.ReadAllTextAsync(sourcePath),
+                StringComparison.Ordinal);
+
+            using (HttpRequestMessage staleProposalRequest = AuthoringRequest(
+                "api/authoring/preview/ai-semantic-proposal",
+                AiSemanticPatchProposalJson.Serialize(proposal),
+                behavior.Revision - 1,
+                "txn-plan-stale",
+                "Apply stale AI clamp plan"))
+            using (HttpResponseMessage staleProposalResponse =
+                await client.SendAsync(staleProposalRequest))
+            {
+                Assert.Equal(HttpStatusCode.Conflict, staleProposalResponse.StatusCode);
+                DebugErrorResponse error = JsonSerializer.Deserialize<DebugErrorResponse>(
+                    await staleProposalResponse.Content.ReadAsStringAsync(),
+                    UnifiedJson.CreateOptions())!;
+                Assert.Equal("UAW1005", error.Error.Code);
+            }
+
+            AuthoringAiSemanticProposalPreviewResponse aiPreview;
+            using (HttpRequestMessage previewRequest = AuthoringRequest(
+                "api/authoring/preview/ai-semantic-proposal",
+                AiSemanticPatchProposalJson.Serialize(proposal),
+                behavior.Revision,
+                "txn-plan",
+                "Apply AI clamp plan"))
+            using (HttpResponseMessage previewResponse = await client.SendAsync(previewRequest))
+            {
+                previewResponse.EnsureSuccessStatusCode();
+                aiPreview = JsonSerializer.Deserialize<AuthoringAiSemanticProposalPreviewResponse>(
+                    await previewResponse.Content.ReadAsStringAsync(),
+                    UnifiedJson.CreateOptions())!;
+            }
+            Assert.Equal(proposal.ProposalId, aiPreview.Proposal.ProposalId);
+            Assert.Contains("12f", Assert.Single(aiPreview.Preview.Files).AfterText);
+            Assert.Contains(
+                "Math.Clamp(scaled, 10f, MaxDamage)",
+                await File.ReadAllTextAsync(sourcePath),
+                StringComparison.Ordinal);
+
+            AiSemanticPatchProposalDocument substitutedProposal =
+                AiSemanticPatchProposalDocument.Create(proposalDraft with
+                {
+                    Intent = "A different, independently identified proposal intent.",
+                });
+            using (HttpRequestMessage substitutedRequest = AuthoringRequest(
+                "api/authoring/ai-semantic-proposal",
+                AiSemanticPatchProposalJson.Serialize(substitutedProposal),
+                behavior.Revision,
+                "txn-plan",
+                "Apply AI clamp plan",
+                previewToken: aiPreview.Preview.PreviewToken))
+            using (HttpResponseMessage substitutedResponse = await client.SendAsync(substitutedRequest))
+            {
+                Assert.Equal(HttpStatusCode.Conflict, substitutedResponse.StatusCode);
+                DebugErrorResponse error = JsonSerializer.Deserialize<DebugErrorResponse>(
+                    await substitutedResponse.Content.ReadAsStringAsync(),
+                    UnifiedJson.CreateOptions())!;
+                Assert.Equal("UAW1012", error.Error.Code);
+            }
+
+            using (HttpRequestMessage previewRequest = AuthoringRequest(
+                "api/authoring/preview/ai-semantic-proposal",
+                AiSemanticPatchProposalJson.Serialize(proposal),
+                behavior.Revision,
+                "txn-plan",
+                "Apply AI clamp plan"))
+            using (HttpResponseMessage previewResponse = await client.SendAsync(previewRequest))
+            {
+                previewResponse.EnsureSuccessStatusCode();
+                aiPreview = JsonSerializer.Deserialize<AuthoringAiSemanticProposalPreviewResponse>(
+                    await previewResponse.Content.ReadAsStringAsync(),
+                    UnifiedJson.CreateOptions())!;
+            }
+            AuthoringAiSemanticProposalCommitResponse aiCommit;
+            using (HttpRequestMessage commitRequest = AuthoringRequest(
+                "api/authoring/ai-semantic-proposal",
+                AiSemanticPatchProposalJson.Serialize(proposal),
+                behavior.Revision,
+                "txn-plan",
+                "Apply AI clamp plan",
+                previewToken: aiPreview.Preview.PreviewToken))
+            using (HttpResponseMessage commitResponse = await client.SendAsync(commitRequest))
+            {
+                commitResponse.EnsureSuccessStatusCode();
+                aiCommit = JsonSerializer.Deserialize<AuthoringAiSemanticProposalCommitResponse>(
+                    await commitResponse.Content.ReadAsStringAsync(),
+                    UnifiedJson.CreateOptions())!;
+            }
+            Assert.Equal(proposal.ProposalId, aiCommit.ProposalId);
+            AuthoringWorkspaceResponse planned = aiCommit.Workspace;
 
             Assert.Equal(4, planned.Revision);
             Assert.Equal(4, planned.Generation.Number);

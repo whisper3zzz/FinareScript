@@ -256,8 +256,34 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         AuthoringTransactionContext transaction = ReadAuthoringTransactionContext(
             context.Request,
             GetDefaultAuthoringDescription(path));
+        if (path == "/api/authoring/ai-semantic-proposal/draft")
+        {
+            string draftJson = await ReadJsonTextAsync(context.Request, cancellationToken);
+            AiSemanticPatchProposalDocument proposal = AiSemanticPatchProposalDocument.Create(
+                AiSemanticPatchProposalJson.DeserializeDraft(draftJson));
+            await WriteJsonAsync(context.Response, proposal, cancellationToken);
+            return;
+        }
         if (path.StartsWith("/api/authoring/preview/", StringComparison.Ordinal))
         {
+            if (path == "/api/authoring/preview/ai-semantic-proposal")
+            {
+                string proposalJson = await ReadJsonTextAsync(context.Request, cancellationToken);
+                AiSemanticPatchProposalDocument proposal =
+                    AiSemanticPatchProposalJson.Deserialize(proposalJson);
+                AuthoringPreviewResponse proposalPreview = await session.PreviewAsync(
+                    proposal.Plan,
+                    transaction with { BoundPayloadId = proposal.ProposalId },
+                    cancellationToken);
+                await WriteJsonAsync(
+                    context.Response,
+                    new AuthoringAiSemanticProposalPreviewResponse(
+                        "unifiedscript.ai-semantic-proposal-preview/v0.1",
+                        proposal,
+                        proposalPreview),
+                    cancellationToken);
+                return;
+            }
             AuthoringPreviewResponse preview;
             if (path == "/api/authoring/preview/group/commit")
             {
@@ -300,6 +326,24 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 };
             }
             await WriteJsonAsync(context.Response, preview, cancellationToken);
+            return;
+        }
+        if (path == "/api/authoring/ai-semantic-proposal")
+        {
+            string proposalJson = await ReadJsonTextAsync(context.Request, cancellationToken);
+            AiSemanticPatchProposalDocument proposal =
+                AiSemanticPatchProposalJson.Deserialize(proposalJson);
+            AuthoringWorkspaceResponse proposalWorkspace = await session.ApplyAsync(
+                proposal.Plan,
+                transaction with { BoundPayloadId = proposal.ProposalId },
+                cancellationToken);
+            await WriteJsonAsync(
+                context.Response,
+                new AuthoringAiSemanticProposalCommitResponse(
+                    "unifiedscript.ai-semantic-proposal-commit/v0.1",
+                    proposal.ProposalId,
+                    proposalWorkspace),
+                cancellationToken);
             return;
         }
         AuthoringWorkspaceResponse response;
@@ -360,6 +404,9 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         "/api/authoring/preview/semantic-patch" => "Semantic patch",
         "/api/authoring/semantic-patch-plan" or
         "/api/authoring/preview/semantic-patch-plan" => "Semantic patch plan",
+        "/api/authoring/ai-semantic-proposal/draft" => "Draft AI semantic proposal",
+        "/api/authoring/ai-semantic-proposal" or
+        "/api/authoring/preview/ai-semantic-proposal" => "AI semantic proposal",
         "/api/authoring/group/begin" => "Begin grouped authoring transaction",
         "/api/authoring/group/commit" or
         "/api/authoring/preview/group/commit" => "Commit grouped authoring transaction",
@@ -422,7 +469,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             transactionId,
             description,
             groupId,
-            previewToken?.ToLowerInvariant());
+            previewToken?.ToLowerInvariant(),
+            null);
     }
 
     private async Task ServeStaticAsync(
@@ -599,7 +647,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         string TransactionId,
         string Description,
         string? GroupId,
-        string? PreviewToken);
+        string? PreviewToken,
+        SemanticId? BoundPayloadId);
 
     private sealed class AuthoringSessionController : IDisposable
     {
@@ -1566,6 +1615,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 transaction.TransactionId,
                 transaction.Description,
                 transaction.GroupId,
+                transaction.BoundPayloadId,
                 publishesRuntime,
                 candidate,
                 diagnostics);
@@ -1595,6 +1645,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             AppendTokenPart(tokenSource, transaction.Description);
             AppendTokenPart(tokenSource, transaction.GroupId ?? string.Empty);
             AppendTokenPart(tokenSource, transaction.BaselineRevision?.ToString() ?? string.Empty);
+            AppendTokenPart(tokenSource, transaction.BoundPayloadId?.Value ?? string.Empty);
             AppendTokenPart(tokenSource, publishesRuntime ? "publish" : "draft");
             foreach (CSharpSourceDocument source in candidate.Request.Sources.OrderBy(
                 static source => source.LogicalPath,
@@ -1675,6 +1726,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                     transaction.Description,
                     StringComparison.Ordinal) ||
                 !string.Equals(prepared.GroupId, transaction.GroupId, StringComparison.Ordinal) ||
+                prepared.BoundPayloadId != transaction.BoundPayloadId ||
                 prepared.PublishesRuntime != publishesRuntime)
             {
                 throw new AuthoringProtocolException(
@@ -2404,6 +2456,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             string TransactionId,
             string Description,
             string? GroupId,
+            SemanticId? BoundPayloadId,
             bool PublishesRuntime,
             CSharpAuthoringSnapshot Candidate,
             IReadOnlyList<UnifiedDiagnostic> Diagnostics);
@@ -2508,6 +2561,16 @@ internal sealed record AuthoringPreviewResponse(
     SemanticGraphDiffDocument SemanticDiff,
     IReadOnlyList<AuthoringPreviewFile> Files,
     IReadOnlyList<UnifiedDiagnostic> Diagnostics);
+
+internal sealed record AuthoringAiSemanticProposalPreviewResponse(
+    string SchemaVersion,
+    AiSemanticPatchProposalDocument Proposal,
+    AuthoringPreviewResponse Preview);
+
+internal sealed record AuthoringAiSemanticProposalCommitResponse(
+    string SchemaVersion,
+    SemanticId ProposalId,
+    AuthoringWorkspaceResponse Workspace);
 
 internal sealed record AuthoringPreviewFile(
     string Path,

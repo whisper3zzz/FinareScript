@@ -115,6 +115,12 @@ planning is byte-stable and distinct producers do not collide through a short
 prefix. The host exposes that transaction at
 `POST /api/authoring/semantic-patch-plan`.
 
+AI tools wrap that same typed plan in
+`unifiedscript.ai-semantic-patch-proposal/v0.1`. Browser and native Slate
+clients review the server-produced semantic/C# diff, while the preview token
+binds the proposal identity before the existing transaction and reload path can
+commit it. See [AI_SEMANTIC_PROPOSALS.md](AI_SEMANTIC_PROPOSALS.md).
+
 Semantic Patch v0.22 added a bounded `moveStatement` operation for control-wire
 authoring. Dragging a node's single-path control output onto an occupied
 single-path statement control input

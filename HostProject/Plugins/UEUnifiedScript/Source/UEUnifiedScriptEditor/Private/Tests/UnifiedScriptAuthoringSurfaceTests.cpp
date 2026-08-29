@@ -1480,10 +1480,19 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         FUnifiedScriptAuthoringWorkbench::BuildSemanticPatchPlanUrl(TEXT("http://127.0.0.1:4173/")),
         FString(TEXT("http://127.0.0.1:4173/api/authoring/semantic-patch-plan")));
     TestEqual(
+        TEXT("Workbench AI proposal endpoint is normalized"),
+        FUnifiedScriptAuthoringWorkbench::BuildAiSemanticProposalUrl(TEXT("http://127.0.0.1:4173/")),
+        FString(TEXT("http://127.0.0.1:4173/api/authoring/ai-semantic-proposal")));
+    TestEqual(
         TEXT("Workbench derives the matching semantic preview endpoint"),
         FUnifiedScriptAuthoringWorkbench::BuildPreviewUrl(
             TEXT("http://127.0.0.1:4173/api/authoring/semantic-patch")),
         FString(TEXT("http://127.0.0.1:4173/api/authoring/preview/semantic-patch")));
+    TestEqual(
+        TEXT("Workbench derives the matching AI proposal preview endpoint"),
+        FUnifiedScriptAuthoringWorkbench::BuildPreviewUrl(
+            TEXT("http://127.0.0.1:4173/api/authoring/ai-semantic-proposal")),
+        FString(TEXT("http://127.0.0.1:4173/api/authoring/preview/ai-semantic-proposal")));
     TestEqual(
         TEXT("Workbench derives the grouped commit preview endpoint"),
         FUnifiedScriptAuthoringWorkbench::BuildPreviewUrl(
@@ -1892,6 +1901,20 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         1);
     TestEqual(TEXT("Workbench response replaces the Surface transactionally"),
         Workspace.Surface.GetActionCount(), 70);
+    const FString AiCommitJson = FString::Printf(
+        TEXT("{\"schemaVersion\":\"unifiedscript.ai-semantic-proposal-commit/v0.1\","
+             "\"proposalId\":\"us_0123456789abcdef0123456789abcdef\","
+             "\"workspace\":%s}"),
+        *WorkspaceJson);
+    FUnifiedScriptAuthoringWorkspaceResult AiWorkspace;
+    TestTrue(
+        *FString::Printf(TEXT("Workbench unwraps AI proposal commit responses: %s"), *Error),
+        FUnifiedScriptAuthoringWorkbench::ParseWorkspaceResponse(
+            AiCommitJson,
+            AiWorkspace,
+            Error));
+    TestEqual(TEXT("AI proposal commit retains the workspace revision"),
+        AiWorkspace.Revision, int64(2));
 
     const FString PreviewJson =
         TEXT("{\"schemaVersion\":\"unifiedscript.authoring-preview/v0.2\","
@@ -1939,6 +1962,25 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         Preview.SemanticSummary.ChangeCount, int64(1));
     TestEqual(TEXT("Preview retains semantic change category"),
         Preview.SemanticChanges[0].Category, FString(TEXT("value")));
+    const FString AiPreviewJson = FString::Printf(
+        TEXT("{\"schemaVersion\":\"unifiedscript.ai-semantic-proposal-preview/v0.1\","
+             "\"proposal\":{\"schemaVersion\":\"unifiedscript.ai-semantic-patch-proposal/v0.1\","
+             "\"proposalId\":\"us_0123456789abcdef0123456789abcdef\","
+             "\"title\":\"Raise minimum\"},\"preview\":%s}"),
+        *PreviewJson);
+    FUnifiedScriptAuthoringPreviewResult AiPreview;
+    TestTrue(
+        *FString::Printf(TEXT("Workbench unwraps AI proposal preview responses: %s"), *Error),
+        FUnifiedScriptAuthoringWorkbench::ParsePreviewResponse(
+            AiPreviewJson,
+            AiPreview,
+            Error));
+    TestEqual(TEXT("AI preview retains proposal identity"),
+        AiPreview.ProposalId,
+        FString(TEXT("us_0123456789abcdef0123456789abcdef")));
+    TestEqual(TEXT("AI preview retains proposal title"),
+        AiPreview.ProposalTitle,
+        FString(TEXT("Raise minimum")));
 
     const FString FailureJson =
         TEXT("{\"error\":{\"code\":\"UAW1003\",\"message\":\"rejected\"},"

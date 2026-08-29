@@ -212,14 +212,14 @@
       </section>
       <section class="ai-prompt-section">
         <h3>TRY AN AI PATCH</h3>
-        <label><textarea id="aiPrompt" rows="3">把第一个尚未暴露的状态改成 Instance Editable，并归入 Gameplay 分类。</textarea></label>
-        <button id="previewPatchButton" class="button primary" type="button">PREVIEW DECLARATION PATCH</button>
+        <label><textarea id="aiPrompt" rows="3">调整当前行为节点的值，并保持类型、稳定目标与旧值前置条件。</textarea></label>
+        <button id="previewPatchButton" class="button primary" type="button">GENERATE TYPED PROPOSAL</button>
         <div id="patchPreview" class="patch-preview">
-          <span>DECLARATION PATCH v0.1</span>
-          <strong id="patchPreviewSummary">等待生成类型化操作</strong>
-          <small>包含 source/configuration ID、目标 Semantic ID 与完整旧值前置条件</small>
+          <span>AI SEMANTIC PROPOSAL v0.1</span>
+          <strong id="patchPreviewSummary">选择可编辑行为节点后生成提案</strong>
+          <small>确定性 Proposal ID · Patch Plan v0.21 · 编译、语义 Diff 与事务门禁</small>
           <pre id="patchPreviewJson"></pre>
-          <button id="applyPreviewPatchButton" class="button secondary" type="button" disabled>APPLY TO SOURCE + CLR</button>
+          <button id="applyPreviewPatchButton" class="button secondary" type="button" disabled>REVIEW DIFF + COMMIT</button>
         </div>
       </section>
     </div>
