@@ -56,8 +56,10 @@ contain no failed declarative assertion.
 
 Runners that materialize untracked generated outputs declare every removable
 path in the catalog. The matrix rejects an undeclared path and only deletes a
-declared file below the clean comparison worktree; tracked changes remain the
-responsibility of the child runner's own transactional restore.
+declared file below the clean comparison worktree. Declared cleanup runs in a
+per-sample `finally` path, so a runner or assertion failure cannot leak temporary
+outputs into the next sample; tracked changes remain the responsibility of the
+child runner's own transactional restore.
 
 ## Run a focused sample
 

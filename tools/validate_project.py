@@ -875,6 +875,21 @@ def main() -> int:
     sample_runners = {
         sample["execution"]["runner"] for sample in sample_catalog["samples"]
     }
+    blockbreaker_cleanup = {
+        "Managed/BlockBreaker.UnifiedScript.asset.json",
+        "Managed/BlockBreaker.UnifiedScript.sourcemap.json",
+        "Managed/BlockBreaker.UnifiedScript.uschunk",
+        "Plugins/UEUnifiedScript/Source/UEUnifiedScriptRuntime/Private/Tests/Generated/UnifiedScriptBlockBreakerDataPlaneExtension.gen.h",
+        "Plugins/UEUnifiedScript/Source/UEUnifiedScriptRuntime/Private/Tests/UnifiedScriptDataPlaneExtensionTests.cpp",
+        "Plugins/UEUnifiedScript/Source/UEUnifiedScriptRuntime/Private/Tests/UnifiedScriptRuntimeBreadcrumbTests.cpp",
+        "Plugins/UEUnifiedScript/Source/UEUnifiedScriptRuntime/Private/Tests/UnifiedScriptRuntimeOwnershipTests.cpp",
+        "Plugins/UEUnifiedScript/Source/UEUnifiedScriptRuntime/Private/UnifiedScriptDataPlaneExtension.cpp",
+        "Plugins/UEUnifiedScript/Source/UEUnifiedScriptRuntime/Public/UnifiedScriptDataPlaneExtension.h",
+    }
+    blockbreaker_samples = {
+        sample["id"]: sample for sample in sample_catalog["samples"]
+        if sample["id"] in {"blockbreaker-gameplay", "blockbreaker-visual-code"}
+    }
     required_sample_categories = {
         "minimal",
         "gameplay",
@@ -904,6 +919,16 @@ def main() -> int:
         and "Remove-DeclaredUntrackedOutputs" in sample_matrix_runner
         and "cleanupUntracked" in sample_matrix_runner
         and "declaredCleanupPaths" in sample_matrix_runner
+        and "finally" in sample_matrix_runner
+        and set(blockbreaker_samples) == {
+            "blockbreaker-gameplay",
+            "blockbreaker-visual-code",
+        }
+        and all(
+            set(sample["execution"]["cleanupUntracked"])
+            == blockbreaker_cleanup
+            for sample in blockbreaker_samples.values()
+        )
         and sample_runners
         == {
             "tools/run-unifiedscript-alpha-acceptance.ps1",
@@ -922,7 +947,7 @@ def main() -> int:
         and "M12.2 sample-matrix evidence" in roadmap_document
         and "sample-matrix.json` reports 5/5" in roadmap_document
         and "dedicated-server World host lifecycle" in product_release_notes,
-        "M12.2 five-category sample catalog, declarative assertions, aggregate runner, or support boundary is incomplete",
+        "M12.2 five-category sample catalog, isolated cleanup, declarative assertions, aggregate runner, or support boundary is incomplete",
     )
     checks.append(
         "M12.2 executes five versioned Unreal sample categories through one evidence matrix"

@@ -333,6 +333,14 @@ foreach ($sample in $samples) {
     }
 
     Write-Host "[sample:$($sample.id)] $($sample.title)"
+    $sampleFailure = $null
+    $evidencePath = $null
+    $evidence = $null
+    $assertionResults = @()
+    $declaredCleanupPaths = @(
+        $sample.execution.cleanupUntracked | Where-Object {
+            -not [string]::IsNullOrWhiteSpace([string]$_)
+        })
     try {
         $process = Invoke-SampleProcess `
             -Script $runner `
@@ -377,18 +385,37 @@ foreach ($sample in $samples) {
                     "$($_.path) actual=$($_.actual) expected=$($_.expected)"
                 }) -join '; '))
         }
-        $declaredCleanupPaths = @(
-            $sample.execution.cleanupUntracked | Where-Object {
-                -not [string]::IsNullOrWhiteSpace([string]$_)
-            })
+    } catch {
+        $sampleFailure = $_.Exception.Message
+    } finally {
         if ($declaredCleanupPaths.Count -gt 0) {
             $cleanupRoot = Join-Path $ComparisonRoot `
                 ([string]$sample.execution.cleanupRoot)
-            Remove-DeclaredUntrackedOutputs `
-                -Root $cleanupRoot `
-                -RelativePaths $declaredCleanupPaths
+            try {
+                Remove-DeclaredUntrackedOutputs `
+                    -Root $cleanupRoot `
+                    -RelativePaths $declaredCleanupPaths
+            } catch {
+                $cleanupFailure = "Cleanup failed: $($_.Exception.Message)"
+                $sampleFailure = if ([string]::IsNullOrWhiteSpace($sampleFailure)) {
+                    $cleanupFailure
+                } else { "$sampleFailure; $cleanupFailure" }
+            }
         }
-        Copy-Item -LiteralPath $evidencePath -Destination $archivedEvidencePath -Force
+    }
+
+    if ([string]::IsNullOrWhiteSpace($sampleFailure)) {
+        try {
+            Copy-Item `
+                -LiteralPath $evidencePath `
+                -Destination $archivedEvidencePath `
+                -Force
+        } catch {
+            $sampleFailure = "Evidence archival failed: $($_.Exception.Message)"
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($sampleFailure)) {
         $sampleRecords.Add([ordered]@{
             id = [string]$sample.id
             category = [string]$sample.category
@@ -412,7 +439,7 @@ foreach ($sample in $samples) {
         if ([bool]$sample.execution.producesReusableHostBuild) {
             $hostBuildReady = $true
         }
-    } catch {
+    } else {
         $sampleRecords.Add([ordered]@{
             id = [string]$sample.id
             category = [string]$sample.category
@@ -425,9 +452,9 @@ foreach ($sample in $samples) {
             assertions = @()
             guarantees = @($sample.guarantees)
             nonClaims = @($sample.nonClaims)
-            error = $_.Exception.Message
+            error = $sampleFailure
         })
-        Write-Warning "Sample '$($sample.id)' failed: $($_.Exception.Message)"
+        Write-Warning "Sample '$($sample.id)' failed: $sampleFailure"
     }
 }
 
