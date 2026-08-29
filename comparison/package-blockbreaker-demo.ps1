@@ -68,6 +68,23 @@ foreach ($required in @($gameAssembly, $gameDeps, $gameChunk)) {
     }
 }
 
+# Plugin synchronization can replace reflected headers without changing the
+# comparison project's own revision. Invalidate only this plugin's generated
+# UHT/build cache so packaging cannot compile current headers against stale
+# generated code from an earlier sample or source revision.
+$projectRootPrefix = [IO.Path]::GetFullPath($projectRoot).TrimEnd('\', '/') +
+    [IO.Path]::DirectorySeparatorChar
+$pluginIntermediate = [IO.Path]::GetFullPath((Join-Path `
+    $projectRoot 'Plugins\UEUnifiedScript\Intermediate'))
+if (-not $pluginIntermediate.StartsWith(
+        $projectRootPrefix,
+        [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Unsafe plugin Intermediate path: $pluginIntermediate"
+}
+if (Test-Path -LiteralPath $pluginIntermediate -PathType Container) {
+    Remove-Item -LiteralPath $pluginIntermediate -Recurse -Force
+}
+
 $runtimeCookDirectories = @(
     (Join-Path $projectRoot 'Content\UnifiedScript'),
     (Join-Path $projectRoot 'Content\BlockBreaker\Meshes'),
