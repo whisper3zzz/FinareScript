@@ -165,9 +165,15 @@ function Restore-CleanGitCheckoutSnapshot {
         throw "Unsafe comparison snapshot restore path: $resolvedSnapshot"
     }
 
-    $trackedPaths = @(
-        & git -C $resolvedRoot diff --name-only
-        & git -C $resolvedRoot diff --cached --name-only) |
+    $workingTreePaths = @(& git -C $resolvedRoot diff --name-only 2>$null)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Cannot inspect comparison working-tree changes: $resolvedRoot"
+    }
+    $indexPaths = @(& git -C $resolvedRoot diff --cached --name-only 2>$null)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Cannot inspect comparison index changes: $resolvedRoot"
+    }
+    $trackedPaths = @($workingTreePaths; $indexPaths) |
         Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
         Sort-Object -Unique
     foreach ($relativePath in $trackedPaths) {
@@ -191,7 +197,10 @@ function Restore-CleanGitCheckoutSnapshot {
     }
 
     $untrackedPaths = @(& git -C $resolvedRoot ls-files --others `
-        --exclude-standard)
+        --exclude-standard 2>$null)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Cannot inspect comparison untracked files: $resolvedRoot"
+    }
     foreach ($relativePath in $untrackedPaths) {
         $nativeRelative = [string]$relativePath -replace '/', '\'
         $target = [IO.Path]::GetFullPath((Join-Path $resolvedRoot $nativeRelative))
