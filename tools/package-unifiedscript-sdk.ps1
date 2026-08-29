@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [ValidatePattern('^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$')]
-    [string]$Version = '0.1.0-m6.3-alpha.1',
+    [string]$Version = '1.0.0-rc.1',
 
     [string]$OutputDirectory,
 
@@ -17,6 +17,77 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $pluginRoot = Join-Path $repoRoot 'HostProject\Plugins\UEUnifiedScript'
+$releaseManifestSource = Join-Path $repoRoot 'release\unifiedscript.release.json'
+if (-not (Test-Path -LiteralPath $releaseManifestSource -PathType Leaf)) {
+    throw "[USSDK1001] Required release manifest is missing: $releaseManifestSource"
+}
+$releaseManifest = Get-Content -LiteralPath $releaseManifestSource -Raw |
+    ConvertFrom-Json
+if ($releaseManifest.schemaVersion -ne 'unifiedscript.product-release/v0.1') {
+    throw "[USSDK1002] Unsupported product release manifest '$($releaseManifest.schemaVersion)'."
+}
+if ($releaseManifest.productVersion -ne $Version) {
+    throw (
+        "[USSDK1002] SDK version '$Version' does not match release manifest " +
+        "version '$($releaseManifest.productVersion)'.")
+}
+if ($releaseManifest.status -ne 'releaseCandidate' -or
+    $releaseManifest.channel -ne 'rc' -or
+    $releaseManifest.compatibility.platform -ne 'win-x64' -or
+    $releaseManifest.compatibility.engineFamily -ne '5.8' -or
+    $releaseManifest.compatibility.verifiedEngineVersion -ne '5.8.1' -or
+    $releaseManifest.compatibility.managedTargetFramework -ne 'net10.0') {
+    throw '[USSDK1002] Product release status or compatibility declaration is incomplete.'
+}
+$expectedArchiveName = "UnifiedScript-SDK-$Version-win-x64.zip"
+if ($releaseManifest.artifacts.sdkArchive -ne $expectedArchiveName -or
+    $releaseManifest.artifacts.pluginVersionName -ne $Version) {
+    throw '[USSDK1002] Product release artifact names do not match the requested SDK version.'
+}
+$requiredDocumentationCategories = @(
+    'index', 'sdk', 'onboarding', 'authoring', 'api', 'debugging',
+    'performance', 'packaging', 'upgrades', 'migration', 'support',
+    'releaseNotes')
+$releaseDocumentation = @($releaseManifest.documentation)
+if ($releaseDocumentation.Count -eq 0) {
+    throw '[USSDK1002] Product release documentation catalog is empty.'
+}
+$documentIds = [Collections.Generic.HashSet[string]]::new(
+    [StringComparer]::Ordinal)
+$documentNames = [Collections.Generic.HashSet[string]]::new(
+    [StringComparer]::OrdinalIgnoreCase)
+$documentationRoot = [IO.Path]::GetFullPath((Join-Path $repoRoot 'docs')).TrimEnd(
+    '\', '/') + [IO.Path]::DirectorySeparatorChar
+foreach ($document in $releaseDocumentation) {
+    if ([string]::IsNullOrWhiteSpace($document.id) -or
+        [string]::IsNullOrWhiteSpace($document.title) -or
+        [string]::IsNullOrWhiteSpace($document.category) -or
+        [string]::IsNullOrWhiteSpace($document.path) -or
+        -not $documentIds.Add([string]$document.id)) {
+        throw '[USSDK1002] Product release documentation IDs and fields must be unique and non-empty.'
+    }
+    $normalizedDocumentPath = ([string]$document.path).Replace('\', '/')
+    if ($normalizedDocumentPath -notmatch '^docs/[0-9A-Za-z_.-]+\.md$') {
+        throw "[USSDK1002] Unsafe release documentation path '$normalizedDocumentPath'."
+    }
+    $sourceDocument = [IO.Path]::GetFullPath((Join-Path $repoRoot $normalizedDocumentPath))
+    $documentName = [IO.Path]::GetFileName($sourceDocument)
+    if (-not $sourceDocument.StartsWith(
+            $documentationRoot,
+            [StringComparison]::OrdinalIgnoreCase) -or
+        -not (Test-Path -LiteralPath $sourceDocument -PathType Leaf) -or
+        -not $documentNames.Add($documentName)) {
+        throw "[USSDK1002] Missing, duplicate, or out-of-root release document '$normalizedDocumentPath'."
+    }
+}
+foreach ($category in $requiredDocumentationCategories) {
+    if ($category -notin @($releaseDocumentation.category)) {
+        throw "[USSDK1002] Release documentation category '$category' is missing."
+    }
+}
+if ($releaseManifest.releaseNotes -notin @($releaseDocumentation.path)) {
+    throw '[USSDK1002] Release notes must be part of the published documentation catalog.'
+}
 $outputRoot = if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
     Join-Path $repoRoot 'artifacts\sdk'
 } elseif ([IO.Path]::IsPathRooted($OutputDirectory)) {
@@ -229,6 +300,14 @@ try {
     $pluginDescriptor = Get-Content `
         -LiteralPath (Join-Path $pluginRoot 'UEUnifiedScript.uplugin') `
         -Raw | ConvertFrom-Json
+    if ([int]$pluginDescriptor.Version -ne
+            [int]$releaseManifest.artifacts.pluginVersion -or
+        $pluginDescriptor.VersionName -ne
+            [string]$releaseManifest.artifacts.pluginVersionName) {
+        Throw-SdkError `
+            'USSDK1002' `
+            'Source plugin descriptor does not match the product release manifest.'
+    }
     $pluginDescriptor.VersionName = $Version
     $pluginDescriptor.Installed = $true
     [IO.File]::WriteAllText(
@@ -299,20 +378,14 @@ try {
         -Destination (Join-Path $sdkRoot 'Authoring\Workbench')
     $documentationDirectory = Join-Path $sdkRoot 'Documentation'
     New-Item -ItemType Directory -Force -Path $documentationDirectory | Out-Null
-    foreach ($document in @(
-        'UNREAL_SDK.md',
-        'UNREAL_FIRST_SCRIPT.md',
-        'UNREAL_ONBOARDING.md',
-        'UNREAL_API_CONTRACT.md',
-        'UNREAL_DEPLOYMENT.md',
-        'VERSIONING_AND_UPGRADES.md',
-        'DIAGNOSTICS_BUNDLES.md',
-        'COMPILED_CHUNKS.md')) {
-        $source = Join-Path $repoRoot "docs\$document"
-        if (Test-Path -LiteralPath $source) {
-            Copy-Item -LiteralPath $source -Destination $documentationDirectory -Force
-        }
+    foreach ($document in $releaseDocumentation) {
+        $source = Join-Path $repoRoot ([string]$document.path)
+        Copy-Item -LiteralPath $source -Destination $documentationDirectory -Force
     }
+    Copy-Item `
+        -LiteralPath $releaseManifestSource `
+        -Destination (Join-Path $sdkRoot 'release-manifest.json') `
+        -Force
 
     foreach ($requiredPayload in @(
         'Tools\setup-unreal-project.ps1',
@@ -330,6 +403,14 @@ try {
         'Managed\Runtime\UnifiedScript.Core.dll',
         'Managed\Runtime\UnifiedScript.Unreal.dll',
         'Managed\Runtime\UnifiedScript.Unreal.deps.json',
+        'release-manifest.json',
+        'Documentation\DOCUMENTATION.md',
+        'Documentation\RELEASE_NOTES_1_0_RC1.md',
+        'Documentation\AUTHORING_SURFACE.md',
+        'Documentation\RUNTIME_DIAGNOSTICS.md',
+        'Documentation\PERFORMANCE_WORKLOAD_SUITE.md',
+        'Documentation\UNREAL_RELEASE.md',
+        'Documentation\PUERTS_MIGRATION.md',
         'Plugins\UEUnifiedScript\UEUnifiedScript.uplugin',
         'Plugins\UEUnifiedScript\Source\UEUnifiedScriptRuntime',
         'Plugins\UEUnifiedScript\Source\UEUnifiedScriptEditor',
@@ -393,6 +474,14 @@ try {
                 deployment = 'unifiedscript.unreal-script-deployment/v0.1'
             }
         }
+        release = [ordered]@{
+            schemaVersion = [string]$releaseManifest.schemaVersion
+            channel = [string]$releaseManifest.channel
+            status = [string]$releaseManifest.status
+            verifiedEngineVersion = [string]$releaseManifest.compatibility.verifiedEngineVersion
+            releaseNotes = [string]$releaseManifest.releaseNotes
+            documentationEntryCount = $releaseDocumentation.Count
+        }
         payload = [ordered]@{
             fileCount = $payloadFiles.Count
             files = $payloadFiles
@@ -414,6 +503,9 @@ try {
         schemaVersion = 'unifiedscript.sdk-package-report/v0.1'
         status = 'passed'
         sdkVersion = $Version
+        releaseManifestSchemaVersion = [string]$releaseManifest.schemaVersion
+        releaseStatus = [string]$releaseManifest.status
+        documentationEntryCount = $releaseDocumentation.Count
         sourceRevision = $sourceRevision
         archive = $archivePath
         archiveSha256 = $archiveHash

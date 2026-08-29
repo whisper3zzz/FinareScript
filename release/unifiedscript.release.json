@@ -1,0 +1,174 @@
+{
+  "schemaVersion": "unifiedscript.product-release/v0.1",
+  "productVersion": "1.0.0-rc.1",
+  "channel": "rc",
+  "status": "releaseCandidate",
+  "productName": "UnifiedScript",
+  "compatibility": {
+    "platform": "win-x64",
+    "engineFamily": "5.8",
+    "verifiedEngineVersion": "5.8.1",
+    "managedTargetFramework": "net10.0"
+  },
+  "artifacts": {
+    "sdkArchive": "UnifiedScript-SDK-1.0.0-rc.1-win-x64.zip",
+    "pluginDescriptor": "Plugins/UEUnifiedScript/UEUnifiedScript.uplugin",
+    "pluginVersion": 1000001,
+    "pluginVersionName": "1.0.0-rc.1"
+  },
+  "releaseNotes": "docs/RELEASE_NOTES_1_0_RC1.md",
+  "documentation": [
+    {
+      "id": "index",
+      "category": "index",
+      "title": "Documentation index",
+      "path": "docs/DOCUMENTATION.md"
+    },
+    {
+      "id": "sdk",
+      "category": "sdk",
+      "title": "SDK distribution and installation",
+      "path": "docs/UNREAL_SDK.md"
+    },
+    {
+      "id": "first-script",
+      "category": "onboarding",
+      "title": "First script walkthrough",
+      "path": "docs/UNREAL_FIRST_SCRIPT.md"
+    },
+    {
+      "id": "onboarding",
+      "category": "onboarding",
+      "title": "Project onboarding",
+      "path": "docs/UNREAL_ONBOARDING.md"
+    },
+    {
+      "id": "deployment",
+      "category": "onboarding",
+      "title": "Script deployment",
+      "path": "docs/UNREAL_DEPLOYMENT.md"
+    },
+    {
+      "id": "authoring-model",
+      "category": "authoring",
+      "title": "Visual and C# authoring model",
+      "path": "docs/VISUAL_AUTHORING_MODEL.md"
+    },
+    {
+      "id": "authoring-surface",
+      "category": "authoring",
+      "title": "Native Authoring Surface",
+      "path": "docs/AUTHORING_SURFACE.md"
+    },
+    {
+      "id": "authoring-diagnostics",
+      "category": "authoring",
+      "title": "Authoring diagnostics",
+      "path": "docs/AUTHORING_DIAGNOSTICS.md"
+    },
+    {
+      "id": "api-contract",
+      "category": "api",
+      "title": "Unreal API Contract",
+      "path": "docs/UNREAL_API_CONTRACT.md"
+    },
+    {
+      "id": "runtime-diagnostics",
+      "category": "debugging",
+      "title": "Runtime diagnostics",
+      "path": "docs/RUNTIME_DIAGNOSTICS.md"
+    },
+    {
+      "id": "native-debug",
+      "category": "debugging",
+      "title": "Native debug workbench",
+      "path": "docs/NATIVE_DEBUG_WORKBENCH.md"
+    },
+    {
+      "id": "hot-reload",
+      "category": "debugging",
+      "title": "Hot reload reliability",
+      "path": "docs/HOT_RELOAD_RELIABILITY.md"
+    },
+    {
+      "id": "gameplay-profiler",
+      "category": "performance",
+      "title": "Gameplay and bridge profiler",
+      "path": "docs/GAMEPLAY_PROFILER.md"
+    },
+    {
+      "id": "performance-suite",
+      "category": "performance",
+      "title": "Matched performance workload suite",
+      "path": "docs/PERFORMANCE_WORKLOAD_SUITE.md"
+    },
+    {
+      "id": "unreal-performance",
+      "category": "performance",
+      "title": "Unreal performance gates",
+      "path": "docs/UNREAL_PERFORMANCE.md"
+    },
+    {
+      "id": "packaging",
+      "category": "packaging",
+      "title": "Win64 release packaging",
+      "path": "docs/UNREAL_RELEASE.md"
+    },
+    {
+      "id": "compatibility",
+      "category": "packaging",
+      "title": "Compatibility matrix",
+      "path": "docs/UNREAL_COMPATIBILITY_MATRIX.md"
+    },
+    {
+      "id": "compiled-chunks",
+      "category": "packaging",
+      "title": "Compiled program chunks",
+      "path": "docs/COMPILED_CHUNKS.md"
+    },
+    {
+      "id": "upgrades",
+      "category": "upgrades",
+      "title": "Versioning and upgrades",
+      "path": "docs/VERSIONING_AND_UPGRADES.md"
+    },
+    {
+      "id": "migration",
+      "category": "migration",
+      "title": "Puerts migration",
+      "path": "docs/PUERTS_MIGRATION.md"
+    },
+    {
+      "id": "diagnostics-bundles",
+      "category": "support",
+      "title": "Privacy-safe diagnostics bundles",
+      "path": "docs/DIAGNOSTICS_BUNDLES.md"
+    },
+    {
+      "id": "release-notes",
+      "category": "releaseNotes",
+      "title": "UnifiedScript 1.0 RC1 release notes",
+      "path": "docs/RELEASE_NOTES_1_0_RC1.md"
+    }
+  ],
+  "acceptance": {
+    "managedTests": 600,
+    "repositoryInvariants": 85,
+    "unrealAutomationTests": 18,
+    "requiredGates": [
+      "managed-tests",
+      "repository-validator",
+      "editor-development-build",
+      "editor-automation",
+      "source-development-shipping-package",
+      "deterministic-sdk-package",
+      "clean-project-sdk-install",
+      "clean-project-development-package"
+    ]
+  },
+  "knownLimitations": [
+    "The declared packaged runtime target is Win64 on Unreal Engine 5.8.1.",
+    "Puerts migration manifests do not rewrite project spawn or asset routing.",
+    "Visual authoring supports the documented restricted C# profile rather than arbitrary C# syntax."
+  ]
+}

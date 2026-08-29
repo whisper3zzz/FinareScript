@@ -1,6 +1,6 @@
 # Unreal SDK distribution
 
-M6.3 packages UnifiedScript as a deterministic Windows SDK that can be used
+UnifiedScript 1.0 RC1 packages the product as a deterministic Windows SDK that can be used
 without a UnifiedScript source checkout. The archive contains the source
 plugin, framework-dependent managed runtime, CLI, onboarding and installation
 tools, versioned schema examples, starter templates, and documentation. Native
@@ -15,7 +15,7 @@ From a UnifiedScript source checkout:
 ```powershell
 powershell -ExecutionPolicy Bypass `
   -File tools/package-unifiedscript-sdk.ps1 `
-  -Version 0.1.0-m6.3-alpha.1 `
+  -Version 1.0.0-rc.1 `
   -EngineRoot D:\UE_5.8
 ```
 
@@ -37,7 +37,10 @@ The archive has one top-level `UnifiedScript-SDK-<version>-win-x64` directory:
 - `Tools`: the SDK installer and the same project onboarding entry point used
   by the source repository;
 - `Schemas`, `Templates`, and `Documentation`: the machine-readable
-  compatibility policy, versioned examples, upgrade guide, and adoption material;
+  compatibility policy, versioned examples, and release-owned onboarding,
+  authoring, API, debugging, performance, packaging, upgrade, and migration guides;
+- `release-manifest.json`: the product version, release channel, exact verified
+  target, artifact names, documentation catalog, acceptance gates, and known limits;
 - `sdk-manifest.json`: compatibility and per-file integrity contract.
 
 Packaging fails with `USSDK10xx`/`USSDK11xx`/`USSDK12xx` before producing an
@@ -88,7 +91,7 @@ engine family, managed target, and ABI contract before invoking Unreal.
 Extract the ZIP and run its installer:
 
 ```powershell
-$sdk = 'D:\SDK\UnifiedScript-SDK-0.1.0-m6.3-alpha.1-win-x64'
+$sdk = 'D:\SDK\UnifiedScript-SDK-1.0.0-rc.1-win-x64'
 powershell -ExecutionPolicy Bypass `
   -File "$sdk\Tools\install-unifiedscript-sdk.ps1" `
   -SdkRoot $sdk `

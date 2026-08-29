@@ -19,7 +19,7 @@ Add this entry to the `.uproject` `Plugins` array before installation:
 Extract the SDK and install it:
 
 ```powershell
-$sdk = 'D:\SDK\UnifiedScript-SDK-0.1.0-m6.3-alpha.1-win-x64'
+$sdk = 'D:\SDK\UnifiedScript-SDK-1.0.0-rc.1-win-x64'
 $project = 'D:\Project\Game\Game.uproject'
 
 powershell -ExecutionPolicy Bypass `

@@ -16,6 +16,13 @@ thunks, and versioned shared/batched ABI tables. A future faster program image
 therefore evolves the compiled chunk without replacing the readable source
 contract or introducing a second language VM.
 
+The SDK root also carries `release-manifest.json`, copied byte-for-byte from
+`release/unifiedscript.release.json`. It binds the product version and channel
+to the plugin version, archive name, exact verified engine/platform, release
+notes, curated documentation catalog, and acceptance gates. SDK packaging
+rejects a caller-supplied version or source plugin descriptor that disagrees
+with that release manifest.
+
 ## Compatibility actions
 
 Each family declares exactly one upgrade strategy:

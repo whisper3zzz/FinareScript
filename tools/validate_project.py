@@ -84,6 +84,8 @@ DOCUMENTS = [
     ROOT / "docs" / "UNREAL_DEPLOYMENT.md",
     ROOT / "docs" / "UNREAL_ONBOARDING.md",
     ROOT / "docs" / "UNREAL_SDK.md",
+    ROOT / "docs" / "DOCUMENTATION.md",
+    ROOT / "docs" / "RELEASE_NOTES_1_0_RC1.md",
     ROOT / "docs" / "UNREAL_RELEASE.md",
     ROOT / "docs" / "UNREAL_COMPATIBILITY_MATRIX.md",
     ROOT / "docs" / "VERSIONING_AND_UPGRADES.md",
@@ -649,7 +651,8 @@ def main() -> int:
         and "measure-readytorun-chunk.ps1" in sdk_package
         and "measure-generation-prewarm.ps1" in sdk_package
         and "generation-prewarm-probe.cs" in sdk_package
-        and "COMPILED_CHUNKS.md" in sdk_package
+        and "release\\unifiedscript.release.json" in sdk_package
+        and "$releaseDocumentation" in sdk_package
         and "Engine-version-specific plugin Binaries leaked" in sdk_package
         and "Assert-NoMachinePathLeak" in sdk_package
         and "unifiedscript.sdk-manifest/v0.1" in sdk_install
@@ -662,6 +665,105 @@ def main() -> int:
         "Deterministic SDK packaging, compatibility, or verified installation is missing",
     )
     checks.append("SDK archive is deterministic, hashed, compatible, and installable")
+
+    product_release_path = ROOT / "release" / "unifiedscript.release.json"
+    product_documentation_path = ROOT / "docs" / "DOCUMENTATION.md"
+    product_release_notes_path = ROOT / "docs" / "RELEASE_NOTES_1_0_RC1.md"
+    product_plugin_path = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript"
+        / "UEUnifiedScript.uplugin"
+    )
+    compatibility_matrix_runner_path = (
+        ROOT / "tools" / "run-unreal-compatibility-matrix.ps1"
+    )
+    for path in [
+        product_release_path,
+        product_documentation_path,
+        product_release_notes_path,
+        product_plugin_path,
+        compatibility_matrix_runner_path,
+    ]:
+        require(path.is_file(), f"Missing M12.2 release-surface artifact: {path}")
+    with product_release_path.open("r", encoding="utf-8") as handle:
+        product_release = json.load(handle)
+    with product_plugin_path.open("r", encoding="utf-8") as handle:
+        product_plugin = json.load(handle)
+    product_documentation = product_documentation_path.read_text(encoding="utf-8")
+    product_release_notes = product_release_notes_path.read_text(encoding="utf-8")
+    compatibility_matrix_runner = compatibility_matrix_runner_path.read_text(
+        encoding="utf-8"
+    )
+    release_documents = product_release["documentation"]
+    release_document_ids = [document["id"] for document in release_documents]
+    release_document_paths = [document["path"] for document in release_documents]
+    release_document_categories = {
+        document["category"] for document in release_documents
+    }
+    required_release_categories = {
+        "index",
+        "sdk",
+        "onboarding",
+        "authoring",
+        "api",
+        "debugging",
+        "performance",
+        "packaging",
+        "upgrades",
+        "migration",
+        "support",
+        "releaseNotes",
+    }
+    require(
+        product_release["schemaVersion"]
+        == "unifiedscript.product-release/v0.1"
+        and product_release["productVersion"] == "1.0.0-rc.1"
+        and product_release["channel"] == "rc"
+        and product_release["status"] == "releaseCandidate"
+        and product_release["compatibility"]
+        == {
+            "platform": "win-x64",
+            "engineFamily": "5.8",
+            "verifiedEngineVersion": "5.8.1",
+            "managedTargetFramework": "net10.0",
+        }
+        and product_release["artifacts"]["sdkArchive"]
+        == "UnifiedScript-SDK-1.0.0-rc.1-win-x64.zip"
+        and product_release["artifacts"]["pluginVersion"] == 1000001
+        and product_plugin["Version"] == 1000001
+        and product_plugin["VersionName"] == "1.0.0-rc.1"
+        and len(release_documents) == 22
+        and len(set(release_document_ids)) == len(release_document_ids)
+        and len(set(release_document_paths)) == len(release_document_paths)
+        and required_release_categories <= release_document_categories
+        and all(
+            path.startswith("docs/")
+            and (ROOT / path).is_file()
+            and (ROOT / path).resolve().parent == (ROOT / "docs").resolve()
+            for path in release_document_paths
+        )
+        and product_release["releaseNotes"] in release_document_paths
+        and product_release["acceptance"]["managedTests"] == 600
+        and product_release["acceptance"]["repositoryInvariants"] == 85
+        and product_release["acceptance"]["unrealAutomationTests"] == 18
+        and "release-manifest.json" in sdk_package
+        and "$releaseDocumentation" in sdk_package
+        and "documentationEntryCount" in sdk_package
+        and "does not match release manifest" in sdk_package
+        and "1.0.0-rc.1" in compatibility_matrix_runner
+        and "$ExpectedAutomationTests = 18" in compatibility_matrix_runner
+        and "releaseStatus -ne 'releaseCandidate'" in compatibility_matrix_runner
+        and "Start here" in product_documentation
+        and "Authoring and API" in product_documentation
+        and "Debugging and profiling" in product_documentation
+        and "Packaging, upgrades, and migration" in product_documentation
+        and "Other platforms and UE versions are not"
+        in product_release_notes
+        and "- Next slice: **M12.2" in roadmap_document,
+        "M12.2 product release manifest, versioned SDK, documentation catalog, or compatibility gate is incomplete",
+    )
+    checks.append(
+        "M12.2 binds the 1.0 RC1 plugin, SDK, release notes, and complete documentation catalog"
+    )
 
     compatibility_policy_path = (
         ROOT / "schemas" / "unifiedscript.compatibility-policy.v0.1.json"
@@ -846,7 +948,7 @@ def main() -> int:
         and "ordinary but proprietary" in diagnostics_tests
         and "CliUsesBundledPolicyAndWritesTheSameArchiveTwice" in diagnostics_tests
         and "diagnostics-policy.v0.1.json" in sdk_package
-        and "DIAGNOSTICS_BUNDLES.md" in sdk_package
+        and "docs/DIAGNOSTICS_BUNDLES.md" in release_document_paths
         and "redacted by default" in diagnostics_guide
         and "v0.1 has no flag" in diagnostics_guide,
         "Privacy-safe diagnostics policy, bounded collector, deterministic archive, SDK payload, or guide is missing",

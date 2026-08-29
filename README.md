@@ -146,11 +146,12 @@ Create a repository-independent alpha SDK with:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools/package-unifiedscript-sdk.ps1 `
-  -Version 0.1.0-m6.3-alpha.1 -EngineRoot D:\UE_5.8
+  -Version 1.0.0-rc.1 -EngineRoot D:\UE_5.8
 ```
 
 The deterministic ZIP contains a hash-verified installer, source plugin,
-managed runtime, CLI, schemas, templates, and documentation while excluding
+managed runtime, CLI, schemas, templates, the product release manifest, and
+the complete release-owned documentation catalog while excluding
 engine-specific native outputs. See [Unreal SDK distribution](docs/UNREAL_SDK.md).
 To take a newly installed C++ project from no scripts to editor play, visual
 editing, hot reload, and packaged play, follow

@@ -3,11 +3,11 @@ param(
     [string]$EngineRoot = $env:UNIFIEDSCRIPT_UE_ROOT,
     [string]$OutputDirectory,
     [ValidatePattern('^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$')]
-    [string]$SdkVersion = '0.1.0-m11.2-rc.1',
+    [string]$SdkVersion = '1.0.0-rc.1',
     [ValidateRange(10, 300)]
     [int]$SmokeTimeoutSeconds = 90,
     [ValidateRange(1, 256)]
-    [int]$ExpectedAutomationTests = 17
+    [int]$ExpectedAutomationTests = 18
 )
 
 $ErrorActionPreference = 'Stop'
@@ -232,6 +232,10 @@ try {
     $sdkReportA = Get-Content -LiteralPath $sdkReportAPath -Raw | ConvertFrom-Json
     $sdkReportB = Get-Content -LiteralPath $sdkReportBPath -Raw | ConvertFrom-Json
     if ($sdkReportA.status -ne 'passed' -or $sdkReportB.status -ne 'passed' -or
+        $sdkReportA.releaseManifestSchemaVersion -ne
+            'unifiedscript.product-release/v0.1' -or
+        $sdkReportA.releaseStatus -ne 'releaseCandidate' -or
+        [int]$sdkReportA.documentationEntryCount -lt 22 -or
         $sdkReportA.archiveSha256 -ne $sdkReportB.archiveSha256 -or
         [long]$sdkReportA.archiveBytes -ne [long]$sdkReportB.archiveBytes -or
         [int]$sdkReportA.payloadFileCount -ne [int]$sdkReportB.payloadFileCount) {
