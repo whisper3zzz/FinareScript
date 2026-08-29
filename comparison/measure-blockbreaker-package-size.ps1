@@ -4,13 +4,20 @@ param(
     [string]$ComparisonRoot = 'D:\Project\UEUnifiedScriptComparison',
     [ValidateSet('Development', 'Shipping')]
     [string]$Configuration = 'Development',
+    [string]$OutputDirectory,
     [switch]$SkipBuild
 )
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $runUat = Join-Path $EngineRoot 'Engine\Build\BatchFiles\RunUAT.bat'
-$artifactRoot = Join-Path $repoRoot 'artifacts\comparison\package-size'
+$artifactRoot = if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
+    Join-Path $repoRoot 'artifacts\comparison\package-size'
+} elseif ([IO.Path]::IsPathRooted($OutputDirectory)) {
+    [IO.Path]::GetFullPath($OutputDirectory)
+} else {
+    [IO.Path]::GetFullPath((Join-Path (Get-Location).Path $OutputDirectory))
+}
 $runId = Get-Date -Format 'yyyyMMdd-HHmmss'
 $runRoot = Join-Path $artifactRoot $runId
 $map = '/Game/BlockBreaker/Maps/TutorialMap'

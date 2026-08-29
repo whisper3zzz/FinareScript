@@ -188,11 +188,21 @@ try {
             if ([string]::IsNullOrWhiteSpace($ComparisonRoot)) {
                 throw "CI lane '$Lane' requires -ComparisonRoot or UNIFIEDSCRIPT_COMPARISON_ROOT."
             }
+            $packageSizeDirectory = Join-Path $runDirectory 'package-size'
+            $packageMetricsPath = Join-Path $packageSizeDirectory 'latest.json'
+            Invoke-CiPhase -Name 'matched-package-size' -FilePath $powershell -Arguments @(
+                '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+                (Join-Path $repoRoot 'comparison\measure-blockbreaker-package-size.ps1'),
+                '-EngineRoot', $EngineRoot,
+                '-ComparisonRoot', ([IO.Path]::GetFullPath($ComparisonRoot)),
+                '-OutputDirectory', $packageSizeDirectory) `
+                -Artifacts @($packageMetricsPath)
             Invoke-CiPhase -Name 'matched-workload-performance' -FilePath $powershell -Arguments @(
                 '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
                 (Join-Path $repoRoot 'comparison\run-complete-workload-suite.ps1'),
                 '-EngineRoot', $EngineRoot,
                 '-ComparisonRoot', ([IO.Path]::GetFullPath($ComparisonRoot)),
+                '-PackageMetricsPath', $packageMetricsPath,
                 '-Force',
                 '-RequireComplete')
             $suiteRoot = Join-Path $repoRoot 'artifacts\comparison\suite\v1.1.0'
