@@ -763,7 +763,10 @@ def main() -> int:
         and "Packaging, upgrades, and migration" in product_documentation
         and "Other platforms and UE versions are not"
         in product_release_notes
-        and "- Next slice: **M12.2" in roadmap_document,
+        and "- [x] publish versioned plugin/SDK archives" in roadmap_document
+        and "- Next slice: **M12.2 — automated sample matrix" in roadmap_document
+        and "M12.2 release-surface evidence" in roadmap_document
+        and "sourceTreeDirty=false" in roadmap_document,
         "M12.2 product release manifest, versioned SDK, documentation catalog, or compatibility gate is incomplete",
     )
     checks.append(
