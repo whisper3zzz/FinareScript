@@ -302,8 +302,12 @@ if ($RunUnreal) {
         'Managed/BlockBreaker.UnifiedScript.asset.json',
         'Managed/BlockBreaker.UnifiedScript.sourcemap.json',
         'Managed/BlockBreaker.UnifiedScript.uschunk',
+        'Plugins/UEUnifiedScript/Source/UEUnifiedScriptRuntime/Private/Tests/Generated/UnifiedScriptBlockBreakerDataPlaneExtension.gen.h',
+        'Plugins/UEUnifiedScript/Source/UEUnifiedScriptRuntime/Private/Tests/UnifiedScriptDataPlaneExtensionTests.cpp',
         'Plugins/UEUnifiedScript/Source/UEUnifiedScriptRuntime/Private/Tests/UnifiedScriptRuntimeBreadcrumbTests.cpp',
-        'Plugins/UEUnifiedScript/Source/UEUnifiedScriptRuntime/Private/Tests/UnifiedScriptRuntimeOwnershipTests.cpp'
+        'Plugins/UEUnifiedScript/Source/UEUnifiedScriptRuntime/Private/Tests/UnifiedScriptRuntimeOwnershipTests.cpp',
+        'Plugins/UEUnifiedScript/Source/UEUnifiedScriptRuntime/Private/UnifiedScriptDataPlaneExtension.cpp',
+        'Plugins/UEUnifiedScript/Source/UEUnifiedScriptRuntime/Public/UnifiedScriptDataPlaneExtension.h'
     )
     & git -C $targetRoot archive --format=zip "--output=$targetArchive" HEAD
     if ($LASTEXITCODE -ne 0) {
