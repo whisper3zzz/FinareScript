@@ -37,6 +37,13 @@ UnifiedScript/Puerts workload budget; microbenchmarks and stale child reports
 cannot substitute for the release performance gate. Dirty-source modes are
 diagnostic-only and cannot emit the strict `passed` verdict.
 
+The frozen clean-revision run at `5be7dde` passed all 15 required gates. It
+includes 619 managed tests, 92 repository invariants, 19 UE Automation tests,
+four declared compatibility/package rows, five executable sample categories,
+three project templates, and all 54 scheduled UnifiedScript/Puerts captures.
+The authoritative local evidence is
+`artifacts/release-readiness/m12-final-5be7dde/release-readiness.json`.
+
 ## What is ready
 
 - A source-distributed Unreal plugin, managed runtime, CLI, schemas, templates,
@@ -113,3 +120,12 @@ release-owned guide set.
   `WindowsServer` target.
 - Project templates are reviewed starting points; they do not generate maps,
   replicated authority policy, project-native classes, or game-specific assets.
+- The qualified weighted performance result is not a claim that every path is
+  faster. In the frozen suite, scalar bridge calls were 1.087774x Puerts and the
+  resource/spawn flow was 1.239108x Puerts. The dedicated reload workload was
+  9.108265x Puerts and is excluded from the broad weighted claim because the
+  CoreCLR generation replacement and Puerts module-cache mechanisms differ.
+- BlockBreaker gameplay medians favored UnifiedScript (frame ratio 0.937981,
+  bridge ratio 0.415071), while its diagnostic reload field was 62.205199 ms
+  versus 0.131797 ms for Puerts. Reload latency and experience remain explicit
+  post-RC1 optimization work.

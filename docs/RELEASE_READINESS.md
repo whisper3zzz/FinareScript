@@ -46,3 +46,29 @@ clean source/comparison states preserved and all evidence bound to one revision.
 
 Each phase owns a log and child report below a unique output directory. Retry
 into a new directory so old artifacts cannot satisfy a failed run.
+
+## Frozen RC1 acceptance
+
+The strict acceptance run completed on 2026-08-29 from clean source revision
+`5be7ddeb767cf2fb67444d5ed93236a40e409764`. Its authoritative report is
+`artifacts/release-readiness/m12-final-5be7dde/release-readiness.json`:
+
+- status `passed`, 15/15 required gates, no failed or planned gates;
+- 619/619 managed tests, 92/92 repository invariants, and 19/19 UE Automation
+  tests;
+- Editor Development, source Game Development/Shipping, and SDK-installed Game
+  Development rows passed on UE 5.8.1 Win64;
+- five sample categories and three project templates passed;
+- repeated SDK archives were byte-identical with SHA-256
+  `2fdde4bed0f32b525c11d03c838002553ed611e83beabd17363cfb3d3929c7cd`;
+- the complete 54-slot, nine-workload comparison qualified at weighted ratio
+  0.563208 against the 0.95 maximum;
+- packaged BlockBreaker measured 1,033,732,983 bytes versus Puerts
+  1,009,756,057 bytes, ratio 1.023745 against the 1.05 maximum.
+
+The source checkout and the frozen UnifiedScript, source, and Puerts comparison
+checkouts were clean before and after the run. The Windows PowerShell 5.1 lane
+uses long-path-safe package enumeration and snapshot cleanup, and restores the
+comparison checkout on both success and failure. This evidence accepts the
+local `1.0.0-rc.1` candidate; it does not claim remote publication or support
+outside UE 5.8.1 Win64.

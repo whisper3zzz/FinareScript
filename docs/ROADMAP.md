@@ -48,8 +48,8 @@ current cursor, validate it, and advance this document.
 
 Last refreshed: **2026-08-29**
 
-- Active milestone: **M12 — Migration ecosystem and UnifiedScript 1.0**
-- Next slice: **M12 acceptance closure and 1.0 release-readiness audit**
+- Active milestone: **Paused after M12 — local `1.0.0-rc.1` acceptance complete**
+- Next slice when resumed: **M13.1 — external real-project pilot and field-adoption hardening**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -60,21 +60,21 @@ machine-local unless an artifact explicitly says otherwise.
 
 | Gate | Verified result |
 | --- | --- |
-| Runtime source baseline | `810913d` (`perf: remove benchmark world log pollution`) |
-| UnifiedScript comparison source | `5cf323e` (`perf: sync representative workload host`) |
+| Runtime source baseline | `5be7dde` (`fix: remove CI snapshots with long paths`) |
+| UnifiedScript comparison source | `d2f1fec` (clean frozen BlockBreaker UnifiedScript acceptance revision) |
 | Puerts comparison source | `be399cb` (`perf: register benchmark world context`) |
-| Managed tests | 600 / 600 passed |
-| Repository validator | 86 / 86 passed |
+| Managed tests | 619 / 619 passed |
+| Repository validator | 92 / 92 passed |
 | UE 5.8.1 native build | passed |
-| `UnifiedScript.Unreal` Automation | 18 / 18 passed, including bounded crash breadcrumbs, failure containment, deterministic World shutdown, workload collectors, gameplay-profiler attribution, Authoring Surface, live World semantic pause/step/reload/detach, repeated success/failure hot-reload leak coverage, and Puerts/UnifiedScript lifecycle ownership arbitration |
+| `UnifiedScript.Unreal` Automation | 19 / 19 passed, including bounded crash breadcrumbs, failure containment, deterministic World shutdown, workload collectors, gameplay-profiler attribution, Authoring Surface, live World semantic pause/step/reload/detach, repeated success/failure hot-reload leak coverage, Puerts/UnifiedScript lifecycle ownership arbitration, and generated data-plane extension registry coverage |
 | M10.2 generated-channel profile | 1,024 rows x 3 median samples: container binding 25,371.973 ns/row, generated snapshot 1.270 ns/row (ratio 0.000050), buffered events 0.586 ns/row, zero managed allocation |
 | Representative workload suite | 54 / 54 scheduled captures; nine workloads, three trials, two runtimes, matched machine/build identity, alternating runtime order |
 | BlockBreaker workload | 10,000 frames, three trials, one shot, one hit, two command completions per trial |
 | Gameplay boundary | generated ABI v3 fast/CallFrame path, zero legacy calls |
-| M10.3 weighted suite | qualified at 0.555769 versus the 0.95 maximum; all 14 regression gates passed |
-| Matched BlockBreaker frame median | UnifiedScript 0.4340 ms; Puerts 0.4740 ms; ratio 0.915612; p95/p99 ratios 0.907923 / 0.916272 |
-| Matched BlockBreaker bridge median | UnifiedScript 122.1483 ms; Puerts 328.9069 ms; ratio 0.371377; calls and logical bytes are both 20% of Puerts |
-| Matched package size | UnifiedScript 1,033,027,093 bytes; Puerts 1,009,681,817 bytes; ratio 1.023121 |
+| M10.3 weighted suite | qualified at 0.563208 versus the 0.95 maximum; all 14 regression gates passed |
+| Matched BlockBreaker frame median | UnifiedScript 0.3902 ms; Puerts 0.4160 ms; ratio 0.937981; p95/p99 ratios 0.934816 / 0.935693 |
+| Matched BlockBreaker bridge median | UnifiedScript 118.7061 ms; Puerts 285.9899 ms; ratio 0.415071; calls and logical bytes are both 20% of Puerts |
+| Matched package size | UnifiedScript 1,033,732,983 bytes; Puerts 1,009,756,057 bytes; ratio 1.023745 |
 | Full migration audit | 74 / 74 inventory items, 19 / 19 shared assets, 40 / 40 generated thunks, zero legacy targets |
 | Deliverable smoke | 300 frames, one shot, one hit, two command completions, 3,631 fast/CallFrame calls, zero legacy calls |
 | Deliverable report | `artifacts/demo/blockbreaker-20260828-152605/demo-delivery.json` |
@@ -85,6 +85,7 @@ machine-local unless an artifact explicitly says otherwise.
 | Scale report | `artifacts/ue/scale/20260828_163657/scale-gate.json` |
 | Visual/C# round trip | semantic, MethodDef IL, execution cases, Script Assets, two live UE candidates, and two packaged candidates equivalent |
 | Round-trip report | `artifacts/roundtrip/blockbreaker-20260828-021802-6305602d/roundtrip-report.json` |
+| M12 strict release acceptance | 15 / 15 required gates passed from clean source revision `5be7dde`; evidence at `artifacts/release-readiness/m12-final-5be7dde/release-readiness.json` |
 
 ## Release ladder
 
@@ -95,7 +96,7 @@ machine-local unless an artifact explicitly says otherwise.
 | R2 adoptable alpha | A second UE project can install, generate, run, and package without repository-specific glue | Complete |
 | R3 product beta | Practical gameplay API coverage, complete visual/code loop, debugging, and migration workflow | Complete |
 | R4 release candidate | Broad performance, soak, packaging, upgrade, and CI evidence | Complete |
-| R5 1.0 | Versioned SDK and plugin distribution with supported compatibility and migration policy | Active — M12 |
+| R5 1.0 | Versioned SDK and plugin distribution with supported compatibility and migration policy | RC1 accepted locally; publication and field adoption remain |
 
 ## Evidence-backed foundation
 
@@ -1746,17 +1747,56 @@ and no critical acceptance failure.
 
 - [x] bind every release-manifest gate to one versioned release-readiness
   provider, including the complete matched performance workload
-- [ ] run the full gate from one clean Git revision and publish a strict 15/15
+- [x] run the full gate from one clean Git revision and publish a strict 15/15
   `unifiedscript.release-readiness/v0.1` verdict
-- [ ] audit the final report for unsupported claims and critical failures, then
+- [x] audit the final report for unsupported claims and critical failures, then
   promote or hold `1.0.0-rc.1` without weakening a gate
 
-M12 acceptance-closure progress (2026-08-29): the new release-readiness runner
-turns the release manifest into an executable 15-gate contract. It rejects
-missing, duplicate, or unowned gates before expensive work, binds child reports
-to one source revision, verifies source/comparison preservation, and reserves
-the exact `passed` status for clean evidence. Plan and dirty modes remain
-non-promotable diagnostics. The full clean-revision run is the next cursor.
+M12 acceptance closure (2026-08-29): strict evidence from clean source revision
+`5be7ddeb767cf2fb67444d5ed93236a40e409764` is recorded at
+`artifacts/release-readiness/m12-final-5be7dde/release-readiness.json`. The
+executable 15-gate contract completed with all manifest gates passed: 619/619
+managed tests, 92/92 repository invariants,
+19/19 UE Automation tests, four declared UE 5.8.1 Win64 compatibility/package
+rows, five samples, three project templates, and the complete 54-slot matched
+workload schedule. The weighted performance ratio is 0.563208 against the 0.95
+maximum, and the matched package-size ratio is 1.023745 against the 1.05
+maximum. Source and all three comparison repositories remained clean before and
+after the run. Windows PowerShell 5.1 long-path package enumeration and snapshot
+cleanup are covered, and the performance lane now restores its comparison
+checkout on both success and failure. `1.0.0-rc.1` is locally accepted; no
+remote publication is implied by this evidence.
+
+## M13 — Field adoption and ecosystem hardening
+
+This milestone starts only when iteration is explicitly resumed. The next work
+is deliberately adoption-driven rather than another internal feature burst.
+
+### M13.1 — External real-project pilot
+
+- [ ] install the frozen RC1 SDK into at least one non-BlockBreaker UE project
+- [ ] migrate one representative gameplay vertical slice and record every
+  missing API, generator escape hatch, authoring friction, and runtime issue
+- [ ] turn pilot findings into versioned compatibility, migration, and
+  regression gates without weakening the RC1 baseline
+
+### M13.2 — Distribution and operational feedback
+
+- [ ] publish a reproducible plugin/SDK distribution path with checksums,
+  upgrade/rollback instructions, and issue templates
+- [ ] add privacy-bounded opt-in diagnostics for install, generation, runtime,
+  reload, and packaging failures
+- [ ] maintain a field-issue dashboard and release criteria tied to reproduced
+  failures rather than feature count
+
+### M13.3 — Platform and performance hardening
+
+- [ ] add another explicitly supported UE/platform package-and-smoke row before
+  broadening compatibility claims
+- [ ] optimize the scalar and resource/spawn paths, which remain slower than
+  Puerts in the frozen RC1 workload
+- [ ] redesign reload measurement and user experience; the current CoreCLR and
+  Puerts reload mechanisms are not directly comparable and remain diagnostic
 
 ## Global release gates
 

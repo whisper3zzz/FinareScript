@@ -854,7 +854,12 @@ def main() -> int:
         and "run-unifiedscript-release-readiness.ps1" in ci_workflow
         and "-PlanOnly" in ci_workflow
         and "15-gate contract" in roadmap_document
-        and "One release-readiness command" in product_release_notes,
+        and "Paused after M12" in roadmap_document
+        and "M13.1 — external real-project pilot" in roadmap_document
+        and "M12 strict release acceptance" in roadmap_document
+        and "Frozen RC1 acceptance" in release_readiness_document
+        and "One release-readiness command" in product_release_notes
+        and "frozen clean-revision run" in product_release_notes,
         "M12 release-readiness providers, strict evidence boundary, CI plan, or performance gate is incomplete",
     )
     checks.append(
@@ -5033,7 +5038,7 @@ def main() -> int:
         and "4,096 accepted" in large_project_scale_doc
         and "updated exactly one" in large_project_scale_doc
         and "- [x] test large contracts and script sets" in roadmap
-        and "- Active milestone: **M12" in roadmap,
+        and "## M12 — Migration ecosystem and UnifiedScript 1.0" in roadmap,
         "M11.1 large Contract, script-set, incremental, or asset-churn scale gate is incomplete",
     )
     checks.append(
@@ -5334,7 +5339,7 @@ def main() -> int:
         and "all 27 captures" in performance_suite_doc
         and "all 54 execution ordinals" in performance_suite_doc
         and "mixed results close M10.1" in performance_suite_doc
-        and "- Active milestone: **M12" in roadmap
+        and "## M12 — Migration ecosystem and UnifiedScript 1.0" in roadmap
         and "- [x] use profiler evidence to promote only high-volume stable data"
         in roadmap
         and "- [x] preserve World ownership, generation checks, bounds"
