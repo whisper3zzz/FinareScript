@@ -4321,6 +4321,8 @@ def main() -> int:
         and "package-unifiedscript-sdk.ps1" in unreal_compatibility_helper
         and "archiveSha256 -ne" in unreal_compatibility_helper
         and "git -C $repoRoot archive" in unreal_compatibility_helper
+        and "compatibilityScratchRoot" in unreal_compatibility_helper
+        and "sdk-install-report.json" in unreal_compatibility_helper
         and "DOTNET_ROOT" in unreal_release_helper
         and "UNIFIEDSCRIPT_DOTNET_ROOT" in unreal_release_helper
         and "not-declared" in unreal_compatibility_helper

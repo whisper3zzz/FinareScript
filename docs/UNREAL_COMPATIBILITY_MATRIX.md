@@ -62,6 +62,12 @@ This is a reproducible clean-project and clean-runtime simulation. Compilation
 still uses the declared UE installation and its bundled .NET SDK; the packaged
 executable does not.
 
+SDK extraction and the plugin-free consumer checkout use a unique, short-lived
+directory below the system temporary root. This keeps the Windows PowerShell
+5.1 installer inside its declared path-length boundary even when the durable
+matrix report itself is nested deeply. The install report is copied back into
+the matrix evidence directory before the scratch directory is removed.
+
 ## Local M11.2 evidence
 
 The 2026-08-28 run at

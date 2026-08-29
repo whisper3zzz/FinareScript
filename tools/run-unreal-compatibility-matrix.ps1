@@ -137,6 +137,9 @@ $sdkReportA = $null
 $sdkReportB = $null
 $sdkInstallReport = $null
 $cleanReleaseReport = $null
+$compatibilityScratchRoot = Join-Path `
+    ([IO.Path]::GetTempPath()) `
+    ('us-' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
 $automationPassed = 0
 $failure = $null
 $startedAt = [DateTime]::UtcNow
@@ -256,13 +259,15 @@ try {
     }
 
     $sdkArchive = Join-Path $sdkOutputA "$sdkBaseName.zip"
-    $sdkExtract = Join-Path $runDirectory 'sdk-extract'
+    $sdkExtract = Join-Path $compatibilityScratchRoot 'sdk'
     $sdkRoot = Join-Path $sdkExtract $sdkBaseName
     $consumerArchive = Join-Path $runDirectory 'consumer.zip'
-    $consumerExport = Join-Path $runDirectory 'c'
+    $consumerExport = Join-Path $compatibilityScratchRoot 'consumer'
     $consumerProject = Join-Path $consumerExport `
         'HostProject\UEUnifiedScriptHost.uproject'
     Invoke-MatrixPhase -Name 'clean-project-sdk-install' -Action {
+        New-Item -ItemType Directory -Force -Path $compatibilityScratchRoot |
+            Out-Null
         Expand-Archive `
             -LiteralPath $sdkArchive `
             -DestinationPath $sdkExtract `
@@ -288,16 +293,22 @@ try {
             -Project $consumerProject `
             -SdkRoot $sdkRoot
     }
-    $sdkInstallReportPath = Get-ChildItem `
+    $sdkInstallSourceReportPath = Get-ChildItem `
         -LiteralPath (Join-Path $consumerExport 'HostProject\Saved\UnifiedScript\Install') `
-        -Filter 'install-report.json' `
         -Recurse `
-        -File | Sort-Object LastWriteTimeUtc | Select-Object -Last 1 -ExpandProperty FullName
-    $sdkInstallReport = Get-Content -LiteralPath $sdkInstallReportPath -Raw |
+        -File | Where-Object Name -EQ 'install-report.json' |
+        Sort-Object LastWriteTimeUtc |
+        Select-Object -Last 1 -ExpandProperty FullName
+    $sdkInstallReport = Get-Content -LiteralPath $sdkInstallSourceReportPath -Raw |
         ConvertFrom-Json
     if ($sdkInstallReport.status -ne 'passed') {
         throw 'The clean-project SDK installation report did not pass.'
     }
+    $sdkInstallReportPath = Join-Path $runDirectory 'sdk-install-report.json'
+    Copy-Item `
+        -LiteralPath $sdkInstallSourceReportPath `
+        -Destination $sdkInstallReportPath `
+        -Force
 
     $installedManagedRoot = Join-Path $consumerExport `
         'HostProject\Plugins\UEUnifiedScript\Binaries\Managed'
@@ -441,6 +452,13 @@ public sealed class DemoScript : IUnrealManagedScript
         [IO.File]::WriteAllBytes($defaultInputPath, $defaultInputBytes)
     } elseif (Test-Path -LiteralPath $defaultInputPath) {
         Remove-Item -LiteralPath $defaultInputPath
+    }
+    if (Test-Path -LiteralPath $compatibilityScratchRoot) {
+        Remove-Item `
+            -LiteralPath $compatibilityScratchRoot `
+            -Recurse `
+            -Force `
+            -ErrorAction SilentlyContinue
     }
 }
 
