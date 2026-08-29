@@ -298,6 +298,13 @@ if ($RunUnreal) {
             Where-Object { $_.StartsWith('?? ', [StringComparison]::Ordinal) } |
             ForEach-Object { $_.Substring(3).Replace('\', '/') }
     )
+    $declaredUntrackedOutputs = @(
+        'Managed/BlockBreaker.UnifiedScript.asset.json',
+        'Managed/BlockBreaker.UnifiedScript.sourcemap.json',
+        'Managed/BlockBreaker.UnifiedScript.uschunk',
+        'Plugins/UEUnifiedScript/Source/UEUnifiedScriptRuntime/Private/Tests/UnifiedScriptRuntimeBreadcrumbTests.cpp',
+        'Plugins/UEUnifiedScript/Source/UEUnifiedScriptRuntime/Private/Tests/UnifiedScriptRuntimeOwnershipTests.cpp'
+    )
     & git -C $targetRoot archive --format=zip "--output=$targetArchive" HEAD
     if ($LASTEXITCODE -ne 0) {
         throw 'Failed to back up the tracked BlockBreaker target before Unreal gates.'
@@ -593,9 +600,7 @@ if ($RunUnreal) {
         )
         $newUntracked = @($finalUntracked | Where-Object { $_ -notin $initialUntracked })
         foreach ($relative in $newUntracked) {
-            if (-not $relative.StartsWith(
-                    'Plugins/UEUnifiedScript/',
-                    [StringComparison]::Ordinal)) {
+            if ($relative -notin $declaredUntrackedOutputs) {
                 throw "Unreal gate created an unexpected untracked path: $relative"
             }
             $createdPath = Join-Path $targetRoot $relative

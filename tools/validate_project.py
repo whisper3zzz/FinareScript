@@ -3789,6 +3789,7 @@ def main() -> int:
         and "gameplayEquivalent" in roundtrip_runner
         and "scriptAssetsEquivalent" in roundtrip_runner
         and "packagedBuildEquivalent" in roundtrip_runner
+        and "declaredUntrackedOutputs" in roundtrip_runner
         and "stage-maximum-stale" in authoring_http_test
         and "group-external-conflict" in authoring_http_test
         and '"UAW1005"' in authoring_http_test
