@@ -3298,6 +3298,64 @@ def main() -> int:
         "M7.4 whole-project Puerts inventory, coverage, or migration gates are incomplete",
     )
     checks.append("M7.4 BlockBreaker migration has exact coverage and zero legacy payload gates")
+    puerts_project_scanner_path = (
+        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealPuertsProjectScanner.cs"
+    )
+    puerts_project_scanner_test_path = (
+        ROOT
+        / "tests"
+        / "UnifiedScript.Tests"
+        / "UnrealPuertsProjectScannerTests.cs"
+    )
+    puerts_migration_document_path = ROOT / "docs" / "PUERTS_MIGRATION.md"
+    for path in [
+        puerts_project_scanner_path,
+        puerts_project_scanner_test_path,
+        puerts_migration_document_path,
+    ]:
+        require(path.is_file(), f"Missing M12.1 Puerts project scanner artifact: {path}")
+    puerts_project_scanner = puerts_project_scanner_path.read_text(encoding="utf-8")
+    puerts_project_scanner_test = puerts_project_scanner_test_path.read_text(
+        encoding="utf-8"
+    )
+    puerts_migration_document = puerts_migration_document_path.read_text(
+        encoding="utf-8"
+    )
+    require(
+        "unifiedscript.puerts-project-scan/v0.1" in puerts_project_scanner
+        and "DefaultSourceScriptRoots" in puerts_project_scanner
+        and "DefaultDeployedScriptRoots" in puerts_project_scanner
+        and "MaximumFileCount = 50_000" in puerts_project_scanner
+        and '"module"' in puerts_project_scanner
+        and '"unrealApi"' in puerts_project_scanner
+        and '"puertsApi"' in puerts_project_scanner
+        and '"lifecycleHook"' in puerts_project_scanner
+        and '"assetReference"' in puerts_project_scanner
+        and '"delegatePattern"' in puerts_project_scanner
+        and '"asyncPattern"' in puerts_project_scanner
+        and '"unsupportedDynamicBehavior"' in puerts_project_scanner
+        and '"scanLimit"' in puerts_project_scanner
+        and 'args[0] == "ue-puerts-scan"' in cli_source
+        and "--script-root" in cli_source
+        and "--native-root" in cli_source
+        and "--fail-on-blockers" in cli_source
+        and "ScansCustomRootsAndClassifiesMigrationRisksDeterministically"
+        in puerts_project_scanner_test
+        and "AutoDiscoveryPrefersAuthoredSourcesOverDeployedJavaScript"
+        in puerts_project_scanner_test
+        and "ReportsIncompleteBoundedScanInsteadOfSilentlyDroppingSources"
+        in puerts_project_scanner_test
+        and "CliWritesScanAndCanFailAutomationOnBlockers"
+        in puerts_project_scanner_test
+        and "blind source translation" in puerts_migration_document
+        and "exactly four authored TypeScript files" in puerts_migration_document
+        and "- [x] scan a Puerts project into an inventory" in roadmap
+        and "generated migration plan and coverage scaffold" in roadmap,
+        "M12.1 generalized Puerts source ownership, risk scan, CLI, tests, or documentation is incomplete",
+    )
+    checks.append(
+        "M12.1 scans generalized Puerts projects with bounded ownership and dynamic-risk evidence"
+    )
     roundtrip_manifest_path = (
         ROOT / "comparison" / "blockbreaker-roundtrip.json"
     )

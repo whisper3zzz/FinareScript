@@ -49,7 +49,7 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-28**
 
 - Active milestone: **M12 — Migration ecosystem and UnifiedScript 1.0**
-- Next slice: **M12.1 — generalized Puerts project scanner**
+- Next slice: **M12.1 — generated migration plan and coverage scaffold**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -63,8 +63,8 @@ machine-local unless an artifact explicitly says otherwise.
 | Runtime source baseline | `810913d` (`perf: remove benchmark world log pollution`) |
 | UnifiedScript comparison source | `5cf323e` (`perf: sync representative workload host`) |
 | Puerts comparison source | `be399cb` (`perf: register benchmark world context`) |
-| Managed tests | 588 / 588 passed |
-| Repository validator | 81 / 81 passed |
+| Managed tests | 593 / 593 passed |
+| Repository validator | 82 / 82 passed |
 | UE 5.8.1 native build | passed |
 | `UnifiedScript.Unreal` Automation | 17 / 17 passed, including bounded crash breadcrumbs, failure containment, deterministic World shutdown, workload collectors, gameplay-profiler attribution, Authoring Surface, live World semantic pause/step/reload/detach, and repeated success/failure hot-reload leak coverage |
 | M10.2 generated-channel profile | 1,024 rows x 3 median samples: container binding 25,371.973 ns/row, generated snapshot 1.270 ns/row (ratio 0.000050), buffered events 0.586 ns/row, zero managed allocation |
@@ -1486,12 +1486,33 @@ requiring repository authors to operate their project.
 
 ### M12.1 — Puerts migration workflow
 
-- [ ] scan a Puerts project into an inventory of modules, APIs, lifecycle hooks,
+- [x] scan a Puerts project into an inventory of modules, APIs, lifecycle hooks,
   assets, delegates, async patterns, and unsupported dynamic behavior
 - [ ] generate a migration plan, API coverage report, stubs/contracts, and
   side-by-side verification harness; do not promise blind one-click conversion
 - [ ] support incremental coexistence during migration while preventing both
   runtimes from owning the same gameplay lifecycle accidentally
+
+M12.1 scanner evidence (2026-08-29): `ue-puerts-scan` publishes strict
+`unifiedscript.puerts-project-scan/v0.1` reports from automatically discovered
+or explicitly selected TypeScript/JavaScript and native roots. Authored source
+roots win over deployed JavaScript, Puerts and UnifiedScript runtime plugin code
+stay outside automatic gameplay ownership, and config/native evidence remains
+fingerprinted. Findings classify modules, script types, Unreal/Puerts APIs,
+lifecycle, resources, delegates, async work, native surfaces, and unsupported
+dynamic behavior with exact locations, migration actions, and info/review/blocker
+risk. The scan is bounded, reports incomplete traversal instead of dropping
+inputs silently, and `--fail-on-blockers` is suitable for automation.
+
+The real BlockBreaker source reproduced as four authored scripts, five target
+native headers, three relevant config files, and 51 findings with zero blockers.
+Its two dynamic review items are the known `ue` module augmentation and
+`UE.Object.prototype` extension. Five scanner tests cover custom roots, alias
+normalization, all required categories, deterministic JSON/fingerprints,
+source-over-deployment ownership, pure-JS fallback, excluded dependencies,
+bounded failure, strict round trip, and CLI blocker exit behavior. See
+`docs/PUERTS_MIGRATION.md`. The next M12.1 slice consumes this artifact to
+generate a plan, coverage scaffold, contracts/stubs, and side-by-side harness.
 
 ### M12.2 — SDK, documentation, and samples
 

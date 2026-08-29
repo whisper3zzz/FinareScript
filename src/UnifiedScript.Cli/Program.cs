@@ -133,6 +133,11 @@ internal static class Program
             return RunUnrealPuertsInventory(args);
         }
 
+        if (args.Count > 0 && args[0] == "ue-puerts-scan")
+        {
+            return RunUnrealPuertsScan(args);
+        }
+
         if (args.Count > 0 && args[0] == "ue-profile-diagnose")
         {
             return RunUnrealProfileDiagnosis(args);
@@ -841,6 +846,58 @@ internal static class Program
             return 65;
         }
         return 0;
+    }
+
+    private static int RunUnrealPuertsScan(IReadOnlyList<string> args)
+    {
+        if (!TryParseUnrealPuertsScanArguments(args, out UnrealPuertsScanOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+
+        options = options ?? throw new InvalidOperationException(
+            "Argument parsing succeeded without Puerts scan options.");
+        if (!Directory.Exists(options.ProjectRoot))
+        {
+            Console.Error.WriteLine(
+                $"Puerts project root does not exist: {options.ProjectRoot}");
+            return 66;
+        }
+        if (!Directory.Exists(options.NativeProjectRoot))
+        {
+            Console.Error.WriteLine(
+                $"Puerts native project root does not exist: {options.NativeProjectRoot}");
+            return 66;
+        }
+
+        UnrealPuertsProjectScan scan = new UnrealPuertsProjectScanner().Scan(
+            new UnrealPuertsProjectScanOptions(
+                options.ProjectRoot,
+                options.NativeProjectRoot,
+                options.ProjectName,
+                options.ScriptRoots,
+                options.NativeRoots));
+        string fullOutputPath = Path.GetFullPath(options.OutputPath);
+        WriteTransactionally(
+        [
+            new OutputFile(fullOutputPath, UnrealPuertsProjectScanJson.Serialize(scan)),
+        ]);
+        Console.WriteLine(fullOutputPath);
+        Console.WriteLine(
+            $"scan-fingerprint={scan.SourceFingerprint}; " +
+            $"scripts={scan.Summary.ScriptFileCount}; " +
+            $"findings={scan.Summary.FindingCount}; " +
+            $"review={scan.Summary.ReviewCount}; " +
+            $"blockers={scan.Summary.BlockerCount}; " +
+            $"complete={scan.Complete.ToString().ToLowerInvariant()}");
+        foreach (string diagnostic in scan.Diagnostics)
+        {
+            Console.Error.WriteLine(diagnostic);
+        }
+        return options.FailOnBlockers && (!scan.Complete || scan.Summary.BlockerCount > 0)
+            ? 65
+            : 0;
     }
 
     private static int RunEmit(IReadOnlyList<string> args)
@@ -3025,6 +3082,74 @@ internal static class Program
         return true;
     }
 
+    private static bool TryParseUnrealPuertsScanArguments(
+        IReadOnlyList<string> args,
+        out UnrealPuertsScanOptions? options)
+    {
+        options = null;
+        if (args.Count < 4 || args[0] != "ue-puerts-scan" ||
+            args[1].StartsWith("--", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        string projectRoot = args[1];
+        string? outputPath = null;
+        string? nativeProjectRoot = null;
+        string? projectName = null;
+        var scriptRoots = new List<string>();
+        var nativeRoots = new List<string>();
+        bool failOnBlockers = false;
+        int index = 2;
+        while (index < args.Count)
+        {
+            string option = args[index++];
+            if (option == "--fail-on-blockers" && !failOnBlockers)
+            {
+                failOnBlockers = true;
+                continue;
+            }
+            if (index >= args.Count)
+            {
+                return false;
+            }
+            string value = args[index++];
+            switch (option)
+            {
+                case "--out" when outputPath is null:
+                    outputPath = value;
+                    break;
+                case "--native-project" when nativeProjectRoot is null:
+                    nativeProjectRoot = value;
+                    break;
+                case "--project-name" when projectName is null:
+                    projectName = value;
+                    break;
+                case "--script-root":
+                    scriptRoots.Add(value);
+                    break;
+                case "--native-root":
+                    nativeRoots.Add(value);
+                    break;
+                default:
+                    return false;
+            }
+        }
+        if (outputPath is null)
+        {
+            return false;
+        }
+        options = new UnrealPuertsScanOptions(
+            projectRoot,
+            nativeProjectRoot ?? projectRoot,
+            projectName,
+            outputPath,
+            scriptRoots,
+            nativeRoots,
+            failOnBlockers);
+        return true;
+    }
+
     private static bool TryParseExecuteArguments(
         IReadOnlyList<string> args,
         out ExecuteOptions? options)
@@ -4178,6 +4303,7 @@ internal static class Program
         "  unifiedscript ue-bindings <reflection.json> --out <bindings.cs> [--contract <api-contract.json>] [--native-out <thunks.cpp>] [--nodes-out <nodes.json>] [--report <coverage.json>] [--fail-on-rejected] [--namespace <name>]\n" +
         "  unifiedscript ue-data-plane <schema.json> --managed-out <layouts.g.cs> --native-out <layouts.gen.h>\n" +
         "  unifiedscript ue-puerts-inventory <puerts-project> --out <inventory.json> [--native-project <target-project>] [--project-name <name>] [--coverage <coverage.json> --report <report.json> --fail-on-uncovered]\n" +
+        "  unifiedscript ue-puerts-scan <puerts-project> --out <scan.json> [--native-project <project>] [--project-name <name>] [--script-root <directory>]... [--native-root <directory>]... [--fail-on-blockers]\n" +
         "  unifiedscript ue-profile-diagnose --baseline <profile.json> --current <profile.json> --evidence <evidence.json> --out <report.json>\n" +
         "  unifiedscript ue-workload-capture --manifest <suite.json> --measurement <raw.json> --out <capture.json>\n" +
         "  unifiedscript ue-workload-assemble --manifest <suite.json> --captures <directory> --engine <unifiedScript|puerts> --out <result.json>\n" +
@@ -4389,6 +4515,15 @@ internal static class Program
         string? CoveragePath,
         string? ReportPath,
         bool FailOnUncovered);
+
+    private sealed record UnrealPuertsScanOptions(
+        string ProjectRoot,
+        string NativeProjectRoot,
+        string? ProjectName,
+        string OutputPath,
+        IReadOnlyList<string> ScriptRoots,
+        IReadOnlyList<string> NativeRoots,
+        bool FailOnBlockers);
 
     private sealed record IdentityOptions(
         string InputPath,

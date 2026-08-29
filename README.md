@@ -11,11 +11,10 @@ then completed the full BlockBreaker migration with exact inventory coverage
 and no Puerts/TypeScript payload in the target project or package. M8.4 then
 completed a real Player/Rifle Visual-to-C#-to-Visual round trip with semantic,
 IL, execution, Script Asset, UE gameplay, and dual packaged-build equivalence.
-M9.2 completes observable transactional hot reload and repeated
-success/failure leak soak on top of live World semantic debugging. M9.3 now
-adds the first complete gameplay-profiler attribution path across semantic
-nodes, World phases, bridge/data-plane boundaries, allocation, and pressure;
-the RoadMap cursor remains on its end-to-end regression proof.
+M9-M11 complete observable hot reload, gameplay profiling, matched performance,
+reliability, packaging, compatibility, and compiled-chunk delivery. M12 now
+turns the proven runtime into a migration ecosystem and UnifiedScript 1.0; its
+first slice is a generalized, bounded Puerts project scanner.
 
 ## Product roadmap
 
@@ -83,6 +82,19 @@ imports, Puerts/Unreal APIs, resources, globals, async patterns, decorators,
 delegates, and native facades. It also requires 19 byte-identical gameplay
 assets, two Script Assets, 40 generated native thunks, and zero legacy targets.
 See [M7.4 BlockBreaker migration](docs/milestones/M7_4_BLOCKBREAKER_MIGRATION.md).
+
+M12.1 generalizes that project-specific proof. Scan any Puerts project into a
+strict deterministic report with source ownership, modules, APIs, lifecycle,
+assets, delegates, async work, native surfaces, and unsupported dynamic behavior:
+
+```powershell
+dotnet run --project src/UnifiedScript.Cli -c Release -- `
+  ue-puerts-scan D:\Project\MyPuertsGame `
+  --out artifacts\migration\my-game.scan.json `
+  --fail-on-blockers
+```
+
+See [Puerts project migration](docs/PUERTS_MIGRATION.md).
 
 Run the M8.4 full Visual/C# round-trip proof with:
 
