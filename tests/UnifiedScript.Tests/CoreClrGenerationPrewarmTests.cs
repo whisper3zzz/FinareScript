@@ -128,7 +128,9 @@ public sealed class CoreClrGenerationPrewarmTests
         CoreClrGenerationPrewarmOperation completed =
             CoreClrGenerationPrewarmOperation.CreateForTests(
                 typeof(PrewarmFixture),
-                new CoreClrGenerationPrewarmOptions(),
+                new CoreClrGenerationPrewarmOptions(
+                    maximumMethodCount: 1,
+                    timeBudget: TimeSpan.FromMilliseconds(100)),
                 _ => { });
         Assert.True(completed.Start());
         await completed.Completion.WaitAsync(TimeSpan.FromSeconds(5));
@@ -137,6 +139,7 @@ public sealed class CoreClrGenerationPrewarmTests
             completed.ObserveFirstTick();
         Assert.True(completedSnapshot.FirstTickObserved);
         Assert.True(completedSnapshot.CompletedBeforeFirstTick);
+        Assert.Equal(1, completedSnapshot.PreparedMethodCount);
         Assert.Equal(
             completedSnapshot.PreparedMethodCount,
             completedSnapshot.PreparedBeforeFirstTickCount);
