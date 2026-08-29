@@ -1124,6 +1124,8 @@ def main() -> int:
         and "managed-debug-fixture" in alpha_acceptance
         and "ProjectLoadingDemo.csproj" in alpha_acceptance
         and "02-repository-validator.log" not in alpha_acceptance
+        and "Restore-AcceptanceConfigs" in alpha_acceptance
+        and "DefaultEngine.ini" in alpha_acceptance
         and "managed-tests" in alpha_acceptance
         and "repository-validator" in alpha_acceptance
         and "unreal-onboarding" in alpha_acceptance
@@ -2747,6 +2749,7 @@ def main() -> int:
             "/Script/Engine.ActorInstanceHandle",
             "/Script/Engine.HitResult",
             "/Script/UEUnifiedScriptRuntime.EUnifiedScriptInteropMode",
+            "/Script/UEUnifiedScriptRuntime.EUnifiedScriptRuntimeOwner",
         }
         and unreal_component_manifest["headerPath"] == "UnifiedScriptComponent.h"
         and all(
@@ -2761,11 +2764,14 @@ def main() -> int:
         == {
             "ActiveGeneration",
             "ActiveDeclarationAssetPath",
+            "ActiveLifecycleOwnershipKey",
             "ActiveScriptAssetPath",
             "LastGameplayProfileTrace",
             "LastReloadTransaction",
             "LastScriptError",
+            "LastStartMilliseconds",
             "LastStateMigration",
+            "LifecycleOwnershipKey",
             "ManagedState",
             "MaterializedStateCount",
             "MaterializedStateOverrideCount",

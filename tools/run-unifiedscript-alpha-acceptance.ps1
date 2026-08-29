@@ -22,6 +22,19 @@ $projectPath = if ([string]::IsNullOrWhiteSpace($Project)) {
 } else {
     [IO.Path]::GetFullPath($Project)
 }
+$projectDirectory = Split-Path -Parent $projectPath
+$configSnapshots = @(
+    'DefaultEngine.ini',
+    'DefaultInput.ini' |
+        ForEach-Object {
+            $path = Join-Path $projectDirectory "Config\$_"
+            $existed = Test-Path -LiteralPath $path -PathType Leaf
+            [ordered]@{
+                path = $path
+                existed = $existed
+                bytes = if ($existed) { [IO.File]::ReadAllBytes($path) } else { $null }
+            }
+        })
 $runDirectory = if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
     Join-Path $repoRoot "artifacts\acceptance\$runId"
 } elseif ([IO.Path]::IsPathRooted($OutputDirectory)) {
@@ -65,6 +78,16 @@ function Resolve-EngineAssociation {
         }
     }
     return $null
+}
+
+function Restore-AcceptanceConfigs {
+    foreach ($snapshot in $configSnapshots) {
+        if ($snapshot.existed) {
+            [IO.File]::WriteAllBytes($snapshot.path, $snapshot.bytes)
+        } elseif (Test-Path -LiteralPath $snapshot.path) {
+            Remove-Item -LiteralPath $snapshot.path -Force
+        }
+    }
 }
 
 function Invoke-AcceptancePhase {
@@ -337,11 +360,13 @@ try {
         $script:Metrics.packageSmoke = ([string]$configurationReport.smokeResult).Split("`n")[0]
     }
 
+    Restore-AcceptanceConfigs
     Write-AcceptanceOutputs -Status 'passed'
     Write-Host 'UnifiedScript alpha acceptance: PASS'
     Write-Host "Report: $reportPath"
     Write-Host "Summary: $summaryPath"
 } catch {
+    Restore-AcceptanceConfigs
     if ($null -eq $script:Failure) {
         $safeRetry = (
             "powershell -ExecutionPolicy Bypass -File `"$PSCommandPath`" " +

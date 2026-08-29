@@ -359,6 +359,28 @@
 					}
 				},
 				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ActiveLifecycleOwnershipKey",
+					"name": "ActiveLifecycleOwnershipKey",
+					"type":
+					{
+						"kind": "name",
+						"nativeName": "FName"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": false,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Active Lifecycle Ownership Key",
+						"category": "UnifiedScript|Coexistence",
+						"deprecated": false
+					}
+				},
+				{
 					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:ActiveScriptAssetPath",
 					"name": "ActiveScriptAssetPath",
 					"type":
@@ -538,6 +560,29 @@
 					}
 				},
 				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:LastStartMilliseconds",
+					"name": "LastStartMilliseconds",
+					"type":
+					{
+						"kind": "float64",
+						"nativeName": "double"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": false,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Last Start Milliseconds",
+						"category": "UnifiedScript|Profiler",
+						"tooltip": "End-to-end configuration, verification, state materialization, and managed start latency.",
+						"deprecated": false
+					}
+				},
+				{
 					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:LastStateMigration",
 					"name": "LastStateMigration",
 					"type":
@@ -557,6 +602,29 @@
 						"displayName": "Last State Migration",
 						"category": "UnifiedScript|State",
 						"tooltip": "Summary of the last declaration/default/override reconciliation.",
+						"deprecated": false
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent:LifecycleOwnershipKey",
+					"name": "LifecycleOwnershipKey",
+					"type":
+					{
+						"kind": "name",
+						"nativeName": "FName"
+					},
+					"access":
+					{
+						"readable": true,
+						"writable": true,
+						"editorVisible": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Lifecycle Ownership Key",
+						"category": "UnifiedScript|Coexistence",
+						"tooltip": "Canonical coexistence-manifest key claimed before managed activation.\nEmpty derives a stable key from the resolved managed type name.",
 						"deprecated": false
 					}
 				},
@@ -3012,6 +3080,94 @@
 			"delegates": [],
 			"functions": [
 				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:ClaimGameplayLifecycle",
+					"name": "ClaimGameplayLifecycle",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [
+						{
+							"name": "WorldContextObject",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UObject*",
+								"typePath": "/Script/CoreUObject.Object",
+								"headerPath": "UObject/Object.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Claimant",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UObject*",
+								"typePath": "/Script/CoreUObject.Object",
+								"headerPath": "UObject/Object.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "HostObject",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UObject*",
+								"typePath": "/Script/CoreUObject.Object",
+								"headerPath": "UObject/Object.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "LifecycleKey",
+							"type":
+							{
+								"kind": "name",
+								"nativeName": "FName"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "RuntimeOwner",
+							"type":
+							{
+								"kind": "enum",
+								"nativeName": "EUnifiedScriptRuntimeOwner",
+								"typePath": "/Script/UEUnifiedScriptRuntime.EUnifiedScriptRuntimeOwner",
+								"headerPath": "UnifiedScriptWorldSubsystem.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "OutError",
+							"type":
+							{
+								"kind": "string",
+								"nativeName": "FString"
+							},
+							"direction": "output"
+						}
+					],
+					"traits":
+					{
+						"static": true,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Claim Gameplay Lifecycle",
+						"category": "UnifiedScript|Coexistence",
+						"tooltip": "Shared Puerts/UnifiedScript arbitration point for one host lifecycle route.",
+						"deprecated": false,
+						"worldContextParameter": "WorldContextObject"
+					}
+				},
+				{
 					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:DestroyActor",
 					"name": "DestroyActor",
 					"returnType":
@@ -3116,6 +3272,43 @@
 						"displayName": "Find Component by Class",
 						"category": "UnifiedScript|Components",
 						"tooltip": "Find Component by Class",
+						"deprecated": false,
+						"worldContextParameter": "WorldContextObject"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:GetGameplayLifecycleOwnershipReport",
+					"name": "GetGameplayLifecycleOwnershipReport",
+					"returnType":
+					{
+						"kind": "string",
+						"nativeName": "FString"
+					},
+					"parameters": [
+						{
+							"name": "WorldContextObject",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UObject*",
+								"typePath": "/Script/CoreUObject.Object",
+								"headerPath": "UObject/Object.h"
+							},
+							"direction": "input"
+						}
+					],
+					"traits":
+					{
+						"static": true,
+						"pure": true,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Get Gameplay Lifecycle Ownership Report",
+						"category": "UnifiedScript|Coexistence",
+						"tooltip": "Get Gameplay Lifecycle Ownership Report",
 						"deprecated": false,
 						"worldContextParameter": "WorldContextObject"
 					}
@@ -3398,6 +3591,94 @@
 						"displayName": "Load Object by Path",
 						"category": "UnifiedScript|Resources",
 						"tooltip": "Load Object by Path",
+						"deprecated": false,
+						"worldContextParameter": "WorldContextObject"
+					}
+				},
+				{
+					"path": "/Script/UEUnifiedScriptRuntime.UnifiedScriptWorldLibrary:ReleaseGameplayLifecycle",
+					"name": "ReleaseGameplayLifecycle",
+					"returnType":
+					{
+						"kind": "boolean",
+						"nativeName": "bool"
+					},
+					"parameters": [
+						{
+							"name": "WorldContextObject",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UObject*",
+								"typePath": "/Script/CoreUObject.Object",
+								"headerPath": "UObject/Object.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "Claimant",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UObject*",
+								"typePath": "/Script/CoreUObject.Object",
+								"headerPath": "UObject/Object.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "HostObject",
+							"type":
+							{
+								"kind": "object",
+								"nativeName": "UObject*",
+								"typePath": "/Script/CoreUObject.Object",
+								"headerPath": "UObject/Object.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "LifecycleKey",
+							"type":
+							{
+								"kind": "name",
+								"nativeName": "FName"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "RuntimeOwner",
+							"type":
+							{
+								"kind": "enum",
+								"nativeName": "EUnifiedScriptRuntimeOwner",
+								"typePath": "/Script/UEUnifiedScriptRuntime.EUnifiedScriptRuntimeOwner",
+								"headerPath": "UnifiedScriptWorldSubsystem.h"
+							},
+							"direction": "input"
+						},
+						{
+							"name": "OutError",
+							"type":
+							{
+								"kind": "string",
+								"nativeName": "FString"
+							},
+							"direction": "output"
+						}
+					],
+					"traits":
+					{
+						"static": true,
+						"pure": false,
+						"callable": true,
+						"nativeAccess": "public"
+					},
+					"metadata":
+					{
+						"displayName": "Release Gameplay Lifecycle",
+						"category": "UnifiedScript|Coexistence",
+						"tooltip": "Release Gameplay Lifecycle",
 						"deprecated": false,
 						"worldContextParameter": "WorldContextObject"
 					}
@@ -4039,6 +4320,47 @@
 					"name": "EUnifiedScriptInteropMode_MAX",
 					"value": 3,
 					"displayName": "EUnified Script Interop Mode MAX"
+				}
+			]
+		},
+		{
+			"path": "/Script/UEUnifiedScriptRuntime.EUnifiedScriptRuntimeOwner",
+			"name": "EUnifiedScriptRuntimeOwner",
+			"nativeName": "EUnifiedScriptRuntimeOwner",
+			"module": "UEUnifiedScriptRuntime",
+			"headerPath": "UnifiedScriptWorldSubsystem.h",
+			"kind": "enum",
+			"traits":
+			{
+				"abstract": false,
+				"blueprintType": true,
+				"interface": false
+			},
+			"metadata":
+			{
+				"displayName": "EUnified Script Runtime Owner",
+				"tooltip": "Runtime lane that owns one gameplay lifecycle route in a World.",
+				"deprecated": false
+			},
+			"interfacePaths": [],
+			"properties": [],
+			"functions": [],
+			"delegates": [],
+			"enumValues": [
+				{
+					"name": "Puerts",
+					"value": 0,
+					"displayName": "Puerts"
+				},
+				{
+					"name": "UnifiedScript",
+					"value": 1,
+					"displayName": "Unified Script"
+				},
+				{
+					"name": "EUnifiedScriptRuntimeOwner_MAX",
+					"value": 2,
+					"displayName": "EUnified Script Runtime Owner MAX"
 				}
 			]
 		}
