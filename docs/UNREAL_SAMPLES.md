@@ -54,6 +54,11 @@ Each sample subdirectory contains `runner.log` and the immutable
 must report five passed categories, preserve all four source repositories, and
 contain no failed declarative assertion.
 
+Runners that materialize untracked generated outputs declare every removable
+path in the catalog. The matrix rejects an undeclared path and only deletes a
+declared file below the clean comparison worktree; tracked changes remain the
+responsibility of the child runner's own transactional restore.
+
 ## Run a focused sample
 
 For investigation, select one or more IDs without weakening their report

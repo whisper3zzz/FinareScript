@@ -162,6 +162,47 @@ function Invoke-SampleProcess {
     }
 }
 
+function Remove-DeclaredUntrackedOutputs {
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string[]]$RelativePaths
+    )
+
+    $rootPath = [IO.Path]::GetFullPath($Root).TrimEnd('\', '/') +
+        [IO.Path]::DirectorySeparatorChar
+    $declared = [Collections.Generic.HashSet[string]]::new(
+        [StringComparer]::Ordinal)
+    foreach ($relativePath in $RelativePaths) {
+        $normalized = $relativePath.Replace('\', '/')
+        if ([IO.Path]::IsPathRooted($relativePath) -or
+            $normalized.Split('/') -contains '..' -or
+            -not $declared.Add($normalized)) {
+            throw "Unsafe or duplicate cleanup path '$relativePath'."
+        }
+    }
+
+    $state = Get-GitState -Root $Root
+    $untrackedPaths = @($state.untracked | ForEach-Object { $_.Substring(3) })
+    $unexpected = @($untrackedPaths | Where-Object {
+        $_.Replace('\', '/') -notin $declared
+    })
+    if ($unexpected.Count -ne 0) {
+        throw (
+            "Sample created undeclared untracked outputs below '$Root': " +
+            ($unexpected -join ', '))
+    }
+    foreach ($relativePath in $untrackedPaths) {
+        $candidate = [IO.Path]::GetFullPath((Join-Path $Root $relativePath))
+        if (-not $candidate.StartsWith(
+                $rootPath,
+                [StringComparison]::OrdinalIgnoreCase) -or
+            -not (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+            throw "Declared cleanup output is not a safe file: $candidate"
+        }
+        Remove-Item -LiteralPath $candidate -Force
+    }
+}
+
 foreach ($required in @($catalogPath, $releasePath, $powershell)) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
         throw "Required sample-matrix input is missing: $required"
@@ -335,6 +376,13 @@ foreach ($sample in $samples) {
                 (($failedAssertions | ForEach-Object {
                     "$($_.path) actual=$($_.actual) expected=$($_.expected)"
                 }) -join '; '))
+        }
+        if (@($sample.execution.cleanupUntracked).Count -gt 0) {
+            $cleanupRoot = Join-Path $ComparisonRoot `
+                ([string]$sample.execution.cleanupRoot)
+            Remove-DeclaredUntrackedOutputs `
+                -Root $cleanupRoot `
+                -RelativePaths @($sample.execution.cleanupUntracked)
         }
         Copy-Item -LiteralPath $evidencePath -Destination $archivedEvidencePath -Force
         $sampleRecords.Add([ordered]@{

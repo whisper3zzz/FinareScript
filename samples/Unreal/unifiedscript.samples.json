@@ -102,7 +102,15 @@
           "300"
         ],
         "reportMarker": "Report: ",
-        "reportSchema": "unifiedscript.blockbreaker-demo-delivery/v0.2"
+        "reportSchema": "unifiedscript.blockbreaker-demo-delivery/v0.2",
+        "cleanupRoot": "BlockBreaker-UnifiedScript",
+        "cleanupUntracked": [
+          "Managed/BlockBreaker.UnifiedScript.asset.json",
+          "Managed/BlockBreaker.UnifiedScript.sourcemap.json",
+          "Managed/BlockBreaker.UnifiedScript.uschunk",
+          "Plugins/UEUnifiedScript/Source/UEUnifiedScriptRuntime/Private/Tests/UnifiedScriptRuntimeBreadcrumbTests.cpp",
+          "Plugins/UEUnifiedScript/Source/UEUnifiedScriptRuntime/Private/Tests/UnifiedScriptRuntimeOwnershipTests.cpp"
+        ]
       },
       "assertions": [
         {

@@ -814,6 +814,8 @@ def main() -> int:
         and "unifiedscript.sample-matrix-report/v0.1" in sample_matrix_runner
         and "Test-SampleAssertion" in sample_matrix_runner
         and "Get-GitState" in sample_matrix_runner
+        and "Remove-DeclaredUntrackedOutputs" in sample_matrix_runner
+        and "cleanupUntracked" in sample_matrix_runner
         and sample_runners
         == {
             "tools/run-unifiedscript-alpha-acceptance.ps1",
@@ -824,6 +826,7 @@ def main() -> int:
         }
         and "client/server gameplay replication" in sample_document
         and "complete acceptance corpus" in sample_document
+        and "rejects an undeclared path" in sample_document
         and "docs/UNREAL_SAMPLES.md" in release_document_paths
         and "sample-matrix" in product_release["acceptance"]["requiredGates"],
         "M12.2 five-category sample catalog, declarative assertions, aggregate runner, or support boundary is incomplete",
