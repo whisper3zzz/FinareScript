@@ -96,7 +96,8 @@ dotnet run --project src/UnifiedScript.Cli -c Release -- `
 ```
 
 Turn that scan into a deterministic migration plan, API coverage/Contract
-request set, compile-safe managed stubs, and a two-lane verification harness:
+request set, compile-safe managed stubs, an ownership manifest, Puerts runtime
+guard, and a two-lane verification harness:
 
 ```powershell
 dotnet run --project src/UnifiedScript.Cli -c Release -- `
@@ -105,6 +106,21 @@ dotnet run --project src/UnifiedScript.Cli -c Release -- `
   --out artifacts\migration\my-game `
   --fail-on-blockers
 ```
+
+Keep both runtimes installed while moving one concrete script type at a time:
+
+```powershell
+dotnet run --project src/UnifiedScript.Cli -c Release -- `
+  ue-puerts-coexist artifacts\migration\my-game\migration-plan.json `
+  --out artifacts\migration\my-game\coexistence `
+  --unified TS_Rifle=MyGame.UnifiedScript.RifleScript `
+  --fail-on-blockers
+```
+
+The generated Puerts guard and the UnifiedScript Component share one native
+World ownership arbiter, so the same host/lifecycle key cannot be activated by
+both runtimes. Route changes require stopping the old owner first; generation
+alone does not alter project spawn/asset selection or claim gameplay parity.
 
 After both runtimes have filled their evidence files, compare exact observable
 values with `ue-puerts-verify ... --fail-on-mismatch`. Generated templates are

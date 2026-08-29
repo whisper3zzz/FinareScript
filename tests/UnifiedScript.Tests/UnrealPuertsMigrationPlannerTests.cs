@@ -28,7 +28,7 @@ public sealed class UnrealPuertsMigrationPlannerTests
         Assert.False(first.Plan.Blocked);
         Assert.Equal(scan.Summary.FindingCount, first.Plan.Summary.WorkItemCount);
         Assert.Equal(5, first.Plan.Phases.Count);
-        Assert.Equal(8, first.Files.Count);
+        Assert.Equal(10, first.Files.Count);
         Assert.Equal(
             first.Files.Select(static file => (file.RelativePath, file.Content, file.Sha256)),
             second.Files.Select(static file => (file.RelativePath, file.Content, file.Sha256)));
@@ -53,6 +53,12 @@ public sealed class UnrealPuertsMigrationPlannerTests
             "UE.StaticMeshComponent.StaticMesh:set",
             "covered-adapter");
         AssertCoverage(first.ApiCoverage, "UE.GameplayStatics.ApplyDamage", "missing");
+        Assert.All(first.CoexistenceManifest.Routes, static route =>
+            Assert.Equal(UnrealPuertsRuntimeOwner.Puerts, route.Owner));
+        Assert.Contains(
+            first.Files,
+            static file => file.RelativePath == "PuertsOwnership.generated.ts" &&
+                file.Content.Contains("claimPuertsLifecycle", StringComparison.Ordinal));
         Assert.Contains(
             first.ContractRequests.Requests,
             static request => request.RequestKind == "runtime-service-route" &&
@@ -81,7 +87,7 @@ public sealed class UnrealPuertsMigrationPlannerTests
             first.VerificationHarness.Cases.Count,
             first.PuertsEvidenceTemplate.Cases.Count);
 
-        Assert.Equal(7, first.Manifest.Payloads.Count);
+        Assert.Equal(9, first.Manifest.Payloads.Count);
         foreach (UnrealPuertsMigrationPackagePayload payload in first.Manifest.Payloads)
         {
             UnrealPuertsMigrationGeneratedFile file = first.Files.Single(

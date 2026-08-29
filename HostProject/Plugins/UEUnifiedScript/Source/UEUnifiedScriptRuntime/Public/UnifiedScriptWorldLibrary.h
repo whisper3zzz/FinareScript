@@ -12,6 +12,7 @@
 #include "CoreMinimal.h"
 #include "Engine/HitResult.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
+#include "UnifiedScriptWorldSubsystem.h"
 #include "UnifiedScriptWorldLibrary.generated.h"
 
 /**
@@ -26,6 +27,28 @@ class UEUNIFIEDSCRIPTRUNTIME_API UUnifiedScriptWorldLibrary final
     GENERATED_BODY()
 
 public:
+    /** Shared Puerts/UnifiedScript arbitration point for one host lifecycle route. */
+    UFUNCTION(BlueprintCallable, Category="UnifiedScript|Coexistence", meta=(WorldContext="WorldContextObject"))
+    static bool ClaimGameplayLifecycle(
+        UObject* WorldContextObject,
+        UObject* Claimant,
+        UObject* HostObject,
+        FName LifecycleKey,
+        EUnifiedScriptRuntimeOwner RuntimeOwner,
+        FString& OutError);
+
+    UFUNCTION(BlueprintCallable, Category="UnifiedScript|Coexistence", meta=(WorldContext="WorldContextObject"))
+    static bool ReleaseGameplayLifecycle(
+        UObject* WorldContextObject,
+        UObject* Claimant,
+        UObject* HostObject,
+        FName LifecycleKey,
+        EUnifiedScriptRuntimeOwner RuntimeOwner,
+        FString& OutError);
+
+    UFUNCTION(BlueprintPure, Category="UnifiedScript|Coexistence", meta=(WorldContext="WorldContextObject"))
+    static FString GetGameplayLifecycleOwnershipReport(UObject* WorldContextObject);
+
     UFUNCTION(BlueprintCallable, Category="UnifiedScript|Resources", meta=(WorldContext="WorldContextObject"))
     static UObject* LoadObjectByPath(UObject* WorldContextObject, const FString& ObjectPath);
 

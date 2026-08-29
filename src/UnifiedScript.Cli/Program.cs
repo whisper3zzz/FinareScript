@@ -143,6 +143,11 @@ internal static class Program
             return RunUnrealPuertsPlan(args);
         }
 
+        if (args.Count > 0 && args[0] == "ue-puerts-coexist")
+        {
+            return RunUnrealPuertsCoexist(args);
+        }
+
         if (args.Count > 0 && args[0] == "ue-puerts-verify")
         {
             return RunUnrealPuertsVerify(args);
@@ -1046,6 +1051,58 @@ internal static class Program
             $"matched={report.Summary.PassedCaseCount}; " +
             $"issues={report.Summary.IssueCount}");
         return options.FailOnMismatch && !report.Passed ? 65 : 0;
+    }
+
+    private static int RunUnrealPuertsCoexist(IReadOnlyList<string> args)
+    {
+        if (!TryParseUnrealPuertsCoexistArguments(
+                args,
+                out UnrealPuertsCoexistOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+
+        options = options ?? throw new InvalidOperationException(
+            "Argument parsing succeeded without Puerts coexistence options.");
+        if (!File.Exists(options.PlanPath))
+        {
+            Console.Error.WriteLine($"Puerts migration plan does not exist: {options.PlanPath}");
+            return 66;
+        }
+        string fullPlanPath = Path.GetFullPath(options.PlanPath);
+        UnrealPuertsMigrationPlan plan = UnrealPuertsMigrationPackageJson.DeserializePlan(
+            File.ReadAllText(fullPlanPath));
+        UnrealPuertsCoexistencePackage package =
+            new UnrealPuertsCoexistencePlanner().Generate(
+                plan,
+                options.UnifiedManagedTypes);
+        string fullOutputDirectory = Path.GetFullPath(options.OutputDirectory);
+        OutputFile[] outputs = package.Files.Select(file => new OutputFile(
+                ResolveOutputPath(fullOutputDirectory, file.RelativePath),
+                file.Content))
+            .ToArray();
+        foreach (OutputFile output in outputs)
+        {
+            EnsureDifferentPath(
+                fullPlanPath,
+                output.Path,
+                "Puerts coexistence output cannot overwrite its migration plan input.");
+        }
+        WriteTransactionally(outputs);
+        foreach (OutputFile output in outputs)
+        {
+            Console.WriteLine(Path.GetFullPath(output.Path));
+        }
+        int unifiedCount = package.Manifest.Routes.Count(
+            static route => route.Owner == UnrealPuertsRuntimeOwner.UnifiedScript);
+        Console.WriteLine(
+            $"manifest={package.Manifest.ManifestId}; " +
+            $"routes={package.Manifest.Routes.Count}; " +
+            $"puerts={package.Manifest.Routes.Count - unifiedCount}; " +
+            $"unifiedScript={unifiedCount}; " +
+            $"blocked={plan.Blocked.ToString().ToLowerInvariant()}");
+        return options.FailOnBlockers && plan.Blocked ? 65 : 0;
     }
 
     private static int RunEmit(IReadOnlyList<string> args)
@@ -3415,6 +3472,63 @@ internal static class Program
         return true;
     }
 
+    private static bool TryParseUnrealPuertsCoexistArguments(
+        IReadOnlyList<string> args,
+        out UnrealPuertsCoexistOptions? options)
+    {
+        options = null;
+        if (args.Count < 4 || args[0] != "ue-puerts-coexist" ||
+            args[1].StartsWith("--", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        string planPath = args[1];
+        string? outputDirectory = null;
+        var unifiedManagedTypes = new Dictionary<string, string>(StringComparer.Ordinal);
+        bool failOnBlockers = false;
+        int index = 2;
+        while (index < args.Count)
+        {
+            string option = args[index++];
+            if (option == "--fail-on-blockers" && !failOnBlockers)
+            {
+                failOnBlockers = true;
+                continue;
+            }
+            if (index >= args.Count)
+            {
+                return false;
+            }
+            string value = args[index++];
+            if (option == "--out" && outputDirectory is null)
+            {
+                outputDirectory = value;
+                continue;
+            }
+            if (option != "--unified")
+            {
+                return false;
+            }
+            int separator = value.IndexOf('=');
+            if (separator <= 0 || separator == value.Length - 1 ||
+                !unifiedManagedTypes.TryAdd(value[..separator], value[(separator + 1)..]))
+            {
+                return false;
+            }
+        }
+        if (outputDirectory is null)
+        {
+            return false;
+        }
+        options = new UnrealPuertsCoexistOptions(
+            planPath,
+            outputDirectory,
+            unifiedManagedTypes,
+            failOnBlockers);
+        return true;
+    }
+
     private static bool TryParseExecuteArguments(
         IReadOnlyList<string> args,
         out ExecuteOptions? options)
@@ -4570,6 +4684,7 @@ internal static class Program
         "  unifiedscript ue-puerts-inventory <puerts-project> --out <inventory.json> [--native-project <target-project>] [--project-name <name>] [--coverage <coverage.json> --report <report.json> --fail-on-uncovered]\n" +
         "  unifiedscript ue-puerts-scan <puerts-project> --out <scan.json> [--native-project <project>] [--project-name <name>] [--script-root <directory>]... [--native-root <directory>]... [--fail-on-blockers]\n" +
         "  unifiedscript ue-puerts-plan <scan.json> --out <directory> [--contract <api-contract.json>] [--namespace <name>] [--fail-on-blockers]\n" +
+        "  unifiedscript ue-puerts-coexist <migration-plan.json> --out <directory> [--unified <SourceType=Managed.Type>]... [--fail-on-blockers]\n" +
         "  unifiedscript ue-puerts-verify <harness.json> --puerts <evidence.json> --unified <evidence.json> --out <report.json> [--fail-on-mismatch]\n" +
         "  unifiedscript ue-profile-diagnose --baseline <profile.json> --current <profile.json> --evidence <evidence.json> --out <report.json>\n" +
         "  unifiedscript ue-workload-capture --manifest <suite.json> --measurement <raw.json> --out <capture.json>\n" +
@@ -4805,6 +4920,12 @@ internal static class Program
         string UnifiedScriptEvidencePath,
         string OutputPath,
         bool FailOnMismatch);
+
+    private sealed record UnrealPuertsCoexistOptions(
+        string PlanPath,
+        string OutputDirectory,
+        IReadOnlyDictionary<string, string> UnifiedManagedTypes,
+        bool FailOnBlockers);
 
     private sealed record IdentityOptions(
         string InputPath,

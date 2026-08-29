@@ -142,6 +142,7 @@ public sealed record UnrealPuertsMigrationPackage(
     UnrealPuertsMigrationPlan Plan,
     UnrealPuertsApiCoverageReport ApiCoverage,
     UnrealPuertsContractRequestSet ContractRequests,
+    UnrealPuertsCoexistenceManifest CoexistenceManifest,
     UnrealPuertsVerificationHarness VerificationHarness,
     UnrealPuertsVerificationEvidence PuertsEvidenceTemplate,
     UnrealPuertsVerificationEvidence UnifiedScriptEvidenceTemplate,
@@ -303,6 +304,8 @@ public sealed class UnrealPuertsMigrationPlanner
             normalizedContract,
             contractFingerprint);
         UnrealPuertsContractRequestSet requests = BuildContractRequests(coverage);
+        UnrealPuertsCoexistencePackage coexistence =
+            new UnrealPuertsCoexistencePlanner().Generate(plan);
         string stubs = BuildMigrationStubs(plan, migrationNamespace);
         UnrealPuertsVerificationHarness harness = BuildHarness(plan);
         UnrealPuertsVerificationEvidence puertsTemplate = BuildEvidenceTemplate(
@@ -311,12 +314,16 @@ public sealed class UnrealPuertsMigrationPlanner
         UnrealPuertsVerificationEvidence unifiedTemplate = BuildEvidenceTemplate(
             harness,
             "unifiedScript");
-        var files = new List<UnrealPuertsMigrationGeneratedFile>
-        {
+        List<UnrealPuertsMigrationGeneratedFile> files =
+        [
             CreateFile("migration-plan.json", "application/json", UnrealPuertsMigrationPackageJson.Serialize(plan)),
             CreateFile("api-coverage.json", "application/json", UnrealPuertsMigrationPackageJson.Serialize(coverage)),
             CreateFile("contract-requests.json", "application/json", UnrealPuertsMigrationPackageJson.Serialize(requests)),
             CreateFile("MigrationStubs.cs", "text/x-csharp", stubs),
+            .. coexistence.Files.Select(static file => CreateFile(
+                file.RelativePath,
+                file.MediaType,
+                file.Content)).ToArray(),
             CreateFile("verification-harness.json", "application/json", UnrealPuertsMigrationPackageJson.Serialize(harness)),
             CreateFile(
                 "evidence/puerts.template.json",
@@ -326,7 +333,7 @@ public sealed class UnrealPuertsMigrationPlanner
                 "evidence/unifiedscript.template.json",
                 "application/json",
                 UnrealPuertsMigrationPackageJson.Serialize(unifiedTemplate)),
-        };
+        ];
         var manifest = new UnrealPuertsMigrationPackageManifest(
             "unifiedscript.puerts-migration-package/v0.1",
             scan.ProjectName,
@@ -346,6 +353,7 @@ public sealed class UnrealPuertsMigrationPlanner
             plan,
             coverage,
             requests,
+            coexistence.Manifest,
             harness,
             puertsTemplate,
             unifiedTemplate,

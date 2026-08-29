@@ -76,7 +76,7 @@ dotnet run --project src/UnifiedScript.Cli -c Release -- `
   --fail-on-blockers
 ```
 
-The write is transactional and produces eight deterministic files:
+The write is transactional and produces ten deterministic files:
 
 - `migration-plan.json` orders every finding through project foundation, API
   Contract/assets, managed port, World lifecycle, and manual-rewrite phases;
@@ -87,6 +87,10 @@ The write is transactional and produces eight deterministic files:
   service, and resource-loader work into explicit requests;
 - `MigrationStubs.cs` provides compile-safe type/lifecycle placeholders carrying
   their work-item IDs and throwing until the port is deliberately implemented;
+- `coexistence-manifest.json` assigns every discovered concrete script type a
+  stable World lifecycle key and exactly one current runtime owner;
+- `PuertsOwnership.generated.ts` lets the retained Puerts boundary claim and
+  release those keys through the same native World arbiter as UnifiedScript;
 - `verification-harness.json` defines required observable values for both the
   `puerts` and `unifiedScript` lanes under an exactly-one-runtime-per-World
   lifecycle policy;
@@ -106,6 +110,43 @@ The generated C# is a scaffold, not translated gameplay. It never fabricates
 method signatures, object ownership, lifecycle order, or behavior from regular
 expressions. `--fail-on-blockers` returns 65 after writing the full package so a
 team can inspect blocked work without losing diagnostic output.
+
+## Incremental coexistence
+
+The migration package starts safely with every discovered script type owned by
+Puerts. Promote only the concrete types whose managed replacement is ready:
+
+```powershell
+dotnet run --project src/UnifiedScript.Cli -c Release -- `
+  ue-puerts-coexist artifacts\migration\my-game\migration-plan.json `
+  --out artifacts\migration\my-game\coexistence `
+  --unified TS_Rifle=MyGame.UnifiedScript.RifleScript `
+  --fail-on-blockers
+```
+
+`--unified` may be repeated. Unknown source types, duplicate promotions, blank
+managed type names, stale/invalid plans, and duplicate route keys fail instead
+of producing an ambiguous handoff. The output is strict
+`unifiedscript.puerts-coexistence/v0.1`; rerunning the same inputs is
+byte-for-byte deterministic.
+
+For each Puerts-owned concrete script instance, call the generated
+`claimPuertsLifecycle` once before its gameplay lifecycle starts and
+`releasePuertsLifecycle` once during teardown. Do not claim separately for base
+class hooks: for example, a `TS_Rifle` instance has one `BlockBreaker.TS_Rifle`
+claim even though it inherits `TS_BaseGun`. A UnifiedScript Component claims
+the same route before managed activation. Set its `LifecycleOwnershipKey` to
+the manifest key; when left empty it falls back to the resolved managed type
+name. The World subsystem rejects a second claimant or runtime owner, prunes
+stale weak claims, clears claims during World shutdown, and prevents reload
+from changing a live route.
+
+Owner changes are stop/change/start transactions: stop the old runtime instance,
+change the manifest and spawn/asset selection, then start the new runtime. The
+manifest and generated guard do not rewrite project spawning, Script Assets, or
+gameplay code, and do not prove behavior parity by themselves. They prevent
+accidental double ownership while both runtimes remain installed; the
+side-by-side evidence gate below still decides whether a migrated type is ready.
 
 ## Side-by-side verification
 
@@ -153,4 +194,9 @@ five existing service routes and one setter adapter), 15 remain explicit
 Contract/service requests, and the prototype extension remains manual. The
 64-case side-by-side harness and pending evidence templates were generated and
 the template-only mismatch gate correctly returned 65; no new live runtime
-equivalence is claimed by this planning slice.
+equivalence is claimed by this planning slice. The reproduced coexistence
+manifest assigns `TS_BaseGun` and `TS_Player` to Puerts and promotes only
+`TS_Rifle` to `BlockBreaker.UnifiedScript.BlockBreakerRifleScript`. Native UE
+5.8.1 build and `UnifiedScript.Unreal.Coexistence.RuntimeOwnership` Automation
+evidence verify that independent routes coexist while conflicting claims are
+rejected.

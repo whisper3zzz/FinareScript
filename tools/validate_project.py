@@ -3350,7 +3350,7 @@ def main() -> int:
         and "blind source translation" in puerts_migration_document
         and "exactly four authored TypeScript files" in puerts_migration_document
         and "- [x] scan a Puerts project into an inventory" in roadmap
-        and "incremental coexistence and lifecycle ownership" in roadmap,
+        and "- [x] support incremental coexistence during migration" in roadmap,
         "M12.1 generalized Puerts source ownership, risk scan, CLI, tests, or documentation is incomplete",
     )
     checks.append(
@@ -3422,7 +3422,7 @@ def main() -> int:
         in puerts_migration_planner_test
         and "BlockedScanStillWritesDiagnosablePackageBeforeFailingGate"
         in puerts_migration_planner_test
-        and "eight deterministic files" in puerts_migration_document
+        and "ten deterministic files" in puerts_migration_document
         and "Both evidence templates intentionally fail this gate"
         in puerts_migration_document
         and "- [x] generate a migration plan, API coverage report"
@@ -3432,6 +3432,75 @@ def main() -> int:
     )
     checks.append(
         "M12.1 emits deterministic Puerts migration packages and strict side-by-side evidence gates"
+    )
+    puerts_coexistence_path = (
+        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealPuertsCoexistence.cs"
+    )
+    puerts_coexistence_test_path = (
+        ROOT / "tests" / "UnifiedScript.Tests" / "UnrealPuertsCoexistenceTests.cs"
+    )
+    runtime_world_header_path = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+        / "UEUnifiedScriptRuntime" / "Public" / "UnifiedScriptWorldSubsystem.h"
+    )
+    runtime_world_library_header_path = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+        / "UEUnifiedScriptRuntime" / "Public" / "UnifiedScriptWorldLibrary.h"
+    )
+    runtime_component_header_path = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+        / "UEUnifiedScriptRuntime" / "Public" / "UnifiedScriptComponent.h"
+    )
+    runtime_ownership_test_path = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+        / "UEUnifiedScriptRuntime" / "Private" / "Tests"
+        / "UnifiedScriptRuntimeOwnershipTests.cpp"
+    )
+    for path in [
+        puerts_coexistence_path,
+        puerts_coexistence_test_path,
+        runtime_world_header_path,
+        runtime_world_library_header_path,
+        runtime_component_header_path,
+        runtime_ownership_test_path,
+    ]:
+        require(path.is_file(), f"Missing M12.1 coexistence artifact: {path}")
+    puerts_coexistence = puerts_coexistence_path.read_text(encoding="utf-8")
+    puerts_coexistence_test = puerts_coexistence_test_path.read_text(encoding="utf-8")
+    runtime_world_header = runtime_world_header_path.read_text(encoding="utf-8")
+    runtime_world_library_header = runtime_world_library_header_path.read_text(
+        encoding="utf-8"
+    )
+    runtime_component_header = runtime_component_header_path.read_text(encoding="utf-8")
+    runtime_ownership_test = runtime_ownership_test_path.read_text(encoding="utf-8")
+    require(
+        "unifiedscript.puerts-coexistence/v0.1" in puerts_coexistence
+        and "exactly-one-runtime-owns-each-world-lifecycle" in puerts_coexistence
+        and 'CreateFile("coexistence-manifest.json"' in puerts_coexistence
+        and 'CreateFile("PuertsOwnership.generated.ts"' in puerts_coexistence
+        and "claimPuertsLifecycle" in puerts_coexistence
+        and "releasePuertsLifecycle" in puerts_coexistence
+        and 'args[0] == "ue-puerts-coexist"' in cli_source
+        and "--unified" in cli_source
+        and "CliWritesPromotedRoutesAndBlockedPlanStillFailsAfterOutput"
+        in puerts_coexistence_test
+        and "EUnifiedScriptRuntimeOwner" in runtime_world_header
+        and "ClaimGameplayLifecycle" in runtime_world_header
+        and "ReleaseGameplayLifecycle" in runtime_world_header
+        and "BuildGameplayLifecycleOwnershipReport" in runtime_world_header
+        and "ClaimGameplayLifecycle" in runtime_world_library_header
+        and "ReleaseGameplayLifecycle" in runtime_world_library_header
+        and "LifecycleOwnershipKey" in runtime_component_header
+        and "Reload cannot change lifecycle ownership" in runtime_component_source
+        and "UnifiedScript.Unreal.Coexistence.RuntimeOwnership" in runtime_ownership_test
+        and "For each Puerts-owned concrete script instance" in puerts_migration_document
+        and "manifest and generated guard do not rewrite" in puerts_migration_document
+        and "- [x] support incremental coexistence during migration" in roadmap
+        and "- Next slice: **M12.2" in roadmap,
+        "M12.1 coexistence manifest, shared World arbiter, tests, or lifecycle documentation is incomplete",
+    )
+    checks.append(
+        "M12.1 arbitrates incremental Puerts and UnifiedScript lifecycle ownership per World"
     )
     roundtrip_manifest_path = (
         ROOT / "comparison" / "blockbreaker-roundtrip.json"
@@ -4428,7 +4497,7 @@ def main() -> int:
         and "4,096 accepted" in large_project_scale_doc
         and "updated exactly one" in large_project_scale_doc
         and "- [x] test large contracts and script sets" in roadmap
-        and "- Next slice: **M12.1" in roadmap,
+        and "- Active milestone: **M12" in roadmap,
         "M11.1 large Contract, script-set, incremental, or asset-churn scale gate is incomplete",
     )
     checks.append(
@@ -4729,7 +4798,7 @@ def main() -> int:
         and "all 27 captures" in performance_suite_doc
         and "all 54 execution ordinals" in performance_suite_doc
         and "mixed results close M10.1" in performance_suite_doc
-        and "- Next slice: **M12.1" in roadmap
+        and "- Active milestone: **M12" in roadmap
         and "- [x] use profiler evidence to promote only high-volume stable data"
         in roadmap
         and "- [x] preserve World ownership, generation checks, bounds"

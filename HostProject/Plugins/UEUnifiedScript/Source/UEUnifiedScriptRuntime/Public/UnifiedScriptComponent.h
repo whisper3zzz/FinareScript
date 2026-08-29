@@ -60,6 +60,13 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="UnifiedScript|Runtime", meta=(AdvancedDisplay))
     FString ScriptTypeName;
 
+    /**
+     * Canonical coexistence-manifest key claimed before managed activation.
+     * Empty derives a stable key from the resolved managed type name.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="UnifiedScript|Coexistence")
+    FName LifecycleOwnershipKey;
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="UnifiedScript")
     bool bStartAutomatically = true;
 
@@ -75,6 +82,9 @@ public:
 
     UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category="UnifiedScript")
     FString ActiveScriptAssetPath;
+
+    UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category="UnifiedScript|Coexistence")
+    FName ActiveLifecycleOwnershipKey;
 
     UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category="UnifiedScript")
     FString ActiveDeclarationAssetPath;
@@ -278,6 +288,7 @@ private:
 
     FString ActiveResolvedAssemblyPath;
     FString ActiveResolvedTypeName;
+    TWeakObjectPtr<UObject> ActiveLifecycleHostObject;
     bool bReloadRequested = false;
     bool bActorEventsBound = false;
     uint64 ManagedScriptInstanceId = 0;

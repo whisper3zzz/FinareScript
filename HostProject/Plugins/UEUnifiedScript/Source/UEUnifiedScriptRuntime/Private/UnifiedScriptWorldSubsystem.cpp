@@ -1,6 +1,9 @@
 #include "UnifiedScriptWorldSubsystem.h"
 
+#include "Dom/JsonObject.h"
 #include "Engine/World.h"
+#include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
 #include "Subsystems/SubsystemCollection.h"
 #include "UnifiedScriptCoreClrHost.h"
 #include "UnifiedScriptRuntimeDiagnostic.h"
@@ -27,6 +30,13 @@ void FailUnavailable(FUnifiedScriptObjectHandleResult& OutResult)
     OutResult.Error = EUnifiedScriptObjectHandleError::RegistryWorldUnavailable;
     OutResult.Message =
         TEXT("The UnifiedScript world runtime host is not ready.");
+}
+
+const TCHAR* RuntimeOwnerName(EUnifiedScriptRuntimeOwner RuntimeOwner)
+{
+    return RuntimeOwner == EUnifiedScriptRuntimeOwner::Puerts
+        ? TEXT("puerts")
+        : TEXT("unifiedScript");
 }
 }
 
@@ -263,6 +273,207 @@ bool UUnifiedScriptWorldSubsystem::IsManagedWorldReady() const
 uint64 UUnifiedScriptWorldSubsystem::GetWorldHostId() const
 {
     return WorldHostId;
+}
+
+bool UUnifiedScriptWorldSubsystem::ClaimGameplayLifecycle(
+    UObject* Claimant,
+    UObject* HostObject,
+    FName LifecycleKey,
+    EUnifiedScriptRuntimeOwner RuntimeOwner,
+    FString& OutError)
+{
+    check(IsInGameThread());
+    OutError.Reset();
+    PruneGameplayLifecycleClaims();
+    UWorld* World = GetWorld();
+    if (!IsNativeRuntimeReady() || World == nullptr)
+    {
+        OutError = TEXT("The UnifiedScript native World host is unavailable.");
+        return false;
+    }
+    if (!IsValid(Claimant) || !IsValid(HostObject) || LifecycleKey.IsNone())
+    {
+        OutError = TEXT("A lifecycle claim requires valid claimant/host objects and a non-empty key.");
+        return false;
+    }
+    if (Claimant->GetWorld() != World || HostObject->GetWorld() != World)
+    {
+        OutError = TEXT("Lifecycle claimant and host objects must belong to the same World host.");
+        return false;
+    }
+    if (RuntimeOwner != EUnifiedScriptRuntimeOwner::Puerts &&
+        RuntimeOwner != EUnifiedScriptRuntimeOwner::UnifiedScript)
+    {
+        OutError = TEXT("The requested gameplay lifecycle runtime owner is invalid.");
+        return false;
+    }
+
+    const FUnifiedScriptGameplayLifecycleClaimKey Key{
+        FObjectKey(HostObject),
+        LifecycleKey};
+    if (const FUnifiedScriptGameplayLifecycleClaim* Existing =
+            GameplayLifecycleClaims.Find(Key))
+    {
+        if (Existing->ClaimantKey == FObjectKey(Claimant) &&
+            Existing->RuntimeOwner == RuntimeOwner)
+        {
+            return true;
+        }
+        OutError = FString::Printf(
+            TEXT("Gameplay lifecycle '%s' on '%s' is already owned by %s claimant '%s'; %s claimant '%s' was rejected."),
+            *LifecycleKey.ToString(),
+            *HostObject->GetPathName(),
+            UE::UnifiedScript::WorldHost::Private::RuntimeOwnerName(
+                Existing->RuntimeOwner),
+            Existing->Claimant.IsValid()
+                ? *Existing->Claimant->GetPathName()
+                : TEXT("<retired>"),
+            UE::UnifiedScript::WorldHost::Private::RuntimeOwnerName(RuntimeOwner),
+            *Claimant->GetPathName());
+        return false;
+    }
+
+    GameplayLifecycleClaims.Add(
+        Key,
+        FUnifiedScriptGameplayLifecycleClaim{
+            HostObject,
+            Claimant,
+            FObjectKey(Claimant),
+            LifecycleKey,
+            RuntimeOwner});
+    return true;
+}
+
+bool UUnifiedScriptWorldSubsystem::ReleaseGameplayLifecycle(
+    UObject* Claimant,
+    UObject* HostObject,
+    FName LifecycleKey,
+    EUnifiedScriptRuntimeOwner RuntimeOwner,
+    FString& OutError)
+{
+    check(IsInGameThread());
+    OutError.Reset();
+    PruneGameplayLifecycleClaims();
+    if (!IsValid(Claimant) || !IsValid(HostObject) || LifecycleKey.IsNone())
+    {
+        OutError = TEXT("A lifecycle release requires valid claimant/host objects and a non-empty key.");
+        return false;
+    }
+    const FUnifiedScriptGameplayLifecycleClaimKey Key{
+        FObjectKey(HostObject),
+        LifecycleKey};
+    const FUnifiedScriptGameplayLifecycleClaim* Existing =
+        GameplayLifecycleClaims.Find(Key);
+    if (Existing == nullptr)
+    {
+        OutError = FString::Printf(
+            TEXT("Gameplay lifecycle '%s' on '%s' has no active owner."),
+            *LifecycleKey.ToString(),
+            *HostObject->GetPathName());
+        return false;
+    }
+    if (Existing->ClaimantKey != FObjectKey(Claimant) ||
+        Existing->RuntimeOwner != RuntimeOwner)
+    {
+        OutError = FString::Printf(
+            TEXT("Gameplay lifecycle '%s' can only be released by its %s claimant '%s'."),
+            *LifecycleKey.ToString(),
+            UE::UnifiedScript::WorldHost::Private::RuntimeOwnerName(
+                Existing->RuntimeOwner),
+            Existing->Claimant.IsValid()
+                ? *Existing->Claimant->GetPathName()
+                : TEXT("<retired>"));
+        return false;
+    }
+    GameplayLifecycleClaims.Remove(Key);
+    return true;
+}
+
+int32 UUnifiedScriptWorldSubsystem::GetGameplayLifecycleClaimCount() const
+{
+    int32 Count = 0;
+    const UWorld* World = GetWorld();
+    for (const TPair<
+             FUnifiedScriptGameplayLifecycleClaimKey,
+             FUnifiedScriptGameplayLifecycleClaim>& Pair : GameplayLifecycleClaims)
+    {
+        const FUnifiedScriptGameplayLifecycleClaim& Claim = Pair.Value;
+        if (Claim.HostObject.IsValid() && Claim.Claimant.IsValid() &&
+            Claim.HostObject->GetWorld() == World && Claim.Claimant->GetWorld() == World)
+        {
+            ++Count;
+        }
+    }
+    return Count;
+}
+
+FString UUnifiedScriptWorldSubsystem::BuildGameplayLifecycleOwnershipReport() const
+{
+    TArray<const FUnifiedScriptGameplayLifecycleClaim*> Claims;
+    const UWorld* World = GetWorld();
+    for (const TPair<
+             FUnifiedScriptGameplayLifecycleClaimKey,
+             FUnifiedScriptGameplayLifecycleClaim>& Pair : GameplayLifecycleClaims)
+    {
+        const FUnifiedScriptGameplayLifecycleClaim& Claim = Pair.Value;
+        if (Claim.HostObject.IsValid() && Claim.Claimant.IsValid() &&
+            Claim.HostObject->GetWorld() == World && Claim.Claimant->GetWorld() == World)
+        {
+            Claims.Add(&Claim);
+        }
+    }
+    Claims.Sort([](
+        const FUnifiedScriptGameplayLifecycleClaim& Left,
+        const FUnifiedScriptGameplayLifecycleClaim& Right)
+    {
+        const int32 KeyOrder = Left.LifecycleKey.Compare(Right.LifecycleKey);
+        return KeyOrder != 0
+            ? KeyOrder < 0
+            : Left.HostObject->GetPathName() < Right.HostObject->GetPathName();
+    });
+
+    const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
+    Root->SetStringField(
+        TEXT("schemaVersion"),
+        TEXT("unifiedscript.runtime-ownership-report/v0.1"));
+    Root->SetStringField(TEXT("worldHostId"), LexToString(WorldHostId));
+    Root->SetNumberField(TEXT("claimCount"), Claims.Num());
+    TArray<TSharedPtr<FJsonValue>> JsonClaims;
+    for (const FUnifiedScriptGameplayLifecycleClaim* Claim : Claims)
+    {
+        const TSharedRef<FJsonObject> JsonClaim = MakeShared<FJsonObject>();
+        JsonClaim->SetStringField(TEXT("lifecycleKey"), Claim->LifecycleKey.ToString());
+        JsonClaim->SetStringField(
+            TEXT("runtimeOwner"),
+            UE::UnifiedScript::WorldHost::Private::RuntimeOwnerName(
+                Claim->RuntimeOwner));
+        JsonClaim->SetStringField(
+            TEXT("hostObject"),
+            Claim->HostObject->GetPathName());
+        JsonClaim->SetStringField(
+            TEXT("claimant"),
+            Claim->Claimant->GetPathName());
+        JsonClaims.Add(MakeShared<FJsonValueObject>(JsonClaim));
+    }
+    Root->SetArrayField(TEXT("claims"), MoveTemp(JsonClaims));
+    FString Json;
+    const TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
+        TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Json);
+    return FJsonSerializer::Serialize(Root, Writer) ? Json : FString();
+}
+
+void UUnifiedScriptWorldSubsystem::PruneGameplayLifecycleClaims()
+{
+    UWorld* World = GetWorld();
+    for (auto Iterator = GameplayLifecycleClaims.CreateIterator(); Iterator; ++Iterator)
+    {
+        const FUnifiedScriptGameplayLifecycleClaim& Claim = Iterator.Value();
+        if (!Claim.HostObject.IsValid() || !Claim.Claimant.IsValid() ||
+            Claim.HostObject->GetWorld() != World || Claim.Claimant->GetWorld() != World)
+        {
+            Iterator.RemoveCurrent();
+        }
+    }
 }
 
 FUnifiedScriptObjectHandle UUnifiedScriptWorldSubsystem::RegisterObject(
@@ -628,6 +839,7 @@ void UUnifiedScriptWorldSubsystem::ShutdownNativeRuntime()
     const bool bManagedWorldWasReady = IsManagedWorldReady();
     const uint64 ShuttingDownWorldHostId = WorldHostId;
     HostState = EUnifiedScriptWorldHostState::ShuttingDown;
+    GameplayLifecycleClaims.Reset();
     FUnifiedScriptRuntimeBreadcrumbs::RecordLifecycle(
         TEXT("WorldShutdown.Begin"),
         ShuttingDownWorldHostId);

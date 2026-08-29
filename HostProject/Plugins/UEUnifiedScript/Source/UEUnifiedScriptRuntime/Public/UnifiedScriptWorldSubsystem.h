@@ -4,6 +4,7 @@
 #include "Subsystems/WorldSubsystem.h"
 #include "UnifiedScriptNativeTransport.h"
 #include "UnifiedScriptObjectRegistry.h"
+#include "UObject/ObjectKey.h"
 
 #include <type_traits>
 
@@ -15,6 +16,39 @@ enum class EUnifiedScriptWorldHostState : uint8
     NativeReady = 1,
     ManagedReady = 2,
     ShuttingDown = 3,
+};
+
+/** Runtime lane that owns one gameplay lifecycle route in a World. */
+UENUM(BlueprintType)
+enum class EUnifiedScriptRuntimeOwner : uint8
+{
+    Puerts = 0,
+    UnifiedScript = 1,
+};
+
+struct FUnifiedScriptGameplayLifecycleClaimKey
+{
+    FObjectKey HostObject;
+    FName LifecycleKey;
+
+    bool operator==(const FUnifiedScriptGameplayLifecycleClaimKey& Other) const
+    {
+        return HostObject == Other.HostObject && LifecycleKey == Other.LifecycleKey;
+    }
+
+    friend uint32 GetTypeHash(const FUnifiedScriptGameplayLifecycleClaimKey& Value)
+    {
+        return HashCombine(GetTypeHash(Value.HostObject), GetTypeHash(Value.LifecycleKey));
+    }
+};
+
+struct FUnifiedScriptGameplayLifecycleClaim
+{
+    TWeakObjectPtr<UObject> HostObject;
+    TWeakObjectPtr<UObject> Claimant;
+    FObjectKey ClaimantKey;
+    FName LifecycleKey;
+    EUnifiedScriptRuntimeOwner RuntimeOwner = EUnifiedScriptRuntimeOwner::Puerts;
 };
 
 /**
@@ -84,6 +118,25 @@ public:
     bool IsCoreClrRuntimeReady() const;
     bool IsManagedWorldReady() const;
     uint64 GetWorldHostId() const;
+
+    /** Atomically claims one host/lifecycle route for exactly one runtime claimant. */
+    bool ClaimGameplayLifecycle(
+        UObject* Claimant,
+        UObject* HostObject,
+        FName LifecycleKey,
+        EUnifiedScriptRuntimeOwner RuntimeOwner,
+        FString& OutError);
+
+    /** Releases only a claim owned by the same claimant and runtime lane. */
+    bool ReleaseGameplayLifecycle(
+        UObject* Claimant,
+        UObject* HostObject,
+        FName LifecycleKey,
+        EUnifiedScriptRuntimeOwner RuntimeOwner,
+        FString& OutError);
+
+    int32 GetGameplayLifecycleClaimCount() const;
+    FString BuildGameplayLifecycleOwnershipReport() const;
 
     FUnifiedScriptObjectHandle RegisterObject(
         UObject* Object,
@@ -187,6 +240,7 @@ public:
 private:
     void HandleWorldPreActorTick(UWorld* World, ELevelTick TickType, float DeltaSeconds);
     void HandleWorldPostActorTick(UWorld* World, ELevelTick TickType, float DeltaSeconds);
+    void PruneGameplayLifecycleClaims();
     void ShutdownNativeRuntime();
 
     EUnifiedScriptWorldHostState HostState = EUnifiedScriptWorldHostState::Stopped;
@@ -199,6 +253,9 @@ private:
     uint64 WorldHostId = 0;
     FDelegateHandle PreActorTickHandle;
     FDelegateHandle PostActorTickHandle;
+    TMap<
+        FUnifiedScriptGameplayLifecycleClaimKey,
+        FUnifiedScriptGameplayLifecycleClaim> GameplayLifecycleClaims;
 
     UPROPERTY(Transient)
     TArray<TObjectPtr<UObject>> LoadedResources;

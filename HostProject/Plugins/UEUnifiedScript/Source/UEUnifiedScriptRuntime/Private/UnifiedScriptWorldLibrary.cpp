@@ -34,6 +34,65 @@ TObjectType* RetainForWorld(UObject* WorldContextObject, TObjectType* Resource)
 }
 }
 
+bool UUnifiedScriptWorldLibrary::ClaimGameplayLifecycle(
+    UObject* WorldContextObject,
+    UObject* Claimant,
+    UObject* HostObject,
+    FName LifecycleKey,
+    EUnifiedScriptRuntimeOwner RuntimeOwner,
+    FString& OutError)
+{
+    UWorld* World = IsValid(WorldContextObject) ? WorldContextObject->GetWorld() : nullptr;
+    UUnifiedScriptWorldSubsystem* Subsystem =
+        World != nullptr ? World->GetSubsystem<UUnifiedScriptWorldSubsystem>() : nullptr;
+    if (Subsystem == nullptr)
+    {
+        OutError = TEXT("The UnifiedScript World ownership arbiter is unavailable.");
+        return false;
+    }
+    return Subsystem->ClaimGameplayLifecycle(
+        Claimant,
+        HostObject,
+        LifecycleKey,
+        RuntimeOwner,
+        OutError);
+}
+
+bool UUnifiedScriptWorldLibrary::ReleaseGameplayLifecycle(
+    UObject* WorldContextObject,
+    UObject* Claimant,
+    UObject* HostObject,
+    FName LifecycleKey,
+    EUnifiedScriptRuntimeOwner RuntimeOwner,
+    FString& OutError)
+{
+    UWorld* World = IsValid(WorldContextObject) ? WorldContextObject->GetWorld() : nullptr;
+    UUnifiedScriptWorldSubsystem* Subsystem =
+        World != nullptr ? World->GetSubsystem<UUnifiedScriptWorldSubsystem>() : nullptr;
+    if (Subsystem == nullptr)
+    {
+        OutError = TEXT("The UnifiedScript World ownership arbiter is unavailable.");
+        return false;
+    }
+    return Subsystem->ReleaseGameplayLifecycle(
+        Claimant,
+        HostObject,
+        LifecycleKey,
+        RuntimeOwner,
+        OutError);
+}
+
+FString UUnifiedScriptWorldLibrary::GetGameplayLifecycleOwnershipReport(
+    UObject* WorldContextObject)
+{
+    UWorld* World = IsValid(WorldContextObject) ? WorldContextObject->GetWorld() : nullptr;
+    const UUnifiedScriptWorldSubsystem* Subsystem =
+        World != nullptr ? World->GetSubsystem<UUnifiedScriptWorldSubsystem>() : nullptr;
+    return Subsystem != nullptr
+        ? Subsystem->BuildGameplayLifecycleOwnershipReport()
+        : FString();
+}
+
 UObject* UUnifiedScriptWorldLibrary::LoadObjectByPath(
     UObject* WorldContextObject,
     const FString& ObjectPath)

@@ -474,15 +474,50 @@ bool UUnifiedScriptComponent::StartScript()
         (FPlatformTime::Seconds() - PhaseStartSeconds) * 1000.0;
 
     PhaseStartSeconds = FPlatformTime::Seconds();
+    UObject* ScriptTarget = GetScriptTarget();
+    const FName ResolvedOwnershipKey = LifecycleOwnershipKey.IsNone()
+        ? FName(*ResolvedTypeName)
+        : LifecycleOwnershipKey;
+    FString Error;
+    if (!Host->ClaimGameplayLifecycle(
+            this,
+            ScriptTarget,
+            ResolvedOwnershipKey,
+            EUnifiedScriptRuntimeOwner::UnifiedScript,
+            Error))
+    {
+        SetScriptFailure(MoveTemp(Error));
+        return false;
+    }
+    auto ReleaseCandidateOwnership = [&]()
+    {
+        FString ReleaseError;
+        if (!Host->ReleaseGameplayLifecycle(
+                this,
+                ScriptTarget,
+                ResolvedOwnershipKey,
+                EUnifiedScriptRuntimeOwner::UnifiedScript,
+                ReleaseError))
+        {
+            Error = Error.IsEmpty()
+                ? MoveTemp(ReleaseError)
+                : Error + TEXT(" Ownership rollback also failed: ") + ReleaseError;
+        }
+    };
+    const double OwnershipMilliseconds =
+        (FPlatformTime::Seconds() - PhaseStartSeconds) * 1000.0;
+
+    PhaseStartSeconds = FPlatformTime::Seconds();
     FUnifiedScriptObjectHandleResult HandleResult;
     const FUnifiedScriptObjectHandle HostHandle = Host->RegisterObject(this, HandleResult);
     if (!HandleResult.IsSuccess())
     {
-        SetScriptFailure(HandleResult.Message);
+        Error = HandleResult.Message;
+        ReleaseCandidateOwnership();
+        SetScriptFailure(MoveTemp(Error));
         return false;
     }
 
-    UObject* ScriptTarget = GetScriptTarget();
     FUnifiedScriptObjectHandle TargetHandle = HostHandle;
     if (ScriptTarget != this)
     {
@@ -491,7 +526,9 @@ bool UUnifiedScriptComponent::StartScript()
         {
             FUnifiedScriptObjectHandleResult ReleaseResult;
             Host->ReleaseObject(HostHandle, ReleaseResult);
-            SetScriptFailure(HandleResult.Message);
+            Error = HandleResult.Message;
+            ReleaseCandidateOwnership();
+            SetScriptFailure(MoveTemp(Error));
             return false;
         }
     }
@@ -508,7 +545,6 @@ bool UUnifiedScriptComponent::StartScript()
     ScriptState = MoveTemp(CandidateScriptState);
     ScriptStateOverrideIds = MoveTemp(CandidateOverrideIds);
     bScriptStateOverrideBaselineInitialized = true;
-    FString Error;
     PhaseStartSeconds = FPlatformTime::Seconds();
     if (!Host->CreateManagedScript(
             InstanceId,
@@ -529,6 +565,7 @@ bool UUnifiedScriptComponent::StartScript()
             Host->ReleaseObject(TargetHandle, ReleaseResult);
         }
         Host->ReleaseObject(HostHandle, ReleaseResult);
+        ReleaseCandidateOwnership();
         SetScriptFailure(MoveTemp(Error));
         return false;
     }
@@ -539,6 +576,8 @@ bool UUnifiedScriptComponent::StartScript()
     ManagedScriptInstanceId = InstanceId;
     ManagedHostHandle = HostHandle.Value;
     ManagedTargetHandle = TargetHandle.Value;
+    ActiveLifecycleOwnershipKey = ResolvedOwnershipKey;
+    ActiveLifecycleHostObject = ScriptTarget;
     bScriptRunning = true;
     ActiveGeneration = TEXT("1");
     ActiveScriptAsset = ResolvedAsset;
@@ -577,7 +616,7 @@ bool UUnifiedScriptComponent::StartScript()
     UE_LOG(
         LogTemp,
         Display,
-        TEXT("UnifiedScript startup phases: Type=%s, Mode=%s, HostMs=%.6f, ConfigurationMs=%.6f, StateMs=%.6f, HandlesMs=%.6f, ManagedMs=%.6f, FinalizationMs=%.6f"),
+        TEXT("UnifiedScript startup phases: Type=%s, Mode=%s, HostMs=%.6f, ConfigurationMs=%.6f, StateMs=%.6f, OwnershipMs=%.6f, HandlesMs=%.6f, ManagedMs=%.6f, FinalizationMs=%.6f"),
         *ResolvedTypeName,
         ResolvedAssemblyPath.EndsWith(TEXT(".uschunk"), ESearchCase::IgnoreCase)
             ? TEXT("chunk")
@@ -585,6 +624,7 @@ bool UUnifiedScriptComponent::StartScript()
         HostValidationMilliseconds,
         ConfigurationMilliseconds,
         StateMaterializationMilliseconds,
+        OwnershipMilliseconds,
         HandleRegistrationMilliseconds,
         ManagedActivationMilliseconds,
         FinalizationMilliseconds);
@@ -595,7 +635,8 @@ void UUnifiedScriptComponent::StopScript()
 {
     check(IsInGameThread());
     if (!bScriptRunning && ManagedScriptInstanceId == 0 &&
-        ManagedHostHandle == 0 && ManagedTargetHandle == 0)
+        ManagedHostHandle == 0 && ManagedTargetHandle == 0 &&
+        ActiveLifecycleOwnershipKey.IsNone())
     {
         SetComponentTickEnabled(false);
         return;
@@ -636,6 +677,21 @@ void UUnifiedScriptComponent::StopScript()
 
     if (Host != nullptr && Host->IsNativeRuntimeReady())
     {
+        if (!ActiveLifecycleOwnershipKey.IsNone() &&
+            ActiveLifecycleHostObject.IsValid())
+        {
+            FString OwnershipError;
+            if (!Host->ReleaseGameplayLifecycle(
+                    this,
+                    ActiveLifecycleHostObject.Get(),
+                    ActiveLifecycleOwnershipKey,
+                    EUnifiedScriptRuntimeOwner::UnifiedScript,
+                    OwnershipError) &&
+                StopError.IsEmpty())
+            {
+                StopError = MoveTemp(OwnershipError);
+            }
+        }
         FUnifiedScriptObjectHandleResult ReleaseResult;
         if (ManagedTargetHandle != 0 && ManagedTargetHandle != ManagedHostHandle)
         {
@@ -658,6 +714,8 @@ void UUnifiedScriptComponent::StopScript()
     ManagedScriptInstanceId = 0;
     ManagedHostHandle = 0;
     ManagedTargetHandle = 0;
+    ActiveLifecycleOwnershipKey = NAME_None;
+    ActiveLifecycleHostObject.Reset();
     bScriptRunning = false;
     bReloadRequested = false;
     bDebugPausedAtFrameBoundary = false;
@@ -795,6 +853,33 @@ bool UUnifiedScriptComponent::ReloadScriptWithTransaction(
         TEXT("succeeded"),
         PhaseStart,
         TEXT("Resolved the Script Asset assembly, type, and declaration paths."));
+    const FName CandidateOwnershipKey = LifecycleOwnershipKey.IsNone()
+        ? ActiveLifecycleOwnershipKey
+        : LifecycleOwnershipKey;
+    if (ActiveLifecycleOwnershipKey.IsNone() ||
+        CandidateOwnershipKey != ActiveLifecycleOwnershipKey)
+    {
+        Error = FString::Printf(
+            TEXT("Reload cannot change lifecycle ownership from '%s' to '%s'; stop the active runtime before changing coexistence routes."),
+            *ActiveLifecycleOwnershipKey.ToString(),
+            *CandidateOwnershipKey.ToString());
+        Transaction.AddPhase(
+            TEXT("ownershipValidation"), TEXT("failed"), 0.0, Error);
+        LastReloadTransaction = Transaction.Finish(
+            TEXT("rolledBack"),
+            CandidateGeneration,
+            FromGeneration,
+            Host,
+            false,
+            Error);
+        SetScriptFailure(MoveTemp(Error));
+        return false;
+    }
+    Transaction.AddPhase(
+        TEXT("ownershipValidation"),
+        TEXT("succeeded"),
+        0.0,
+        TEXT("Retained the active World lifecycle claim across the candidate generation."));
     if (!IFileManager::Get().FileExists(*ResolvedAssemblyPath))
     {
         Error = FString::Printf(
