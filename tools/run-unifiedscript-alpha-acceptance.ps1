@@ -272,7 +272,8 @@ try {
     $script:Metrics.managedTestsPassed = [int]$counters.passed
     $script:Metrics.managedTestsFailed = [int]$counters.failed
 
-    $validatorLog = Join-Path $runDirectory '02-repository-validator.log'
+    $validatorLog = Join-Path $runDirectory (
+        '{0:D2}-repository-validator.log' -f ($script:PhaseCounter + 1))
     Invoke-AcceptancePhase `
         -Name 'repository-validator' `
         -FilePath $python `

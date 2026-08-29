@@ -1123,6 +1123,7 @@ def main() -> int:
         and "unifiedscript.alpha-acceptance/v0.1" in alpha_acceptance
         and "managed-debug-fixture" in alpha_acceptance
         and "ProjectLoadingDemo.csproj" in alpha_acceptance
+        and "02-repository-validator.log" not in alpha_acceptance
         and "managed-tests" in alpha_acceptance
         and "repository-validator" in alpha_acceptance
         and "unreal-onboarding" in alpha_acceptance
