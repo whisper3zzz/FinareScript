@@ -377,12 +377,16 @@ foreach ($sample in $samples) {
                     "$($_.path) actual=$($_.actual) expected=$($_.expected)"
                 }) -join '; '))
         }
-        if (@($sample.execution.cleanupUntracked).Count -gt 0) {
+        $declaredCleanupPaths = @(
+            $sample.execution.cleanupUntracked | Where-Object {
+                -not [string]::IsNullOrWhiteSpace([string]$_)
+            })
+        if ($declaredCleanupPaths.Count -gt 0) {
             $cleanupRoot = Join-Path $ComparisonRoot `
                 ([string]$sample.execution.cleanupRoot)
             Remove-DeclaredUntrackedOutputs `
                 -Root $cleanupRoot `
-                -RelativePaths @($sample.execution.cleanupUntracked)
+                -RelativePaths $declaredCleanupPaths
         }
         Copy-Item -LiteralPath $evidencePath -Destination $archivedEvidencePath -Force
         $sampleRecords.Add([ordered]@{

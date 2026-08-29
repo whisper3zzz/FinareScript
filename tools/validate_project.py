@@ -830,6 +830,7 @@ def main() -> int:
         and "Get-GitState" in sample_matrix_runner
         and "Remove-DeclaredUntrackedOutputs" in sample_matrix_runner
         and "cleanupUntracked" in sample_matrix_runner
+        and "declaredCleanupPaths" in sample_matrix_runner
         and sample_runners
         == {
             "tools/run-unifiedscript-alpha-acceptance.ps1",
