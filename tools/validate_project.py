@@ -1121,6 +1121,8 @@ def main() -> int:
         alpha_acceptance_path.is_file()
         and alpha_acceptance_doc_path.is_file()
         and "unifiedscript.alpha-acceptance/v0.1" in alpha_acceptance
+        and "managed-debug-fixture" in alpha_acceptance
+        and "ProjectLoadingDemo.csproj" in alpha_acceptance
         and "managed-tests" in alpha_acceptance
         and "repository-validator" in alpha_acceptance
         and "unreal-onboarding" in alpha_acceptance

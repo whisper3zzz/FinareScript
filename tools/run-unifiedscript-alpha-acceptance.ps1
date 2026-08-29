@@ -35,6 +35,8 @@ $onboardingReportPath = Join-Path $runDirectory 'onboarding-report.json'
 $releaseDirectory = Join-Path $runDirectory 'package'
 $releaseReportPath = Join-Path $releaseDirectory 'release-gate.json'
 $managedTrxPath = Join-Path $runDirectory 'managed-tests.trx'
+$projectLoadingFixture = Join-Path $repoRoot `
+    'samples\ProjectLoading\ProjectLoadingDemo.csproj'
 $script:PhaseRecords = [Collections.Generic.List[object]]::new()
 $script:CurrentPhase = 'preflight'
 $script:PhaseCounter = 0
@@ -217,7 +219,15 @@ try {
     $release = Join-Path $repoRoot 'tools\package-unreal-release.ps1'
     $validator = Join-Path $repoRoot 'tools\validate_project.py'
     $solution = Join-Path $repoRoot 'UnifiedScript.slnx'
-    foreach ($required in @($dotnet, $python, $powershell, $setup, $release, $validator, $solution)) {
+    foreach ($required in @(
+            $dotnet,
+            $python,
+            $powershell,
+            $setup,
+            $release,
+            $validator,
+            $solution,
+            $projectLoadingFixture)) {
         if (-not (Test-Path -LiteralPath $required)) {
             throw "Required alpha acceptance input is missing: $required"
         }
@@ -235,6 +245,16 @@ try {
         artifacts = @()
         retry = "powershell -File `"$PSCommandPath`" -EngineRoot `"$EngineRoot`""
     })
+
+    # CSharpProjectLoader tests intentionally evaluate the sample project's
+    # default Debug configuration without building it. Materialize that exact
+    # project-reference closure so a clean checkout behaves like a warm tree.
+    Invoke-AcceptancePhase `
+        -Name 'managed-debug-fixture' `
+        -FilePath $dotnet `
+        -Arguments @(
+            'build', $projectLoadingFixture, '-c', 'Debug', '--nologo') `
+        -Retry "& `"$dotnet`" build `"$projectLoadingFixture`" -c Debug"
 
     Invoke-AcceptancePhase `
         -Name 'managed-tests' `
