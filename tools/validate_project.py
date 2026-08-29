@@ -1054,6 +1054,9 @@ def main() -> int:
         and "CI lane output directory must be empty" in ci_lane
         and "run-complete-workload-suite.ps1" in ci_lane
         and "-RequireComplete" in ci_lane
+        and "New-CleanGitCheckoutSnapshot" in ci_lane
+        and "Restore-CleanGitCheckoutSnapshot" in ci_lane
+        and "comparison-checkout-snapshot" in ci_lane
         and "status -ne 'qualified'" in ci_lane
         and "run-unreal-compatibility-matrix.ps1" in ci_lane
         and "[switch]$RequireComplete" in (

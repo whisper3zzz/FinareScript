@@ -110,6 +110,109 @@ function Require-UnrealEngine {
     }
 }
 
+function New-CleanGitCheckoutSnapshot {
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$SnapshotRoot
+    )
+
+    $resolvedRoot = [IO.Path]::GetFullPath($Root)
+    $entries = @(& git -C $resolvedRoot status --porcelain=v1 `
+        --untracked-files=all 2>$null)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Cannot inspect comparison checkout: $resolvedRoot"
+    }
+    if ($entries.Count -ne 0) {
+        throw (
+            'The workload-performance lane requires a clean UnifiedScript ' +
+            "comparison checkout before it can preserve it: $resolvedRoot")
+    }
+
+    $resolvedSnapshot = [IO.Path]::GetFullPath($SnapshotRoot)
+    $runPrefix = [IO.Path]::GetFullPath($runDirectory).TrimEnd('\', '/') +
+        [IO.Path]::DirectorySeparatorChar
+    if (-not $resolvedSnapshot.StartsWith(
+            $runPrefix,
+            [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Unsafe comparison snapshot path: $resolvedSnapshot"
+    }
+    New-Item -ItemType Directory -Force -Path $resolvedSnapshot | Out-Null
+    $snapshotPrefix = $resolvedSnapshot.TrimEnd('\', '/') +
+        [IO.Path]::DirectorySeparatorChar
+    & git -C $resolvedRoot checkout-index --all "--prefix=$snapshotPrefix"
+    if ($LASTEXITCODE -ne 0) {
+        throw "Cannot snapshot comparison checkout: $resolvedRoot"
+    }
+
+    return [pscustomobject]@{
+        Root = $resolvedRoot
+        SnapshotRoot = $resolvedSnapshot
+    }
+}
+
+function Restore-CleanGitCheckoutSnapshot {
+    param([Parameter(Mandatory)]$Snapshot)
+
+    $resolvedRoot = [IO.Path]::GetFullPath([string]$Snapshot.Root)
+    $rootPrefix = $resolvedRoot.TrimEnd('\', '/') +
+        [IO.Path]::DirectorySeparatorChar
+    $resolvedSnapshot = [IO.Path]::GetFullPath([string]$Snapshot.SnapshotRoot)
+    $runPrefix = [IO.Path]::GetFullPath($runDirectory).TrimEnd('\', '/') +
+        [IO.Path]::DirectorySeparatorChar
+    if (-not $resolvedSnapshot.StartsWith(
+            $runPrefix,
+            [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Unsafe comparison snapshot restore path: $resolvedSnapshot"
+    }
+
+    $trackedPaths = @(
+        & git -C $resolvedRoot diff --name-only
+        & git -C $resolvedRoot diff --cached --name-only) |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+        Sort-Object -Unique
+    foreach ($relativePath in $trackedPaths) {
+        $nativeRelative = [string]$relativePath -replace '/', '\'
+        $source = [IO.Path]::GetFullPath((Join-Path `
+            $resolvedSnapshot $nativeRelative))
+        $destination = [IO.Path]::GetFullPath((Join-Path `
+            $resolvedRoot $nativeRelative))
+        if (-not $destination.StartsWith(
+                $rootPrefix,
+                [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Unsafe comparison restore target: $destination"
+        }
+        if (Test-Path -LiteralPath $source -PathType Leaf) {
+            New-Item -ItemType Directory -Force -Path (
+                Split-Path -Parent $destination) | Out-Null
+            Copy-Item -LiteralPath $source -Destination $destination -Force
+        } elseif (Test-Path -LiteralPath $destination -PathType Leaf) {
+            Remove-Item -LiteralPath $destination -Force
+        }
+    }
+
+    $untrackedPaths = @(& git -C $resolvedRoot ls-files --others `
+        --exclude-standard)
+    foreach ($relativePath in $untrackedPaths) {
+        $nativeRelative = [string]$relativePath -replace '/', '\'
+        $target = [IO.Path]::GetFullPath((Join-Path $resolvedRoot $nativeRelative))
+        if (-not $target.StartsWith(
+                $rootPrefix,
+                [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Unsafe comparison cleanup target: $target"
+        }
+        if (Test-Path -LiteralPath $target -PathType Leaf) {
+            Remove-Item -LiteralPath $target -Force
+        }
+    }
+
+    $remaining = @(& git -C $resolvedRoot status --porcelain=v1 `
+        --untracked-files=all)
+    if ($LASTEXITCODE -ne 0 -or $remaining.Count -ne 0) {
+        throw "Comparison checkout restoration failed: $resolvedRoot"
+    }
+    Remove-Item -LiteralPath $resolvedSnapshot -Recurse -Force
+}
+
 try {
     if ([string]::IsNullOrWhiteSpace($sourceRevision)) {
         throw 'CI lanes require a Git checkout with a resolvable HEAD.'
@@ -188,47 +291,55 @@ try {
             if ([string]::IsNullOrWhiteSpace($ComparisonRoot)) {
                 throw "CI lane '$Lane' requires -ComparisonRoot or UNIFIEDSCRIPT_COMPARISON_ROOT."
             }
-            $packageSizeDirectory = Join-Path $runDirectory 'package-size'
-            $packageMetricsPath = Join-Path $packageSizeDirectory 'latest.json'
-            Invoke-CiPhase -Name 'matched-package-size' -FilePath $powershell -Arguments @(
-                '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
-                (Join-Path $repoRoot 'comparison\measure-blockbreaker-package-size.ps1'),
-                '-EngineRoot', $EngineRoot,
-                '-ComparisonRoot', ([IO.Path]::GetFullPath($ComparisonRoot)),
-                '-OutputDirectory', $packageSizeDirectory) `
-                -Artifacts @($packageMetricsPath)
-            Invoke-CiPhase -Name 'matched-workload-performance' -FilePath $powershell -Arguments @(
-                '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
-                (Join-Path $repoRoot 'comparison\run-complete-workload-suite.ps1'),
-                '-EngineRoot', $EngineRoot,
-                '-ComparisonRoot', ([IO.Path]::GetFullPath($ComparisonRoot)),
-                '-PackageMetricsPath', $packageMetricsPath,
-                '-Force',
-                '-RequireComplete')
-            $suiteRoot = Join-Path $repoRoot 'artifacts\comparison\suite\v1.1.0'
-            $performanceDirectory = Join-Path $runDirectory 'performance'
-            New-Item -ItemType Directory -Force -Path $performanceDirectory | Out-Null
-            $performanceArtifacts = @()
-            foreach ($name in @(
-                    'unifiedscript.json',
-                    'puerts.json',
-                    'comparison.json',
-                    'budget-report.json')) {
-                $source = Join-Path $suiteRoot $name
-                if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
-                    throw "Complete workload suite did not produce $name."
+            $resolvedComparisonRoot = [IO.Path]::GetFullPath($ComparisonRoot)
+            $comparisonSnapshot = New-CleanGitCheckoutSnapshot `
+                -Root (Join-Path $resolvedComparisonRoot 'BlockBreaker-UnifiedScript') `
+                -SnapshotRoot (Join-Path $runDirectory 'comparison-checkout-snapshot')
+            try {
+                $packageSizeDirectory = Join-Path $runDirectory 'package-size'
+                $packageMetricsPath = Join-Path $packageSizeDirectory 'latest.json'
+                Invoke-CiPhase -Name 'matched-package-size' -FilePath $powershell -Arguments @(
+                    '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+                    (Join-Path $repoRoot 'comparison\measure-blockbreaker-package-size.ps1'),
+                    '-EngineRoot', $EngineRoot,
+                    '-ComparisonRoot', $resolvedComparisonRoot,
+                    '-OutputDirectory', $packageSizeDirectory) `
+                    -Artifacts @($packageMetricsPath)
+                Invoke-CiPhase -Name 'matched-workload-performance' -FilePath $powershell -Arguments @(
+                    '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+                    (Join-Path $repoRoot 'comparison\run-complete-workload-suite.ps1'),
+                    '-EngineRoot', $EngineRoot,
+                    '-ComparisonRoot', $resolvedComparisonRoot,
+                    '-PackageMetricsPath', $packageMetricsPath,
+                    '-Force',
+                    '-RequireComplete')
+                $suiteRoot = Join-Path $repoRoot 'artifacts\comparison\suite\v1.1.0'
+                $performanceDirectory = Join-Path $runDirectory 'performance'
+                New-Item -ItemType Directory -Force -Path $performanceDirectory | Out-Null
+                $performanceArtifacts = @()
+                foreach ($name in @(
+                        'unifiedscript.json',
+                        'puerts.json',
+                        'comparison.json',
+                        'budget-report.json')) {
+                    $source = Join-Path $suiteRoot $name
+                    if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+                        throw "Complete workload suite did not produce $name."
+                    }
+                    $destination = Join-Path $performanceDirectory $name
+                    Copy-Item -LiteralPath $source -Destination $destination -Force
+                    $performanceArtifacts += Get-RelativeArtifactPath $destination
                 }
-                $destination = Join-Path $performanceDirectory $name
-                Copy-Item -LiteralPath $source -Destination $destination -Force
-                $performanceArtifacts += Get-RelativeArtifactPath $destination
+                $budget = Get-Content -LiteralPath (
+                    Join-Path $performanceDirectory 'budget-report.json') -Raw | ConvertFrom-Json
+                if ($budget.schemaVersion -ne 'unifiedscript.performance-budget-report/v0.1' -or
+                    $budget.status -ne 'qualified') {
+                    throw "Complete workload budget did not qualify."
+                }
+                $phaseRecords[-1].artifacts = $performanceArtifacts
+            } finally {
+                Restore-CleanGitCheckoutSnapshot -Snapshot $comparisonSnapshot
             }
-            $budget = Get-Content -LiteralPath (
-                Join-Path $performanceDirectory 'budget-report.json') -Raw | ConvertFrom-Json
-            if ($budget.schemaVersion -ne 'unifiedscript.performance-budget-report/v0.1' -or
-                $budget.status -ne 'qualified') {
-                throw "Complete workload budget did not qualify."
-            }
-            $phaseRecords[-1].artifacts = $performanceArtifacts
         }
         'sdk-installation' {
             Require-UnrealEngine
