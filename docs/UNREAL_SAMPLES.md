@@ -34,8 +34,8 @@ clean `BlockBreaker-UnifiedScript`, `BlockBreakerSource`, and
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools/run-unifiedscript-sample-matrix.ps1 `
-  -EngineRoot D:\UE_5.8 `
-  -ComparisonRoot D:\Project\UEUnifiedScriptComparison
+  -EngineRoot $env:UNIFIEDSCRIPT_UE_ROOT `
+  -ComparisonRoot $env:UNIFIEDSCRIPT_COMPARISON_ROOT
 ```
 
 By default the runner rejects dirty source or comparison repositories. The
@@ -66,8 +66,8 @@ contract:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools/run-unifiedscript-sample-matrix.ps1 `
-  -EngineRoot D:\UE_5.8 `
-  -ComparisonRoot D:\Project\UEUnifiedScriptComparison `
+  -EngineRoot $env:UNIFIEDSCRIPT_UE_ROOT `
+  -ComparisonRoot $env:UNIFIEDSCRIPT_COMPARISON_ROOT `
   -SampleIds dedicated-server-lifecycle,gameplay-data-plane
 ```
 

@@ -49,7 +49,7 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-29**
 
 - Active milestone: **M12 — Migration ecosystem and UnifiedScript 1.0**
-- Next slice: **M12.2 — automated sample matrix and acceptance reports**
+- Next slice: **M12.2 — project templates and generated API/diagnostic browser**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -64,7 +64,7 @@ machine-local unless an artifact explicitly says otherwise.
 | UnifiedScript comparison source | `5cf323e` (`perf: sync representative workload host`) |
 | Puerts comparison source | `be399cb` (`perf: register benchmark world context`) |
 | Managed tests | 600 / 600 passed |
-| Repository validator | 85 / 85 passed |
+| Repository validator | 86 / 86 passed |
 | UE 5.8.1 native build | passed |
 | `UnifiedScript.Unreal` Automation | 18 / 18 passed, including bounded crash breadcrumbs, failure containment, deterministic World shutdown, workload collectors, gameplay-profiler attribution, Authoring Surface, live World semantic pause/step/reload/detach, repeated success/failure hot-reload leak coverage, and Puerts/UnifiedScript lifecycle ownership arbitration |
 | M10.2 generated-channel profile | 1,024 rows x 3 median samples: container binding 25,371.973 ns/row, generated snapshot 1.270 ns/row (ratio 0.000050), buffered events 0.586 ns/row, zero managed allocation |
@@ -1549,7 +1549,7 @@ cursor advances to M12.2's versioned SDK and documentation release surface.
 
 - [x] publish versioned plugin/SDK archives, release notes, upgrade guides,
   onboarding, authoring, API, debugging, performance, packaging, and migration docs
-- [ ] ship minimal, gameplay, networking/server, data-plane, and visual/code
+- [x] ship minimal, gameplay, networking/server, data-plane, and visual/code
   round-trip samples with automated acceptance reports
 - [ ] provide project templates and an API/diagnostic browser generated from the
   same contracts consumed by the compiler and editor
@@ -1557,7 +1557,7 @@ cursor advances to M12.2's versioned SDK and documentation release surface.
 M12.2 release-surface evidence (2026-08-29): strict
 `unifiedscript.product-release/v0.1` now binds `1.0.0-rc.1` to plugin version
 1000001, the Win64/UE 5.8.1/.NET 10 support boundary, archive identity,
-acceptance gates, release notes, known limits, and a unique 22-entry catalog
+acceptance gates, release notes, known limits, and a unique 23-entry catalog
 covering onboarding, authoring, API, debugging, performance, packaging,
 upgrades, support, and Puerts migration. SDK packaging rejects release/plugin
 version drift, unsafe or missing documents, machine paths, native build output,
@@ -1574,9 +1574,24 @@ SDK SHA-256 is
 `14ea45a52bf5a04515a0b9d49449581e355453480275aa520eff1cf6289a3c41`.
 The gate first exposed and then verified fixes for expected native stderr being
 misclassified as an Automation failure and 269-character SDK staging paths.
-Managed tests pass 600/600 and repository validation passes 85/85. The cursor
-advances to M12.2's automated minimal/gameplay/networking-server/data-plane/
-visual-code sample matrix.
+Managed tests pass 600/600 and repository validation passes 86/86.
+
+M12.2 sample-matrix evidence (2026-08-29): the clean source worktree at
+`82120e1` executed all five versioned catalog entries through one aggregate
+runner. `artifacts/samples/m12-2-final-82120e1/sample-matrix.json` reports 5/5
+passed in 492,360 ms, including 600/600 managed tests, 86/86 repository
+invariants, 18/18 UE Automation tests, Development package smoke, 300-frame
+BlockBreaker gameplay, dedicated-server World lifecycle, measured gameplay
+data-plane routes, and Visual/C# semantic, IL, execution, UE, and package
+equivalence. The report records `source.preserved=true` and
+`comparisons.preserved=true`; all three comparison repositories finished clean.
+After replacing machine-specific sample commands with environment variables,
+two SDK package runs produced byte-identical 199-payload, 8,369,473-byte
+archives with SHA-256
+`e8a92010b9c2f5f44f61c31d16b32487c625e6e30e9810297e1bc47b8a689d3a`.
+The server sample intentionally does not claim client/server gameplay
+replication or a packaged WindowsServer target. The cursor advances to M12.2's
+project templates and generated API/diagnostic browser.
 
 ### M12.3 — Beyond-Puerts differentiators
 

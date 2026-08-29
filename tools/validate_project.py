@@ -779,7 +779,8 @@ def main() -> int:
         and "Other platforms and UE versions are not"
         in product_release_notes
         and "- [x] publish versioned plugin/SDK archives" in roadmap_document
-        and "- Next slice: **M12.2 — automated sample matrix" in roadmap_document
+        and "- Next slice: **M12.2 — project templates and generated API/diagnostic browser**"
+        in roadmap_document
         and "M12.2 release-surface evidence" in roadmap_document
         and "sourceTreeDirty=false" in roadmap_document,
         "M12.2 product release manifest, versioned SDK, documentation catalog, or compatibility gate is incomplete",
@@ -843,7 +844,12 @@ def main() -> int:
         and "complete acceptance corpus" in sample_document
         and "rejects an undeclared path" in sample_document
         and "docs/UNREAL_SAMPLES.md" in release_document_paths
-        and "sample-matrix" in product_release["acceptance"]["requiredGates"],
+        and "sample-matrix" in product_release["acceptance"]["requiredGates"]
+        and "- [x] ship minimal, gameplay, networking/server, data-plane, and visual/code"
+        in roadmap_document
+        and "M12.2 sample-matrix evidence" in roadmap_document
+        and "sample-matrix.json` reports 5/5" in roadmap_document
+        and "dedicated-server World host lifecycle" in product_release_notes,
         "M12.2 five-category sample catalog, declarative assertions, aggregate runner, or support boundary is incomplete",
     )
     checks.append(

@@ -22,6 +22,9 @@ Verified target: Unreal Engine 5.8.1, Win64, .NET 10
 - General Puerts projects can be scanned, planned, migrated incrementally under
   a single-runtime lifecycle ownership policy, and verified with exact
   side-by-side observable evidence.
+- One versioned sample catalog and aggregate acceptance runner cover minimal
+  onboarding, packaged BlockBreaker gameplay, dedicated-server World lifecycle,
+  gameplay data-plane routes, and Visual/C# round-trip equivalence.
 
 ## Compatibility and packaging
 
@@ -57,5 +60,8 @@ release-owned guide set.
   gameplay selection routes and does not itself prove behavior parity.
 - Visual editing intentionally targets the documented restricted C# profile;
   source-only methods remain explicit opaque boundaries.
-- Networking/server sample coverage and the generated API/diagnostic browser
-  remain M12.2 follow-up slices and are not claimed by RC1 yet.
+- The networking/server sample proves dedicated-server World host lifecycle; it
+  does not yet claim client/server gameplay replication or a packaged
+  `WindowsServer` target.
+- Project templates and the generated API/diagnostic browser remain M12.2
+  follow-up slices and are not claimed by RC1 yet.
