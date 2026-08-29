@@ -1348,6 +1348,8 @@ def main() -> int:
         and "alpha-acceptance.md" in alpha_acceptance
         and "SkipPackageSmoke" in alpha_acceptance
         and "OutputDirectory" in release_gate
+        and "Find-ReleaseFileWithRetry" in release_gate
+        and "TimeoutSeconds = 15" in release_gate
         and "automation = [ordered]@{" in onboarding_script
         and "Failure still produces both top-level reports"
         in alpha_acceptance_doc,

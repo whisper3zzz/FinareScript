@@ -67,6 +67,10 @@ package with both external .NET-root environment variables pointing at missing
 directories. A pass therefore proves that startup selected the plugin-local
 runtime instead of silently using developer-machine state.
 
+Archive materialization can finish a fraction of a second after AutomationTool
+returns on Windows. The verifier polls for each exact runtime file for at most
+15 seconds; it still fails if the closure never becomes complete.
+
 The runtime resolves the packaged plugin-local .NET root first, then explicit
 environment roots, and finally the engine development root. A packaged build
 therefore does not require a system-wide .NET installation or the source UE

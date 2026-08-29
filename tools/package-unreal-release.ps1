@@ -64,6 +64,33 @@ $runDirectory = if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
 }
 New-Item -ItemType Directory -Force -Path $runDirectory | Out-Null
 
+function Find-ReleaseFileWithRetry {
+    param(
+        [Parameter(Mandatory)][string]$Directory,
+        [Parameter(Mandatory)][string]$Filter,
+        [ValidateRange(1, 30)][int]$TimeoutSeconds = 15
+    )
+
+    $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+    do {
+        if (Test-Path -LiteralPath $Directory -PathType Container) {
+            $candidate = Get-ChildItem `
+                -LiteralPath $Directory `
+                -Filter $Filter `
+                -Recurse `
+                -File `
+                -ErrorAction SilentlyContinue |
+                Select-Object -First 1
+            if ($null -ne $candidate) {
+                return $candidate
+            }
+        }
+        Start-Sleep -Milliseconds 100
+    } while ([DateTime]::UtcNow -lt $deadline)
+
+    return $null
+}
+
 $defaultEnginePath = Join-Path $projectRoot 'Config\DefaultEngine.ini'
 $defaultInputPath = Join-Path $projectRoot 'Config\DefaultInput.ini'
 $defaultEngineExisted = Test-Path -LiteralPath $defaultEnginePath
@@ -132,21 +159,24 @@ try {
                 throw "$configuration package is incomplete: $requiredPackageFile"
             }
         }
-        $hostFxr = Get-ChildItem `
-            -LiteralPath (Join-Path $runtimeRoot 'host\fxr') `
-            -Filter 'hostfxr.dll' -Recurse -File | Select-Object -First 1
-        $coreClr = Get-ChildItem `
-            -LiteralPath (Join-Path $runtimeRoot 'shared\Microsoft.NETCore.App') `
-            -Filter 'coreclr.dll' -Recurse -File | Select-Object -First 1
-        $hostPolicy = Get-ChildItem `
-            -LiteralPath (Join-Path $runtimeRoot 'shared\Microsoft.NETCore.App') `
-            -Filter 'hostpolicy.dll' -Recurse -File | Select-Object -First 1
-        $privateCoreLib = Get-ChildItem `
-            -LiteralPath (Join-Path $runtimeRoot 'shared\Microsoft.NETCore.App') `
-            -Filter 'System.Private.CoreLib.dll' -Recurse -File | Select-Object -First 1
-        $systemRuntime = Get-ChildItem `
-            -LiteralPath (Join-Path $runtimeRoot 'shared\Microsoft.NETCore.App') `
-            -Filter 'System.Runtime.dll' -Recurse -File | Select-Object -First 1
+        $hostFxrDirectory = Join-Path $runtimeRoot 'host\fxr'
+        $sharedRuntimeDirectory = Join-Path $runtimeRoot `
+            'shared\Microsoft.NETCore.App'
+        $hostFxr = Find-ReleaseFileWithRetry `
+            -Directory $hostFxrDirectory `
+            -Filter 'hostfxr.dll'
+        $coreClr = Find-ReleaseFileWithRetry `
+            -Directory $sharedRuntimeDirectory `
+            -Filter 'coreclr.dll'
+        $hostPolicy = Find-ReleaseFileWithRetry `
+            -Directory $sharedRuntimeDirectory `
+            -Filter 'hostpolicy.dll'
+        $privateCoreLib = Find-ReleaseFileWithRetry `
+            -Directory $sharedRuntimeDirectory `
+            -Filter 'System.Private.CoreLib.dll'
+        $systemRuntime = Find-ReleaseFileWithRetry `
+            -Directory $sharedRuntimeDirectory `
+            -Filter 'System.Runtime.dll'
         if ($null -eq $hostFxr -or $null -eq $coreClr -or
             $null -eq $hostPolicy -or $null -eq $privateCoreLib -or
             $null -eq $systemRuntime) {
