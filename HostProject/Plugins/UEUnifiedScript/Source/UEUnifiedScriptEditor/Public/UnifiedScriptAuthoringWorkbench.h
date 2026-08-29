@@ -123,6 +123,23 @@ struct FUnifiedScriptAuthoringPreviewFile
     FString AfterText;
 };
 
+struct FUnifiedScriptAuthoringSemanticChange
+{
+    FString FunctionName;
+    FString EntityKind;
+    FString Category;
+    FString Facet;
+    FString Summary;
+};
+
+struct FUnifiedScriptAuthoringSemanticDiffSummary
+{
+    int64 AddedFunctions = 0;
+    int64 RemovedFunctions = 0;
+    int64 ModifiedFunctions = 0;
+    int64 ChangeCount = 0;
+};
+
 struct FUnifiedScriptAuthoringPreviewResult
 {
     int64 BaselineRevision = 0;
@@ -131,6 +148,8 @@ struct FUnifiedScriptAuthoringPreviewResult
     FString Description;
     bool bPublishesRuntime = false;
     FString PreviewToken;
+    FUnifiedScriptAuthoringSemanticDiffSummary SemanticSummary;
+    TArray<FUnifiedScriptAuthoringSemanticChange> SemanticChanges;
     TArray<FUnifiedScriptAuthoringPreviewFile> Files;
     TArray<FUnifiedScriptAuthoringDiagnostic> Diagnostics;
 };

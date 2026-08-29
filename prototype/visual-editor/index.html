@@ -279,6 +279,28 @@
     </form>
   </dialog>
 
+  <dialog id="semanticReviewDialog" class="semantic-review-dialog" data-testid="semantic-review-dialog">
+    <form method="dialog">
+      <div class="semantic-review-heading">
+        <div><div class="eyebrow">Stable-ID graph review / exact C# source</div><h2 id="semanticReviewTitle">Review authoring transaction</h2></div>
+        <button class="square-button" value="cancel" type="submit" aria-label="关闭语义审查">×</button>
+      </div>
+      <div id="semanticReviewSummary" class="semantic-review-summary"></div>
+      <section class="semantic-review-changes">
+        <header><span>SEMANTIC GRAPH DIFF</span><small>Source spans and presentation labels are excluded</small></header>
+        <div id="semanticReviewChanges"></div>
+      </section>
+      <section class="semantic-review-source">
+        <div><header>BEFORE</header><pre id="semanticReviewBefore"></pre></div>
+        <div><header>AFTER</header><pre id="semanticReviewAfter"></pre></div>
+      </section>
+      <div class="semantic-review-actions">
+        <button class="button secondary" value="cancel" type="submit">CANCEL · NO WRITES</button>
+        <button class="button primary" value="commit" type="submit" data-testid="commit-semantic-review">COMMIT REVIEWED CHANGE</button>
+      </div>
+    </form>
+  </dialog>
+
   <div id="toast" class="toast" role="status" aria-live="polite"><span>✓</span><div><strong>Declaration created</strong><small>Text · Visual · AI views updated</small></div></div>
 
   <script src="app.js"></script>

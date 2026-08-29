@@ -49,7 +49,7 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-29**
 
 - Active milestone: **M12 — Migration ecosystem and UnifiedScript 1.0**
-- Next slice: **M12.3 — reviewable semantic graph/C# diffs**
+- Next slice: **M12.3 — typed AI semantic patch proposals**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -1619,7 +1619,7 @@ graph/C# diff surface.
 
 ### M12.3 — Beyond-Puerts differentiators
 
-- [ ] make semantic graph/C# diffs reviewable and mergeable without serialized
+- [x] make semantic graph/C# diffs reviewable and mergeable without serialized
   Blueprint graph noise
 - [ ] let AI tools propose typed semantic patch plans that pass the same compiler
   and transaction gates as human graph edits
@@ -1627,6 +1627,32 @@ graph/C# diff surface.
   and Unreal API boundaries are visible in one place
 - [ ] keep the generated data-plane architecture open to new workloads without
   weakening safety or ABI compatibility
+
+M12.3 semantic review evidence (2026-08-29): Graph v0.13 now has strict,
+deterministic `unifiedscript.semantic-graph-diff/v0.1` and
+`unifiedscript.semantic-graph-merge/v0.1` review contracts. Stable semantic IDs
+classify signature, control/data flow, value, binding, and structure changes;
+source spans, labels, and canvas layout do not create executable noise. The CLI
+emits reviewable diffs and performs conservative three-way merges for disjoint,
+one-sided, identical, added, and removed Visual functions. Different edits to
+the same function produce an explicit two-sided conflict report and no merged
+Graph instead of guessing a node-level resolution.
+
+Authoring preview advances to v0.2 and embeds that exact semantic diff beside
+the authoritative C# before/after files. Native Slate and the browser Workbench
+both show the stable-ID review before resending the same payload, transaction,
+baseline/group identity, and SHA-256 preview token; cancellation remains a
+zero-write path. Focused semantic/HTTP regression passes 13/13, the full managed
+suite passes 610/610, repository validation passes 88/88, and the UE 5.8.1
+Editor build plus 18/18 `UnifiedScript.Unreal` Automation tests pass. The merge
+artifact is intentionally review evidence rather than a second source of truth:
+C# publication still goes through the compiler and authoring transaction gate.
+Full Apply evidence is recorded at
+`artifacts/onboarding/m12-3-semantic-review-full.json`; both native passes,
+deployment, determinism, and managed startup completed in 72,376 ms. Two final
+SDK archives are byte-identical at 205 entries and 8,454,033 bytes with SHA-256
+`5d56c9391ccb6b14a95531262879dae0497e76b9831bc00c3b9ac3f18258f2aa`.
+The cursor advances to M12.3's typed AI semantic patch proposals.
 
 Acceptance: the 1.0 release has an installable SDK, supported compatibility
 matrix, end-to-end migration guide, complete samples, published workload report,

@@ -92,6 +92,13 @@ dominance violations are rejected before source commit. `disconnectDataEdge`
 replaces one exact connected input with the bounded scalar default for its
 declared type instead of leaving invalid C# behind.
 
+Authoring preview v0.2 now pairs this complete Surface context with a strict
+semantic Graph diff. Slate and browser clients review typed stable-ID changes
+and exact C# source together, so line movement, graph layout, and presentation
+labels do not hide or manufacture executable changes. Three-way merge is
+conservative at the Visual-function boundary; see
+[SEMANTIC_DIFF_AND_MERGE.md](SEMANTIC_DIFF_AND_MERGE.md).
+
 Surface v0.4 publishes enough structural preconditions for a client to author
 whole statements without treating screen coordinates as semantics. The UE
 client inserts locals, `if`, `while`, `do/while`, bounded `for`, nearest-region

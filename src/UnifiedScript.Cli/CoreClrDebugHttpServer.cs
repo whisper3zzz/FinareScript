@@ -1570,13 +1570,14 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
                 candidate,
                 diagnostics);
             return new AuthoringPreviewResponse(
-                "unifiedscript.authoring-preview/v0.1",
+                "unifiedscript.authoring-preview/v0.2",
                 baseline.Revision,
                 candidate.Revision,
                 transaction.TransactionId,
                 transaction.Description,
                 publishesRuntime,
                 previewToken,
+                new SemanticGraphDiffer().Compare(baseline.Graph, candidate.Graph),
                 files,
                 diagnostics);
         }
@@ -2504,6 +2505,7 @@ internal sealed record AuthoringPreviewResponse(
     string Description,
     bool PublishesRuntime,
     string PreviewToken,
+    SemanticGraphDiffDocument SemanticDiff,
     IReadOnlyList<AuthoringPreviewFile> Files,
     IReadOnlyList<UnifiedDiagnostic> Diagnostics);
 

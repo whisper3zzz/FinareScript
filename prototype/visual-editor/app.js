@@ -25,6 +25,7 @@ const debugStrip = document.getElementById('debugStrip');
 const aiDrawer = document.getElementById('aiDrawer');
 const apiBrowserDrawer = document.getElementById('apiBrowserDrawer');
 const variableDialog = document.getElementById('variableDialog');
+const semanticReviewDialog = document.getElementById('semanticReviewDialog');
 const toast = document.getElementById('toast');
 
 function escapeHtml(value) {
@@ -923,6 +924,7 @@ async function authoringRequest(path, patch, label = 'Visual authoring edit', op
     'X-UnifiedScript-Transaction-Label': label,
   };
   if (groupId) headers['X-UnifiedScript-Group-Id'] = groupId;
+  if (options.previewToken) headers['X-UnifiedScript-Preview-Token'] = options.previewToken;
   if (state.authoringRevision !== null) {
     headers['X-UnifiedScript-Baseline-Revision'] = String(state.authoringRevision);
   }
@@ -938,6 +940,69 @@ async function authoringRequest(path, patch, label = 'Visual authoring edit', op
   if (payload.schemaVersion !== 'unifiedscript.authoring-workspace/v0.5') throw new Error('Unsupported authoring response');
   validateVisualProfile(payload.profile);
   return payload;
+}
+
+function validateAuthoringPreview(preview) {
+  assertArtifact(preview?.schemaVersion === 'unifiedscript.authoring-preview/v0.2', 'Unsupported authoring preview protocol');
+  assertArtifact(preview.semanticDiff?.schemaVersion === 'unifiedscript.semantic-graph-diff/v0.1', 'Preview has no versioned semantic graph diff');
+  assertArtifact(preview.semanticDiff.graphSchemaVersion === 'unifiedscript.graph/v0.13', 'Preview semantic diff targets an unsupported Graph schema');
+  assertArtifact(Array.isArray(preview.semanticDiff.functions) && Array.isArray(preview.files), 'Malformed authoring preview');
+  assertArtifact(typeof preview.previewToken === 'string' && /^[0-9a-f]{64}$/i.test(preview.previewToken), 'Preview token is invalid');
+  return preview;
+}
+
+async function previewAuthoringRequest(path, patch, label, transactionId, groupId) {
+  const previewPath = path.replace('/api/authoring/', '/api/authoring/preview/');
+  const headers = {
+    'Content-Type': 'application/json',
+    'X-UnifiedScript-Transaction-Id': transactionId,
+    'X-UnifiedScript-Transaction-Label': label,
+  };
+  if (groupId) headers['X-UnifiedScript-Group-Id'] = groupId;
+  if (state.authoringRevision !== null) headers['X-UnifiedScript-Baseline-Revision'] = String(state.authoringRevision);
+  const response = await fetch(previewPath, { method: 'POST', headers, body: JSON.stringify(patch) });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(payload.diagnostics?.[0]?.message || payload.error?.message || `Preview returned ${response.status}`);
+    error.code = payload.error?.code;
+    throw error;
+  }
+  return validateAuthoringPreview(payload);
+}
+
+function previewSideText(files, side) {
+  if (!files.length) return '(No C# source text changed.)';
+  return files.map(file => `===== ${file.path} =====\n${file[side]}`).join('\n\n');
+}
+
+function showSemanticReview(preview) {
+  const diff = preview.semanticDiff;
+  const summary = diff.summary;
+  document.getElementById('semanticReviewTitle').textContent = preview.description;
+  document.getElementById('semanticReviewSummary').innerHTML = [
+    [summary.addedFunctions, 'FUNCTIONS ADDED'], [summary.removedFunctions, 'FUNCTIONS REMOVED'],
+    [summary.modifiedFunctions, 'FUNCTIONS MODIFIED'], [summary.changeCount, 'STABLE-ID CHANGES'],
+    [`R${preview.baselineRevision} → R${preview.candidateRevision}`, preview.publishesRuntime ? 'SOURCE + RUNTIME' : 'DRAFT ONLY'],
+  ].map(([value, label]) => `<div><strong>${escapeHtml(value)}</strong><span>${escapeHtml(label)}</span></div>`).join('');
+  const changes = diff.functions.flatMap(func => func.changes.map(change => ({ func, change })));
+  document.getElementById('semanticReviewChanges').innerHTML = changes.length
+    ? changes.map(({ func, change }) => `<div class="semantic-change"><em>${escapeHtml(change.category)}</em><strong>${escapeHtml(func.qualifiedName)} · ${escapeHtml(change.entityKind)}/${escapeHtml(change.facet)}</strong><span>${escapeHtml(change.summary)}</span></div>`).join('')
+    : '<div class="semantic-review-empty">No executable graph semantics changed. Review the exact declaration/source diff below.</div>';
+  document.getElementById('semanticReviewBefore').textContent = previewSideText(preview.files, 'beforeText');
+  document.getElementById('semanticReviewAfter').textContent = previewSideText(preview.files, 'afterText');
+  semanticReviewDialog.returnValue = 'cancel';
+  semanticReviewDialog.showModal();
+  return new Promise(resolve => semanticReviewDialog.addEventListener('close', () => resolve(semanticReviewDialog.returnValue === 'commit'), { once: true }));
+}
+
+async function reviewAndCommitAuthoring(path, patch, label) {
+  const transactionId = newAuthoringOperationId();
+  const groupId = state.authoringGroup?.id || null;
+  const preview = await previewAuthoringRequest(path, patch, label, transactionId, groupId);
+  if (!await showSemanticReview(preview)) return null;
+  return authoringRequest(path, patch, label, {
+    transactionId, groupId, previewToken: preview.previewToken,
+  });
 }
 
 async function toggleAuthoringGroup() {
@@ -989,7 +1054,11 @@ async function saveDeclarationChanges(patch = null) {
     const nextPatch = patch || buildDeclarationPatch();
     if (!nextPatch.operations.length) return showToast('Nothing to save', 'Declarations are synchronized');
     setAuthoringBusy(true);
-    const workspace = await authoringRequest('/api/authoring/declaration-patch', nextPatch, 'Edit script declarations');
+    const workspace = await reviewAndCommitAuthoring('/api/authoring/declaration-patch', nextPatch, 'Edit script declarations');
+    if (!workspace) {
+      setAuthoringBusy(false);
+      return showToast('Change cancelled', 'Preview performed no source, history, artifact, or runtime write');
+    }
     applyWorkspaceArtifacts(workspace.scriptAssets, workspace.graph, workspace.surface, workspace.sourceText, workspace);
     showToast(
       workspace.group ? `Staged edit ${workspace.group.stagedOperationCount}` : `Saved revision ${workspace.revision}`,
@@ -1005,7 +1074,11 @@ async function saveSemanticPatch(patch) {
   if (!state.authoringConnected) return showToast('Read-only artifacts', 'Start debug-serve to apply semantic edits');
   try {
     setAuthoringBusy(true);
-    const workspace = await authoringRequest('/api/authoring/semantic-patch', patch, 'Edit behavior graph');
+    const workspace = await reviewAndCommitAuthoring('/api/authoring/semantic-patch', patch, 'Edit behavior graph');
+    if (!workspace) {
+      setAuthoringBusy(false);
+      return showToast('Change cancelled', 'Preview performed no source, history, artifact, or runtime write');
+    }
     applyWorkspaceArtifacts(workspace.scriptAssets, workspace.graph, workspace.surface, workspace.sourceText, workspace);
     showToast(
       workspace.group ? `Staged edit ${workspace.group.stagedOperationCount}` : `Behavior saved · R${workspace.revision}`,

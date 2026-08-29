@@ -19,6 +19,7 @@ unsafe, or outside `docs`.
 - [Visual and C# authoring model](VISUAL_AUTHORING_MODEL.md)
 - [Native Authoring Surface](AUTHORING_SURFACE.md)
 - [Authoring diagnostics](AUTHORING_DIAGNOSTICS.md)
+- [Semantic Graph diff and merge](SEMANTIC_DIFF_AND_MERGE.md)
 - [Unreal API Contract](UNREAL_API_CONTRACT.md)
 - [Project templates and generated API browser](PROJECT_TEMPLATES_AND_API_BROWSER.md)
 

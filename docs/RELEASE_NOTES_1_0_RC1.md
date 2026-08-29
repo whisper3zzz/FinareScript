@@ -30,6 +30,11 @@ Verified target: Unreal Engine 5.8.1, Win64, .NET 10
   records their exact capabilities and non-claims.
 - The Workbench provides a searchable API/diagnostic browser generated from the
   same Contract, node catalog, and coverage input as managed/native bindings.
+- Native Slate and browser authoring previews expose versioned stable-ID
+  semantic Graph diffs beside exact C# source. The CLI can diff Graph artifacts
+  and three-way merge disjoint Visual-function changes without Blueprint
+  serialization or layout noise, while conflicting same-function edits remain
+  explicit and non-writing.
 
 ## Compatibility and packaging
 

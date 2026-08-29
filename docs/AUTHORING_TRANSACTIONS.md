@@ -44,9 +44,11 @@ reports invalid transaction metadata.
 Native Slate preflights declaration, semantic, plan, Undo, Redo, and grouped
 commit requests through matching `/api/authoring/preview/...` endpoints. A
 preview runs steps 1-4 of the commit path under the same session gate, returns
-exact changed C# `beforeText`/`afterText`, and performs no persistence or runtime
-reload. Group stages preview the current draft; grouped commit previews the
-draft against the published workspace.
+the versioned stable-ID semantic Graph diff plus exact changed C#
+`beforeText`/`afterText`, and performs no persistence or runtime reload. Native
+Slate and the browser Workbench both require this review for declaration and
+behavior edits. Group stages preview the current draft; grouped commit previews
+the draft against the published workspace.
 
 The preview response includes a SHA-256 token over revisions, transaction/group
 metadata, complete candidate source, reconciled identity sidecars, Declaration
@@ -58,6 +60,9 @@ omit the header, but the native Unreal editor never bypasses its preview for a
 source-changing operation. Structured failures include diagnostic/quick-fix
 arrays and a rollback receipt. See
 [AUTHORING_DIAGNOSTICS.md](AUTHORING_DIAGNOSTICS.md).
+The standalone review/merge schemas and conservative function-level merge
+boundary are documented in
+[SEMANTIC_DIFF_AND_MERGE.md](SEMANTIC_DIFF_AND_MERGE.md).
 
 ## User-grouped transactions
 

@@ -1894,11 +1894,28 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         Workspace.Surface.GetActionCount(), 70);
 
     const FString PreviewJson =
-        TEXT("{\"schemaVersion\":\"unifiedscript.authoring-preview/v0.1\","
+        TEXT("{\"schemaVersion\":\"unifiedscript.authoring-preview/v0.2\","
              "\"baselineRevision\":2,\"candidateRevision\":3,"
              "\"transactionId\":\"txn-preview\",\"description\":\"Change value\","
              "\"publishesRuntime\":true,"
              "\"previewToken\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\","
+             "\"semanticDiff\":{"
+             "\"schemaVersion\":\"unifiedscript.semantic-graph-diff/v0.1\","
+             "\"graphSchemaVersion\":\"unifiedscript.graph/v0.13\","
+             "\"baselineCompilationId\":\"us_base\",\"targetCompilationId\":\"us_target\","
+             "\"semanticConfigurationId\":\"us_config\","
+             "\"summary\":{\"addedFunctions\":0,\"removedFunctions\":0,"
+             "\"modifiedFunctions\":1,\"changeCount\":1},"
+             "\"functions\":[{\"functionId\":\"us_function\","
+             "\"qualifiedName\":\"DemoScript.Evaluate\","
+             "\"baselineFingerprint\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\","
+             "\"targetFingerprint\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\","
+             "\"changes\":[{\"id\":\"us_change\",\"functionId\":\"us_function\","
+             "\"functionName\":\"DemoScript.Evaluate\",\"entityKind\":\"node\","
+             "\"entityId\":\"us_literal\",\"changeKind\":\"updated\","
+             "\"category\":\"value\",\"facet\":\"property:value\","
+             "\"before\":\"1\",\"after\":\"2\","
+             "\"summary\":\"Changed literal value from 1 to 2.\"}]}]},"
              "\"files\":[{\"path\":\"DemoScript.cs\",\"beforeText\":\"return 1;\","
              "\"afterText\":\"return 2;\"}],"
              "\"diagnostics\":[{\"code\":\"CS0168\",\"severity\":\"warning\","
@@ -1916,6 +1933,12 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("Preview retains exact after source"),
         Preview.Files[0].AfterText, FString(TEXT("return 2;")));
     TestEqual(TEXT("Preview retains compiler warning"), Preview.Diagnostics.Num(), 1);
+    TestEqual(TEXT("Preview retains one modified semantic function"),
+        Preview.SemanticSummary.ModifiedFunctions, int64(1));
+    TestEqual(TEXT("Preview retains one stable-ID semantic change"),
+        Preview.SemanticSummary.ChangeCount, int64(1));
+    TestEqual(TEXT("Preview retains semantic change category"),
+        Preview.SemanticChanges[0].Category, FString(TEXT("value")));
 
     const FString FailureJson =
         TEXT("{\"error\":{\"code\":\"UAW1003\",\"message\":\"rejected\"},"

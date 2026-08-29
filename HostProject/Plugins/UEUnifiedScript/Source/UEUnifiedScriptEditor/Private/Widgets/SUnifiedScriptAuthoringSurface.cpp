@@ -522,6 +522,28 @@ FString BuildPreviewDiagnosticsText(const FUnifiedScriptAuthoringPreviewResult& 
     }
     return Result;
 }
+
+FString BuildSemanticReviewText(const FUnifiedScriptAuthoringPreviewResult& Preview)
+{
+    FString Result;
+    for (const FUnifiedScriptAuthoringSemanticChange& Change : Preview.SemanticChanges)
+    {
+        if (!Result.IsEmpty())
+        {
+            Result += TEXT("\n");
+        }
+        Result += FString::Printf(
+            TEXT("[%s] %s · %s/%s\n%s"),
+            *Change.Category,
+            *Change.FunctionName,
+            *Change.EntityKind,
+            *Change.Facet,
+            *Change.Summary);
+    }
+    return Result.IsEmpty()
+        ? TEXT("No executable graph semantics changed; review the declaration/source diff below.")
+        : Result;
+}
 }
 
 class SUnifiedScriptCanvasMinimap final : public SLeafWidget
@@ -3643,6 +3665,8 @@ bool SUnifiedScriptAuthoringSurface::ShowDiffPreview(
         UE::UnifiedScript::AuthoringSurface::Slate::Private::BuildPreviewSideText(Preview, false);
     const FString DiagnosticsText =
         UE::UnifiedScript::AuthoringSurface::Slate::Private::BuildPreviewDiagnosticsText(Preview);
+    const FString SemanticReviewText =
+        UE::UnifiedScript::AuthoringSurface::Slate::Private::BuildSemanticReviewText(Preview);
     const TSharedRef<SWindow> Window = SNew(SWindow)
         .Title(FText::FromString(FString::Printf(
             TEXT("UnifiedScript Diff Preview - %s"),
@@ -3672,7 +3696,37 @@ bool SUnifiedScriptAuthoringSurface::ShowDiffPreview(
                 .Font(FAppStyle::GetFontStyle(TEXT("SmallFontBold")))
             ]
             + SVerticalBox::Slot()
-            .FillHeight(1.0f)
+            .FillHeight(0.28f)
+            .Padding(0.0f, 0.0f, 0.0f, 8.0f)
+            [
+                SNew(SBorder)
+                .BorderImage(FAppStyle::GetBrush(TEXT("Brushes.Panel")))
+                .Padding(8.0f)
+                [
+                    SNew(SVerticalBox)
+                    + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 4.0f)
+                    [
+                        SNew(STextBlock)
+                        .Text(FText::FromString(FString::Printf(
+                            TEXT("SEMANTIC REVIEW  |  functions +%lld -%lld ~%lld  |  %lld stable-ID changes"),
+                            Preview.SemanticSummary.AddedFunctions,
+                            Preview.SemanticSummary.RemovedFunctions,
+                            Preview.SemanticSummary.ModifiedFunctions,
+                            Preview.SemanticSummary.ChangeCount)))
+                        .Font(FAppStyle::GetFontStyle(TEXT("SmallFontBold")))
+                        .ColorAndOpacity(FLinearColor(0.32f, 0.68f, 0.95f))
+                    ]
+                    + SVerticalBox::Slot().FillHeight(1.0f)
+                    [
+                        SNew(SMultiLineEditableTextBox)
+                        .Text(FText::FromString(SemanticReviewText))
+                        .IsReadOnly(true)
+                        .Font(FAppStyle::GetFontStyle(TEXT("MonoFont")))
+                    ]
+                ]
+            ]
+            + SVerticalBox::Slot()
+            .FillHeight(0.72f)
             [
                 SNew(SSplitter)
                 + SSplitter::Slot()

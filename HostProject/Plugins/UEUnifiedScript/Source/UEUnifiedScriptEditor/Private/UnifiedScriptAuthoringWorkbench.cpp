@@ -19,7 +19,9 @@ namespace UE::UnifiedScript::AuthoringWorkbench::Private
 constexpr TCHAR WorkspaceSchema[] = TEXT("unifiedscript.authoring-workspace/v0.5");
 constexpr TCHAR ProfileReportSchema[] = TEXT("unifiedscript.visual-csharp-profile-report/v0.1");
 constexpr TCHAR VisualProfileSchema[] = TEXT("unifiedscript.visual-csharp-profile/v0.3");
-constexpr TCHAR PreviewSchema[] = TEXT("unifiedscript.authoring-preview/v0.1");
+constexpr TCHAR PreviewSchema[] = TEXT("unifiedscript.authoring-preview/v0.2");
+constexpr TCHAR SemanticDiffSchema[] = TEXT("unifiedscript.semantic-graph-diff/v0.1");
+constexpr TCHAR GraphSchema[] = TEXT("unifiedscript.graph/v0.13");
 
 bool ReadPositiveInteger(
     const TSharedPtr<FJsonObject>& Object,
@@ -634,6 +636,95 @@ bool FUnifiedScriptAuthoringWorkbench::ParsePreviewResponse(
     if (!bValidPreviewToken)
     {
         OutError = TEXT("The authoring preview has an invalid SHA-256 token.");
+        return false;
+    }
+
+    const TSharedPtr<FJsonObject>* SemanticDiff = nullptr;
+    const TSharedPtr<FJsonObject>* SemanticSummary = nullptr;
+    FString SemanticSchema;
+    FString GraphSchema;
+    int64 AddedFunctions = 0;
+    int64 RemovedFunctions = 0;
+    int64 ModifiedFunctions = 0;
+    int64 ChangeCount = 0;
+    if (!Root->TryGetObjectField(TEXT("semanticDiff"), SemanticDiff) ||
+        SemanticDiff == nullptr ||
+        !(*SemanticDiff)->TryGetStringField(TEXT("schemaVersion"), SemanticSchema) ||
+        SemanticSchema != UE::UnifiedScript::AuthoringWorkbench::Private::SemanticDiffSchema ||
+        !(*SemanticDiff)->TryGetStringField(TEXT("graphSchemaVersion"), GraphSchema) ||
+        GraphSchema != UE::UnifiedScript::AuthoringWorkbench::Private::GraphSchema ||
+        !(*SemanticDiff)->TryGetObjectField(TEXT("summary"), SemanticSummary) ||
+        SemanticSummary == nullptr ||
+        !UE::UnifiedScript::AuthoringWorkbench::Private::ReadNonNegativeInteger(
+            *SemanticSummary, TEXT("addedFunctions"), AddedFunctions, OutError) ||
+        !UE::UnifiedScript::AuthoringWorkbench::Private::ReadNonNegativeInteger(
+            *SemanticSummary, TEXT("removedFunctions"), RemovedFunctions, OutError) ||
+        !UE::UnifiedScript::AuthoringWorkbench::Private::ReadNonNegativeInteger(
+            *SemanticSummary, TEXT("modifiedFunctions"), ModifiedFunctions, OutError) ||
+        !UE::UnifiedScript::AuthoringWorkbench::Private::ReadNonNegativeInteger(
+            *SemanticSummary, TEXT("changeCount"), ChangeCount, OutError))
+    {
+        if (OutError.IsEmpty())
+        {
+            OutError = TEXT("The authoring preview requires a valid semantic graph diff.");
+        }
+        return false;
+    }
+    Candidate.SemanticSummary.AddedFunctions = AddedFunctions;
+    Candidate.SemanticSummary.RemovedFunctions = RemovedFunctions;
+    Candidate.SemanticSummary.ModifiedFunctions = ModifiedFunctions;
+    Candidate.SemanticSummary.ChangeCount = ChangeCount;
+
+    const TArray<TSharedPtr<FJsonValue>>* Functions = nullptr;
+    if (!(*SemanticDiff)->TryGetArrayField(TEXT("functions"), Functions) || Functions == nullptr ||
+        AddedFunctions + RemovedFunctions + ModifiedFunctions != Functions->Num())
+    {
+        OutError = TEXT("The semantic graph diff function summary is inconsistent.");
+        return false;
+    }
+    for (const TSharedPtr<FJsonValue>& FunctionValue : *Functions)
+    {
+        const TSharedPtr<FJsonObject> Function =
+            FunctionValue.IsValid() ? FunctionValue->AsObject() : nullptr;
+        FString FunctionId;
+        FString QualifiedName;
+        const TArray<TSharedPtr<FJsonValue>>* Changes = nullptr;
+        if (!UE::UnifiedScript::AuthoringWorkbench::Private::ReadRequiredString(
+                Function, TEXT("functionId"), FunctionId, OutError) ||
+            !UE::UnifiedScript::AuthoringWorkbench::Private::ReadRequiredString(
+                Function, TEXT("qualifiedName"), QualifiedName, OutError) ||
+            !Function->TryGetArrayField(TEXT("changes"), Changes) || Changes == nullptr ||
+            Changes->IsEmpty())
+        {
+            if (OutError.IsEmpty())
+            {
+                OutError = TEXT("The semantic graph diff contains an invalid function change.");
+            }
+            return false;
+        }
+        for (const TSharedPtr<FJsonValue>& ChangeValue : *Changes)
+        {
+            const TSharedPtr<FJsonObject> Change =
+                ChangeValue.IsValid() ? ChangeValue->AsObject() : nullptr;
+            FUnifiedScriptAuthoringSemanticChange CandidateChange;
+            CandidateChange.FunctionName = QualifiedName;
+            if (!UE::UnifiedScript::AuthoringWorkbench::Private::ReadRequiredString(
+                    Change, TEXT("entityKind"), CandidateChange.EntityKind, OutError) ||
+                !UE::UnifiedScript::AuthoringWorkbench::Private::ReadRequiredString(
+                    Change, TEXT("category"), CandidateChange.Category, OutError) ||
+                !UE::UnifiedScript::AuthoringWorkbench::Private::ReadRequiredString(
+                    Change, TEXT("facet"), CandidateChange.Facet, OutError) ||
+                !UE::UnifiedScript::AuthoringWorkbench::Private::ReadRequiredString(
+                    Change, TEXT("summary"), CandidateChange.Summary, OutError))
+            {
+                return false;
+            }
+            Candidate.SemanticChanges.Add(MoveTemp(CandidateChange));
+        }
+    }
+    if (Candidate.SemanticChanges.Num() != ChangeCount)
+    {
+        OutError = TEXT("The semantic graph diff change count is inconsistent.");
         return false;
     }
 

@@ -80,6 +80,7 @@ DOCUMENTS = [
     ROOT / "docs" / "CANVAS_AUTHORING.md",
     ROOT / "docs" / "NODE_DETAILS.md",
     ROOT / "docs" / "AUTHORING_DIAGNOSTICS.md",
+    ROOT / "docs" / "SEMANTIC_DIFF_AND_MERGE.md",
     ROOT / "docs" / "UNREAL_ADAPTER.md",
     ROOT / "docs" / "UNREAL_DEPLOYMENT.md",
     ROOT / "docs" / "UNREAL_ONBOARDING.md",
@@ -755,7 +756,7 @@ def main() -> int:
         and product_release["artifacts"]["pluginVersion"] == 1000001
         and product_plugin["Version"] == 1000001
         and product_plugin["VersionName"] == "1.0.0-rc.1"
-        and len(release_documents) == 24
+        and len(release_documents) == 25
         and len(set(release_document_ids)) == len(release_document_ids)
         and len(set(release_document_paths)) == len(release_document_paths)
         and required_release_categories <= release_document_categories
@@ -766,8 +767,8 @@ def main() -> int:
             for path in release_document_paths
         )
         and product_release["releaseNotes"] in release_document_paths
-        and product_release["acceptance"]["managedTests"] == 602
-        and product_release["acceptance"]["repositoryInvariants"] == 87
+        and product_release["acceptance"]["managedTests"] == 610
+        and product_release["acceptance"]["repositoryInvariants"] == 88
         and product_release["acceptance"]["unrealAutomationTests"] == 18
         and "release-manifest.json" in sdk_package
         and "$releaseDocumentation" in sdk_package
@@ -785,8 +786,7 @@ def main() -> int:
         and "Other platforms and UE versions are not"
         in product_release_notes
         and "- [x] publish versioned plugin/SDK archives" in roadmap_document
-        and "- Next slice: **M12.3 — reviewable semantic graph/C# diffs**"
-        in roadmap_document
+        and "M12.2 is complete" in roadmap_document
         and "M12.2 release-surface evidence" in roadmap_document
         and "sourceTreeDirty=false" in roadmap_document,
         "M12.2 product release manifest, versioned SDK, documentation catalog, or compatibility gate is incomplete",
@@ -5207,7 +5207,7 @@ def main() -> int:
         ROOT / "docs" / "AUTHORING_DIAGNOSTICS.md"
     ).read_text(encoding="utf-8")
     require(
-        "unifiedscript.authoring-preview/v0.1" in debug_server_source
+        "unifiedscript.authoring-preview/v0.2" in debug_server_source
         and "X-UnifiedScript-Preview-Token" in debug_server_source
         and "TakePreparedPreview" in debug_server_source
         and "preparedPreviews" in debug_server_source
@@ -5228,6 +5228,53 @@ def main() -> int:
     )
     checks.append(
         "UE Slate binds exact server previews to commits and exposes diagnostic rollback UX"
+    )
+    semantic_review_source = (
+        ROOT / "src" / "UnifiedScript.Graph" / "SemanticGraphReview.cs"
+    ).read_text(encoding="utf-8")
+    semantic_review_tests = (
+        ROOT / "tests" / "UnifiedScript.Tests" / "SemanticGraphReviewTests.cs"
+    ).read_text(encoding="utf-8")
+    semantic_review_document = (
+        ROOT / "docs" / "SEMANTIC_DIFF_AND_MERGE.md"
+    ).read_text(encoding="utf-8")
+    workbench_index = (
+        ROOT / "prototype" / "visual-editor" / "index.html"
+    ).read_text(encoding="utf-8")
+    workbench_script = (
+        ROOT / "prototype" / "visual-editor" / "app.js"
+    ).read_text(encoding="utf-8")
+    require(
+        "unifiedscript.semantic-graph-diff/v0.1" in semantic_review_source
+        and "unifiedscript.semantic-graph-merge/v0.1" in semantic_review_source
+        and "CanonicalFunction" in semantic_review_source
+        and "function-level auto-merge was refused" in semantic_review_source
+        and 'args[0] == "semantic-diff"' in cli_source
+        and 'args[0] == "semantic-merge"' in cli_source
+        and "new SemanticGraphDiffer().Compare" in debug_server_source
+        and "SemanticDiffSchema" in unreal_authoring_workbench_source
+        and "SemanticChanges" in unreal_authoring_workbench_header
+        and "SEMANTIC REVIEW" in unreal_authoring_widget
+        and 'id="semanticReviewDialog"' in workbench_index
+        and "reviewAndCommitAuthoring" in workbench_script
+        and "X-UnifiedScript-Preview-Token" in workbench_script
+        and "MergeCombinesDisjointFunctionChangesDeterministically"
+        in semantic_review_tests
+        and "SemanticMergeCliWritesCleanGraphOrConflictReportAtomically"
+        in semantic_review_tests
+        and "auto-merge inside one function" in semantic_review_document
+        and "docs/SEMANTIC_DIFF_AND_MERGE.md" in release_document_paths
+        and "semantic-diff-merge"
+        in product_release["acceptance"]["requiredGates"]
+        and "- [x] make semantic graph/C# diffs reviewable and mergeable"
+        in roadmap_document
+        and "M12.3 semantic review evidence" in roadmap_document
+        and "Next slice: **M12.3 — typed AI semantic patch proposals**"
+        in roadmap_document,
+        "M12.3 stable-ID semantic diff, conservative merge, dual Workbench review, or release gate is incomplete",
+    )
+    checks.append(
+        "M12.3 reviews stable-ID Graph/C# changes and conservatively merges disjoint functions"
     )
     identity_reconciler_source = (
         ROOT / "src" / "UnifiedScript.CSharp" / "CSharpIdentityReconciler.cs"

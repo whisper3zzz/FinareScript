@@ -73,6 +73,12 @@
       "path": "docs/AUTHORING_DIAGNOSTICS.md"
     },
     {
+      "id": "semantic-diff-merge",
+      "category": "authoring",
+      "title": "Semantic Graph diff and merge",
+      "path": "docs/SEMANTIC_DIFF_AND_MERGE.md"
+    },
+    {
       "id": "api-contract",
       "category": "api",
       "title": "Unreal API Contract",
@@ -164,8 +170,8 @@
     }
   ],
   "acceptance": {
-    "managedTests": 602,
-    "repositoryInvariants": 87,
+    "managedTests": 610,
+    "repositoryInvariants": 88,
     "unrealAutomationTests": 18,
     "requiredGates": [
       "managed-tests",
@@ -176,6 +182,7 @@
       "deterministic-sdk-package",
       "sample-matrix",
       "project-template-and-api-browser",
+      "semantic-diff-merge",
       "clean-project-sdk-install",
       "clean-project-development-package"
     ]

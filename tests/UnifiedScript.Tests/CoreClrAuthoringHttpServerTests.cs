@@ -375,11 +375,18 @@ public sealed class CoreClrAuthoringHttpServerTests
                 baseline.Revision,
                 "txn-declaration",
                 "Update MaxDamage");
-            Assert.Equal("unifiedscript.authoring-preview/v0.1", declarationPreview.SchemaVersion);
+            Assert.Equal("unifiedscript.authoring-preview/v0.2", declarationPreview.SchemaVersion);
             Assert.Equal(baseline.Revision, declarationPreview.BaselineRevision);
             Assert.Equal(baseline.Revision + 1, declarationPreview.CandidateRevision);
             Assert.True(declarationPreview.PublishesRuntime);
             Assert.Equal(64, declarationPreview.PreviewToken.Length);
+            Assert.Equal(
+                SemanticGraphDiffDocument.CurrentSchemaVersion,
+                declarationPreview.SemanticDiff.SchemaVersion);
+            Assert.Equal(GraphDocument.CurrentSchemaVersion, declarationPreview.SemanticDiff.GraphSchemaVersion);
+            Assert.Equal(baseline.Graph.SourceCompilationId, declarationPreview.SemanticDiff.BaselineCompilationId);
+            Assert.Equal(0, declarationPreview.SemanticDiff.Summary.ChangeCount);
+            Assert.Empty(declarationPreview.SemanticDiff.Functions);
             AuthoringPreviewFile declarationFile = Assert.Single(declarationPreview.Files);
             Assert.Equal(logicalPath, declarationFile.Path);
             Assert.Equal(Source, declarationFile.BeforeText);
@@ -731,6 +738,11 @@ public sealed class CoreClrAuthoringHttpServerTests
                 "Stage minimum",
                 begun.Group.Id);
             Assert.False(behaviorPreview.PublishesRuntime);
+            Assert.Equal(1, behaviorPreview.SemanticDiff.Summary.ModifiedFunctions);
+            Assert.Contains(
+                behaviorPreview.SemanticDiff.Functions.SelectMany(static function => function.Changes),
+                static change => change.Category == SemanticGraphChangeCategory.Value &&
+                    change.Facet == "property:value" && change.Before == "0f" && change.After == "10f");
             Assert.Contains(
                 "Math.Clamp(scaled, 10f, MaxDamage)",
                 Assert.Single(behaviorPreview.Files).AfterText,

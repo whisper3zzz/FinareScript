@@ -53,6 +53,16 @@ internal static class Program
             return RunLayout(args, synchronize: true);
         }
 
+        if (args.Count > 0 && args[0] == "semantic-diff")
+        {
+            return RunSemanticDiff(args);
+        }
+
+        if (args.Count > 0 && args[0] == "semantic-merge")
+        {
+            return RunSemanticMerge(args);
+        }
+
         if (args.Count > 0 && args[0] == "apply-patch")
         {
             return RunApply(args, isPlan: false);
@@ -189,6 +199,196 @@ internal static class Program
         }
 
         return RunAnalyze(args);
+    }
+
+    private static int RunSemanticDiff(IReadOnlyList<string> args)
+    {
+        if (!TryParseSemanticDiffArguments(args, out SemanticDiffOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+
+        options = options ?? throw new InvalidOperationException(
+            "Argument parsing succeeded without semantic diff options.");
+        foreach (string input in new[] { options.BaselinePath, options.TargetPath })
+        {
+            if (!File.Exists(input))
+            {
+                Console.Error.WriteLine($"Semantic graph input does not exist: {input}");
+                return 66;
+            }
+        }
+
+        string outputPath = Path.GetFullPath(options.OutputPath);
+        EnsureDifferentPath(
+            options.BaselinePath,
+            outputPath,
+            "Semantic diff output cannot overwrite the baseline graph.");
+        EnsureDifferentPath(
+            options.TargetPath,
+            outputPath,
+            "Semantic diff output cannot overwrite the target graph.");
+        SemanticGraphDiffDocument diff = new SemanticGraphDiffer().Compare(
+            GraphJson.Deserialize(File.ReadAllText(options.BaselinePath)),
+            GraphJson.Deserialize(File.ReadAllText(options.TargetPath)));
+        WriteAtomically(outputPath, SemanticGraphReviewJson.SerializeDiff(diff) + "\n");
+        Console.WriteLine(outputPath);
+        Console.WriteLine(
+            $"semantic changes={diff.Summary.ChangeCount}; " +
+            $"functions +{diff.Summary.AddedFunctions} " +
+            $"-{diff.Summary.RemovedFunctions} ~{diff.Summary.ModifiedFunctions}");
+        return options.FailOnChange && diff.Summary.ChangeCount > 0 ? 3 : 0;
+    }
+
+    private static int RunSemanticMerge(IReadOnlyList<string> args)
+    {
+        if (!TryParseSemanticMergeArguments(args, out SemanticMergeOptions? options))
+        {
+            PrintUsage();
+            return 64;
+        }
+
+        options = options ?? throw new InvalidOperationException(
+            "Argument parsing succeeded without semantic merge options.");
+        foreach (string input in new[]
+                 {
+                     options.BaselinePath,
+                     options.OursPath,
+                     options.TheirsPath,
+                 })
+        {
+            if (!File.Exists(input))
+            {
+                Console.Error.WriteLine($"Semantic graph input does not exist: {input}");
+                return 66;
+            }
+        }
+
+        string reportPath = Path.GetFullPath(options.ReportPath);
+        string outputPath = Path.GetFullPath(options.OutputPath);
+        foreach (string input in new[]
+                 {
+                     options.BaselinePath,
+                     options.OursPath,
+                     options.TheirsPath,
+                 })
+        {
+            EnsureDifferentPath(
+                input,
+                reportPath,
+                "Semantic merge report cannot overwrite an input graph.");
+            EnsureDifferentPath(
+                input,
+                outputPath,
+                "Semantic merge output cannot overwrite an input graph.");
+        }
+        EnsureDifferentPath(
+            reportPath,
+            outputPath,
+            "Semantic merge report and graph output require different paths.");
+
+        SemanticGraphMergeResult result = new SemanticGraphMerger().Merge(
+            GraphJson.Deserialize(File.ReadAllText(options.BaselinePath)),
+            GraphJson.Deserialize(File.ReadAllText(options.OursPath)),
+            GraphJson.Deserialize(File.ReadAllText(options.TheirsPath)));
+        string report = SemanticGraphReviewJson.SerializeMerge(result.Document) + "\n";
+        if (!result.Succeeded || result.MergedGraph is null)
+        {
+            WriteAtomically(reportPath, report);
+            Console.WriteLine(reportPath);
+            Console.Error.WriteLine(
+                $"Semantic merge has {result.Document.Summary.ConflictCount} conflict(s); " +
+                "no merged graph was written.");
+            return 3;
+        }
+
+        WriteTransactionally(
+        [
+            new OutputFile(reportPath, report),
+            new OutputFile(outputPath, GraphJson.Serialize(result.MergedGraph) + "\n"),
+        ]);
+        Console.WriteLine(reportPath);
+        Console.WriteLine(outputPath);
+        Console.WriteLine(
+            $"semantic merge clean; ours={result.Document.Summary.OursResolutions}; " +
+            $"theirs={result.Document.Summary.TheirsResolutions}; " +
+            $"identical={result.Document.Summary.IdenticalResolutions}; " +
+            $"removed={result.Document.Summary.RemovedFunctions}");
+        return 0;
+    }
+
+    private static bool TryParseSemanticDiffArguments(
+        IReadOnlyList<string> args,
+        out SemanticDiffOptions? options)
+    {
+        options = null;
+        if (args.Count < 5 || args[0] != "semantic-diff" ||
+            args[1].StartsWith("--", StringComparison.Ordinal) ||
+            args[2].StartsWith("--", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        string? output = null;
+        bool failOnChange = false;
+        for (int index = 3; index < args.Count; index++)
+        {
+            if (args[index] == "--fail-on-change")
+            {
+                failOnChange = true;
+                continue;
+            }
+            if (args[index] == "--out" && index + 1 < args.Count)
+            {
+                output = args[++index];
+                continue;
+            }
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(output))
+        {
+            return false;
+        }
+        options = new SemanticDiffOptions(args[1], args[2], output, failOnChange);
+        return true;
+    }
+
+    private static bool TryParseSemanticMergeArguments(
+        IReadOnlyList<string> args,
+        out SemanticMergeOptions? options)
+    {
+        options = null;
+        if (args.Count < 8 || args[0] != "semantic-merge" ||
+            args.Skip(1).Take(3).Any(static value => value.StartsWith("--", StringComparison.Ordinal)))
+        {
+            return false;
+        }
+
+        string? report = null;
+        string? output = null;
+        for (int index = 4; index < args.Count; index++)
+        {
+            if (args[index] == "--report" && index + 1 < args.Count)
+            {
+                report = args[++index];
+                continue;
+            }
+            if (args[index] == "--out" && index + 1 < args.Count)
+            {
+                output = args[++index];
+                continue;
+            }
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(report) || string.IsNullOrWhiteSpace(output))
+        {
+            return false;
+        }
+        options = new SemanticMergeOptions(args[1], args[2], args[3], report, output);
+        return true;
     }
 
     private static int RunDiagnosticsBundle(IReadOnlyList<string> args)
@@ -4713,6 +4913,8 @@ internal static class Program
         "  unifiedscript identity-init <input.cs> --out <identity.usids> [options]\n" +
         "  unifiedscript layout-init <graph.json> --out <layout.usgraph>\n" +
         "  unifiedscript layout-sync <graph.json> --layout <layout.usgraph> --out <updated.usgraph>\n" +
+        "  unifiedscript semantic-diff <baseline.graph.json> <target.graph.json> --out <diff.json> [--fail-on-change]\n" +
+        "  unifiedscript semantic-merge <baseline.graph.json> <ours.graph.json> <theirs.graph.json> --report <merge.json> --out <merged.graph.json>\n" +
         "  unifiedscript apply-patch <input.cs> --patch <patch.json> --out <output.cs> [options]\n" +
         "  unifiedscript apply-plan <input.cs> --plan <plan.json> --out <output.cs> [options]\n" +
         "  unifiedscript apply-project-patch <project.csproj> --patch <patch.json> --out <directory> [options]\n" +
@@ -5005,6 +5207,19 @@ internal static class Program
     private sealed record LayoutOptions(
         string GraphPath,
         string? LayoutPath,
+        string OutputPath);
+
+    private sealed record SemanticDiffOptions(
+        string BaselinePath,
+        string TargetPath,
+        string OutputPath,
+        bool FailOnChange);
+
+    private sealed record SemanticMergeOptions(
+        string BaselinePath,
+        string OursPath,
+        string TheirsPath,
+        string ReportPath,
         string OutputPath);
 
     private sealed record PatchOptions(

@@ -22,8 +22,9 @@ graph or source buffer.
 3. The server validates the current workspace/group, external-file state,
    typed preconditions, compiler contract, and candidate analysis without
    writing source, identity, artifacts, history, or a runtime generation.
-4. A modal Unreal diff shows exact **Before** and **After** C# for every changed
-   logical source plus any successful-candidate warnings.
+4. A modal Unreal diff shows the typed stable-ID semantic Graph changes and
+   exact **Before** and **After** C# for every changed logical source, plus any
+   successful-candidate warnings. The browser Workbench uses the same contract.
 5. Cancel closes the preview with a zero-write status. Apply resends the same
    payload, operation identity, baseline/group identity, and returned
    `X-UnifiedScript-Preview-Token` to the ordinary transaction endpoint.
@@ -37,15 +38,17 @@ runtime is unchanged. Group commit previews the complete accumulated draft
 against the published workspace before creating one history entry and one new
 runtime generation.
 
-## Preview response v0.1
+## Preview response v0.2
 
-`unifiedscript.authoring-preview/v0.1` contains:
+`unifiedscript.authoring-preview/v0.2` contains:
 
 - baseline and candidate revisions;
 - exact transaction ID and description;
 - whether acceptance publishes a runtime generation or only stages a draft;
 - a lowercase SHA-256 preview token over transaction context, complete candidate
   source/identity sidecars, Declaration IR, and Graph;
+- a strict `unifiedscript.semantic-graph-diff/v0.1` document describing stable
+  function/node/edge/region changes without source-span or layout noise;
 - changed logical source paths with exact `beforeText` and `afterText`;
 - structured compiler/contract diagnostics with severity, code, message,
   source span, and optional semantic ID.
@@ -53,6 +56,8 @@ runtime generation.
 The native parser is strict: unknown schema, invalid revisions/tokens,
 duplicate paths, unchanged file entries, malformed spans, or unsupported
 diagnostic severities reject the preview instead of silently applying it.
+The semantic summary and nested change counts are also checked before Slate
+renders the review. See [Semantic Graph diff and merge](SEMANTIC_DIFF_AND_MERGE.md).
 
 ## Failure panel and safe quick fixes
 
@@ -92,6 +97,8 @@ previous immutable request if persistence fails.
 The managed HTTP integration test proves:
 
 - a normal preview returns exact changed source and performs zero writes;
+- declaration previews may carry a zero-change semantic diff, while behavior
+  previews identify the exact stable literal/value change;
 - a mismatched preview token is rejected with `UAW1012` and an `unchanged`
   receipt;
 - a statement insertion that allocates fresh semantic identities commits the
