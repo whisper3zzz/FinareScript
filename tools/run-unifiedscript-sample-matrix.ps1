@@ -44,10 +44,21 @@ function Get-GitState {
     if ($LASTEXITCODE -ne 0) {
         throw "Git status is unavailable for '$Root'."
     }
+    & git -C $Root diff --quiet --
+    $trackedChanges = $LASTEXITCODE -ne 0
+    & git -C $Root diff --cached --quiet --
+    $stagedChanges = $LASTEXITCODE -ne 0
+    $untracked = @($status | Where-Object {
+        $_.StartsWith('?? ', [StringComparison]::Ordinal)
+    })
     return [ordered]@{
         root = [IO.Path]::GetFullPath($Root)
         revision = $revision
-        dirty = $status.Count -ne 0
+        dirty = $trackedChanges -or $stagedChanges -or $untracked.Count -ne 0
+        porcelainDirty = $status.Count -ne 0
+        trackedChanges = $trackedChanges
+        stagedChanges = $stagedChanges
+        untracked = $untracked
         status = @($status)
     }
 }
@@ -58,8 +69,16 @@ function Test-GitStatePreserved {
         [Parameter(Mandatory)]$After
     )
 
-    return $Before.revision -eq $After.revision -and
-        (@($Before.status) -join "`n") -ceq (@($After.status) -join "`n")
+    if ($Before.revision -ne $After.revision) {
+        return $false
+    }
+    if (-not $Before.dirty) {
+        # Git can report CRLF/stat-only dirt after UE tooling rewrites a file
+        # even when the clean-filtered blobs are byte-equivalent to HEAD.
+        return -not $After.dirty
+    }
+    return (@($Before.status) -join "`n") -ceq
+        (@($After.status) -join "`n")
 }
 
 function Expand-SampleToken {
