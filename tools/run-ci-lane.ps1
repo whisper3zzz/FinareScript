@@ -110,6 +110,31 @@ function Require-UnrealEngine {
     }
 }
 
+function Invoke-GitPathQuery {
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string[]]$Arguments,
+        [Parameter(Mandatory)][string]$FailureMessage
+    )
+
+    # Native stderr is promoted to the PowerShell error stream. Git can write
+    # harmless line-ending warnings there while still returning valid paths,
+    # so keep stderr isolated and make the native exit code authoritative.
+    $previousPreference = $ErrorActionPreference
+    $exitCode = -1
+    try {
+        $ErrorActionPreference = 'Continue'
+        $paths = @(& git -C $Root @Arguments 2>$null)
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousPreference
+    }
+    if ($exitCode -ne 0) {
+        throw $FailureMessage
+    }
+    return @($paths | ForEach-Object { [string]$_ })
+}
+
 function New-CleanGitCheckoutSnapshot {
     param(
         [Parameter(Mandatory)][string]$Root,
@@ -117,11 +142,9 @@ function New-CleanGitCheckoutSnapshot {
     )
 
     $resolvedRoot = [IO.Path]::GetFullPath($Root)
-    $entries = @(& git -C $resolvedRoot status --porcelain=v1 `
-        --untracked-files=all 2>$null)
-    if ($LASTEXITCODE -ne 0) {
-        throw "Cannot inspect comparison checkout: $resolvedRoot"
-    }
+    $entries = @(Invoke-GitPathQuery -Root $resolvedRoot -Arguments @(
+            'status', '--porcelain=v1', '--untracked-files=all') `
+            -FailureMessage "Cannot inspect comparison checkout: $resolvedRoot")
     if ($entries.Count -ne 0) {
         throw (
             'The workload-performance lane requires a clean UnifiedScript ' +
@@ -165,14 +188,12 @@ function Restore-CleanGitCheckoutSnapshot {
         throw "Unsafe comparison snapshot restore path: $resolvedSnapshot"
     }
 
-    $workingTreePaths = @(& git -C $resolvedRoot diff --name-only 2>$null)
-    if ($LASTEXITCODE -ne 0) {
-        throw "Cannot inspect comparison working-tree changes: $resolvedRoot"
-    }
-    $indexPaths = @(& git -C $resolvedRoot diff --cached --name-only 2>$null)
-    if ($LASTEXITCODE -ne 0) {
-        throw "Cannot inspect comparison index changes: $resolvedRoot"
-    }
+    $workingTreePaths = @(Invoke-GitPathQuery -Root $resolvedRoot -Arguments @(
+            'diff', '--name-only') -FailureMessage (
+            "Cannot inspect comparison working-tree changes: $resolvedRoot"))
+    $indexPaths = @(Invoke-GitPathQuery -Root $resolvedRoot -Arguments @(
+            'diff', '--cached', '--name-only') -FailureMessage (
+            "Cannot inspect comparison index changes: $resolvedRoot"))
     $trackedPaths = @($workingTreePaths; $indexPaths) |
         Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
         Sort-Object -Unique
@@ -196,11 +217,9 @@ function Restore-CleanGitCheckoutSnapshot {
         }
     }
 
-    $untrackedPaths = @(& git -C $resolvedRoot ls-files --others `
-        --exclude-standard 2>$null)
-    if ($LASTEXITCODE -ne 0) {
-        throw "Cannot inspect comparison untracked files: $resolvedRoot"
-    }
+    $untrackedPaths = @(Invoke-GitPathQuery -Root $resolvedRoot -Arguments @(
+            'ls-files', '--others', '--exclude-standard') -FailureMessage (
+            "Cannot inspect comparison untracked files: $resolvedRoot"))
     foreach ($relativePath in $untrackedPaths) {
         $nativeRelative = [string]$relativePath -replace '/', '\'
         $target = [IO.Path]::GetFullPath((Join-Path $resolvedRoot $nativeRelative))
@@ -214,9 +233,10 @@ function Restore-CleanGitCheckoutSnapshot {
         }
     }
 
-    $remaining = @(& git -C $resolvedRoot status --porcelain=v1 `
-        --untracked-files=all)
-    if ($LASTEXITCODE -ne 0 -or $remaining.Count -ne 0) {
+    $remaining = @(Invoke-GitPathQuery -Root $resolvedRoot -Arguments @(
+            'status', '--porcelain=v1', '--untracked-files=all') `
+            -FailureMessage "Cannot verify comparison checkout: $resolvedRoot")
+    if ($remaining.Count -ne 0) {
         throw "Comparison checkout restoration failed: $resolvedRoot"
     }
     Remove-Item -LiteralPath $resolvedSnapshot -Recurse -Force
