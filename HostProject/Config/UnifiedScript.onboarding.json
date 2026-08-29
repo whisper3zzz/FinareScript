@@ -29,6 +29,12 @@
     "stageDirectory": "../Plugins/UEUnifiedScript/Binaries/Managed",
     "projects": [
       "../../samples/Unreal/UnifiedScript.Unreal.Demo/UnifiedScript.Unreal.Demo.csproj"
+    ],
+    "chunks": [
+      {
+        "project": "../../samples/Unreal/UnifiedScript.Unreal.Demo/UnifiedScript.Unreal.Demo.csproj",
+        "stagePath": "../Plugins/UEUnifiedScript/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.uschunk"
+      }
     ]
   },
   "validation": {

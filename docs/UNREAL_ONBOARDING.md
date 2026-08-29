@@ -101,7 +101,13 @@ configuration file.
   "managed": {
     "configuration": "Release",
     "stageDirectory": "../Plugins/UEUnifiedScript/Binaries/Managed",
-    "projects": ["../Managed/Game.UnifiedScript.csproj"]
+    "projects": ["../Managed/Game.UnifiedScript.csproj"],
+    "chunks": [
+      {
+        "project": "../Managed/Game.UnifiedScript.csproj",
+        "stagePath": "../Plugins/UEUnifiedScript/Binaries/Managed/Game.UnifiedScript.uschunk"
+      }
+    ]
   },
   "validation": {
     "automationFilter": "Game.UnifiedScript",
@@ -119,6 +125,12 @@ it to produce C++, C#, coverage, and visual nodes from the same selection.
 thunk and rejects reflection fallback, rejected members, and deferred types.
 Projects may set it to false only when their reviewed product policy permits a
 safe reflected fallback.
+
+The optional `managed.chunks` list compiles an already-built managed project
+into a deterministic `.uschunk`, verifies the container, and atomically replaces
+the declared file below `managed.stageDirectory` before UE Automation starts.
+This keeps the chunk dependency manifest synchronized with any shared managed
+assemblies rebuilt during onboarding.
 
 ## Reports and failures
 

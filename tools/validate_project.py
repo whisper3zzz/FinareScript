@@ -603,6 +603,11 @@ def main() -> int:
         onboarding_config["deployment"]["manifest"],
         onboarding_config["managed"]["stageDirectory"],
         *onboarding_config["managed"]["projects"],
+        *(
+            path
+            for chunk in onboarding_config["managed"].get("chunks", [])
+            for path in (chunk["project"], chunk["stagePath"])
+        ),
     ]
     coverage_summary = onboarding_coverage["summary"]
     require(
@@ -628,6 +633,15 @@ def main() -> int:
         and "unifiedscript.unreal-project-onboarding-report/v0.1" in onboarding_script
         and "Assert-GeneratedFileMatches" in onboarding_script
         and "UnifiedScriptSyncAssets" in onboarding_script
+        and "managed.chunks entry" in onboarding_script
+        and "compiled-chunks" in onboarding_script
+        and "chunk-inspect" in onboarding_script
+        and onboarding_config["managed"]["chunks"]
+        and all(
+            chunk["project"] in onboarding_config["managed"]["projects"]
+            and chunk["stagePath"].endswith(".uschunk")
+            for chunk in onboarding_config["managed"]["chunks"]
+        )
         and "Automation RunTests" in onboarding_script,
         "One-command Unreal onboarding, determinism, or native coverage gate is missing",
     )

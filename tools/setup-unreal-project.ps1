@@ -524,8 +524,14 @@ try {
             -Context 'deployment'
         Assert-AllowedProperties `
             -Value $configJson.managed `
-            -Allowed @('configuration', 'stageDirectory', 'projects') `
+            -Allowed @('configuration', 'stageDirectory', 'projects', 'chunks') `
             -Context 'managed'
+        foreach ($chunk in @($configJson.managed.chunks)) {
+            Assert-AllowedProperties `
+                -Value $chunk `
+                -Allowed @('project', 'stagePath') `
+                -Context 'managed.chunks entry'
+        }
         if ($null -ne $configJson.validation) {
             Assert-AllowedProperties `
                 -Value $configJson.validation `
@@ -598,6 +604,18 @@ try {
                 Resolve-FullPath -Path ([string]$_) -BaseDirectory $configDirectory
             }
         )
+        $resolved.managedChunks = @(
+            @($configJson.managed.chunks) | ForEach-Object {
+                [pscustomobject]@{
+                    project = Resolve-FullPath `
+                        -Path ([string]$_.project) `
+                        -BaseDirectory $configDirectory
+                    stagePath = Resolve-FullPath `
+                        -Path ([string]$_.stagePath) `
+                        -BaseDirectory $configDirectory
+                }
+            }
+        )
         $resolved.automationFilter = if ($null -eq $configJson.validation) {
             $null
         } else { [string]$configJson.validation.automationFilter }
@@ -657,7 +675,7 @@ try {
         }
 
         $requiredInputs = @($resolved.contract, $resolved.deployment) +
-            $resolved.managedProjects
+            $resolved.managedProjects + @($resolved.managedChunks.project)
         if ($sdkLayout -eq 'repository') {
             $requiredInputs = @($cliProject) + $requiredInputs
         } else {
@@ -677,6 +695,28 @@ try {
             $resolved.coverageOutput,
             $resolved.managedStage)) {
             Assert-WritableDestination -Path $destination
+        }
+        $managedStageBoundary = [IO.Path]::GetFullPath(
+            $resolved.managedStage).TrimEnd('\', '/') +
+            [IO.Path]::DirectorySeparatorChar
+        foreach ($chunk in $resolved.managedChunks) {
+            if ($chunk.project -notin $resolved.managedProjects) {
+                Throw-OnboardingError `
+                    -Code 'USONB1001' `
+                    -Message "Managed chunk project is not present in managed.projects: $($chunk.project)"
+            }
+            $chunkStagePath = [IO.Path]::GetFullPath($chunk.stagePath)
+            if (-not $chunkStagePath.StartsWith(
+                    $managedStageBoundary,
+                    [StringComparison]::OrdinalIgnoreCase) -or
+                [IO.Path]::GetExtension($chunkStagePath) -ne '.uschunk') {
+                Throw-OnboardingError `
+                    -Code 'USONB1001' `
+                    -Message (
+                        "Managed chunk stagePath must be a .uschunk below " +
+                        "managed.stageDirectory: $chunkStagePath")
+            }
+            Assert-WritableDestination -Path $chunkStagePath
         }
 
         $engineVersion = Get-Content `
@@ -874,6 +914,66 @@ try {
             }
         }
 
+        if ($resolved.managedChunks.Count -gt 0) {
+            Invoke-OnboardingPhase -Name 'compiled-chunks' -Action {
+                for ($index = 0; $index -lt $resolved.managedChunks.Count; ++$index) {
+                    $chunk = $resolved.managedChunks[$index]
+                    $safeName = [IO.Path]::GetFileNameWithoutExtension($chunk.stagePath)
+                    $outputDirectory = Join-Path `
+                        $script:RunDirectory `
+                        ("compiled-chunks\{0:D2}-{1}" -f ($index + 1), $safeName)
+                    New-Item -ItemType Directory -Force -Path $outputDirectory | Out-Null
+                    Invoke-LoggedCommand `
+                        -FilePath $resolved.dotnet `
+                        -Arguments @(
+                            $cliAssembly,
+                            'emit', $chunk.project,
+                            '--out', $outputDirectory,
+                            '--configuration', $resolved.managedConfiguration,
+                            '--no-restore',
+                            '--no-build') `
+                        -LogPath (Join-Path $script:RunDirectory "chunk-emit-$safeName.log") `
+                        -FailureCode 'USONB2303' `
+                        -FailureMessage "Managed chunk emission failed: $($chunk.project)"
+                    $compiledChunk = Join-Path `
+                        $outputDirectory `
+                        ([IO.Path]::GetFileName($chunk.stagePath))
+                    Assert-RequiredPath `
+                        -Path $compiledChunk `
+                        -Label 'Compiled managed chunk' `
+                        -Code 'USONB2303'
+                    Invoke-LoggedCommand `
+                        -FilePath $resolved.dotnet `
+                        -Arguments @($cliAssembly, 'chunk-inspect', $compiledChunk) `
+                        -LogPath (Join-Path $script:RunDirectory "chunk-inspect-$safeName.log") `
+                        -FailureCode 'USONB2303' `
+                        -FailureMessage "Managed chunk verification failed: $compiledChunk"
+
+                    $stageDirectory = Split-Path -Parent $chunk.stagePath
+                    New-Item -ItemType Directory -Force -Path $stageDirectory | Out-Null
+                    $temporaryStagePath = Join-Path `
+                        $stageDirectory `
+                        (".{0}.{1}.tmp" -f
+                            ([IO.Path]::GetFileName($chunk.stagePath)),
+                            [Guid]::NewGuid().ToString('N'))
+                    try {
+                        Copy-Item `
+                            -LiteralPath $compiledChunk `
+                            -Destination $temporaryStagePath `
+                            -Force
+                        Move-Item `
+                            -LiteralPath $temporaryStagePath `
+                            -Destination $chunk.stagePath `
+                            -Force
+                    } finally {
+                        if (Test-Path -LiteralPath $temporaryStagePath) {
+                            Remove-Item -LiteralPath $temporaryStagePath -Force
+                        }
+                    }
+                }
+            }
+        }
+
         Invoke-OnboardingPhase -Name 'native-final-build' -Action {
             Invoke-LoggedCommand `
                 -FilePath $resolved.build `
@@ -1030,6 +1130,7 @@ try {
         bindingCoverage = $resolved.coverageOutput
         deploymentManifest = $resolved.deployment
         managedStageDirectory = $resolved.managedStage
+        compiledChunks = @($resolved.managedChunks.stagePath)
         runDirectory = $script:RunDirectory
         automation = [ordered]@{
             filter = $resolved.automationFilter

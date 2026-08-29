@@ -30,6 +30,12 @@
     "stageDirectory": "../Plugins/UEUnifiedScript/Binaries/Managed",
     "projects": [
       "../Managed/__ASSEMBLY_NAME__/__ASSEMBLY_NAME__.csproj"
+    ],
+    "chunks": [
+      {
+        "project": "../Managed/__ASSEMBLY_NAME__/__ASSEMBLY_NAME__.csproj",
+        "stagePath": "../Plugins/UEUnifiedScript/Binaries/Managed/__ASSEMBLY_NAME__.uschunk"
+      }
     ]
   }
 }
