@@ -239,7 +239,16 @@ function Restore-CleanGitCheckoutSnapshot {
     if ($remaining.Count -ne 0) {
         throw "Comparison checkout restoration failed: $resolvedRoot"
     }
-    Remove-Item -LiteralPath $resolvedSnapshot -Recurse -Force
+    $snapshotDeletePath = $resolvedSnapshot
+    if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT -and
+        -not $snapshotDeletePath.StartsWith('\\?\')) {
+        $snapshotDeletePath = if ($snapshotDeletePath.StartsWith('\\')) {
+            '\\?\UNC\' + $snapshotDeletePath.TrimStart('\')
+        } else {
+            '\\?\' + $snapshotDeletePath
+        }
+    }
+    [IO.Directory]::Delete($snapshotDeletePath, $true)
 }
 
 try {
