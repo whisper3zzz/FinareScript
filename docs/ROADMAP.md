@@ -49,7 +49,7 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-29**
 
 - Active milestone: **M12 — Migration ecosystem and UnifiedScript 1.0**
-- Next slice: **M12.2 — project templates and generated API/diagnostic browser**
+- Next slice: **M12.3 — reviewable semantic graph/C# diffs**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
 
@@ -1551,13 +1551,13 @@ cursor advances to M12.2's versioned SDK and documentation release surface.
   onboarding, authoring, API, debugging, performance, packaging, and migration docs
 - [x] ship minimal, gameplay, networking/server, data-plane, and visual/code
   round-trip samples with automated acceptance reports
-- [ ] provide project templates and an API/diagnostic browser generated from the
+- [x] provide project templates and an API/diagnostic browser generated from the
   same contracts consumed by the compiler and editor
 
 M12.2 release-surface evidence (2026-08-29): strict
 `unifiedscript.product-release/v0.1` now binds `1.0.0-rc.1` to plugin version
 1000001, the Win64/UE 5.8.1/.NET 10 support boundary, archive identity,
-acceptance gates, release notes, known limits, and a unique 23-entry catalog
+acceptance gates, release notes, known limits, and a unique 24-entry catalog
 covering onboarding, authoring, API, debugging, performance, packaging,
 upgrades, support, and Puerts migration. SDK packaging rejects release/plugin
 version drift, unsafe or missing documents, machine paths, native build output,
@@ -1592,6 +1592,30 @@ archives with SHA-256
 The server sample intentionally does not claim client/server gameplay
 replication or a packaged WindowsServer target. The cursor advances to M12.2's
 project templates and generated API/diagnostic browser.
+
+M12.2 template/browser evidence (2026-08-29): the versioned
+`unifiedscript.project-template-catalog/v0.1` exposes `minimal`,
+`visual-gameplay`, and `data-plane` as reviewed starting points with explicit
+capabilities and non-claims. The public scaffold rendered, compiled, analyzed,
+and generated Script Asset/Surface outputs for all three entries; the
+`unifiedscript.project-template-acceptance/v0.1` report at
+`artifacts/project-templates/m12-2-second/project-template-acceptance.json`
+passes 3/3 in 13,910 ms. Contract generation now emits a deterministic
+`unifiedscript.unreal-api-browser/v0.1` beside managed bindings, native thunks,
+visual nodes, and coverage. The checked-in UE 5.8.1 browser contains 7 types,
+110 Contract members, 121 nodes, and one stable coverage diagnostic; the
+Workbench exposes the validated document through read-only
+`GET /api/unreal/browser` search and route filters.
+
+Full Apply onboarding rebuilt both native passes, regenerated all five Contract
+consumers, recompiled/deployed the content-identified Demo chunk, and passed
+18/18 `UnifiedScript.Unreal` Automation tests in
+`artifacts/onboarding/m12-2-template-browser-full.json`. Managed regression is
+602/602 and repository validation is 87/87. Two final SDK archives are
+byte-identical at 204 payloads and 8,401,594 bytes with SHA-256
+`9b88bd1c085adbeafa253fd6ddecf79807f5299afd3a2a3972740a942a0f31fb`.
+M12.2 is complete and the cursor advances to M12.3's reviewable semantic
+graph/C# diff surface.
 
 ### M12.3 — Beyond-Puerts differentiators
 

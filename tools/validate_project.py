@@ -599,6 +599,7 @@ def main() -> int:
         onboarding_config["bindings"]["managedOutput"],
         onboarding_config["bindings"]["nativeOutput"],
         onboarding_config["bindings"]["nodeCatalogOutput"],
+        onboarding_config["bindings"]["browserOutput"],
         onboarding_config["bindings"]["coverageOutput"],
         onboarding_config["deployment"]["manifest"],
         onboarding_config["managed"]["stageDirectory"],
@@ -636,6 +637,8 @@ def main() -> int:
         and "managed.chunks entry" in onboarding_script
         and "compiled-chunks" in onboarding_script
         and "chunk-inspect" in onboarding_script
+        and "--browser-out" in onboarding_script
+        and "apiBrowser" in onboarding_script
         and onboarding_config["managed"]["chunks"]
         and all(
             chunk["project"] in onboarding_config["managed"]["projects"]
@@ -667,6 +670,9 @@ def main() -> int:
         and "measure-compiled-chunk-load.ps1" in sdk_package
         and "measure-readytorun-chunk.ps1" in sdk_package
         and "measure-generation-prewarm.ps1" in sdk_package
+        and "unifiedscript.project-templates.json" in sdk_package
+        and "VisualGameplayScript.cs.template" in sdk_package
+        and "DataPlaneScript.cs.template" in sdk_package
         and "generation-prewarm-probe.cs" in sdk_package
         and "release\\unifiedscript.release.json" in sdk_package
         and "$releaseDocumentation" in sdk_package
@@ -749,7 +755,7 @@ def main() -> int:
         and product_release["artifacts"]["pluginVersion"] == 1000001
         and product_plugin["Version"] == 1000001
         and product_plugin["VersionName"] == "1.0.0-rc.1"
-        and len(release_documents) == 23
+        and len(release_documents) == 24
         and len(set(release_document_ids)) == len(release_document_ids)
         and len(set(release_document_paths)) == len(release_document_paths)
         and required_release_categories <= release_document_categories
@@ -760,8 +766,8 @@ def main() -> int:
             for path in release_document_paths
         )
         and product_release["releaseNotes"] in release_document_paths
-        and product_release["acceptance"]["managedTests"] == 600
-        and product_release["acceptance"]["repositoryInvariants"] == 86
+        and product_release["acceptance"]["managedTests"] == 602
+        and product_release["acceptance"]["repositoryInvariants"] == 87
         and product_release["acceptance"]["unrealAutomationTests"] == 18
         and "release-manifest.json" in sdk_package
         and "$releaseDocumentation" in sdk_package
@@ -779,7 +785,7 @@ def main() -> int:
         and "Other platforms and UE versions are not"
         in product_release_notes
         and "- [x] publish versioned plugin/SDK archives" in roadmap_document
-        and "- Next slice: **M12.2 — project templates and generated API/diagnostic browser**"
+        and "- Next slice: **M12.3 — reviewable semantic graph/C# diffs**"
         in roadmap_document
         and "M12.2 release-surface evidence" in roadmap_document
         and "sourceTreeDirty=false" in roadmap_document,
@@ -1052,6 +1058,27 @@ def main() -> int:
     authoring_start_path = ROOT / "tools" / "start-unifiedscript-authoring.ps1"
     first_script_guide_path = ROOT / "docs" / "UNREAL_FIRST_SCRIPT.md"
     template_root = ROOT / "templates" / "UnrealProject"
+    project_template_catalog_path = (
+        template_root / "unifiedscript.project-templates.json"
+    )
+    project_template_runner_path = (
+        ROOT / "tools" / "test-unifiedscript-project-templates.ps1"
+    )
+    api_browser_source_path = (
+        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealApiBrowser.cs"
+    )
+    api_browser_sample_path = (
+        ROOT / "samples" / "Unreal" / "UEUnifiedScriptRuntime.api-browser.json"
+    )
+    api_browser_guide_path = (
+        ROOT / "docs" / "PROJECT_TEMPLATES_AND_API_BROWSER.md"
+    )
+    api_browser_server_path = (
+        ROOT / "src" / "UnifiedScript.Cli" / "CoreClrDebugHttpServer.cs"
+    )
+    cli_program_path = ROOT / "src" / "UnifiedScript.Cli" / "Program.cs"
+    workbench_index_path = ROOT / "prototype" / "visual-editor" / "index.html"
+    workbench_script_path = ROOT / "prototype" / "visual-editor" / "app.js"
     required_templates = [
         template_root / "Config" / "UnifiedScript.onboarding.json.template",
         template_root / "Contracts" / "Project.unreal-api-contract.json.template",
@@ -1060,6 +1087,8 @@ def main() -> int:
         / "Project.unifiedscript-deployment.json.template",
         template_root / "Managed" / "Project.UnifiedScript.csproj.template",
         template_root / "Managed" / "FirstScript.cs.template",
+        template_root / "Managed" / "VisualGameplayScript.cs.template",
+        template_root / "Managed" / "DataPlaneScript.cs.template",
         template_root / "Source" / "Project.Build.cs.template",
         template_root / "Source" / "Project.Target.cs.template",
         template_root / "Source" / "ProjectEditor.Target.cs.template",
@@ -1069,6 +1098,17 @@ def main() -> int:
     authoring_start = authoring_start_path.read_text(encoding="utf-8")
     first_script_guide = first_script_guide_path.read_text(encoding="utf-8")
     first_script_template = required_templates[4].read_text(encoding="utf-8")
+    with project_template_catalog_path.open("r", encoding="utf-8") as handle:
+        project_template_catalog = json.load(handle)
+    with api_browser_sample_path.open("r", encoding="utf-8") as handle:
+        api_browser_sample = json.load(handle)
+    project_template_runner = project_template_runner_path.read_text(encoding="utf-8")
+    api_browser_source = api_browser_source_path.read_text(encoding="utf-8")
+    api_browser_guide = api_browser_guide_path.read_text(encoding="utf-8")
+    api_browser_server = api_browser_server_path.read_text(encoding="utf-8")
+    cli_program = cli_program_path.read_text(encoding="utf-8")
+    workbench_index = workbench_index_path.read_text(encoding="utf-8")
+    workbench_script = workbench_script_path.read_text(encoding="utf-8")
     plugin_source_root = (
         ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
     )
@@ -1105,10 +1145,12 @@ def main() -> int:
         scaffold_path.is_file()
         and authoring_start_path.is_file()
         and all(path.is_file() for path in required_templates)
-        and "unifiedscript.project-scaffold-report/v0.1" in scaffold
+        and "unifiedscript.project-scaffold-report/v0.2" in scaffold
+        and "unifiedscript.project-template-catalog/v0.1" in scaffold
         and "setup-unreal-project.ps1" in scaffold
         and "identity-init" in authoring_start
         and "debug-serve" in authoring_start
+        and "--api-browser" in authoring_start
         and "Authoring\\Workbench" in authoring_start
         and "using System;" in first_script_template
         and '[ScriptAsset("__PROJECT_NAME__/__SCRIPT_NAME__")]'
@@ -1132,6 +1174,76 @@ def main() -> int:
         "Project-agnostic first-script templates or fixture isolation is missing",
     )
     checks.append("generic first-script scaffold isolates fixtures from the plugin")
+
+    project_template_ids = [
+        template["id"] for template in project_template_catalog["templates"]
+    ]
+    browser_summary = api_browser_sample["summary"]
+    require(
+        project_template_catalog["schemaVersion"]
+        == "unifiedscript.project-template-catalog/v0.1"
+        and project_template_catalog["productVersion"]
+        == product_release["productVersion"]
+        and project_template_catalog["defaultTemplate"] == "minimal"
+        and project_template_ids
+        == ["minimal", "visual-gameplay", "data-plane"]
+        and len(set(project_template_ids)) == len(project_template_ids)
+        and all(
+            template["capabilities"]
+            and template["nonClaims"]
+            and not Path(template["scriptTemplate"]).is_absolute()
+            and ".." not in Path(template["scriptTemplate"]).parts
+            and (template_root / template["scriptTemplate"]).is_file()
+            for template in project_template_catalog["templates"]
+        )
+        and "unifiedscript.project-template-acceptance/v0.1"
+        in project_template_runner
+        and "new-unifiedscript-project.ps1" in project_template_runner
+        and "-SkipOnboarding" in project_template_runner
+        and api_browser_sample["schemaVersion"]
+        == "unifiedscript.unreal-api-browser/v0.1"
+        and api_browser_sample["sources"]
+        == {
+            "contractSchemaVersion": "unifiedscript.unreal-api-contract/v0.2",
+            "nodeCatalogSchemaVersion": "unifiedscript.unreal-api-node-catalog/v0.2",
+            "coverageSchemaVersion": "unifiedscript.unreal-binding-coverage/v0.2",
+            "inputSha256": api_browser_sample["sources"]["inputSha256"],
+        }
+        and len(api_browser_sample["sources"]["inputSha256"]) == 64
+        and browser_summary["typeCount"] == len(api_browser_sample["types"])
+        and browser_summary["nodeCount"]
+        == sum(len(type_entry["members"]) for type_entry in api_browser_sample["types"])
+        and browser_summary["diagnosticCount"]
+        == len(api_browser_sample["diagnostics"])
+        and "UnrealApiContractJson.Serialize" in api_browser_source
+        and "UnrealApiNodeCatalogGenerator.Serialize" in api_browser_source
+        and "UnrealBindingCoverageJson.Serialize" in api_browser_source
+        and "SHA256.HashData" in api_browser_source
+        and 'case "--browser-out"' in cli_program
+        and "UnrealApiBrowserGenerator.Generate" in cli_program
+        and 'path != "/api/unreal/browser"' in api_browser_server
+        and 'context.Request.HttpMethod != "GET"' in api_browser_server
+        and 'id="apiBrowserButton"' in workbench_index
+        and 'id="apiBrowserDrawer"' in workbench_index
+        and "validateApiBrowser" in workbench_script
+        and "dataPlaneOperation: 'DATA PLANE'" in workbench_script
+        and "BrowserOutput" in onboarding_script
+        and "Assert-GeneratedFileMatches -Expected $resolved.browserOutput"
+        in onboarding_script
+        and "docs/PROJECT_TEMPLATES_AND_API_BROWSER.md"
+        in release_document_paths
+        and "project-template-and-api-browser"
+        in product_release["acceptance"]["requiredGates"]
+        and "GET /api/unreal/browser" in api_browser_guide
+        and "reviewed starting points" in product_release_notes
+        and "- [x] provide project templates and an API/diagnostic browser"
+        in roadmap_document
+        and "M12.2 template/browser evidence" in roadmap_document,
+        "Versioned project templates or the Contract-owned API/diagnostic browser is incomplete",
+    )
+    checks.append(
+        "M12.2 ships three verified project templates and one Contract-owned API/diagnostic browser"
+    )
 
     alpha_acceptance_path = (
         ROOT / "tools" / "run-unifiedscript-alpha-acceptance.ps1"
@@ -3698,7 +3810,7 @@ def main() -> int:
         and "For each Puerts-owned concrete script instance" in puerts_migration_document
         and "manifest and generated guard do not rewrite" in puerts_migration_document
         and "- [x] support incremental coexistence during migration" in roadmap
-        and "- Next slice: **M12.2" in roadmap,
+        and "M12.1 is complete" in roadmap,
         "M12.1 coexistence manifest, shared World arbiter, tests, or lifecycle documentation is incomplete",
     )
     checks.append(

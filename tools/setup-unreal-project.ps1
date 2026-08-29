@@ -306,12 +306,18 @@ function Invoke-BindingGeneration {
         [Parameter(Mandatory)][string]$ManagedOutput,
         [Parameter(Mandatory)][string]$NativeOutput,
         [Parameter(Mandatory)][string]$NodeCatalogOutput,
+        [Parameter(Mandatory)][string]$BrowserOutput,
         [Parameter(Mandatory)][string]$CoverageOutput,
         [Parameter(Mandatory)][bool]$FailOnRejected,
         [Parameter(Mandatory)][string]$LogPath
     )
 
-    foreach ($output in @($ManagedOutput, $NativeOutput, $NodeCatalogOutput, $CoverageOutput)) {
+    foreach ($output in @(
+        $ManagedOutput,
+        $NativeOutput,
+        $NodeCatalogOutput,
+        $BrowserOutput,
+        $CoverageOutput)) {
         New-Item -ItemType Directory -Force -Path (Split-Path -Parent $output) | Out-Null
     }
     $arguments = @(
@@ -322,6 +328,7 @@ function Invoke-BindingGeneration {
         '--out', $ManagedOutput,
         '--native-out', $NativeOutput,
         '--nodes-out', $NodeCatalogOutput,
+        '--browser-out', $BrowserOutput,
         '--report', $CoverageOutput
     )
     if ($FailOnRejected) {
@@ -516,7 +523,8 @@ try {
             -Value $configJson.bindings `
             -Allowed @(
                 'contract', 'managedOutput', 'nativeOutput', 'nodeCatalogOutput',
-                'coverageOutput', 'failOnRejected', 'requireCompleteNativeCoverage') `
+                'browserOutput', 'coverageOutput', 'failOnRejected',
+                'requireCompleteNativeCoverage') `
             -Context 'bindings'
         Assert-AllowedProperties `
             -Value $configJson.deployment `
@@ -580,6 +588,19 @@ try {
         $resolved.nodeCatalogOutput = Resolve-FullPath `
             -Path ([string]$configJson.bindings.nodeCatalogOutput) `
             -BaseDirectory $configDirectory
+        $resolved.browserOutput = if (
+            [string]::IsNullOrWhiteSpace($configJson.bindings.browserOutput)) {
+            $nodeCatalogDirectory = Split-Path -Parent $resolved.nodeCatalogOutput
+            $nodeCatalogName = [IO.Path]::GetFileNameWithoutExtension(
+                $resolved.nodeCatalogOutput)
+            $browserName = ($nodeCatalogName -replace '\.api-nodes$', '') +
+                '.api-browser.json'
+            Join-Path $nodeCatalogDirectory $browserName
+        } else {
+            Resolve-FullPath `
+                -Path ([string]$configJson.bindings.browserOutput) `
+                -BaseDirectory $configDirectory
+        }
         $resolved.coverageOutput = Resolve-FullPath `
             -Path ([string]$configJson.bindings.coverageOutput) `
             -BaseDirectory $configDirectory
@@ -692,6 +713,7 @@ try {
             $resolved.managedOutput,
             $resolved.nativeOutput,
             $resolved.nodeCatalogOutput,
+            $resolved.browserOutput,
             $resolved.coverageOutput,
             $resolved.managedStage)) {
             Assert-WritableDestination -Path $destination
@@ -766,6 +788,7 @@ try {
                 $resolved.managedOutput,
                 $resolved.nativeOutput,
                 $resolved.nodeCatalogOutput,
+                $resolved.browserOutput,
                 $resolved.coverageOutput)) {
                 Assert-RequiredPath `
                     -Path $required `
@@ -835,6 +858,7 @@ try {
                     -ManagedOutput $resolved.managedOutput `
                     -NativeOutput $resolved.nativeOutput `
                     -NodeCatalogOutput $resolved.nodeCatalogOutput `
+                    -BrowserOutput $resolved.browserOutput `
                     -CoverageOutput $resolved.coverageOutput `
                     -FailOnRejected $resolved.failOnRejected `
                     -LogPath (Join-Path $script:RunDirectory 'bootstrap-bindings.log')
@@ -893,6 +917,7 @@ try {
                 -ManagedOutput $resolved.managedOutput `
                 -NativeOutput $resolved.nativeOutput `
                 -NodeCatalogOutput $resolved.nodeCatalogOutput `
+                -BrowserOutput $resolved.browserOutput `
                 -CoverageOutput $resolved.coverageOutput `
                 -FailOnRejected $resolved.failOnRejected `
                 -LogPath (Join-Path $script:RunDirectory 'binding-generation.log')
@@ -1032,6 +1057,7 @@ try {
         $tempManaged = Join-Path $tempDirectory 'bindings.cs'
         $tempNative = Join-Path $tempDirectory 'native-thunks.cpp'
         $tempNodes = Join-Path $tempDirectory 'api-nodes.json'
+        $tempBrowser = Join-Path $tempDirectory 'api-browser.json'
         $tempCoverage = Join-Path $tempDirectory 'binding-coverage.json'
         Invoke-BindingGeneration `
             -DotNet $resolved.dotnet `
@@ -1041,12 +1067,14 @@ try {
             -ManagedOutput $tempManaged `
             -NativeOutput $tempNative `
             -NodeCatalogOutput $tempNodes `
+            -BrowserOutput $tempBrowser `
             -CoverageOutput $tempCoverage `
             -FailOnRejected $resolved.failOnRejected `
             -LogPath (Join-Path $script:RunDirectory 'determinism.log')
         Assert-GeneratedFileMatches -Expected $resolved.managedOutput -Actual $tempManaged
         Assert-GeneratedFileMatches -Expected $resolved.nativeOutput -Actual $tempNative
         Assert-GeneratedFileMatches -Expected $resolved.nodeCatalogOutput -Actual $tempNodes
+        Assert-GeneratedFileMatches -Expected $resolved.browserOutput -Actual $tempBrowser
         Assert-GeneratedFileMatches -Expected $resolved.coverageOutput -Actual $tempCoverage
 
         $coverage = Get-Content -LiteralPath $resolved.coverageOutput -Raw |
@@ -1127,6 +1155,7 @@ try {
         managedBindings = $resolved.managedOutput
         nativeThunks = $resolved.nativeOutput
         apiNodeCatalog = $resolved.nodeCatalogOutput
+        apiBrowser = $resolved.browserOutput
         bindingCoverage = $resolved.coverageOutput
         deploymentManifest = $resolved.deployment
         managedStageDirectory = $resolved.managedStage

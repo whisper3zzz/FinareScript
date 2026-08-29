@@ -1,0 +1,62 @@
+using System;
+using UnifiedScript;
+using UnifiedScript.Unreal;
+
+namespace __MANAGED_NAMESPACE__;
+
+[ScriptAsset("__PROJECT_NAME__/__SCRIPT_NAME__")]
+public sealed class __SCRIPT_NAME__ : IUnrealManagedScript
+{
+    [Expose(InstanceEditable = true, SaveGame = true, Category = "Gameplay")]
+    public float Health { get; set; } = 100.0f;
+
+    [Expose(InstanceEditable = true, Category = "Gameplay")]
+    public float ShieldRatio { get; set; } = 0.25f;
+
+    [Visual]
+    public float ApplyDamage(float incomingDamage, bool shieldEnabled)
+    {
+        float damage = incomingDamage;
+        if (shieldEnabled)
+        {
+            damage = incomingDamage * (1.0f - ShieldRatio);
+        }
+
+        Health -= damage;
+        if (Health < 0.0f)
+        {
+            Health = 0.0f;
+        }
+
+        return Health;
+    }
+
+    [Visual]
+    public float ResolveMovementScale(float input, bool sprinting)
+    {
+        float scale = input;
+        if (sprinting)
+        {
+            scale *= 1.5f;
+        }
+
+        return scale;
+    }
+
+    public void OnStart(UnrealScriptContext context)
+    {
+        Health = Math.Clamp(Health, 0.0f, 100.0f);
+    }
+
+    public void OnTick(float deltaSeconds)
+    {
+        if (deltaSeconds < 0.0f)
+        {
+            throw new ArgumentOutOfRangeException(nameof(deltaSeconds));
+        }
+    }
+
+    public void OnStop()
+    {
+    }
+}

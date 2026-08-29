@@ -14,6 +14,8 @@ param(
     [ValidatePattern('^[A-Za-z_][A-Za-z0-9_]*$')]
     [string]$ScriptName = 'FirstScript',
 
+    [string]$Template = 'minimal',
+
     [string]$ManagedNamespace,
 
     [switch]$Force,
@@ -32,10 +34,13 @@ $templateRoot = if (Test-Path -LiteralPath (Join-Path $sdkRoot 'templates\Unreal
 } else {
     Join-Path $sdkRoot 'Templates\UnrealProject'
 }
+$templateCatalogPath = Join-Path $templateRoot 'unifiedscript.project-templates.json'
 $setupScript = Join-Path $PSScriptRoot 'setup-unreal-project.ps1'
 $runId = Get-Date -Format 'yyyyMMdd-HHmmss'
 $reportPath = Join-Path $projectRoot "Saved\UnifiedScript\Scaffold\$runId\scaffold-report.json"
 $createdFiles = [Collections.Generic.List[string]]::new()
+$selectedTemplate = $null
+$templateCatalogSha256 = $null
 
 function Throw-ScaffoldError {
     param([string]$Code, [string]$Message)
@@ -95,10 +100,25 @@ function Write-ScaffoldReport {
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $reportPath) |
         Out-Null
     $document = [ordered]@{
-        schemaVersion = 'unifiedscript.project-scaffold-report/v0.1'
+        schemaVersion = 'unifiedscript.project-scaffold-report/v0.2'
         status = $Status
         project = $projectPath
         sdkRoot = $sdkRoot
+        templateCatalog = if ($null -eq $script:selectedTemplate) { $null } else {
+            [ordered]@{
+                schemaVersion = 'unifiedscript.project-template-catalog/v0.1'
+                sha256 = $script:templateCatalogSha256
+            }
+        }
+        template = if ($null -eq $script:selectedTemplate) { $null } else {
+            [ordered]@{
+                id = [string]$script:selectedTemplate.id
+                title = [string]$script:selectedTemplate.title
+                description = [string]$script:selectedTemplate.description
+                capabilities = @($script:selectedTemplate.capabilities)
+                nonClaims = @($script:selectedTemplate.nonClaims)
+            }
+        }
         createdFiles = @($script:createdFiles)
         outputs = $Outputs
         error = if ($Status -eq 'passed') { $null } else {
@@ -113,7 +133,11 @@ function Write-ScaffoldReport {
 }
 
 try {
-    foreach ($required in @($projectPath, $templateRoot, $setupScript)) {
+    foreach ($required in @(
+        $projectPath,
+        $templateRoot,
+        $templateCatalogPath,
+        $setupScript)) {
         if (-not (Test-Path -LiteralPath $required)) {
             Throw-ScaffoldError 'USNEW1001' "Required scaffold input is missing: $required"
         }
@@ -121,6 +145,49 @@ try {
     if ([IO.Path]::GetExtension($projectPath) -ne '.uproject') {
         Throw-ScaffoldError 'USNEW1001' "Project must be a .uproject file: $projectPath"
     }
+    $templateCatalog = Get-Content -LiteralPath $templateCatalogPath -Raw |
+        ConvertFrom-Json
+    if ($templateCatalog.schemaVersion -ne
+            'unifiedscript.project-template-catalog/v0.1' -or
+        [string]::IsNullOrWhiteSpace($templateCatalog.productVersion) -or
+        [string]::IsNullOrWhiteSpace($templateCatalog.defaultTemplate) -or
+        @($templateCatalog.templates).Count -lt 2) {
+        Throw-ScaffoldError 'USNEW1007' 'The project template catalog is invalid.'
+    }
+    $templateIds = @($templateCatalog.templates | ForEach-Object { [string]$_.id })
+    if (@($templateIds | Select-Object -Unique).Count -ne $templateIds.Count) {
+        Throw-ScaffoldError 'USNEW1007' 'The project template catalog contains duplicate IDs.'
+    }
+    if ([string]::IsNullOrWhiteSpace($Template)) {
+        $Template = [string]$templateCatalog.defaultTemplate
+    }
+    $selectedTemplate = @($templateCatalog.templates) |
+        Where-Object { $_.id -ceq $Template } |
+        Select-Object -First 1
+    if ($null -eq $selectedTemplate) {
+        Throw-ScaffoldError `
+            'USNEW1008' `
+            "Unknown project template '$Template'. Available: $($templateIds -join ', ')"
+    }
+    $templateRelativePath = ([string]$selectedTemplate.scriptTemplate).Replace('/', '\')
+    if ([string]::IsNullOrWhiteSpace($selectedTemplate.title) -or
+        [string]::IsNullOrWhiteSpace($selectedTemplate.description) -or
+        @($selectedTemplate.capabilities).Count -eq 0 -or
+        @($selectedTemplate.nonClaims).Count -eq 0 -or
+        [IO.Path]::IsPathRooted($templateRelativePath) -or
+        $templateRelativePath.Split('\') -contains '..' -or
+        -not $templateRelativePath.EndsWith('.template', [StringComparison]::Ordinal)) {
+        Throw-ScaffoldError 'USNEW1007' "Project template '$Template' is invalid."
+    }
+    $scriptTemplatePath = Join-Path $templateRoot $templateRelativePath
+    if (-not (Test-Path -LiteralPath $scriptTemplatePath -PathType Leaf)) {
+        Throw-ScaffoldError `
+            'USNEW1007' `
+            "Project template source is missing: $scriptTemplatePath"
+    }
+    $templateCatalogSha256 = (Get-FileHash `
+        -LiteralPath $templateCatalogPath `
+        -Algorithm SHA256).Hash.ToLowerInvariant()
     $projectJson = Get-Content -LiteralPath $projectPath -Raw | ConvertFrom-Json
     $enabledPlugin = @($projectJson.Plugins) |
         Where-Object { $_.Name -eq 'UEUnifiedScript' -and $_.Enabled -eq $true }
@@ -202,6 +269,7 @@ try {
         managedProject = Join-Path $managedRoot "$assemblyName.csproj"
         managedSource = Join-Path $managedRoot "$ScriptName.cs"
         managedStage = Join-Path $projectRoot 'Plugins\UEUnifiedScript\Binaries\Managed\Scripts'
+        apiBrowser = Join-Path $projectRoot "Generated\$ProjectName.api-browser.json"
     }
     foreach ($destination in @(
         $outputs.config,
@@ -241,7 +309,7 @@ try {
         -Destination $outputs.managedProject `
         -Replacements $replacements
     Render-Template `
-        -TemplatePath (Join-Path $templateRoot 'Managed\FirstScript.cs.template') `
+        -TemplatePath $scriptTemplatePath `
         -Destination $outputs.managedSource `
         -Replacements $replacements
 
@@ -277,6 +345,18 @@ try {
             Throw-ScaffoldError `
                 'USNEW2002' `
                 "Project onboarding failed with exit code $LASTEXITCODE."
+        }
+        if (-not (Test-Path -LiteralPath $outputs.apiBrowser -PathType Leaf)) {
+            Throw-ScaffoldError `
+                'USNEW2003' `
+                "Generated API browser is missing after onboarding: $($outputs.apiBrowser)"
+        }
+        $apiBrowser = Get-Content -LiteralPath $outputs.apiBrowser -Raw |
+            ConvertFrom-Json
+        if ($apiBrowser.schemaVersion -ne 'unifiedscript.unreal-api-browser/v0.1') {
+            Throw-ScaffoldError `
+                'USNEW2003' `
+                "Generated API browser has an unsupported schema: $($apiBrowser.schemaVersion)"
         }
     }
 

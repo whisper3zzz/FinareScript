@@ -85,6 +85,19 @@ $managedProject = Resolve-ConfigPath `
 $managedOutput = Resolve-ConfigPath `
     -Path ([string]$config.bindings.managedOutput) `
     -BaseDirectory $configDirectory
+$nodeCatalogOutput = Resolve-ConfigPath `
+    -Path ([string]$config.bindings.nodeCatalogOutput) `
+    -BaseDirectory $configDirectory
+$apiBrowser = if ([string]::IsNullOrWhiteSpace($config.bindings.browserOutput)) {
+    $nodeCatalogName = [IO.Path]::GetFileNameWithoutExtension($nodeCatalogOutput)
+    $browserName = ($nodeCatalogName -replace '\.api-nodes$', '') +
+        '.api-browser.json'
+    Join-Path (Split-Path -Parent $nodeCatalogOutput) $browserName
+} else {
+    Resolve-ConfigPath `
+        -Path ([string]$config.bindings.browserOutput) `
+        -BaseDirectory $configDirectory
+}
 $managedStage = Resolve-ConfigPath `
     -Path ([string]$config.managed.stageDirectory) `
     -BaseDirectory $configDirectory
@@ -115,7 +128,7 @@ if ([string]::IsNullOrWhiteSpace($Script)) {
         $scriptPath = $scriptCandidates[0]
     }
 }
-foreach ($required in @($managedProject, $managedOutput, $scriptPath)) {
+foreach ($required in @($managedProject, $managedOutput, $apiBrowser, $scriptPath)) {
     if (-not (Test-Path -LiteralPath $required)) {
         throw "Required managed authoring input is missing: $required"
     }
@@ -165,6 +178,7 @@ foreach ($argument in @(
     'debug-serve',
     $scriptPath,
     '--source', $managedOutput,
+    '--api-browser', $apiBrowser,
     '--root', $workbenchRoot,
     '--port', [string]$Port,
     '--assembly', $assemblyName,

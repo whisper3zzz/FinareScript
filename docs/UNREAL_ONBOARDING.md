@@ -58,6 +58,11 @@ powershell -ExecutionPolicy Bypass `
 
 `-ValidateOnly` requires one successful Apply baseline. It does not overwrite
 reflection, bindings, native thunks, node catalogs, coverage, or Script Assets.
+That baseline must match the current managed assemblies and compiled chunks. If
+a shared UnifiedScript assembly changed after the last Apply run, run ordinary
+Apply onboarding once to rebuild, recompile, and deploy the chunks before using
+`-ValidateOnly` again; otherwise the runtime correctly rejects the stale chunk
+dependency content identity.
 When it runs from this repository, it first builds the current Release CLI for
 validation only, so deterministic output checks cannot accidentally use a stale
 tool binary. The rebuilt CLI is not staged into the Unreal plugin.

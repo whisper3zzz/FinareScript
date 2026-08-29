@@ -1,0 +1,65 @@
+using System;
+using UnifiedScript;
+using UnifiedScript.Unreal;
+
+namespace __MANAGED_NAMESPACE__;
+
+[ScriptAsset("__PROJECT_NAME__/__SCRIPT_NAME__")]
+public sealed class __SCRIPT_NAME__ : IUnrealManagedScript
+{
+    private UnrealWorldDataPlane _dataPlane = null!;
+    private UnrealSharedObjectHandleV4 _target;
+
+    [Expose(InstanceEditable = true, Category = "Data Plane")]
+    public float VelocityX { get; set; } = 100.0f;
+
+    [Visual]
+    public float ClampVelocity(float velocity)
+    {
+        if (velocity > 1000.0f)
+        {
+            return 1000.0f;
+        }
+        if (velocity < -1000.0f)
+        {
+            return -1000.0f;
+        }
+
+        return velocity;
+    }
+
+    public void OnStart(UnrealScriptContext context)
+    {
+        _dataPlane = context.DataPlane;
+        if (!_dataPlane.SupportsGameplayData)
+        {
+            throw new InvalidOperationException("Gameplay Data ABI is unavailable.");
+        }
+
+        _target = _dataPlane.Scope(context.Target);
+        using UnrealCommandBatch commands = _dataPlane.BeginCommands(1);
+        commands.Commands[0] = UnrealCommandV4.SetActorVelocity(
+            _target,
+            new UnrealVector(ClampVelocity(VelocityX), 0.0, 0.0));
+        commands.Commit();
+    }
+
+    public void OnTick(float deltaSeconds)
+    {
+        if (deltaSeconds < 0.0f)
+        {
+            throw new ArgumentOutOfRangeException(nameof(deltaSeconds));
+        }
+
+        using UnrealTraceBatch traces = _dataPlane.BeginTraceBatch(1);
+        traces.Requests[0] = UnrealTraceRequestV4.Line(
+            UnrealVector.Zero,
+            new UnrealVector(100.0, 0.0, 0.0),
+            collisionChannel: 0);
+        _ = traces.Execute().Length;
+    }
+
+    public void OnStop()
+    {
+    }
+}

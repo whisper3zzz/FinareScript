@@ -206,6 +206,69 @@ public sealed class UnrealApiContractTests
         Assert.Contains("\"latentInfoParameter\": \"Deferred\"", json, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ApiBrowserIsDeterministicAndJoinsNodesWithCoverageDiagnostics()
+    {
+        UnrealApiContractProjection projection = UnrealApiContractProjector.Project(
+            LoadFixture(),
+            CreateContract("Add"));
+        UnrealBindingGenerationResult managed = new UnrealBindingGenerator().Generate(
+            projection.Reflection,
+            new UnrealBindingGeneratorOptions(projection.Contract.ManagedNamespace));
+        UnrealNativeThunkGenerationResult native = new UnrealNativeThunkGenerator().Generate(
+            projection.NativeReflection,
+            new UnrealNativeThunkGeneratorOptions(
+                projection.Contract.NativeHeader,
+                projection.Contract.NativeNamespace));
+        UnrealBindingCoverageReport generatedCoverage = UnrealBindingCoverageReport.Create(
+            projection,
+            managed,
+            native);
+        UnrealBindingCoverageEntry generatedEntry = Assert.Single(generatedCoverage.Entries);
+        UnrealBindingCoverageReport coverage = generatedCoverage with
+        {
+            Summary = generatedCoverage.Summary with
+            {
+                DirectThunkCount = 0,
+                RejectedCount = 1,
+            },
+            Entries =
+            [
+                generatedEntry with
+                {
+                    Disposition = UnrealBindingDisposition.Rejected,
+                    DiagnosticCodes = ["USUE4999"],
+                    Message = "The test contract rejects this route.",
+                },
+            ],
+        };
+        UnrealApiNodeCatalog nodes = UnrealApiNodeCatalogGenerator.Generate(projection);
+
+        UnrealApiBrowserDocument browser = UnrealApiBrowserGenerator.Generate(
+            projection,
+            nodes,
+            coverage);
+        string first = UnrealApiBrowserJson.Serialize(browser);
+        string second = UnrealApiBrowserJson.Serialize(
+            UnrealApiBrowserJson.Deserialize(first));
+
+        Assert.Equal(first, second);
+        Assert.Equal(UnrealApiBrowserDocument.CurrentSchemaVersion, browser.SchemaVersion);
+        Assert.Equal(64, browser.Sources.InputSha256.Length);
+        Assert.Equal(1, browser.Summary.TypeCount);
+        Assert.Equal(1, browser.Summary.MemberCount);
+        Assert.Equal(1, browser.Summary.RejectedCount);
+        UnrealApiBrowserMember member = Assert.Single(
+            Assert.Single(browser.Types).Members,
+            static item => item.Title == "Add");
+        Assert.False(member.Available);
+        Assert.Equal(UnrealBindingDisposition.Rejected, member.Disposition);
+        Assert.Contains("USUE4999", member.DiagnosticCodes);
+        UnrealApiBrowserDiagnostic diagnostic = Assert.Single(browser.Diagnostics);
+        Assert.Equal(UnifiedScript.Core.UnifiedDiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.Contains(member.MemberPath, diagnostic.MemberPaths);
+    }
+
     private static UnrealReflectionManifest LoadFixture()
     {
         string path = Path.Combine(

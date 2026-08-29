@@ -41,6 +41,7 @@ powershell -ExecutionPolicy Bypass `
   -File "$sdk\Tools\new-unifiedscript-project.ps1" `
   -Project $project `
   -EngineRoot D:\UE_5.8 `
+  -Template minimal `
   -ScriptName FirstScript
 ```
 
@@ -52,7 +53,8 @@ project-owned files from placeholder templates:
 - `Contracts/Game.unreal-api-contract.json`;
 - `Deployment/Game.unifiedscript-deployment.json`;
 - generated Declaration IR, Graph, Authoring Surface, bindings, native thunks,
-  API nodes, coverage, and `/Game/UnifiedScript/FirstScript/SA_FirstScript`.
+  API nodes, API/diagnostic browser, coverage, and
+  `/Game/UnifiedScript/FirstScript/SA_FirstScript`.
 
 It immediately executes normal onboarding, so success means the managed
 project, reflection export, complete native contract, final editor target, and
@@ -115,9 +117,13 @@ UnifiedScript repository path is consulted at runtime.
 
 ## Template inventory
 
-The raw reusable templates live under `Templates/UnrealProject` in the SDK and
-`templates/UnrealProject` in source. They cover onboarding, API Contract,
-deployment/Script Asset identity, C# project/type, game/editor targets, module
-rules, and the `.uproject` plugin fragment. The scaffold tool is the supported
-way to render them; the files remain readable so teams can review and customize
-their policy before automation.
+The versioned `unifiedscript.project-template-catalog/v0.1` declares `minimal`,
+`visual-gameplay`, and `data-plane` starting points. The raw reusable templates
+live under `Templates/UnrealProject` in the SDK and `templates/UnrealProject` in
+source. They cover onboarding, API Contract, deployment/Script Asset identity,
+C# project/type, game/editor targets, module rules, and the `.uproject` plugin
+fragment. The scaffold tool is the supported way to render them; the files
+remain readable so teams can review and customize their policy before
+automation. See
+[Project templates and generated API browser](PROJECT_TEMPLATES_AND_API_BROWSER.md)
+for exact capabilities and non-claims.

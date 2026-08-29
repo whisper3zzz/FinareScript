@@ -11,6 +11,7 @@ selected UClass reflection
         -> direct native C++ thunks
         -> binding coverage report
         -> visual API node catalog
+        -> searchable API/diagnostic browser
 ```
 
 This prevents managed code, the native dispatcher, and the visual palette from
@@ -117,6 +118,7 @@ unifiedscript ue-bindings Generated\Game.reflection.json `
   --out Managed\Generated\Game.bindings.generated.cs `
   --native-out Source\Game\Generated\Game.native-thunks.generated.cpp `
   --nodes-out Generated\Game.api-nodes.json `
+  --browser-out Generated\Game.api-browser.json `
   --report Generated\Game.binding-coverage.json `
   --fail-on-rejected
 ```
@@ -130,6 +132,13 @@ native reflection metadata. Script Assets can set `ApiNodeCatalogPath`; the
 Slate authoring surface builds its Unreal API palette from that
 product-specific catalog instead of reconstructing presentation policy in the
 editor.
+
+The same transaction emits `unifiedscript.unreal-api-browser/v0.1`. It joins
+node presentation with the exact coverage disposition and diagnostic codes for
+each Contract path, then fingerprints the canonical Contract, node catalog, and
+coverage inputs. The local Workbench serves this validated document read-only at
+`GET /api/unreal/browser`; see
+[Project templates and generated API browser](PROJECT_TEMPLATES_AND_API_BROWSER.md).
 
 Functions with more than four parameters use the generic ABI v3 CallFrame
 path, including names and enums. Fixed signatures with zero to four parameters

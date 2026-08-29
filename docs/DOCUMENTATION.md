@@ -20,6 +20,7 @@ unsafe, or outside `docs`.
 - [Native Authoring Surface](AUTHORING_SURFACE.md)
 - [Authoring diagnostics](AUTHORING_DIAGNOSTICS.md)
 - [Unreal API Contract](UNREAL_API_CONTRACT.md)
+- [Project templates and generated API browser](PROJECT_TEMPLATES_AND_API_BROWSER.md)
 
 ## Debugging and profiling
 

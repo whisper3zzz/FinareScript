@@ -579,6 +579,11 @@ internal static class Program
             Console.Error.WriteLine("--nodes-out requires --contract so visual nodes share the shipped API allowlist.");
             return 64;
         }
+        if (options.BrowserOutputPath is not null && options.ContractPath is null)
+        {
+            Console.Error.WriteLine("--browser-out requires --contract so the browser shares the shipped API allowlist.");
+            return 64;
+        }
 
         string fullManifestPath = Path.GetFullPath(options.ManifestPath);
         string fullOutputPath = Path.GetFullPath(options.OutputPath);
@@ -594,6 +599,9 @@ internal static class Program
         string? fullNodeCatalogOutputPath = options.NodeCatalogOutputPath is null
             ? null
             : Path.GetFullPath(options.NodeCatalogOutputPath);
+        string? fullBrowserOutputPath = options.BrowserOutputPath is null
+            ? null
+            : Path.GetFullPath(options.BrowserOutputPath);
         string[] inputPaths = fullContractPath is null
             ? [fullManifestPath]
             : [fullManifestPath, fullContractPath];
@@ -603,6 +611,7 @@ internal static class Program
             fullNativeOutputPath,
             fullReportPath,
             fullNodeCatalogOutputPath,
+            fullBrowserOutputPath,
         }.Where(static path => path is not null).Cast<string>().ToArray();
         if (outputPaths.Distinct(StringComparer.OrdinalIgnoreCase).Count() != outputPaths.Length)
         {
@@ -646,7 +655,8 @@ internal static class Program
         }
 
         UnrealNativeThunkGenerationResult? nativeResult = null;
-        if (fullNativeOutputPath is not null || fullReportPath is not null || options.FailOnRejected)
+        if (fullNativeOutputPath is not null || fullReportPath is not null ||
+            fullBrowserOutputPath is not null || options.FailOnRejected)
         {
             nativeResult = new UnrealNativeThunkGenerator().Generate(
                 projection?.NativeReflection ?? manifest,
@@ -660,7 +670,8 @@ internal static class Program
             }
         }
         UnrealBindingCoverageReport? coverage = null;
-        if (fullReportPath is not null || options.FailOnRejected)
+        if (fullReportPath is not null || fullBrowserOutputPath is not null ||
+            options.FailOnRejected)
         {
             coverage = projection is null
                 ? UnrealBindingCoverageReport.Create(manifest, result, nativeResult!)
@@ -695,12 +706,25 @@ internal static class Program
         {
             outputs.Add(new OutputFile(fullReportPath, UnrealBindingCoverageJson.Serialize(coverage!)));
         }
+        UnrealApiNodeCatalog? nodeCatalog =
+            fullNodeCatalogOutputPath is not null || fullBrowserOutputPath is not null
+                ? UnrealApiNodeCatalogGenerator.Generate(projection!)
+                : null;
         if (fullNodeCatalogOutputPath is not null)
         {
-            UnrealApiNodeCatalog catalog = UnrealApiNodeCatalogGenerator.Generate(projection!);
             outputs.Add(new OutputFile(
                 fullNodeCatalogOutputPath,
-                UnrealApiNodeCatalogGenerator.Serialize(catalog)));
+                UnrealApiNodeCatalogGenerator.Serialize(nodeCatalog!)));
+        }
+        if (fullBrowserOutputPath is not null)
+        {
+            UnrealApiBrowserDocument browser = UnrealApiBrowserGenerator.Generate(
+                projection!,
+                nodeCatalog!,
+                coverage!);
+            outputs.Add(new OutputFile(
+                fullBrowserOutputPath,
+                UnrealApiBrowserJson.Serialize(browser)));
         }
         WriteTransactionally(outputs);
         foreach (OutputFile output in outputs)
@@ -1552,6 +1576,11 @@ internal static class Program
             Console.Error.WriteLine($"Visual workbench root does not exist: {options.ContentRoot}");
             return 66;
         }
+        if (options.ApiBrowserPath is not null && !File.Exists(options.ApiBrowserPath))
+        {
+            Console.Error.WriteLine($"Unreal API browser does not exist: {options.ApiBrowserPath}");
+            return 66;
+        }
 
         string fullInputPath = Path.GetFullPath(options.InputPath);
         string logicalPath = GetLogicalInputPath(fullInputPath);
@@ -1598,6 +1627,9 @@ internal static class Program
             sources,
             options.ReferencePaths,
             LoadEffectCatalog(options.EffectCatalogPath));
+        UnrealApiBrowserDocument? apiBrowser = options.ApiBrowserPath is null
+            ? null
+            : UnrealApiBrowserJson.Deserialize(File.ReadAllText(options.ApiBrowserPath));
         try
         {
             using var server = new CoreClrDebugHttpServer(
@@ -1612,7 +1644,8 @@ internal static class Program
                     options.ManagedAssemblyOutputPath,
                     options.PortablePdbOutputPath,
                     historyPath),
-                sourceFiles);
+                sourceFiles,
+                apiBrowser);
             using var cancellation = new CancellationTokenSource();
             ConsoleCancelEventHandler cancelHandler = (_, eventArgs) =>
             {
@@ -3103,6 +3136,7 @@ internal static class Program
         string? nativeNamespace = null;
         string? contractPath = null;
         string? nodeCatalogOutputPath = null;
+        string? browserOutputPath = null;
         bool failOnRejected = false;
         int index = 2;
         while (index < args.Count)
@@ -3145,6 +3179,9 @@ internal static class Program
                 case "--nodes-out" when nodeCatalogOutputPath is null:
                     nodeCatalogOutputPath = value;
                     break;
+                case "--browser-out" when browserOutputPath is null:
+                    browserOutputPath = value;
+                    break;
                 default:
                     return false;
             }
@@ -3165,6 +3202,7 @@ internal static class Program
             reportPath,
             contractPath,
             nodeCatalogOutputPath,
+            browserOutputPath,
             failOnRejected);
         return true;
     }
@@ -3624,6 +3662,7 @@ internal static class Program
         string? managedAssemblyOutputPath = null;
         string? portablePdbOutputPath = null;
         string? historyPath = null;
+        string? apiBrowserPath = null;
         int port = 4173;
         bool hasPort = false;
         var referencePaths = new List<string>();
@@ -3677,6 +3716,9 @@ internal static class Program
                 case "--history" when historyPath is null:
                     historyPath = value;
                     break;
+                case "--api-browser" when apiBrowserPath is null:
+                    apiBrowserPath = value;
+                    break;
                 default:
                     return false;
             }
@@ -3700,7 +3742,8 @@ internal static class Program
             surfaceOutputPath,
             managedAssemblyOutputPath,
             portablePdbOutputPath,
-            historyPath);
+            historyPath,
+            apiBrowserPath);
         return true;
     }
 
@@ -4677,9 +4720,9 @@ internal static class Program
         "  unifiedscript apply-declaration-patch <input.cs> --declaration-patch <patch.json> " +
         "--out <output.cs> --out-asset <asset.json> [options]\n" +
         "  unifiedscript execute <input.cs> (--method <name> | --method-id <us_...>) [options]\n" +
-        "  unifiedscript debug-serve <input.cs> --root <visual-editor-directory> [--port <number>] [options]\n" +
+        "  unifiedscript debug-serve <input.cs> --root <visual-editor-directory> [--port <number>] [--api-browser <api-browser.json>] [options]\n" +
         "  unifiedscript debug-frame-serve <input.cs> [--port <number>] [--max-connections <count>] [options]\n" +
-        "  unifiedscript ue-bindings <reflection.json> --out <bindings.cs> [--contract <api-contract.json>] [--native-out <thunks.cpp>] [--nodes-out <nodes.json>] [--report <coverage.json>] [--fail-on-rejected] [--namespace <name>]\n" +
+        "  unifiedscript ue-bindings <reflection.json> --out <bindings.cs> [--contract <api-contract.json>] [--native-out <thunks.cpp>] [--nodes-out <nodes.json>] [--browser-out <api-browser.json>] [--report <coverage.json>] [--fail-on-rejected] [--namespace <name>]\n" +
         "  unifiedscript ue-data-plane <schema.json> --managed-out <layouts.g.cs> --native-out <layouts.gen.h>\n" +
         "  unifiedscript ue-puerts-inventory <puerts-project> --out <inventory.json> [--native-project <target-project>] [--project-name <name>] [--coverage <coverage.json> --report <report.json> --fail-on-uncovered]\n" +
         "  unifiedscript ue-puerts-scan <puerts-project> --out <scan.json> [--native-project <project>] [--project-name <name>] [--script-root <directory>]... [--native-root <directory>]... [--fail-on-blockers]\n" +
@@ -4780,7 +4823,8 @@ internal static class Program
         string? SurfaceOutputPath,
         string? ManagedAssemblyOutputPath,
         string? PortablePdbOutputPath,
-        string? HistoryPath);
+        string? HistoryPath,
+        string? ApiBrowserPath);
 
     private sealed record DebugFrameServeOptions(
         string InputPath,
@@ -4844,6 +4888,7 @@ internal static class Program
         string? ReportPath,
         string? ContractPath,
         string? NodeCatalogOutputPath,
+        string? BrowserOutputPath,
         bool FailOnRejected);
 
     private sealed record UnrealDataPlaneOptions(

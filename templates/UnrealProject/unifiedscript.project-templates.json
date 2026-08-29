@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "unifiedscript.project-template-catalog/v0.1",
+  "productVersion": "1.0.0-rc.1",
+  "defaultTemplate": "minimal",
+  "templates": [
+    {
+      "id": "minimal",
+      "title": "Minimal lifecycle",
+      "description": "Smallest World-hosted script with one exposed state and one Visual method.",
+      "scriptTemplate": "Managed/FirstScript.cs.template",
+      "capabilities": ["lifecycle", "exposed-state", "visual-code-roundtrip"],
+      "nonClaims": ["game-specific API coverage", "replication"]
+    },
+    {
+      "id": "visual-gameplay",
+      "title": "Visual gameplay policy",
+      "description": "Structured health, shield, and movement policy designed for immediate C#/Visual editing.",
+      "scriptTemplate": "Managed/VisualGameplayScript.cs.template",
+      "capabilities": ["lifecycle", "exposed-state", "structured-control-flow", "visual-code-roundtrip"],
+      "nonClaims": ["network authority", "project-specific actor bindings"]
+    },
+    {
+      "id": "data-plane",
+      "title": "Gameplay data plane",
+      "description": "World-scoped command and batch-trace starter using the generated Shared Data ABI.",
+      "scriptTemplate": "Managed/DataPlaneScript.cs.template",
+      "capabilities": ["lifecycle", "command-buffer", "batch-trace", "zero-copy-snapshot"],
+      "nonClaims": ["project-specific gameplay semantics", "cross-machine benchmark results"]
+    }
+  ]
+}

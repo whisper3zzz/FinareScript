@@ -10,6 +10,7 @@ using UnifiedScript.Core;
 using UnifiedScript.CSharp;
 using UnifiedScript.Graph;
 using UnifiedScript.Runtime;
+using UnifiedScript.Unreal;
 
 namespace UnifiedScript.Tests;
 
@@ -37,6 +38,75 @@ public sealed class CoreClrAuthoringHttpServerTests
             }
         }
         """;
+
+    [Fact]
+    public async Task GeneratedUnrealApiBrowserIsServedReadOnly()
+    {
+        string directory = Path.Combine(
+            Path.GetTempPath(),
+            $"unifiedscript-api-browser-http-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        string sourcePath = Path.Combine(directory, "DamagePolicy.cs");
+        string contentRoot = Path.Combine(directory, "workbench");
+        Directory.CreateDirectory(contentRoot);
+        await File.WriteAllTextAsync(sourcePath, Source);
+        await File.WriteAllTextAsync(
+            Path.Combine(contentRoot, "index.html"),
+            "<!doctype html><title>test</title>");
+        string logicalPath = sourcePath.Replace('\\', '/');
+        var request = new CSharpCompilationRequest(
+            "UnifiedScript.Analysis",
+            [new CSharpSourceDocument(
+                logicalPath,
+                Source,
+                IdentitySidecarDocument.CreateEmpty(logicalPath))]);
+        var browser = new UnrealApiBrowserDocument(
+            UnrealApiBrowserDocument.CurrentSchemaVersion,
+            "Tests.Runtime",
+            "Tests.Generated",
+            new UnrealEngineIdentity(5, 8, 1, "//UE5/Release-5.8"),
+            new UnrealApiBrowserSources(
+                UnrealApiContract.CurrentSchemaVersion,
+                UnrealApiNodeCatalog.CurrentSchemaVersion,
+                UnrealBindingCoverageReport.CurrentSchemaVersion,
+                new string('a', 64)),
+            new UnrealApiBrowserSummary(0, 0, 0, 0, 0, 0, 0, 0, 0),
+            [],
+            []);
+        int port = ReserveLoopbackPort();
+
+        try
+        {
+            using var server = new CoreClrDebugHttpServer(
+                request,
+                sourcePath,
+                identityPath: null,
+                contentRoot,
+                port,
+                apiBrowser: browser);
+            using var cancellation = new CancellationTokenSource();
+            Task serverTask = server.RunAsync(cancellation.Token);
+            using var client = new HttpClient
+            {
+                BaseAddress = new Uri($"http://127.0.0.1:{port}/"),
+            };
+
+            string json = await client.GetStringAsync("api/unreal/browser");
+            UnrealApiBrowserDocument served = UnrealApiBrowserJson.Deserialize(json);
+            Assert.Equal(browser.ContractName, served.ContractName);
+            using HttpResponseMessage rejected = await client.PostAsync(
+                "api/unreal/browser",
+                JsonContent("{}"));
+            Assert.Equal(HttpStatusCode.MethodNotAllowed, rejected.StatusCode);
+
+            cancellation.Cancel();
+            await serverTask.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
 
     [Fact]
     public async Task AuthoringEndpointsPersistReloadAndRejectExternalConflicts()

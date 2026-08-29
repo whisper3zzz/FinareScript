@@ -12,6 +12,7 @@ const state = {
   debugConnected: false, debugBusy: false, debugCommandPending: false,
   debugHealth: null, debugSession: null,
   debugFrameId: null,
+  apiBrowser: null, apiBrowserMembers: [], selectedApiMemberId: null,
 };
 
 const editorBody = document.getElementById('editorBody');
@@ -22,6 +23,7 @@ const inspectorBody = document.getElementById('inspectorBody');
 const declarationSearch = document.getElementById('declarationSearch');
 const debugStrip = document.getElementById('debugStrip');
 const aiDrawer = document.getElementById('aiDrawer');
+const apiBrowserDrawer = document.getElementById('apiBrowserDrawer');
 const variableDialog = document.getElementById('variableDialog');
 const toast = document.getElementById('toast');
 
@@ -79,7 +81,7 @@ async function loadWorkspaceArtifacts() {
     assertArtifact(workspace.schemaVersion === 'unifiedscript.authoring-workspace/v0.5', 'Unsupported authoring workspace protocol');
     validateVisualProfile(workspace.profile);
     applyWorkspaceArtifacts(workspace.scriptAssets, workspace.graph, workspace.surface, workspace.sourceText, workspace);
-    await connectDebugBridge();
+    await Promise.all([connectDebugBridge(), loadApiBrowser()]);
     return;
   } catch (error) {
     console.info('Live authoring host is offline; loading checked-in Surface artifacts.', error.message);
@@ -99,6 +101,7 @@ async function loadWorkspaceArtifacts() {
       assetResponse.json(), graphResponse.json(), surfaceResponse.json(), sourceResponse.text(),
     ]);
     applyWorkspaceArtifacts(artifact, graph, surface, sourceText);
+    await loadApiBrowser();
   } catch (error) {
     document.querySelector('.sync-status strong').textContent = 'SURFACE ERROR';
     flowCanvas.innerHTML = `<div class="surface-error"><strong>AUTHORING SURFACE UNAVAILABLE</strong><span>${escapeHtml(error.message)}</span></div>`;
@@ -130,6 +133,134 @@ function validateWorkspaceArtifacts(artifact, graph, surface) {
       });
     });
   });
+}
+
+function validateApiBrowser(browser) {
+  assertArtifact(browser?.schemaVersion === 'unifiedscript.unreal-api-browser/v0.1', 'Unsupported Unreal API browser protocol');
+  assertArtifact(browser.sources?.contractSchemaVersion === 'unifiedscript.unreal-api-contract/v0.2', 'API browser is not derived from the current Contract schema');
+  assertArtifact(typeof browser.sources?.inputSha256 === 'string' && browser.sources.inputSha256.length === 64, 'API browser input identity is missing');
+  assertArtifact(Array.isArray(browser.types) && Array.isArray(browser.diagnostics), 'Malformed Unreal API browser document');
+  const members = browser.types.flatMap(type => (type.members || []).map(member => ({ ...member, owner: type })));
+  assertArtifact(browser.summary?.typeCount === browser.types.length && browser.summary?.nodeCount === members.length, 'API browser summary does not match its generated index');
+  return members;
+}
+
+async function loadApiBrowser() {
+  const button = document.getElementById('apiBrowserButton');
+  try {
+    const response = await fetch('/api/unreal/browser', { cache: 'no-store' });
+    if (!response.ok) throw new Error(`API browser returned ${response.status}`);
+    const browser = await response.json();
+    const members = validateApiBrowser(browser);
+    state.apiBrowser = browser;
+    state.apiBrowserMembers = members;
+    state.selectedApiMemberId = members[0]?.id ?? null;
+    button.disabled = false;
+    button.title = `${browser.contractName} · ${members.length} generated nodes`;
+    renderApiBrowser();
+  } catch (error) {
+    button.disabled = true;
+    button.title = error.message;
+    console.info('Generated Unreal API browser is unavailable.', error.message);
+  }
+}
+
+function apiRoute(member) {
+  return member.disposition || 'visualOnly';
+}
+
+function apiRouteLabel(route) {
+  return ({
+    directThunk: 'DIRECT THUNK', callFrame: 'CALL FRAME', dataPlaneOperation: 'DATA PLANE',
+    reflectionFallback: 'REFLECTION', rejected: 'REJECTED', visualOnly: 'VISUAL ONLY',
+  })[route] || String(route || 'UNKNOWN').toUpperCase();
+}
+
+function apiMemberSearchText(member) {
+  return [member.title, member.kind, member.memberPath, member.memberId, member.category,
+    member.tooltip, member.owner.name, member.owner.managedTypeName, apiRoute(member),
+    ...(member.diagnosticCodes || []), ...(member.pins || []).flatMap(pin =>
+      [pin.name, pin.direction, pin.type?.nativeType, pin.type?.typePath])]
+    .filter(Boolean).join(' ').toLowerCase();
+}
+
+function filteredApiMembers() {
+  const query = document.getElementById('apiBrowserSearch').value.trim().toLowerCase();
+  const route = document.getElementById('apiBrowserRoute').value;
+  return state.apiBrowserMembers.filter(member =>
+    (!route || apiRoute(member) === route) && (!query || apiMemberSearchText(member).includes(query)));
+}
+
+function renderApiBrowser() {
+  const browser = state.apiBrowser;
+  if (!browser) return;
+  document.getElementById('apiBrowserContract').textContent = browser.contractName;
+  document.getElementById('apiBrowserFingerprint').textContent =
+    `UE ${browser.engine.major}.${browser.engine.minor}.${browser.engine.patch} · ${browser.sources.inputSha256.slice(0, 16)}…`;
+  const metricValues = [browser.summary.typeCount, browser.summary.memberCount,
+    browser.summary.nodeCount, browser.summary.diagnosticCount];
+  document.querySelectorAll('#apiBrowserMetrics strong').forEach((element, index) => {
+    element.textContent = String(metricValues[index]);
+  });
+
+  const members = filteredApiMembers();
+  const groups = new Map();
+  members.forEach(member => {
+    if (!groups.has(member.owner.path)) groups.set(member.owner.path, { type: member.owner, members: [] });
+    groups.get(member.owner.path).members.push(member);
+  });
+  const results = document.getElementById('apiBrowserResults');
+  results.innerHTML = [...groups.values()].map(group => `
+    <section class="api-result-group"><header><strong>${escapeHtml(group.type.managedTypeName)}</strong><small>${escapeHtml(group.type.path)}</small><em>${group.members.length}</em></header>
+      ${group.members.map(member => `<button class="api-result-item${member.id === state.selectedApiMemberId ? ' active' : ''}" type="button" data-api-member="${escapeHtml(member.id)}">
+        <span class="api-kind">${escapeHtml(member.kind.slice(0, 2).toUpperCase())}</span><span><strong>${escapeHtml(member.title)}</strong><small>${escapeHtml(member.category)}</small></span>
+        <em class="api-route route-${apiRoute(member)}">${apiRouteLabel(apiRoute(member))}</em></button>`).join('')}
+    </section>`).join('') || '<div class="api-browser-empty">NO CONTRACT MEMBER MATCHES THIS FILTER</div>';
+  results.querySelectorAll('[data-api-member]').forEach(button =>
+    button.addEventListener('click', () => selectApiMember(button.dataset.apiMember)));
+  if (!members.some(member => member.id === state.selectedApiMemberId)) {
+    state.selectedApiMemberId = members[0]?.id ?? null;
+  }
+  renderApiMemberDetail();
+  renderApiDiagnostics();
+}
+
+function selectApiMember(id) {
+  state.selectedApiMemberId = id;
+  document.querySelectorAll('[data-api-member]').forEach(button =>
+    button.classList.toggle('active', button.dataset.apiMember === id));
+  renderApiMemberDetail();
+}
+
+function renderApiMemberDetail() {
+  const member = state.apiBrowserMembers.find(item => item.id === state.selectedApiMemberId);
+  const detail = document.getElementById('apiBrowserDetail');
+  if (!member) {
+    detail.innerHTML = '<div class="surface-loading">SELECT AN API MEMBER</div>';
+    return;
+  }
+  const constraints = member.constraints;
+  const pins = (member.pins || []).map(pin => `<div class="api-pin"><span class="pin-direction ${pin.direction}">${escapeHtml(pin.direction)}</span><strong>${escapeHtml(pin.name)}</strong><code>${escapeHtml(pin.type?.nativeType || pin.type?.kind || 'flow')}</code>${pin.defaultValue !== undefined ? `<em>= ${escapeHtml(pin.defaultValue)}</em>` : ''}</div>`).join('');
+  detail.innerHTML = `
+    <div class="api-detail-heading"><span>${escapeHtml(member.kind)}</span><h3>${escapeHtml(member.title)}</h3><p>${escapeHtml(member.tooltip)}</p></div>
+    <div class="api-detail-route route-${apiRoute(member)}"><strong>${apiRouteLabel(apiRoute(member))}</strong><span>${member.available ? 'AVAILABLE TO GENERATED CODE + VISUAL NODES' : 'REJECTED BY CONTRACT COVERAGE'}</span></div>
+    <dl class="api-facts"><dt>Managed owner</dt><dd>${escapeHtml(member.owner.managedTypeName)}</dd><dt>Member ID</dt><dd><code>${escapeHtml(member.memberId)}</code></dd><dt>Contract path</dt><dd><code>${escapeHtml(member.memberPath)}</code></dd><dt>Thread</dt><dd>${escapeHtml(constraints.threadRequirement)}</dd><dt>World</dt><dd>${escapeHtml(constraints.worldRequirement)}${constraints.worldContextParameter ? ` · ${escapeHtml(constraints.worldContextParameter)}` : ''}</dd><dt>Behavior</dt><dd>${member.pure ? 'pure' : 'impure'}${constraints.latent ? ' · latent' : ''}${constraints.deprecated ? ' · deprecated' : ''}</dd></dl>
+    <section class="api-pin-section"><div class="api-browser-section-title"><span>TYPED PINS</span><em>${member.pins.length}</em></div>${pins || '<div class="api-browser-empty">NO DATA PINS</div>'}</section>
+    <section class="api-member-diagnostics"><div class="api-browser-section-title"><span>DIAGNOSTICS</span><em>${member.diagnosticCodes.length}</em></div>${member.diagnosticCodes.map(code => `<button type="button" data-diagnostic-code="${escapeHtml(code)}">${escapeHtml(code)}</button>`).join('') || '<div class="api-browser-empty">NO ROUTE DIAGNOSTICS</div>'}</section>`;
+  detail.querySelectorAll('[data-diagnostic-code]').forEach(button =>
+    button.addEventListener('click', () => {
+      document.getElementById('apiBrowserSearch').value = button.dataset.diagnosticCode;
+      renderApiBrowser();
+    }));
+}
+
+function renderApiDiagnostics() {
+  const query = document.getElementById('apiBrowserSearch').value.trim().toLowerCase();
+  const diagnostics = state.apiBrowser.diagnostics.filter(item => !query ||
+    [item.code, item.message, ...(item.memberPaths || [])].join(' ').toLowerCase().includes(query));
+  document.getElementById('apiDiagnosticCount').textContent = String(diagnostics.length);
+  document.getElementById('apiDiagnosticList').innerHTML = diagnostics.map(item => `
+    <article class="api-diagnostic severity-${item.severity}"><header><strong>${escapeHtml(item.code)}</strong><em>${escapeHtml(item.severity)}</em></header><p>${escapeHtml(item.message)}</p><small>${item.memberPaths.length} CONTRACT PATH${item.memberPaths.length === 1 ? '' : 'S'}</small></article>`).join('') || '<div class="api-browser-empty">NO DIAGNOSTIC MATCHES THIS FILTER</div>';
 }
 
 function validateVisualProfile(report) {
@@ -1230,6 +1361,18 @@ document.getElementById('aiViewButton').addEventListener('click', () => {
   aiDrawer.classList.add('visible');
   aiDrawer.setAttribute('aria-hidden', 'false');
 });
+document.getElementById('apiBrowserButton').addEventListener('click', () => {
+  renderApiBrowser();
+  apiBrowserDrawer.classList.add('visible');
+  apiBrowserDrawer.setAttribute('aria-hidden', 'false');
+  setTimeout(() => document.getElementById('apiBrowserSearch').focus(), 30);
+});
+document.getElementById('closeApiBrowser').addEventListener('click', () => {
+  apiBrowserDrawer.classList.remove('visible');
+  apiBrowserDrawer.setAttribute('aria-hidden', 'true');
+});
+document.getElementById('apiBrowserSearch').addEventListener('input', renderApiBrowser);
+document.getElementById('apiBrowserRoute').addEventListener('change', renderApiBrowser);
 document.getElementById('closeAiDrawer').addEventListener('click', () => {
   aiDrawer.classList.remove('visible');
   aiDrawer.setAttribute('aria-hidden', 'true');
@@ -1293,6 +1436,9 @@ document.addEventListener('keydown', event => {
   }
   if (event.key === 'Escape' && aiDrawer.classList.contains('visible')) {
     document.getElementById('closeAiDrawer').click();
+  }
+  if (event.key === 'Escape' && apiBrowserDrawer.classList.contains('visible')) {
+    document.getElementById('closeApiBrowser').click();
   }
 });
 document.getElementById('copyCodeButton').addEventListener('click', () =>

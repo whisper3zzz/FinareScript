@@ -35,6 +35,9 @@
         <button id="aiViewButton" class="button secondary" type="button" data-testid="ai-view-button">
           <span class="button-icon">⌁</span> AI LENS
         </button>
+        <button id="apiBrowserButton" class="button secondary" type="button" data-testid="api-browser-button" disabled>
+          <span class="button-icon">⌕</span> API + DIAGNOSTICS
+        </button>
         <button id="groupButton" class="button secondary history-button" type="button" data-testid="group-button" title="Begin grouped authoring transaction">
           GROUP EDITS
         </button>
@@ -219,6 +222,35 @@
           <button id="applyPreviewPatchButton" class="button secondary" type="button" disabled>APPLY TO SOURCE + CLR</button>
         </div>
       </section>
+    </div>
+  </div>
+
+  <div id="apiBrowserDrawer" class="api-browser-drawer" aria-hidden="true" data-testid="api-browser-drawer">
+    <div class="api-browser-header">
+      <div>
+        <span class="api-browser-sigil">UE</span>
+        <div><div class="eyebrow">Contract-owned generated surface</div><h2>API + Diagnostic Browser</h2></div>
+      </div>
+      <div class="api-browser-identity"><span id="apiBrowserContract">NO CONTRACT</span><small id="apiBrowserFingerprint">waiting for generated browser</small></div>
+      <button id="closeApiBrowser" class="square-button" type="button" aria-label="关闭 API 浏览器">×</button>
+    </div>
+    <div id="apiBrowserMetrics" class="api-browser-metrics">
+      <div><strong>—</strong><span>TYPES</span></div><div><strong>—</strong><span>MEMBERS</span></div>
+      <div><strong>—</strong><span>NODES</span></div><div><strong>—</strong><span>DIAGNOSTICS</span></div>
+    </div>
+    <div class="api-browser-controls">
+      <label class="api-browser-search"><span>⌕</span><input id="apiBrowserSearch" type="search" placeholder="Search type, member, path, pin, diagnostic…" autocomplete="off"></label>
+      <select id="apiBrowserRoute" aria-label="Binding route">
+        <option value="">ALL ROUTES</option><option value="directThunk">DIRECT THUNK</option>
+        <option value="callFrame">CALL FRAME</option><option value="dataPlaneOperation">DATA PLANE</option>
+        <option value="reflectionFallback">REFLECTION</option><option value="rejected">REJECTED</option>
+        <option value="visualOnly">VISUAL ONLY</option>
+      </select>
+    </div>
+    <div class="api-browser-body">
+      <section class="api-browser-results"><div id="apiBrowserResults" class="api-browser-result-list"><div class="surface-loading">LOADING CONTRACT INDEX…</div></div></section>
+      <section id="apiBrowserDetail" class="api-browser-detail"><div class="surface-loading">SELECT AN API MEMBER</div></section>
+      <section class="api-browser-diagnostics"><div class="api-browser-section-title"><span>DIAGNOSTIC CATALOG</span><em id="apiDiagnosticCount">0</em></div><div id="apiDiagnosticList"></div></section>
     </div>
   </div>
 

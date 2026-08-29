@@ -8,6 +8,7 @@ using UnifiedScript.Core;
 using UnifiedScript.CSharp;
 using UnifiedScript.Graph;
 using UnifiedScript.Runtime;
+using UnifiedScript.Unreal;
 
 namespace UnifiedScript.Cli;
 
@@ -23,6 +24,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
     private readonly HttpListener listener = new();
     private readonly string contentRoot;
     private readonly AuthoringSessionController session;
+    private readonly UnrealApiBrowserDocument? apiBrowser;
     private bool disposed;
 
     public CoreClrDebugHttpServer(
@@ -32,7 +34,8 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         string contentRoot,
         int port,
         AuthoringArtifactOutputs? artifactOutputs = null,
-        IReadOnlyDictionary<string, string>? sourceFiles = null)
+        IReadOnlyDictionary<string, string>? sourceFiles = null,
+        UnrealApiBrowserDocument? apiBrowser = null)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentException.ThrowIfNullOrWhiteSpace(contentRoot);
@@ -54,6 +57,7 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
             identityPath,
             artifactOutputs ?? new AuthoringArtifactOutputs(),
             sourceFiles);
+        this.apiBrowser = apiBrowser;
         listener.Prefixes.Add($"http://127.0.0.1:{port}/");
     }
 
@@ -97,6 +101,11 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         try
         {
             AddCommonHeaders(context.Response);
+            if (path.StartsWith("/api/unreal/", StringComparison.Ordinal))
+            {
+                await HandleUnrealApiAsync(context, path, cancellationToken);
+                return;
+            }
             if (path.StartsWith("/api/debug/", StringComparison.Ordinal))
             {
                 await HandleDebugApiAsync(context, path, cancellationToken);
@@ -129,6 +138,31 @@ internal sealed class CoreClrDebugHttpServer : IDisposable
         {
             context.Response.Close();
         }
+    }
+
+    private async Task HandleUnrealApiAsync(
+        HttpListenerContext context,
+        string path,
+        CancellationToken cancellationToken)
+    {
+        if (context.Request.HttpMethod != "GET")
+        {
+            context.Response.StatusCode = (int)HttpStatusCode.MethodNotAllowed;
+            context.Response.Headers[HttpResponseHeader.Allow] = "GET";
+            return;
+        }
+        if (path != "/api/unreal/browser")
+        {
+            throw new HttpProtocolException(HttpStatusCode.NotFound, "Unknown Unreal API endpoint.");
+        }
+        if (apiBrowser is null)
+        {
+            throw new HttpProtocolException(
+                HttpStatusCode.NotFound,
+                "No generated Unreal API browser was configured for this authoring session.");
+        }
+
+        await WriteJsonAsync(context.Response, apiBrowser, cancellationToken);
     }
 
     private async Task HandleDebugApiAsync(

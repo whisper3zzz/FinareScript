@@ -79,6 +79,12 @@
       "path": "docs/UNREAL_API_CONTRACT.md"
     },
     {
+      "id": "project-templates-api-browser",
+      "category": "api",
+      "title": "Project templates and generated API browser",
+      "path": "docs/PROJECT_TEMPLATES_AND_API_BROWSER.md"
+    },
+    {
       "id": "runtime-diagnostics",
       "category": "debugging",
       "title": "Runtime diagnostics",
@@ -158,8 +164,8 @@
     }
   ],
   "acceptance": {
-    "managedTests": 600,
-    "repositoryInvariants": 86,
+    "managedTests": 602,
+    "repositoryInvariants": 87,
     "unrealAutomationTests": 18,
     "requiredGates": [
       "managed-tests",
@@ -169,6 +175,7 @@
       "source-development-shipping-package",
       "deterministic-sdk-package",
       "sample-matrix",
+      "project-template-and-api-browser",
       "clean-project-sdk-install",
       "clean-project-development-package"
     ]

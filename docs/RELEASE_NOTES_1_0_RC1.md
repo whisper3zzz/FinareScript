@@ -25,6 +25,11 @@ Verified target: Unreal Engine 5.8.1, Win64, .NET 10
 - One versioned sample catalog and aggregate acceptance runner cover minimal
   onboarding, packaged BlockBreaker gameplay, dedicated-server World lifecycle,
   gameplay data-plane routes, and Visual/C# round-trip equivalence.
+- Three versioned project templates cover minimal lifecycle, structured Visual
+  gameplay policy, and World data-plane starting points. The public scaffold
+  records their exact capabilities and non-claims.
+- The Workbench provides a searchable API/diagnostic browser generated from the
+  same Contract, node catalog, and coverage input as managed/native bindings.
 
 ## Compatibility and packaging
 
@@ -63,5 +68,5 @@ release-owned guide set.
 - The networking/server sample proves dedicated-server World host lifecycle; it
   does not yet claim client/server gameplay replication or a packaged
   `WindowsServer` target.
-- Project templates and the generated API/diagnostic browser remain M12.2
-  follow-up slices and are not claimed by RC1 yet.
+- Project templates are reviewed starting points; they do not generate maps,
+  replicated authority policy, project-native classes, or game-specific assets.

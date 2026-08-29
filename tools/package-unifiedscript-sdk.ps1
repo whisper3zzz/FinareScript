@@ -418,7 +418,10 @@ try {
         'Plugins\UEUnifiedScript\Source\UEUnifiedScriptRuntime',
         'Plugins\UEUnifiedScript\Source\UEUnifiedScriptEditor',
         'Plugins\UEUnifiedScript\Resources\Managed\UnifiedScript.Unreal.runtimeconfig.json',
+        'Templates\UnrealProject\unifiedscript.project-templates.json',
         'Templates\UnrealProject\Managed\FirstScript.cs.template',
+        'Templates\UnrealProject\Managed\VisualGameplayScript.cs.template',
+        'Templates\UnrealProject\Managed\DataPlaneScript.cs.template',
         'Templates\UnrealProject\Config\UnifiedScript.onboarding.json.template',
         'Authoring\Workbench\index.html')) {
         $candidate = Join-Path $sdkRoot $requiredPayload
