@@ -65,15 +65,38 @@ foreach ($runtime in $runtimeDefinitions) {
         "-CookDir=$cookDirectories",
         '-AdditionalCookerOptions=-SkipZenStore',
         '-unattended', '-utf8output', '-NoCodeSign', '-NoXGE',
-        '-nocompileeditor'
+        '-nocompileeditor', '-clean'
     )
     if (-not $SkipBuild) {
         $uatArguments += '-build'
     }
-    Write-Output "[package-size] $($runtime.Id) Build/Cook/Stage/Pak/Archive..."
-    & $runUat @uatArguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "$($runtime.Id) packaging failed with exit code $LASTEXITCODE."
+    $orderLogSnapshots = @(
+        'Build\Windows\FileOpenOrder\CookerOpenOrder.log',
+        'Build\Windows\FileOpenOrder\EditorOpenOrder.log' |
+            ForEach-Object {
+                $path = Join-Path $runtime.Root $_
+                [pscustomobject]@{
+                    Path = $path
+                    Existed = Test-Path -LiteralPath $path -PathType Leaf
+                    Bytes = if (Test-Path -LiteralPath $path -PathType Leaf) {
+                        [IO.File]::ReadAllBytes($path)
+                    } else { $null }
+                }
+            })
+    try {
+        Write-Output "[package-size] $($runtime.Id) Build/Cook/Stage/Pak/Archive..."
+        & $runUat @uatArguments
+        if ($LASTEXITCODE -ne 0) {
+            throw "$($runtime.Id) packaging failed with exit code $LASTEXITCODE."
+        }
+    } finally {
+        foreach ($snapshot in $orderLogSnapshots) {
+            if ($snapshot.Existed) {
+                [IO.File]::WriteAllBytes($snapshot.Path, $snapshot.Bytes)
+            } elseif (Test-Path -LiteralPath $snapshot.Path -PathType Leaf) {
+                Remove-Item -LiteralPath $snapshot.Path -Force
+            }
+        }
     }
 
     $files = @(Get-ChildItem -LiteralPath $archiveDirectory -Recurse -File)
