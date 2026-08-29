@@ -54,8 +54,8 @@ try {
         $aggregate.AppendData($entry)
     }
 
-    $identity = [Convert]::ToHexString(
-        $aggregate.GetHashAndReset()).ToLowerInvariant()
+    $identity = [BitConverter]::ToString(
+        $aggregate.GetHashAndReset()).Replace('-', '').ToLowerInvariant()
 } finally {
     $aggregate.Dispose()
 }
