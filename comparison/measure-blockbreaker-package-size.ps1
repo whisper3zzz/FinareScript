@@ -11,6 +11,12 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $runUat = Join-Path $EngineRoot 'Engine\Build\BatchFiles\RunUAT.bat'
+$dotnetExe = Join-Path $EngineRoot `
+    'Engine\Binaries\ThirdParty\DotNet\10.0\win-x64\dotnet.exe'
+$cliProject = Join-Path $repoRoot `
+    'src\UnifiedScript.Cli\UnifiedScript.Cli.csproj'
+$cliAssembly = Join-Path $repoRoot `
+    'src\UnifiedScript.Cli\bin\Release\net10.0\UnifiedScript.Cli.dll'
 $artifactRoot = if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
     Join-Path $repoRoot 'artifacts\comparison\package-size'
 } elseif ([IO.Path]::IsPathRooted($OutputDirectory)) {
@@ -36,16 +42,59 @@ $runtimeDefinitions = @(
     }
 )
 
-if (-not (Test-Path -LiteralPath $runUat)) {
-    throw "RunUAT does not exist: $runUat"
+foreach ($requiredPath in @($runUat, $dotnetExe, $cliProject)) {
+    if (-not (Test-Path -LiteralPath $requiredPath)) {
+        throw "Package-size dependency does not exist: $requiredPath"
+    }
 }
 New-Item -ItemType Directory -Force -Path $runRoot | Out-Null
+
+function Build-UnifiedScriptManagedProgram {
+    param([Parameter(Mandatory)][string]$ProjectRoot)
+
+    $managedProject = Join-Path $ProjectRoot `
+        'Managed\BlockBreaker.UnifiedScript.csproj'
+    $managedRoot = Split-Path -Parent $managedProject
+    $managedOutputs = @(
+        (Join-Path $managedRoot 'BlockBreaker.UnifiedScript.dll'),
+        (Join-Path $managedRoot 'BlockBreaker.UnifiedScript.deps.json'),
+        (Join-Path $managedRoot 'BlockBreaker.UnifiedScript.uschunk'))
+    if (-not (Test-Path -LiteralPath $managedProject -PathType Leaf)) {
+        throw "UnifiedScript managed project does not exist: $managedProject"
+    }
+
+    Write-Output '[package-size] unifiedScript managed program build...'
+    & $dotnetExe build $cliProject -c Release --nologo
+    if ($LASTEXITCODE -ne 0) {
+        throw "UnifiedScript CLI build failed with exit code $LASTEXITCODE."
+    }
+    & $dotnetExe build $managedProject -c Release --nologo
+    if ($LASTEXITCODE -ne 0) {
+        throw "BlockBreaker managed build failed with exit code $LASTEXITCODE."
+    }
+    & $dotnetExe $cliAssembly emit $managedProject `
+        --out $managedRoot `
+        --configuration Release `
+        --no-restore `
+        --no-build
+    if ($LASTEXITCODE -ne 0) {
+        throw "BlockBreaker chunk emission failed with exit code $LASTEXITCODE."
+    }
+    foreach ($managedOutput in $managedOutputs) {
+        if (-not (Test-Path -LiteralPath $managedOutput -PathType Leaf)) {
+            throw "BlockBreaker managed package output is missing: $managedOutput"
+        }
+    }
+}
 
 $measurements = [ordered]@{}
 foreach ($runtime in $runtimeDefinitions) {
     $projectPath = Join-Path $runtime.Root 'BlockBreaker.uproject'
     if (-not (Test-Path -LiteralPath $projectPath)) {
         throw "BlockBreaker project does not exist: $projectPath"
+    }
+    if ($runtime.Id -eq 'unifiedScript') {
+        Build-UnifiedScriptManagedProgram -ProjectRoot $runtime.Root
     }
     $trackedStatus = @(& git -C $runtime.Root status --porcelain --untracked-files=no)
     if ($trackedStatus.Count -ne 0) {
