@@ -4396,18 +4396,14 @@ void SUnifiedScriptAuthoringSurface::HandleWorkspaceRefreshResponse(
         false);
 }
 
-void SUnifiedScriptAuthoringSurface::ReloadMatchingComponents(
-    const FString& ReloadTransactionJson,
-    int32& OutMatched,
-    int32& OutReloaded,
-    int32& OutFailed,
-    FString& OutObservedReloadTransactionJson)
+FUnifiedScriptReloadBatchResult
+SUnifiedScriptAuthoringSurface::ReloadMatchingComponentsForAsset(
+    const UUnifiedScriptAsset* PreferredAsset,
+    const FString& LoadedSurfacePath,
+    const FString& ReloadTransactionJson)
 {
-    OutMatched = 0;
-    OutReloaded = 0;
-    OutFailed = 0;
-    OutObservedReloadTransactionJson.Reset();
-    const UUnifiedScriptAsset* PreferredAsset = LoadedScriptAsset.Get();
+    FUnifiedScriptReloadBatchResult Result;
+    TArray<TWeakObjectPtr<UUnifiedScriptComponent>> MatchingComponents;
     for (TObjectIterator<UUnifiedScriptComponent> It; It; ++It)
     {
         UUnifiedScriptComponent* Component = *It;
@@ -4432,23 +4428,88 @@ void SUnifiedScriptAuthoringSurface::ReloadMatchingComponents(
             continue;
         }
 
-        ++OutMatched;
+        MatchingComponents.Add(Component);
+    }
+
+    MatchingComponents.Sort([](
+        const TWeakObjectPtr<UUnifiedScriptComponent>& Left,
+        const TWeakObjectPtr<UUnifiedScriptComponent>& Right)
+    {
+        const UUnifiedScriptComponent* LeftComponent = Left.Get();
+        const UUnifiedScriptComponent* RightComponent = Right.Get();
+        return LeftComponent != nullptr && RightComponent != nullptr
+            ? LeftComponent->GetPathName() < RightComponent->GetPathName()
+            : LeftComponent != nullptr;
+    });
+    Result.Matched = MatchingComponents.Num();
+
+    TArray<FString> PreflightTransactions;
+    PreflightTransactions.SetNum(MatchingComponents.Num());
+    for (int32 Index = 0; Index < MatchingComponents.Num(); ++Index)
+    {
+        UUnifiedScriptComponent* Component = MatchingComponents[Index].Get();
+        if (Component == nullptr ||
+            !Component->PreflightScriptReloadWithTransaction(
+                ReloadTransactionJson,
+                PreflightTransactions[Index]))
+        {
+            ++Result.PreflightRejected;
+            if (Result.ObservedReloadTransactionJson.IsEmpty() && Component != nullptr)
+            {
+                Result.ObservedReloadTransactionJson = PreflightTransactions[Index];
+            }
+        }
+    }
+    if (Result.PreflightRejected > 0)
+    {
+        // The batch barrier deliberately counts every match as failed because
+        // none was allowed to cross into runtime mutation.
+        Result.Failed = Result.Matched;
+        return Result;
+    }
+
+    for (int32 Index = 0; Index < MatchingComponents.Num(); ++Index)
+    {
+        UUnifiedScriptComponent* Component = MatchingComponents[Index].Get();
+        if (Component == nullptr)
+        {
+            ++Result.Failed;
+            continue;
+        }
         const bool bUpdated = Component->bScriptRunning
-            ? Component->ReloadScriptWithTransaction(ReloadTransactionJson)
-            : Component->RefreshScriptStateWithTransaction(ReloadTransactionJson);
+            ? Component->ReloadScriptWithTransaction(PreflightTransactions[Index])
+            : Component->RefreshScriptStateWithTransaction(PreflightTransactions[Index]);
         if (!Component->LastReloadTransaction.IsEmpty())
         {
-            OutObservedReloadTransactionJson = Component->LastReloadTransaction;
+            Result.ObservedReloadTransactionJson = Component->LastReloadTransaction;
         }
         if (bUpdated)
         {
-            ++OutReloaded;
+            ++Result.Reloaded;
         }
         else
         {
-            ++OutFailed;
+            ++Result.Failed;
         }
     }
+    return Result;
+}
+
+void SUnifiedScriptAuthoringSurface::ReloadMatchingComponents(
+    const FString& ReloadTransactionJson,
+    int32& OutMatched,
+    int32& OutReloaded,
+    int32& OutFailed,
+    FString& OutObservedReloadTransactionJson)
+{
+    const FUnifiedScriptReloadBatchResult Result = ReloadMatchingComponentsForAsset(
+        LoadedScriptAsset.Get(),
+        LoadedSurfacePath,
+        ReloadTransactionJson);
+    OutMatched = Result.Matched;
+    OutReloaded = Result.Reloaded;
+    OutFailed = Result.Failed;
+    OutObservedReloadTransactionJson = Result.ObservedReloadTransactionJson;
 }
 
 EActiveTimerReturnType SUnifiedScriptAuthoringSurface::HandleAutoReload(

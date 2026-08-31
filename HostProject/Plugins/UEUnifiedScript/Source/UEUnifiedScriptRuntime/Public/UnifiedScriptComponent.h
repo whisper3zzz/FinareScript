@@ -138,6 +138,15 @@ public:
     /** Extends an authoring publication transaction through the live World swap. */
     bool ReloadScriptWithTransaction(const FString& PublicationTransactionJson);
 
+    /**
+     * Validates the configured candidate, state migration, and live ownership
+     * without mutating runtime/debug/state fields. Authoring surfaces use this
+     * as a batch barrier before changing any matching instance.
+     */
+    bool PreflightScriptReloadWithTransaction(
+        const FString& PublicationTransactionJson,
+        FString& OutPreflightTransactionJson) const;
+
     UFUNCTION(BlueprintCallable, Category="UnifiedScript")
     void RequestReload();
 

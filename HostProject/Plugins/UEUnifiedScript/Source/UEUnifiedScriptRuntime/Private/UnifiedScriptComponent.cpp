@@ -763,6 +763,155 @@ bool UUnifiedScriptComponent::ReloadScript()
     return ReloadScriptWithTransaction(FString());
 }
 
+bool UUnifiedScriptComponent::PreflightScriptReloadWithTransaction(
+    const FString& PublicationTransactionJson,
+    FString& OutPreflightTransactionJson) const
+{
+    check(IsInGameThread());
+    OutPreflightTransactionJson.Reset();
+
+    const int32 FromGeneration = FCString::Atoi(*ActiveGeneration);
+    const int32 CandidateGeneration = bScriptRunning
+        ? FMath::Max(1, FromGeneration + 1)
+        : FromGeneration;
+    UE::UnifiedScript::Component::Private::FReloadTransactionBuilder Transaction;
+    FString Error;
+    if (!Transaction.Initialize(
+            PublicationTransactionJson,
+            FromGeneration,
+            Error))
+    {
+        UE::UnifiedScript::Component::Private::FReloadTransactionBuilder Failure;
+        FString Ignored;
+        Failure.Initialize(FString(), FromGeneration, Ignored);
+        Failure.AddPhase(
+            TEXT("batchPreflight"),
+            TEXT("failed"),
+            0.0,
+            Error);
+        OutPreflightTransactionJson = Failure.Finish(
+            TEXT("failed"),
+            CandidateGeneration,
+            FromGeneration,
+            nullptr,
+            bSemanticDebugTickActive,
+            Error);
+        return false;
+    }
+
+    const UUnifiedScriptWorldSubsystem* Host = bScriptRunning && GetWorld() != nullptr
+        ? GetWorld()->GetSubsystem<UUnifiedScriptWorldSubsystem>()
+        : nullptr;
+    const auto Reject = [&Transaction,
+                         &OutPreflightTransactionJson,
+                         CandidateGeneration,
+                         FromGeneration,
+                         Host,
+                         this](
+                            const FString& FailureState,
+                            const FString& FailureMessage)
+    {
+        Transaction.AddPhase(
+            TEXT("batchPreflight"),
+            FailureState,
+            0.0,
+            FailureMessage);
+        const bool bRestartRequired = FailureState == TEXT("restartRequired");
+        OutPreflightTransactionJson = Transaction.Finish(
+            bRestartRequired ? TEXT("restartRequired") : TEXT("rolledBack"),
+            CandidateGeneration,
+            FromGeneration,
+            Host,
+            bSemanticDebugTickActive,
+            FailureMessage);
+        return false;
+    };
+
+    if (bScriptRunning && Host == nullptr)
+    {
+        return Reject(
+            TEXT("failed"),
+            TEXT("The UnifiedScript World host is unavailable during reload preflight."));
+    }
+
+    FString ResolvedAssemblyPath;
+    FString ResolvedTypeName;
+    UUnifiedScriptAsset* ResolvedAsset = nullptr;
+    if (!ResolveScriptConfiguration(
+            ResolvedAssemblyPath,
+            ResolvedTypeName,
+            ResolvedAsset,
+            Error))
+    {
+        return Reject(TEXT("failed"), Error);
+    }
+
+    if (bScriptRunning)
+    {
+        const FName CandidateOwnershipKey = LifecycleOwnershipKey.IsNone()
+            ? ActiveLifecycleOwnershipKey
+            : LifecycleOwnershipKey;
+        if (ActiveLifecycleOwnershipKey.IsNone() ||
+            CandidateOwnershipKey != ActiveLifecycleOwnershipKey)
+        {
+            Error = FString::Printf(
+                TEXT("Reload cannot change lifecycle ownership from '%s' to '%s'; stop the active runtime before changing coexistence routes."),
+                *ActiveLifecycleOwnershipKey.ToString(),
+                *CandidateOwnershipKey.ToString());
+            return Reject(TEXT("restartRequired"), Error);
+        }
+        if (!IFileManager::Get().FileExists(*ResolvedAssemblyPath))
+        {
+            Error = FString::Printf(
+                TEXT("The managed script assembly does not exist: '%s'."),
+                *ResolvedAssemblyPath);
+            return Reject(TEXT("failed"), Error);
+        }
+    }
+
+    FInstancedPropertyBag CandidateScriptState;
+    TArray<FGuid> CandidateOverrideIds;
+    FUnifiedScriptStateMigrationReport CandidateMigration;
+    FString CandidateDeclarationAssetPath;
+    if (!BuildScriptState(
+            ResolvedAsset,
+            ScriptState,
+            GetEffectiveScriptStateOverrideIds(),
+            CandidateScriptState,
+            CandidateOverrideIds,
+            CandidateMigration,
+            CandidateDeclarationAssetPath,
+            Error))
+    {
+        return Reject(TEXT("failed"), Error);
+    }
+
+    if (Transaction.IsAuthoringPublication() &&
+        CandidateMigration.DroppedOverrideCount > 0)
+    {
+        Error = FString::Printf(
+            TEXT("Restart required: this edit would discard %d explicit instance state override(s). No matching instance was reloaded."),
+            CandidateMigration.DroppedOverrideCount);
+        return Reject(TEXT("restartRequired"), Error);
+    }
+
+    Transaction.AddPhase(
+        TEXT("batchPreflight"),
+        TEXT("succeeded"),
+        0.0,
+        FString::Printf(
+            TEXT("Validated the %s instance candidate and preserved %d explicit state override(s) before the batch reload barrier."),
+            bScriptRunning ? TEXT("running") : TEXT("stopped/editor"),
+            CandidateOverrideIds.Num()));
+    OutPreflightTransactionJson = Transaction.Finish(
+        TEXT("preflightPassed"),
+        CandidateGeneration,
+        FromGeneration,
+        Host,
+        bSemanticDebugTickActive);
+    return true;
+}
+
 bool UUnifiedScriptComponent::ReloadScriptWithTransaction(
     const FString& PublicationTransactionJson)
 {

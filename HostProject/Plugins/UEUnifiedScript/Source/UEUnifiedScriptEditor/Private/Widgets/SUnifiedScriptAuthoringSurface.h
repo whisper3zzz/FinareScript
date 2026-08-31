@@ -75,6 +75,15 @@ struct FUnifiedScriptPendingAuthoringTransaction
 using FUnifiedScriptSurfaceTreeItemPtr = TSharedPtr<FUnifiedScriptSurfaceTreeItem>;
 using FUnifiedScriptNodePaletteItemPtr = TSharedPtr<FUnifiedScriptNodePaletteItem>;
 
+struct FUnifiedScriptReloadBatchResult
+{
+    int32 Matched = 0;
+    int32 Reloaded = 0;
+    int32 Failed = 0;
+    int32 PreflightRejected = 0;
+    FString ObservedReloadTransactionJson;
+};
+
 class SUnifiedScriptAuthoringSurface : public SCompoundWidget
 {
 public:
@@ -102,6 +111,12 @@ public:
         FUnifiedScriptGraphPaletteAction& OutAction) const;
     bool ToggleDebugBreakpoint(const FString& ActionId);
     bool IsDebugBreakpointEnabled(const FString& ActionId) const;
+
+    /** Executes one all-matching-instance preflight barrier before any reload. */
+    static FUnifiedScriptReloadBatchResult ReloadMatchingComponentsForAsset(
+        const UUnifiedScriptAsset* PreferredAsset,
+        const FString& LoadedSurfacePath,
+        const FString& ReloadTransactionJson);
 
 private:
     friend class SUnifiedScriptCanvasMinimap;

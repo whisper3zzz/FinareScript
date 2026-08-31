@@ -1579,6 +1579,33 @@ def main() -> int:
     checks.append(
         "M13.2C carries producer context into UE diagnostics and installs one project-local IDE workflow"
     )
+    unreal_component_header = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+        / "UEUnifiedScriptRuntime" / "Public" / "UnifiedScriptComponent.h"
+    ).read_text(encoding="utf-8")
+    authoring_surface_tests = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+        / "UEUnifiedScriptEditor" / "Private" / "Tests"
+        / "UnifiedScriptAuthoringSurfaceTests.cpp"
+    ).read_text(encoding="utf-8")
+    require(
+        "PreflightScriptReloadWithTransaction" in unreal_component_header
+        and 'TEXT("batchPreflight")' in unreal_component
+        and 'TEXT("preflightPassed")' in unreal_component
+        and "ReloadMatchingComponentsForAsset" in authoring_surface_widget
+        and "PreflightRejected > 0" in authoring_surface_widget
+        and "PreflightTransactions[Index]" in authoring_surface_widget
+        and "UnifiedScript.Unreal.Editor.ReloadBatchPreflight"
+        in authoring_surface_tests
+        and "StoppedComponent" in authoring_surface_tests
+        and "none was allowed to cross into runtime mutation"
+        in authoring_surface_widget
+        and "M13.2D-1 — all-instance preflight barrier" in roadmap_document,
+        "M13.2D-1 all-instance non-mutating reload preflight or mixed-state regression is incomplete",
+    )
+    checks.append(
+        "M13.2D preflights every matching running and stopped instance before reload"
+    )
     require(
         "UnifiedScriptScriptClassSmoke" in native_host_source_template
         and "LoadClass<AUnifiedScriptActor>" in native_host_source_template

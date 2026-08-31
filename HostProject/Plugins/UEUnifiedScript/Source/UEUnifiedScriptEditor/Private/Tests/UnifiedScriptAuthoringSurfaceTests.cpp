@@ -4,14 +4,18 @@
 #include "UnifiedScriptAuthoringWorkbench.h"
 #include "UnifiedScriptDebugWorkbench.h"
 
+#include "Engine/World.h"
 #include "Framework/Docking/TabManager.h"
 #include "Graph/UnifiedScriptGraphLayoutStore.h"
 #include "Graph/UnifiedScriptNodePalette.h"
 #include "Graph/UnifiedScriptGraphPresentation.h"
 #include "HAL/FileManager.h"
+#include "Interfaces/IPluginManager.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "UnifiedScriptAsset.h"
+#include "UnifiedScriptComponent.h"
 #include "UnifiedScriptEdGraph.h"
 #include "Widgets/SUnifiedScriptAuthoringSurface.h"
 
@@ -2121,6 +2125,148 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         FString(TEXT("UnifiedScript|Interop")));
     TestTrue(TEXT("Generated pin default reaches the Palette tooltip"),
         DefaultApiAction.Tooltip.Contains(TEXT("Defaults: Amount=1")));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FUnifiedScriptAuthoringReloadBatchPreflightTest,
+    "UnifiedScript.Unreal.Editor.ReloadBatchPreflight",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUnifiedScriptAuthoringReloadBatchPreflightTest::RunTest(
+    const FString& Parameters)
+{
+    UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+    if (!TestNotNull(TEXT("Creates the reload-batch test World"), World))
+    {
+        return false;
+    }
+    World->AddToRoot();
+
+    UUnifiedScriptComponent* FirstComponent =
+        NewObject<UUnifiedScriptComponent>(World);
+    UUnifiedScriptComponent* SecondComponent =
+        NewObject<UUnifiedScriptComponent>(World);
+    UUnifiedScriptComponent* StoppedComponent =
+        NewObject<UUnifiedScriptComponent>(World);
+    UUnifiedScriptAsset* InitialAsset = NewObject<UUnifiedScriptAsset>(World);
+    UUnifiedScriptAsset* IncompatibleAsset = NewObject<UUnifiedScriptAsset>(World);
+    const TSharedPtr<IPlugin> Plugin =
+        IPluginManager::Get().FindPlugin(TEXT("UEUnifiedScript"));
+    const FString DemoChunkPath = Plugin.IsValid()
+        ? FPaths::Combine(
+            Plugin->GetBaseDir(),
+            TEXT("Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.uschunk"))
+        : FString();
+    if (!TestTrue(TEXT("Reload-batch test resolves the installed plugin"), Plugin.IsValid()))
+    {
+        World->RemoveFromRoot();
+        World->DestroyWorld(false);
+        return false;
+    }
+
+    if (FPaths::FileExists(DemoChunkPath))
+    {
+        InitialAsset->CompiledChunkPath =
+            TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.uschunk");
+    }
+    InitialAsset->ScriptAssemblyPath =
+        TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.dll");
+    InitialAsset->ScriptTypeName = TEXT("UnifiedScript.Unreal.Demo.DemoScript");
+    if (InitialAsset->CompiledChunkPath.IsEmpty())
+    {
+        InitialAsset->DeclarationPath =
+            TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.asset.json");
+    }
+    InitialAsset->DeclarationAssetPath = TEXT("Unreal/Demo");
+    InitialAsset->AuthoringSurfacePath =
+        TEXT("{PluginDir}/Binaries/Managed/Demo/UnifiedScript.Unreal.Demo.surface.json");
+    IncompatibleAsset->ScriptAssemblyPath = InitialAsset->ScriptAssemblyPath;
+    IncompatibleAsset->ScriptTypeName =
+        TEXT("UnifiedScript.Unreal.Demo.AlternateDemoScript");
+
+    FirstComponent->ScriptAsset = InitialAsset;
+    SecondComponent->ScriptAsset = InitialAsset;
+    StoppedComponent->ScriptAsset = InitialAsset;
+    const bool bPrepared = FirstComponent->RefreshScriptState() &&
+        SecondComponent->RefreshScriptState() &&
+        StoppedComponent->RefreshScriptState() &&
+        FirstComponent->SetScriptStateInt32(TEXT("InitialValue"), 37) &&
+        SecondComponent->SetScriptStateInt32(TEXT("InitialValue"), 41) &&
+        StoppedComponent->SetScriptStateInt32(TEXT("InitialValue"), 53);
+    FirstComponent->RegisterComponentWithWorld(World);
+    SecondComponent->RegisterComponentWithWorld(World);
+    StoppedComponent->RegisterComponentWithWorld(World);
+    FirstComponent->BeginPlay();
+    SecondComponent->BeginPlay();
+    const bool bStarted = FirstComponent->bScriptRunning &&
+        SecondComponent->bScriptRunning;
+    TestTrue(TEXT("Running and stopped Script Class instances prepare state"), bPrepared);
+    TestTrue(TEXT("Two matching Script Class instances enter generation one"), bStarted);
+    TestFalse(TEXT("Stopped/editor instance remains outside managed execution"),
+        StoppedComponent->bScriptRunning);
+
+    const FString Publication = TEXT(
+        "{\"schemaVersion\":\"unifiedscript.reload-transaction/v0.1\","
+        "\"transactionId\":\"authoring-batch-preflight\","
+        "\"source\":\"authoring\",\"state\":\"published\",\"phases\":[]}");
+    SecondComponent->ScriptAsset = IncompatibleAsset;
+    const FUnifiedScriptReloadBatchResult Rejected =
+        SUnifiedScriptAuthoringSurface::ReloadMatchingComponentsForAsset(
+            InitialAsset,
+            FString(),
+            Publication);
+    TestEqual(TEXT("Batch finds running and stopped matching instances"),
+        Rejected.Matched, 3);
+    TestEqual(TEXT("Batch reloads no instance after one rejected preflight"),
+        Rejected.Reloaded, 0);
+    TestEqual(TEXT("Batch marks every blocked match as failed"), Rejected.Failed, 3);
+    TestEqual(TEXT("Batch identifies one rejecting candidate"),
+        Rejected.PreflightRejected, 1);
+    TestTrue(TEXT("Batch reports the restart-required barrier"),
+        Rejected.ObservedReloadTransactionJson.Contains(
+            TEXT("\"state\":\"restartRequired\"")) &&
+            Rejected.ObservedReloadTransactionJson.Contains(
+                TEXT("\"batchPreflight\"")));
+    TestEqual(TEXT("First instance never crosses the rejected batch barrier"),
+        FirstComponent->ActiveGeneration, FString(TEXT("1")));
+    TestEqual(TEXT("Second instance keeps its old generation"),
+        SecondComponent->ActiveGeneration, FString(TEXT("1")));
+    TestEqual(TEXT("First instance state remains exact"),
+        FirstComponent->GetScriptStateInt32(TEXT("InitialValue"), -1), 37);
+    TestEqual(TEXT("Second instance state remains exact"),
+        SecondComponent->GetScriptStateInt32(TEXT("InitialValue"), -1), 41);
+    TestEqual(TEXT("Stopped/editor instance state remains exact"),
+        StoppedComponent->GetScriptStateInt32(TEXT("InitialValue"), -1), 53);
+
+    SecondComponent->ScriptAsset = InitialAsset;
+    const FUnifiedScriptReloadBatchResult Committed =
+        SUnifiedScriptAuthoringSurface::ReloadMatchingComponentsForAsset(
+            InitialAsset,
+            FString(),
+            Publication);
+    TestEqual(TEXT("Compatible batch still finds every instance"), Committed.Matched, 3);
+    TestEqual(TEXT("Compatible batch updates running and stopped instances"),
+        Committed.Reloaded, 3);
+    TestEqual(TEXT("Compatible batch has no failures"), Committed.Failed, 0);
+    TestEqual(TEXT("Compatible batch has no rejected preflight"),
+        Committed.PreflightRejected, 0);
+    TestEqual(TEXT("First compatible instance advances together"),
+        FirstComponent->ActiveGeneration, FString(TEXT("2")));
+    TestEqual(TEXT("Second compatible instance advances together"),
+        SecondComponent->ActiveGeneration, FString(TEXT("2")));
+    TestFalse(TEXT("Compatible stopped/editor refresh does not start managed code"),
+        StoppedComponent->bScriptRunning);
+    TestEqual(TEXT("Compatible stopped/editor refresh preserves its override"),
+        StoppedComponent->GetScriptStateInt32(TEXT("InitialValue"), -1), 53);
+
+    FirstComponent->StopScript();
+    SecondComponent->StopScript();
+    FirstComponent->UnregisterComponent();
+    SecondComponent->UnregisterComponent();
+    StoppedComponent->UnregisterComponent();
+    World->RemoveFromRoot();
+    World->DestroyWorld(false);
     return true;
 }
 

@@ -305,3 +305,13 @@ publish the result immediately through the same compile/reload transaction.
 `OnManagedSignal` demonstrates the reverse direction: its Event Entry receives
 an `int` plus generation-safe object handle through native ABI v4, updates C#
 state, and rebinds exactly once after reload.
+
+M13.2D adds an all-matching-instance barrier to that publication path. Before
+any component reloads, the editor preflights every running and stopped/editor
+instance of the selected Script Asset. One incompatible declaration, lost
+stable-ID override, ownership change, missing live artifact, or invalid
+configuration returns the same actionable reload receipt and blocks the whole
+batch. Compatible running instances then reload; compatible stopped/editor
+instances refresh declaration state without starting managed code. Dynamic
+candidate failures after this deterministic barrier remain the next two-phase
+batch-commit slice.

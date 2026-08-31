@@ -285,6 +285,29 @@ bool FUnifiedScriptWorldSubsystemLifecycleTest::RunTest(const FString& Parameter
     StoppedSchemaBreakingScriptAsset->ScriptTypeName =
         TEXT("UnifiedScript.Unreal.Demo.AlternateDemoScript");
     FirstComponent->ScriptAsset = StoppedSchemaBreakingScriptAsset;
+    const FString StoppedTransactionBeforePreflight =
+        FirstComponent->LastReloadTransaction;
+    FString StoppedPreflightTransaction;
+    TestFalse(
+        TEXT("Stopped instance preflight rejects state loss before mutation"),
+        FirstComponent->PreflightScriptReloadWithTransaction(
+            TEXT(
+                "{\"schemaVersion\":\"unifiedscript.reload-transaction/v0.1\","
+                "\"transactionId\":\"authoring-stopped-preflight\","
+                "\"source\":\"authoring\",\"state\":\"published\",\"phases\":[]}"),
+            StoppedPreflightTransaction));
+    TestTrue(
+        TEXT("Stopped preflight returns the restart-required batch barrier"),
+        StoppedPreflightTransaction.Contains(TEXT("\"state\":\"restartRequired\"")) &&
+            StoppedPreflightTransaction.Contains(TEXT("\"batchPreflight\"")));
+    TestEqual(
+        TEXT("Stopped preflight does not mutate the observable component receipt"),
+        FirstComponent->LastReloadTransaction,
+        StoppedTransactionBeforePreflight);
+    TestEqual(
+        TEXT("Stopped preflight preserves explicit state"),
+        FirstComponent->GetScriptStateInt32(TEXT("InitialValue"), -1),
+        37);
     TestFalse(
         TEXT("Stopped instance rejects an authoring edit that would lose state"),
         FirstComponent->RefreshScriptStateWithTransaction(
@@ -504,9 +527,28 @@ bool FUnifiedScriptWorldSubsystemLifecycleTest::RunTest(const FString& Parameter
         "{\"schemaVersion\":\"unifiedscript.reload-transaction/v0.1\","
         "\"transactionId\":\"authoring-compatible-state\","
         "\"source\":\"authoring\",\"state\":\"published\",\"phases\":[]}");
+    const FString LiveTransactionBeforePreflight = FirstComponent->LastReloadTransaction;
+    FString LivePreflightTransaction;
+    TestTrue(
+        TEXT("Compatible live candidate passes without changing its generation"),
+        FirstComponent->PreflightScriptReloadWithTransaction(
+            AuthoringPublication,
+            LivePreflightTransaction));
+    TestTrue(
+        TEXT("Compatible live preflight emits the batch barrier receipt"),
+        LivePreflightTransaction.Contains(TEXT("\"state\":\"preflightPassed\"")) &&
+            LivePreflightTransaction.Contains(TEXT("\"batchPreflight\"")));
+    TestEqual(
+        TEXT("Compatible live preflight keeps generation one active"),
+        FirstComponent->ActiveGeneration,
+        FString(TEXT("1")));
+    TestEqual(
+        TEXT("Compatible live preflight does not replace the component receipt"),
+        FirstComponent->LastReloadTransaction,
+        LiveTransactionBeforePreflight);
     TestTrue(
         TEXT("Compatible Authoring Surface publication creates a new script generation"),
-        FirstComponent->ReloadScriptWithTransaction(AuthoringPublication));
+        FirstComponent->ReloadScriptWithTransaction(LivePreflightTransaction));
     TestEqual(
         TEXT("Reloaded generation is visible"),
         FirstComponent->ActiveGeneration,
@@ -533,6 +575,33 @@ bool FUnifiedScriptWorldSubsystemLifecycleTest::RunTest(const FString& Parameter
     SchemaBreakingScriptAsset->ScriptTypeName =
         TEXT("UnifiedScript.Unreal.Demo.AlternateDemoScript");
     FirstComponent->ScriptAsset = SchemaBreakingScriptAsset;
+    const FString LiveGenerationBeforeRejectedPreflight = FirstComponent->ActiveGeneration;
+    const FString LiveTransactionBeforeRejectedPreflight =
+        FirstComponent->LastReloadTransaction;
+    FString LiveRejectedPreflightTransaction;
+    TestFalse(
+        TEXT("State-breaking live candidate fails the non-mutating batch preflight"),
+        FirstComponent->PreflightScriptReloadWithTransaction(
+            TEXT(
+                "{\"schemaVersion\":\"unifiedscript.reload-transaction/v0.1\","
+                "\"transactionId\":\"authoring-incompatible-preflight\","
+                "\"source\":\"authoring\",\"state\":\"published\",\"phases\":[]}"),
+            LiveRejectedPreflightTransaction));
+    TestTrue(
+        TEXT("Rejected live preflight is actionable and identifies the barrier"),
+        LiveRejectedPreflightTransaction.Contains(
+            TEXT("\"state\":\"restartRequired\"")) &&
+            LiveRejectedPreflightTransaction.Contains(TEXT("\"batchPreflight\"")) &&
+            LiveRejectedPreflightTransaction.Contains(
+                TEXT("\"requiredAction\":\"restartEditor\"")));
+    TestEqual(
+        TEXT("Rejected live preflight keeps the old generation active"),
+        FirstComponent->ActiveGeneration,
+        LiveGenerationBeforeRejectedPreflight);
+    TestEqual(
+        TEXT("Rejected live preflight leaves the prior receipt untouched"),
+        FirstComponent->LastReloadTransaction,
+        LiveTransactionBeforeRejectedPreflight);
     TestFalse(
         TEXT("State-breaking Authoring Surface publication requires an Editor restart"),
         FirstComponent->ReloadScriptWithTransaction(

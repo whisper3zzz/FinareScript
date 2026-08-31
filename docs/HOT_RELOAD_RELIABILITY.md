@@ -12,6 +12,8 @@ The authoring server starts the transaction and records `compile`,
 World component exists, the same JSON receipt crosses the native boundary and
 is extended with:
 
+- `batchPreflight` on every matching running or stopped/editor instance before
+  any instance crosses into runtime mutation;
 - `debugDrain` and `configuration` before any runtime generation changes;
 - `artifactValidation` and `stateMigration` while the old generation remains
   recoverable;
@@ -31,6 +33,17 @@ semantic-debug activity, and `retiredLoadContextsAlive`. Slate parses this
 contract rather than scraping log text: successful authoring and semantic
 attach status show the transaction summary, while the diagnostics panel lists
 each failed or rolled-back phase and its duration.
+
+The Authoring Surface first collects every component that resolves to the exact
+Script Asset (or, for legacy entry, the exact Surface path), sorts that set by
+object path, and runs a non-mutating preflight. Configuration, lifecycle
+ownership, artifact presence for live instances, declaration materialization,
+and stable-ID override preservation are checked while every active generation,
+property bag, debug session, and component receipt remains untouched. A single
+`failed` or `restartRequired` candidate blocks the whole batch; the receipt
+reports `batchPreflight`, and no compatible sibling is allowed to advance early.
+Stopped/editor instances participate in the same barrier but a successful
+commit refreshes declaration state without starting managed code.
 
 ## Rollback guarantees
 
@@ -82,6 +95,11 @@ evidence.
 
 ## Current boundary
 
-This receipt proves ordering, rollback, ownership cleanup, and editor
-visibility. It does not yet provide per-node gameplay timing, bridge-call
-attribution, remote debug framing, or a frame timeline; those are owned by M9.3.
+The deterministic all-instance preflight closes configuration, ownership,
+artifact, declaration, and state-compatibility partial updates. After the
+barrier, managed candidates are still committed instance by instance. An
+unexpected dynamic failure in a later managed candidate therefore still needs
+the M13.2D two-phase prepare/commit/abort coordinator before the whole batch can
+claim atomic rollback for every possible failure. Per-node gameplay timing,
+bridge-call attribution, remote debug framing, and a frame timeline remain
+owned by M9.3.

@@ -32,7 +32,9 @@ the hidden authoring service.
 5. Change an editable value and choose **Apply & Reload**. The Workbench checks
    the current source fingerprints, compiles one candidate, and atomically
    publishes C#, identity sidecars, Declaration IR, Authoring Surface, DLL, and
-   PDB before reloading the matching component.
+   PDB. Native reload then preflights every matching running and stopped/editor
+   component before changing any instance; one restart-required state migration
+   blocks the entire batch.
 6. Drag a typed data wire onto an occupied input to preview transactional
    rewiring. Invalid types and stale source are rejected without partially
    changing the graph or source.

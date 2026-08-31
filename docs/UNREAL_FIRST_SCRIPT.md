@@ -165,7 +165,12 @@ Browser, choose **Tools > UnifiedScript Authoring**, and click
 by its restricted C# source. Edit a supported node/default/connection and use
 **Apply & Reload**. The server commits the semantic patch, emits the next
 managed generation plus Declaration/Surface artifacts, and the editor reloads
-components matched to that Script Asset without restarting the process.
+components matched to that Script Asset without restarting the process. Before
+the first component changes generation, every matching running and
+stopped/editor instance passes the same non-mutating configuration, ownership,
+artifact, declaration, and stable-ID state preflight. If one instance requires
+a restart, the entire batch remains on its previous generation/state and the
+reload receipt identifies `batchPreflight` plus the required action.
 
 ## 5. Packaged play
 
