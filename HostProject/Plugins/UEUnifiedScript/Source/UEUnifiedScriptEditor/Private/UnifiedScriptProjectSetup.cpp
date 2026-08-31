@@ -121,6 +121,61 @@ bool FUnifiedScriptProjectSetup::ResolvePaths(
     return true;
 }
 
+bool FUnifiedScriptProjectSetup::ResolveDailyBuildPaths(
+    const FString& ProjectFile,
+    const FString& PluginRoot,
+    const FString& EngineRoot,
+    FUnifiedScriptProjectSetupPaths& OutPaths,
+    FString& OutError)
+{
+    FUnifiedScriptProjectSetupPaths Candidate;
+    Candidate.ProjectFile = FPaths::ConvertRelativePathToFull(ProjectFile);
+    Candidate.ProjectRoot = FPaths::GetPath(Candidate.ProjectFile);
+    Candidate.PluginRoot = FPaths::ConvertRelativePathToFull(PluginRoot);
+    Candidate.EngineRoot = FPaths::ConvertRelativePathToFull(EngineRoot);
+    FPaths::NormalizeDirectoryName(Candidate.ProjectRoot);
+    FPaths::NormalizeDirectoryName(Candidate.PluginRoot);
+    FPaths::NormalizeDirectoryName(Candidate.EngineRoot);
+
+    Candidate.SetupScript = FPaths::Combine(
+        Candidate.PluginRoot,
+        TEXT("Tools/setup-unreal-project.ps1"));
+    if (!IFileManager::Get().FileExists(*Candidate.SetupScript))
+    {
+        const FString RepositoryRoot = FPaths::ConvertRelativePathToFull(
+            FPaths::Combine(Candidate.PluginRoot, TEXT("../../..")));
+        const FString RepositoryMarker = FPaths::Combine(
+            RepositoryRoot,
+            TEXT("UnifiedScript.slnx"));
+        const FString RepositorySetup = FPaths::Combine(
+            RepositoryRoot,
+            TEXT("tools/setup-unreal-project.ps1"));
+        if (IFileManager::Get().FileExists(*RepositoryMarker) &&
+            IFileManager::Get().FileExists(*RepositorySetup))
+        {
+            Candidate.SetupScript = RepositorySetup;
+        }
+    }
+    Candidate.DailyBuildReport = FPaths::Combine(
+        Candidate.ProjectRoot,
+        TEXT("Saved/UnifiedScript/ProjectSetup/daily-build-report.json"));
+
+    if (!UE::UnifiedScript::ProjectSetup::Private::RequireFile(
+            Candidate.ProjectFile,
+            TEXT("Unreal project"),
+            OutError) ||
+        !UE::UnifiedScript::ProjectSetup::Private::RequireFile(
+            Candidate.SetupScript,
+            TEXT("Daily onboarding tool"),
+            OutError))
+    {
+        return false;
+    }
+    OutPaths = MoveTemp(Candidate);
+    OutError.Reset();
+    return true;
+}
+
 bool FUnifiedScriptProjectSetup::BuildCommand(
     EUnifiedScriptProjectSetupOperation Operation,
     const FUnifiedScriptProjectSetupPaths& Paths,

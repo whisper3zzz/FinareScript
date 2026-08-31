@@ -187,6 +187,15 @@ their last successful state. If a native thunk, reflection surface, deployment
 schema, or baseline must change, the receipt names the blocking stage and asks
 for **Build, Restart & Continue**; no component is partially reloaded.
 
+You do not need to visit Project Setup before every run. A successful Graph
+**Apply & Reload** queues this same daily action, and the normal Play button
+uses it as a gate. The first Play request waits outside PIE; compatible managed
+changes build and reload before the exact request resumes automatically. If the
+change requires native/reflection/schema work, Play stays stopped and the same
+diagnostic receipt points to **Build, Restart & Continue**. Repeated Graph,
+manual, or Play requests while a build is active are coalesced rather than
+starting competing generators.
+
 ## 5. Packaged play
 
 Save the map containing the actor and package with the ordinary Unreal

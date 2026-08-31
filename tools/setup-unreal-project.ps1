@@ -20,6 +20,40 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+$moduleSearchPaths = @(
+    $env:PSModulePath,
+    [Environment]::GetEnvironmentVariable('PSModulePath', 'Machine'),
+    [Environment]::GetEnvironmentVariable('PSModulePath', 'User')
+) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+$env:PSModulePath = ($moduleSearchPaths -join ';')
+Import-Module Microsoft.PowerShell.Utility -ErrorAction Stop
+if ($null -eq (Get-Command Get-FileHash -ErrorAction SilentlyContinue)) {
+    function global:Get-FileHash {
+        [CmdletBinding()]
+        param(
+            [Parameter(Mandatory)][string]$LiteralPath,
+            [ValidateSet('SHA256')][string]$Algorithm = 'SHA256'
+        )
+
+        $stream = [IO.File]::OpenRead($LiteralPath)
+        try {
+            $sha256 = [Security.Cryptography.SHA256]::Create()
+            try {
+                $hash = [BitConverter]::ToString(
+                    $sha256.ComputeHash($stream)).Replace('-', '')
+            } finally {
+                $sha256.Dispose()
+            }
+        } finally {
+            $stream.Dispose()
+        }
+        [pscustomobject]@{
+            Algorithm = $Algorithm
+            Hash = $hash
+            Path = $LiteralPath
+        }
+    }
+}
 $script:PhaseRecords = [Collections.Generic.List[object]]::new()
 $script:CurrentPhase = 'bootstrap'
 $script:ResolvedEngineRoot = $null

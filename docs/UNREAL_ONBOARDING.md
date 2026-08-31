@@ -147,6 +147,16 @@ Editor-safe stages, preserves prior state for deliberately deferred Editor-owned
 stages, and returns exit/report status `restartRequired` when an invalidated
 stage needs an Editor restart. Callers must not reload on that status.
 
+The Editor owns one daily coordinator for the Project Setup button, accepted
+Graph publication, and normal Play. Requests arriving during a build are folded
+into at most one follow-up while retaining every trigger and reload intent.
+Normal Play is canceled before PIE, its exact request is retained, and it is
+replayed automatically only after the final compatible receipt. A failed or
+`restartRequired` receipt leaves Play blocked and appears on the shared **Daily
+Build & Reload** diagnostics page. `UnifiedScript.BuildAndReload` queues the
+same coordinator from the UE console or a CMD smoke run; it is not a separate
+build implementation.
+
 Apply persists one dependency graph at
 `Saved/UnifiedScript/BuildGraph/onboarding-state.json`. Each stage fingerprints
 its configuration, source inputs, dependency outputs, and tracked outputs. A

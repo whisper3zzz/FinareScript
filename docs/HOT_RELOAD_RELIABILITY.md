@@ -129,7 +129,9 @@ The deterministic preflight plus two-phase prepare/commit/abort coordinator
 closes mixed-generation publication for one Workbench reload batch, including a
 late candidate `OnStart` or event-rebinding failure. Finalize cleanup is
 observable but intentionally does not roll back an already published complete
-batch. M13.2D-3 still needs to route the ordinary source/Graph Build and Play
-loop through this same batch receipt automatically. Per-node gameplay timing,
-bridge-call attribution, remote debug framing, and a frame timeline remain
-owned by M9.3.
+batch. Ordinary source Build & Reload, accepted Graph publication, and normal
+Play now enter one coalescing editor-module coordinator and emit the same batch
+receipt. Play is retained before PIE and replayed only after the final
+compatible receipt; failure or native/schema restart leaves the previous live
+generation intact and Play blocked. Per-node gameplay timing, bridge-call
+attribution, remote debug framing, and a frame timeline remain owned by M9.3.

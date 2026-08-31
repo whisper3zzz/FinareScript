@@ -90,6 +90,14 @@ public:
         FUnifiedScriptProjectSetupPaths& OutPaths,
         FString& OutError);
 
+    /** Resolves only the daily build contract, including a source-repository fallback. */
+    static bool ResolveDailyBuildPaths(
+        const FString& ProjectFile,
+        const FString& PluginRoot,
+        const FString& EngineRoot,
+        FUnifiedScriptProjectSetupPaths& OutPaths,
+        FString& OutError);
+
     static bool BuildCommand(
         EUnifiedScriptProjectSetupOperation Operation,
         const FUnifiedScriptProjectSetupPaths& Paths,

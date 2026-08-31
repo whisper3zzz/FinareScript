@@ -5,6 +5,7 @@
 #include "Widgets/SCompoundWidget.h"
 
 class SMultiLineEditableTextBox;
+struct FUnifiedScriptDailyBuildResult;
 
 /** Project-local adopt, doctor, and deferred native onboarding surface. */
 class SUnifiedScriptProjectSetup final : public SCompoundWidget
@@ -40,6 +41,7 @@ private:
     FText GetAuthoringDescription() const;
     EActiveTimerReturnType PollAttachedOperation(double CurrentTime, float DeltaTime);
     void AppendOutput(const FString& Text);
+    void HandleDailyBuildCompleted(const FUnifiedScriptDailyBuildResult& Result);
     void FinishAttachedOperation(int32 ReturnCode);
     void CloseProcessResources();
     void SetStatus(const FText& InStatus, const FSlateColor& InColor);
@@ -51,6 +53,7 @@ private:
     FString ActiveOperationLabel;
     FString ActiveReportPath;
     TOptional<EUnifiedScriptProjectSetupOperation> ActiveOperation;
+    FDelegateHandle DailyBuildCompletedHandle;
     FUnifiedScriptFirstPlayRequest FirstPlayRequest;
     bool bHasFirstPlayRequest = false;
     FText StatusText;

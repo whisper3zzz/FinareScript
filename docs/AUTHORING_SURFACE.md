@@ -222,15 +222,22 @@ keeps compiler-owned nodes and wires unchanged until the server commits;
 success regenerates C#, Declaration IR, Graph, Surface, DLL, and PDB, then
 reloads matching components. Rejection leaves the canvas unchanged.
 
-Project Setup now exposes the same publication boundary to ordinary C# edits.
-Its **Build & Reload** action invokes the persistent dependency graph in
-`dailyEditor` mode, publishes compatible managed assemblies and chunks, and
-passes one `dailyBuild` reload transaction to every exact Script Class asset
-represented by running or stopped/editor components. Native/reflection/schema
-invalidation produces an explicit `restartEditor` receipt before the reload
-coordinator is entered. The remaining M13.2D-3 work is to make accepted Graph
-edits and the normal Play command trigger this action automatically rather than
-keeping it as a Project Setup button.
+One editor-module coordinator now exposes the same publication boundary to
+ordinary C# edits, accepted Graph edits, and normal Play. Project Setup's
+**Build & Reload** button and accepted Workbench publication both queue the
+persistent dependency graph in `dailyEditor` mode. Overlapping requests merge
+their reason and reload intent into at most one follow-up run. A compatible
+receipt publishes managed assemblies/chunks and passes one `dailyBuild` reload
+transaction to every exact Script Class asset represented by running or
+stopped/editor components. Native/reflection/schema invalidation produces an
+explicit `restartEditor` receipt before the reload coordinator is entered.
+
+The same coordinator is an UE 5.8 `IPIEAuthorizer`. It retains and rejects the
+first normal Play request while Build & Reload runs, then replays that exact
+request once after the final compatible receipt. Failed or restart-required
+results clear the pending request and leave Play blocked. Manual, Graph, and
+Play completions therefore publish one shared `dailyBuild` result in Slate
+diagnostics instead of maintaining three reload paths.
 
 The node menu reads the loaded Script Asset's contract-generated API node
 catalog, falling back to the checked-in API node catalog for the repository

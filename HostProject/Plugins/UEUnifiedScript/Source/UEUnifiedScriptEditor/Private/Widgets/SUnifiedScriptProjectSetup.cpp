@@ -1,7 +1,6 @@
 #include "Widgets/SUnifiedScriptProjectSetup.h"
 
 #include "Editor.h"
-#include "Dom/JsonObject.h"
 #include "FileHelpers.h"
 #include "HAL/FileManager.h"
 #include "HAL/PlatformApplicationMisc.h"
@@ -13,7 +12,6 @@
 #include "UEUnifiedScriptEditorModule.h"
 #include "UnifiedScriptAsset.h"
 #include "UnifiedScriptEditorDiagnostics.h"
-#include "Widgets/SUnifiedScriptAuthoringSurface.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SMultiLineEditableTextBox.h"
 #include "Widgets/Layout/SBorder.h"
@@ -21,54 +19,11 @@
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Text/STextBlock.h"
 #include "UObject/UObjectGlobals.h"
-#include "Serialization/JsonSerializer.h"
-#include "Serialization/JsonWriter.h"
 
 #define LOCTEXT_NAMESPACE "SUnifiedScriptProjectSetup"
 
 namespace UE::UnifiedScript::ProjectSetup::Private
 {
-FString BuildDailyReloadTransaction(
-    const FUnifiedScriptDailyBuildReceipt& Receipt,
-    const FString& ReportPath)
-{
-    const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
-    Root->SetStringField(
-        TEXT("schemaVersion"),
-        TEXT("unifiedscript.reload-transaction/v0.1"));
-    Root->SetStringField(
-        TEXT("transactionId"),
-        FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower));
-    Root->SetStringField(TEXT("source"), TEXT("dailyBuild"));
-    Root->SetStringField(TEXT("buildReport"), ReportPath);
-
-    TArray<TSharedPtr<FJsonValue>> Phases;
-    const auto AddPhase = [&Phases](const TCHAR* Name, const FString& Detail)
-    {
-        const TSharedRef<FJsonObject> Phase = MakeShared<FJsonObject>();
-        Phase->SetStringField(TEXT("name"), Name);
-        Phase->SetStringField(TEXT("state"), TEXT("published"));
-        Phase->SetNumberField(TEXT("durationMicroseconds"), 0.0);
-        Phase->SetStringField(TEXT("detail"), Detail);
-        Phases.Add(MakeShared<FJsonValueObject>(Phase));
-    };
-    AddPhase(
-        TEXT("dependencyAwareBuild"),
-        FString::Printf(
-            TEXT("Daily graph executed %d, skipped %d, and deferred %d Editor-only stages."),
-            Receipt.ExecutedStages,
-            Receipt.SkippedStages,
-            Receipt.DeferredStages));
-    AddPhase(
-        TEXT("artifactPublication"),
-        TEXT("Managed assemblies and compiled chunks were published atomically before reload."));
-    Root->SetArrayField(TEXT("phases"), MoveTemp(Phases));
-
-    FString Json;
-    const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Json);
-    return FJsonSerializer::Serialize(Root, Writer) ? Json : FString();
-}
-
 TSharedRef<SWidget> MakeActionRow(
     const FText& Title,
     const FText& Description,
@@ -164,6 +119,10 @@ TSharedRef<SWidget> MakeDynamicActionRow(
 
 void SUnifiedScriptProjectSetup::Construct(const FArguments& InArgs)
 {
+    DailyBuildCompletedHandle =
+        IUEUnifiedScriptEditorModule::Get().OnDailyBuildCompleted().AddSP(
+            this,
+            &SUnifiedScriptProjectSetup::HandleDailyBuildCompleted);
     SetStatus(
         LOCTEXT("ReadyStatus", "Ready — inspect the project before applying changes."),
         FSlateColor::UseForeground());
@@ -324,6 +283,12 @@ void SUnifiedScriptProjectSetup::Construct(const FArguments& InArgs)
 
 SUnifiedScriptProjectSetup::~SUnifiedScriptProjectSetup()
 {
+    if (DailyBuildCompletedHandle.IsValid() &&
+        FModuleManager::Get().IsModuleLoaded(TEXT("UEUnifiedScriptEditor")))
+    {
+        IUEUnifiedScriptEditorModule::Get().OnDailyBuildCompleted().Remove(
+            DailyBuildCompletedHandle);
+    }
     CloseProcessResources();
 }
 
@@ -350,10 +315,24 @@ FReply SUnifiedScriptProjectSetup::RunDoctor()
 
 FReply SUnifiedScriptProjectSetup::BuildAndReload()
 {
+    if (IUEUnifiedScriptEditorModule::Get().IsDailyBuildRunning())
+    {
+        SetStatus(
+            LOCTEXT("DailyBuildAlreadyRunning", "Build & Reload is already running; this request was coalesced."),
+            FAppStyle::GetSlateColor(TEXT("Colors.AccentBlue")));
+    }
     FEditorFileUtils::SaveDirtyPackages(true, true, true);
-    return RunAttachedOperation(
-        EUnifiedScriptProjectSetupOperation::DailyBuildAttached,
-        LOCTEXT("DailyBuildOperation", "daily Build & Reload"));
+    const bool bQueued = IUEUnifiedScriptEditorModule::Get().RequestDailyBuild(
+        EUnifiedScriptDailyBuildReason::Manual,
+        true);
+    if (bQueued)
+    {
+        AppendOutput(TEXT("Queued the shared daily Build & Reload action (manual)."));
+        SetStatus(
+            LOCTEXT("DailyBuildQueued", "Running the shared daily Build & Reload action…"),
+            FAppStyle::GetSlateColor(TEXT("Colors.AccentBlue")));
+    }
+    return FReply::Handled();
 }
 
 FReply SUnifiedScriptProjectSetup::LocateFirstPlayClass()
@@ -662,7 +641,8 @@ bool SUnifiedScriptProjectSetup::ResolveProjectPaths(
 
 bool SUnifiedScriptProjectSetup::CanRunAttachedOperation() const
 {
-    return !ActiveProcess.IsValid();
+    return !ActiveProcess.IsValid() &&
+        !IUEUnifiedScriptEditorModule::Get().IsDailyBuildRunning();
 }
 
 bool SUnifiedScriptProjectSetup::CanLocateFirstPlayClass() const
@@ -825,6 +805,21 @@ void SUnifiedScriptProjectSetup::AppendOutput(const FString& Text)
     OutputTextBox->ScrollTo(ETextLocation::EndOfDocument);
 }
 
+void SUnifiedScriptProjectSetup::HandleDailyBuildCompleted(
+    const FUnifiedScriptDailyBuildResult& Result)
+{
+    AppendOutput(FString::Printf(
+        TEXT("%s\nReport: %s"),
+        *Result.Summary,
+        *Result.ReportPath));
+    const FSlateColor Color = Result.RequiresRestart()
+        ? FAppStyle::GetSlateColor(TEXT("Colors.Warning"))
+        : Result.IsSuccess()
+            ? FAppStyle::GetSlateColor(TEXT("Colors.AccentGreen"))
+            : FAppStyle::GetSlateColor(TEXT("Colors.AccentRed"));
+    SetStatus(FText::FromString(Result.Summary), Color);
+}
+
 void SUnifiedScriptProjectSetup::FinishAttachedOperation(int32 ReturnCode)
 {
     const FString OperationLabel = MoveTemp(ActiveOperationLabel);
@@ -832,62 +827,6 @@ void SUnifiedScriptProjectSetup::FinishAttachedOperation(int32 ReturnCode)
     const TOptional<EUnifiedScriptProjectSetupOperation> CompletedOperation = ActiveOperation;
     ActiveOperation.Reset();
     CloseProcessResources();
-    if (CompletedOperation.IsSet() &&
-        CompletedOperation.GetValue() == EUnifiedScriptProjectSetupOperation::DailyBuildAttached)
-    {
-        FUnifiedScriptDailyBuildReceipt Receipt;
-        FString ReceiptError;
-        if (FUnifiedScriptProjectSetup::ReadDailyBuildReceipt(
-                ReportPath,
-                Receipt,
-                ReceiptError))
-        {
-            if (Receipt.RequiresRestart())
-            {
-                const FString RestartMessage = FString::Printf(
-                    TEXT("Restart required at %s: %s. Use Build, Restart & Continue; no live generation was changed."),
-                    *Receipt.RestartRequiredStage,
-                    *Receipt.RestartReason);
-                SetStatus(
-                    FText::FromString(RestartMessage),
-                    FAppStyle::GetSlateColor(TEXT("Colors.Warning")));
-                AppendOutput(RestartMessage);
-                return;
-            }
-            if (ReturnCode == 0 && Receipt.IsReadyToReload())
-            {
-                const FString ReloadTransaction =
-                    UE::UnifiedScript::ProjectSetup::Private::BuildDailyReloadTransaction(
-                        Receipt,
-                        ReportPath);
-                const FUnifiedScriptReloadBatchResult Reload =
-                    SUnifiedScriptAuthoringSurface::ReloadAllScriptClassComponents(
-                        ReloadTransaction);
-                const FString Completion = FString::Printf(
-                    TEXT("Daily Build completed: %d stages ran, %d skipped, %d deferred; %d components matched, %d reloaded, %d failed."),
-                    Receipt.ExecutedStages,
-                    Receipt.SkippedStages,
-                    Receipt.DeferredStages,
-                    Reload.Matched,
-                    Reload.Reloaded,
-                    Reload.Failed);
-                SetStatus(
-                    FText::FromString(Completion),
-                    Reload.Failed == 0
-                        ? FAppStyle::GetSlateColor(TEXT("Colors.AccentGreen"))
-                        : FAppStyle::GetSlateColor(TEXT("Colors.AccentRed")));
-                AppendOutput(FString::Printf(
-                    TEXT("%s\nReport: %s"),
-                    *Completion,
-                    *ReportPath));
-                return;
-            }
-        }
-        else
-        {
-            AppendOutput(ReceiptError);
-        }
-    }
     if (ReturnCode == 0)
     {
         if (CompletedOperation.IsSet() &&

@@ -1667,6 +1667,25 @@ def main() -> int:
         "M13.2D-3a runs one editor-attached build/reload or returns an exact restart action"
     )
     require(
+        "public IPIEAuthorizer" in editor_module
+        and "UnifiedScript.BuildAndReload" in editor_module
+        and "RequestPIEPermissionInternal" in editor_module
+        and "ScheduleDeferredPlay" in editor_module
+        and "EUnifiedScriptDailyBuildReason::GraphPublication"
+        in authoring_surface_widget
+        and "UnifiedScript.Integration.DailyBuildPlayGate"
+        in project_setup_tests
+        and "The Play gate publishes one shared daily-build receipt"
+        in project_setup_tests
+        and "$moduleSearchPaths" in onboarding_script
+        and "function global:Get-FileHash" in onboarding_script
+        and "[x] **M13.2D-3b" in roadmap_document,
+        "M13.2D-3b shared Graph/Play coordinator, retained Play replay, UE child process repair, or integration proof is incomplete",
+    )
+    checks.append(
+        "M13.2D-3b coalesces Graph and Play through one verified daily-build coordinator"
+    )
+    require(
         "UnifiedScriptScriptClassSmoke" in native_host_source_template
         and "LoadClass<AUnifiedScriptActor>" in native_host_source_template
         and "LoadClass<UUnifiedScriptComponent>" in native_host_source_template

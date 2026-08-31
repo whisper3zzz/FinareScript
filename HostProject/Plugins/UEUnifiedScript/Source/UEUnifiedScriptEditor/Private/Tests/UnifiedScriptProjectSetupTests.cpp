@@ -1,6 +1,8 @@
 #include "Misc/AutomationTest.h"
 
+#include "Editor.h"
 #include "HAL/FileManager.h"
+#include "HAL/PlatformTime.h"
 #include "Engine/Blueprint.h"
 #include "Engine/BlueprintGeneratedClass.h"
 #include "GameFramework/Actor.h"
@@ -9,12 +11,125 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
+#include "Tests/AutomationEditorCommon.h"
+#include "UEUnifiedScriptEditorModule.h"
 #include "UnifiedScriptProjectSetup.h"
 #include "UnifiedScriptReflectionExporter.h"
 #include "EdGraphSchema_K2.h"
 #include "UObject/Package.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
+
+namespace UE::UnifiedScript::Editor::Tests
+{
+class FDailyBuildPlayGateCommand final : public IAutomationLatentCommand
+{
+public:
+    explicit FDailyBuildPlayGateCommand(FAutomationTestBase* InTest)
+        : Test(InTest)
+    {
+        CompletionHandle = IUEUnifiedScriptEditorModule::Get()
+            .OnDailyBuildCompleted()
+            .AddRaw(this, &FDailyBuildPlayGateCommand::OnDailyBuildCompleted);
+        PostPIEStartedHandle = FEditorDelegates::PostPIEStarted.AddRaw(
+            this,
+            &FDailyBuildPlayGateCommand::OnPostPIEStarted);
+    }
+
+    virtual ~FDailyBuildPlayGateCommand() override
+    {
+        IUEUnifiedScriptEditorModule::Get()
+            .OnDailyBuildCompleted()
+            .Remove(CompletionHandle);
+        FEditorDelegates::PostPIEStarted.Remove(PostPIEStartedHandle);
+    }
+
+    virtual bool Update() override
+    {
+        if (!bRequested)
+        {
+            bRequested = true;
+            RequestStartedAt = FPlatformTime::Seconds();
+            if (GEditor == nullptr)
+            {
+                Test->AddError(TEXT("The Play gate smoke test requires GEditor."));
+                return true;
+            }
+
+            FRequestPlaySessionParams Request;
+            Request.bAllowOnlineSubsystem = false;
+            Request.StartLocation = FVector::ZeroVector;
+            Request.StartRotation = FRotator::ZeroRotator;
+            GEditor->RequestPlaySession(Request);
+            GEditor->StartQueuedPlaySessionRequest();
+            return false;
+        }
+
+        if (bPIEStarted)
+        {
+            Test->TestEqual(
+                TEXT("The Play gate publishes one shared daily-build receipt"),
+                CompletionCount,
+                1);
+            Test->TestTrue(
+                TEXT("The Play gate receipt is compatible"),
+                CompletionResult.IsSuccess());
+            Test->TestTrue(
+                TEXT("The shared build records Play as its trigger"),
+                (CompletionResult.Reasons &
+                    static_cast<uint8>(EUnifiedScriptDailyBuildReason::Play)) != 0);
+            Test->TestFalse(
+                TEXT("The daily build is drained before PIE begins"),
+                IUEUnifiedScriptEditorModule::Get().IsDailyBuildRunning());
+            return true;
+        }
+
+        if (CompletionCount > 0 && !CompletionResult.IsSuccess())
+        {
+            Test->AddError(FString::Printf(
+                TEXT("Build & Reload did not produce a Play-compatible receipt; status=%s, summary=%s"),
+                *CompletionResult.Status,
+                *CompletionResult.Summary));
+            return true;
+        }
+
+        constexpr double TimeoutSeconds = 30.0;
+        if (FPlatformTime::Seconds() - RequestStartedAt < TimeoutSeconds)
+        {
+            return false;
+        }
+
+        Test->AddError(FString::Printf(
+            TEXT("Timed out waiting for Build & Reload to resume PIE after %.0f seconds; completions=%d, status=%s, summary=%s"),
+            TimeoutSeconds,
+            CompletionCount,
+            *CompletionResult.Status,
+            *CompletionResult.Summary));
+        return true;
+    }
+
+private:
+    void OnDailyBuildCompleted(const FUnifiedScriptDailyBuildResult& Result)
+    {
+        ++CompletionCount;
+        CompletionResult = Result;
+    }
+
+    void OnPostPIEStarted(bool bIsSimulating)
+    {
+        bPIEStarted = true;
+    }
+
+    FAutomationTestBase* Test = nullptr;
+    FDelegateHandle CompletionHandle;
+    FDelegateHandle PostPIEStartedHandle;
+    FUnifiedScriptDailyBuildResult CompletionResult;
+    double RequestStartedAt = 0.0;
+    int32 CompletionCount = 0;
+    bool bRequested = false;
+    bool bPIEStarted = false;
+};
+}
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
     FUnifiedScriptProjectSetupCommandContractTest,
@@ -95,6 +210,39 @@ bool FUnifiedScriptProjectSetupCommandContractTest::RunTest(const FString& Param
         TEXT("First-Play request path"),
         Paths.FirstPlayRequest,
         FUnifiedScriptProjectSetup::GetFirstPlayRequestPath(TestRoot));
+
+    const FString SourceRepository = FPaths::Combine(TestRoot, TEXT("SourceRepository"));
+    const FString SourcePluginRoot = FPaths::Combine(
+        SourceRepository,
+        TEXT("HostProject/Plugins/UEUnifiedScript"));
+    const FString SourceProject = FPaths::Combine(
+        SourceRepository,
+        TEXT("HostProject/SourceHost.uproject"));
+    const FString SourceSetup = FPaths::Combine(
+        SourceRepository,
+        TEXT("tools/setup-unreal-project.ps1"));
+    IFileManager::Get().MakeDirectory(*FPaths::GetPath(SourceProject), true);
+    IFileManager::Get().MakeDirectory(*FPaths::GetPath(SourceSetup), true);
+    TestTrue(TEXT("Creates source repository marker"), FFileHelper::SaveStringToFile(
+        TEXT("<Solution />"),
+        *FPaths::Combine(SourceRepository, TEXT("UnifiedScript.slnx"))));
+    TestTrue(TEXT("Creates source repository project"), FFileHelper::SaveStringToFile(
+        TEXT("{}"),
+        *SourceProject));
+    TestTrue(TEXT("Creates source repository setup"), FFileHelper::SaveStringToFile(
+        TEXT("# fixture"),
+        *SourceSetup));
+    FUnifiedScriptProjectSetupPaths DailyPaths;
+    TestTrue(
+        TEXT("Daily build resolves the source-repository tool fallback"),
+        FUnifiedScriptProjectSetup::ResolveDailyBuildPaths(
+            SourceProject,
+            SourcePluginRoot,
+            EngineRoot,
+            DailyPaths,
+            Error));
+    TestEqual(TEXT("Daily build uses the repository setup script"),
+        DailyPaths.SetupScript, FPaths::ConvertRelativePathToFull(SourceSetup));
 
     FString FirstPlayPath;
     TestTrue(
@@ -282,7 +430,52 @@ bool FUnifiedScriptProjectSetupCommandContractTest::RunTest(const FString& Param
         DailyReceipt.RestartRequiredStage,
         FString(TEXT("native-final-build")));
 
+    FUnifiedScriptDailyBuildQueue DailyQueue;
+    DailyQueue.Enqueue(EUnifiedScriptDailyBuildReason::GraphPublication, true);
+    DailyQueue.Enqueue(EUnifiedScriptDailyBuildReason::GraphPublication, false);
+    bool bReloadComponents = false;
+    TestEqual(
+        TEXT("Graph requests coalesce into one active reason"),
+        DailyQueue.Begin(bReloadComponents),
+        static_cast<uint8>(EUnifiedScriptDailyBuildReason::GraphPublication));
+    TestTrue(TEXT("Coalesced Graph request retains reload intent"), bReloadComponents);
+    DailyQueue.Enqueue(EUnifiedScriptDailyBuildReason::Play, true);
+    DailyQueue.Enqueue(EUnifiedScriptDailyBuildReason::Play, false);
+    TestTrue(
+        TEXT("Requests arriving during a build schedule one follow-up"),
+        DailyQueue.Complete());
+    TestEqual(
+        TEXT("The follow-up retains only the pending Play reason"),
+        DailyQueue.Begin(bReloadComponents),
+        static_cast<uint8>(EUnifiedScriptDailyBuildReason::Play));
+    TestTrue(TEXT("The coalesced Play gate retains reload intent"), bReloadComponents);
+    TestFalse(TEXT("The second build drains the queue"), DailyQueue.Complete());
+    TestEqual(TEXT("Three duplicate/overlapping requests were coalesced"),
+        DailyQueue.CoalescedRequestCount, 3);
+
     IFileManager::Get().DeleteDirectory(*TestRoot, false, true);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FUnifiedScriptDailyBuildPlayGateTest,
+    "UnifiedScript.Integration.DailyBuildPlayGate",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUnifiedScriptDailyBuildPlayGateTest::RunTest(const FString& Parameters)
+{
+    if (!TestNotNull(
+            TEXT("Creates a transient Editor world for the Play gate"),
+            FAutomationEditorCommonUtils::CreateNewMap()))
+    {
+        return false;
+    }
+    TestFalse(
+        TEXT("The Play gate starts with no active daily build"),
+        IUEUnifiedScriptEditorModule::Get().IsDailyBuildRunning());
+    ADD_LATENT_AUTOMATION_COMMAND(
+        UE::UnifiedScript::Editor::Tests::FDailyBuildPlayGateCommand(this));
+    ADD_LATENT_AUTOMATION_COMMAND(FEndPlayMapCommand);
     return true;
 }
 

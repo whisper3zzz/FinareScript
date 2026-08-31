@@ -29,6 +29,7 @@
 #include "Rendering/DrawElements.h"
 #include "SourceCodeNavigation.h"
 #include "Styling/AppStyle.h"
+#include "UEUnifiedScriptEditorModule.h"
 #include "UnifiedScriptAsset.h"
 #include "UnifiedScriptAuthoringWorkbench.h"
 #include "UnifiedScriptComponent.h"
@@ -3993,15 +3994,10 @@ void SUnifiedScriptAuthoringSurface::HandlePatchResponse(
     int32 Reloaded = 0;
     int32 Failed = 0;
     FString ObservedReloadTransactionJson;
-    if (bPublishedRuntime && bReloadMatchingComponents)
-    {
-        ReloadMatchingComponents(
-            ReloadTransactionJson,
-            Matched,
-            Reloaded,
-            Failed,
-            ObservedReloadTransactionJson);
-    }
+    const bool bDailyBuildQueued = bPublishedRuntime &&
+        IUEUnifiedScriptEditorModule::Get().RequestDailyBuild(
+            EUnifiedScriptDailyBuildReason::GraphPublication,
+            bReloadMatchingComponents);
     const FString HistoryPersistenceDetail = HistoryPersistenceMessage.IsEmpty()
         ? FString()
         : FString::Printf(TEXT(" (%s)"), *HistoryPersistenceMessage);
@@ -4020,16 +4016,14 @@ void SUnifiedScriptAuthoringSurface::HandlePatchResponse(
     }
     FString CompletionStatus = bPublishedRuntime
         ? FString::Printf(
-            TEXT("Applied revision %lld / Workbench generation %lld; history %lld undo / %lld redo; journal %s%s; Surface refreshed; components %d matched, %d updated, %d failed."),
+            TEXT("Applied revision %lld / Workbench generation %lld; history %lld undo / %lld redo; journal %s%s; Surface refreshed; shared daily Build & Reload %s."),
             WorkspaceRevision,
             WorkspaceGeneration,
             UndoAuthoringDepth,
             RedoAuthoringDepth,
             *HistoryPersistenceState,
             *HistoryPersistenceDetail,
-            Matched,
-            Reloaded,
-            Failed)
+            bDailyBuildQueued ? TEXT("queued") : TEXT("failed to queue"))
         : FString::Printf(
             TEXT("Grouped draft discarded; committed revision %lld / Workbench generation %lld remains active; history %lld undo / %lld redo; journal %s%s; Surface restored; components %d matched, %d updated, %d failed."),
             WorkspaceRevision,
@@ -4068,7 +4062,8 @@ void SUnifiedScriptAuthoringSurface::HandlePatchResponse(
     }
     SetStatus(
         CompletionStatus,
-        Failed > 0 || HistoryPersistenceState == TEXT("rejected"));
+        (bPublishedRuntime && !bDailyBuildQueued) || Failed > 0 ||
+            HistoryPersistenceState == TEXT("rejected"));
 }
 
 void SUnifiedScriptAuthoringSurface::AdoptWorkspace(
