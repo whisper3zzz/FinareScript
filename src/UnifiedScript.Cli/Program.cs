@@ -1283,6 +1283,7 @@ internal static class Program
         UnrealApiContract contract = UnrealApiContractJson.Deserialize(
             File.ReadAllText(baseContractPath));
         var sources = new List<CSharpSourceDocument>();
+        var loadedRequests = new List<CSharpCompilationRequest>();
         foreach (string projectPath in projectPaths)
         {
             CSharpProjectLoadResult loaded;
@@ -1301,15 +1302,44 @@ internal static class Program
                 Console.Error.WriteLine(exception.Message);
                 return 65;
             }
+            loadedRequests.Add(loaded.Request);
             string prefix = Path.GetFileNameWithoutExtension(projectPath);
             sources.AddRange(loaded.Request.Sources.Select(source => new CSharpSourceDocument(
                 $"{prefix}/{source.LogicalPath}",
                 source.Source)));
         }
 
+        string[] configurationKeys = loadedRequests
+            .Select(static request => request.Settings.ConfigurationKey)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        bool[] defaultReferenceModes = loadedRequests
+            .Select(static request => request.IncludeDefaultReferences)
+            .Distinct()
+            .ToArray();
+        if (configurationKeys.Length != 1 || defaultReferenceModes.Length != 1)
+        {
+            Console.Error.WriteLine(
+                "Managed projects in one Unreal surface expansion must use compatible C# " +
+                "parse/compilation settings and default-reference policy.");
+            return 65;
+        }
+        string[] referencePaths = loadedRequests
+            .SelectMany(static request => request.ReferencePaths)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        var scanRequest = new CSharpCompilationRequest(
+            "UnifiedScript.ApiSurfaceScan",
+            sources,
+            referencePaths,
+            settings: loadedRequests[0].Settings,
+            runtimeReferencePaths: referencePaths,
+            includeDefaultReferences: defaultReferenceModes[0]);
+
         UnrealApiDependencyRequestSet requests = new UnrealApiSourceDependencyScanner().Scan(
             contract.ContractName,
-            sources,
+            scanRequest,
             reflection,
             contract);
         UnrealApiDevelopmentSurfaceResult result =

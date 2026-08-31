@@ -278,6 +278,9 @@ $generatedEvidence = [ordered]@{
         -Path (Join-Path $projectRoot `
             'Content\UnifiedScript\FirstScript\SA_FirstScript.uasset') `
         -Label 'Generated Script Asset'
+    firstScriptSource = Assert-File `
+        -Path (Join-Path $projectRoot "Managed\$assemblyName\FirstScript.cs") `
+        -Label 'Managed first-script source'
     editorPlugin = Assert-File `
         -Path (Join-Path $projectRoot `
             'Plugins\UEUnifiedScript\Binaries\Win64\UnrealEditor-UEUnifiedScriptRuntime.dll') `
@@ -315,6 +318,13 @@ $managedBindingText = Get-Content -LiteralPath $generatedEvidence.bindings.path 
 if ($managedBindingText -notmatch 'class Actor' -or
     $managedBindingText -notmatch 'GetActorLocation') {
     throw 'Generated managed binding does not contain the source-requested Actor API.'
+}
+$firstScriptText = Get-Content -LiteralPath $generatedEvidence.firstScriptSource.path -Raw
+$generatedNamespacePattern = [regex]::Escape("$assemblyName.Generated")
+if ($firstScriptText -notmatch "using\s+$generatedNamespacePattern\s*;" -or
+    $firstScriptText -match 'using\s+UnrealApi\s*=' -or
+    $firstScriptText -notmatch 'new\s+Actor\s*\(') {
+    throw 'First-script source did not exercise the ordinary generated-namespace import.'
 }
 
 $validateReportPath = Join-Path $projectRoot `

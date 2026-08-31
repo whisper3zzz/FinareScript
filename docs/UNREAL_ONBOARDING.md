@@ -100,10 +100,11 @@ Apply performs these phases in order:
    selected project's plugin;
 3. bootstrap native bindings from the last reflection artifact when present;
 4. build the editor target and export current reflection;
-5. analyze explicit generated-API use in the managed projects, resolve every
-   request into an all-or-nothing development Contract overlay, and generate the
-   C# wrappers, native thunks, visual API catalog, API browser, and coverage
-   report atomically from that effective Contract;
+5. analyze ordinary imported, aliased, or fully qualified generated-API use in
+   the managed projects, use Roslyn symbols to reject user-type collisions,
+   resolve deterministic overloads, and fold every request into an all-or-nothing
+   development Contract overlay before generating the C# wrappers, native
+   thunks, visual API catalog, API browser, and coverage report atomically;
 6. build project managed assemblies and rebuild the editor target against the
    final native thunks;
 7. build the configured project Game target and require its target receipt, so

@@ -159,7 +159,7 @@ public sealed class UnrealApiDevelopmentSurfaceTests
                 {
                     public void Run(UnrealApi.FixtureDerived target)
                     {
-                        _ = target.Scale(1);
+                        _ = target.Scale(default);
                         target.DoesNotExist();
                     }
                 }
@@ -232,6 +232,186 @@ public sealed class UnrealApiDevelopmentSurfaceTests
     }
 
     [Fact]
+    public void ScannerSupportsOrdinaryAndGlobalImportsWithoutCapturingUserOrReferencedTypes()
+    {
+        UnrealReflectionManifest reflection = AddReferencedCollisionType(LoadReflection());
+        UnrealApiContract contract = CreateContract();
+
+        UnrealApiDependencyRequestSet requests = new UnrealApiSourceDependencyScanner().Scan(
+            "ImportedSurfaceProject",
+            [
+                Source(
+                    "Gameplay/GlobalUsings.cs",
+                    "global using UnifiedScript.Tests.AutoSurface;"),
+                Source(
+                    "Gameplay/Imported.cs",
+                    """
+                    namespace Gameplay;
+
+                    public static class Imported
+                    {
+                        public static void Run(FixtureDerived target)
+                        {
+                            _ = target.Spawn();
+                            var created = new FixtureDerived(default!, default!);
+                            _ = created.EchoOuter(default);
+                        }
+                    }
+                    """),
+                Source(
+                    "Gameplay/Shadowed.cs",
+                    """
+                    namespace Gameplay.Shadowed;
+
+                    public sealed class FixtureDerived
+                    {
+                        public void UnsafeValue() { }
+                    }
+
+                    public static class UserCode
+                    {
+                        public static void Run(FixtureDerived target) => target.UnsafeValue();
+                    }
+                    """),
+                Source(
+                    "Gameplay/ReferencedType.cs",
+                    """
+                    using System;
+                    using UnifiedScript.Tests.AutoSurface;
+
+                    namespace Gameplay.Referenced;
+
+                    public static class ReferencedType
+                    {
+                        public static int Run(Version target) => target.Major;
+                    }
+                    """),
+            ],
+            reflection,
+            contract);
+
+        Assert.Equal(["EchoOuter", "Spawn"], requests.Requests
+            .Select(static request => request.MemberName)
+            .Order(StringComparer.Ordinal));
+        Assert.All(requests.Requests.SelectMany(static request => request.Locations),
+            static location => Assert.Equal("Gameplay/Imported.cs", location.SourcePath));
+    }
+
+    [Fact]
+    public void ScannerSelectsExactOverloadsFromInvocationArgumentTypes()
+    {
+        UnrealReflectionManifest reflection = LoadReflection();
+        UnrealApiContract contract = CreateContract();
+        UnrealApiDependencyRequestSet requests = new UnrealApiSourceDependencyScanner().Scan(
+            "OverloadSurfaceProject",
+            [Source(
+                "Gameplay/Overloads.cs",
+                """
+                using UnifiedScript.Tests.AutoSurface;
+
+                namespace Gameplay;
+
+                public static class Overloads
+                {
+                    public static void Run(FixtureDerived target)
+                    {
+                        _ = target.Scale(1);
+                        _ = target.Scale(1.0f);
+                    }
+                }
+                """)],
+            reflection,
+            contract);
+
+        Assert.Equal(["Scale(float)", "Scale(int32)"], requests.Requests
+            .Select(static request => request.MemberName)
+            .Order(StringComparer.Ordinal));
+        UnrealApiDevelopmentSurfaceResult result =
+            new UnrealApiDevelopmentSurfacePlanner().Plan(reflection, requests, contract);
+        Assert.True(result.Applied);
+        UnrealApiContractType fixture = Assert.Single(result.EffectiveContract.Types);
+        Assert.Contains("Scale(float)", fixture.Members, StringComparer.Ordinal);
+        Assert.Contains("Scale(int32)", fixture.Members, StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public void OrdinarySourceExpandsRepresentativeBlueprintSignatureMatrix()
+    {
+        UnrealReflectionManifest reflection = AddAutomaticSurfaceMembers(LoadReflection());
+        UnrealApiContract contract = CreateContract();
+        UnrealApiDependencyRequestSet requests = new UnrealApiSourceDependencyScanner().Scan(
+            "SignatureMatrixProject",
+            [Source(
+                "Gameplay/SignatureMatrix.cs",
+                """
+                using UnifiedScript.Tests.AutoSurface;
+
+                namespace Gameplay;
+
+                public static class SignatureMatrix
+                {
+                    public static void Run(FixtureDerived target)
+                    {
+                        _ = target.ClassValue;
+                        _ = target.MapValue;
+                        _ = target.Mode;
+                        _ = target.ObjectValue;
+                        _ = target.SoftClass;
+                        _ = target.SoftObject;
+                        _ = target.Tags;
+                        target.BatchMove(default!);
+                        _ = target.EchoOuter(default);
+                        int value = 1;
+                        _ = target.Mutate(ref value, out int doubled);
+                        _ = target.SubscribeOnChanged(changed => { });
+                        _ = target.Spawn();
+                        _ = FixtureDerived.WorldTime(default);
+                    }
+                }
+                """)],
+            reflection,
+            contract);
+
+        string[] expected =
+        [
+            "BatchMove",
+            "ClassValue",
+            "EchoOuter",
+            "MapValue",
+            "Mode",
+            "Mutate",
+            "ObjectValue",
+            "OnChanged",
+            "SoftClass",
+            "SoftObject",
+            "Spawn",
+            "Tags",
+            "WorldTime",
+        ];
+        Assert.Equal(expected, requests.Requests
+            .Select(static request => request.MemberName)
+            .Order(StringComparer.Ordinal));
+
+        UnrealApiDevelopmentSurfaceResult result =
+            new UnrealApiDevelopmentSurfacePlanner().Plan(reflection, requests, contract);
+        Assert.True(result.Applied);
+        Assert.Equal(0, result.Summary.OpenDecisionCount);
+        UnrealApiContractType fixture = Assert.Single(result.EffectiveContract.Types);
+        Assert.Equal(expected, fixture.Members);
+        UnrealApiContractProjection projection =
+            UnrealApiContractProjector.Project(reflection, result.EffectiveContract);
+        Assert.Contains(projection.Reflection.Types,
+            static type => type.Path == "/Script/BindingMatrix.OuterData");
+        Assert.Contains(projection.Reflection.Types,
+            static type => type.Path == "/Script/BindingMatrix.FixtureMode");
+        UnrealBindingGenerationResult bindings = new UnrealBindingGenerator().Generate(
+            projection.Reflection,
+            new UnrealBindingGeneratorOptions(projection.Contract.ManagedNamespace));
+        Assert.Contains("SubscribeOnChanged", bindings.Source, StringComparison.Ordinal);
+        Assert.Contains("IReadOnlySet<int>", bindings.Source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PolicyRejectedMemberReturnsSourceLinkedDiagnosticWithoutOverlay()
     {
         UnrealReflectionManifest reflection = LoadReflection();
@@ -301,11 +481,11 @@ public sealed class UnrealApiDevelopmentSurfaceTests
             File.WriteAllText(
                 sourcePath,
                 """
-                using UnrealApi = UnifiedScript.Tests.AutoSurface;
+                using UnifiedScript.Tests.AutoSurface;
 
                 public static class Gameplay
                 {
-                    public static void Run(UnrealApi.FixtureDerived target) =>
+                    public static void Run(FixtureDerived target) =>
                         target.Spawn(1, false);
                 }
                 """);
@@ -381,6 +561,71 @@ public sealed class UnrealApiDevelopmentSurfaceTests
         }).ToArray();
         return UnrealReflectionJson.Deserialize(UnrealReflectionJson.Serialize(
             UnrealReflectionManifest.Create(manifest.Engine, manifest.Modules, types)));
+    }
+
+    private static UnrealReflectionManifest AddAutomaticSurfaceMembers(
+        UnrealReflectionManifest manifest)
+    {
+        UnrealReflectedType[] types = manifest.Types.Select(type =>
+        {
+            if (type.Path != "/Script/BindingMatrix.FixtureDerived")
+            {
+                return type;
+            }
+            var setProperty = new UnrealReflectedProperty(
+                type.Path + ":Tags",
+                "Tags",
+                new UnrealTypeReference(
+                    UnrealValueKind.Set,
+                    "TSet<int32>",
+                    ElementType: new UnrealTypeReference(UnrealValueKind.Int32, "int32")),
+                new UnrealPropertyAccess(true, true, true));
+            var reflectedDelegate = new UnrealReflectedDelegate(
+                type.Path + ":OnChanged",
+                "OnChanged",
+                "/Script/BindingMatrix.FixtureChanged__DelegateSignature",
+                new UnrealTypeReference(UnrealValueKind.Void, "void"),
+                [new UnrealReflectedParameter(
+                    "Value",
+                    new UnrealTypeReference(UnrealValueKind.Int32, "int32"),
+                    UnrealParameterDirection.Input)],
+                new UnrealDelegateTraits(
+                    UnrealDelegateKind.Multicast,
+                    BlueprintAssignable: true,
+                    BlueprintCallable: false,
+                    BlueprintAuthorityOnly: false));
+            return type with
+            {
+                Properties = [.. type.Properties, setProperty],
+                Delegates = [.. type.Delegates, reflectedDelegate],
+            };
+        }).ToArray();
+        return UnrealReflectionJson.Deserialize(UnrealReflectionJson.Serialize(
+            UnrealReflectionManifest.Create(manifest.Engine, manifest.Modules, types)));
+    }
+
+    private static UnrealReflectionManifest AddReferencedCollisionType(
+        UnrealReflectionManifest manifest)
+    {
+        var version = new UnrealReflectedType(
+            "/Script/BindingMatrix.Version",
+            "Version",
+            "UVersion",
+            "BindingMatrix",
+            UnrealReflectedTypeKind.Class,
+            "/Script/CoreUObject.Object",
+            new UnrealTypeTraits(Abstract: false, BlueprintType: true),
+            [new UnrealReflectedProperty(
+                "/Script/BindingMatrix.Version:Major",
+                "Major",
+                new UnrealTypeReference(UnrealValueKind.Int32, "int32"),
+                new UnrealPropertyAccess(true, false, true))],
+            []);
+        return UnrealReflectionJson.Deserialize(UnrealReflectionJson.Serialize(
+            UnrealReflectionManifest.Create(
+                manifest.Engine,
+                manifest.Modules,
+                [.. manifest.Types, version])));
     }
 
     private static UnrealApiContract CreateContract() => new(

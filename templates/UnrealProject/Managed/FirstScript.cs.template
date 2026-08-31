@@ -1,7 +1,7 @@
 using System;
 using UnifiedScript;
 using UnifiedScript.Unreal;
-using UnrealApi = __MANAGED_NAMESPACE__.Generated;
+using __MANAGED_NAMESPACE__.Generated;
 
 namespace __MANAGED_NAMESPACE__;
 
@@ -25,7 +25,7 @@ public sealed class __SCRIPT_NAME__ : IUnrealManagedScript
 
     public void OnStart(UnrealScriptContext context)
     {
-        _ = new UnrealApi.Actor(context.Target, context.Bridge).GetActorLocation();
+        _ = new Actor(context.Target, context.Bridge).GetActorLocation();
         StartValue = AddClamped(StartValue, 1);
     }
 

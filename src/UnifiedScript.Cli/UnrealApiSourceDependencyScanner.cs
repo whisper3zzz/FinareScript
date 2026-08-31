@@ -10,10 +10,11 @@ using UnifiedScript.Unreal;
 namespace UnifiedScript.Cli;
 
 /// <summary>
-/// Finds generated-Unreal wrapper use before the referenced wrapper exists. The scanner accepts
-/// only an explicit alias or fully-qualified generated namespace and resolves a receiver through
-/// its syntactic declaration. It therefore never guesses that an unrelated user type is Unreal.
-/// Roslyn semantic compilation happens after the resulting safe overlay has generated wrappers.
+/// Finds generated-Unreal wrapper use before the referenced wrapper exists. Explicit aliases and
+/// fully-qualified names remain supported, while ordinary imports can use bare wrapper names.
+/// Roslyn symbols reject user-defined or referenced type collisions; syntax supplies the missing
+/// generated identity during the bootstrap pass. Invocation argument types also select an exact
+/// reflected overload when that choice is deterministic.
 /// </summary>
 public sealed class UnrealApiSourceDependencyScanner
 {
@@ -35,27 +36,65 @@ public sealed class UnrealApiSourceDependencyScanner
         string projectName,
         IReadOnlyList<CSharpSourceDocument> sources,
         UnrealReflectionManifest reflection,
+        UnrealApiContract baseContract) =>
+        Scan(
+            projectName,
+            new CSharpCompilationRequest("UnifiedScript.ApiSurfaceScan", sources),
+            reflection,
+            baseContract);
+
+    public UnrealApiDependencyRequestSet Scan(
+        string projectName,
+        CSharpCompilationRequest compilationRequest,
+        UnrealReflectionManifest reflection,
         UnrealApiContract baseContract)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectName);
-        ArgumentNullException.ThrowIfNull(sources);
+        ArgumentNullException.ThrowIfNull(compilationRequest);
         UnrealReflectionManifest normalizedReflection =
             UnrealReflectionJson.NormalizeAndValidate(reflection);
         UnrealApiContract normalizedContract = UnrealApiContractJson.Deserialize(
             UnrealApiContractJson.Serialize(baseContract, writeIndented: false));
-        CSharpSourceDocument[] userSources = sources
+        CSharpSourceDocument[] userSources = compilationRequest.Sources
             .Where(static source => !IsGenerated(source.Source))
             .OrderBy(static source => source.LogicalPath, StringComparer.Ordinal)
             .ToArray();
         EnsureUniquePaths(userSources);
+
+        SyntaxTree[] syntaxTrees = compilationRequest.Sources.Select(source =>
+            CSharpSyntaxTree.ParseText(
+                SourceText.From(source.Source, Encoding.UTF8),
+                compilationRequest.Settings.ParseOptions,
+                source.LogicalPath)).ToArray();
+        CSharpCompilation compilation = new CSharpCompilationHost().Create(
+            compilationRequest,
+            syntaxTrees);
+        IReadOnlyDictionary<string, SyntaxTree> treesByPath = syntaxTrees.ToDictionary(
+            static tree => tree.FilePath,
+            StringComparer.Ordinal);
+        UsingImport[] globalImports = syntaxTrees
+            .SelectMany(static tree => tree.GetCompilationUnitRoot().Usings)
+            .Where(static directive =>
+                directive.GlobalKeyword.IsKind(SyntaxKind.GlobalKeyword) &&
+                !directive.StaticKeyword.IsKind(SyntaxKind.StaticKeyword))
+            .Select(CreateImport)
+            .Where(static import => import is not null)
+            .Cast<UsingImport>()
+            .OrderBy(static import => import.Alias, StringComparer.Ordinal)
+            .ThenBy(static import => import.Target, StringComparer.Ordinal)
+            .ToArray();
 
         IReadOnlyDictionary<string, ReflectedTypeTarget[]> typeTargets =
             CreateTypeTargets(normalizedReflection);
         var occurrences = new List<RequestOccurrence>();
         foreach (CSharpSourceDocument source in userSources)
         {
+            SyntaxTree tree = treesByPath[source.LogicalPath];
             ScanSource(
                 source,
+                tree,
+                compilation.GetSemanticModel(tree, ignoreAccessibility: true),
+                globalImports,
                 normalizedContract.ManagedNamespace,
                 typeTargets,
                 occurrences);
@@ -82,7 +121,7 @@ public sealed class UnrealApiSourceDependencyScanner
                     identity.MemberName,
                     "contract-member",
                     "generated-binding",
-                    $"{first.ManagedTypeName}.{identity.MemberName}",
+                    $"{first.ManagedTypeName}.{first.SourceMemberName}",
                     group.Select(static occurrence => occurrence.Location)
                         .Distinct()
                         .OrderBy(static location => location.SourcePath, StringComparer.Ordinal)
@@ -104,45 +143,53 @@ public sealed class UnrealApiSourceDependencyScanner
 
     private static void ScanSource(
         CSharpSourceDocument source,
+        SyntaxTree tree,
+        SemanticModel semanticModel,
+        IReadOnlyList<UsingImport> globalImports,
         string managedNamespace,
         IReadOnlyDictionary<string, ReflectedTypeTarget[]> typeTargets,
         ICollection<RequestOccurrence> occurrences)
     {
-        SyntaxTree tree = CSharpSyntaxTree.ParseText(source.Source, path: source.LogicalPath);
         CompilationUnitSyntax root = tree.GetCompilationUnitRoot();
-        string[] aliases = root.DescendantNodes(descendIntoTrivia: false)
-            .OfType<UsingDirectiveSyntax>()
-            .Where(usingDirective => usingDirective.Alias is not null &&
-                NormalizeName(usingDirective.Name?.ToString()) == managedNamespace)
-            .Select(static usingDirective => usingDirective.Alias!.Name.Identifier.ValueText)
-            .Distinct(StringComparer.Ordinal)
-            .Order(StringComparer.Ordinal)
-            .ToArray();
-        if (aliases.Length == 0 &&
-            !source.Source.Contains(managedNamespace + ".", StringComparison.Ordinal))
-        {
-            return;
-        }
 
         var bindings = new List<TypedBinding>();
         foreach (VariableDeclarationSyntax declaration in root.DescendantNodes()
                      .OfType<VariableDeclarationSyntax>())
         {
-            if (!TryResolveType(
+            ReflectedTypeTarget[]? declaredTargets = null;
+            bool isVar = declaration.Type is IdentifierNameSyntax identifier &&
+                identifier.Identifier.ValueText == "var";
+            if (!isVar)
+            {
+                _ = TryResolveType(
                     declaration.Type,
-                    aliases,
+                    semanticModel,
+                    globalImports,
                     managedNamespace,
                     typeTargets,
-                    out ReflectedTypeTarget[]? targets))
-            {
-                continue;
+                    out declaredTargets);
             }
             TextSpan scope = DeclarationScope(declaration);
             foreach (VariableDeclaratorSyntax variable in declaration.Variables)
             {
+                ReflectedTypeTarget[]? targets = declaredTargets;
+                if (targets is null && isVar && variable.Initializer is not null)
+                {
+                    _ = TryResolveValueExpression(
+                        variable.Initializer.Value,
+                        semanticModel,
+                        globalImports,
+                        managedNamespace,
+                        typeTargets,
+                        out targets);
+                }
+                if (targets is null)
+                {
+                    continue;
+                }
                 bindings.Add(new TypedBinding(
                     variable.Identifier.ValueText,
-                    targets!,
+                    targets,
                     scope.Start,
                     scope.End,
                     variable.SpanStart));
@@ -152,7 +199,8 @@ public sealed class UnrealApiSourceDependencyScanner
         {
             if (parameter.Type is null || !TryResolveType(
                     parameter.Type,
-                    aliases,
+                    semanticModel,
+                    globalImports,
                     managedNamespace,
                     typeTargets,
                     out ReflectedTypeTarget[]? targets))
@@ -172,7 +220,8 @@ public sealed class UnrealApiSourceDependencyScanner
         {
             if (!TryResolveType(
                     property.Type,
-                    aliases,
+                    semanticModel,
+                    globalImports,
                     managedNamespace,
                     typeTargets,
                     out ReflectedTypeTarget[]? targets))
@@ -195,18 +244,24 @@ public sealed class UnrealApiSourceDependencyScanner
                     access.Expression,
                     access.SpanStart,
                     bindings,
-                    aliases,
+                    semanticModel,
+                    globalImports,
                     managedNamespace,
                     typeTargets,
                     out ReflectedTypeTarget[]? targets))
             {
                 continue;
             }
-            string memberName = access.Name.Identifier.ValueText;
-            if (string.IsNullOrWhiteSpace(memberName))
+            string sourceMemberName = access.Name.Identifier.ValueText;
+            if (string.IsNullOrWhiteSpace(sourceMemberName))
             {
                 continue;
             }
+            string memberName = ResolveMemberSelector(
+                access,
+                sourceMemberName,
+                targets!,
+                semanticModel);
             FileLinePositionSpan lineSpan = tree.GetLineSpan(access.Name.Span);
             var location = new UnrealApiSourceSpan(
                 source.LogicalPath,
@@ -220,6 +275,7 @@ public sealed class UnrealApiSourceDependencyScanner
                 targets.Length == 1 ? first.TypePath : null,
                 first.ManagedTypeName,
                 memberName,
+                sourceMemberName,
                 location));
         }
     }
@@ -228,52 +284,77 @@ public sealed class UnrealApiSourceDependencyScanner
         ExpressionSyntax expression,
         int position,
         IReadOnlyList<TypedBinding> bindings,
-        IReadOnlyList<string> aliases,
+        SemanticModel semanticModel,
+        IReadOnlyList<UsingImport> globalImports,
         string managedNamespace,
         IReadOnlyDictionary<string, ReflectedTypeTarget[]> typeTargets,
         out ReflectedTypeTarget[]? targets)
     {
         expression = Unwrap(expression);
+        if (TryResolveSemanticType(
+                expression,
+                semanticModel,
+                managedNamespace,
+                typeTargets,
+                out targets))
+        {
+            return true;
+        }
         switch (expression)
         {
             case IdentifierNameSyntax identifier:
-                targets = bindings
-                    .Where(binding => binding.Name == identifier.Identifier.ValueText &&
-                        position >= binding.ScopeStart && position <= binding.ScopeEnd &&
-                        (binding.DeclarationPosition <= position || binding.ScopeStart == 0))
-                    .OrderByDescending(static binding => binding.ScopeStart)
-                    .ThenByDescending(static binding => binding.DeclarationPosition)
-                    .Select(static binding => binding.Targets)
-                    .FirstOrDefault();
-                return targets is not null;
-            case MemberAccessExpressionSyntax memberAccess
-                when memberAccess.Expression is ThisExpressionSyntax or BaseExpressionSyntax:
-                return TryResolveReceiver(
-                    SyntaxFactory.IdentifierName(memberAccess.Name.Identifier),
-                    position,
-                    bindings,
-                    aliases,
+                targets = FindBinding(identifier.Identifier.ValueText, position, bindings);
+                return targets is not null || TryResolveTypeName(
+                    identifier.Identifier.Text,
+                    identifier,
+                    semanticModel,
+                    globalImports,
                     managedNamespace,
                     typeTargets,
                     out targets);
+            case MemberAccessExpressionSyntax memberAccess
+                when memberAccess.Expression is ThisExpressionSyntax or BaseExpressionSyntax:
+                targets = FindBinding(memberAccess.Name.Identifier.ValueText, position, bindings);
+                return targets is not null;
             case ObjectCreationExpressionSyntax creation:
                 return TryResolveType(
                     creation.Type,
-                    aliases,
+                    semanticModel,
+                    globalImports,
                     managedNamespace,
                     typeTargets,
                     out targets);
             case CastExpressionSyntax cast:
                 return TryResolveType(
                     cast.Type,
-                    aliases,
+                    semanticModel,
+                    globalImports,
+                    managedNamespace,
+                    typeTargets,
+                    out targets);
+            case DefaultExpressionSyntax defaultExpression:
+                return TryResolveType(
+                    defaultExpression.Type,
+                    semanticModel,
+                    globalImports,
+                    managedNamespace,
+                    typeTargets,
+                    out targets);
+            case BinaryExpressionSyntax binary when binary.IsKind(SyntaxKind.AsExpression) &&
+                binary.Right is TypeSyntax asType:
+                return TryResolveType(
+                    asType,
+                    semanticModel,
+                    globalImports,
                     managedNamespace,
                     typeTargets,
                     out targets);
             case MemberAccessExpressionSyntax typeExpression:
                 return TryResolveTypeName(
                     typeExpression.ToString(),
-                    aliases,
+                    typeExpression,
+                    semanticModel,
+                    globalImports,
                     managedNamespace,
                     typeTargets,
                     out targets);
@@ -289,12 +370,71 @@ public sealed class UnrealApiSourceDependencyScanner
         {
             expression = parenthesized.Expression;
         }
+        if (expression is PostfixUnaryExpressionSyntax postfix &&
+            postfix.IsKind(SyntaxKind.SuppressNullableWarningExpression))
+        {
+            return Unwrap(postfix.Operand);
+        }
         return expression;
+    }
+
+    private static bool TryResolveValueExpression(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        IReadOnlyList<UsingImport> globalImports,
+        string managedNamespace,
+        IReadOnlyDictionary<string, ReflectedTypeTarget[]> typeTargets,
+        out ReflectedTypeTarget[]? targets)
+    {
+        expression = Unwrap(expression);
+        if (TryResolveSemanticType(
+                expression,
+                semanticModel,
+                managedNamespace,
+                typeTargets,
+                out targets))
+        {
+            return true;
+        }
+        return expression switch
+        {
+            ObjectCreationExpressionSyntax creation => TryResolveType(
+                creation.Type,
+                semanticModel,
+                globalImports,
+                managedNamespace,
+                typeTargets,
+                out targets),
+            CastExpressionSyntax cast => TryResolveType(
+                cast.Type,
+                semanticModel,
+                globalImports,
+                managedNamespace,
+                typeTargets,
+                out targets),
+            DefaultExpressionSyntax defaultExpression => TryResolveType(
+                defaultExpression.Type,
+                semanticModel,
+                globalImports,
+                managedNamespace,
+                typeTargets,
+                out targets),
+            BinaryExpressionSyntax binary when binary.IsKind(SyntaxKind.AsExpression) &&
+                binary.Right is TypeSyntax asType => TryResolveType(
+                    asType,
+                    semanticModel,
+                    globalImports,
+                    managedNamespace,
+                    typeTargets,
+                    out targets),
+            _ => NoTargets(out targets),
+        };
     }
 
     private static bool TryResolveType(
         TypeSyntax type,
-        IReadOnlyList<string> aliases,
+        SemanticModel semanticModel,
+        IReadOnlyList<UsingImport> globalImports,
         string managedNamespace,
         IReadOnlyDictionary<string, ReflectedTypeTarget[]> typeTargets,
         out ReflectedTypeTarget[]? targets)
@@ -305,7 +445,9 @@ public sealed class UnrealApiSourceDependencyScanner
         }
         return TryResolveTypeName(
             type.ToString(),
-            aliases,
+            type,
+            semanticModel,
+            globalImports,
             managedNamespace,
             typeTargets,
             out targets);
@@ -313,13 +455,16 @@ public sealed class UnrealApiSourceDependencyScanner
 
     private static bool TryResolveTypeName(
         string typeText,
-        IReadOnlyList<string> aliases,
+        SyntaxNode context,
+        SemanticModel semanticModel,
+        IReadOnlyList<UsingImport> globalImports,
         string managedNamespace,
         IReadOnlyDictionary<string, ReflectedTypeTarget[]> typeTargets,
         out ReflectedTypeTarget[]? targets)
     {
         string normalized = NormalizeName(typeText);
         string? managedTypeName = null;
+        bool bareName = false;
         string namespacePrefix = managedNamespace + ".";
         if (normalized.StartsWith(namespacePrefix, StringComparison.Ordinal))
         {
@@ -327,7 +472,8 @@ public sealed class UnrealApiSourceDependencyScanner
         }
         else
         {
-            foreach (string alias in aliases)
+            ImportScope scope = GetImportScope(context, globalImports, managedNamespace);
+            foreach (string alias in scope.Aliases)
             {
                 string aliasPrefix = alias + ".";
                 if (normalized.StartsWith(aliasPrefix, StringComparison.Ordinal))
@@ -336,6 +482,12 @@ public sealed class UnrealApiSourceDependencyScanner
                     break;
                 }
             }
+            if (managedTypeName is null && !normalized.Contains('.') &&
+                scope.NamespaceImported)
+            {
+                managedTypeName = normalized;
+                bareName = true;
+            }
         }
         if (managedTypeName is null || managedTypeName.Contains('.') ||
             !typeTargets.TryGetValue(managedTypeName, out targets))
@@ -343,7 +495,354 @@ public sealed class UnrealApiSourceDependencyScanner
             targets = null;
             return false;
         }
+        if (bareName && !CanUseBareGeneratedName(
+                context,
+                managedTypeName,
+                semanticModel,
+                managedNamespace))
+        {
+            targets = null;
+            return false;
+        }
         return true;
+    }
+
+    private static ReflectedTypeTarget[]? FindBinding(
+        string name,
+        int position,
+        IReadOnlyList<TypedBinding> bindings) => bindings
+        .Where(binding => binding.Name == name &&
+            position >= binding.ScopeStart && position <= binding.ScopeEnd &&
+            (binding.DeclarationPosition <= position || binding.ScopeStart == 0))
+        .OrderByDescending(static binding => binding.ScopeStart)
+        .ThenByDescending(static binding => binding.DeclarationPosition)
+        .Select(static binding => binding.Targets)
+        .FirstOrDefault();
+
+    private static bool TryResolveSemanticType(
+        SyntaxNode node,
+        SemanticModel semanticModel,
+        string managedNamespace,
+        IReadOnlyDictionary<string, ReflectedTypeTarget[]> typeTargets,
+        out ReflectedTypeTarget[]? targets)
+    {
+        ITypeSymbol? symbol = node switch
+        {
+            ExpressionSyntax expression => semanticModel.GetTypeInfo(expression).Type,
+            _ => null,
+        };
+        if (symbol is INamedTypeSymbol named && symbol.TypeKind != TypeKind.Error &&
+            IsGeneratedType(named, managedNamespace) &&
+            typeTargets.TryGetValue(ToIdentifier(named.Name), out targets))
+        {
+            return true;
+        }
+        targets = null;
+        return false;
+    }
+
+    private static bool CanUseBareGeneratedName(
+        SyntaxNode node,
+        string managedTypeName,
+        SemanticModel semanticModel,
+        string managedNamespace)
+    {
+        ITypeSymbol? type = node switch
+        {
+            ExpressionSyntax expression => semanticModel.GetTypeInfo(expression).Type,
+            _ => null,
+        };
+        if (type is not null && type.TypeKind != TypeKind.Error)
+        {
+            return type is INamedTypeSymbol named && IsGeneratedType(named, managedNamespace);
+        }
+
+        SymbolInfo symbolInfo = semanticModel.GetSymbolInfo(node);
+        ISymbol[] resolved = (symbolInfo.Symbol is null
+                ? symbolInfo.CandidateSymbols
+                : [symbolInfo.Symbol])
+            .Where(static symbol => symbol is not ITypeSymbol { TypeKind: TypeKind.Error })
+            .ToArray();
+        if (resolved.Any(symbol => symbol is not INamedTypeSymbol named ||
+                !IsGeneratedType(named, managedNamespace)))
+        {
+            return false;
+        }
+
+        string lookupName = managedTypeName.StartsWith('@')
+            ? managedTypeName[1..]
+            : managedTypeName;
+        return semanticModel.LookupSymbols(node.SpanStart, name: lookupName).All(symbol =>
+            symbol is INamedTypeSymbol named && IsGeneratedType(named, managedNamespace));
+    }
+
+    private static bool IsGeneratedType(INamedTypeSymbol type, string managedNamespace) =>
+        type.ContainingNamespace?.ToDisplayString() == managedNamespace;
+
+    private static ImportScope GetImportScope(
+        SyntaxNode context,
+        IReadOnlyList<UsingImport> globalImports,
+        string managedNamespace)
+    {
+        var aliases = new Dictionary<string, string>(StringComparer.Ordinal);
+        bool namespaceImported = false;
+        foreach (SyntaxNode container in context.AncestorsAndSelf().Where(static node =>
+                     node is BaseNamespaceDeclarationSyntax or CompilationUnitSyntax))
+        {
+            SyntaxList<UsingDirectiveSyntax> usings = container switch
+            {
+                BaseNamespaceDeclarationSyntax declaration => declaration.Usings,
+                CompilationUnitSyntax unit => unit.Usings,
+                _ => default,
+            };
+            foreach (UsingDirectiveSyntax directive in usings.Where(static directive =>
+                         !directive.GlobalKeyword.IsKind(SyntaxKind.GlobalKeyword) &&
+                         !directive.StaticKeyword.IsKind(SyntaxKind.StaticKeyword)))
+            {
+                AddImport(CreateImport(directive), aliases, managedNamespace, ref namespaceImported);
+            }
+        }
+        foreach (UsingImport import in globalImports)
+        {
+            AddImport(import, aliases, managedNamespace, ref namespaceImported);
+        }
+        return new ImportScope(
+            aliases.Where(pair => pair.Value == managedNamespace)
+                .Select(static pair => pair.Key)
+                .Order(StringComparer.Ordinal)
+                .ToArray(),
+            namespaceImported);
+    }
+
+    private static UsingImport? CreateImport(UsingDirectiveSyntax directive)
+    {
+        string target = NormalizeName(directive.Name?.ToString());
+        if (target.Length == 0)
+        {
+            return null;
+        }
+        return new UsingImport(
+            directive.Alias?.Name.Identifier.ValueText,
+            target);
+    }
+
+    private static void AddImport(
+        UsingImport? import,
+        IDictionary<string, string> aliases,
+        string managedNamespace,
+        ref bool namespaceImported)
+    {
+        if (import is null)
+        {
+            return;
+        }
+        if (import.Alias is null)
+        {
+            namespaceImported |= import.Target == managedNamespace;
+            return;
+        }
+        aliases.TryAdd(import.Alias, import.Target);
+    }
+
+    private static bool NoTargets(out ReflectedTypeTarget[]? targets)
+    {
+        targets = null;
+        return false;
+    }
+
+    private static string ResolveMemberSelector(
+        MemberAccessExpressionSyntax access,
+        string memberName,
+        IReadOnlyList<ReflectedTypeTarget> targets,
+        SemanticModel semanticModel)
+    {
+        if (targets.Count != 1)
+        {
+            return memberName;
+        }
+
+        UnrealReflectedDelegate? reflectedDelegate = targets[0].ReflectedType.Delegates
+            .SingleOrDefault(item =>
+                "Subscribe" + item.Name == memberName || item.Name + "Event" == memberName);
+        if (reflectedDelegate is not null)
+        {
+            return reflectedDelegate.Name;
+        }
+        if (access.Parent is not InvocationExpressionSyntax invocation ||
+            invocation.Expression != access)
+        {
+            return memberName;
+        }
+
+        UnrealReflectedFunction[] overloads = targets[0].ReflectedType.Functions
+            .Where(function => function.Name == memberName ||
+                UnrealManagedNaming.FunctionName(function) == memberName)
+            .ToArray();
+        if (overloads.Length <= 1)
+        {
+            return memberName;
+        }
+
+        UnrealReflectedFunction[] compatible = overloads.Where(function =>
+            InvocationMatches(function, invocation.ArgumentList.Arguments, semanticModel)).ToArray();
+        return compatible.Length == 1
+            ? FunctionSelector(compatible[0])
+            : memberName;
+    }
+
+    private static bool InvocationMatches(
+        UnrealReflectedFunction function,
+        SeparatedSyntaxList<ArgumentSyntax> arguments,
+        SemanticModel semanticModel)
+    {
+        IReadOnlyList<UnrealReflectedParameter> parameters = function.Parameters;
+        if (arguments.Count > parameters.Count)
+        {
+            return false;
+        }
+
+        var assigned = new bool[parameters.Count];
+        int nextPositional = 0;
+        foreach (ArgumentSyntax argument in arguments)
+        {
+            int parameterIndex;
+            if (argument.NameColon is not null)
+            {
+                string argumentName = argument.NameColon.Name.Identifier.ValueText;
+                parameterIndex = Enumerable.Range(0, parameters.Count).FirstOrDefault(
+                    index => ParameterNameMatches(parameters[index].Name, argumentName),
+                    -1);
+            }
+            else
+            {
+                while (nextPositional < parameters.Count && assigned[nextPositional])
+                {
+                    nextPositional++;
+                }
+                parameterIndex = nextPositional++;
+            }
+            if (parameterIndex < 0 || parameterIndex >= parameters.Count ||
+                assigned[parameterIndex])
+            {
+                return false;
+            }
+
+            UnrealReflectedParameter parameter = parameters[parameterIndex];
+            if (!DirectionMatches(argument.RefKindKeyword, parameter.Direction) ||
+                !ArgumentTypeMatches(argument.Expression, parameter.Type, semanticModel))
+            {
+                return false;
+            }
+            assigned[parameterIndex] = true;
+        }
+
+        for (int index = 0; index < parameters.Count; index++)
+        {
+            if (!assigned[index] &&
+                (parameters[index].Direction != UnrealParameterDirection.Input ||
+                 parameters[index].DefaultValue is null))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static bool ParameterNameMatches(string reflectedName, string argumentName) =>
+        reflectedName == argumentName ||
+        char.ToLowerInvariant(reflectedName[0]) + reflectedName[1..] == argumentName;
+
+    private static bool DirectionMatches(
+        SyntaxToken refKind,
+        UnrealParameterDirection direction) => direction switch
+        {
+            UnrealParameterDirection.Input => refKind.RawKind == 0,
+            UnrealParameterDirection.Output => refKind.IsKind(SyntaxKind.OutKeyword),
+            UnrealParameterDirection.InputOutput => refKind.IsKind(SyntaxKind.RefKeyword),
+            _ => false,
+        };
+
+    private static bool ArgumentTypeMatches(
+        ExpressionSyntax expression,
+        UnrealTypeReference expected,
+        SemanticModel semanticModel)
+    {
+        if (expression.IsKind(SyntaxKind.NullLiteralExpression))
+        {
+            return expected.Kind is UnrealValueKind.String or UnrealValueKind.Object or
+                UnrealValueKind.Class or UnrealValueKind.SoftObject or UnrealValueKind.SoftClass or
+                UnrealValueKind.Array or UnrealValueKind.Set or UnrealValueKind.Map;
+        }
+        if (expression.IsKind(SyntaxKind.DefaultLiteralExpression) ||
+            expression is DeclarationExpressionSyntax)
+        {
+            return true;
+        }
+
+        TypeInfo typeInfo = semanticModel.GetTypeInfo(expression);
+        ITypeSymbol? actual = typeInfo.Type ?? typeInfo.ConvertedType;
+        if (actual is null || actual.TypeKind == TypeKind.Error)
+        {
+            return true;
+        }
+        if (actual.SpecialType != SpecialType.None)
+        {
+            return (actual.SpecialType, expected.Kind) switch
+            {
+                (SpecialType.System_Boolean, UnrealValueKind.Boolean) => true,
+                (SpecialType.System_SByte, UnrealValueKind.Int8) => true,
+                (SpecialType.System_Byte, UnrealValueKind.UInt8) => true,
+                (SpecialType.System_Int16, UnrealValueKind.Int16) => true,
+                (SpecialType.System_UInt16, UnrealValueKind.UInt16) => true,
+                (SpecialType.System_Int32, UnrealValueKind.Int32) => true,
+                (SpecialType.System_UInt32, UnrealValueKind.UInt32) => true,
+                (SpecialType.System_Int64, UnrealValueKind.Int64) => true,
+                (SpecialType.System_UInt64, UnrealValueKind.UInt64) => true,
+                (SpecialType.System_Single, UnrealValueKind.Float32) => true,
+                (SpecialType.System_Double, UnrealValueKind.Float64) => true,
+                (SpecialType.System_String, UnrealValueKind.String) => true,
+                _ => false,
+            };
+        }
+        if (actual is not INamedTypeSymbol named)
+        {
+            return true;
+        }
+
+        string actualName = named.Name;
+        return expected.Kind switch
+        {
+            UnrealValueKind.Name => actualName == "UnrealName",
+            UnrealValueKind.Text => actualName == "UnrealText",
+            UnrealValueKind.Object => actualName == "UnrealObjectHandle",
+            UnrealValueKind.Class => actualName == "UnrealClassHandle",
+            UnrealValueKind.SoftObject => actualName == "UnrealSoftObjectHandle",
+            UnrealValueKind.SoftClass => actualName == "UnrealSoftClassHandle",
+            UnrealValueKind.Enum => actualName == "UnrealEnumValue",
+            UnrealValueKind.Struct when expected.TypePath == "/Script/CoreUObject.Vector" =>
+                actualName == "UnrealVector",
+            UnrealValueKind.Struct when expected.TypePath == "/Script/CoreUObject.Rotator" =>
+                actualName == "UnrealRotator",
+            UnrealValueKind.Struct when expected.TypePath == "/Script/CoreUObject.Transform" =>
+                actualName == "UnrealTransform",
+            UnrealValueKind.Struct when expected.TypePath is not null =>
+                actualName == ManagedNameFromNative(expected.NativeName),
+            UnrealValueKind.Array => actualName is "IReadOnlyList" or "List" or "Array",
+            UnrealValueKind.Set => actualName is "IReadOnlySet" or "HashSet",
+            UnrealValueKind.Map => actualName is "IReadOnlyDictionary" or "Dictionary",
+            _ => true,
+        };
+    }
+
+    private static string ManagedNameFromNative(string nativeName) => ToIdentifier(
+        nativeName.Length > 1 && nativeName[0] == 'F' ? nativeName[1..] : nativeName);
+
+    private static string FunctionSelector(UnrealReflectedFunction function)
+    {
+        int open = function.Path.IndexOf('(', StringComparison.Ordinal);
+        return open >= 0
+            ? function.Path[(function.Path.LastIndexOf(':') + 1)..]
+            : function.Name;
     }
 
     private static IReadOnlyDictionary<string, ReflectedTypeTarget[]> CreateTypeTargets(
@@ -363,7 +862,7 @@ public sealed class UnrealApiSourceDependencyScanner
                 : AddStableSuffix(candidate, type.Path, used);
             targets.Add(
                 managedName,
-                [new ReflectedTypeTarget(type.Name, type.Path, managedName)]);
+                [new ReflectedTypeTarget(type.Name, type.Path, managedName, type)]);
         }
         return targets;
     }
@@ -437,7 +936,14 @@ public sealed class UnrealApiSourceDependencyScanner
     private sealed record ReflectedTypeTarget(
         string TypeName,
         string TypePath,
-        string ManagedTypeName);
+        string ManagedTypeName,
+        UnrealReflectedType ReflectedType);
+
+    private sealed record UsingImport(string? Alias, string Target);
+
+    private sealed record ImportScope(
+        IReadOnlyList<string> Aliases,
+        bool NamespaceImported);
 
     private sealed record TypedBinding(
         string Name,
@@ -451,6 +957,7 @@ public sealed class UnrealApiSourceDependencyScanner
         string? TypePath,
         string ManagedTypeName,
         string MemberName,
+        string SourceMemberName,
         UnrealApiSourceSpan Location);
 
     private sealed record RequestIdentity(

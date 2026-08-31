@@ -124,8 +124,9 @@ Open the project in UE 5.8, then:
 
 The generated `FirstScript` exposes `StartValue`, a Visual
 `AddClamped(value, delta)` function, and an ordinary source call to
-`Actor.GetActorLocation`. The source imports its generated API namespace with an
-explicit `UnrealApi` alias. During the first Setup run, current Engine reflection
+`Actor.GetActorLocation`. The source uses a normal
+`using Game.UnifiedScript.Generated;` import; an alias or fully qualified name is
+no longer required. During the first Setup run, current Engine reflection
 turns that call into a source dependency request and safe development Contract
 overlay before the managed project needs to compile. The same effective member
 then appears in the generated native thunk, C# wrapper, visual node catalog, API
