@@ -698,7 +698,8 @@ def main() -> int:
         in packaged_adoption
         and "Rollback did not restore the original product files"
         in packaged_adoption
-        and "Adopted managed project failed to build" in packaged_adoption
+        and "deferredToPackagedNativeOnboarding" in packaged_adoption
+        and "Build/Onboard" in packaged_adoption
         and "adopt $project --sdk-root $sdk" in first_script_guide
         and "doctor $project --engine-root" in first_script_guide,
         "Zero-config Unreal adoption, safe rollback, doctor, fixtures, or guide is missing",
@@ -1384,7 +1385,7 @@ def main() -> int:
         and "BuildCookRun" in script_class_golden_path
         and "SA_M13C0PersistentActor" in script_class_golden_path
         and "SA_M13C0PersistentComponent" in script_class_golden_path
-        and "M13.1C-1 — packaged first-Play golden path" in roadmap_document
+        and "Current tranche: **M13.1C-1c" in roadmap_document
         and "M13.1C-0 — attachable Script Class foundation" in roadmap_document
         and "require no handwritten facade | Complete |" in roadmap_document,
         "M13.1C-0 cross-process lifecycle, deterministic regeneration, cook proof, or roadmap handoff is incomplete",
@@ -1407,12 +1408,46 @@ def main() -> int:
         and "IncludeScriptClassFirstPlay" in packaged_native_onboarding
         and "cook.cookedAssets).Count -ne 4" in packaged_native_onboarding
         and "M13.1C-1 first-Play connection (active)" in roadmap_document
-        and "- [x] connect class creation to the adopted project's single Build/Onboard"
+        and "M13.1C-1a — first Build" in roadmap_document
+        and "connect class creation to the adopted project's single Build/Onboard"
         in roadmap_document,
         "M13.1C-1 first-Play receipt, single Build/relaunch, Editor continuation, or packaged acceptance is incomplete",
     )
     checks.append(
         "M13.1C-1 connects Script Class creation to one packaged first-Play build"
+    )
+    runtime_world_tests = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+        / "UEUnifiedScriptRuntime" / "Private" / "Tests"
+        / "UnifiedScriptWorldSubsystemTests.cpp"
+    ).read_text(encoding="utf-8")
+    authoring_workbench_native = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+        / "UEUnifiedScriptEditor" / "Private"
+        / "UnifiedScriptAuthoringWorkbench.cpp"
+    ).read_text(encoding="utf-8")
+    require(
+        "BuildAuthoringCommand" in project_setup_header
+        and "start-unifiedscript-authoring.ps1" in project_setup_source
+        and "Open Authoring & Reload" in project_setup_widget
+        and "OpenAuthoringSurface(ScriptAsset)" in project_setup_widget
+        and "AuthoringScriptPath" in adoption_source
+        and "AuthoringWorkbenchRoot" in adoption_source
+        and '"authoring"' in adoption_source
+        and "IsAuthoringPublication" in unreal_component
+        and 'TEXT("schemaCompatibility")' in unreal_component
+        and 'TEXT("restartRequired")' in unreal_component
+        and 'TEXT("requiredAction"), TEXT("restartEditor")' in unreal_component
+        and "RefreshScriptStateWithTransaction" in unreal_component
+        and "authoring-stopped-incompatible-state" in runtime_world_tests
+        and "authoring-compatible-state" in runtime_world_tests
+        and "authoring-incompatible-state" in runtime_world_tests
+        and "Restart Editor required" in authoring_workbench_native
+        and "M13.1C-1b — edit/reload" in roadmap_document,
+        "M13.1C-1b exact Script Class authoring launch, state-preserving reload, or restart-required rejection is incomplete",
+    )
+    checks.append(
+        "M13.1C-1b connects exact Script Classes to state-safe authoring reload"
     )
 
     sample_catalog_path = ROOT / "samples" / "Unreal" / "unifiedscript.samples.json"

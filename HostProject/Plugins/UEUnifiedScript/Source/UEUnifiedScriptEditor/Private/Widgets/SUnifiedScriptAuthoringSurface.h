@@ -89,6 +89,7 @@ public:
         const FGeometry& MyGeometry,
         const FKeyEvent& InKeyEvent) override;
 
+    bool LoadScriptAsset(UUnifiedScriptAsset* ScriptAsset);
     bool LoadSurface(const FString& ConfiguredPath);
     int32 GetVisibleGraphNodeCount() const;
     int32 GetVisibleGraphEdgeCount() const;

@@ -18,6 +18,7 @@ struct FUnifiedScriptProjectSetupPaths
     FString EngineRoot;
     FString CliExecutable;
     FString DeferredOnboardingScript;
+    FString AuthoringScript;
     FString PreviewReport;
     FString RepairReport;
     FString DoctorReport;
@@ -66,6 +67,12 @@ public:
         EUnifiedScriptProjectSetupOperation Operation,
         const FUnifiedScriptProjectSetupPaths& Paths,
         uint32 EditorProcessId,
+        FUnifiedScriptProjectSetupCommand& OutCommand,
+        FString& OutError);
+
+    static bool BuildAuthoringCommand(
+        const FUnifiedScriptProjectSetupPaths& Paths,
+        const FString& SourcePath,
         FUnifiedScriptProjectSetupCommand& OutCommand,
         FString& OutError);
 

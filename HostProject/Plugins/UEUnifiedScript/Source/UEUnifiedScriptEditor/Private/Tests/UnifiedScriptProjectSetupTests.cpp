@@ -36,6 +36,12 @@ bool FUnifiedScriptProjectSetupCommandContractTest::RunTest(const FString& Param
     const FString DeferredScript = FPaths::Combine(
         PluginRoot,
         TEXT("Tools/run-unifiedscript-onboarding-after-process.ps1"));
+    const FString AuthoringScript = FPaths::Combine(
+        PluginRoot,
+        TEXT("Tools/start-unifiedscript-authoring.ps1"));
+    const FString ScriptClassSource = FPaths::Combine(
+        TestRoot,
+        TEXT("Managed/FirstPlayActor.cs"));
 
     IFileManager::Get().MakeDirectory(*FPaths::GetPath(CliExecutable), true);
     TestTrue(
@@ -47,6 +53,13 @@ bool FUnifiedScriptProjectSetupCommandContractTest::RunTest(const FString& Param
     TestTrue(
         TEXT("Creates the deferred setup fixture"),
         FFileHelper::SaveStringToFile(TEXT("# fixture"), *DeferredScript));
+    TestTrue(
+        TEXT("Creates the authoring launcher fixture"),
+        FFileHelper::SaveStringToFile(TEXT("# fixture"), *AuthoringScript));
+    IFileManager::Get().MakeDirectory(*FPaths::GetPath(ScriptClassSource), true);
+    TestTrue(
+        TEXT("Creates the Script Class source fixture"),
+        FFileHelper::SaveStringToFile(TEXT("public sealed class FirstPlayActor {}"), *ScriptClassSource));
 
     FUnifiedScriptProjectSetupPaths Paths;
     FString Error;
@@ -65,6 +78,10 @@ bool FUnifiedScriptProjectSetupCommandContractTest::RunTest(const FString& Param
         Paths.DeferredOnboardingScript,
         FPaths::ConvertRelativePathToFull(DeferredScript));
     TestEqual(
+        TEXT("Authoring script path"),
+        Paths.AuthoringScript,
+        FPaths::ConvertRelativePathToFull(AuthoringScript));
+    TestEqual(
         TEXT("First-Play request path"),
         Paths.FirstPlayRequest,
         FUnifiedScriptProjectSetup::GetFirstPlayRequestPath(TestRoot));
@@ -78,7 +95,7 @@ bool FUnifiedScriptProjectSetupCommandContractTest::RunTest(const FString& Param
             TEXT("actor"),
             TEXT("/Game/FirstPlayActor.FirstPlayActor"),
             TEXT("/Game/SA_FirstPlayActor.SA_FirstPlayActor"),
-            FPaths::Combine(TestRoot, TEXT("Managed/FirstPlayActor.cs")),
+            ScriptClassSource,
             TEXT("SetupGame.UnifiedScript.FirstPlayActor"),
             FirstPlayPath,
             Error));
@@ -165,6 +182,23 @@ bool FUnifiedScriptProjectSetupCommandContractTest::RunTest(const FString& Param
     TestTrue(TEXT("Deferred Editor relaunch"), Command.Arguments.Contains(TEXT(" -RelaunchEditor")));
     TestEqual(TEXT("Onboarding report"), Command.ReportPath, Paths.OnboardingReport);
     TestTrue(TEXT("Deferred command is detached"), Command.bDetached);
+
+    TestTrue(
+        TEXT("Builds exact Script Class authoring command"),
+        FUnifiedScriptProjectSetup::BuildAuthoringCommand(
+            Paths,
+            ScriptClassSource,
+            Command,
+            Error));
+    TestEqual(TEXT("Authoring executable"), Command.Executable, FString(TEXT("powershell.exe")));
+    TestTrue(TEXT("Authoring launcher"), Command.Arguments.Contains(
+        FString::Printf(TEXT("-File \"%s\""), *Paths.AuthoringScript)));
+    TestTrue(TEXT("Authoring source"), Command.Arguments.Contains(
+        FString::Printf(
+            TEXT("-Script \"%s\""),
+            *FPaths::ConvertRelativePathToFull(ScriptClassSource))));
+    TestTrue(TEXT("Authoring command is detached"), Command.bDetached);
+    TestTrue(TEXT("Authoring command has no report"), Command.ReportPath.IsEmpty());
 
     IFileManager::Get().DeleteDirectory(*TestRoot, false, true);
     return true;

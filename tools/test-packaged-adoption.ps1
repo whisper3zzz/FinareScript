@@ -116,15 +116,6 @@ $cli = Join-Path $sdkRoot 'Tools\unifiedscript.cmd'
 if (-not (Test-Path -LiteralPath $cli -PathType Leaf)) {
     throw "Packaged UnifiedScript entry point is missing: $cli"
 }
-$dotnet = if (-not [string]::IsNullOrWhiteSpace($EngineRoot) -and
-        (Test-Path -LiteralPath (Join-Path ([IO.Path]::GetFullPath($EngineRoot)) `
-            'Engine\Binaries\ThirdParty\DotNet\10.0\win-x64\dotnet.exe') -PathType Leaf)) {
-    Join-Path ([IO.Path]::GetFullPath($EngineRoot)) `
-        'Engine\Binaries\ThirdParty\DotNet\10.0\win-x64\dotnet.exe'
-} else {
-    (Get-Command dotnet -ErrorAction Stop).Source
-}
-
 $results = [Collections.Generic.List[object]]::new()
 foreach ($fixture in @(
         (New-AdoptionFixture -Name 'NativeAdoption' -Native $true),
@@ -153,6 +144,8 @@ foreach ($fixture in @(
             'Plugins\UEUnifiedScript\Tools\unifiedscript.cmd',
             'Plugins\UEUnifiedScript\Tools\setup-unreal-project.ps1',
             'Plugins\UEUnifiedScript\Tools\run-unifiedscript-onboarding-after-process.ps1',
+            'Plugins\UEUnifiedScript\Tools\start-unifiedscript-authoring.ps1',
+            'Plugins\UEUnifiedScript\Authoring\Workbench\index.html',
             "Managed\$([IO.Path]::GetFileNameWithoutExtension($project)).UnifiedScript\FirstScript.cs",
             'Config\UnifiedScript.onboarding.json')) {
         if (-not (Test-Path -LiteralPath (Join-Path $projectRoot $required) -PathType Leaf)) {
@@ -160,19 +153,11 @@ foreach ($fixture in @(
         }
     }
 
-    $projectName = [IO.Path]::GetFileNameWithoutExtension($project)
-    $managedProject = Join-Path $projectRoot `
-        "Managed\$projectName.UnifiedScript\$projectName.UnifiedScript.csproj"
-    & $dotnet build $managedProject -c Release --nologo
-    if ($LASTEXITCODE -ne 0) {
-        throw "Adopted managed project failed to build with exit code ${LASTEXITCODE}: $managedProject"
-    }
-    $stagedAssembly = Join-Path $projectRoot `
-        "Plugins\UEUnifiedScript\Binaries\Managed\Scripts\$projectName.UnifiedScript.dll"
-    if (-not (Test-Path -LiteralPath $stagedAssembly -PathType Leaf)) {
-        throw "Adopted managed build did not stage its assembly: $stagedAssembly"
-    }
-    $afterBuild = Get-ProductSnapshot -ProjectRoot $projectRoot
+    # FirstScript intentionally consumes generated Unreal wrappers. Their first
+    # materialization belongs to Build/Onboard and is covered by the packaged
+    # native acceptance; adoption alone cannot compile before reflection and
+    # generated-surface publication have run.
+    $afterAdoption = Get-ProductSnapshot -ProjectRoot $projectRoot
 
     $projectPlugin = Join-Path $projectRoot 'Plugins\UEUnifiedScript'
     $projectCli = Join-Path $projectPlugin 'Tools\unifiedscript.cmd'
@@ -205,7 +190,7 @@ foreach ($fixture in @(
         [int]$rerun.summary.conflicts -ne 0) {
         throw "Project-local adoption rerun was not a deterministic no-op for $project"
     }
-    if ((Get-ProductSnapshot -ProjectRoot $projectRoot) -cne $afterBuild) {
+    if ((Get-ProductSnapshot -ProjectRoot $projectRoot) -cne $afterAdoption) {
         throw "Project-local repeated adoption changed product files for $project"
     }
 
@@ -221,6 +206,7 @@ foreach ($fixture in @(
         previewFingerprint = [string]$preview.fingerprint
         projectLocalDoctor = [string]$doctor.status
         projectLocalRerunChanges = [int]$rerun.summary.changed
+        managedBuild = 'deferredToPackagedNativeOnboarding'
     })
 }
 

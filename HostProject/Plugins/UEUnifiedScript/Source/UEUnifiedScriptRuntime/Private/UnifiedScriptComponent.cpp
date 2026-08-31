@@ -194,6 +194,14 @@ public:
         }
     }
 
+    bool IsAuthoringPublication() const
+    {
+        FString Source;
+        return Root.IsValid() &&
+            Root->TryGetStringField(TEXT("source"), Source) &&
+            Source == TEXT("authoring");
+    }
+
     FString Finish(
         const FString& State,
         int32 CandidateGeneration,
@@ -215,6 +223,11 @@ public:
         Root->SetNumberField(TEXT("worldCandidateGeneration"), CandidateGeneration);
         Root->SetNumberField(TEXT("worldActiveGeneration"), ActiveGeneration);
         Root->SetArrayField(TEXT("phases"), Phases);
+        if (State == TEXT("restartRequired"))
+        {
+            Root->SetBoolField(TEXT("restartRequired"), true);
+            Root->SetStringField(TEXT("requiredAction"), TEXT("restartEditor"));
+        }
         if (!Failure.IsEmpty())
         {
             Root->SetStringField(TEXT("failure"), Failure.Left(4096));
@@ -947,6 +960,36 @@ bool UUnifiedScriptComponent::ReloadScriptWithTransaction(
             CandidateScriptState.GetNumPropertiesInBag(),
             CandidateOverrideIds.Num()));
 
+    if (Transaction.IsAuthoringPublication())
+    {
+        if (CandidateMigration.DroppedOverrideCount > 0)
+        {
+            Error = FString::Printf(
+                TEXT("Restart required: this edit would discard %d explicit instance state override(s). The active generation and its state were left unchanged."),
+                CandidateMigration.DroppedOverrideCount);
+            Transaction.AddPhase(
+                TEXT("schemaCompatibility"),
+                TEXT("restartRequired"),
+                0.0,
+                Error);
+            LastReloadTransaction = Transaction.Finish(
+                TEXT("restartRequired"),
+                CandidateGeneration,
+                FromGeneration,
+                Host,
+                false,
+                Error);
+            LastScriptError = Error;
+            LastRuntimeDiagnostic = {};
+            return false;
+        }
+        Transaction.AddPhase(
+            TEXT("schemaCompatibility"),
+            TEXT("succeeded"),
+            0.0,
+            TEXT("The authoring edit preserves every explicit instance state override and can swap generations transactionally."));
+    }
+
     FInstancedPropertyBag PreviousScriptState = ScriptState;
     TArray<FGuid> PreviousOverrideIds = ScriptStateOverrideIds;
     const bool bPreviousOverrideBaselineInitialized =
@@ -1475,6 +1518,119 @@ bool UUnifiedScriptComponent::RefreshScriptState()
     ActiveDeclarationAssetPath = MoveTemp(CandidateAssetPath);
     ApplyStateMigrationDiagnostics(CandidateMigration);
     LastScriptError.Reset();
+    return true;
+}
+
+bool UUnifiedScriptComponent::RefreshScriptStateWithTransaction(
+    const FString& PublicationTransactionJson)
+{
+    check(IsInGameThread());
+    if (PublicationTransactionJson.IsEmpty())
+    {
+        return RefreshScriptState();
+    }
+
+    const int32 Generation = FCString::Atoi(*ActiveGeneration);
+    UE::UnifiedScript::Component::Private::FReloadTransactionBuilder Transaction;
+    FString Error;
+    if (!Transaction.Initialize(PublicationTransactionJson, Generation, Error))
+    {
+        SetScriptFailure(MoveTemp(Error));
+        return false;
+    }
+
+    FString ResolvedAssemblyPath;
+    FString ResolvedTypeName;
+    UUnifiedScriptAsset* ResolvedAsset = nullptr;
+    double PhaseStart = FPlatformTime::Seconds();
+    if (!ResolveScriptConfiguration(
+            ResolvedAssemblyPath,
+            ResolvedTypeName,
+            ResolvedAsset,
+            Error))
+    {
+        Transaction.AddPhase(
+            TEXT("configurationResolution"),
+            TEXT("failed"),
+            PhaseStart,
+            Error);
+        LastReloadTransaction = Transaction.Finish(
+            TEXT("rolledBack"), Generation, Generation, nullptr, false, Error);
+        SetScriptFailure(MoveTemp(Error));
+        return false;
+    }
+    Transaction.AddPhase(
+        TEXT("configurationResolution"),
+        TEXT("succeeded"),
+        PhaseStart,
+        TEXT("Resolved the stopped/editor instance Script Asset and declaration paths."));
+
+    FInstancedPropertyBag Candidate;
+    TArray<FGuid> CandidateOverrideIds;
+    FUnifiedScriptStateMigrationReport CandidateMigration;
+    FString CandidateAssetPath;
+    PhaseStart = FPlatformTime::Seconds();
+    if (!BuildScriptState(
+            ResolvedAsset,
+            ScriptState,
+            GetEffectiveScriptStateOverrideIds(),
+            Candidate,
+            CandidateOverrideIds,
+            CandidateMigration,
+            CandidateAssetPath,
+            Error))
+    {
+        Transaction.AddPhase(TEXT("stateMigration"), TEXT("failed"), PhaseStart, Error);
+        LastReloadTransaction = Transaction.Finish(
+            TEXT("rolledBack"), Generation, Generation, nullptr, false, Error);
+        SetScriptFailure(MoveTemp(Error));
+        return false;
+    }
+    Transaction.AddPhase(
+        TEXT("stateMigration"),
+        TEXT("succeeded"),
+        PhaseStart,
+        FString::Printf(
+            TEXT("Prepared %d state value(s), preserving %d override(s)."),
+            Candidate.GetNumPropertiesInBag(),
+            CandidateOverrideIds.Num()));
+
+    if (Transaction.IsAuthoringPublication() && CandidateMigration.DroppedOverrideCount > 0)
+    {
+        Error = FString::Printf(
+            TEXT("Restart required: this edit would discard %d explicit instance state override(s). The stopped/editor instance state was left unchanged."),
+            CandidateMigration.DroppedOverrideCount);
+        Transaction.AddPhase(
+            TEXT("schemaCompatibility"),
+            TEXT("restartRequired"),
+            0.0,
+            Error);
+        LastReloadTransaction = Transaction.Finish(
+            TEXT("restartRequired"), Generation, Generation, nullptr, false, Error);
+        LastScriptError = Error;
+        LastRuntimeDiagnostic = {};
+        return false;
+    }
+
+    Transaction.AddPhase(
+        TEXT("schemaCompatibility"),
+        TEXT("succeeded"),
+        0.0,
+        TEXT("The authoring edit preserves every explicit stopped/editor instance state override."));
+    ScriptState = MoveTemp(Candidate);
+    ScriptStateOverrideIds = MoveTemp(CandidateOverrideIds);
+    bScriptStateOverrideBaselineInitialized = true;
+    ActiveDeclarationAssetPath = MoveTemp(CandidateAssetPath);
+    ApplyStateMigrationDiagnostics(CandidateMigration);
+    Transaction.AddPhase(
+        TEXT("stateCommit"),
+        TEXT("succeeded"),
+        0.0,
+        TEXT("Committed the compatible declaration state without starting a managed generation."));
+    LastReloadTransaction = Transaction.Finish(
+        TEXT("committed"), Generation, Generation, nullptr, false);
+    LastScriptError.Reset();
+    LastRuntimeDiagnostic = {};
     return true;
 }
 

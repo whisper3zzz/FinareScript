@@ -24,6 +24,7 @@ private:
     FReply RunDoctor();
     FReply BuildAndOnboard();
     FReply LocateFirstPlayClass();
+    FReply StartAuthoringAndOpenFirstPlayClass();
     FReply RunAttachedOperation(
         EUnifiedScriptProjectSetupOperation Operation,
         const FText& OperationLabel);
@@ -31,8 +32,10 @@ private:
     bool ResolveProjectPaths(FUnifiedScriptProjectSetupPaths& OutPaths);
     bool CanRunAttachedOperation() const;
     bool CanLocateFirstPlayClass() const;
+    bool CanAuthorFirstPlayClass() const;
     void RefreshFirstPlayRequest();
     FText GetFirstPlayDescription() const;
+    FText GetAuthoringDescription() const;
     EActiveTimerReturnType PollAttachedOperation(double CurrentTime, float DeltaTime);
     void AppendOutput(const FString& Text);
     void FinishAttachedOperation(int32 ReturnCode);

@@ -145,6 +145,9 @@ public:
     UFUNCTION(BlueprintCallable, CallInEditor, Category="UnifiedScript|State")
     bool RefreshScriptState();
 
+    /** Extends an authoring transaction through a stopped/editor instance state refresh. */
+    bool RefreshScriptStateWithTransaction(const FString& PublicationTransactionJson);
+
     UFUNCTION(BlueprintPure, Category="UnifiedScript|State")
     int32 GetScriptStateInt32(const FString& Name, int32 Fallback) const;
 

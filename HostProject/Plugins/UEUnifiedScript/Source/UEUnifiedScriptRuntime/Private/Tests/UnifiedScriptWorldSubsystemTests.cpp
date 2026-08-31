@@ -278,6 +278,31 @@ bool FUnifiedScriptWorldSubsystemLifecycleTest::RunTest(const FString& Parameter
     TestTrue(
         TEXT("Demo override can be re-applied after reset"),
         FirstComponent->SetScriptStateInt32(TEXT("InitialValue"), 37));
+    UUnifiedScriptAsset* StoppedSchemaBreakingScriptAsset =
+        NewObject<UUnifiedScriptAsset>(FirstWorld);
+    StoppedSchemaBreakingScriptAsset->ScriptAssemblyPath =
+        InitialScriptAsset->ScriptAssemblyPath;
+    StoppedSchemaBreakingScriptAsset->ScriptTypeName =
+        TEXT("UnifiedScript.Unreal.Demo.AlternateDemoScript");
+    FirstComponent->ScriptAsset = StoppedSchemaBreakingScriptAsset;
+    TestFalse(
+        TEXT("Stopped instance rejects an authoring edit that would lose state"),
+        FirstComponent->RefreshScriptStateWithTransaction(
+            TEXT(
+                "{\"schemaVersion\":\"unifiedscript.reload-transaction/v0.1\","
+                "\"transactionId\":\"authoring-stopped-incompatible-state\","
+                "\"source\":\"authoring\",\"state\":\"published\",\"phases\":[]}")));
+    TestEqual(
+        TEXT("Stopped restart-required edit preserves its explicit state"),
+        FirstComponent->GetScriptStateInt32(TEXT("InitialValue"), -1),
+        37);
+    TestTrue(
+        TEXT("Stopped restart-required edit exposes the same action contract"),
+        FirstComponent->LastReloadTransaction.Contains(
+            TEXT("\"state\":\"restartRequired\"")) &&
+            FirstComponent->LastReloadTransaction.Contains(
+                TEXT("\"requiredAction\":\"restartEditor\"")));
+    FirstComponent->ScriptAsset = InitialScriptAsset;
     FirstComponent->RegisterComponentWithWorld(FirstWorld);
     TestTrue(TEXT("Lifecycle demo component is registered"), FirstComponent->IsRegistered());
     TestEqual(
@@ -475,7 +500,13 @@ bool FUnifiedScriptWorldSubsystemLifecycleTest::RunTest(const FString& Parameter
         TEXT("Live debugger resumes automatic managed ticks"),
         FirstComponent->ContinueFromDebugFrameBoundary());
 
-    TestTrue(TEXT("Component reload creates a new script generation"), FirstComponent->ReloadScript());
+    const FString AuthoringPublication = TEXT(
+        "{\"schemaVersion\":\"unifiedscript.reload-transaction/v0.1\","
+        "\"transactionId\":\"authoring-compatible-state\","
+        "\"source\":\"authoring\",\"state\":\"published\",\"phases\":[]}");
+    TestTrue(
+        TEXT("Compatible Authoring Surface publication creates a new script generation"),
+        FirstComponent->ReloadScriptWithTransaction(AuthoringPublication));
     TestEqual(
         TEXT("Reloaded generation is visible"),
         FirstComponent->ActiveGeneration,
@@ -484,11 +515,57 @@ bool FUnifiedScriptWorldSubsystemLifecycleTest::RunTest(const FString& Parameter
         TEXT("Reload retains exactly one compatible instance override"),
         FirstComponent->MaterializedStateOverrideCount,
         1);
+    TestTrue(
+        TEXT("Compatible authoring reload records the schema compatibility gate"),
+        FirstComponent->LastReloadTransaction.Contains(
+            TEXT("\"schemaCompatibility\"")) &&
+            FirstComponent->LastReloadTransaction.Contains(
+                TEXT("\"state\":\"committed\"")));
     FirstComponent->BroadcastManagedSignal(73, FirstComponent);
     TestEqual(
         TEXT("Reload rebinds one Event Entry and preserves compatible state"),
         FirstComponent->ManagedState,
         FString(TEXT("Started:37|Event:73")));
+
+    UUnifiedScriptAsset* SchemaBreakingScriptAsset =
+        NewObject<UUnifiedScriptAsset>(FirstWorld);
+    SchemaBreakingScriptAsset->ScriptAssemblyPath = InitialScriptAsset->ScriptAssemblyPath;
+    SchemaBreakingScriptAsset->ScriptTypeName =
+        TEXT("UnifiedScript.Unreal.Demo.AlternateDemoScript");
+    FirstComponent->ScriptAsset = SchemaBreakingScriptAsset;
+    TestFalse(
+        TEXT("State-breaking Authoring Surface publication requires an Editor restart"),
+        FirstComponent->ReloadScriptWithTransaction(
+            TEXT(
+                "{\"schemaVersion\":\"unifiedscript.reload-transaction/v0.1\","
+                "\"transactionId\":\"authoring-incompatible-state\","
+                "\"source\":\"authoring\",\"state\":\"published\",\"phases\":[]}")));
+    TestEqual(
+        TEXT("Restart-required edit keeps the active generation"),
+        FirstComponent->ActiveGeneration,
+        FString(TEXT("2")));
+    TestEqual(
+        TEXT("Restart-required edit preserves the explicit instance value"),
+        FirstComponent->GetScriptStateInt32(TEXT("InitialValue"), -1),
+        37);
+    TestEqual(
+        TEXT("Restart-required edit preserves the override identity"),
+        FirstComponent->MaterializedStateOverrideCount,
+        1);
+    TestTrue(
+        TEXT("Restart-required transaction exposes an actionable atomic result"),
+        FirstComponent->LastReloadTransaction.Contains(
+            TEXT("\"state\":\"restartRequired\"")) &&
+            FirstComponent->LastReloadTransaction.Contains(
+                TEXT("\"requiredAction\":\"restartEditor\"")) &&
+            FirstComponent->LastReloadTransaction.Contains(
+                TEXT("\"schemaCompatibility\"")) &&
+            FirstComponent->LastScriptError.Contains(TEXT("active generation")));
+    TestEqual(
+        TEXT("Restart-required edit leaves the active Script Asset unchanged"),
+        FirstComponent->ActiveScriptAssetPath,
+        InitialScriptAsset->GetPathName());
+    FirstComponent->ScriptAsset = InitialScriptAsset;
 
     UUnifiedScriptAsset* InvalidScriptAsset =
         NewObject<UUnifiedScriptAsset>(FirstWorld);

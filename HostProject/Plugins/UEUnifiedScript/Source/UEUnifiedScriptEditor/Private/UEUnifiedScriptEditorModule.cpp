@@ -1,4 +1,4 @@
-#include "Modules/ModuleManager.h"
+#include "UEUnifiedScriptEditorModule.h"
 
 #include "AssetToolsModule.h"
 #include "Containers/Ticker.h"
@@ -60,7 +60,7 @@ public:
 };
 }
 
-class FUEUnifiedScriptEditorModule final : public IModuleInterface
+class FUEUnifiedScriptEditorModule final : public IUEUnifiedScriptEditorModule
 {
 public:
     virtual void StartupModule() override
@@ -92,7 +92,7 @@ public:
             TEXT("Open the UnifiedScript Authoring Surface."),
             FConsoleCommandDelegate::CreateRaw(
                 this,
-                &FUEUnifiedScriptEditorModule::OpenAuthoringSurface),
+                &FUEUnifiedScriptEditorModule::OpenAuthoringSurfaceCommand),
             ECVF_Default);
 
         OpenProjectSetupConsoleCommand = IConsoleManager::Get().RegisterConsoleCommand(
@@ -153,19 +153,47 @@ public:
             UE::UnifiedScript::Editor::Private::ProjectSetupTabName);
     }
 
+    virtual void OpenAuthoringSurface(UUnifiedScriptAsset* ScriptAsset) override
+    {
+        PendingAuthoringScriptAsset = ScriptAsset;
+        FGlobalTabmanager::Get()->TryInvokeTab(
+            UE::UnifiedScript::Editor::Private::AuthoringSurfaceTabName);
+        if (AuthoringSurfaceWidget.IsValid() && IsValid(ScriptAsset))
+        {
+            AuthoringSurfaceWidget.Pin()->LoadScriptAsset(ScriptAsset);
+            PendingAuthoringScriptAsset.Reset();
+        }
+    }
+
+    virtual void OpenProjectSetup() override
+    {
+        FGlobalTabmanager::Get()->TryInvokeTab(
+            UE::UnifiedScript::Editor::Private::ProjectSetupTabName);
+    }
+
 private:
     TSharedPtr<FGraphPanelNodeFactory> GraphNodeFactory;
     TSharedPtr<FGraphPanelPinFactory> GraphPinFactory;
     IConsoleObject* OpenAuthoringConsoleCommand = nullptr;
     IConsoleObject* OpenProjectSetupConsoleCommand = nullptr;
     FTSTicker::FDelegateHandle FirstPlayStartupHandle;
+    TWeakPtr<SUnifiedScriptAuthoringSurface> AuthoringSurfaceWidget;
+    TWeakObjectPtr<UUnifiedScriptAsset> PendingAuthoringScriptAsset;
 
     TSharedRef<SDockTab> SpawnAuthoringSurfaceTab(const FSpawnTabArgs& Args)
     {
+        TSharedRef<SUnifiedScriptAuthoringSurface> Surface =
+            SNew(SUnifiedScriptAuthoringSurface);
+        AuthoringSurfaceWidget = Surface;
+        if (PendingAuthoringScriptAsset.IsValid())
+        {
+            Surface->LoadScriptAsset(PendingAuthoringScriptAsset.Get());
+            PendingAuthoringScriptAsset.Reset();
+        }
         return SNew(SDockTab)
             .TabRole(ETabRole::NomadTab)
             [
-                SNew(SUnifiedScriptAuthoringSurface)
+                Surface
             ];
     }
 
@@ -178,16 +206,9 @@ private:
             ];
     }
 
-    void OpenAuthoringSurface()
+    void OpenAuthoringSurfaceCommand()
     {
-        FGlobalTabmanager::Get()->TryInvokeTab(
-            UE::UnifiedScript::Editor::Private::AuthoringSurfaceTabName);
-    }
-
-    void OpenProjectSetup()
-    {
-        FGlobalTabmanager::Get()->TryInvokeTab(
-            UE::UnifiedScript::Editor::Private::ProjectSetupTabName);
+        OpenAuthoringSurface(nullptr);
     }
 
     bool OpenFirstPlayOnStartup(float DeltaTime)
@@ -223,7 +244,7 @@ private:
             FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("Icons.Code")),
             FUIAction(FExecuteAction::CreateRaw(
                 this,
-                &FUEUnifiedScriptEditorModule::OpenAuthoringSurface)));
+                &FUEUnifiedScriptEditorModule::OpenAuthoringSurfaceCommand)));
         Section.AddMenuEntry(
             TEXT("OpenUnifiedScriptProjectSetup"),
             LOCTEXT("OpenProjectSetup", "UnifiedScript Project Setup"),

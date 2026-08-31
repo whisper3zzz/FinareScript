@@ -350,6 +350,33 @@ internal static partial class UnrealProjectAdoptionService
                 "run-unifiedscript-onboarding-after-process.ps1"),
             "tool",
             File.ReadAllBytes(layout.DeferredOnboardingScriptPath));
+        AddDesired(
+            desired,
+            projectRoot,
+            Path.Combine(
+                "Plugins",
+                "UEUnifiedScript",
+                "Tools",
+                "start-unifiedscript-authoring.ps1"),
+            "tool",
+            File.ReadAllBytes(layout.AuthoringScriptPath));
+        foreach (string sourcePath in Directory.EnumerateFiles(
+                     layout.AuthoringWorkbenchRoot,
+                     "*",
+                     SearchOption.AllDirectories).OrderBy(static path => path, PathComparer))
+        {
+            AddDesired(
+                desired,
+                projectRoot,
+                Path.Combine(
+                    "Plugins",
+                    "UEUnifiedScript",
+                    "Authoring",
+                    "Workbench",
+                    GetRelativePath(layout.AuthoringWorkbenchRoot, sourcePath)),
+                "authoring",
+                File.ReadAllBytes(sourcePath));
+        }
 
         foreach (string required in RequiredRuntimeFiles)
         {
@@ -750,18 +777,29 @@ internal static partial class UnrealProjectAdoptionService
             pluginRoot,
             "Tools",
             "run-unifiedscript-onboarding-after-process.ps1");
+        string projectAuthoring = Path.Combine(
+            pluginRoot,
+            "Tools",
+            "start-unifiedscript-authoring.ps1");
+        string projectAuthoringWorkbench = Path.Combine(
+            pluginRoot,
+            "Authoring",
+            "Workbench",
+            "index.html");
         checks.Add(File.Exists(projectCli) &&
                    File.Exists(projectCliWrapper) &&
                    File.Exists(projectOnboarding) &&
-                   File.Exists(projectDeferredOnboarding)
+                   File.Exists(projectDeferredOnboarding) &&
+                   File.Exists(projectAuthoring) &&
+                   File.Exists(projectAuthoringWorkbench)
             ? new UnrealProjectDoctorCheck(
                 "project-tools",
                 "passed",
-                "Project-local adopt/doctor/build tools are installed for editor use.")
+                "Project-local adopt/doctor/build/authoring tools are installed for editor use.")
             : new UnrealProjectDoctorCheck(
                 "project-tools",
                 "failed",
-                "The project-local UnifiedScript CLI or onboarding tool is missing.",
+                "The project-local UnifiedScript CLI, onboarding tool, authoring launcher, or Workbench is missing.",
                 "Re-run unifiedscript adopt from the intended SDK."));
 
         string configPath = Path.Combine(projectRoot, "Config", "UnifiedScript.onboarding.json");
@@ -1527,9 +1565,30 @@ internal static partial class UnrealProjectAdoptionService
             string? deferredOnboarding = File.Exists(packagedDeferredOnboarding)
                 ? packagedDeferredOnboarding
                 : File.Exists(repositoryDeferredOnboarding) ? repositoryDeferredOnboarding : null;
+            string packagedAuthoring = Path.Combine(
+                root,
+                "Tools",
+                "start-unifiedscript-authoring.ps1");
+            string repositoryAuthoring = Path.Combine(
+                root,
+                "tools",
+                "start-unifiedscript-authoring.ps1");
+            string? authoring = File.Exists(packagedAuthoring)
+                ? packagedAuthoring
+                : File.Exists(repositoryAuthoring) ? repositoryAuthoring : null;
+            string packagedAuthoringWorkbench = Path.Combine(root, "Authoring", "Workbench");
+            string repositoryAuthoringWorkbench = Path.Combine(root, "prototype", "visual-editor");
+            string? authoringWorkbench = File.Exists(Path.Combine(
+                    packagedAuthoringWorkbench,
+                    "index.html"))
+                ? packagedAuthoringWorkbench
+                : File.Exists(Path.Combine(repositoryAuthoringWorkbench, "index.html"))
+                    ? repositoryAuthoringWorkbench
+                    : null;
             if (templateRoot is not null && pluginRoot is not null && runtimeRoot is not null &&
                 cliRoot is not null && wrapper is not null && onboarding is not null &&
-                deferredOnboarding is not null)
+                deferredOnboarding is not null && authoring is not null &&
+                authoringWorkbench is not null)
             {
                 string catalog = Path.Combine(templateRoot, "unifiedscript.project-templates.json");
                 if (File.Exists(catalog) && RequiredRuntimeFiles.All(file =>
@@ -1543,7 +1602,9 @@ internal static partial class UnrealProjectAdoptionService
                         Path.GetFullPath(cliRoot),
                         Path.GetFullPath(wrapper),
                         Path.GetFullPath(onboarding),
-                        Path.GetFullPath(deferredOnboarding));
+                        Path.GetFullPath(deferredOnboarding),
+                        Path.GetFullPath(authoring),
+                        Path.GetFullPath(authoringWorkbench));
                 }
             }
         }
@@ -1560,7 +1621,7 @@ internal static partial class UnrealProjectAdoptionService
         {
             string relative = NormalizeRelative(GetRelativePath(pluginRoot, path));
             string firstSegment = relative.Split('/')[0];
-            if (firstSegment is "Binaries" or "Intermediate" or "Saved" or "DerivedDataCache" or "Tools" ||
+            if (firstSegment is "Authoring" or "Binaries" or "Intermediate" or "Saved" or "DerivedDataCache" or "Tools" ||
                 string.Equals(path, descriptor, PathComparison))
             {
                 continue;
@@ -1734,7 +1795,9 @@ internal static partial class UnrealProjectAdoptionService
         string CliRoot,
         string CliWrapperPath,
         string OnboardingScriptPath,
-        string DeferredOnboardingScriptPath);
+        string DeferredOnboardingScriptPath,
+        string AuthoringScriptPath,
+        string AuthoringWorkbenchRoot);
 
     private sealed record AdoptionTemplate(string Id, string ScriptTemplate);
 

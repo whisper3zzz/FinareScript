@@ -1899,6 +1899,29 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         TEXT("Workbench response retains observable reload phases"),
         Workspace.ReloadTransaction.Phases.Num(),
         1);
+    FUnifiedScriptReloadTransactionResult RestartRequired;
+    TestTrue(
+        TEXT("Workbench parses an explicit restart-required reload result"),
+        FUnifiedScriptAuthoringWorkbench::ParseReloadTransaction(
+            TEXT(
+                "{\"schemaVersion\":\"unifiedscript.reload-transaction/v0.1\","
+                "\"transactionId\":\"txn-restart\",\"source\":\"authoring\","
+                "\"state\":\"restartRequired\",\"requiredAction\":\"restartEditor\","
+                "\"fromGeneration\":3,\"candidateGeneration\":4,\"activeGeneration\":3,"
+                "\"phases\":[{\"name\":\"schemaCompatibility\","
+                "\"state\":\"restartRequired\",\"durationMicroseconds\":0,"
+                "\"detail\":\"Explicit state would be lost.\"}],"
+                "\"failure\":\"Restart required without changing the active generation.\"}"),
+            RestartRequired,
+            Error));
+    TestEqual(
+        TEXT("Restart-required result retains its required action"),
+        RestartRequired.RequiredAction,
+        FString(TEXT("restartEditor")));
+    TestTrue(
+        TEXT("Restart-required result is explicit in the editor status"),
+        RestartRequired.ToDisplayString().Contains(TEXT("Restart Editor required")) &&
+            RestartRequired.ToDisplayString().Contains(TEXT("active generation")));
     TestEqual(TEXT("Workbench response replaces the Surface transactionally"),
         Workspace.Surface.GetActionCount(), 70);
     const FString AiCommitJson = FString::Printf(

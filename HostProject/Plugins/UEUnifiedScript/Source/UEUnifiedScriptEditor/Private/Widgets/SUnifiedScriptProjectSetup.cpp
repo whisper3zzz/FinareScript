@@ -8,6 +8,8 @@
 #include "Misc/MessageDialog.h"
 #include "Misc/Paths.h"
 #include "Styling/AppStyle.h"
+#include "UEUnifiedScriptEditorModule.h"
+#include "UnifiedScriptAsset.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SMultiLineEditableTextBox.h"
 #include "Widgets/Layout/SBorder.h"
@@ -220,6 +222,21 @@ void SUnifiedScriptProjectSetup::Construct(const FArguments& InArgs)
                     FOnClicked::CreateSP(this, &SUnifiedScriptProjectSetup::LocateFirstPlayClass))
             ]
             + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(0.0f, 0.0f, 0.0f, 12.0f)
+            [
+                UE::UnifiedScript::ProjectSetup::Private::MakeDynamicActionRow(
+                    LOCTEXT("AuthoringTitle", "6. Edit and reload"),
+                    TAttribute<FText>::CreateLambda(
+                        [this]() { return GetAuthoringDescription(); }),
+                    LOCTEXT("AuthoringButton", "Open Authoring & Reload"),
+                    TAttribute<bool>::CreateLambda(
+                        [this]() { return CanAuthorFirstPlayClass(); }),
+                    FOnClicked::CreateSP(
+                        this,
+                        &SUnifiedScriptProjectSetup::StartAuthoringAndOpenFirstPlayClass))
+            ]
+            + SVerticalBox::Slot()
             .FillHeight(1.0f)
             .MinHeight(160.0f)
             [
@@ -287,6 +304,84 @@ FReply SUnifiedScriptProjectSetup::LocateFirstPlayClass()
             LOCTEXT(
                 "FirstPlayLocated",
                 "Located {0}. Add it to the level or an Actor, then press Play."),
+            FText::FromString(FirstPlayRequest.ManagedTypeName)),
+        FAppStyle::GetSlateColor(TEXT("Colors.AccentGreen")));
+    return FReply::Handled();
+}
+
+FReply SUnifiedScriptProjectSetup::StartAuthoringAndOpenFirstPlayClass()
+{
+    if (!CanAuthorFirstPlayClass())
+    {
+        return FReply::Handled();
+    }
+
+    FUnifiedScriptProjectSetupPaths Paths;
+    if (!ResolveProjectPaths(Paths))
+    {
+        return FReply::Handled();
+    }
+    FUnifiedScriptProjectSetupCommand Command;
+    FString Error;
+    if (!FUnifiedScriptProjectSetup::BuildAuthoringCommand(
+            Paths,
+            FirstPlayRequest.SourcePath,
+            Command,
+            Error))
+    {
+        AppendOutput(Error);
+        SetStatus(FText::FromString(Error), FAppStyle::GetSlateColor(TEXT("Colors.AccentRed")));
+        return FReply::Handled();
+    }
+
+    UUnifiedScriptAsset* ScriptAsset = Cast<UUnifiedScriptAsset>(StaticLoadObject(
+        UUnifiedScriptAsset::StaticClass(),
+        nullptr,
+        *FirstPlayRequest.ScriptAssetPath));
+    if (ScriptAsset == nullptr)
+    {
+        const FText ErrorText = FText::Format(
+            LOCTEXT("AuthoringAssetMissing", "The Script Asset could not be loaded: {0}"),
+            FText::FromString(FirstPlayRequest.ScriptAssetPath));
+        AppendOutput(ErrorText.ToString());
+        SetStatus(ErrorText, FAppStyle::GetSlateColor(TEXT("Colors.AccentRed")));
+        return FReply::Handled();
+    }
+
+    uint32 ProcessId = 0;
+    FProcHandle Process = FPlatformProcess::CreateProc(
+        *Command.Executable,
+        *Command.Arguments,
+        Command.bDetached,
+        false,
+        false,
+        &ProcessId,
+        0,
+        *Paths.ProjectRoot,
+        nullptr,
+        nullptr,
+        nullptr);
+    if (!Process.IsValid())
+    {
+        const FText ErrorText = LOCTEXT(
+            "AuthoringLaunchFailure",
+            "Could not start the project-local UnifiedScript authoring server.");
+        AppendOutput(ErrorText.ToString());
+        SetStatus(ErrorText, FAppStyle::GetSlateColor(TEXT("Colors.AccentRed")));
+        return FReply::Handled();
+    }
+    FPlatformProcess::CloseProc(Process);
+
+    AppendOutput(FString::Printf(
+        TEXT("Authoring server %u launched for %s. Close its terminal to stop the server."),
+        ProcessId,
+        *FirstPlayRequest.SourcePath));
+    IUEUnifiedScriptEditorModule::Get().OpenAuthoringSurface(ScriptAsset);
+    SetStatus(
+        FText::Format(
+            LOCTEXT(
+                "AuthoringStarted",
+                "Opening {0}. Wait for the authoring terminal to report its URL, then use Apply & Reload while the class is running."),
             FText::FromString(FirstPlayRequest.ManagedTypeName)),
         FAppStyle::GetSlateColor(TEXT("Colors.AccentGreen")));
     return FReply::Handled();
@@ -483,6 +578,13 @@ bool SUnifiedScriptProjectSetup::CanLocateFirstPlayClass() const
         FirstPlayRequest.IsReady();
 }
 
+bool SUnifiedScriptProjectSetup::CanAuthorFirstPlayClass() const
+{
+    return !ActiveProcess.IsValid() && bHasFirstPlayRequest &&
+        FirstPlayRequest.IsReady() && !FirstPlayRequest.SourcePath.IsEmpty() &&
+        !FirstPlayRequest.ScriptAssetPath.IsEmpty();
+}
+
 void SUnifiedScriptProjectSetup::RefreshFirstPlayRequest()
 {
     bHasFirstPlayRequest = false;
@@ -572,6 +674,21 @@ FText SUnifiedScriptProjectSetup::GetFirstPlayDescription() const
             "{0} is ready. {1}, then use the normal Play button."),
         FText::FromString(FirstPlayRequest.ManagedTypeName),
         Placement);
+}
+
+FText SUnifiedScriptProjectSetup::GetAuthoringDescription() const
+{
+    if (!bHasFirstPlayRequest || !FirstPlayRequest.IsReady())
+    {
+        return LOCTEXT(
+            "AuthoringNotReady",
+            "Finish the first Build above before starting the state-preserving edit/reload loop.");
+    }
+    return FText::Format(
+        LOCTEXT(
+            "AuthoringReadyDescription",
+            "Launch the project-local authoring server for {0}, open its exact visual surface, and reload matching live instances after an accepted edit."),
+        FText::FromString(FirstPlayRequest.ManagedTypeName));
 }
 
 EActiveTimerReturnType SUnifiedScriptProjectSetup::PollAttachedOperation(

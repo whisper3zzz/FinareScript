@@ -92,6 +92,7 @@ struct FUnifiedScriptReloadTransactionResult
     FString TransactionId;
     FString Source;
     FString State;
+    FString RequiredAction;
     int64 FromGeneration = 0;
     int64 CandidateGeneration = 0;
     int64 ActiveGeneration = 0;

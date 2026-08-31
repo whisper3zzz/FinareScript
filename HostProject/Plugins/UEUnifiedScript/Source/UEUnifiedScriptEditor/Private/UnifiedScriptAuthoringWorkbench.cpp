@@ -180,11 +180,21 @@ FString FUnifiedScriptReloadTransactionResult::ToDisplayString() const
     {
         PhaseStates.Add(FString::Printf(TEXT("%s:%s"), *Phase.Name, *Phase.State));
     }
-    return FString::Printf(
+    FString Result = FString::Printf(
         TEXT("Reload %s · %s · %s"),
         *TransactionId,
         *State,
         *FString::Join(PhaseStates, TEXT(" -> ")));
+    if (RequiredAction == TEXT("restartEditor"))
+    {
+        Result += TEXT(" · Restart Editor required");
+    }
+    if (!Failure.IsEmpty())
+    {
+        Result += TEXT("\n");
+        Result += Failure;
+    }
+    return Result;
 }
 
 bool FUnifiedScriptAuthoringWorkbench::ParseReloadTransaction(
@@ -247,6 +257,7 @@ bool FUnifiedScriptAuthoringWorkbench::ParseReloadTransaction(
         }
         Candidate.Phases.Add(MoveTemp(Phase));
     }
+    Root->TryGetStringField(TEXT("requiredAction"), Candidate.RequiredAction);
     Root->TryGetStringField(TEXT("failure"), Candidate.Failure);
     Candidate.Json = Json;
     OutTransaction = MoveTemp(Candidate);

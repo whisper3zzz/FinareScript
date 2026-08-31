@@ -65,6 +65,19 @@ public sealed class UnrealProjectAdoptionTests
             "Binaries",
             "Managed",
             "UnifiedScript.Unreal.dll")));
+        Assert.True(File.Exists(Path.Combine(
+            fixture.ProjectRoot,
+            "Plugins",
+            "UEUnifiedScript",
+            "Tools",
+            "start-unifiedscript-authoring.ps1")));
+        Assert.True(File.Exists(Path.Combine(
+            fixture.ProjectRoot,
+            "Plugins",
+            "UEUnifiedScript",
+            "Authoring",
+            "Workbench",
+            "index.html")));
 
         string doctorReport = Path.Combine(fixture.Root, "doctor.json");
         int doctor = Program.Main([
@@ -88,7 +101,7 @@ public sealed class UnrealProjectAdoptionTests
             "adopt",
             fixture.ProjectPath,
             "--sdk-root",
-            fixture.SdkRoot,
+            Path.Combine(fixture.ProjectRoot, "Plugins", "UEUnifiedScript"),
         ]);
         Assert.Equal(0, rerun);
         Assert.Equal(beforeRerun, SnapshotProductFiles(fixture.ProjectRoot));
@@ -526,6 +539,12 @@ public sealed class UnrealProjectAdoptionTests
             Write(
                 Path.Combine(SdkRoot, "Tools", "run-unifiedscript-onboarding-after-process.ps1"),
                 "# fixture deferred onboarding\n");
+            Write(
+                Path.Combine(SdkRoot, "Tools", "start-unifiedscript-authoring.ps1"),
+                "# fixture authoring launcher\n");
+            Write(
+                Path.Combine(SdkRoot, "Authoring", "Workbench", "index.html"),
+                "<!doctype html><title>Fixture Workbench</title>\n");
         }
 
         private void CreateEngine()

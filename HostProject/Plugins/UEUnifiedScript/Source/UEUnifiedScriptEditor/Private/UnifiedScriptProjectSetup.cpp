@@ -71,6 +71,9 @@ bool FUnifiedScriptProjectSetup::ResolvePaths(
     Candidate.DeferredOnboardingScript = FPaths::Combine(
         Candidate.PluginRoot,
         TEXT("Tools/run-unifiedscript-onboarding-after-process.ps1"));
+    Candidate.AuthoringScript = FPaths::Combine(
+        Candidate.PluginRoot,
+        TEXT("Tools/start-unifiedscript-authoring.ps1"));
     const FString ReportRoot = FPaths::Combine(
         Candidate.ProjectRoot,
         TEXT("Saved/UnifiedScript/ProjectSetup"));
@@ -91,6 +94,10 @@ bool FUnifiedScriptProjectSetup::ResolvePaths(
         !UE::UnifiedScript::ProjectSetup::Private::RequireFile(
             Candidate.DeferredOnboardingScript,
             TEXT("Deferred onboarding tool"),
+            OutError) ||
+        !UE::UnifiedScript::ProjectSetup::Private::RequireFile(
+            Candidate.AuthoringScript,
+            TEXT("Authoring launcher"),
             OutError))
     {
         return false;
@@ -167,6 +174,35 @@ bool FUnifiedScriptProjectSetup::BuildCommand(
         OutError = TEXT("UnifiedScript project setup command is incomplete.");
         return false;
     }
+    OutCommand = MoveTemp(Candidate);
+    OutError.Reset();
+    return true;
+}
+
+bool FUnifiedScriptProjectSetup::BuildAuthoringCommand(
+    const FUnifiedScriptProjectSetupPaths& Paths,
+    const FString& SourcePath,
+    FUnifiedScriptProjectSetupCommand& OutCommand,
+    FString& OutError)
+{
+    using namespace UE::UnifiedScript::ProjectSetup::Private;
+    FString ResolvedSourcePath = FPaths::ConvertRelativePathToFull(SourcePath);
+    FPaths::NormalizeFilename(ResolvedSourcePath);
+    if (!RequireFile(ResolvedSourcePath, TEXT("Script Class source"), OutError) ||
+        !RequireFile(Paths.AuthoringScript, TEXT("Authoring launcher"), OutError))
+    {
+        return false;
+    }
+
+    FUnifiedScriptProjectSetupCommand Candidate;
+    Candidate.Executable = TEXT("powershell.exe");
+    Candidate.bDetached = true;
+    Candidate.Arguments = FString::Printf(
+        TEXT("-NoProfile -ExecutionPolicy Bypass -File %s -Project %s -EngineRoot %s -Script %s"),
+        *Quote(Paths.AuthoringScript),
+        *Quote(Paths.ProjectFile),
+        *Quote(Paths.EngineRoot),
+        *Quote(ResolvedSourcePath));
     OutCommand = MoveTemp(Candidate);
     OutError.Reset();
     return true;

@@ -1772,6 +1772,36 @@ bool SUnifiedScriptAuthoringSurface::LoadSurface(const FString& ConfiguredPath)
     return true;
 }
 
+bool SUnifiedScriptAuthoringSurface::LoadScriptAsset(UUnifiedScriptAsset* ScriptAsset)
+{
+    if (!IsValid(ScriptAsset))
+    {
+        SetStatus(TEXT("The requested UnifiedScript Data Asset is unavailable."), true);
+        return false;
+    }
+    const FString SurfacePath = ScriptAsset->ResolveAuthoringSurfacePath();
+    if (SurfacePath.IsEmpty())
+    {
+        SetStatus(
+            FString::Printf(
+                TEXT("Script Asset '%s' has no AuthoringSurfacePath."),
+                *ScriptAsset->GetPathName()),
+            true);
+        return false;
+    }
+    if (!LoadSurface(SurfacePath))
+    {
+        return false;
+    }
+    LoadedScriptAsset = ScriptAsset;
+    const FString ServerUrl = ScriptAsset->ResolveAuthoringServerUrl();
+    if (!ServerUrl.IsEmpty())
+    {
+        ServerUrlTextBox->SetText(FText::FromString(ServerUrl));
+    }
+    return true;
+}
+
 FReply SUnifiedScriptAuthoringSurface::HandleLoad()
 {
     LoadedScriptAsset.Reset();
@@ -1817,23 +1847,7 @@ FReply SUnifiedScriptAuthoringSurface::HandleLoadSelectedAsset()
     {
         if (UUnifiedScriptAsset* Asset = Cast<UUnifiedScriptAsset>(AssetData.GetAsset()))
         {
-            const FString SurfacePath = Asset->ResolveAuthoringSurfacePath();
-            if (SurfacePath.IsEmpty())
-            {
-                SetStatus(
-                    FString::Printf(TEXT("Selected Script Asset '%s' has no AuthoringSurfacePath."), *Asset->GetPathName()),
-                    true);
-                return FReply::Handled();
-            }
-            if (LoadSurface(SurfacePath))
-            {
-                LoadedScriptAsset = Asset;
-                const FString ServerUrl = Asset->ResolveAuthoringServerUrl();
-                if (!ServerUrl.IsEmpty())
-                {
-                    ServerUrlTextBox->SetText(FText::FromString(ServerUrl));
-                }
-            }
+            LoadScriptAsset(Asset);
             return FReply::Handled();
         }
     }
@@ -4408,7 +4422,7 @@ void SUnifiedScriptAuthoringSurface::ReloadMatchingComponents(
         ++OutMatched;
         const bool bUpdated = Component->bScriptRunning
             ? Component->ReloadScriptWithTransaction(ReloadTransactionJson)
-            : Component->RefreshScriptState();
+            : Component->RefreshScriptStateWithTransaction(ReloadTransactionJson);
         if (!Component->LastReloadTransaction.IsEmpty())
         {
             OutObservedReloadTransactionJson = Component->LastReloadTransaction;
