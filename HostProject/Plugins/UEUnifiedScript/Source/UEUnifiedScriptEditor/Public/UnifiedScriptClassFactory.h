@@ -21,6 +21,13 @@ public:
         FFeedbackContext* Warn,
         FName CallingContext) override;
 
+    /**
+     * Script Class creation needs the asset name before it writes C# and
+     * deployment identities. Keep it on the named Tools workflow instead of
+     * the Content Browser's create-then-rename menu.
+     */
+    virtual bool ShouldShowInNewMenu() const override { return false; }
+
     EUnifiedScriptClassKind GetScriptClassKind() const { return ScriptClassKind; }
 
 protected:

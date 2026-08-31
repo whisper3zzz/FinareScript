@@ -295,6 +295,16 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 bool FUnifiedScriptClassFactoryContractTest::RunTest(const FString& Parameters)
 {
     using namespace UE::UnifiedScript::ClassFactory::Tests;
+    const UUnifiedScriptActorClassFactory* ActorFactory =
+        GetDefault<UUnifiedScriptActorClassFactory>();
+    const UUnifiedScriptActorComponentClassFactory* ComponentFactory =
+        GetDefault<UUnifiedScriptActorComponentClassFactory>();
+    TestFalse(
+        TEXT("Actor Script Class is hidden from create-then-rename menus"),
+        ActorFactory->ShouldShowInNewMenu());
+    TestFalse(
+        TEXT("Component Script Class is hidden from create-then-rename menus"),
+        ComponentFactory->ShouldShowInNewMenu());
     FScopedCreatedClassCleanup Cleanup;
     Cleanup.DeploymentPath = FPaths::ConvertRelativePathToFull(FPaths::Combine(
         FPaths::ProjectDir(),

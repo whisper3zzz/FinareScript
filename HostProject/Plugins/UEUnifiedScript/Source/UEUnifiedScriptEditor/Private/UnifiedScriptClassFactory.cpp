@@ -2,7 +2,6 @@
 
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Dom/JsonObject.h"
-#include "Framework/Docking/TabManager.h"
 #include "GameFramework/Actor.h"
 #include "HAL/FileManager.h"
 #include "Kismet2/BlueprintEditorUtils.h"
@@ -34,6 +33,7 @@ struct FProjectClassSettings
     FString SourceDirectory;
     FString DeploymentPath;
     FString CompiledChunkPath;
+    TArray<uint8> OriginalDeploymentBytes;
     TSharedPtr<FJsonObject> DeploymentRoot;
     TSharedPtr<FJsonObject> BaselineDeployment;
 };
@@ -171,8 +171,17 @@ bool ReadProjectSettings(FProjectClassSettings& OutSettings, FString& OutError)
         return false;
     }
 
-    if (!ReadJsonFile(Settings.DeploymentPath, Settings.DeploymentRoot, OutError))
+    if (!ReadJsonFile(Settings.DeploymentPath, Settings.DeploymentRoot, OutError) ||
+        !FFileHelper::LoadFileToArray(
+            Settings.OriginalDeploymentBytes,
+            *Settings.DeploymentPath))
     {
+        if (OutError.IsEmpty())
+        {
+            OutError = FString::Printf(
+                TEXT("Cannot snapshot UnifiedScript deployment manifest '%s'."),
+                *Settings.DeploymentPath);
+        }
         return false;
     }
     const TArray<TSharedPtr<FJsonValue>>* Scripts = nullptr;
@@ -274,6 +283,7 @@ bool WriteTextAtomically(const FString& Path, const FString& Text, FString& OutE
             *Temporary,
             FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
     {
+        IFileManager::Get().Delete(*Temporary, false, true);
         OutError = FString::Printf(TEXT("Cannot write '%s'."), *Temporary);
         return false;
     }
@@ -284,6 +294,97 @@ bool WriteTextAtomically(const FString& Path, const FString& Text, FString& OutE
         return false;
     }
     return true;
+}
+
+bool WriteBytesAtomically(
+    const FString& Path,
+    const TArray<uint8>& Bytes,
+    FString& OutError)
+{
+    IFileManager::Get().MakeDirectory(*FPaths::GetPath(Path), true);
+    const FString Temporary = Path + TEXT(".unifiedscript.rollback.tmp");
+    if (!FFileHelper::SaveArrayToFile(Bytes, *Temporary))
+    {
+        IFileManager::Get().Delete(*Temporary, false, true);
+        OutError = FString::Printf(TEXT("Cannot restore '%s'."), *Temporary);
+        return false;
+    }
+    if (!IFileManager::Get().Move(*Path, *Temporary, true, true, false, true))
+    {
+        IFileManager::Get().Delete(*Temporary, false, true);
+        OutError = FString::Printf(TEXT("Cannot publish restored file '%s'."), *Path);
+        return false;
+    }
+    return true;
+}
+
+bool RestoreFileSnapshot(
+    const FString& Path,
+    bool bExisted,
+    const TArray<uint8>& OriginalBytes,
+    FString& OutError)
+{
+    if (bExisted)
+    {
+        return WriteBytesAtomically(Path, OriginalBytes, OutError);
+    }
+    if (!IFileManager::Get().FileExists(*Path) ||
+        IFileManager::Get().Delete(*Path, false, true))
+    {
+        return true;
+    }
+    OutError = FString::Printf(TEXT("Cannot remove newly published file '%s'."), *Path);
+    return false;
+}
+
+bool RollbackExternalPublication(
+    const FProjectClassSettings& Settings,
+    const FString& SourcePath,
+    bool bSourceDirectoryExisted,
+    const FString& FirstPlayRequestPath,
+    bool bFirstPlayRequestExisted,
+    const TArray<uint8>& OriginalFirstPlayRequestBytes,
+    FString& OutError)
+{
+    TArray<FString> Failures;
+    if (IFileManager::Get().FileExists(*SourcePath) &&
+        !IFileManager::Get().Delete(*SourcePath, false, true))
+    {
+        Failures.Add(FString::Printf(
+            TEXT("cannot remove new source '%s'"),
+            *SourcePath));
+    }
+
+    FString RestoreError;
+    if (!WriteBytesAtomically(
+            Settings.DeploymentPath,
+            Settings.OriginalDeploymentBytes,
+            RestoreError))
+    {
+        Failures.Add(RestoreError);
+    }
+    RestoreError.Reset();
+    if (!RestoreFileSnapshot(
+            FirstPlayRequestPath,
+            bFirstPlayRequestExisted,
+            OriginalFirstPlayRequestBytes,
+            RestoreError))
+    {
+        Failures.Add(RestoreError);
+    }
+
+    if (!bSourceDirectoryExisted)
+    {
+        // Non-recursive deletion succeeds only when this creation left the
+        // directory empty; never remove files created concurrently by a user.
+        IFileManager::Get().DeleteDirectory(
+            *Settings.SourceDirectory,
+            false,
+            false);
+    }
+
+    OutError = FString::Join(Failures, TEXT("; "));
+    return Failures.IsEmpty();
 }
 
 bool AppendDeployment(
@@ -434,7 +535,7 @@ UObject* UUnifiedScriptClassFactory::FactoryCreateNew(
     FString Error;
     FProjectClassSettings Settings;
     const FString TypeName = Name.ToString();
-    if (ScriptClassKind == EUnifiedScriptClassKind::None ||
+    if (ScriptClassKind == EUnifiedScriptClassKind::None || InParent == nullptr ||
         !IsManagedIdentifier(TypeName) ||
         !ReadProjectSettings(Settings, Error))
     {
@@ -487,6 +588,33 @@ UObject* UUnifiedScriptClassFactory::FactoryCreateNew(
         *Settings.ManagedNamespace,
         *TypeName);
     const FGuid ClassId = FGuid::NewGuid();
+    const FString BlueprintAssetPath = FString::Printf(
+        TEXT("%s.%s"),
+        *BlueprintPackagePath,
+        *TypeName);
+    const FString ScriptAssetObjectPath = FString::Printf(
+        TEXT("%s.%s"),
+        *ScriptAssetPackagePath,
+        *ScriptAssetName);
+    const FString FirstPlayRequestPath =
+        FUnifiedScriptProjectSetup::GetFirstPlayRequestPath(Settings.ProjectRoot);
+    const bool bSourceDirectoryExisted =
+        IFileManager::Get().DirectoryExists(*Settings.SourceDirectory);
+    const bool bFirstPlayRequestExisted =
+        IFileManager::Get().FileExists(*FirstPlayRequestPath);
+    TArray<uint8> OriginalFirstPlayRequestBytes;
+    if (bFirstPlayRequestExisted &&
+        !FFileHelper::LoadFileToArray(
+            OriginalFirstPlayRequestBytes,
+            *FirstPlayRequestPath))
+    {
+        Warn->Logf(
+            ELogVerbosity::Error,
+            TEXT("UnifiedScript Class creation failed: cannot snapshot first-Play request '%s'."),
+            *FirstPlayRequestPath);
+        return nullptr;
+    }
+
     FString DeploymentJson;
     if (!AppendDeployment(
             Settings,
@@ -499,6 +627,71 @@ UObject* UUnifiedScriptClassFactory::FactoryCreateNew(
             Error))
     {
         Warn->Logf(ELogVerbosity::Error, TEXT("UnifiedScript Class creation failed: %s"), *Error);
+        return nullptr;
+    }
+
+    const FString Source = RenderManagedSource(
+        Settings.ManagedNamespace,
+        TypeName,
+        DeclarationAssetPath,
+        ClassId);
+    if (!WriteTextAtomically(SourcePath, Source, Error) ||
+        !WriteTextAtomically(Settings.DeploymentPath, DeploymentJson, Error))
+    {
+        FString RollbackError;
+        RollbackExternalPublication(
+            Settings,
+            SourcePath,
+            bSourceDirectoryExisted,
+            FirstPlayRequestPath,
+            bFirstPlayRequestExisted,
+            OriginalFirstPlayRequestBytes,
+            RollbackError);
+        if (!RollbackError.IsEmpty())
+        {
+            Error += FString::Printf(TEXT(" Rollback also failed: %s"), *RollbackError);
+        }
+        Warn->Logf(ELogVerbosity::Error, TEXT("UnifiedScript Class creation failed: %s"), *Error);
+        return nullptr;
+    }
+
+    FString PublishedFirstPlayRequestPath;
+    FString FirstPlayError;
+    const FString RequestId = FString::Printf(
+        TEXT("us_%s"),
+        *ClassId.ToString(EGuidFormats::Digits).ToLower());
+    if (!FUnifiedScriptProjectSetup::WriteFirstPlayRequest(
+            Settings.ProjectRoot,
+            RequestId,
+            ScriptClassKind == EUnifiedScriptClassKind::Actor
+                ? TEXT("actor")
+                : TEXT("actorComponent"),
+            BlueprintAssetPath,
+            ScriptAssetObjectPath,
+            SourcePath,
+            ManagedTypeName,
+            PublishedFirstPlayRequestPath,
+            FirstPlayError))
+    {
+        FString RollbackError;
+        RollbackExternalPublication(
+            Settings,
+            SourcePath,
+            bSourceDirectoryExisted,
+            FirstPlayRequestPath,
+            bFirstPlayRequestExisted,
+            OriginalFirstPlayRequestBytes,
+            RollbackError);
+        if (!RollbackError.IsEmpty())
+        {
+            FirstPlayError += FString::Printf(
+                TEXT(" Rollback also failed: %s"),
+                *RollbackError);
+        }
+        Warn->Logf(
+            ELogVerbosity::Error,
+            TEXT("UnifiedScript Class creation failed: %s"),
+            *FirstPlayError);
         return nullptr;
     }
 
@@ -515,19 +708,22 @@ UObject* UUnifiedScriptClassFactory::FactoryCreateNew(
         CallingContext));
     if (Blueprint == nullptr || Blueprint->GeneratedClass == nullptr)
     {
-        return nullptr;
-    }
-
-    const FString Source = RenderManagedSource(
-        Settings.ManagedNamespace,
-        TypeName,
-        DeclarationAssetPath,
-        ClassId);
-    if (!WriteTextAtomically(SourcePath, Source, Error) ||
-        !WriteTextAtomically(Settings.DeploymentPath, DeploymentJson, Error))
-    {
-        IFileManager::Get().Delete(*SourcePath, false, true);
-        Warn->Logf(ELogVerbosity::Error, TEXT("UnifiedScript Class creation failed: %s"), *Error);
+        FString RollbackError;
+        RollbackExternalPublication(
+            Settings,
+            SourcePath,
+            bSourceDirectoryExisted,
+            FirstPlayRequestPath,
+            bFirstPlayRequestExisted,
+            OriginalFirstPlayRequestBytes,
+            RollbackError);
+        if (!RollbackError.IsEmpty())
+        {
+            Warn->Logf(
+                ELogVerbosity::Error,
+                TEXT("UnifiedScript Class rollback failed after Blueprint creation failed: %s"),
+                *RollbackError);
+        }
         return nullptr;
     }
 
@@ -561,41 +757,10 @@ UObject* UUnifiedScriptClassFactory::FactoryCreateNew(
     FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
     Blueprint->MarkPackageDirty();
 
-    FString FirstPlayRequestPath;
-    FString FirstPlayError;
-    const FString RequestId = FString::Printf(
-        TEXT("us_%s"),
-        *ClassId.ToString(EGuidFormats::Digits).ToLower());
-    if (!FUnifiedScriptProjectSetup::WriteFirstPlayRequest(
-            Settings.ProjectRoot,
-            RequestId,
-            ScriptClassKind == EUnifiedScriptClassKind::Actor
-                ? TEXT("actor")
-                : TEXT("actorComponent"),
-            Blueprint->GetPathName(),
-            ScriptAsset->GetPathName(),
-            SourcePath,
-            ManagedTypeName,
-            FirstPlayRequestPath,
-            FirstPlayError))
-    {
-        Warn->Logf(
-            ELogVerbosity::Warning,
-            TEXT("UnifiedScript Class was created, but its first-Play handoff could not be written: %s"),
-            *FirstPlayError);
-    }
-    else
-    {
-        Warn->Logf(
-            ELogVerbosity::Display,
-            TEXT("UnifiedScript Class is ready to build. Open Project Setup and choose Build, Restart & Continue. Request: %s"),
-            *FirstPlayRequestPath);
-        if (!FApp::IsUnattended())
-        {
-            FGlobalTabmanager::Get()->TryInvokeTab(
-                FName(TEXT("UnifiedScriptProjectSetup")));
-        }
-    }
+    Warn->Logf(
+        ELogVerbosity::Display,
+        TEXT("UnifiedScript Class is ready to build. Open Project Setup and choose Build, Restart & Continue. Request: %s"),
+        *PublishedFirstPlayRequestPath);
     return Blueprint;
 }
 

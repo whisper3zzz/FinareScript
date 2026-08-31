@@ -79,6 +79,7 @@ public:
             .SetDisplayName(LOCTEXT("AuthoringSurfaceTab", "UnifiedScript Authoring"))
             .SetTooltipText(LOCTEXT("AuthoringSurfaceTooltip", "Open the native UnifiedScript visual authoring workspace."))
             .SetGroup(WorkspaceMenu::GetMenuStructure().GetToolsCategory())
+            .SetMenuType(ETabSpawnerMenuType::Hidden)
             .SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("Icons.Code")));
 
         FGlobalTabmanager::Get()->RegisterNomadTabSpawner(
@@ -87,6 +88,7 @@ public:
             .SetDisplayName(LOCTEXT("ProjectSetupTab", "UnifiedScript Project Setup"))
             .SetTooltipText(LOCTEXT("ProjectSetupTooltip", "Adopt, diagnose, repair, and build this UnifiedScript project."))
             .SetGroup(WorkspaceMenu::GetMenuStructure().GetToolsCategory())
+            .SetMenuType(ETabSpawnerMenuType::Hidden)
             .SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("Icons.Settings")));
 
         OpenAuthoringConsoleCommand = IConsoleManager::Get().RegisterConsoleCommand(
@@ -138,6 +140,11 @@ public:
         {
             FTSTicker::GetCoreTicker().RemoveTicker(FirstPlayStartupHandle);
             FirstPlayStartupHandle.Reset();
+        }
+        if (CreatedClassSetupHandle.IsValid())
+        {
+            FTSTicker::GetCoreTicker().RemoveTicker(CreatedClassSetupHandle);
+            CreatedClassSetupHandle.Reset();
         }
         if (OpenAuthoringConsoleCommand != nullptr)
         {
@@ -198,6 +205,7 @@ private:
     IConsoleObject* OpenAuthoringConsoleCommand = nullptr;
     IConsoleObject* OpenProjectSetupConsoleCommand = nullptr;
     FTSTicker::FDelegateHandle FirstPlayStartupHandle;
+    FTSTicker::FDelegateHandle CreatedClassSetupHandle;
     TWeakPtr<SUnifiedScriptAuthoringSurface> AuthoringSurfaceWidget;
     TWeakObjectPtr<UUnifiedScriptAsset> PendingAuthoringScriptAsset;
     FString PendingAuthoringSemanticId;
@@ -245,6 +253,26 @@ private:
         return false;
     }
 
+    bool OpenCreatedClassSetup(float DeltaTime)
+    {
+        CreatedClassSetupHandle.Reset();
+        OpenProjectSetup();
+        return false;
+    }
+
+    void ScheduleCreatedClassSetup()
+    {
+        if (CreatedClassSetupHandle.IsValid())
+        {
+            FTSTicker::GetCoreTicker().RemoveTicker(CreatedClassSetupHandle);
+        }
+        CreatedClassSetupHandle = FTSTicker::GetCoreTicker().AddTicker(
+            FTickerDelegate::CreateRaw(
+                this,
+                &FUEUnifiedScriptEditorModule::OpenCreatedClassSetup),
+            0.1f);
+    }
+
     template <typename TFactory>
     void CreateScriptClass()
     {
@@ -255,7 +283,9 @@ private:
             TEXT("CreateUnifiedScriptClass"));
         if (CreatedAsset != nullptr)
         {
-            OpenProjectSetup();
+            // AssetTools may foreground the new Blueprint after this call.
+            // Defer once so Project Setup remains the visible next action.
+            ScheduleCreatedClassSetup();
         }
     }
 
