@@ -49,8 +49,8 @@ bool FUnifiedScriptAssetWorkflowContractTest::RunTest(const FString& Parameters)
         TEXT("Rename explains the multi-artifact identity hazard"),
         Rename.GetErrorText().ToString().Contains(TEXT("source, proxy, deployment")));
     TestTrue(
-        TEXT("Duplicate points authors to a new Script Class"),
-        Duplicate.GetErrorText().ToString().Contains(TEXT("Create a new UnifiedScript Class")));
+        TEXT("Duplicate points authors to the complete-class operation"),
+        Duplicate.GetErrorText().ToString().Contains(TEXT("Duplicate UnifiedScript Class")));
 
     TArray<FAssetData> Assets{AssetData};
     FAssetSourceFilesArgs SourceArgs;
@@ -96,6 +96,8 @@ bool FUnifiedScriptAssetWorkflowContractTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Context menu opens exact C# source"), Menu->ContainsEntry(TEXT("UnifiedScript.OpenSource")));
     TestTrue(TEXT("Context menu locates exact generated class"), Menu->ContainsEntry(TEXT("UnifiedScript.LocateGeneratedClass")));
     TestTrue(TEXT("Context menu exposes repair"), Menu->ContainsEntry(TEXT("UnifiedScript.OpenRepair")));
+    TestTrue(TEXT("Context menu exposes complete-class rename"), Menu->ContainsEntry(TEXT("UnifiedScript.RenameClass")));
+    TestTrue(TEXT("Context menu exposes complete-class duplicate"), Menu->ContainsEntry(TEXT("UnifiedScript.DuplicateClass")));
     return true;
 }
 

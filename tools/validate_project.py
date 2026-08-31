@@ -1578,6 +1578,47 @@ def main() -> int:
         "M13.2A makes Script Assets the safe daily-workflow entry"
     )
 
+    script_class_operations_header = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+        / "UEUnifiedScriptEditor" / "Public"
+        / "UnifiedScriptClassAssetOperations.h"
+    ).read_text(encoding="utf-8")
+    script_class_operations_source = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+        / "UEUnifiedScriptEditor" / "Private"
+        / "UnifiedScriptClassAssetOperations.cpp"
+    ).read_text(encoding="utf-8")
+    script_class_operations_tests = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+        / "UEUnifiedScriptEditor" / "Private" / "Tests"
+        / "UnifiedScriptClassAssetOperationsTests.cpp"
+    ).read_text(encoding="utf-8")
+    require(
+        "FUnifiedScriptClassAssetOperations" in script_class_operations_header
+        and "static bool Rename" in script_class_operations_header
+        and "static bool Duplicate" in script_class_operations_header
+        and "FAssetRenameData" in script_class_operations_source
+        and "DuplicateAsset" in script_class_operations_source
+        and "TransformSource" in script_class_operations_source
+        and "BuildDeployment" in script_class_operations_source
+        and "BuildFirstPlayRequest" in script_class_operations_source
+        and "VerifyFilesUnchanged" in script_class_operations_source
+        and "RollbackRename" in script_class_operations_source
+        and "RollbackDuplicate" in script_class_operations_source
+        and "UnifiedScript.RenameClass" in script_asset_definition_source
+        and "UnifiedScript.DuplicateClass" in script_asset_definition_source
+        and "UnifiedScript.Unreal.ScriptClass.AssetOperations"
+        in script_class_operations_tests
+        and "AfterExternalPublication" in script_class_operations_tests
+        and "restores deployment bytes exactly" in script_class_operations_tests
+        and "M13.2A-2a — rename and duplicate transaction"
+        in roadmap_document,
+        "M13.2A-2a complete-class rename, duplicate, conflict detection, or rollback coverage is incomplete",
+    )
+    checks.append(
+        "M13.2A renames and duplicates complete Script Class identities transactionally"
+    )
+
     sample_catalog_path = ROOT / "samples" / "Unreal" / "unifiedscript.samples.json"
     sample_matrix_runner_path = ROOT / "tools" / "run-unifiedscript-sample-matrix.ps1"
     sample_document_path = ROOT / "docs" / "UNREAL_SAMPLES.md"

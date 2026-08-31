@@ -2,8 +2,10 @@
 
 #include "ContentBrowserMenuContexts.h"
 #include "ContentBrowserModule.h"
+#include "Dialogs/DlgPickAssetPath.h"
 #include "Engine/Blueprint.h"
 #include "IContentBrowserSingleton.h"
+#include "Misc/MessageDialog.h"
 #include "Misc/Paths.h"
 #include "SourceCodeNavigation.h"
 #include "Styling/AppStyle.h"
@@ -11,6 +13,7 @@
 #include "UEUnifiedScriptEditorModule.h"
 #include "UnifiedScriptAsset.h"
 #include "UnifiedScriptAuthoringSurface.h"
+#include "UnifiedScriptClassAssetOperations.h"
 
 #include UE_INLINE_GENERATED_CPP_BY_NAME(UnifiedScriptAssetDefinition)
 
@@ -71,6 +74,90 @@ void OpenRepair(const FToolMenuContext& Context)
 {
     IUEUnifiedScriptEditorModule::Get().OpenProjectSetup();
 }
+
+FString GetBlueprintPackagePath(const UUnifiedScriptAsset& ScriptAsset)
+{
+    const UClass* GeneratedClass = ScriptAsset.GeneratedClassPath.TryLoadClass<UObject>();
+    return GeneratedClass != nullptr && GeneratedClass->ClassGeneratedBy != nullptr
+        ? GeneratedClass->ClassGeneratedBy->GetOutermost()->GetName()
+        : FString();
+}
+
+bool PromptForTargetBlueprintPath(
+    const UUnifiedScriptAsset& ScriptAsset,
+    bool bDuplicate,
+    FString& OutPackagePath)
+{
+    const FString CurrentPackagePath = GetBlueprintPackagePath(ScriptAsset);
+    if (CurrentPackagePath.IsEmpty())
+    {
+        return false;
+    }
+    const FString Directory = FPackageName::GetLongPackagePath(CurrentPackagePath);
+    FString SuggestedName = FPackageName::GetLongPackageAssetName(CurrentPackagePath);
+    if (bDuplicate)
+    {
+        SuggestedName += TEXT("_Copy");
+    }
+    const TSharedRef<SDlgPickAssetPath> Dialog = SNew(SDlgPickAssetPath)
+        .Title(bDuplicate
+            ? LOCTEXT("DuplicateClassDialog", "Duplicate UnifiedScript Class")
+            : LOCTEXT("RenameClassDialog", "Rename UnifiedScript Class"))
+        .DefaultAssetPath(FText::FromString(Directory / SuggestedName));
+    if (Dialog->ShowModal() != EAppReturnType::Ok)
+    {
+        return false;
+    }
+    OutPackagePath = Dialog->GetFullAssetPath().ToString();
+    return !OutPackagePath.IsEmpty();
+}
+
+void RunClassOperation(const FToolMenuContext& Context, bool bDuplicate)
+{
+    for (UUnifiedScriptAsset* Asset : LoadSelectedScriptAssets(Context))
+    {
+        FString TargetPackagePath;
+        if (!PromptForTargetBlueprintPath(*Asset, bDuplicate, TargetPackagePath))
+        {
+            continue;
+        }
+        FUnifiedScriptClassAssetOperationResult Result;
+        const bool bSucceeded = bDuplicate
+            ? FUnifiedScriptClassAssetOperations::Duplicate(
+                Asset,
+                TargetPackagePath,
+                Result)
+            : FUnifiedScriptClassAssetOperations::Rename(
+                Asset,
+                TargetPackagePath,
+                Result);
+        if (!bSucceeded)
+        {
+            FMessageDialog::Open(
+                EAppMsgType::Ok,
+                FText::FromString(Result.Error),
+                LOCTEXT("ClassOperationFailed", "UnifiedScript Class operation failed"));
+            continue;
+        }
+
+        TArray<UObject*> AssetsToLocate;
+        AssetsToLocate.Add(Result.Blueprint);
+        AssetsToLocate.Add(Result.ScriptAsset);
+        FContentBrowserModule& ContentBrowser =
+            FModuleManager::LoadModuleChecked<FContentBrowserModule>(TEXT("ContentBrowser"));
+        ContentBrowser.Get().SyncBrowserToAssets(AssetsToLocate);
+    }
+}
+
+void RenameClass(const FToolMenuContext& Context)
+{
+    RunClassOperation(Context, false);
+}
+
+void DuplicateClass(const FToolMenuContext& Context)
+{
+    RunClassOperation(Context, true);
+}
 }
 
 FText UAssetDefinition_UnifiedScriptAsset::GetAssetDisplayName() const
@@ -112,17 +199,25 @@ EAssetCommandResult UAssetDefinition_UnifiedScriptAsset::OpenAssets(
 FAssetSupportResponse UAssetDefinition_UnifiedScriptAsset::CanRename(
     const FAssetData& InAsset) const
 {
+    if (FUnifiedScriptClassAssetOperations::IsAssetToolsMutationActive())
+    {
+        return FAssetSupportResponse::Supported();
+    }
     return FAssetSupportResponse::Error(LOCTEXT(
         "RenameBlocked",
-        "Rename the complete UnifiedScript Class through its managed workflow; renaming only the Script Asset would break its source, proxy, deployment, and semantic identity."));
+        "Use Rename UnifiedScript Class; renaming only the Script Asset would break its source, proxy, deployment, and semantic identity."));
 }
 
 FAssetSupportResponse UAssetDefinition_UnifiedScriptAsset::CanDuplicate(
     const FAssetData& InAsset) const
 {
+    if (FUnifiedScriptClassAssetOperations::IsAssetToolsMutationActive())
+    {
+        return FAssetSupportResponse::Supported();
+    }
     return FAssetSupportResponse::Error(LOCTEXT(
         "DuplicateBlocked",
-        "Create a new UnifiedScript Class instead; duplicating only the Script Asset would reuse the original source, proxy, deployment, and semantic identity."));
+        "Use Duplicate UnifiedScript Class; duplicating only the Script Asset would reuse the original source, proxy, deployment, and semantic identity."));
 }
 
 EAssetCommandResult UAssetDefinition_UnifiedScriptAsset::GetSourceFiles(
@@ -203,6 +298,26 @@ void UE::UnifiedScript::Editor::RegisterUnifiedScriptAssetContextMenu()
         LOCTEXT("OpenRepairTooltip", "Open Project Setup to validate and repair product-owned Script Class artifacts."),
         FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("Icons.Settings")),
         RepairAction);
+
+    FToolUIAction RenameClassAction;
+    RenameClassAction.ExecuteAction = FToolMenuExecuteAction::CreateStatic(
+        &UE::UnifiedScript::Editor::Private::RenameClass);
+    Section.AddMenuEntry(
+        TEXT("UnifiedScript.RenameClass"),
+        LOCTEXT("RenameClass", "Rename UnifiedScript Class..."),
+        LOCTEXT("RenameClassTooltip", "Rename the Blueprint proxy, Script Asset, C# source, deployment entry, and first-Play identity as one rollback-safe transaction."),
+        FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("Icons.Edit")),
+        RenameClassAction);
+
+    FToolUIAction DuplicateClassAction;
+    DuplicateClassAction.ExecuteAction = FToolMenuExecuteAction::CreateStatic(
+        &UE::UnifiedScript::Editor::Private::DuplicateClass);
+    Section.AddMenuEntry(
+        TEXT("UnifiedScript.DuplicateClass"),
+        LOCTEXT("DuplicateClass", "Duplicate UnifiedScript Class..."),
+        LOCTEXT("DuplicateClassTooltip", "Duplicate the complete Script Class with a fresh stable ClassId and an independent source/deployment identity."),
+        FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("Icons.Plus")),
+        DuplicateClassAction);
 }
 
 #undef LOCTEXT_NAMESPACE
