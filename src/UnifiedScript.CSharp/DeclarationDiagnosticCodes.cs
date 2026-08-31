@@ -8,4 +8,6 @@ public static class DeclarationDiagnosticCodes
     public const string UnsupportedStateType = "UAD1004";
     public const string DuplicateAssetPath = "UAD1005";
     public const string InvalidExposureMetadata = "UAD1006";
+    public const string InvalidScriptClassId = "UAD1007";
+    public const string DuplicateScriptClassId = "UAD1008";
 }

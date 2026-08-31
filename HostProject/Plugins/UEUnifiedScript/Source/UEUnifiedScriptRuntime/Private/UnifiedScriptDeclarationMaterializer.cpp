@@ -612,6 +612,8 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeChunkFileWithOverrides(
     TSet<FString> SeenAssetPaths;
     TArray<FPropertyBagPropertyDesc> Descs;
     TArray<FBinaryDefault> Defaults;
+    FGuid SelectedAssetId;
+    FString SelectedQualifiedName;
     FString SelectedAssetPath;
     bool bSelected = false;
     for (uint32 AssetIndex = 0; AssetIndex < AssetCount; ++AssetIndex)
@@ -644,6 +646,8 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeChunkFileWithOverrides(
                 return false;
             }
             bSelected = true;
+            SelectedAssetId = AssetId;
+            SelectedQualifiedName = QualifiedName;
             SelectedAssetPath = AssetPath;
             Descs.Reserve(static_cast<int32>(StateCount));
             Defaults.Reserve(static_cast<int32>(StateCount));
@@ -797,6 +801,8 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeChunkFileWithOverrides(
     }
 
     FUnifiedScriptStateMigrationReport Migration;
+    Migration.AssetId = SelectedAssetId;
+    Migration.AssetQualifiedName = MoveTemp(SelectedQualifiedName);
     Migration.DeclaredStateCount = Descs.Num();
     Migration.PreservedOverrideCount = CompatibleOverrideIds.Num();
     Migration.DefaultedStateCount = Descs.Num() - CompatibleOverrideIds.Num();
@@ -879,6 +885,20 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeJsonWithOverrides(
     FString SelectedAssetPath;
     if (!SelectAsset(*Assets, RequestedAssetPath, Asset, SelectedAssetPath, OutError))
     {
+        return false;
+    }
+
+    FString AssetIdText;
+    FString AssetQualifiedName;
+    FGuid AssetId;
+    if (!Asset->TryGetStringField(TEXT("id"), AssetIdText) ||
+        !ParseSemanticId(AssetIdText, AssetId) ||
+        !Asset->TryGetStringField(TEXT("qualifiedName"), AssetQualifiedName) ||
+        AssetQualifiedName.IsEmpty())
+    {
+        OutError = FString::Printf(
+            TEXT("Declaration asset '%s' has an invalid class identity."),
+            *SelectedAssetPath);
         return false;
     }
 
@@ -1050,6 +1070,8 @@ bool FUnifiedScriptDeclarationMaterializer::MaterializeJsonWithOverrides(
     }
 
     FUnifiedScriptStateMigrationReport Migration;
+    Migration.AssetId = AssetId;
+    Migration.AssetQualifiedName = MoveTemp(AssetQualifiedName);
     Migration.DeclaredStateCount = Descs.Num();
     Migration.PreservedOverrideCount = CompatibleOverrideIds.Num();
     Migration.DefaultedStateCount = Descs.Num() - CompatibleOverrideIds.Num();

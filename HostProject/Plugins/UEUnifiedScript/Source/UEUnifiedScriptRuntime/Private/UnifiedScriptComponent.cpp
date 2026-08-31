@@ -477,10 +477,16 @@ bool UUnifiedScriptComponent::StartScript()
 
     PhaseStartSeconds = FPlatformTime::Seconds();
     UObject* ScriptTarget = GetScriptTarget();
+    FString Error;
+    if (ResolvedAsset != nullptr &&
+        !ResolvedAsset->ValidateGeneratedClassIdentity(this, ScriptTarget, Error))
+    {
+        SetScriptFailure(MoveTemp(Error));
+        return false;
+    }
     const FName ResolvedOwnershipKey = LifecycleOwnershipKey.IsNone()
         ? FName(*ResolvedTypeName)
         : LifecycleOwnershipKey;
-    FString Error;
     if (!Host->ClaimGameplayLifecycle(
             this,
             ScriptTarget,
@@ -1857,7 +1863,7 @@ bool UUnifiedScriptComponent::BuildScriptState(
     if (UE::UnifiedScript::Component::Private::ShouldPreferCompiledChunks() &&
         !CompiledChunkPath.IsEmpty())
     {
-        return FUnifiedScriptDeclarationMaterializer::MaterializeChunkFileWithOverrides(
+        const bool bMaterialized = FUnifiedScriptDeclarationMaterializer::MaterializeChunkFileWithOverrides(
             ResolveConfiguredPath(CompiledChunkPath),
             RequestedAssetPath,
             ExistingState,
@@ -1867,16 +1873,25 @@ bool UUnifiedScriptComponent::BuildScriptState(
             OutMigration,
             OutDeclarationAssetPath,
             OutError);
+        return bMaterialized && ResolvedAsset->ValidateDeclarationIdentity(
+            OutMigration.AssetId,
+            OutMigration.AssetQualifiedName,
+            OutError);
     }
     if (DeclarationPath.IsEmpty())
     {
+        if (ResolvedAsset->ScriptClassId.IsValid())
+        {
+            OutError = TEXT("A persistent UnifiedScript Class requires declaration identity data.");
+            return false;
+        }
         OutState.Reset();
         OutMigration.DroppedOverrideCount = ExistingOverrideIds.Num();
         OutError.Reset();
         return true;
     }
 
-    return FUnifiedScriptDeclarationMaterializer::MaterializeFileWithOverrides(
+    const bool bMaterialized = FUnifiedScriptDeclarationMaterializer::MaterializeFileWithOverrides(
         ResolveConfiguredPath(DeclarationPath),
         RequestedAssetPath,
         ExistingState,
@@ -1885,6 +1900,10 @@ bool UUnifiedScriptComponent::BuildScriptState(
         OutOverrideIds,
         OutMigration,
         OutDeclarationAssetPath,
+        OutError);
+    return bMaterialized && ResolvedAsset->ValidateDeclarationIdentity(
+        OutMigration.AssetId,
+        OutMigration.AssetQualifiedName,
         OutError);
 }
 

@@ -93,8 +93,25 @@ internal sealed class CSharpScriptAssetLowerer
                 IReadOnlyList<ScriptFunctionDeclaration> functions = hirType is null
                     ? []
                     : LowerFunctions(hirType, semanticTypes, semanticMethods);
+                SemanticId assetId = hirType?.Id ?? CSharpSemanticIds.ForSymbol("type", qualifiedName);
+                if (assetAttribute is not null &&
+                    TryReadNamedString(
+                        assetAttribute,
+                        nameof(global::UnifiedScript.ScriptAssetAttribute.ClassId),
+                        out string? classId))
+                {
+                    if (!SemanticId.TryParse(classId, out assetId))
+                    {
+                        diagnostics.Add(new UnifiedDiagnostic(
+                            DeclarationDiagnosticCodes.InvalidScriptClassId,
+                            UnifiedDiagnosticSeverity.Error,
+                            $"Script asset '{qualifiedName}' has invalid persistent class ID '{classId}'. Expected 'us_' followed by 32 lowercase hexadecimal digits.",
+                            typeSpan));
+                        continue;
+                    }
+                }
                 declarations.Add(new ScriptAssetDeclaration(
-                    hirType?.Id ?? CSharpSemanticIds.ForSymbol("type", qualifiedName),
+                    assetId,
                     qualifiedName,
                     assetPath,
                     typeSpan,
@@ -118,6 +135,21 @@ internal sealed class CSharpScriptAssetLowerer
             }
         }
 
+        foreach (IGrouping<SemanticId, ScriptAssetDeclaration> duplicate in declarations
+                     .GroupBy(static asset => asset.Id)
+                     .Where(static group => group.Count() > 1))
+        {
+            foreach (ScriptAssetDeclaration asset in duplicate)
+            {
+                diagnostics.Add(new UnifiedDiagnostic(
+                    DeclarationDiagnosticCodes.DuplicateScriptClassId,
+                    UnifiedDiagnosticSeverity.Error,
+                    $"Script class ID '{duplicate.Key}' is also used by another source type.",
+                    asset.Span,
+                    asset.Id));
+            }
+        }
+
         if (diagnostics.Any(static diagnostic => diagnostic.Severity == UnifiedDiagnosticSeverity.Error))
         {
             return new ScriptAssetLoweringResult(null, declarationReferences, diagnostics);
@@ -128,6 +160,24 @@ internal sealed class CSharpScriptAssetLowerer
             semantics.ConfigurationId,
             declarations));
         return new ScriptAssetLoweringResult(document, declarationReferences, diagnostics);
+    }
+
+    private static bool TryReadNamedString(
+        AttributeData attribute,
+        string name,
+        out string? value)
+    {
+        foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
+        {
+            if (string.Equals(argument.Key, name, StringComparison.Ordinal))
+            {
+                value = argument.Value.Value as string;
+                return true;
+            }
+        }
+
+        value = null;
+        return false;
     }
 
     private static IReadOnlyList<ScriptStateDeclaration> LowerStates(

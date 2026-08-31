@@ -232,4 +232,58 @@ public sealed class CSharpScriptAssetLowererTests
         Assert.Equal(2, result.Diagnostics.Count(static diagnostic =>
             diagnostic.Code == DeclarationDiagnosticCodes.DuplicateAssetPath));
     }
+
+    [Fact]
+    public void ExplicitScriptClassIdBecomesTheAssetSemanticIdentity()
+    {
+        const string source = """
+            using UnifiedScript;
+            [ScriptAsset("Gameplay/Door", ClassId = "us_0123456789abcdef0123456789abcdef")]
+            public sealed class Door { }
+            """;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(source, "Door.cs");
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics));
+        Assert.Equal(
+            "us_0123456789abcdef0123456789abcdef",
+            Assert.Single(result.ScriptAssets!.Assets).Id.Value);
+    }
+
+    [Theory]
+    [InlineData("us_0123456789ABCDEF0123456789ABCDEF")]
+    [InlineData("0123456789abcdef0123456789abcdef")]
+    [InlineData("us_short")]
+    public void InvalidExplicitScriptClassIdFailsBeforeEmission(string classId)
+    {
+        string source = $$"""
+            using UnifiedScript;
+            [ScriptAsset("Gameplay/Door", ClassId = "{{classId}}")]
+            public sealed class Door { }
+            """;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(source, "Door.cs");
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(result.Diagnostics, static diagnostic =>
+            diagnostic.Code == DeclarationDiagnosticCodes.InvalidScriptClassId);
+    }
+
+    [Fact]
+    public void DuplicateExplicitScriptClassIdsFailBeforeEmission()
+    {
+        const string source = """
+            using UnifiedScript;
+            [ScriptAsset("Gameplay/First", ClassId = "us_0123456789abcdef0123456789abcdef")]
+            public sealed class First { }
+            [ScriptAsset("Gameplay/Second", ClassId = "us_0123456789abcdef0123456789abcdef")]
+            public sealed class Second { }
+            """;
+
+        CSharpAnalysisResult result = new CSharpSemanticPipeline().Analyze(source, "DuplicateIds.cs");
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(2, result.Diagnostics.Count(static diagnostic =>
+            diagnostic.Code == DeclarationDiagnosticCodes.DuplicateScriptClassId));
+    }
 }

@@ -8,6 +8,12 @@ namespace UnifiedScript;
 public sealed class ScriptAssetAttribute(string path) : Attribute
 {
     public string Path { get; } = path;
+
+    /// <summary>
+    /// Optional persistent class identity shared with generated Unreal assets.
+    /// New Script Class scaffolds always write this value explicitly.
+    /// </summary>
+    public string? ClassId { get; set; }
 }
 
 /// <summary>

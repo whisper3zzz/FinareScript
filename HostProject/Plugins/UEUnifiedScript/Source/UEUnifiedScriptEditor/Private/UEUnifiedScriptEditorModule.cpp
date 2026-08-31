@@ -1,6 +1,8 @@
 #include "Modules/ModuleManager.h"
 
+#include "AssetToolsModule.h"
 #include "EdGraphUtilities.h"
+#include "Engine/Blueprint.h"
 #include "Graph/SUnifiedScriptGraphNode.h"
 #include "HAL/IConsoleManager.h"
 #include "KismetPins/SGraphPinExec.h"
@@ -8,6 +10,7 @@
 #include "Styling/AppStyle.h"
 #include "ToolMenus.h"
 #include "UnifiedScriptEdGraph.h"
+#include "UnifiedScriptClassFactory.h"
 #include "Widgets/Docking/SDockTab.h"
 #include "Widgets/SUnifiedScriptAuthoringSurface.h"
 #include "Widgets/SUnifiedScriptProjectSetup.h"
@@ -169,6 +172,16 @@ private:
             UE::UnifiedScript::Editor::Private::ProjectSetupTabName);
     }
 
+    template <typename TFactory>
+    void CreateScriptClass()
+    {
+        TFactory* Factory = NewObject<TFactory>(GetTransientPackage());
+        FAssetToolsModule::GetModule().Get().CreateAssetWithDialog(
+            UBlueprint::StaticClass(),
+            Factory,
+            TEXT("CreateUnifiedScriptClass"));
+    }
+
     void RegisterMenus()
     {
         FToolMenuOwnerScoped OwnerScoped(this);
@@ -190,6 +203,22 @@ private:
             FUIAction(FExecuteAction::CreateRaw(
                 this,
                 &FUEUnifiedScriptEditorModule::OpenProjectSetup)));
+        Section.AddMenuEntry(
+            TEXT("CreateUnifiedScriptActorClass"),
+            LOCTEXT("CreateActorClass", "Create UnifiedScript Class (Actor)"),
+            LOCTEXT("CreateActorClassTooltip", "Create a placeable managed Actor class, C# source, Script Asset, and Blueprint proxy."),
+            FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("ClassIcon.Actor")),
+            FUIAction(FExecuteAction::CreateRaw(
+                this,
+                &FUEUnifiedScriptEditorModule::CreateScriptClass<UUnifiedScriptActorClassFactory>)));
+        Section.AddMenuEntry(
+            TEXT("CreateUnifiedScriptActorComponentClass"),
+            LOCTEXT("CreateActorComponentClass", "Create UnifiedScript Class (Actor Component)"),
+            LOCTEXT("CreateActorComponentClassTooltip", "Create an attachable managed ActorComponent class, C# source, Script Asset, and Blueprint proxy."),
+            FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("ClassIcon.ActorComponent")),
+            FUIAction(FExecuteAction::CreateRaw(
+                this,
+                &FUEUnifiedScriptEditorModule::CreateScriptClass<UUnifiedScriptActorComponentClassFactory>)));
     }
 };
 

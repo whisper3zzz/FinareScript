@@ -15,6 +15,12 @@
 /** Observable result of reconciling one instance state bag with a new declaration. */
 struct UEUNIFIEDSCRIPTRUNTIME_API FUnifiedScriptStateMigrationReport
 {
+    /** Exact Script Asset identity selected from the declaration payload. */
+    FGuid AssetId;
+
+    /** Exact managed metadata name selected from the declaration payload. */
+    FString AssetQualifiedName;
+
     int32 DeclaredStateCount = 0;
     int32 PreservedOverrideCount = 0;
     int32 DefaultedStateCount = 0;

@@ -4,6 +4,14 @@
 #include "Engine/DataAsset.h"
 #include "UnifiedScriptAsset.generated.h"
 
+UENUM(BlueprintType)
+enum class EUnifiedScriptClassKind : uint8
+{
+    None,
+    Actor,
+    ActorComponent,
+};
+
 /**
  * Project asset describing one managed UnifiedScript entry point.
  *
@@ -18,6 +26,18 @@ class UEUNIFIEDSCRIPTRUNTIME_API UUnifiedScriptAsset : public UDataAsset
 public:
     UPROPERTY(VisibleAnywhere, Category="UnifiedScript")
     int32 SchemaVersion = 1;
+
+    /** Stable semantic identity written into the managed [ScriptAsset] declaration. */
+    UPROPERTY(VisibleAnywhere, Category="UnifiedScript|Class")
+    FGuid ScriptClassId;
+
+    /** Determines whether the generated Blueprint proxy is placeable or attachable. */
+    UPROPERTY(VisibleAnywhere, Category="UnifiedScript|Class")
+    EUnifiedScriptClassKind ScriptClassKind = EUnifiedScriptClassKind::None;
+
+    /** Exact generated Blueprint class path; never resolved by short name. */
+    UPROPERTY(VisibleAnywhere, Category="UnifiedScript|Class")
+    FSoftClassPath GeneratedClassPath;
 
     /** Preferred verified .uschunk program. Falls back to ScriptAssemblyPath during migration. */
     UPROPERTY(EditAnywhere, Category="UnifiedScript|Runtime")
@@ -70,6 +90,18 @@ public:
 
     /** Validates the concrete component target against RequiredTargetClass without starting CoreCLR. */
     bool ValidateTarget(const UObject* Target, FString& OutError) const;
+
+    /** Rejects stale or similarly named declaration output for a persistent Script Class. */
+    bool ValidateDeclarationIdentity(
+        const FGuid& DeclarationId,
+        const FString& DeclarationQualifiedName,
+        FString& OutError) const;
+
+    /** Rejects a host/target that is not an instance of the exact generated proxy class. */
+    bool ValidateGeneratedClassIdentity(
+        const UObject* Host,
+        const UObject* Target,
+        FString& OutError) const;
 
     FString ResolveRequiredTargetClassPath() const;
 

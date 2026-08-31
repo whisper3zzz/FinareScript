@@ -24,6 +24,8 @@ bool FUnifiedScriptDeclarationMaterializerTest::RunTest(const FString& Parameter
 {
   "schemaVersion": "unifiedscript.script-asset/v0.1",
   "assets": [{
+    "id": "us_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "qualifiedName": "Tests.State",
     "assetPath": "Tests/State",
     "states": [
       {
@@ -84,6 +86,18 @@ bool FUnifiedScriptDeclarationMaterializerTest::RunTest(const FString& Parameter
         return false;
     }
     TestEqual(TEXT("Selected declaration asset is reported"), AssetPath, FString(TEXT("Tests/State")));
+    FGuid ExpectedAssetId;
+    TestTrue(
+        TEXT("Expected declaration class ID parses"),
+        FGuid::ParseExact(
+            TEXT("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+            EGuidFormats::Digits,
+            ExpectedAssetId));
+    TestEqual(TEXT("Selected declaration class ID is reported"), InitialMigration.AssetId, ExpectedAssetId);
+    TestEqual(
+        TEXT("Selected managed type is reported"),
+        InitialMigration.AssetQualifiedName,
+        FString(TEXT("Tests.State")));
     TestEqual(TEXT("Three states are materialized"), InitialState.GetNumPropertiesInBag(), 3);
     TestEqual(TEXT("Initial values inherit declaration defaults"), InitialMigration.DefaultedStateCount, 3);
     TestEqual(TEXT("Initial materialization has no overrides"), InitialOverrideIds.Num(), 0);
@@ -145,6 +159,8 @@ bool FUnifiedScriptDeclarationMaterializerTest::RunTest(const FString& Parameter
 {
   "schemaVersion": "unifiedscript.script-asset/v0.1",
   "assets": [{
+    "id": "us_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "qualifiedName": "Tests.State",
     "assetPath": "Tests/State",
     "states": [
       {
@@ -212,6 +228,8 @@ bool FUnifiedScriptDeclarationMaterializerTest::RunTest(const FString& Parameter
 {
   "schemaVersion": "unifiedscript.script-asset/v0.1",
   "assets": [{
+    "id": "us_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "qualifiedName": "Tests.State",
     "assetPath": "Tests/State",
     "states": [
       {
@@ -266,6 +284,8 @@ bool FUnifiedScriptDeclarationMaterializerTest::RunTest(const FString& Parameter
 {
   "schemaVersion": "unifiedscript.script-asset/v0.1",
   "assets": [{
+    "id": "us_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "qualifiedName": "Tests.State",
     "assetPath": "Tests/State",
     "states": [{
       "id": "us_11111111111111111111111111111111",

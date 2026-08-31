@@ -109,6 +109,42 @@ bool FUnifiedScriptAssetConfigurationTest::RunTest(const FString& Parameters)
         Asset->ResolveRequiredTargetClassPath(),
         AActor::StaticClass()->GetPathName());
 
+    TestTrue(
+        TEXT("Persistent class GUID parses"),
+        FGuid::ParseExact(
+            TEXT("0123456789abcdef0123456789abcdef"),
+            EGuidFormats::Digits,
+            Asset->ScriptClassId));
+    TestTrue(
+        TEXT("Exact declaration class identity is accepted"),
+        Asset->ValidateDeclarationIdentity(
+            Asset->ScriptClassId,
+            TEXT("UnifiedScript.Unreal.Demo.DemoScript"),
+            Error));
+    FGuid StaleClassId;
+    TestTrue(
+        TEXT("Stale class GUID parses"),
+        FGuid::ParseExact(
+            TEXT("fedcba9876543210fedcba9876543210"),
+            EGuidFormats::Digits,
+            StaleClassId));
+    TestFalse(
+        TEXT("Stale declaration class identity is rejected"),
+        Asset->ValidateDeclarationIdentity(
+            StaleClassId,
+            TEXT("UnifiedScript.Unreal.Demo.DemoScript"),
+            Error));
+    TestTrue(TEXT("Stale identity failure is explicit"), Error.Contains(TEXT("stale")));
+
+    Asset->ScriptClassKind = EUnifiedScriptClassKind::Actor;
+    Asset->GeneratedClassPath = FSoftClassPath(AActor::StaticClass());
+    TestTrue(
+        TEXT("Exact generated Actor class is accepted"),
+        Asset->ValidateGeneratedClassIdentity(Asset, CompatibleTarget, Error));
+    TestFalse(
+        TEXT("A similarly configured non-Actor target is rejected"),
+        Asset->ValidateGeneratedClassIdentity(Asset, Asset, Error));
+
     Asset->SchemaVersion = 2;
     TestFalse(
         TEXT("Unknown Script Asset schema is rejected"),

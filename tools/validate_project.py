@@ -1306,6 +1306,63 @@ def main() -> int:
         "M13.1B-2b locks exact Blueprint/native surfaces and rejects stale generation"
     )
 
+    script_asset_attributes = (
+        ROOT / "src" / "UnifiedScript.Core" / "ScriptAssetAttributes.cs"
+    ).read_text(encoding="utf-8")
+    script_asset_lowerer = (
+        ROOT / "src" / "UnifiedScript.CSharp" / "CSharpScriptAssetLowerer.cs"
+    ).read_text(encoding="utf-8")
+    script_asset_runtime = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptRuntime"
+        / "Private"
+        / "UnifiedScriptAsset.cpp"
+    ).read_text(encoding="utf-8")
+    script_class_factory = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptEditor"
+        / "Private"
+        / "UnifiedScriptClassFactory.cpp"
+    ).read_text(encoding="utf-8")
+    script_class_factory_tests = (
+        ROOT
+        / "HostProject"
+        / "Plugins"
+        / "UEUnifiedScript"
+        / "Source"
+        / "UEUnifiedScriptEditor"
+        / "Private"
+        / "Tests"
+        / "UnifiedScriptClassFactoryTests.cpp"
+    ).read_text(encoding="utf-8")
+    require(
+        "public string? ClassId" in script_asset_attributes
+        and "InvalidScriptClassId" in script_asset_lowerer
+        and "DuplicateScriptClassId" in script_asset_lowerer
+        and "ValidateDeclarationIdentity" in script_asset_runtime
+        and "ValidateGeneratedClassIdentity" in script_asset_runtime
+        and "UUnifiedScriptActorClassFactory" in script_class_factory
+        and "UUnifiedScriptActorComponentClassFactory" in script_class_factory
+        and "RenderManagedSource" in script_class_factory
+        and "AppendDeployment" in script_class_factory
+        and "FactoryContract" in script_class_factory_tests
+        and "Generated Actor is selectable" in script_class_factory_tests
+        and "Generated Component is attachable" in script_class_factory_tests
+        and "M13.1C-0 creation and identity foundation" in roadmap_document,
+        "M13.1C-0 persistent Script Class identity, Editor factory, or save contract is incomplete",
+    )
+    checks.append(
+        "M13.1C-0 creates exact-identity Actor and Component Script Class proxies"
+    )
+
     sample_catalog_path = ROOT / "samples" / "Unreal" / "unifiedscript.samples.json"
     sample_matrix_runner_path = ROOT / "tools" / "run-unifiedscript-sample-matrix.ps1"
     sample_document_path = ROOT / "docs" / "UNREAL_SAMPLES.md"

@@ -77,6 +77,78 @@ bool UUnifiedScriptAsset::ValidateTarget(
     return true;
 }
 
+bool UUnifiedScriptAsset::ValidateDeclarationIdentity(
+    const FGuid& DeclarationId,
+    const FString& DeclarationQualifiedName,
+    FString& OutError) const
+{
+    if (!ScriptClassId.IsValid())
+    {
+        OutError.Reset();
+        return true;
+    }
+
+    if (DeclarationId != ScriptClassId)
+    {
+        OutError = FString::Printf(
+            TEXT("UnifiedScript Class '%s' expects semantic ID '%s', but the selected declaration has '%s'. Rebuild or recreate the stale class proxy instead of binding by name."),
+            *GetPathName(),
+            *ScriptClassId.ToString(EGuidFormats::Digits),
+            *DeclarationId.ToString(EGuidFormats::Digits));
+        return false;
+    }
+    FString ExpectedTypeName = ScriptTypeName;
+    ExpectedTypeName.TrimStartAndEndInline();
+    if (DeclarationQualifiedName != ExpectedTypeName)
+    {
+        OutError = FString::Printf(
+            TEXT("UnifiedScript Class '%s' expects managed type '%s', but the selected declaration contains '%s'."),
+            *GetPathName(),
+            *ExpectedTypeName,
+            *DeclarationQualifiedName);
+        return false;
+    }
+
+    OutError.Reset();
+    return true;
+}
+
+bool UUnifiedScriptAsset::ValidateGeneratedClassIdentity(
+    const UObject* Host,
+    const UObject* Target,
+    FString& OutError) const
+{
+    if (ScriptClassKind == EUnifiedScriptClassKind::None)
+    {
+        OutError.Reset();
+        return true;
+    }
+    if (!ScriptClassId.IsValid() || !GeneratedClassPath.IsValid())
+    {
+        OutError = FString::Printf(
+            TEXT("UnifiedScript Class '%s' has incomplete persistent class identity."),
+            *GetPathName());
+        return false;
+    }
+
+    UClass* ExpectedClass = GeneratedClassPath.TryLoadClass<UObject>();
+    const UObject* Candidate = ScriptClassKind == EUnifiedScriptClassKind::Actor
+        ? Target
+        : Host;
+    if (ExpectedClass == nullptr || Candidate == nullptr || !Candidate->IsA(ExpectedClass))
+    {
+        OutError = FString::Printf(
+            TEXT("UnifiedScript Class '%s' requires exact generated class '%s', but received '%s'."),
+            *GetPathName(),
+            *GeneratedClassPath.ToString(),
+            Candidate != nullptr ? *Candidate->GetClass()->GetPathName() : TEXT("<null>"));
+        return false;
+    }
+
+    OutError.Reset();
+    return true;
+}
+
 FString UUnifiedScriptAsset::ResolveRequiredTargetClassPath() const
 {
     return RequiredTargetClass.IsNull()
