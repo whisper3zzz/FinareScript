@@ -27,4 +27,8 @@ namespace UE::UnifiedScript::Editor
 {
 /** Adds exact Script Asset actions to its class-specific Content Browser menu. */
 void RegisterUnifiedScriptAssetContextMenu();
+
+/** Rejects bare destructive operations against either half of a Script Class. */
+void RegisterUnifiedScriptAssetOperationGuards();
+void UnregisterUnifiedScriptAssetOperationGuards();
 }

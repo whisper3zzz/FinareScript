@@ -3,6 +3,7 @@
 #include "ContentBrowserMenuContexts.h"
 #include "ContentBrowserModule.h"
 #include "Dialogs/DlgPickAssetPath.h"
+#include "Editor.h"
 #include "Engine/Blueprint.h"
 #include "IContentBrowserSingleton.h"
 #include "Misc/MessageDialog.h"
@@ -21,6 +22,41 @@
 
 namespace UE::UnifiedScript::Editor::Private
 {
+FDelegateHandle AssetsCanDeleteHandle;
+FDelegateHandle PreDestructiveAssetActionHandle;
+
+bool ContainsCompleteScriptClassAsset(const TArray<UObject*>& Objects)
+{
+    return Objects.ContainsByPredicate(
+        [](const UObject* Object)
+        {
+            return FUnifiedScriptClassAssetOperations::IsCompleteClassAsset(Object);
+        });
+}
+
+void GuardBareDelete(
+    const TArray<UObject*>& Objects,
+    FCanDeleteAssetResult& OutCanDelete)
+{
+    if (!FUnifiedScriptClassAssetOperations::IsAssetToolsMutationActive() &&
+        ContainsCompleteScriptClassAsset(Objects))
+    {
+        OutCanDelete.Set(false);
+    }
+}
+
+void GuardBareDestructiveAction(FOnPreDestructiveAssetActionArgs& Args)
+{
+    if (FUnifiedScriptClassAssetOperations::IsAssetToolsMutationActive() ||
+        !ContainsCompleteScriptClassAsset(Args.Objects))
+    {
+        return;
+    }
+    Args.Result.bSuccess = false;
+    Args.Result.ErrorMessage =
+        TEXT("Use the UnifiedScript Class actions on its Script Asset; operating on only the generated Blueprint or sidecar would break the complete class identity.");
+}
+
 TArray<UUnifiedScriptAsset*> LoadSelectedScriptAssets(const FToolMenuContext& Context)
 {
     const UContentBrowserAssetContextMenuContext* AssetContext =
@@ -157,6 +193,35 @@ void RenameClass(const FToolMenuContext& Context)
 void DuplicateClass(const FToolMenuContext& Context)
 {
     RunClassOperation(Context, true);
+}
+
+void DeleteClass(const FToolMenuContext& Context)
+{
+    for (UUnifiedScriptAsset* Asset : LoadSelectedScriptAssets(Context))
+    {
+        const EAppReturnType::Type Confirmation = FMessageDialog::Open(
+            EAppMsgType::YesNo,
+            FText::Format(
+                LOCTEXT(
+                    "DeleteClassConfirmation",
+                    "Delete UnifiedScript Class '{0}'? This removes its generated Blueprint, Script Asset, managed source, deployment entry, and matching first-Play request."),
+                FText::FromString(Asset->ScriptTypeName)),
+            LOCTEXT("DeleteClassDialog", "Delete UnifiedScript Class"));
+        if (Confirmation != EAppReturnType::Yes)
+        {
+            continue;
+        }
+        FUnifiedScriptClassAssetOperationResult Result;
+        if (!FUnifiedScriptClassAssetOperations::Delete(Asset, Result))
+        {
+            FMessageDialog::Open(
+                EAppMsgType::Ok,
+                FText::FromString(Result.Error),
+                LOCTEXT(
+                    "DeleteClassFailed",
+                    "UnifiedScript Class deletion failed"));
+        }
+    }
 }
 }
 
@@ -318,6 +383,48 @@ void UE::UnifiedScript::Editor::RegisterUnifiedScriptAssetContextMenu()
         LOCTEXT("DuplicateClassTooltip", "Duplicate the complete Script Class with a fresh stable ClassId and an independent source/deployment identity."),
         FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("Icons.Plus")),
         DuplicateClassAction);
+
+    FToolUIAction DeleteClassAction;
+    DeleteClassAction.ExecuteAction = FToolMenuExecuteAction::CreateStatic(
+        &UE::UnifiedScript::Editor::Private::DeleteClass);
+    Section.AddMenuEntry(
+        TEXT("UnifiedScript.DeleteClass"),
+        LOCTEXT("DeleteClass", "Delete UnifiedScript Class..."),
+        LOCTEXT("DeleteClassTooltip", "Delete the generated Blueprint, Script Asset, managed source, deployment entry, and matching first-Play request as one guarded transaction."),
+        FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("Icons.Delete")),
+        DeleteClassAction);
+}
+
+void UE::UnifiedScript::Editor::RegisterUnifiedScriptAssetOperationGuards()
+{
+    using namespace UE::UnifiedScript::Editor::Private;
+    if (!AssetsCanDeleteHandle.IsValid())
+    {
+        AssetsCanDeleteHandle = FEditorDelegates::OnAssetsCanDelete.AddStatic(
+            &GuardBareDelete);
+    }
+    if (!PreDestructiveAssetActionHandle.IsValid())
+    {
+        PreDestructiveAssetActionHandle =
+            FEditorDelegates::OnPreDestructiveAssetActionWithArgs.AddStatic(
+                &GuardBareDestructiveAction);
+    }
+}
+
+void UE::UnifiedScript::Editor::UnregisterUnifiedScriptAssetOperationGuards()
+{
+    using namespace UE::UnifiedScript::Editor::Private;
+    if (AssetsCanDeleteHandle.IsValid())
+    {
+        FEditorDelegates::OnAssetsCanDelete.Remove(AssetsCanDeleteHandle);
+        AssetsCanDeleteHandle.Reset();
+    }
+    if (PreDestructiveAssetActionHandle.IsValid())
+    {
+        FEditorDelegates::OnPreDestructiveAssetActionWithArgs.Remove(
+            PreDestructiveAssetActionHandle);
+        PreDestructiveAssetActionHandle.Reset();
+    }
 }
 
 #undef LOCTEXT_NAMESPACE

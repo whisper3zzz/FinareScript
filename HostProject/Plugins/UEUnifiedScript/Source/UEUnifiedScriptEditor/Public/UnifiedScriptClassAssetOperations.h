@@ -49,6 +49,15 @@ public:
         EUnifiedScriptClassAssetOperationFailurePoint FailurePoint =
             EUnifiedScriptClassAssetOperationFailurePoint::None);
 
+    static bool Delete(
+        UUnifiedScriptAsset* ScriptAsset,
+        FUnifiedScriptClassAssetOperationResult& OutResult,
+        EUnifiedScriptClassAssetOperationFailurePoint FailurePoint =
+            EUnifiedScriptClassAssetOperationFailurePoint::None);
+
+    /** True for either half of a persistent Script Class asset pair. */
+    static bool IsCompleteClassAsset(const UObject* Asset);
+
     /** True only while the complete-class transaction invokes AssetTools. */
     static bool IsAssetToolsMutationActive();
 };

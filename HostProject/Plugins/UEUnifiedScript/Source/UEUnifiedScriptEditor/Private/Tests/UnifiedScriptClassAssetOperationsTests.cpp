@@ -3,6 +3,7 @@
 #include "UnifiedScriptClassAssetOperations.h"
 
 #include "Engine/Blueprint.h"
+#include "Editor.h"
 #include "HAL/FileManager.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/FileHelper.h"
@@ -414,6 +415,160 @@ bool FUnifiedScriptClassAssetOperationsTest::RunTest(const FString& Parameters)
     TestFalse(
         TEXT("Rollback removes the duplicated Script Asset package"),
         FPackageName::DoesPackageExist(DuplicateFailureSidecar));
+
+    TestTrue(
+        TEXT("Generated Blueprint is recognized as one half of a complete Script Class"),
+        FUnifiedScriptClassAssetOperations::IsCompleteClassAsset(
+            DuplicateResult.Blueprint));
+    TestTrue(
+        TEXT("Script Asset is recognized as one half of a complete Script Class"),
+        FUnifiedScriptClassAssetOperations::IsCompleteClassAsset(
+            DuplicateResult.ScriptAsset));
+    TArray<UObject*> BareDeleteObjects{DuplicateResult.Blueprint};
+    FCanDeleteAssetResult BareDeleteResult;
+    FEditorDelegates::OnAssetsCanDelete.Broadcast(
+        BareDeleteObjects,
+        BareDeleteResult);
+    TestFalse(
+        TEXT("Editor guard rejects bare generated Blueprint deletion"),
+        BareDeleteResult.Get());
+    FOnPreDestructiveAssetActionArgs BareRenameArgs(
+        BareDeleteObjects,
+        EDestructiveAssetActions::AssetRename);
+    FEditorDelegates::OnPreDestructiveAssetActionWithArgs.Broadcast(
+        BareRenameArgs);
+    TestFalse(
+        TEXT("Editor guard rejects bare generated Blueprint rename or move"),
+        BareRenameArgs.Result.bSuccess);
+
+    const FString ManagedReferenceProbePath = FPaths::Combine(
+        FPaths::GetPath(DuplicateResult.SourcePath),
+        DuplicateName + TEXT("_ReferenceProbe.cs"));
+    Cleanup.SourcePaths.Add(ManagedReferenceProbePath);
+    const FString ManagedReferenceProbe = FString::Printf(
+        TEXT("namespace UnifiedScript.Unreal.Demo; sealed class ReferenceProbe { %s? Value; }\n"),
+        *DuplicateName);
+    TestTrue(
+        TEXT("Writes an external managed reference probe"),
+        FFileHelper::SaveStringToFile(
+            ManagedReferenceProbe,
+            *ManagedReferenceProbePath));
+    FUnifiedScriptClassAssetOperationResult ReferencedDeleteResult;
+    TestFalse(
+        TEXT("Delete rejects a Script Class with a managed source referencer"),
+        FUnifiedScriptClassAssetOperations::Delete(
+            DuplicateResult.ScriptAsset,
+            ReferencedDeleteResult));
+    TestTrue(
+        TEXT("Referenced delete explains the managed referencer"),
+        ReferencedDeleteResult.Error.Contains(TEXT("managed sources still reference")));
+    TestTrue(
+        TEXT("Rejected referenced delete preserves the managed source"),
+        IFileManager::Get().FileExists(*DuplicateResult.SourcePath));
+    TestTrue(
+        TEXT("Removes the managed reference probe before delete transaction coverage"),
+        IFileManager::Get().Delete(
+            *ManagedReferenceProbePath,
+            false,
+            true));
+
+    TArray<uint8> DuplicateSourceBeforeDeleteFailure;
+    TArray<uint8> DeploymentBeforeDeleteFailure;
+    TArray<uint8> RequestBeforeDeleteFailure;
+    TestTrue(
+        TEXT("Snapshots duplicate source before delete rollback coverage"),
+        ReadBytes(
+            DuplicateResult.SourcePath,
+            DuplicateSourceBeforeDeleteFailure));
+    TestTrue(
+        TEXT("Snapshots deployment before delete rollback coverage"),
+        ReadBytes(
+            Cleanup.DeploymentPath,
+            DeploymentBeforeDeleteFailure));
+    TestTrue(
+        TEXT("Snapshots request before delete rollback coverage"),
+        ReadBytes(
+            Cleanup.FirstPlayRequestPath,
+            RequestBeforeDeleteFailure));
+    FUnifiedScriptClassAssetOperationResult DeleteFailureResult;
+    TestFalse(
+        TEXT("Injected post-publication failure rejects complete-class delete"),
+        FUnifiedScriptClassAssetOperations::Delete(
+            DuplicateResult.ScriptAsset,
+            DeleteFailureResult,
+            EUnifiedScriptClassAssetOperationFailurePoint::AfterExternalPublication));
+    TestTrue(
+        TEXT("Injected delete failure rolls back the full transaction"),
+        DeleteFailureResult.bRolledBack);
+    TArray<uint8> DuplicateSourceAfterDeleteFailure;
+    TArray<uint8> DeploymentAfterDeleteFailure;
+    TArray<uint8> RequestAfterDeleteFailure;
+    TestTrue(
+        TEXT("Reads duplicate source after delete rollback"),
+        ReadBytes(
+            DuplicateResult.SourcePath,
+            DuplicateSourceAfterDeleteFailure));
+    TestTrue(
+        TEXT("Reads deployment after delete rollback"),
+        ReadBytes(
+            Cleanup.DeploymentPath,
+            DeploymentAfterDeleteFailure));
+    TestTrue(
+        TEXT("Reads request after delete rollback"),
+        ReadBytes(
+            Cleanup.FirstPlayRequestPath,
+            RequestAfterDeleteFailure));
+    TestEqual(
+        TEXT("Delete rollback restores source bytes exactly"),
+        DuplicateSourceAfterDeleteFailure,
+        DuplicateSourceBeforeDeleteFailure);
+    TestEqual(
+        TEXT("Delete rollback restores deployment bytes exactly"),
+        DeploymentAfterDeleteFailure,
+        DeploymentBeforeDeleteFailure);
+    TestEqual(
+        TEXT("Delete rollback restores request bytes exactly"),
+        RequestAfterDeleteFailure,
+        RequestBeforeDeleteFailure);
+    TestTrue(
+        TEXT("Delete rollback restores the Blueprint package"),
+        FPackageName::DoesPackageExist(DuplicatePackage));
+    TestTrue(
+        TEXT("Delete rollback restores the Script Asset package"),
+        FPackageName::DoesPackageExist(DuplicateSidecar));
+
+    const FString DeletedManagedTypeName = DuplicateResult.ManagedTypeName;
+    const FString DeletedSourcePath = DuplicateResult.SourcePath;
+    FUnifiedScriptClassAssetOperationResult DeleteResult;
+    TestTrue(
+        TEXT("Deletes the complete unreferenced Script Class"),
+        FUnifiedScriptClassAssetOperations::Delete(
+            DuplicateResult.ScriptAsset,
+            DeleteResult));
+    TestTrue(TEXT("Delete transaction reports success"), DeleteResult.bSucceeded);
+    TestNull(TEXT("Delete does not return a stale Blueprint pointer"), DeleteResult.Blueprint);
+    TestNull(TEXT("Delete does not return a stale Script Asset pointer"), DeleteResult.ScriptAsset);
+    TestFalse(
+        TEXT("Delete removes the managed source"),
+        IFileManager::Get().FileExists(*DeletedSourcePath));
+    TestFalse(
+        TEXT("Delete removes the Blueprint package"),
+        FPackageName::DoesPackageExist(DuplicatePackage));
+    TestFalse(
+        TEXT("Delete removes the Script Asset package"),
+        FPackageName::DoesPackageExist(DuplicateSidecar));
+    FString DeploymentAfterDelete;
+    TestTrue(
+        TEXT("Reads deployment after complete-class delete"),
+        FFileHelper::LoadFileToString(
+            DeploymentAfterDelete,
+            *Cleanup.DeploymentPath));
+    TestFalse(
+        TEXT("Delete removes the exact deployment identity"),
+        DeploymentAfterDelete.Contains(DeletedManagedTypeName));
+    TestFalse(
+        TEXT("Delete removes its matching first-Play request"),
+        IFileManager::Get().FileExists(*Cleanup.FirstPlayRequestPath));
     return true;
 }
 

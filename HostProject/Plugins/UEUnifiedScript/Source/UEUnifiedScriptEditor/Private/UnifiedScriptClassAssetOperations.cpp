@@ -1,7 +1,9 @@
 #include "UnifiedScriptClassAssetOperations.h"
 
+#include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetToolsModule.h"
 #include "Dom/JsonObject.h"
+#include "Editor.h"
 #include "Engine/Blueprint.h"
 #include "GameFramework/Actor.h"
 #include "HAL/FileManager.h"
@@ -642,6 +644,192 @@ bool BuildDeployment(
     return SerializeJson(Context.DeploymentRoot.ToSharedRef(), OutJson, OutError);
 }
 
+bool BuildDeleteDeployment(
+    const FClassOperationContext& Context,
+    FString& OutJson,
+    FString& OutError)
+{
+    TArray<TSharedPtr<FJsonValue>> Scripts;
+    const TSharedPtr<FJsonObject> Existing = FindDeploymentEntry(
+        Context,
+        Scripts,
+        OutError);
+    if (!Existing.IsValid())
+    {
+        return false;
+    }
+    const int32 Removed = Scripts.RemoveAll(
+        [&Existing](const TSharedPtr<FJsonValue>& Value)
+        {
+            return Value.IsValid() && Value->AsObject() == Existing;
+        });
+    if (Removed != 1)
+    {
+        OutError = TEXT("Deployment did not remove exactly one Script Class identity.");
+        return false;
+    }
+    Context.DeploymentRoot->SetArrayField(TEXT("scripts"), Scripts);
+    return SerializeJson(Context.DeploymentRoot.ToSharedRef(), OutJson, OutError);
+}
+
+FString GetBlueprintAssetPath(const FClassOperationContext& Context)
+{
+    return FString::Printf(
+        TEXT("%s.%s"),
+        *Context.BlueprintPackagePath,
+        *Context.OldTypeName);
+}
+
+FString GetScriptAssetObjectPath(const FClassOperationContext& Context)
+{
+    return FString::Printf(
+        TEXT("%s.%s"),
+        *Context.ScriptAssetPackagePath,
+        *FPackageName::GetLongPackageAssetName(Context.ScriptAssetPackagePath));
+}
+
+bool ShouldDeleteFirstPlayRequest(
+    const FClassOperationContext& Context,
+    bool& bOutDelete,
+    FString& OutError)
+{
+    bOutDelete = false;
+    if (!IFileManager::Get().FileExists(*Context.FirstPlayRequestPath))
+    {
+        return true;
+    }
+    FUnifiedScriptFirstPlayRequest Request;
+    if (!FUnifiedScriptProjectSetup::ReadFirstPlayRequest(
+            Context.FirstPlayRequestPath,
+            Request,
+            OutError))
+    {
+        OutError = TEXT("Cannot safely classify the existing first-Play request: ") +
+            OutError;
+        return false;
+    }
+    bOutDelete = Request.RequestId == Context.ClassId ||
+        Request.BlueprintAssetPath == GetBlueprintAssetPath(Context) ||
+        Request.ScriptAssetPath == GetScriptAssetObjectPath(Context) ||
+        FPaths::IsSamePath(Request.SourcePath, Context.SourcePath) ||
+        Request.ManagedTypeName == Context.ManagedTypeName;
+    return true;
+}
+
+bool ValidateNoExternalAssetReferencers(
+    const FClassOperationContext& Context,
+    FString& OutError)
+{
+    IAssetRegistry& AssetRegistry =
+        FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+    const FName InternalPackages[] = {
+        FName(*Context.BlueprintPackagePath),
+        FName(*Context.ScriptAssetPackagePath),
+    };
+    TArray<FString> ExternalReferencers;
+    for (const FName Package : InternalPackages)
+    {
+        TArray<FName> Referencers;
+        AssetRegistry.GetReferencers(
+            Package,
+            Referencers,
+            UE::AssetRegistry::EDependencyCategory::Package);
+        for (const FName Referencer : Referencers)
+        {
+            if (Referencer != InternalPackages[0] &&
+                Referencer != InternalPackages[1])
+            {
+                ExternalReferencers.AddUnique(Referencer.ToString());
+            }
+        }
+    }
+    ExternalReferencers.Sort();
+    if (!ExternalReferencers.IsEmpty())
+    {
+        OutError = FString::Printf(
+            TEXT("Cannot delete Script Class '%s'; UE assets still reference it: %s"),
+            *Context.ManagedTypeName,
+            *FString::Join(ExternalReferencers, TEXT(", ")));
+        return false;
+    }
+    return true;
+}
+
+FString FindManagedProjectRoot(const FString& SourcePath)
+{
+    FString Directory = FPaths::GetPath(SourcePath);
+    while (!Directory.IsEmpty())
+    {
+        TArray<FString> ProjectFiles;
+        IFileManager::Get().FindFiles(
+            ProjectFiles,
+            *(Directory / TEXT("*.csproj")),
+            true,
+            false);
+        if (!ProjectFiles.IsEmpty())
+        {
+            return Directory;
+        }
+        const FString Parent = FPaths::GetPath(Directory);
+        if (Parent.IsEmpty() || FPaths::IsSamePath(Parent, Directory))
+        {
+            break;
+        }
+        Directory = Parent;
+    }
+    return FPaths::GetPath(SourcePath);
+}
+
+bool ValidateNoExternalManagedReferencers(
+    const FClassOperationContext& Context,
+    FString& OutError)
+{
+    TArray<FString> SourceFiles;
+    IFileManager::Get().FindFilesRecursive(
+        SourceFiles,
+        *FindManagedProjectRoot(Context.SourcePath),
+        TEXT("*.cs"),
+        true,
+        false);
+    const FRegexPattern TypePattern(
+        TEXT("\\b") + Context.OldTypeName + TEXT("\\b"));
+    TArray<FString> Referencers;
+    for (FString SourceFile : SourceFiles)
+    {
+        SourceFile = FPaths::ConvertRelativePathToFull(SourceFile);
+        FPaths::NormalizeFilename(SourceFile);
+        if (FPaths::IsSamePath(SourceFile, Context.SourcePath) ||
+            SourceFile.Contains(TEXT("/bin/"), ESearchCase::IgnoreCase) ||
+            SourceFile.Contains(TEXT("/obj/"), ESearchCase::IgnoreCase))
+        {
+            continue;
+        }
+        FString Source;
+        if (!FFileHelper::LoadFileToString(Source, *SourceFile))
+        {
+            OutError = FString::Printf(
+                TEXT("Cannot inspect managed reference candidate '%s'."),
+                *SourceFile);
+            return false;
+        }
+        FRegexMatcher TypeMatcher(TypePattern, Source);
+        if (TypeMatcher.FindNext() || Source.Contains(Context.ClassId))
+        {
+            Referencers.Add(SourceFile);
+        }
+    }
+    Referencers.Sort();
+    if (!Referencers.IsEmpty())
+    {
+        OutError = FString::Printf(
+            TEXT("Cannot delete Script Class '%s'; managed sources still reference it: %s"),
+            *Context.ManagedTypeName,
+            *FString::Join(Referencers, TEXT(", ")));
+        return false;
+    }
+    return true;
+}
+
 bool BuildFirstPlayRequest(
     const FClassOperationContext& Context,
     const FTargetIdentity& Target,
@@ -699,6 +887,30 @@ bool CaptureExternalSnapshots(
     return true;
 }
 
+bool CaptureDeleteExternalSnapshots(
+    const FClassOperationContext& Context,
+    TArray<FFileSnapshot>& OutSnapshots,
+    FString& OutError)
+{
+    const FString Paths[] = {
+        Context.SourcePath,
+        Context.DeploymentPath,
+        Context.FirstPlayRequestPath,
+    };
+    TArray<FFileSnapshot> Snapshots;
+    for (const FString& Path : Paths)
+    {
+        FFileSnapshot Snapshot;
+        if (!CaptureFile(Path, Snapshot, OutError))
+        {
+            return false;
+        }
+        Snapshots.Add(MoveTemp(Snapshot));
+    }
+    OutSnapshots = MoveTemp(Snapshots);
+    return true;
+}
+
 bool PublishExternalFiles(
     const FClassOperationContext& Context,
     const FTargetIdentity& Target,
@@ -723,6 +935,36 @@ bool PublishExternalFiles(
         OutError = FString::Printf(
             TEXT("Cannot remove renamed source '%s'."),
             *Context.SourcePath);
+        return false;
+    }
+    return true;
+}
+
+bool PublishDeleteExternalFiles(
+    const FClassOperationContext& Context,
+    const FString& Deployment,
+    bool bDeleteFirstPlayRequest,
+    FString& OutError)
+{
+    if (!WriteTextAtomically(Context.DeploymentPath, Deployment, OutError))
+    {
+        return false;
+    }
+    if (IFileManager::Get().FileExists(*Context.SourcePath) &&
+        !IFileManager::Get().Delete(*Context.SourcePath, false, true))
+    {
+        OutError = FString::Printf(
+            TEXT("Cannot remove deleted Script Class source '%s'."),
+            *Context.SourcePath);
+        return false;
+    }
+    if (bDeleteFirstPlayRequest &&
+        IFileManager::Get().FileExists(*Context.FirstPlayRequestPath) &&
+        !IFileManager::Get().Delete(*Context.FirstPlayRequestPath, false, true))
+    {
+        OutError = FString::Printf(
+            TEXT("Cannot remove deleted Script Class first-Play request '%s'."),
+            *Context.FirstPlayRequestPath);
         return false;
     }
     return true;
@@ -794,6 +1036,21 @@ void FillResult(
     OutResult.ManagedTypeName = Target.ManagedTypeName;
     OutResult.Blueprint = Blueprint;
     OutResult.ScriptAsset = ScriptAsset;
+}
+
+void FillDeleteResult(
+    const FClassOperationContext& Context,
+    const FString& TransactionId,
+    FUnifiedScriptClassAssetOperationResult& OutResult)
+{
+    OutResult.Operation = TEXT("delete");
+    OutResult.TransactionId = TransactionId;
+    OutResult.BlueprintAssetPath = GetBlueprintAssetPath(Context);
+    OutResult.ScriptAssetPath = GetScriptAssetObjectPath(Context);
+    OutResult.SourcePath = Context.SourcePath;
+    OutResult.ManagedTypeName = Context.ManagedTypeName;
+    OutResult.Blueprint = Context.Blueprint;
+    OutResult.ScriptAsset = Context.ScriptAsset;
 }
 
 bool ShouldFail(
@@ -1178,6 +1435,174 @@ bool FUnifiedScriptClassAssetOperations::Duplicate(
 
     OutResult.bSucceeded = true;
     return true;
+}
+
+bool FUnifiedScriptClassAssetOperations::Delete(
+    UUnifiedScriptAsset* ScriptAsset,
+    FUnifiedScriptClassAssetOperationResult& OutResult,
+    EUnifiedScriptClassAssetOperationFailurePoint FailurePoint)
+{
+    using namespace UE::UnifiedScript::ClassAssetOperations::Private;
+    OutResult = {};
+    FClassOperationContext Context;
+    FString Error;
+    if (!BuildContext(ScriptAsset, Context, Error))
+    {
+        OutResult.Operation = TEXT("delete");
+        OutResult.Error = Error;
+        return false;
+    }
+
+    const FString TransactionId =
+        FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower);
+    FillDeleteResult(Context, TransactionId, OutResult);
+    if (!ValidateNoExternalAssetReferencers(Context, Error) ||
+        !ValidateNoExternalManagedReferencers(Context, Error))
+    {
+        OutResult.Error = Error;
+        return false;
+    }
+
+    FString Deployment;
+    bool bDeleteFirstPlayRequest = false;
+    TArray<FFileSnapshot> FileSnapshots;
+    if (!BuildDeleteDeployment(Context, Deployment, Error) ||
+        !ShouldDeleteFirstPlayRequest(
+            Context,
+            bDeleteFirstPlayRequest,
+            Error) ||
+        !CaptureDeleteExternalSnapshots(Context, FileSnapshots, Error))
+    {
+        OutResult.Error = Error;
+        return false;
+    }
+
+    const FString TombstoneName = TEXT("USD_") +
+        TransactionId.Replace(TEXT("-"), TEXT("")).Left(12);
+    const FString TombstonePackagePath =
+        FPackageName::GetLongPackagePath(Context.BlueprintPackagePath) /
+        TombstoneName;
+    FTargetIdentity Tombstone;
+    if (!BuildTarget(
+            Context,
+            TombstonePackagePath,
+            ScriptAsset->ScriptClassId,
+            Tombstone,
+            Error))
+    {
+        OutResult.Error = Error;
+        return false;
+    }
+
+    TArray<FAssetRenameData> TombstoneRenames;
+    TombstoneRenames.Emplace(
+        Context.Blueprint,
+        Tombstone.BlueprintPackageDirectory,
+        Tombstone.TypeName);
+    TombstoneRenames.Emplace(
+        Context.ScriptAsset,
+        Tombstone.BlueprintPackageDirectory,
+        Tombstone.ScriptAssetName);
+    {
+        FScopedAssetToolsMutation Mutation;
+        if (!FAssetToolsModule::GetModule().Get().RenameAssets(TombstoneRenames))
+        {
+            OutResult.Error =
+                TEXT("AssetTools could not stage the complete Script Class for deletion.");
+            return false;
+        }
+    }
+
+    const auto Rollback = [&]()
+    {
+        FString RollbackError;
+        OutResult.bRolledBack = RollbackRename(
+            Context,
+            Tombstone,
+            FileSnapshots,
+            RollbackError);
+        if (!RollbackError.IsEmpty())
+        {
+            OutResult.Error += TEXT(" Rollback failed: ") + RollbackError;
+        }
+        return false;
+    };
+
+    if (ShouldFail(
+            EUnifiedScriptClassAssetOperationFailurePoint::AfterAssetMutation,
+            FailurePoint,
+            Error) ||
+        !VerifyFilesUnchanged(FileSnapshots, Error) ||
+        !PublishDeleteExternalFiles(
+            Context,
+            Deployment,
+            bDeleteFirstPlayRequest,
+            Error) ||
+        ShouldFail(
+            EUnifiedScriptClassAssetOperationFailurePoint::AfterExternalPublication,
+            FailurePoint,
+            Error))
+    {
+        OutResult.Error = Error;
+        return Rollback();
+    }
+
+    TArray<UObject*> ObjectsToDelete = {
+        Context.Blueprint,
+        Context.ScriptAsset,
+    };
+    FCanDeleteAssetResult CanDeleteResult;
+    {
+        FScopedAssetToolsMutation Mutation;
+        FEditorDelegates::OnAssetsCanDelete.Broadcast(
+            ObjectsToDelete,
+            CanDeleteResult);
+    }
+    if (!CanDeleteResult.Get())
+    {
+        OutResult.Error =
+            TEXT("A registered UE editor guard rejected the complete Script Class deletion.");
+        return Rollback();
+    }
+
+    int32 DeletedCount = 0;
+    {
+        FScopedAssetToolsMutation Mutation;
+        DeletedCount = ObjectTools::DeleteObjectsUnchecked(ObjectsToDelete);
+    }
+    if (DeletedCount != ObjectsToDelete.Num())
+    {
+        OutResult.Error = FString::Printf(
+            TEXT("UE deleted %d of %d staged Script Class assets; run Repair before continuing."),
+            DeletedCount,
+            ObjectsToDelete.Num());
+        if (IsValid(Context.Blueprint) && IsValid(Context.ScriptAsset))
+        {
+            return Rollback();
+        }
+        return false;
+    }
+
+    OutResult.bSucceeded = true;
+    OutResult.Blueprint = nullptr;
+    OutResult.ScriptAsset = nullptr;
+    return true;
+}
+
+bool FUnifiedScriptClassAssetOperations::IsCompleteClassAsset(const UObject* Asset)
+{
+    using namespace UE::UnifiedScript::ClassAssetOperations::Private;
+    if (const UUnifiedScriptAsset* ScriptAsset = Cast<UUnifiedScriptAsset>(Asset))
+    {
+        return ScriptAsset->ScriptClassId.IsValid() &&
+            ScriptAsset->ScriptClassKind != EUnifiedScriptClassKind::None;
+    }
+    const UBlueprint* Blueprint = Cast<UBlueprint>(Asset);
+    const UUnifiedScriptAsset* ScriptAsset = GetBlueprintScriptAsset(
+        const_cast<UBlueprint*>(Blueprint));
+    return ScriptAsset != nullptr &&
+        ScriptAsset->ScriptClassId.IsValid() &&
+        ScriptAsset->ScriptClassKind != EUnifiedScriptClassKind::None;
 }
 
 bool FUnifiedScriptClassAssetOperations::IsAssetToolsMutationActive()

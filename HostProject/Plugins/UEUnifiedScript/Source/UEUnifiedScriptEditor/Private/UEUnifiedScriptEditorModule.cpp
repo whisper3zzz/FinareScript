@@ -69,6 +69,7 @@ public:
     {
         using namespace UE::UnifiedScript::Editor::Private;
         FUnifiedScriptEditorDiagnostics::Register();
+        UE::UnifiedScript::Editor::RegisterUnifiedScriptAssetOperationGuards();
         GraphNodeFactory = MakeShared<FUnifiedScriptGraphPanelNodeFactory>();
         FEdGraphUtilities::RegisterVisualNodeFactory(GraphNodeFactory);
         GraphPinFactory = MakeShared<FUnifiedScriptGraphPanelPinFactory>();
@@ -125,6 +126,7 @@ public:
 
     virtual void ShutdownModule() override
     {
+        UE::UnifiedScript::Editor::UnregisterUnifiedScriptAssetOperationGuards();
         if (GraphNodeFactory.IsValid())
         {
             FEdGraphUtilities::UnregisterVisualNodeFactory(GraphNodeFactory);

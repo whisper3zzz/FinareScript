@@ -98,6 +98,7 @@ bool FUnifiedScriptAssetWorkflowContractTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Context menu exposes repair"), Menu->ContainsEntry(TEXT("UnifiedScript.OpenRepair")));
     TestTrue(TEXT("Context menu exposes complete-class rename"), Menu->ContainsEntry(TEXT("UnifiedScript.RenameClass")));
     TestTrue(TEXT("Context menu exposes complete-class duplicate"), Menu->ContainsEntry(TEXT("UnifiedScript.DuplicateClass")));
+    TestTrue(TEXT("Context menu exposes complete-class delete"), Menu->ContainsEntry(TEXT("UnifiedScript.DeleteClass")));
     return true;
 }
 

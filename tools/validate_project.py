@@ -1618,6 +1618,30 @@ def main() -> int:
     checks.append(
         "M13.2A renames and duplicates complete Script Class identities transactionally"
     )
+    require(
+        "static bool Delete" in script_class_operations_header
+        and "IsCompleteClassAsset" in script_class_operations_header
+        and "BuildDeleteDeployment" in script_class_operations_source
+        and "ValidateNoExternalAssetReferencers" in script_class_operations_source
+        and "ValidateNoExternalManagedReferencers" in script_class_operations_source
+        and "PublishDeleteExternalFiles" in script_class_operations_source
+        and "ObjectTools::DeleteObjectsUnchecked" in script_class_operations_source
+        and "UnifiedScript.DeleteClass" in script_asset_definition_source
+        and "RegisterUnifiedScriptAssetOperationGuards"
+        in script_asset_definition_source
+        and "managed sources still reference"
+        in script_class_operations_tests
+        and "Delete rollback restores source bytes exactly"
+        in script_class_operations_tests
+        and "Delete removes the exact deployment identity"
+        in script_class_operations_tests
+        and "M13.2A-2b1 — guarded safe delete"
+        in roadmap_document,
+        "M13.2A-2b1 safe delete, referencer rejection, direct-operation guards, or rollback coverage is incomplete",
+    )
+    checks.append(
+        "M13.2A safely deletes unreferenced complete Script Classes"
+    )
 
     sample_catalog_path = ROOT / "samples" / "Unreal" / "unifiedscript.samples.json"
     sample_matrix_runner_path = ROOT / "tools" / "run-unifiedscript-sample-matrix.ps1"
