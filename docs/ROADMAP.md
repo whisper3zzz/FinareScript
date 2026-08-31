@@ -56,12 +56,12 @@ current cursor, validate it, and advance this document.
 Last refreshed: **2026-08-31**
 
 - Active milestone: **M13.1 in progress — Puerts-grade zero-config adoption, automatic Unreal API surface, and first Script Class workflow**
-- Completed tranches: **M13.1A-0 packaged transactional `adopt`/`doctor` CLI (`9fe7f70`); M13.1A-1 project-local Editor Setup/Doctor/Build surface; M13.1A-2 clean Blueprint-only native host and cook closure; M13.1B-1 first source-use-to-generated-surface vertical; M13.1B-2 ordinary-source/signature tranche; M13.1B-2 bounded native reflection-discovery tranche; M13.1B-2b exact Blueprint discovery and generated-surface lock**
-- Current tranche: **M13.1C-0 — attachable Script Class foundation**
-- Current implementation state: **M13.1C-0 creation and identity foundation is implemented: Tools/Content Browser can create an Actor or ActorComponent Script Class, generate its C# lifecycle source, exact-ID Script Asset sidecar, Blueprint proxy, and deployment entry, and save both UE assets without a handwritten host; runtime activation now rejects stale semantic IDs, managed type names, or generated-class paths instead of falling back to a similarly named type**
-- Current verification state: **645/645 managed tests, 101/101 repository invariants, and 22/22 `UnifiedScript.Unreal` Automation tests pass on UE 5.8.1; the new factory test creates and saves both class kinds, verifies selectable/attachable inheritance, Blueprint-visible property/function surface, stable C#/semantic/asset/native identity, and leaves no fixture output; the latest complete packaged-SDK acceptance remains M13.1B-2b at 279,057 ms**
-- Next acceptance: **run the created Actor and ActorComponent through the normal Build/Onboard dependency graph, reopen the editor, spawn/attach them, observe `BeginPlay`/`Tick`/stop and World teardown, then cook/package and prove deterministic no-change regeneration**
-- Next user-visible slice: **close create -> Build -> reopen -> attach/select -> Play for the generated classes before expanding exhaustive API, platform, networking, or performance breadth**
+- Completed tranches: **M13.1A-0 packaged transactional `adopt`/`doctor` CLI (`9fe7f70`); M13.1A-1 project-local Editor Setup/Doctor/Build surface; M13.1A-2 clean Blueprint-only native host and cook closure; M13.1B-1 first source-use-to-generated-surface vertical; M13.1B-2 ordinary-source/signature tranche; M13.1B-2 bounded native reflection-discovery tranche; M13.1B-2b exact Blueprint discovery and generated-surface lock; M13.1C-0 attachable Script Class foundation**
+- Current tranche: **M13.1C-1 — packaged first-Play golden path**
+- Current implementation state: **the repository host can create Actor and ActorComponent Script Classes from Tools/Content Browser, generate their C# lifecycle source, exact-ID Script Asset sidecars, Blueprint proxies, and deployment entries, then build, reopen in a second Editor process, spawn/attach, execute `BeginPlay`/`Tick`/`EndPlay`, tear down the World, and cook all four UE assets without a handwritten host; stale semantic IDs, managed types, and generated-class paths fail explicitly**
+- Current verification state: **645/645 managed tests, 102/102 repository invariants, and 22/22 normal `UnifiedScript.Unreal` Automation tests pass on UE 5.8.1; two isolated integration processes (creation PID 10,472 and reload PID 37,608) proved persistent reload and lifecycle, six generated outputs were byte-stable across ValidateOnly, and Win64 BuildCookRun carried both Blueprint proxies plus both Script Asset sidecars; the 210,632 ms report is at `HostProject/Saved/UnifiedScript/ScriptClassGoldenPath/20260831-170500/script-class-golden-path-report.json`**
+- Next acceptance: **replay create -> Build/Onboard -> attach/select -> Play -> compatible edit/reload -> package from a clean project installed by the packaged SDK, with UE-facing diagnostics and no source-checkout command**
+- Next user-visible slice: **make the adopted project's normal UE Build/Play surface own the whole dependency graph and show the first managed behavior without leaving the Editor**
 - External acceptance candidate: **`D:\Project\LyraStarterGame` (deferred until the golden path works; read-only discovery only, not selected or modified yet)**
 - Primary engine gate: **Unreal Engine 5.8.1 installed build at `D:\UE_5.8`**
 - Product proof: **self-contained Win64 BlockBreaker demo**
@@ -77,13 +77,13 @@ machine-local unless an artifact explicitly says otherwise.
 | Runtime source baseline | `5be7dde` (`fix: remove CI snapshots with long paths`) |
 | UnifiedScript comparison source | `d2f1fec` (clean frozen BlockBreaker UnifiedScript acceptance revision) |
 | Puerts comparison source | `be399cb` (`perf: register benchmark world context`) |
-| Managed tests | 640 / 640 passed |
-| Repository validator | 100 / 100 passed |
+| Managed tests | 645 / 645 passed |
+| Repository validator | 102 / 102 passed |
 | M13.1B-1 automatic source surface | 6 / 6 focused regressions plus 634 / 634 full managed tests and 97 / 97 repository invariants passed; fresh packaged UE 5.8.1 consumer passed source expansion, Editor/Game build, ValidateOnly, Automation, Win64 BuildCookRun, no-change Repair, Doctor, and rollback in 234,215 ms; report at `artifacts/a/b1/packaged-native-onboarding-report.json`; accepted SDK SHA-256 `e217472bffd951893d45f6e21fc44f285e92f9e46b0eb2fe032a79daa8005997` |
 | M13.1B-2 ordinary source/signature matrix | 9 / 9 focused regressions plus 637 / 637 full managed tests and 98 / 98 repository invariants passed; ordinary imports, semantic collision safety, exact overload selection, delegate projection, and the representative Blueprint-visible signature matrix use the real generators; a fresh packaged UE 5.8.1 consumer passed source expansion, Editor/Game build, ValidateOnly, Automation, Win64 BuildCookRun, no-change Repair, Doctor, and rollback in 278,254 ms; report at `artifacts/a/b3/packaged-native-onboarding-report.json`; accepted SDK SHA-256 `eb205ca8313c068ff2e822e930a79e52e7a189feffdabc658bd33e7dbe97210f` |
 | M13.1B-2 bounded native reflection discovery | 10 / 10 focused regressions plus 638 / 638 full managed tests and 99 / 99 repository invariants passed; the clean template produced only `Actor`/`Pawn` source hints, UE uniquely added one source-discovered Engine class, and the resulting `Pawn.GetController` plus `Actor.GetActorLocation` surface passed Editor/Game build, ValidateOnly byte locks, Automation, Win64 BuildCookRun, no-change Repair, Doctor, and rollback in 250,077 ms; report at `artifacts/a/b4/packaged-native-onboarding-report.json`; accepted SDK SHA-256 `97995eea92e45af2b37f076c1a9ba89d11128be718125358a19ac819063f2cc8` |
 | M13.1B-2b Blueprint discovery and surface lock | 12 / 12 focused regressions plus 640 / 640 full managed tests and 100 / 100 repository invariants passed; full UE 5.8.1 Automation passed 21 / 21 including exact transient Blueprint generated-class discovery; a fresh packaged consumer passed Apply, 3,000-byte exact per-type lock generation, ValidateOnly frozen verification, Editor/Game builds, two project Setup Automation tests, Win64 BuildCookRun, zero-change Repair, Doctor, and rollback in 279,057 ms; report at `artifacts/a/b5/packaged-native-onboarding-report.json`; accepted SDK SHA-256 `01d30c2066570d90b21a6be0adaa602a8fb9d99bd219cabf043df48b651d1b71` |
-| M13.1C-0 creation and identity foundation | 5 new managed identity regressions plus 645 / 645 full managed tests and 101 / 101 repository invariants passed; UE 5.8.1 build and 22 / 22 Automation passed; the Editor factory created and saved Actor and ActorComponent Blueprint proxies with exact persistent ClassId, managed type, declaration path, generated-class path, Script Asset sidecar, deployment entry, lifecycle source, and inherited Blueprint property/function surface, then removed every test output; second-process reopen, live Play, and cook remain the active exit gate |
+| M13.1C-0 attachable Script Class foundation | 5 new managed identity regressions plus 645 / 645 full managed tests, 102 / 102 repository invariants, UE 5.8.1 build, and 22 / 22 normal Automation tests passed; isolated creation and reload processes proved persistent Actor/ActorComponent identity, `BeginPlay`/`Tick`/`EndPlay`, World teardown, six-output deterministic ValidateOnly, and Win64 Cook of both proxies and both exact Script Asset sidecars in 210,632 ms; report at `HostProject/Saved/UnifiedScript/ScriptClassGoldenPath/20260831-170500/script-class-golden-path-report.json` |
 | Packaged project adoption | two clean fixtures installed 169 owned files, built managed scripts, passed project-local Doctor, reran project-local Repair with 169 unchanged/zero changed, and rolled back all 169 files; report at `artifacts/adoption/m13-1a1-final-20260831/packaged-adoption-report.json` |
 | Blueprint-only native onboarding | clean packaged-SDK consumer passed project-local Apply/Validate, Editor/Game builds, Automation, Win64 BuildCookRun, zero-change Repair, Doctor, and exact rollback in 220,036 ms; report at `artifacts/adoption-native/m13-1a2-final-native-20260831/packaged-native-onboarding-report.json` |
 | UE 5.8.1 native build | passed |
@@ -1823,8 +1823,8 @@ become three independently configured products.
 | M13.1B-1 — first automatic reflected API vertical | referencing a supported Blueprint-visible API generates typed C++, C#, and visual descriptions without hand-editing a Contract | deterministic dependency closure, exact coverage, source-linked unsupported-use diagnostics, packaged UE build/cook, and no-change validation pass on a clean consumer | Complete |
 | M13.1B-2a — native reflected breadth | ordinary C# use discovers the needed native project/plugin/Engine surface and supports representative gameplay signatures without generator knowledge | type/signature matrix, semantic source discovery, deterministic generation, and zero handwritten dispatch pass on a clean consumer | Complete |
 | M13.1B-2b — Blueprint discovery and surface lock | ordinary C# use discovers loaded Blueprint/generated classes by exact asset/class identity and freezes the generated development surface for team/CI use | loaded Blueprint fixture, asset-path identity, per-type localized regeneration, no-change lock, and stale-lock rejection pass | Complete |
-| M13.1C-0 — attachable Script Class foundation | **Create UnifiedScript Class** produces one ActorComponent and one Actor proxy with stable native, asset, managed, and semantic identity | both classes are selectable/attachable, receive `BeginPlay`/`Tick`, expose one property/function, survive reopen, and require no handwritten facade | **Active** |
-| M13.1C-1 — first-Play golden path | the adopted clean project can create, compile, attach, Play, edit, reload, cook, and package the new Script Class from UE | the complete workflow replays from a packaged SDK with editor diagnostics, no manual generator command, and no source-checkout dependency | Pending |
+| M13.1C-0 — attachable Script Class foundation | **Create UnifiedScript Class** produces one ActorComponent and one Actor proxy with stable native, asset, managed, and semantic identity | both classes are selectable/attachable, receive `BeginPlay`/`Tick`, expose one property/function, survive reopen, and require no handwritten facade | Complete |
+| M13.1C-1 — first-Play golden path | the adopted clean project can create, compile, attach, Play, edit, reload, cook, and package the new Script Class from UE | the complete workflow replays from a packaged SDK with editor diagnostics, no manual generator command, and no source-checkout dependency | **Active** |
 | M13.2 — Blueprint class parity | managed types participate in lifecycle, properties, events, input, inheritance, and Blueprint references as ordinary UE classes | proxy identity and behavior survive reload, rename, duplication, PIE multi-World, cook, and package | Pending |
 | M13.3 — daily edit loop | Build/Play, diagnostics, reload, IDE navigation, and C#/Graph editing become one discoverable workflow | a new user completes the published walkthrough without repository knowledge or generator commands | Pending |
 | M13.4 — external production pilot | a non-BlockBreaker project migrates a representative gameplay slice through the published golden path | exact old/new observables match and a second clean checkout reproduces adoption and packaging | Pending |
@@ -1892,13 +1892,13 @@ roadmap may describe UnifiedScript as usability-equivalent.
 | P0 workflow gate | Pass condition | Current state | Owning slice |
 | --- | --- | --- | --- |
 | Adopt an existing project | one Editor or CLI action installs/enables all owned pieces; rerun is no-change; Doctor and rollback are available | **Passed on clean native and Blueprint-only fixtures** | M13.1A |
-| Create gameplay behavior | create an ActorComponent or Actor from the UE editor, attach/select it, and expose a managed property/function without writing a native host | **Missing; current demos depend on pre-authored host/asset structure** | M13.1C-0 |
+| Create gameplay behavior | create an ActorComponent or Actor from the UE editor, attach/select it, and expose a managed property/function without writing a native host | **Passed in the repository host; packaged-SDK replay remains under first Play** | M13.1C-0 |
 | Call ordinary Unreal APIs | a newly referenced supported native or loaded-Blueprint API becomes typed and runnable without editing Contract/reflection/thunk metadata | **Passed for bounded native and loaded-Blueprint fixtures through the packaged SDK workflow** | M13.1B-2b |
 | Reach first Play | create -> compile -> attach -> Play succeeds from a clean adopted project with no repository command or generated-file edit | **Missing as a first-class Script Class workflow** | M13.1C-1 |
 | Edit and reload | save one compatible C#/Graph change, invoke at most one explicit build/reload action, preserve valid instance state, and continue PIE or explain why restart is required | **Runtime transaction machinery exists; product workflow is not connected** | M13.3 |
 | Diagnose failures | compile, API-coverage, stale-generation, reload, runtime, and package failures appear in UE with source/member navigation and one copyable diagnostic bundle | **Partial across CLI/reports; not unified in the editor** | M13.3 |
 | Use C# or Graph | the same Script Class opens in either authoring view and round-trips without a second behavior implementation | **Semantic round trip passed; not yet the default class workflow** | M13.3 |
-| Package normally | normal project packaging carries the generated class, managed program, runtime closure, and used API surface with actionable omission errors | **Foundation passed; must be replayed with a newly created Script Class** | M13.1C-1 |
+| Package normally | normal project packaging carries the generated class, managed program, runtime closure, and used API surface with actionable omission errors | **Repository-host Script Class Cook passed; packaged-SDK consumer and packaged smoke remain** | M13.1C-1 |
 | Reproduce outside BlockBreaker | a maintainer-independent user repeats the published path in a non-BlockBreaker project and a second clean checkout | **Missing** | M13.4 |
 
 The golden-path regression records both action count and elapsed time for
@@ -2289,8 +2289,8 @@ M13.1C-0 — attachable class foundation:
   generated native proxy, Blueprint/UClass asset, and Script Asset; rename,
   duplicate, or stale identities fail explicitly rather than bind to a
   similarly named type
-- [ ] prove the exact Blueprint -> Script Asset reference becomes the intended
-  cook entry in a fresh packaged consumer
+- [x] prove the exact Blueprint -> Script Asset reference becomes the intended
+  repository-host cook entry; packaged-consumer replay belongs to M13.1C-1
 - [x] add **Create UnifiedScript Class** for ActorComponent and Actor first;
   defer the general UObject/library breadth until both gameplay bases pass
 - [x] generate minimal `BeginPlay` and optional `Tick` source that compiles
@@ -2298,10 +2298,10 @@ M13.1C-0 — attachable class foundation:
 - [x] make the Actor selectable and the Component attachable from ordinary UE
   class/component pickers; expose one editable property and one callable
   function to Blueprint
-- [ ] prove create, compile, attach/select, Play, stop, World teardown, save,
+- [x] prove create, compile, attach/select, lifecycle, stop, World teardown, save,
   reopen, and deterministic no-change regeneration in the repository host
 
-Progress (2026-08-31, M13.1C-0 creation and identity foundation):
+Completed (2026-08-31, M13.1C-0 attachable class foundation):
 `[ScriptAsset]` can now pin one persistent `us_...` class ID, the C# lowerer
 uses it as the Script Asset semantic identity, and invalid or duplicate IDs
 fail before emission. `UUnifiedScriptAsset` stores the matching GUID, Actor or
@@ -2314,11 +2314,20 @@ Blueprint CDO, and expose the actions in the UE Tools and Content Browser
 creation surfaces. UE 5.8.1 Automation creates both kinds, verifies ordinary
 Actor/ActorComponent inheritance, inherited Blueprint property/function
 visibility, source/semantic/native/asset identity, saves both packages, and
-removes the source, manifest mutation, and package files after the test. The
-verified baseline is 645/645 managed, 101/101 repository, UE build passed, and
-22/22 Automation. This is not yet the M13.1C-0 exit: a second editor process
-must load the saved assets after the normal Build/Onboard graph, run both in a
-World through BeginPlay/Tick/stop, and prove cook/no-change behavior.
+removes the source, manifest mutation, and package files after the test. A
+separate golden-path driver then created persistent fixtures in Editor process
+10,472, ran normal Build/Onboard, loaded them in process 37,608, spawned the
+Actor, attached the Component, executed `BeginPlay`/`Tick`/`EndPlay`, and
+verified World teardown. ValidateOnly preserved all six deterministic output
+hashes; Win64 BuildCookRun contained both Blueprint proxies and both exact Script
+Asset sidecars; final cleanup restored the repository-host baseline. The full
+run passed in 210,632 ms at
+`HostProject/Saved/UnifiedScript/ScriptClassGoldenPath/20260831-170500/script-class-golden-path-report.json`.
+
+This closes the repository-host foundation, not the user-operated first-Play
+claim: M13.1C-1 must reproduce the workflow from a packaged SDK in a clean
+adopted project, connect it to ordinary UE actions, and verify compatible edit
+and reload plus packaged execution.
 
 M13.1C-1 — first-Play golden path:
 

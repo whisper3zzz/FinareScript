@@ -1343,6 +1343,16 @@ def main() -> int:
         / "Tests"
         / "UnifiedScriptClassFactoryTests.cpp"
     ).read_text(encoding="utf-8")
+    script_class_golden_path_path = (
+        ROOT / "tools" / "test-script-class-golden-path.ps1"
+    )
+    require(
+        script_class_golden_path_path.is_file(),
+        f"Missing M13.1C-0 Script Class golden-path driver: {script_class_golden_path_path}",
+    )
+    script_class_golden_path = script_class_golden_path_path.read_text(
+        encoding="utf-8"
+    )
     require(
         "public string? ClassId" in script_asset_attributes
         and "InvalidScriptClassId" in script_asset_lowerer
@@ -1356,11 +1366,31 @@ def main() -> int:
         and "FactoryContract" in script_class_factory_tests
         and "Generated Actor is selectable" in script_class_factory_tests
         and "Generated Component is attachable" in script_class_factory_tests
-        and "M13.1C-0 creation and identity foundation" in roadmap_document,
+        and "M13.1C-0 attachable class foundation" in roadmap_document,
         "M13.1C-0 persistent Script Class identity, Editor factory, or save contract is incomplete",
     )
     checks.append(
         "M13.1C-0 creates exact-identity Actor and Component Script Class proxies"
+    )
+    require(
+        "public int AddOne(int value)" in script_class_factory
+        and "return value + 1;" in script_class_factory
+        and "UnifiedScript.Integration.ScriptClass.CreatePersistent"
+        in script_class_factory_tests
+        and "UnifiedScript.Integration.ScriptClass.ReloadLifecycle"
+        in script_class_factory_tests
+        and "GetCurrentProcessId" in script_class_factory_tests
+        and "$createProcessId -eq $reloadProcessId" in script_class_golden_path
+        and "BuildCookRun" in script_class_golden_path
+        and "SA_M13C0PersistentActor" in script_class_golden_path
+        and "SA_M13C0PersistentComponent" in script_class_golden_path
+        and "M13.1C-1 — packaged first-Play golden path" in roadmap_document
+        and "M13.1C-0 — attachable Script Class foundation" in roadmap_document
+        and "require no handwritten facade | Complete |" in roadmap_document,
+        "M13.1C-0 cross-process lifecycle, deterministic regeneration, cook proof, or roadmap handoff is incomplete",
+    )
+    checks.append(
+        "M13.1C-0 persists Script Classes across Editor processes, lifecycle, and cook"
     )
 
     sample_catalog_path = ROOT / "samples" / "Unreal" / "unifiedscript.samples.json"

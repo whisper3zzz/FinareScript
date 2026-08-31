@@ -3,13 +3,17 @@
 #include "UnifiedScriptClassFactory.h"
 
 #include "Engine/Blueprint.h"
+#include "Engine/World.h"
 #include "HAL/FileManager.h"
+#include "HAL/PlatformProcess.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/FileHelper.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
 #include "UnifiedScriptActor.h"
+#include "UnifiedScriptCoreClrHost.h"
 #include "UnifiedScriptComponent.h"
+#include "UnifiedScriptWorldSubsystem.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "UObject/UnrealType.h"
@@ -57,7 +61,7 @@ bool CreateAndVerify(
     FAutomationTestBase& Test,
     const FString& TypeName,
     EUnifiedScriptClassKind ExpectedKind,
-    FScopedCreatedClassCleanup& Cleanup)
+    FScopedCreatedClassCleanup* Cleanup)
 {
     const FString PackageName = FString::Printf(
         TEXT("/Game/UnifiedScriptAutomation/%s"),
@@ -133,7 +137,10 @@ bool CreateAndVerify(
         ScriptAsset->DeclarationAssetPath.EndsWith(TEXT("/") + TypeName));
 
     const FString SourcePath = ResolveConfiguredPath(ScriptAsset->SourcePath);
-    Cleanup.SourcePaths.Add(SourcePath);
+    if (Cleanup != nullptr)
+    {
+        Cleanup->SourcePaths.Add(SourcePath);
+    }
     FString Source;
     Test.TestTrue(TEXT("Managed Script Class source is written"), FFileHelper::LoadFileToString(Source, *SourcePath));
     Test.TestTrue(
@@ -142,6 +149,9 @@ bool CreateAndVerify(
             TEXT("ClassId = \"us_%s\""),
             *ScriptAsset->ScriptClassId.ToString(EGuidFormats::Digits).ToLower())));
     Test.TestTrue(TEXT("Managed source exposes editable state"), Source.Contains(TEXT("[Expose(")));
+    Test.TestTrue(
+        TEXT("Managed source emits a Visual-compatible block body"),
+        Source.Contains(TEXT("public int AddOne(int value)\n    {\n        return value + 1;\n    }")));
     Test.TestTrue(TEXT("Managed source includes BeginPlay"), Source.Contains(TEXT("OnBeginPlay")));
     Test.TestTrue(TEXT("Managed source includes Tick"), Source.Contains(TEXT("OnTick")));
 
@@ -151,8 +161,11 @@ bool CreateAndVerify(
     const FString ScriptFilename = FPackageName::LongPackageNameToFilename(
         ScriptAsset->GetOutermost()->GetName(),
         FPackageName::GetAssetPackageExtension());
-    Cleanup.PackagePaths.Add(BlueprintFilename);
-    Cleanup.PackagePaths.Add(ScriptFilename);
+    if (Cleanup != nullptr)
+    {
+        Cleanup->PackagePaths.Add(BlueprintFilename);
+        Cleanup->PackagePaths.Add(ScriptFilename);
+    }
     FSavePackageArgs SaveArguments;
     SaveArguments.TopLevelFlags = RF_Public | RF_Standalone;
     SaveArguments.SaveFlags = SAVE_None;
@@ -169,6 +182,63 @@ bool CreateAndVerify(
     Test.TestTrue(TEXT("Saved Blueprint proxy exists"), IFileManager::Get().FileExists(*BlueprintFilename));
     Test.TestTrue(TEXT("Saved Script Asset sidecar exists"), IFileManager::Get().FileExists(*ScriptFilename));
     return true;
+}
+
+constexpr const TCHAR* PersistentActorType = TEXT("M13C0PersistentActor");
+constexpr const TCHAR* PersistentComponentType = TEXT("M13C0PersistentComponent");
+constexpr const TCHAR* PersistentPackageRoot =
+    TEXT("/Game/UnifiedScriptAutomation");
+
+FString PersistentPackageName(const TCHAR* TypeName)
+{
+    return FString::Printf(TEXT("%s/%s"), PersistentPackageRoot, TypeName);
+}
+
+FString PersistentObjectPath(const TCHAR* TypeName)
+{
+    return FString::Printf(
+        TEXT("%s/%s.%s"),
+        PersistentPackageRoot,
+        TypeName,
+        TypeName);
+}
+
+FString PersistentSidecarPath(const TCHAR* TypeName)
+{
+    return FString::Printf(
+        TEXT("%s/SA_%s.SA_%s"),
+        PersistentPackageRoot,
+        TypeName,
+        TypeName);
+}
+
+FString ProcessReceiptPath(const TCHAR* Stage)
+{
+    return FPaths::ConvertRelativePathToFull(FPaths::Combine(
+        FPaths::ProjectSavedDir(),
+        TEXT("UnifiedScript/ScriptClassGoldenPath"),
+        FString(Stage) + TEXT(".pid")));
+}
+
+bool WriteProcessReceipt(FAutomationTestBase& Test, const TCHAR* Stage)
+{
+    const FString Path = ProcessReceiptPath(Stage);
+    IFileManager::Get().MakeDirectory(*FPaths::GetPath(Path), true);
+    return Test.TestTrue(
+        *FString::Printf(TEXT("Writes %s process receipt"), Stage),
+        FFileHelper::SaveStringToFile(
+            FString::FromInt(static_cast<int32>(FPlatformProcess::GetCurrentProcessId())),
+            *Path,
+            FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM));
+}
+
+UUnifiedScriptComponent* GetActorScriptComponent(UBlueprint* Blueprint)
+{
+    const AUnifiedScriptActor* Defaults = Blueprint != nullptr &&
+            Blueprint->GeneratedClass != nullptr
+        ? Cast<AUnifiedScriptActor>(Blueprint->GeneratedClass->GetDefaultObject())
+        : nullptr;
+    return Defaults != nullptr ? Defaults->ScriptComponent : nullptr;
 }
 }
 
@@ -197,13 +267,204 @@ bool FUnifiedScriptClassFactoryContractTest::RunTest(const FString& Parameters)
         *this,
         TEXT("M13Actor_") + Suffix,
         EUnifiedScriptClassKind::Actor,
-        Cleanup);
+        &Cleanup);
     const bool bComponent = CreateAndVerify<UUnifiedScriptActorComponentClassFactory>(
         *this,
         TEXT("M13Component_") + Suffix,
         EUnifiedScriptClassKind::ActorComponent,
-        Cleanup);
+        &Cleanup);
     return bActor && bComponent;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FUnifiedScriptPersistentClassCreateTest,
+    "UnifiedScript.Integration.ScriptClass.CreatePersistent",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUnifiedScriptPersistentClassCreateTest::RunTest(const FString& Parameters)
+{
+    using namespace UE::UnifiedScript::ClassFactory::Tests;
+    const bool bActor = CreateAndVerify<UUnifiedScriptActorClassFactory>(
+        *this,
+        PersistentActorType,
+        EUnifiedScriptClassKind::Actor,
+        nullptr);
+    const bool bComponent = CreateAndVerify<UUnifiedScriptActorComponentClassFactory>(
+        *this,
+        PersistentComponentType,
+        EUnifiedScriptClassKind::ActorComponent,
+        nullptr);
+    return bActor && bComponent && WriteProcessReceipt(*this, TEXT("create"));
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FUnifiedScriptPersistentClassReloadLifecycleTest,
+    "UnifiedScript.Integration.ScriptClass.ReloadLifecycle",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUnifiedScriptPersistentClassReloadLifecycleTest::RunTest(
+    const FString& Parameters)
+{
+    using namespace UE::UnifiedScript::ClassFactory::Tests;
+    FString CreateProcessText;
+    if (!TestTrue(
+            TEXT("Reads the first-process creation receipt"),
+            FFileHelper::LoadFileToString(
+                CreateProcessText,
+                *ProcessReceiptPath(TEXT("create")))))
+    {
+        return false;
+    }
+    CreateProcessText.TrimStartAndEndInline();
+    TestNotEqual(
+        TEXT("Reload verification runs in a different Editor process"),
+        FCString::Atoi(*CreateProcessText),
+        static_cast<int32>(FPlatformProcess::GetCurrentProcessId()));
+
+    UBlueprint* ActorBlueprint = LoadObject<UBlueprint>(
+        nullptr,
+        *PersistentObjectPath(PersistentActorType));
+    UBlueprint* ComponentBlueprint = LoadObject<UBlueprint>(
+        nullptr,
+        *PersistentObjectPath(PersistentComponentType));
+    if (!TestNotNull(TEXT("Reloads the saved Actor Blueprint"), ActorBlueprint) ||
+        !TestNotNull(TEXT("Reloads the saved Component Blueprint"), ComponentBlueprint) ||
+        !TestNotNull(TEXT("Reloaded Actor Blueprint has a generated class"),
+            ActorBlueprint != nullptr ? ActorBlueprint->GeneratedClass.Get() : nullptr) ||
+        !TestNotNull(TEXT("Reloaded Component Blueprint has a generated class"),
+            ComponentBlueprint != nullptr ? ComponentBlueprint->GeneratedClass.Get() : nullptr))
+    {
+        return false;
+    }
+
+    UUnifiedScriptAsset* ActorAsset = LoadObject<UUnifiedScriptAsset>(
+        nullptr,
+        *PersistentSidecarPath(PersistentActorType));
+    UUnifiedScriptAsset* ComponentAsset = LoadObject<UUnifiedScriptAsset>(
+        nullptr,
+        *PersistentSidecarPath(PersistentComponentType));
+    if (!TestNotNull(TEXT("Reloads the saved Actor Script Asset"), ActorAsset) ||
+        !TestNotNull(TEXT("Reloads the saved Component Script Asset"), ComponentAsset))
+    {
+        return false;
+    }
+
+    TestTrue(
+        TEXT("Reloaded Actor CDO retains the exact Script Asset"),
+        GetActorScriptComponent(ActorBlueprint) != nullptr &&
+            GetActorScriptComponent(ActorBlueprint)->ScriptAsset == ActorAsset);
+    const UUnifiedScriptComponent* ComponentDefaults =
+        Cast<UUnifiedScriptComponent>(ComponentBlueprint->GeneratedClass->GetDefaultObject());
+    TestTrue(
+        TEXT("Reloaded Component CDO retains the exact Script Asset"),
+        ComponentDefaults != nullptr && ComponentDefaults->ScriptAsset == ComponentAsset);
+
+    const int32 InitialManagedWorldCount =
+        FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount();
+    UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+    if (!TestNotNull(TEXT("Creates the second-process gameplay World"), World))
+    {
+        return false;
+    }
+    World->AddToRoot();
+    UUnifiedScriptWorldSubsystem* Host =
+        World->GetSubsystem<UUnifiedScriptWorldSubsystem>();
+    if (!TestNotNull(TEXT("Gameplay World owns a managed host"), Host))
+    {
+        World->RemoveFromRoot();
+        World->DestroyWorld(false);
+        return false;
+    }
+
+    AUnifiedScriptActor* ScriptActor = Cast<AUnifiedScriptActor>(
+        World->SpawnActor(ActorBlueprint->GeneratedClass));
+    AActor* ComponentOwner = World->SpawnActor<AActor>();
+    UUnifiedScriptComponent* AttachedComponent = ComponentOwner != nullptr
+        ? NewObject<UUnifiedScriptComponent>(
+            ComponentOwner,
+            ComponentBlueprint->GeneratedClass)
+        : nullptr;
+    if (!TestNotNull(TEXT("Spawns the reloaded Script Actor class"), ScriptActor) ||
+        !TestNotNull(TEXT("Spawns a Component owner"), ComponentOwner) ||
+        !TestNotNull(TEXT("Attaches the reloaded Script Component class"), AttachedComponent))
+    {
+        World->RemoveFromRoot();
+        World->DestroyWorld(false);
+        return false;
+    }
+    ComponentOwner->AddInstanceComponent(AttachedComponent);
+    AttachedComponent->RegisterComponentWithWorld(World);
+
+    UUnifiedScriptComponent* ActorComponent = ScriptActor->ScriptComponent;
+    if (!TestNotNull(TEXT("Reloaded Script Actor owns its host component"), ActorComponent))
+    {
+        World->RemoveFromRoot();
+        World->DestroyWorld(false);
+        return false;
+    }
+    FString IdentityError;
+    TestTrue(
+        *FString::Printf(TEXT("Actor generated-class identity reloads exactly: %s"), *IdentityError),
+        ActorAsset->ValidateGeneratedClassIdentity(
+            ActorComponent,
+            ScriptActor,
+            IdentityError));
+    IdentityError.Reset();
+    TestTrue(
+        *FString::Printf(TEXT("Component generated-class identity reloads exactly: %s"), *IdentityError),
+        ComponentAsset->ValidateGeneratedClassIdentity(
+            AttachedComponent,
+            ComponentOwner,
+            IdentityError));
+    ActorComponent->BeginPlay();
+    AttachedComponent->BeginPlay();
+    TestTrue(
+        *FString::Printf(TEXT("Actor Script Class enters managed BeginPlay: %s"),
+            *ActorComponent->LastScriptError),
+        ActorComponent->bScriptRunning);
+    TestTrue(
+        *FString::Printf(TEXT("Component Script Class enters managed BeginPlay: %s"),
+            *AttachedComponent->LastScriptError),
+        AttachedComponent->bScriptRunning);
+    TestEqual(TEXT("Actor class materializes its editable StartValue"),
+        ActorComponent->GetScriptStateInt32(TEXT("StartValue"), -1), 1);
+    TestEqual(TEXT("Component class materializes its editable StartValue"),
+        AttachedComponent->GetScriptStateInt32(TEXT("StartValue"), -1), 1);
+    TestEqual(TEXT("Two generated Script Classes are live in one World"),
+        Host->GetManagedScriptCount(), 2);
+
+    Host->EndManagedFrame();
+    Host->BeginManagedFrame();
+    ActorComponent->TickComponent(0.016f, LEVELTICK_All, nullptr);
+    AttachedComponent->TickComponent(0.016f, LEVELTICK_All, nullptr);
+    TestTrue(
+        *FString::Printf(TEXT("Actor Script Class completes managed Tick: %s"),
+            *ActorComponent->LastScriptError),
+        ActorComponent->bScriptRunning && ActorComponent->LastScriptError.IsEmpty());
+    TestTrue(
+        *FString::Printf(TEXT("Component Script Class completes managed Tick: %s"),
+            *AttachedComponent->LastScriptError),
+        AttachedComponent->bScriptRunning && AttachedComponent->LastScriptError.IsEmpty());
+
+    ActorComponent->EndPlay(EEndPlayReason::Destroyed);
+    AttachedComponent->EndPlay(EEndPlayReason::Destroyed);
+    TestFalse(TEXT("Actor Script Class stops on EndPlay"), ActorComponent->bScriptRunning);
+    TestFalse(TEXT("Component Script Class stops on EndPlay"), AttachedComponent->bScriptRunning);
+    TestEqual(TEXT("EndPlay releases both managed instances"),
+        Host->GetManagedScriptCount(), 0);
+    TestEqual(TEXT("EndPlay releases both lifecycle claims"),
+        Host->GetGameplayLifecycleClaimCount(), 0);
+
+    AttachedComponent->UnregisterComponent();
+    ScriptActor->Destroy();
+    ComponentOwner->Destroy();
+    World->RemoveFromRoot();
+    World->DestroyWorld(false);
+    TestEqual(
+        TEXT("World teardown releases its collectible managed context"),
+        FUnifiedScriptCoreClrHost::Get().GetManagedWorldCount(),
+        InitialManagedWorldCount);
+    return WriteProcessReceipt(*this, TEXT("reload"));
 }
 
 #endif
