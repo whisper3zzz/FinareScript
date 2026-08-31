@@ -12,6 +12,7 @@
       "/Script/UEUnifiedScriptRuntime.UnifiedScriptActor",
       "/Script/UEUnifiedScriptRuntime.UnifiedScriptComponent"
     ],
+    "blueprintAssets": [],
     "output": "../Generated/__PROJECT_NAME__.reflection.json"
   },
   "bindings": {
@@ -29,6 +30,8 @@
       "requestsOutput": "../Generated/__PROJECT_NAME__.api-requests.json",
       "contractOutput": "../Generated/__PROJECT_NAME__.development-api-contract.json",
       "reportOutput": "../Generated/__PROJECT_NAME__.development-surface.json",
+      "lockOutput": "../Generated/__PROJECT_NAME__.generated-surface.lock.json",
+      "lockMode": "update",
       "failOnOpenDecisions": true
     }
   },
@@ -51,6 +54,6 @@
   },
   "validation": {
     "automationFilter": "UnifiedScript.Unreal.ProjectSetup",
-    "minimumAutomationTests": 1
+    "minimumAutomationTests": 2
   }
 }

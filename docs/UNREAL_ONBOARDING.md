@@ -101,12 +101,14 @@ Apply performs these phases in order:
 3. bootstrap native bindings from the last reflection artifact when present;
 4. build the editor target, scan source for collision-safe generated type hints,
    and export the configured classes plus uniquely requested native project,
-   plugin, or Engine classes;
+   plugin, Engine, or loaded Blueprint generated classes under their exact
+   `/Script` or content object paths;
 5. analyze ordinary imported, aliased, or fully qualified generated-API use in
    the managed projects, use Roslyn symbols to reject user-type collisions,
    resolve deterministic overloads, and fold every request into an all-or-nothing
-   development Contract overlay before generating the C# wrappers, native
-   thunks, visual API catalog, API browser, and coverage report atomically;
+   development Contract overlay and per-type surface lock before generating the
+   C# wrappers, native thunks, visual API catalog, API browser, and coverage
+   report atomically;
 6. build project managed assemblies and rebuild the editor target against the
    final native thunks;
 7. build the configured project Game target and require its target receipt, so
@@ -114,7 +116,8 @@ Apply performs these phases in order:
    the source plugin;
 8. synchronize the deployment manifest into deterministic Script Assets;
 9. regenerate the type hints, dependency requests, development Contract/report,
-   and all five binding consumers in `Saved` and compare their exact bytes;
+   generated surface lock, and all five binding consumers in `Saved` and compare
+   their exact bytes;
 10. optionally run the configured UE Automation filter and require its minimum
    successful test count.
 
@@ -134,8 +137,8 @@ powershell -ExecutionPolicy Bypass `
 
 `-ValidateOnly` requires one successful Apply baseline. It does not overwrite
 reflection, source type hints, dependency requests, the development
-Contract/report, bindings,
-native thunks, node catalogs, browser, coverage, or Script Assets.
+Contract/report, generated surface lock, bindings, native thunks, node catalogs,
+browser, coverage, or Script Assets.
 That baseline must match the current managed assemblies and compiled chunks. If
 a shared UnifiedScript assembly changed after the last Apply run, run ordinary
 Apply onboarding once to rebuild, recompile, and deploy the chunks before using
@@ -167,6 +170,7 @@ configuration file.
   "reflection": {
     "modules": ["Game", "Engine", "UEUnifiedScriptRuntime"],
     "classes": ["/Script/Game.Player", "/Script/Engine.Actor"],
+    "blueprintAssets": ["/Game/Gameplay/BP_Door.BP_Door"],
     "output": "../Generated/Game.reflection.json"
   },
   "bindings": {
@@ -184,6 +188,8 @@ configuration file.
       "requestsOutput": "../Generated/Game.api-requests.json",
       "contractOutput": "../Generated/Game.development-api-contract.json",
       "reportOutput": "../Generated/Game.development-surface.json",
+      "lockOutput": "../Generated/Game.generated-surface.lock.json",
+      "lockMode": "update",
       "failOnOpenDecisions": true
     }
   },
@@ -210,8 +216,13 @@ configuration file.
 ```
 
 `reflection.modules` controls what Unreal may inspect. `reflection.classes`
-narrows broad modules such as Engine to an exact allowlist. The separate API
-Contract remains the reviewed shipped-member boundary. When
+narrows broad native modules such as Engine to an exact `/Script` allowlist.
+`reflection.blueprintAssets` contains exact Blueprint asset object paths; Setup
+loads those assets and exports their generated classes under exact paths such as
+`/Game/Gameplay/BP_Door.BP_Door_C`. Source type hints may also discover a unique
+Blueprint by generated class name; missing and ambiguous candidates fail instead
+of selecting by load order. The separate API Contract remains the reviewed
+shipped-member boundary. When
 `bindings.developmentSurface.enabled` is true, Setup scans the declared managed
 projects before they need to compile, writes exact source dependency requests,
 and uses a safe development Contract overlay for C++, C#, visual nodes, browser,
@@ -220,9 +231,16 @@ the base Contract effective and fails before partial binding generation. Setting
 `failOnOpenDecisions` to false retains the diagnostic report but still does not
 partially apply an unsafe overlay.
 
-The generated request, overlay, and report paths are resolved relative to the
-configuration exactly like other outputs. Existing v0.1 configurations that do
-not declare `developmentSurface` keep their reviewed Contract-only behavior.
+The generated type-hint, request, overlay, report, and lock paths are resolved
+relative to the configuration exactly like other outputs. `lockMode: "update"`
+is the local-authoring default and atomically refreshes the deterministic lock
+after a safe expansion. `lockMode: "frozen"` verifies the candidate against the
+accepted lock and rejects localized added, removed, or changed type drift before
+overwriting generated output. ValidateOnly always verifies and byte-compares the
+accepted lock regardless of Apply mode. Existing v0.1 configurations that omit
+`lockOutput` derive it beside the development-surface report; configurations
+that do not declare `developmentSurface` keep their reviewed Contract-only
+behavior.
 
 `requireCompleteNativeCoverage` requires every selected member to have a native
 thunk and rejects reflection fallback, rejected members, and deferred types.

@@ -1267,7 +1267,20 @@ internal static class Program
         string requestOutputPath = Path.GetFullPath(options.RequestOutputPath);
         string overlayOutputPath = Path.GetFullPath(options.OverlayOutputPath);
         string reportOutputPath = Path.GetFullPath(options.ReportOutputPath);
-        string[] outputPaths = [requestOutputPath, overlayOutputPath, reportOutputPath];
+        string? lockOutputPath = options.LockOutputPath is null
+            ? null
+            : Path.GetFullPath(options.LockOutputPath);
+        string? verifyLockPath = options.VerifyLockPath is null
+            ? null
+            : Path.GetFullPath(options.VerifyLockPath);
+        if (verifyLockPath is not null && !File.Exists(verifyLockPath))
+        {
+            Console.Error.WriteLine($"Unreal generated surface lock does not exist: {verifyLockPath}");
+            return 66;
+        }
+        string[] outputPaths = new[] { requestOutputPath, overlayOutputPath, reportOutputPath }
+            .Concat(lockOutputPath is null ? [] : [lockOutputPath])
+            .ToArray();
         if (outputPaths.Distinct(StringComparer.OrdinalIgnoreCase).Count() != outputPaths.Length)
         {
             throw new ArgumentException("Unreal development surface outputs must be distinct.");
@@ -1349,6 +1362,34 @@ internal static class Program
             contract);
         UnrealApiDevelopmentSurfaceResult result =
             new UnrealApiDevelopmentSurfacePlanner().Plan(reflection, requests, contract);
+        if (verifyLockPath is not null && !result.Applied)
+        {
+            Console.Error.WriteLine(
+                "USUE3202: generated surface lock cannot be verified while API decisions are open.");
+            return 65;
+        }
+        UnrealApiGeneratedSurfaceLock? surfaceLock = result.Applied &&
+            (lockOutputPath is not null || verifyLockPath is not null)
+                ? UnrealApiGeneratedSurfaceLockJson.Create(
+                    result.ProjectName,
+                    reflection,
+                    result)
+                : null;
+        if (verifyLockPath is not null && surfaceLock is not null)
+        {
+            UnrealApiGeneratedSurfaceLock expected = UnrealApiGeneratedSurfaceLockJson.Deserialize(
+                File.ReadAllText(verifyLockPath));
+            IReadOnlyList<string> differences = UnrealApiGeneratedSurfaceLockJson.Diff(
+                expected,
+                surfaceLock);
+            if (differences.Count > 0)
+            {
+                Console.Error.WriteLine(
+                    "USUE3201: generated surface lock is stale: " +
+                    string.Join(", ", differences));
+                return 65;
+            }
+        }
         var outputs = new List<OutputFile>
         {
             new(requestOutputPath, UnrealApiDependencyRequestJson.Serialize(requests)),
@@ -1359,6 +1400,12 @@ internal static class Program
             outputs.Add(new OutputFile(
                 overlayOutputPath,
                 UnrealApiContractJson.Serialize(result.EffectiveContract)));
+            if (lockOutputPath is not null && surfaceLock is not null)
+            {
+                outputs.Add(new OutputFile(
+                    lockOutputPath,
+                    UnrealApiGeneratedSurfaceLockJson.Serialize(surfaceLock)));
+            }
         }
         WriteTransactionally(outputs);
 
@@ -1368,6 +1415,10 @@ internal static class Program
             Console.WriteLine(overlayOutputPath);
         }
         Console.WriteLine(reportOutputPath);
+        if (lockOutputPath is not null && surfaceLock is not null)
+        {
+            Console.WriteLine(lockOutputPath);
+        }
         Console.WriteLine(
             $"requests={result.Summary.RequestCount}; " +
             $"selected={result.Summary.SelectedCount}; " +
@@ -4210,6 +4261,8 @@ internal static class Program
         string? requestOutputPath = null;
         string? overlayOutputPath = null;
         string? reportOutputPath = null;
+        string? lockOutputPath = null;
+        string? verifyLockPath = null;
         string configuration = "Release";
         string? dotNetPath = null;
         bool failOnOpenDecisions = false;
@@ -4244,6 +4297,12 @@ internal static class Program
                 case "--report" when reportOutputPath is null:
                     reportOutputPath = value;
                     break;
+                case "--lock-out" when lockOutputPath is null:
+                    lockOutputPath = value;
+                    break;
+                case "--verify-lock" when verifyLockPath is null:
+                    verifyLockPath = value;
+                    break;
                 case "--configuration" when configuration == "Release":
                     configuration = value;
                     break;
@@ -4267,6 +4326,8 @@ internal static class Program
             requestOutputPath,
             overlayOutputPath,
             reportOutputPath,
+            lockOutputPath,
+            verifyLockPath,
             configuration,
             dotNetPath,
             failOnOpenDecisions);
@@ -5908,7 +5969,7 @@ internal static class Program
         "  unifiedscript ue-bindings <reflection.json> --out <bindings.cs> [--contract <api-contract.json>] [--native-out <thunks.cpp>] [--nodes-out <nodes.json>] [--browser-out <api-browser.json>] [--report <coverage.json>] [--fail-on-rejected] [--namespace <name>]\n" +
         "  unifiedscript ue-contract-propose <reflection.json> --requests <contract-requests.json> --base <api-contract.json> --out <proposal.json> [--fail-on-open-decisions]\n" +
         "  unifiedscript ue-reflection-hints --project <managed.csproj> [--project <managed.csproj>...] --base <api-contract.json> --out <type-hints.json> [--configuration <name>] [--dotnet <path>]\n" +
-        "  unifiedscript ue-surface-expand <reflection.json> --project <managed.csproj> [--project <managed.csproj>...] --base <api-contract.json> --requests-out <requests.json> --overlay-out <development-contract.json> --report <surface.json> [--configuration <name>] [--dotnet <path>] [--fail-on-open-decisions]\n" +
+        "  unifiedscript ue-surface-expand <reflection.json> --project <managed.csproj> [--project <managed.csproj>...] --base <api-contract.json> --requests-out <requests.json> --overlay-out <development-contract.json> --report <surface.json> [--lock-out <surface-lock.json>] [--verify-lock <surface-lock.json>] [--configuration <name>] [--dotnet <path>] [--fail-on-open-decisions]\n" +
         "  unifiedscript ue-data-plane <schema.json> --managed-out <layouts.g.cs> --native-out <layouts.gen.h>\n" +
         "  unifiedscript ue-data-plane-extension <schema.json> --managed-out <extension.g.cs> --native-out <extension.gen.h> --catalog-out <catalog.json>\n" +
         "  unifiedscript ue-puerts-inventory <puerts-project> --out <inventory.json> [--native-project <target-project>] [--project-name <name>] [--coverage <coverage.json> --report <report.json> --fail-on-uncovered]\n" +
@@ -6092,6 +6153,8 @@ internal static class Program
         string RequestOutputPath,
         string OverlayOutputPath,
         string ReportOutputPath,
+        string? LockOutputPath,
+        string? VerifyLockPath,
         string Configuration,
         string? DotNetPath,
         bool FailOnOpenDecisions);

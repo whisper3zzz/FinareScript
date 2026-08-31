@@ -10,8 +10,11 @@ struct FUnifiedScriptReflectionExportOptions
     /** Optional exact /Script/Module.Type allowlist. Empty exports every native class in Modules. */
     TArray<FString> ClassPaths;
 
-    /** Optional exact generated C# short names resolved uniquely across loaded native /Script classes. */
+    /** Optional generated C# short names resolved uniquely across native and bounded Blueprint classes. */
     TArray<FString> TypeNames;
+
+    /** Optional exact Blueprint asset object paths whose generated classes must be loaded and exported. */
+    TArray<FString> BlueprintAssetPaths;
 };
 
 struct FUnifiedScriptReflectionExportResult
@@ -22,6 +25,7 @@ struct FUnifiedScriptReflectionExportResult
     int32 DelegateCount = 0;
     int32 ExcludedTypeCount = 0;
     int32 DiscoveredClassCount = 0;
+    int32 DiscoveredBlueprintClassCount = 0;
 };
 
 class UEUNIFIEDSCRIPTEDITOR_API FUnifiedScriptReflectionExporter

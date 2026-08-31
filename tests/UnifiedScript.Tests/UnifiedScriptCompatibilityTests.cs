@@ -15,7 +15,7 @@ public sealed class UnifiedScriptCompatibilityTests
         UnifiedScriptCompatibilityPolicy policy = LoadPolicy();
 
         Assert.Equal(UnifiedScriptCompatibilityPolicy.CurrentSchemaVersion, policy.SchemaVersion);
-        Assert.Equal(18, policy.Families.Count);
+        Assert.Equal(19, policy.Families.Count);
         Assert.Equal(HirDocument.CurrentSchemaVersion, Family(policy, "hir").CurrentVersion);
         Assert.Equal(BoundCompilation.CurrentSchemaVersion, Family(policy, "semantics").CurrentVersion);
         Assert.Equal(GraphDocument.CurrentSchemaVersion, Family(policy, "graph").CurrentVersion);
@@ -34,6 +34,9 @@ public sealed class UnifiedScriptCompatibilityTests
         Assert.Equal(
             UnrealApiContract.CurrentSchemaVersion,
             Family(policy, "unreal-api-contract").CurrentVersion);
+        Assert.Equal(
+            UnrealApiGeneratedSurfaceLock.CurrentSchemaVersion,
+            Family(policy, "unreal-api-generated-surface-lock").CurrentVersion);
         Assert.Equal(
             "unifiedscript.chunk/v1.0",
             Family(policy, "compiled-program-chunk").CurrentVersion);

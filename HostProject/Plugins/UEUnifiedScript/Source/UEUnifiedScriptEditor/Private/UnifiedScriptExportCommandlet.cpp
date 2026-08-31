@@ -44,6 +44,12 @@ int32 UUnifiedScriptExportCommandlet::Main(const FString& Params)
         TypeNameList.ParseIntoArray(Options.TypeNames, TEXT(","), true);
     }
 
+    FString BlueprintAssetList;
+    if (FParse::Value(*Params, TEXT("BlueprintAssets="), BlueprintAssetList, false))
+    {
+        BlueprintAssetList.ParseIntoArray(Options.BlueprintAssetPaths, TEXT(","), true);
+    }
+
     FUnifiedScriptReflectionExportResult Result;
     FText Error;
     if (!FUnifiedScriptReflectionExporter::Export(Options, Result, Error))
@@ -55,13 +61,14 @@ int32 UUnifiedScriptExportCommandlet::Main(const FString& Params)
     UE_LOG(
         LogTemp,
         Display,
-        TEXT("UnifiedScript reflection export wrote %d types, %d properties, %d functions, and %d delegates to %s (%d source-discovered classes, %d internal types excluded)"),
+        TEXT("UnifiedScript reflection export wrote %d types, %d properties, %d functions, and %d delegates to %s (%d source-discovered classes, %d Blueprint classes, %d internal types excluded)"),
         Result.TypeCount,
         Result.PropertyCount,
         Result.FunctionCount,
         Result.DelegateCount,
         *Options.OutputPath,
         Result.DiscoveredClassCount,
+        Result.DiscoveredBlueprintClassCount,
         Result.ExcludedTypeCount);
     return 0;
 }

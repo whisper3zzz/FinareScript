@@ -286,7 +286,7 @@ try {
     }
 
     $reflection = [ordered]@{
-        schemaVersion = 'unifiedscript.unreal-reflection/v0.4'
+        schemaVersion = 'unifiedscript.unreal-reflection/v0.5'
         engine = [ordered]@{
             major = 5
             minor = 8

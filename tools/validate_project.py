@@ -1108,6 +1108,15 @@ def main() -> int:
         / "UnifiedScript.Cli"
         / "UnrealApiSourceTypeHintScanner.cs"
     )
+    generated_surface_lock_path = (
+        ROOT
+        / "src"
+        / "UnifiedScript.Unreal"
+        / "UnrealApiGeneratedSurfaceLock.cs"
+    )
+    native_thunk_generator_b2_path = (
+        ROOT / "src" / "UnifiedScript.Unreal" / "UnrealNativeThunkGenerator.cs"
+    )
     managed_naming_path = (
         ROOT
         / "src"
@@ -1138,6 +1147,8 @@ def main() -> int:
         development_surface_source_path,
         source_dependency_scanner_path,
         source_type_hint_scanner_path,
+        generated_surface_lock_path,
+        native_thunk_generator_b2_path,
         managed_naming_path,
         development_surface_test_path,
         onboarding_template_path,
@@ -1151,6 +1162,10 @@ def main() -> int:
         encoding="utf-8"
     )
     source_type_hint_scanner = source_type_hint_scanner_path.read_text(
+        encoding="utf-8"
+    )
+    generated_surface_lock = generated_surface_lock_path.read_text(encoding="utf-8")
+    native_thunk_generator_b2 = native_thunk_generator_b2_path.read_text(
         encoding="utf-8"
     )
     managed_naming = managed_naming_path.read_text(encoding="utf-8")
@@ -1224,8 +1239,8 @@ def main() -> int:
         and "ordinary generated-namespace import" in packaged_native_onboarding
         and "normal import scope with Roslyn symbols" in api_contract_document
         and "M13.1B-2 execution checklist" in roadmap_document
-        and "M13.1B-2 — Puerts-grade reflected API/signature breadth"
-        in roadmap_document
+        and "M13.1B-2 ordinary source/signature matrix" in roadmap_document
+        and "M13.1B-2a — native reflected breadth" in roadmap_document
         and "Progress (2026-08-31, M13.1B-2 ordinary-source/signature tranche)"
         in roadmap_document,
         "M13.1B-2 ordinary imports, semantic collision safety, overload selection, or product fixture is incomplete",
@@ -1257,6 +1272,38 @@ def main() -> int:
     )
     checks.append(
         "M13.1B-2 discovers bounded native Unreal types before reflection export"
+    )
+    require(
+        "unifiedscript.unreal-api-generated-surface-lock/v0.1"
+        in generated_surface_lock
+        and "TypeFingerprint" in generated_surface_lock
+        and "changed:{path}" in generated_surface_lock
+        and "--lock-out" in cli_source
+        and "--verify-lock" in cli_source
+        and "USUE3201" in cli_source
+        and "BlueprintAssetPaths" in reflection_exporter
+        and "FAssetRegistryModule" in reflection_exporter
+        and "BlueprintAssets" in reflection_exporter
+        and "DiscoveredBlueprintClassCount" in reflection_exporter
+        and "USUE3010" in native_thunk_generator_b2
+        and "developmentSurfaceLock" in onboarding_script
+        and "lockMode" in onboarding_script
+        and '"blueprintAssets"' in onboarding_template
+        and '"lockOutput"' in onboarding_template
+        and "BlueprintGeneratedClassUsesExactAssetIdentityAndSafeReflectionRoute"
+        in development_surface_test
+        and "GeneratedSurfaceLockIsDeterministicLocalizedAndStaleSafe"
+        in development_surface_test
+        and "BlueprintReflectionDiscovery" in project_setup_tests
+        and "Generated API surface lock did not freeze the exact Actor/Pawn surface."
+        in packaged_native_onboarding
+        and "unifiedscript.unreal-api-generated-surface-lock/v0.1"
+        in api_contract_document
+        and "M13.1B-2b" in roadmap_document,
+        "M13.1B-2b Blueprint identity, generated surface lock, stale-lock gate, or acceptance is incomplete",
+    )
+    checks.append(
+        "M13.1B-2b locks exact Blueprint/native surfaces and rejects stale generation"
     )
 
     sample_catalog_path = ROOT / "samples" / "Unreal" / "unifiedscript.samples.json"
@@ -1372,14 +1419,22 @@ def main() -> int:
     require(
         compatibility_policy["schemaVersion"]
         == "unifiedscript.compatibility-policy/v0.1"
-        and len(compatibility_families) == 18
+        and len(compatibility_families) == 19
         and compatibility_families["unreal-reflection"]["currentVersion"]
-        == "unifiedscript.unreal-reflection/v0.4"
+        == "unifiedscript.unreal-reflection/v0.5"
         and compatibility_families["unreal-api-contract"]["currentVersion"]
         == "unifiedscript.unreal-api-contract/v0.2"
         and compatibility_families["compiled-program-chunk"]["upgradeStrategy"]
         == "rebuild"
         and compatibility_families["generated-bindings"]["upgradeStrategy"]
+        == "regenerate"
+        and compatibility_families["unreal-api-generated-surface-lock"][
+            "currentVersion"
+        ]
+        == "unifiedscript.unreal-api-generated-surface-lock/v0.1"
+        and compatibility_families["unreal-api-generated-surface-lock"][
+            "upgradeStrategy"
+        ]
         == "regenerate"
         and compatibility_families["unreal-data-plane-extension"]["currentVersion"]
         == "unifiedscript.unreal-data-plane-extension/v0.1"
@@ -1522,7 +1577,7 @@ def main() -> int:
             for source_schema in {
                 "unifiedscript.hir/v0.9",
                 "unifiedscript.authoring-surface/v0.1",
-                "unifiedscript.unreal-reflection/v0.4",
+                "unifiedscript.unreal-reflection/v0.5",
             }
         )
         and {"schemaVersion", "status", "phase", "metric", "sha256"}.issubset(
@@ -3489,7 +3544,7 @@ def main() -> int:
     )
     require(
         unreal_manifest["schemaVersion"]
-        == "unifiedscript.unreal-reflection/v0.4"
+        == "unifiedscript.unreal-reflection/v0.5"
         and unreal_manifest["modules"] == ["Engine", "UEUnifiedScriptRuntime"]
         and {item["path"] for item in unreal_manifest["types"]}
         == {
@@ -3676,7 +3731,7 @@ def main() -> int:
         and {module["Name"] for module in unreal_plugin["Modules"]}
         == {"UEUnifiedScriptRuntime", "UEUnifiedScriptEditor"}
         and "UUnifiedScriptComponent : public UActorComponent" in unreal_component
-        and "unifiedscript.unreal-reflection/v0.4" in unreal_exporter
+        and "unifiedscript.unreal-reflection/v0.5" in unreal_exporter
         and "UnifiedScriptBindingInternal" in unreal_exporter
         and "UnifiedScriptBindingInternal" in unreal_delegate_proxy
         and "TObjectIterator<UClass>" in unreal_exporter

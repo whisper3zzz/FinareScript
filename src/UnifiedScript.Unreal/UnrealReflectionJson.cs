@@ -29,6 +29,7 @@ public static class UnrealReflectionJson
         if (manifest.SchemaVersion != UnrealReflectionManifest.CurrentSchemaVersion &&
             manifest.SchemaVersion != UnrealReflectionManifest.PreviousSchemaVersion &&
             manifest.SchemaVersion != UnrealReflectionManifest.LegacySchemaVersion &&
+            manifest.SchemaVersion != UnrealReflectionManifest.OlderSchemaVersion &&
             manifest.SchemaVersion != UnrealReflectionManifest.OldestSchemaVersion)
         {
             throw new JsonException(
@@ -94,11 +95,11 @@ public static class UnrealReflectionJson
             throw new JsonException("The Unreal reflection manifest contains an invalid reflected type.");
         }
 
-        if (type.BaseTypePath is not null && !IsScriptPath(type.BaseTypePath))
+        if (type.BaseTypePath is not null && !IsReflectedObjectPath(type.BaseTypePath))
         {
             throw new JsonException($"Unreal type '{type.Path}' has an invalid base type path.");
         }
-        if (type.InterfacePaths.Any(static path => !IsScriptPath(path)) ||
+        if (type.InterfacePaths.Any(static path => !IsReflectedObjectPath(path)) ||
             type.InterfacePaths.Distinct(StringComparer.Ordinal).Count() != type.InterfacePaths.Count)
         {
             throw new JsonException($"Unreal type '{type.Path}' has invalid interface paths.");
@@ -187,7 +188,7 @@ public static class UnrealReflectionJson
             if (reflectedDelegate is null ||
                 !IsIdentifier(reflectedDelegate.Name) ||
                 !IsMemberPath(reflectedDelegate.Path, type.Path, reflectedDelegate.Name) ||
-                !IsScriptPath(reflectedDelegate.SignaturePath) ||
+                !IsReflectedFieldPath(reflectedDelegate.SignaturePath) ||
                 reflectedDelegate.Parameters is null || reflectedDelegate.Traits is null ||
                 reflectedDelegate.Metadata is null ||
                 !Enum.IsDefined(reflectedDelegate.Traits.Kind) ||
@@ -265,7 +266,8 @@ public static class UnrealReflectionJson
             case UnrealValueKind.Object or UnrealValueKind.Class or
                 UnrealValueKind.SoftObject or UnrealValueKind.SoftClass or
                 UnrealValueKind.Struct or UnrealValueKind.Enum
-                when hasTypePath && IsScriptPath(type.TypePath!) && !hasElement && !hasKey && !hasValue:
+                when hasTypePath && IsReflectedObjectPath(type.TypePath!) &&
+                    !hasElement && !hasKey && !hasValue:
                 return;
             case UnrealValueKind.Array or UnrealValueKind.Set
                 when !hasTypePath && hasElement && !hasKey && !hasValue:
@@ -341,14 +343,24 @@ public static class UnrealReflectionJson
         (char.IsLetter(value[0]) || value[0] == '_') &&
         value.Skip(1).All(static character => char.IsLetterOrDigit(character) || character == '_');
 
-    private static bool IsScriptPath(string path) =>
-        path.StartsWith("/Script/", StringComparison.Ordinal) &&
-        path.Length > "/Script/.".Length &&
+    private static bool IsReflectedObjectPath(string path) =>
+        path.StartsWith("/", StringComparison.Ordinal) &&
+        path.Length > "/A.B".Length &&
+        path.Contains('.') &&
+        !path.Any(char.IsWhiteSpace) &&
+        !path.Contains(':');
+
+    private static bool IsReflectedFieldPath(string path) =>
+        path.StartsWith("/", StringComparison.Ordinal) &&
+        path.Length > "/A.B".Length &&
         path.Contains('.') &&
         !path.Any(char.IsWhiteSpace);
 
     private static bool IsReflectedPath(string path, string module) =>
-        IsScriptPath(path) && path.StartsWith($"/Script/{module}.", StringComparison.Ordinal);
+        IsReflectedObjectPath(path) &&
+        (path.StartsWith($"/Script/{module}.", StringComparison.Ordinal) ||
+         path.StartsWith($"/{module}/", StringComparison.Ordinal) ||
+         path.StartsWith($"/{module}.", StringComparison.Ordinal));
 
     private static bool IsMemberPath(string path, string ownerPath, string memberName) =>
         string.Equals(path, $"{ownerPath}:{memberName}", StringComparison.Ordinal);

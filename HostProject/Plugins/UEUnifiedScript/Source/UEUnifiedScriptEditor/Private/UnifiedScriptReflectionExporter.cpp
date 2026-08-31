@@ -1,11 +1,17 @@
 #include "UnifiedScriptReflectionExporter.h"
 
 #include "Algo/Unique.h"
+#include "AssetRegistry/AssetData.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "AssetRegistry/IAssetRegistry.h"
 #include "Dom/JsonObject.h"
+#include "Engine/Blueprint.h"
 #include "HAL/FileManager.h"
 #include "Misc/EngineVersion.h"
 #include "Misc/FileHelper.h"
+#include "Misc/PackageName.h"
 #include "Misc/Paths.h"
+#include "Modules/ModuleManager.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "UObject/Class.h"
@@ -15,7 +21,7 @@
 
 namespace UE::UnifiedScript::Private
 {
-constexpr const TCHAR* ReflectionSchema = TEXT("unifiedscript.unreal-reflection/v0.4");
+constexpr const TCHAR* ReflectionSchema = TEXT("unifiedscript.unreal-reflection/v0.5");
 constexpr const TCHAR* InternalBindingMetadata = TEXT("UnifiedScriptBindingInternal");
 
 TSharedRef<FJsonObject> TypeReference(
@@ -258,7 +264,22 @@ TSharedRef<FJsonObject> PropertyTypeReference(const FProperty* Property)
 FString ModuleName(const UObject* Type)
 {
     FString Name = Type->GetOutermost()->GetName();
-    return Name.RemoveFromStart(TEXT("/Script/")) ? Name : FString();
+    if (Name.RemoveFromStart(TEXT("/Script/")))
+    {
+        return Name;
+    }
+    if (!Name.RemoveFromStart(TEXT("/")))
+    {
+        return FString();
+    }
+    FString Mount;
+    FString Remainder;
+    if (Name.Split(TEXT("/"), &Mount, &Remainder) ||
+        Name.Split(TEXT("."), &Mount, &Remainder))
+    {
+        return Mount;
+    }
+    return Name;
 }
 
 const TCHAR* PropertyNativeAccess(const FProperty* Property)
@@ -471,7 +492,10 @@ TSharedRef<FJsonObject> ExportClass(
 
     TSharedRef<FJsonObject> Traits = MakeShared<FJsonObject>();
     Traits->SetBoolField(TEXT("abstract"), Class->HasAnyClassFlags(CLASS_Abstract));
-    Traits->SetBoolField(TEXT("blueprintType"), Class->GetBoolMetaData(TEXT("BlueprintType")));
+    Traits->SetBoolField(
+        TEXT("blueprintType"),
+        Class->GetBoolMetaData(TEXT("BlueprintType")) ||
+            Cast<UBlueprint>(Class->ClassGeneratedBy) != nullptr);
     Traits->SetBoolField(TEXT("interface"), Class->HasAnyClassFlags(CLASS_Interface));
     Json->SetObjectField(TEXT("traits"), Traits);
     Json->SetObjectField(TEXT("metadata"), BlueprintMetadata(Class));
@@ -799,7 +823,46 @@ bool FUnifiedScriptReflectionExporter::Export(
     }
     TypeNames.Sort();
 
+    TArray<FString> BlueprintAssetPaths = Options.BlueprintAssetPaths;
+    TSet<FString> BlueprintAssetPathSet;
+    for (FString& BlueprintAssetPath : BlueprintAssetPaths)
+    {
+        BlueprintAssetPath.TrimStartAndEndInline();
+        if (!FPackageName::IsValidObjectPath(BlueprintAssetPath) ||
+            BlueprintAssetPathSet.Contains(BlueprintAssetPath))
+        {
+            OutError = FText::FromString(
+                TEXT("Reflected Blueprint assets must be unique exact object paths such as /Game/Blueprints/BP_Actor.BP_Actor."));
+            return false;
+        }
+        BlueprintAssetPathSet.Add(BlueprintAssetPath);
+    }
+    BlueprintAssetPaths.Sort();
+
     TArray<const UClass*> Classes;
+    TSet<const UClass*> ExplicitClassSet;
+    for (const FString& BlueprintAssetPath : BlueprintAssetPaths)
+    {
+        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintAssetPath);
+        if (Blueprint == nullptr || Blueprint->GeneratedClass == nullptr)
+        {
+            OutError = FText::FromString(FString::Printf(
+                TEXT("Requested Blueprint asset '%s' could not load a generated class."),
+                *BlueprintAssetPath));
+            return false;
+        }
+        const UClass* GeneratedClass = Blueprint->GeneratedClass;
+        if (GeneratedClass->HasMetaData(InternalBindingMetadata))
+        {
+            OutError = FText::FromString(FString::Printf(
+                TEXT("Requested Blueprint asset '%s' is internal to UnifiedScript binding infrastructure."),
+                *BlueprintAssetPath));
+            return false;
+        }
+        Classes.AddUnique(GeneratedClass);
+        ExplicitClassSet.Add(GeneratedClass);
+        Modules.AddUnique(ModuleName(GeneratedClass));
+    }
     for (TObjectIterator<UClass> It; It; ++It)
     {
         const UClass* Class = *It;
@@ -816,23 +879,57 @@ bool FUnifiedScriptReflectionExporter::Export(
                 continue;
             }
             Classes.Add(Class);
+            if (ClassPathSet.Contains(Class->GetPathName()))
+            {
+                ExplicitClassSet.Add(Class);
+            }
         }
     }
     if (!TypeNameSet.IsEmpty())
     {
         TMap<FString, TArray<const UClass*>> CandidatesByName;
+        FARFilter BlueprintFilter;
+        BlueprintFilter.ClassPaths.Add(UBlueprint::StaticClass()->GetClassPathName());
+        BlueprintFilter.bRecursiveClasses = true;
+        TArray<FAssetData> BlueprintAssets;
+        IAssetRegistry& AssetRegistry =
+            FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+        AssetRegistry.GetAssets(BlueprintFilter, BlueprintAssets);
+        BlueprintAssets.Sort([](const FAssetData& Left, const FAssetData& Right)
+        {
+            return Left.GetObjectPathString() < Right.GetObjectPathString();
+        });
+        for (const FAssetData& Asset : BlueprintAssets)
+        {
+            const FString GeneratedTypeName = Asset.AssetName.ToString() + TEXT("_C");
+            if (!TypeNameSet.Contains(GeneratedTypeName))
+            {
+                continue;
+            }
+            UBlueprint* Blueprint = Cast<UBlueprint>(Asset.GetAsset());
+            if (Blueprint == nullptr || Blueprint->GeneratedClass == nullptr)
+            {
+                continue;
+            }
+            CandidatesByName.FindOrAdd(GeneratedTypeName).AddUnique(Blueprint->GeneratedClass);
+        }
+
         for (TObjectIterator<UClass> It; It; ++It)
         {
             const UClass* Class = *It;
+            const bool bNativeScriptClass = Class->HasAnyClassFlags(CLASS_Native) &&
+                Class->GetPathName().StartsWith(TEXT("/Script/"));
+            const bool bBlueprintGeneratedClass = !bNativeScriptClass &&
+                Cast<UBlueprint>(Class->ClassGeneratedBy) != nullptr &&
+                Class->GetPathName().StartsWith(TEXT("/"));
             if (Class->HasAnyFlags(RF_NewerVersionExists) ||
-                !Class->HasAnyClassFlags(CLASS_Native) ||
+                (!bNativeScriptClass && !bBlueprintGeneratedClass) ||
                 Class->HasMetaData(InternalBindingMetadata) ||
-                !Class->GetPathName().StartsWith(TEXT("/Script/")) ||
                 !TypeNameSet.Contains(Class->GetName()))
             {
                 continue;
             }
-            CandidatesByName.FindOrAdd(Class->GetName()).Add(Class);
+            CandidatesByName.FindOrAdd(Class->GetName()).AddUnique(Class);
         }
         for (const FString& TypeName : TypeNames)
         {
@@ -840,7 +937,7 @@ bool FUnifiedScriptReflectionExporter::Export(
             if (Candidates == nullptr || Candidates->IsEmpty())
             {
                 OutError = FText::FromString(FString::Printf(
-                    TEXT("Source-requested reflected type '%s' was not found among loaded native /Script classes."),
+                    TEXT("Source-requested reflected type '%s' was not found among native /Script or Blueprint generated classes."),
                     *TypeName));
                 return false;
             }
@@ -848,10 +945,17 @@ bool FUnifiedScriptReflectionExporter::Export(
             {
                 return Left.GetPathName() < Right.GetPathName();
             });
-            if (Candidates->Num() != 1)
+            TArray<const UClass*> ExplicitCandidates = Candidates->FilterByPredicate(
+                [&ExplicitClassSet](const UClass* Candidate)
+                {
+                    return ExplicitClassSet.Contains(Candidate);
+                });
+            const TArray<const UClass*>& ResolvedCandidates =
+                ExplicitCandidates.IsEmpty() ? *Candidates : ExplicitCandidates;
+            if (ResolvedCandidates.Num() != 1)
             {
                 TArray<FString> CandidatePaths;
-                for (const UClass* Candidate : *Candidates)
+                for (const UClass* Candidate : ResolvedCandidates)
                 {
                     CandidatePaths.Add(Candidate->GetPathName());
                 }
@@ -861,7 +965,7 @@ bool FUnifiedScriptReflectionExporter::Export(
                     *FString::Join(CandidatePaths, TEXT(", "))));
                 return false;
             }
-            const UClass* Discovered = (*Candidates)[0];
+            const UClass* Discovered = ResolvedCandidates[0];
             if (!Classes.Contains(Discovered))
             {
                 Classes.Add(Discovered);
@@ -870,6 +974,14 @@ bool FUnifiedScriptReflectionExporter::Export(
             }
         }
         Modules.Sort();
+    }
+    for (const UClass* Class : Classes)
+    {
+        if (Cast<UBlueprint>(Class->ClassGeneratedBy) != nullptr &&
+            !Class->GetPathName().StartsWith(TEXT("/Script/")))
+        {
+            ++OutResult.DiscoveredBlueprintClassCount;
+        }
     }
     Classes.Sort([](const UClass& Left, const UClass& Right)
     {

@@ -86,7 +86,7 @@ public static class UnrealApiContractJson
         var normalizedTypes = new List<UnrealApiContractType>(contract.Types.Count);
         foreach (UnrealApiContractType? type in contract.Types)
         {
-            if (type is null || !IsScriptPath(type.Path) || type.Members is null ||
+            if (type is null || !IsReflectedTypePath(type.Path) || type.Members is null ||
                 type.Members.Count == 0 || !typePaths.Add(type.Path))
             {
                 throw new JsonException("The Unreal API contract contains an invalid type selector.");
@@ -177,9 +177,9 @@ public static class UnrealApiContractJson
         return baseline;
     }
 
-    private static bool IsScriptPath(string path) =>
-        path.StartsWith("/Script/", StringComparison.Ordinal) &&
-        path.Contains('.') && !path.Any(char.IsWhiteSpace);
+    private static bool IsReflectedTypePath(string path) =>
+        path.StartsWith("/", StringComparison.Ordinal) &&
+        path.Contains('.') && !path.Contains(':') && !path.Any(char.IsWhiteSpace);
 
     private static bool IsHeaderPath(string? value)
     {

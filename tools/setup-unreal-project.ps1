@@ -353,11 +353,15 @@ function Invoke-DevelopmentSurfaceExpansion {
         [Parameter(Mandatory)][string]$RequestsOutput,
         [Parameter(Mandatory)][string]$OverlayOutput,
         [Parameter(Mandatory)][string]$ReportOutput,
+        [string]$SurfaceLockOutput,
+        [string]$VerifySurfaceLock,
         [Parameter(Mandatory)][bool]$FailOnOpenDecisions,
         [Parameter(Mandatory)][string]$LogPath
     )
 
-    foreach ($output in @($RequestsOutput, $OverlayOutput, $ReportOutput)) {
+    foreach ($output in @(
+            $RequestsOutput, $OverlayOutput, $ReportOutput, $SurfaceLockOutput) |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) {
         New-Item -ItemType Directory -Force -Path (Split-Path -Parent $output) | Out-Null
     }
     $arguments = @(
@@ -376,6 +380,12 @@ function Invoke-DevelopmentSurfaceExpansion {
         '--configuration', $ManagedConfiguration,
         '--dotnet', $DotNet
     )
+    if (-not [string]::IsNullOrWhiteSpace($SurfaceLockOutput)) {
+        $arguments += @('--lock-out', $SurfaceLockOutput)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($VerifySurfaceLock)) {
+        $arguments += @('--verify-lock', $VerifySurfaceLock)
+    }
     if ($FailOnOpenDecisions) {
         $arguments += '--fail-on-open-decisions'
     }
@@ -601,7 +611,7 @@ try {
         }
         Assert-AllowedProperties `
             -Value $configJson.reflection `
-            -Allowed @('modules', 'classes', 'output') `
+            -Allowed @('modules', 'classes', 'blueprintAssets', 'output') `
             -Context 'reflection'
         Assert-AllowedProperties `
             -Value $configJson.bindings `
@@ -615,7 +625,8 @@ try {
                 -Value $configJson.bindings.developmentSurface `
                 -Allowed @(
                     'enabled', 'typeHintsOutput', 'requestsOutput', 'contractOutput',
-                    'reportOutput', 'failOnOpenDecisions') `
+                    'reportOutput', 'lockOutput', 'lockMode',
+                    'failOnOpenDecisions') `
                 -Context 'bindings.developmentSurface'
         }
         Assert-AllowedProperties `
@@ -668,6 +679,7 @@ try {
                 @($configJson.reflection.classes)
             }
         )
+        $resolved.blueprintAssets = @($configJson.reflection.blueprintAssets)
         $resolved.reflection = Resolve-FullPath `
             -Path ([string]$configJson.reflection.output) `
             -BaseDirectory $configDirectory
@@ -749,11 +761,45 @@ try {
             $resolved.developmentSurfaceReport = Resolve-FullPath `
                 -Path ([string]$configJson.bindings.developmentSurface.reportOutput) `
                 -BaseDirectory $configDirectory
+            $resolved.developmentSurfaceLock = if ([string]::IsNullOrWhiteSpace(
+                    $configJson.bindings.developmentSurface.lockOutput)) {
+                $reportFileName = [IO.Path]::GetFileName(
+                    $resolved.developmentSurfaceReport)
+                $lockFileName = if ($reportFileName.EndsWith(
+                        '.development-surface.json', [StringComparison]::OrdinalIgnoreCase)) {
+                    $reportFileName.Substring(
+                        0,
+                        $reportFileName.Length - '.development-surface.json'.Length) +
+                        '.generated-surface.lock.json'
+                } else {
+                    $reportFileName + '.lock.json'
+                }
+                Join-Path `
+                    (Split-Path -Parent $resolved.developmentSurfaceReport) `
+                    $lockFileName
+            } else {
+                Resolve-FullPath `
+                    -Path ([string]$configJson.bindings.developmentSurface.lockOutput) `
+                    -BaseDirectory $configDirectory
+            }
+            $resolved.developmentSurfaceLockMode = if ([string]::IsNullOrWhiteSpace(
+                    $configJson.bindings.developmentSurface.lockMode)) {
+                'update'
+            } else {
+                ([string]$configJson.bindings.developmentSurface.lockMode).ToLowerInvariant()
+            }
+            if ($resolved.developmentSurfaceLockMode -notin @('update', 'frozen')) {
+                Throw-OnboardingError `
+                    -Code 'USONB1001' `
+                    -Message "bindings.developmentSurface.lockMode must be 'update' or 'frozen'."
+            }
         } else {
             $resolved.developmentSurfaceTypeHints = $null
             $resolved.developmentSurfaceRequests = $null
             $resolved.developmentSurfaceContract = $null
             $resolved.developmentSurfaceReport = $null
+            $resolved.developmentSurfaceLock = $null
+            $resolved.developmentSurfaceLockMode = $null
         }
         $resolved.effectiveContract = if (
             $resolved.developmentSurfaceEnabled -and
@@ -880,6 +926,12 @@ try {
         foreach ($required in $requiredInputs) {
             Assert-RequiredPath -Path $required -Label 'Onboarding input'
         }
+        if ($resolved.developmentSurfaceEnabled -and
+            $resolved.developmentSurfaceLockMode -eq 'frozen') {
+            Assert-RequiredPath `
+                -Path $resolved.developmentSurfaceLock `
+                -Label 'Frozen generated surface lock'
+        }
         foreach ($destination in @(
              $resolved.reflection,
              $resolved.managedOutput,
@@ -891,7 +943,8 @@ try {
              $resolved.developmentSurfaceTypeHints,
              $resolved.developmentSurfaceRequests,
              $resolved.developmentSurfaceContract,
-             $resolved.developmentSurfaceReport) |
+             $resolved.developmentSurfaceReport,
+             $resolved.developmentSurfaceLock) |
              Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) {
              Assert-WritableDestination -Path $destination
          }
@@ -981,7 +1034,8 @@ try {
                      $resolved.developmentSurfaceTypeHints,
                      $resolved.developmentSurfaceRequests,
                      $resolved.developmentSurfaceContract,
-                     $resolved.developmentSurfaceReport)
+                     $resolved.developmentSurfaceReport,
+                     $resolved.developmentSurfaceLock)
              }
              foreach ($required in $validatePrerequisites) {
                  Assert-RequiredPath `
@@ -1123,6 +1177,9 @@ try {
                     $arguments += "-TypeNames=$($typeNames -join ',')"
                 }
             }
+            if ($resolved.blueprintAssets.Count -gt 0) {
+                $arguments += "-BlueprintAssets=$($resolved.blueprintAssets -join ',')"
+            }
             Invoke-LoggedCommand `
                 -FilePath $resolved.editorCmd `
                 -Arguments $arguments `
@@ -1147,6 +1204,11 @@ try {
                     -RequestsOutput $resolved.developmentSurfaceRequests `
                     -OverlayOutput $resolved.developmentSurfaceContract `
                     -ReportOutput $resolved.developmentSurfaceReport `
+                    -SurfaceLockOutput $resolved.developmentSurfaceLock `
+                    -VerifySurfaceLock $(if (
+                            $resolved.developmentSurfaceLockMode -eq 'frozen') {
+                        $resolved.developmentSurfaceLock
+                    } else { $null }) `
                     -FailOnOpenDecisions $resolved.developmentSurfaceFailOnOpen `
                     -LogPath (Join-Path $script:RunDirectory 'development-surface.log')
                 Assert-RequiredPath `
@@ -1308,6 +1370,7 @@ try {
             $tempRequests = Join-Path $surfaceValidationDirectory 'api-requests.json'
             $tempContract = Join-Path $surfaceValidationDirectory 'development-contract.json'
             $tempReport = Join-Path $surfaceValidationDirectory 'development-surface.json'
+            $tempLock = Join-Path $surfaceValidationDirectory 'generated-surface.lock.json'
             Invoke-ReflectionHintScan `
                 -DotNet $resolved.dotnet `
                 -CliAssembly $cliAssembly `
@@ -1327,6 +1390,8 @@ try {
                 -RequestsOutput $tempRequests `
                 -OverlayOutput $tempContract `
                 -ReportOutput $tempReport `
+                -SurfaceLockOutput $tempLock `
+                -VerifySurfaceLock $resolved.developmentSurfaceLock `
                 -FailOnOpenDecisions $resolved.developmentSurfaceFailOnOpen `
                 -LogPath (Join-Path $script:RunDirectory 'development-surface-validation.log')
             Assert-GeneratedFileMatches `
@@ -1341,6 +1406,9 @@ try {
             Assert-GeneratedFileMatches `
                 -Expected $resolved.developmentSurfaceReport `
                 -Actual $tempReport
+            Assert-GeneratedFileMatches `
+                -Expected $resolved.developmentSurfaceLock `
+                -Actual $tempLock
             $resolved.effectiveContract = $resolved.developmentSurfaceContract
         }
     }
@@ -1495,6 +1563,8 @@ try {
                 requests = $resolved.developmentSurfaceRequests
                 effectiveContract = $resolved.developmentSurfaceContract
                 report = $resolved.developmentSurfaceReport
+                lock = $resolved.developmentSurfaceLock
+                lockMode = $resolved.developmentSurfaceLockMode
             }
         } else { $null }
         deploymentManifest = $resolved.deployment

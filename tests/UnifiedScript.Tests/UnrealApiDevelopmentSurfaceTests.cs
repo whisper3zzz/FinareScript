@@ -364,6 +364,149 @@ public sealed class UnrealApiDevelopmentSurfaceTests
     }
 
     [Fact]
+    public void BlueprintGeneratedClassUsesExactAssetIdentityAndSafeReflectionRoute()
+    {
+        UnrealReflectionManifest reflection = AddBlueprintGeneratedClass(LoadReflection());
+        UnrealApiContract contract = CreateContract();
+        CSharpSourceDocument source = Source(
+            "Gameplay/BlueprintDoor.cs",
+            """
+            using UnifiedScript.Tests.AutoSurface;
+
+            namespace Gameplay;
+
+            public static class BlueprintDoor
+            {
+                public static bool IsOpen(BP_UnifiedDoor_C door) => door.Open;
+            }
+            """);
+        var compilation = new CSharpCompilationRequest("BlueprintDoor", [source]);
+
+        UnrealApiSourceTypeHintSet hints = new UnrealApiSourceTypeHintScanner().Scan(
+            "BlueprintDoor",
+            compilation,
+            contract);
+        Assert.Contains(hints.Hints,
+            static hint => hint.ManagedTypeName == "BP_UnifiedDoor_C");
+
+        UnrealApiDependencyRequestSet requests = new UnrealApiSourceDependencyScanner().Scan(
+            "BlueprintDoor",
+            compilation,
+            reflection,
+            contract);
+        UnrealApiDependencyRequest request = Assert.Single(requests.Requests);
+        Assert.Equal("/Game/UnifiedScript/BP_UnifiedDoor.BP_UnifiedDoor_C",
+            request.SuggestedTypePath);
+        Assert.Equal("Open", request.MemberName);
+
+        UnrealApiDevelopmentSurfaceResult surface =
+            new UnrealApiDevelopmentSurfacePlanner().Plan(reflection, requests, contract);
+        Assert.True(surface.Applied);
+        UnrealApiContractProjection projection = UnrealApiContractProjector.Project(
+            reflection,
+            surface.EffectiveContract);
+        UnrealBindingGenerationResult managed = new UnrealBindingGenerator().Generate(
+            projection.Reflection,
+            new UnrealBindingGeneratorOptions(projection.Contract.ManagedNamespace));
+        UnrealNativeThunkGenerationResult native = new UnrealNativeThunkGenerator().Generate(
+            projection.NativeReflection,
+            new UnrealNativeThunkGeneratorOptions(
+                projection.Contract.NativeHeader,
+                projection.Contract.NativeNamespace));
+        UnrealBindingCoverageReport coverage = UnrealBindingCoverageReport.Create(
+            projection,
+            managed,
+            native);
+
+        Assert.Contains("class BP_UnifiedDoor_C", managed.Source, StringComparison.Ordinal);
+        Assert.DoesNotContain("ABP_UnifiedDoor_C", native.Source, StringComparison.Ordinal);
+        UnrealBindingCoverageEntry entry = Assert.Single(coverage.Entries,
+            static item => item.Path ==
+                "/Game/UnifiedScript/BP_UnifiedDoor.BP_UnifiedDoor_C:Open");
+        Assert.Equal(UnrealBindingDisposition.ReflectionFallback, entry.Disposition);
+        Assert.Contains("USUE3010", entry.DiagnosticCodes);
+    }
+
+    [Fact]
+    public void GeneratedSurfaceLockIsDeterministicLocalizedAndStaleSafe()
+    {
+        UnrealReflectionManifest reflection = LoadReflection();
+        UnrealApiContract contract = CreateContract();
+        UnrealApiDependencyRequestSet initialRequests = new UnrealApiSourceDependencyScanner().Scan(
+            "SurfaceLockProject",
+            [Source(
+                "Gameplay/SurfaceLock.cs",
+                """
+                using UnifiedScript.Tests.AutoSurface;
+
+                public static class SurfaceLock
+                {
+                    public static void Run(FixtureDerived target)
+                    {
+                        _ = target.EchoOuter(default);
+                        _ = target.Spawn(1, false);
+                    }
+                }
+                """)],
+            reflection,
+            contract);
+        UnrealApiDevelopmentSurfaceResult initialSurface =
+            new UnrealApiDevelopmentSurfacePlanner().Plan(reflection, initialRequests, contract);
+        UnrealApiGeneratedSurfaceLock initial = UnrealApiGeneratedSurfaceLockJson.Create(
+            "SurfaceLockProject",
+            reflection,
+            initialSurface);
+        string initialJson = UnrealApiGeneratedSurfaceLockJson.Serialize(initial);
+
+        Assert.Equal(initialJson, UnrealApiGeneratedSurfaceLockJson.Serialize(
+            UnrealApiGeneratedSurfaceLockJson.Deserialize(initialJson)));
+        Assert.Empty(UnrealApiGeneratedSurfaceLockJson.Diff(initial, initial));
+        Assert.Throws<JsonException>(() => UnrealApiGeneratedSurfaceLockJson.Deserialize(
+            initialJson.Replace("\"projectName\"", "\"unknown\":true,\"projectName\"",
+                StringComparison.Ordinal)));
+        Assert.Throws<JsonException>(() => UnrealApiGeneratedSurfaceLockJson.Deserialize(
+            initialJson.Replace(initial.Fingerprint, new string('0', 64),
+                StringComparison.Ordinal)));
+
+        UnrealApiDependencyRequestSet expandedRequests = new UnrealApiSourceDependencyScanner().Scan(
+            "SurfaceLockProject",
+            [Source(
+                "Gameplay/SurfaceLock.cs",
+                """
+                using UnifiedScript.Tests.AutoSurface;
+
+                public static class SurfaceLock
+                {
+                    public static void Run(FixtureDerived target)
+                    {
+                        _ = target.EchoOuter(default);
+                        _ = target.Scale(1);
+                        _ = target.Spawn(1, false);
+                    }
+                }
+                """)],
+            reflection,
+            contract);
+        UnrealApiDevelopmentSurfaceResult expandedSurface =
+            new UnrealApiDevelopmentSurfacePlanner().Plan(reflection, expandedRequests, contract);
+        UnrealApiGeneratedSurfaceLock expanded = UnrealApiGeneratedSurfaceLockJson.Create(
+            "SurfaceLockProject",
+            reflection,
+            expandedSurface);
+        IReadOnlyList<string> differences = UnrealApiGeneratedSurfaceLockJson.Diff(
+            initial,
+            expanded);
+
+        Assert.Contains("effective-contract", differences);
+        Assert.Contains("changed:/Script/BindingMatrix.FixtureDerived", differences);
+        Assert.Equal(
+            initial.Types.Single(static type => type.TypePath == "/Script/BindingMatrix.OuterData")
+                .TypeFingerprint,
+            expanded.Types.Single(static type => type.TypePath == "/Script/BindingMatrix.OuterData")
+                .TypeFingerprint);
+    }
+
+    [Fact]
     public void ScannerSelectsExactOverloadsFromInvocationArgumentTypes()
     {
         UnrealReflectionManifest reflection = LoadReflection();
@@ -535,6 +678,7 @@ public sealed class UnrealApiDevelopmentSurfaceTests
             string requestsPath = Path.Combine(root, "api-requests.json");
             string overlayPath = Path.Combine(root, "development-contract.json");
             string reportPath = Path.Combine(root, "development-surface.json");
+            string lockPath = Path.Combine(root, "generated-surface.lock.json");
             File.WriteAllText(
                 projectPath,
                 """
@@ -571,6 +715,7 @@ public sealed class UnrealApiDevelopmentSurfaceTests
                 "--requests-out", requestsPath,
                 "--overlay-out", overlayPath,
                 "--report", reportPath,
+                "--lock-out", lockPath,
                 "--configuration", "Release",
                 "--fail-on-open-decisions",
             ]);
@@ -579,6 +724,7 @@ public sealed class UnrealApiDevelopmentSurfaceTests
             Assert.True(File.Exists(requestsPath));
             Assert.True(File.Exists(overlayPath));
             Assert.True(File.Exists(reportPath));
+            Assert.True(File.Exists(lockPath));
             UnrealApiDevelopmentSurfaceResult report =
                 UnrealApiDevelopmentSurfaceJson.Deserialize(File.ReadAllText(reportPath));
             Assert.True(report.Applied);
@@ -587,6 +733,50 @@ public sealed class UnrealApiDevelopmentSurfaceTests
                 UnrealApiContractJson.Deserialize(File.ReadAllText(overlayPath)).Types,
                 static type => type.Path == "/Script/BindingMatrix.FixtureDerived" &&
                     type.Members.Contains("Spawn", StringComparer.Ordinal));
+            string acceptedLock = File.ReadAllText(lockPath);
+            Assert.Equal(0, UnifiedScript.Cli.Program.Main(
+            [
+                "ue-surface-expand",
+                reflectionPath,
+                "--project", projectPath,
+                "--base", contractPath,
+                "--requests-out", requestsPath,
+                "--overlay-out", overlayPath,
+                "--report", reportPath,
+                "--lock-out", lockPath,
+                "--verify-lock", lockPath,
+                "--configuration", "Release",
+                "--fail-on-open-decisions",
+            ]));
+            File.WriteAllText(
+                sourcePath,
+                """
+                using UnifiedScript.Tests.AutoSurface;
+
+                public static class Gameplay
+                {
+                    public static void Run(FixtureDerived target)
+                    {
+                        _ = target.Scale(1);
+                        _ = target.Spawn(1, false);
+                    }
+                }
+                """);
+            Assert.Equal(65, UnifiedScript.Cli.Program.Main(
+            [
+                "ue-surface-expand",
+                reflectionPath,
+                "--project", projectPath,
+                "--base", contractPath,
+                "--requests-out", requestsPath,
+                "--overlay-out", overlayPath,
+                "--report", reportPath,
+                "--lock-out", lockPath,
+                "--verify-lock", lockPath,
+                "--configuration", "Release",
+                "--fail-on-open-decisions",
+            ]));
+            Assert.Equal(acceptedLock, File.ReadAllText(lockPath));
         }
         finally
         {
@@ -692,6 +882,31 @@ public sealed class UnrealApiDevelopmentSurfaceTests
                 manifest.Engine,
                 manifest.Modules,
                 [.. manifest.Types, version])));
+    }
+
+    private static UnrealReflectionManifest AddBlueprintGeneratedClass(
+        UnrealReflectionManifest manifest)
+    {
+        const string path = "/Game/UnifiedScript/BP_UnifiedDoor.BP_UnifiedDoor_C";
+        var blueprint = new UnrealReflectedType(
+            path,
+            "BP_UnifiedDoor_C",
+            "ABP_UnifiedDoor_C",
+            "Game",
+            UnrealReflectedTypeKind.Class,
+            "/Script/Engine.Actor",
+            new UnrealTypeTraits(Abstract: false, BlueprintType: true),
+            [new UnrealReflectedProperty(
+                path + ":Open",
+                "Open",
+                new UnrealTypeReference(UnrealValueKind.Boolean, "bool"),
+                new UnrealPropertyAccess(Readable: true, Writable: true, EditorVisible: true))],
+            []);
+        return UnrealReflectionJson.Deserialize(UnrealReflectionJson.Serialize(
+            UnrealReflectionManifest.Create(
+                manifest.Engine,
+                [.. manifest.Modules, "Game"],
+                [.. manifest.Types, blueprint])));
     }
 
     private static UnrealApiContract CreateContract() => new(

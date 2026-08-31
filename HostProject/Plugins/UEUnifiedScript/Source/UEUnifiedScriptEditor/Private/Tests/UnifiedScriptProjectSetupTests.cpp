@@ -1,10 +1,18 @@
 #include "Misc/AutomationTest.h"
 
 #include "HAL/FileManager.h"
+#include "Engine/Blueprint.h"
+#include "Engine/BlueprintGeneratedClass.h"
+#include "GameFramework/Actor.h"
+#include "Kismet2/BlueprintEditorUtils.h"
+#include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
 #include "UnifiedScriptProjectSetup.h"
+#include "UnifiedScriptReflectionExporter.h"
+#include "EdGraphSchema_K2.h"
+#include "UObject/Package.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -122,6 +130,77 @@ bool FUnifiedScriptProjectSetupCommandContractTest::RunTest(const FString& Param
     TestTrue(TEXT("Deferred command is detached"), Command.bDetached);
 
     IFileManager::Get().DeleteDirectory(*TestRoot, false, true);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FUnifiedScriptBlueprintReflectionDiscoveryTest,
+    "UnifiedScript.Unreal.ProjectSetup.BlueprintReflectionDiscovery",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUnifiedScriptBlueprintReflectionDiscoveryTest::RunTest(const FString& Parameters)
+{
+    const FString Suffix = FGuid::NewGuid().ToString(EGuidFormats::Digits);
+    const FString AssetName = TEXT("BP_UnifiedScriptReflection_") + Suffix;
+    const FString PackageName = TEXT("/Engine/Transient/") + AssetName;
+    UPackage* Package = CreatePackage(*PackageName);
+    UBlueprint* Blueprint = FKismetEditorUtilities::CreateBlueprint(
+        AActor::StaticClass(),
+        Package,
+        FName(*AssetName),
+        BPTYPE_Normal,
+        UBlueprint::StaticClass(),
+        UBlueprintGeneratedClass::StaticClass(),
+        FName(TEXT("UnifiedScriptBlueprintReflectionDiscovery")));
+    if (!TestNotNull(TEXT("Creates transient Blueprint fixture"), Blueprint))
+    {
+        return false;
+    }
+
+    FEdGraphPinType BoolType;
+    BoolType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
+    TestTrue(
+        TEXT("Adds Blueprint-visible fixture member"),
+        FBlueprintEditorUtils::AddMemberVariable(Blueprint, FName(TEXT("Open")), BoolType));
+    FKismetEditorUtilities::CompileBlueprint(Blueprint);
+    if (!TestNotNull(
+            TEXT("Compiles Blueprint generated class"),
+            Blueprint->GeneratedClass.Get()))
+    {
+        return false;
+    }
+
+    const FString OutputPath = FPaths::ConvertRelativePathToFull(FPaths::Combine(
+        FPaths::ProjectSavedDir(),
+        TEXT("Automation/UnifiedScriptBlueprintReflection"),
+        Suffix + TEXT(".json")));
+    FUnifiedScriptReflectionExportOptions Options;
+    Options.OutputPath = OutputPath;
+    Options.Modules.Add(TEXT("Engine"));
+    Options.TypeNames.Add(Blueprint->GeneratedClass->GetName());
+    Options.BlueprintAssetPaths.Add(Blueprint->GetPathName());
+    FUnifiedScriptReflectionExportResult Result;
+    FText Error;
+    const bool bExported = FUnifiedScriptReflectionExporter::Export(Options, Result, Error);
+    if (!TestTrue(TEXT("Exports exact Blueprint asset and generated class"), bExported))
+    {
+        AddError(FString::Printf(TEXT("Blueprint reflection export: %s"), *Error.ToString()));
+        return false;
+    }
+    TestTrue(TEXT("Blueprint export has no error"), Error.IsEmpty());
+    TestEqual(TEXT("One Blueprint generated class is present"), Result.DiscoveredBlueprintClassCount, 1);
+
+    FString Json;
+    TestTrue(TEXT("Reads Blueprint reflection manifest"), FFileHelper::LoadFileToString(Json, *OutputPath));
+    TestTrue(TEXT("Uses reflection v0.5"), Json.Contains(
+        TEXT("unifiedscript.unreal-reflection/v0.5")));
+    TestTrue(TEXT("Carries exact Blueprint asset-generated class path"), Json.Contains(
+        Blueprint->GeneratedClass->GetPathName()));
+    TestTrue(TEXT("Carries Blueprint mount as module identity"), Json.Contains(
+        TEXT("\"module\": \"Engine\"")));
+    TestTrue(TEXT("Carries Blueprint-defined member"), Json.Contains(TEXT("\"name\": \"Open\"")));
+
+    IFileManager::Get().Delete(*OutputPath, false, true);
     return true;
 }
 

@@ -11,7 +11,7 @@ The first slice has four explicit boundaries:
 ```text
 UE 5.7/5.8 native reflection
   -> UnifiedScriptExport commandlet
-  -> unifiedscript.unreal-reflection/v0.4
+  -> unifiedscript.unreal-reflection/v0.5
   -> UnifiedScript.Unreal binding generator
   -> typed C# wrappers over IUnrealInvocationBridge
 ```

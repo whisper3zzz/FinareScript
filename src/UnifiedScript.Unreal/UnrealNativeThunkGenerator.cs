@@ -47,6 +47,24 @@ public sealed class UnrealNativeThunkGenerator
 
         foreach (UnrealReflectedType type in normalized.Types)
         {
+            if (!type.Path.StartsWith("/Script/", StringComparison.Ordinal))
+            {
+                foreach (UnrealReflectedProperty property in type.Properties)
+                {
+                    diagnostics.Add(new UnrealNativeThunkDiagnostic(
+                        "USUE3010",
+                        "Blueprint asset members use the generation-safe reflected route because asset-generated classes have no native C++ header.",
+                        property.Path));
+                }
+                foreach (UnrealReflectedFunction function in type.Functions)
+                {
+                    diagnostics.Add(new UnrealNativeThunkDiagnostic(
+                        "USUE3010",
+                        "Blueprint asset members use the generation-safe reflected route because asset-generated classes have no native C++ header.",
+                        function.Path));
+                }
+                continue;
+            }
             if (type.Kind == UnrealReflectedTypeKind.Struct)
             {
                 foreach (UnrealReflectedProperty field in type.Properties)

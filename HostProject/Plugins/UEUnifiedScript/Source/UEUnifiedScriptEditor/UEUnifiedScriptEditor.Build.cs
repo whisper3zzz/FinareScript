@@ -11,6 +11,7 @@ public class UEUnifiedScriptEditor : ModuleRules
             "CoreUObject",
             "ApplicationCore",
             "AssetRegistry",
+            "BlueprintGraph",
             "ContentBrowser",
             "DesktopPlatform",
             "Engine",

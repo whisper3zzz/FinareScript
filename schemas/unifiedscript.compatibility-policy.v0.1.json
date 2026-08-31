@@ -159,16 +159,27 @@
     {
       "id": "unreal-reflection",
       "category": "persistentContract",
-      "currentVersion": "unifiedscript.unreal-reflection/v0.4",
+      "currentVersion": "unifiedscript.unreal-reflection/v0.5",
       "readableVersions": [
         "unifiedscript.unreal-reflection/v0.1",
         "unifiedscript.unreal-reflection/v0.2",
-        "unifiedscript.unreal-reflection/v0.3"
+        "unifiedscript.unreal-reflection/v0.3",
+        "unifiedscript.unreal-reflection/v0.4"
       ],
       "upgradeStrategy": "rewrite",
       "sourceOfTruth": "Unreal reflection export",
       "producer": "UE UnifiedScript reflection export and compatibility upgrade",
       "consumer": "API contract projector and binding generator"
+    },
+    {
+      "id": "unreal-api-generated-surface-lock",
+      "category": "generatedContract",
+      "currentVersion": "unifiedscript.unreal-api-generated-surface-lock/v0.1",
+      "readableVersions": [],
+      "upgradeStrategy": "regenerate",
+      "sourceOfTruth": "effective Unreal API Contract and selected reflection",
+      "producer": "unifiedscript ue-surface-expand",
+      "consumer": "project Setup, team review, and CI drift gates"
     },
     {
       "id": "unreal-script-deployment",

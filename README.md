@@ -326,7 +326,8 @@ The repository currently implements:
   semantic breakpoint bind/pending/disabled plus stale-hit protocols;
 - automated execution equivalence between independently text-authored code and
   C# produced by a checked-in visual semantic patch plan;
-- a strict `unifiedscript.unreal-reflection/v0.4` contract with inheritance,
+- a strict `unifiedscript.unreal-reflection/v0.5` contract with native and exact
+  Blueprint-generated-class identity, inheritance,
   interfaces, Blueprint metadata, enums, default parameters, soft references,
   callable/property/delegate shapes, latent/thread/World execution policy,
   deterministic managed-wrapper/event proxy generation, and the `ue-bindings`

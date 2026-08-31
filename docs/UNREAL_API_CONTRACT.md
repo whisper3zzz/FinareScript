@@ -22,7 +22,7 @@ silently exposing different Unreal members.
 `unifiedscript.unreal-api-contract/v0.2` requires a contract name, managed
 namespace, generated-thunk header and C++ namespace, plus one or more exact
 type/member selectors. Type paths and member names must exist in the supplied
-`unifiedscript.unreal-reflection/v0.4` document. Unknown fields, duplicate
+`unifiedscript.unreal-reflection/v0.5` document. Unknown fields, duplicate
 selectors, stale types, and stale members fail generation.
 
 ```json
@@ -135,12 +135,17 @@ project compilation. It writes
 `unifiedscript.unreal-api-source-type-hints/v0.1`, containing only generated-
 namespace type names that do not bind to a user or referenced C# symbol, plus
 exact source locations and source/Contract fingerprints. The UE exporter resolves
-each hint to exactly one loaded native `/Script` class across project, plugin, or
-Engine modules and adds only those classes to the configured selection. Missing
-or same-name candidates fail explicitly; configure an exact `reflection.classes`
-path to disambiguate. This closes the first-use bootstrap without exporting every
-Engine UObject. Blueprint asset/generated-class discovery is not part of this
-native-class tranche yet.
+each hint to exactly one native `/Script` class or Blueprint generated class. It
+uses the Asset Registry only to find matching Blueprint asset names, loads only
+those bounded candidates, and records the exact generated-class object path such
+as `/Game/Gameplay/BP_Door.BP_Door_C` in reflection, the Contract, member IDs,
+and generated consumers. Missing and same-name candidates fail explicitly.
+`reflection.classes` can select an exact native class;
+`reflection.blueprintAssets` can select an exact Blueprint asset object path to
+disambiguate or guarantee loading. Asset-generated members have no native C++
+header, so they are never given a fake DirectThunk: supported cold-path shapes
+use the safe reflected route and unsupported ownership/signature shapes remain
+source-linked diagnostics.
 
 ```powershell
 unifiedscript ue-reflection-hints `
@@ -170,6 +175,7 @@ unifiedscript ue-surface-expand Generated\Game.reflection.json `
   --requests-out Generated\Game.api-requests.json `
   --overlay-out Generated\Game.development-api-contract.json `
   --report Generated\Game.development-surface.json `
+  --lock-out Generated\Game.generated-surface.lock.json `
   --fail-on-open-decisions
 ```
 
@@ -188,6 +194,17 @@ means reflection found the member but the configured generation policy cannot
 ship a supported route. The proposed Contract remains diagnostic evidence even
 when `--fail-on-open-decisions` returns exit code 65.
 
+When expansion is applied, `--lock-out` writes the strict
+`unifiedscript.unreal-api-generated-surface-lock/v0.1` artifact. It fingerprints
+the project, managed namespace, engine identity, base/effective Contracts, and
+each selected reflected type independently. Member edits therefore report a
+localized `changed:<type-path>` entry while unrelated type fingerprints remain
+stable. Passing the accepted file through `--verify-lock` makes drift a
+pre-write failure: `USUE3201` lists stable project/namespace/engine/Contract and
+`added`, `removed`, or `changed` type differences and exits 65 before replacing
+the request, overlay, report, lock, or downstream generated surface. An open
+decision cannot be frozen and fails as `USUE3202`.
+
 Author-facing C# and visual names may intentionally differ from the stored
 reflection selector. For example, UE exposes the Blueprint-callable function as
 `K2_GetActorLocation`; UnifiedScript generates `GetActorLocation` while the
@@ -197,9 +214,14 @@ part of generated naming, not a fuzzy lookup, and collisions remain explicit
 overloads or diagnostics.
 
 Project-local Setup consumes the development Contract only for the current
-generated development surface. The reviewed base Contract remains the team and
-release/CI freeze point: promoting, shrinking, or policy-changing the surface is
-still an explicit source-review operation.
+generated development surface. Its default `update` lock mode follows safe local
+source expansion and refreshes the generated lock; `frozen` verifies the current
+candidate against the accepted lock before writing output. ValidateOnly always
+regenerates a temporary candidate, verifies the accepted lock, and compares
+exact bytes. The reviewed base Contract remains the policy boundary and the
+generated lock becomes the exact team/release/CI surface boundary: promoting,
+shrinking, or policy-changing either remains an explicit source-review
+operation.
 
 ## Review-only Contract proposals
 

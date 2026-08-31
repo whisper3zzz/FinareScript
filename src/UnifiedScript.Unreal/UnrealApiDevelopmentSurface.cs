@@ -122,7 +122,7 @@ public static class UnrealApiDependencyRequestJson
                 string.IsNullOrWhiteSpace(request.Id) || !ids.Add(request.Id.Trim()) ||
                 string.IsNullOrWhiteSpace(request.TypeName) ||
                 request.SuggestedTypePath is not null &&
-                !IsScriptPath(request.SuggestedTypePath) ||
+                !IsReflectedTypePath(request.SuggestedTypePath) ||
                 string.IsNullOrWhiteSpace(request.MemberName) ||
                 request.RequestKind != "contract-member" ||
                 request.SuggestedRoute != "generated-binding" ||
@@ -184,9 +184,9 @@ public static class UnrealApiDependencyRequestJson
             segment.Skip(1).All(static character =>
                 char.IsLetterOrDigit(character) || character == '_'));
 
-    private static bool IsScriptPath(string value) =>
-        value.StartsWith("/Script/", StringComparison.Ordinal) &&
-        value.Contains('.') && !value.Any(char.IsWhiteSpace);
+    private static bool IsReflectedTypePath(string value) =>
+        value.StartsWith("/", StringComparison.Ordinal) &&
+        value.Contains('.') && !value.Contains(':') && !value.Any(char.IsWhiteSpace);
 
     private static bool IsSha256(string value) =>
         value.Length == 64 && value.All(static character =>

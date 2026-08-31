@@ -191,11 +191,13 @@ public sealed record UnrealReflectionManifest(
     IReadOnlyList<string> Modules,
     IReadOnlyList<UnrealReflectedType> Types)
 {
-    public const string CurrentSchemaVersion = "unifiedscript.unreal-reflection/v0.4";
+    public const string CurrentSchemaVersion = "unifiedscript.unreal-reflection/v0.5";
 
-    public const string PreviousSchemaVersion = "unifiedscript.unreal-reflection/v0.3";
+    public const string PreviousSchemaVersion = "unifiedscript.unreal-reflection/v0.4";
 
-    public const string LegacySchemaVersion = "unifiedscript.unreal-reflection/v0.2";
+    public const string LegacySchemaVersion = "unifiedscript.unreal-reflection/v0.3";
+
+    public const string OlderSchemaVersion = "unifiedscript.unreal-reflection/v0.2";
 
     public const string OldestSchemaVersion = "unifiedscript.unreal-reflection/v0.1";
 

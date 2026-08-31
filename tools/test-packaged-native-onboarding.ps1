@@ -99,8 +99,8 @@ function Assert-OnboardingReport {
         }
     }
     if ($report.outputs.automation.filter -ne 'UnifiedScript.Unreal.ProjectSetup' -or
-        [int]$report.outputs.automation.required -ne 1 -or
-        [int]$report.outputs.automation.passed -lt 1 -or
+        [int]$report.outputs.automation.required -ne 2 -or
+        [int]$report.outputs.automation.passed -lt 2 -or
         [int]$report.outputs.automation.failed -ne 0) {
         throw "Project Setup Automation was not proven by $Path"
     }
@@ -266,6 +266,10 @@ $generatedEvidence = [ordered]@{
         -Path (Join-Path $projectRoot `
             "Generated\$projectName.development-api-contract.json") `
         -Label 'Automatic development API Contract'
+    surfaceLock = Assert-File `
+        -Path (Join-Path $projectRoot `
+            "Generated\$projectName.generated-surface.lock.json") `
+        -Label 'Generated API surface lock'
     developmentSurface = Assert-File `
         -Path (Join-Path $projectRoot `
             "Generated\$projectName.development-surface.json") `
@@ -306,6 +310,9 @@ $sourceTypeHints = Get-Content `
 $surfaceContract = Get-Content `
     -LiteralPath $generatedEvidence.developmentContract.path `
     -Raw | ConvertFrom-Json
+$surfaceLock = Get-Content `
+    -LiteralPath $generatedEvidence.surfaceLock.path `
+    -Raw | ConvertFrom-Json
 if ($surfaceReport.schemaVersion -ne
         'unifiedscript.unreal-api-development-surface/v0.1' -or
     $surfaceReport.applied -ne $true -or
@@ -335,6 +342,17 @@ if ($sourceTypeHints.schemaVersion -ne
         $_.managedTypeName -eq 'Pawn'
     }).Count -ne 1) {
     throw 'Managed source did not produce the bounded Pawn reflection hint.'
+}
+if ($surfaceLock.schemaVersion -ne
+        'unifiedscript.unreal-api-generated-surface-lock/v0.1' -or
+    [string]::IsNullOrWhiteSpace($surfaceLock.fingerprint) -or
+    @($surfaceLock.types | Where-Object {
+        $_.typePath -eq '/Script/Engine.Actor'
+    }).Count -ne 1 -or
+    @($surfaceLock.types | Where-Object {
+        $_.typePath -eq '/Script/Engine.Pawn'
+    }).Count -ne 1) {
+    throw 'Generated API surface lock did not freeze the exact Actor/Pawn surface.'
 }
 $managedBindingText = Get-Content -LiteralPath $generatedEvidence.bindings.path -Raw
 if ($managedBindingText -notmatch 'class Actor' -or
