@@ -155,6 +155,22 @@ bool FUnifiedScriptProjectSetupCommandContractTest::RunTest(const FString& Param
         FString::Printf(TEXT("--engine-root \"%s\""), *Paths.EngineRoot)));
     TestEqual(TEXT("Doctor report"), Command.ReportPath, Paths.DoctorReport);
 
+    TestTrue(
+        TEXT("Builds support bundle command"),
+        FUnifiedScriptProjectSetup::BuildCommand(
+            EUnifiedScriptProjectSetupOperation::ExportDiagnostics,
+            Paths,
+            0,
+            Command,
+            Error));
+    TestEqual(TEXT("Support bundle executable"), Command.Executable, Paths.CliExecutable);
+    TestTrue(TEXT("Support bundle input"), Command.Arguments.Contains(
+        FString::Printf(TEXT("diagnostics-bundle \"%s\""), *Paths.DiagnosticsInputRoot)));
+    TestTrue(TEXT("Support bundle output"), Command.Arguments.Contains(
+        FString::Printf(TEXT("--out \"%s\""), *Paths.DiagnosticsBundle)));
+    TestEqual(TEXT("Support bundle path"), Command.ReportPath, Paths.DiagnosticsBundle);
+    TestFalse(TEXT("Support bundle command is attached"), Command.bDetached);
+
     TestFalse(
         TEXT("Rejects deferred onboarding without an Editor process"),
         FUnifiedScriptProjectSetup::BuildCommand(

@@ -176,6 +176,44 @@ foreach ($fixture in @(
         throw "Project-local doctor did not validate the installed tools for $project"
     }
 
+    $diagnosticsInput = Join-Path $projectRoot 'Saved\UnifiedScript\EditorDiagnostics'
+    New-Item -ItemType Directory -Force -Path $diagnosticsInput | Out-Null
+    $editorDiagnostic = [ordered]@{
+        schemaVersion = 'unifiedscript.editor-diagnostics/v0.1'
+        retainedCount = 1
+        diagnostics = @([ordered]@{
+            sequence = 1
+            domain = 'compile'
+            code = 'CS0103'
+            severity = 'error'
+            message = 'Fixture compile diagnostic.'
+            sourcePath = 'Managed/FirstScript.cs'
+            line = 7
+            column = 5
+            member = 'us_fixture_member'
+            action = 'retry'
+            evidencePath = $doctorReportPath
+        })
+    }
+    [IO.File]::WriteAllText(
+        (Join-Path $diagnosticsInput 'latest.json'),
+        ($editorDiagnostic | ConvertTo-Json -Depth 8) + "`n",
+        [Text.UTF8Encoding]::new($false))
+    $supportBundlePath = Join-Path $projectRoot `
+        'Saved\UnifiedScriptSupport\UnifiedScriptSupport.zip'
+    New-Item -ItemType Directory -Force -Path `
+        ([IO.Path]::GetDirectoryName($supportBundlePath)) | Out-Null
+    Invoke-AdoptionCli `
+        -Cli $projectCli `
+        -Arguments @(
+            'diagnostics-bundle',
+            (Join-Path $projectRoot 'Saved\UnifiedScript'),
+            '--out', $supportBundlePath)
+    if (-not (Test-Path -LiteralPath $supportBundlePath -PathType Leaf) -or
+        (Get-Item -LiteralPath $supportBundlePath).Length -le 0) {
+        throw "Project-local support bundle export failed for $project"
+    }
+
     $rerunReportPath = Join-Path $projectRoot `
         'Saved\UnifiedScript\ProjectSetup\adoption-rerun.json'
     Invoke-AdoptionCli `
@@ -207,6 +245,7 @@ foreach ($fixture in @(
         projectLocalDoctor = [string]$doctor.status
         projectLocalRerunChanges = [int]$rerun.summary.changed
         managedBuild = 'deferredToPackagedNativeOnboarding'
+        supportBundle = $supportBundlePath
     })
 }
 

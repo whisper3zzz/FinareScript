@@ -68,12 +68,19 @@ Adoption also installs these project-local product tools below
 - the versioned project templates used by deterministic Repair.
 
 After the plugin can load, **Tools > UnifiedScript Project Setup** exposes the
-same operations in Slate. Preview, Repair, and Doctor stream their child-process
+same operations in Slate. Preview, Repair, Doctor, and support-bundle export stream their child-process
 output without blocking the game thread. **Build, Restart & Continue** saves
 dirty packages, launches the deferred helper with the current Editor process
 ID, and requests a normal Editor exit. The helper then invokes the project-local
 setup script, writes its report under `Saved/UnifiedScript/ProjectSetup`, and
 reopens the project.
+
+**Export Support Bundle** runs the installed CLI's allowlisted, bounded,
+privacy-redacted collector over `Saved/UnifiedScript`, writes the ZIP outside
+that input tree, and copies its path. Setup, authoring, reload, and live runtime
+failures all publish to the shared **UnifiedScript Diagnostics** Message Log;
+use its source/member links and Retry, Repair, or Restart Editor guidance before
+exporting the support evidence.
 
 Creating an Actor or ActorComponent through **Create UnifiedScript Class** also
 opens Project Setup and records the exact managed type, Script Asset, and

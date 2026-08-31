@@ -91,6 +91,7 @@ public:
 
     bool LoadScriptAsset(UUnifiedScriptAsset* ScriptAsset);
     bool LoadSurface(const FString& ConfiguredPath);
+    bool NavigateToSemanticId(const FString& SemanticId);
     int32 GetVisibleGraphNodeCount() const;
     int32 GetVisibleGraphEdgeCount() const;
     FString GetActiveFunctionId() const;

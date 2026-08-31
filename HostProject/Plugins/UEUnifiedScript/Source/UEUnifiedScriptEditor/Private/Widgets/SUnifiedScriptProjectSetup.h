@@ -25,6 +25,7 @@ private:
     FReply BuildAndOnboard();
     FReply LocateFirstPlayClass();
     FReply StartAuthoringAndOpenFirstPlayClass();
+    FReply ExportSupportBundle();
     FReply RunAttachedOperation(
         EUnifiedScriptProjectSetupOperation Operation,
         const FText& OperationLabel);
@@ -48,6 +49,7 @@ private:
     void* WritePipe = nullptr;
     FString ActiveOperationLabel;
     FString ActiveReportPath;
+    TOptional<EUnifiedScriptProjectSetupOperation> ActiveOperation;
     FUnifiedScriptFirstPlayRequest FirstPlayRequest;
     bool bHasFirstPlayRequest = false;
     FText StatusText;

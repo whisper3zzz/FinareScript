@@ -33,6 +33,7 @@
 #include "UnifiedScriptAuthoringWorkbench.h"
 #include "UnifiedScriptComponent.h"
 #include "UnifiedScriptEdGraph.h"
+#include "UnifiedScriptEditorDiagnostics.h"
 #include "UObject/UObjectIterator.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SCheckBox.h"
@@ -4054,6 +4055,15 @@ void SUnifiedScriptAuthoringSurface::HandlePatchResponse(
         {
             CompletionStatus += TEXT("\n");
             CompletionStatus += ObservedTransaction.ToDisplayString();
+            if (Failed > 0 || ObservedTransaction.State == TEXT("restartRequired") ||
+                ObservedTransaction.State == TEXT("rolledBack"))
+            {
+                FUnifiedScriptEditorDiagnostics::Publish(
+                    LOCTEXT("ReloadDiagnosticsPage", "Script Class reload"),
+                    {FUnifiedScriptEditorDiagnostics::FromReloadTransaction(
+                        ObservedTransaction,
+                        WorkbenchSourcePath)});
+            }
         }
     }
     SetStatus(
@@ -4115,6 +4125,9 @@ void SUnifiedScriptAuthoringSurface::HandleAuthoringFailure(
     }
     bHasAuthoringFailure = true;
     RebuildDiagnosticsPanel();
+    FUnifiedScriptEditorDiagnostics::Publish(
+        LOCTEXT("AuthoringDiagnosticsPage", "Authoring transaction"),
+        FUnifiedScriptEditorDiagnostics::FromAuthoringFailure(LastAuthoringFailure));
     SetStatus(LastAuthoringFailure.ToDisplayString(), true);
 }
 
@@ -6665,6 +6678,70 @@ bool SUnifiedScriptAuthoringSurface::SelectFunction(const FString& FunctionId)
     }
     RebuildGraph(*Item);
     return ActiveFunctionId == FunctionId;
+}
+
+bool SUnifiedScriptAuthoringSurface::NavigateToSemanticId(const FString& SemanticId)
+{
+    if (SemanticId.IsEmpty())
+    {
+        return false;
+    }
+    FString OwningFunctionId;
+    for (const FUnifiedScriptAuthoringAsset& Asset : Document.Assets)
+    {
+        for (const FUnifiedScriptAuthoringFunction& Function : Asset.Functions)
+        {
+            bool bOwnsSemanticId = Function.Id == SemanticId ||
+                Function.FindAction(SemanticId) != nullptr;
+            if (!bOwnsSemanticId)
+            {
+                bOwnsSemanticId = Function.Regions.ContainsByPredicate(
+                    [&SemanticId](const FUnifiedScriptAuthoringRegion& Region)
+                    {
+                        return Region.Id == SemanticId ||
+                            Region.DirectStatementIds.Contains(SemanticId);
+                    });
+            }
+            if (bOwnsSemanticId)
+            {
+                OwningFunctionId = Function.Id;
+                break;
+            }
+        }
+        if (!OwningFunctionId.IsEmpty())
+        {
+            break;
+        }
+    }
+    if (!OwningFunctionId.IsEmpty() && ActiveFunctionId != OwningFunctionId &&
+        !SelectFunction(OwningFunctionId))
+    {
+        return false;
+    }
+
+    const FUnifiedScriptSurfaceTreeItemPtr Item = FindSurfaceItem(SemanticId);
+    if (!Item.IsValid())
+    {
+        return false;
+    }
+    if (TreeView.IsValid())
+    {
+        TreeView->SetSelection(Item, ESelectInfo::Direct);
+        TreeView->RequestScrollIntoView(Item);
+    }
+    if (GraphEditor.IsValid())
+    {
+        if (const TWeakObjectPtr<UUnifiedScriptEdGraphNode>* Node =
+                GraphNodesBySemanticId.Find(SemanticId))
+        {
+            if (Node->IsValid())
+            {
+                GraphEditor->JumpToNode(Node->Get(), false, true);
+            }
+        }
+    }
+    RebuildInspector(Item);
+    return true;
 }
 
 bool SUnifiedScriptAuthoringSurface::HasNodePaletteAction(const FString& ActionId) const

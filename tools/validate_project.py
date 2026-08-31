@@ -1385,7 +1385,7 @@ def main() -> int:
         and "BuildCookRun" in script_class_golden_path
         and "SA_M13C0PersistentActor" in script_class_golden_path
         and "SA_M13C0PersistentComponent" in script_class_golden_path
-        and "Current tranche: **M13.1C-1c" in roadmap_document
+        and "Current tranche: **M13.1C-1d" in roadmap_document
         and "M13.1C-0 — attachable Script Class foundation" in roadmap_document
         and "require no handwritten facade | Complete |" in roadmap_document,
         "M13.1C-0 cross-process lifecycle, deterministic regeneration, cook proof, or roadmap handoff is incomplete",
@@ -1448,6 +1448,63 @@ def main() -> int:
     )
     checks.append(
         "M13.1C-1b connects exact Script Classes to state-safe authoring reload"
+    )
+    editor_diagnostics_source = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+        / "UEUnifiedScriptEditor" / "Private" / "UnifiedScriptEditorDiagnostics.cpp"
+    ).read_text(encoding="utf-8")
+    editor_diagnostics_header = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+        / "UEUnifiedScriptEditor" / "Public" / "UnifiedScriptEditorDiagnostics.h"
+    ).read_text(encoding="utf-8")
+    editor_diagnostics_tests = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+        / "UEUnifiedScriptEditor" / "Private" / "Tests"
+        / "UnifiedScriptEditorDiagnosticsTests.cpp"
+    ).read_text(encoding="utf-8")
+    authoring_surface_widget = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+        / "UEUnifiedScriptEditor" / "Private" / "Widgets"
+        / "SUnifiedScriptAuthoringSurface.cpp"
+    ).read_text(encoding="utf-8")
+    debug_panel_widget = (
+        ROOT / "HostProject" / "Plugins" / "UEUnifiedScript" / "Source"
+        / "UEUnifiedScriptEditor" / "Private" / "Widgets"
+        / "SUnifiedScriptDebugPanel.cpp"
+    ).read_text(encoding="utf-8")
+    authoring_diagnostics_document = (
+        ROOT / "docs" / "AUTHORING_DIAGNOSTICS.md"
+    ).read_text(encoding="utf-8")
+    diagnostics_bundle_document = (
+        ROOT / "docs" / "DIAGNOSTICS_BUNDLES.md"
+    ).read_text(encoding="utf-8")
+    require(
+        "MaximumRetainedDiagnosticCount = 128" in editor_diagnostics_header
+        and "UnifiedScriptDiagnostics" in editor_diagnostics_source
+        and "unifiedscript.editor-diagnostics/v0.1" in editor_diagnostics_source
+        and "FromAuthoringFailure" in editor_diagnostics_source
+        and "FromReloadTransaction" in editor_diagnostics_source
+        and "FromRuntime" in editor_diagnostics_source
+        and "Open Source" in editor_diagnostics_source
+        and "OpenAuthoringMember" in editor_diagnostics_source
+        and "Restart Editor" in editor_diagnostics_source
+        and "PersistSnapshot" in editor_diagnostics_source
+        and "FUnifiedScriptEditorDiagnostics::Publish" in authoring_surface_widget
+        and "FUnifiedScriptEditorDiagnostics::Publish" in debug_panel_widget
+        and "Export Support Bundle" in project_setup_widget
+        and "diagnostics-bundle" in project_setup_source
+        and "ClipboardCopy" in project_setup_widget
+        and "UnifiedEditorContract" in editor_diagnostics_tests
+        and "Reads one structured report diagnostic" in editor_diagnostics_tests
+        and "persists one bundle input" in editor_diagnostics_tests
+        and "UnifiedScript Diagnostics" in authoring_diagnostics_document
+        and "Export Support Bundle" in diagnostics_bundle_document
+        and "M13.1C-1c — diagnostics" in roadmap_document
+        and "Current tranche: **M13.1C-1d" in roadmap_document,
+        "M13.1C-1c unified UE diagnostics, navigation, recovery guidance, or support bundle is incomplete",
+    )
+    checks.append(
+        "M13.1C-1c unifies UE diagnostics, navigation, recovery, and support bundles"
     )
 
     sample_catalog_path = ROOT / "samples" / "Unreal" / "unifiedscript.samples.json"
@@ -1697,8 +1754,8 @@ def main() -> int:
     require(
         diagnostics_policy["schemaVersion"]
         == "unifiedscript.diagnostics-policy/v0.1"
-        and len(diagnostics_policy["allowedSchemas"]) == 31
-        and len(set(diagnostics_policy["allowedSchemas"])) == 31
+        and len(diagnostics_policy["allowedSchemas"]) == 32
+        and len(set(diagnostics_policy["allowedSchemas"])) == 32
         and diagnostics_policy["maximumReportCount"] == 256
         and diagnostics_policy["maximumReportBytes"] == 16 * 1024 * 1024
         and diagnostics_policy["maximumBundleBytes"] == 64 * 1024 * 1024
@@ -1715,6 +1772,8 @@ def main() -> int:
         and "unifiedscript.generation-prewarm-trial/v0.1"
         in diagnostics_policy["allowedSchemas"]
         and "unifiedscript.generation-prewarm-experiment/v0.1"
+        in diagnostics_policy["allowedSchemas"]
+        and "unifiedscript.editor-diagnostics/v0.1"
         in diagnostics_policy["allowedSchemas"]
         and all(
             source_schema not in diagnostics_policy["allowedSchemas"]

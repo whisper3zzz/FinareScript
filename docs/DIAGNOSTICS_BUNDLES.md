@@ -18,11 +18,14 @@ upload.
 
 ## Safe-default boundary
 
-The v0.1 policy only admits 31 exact report schemas such as CI lanes, release
+The v0.1 policy only admits 32 exact report schemas such as CI lanes, release
 and compatibility gates, runtime diagnostics, reliability/scale results,
 performance budgets, compiled-chunk load, ReadyToRun, and generation-prewarm
 experiment profiles,
 binding coverage, onboarding, SDK install/package, and round-trip reports. It
+also admits the bounded `unifiedscript.editor-diagnostics/v0.1` snapshot written
+by the UE Message Log bridge. Its messages, source/member identity, and evidence
+paths are subject to the same safe-default redaction rules. It
 excludes by construction:
 
 - `.cs`, `.cpp`, `.h`, Blueprint/uasset, binary, log, dump, trace, and profiler
@@ -72,6 +75,14 @@ output mechanism as other UnifiedScript artifacts, so an interrupted build does
 not leave a successful-looking partial ZIP.
 
 ## Recommended support workflow
+
+From Unreal, open **Tools > UnifiedScript Project Setup** and select **Export Support Bundle**.
+The project-local CLI collects `Saved/UnifiedScript`, writes
+`Saved/UnifiedScriptSupport/UnifiedScriptSupport.zip`, and copies that path to
+the clipboard. The ZIP lives outside its input root, so repeated exports do not
+recursively collect previous bundles.
+
+For command-line or support-owned collection:
 
 1. Point the command at the narrowest artifact/run directory that reproduces
    the issue, not a repository or user profile root.

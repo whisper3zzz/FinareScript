@@ -16,5 +16,6 @@ public:
     }
 
     virtual void OpenAuthoringSurface(UUnifiedScriptAsset* ScriptAsset) = 0;
+    virtual bool OpenAuthoringMember(const FString& SemanticId) = 0;
     virtual void OpenProjectSetup() = 0;
 };

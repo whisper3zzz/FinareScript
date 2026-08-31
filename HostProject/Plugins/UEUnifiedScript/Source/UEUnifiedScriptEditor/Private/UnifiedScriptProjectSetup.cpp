@@ -81,6 +81,12 @@ bool FUnifiedScriptProjectSetup::ResolvePaths(
     Candidate.RepairReport = FPaths::Combine(ReportRoot, TEXT("adoption-repair.json"));
     Candidate.DoctorReport = FPaths::Combine(ReportRoot, TEXT("doctor-report.json"));
     Candidate.OnboardingReport = FPaths::Combine(ReportRoot, TEXT("onboarding-report.json"));
+    Candidate.DiagnosticsInputRoot = FPaths::Combine(
+        Candidate.ProjectRoot,
+        TEXT("Saved/UnifiedScript"));
+    Candidate.DiagnosticsBundle = FPaths::Combine(
+        Candidate.ProjectRoot,
+        TEXT("Saved/UnifiedScriptSupport/UnifiedScriptSupport.zip"));
     Candidate.FirstPlayRequest = GetFirstPlayRequestPath(Candidate.ProjectRoot);
 
     if (!UE::UnifiedScript::ProjectSetup::Private::RequireFile(
@@ -143,6 +149,14 @@ bool FUnifiedScriptProjectSetup::BuildCommand(
             TEXT("doctor %s --engine-root %s --report %s"),
             *Quote(Paths.ProjectFile),
             *Quote(Paths.EngineRoot),
+            *Quote(Candidate.ReportPath));
+        break;
+    case EUnifiedScriptProjectSetupOperation::ExportDiagnostics:
+        Candidate.Executable = Paths.CliExecutable;
+        Candidate.ReportPath = Paths.DiagnosticsBundle;
+        Candidate.Arguments = FString::Printf(
+            TEXT("diagnostics-bundle %s --out %s"),
+            *Quote(Paths.DiagnosticsInputRoot),
             *Quote(Candidate.ReportPath));
         break;
     case EUnifiedScriptProjectSetupOperation::BuildAfterEditorExit:

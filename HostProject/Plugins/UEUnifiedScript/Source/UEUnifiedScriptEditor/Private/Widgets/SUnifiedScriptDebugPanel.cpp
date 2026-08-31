@@ -10,6 +10,7 @@
 #include "UnifiedScriptAuthoringWorkbench.h"
 #include "UnifiedScriptAsset.h"
 #include "UnifiedScriptComponent.h"
+#include "UnifiedScriptEditorDiagnostics.h"
 #include "UObject/UObjectIterator.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SEditableTextBox.h"
@@ -1826,6 +1827,14 @@ void SUnifiedScriptDebugPanel::RefreshLiveWorldTargetNow()
     if (PreviousComponent != LiveComponent.Get() ||
         PreviousSequence != LastRuntimeDiagnosticSequence)
     {
+        if (LiveContext.IsSet() && LiveContext->LastDiagnostic.IsValid() &&
+            LastRuntimeDiagnosticSequence > 0)
+        {
+            FUnifiedScriptEditorDiagnostics::Publish(
+                LOCTEXT("RuntimeDiagnosticsPage", "Live World runtime"),
+                {FUnifiedScriptEditorDiagnostics::FromRuntime(
+                    LiveContext->LastDiagnostic)});
+        }
         if (PreviousComponent != LiveComponent.Get())
         {
             GameplayProfile.Reset();

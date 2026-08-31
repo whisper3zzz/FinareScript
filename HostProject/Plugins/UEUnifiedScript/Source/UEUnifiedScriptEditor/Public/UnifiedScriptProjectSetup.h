@@ -7,6 +7,7 @@ enum class EUnifiedScriptProjectSetupOperation : uint8
     PreviewAdoption,
     RepairAdoption,
     Doctor,
+    ExportDiagnostics,
     BuildAfterEditorExit,
 };
 
@@ -23,6 +24,8 @@ struct FUnifiedScriptProjectSetupPaths
     FString RepairReport;
     FString DoctorReport;
     FString OnboardingReport;
+    FString DiagnosticsInputRoot;
+    FString DiagnosticsBundle;
     FString FirstPlayRequest;
 };
 

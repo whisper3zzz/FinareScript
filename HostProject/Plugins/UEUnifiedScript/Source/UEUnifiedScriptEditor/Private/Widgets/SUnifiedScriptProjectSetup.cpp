@@ -3,6 +3,7 @@
 #include "Editor.h"
 #include "FileHelpers.h"
 #include "HAL/FileManager.h"
+#include "HAL/PlatformApplicationMisc.h"
 #include "HAL/PlatformMisc.h"
 #include "Interfaces/IPluginManager.h"
 #include "Misc/MessageDialog.h"
@@ -10,6 +11,7 @@
 #include "Styling/AppStyle.h"
 #include "UEUnifiedScriptEditorModule.h"
 #include "UnifiedScriptAsset.h"
+#include "UnifiedScriptEditorDiagnostics.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SMultiLineEditableTextBox.h"
 #include "Widgets/Layout/SBorder.h"
@@ -237,6 +239,21 @@ void SUnifiedScriptProjectSetup::Construct(const FArguments& InArgs)
                         &SUnifiedScriptProjectSetup::StartAuthoringAndOpenFirstPlayClass))
             ]
             + SVerticalBox::Slot()
+            .AutoHeight()
+            .Padding(0.0f, 0.0f, 0.0f, 12.0f)
+            [
+                UE::UnifiedScript::ProjectSetup::Private::MakeActionRow(
+                    LOCTEXT("DiagnosticsTitle", "7. Diagnose and share"),
+                    LOCTEXT(
+                        "DiagnosticsDescription",
+                        "Build one bounded, privacy-redacted support bundle from UnifiedScript reports and copy its path."),
+                    LOCTEXT("DiagnosticsButton", "Export Support Bundle"),
+                    CanRun,
+                    FOnClicked::CreateSP(
+                        this,
+                        &SUnifiedScriptProjectSetup::ExportSupportBundle))
+            ]
+            + SVerticalBox::Slot()
             .FillHeight(1.0f)
             .MinHeight(160.0f)
             [
@@ -387,6 +404,13 @@ FReply SUnifiedScriptProjectSetup::StartAuthoringAndOpenFirstPlayClass()
     return FReply::Handled();
 }
 
+FReply SUnifiedScriptProjectSetup::ExportSupportBundle()
+{
+    return RunAttachedOperation(
+        EUnifiedScriptProjectSetupOperation::ExportDiagnostics,
+        LOCTEXT("ExportDiagnosticsOperation", "Support bundle export"));
+}
+
 FReply SUnifiedScriptProjectSetup::RunAttachedOperation(
     EUnifiedScriptProjectSetupOperation Operation,
     const FText& OperationLabel)
@@ -400,6 +424,10 @@ FReply SUnifiedScriptProjectSetup::RunAttachedOperation(
     if (!ResolveProjectPaths(Paths))
     {
         return FReply::Handled();
+    }
+    if (Operation == EUnifiedScriptProjectSetupOperation::ExportDiagnostics)
+    {
+        IFileManager::Get().MakeDirectory(*Paths.DiagnosticsInputRoot, true);
     }
 
     FUnifiedScriptProjectSetupCommand Command;
@@ -446,6 +474,7 @@ FReply SUnifiedScriptProjectSetup::RunAttachedOperation(
 
     ActiveOperationLabel = OperationLabel.ToString();
     ActiveReportPath = Command.ReportPath;
+    ActiveOperation = Operation;
     AppendOutput(FString::Printf(
         TEXT("> %s %s"),
         *Command.Executable,
@@ -736,9 +765,26 @@ void SUnifiedScriptProjectSetup::FinishAttachedOperation(int32 ReturnCode)
 {
     const FString OperationLabel = MoveTemp(ActiveOperationLabel);
     const FString ReportPath = MoveTemp(ActiveReportPath);
+    const TOptional<EUnifiedScriptProjectSetupOperation> CompletedOperation = ActiveOperation;
+    ActiveOperation.Reset();
     CloseProcessResources();
     if (ReturnCode == 0)
     {
+        if (CompletedOperation.IsSet() &&
+            CompletedOperation.GetValue() == EUnifiedScriptProjectSetupOperation::ExportDiagnostics)
+        {
+            FPlatformApplicationMisc::ClipboardCopy(*ReportPath);
+            SetStatus(
+                FText::Format(
+                    LOCTEXT(
+                        "SupportBundleSuccessStatus",
+                        "Support bundle created and its path copied: {0}"),
+                    FText::FromString(ReportPath)),
+                FAppStyle::GetSlateColor(TEXT("Colors.AccentGreen")));
+            AppendOutput(FString::Printf(
+                TEXT("Support bundle: %s\nPath copied to clipboard."), *ReportPath));
+            return;
+        }
         SetStatus(
             FText::Format(
                 LOCTEXT("SuccessStatus", "{0} completed. Report: {1}"),
@@ -759,6 +805,15 @@ void SUnifiedScriptProjectSetup::FinishAttachedOperation(int32 ReturnCode)
             TEXT("Exit code: %d\nReport: %s"),
             ReturnCode,
             *ReportPath));
+        TArray<FUnifiedScriptEditorDiagnostic> Diagnostics =
+            FUnifiedScriptEditorDiagnostics::ReadReport(ReportPath);
+        Diagnostics.Insert(
+            FUnifiedScriptEditorDiagnostics::FromSetupFailure(
+                OperationLabel, ReturnCode, ReportPath),
+            0);
+        FUnifiedScriptEditorDiagnostics::Publish(
+            LOCTEXT("SetupDiagnosticsPage", "Project Setup"),
+            Diagnostics);
     }
 }
 

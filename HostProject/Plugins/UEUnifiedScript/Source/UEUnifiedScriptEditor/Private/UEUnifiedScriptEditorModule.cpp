@@ -14,6 +14,7 @@
 #include "ToolMenus.h"
 #include "UnifiedScriptEdGraph.h"
 #include "UnifiedScriptClassFactory.h"
+#include "UnifiedScriptEditorDiagnostics.h"
 #include "Widgets/Docking/SDockTab.h"
 #include "Widgets/SUnifiedScriptAuthoringSurface.h"
 #include "Widgets/SUnifiedScriptProjectSetup.h"
@@ -66,6 +67,7 @@ public:
     virtual void StartupModule() override
     {
         using namespace UE::UnifiedScript::Editor::Private;
+        FUnifiedScriptEditorDiagnostics::Register();
         GraphNodeFactory = MakeShared<FUnifiedScriptGraphPanelNodeFactory>();
         FEdGraphUtilities::RegisterVisualNodeFactory(GraphNodeFactory);
         GraphPinFactory = MakeShared<FUnifiedScriptGraphPanelPinFactory>();
@@ -151,6 +153,7 @@ public:
             UE::UnifiedScript::Editor::Private::AuthoringSurfaceTabName);
         FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(
             UE::UnifiedScript::Editor::Private::ProjectSetupTabName);
+        FUnifiedScriptEditorDiagnostics::Unregister();
     }
 
     virtual void OpenAuthoringSurface(UUnifiedScriptAsset* ScriptAsset) override
@@ -171,6 +174,24 @@ public:
             UE::UnifiedScript::Editor::Private::ProjectSetupTabName);
     }
 
+    virtual bool OpenAuthoringMember(const FString& SemanticId) override
+    {
+        PendingAuthoringSemanticId = SemanticId;
+        FGlobalTabmanager::Get()->TryInvokeTab(
+            UE::UnifiedScript::Editor::Private::AuthoringSurfaceTabName);
+        if (AuthoringSurfaceWidget.IsValid())
+        {
+            const bool bNavigated =
+                AuthoringSurfaceWidget.Pin()->NavigateToSemanticId(SemanticId);
+            if (bNavigated)
+            {
+                PendingAuthoringSemanticId.Reset();
+            }
+            return bNavigated;
+        }
+        return false;
+    }
+
 private:
     TSharedPtr<FGraphPanelNodeFactory> GraphNodeFactory;
     TSharedPtr<FGraphPanelPinFactory> GraphPinFactory;
@@ -179,6 +200,7 @@ private:
     FTSTicker::FDelegateHandle FirstPlayStartupHandle;
     TWeakPtr<SUnifiedScriptAuthoringSurface> AuthoringSurfaceWidget;
     TWeakObjectPtr<UUnifiedScriptAsset> PendingAuthoringScriptAsset;
+    FString PendingAuthoringSemanticId;
 
     TSharedRef<SDockTab> SpawnAuthoringSurfaceTab(const FSpawnTabArgs& Args)
     {
@@ -189,6 +211,11 @@ private:
         {
             Surface->LoadScriptAsset(PendingAuthoringScriptAsset.Get());
             PendingAuthoringScriptAsset.Reset();
+        }
+        if (!PendingAuthoringSemanticId.IsEmpty() &&
+            Surface->NavigateToSemanticId(PendingAuthoringSemanticId))
+        {
+            PendingAuthoringSemanticId.Reset();
         }
         return SNew(SDockTab)
             .TabRole(ETabRole::NomadTab)

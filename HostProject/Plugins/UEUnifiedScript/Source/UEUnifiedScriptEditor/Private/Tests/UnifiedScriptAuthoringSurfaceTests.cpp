@@ -2091,6 +2091,10 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
         Widget->SelectFunction(DefaultFunction->Id));
     if (Assignment != nullptr)
     {
+        TestTrue(TEXT("Unified diagnostics can navigate to an exact semantic member"),
+            Widget->NavigateToSemanticId(Assignment->Id));
+        TestEqual(TEXT("Semantic member navigation activates its owning function"),
+            Widget->GetActiveFunctionId(), Function.Id);
         TestTrue(TEXT("Slate can toggle a graph/source semantic breakpoint"),
             Widget->ToggleDebugBreakpoint(Assignment->Id));
         TestTrue(TEXT("Slate retains semantic breakpoint state across function selection"),
@@ -2099,6 +2103,8 @@ bool FUnifiedScriptAuthoringSurfaceTest::RunTest(const FString& Parameters)
             Widget->ToggleDebugBreakpoint(Assignment->Id));
         TestFalse(TEXT("Removed semantic breakpoint is no longer active"),
             Widget->IsDebugBreakpointEnabled(Assignment->Id));
+        TestTrue(TEXT("My Script can return to the reflected-default proof function"),
+            Widget->SelectFunction(DefaultFunction->Id));
     }
     FUnifiedScriptGraphPaletteAction DefaultApiAction;
     TestTrue(TEXT("Generated API defaults keep the action context-valid"),

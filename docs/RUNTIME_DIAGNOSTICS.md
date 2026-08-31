@@ -94,6 +94,14 @@ active:
 These three controls deliberately do not preserve an in-progress CLR stack;
 they remain useful for coarse gameplay stepping and diagnostics.
 
+When the selected live component receives a new diagnostic sequence, the Slate
+debugger publishes that detached record to **UnifiedScript Diagnostics**. The
+Message Log links to its exact Portable-PDB source location and exposes the
+generated bridge member or semantic method as a navigable member token. It uses
+the same normalized Retry/Repair/Restart guidance and bounded editor snapshot as
+compile, generation, coverage, stale-surface, and reload failures; no runtime
+object or collectible context is retained by the log entry.
+
 ## Evidence
 
 Managed tests validate ordinary and native-bridge records, exact 64-bit

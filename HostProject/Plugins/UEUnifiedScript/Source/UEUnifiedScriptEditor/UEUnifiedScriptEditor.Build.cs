@@ -19,6 +19,7 @@ public class UEUnifiedScriptEditor : ModuleRules
             "GraphEditor",
             "HTTP",
             "Json",
+            "MessageLog",
             "InputCore",
             "Projects",
             "Slate",
